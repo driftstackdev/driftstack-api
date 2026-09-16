@@ -68,6 +68,56 @@ function declaredFields(block: string): Set<string> {
 }
 
 /**
+ * (V6 2026-09-16) The property sets a schema declares inside its UNION BRANCHES —
+ * `oneOf` / `anyOf` / `allOf` — rather than on its own `properties`.
+ *
+ * ⛔ MEASURED, NOT HYPOTHETICAL. `udp_detail` was published on the fleet member of
+ * `AccountProxyTestResult`'s `oneOf` and never reached `models.py`; this file walked
+ * `components.schemas[*].properties` alone, so that member was outside the population
+ * it censused and the guard reported CLEAN for a field the typed client could not
+ * read. The same mistake `collectConstraints` below already avoids for enums and
+ * patterns, made one layer up — a census reporting a clean answer about a set it
+ * never enumerated.
+ *
+ * Only union keys are followed. `properties` and `items` are NOT: a nested object
+ * becomes its own generated class under a name datamodel-codegen invents, and the
+ * arm that owns those is the top-level one. A union branch is different — it lands
+ * as `<Name>1`, `<Name>2`, … beside the schema's own name, which is exactly the
+ * candidate set below.
+ */
+function unionBranchProperties(schema: unknown): Array<Record<string, unknown>> {
+  const out: Array<Record<string, unknown>> = [];
+  const walk = (node: unknown, isRoot: boolean): void => {
+    if (node === null || typeof node !== 'object' || Array.isArray(node)) return;
+    const obj = node as Record<string, unknown>;
+    if (!isRoot) {
+      const props = obj['properties'];
+      if (props !== null && typeof props === 'object' && Object.keys(props).length > 0) {
+        out.push(props as Record<string, unknown>);
+      }
+    }
+    for (const key of ['oneOf', 'anyOf', 'allOf']) {
+      const branches = obj[key];
+      if (Array.isArray(branches)) for (const b of branches) walk(b, false);
+    }
+  };
+  walk(schema, true);
+  return out;
+}
+
+/** The classes a union member of `name` can have landed as: the schema's own class
+ *  and its numbered siblings (`AccountProxyTestResult`, `…1`, `…2`, `…3`). Derived
+ *  from the generator's naming rather than listed, so a new union needs no edit. */
+function candidateBlocks(name: string, all: Map<string, string>): Set<string>[] {
+  const out: Set<string>[] = [];
+  for (const [cls, block] of all) {
+    if (cls !== name && !(cls.startsWith(name) && /^\d+$/.test(cls.slice(name.length)))) continue;
+    out.push(declaredFields(block));
+  }
+  return out;
+}
+
+/**
  * Every `enum` value and every `pattern` the component schemas declare, at any depth.
  *
  * A constraint is not always on a top-level property: it sits inside `items`, inside a
@@ -111,6 +161,9 @@ const specPatterns = constraints.patterns;
 const schemasWithProperties = Object.entries(spec.components?.schemas ?? {}).filter(
   ([, schema]) => Object.keys(schema.properties ?? {}).length > 0,
 );
+const schemasWithUnionBranches = Object.entries(spec.components?.schemas ?? {})
+  .map(([name, schema]) => ({ name, branches: unionBranchProperties(schema) }))
+  .filter((s) => s.branches.length > 0);
 
 describe('V-953 the generated Python models carry every property the spec declares', () => {
   it('CRITICAL both artefacts parsed into real populations. The assertion below reports an ABSENCE, so a spec that yielded no schemas with properties, or a models file that yielded no classes, would satisfy it having compared nothing at all.', () => {
@@ -159,6 +212,65 @@ describe('V-953 the generated Python models carry every property the spec declar
     expect(fields.has('idempotency'), 'a word from a description is NOT a field').toBe(false);
     expect(fields.has('OtherModel'), 'a type name is NOT a field').toBe(false);
     expect(fields.has('description'), 'a Field() keyword is NOT a field').toBe(false);
+  });
+
+  it(`CRITICAL every property of every UNION BRANCH (\`oneOf\` / \`anyOf\` / \`allOf\`) exists on one of that schema's generated classes. The arm above walks \`schema.properties\` only, so a property added inside a union member is outside its population and it reports CLEAN — which is exactly what happened to \`udp_detail\` on the fleet member of AccountProxyTestResult: published in the spec, absent from models.py, four sdk-python guards green. A VPN row then reached a typed Python caller with neither a UDP verdict nor the sentence saying why there is none. (${FIX})`, () => {
+    // The population, first: this arm reports an ABSENCE, and a walker that found
+    // no branches would satisfy it having compared nothing.
+    expect(
+      schemasWithUnionBranches.length,
+      'spec component schemas carrying union branches with properties',
+    ).toBeGreaterThan(5);
+
+    const missing: string[] = [];
+    for (const { name, branches } of schemasWithUnionBranches) {
+      const candidates = candidateBlocks(name, blocks);
+      branches.forEach((props, i) => {
+        const keys = Object.keys(props);
+        if (candidates.length === 0) {
+          missing.push(`${name} (union member ${i + 1}): no generated class at all`);
+          return;
+        }
+        // Covered when ONE class declares the whole member — the generator emits a
+        // class per member, so a member split across two classes is not a match.
+        const absentPerClass = candidates.map((have) => keys.filter((k) => !have.has(k)));
+        if (absentPerClass.some((a) => a.length === 0)) return;
+        const best = absentPerClass.reduce((a, b) => (a.length <= b.length ? a : b));
+        missing.push(`${name} (union member ${i + 1}): ${best.join(', ')}`);
+      });
+    }
+    expect(
+      missing,
+      'the spec declares these properties on a union member and no generated class for that ' +
+        'schema carries them. A typed Python caller cannot read them off the branch that has them',
+    ).toEqual([]);
+  });
+
+  it("CRITICAL the union walker follows union keys ONLY, and can miss. Asserted against a fixture: walking `properties` or `items` as well would credit a nested object's fields to the parent class, and the arm above would pass on a models.py that never generated the member.", () => {
+    const found = unionBranchProperties({
+      properties: { own: {}, nested: { properties: { buried: {} } } },
+      oneOf: [
+        { properties: { a: {} } },
+        { anyOf: [{ properties: { b: {} } }] },
+        { properties: { list: { items: { properties: { deep: {} } } } } },
+      ],
+    });
+    const keys = found.flatMap((p) => Object.keys(p)).sort();
+
+    expect(keys, 'union members at any union depth, and nothing else').toEqual(['a', 'b', 'list']);
+    expect(keys.includes('own'), "the schema's OWN properties belong to the arm above").toBe(false);
+    expect(keys.includes('buried'), 'a nested object is its own class, not this one').toBe(false);
+    expect(keys.includes('deep'), 'an array item is its own class, not this one').toBe(false);
+
+    // …and the candidate set is the generator's numbering, not every class whose
+    // name merely begins with the schema's.
+    const fake = new Map([
+      ['Thing', 'class Thing(BaseModel):\n    a: str\n'],
+      ['Thing2', 'class Thing2(BaseModel):\n    b: str\n'],
+      ['ThingHolder', 'class ThingHolder(BaseModel):\n    c: str\n'],
+    ]);
+    const names = candidateBlocks('Thing', fake).flatMap((s) => [...s]);
+    expect(names.sort(), 'Thing and Thing2 — never ThingHolder').toEqual(['a', 'b']);
   });
 
   it(`CRITICAL every enum the spec declares reaches the generated models as a literal. The arm above compares NAMES: a property keeps its field when its allowed values change, so widening or narrowing an enum leaves every name-level check green while the typed client rejects a value the API accepts — or accepts one it refuses. Measured: the models went stale for five days across this exact class, carrying \`action: str\` against a spec declaring 24 audit actions, with three sdk-python guards green throughout. (${FIX})`, () => {

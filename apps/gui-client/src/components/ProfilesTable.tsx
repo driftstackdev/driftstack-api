@@ -32,6 +32,9 @@ import {
   EXIT_GEO_UNAVAILABLE_TITLE,
   VPN_NO_EXIT_YET,
   VPN_NO_EXIT_YET_TITLE,
+  VPN_UDP_MEASURED_NONE_TITLE,
+  VPN_UDP_MEASURED_OK_TITLE,
+  VPN_UDP_NOT_MEASURED_TITLE,
 } from '../lib/proxy-check-copy';
 
 export type ProfilesTableSortKey = 'name' | 'status' | 'country' | 'created' | 'lastUsed';
@@ -524,10 +527,20 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
       {/* UDP + OS (collapses below md) */}
       <td className={`px-3 py-2 ${HIDE_MED}`}>
         <div className="flex items-center gap-1">
-          {r.vpn === true ? (
+          {r.vpn === true && r.udp === 'unknown' ? (
             // (n) N18 — nothing probes a UDP grant on a tunnel: UDP rides inside
             // it. The card's chip has said so since (h); the list showed a dash,
             // which reads as "not measured" for something that is not measurable.
+            //
+            // ⛔ (V6 2026-09-16) ITEM 3 — and it is the NOT-MEASURED arm ONLY now.
+            // The node's three-state `udp_associate` is contracted, so "not
+            // measurable" stops being true of a tunnel: a VPN row with a MEASURED
+            // verdict falls through to the chip below and renders it, green for a
+            // relay and muted-⤵ for a measured fall-back. An unconditional pill
+            // here would have swallowed that verdict — the row would keep saying
+            // "UDP via tunnel" over a tunnel a Mac had just measured as carrying
+            // none. The sentence is shared with the grid and the card
+            // (`VPN_UDP_NOT_MEASURED_TITLE`), which is the only state it describes.
             <span
               data-udp="tunnel"
               // 2026-09-12 (review) — secondary ink, not muted: muted on the
@@ -535,7 +548,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               // profiles-list finding the gate still reported); secondary is 6.71
               // dark / 5.51 light there.
               className="inline-block cursor-help rounded bg-surface-divider/60 px-1.5 py-0.5 text-[10px] font-bold text-ink-secondary"
-              title={`UDP travels inside the VPN. WebRTC and QUIC use it; run ${CHECK_VPN_ACTION} to measure QUIC through this VPN.`}
+              title={VPN_UDP_NOT_MEASURED_TITLE}
             >
               UDP via tunnel
             </span>
@@ -548,10 +561,19 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
                   ? 'bg-status-ready/20 text-status-ready'
                   : 'bg-surface-divider/60 text-ink-muted'
               }`}
+              // (V6 2026-09-16) ITEM 3 — a VPN row reaches this chip only with a
+              // MEASURED verdict, and it gets the tunnel's own wording: the SOCKS5
+              // sentences talk about an exit and a UDP-ASSOCIATE grant, neither of
+              // which exists on a tunnel. Both halves are shared with the grid and
+              // the card so one measurement cannot be described three ways.
               title={
-                r.udp === 'ok'
-                  ? `UDP works — WebRTC ✓; ${QUIC_CLAUSE[r.quic ?? 'unknown']}`
-                  : 'UDP not supported — WebRTC and QUIC fall back to slower connections'
+                r.vpn === true
+                  ? r.udp === 'ok'
+                    ? VPN_UDP_MEASURED_OK_TITLE
+                    : VPN_UDP_MEASURED_NONE_TITLE
+                  : r.udp === 'ok'
+                    ? `UDP works — WebRTC ✓; ${QUIC_CLAUSE[r.quic ?? 'unknown']}`
+                    : 'UDP not supported — WebRTC and QUIC fall back to slower connections'
               }
             >
               {r.udp === 'ok' ? '✓' : '⤵'}

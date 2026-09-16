@@ -252,7 +252,7 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
       // V-217 — `lowerOpenvpnScriptSecurity` joined this import: the route lowers
       // `script-security 2` to 1 and accepts the config rather than refusing it,
       // and the LOWERED blob is what it validates and stores.
-      /import \{\s*AccountOrganizationSchema,\s*AccountProxyInputSchema,\s*AccountProxyUpdateSchema,\s*AVATAR_MAX_BYTES,\s*findUnresolvableOpenvpnFileReferences,\s*lowerOpenvpnScriptSecurity,\s*PROFILES_PER_TIER,\s*PROXIES_PER_TIER,\s*TIER_CONCURRENT_SESSION_LIMITS,\s*UpdateAccountMeRequestSchema,\s*UploadAvatarRequestSchema,\s*UuidSchema,\s*type AccountProxyMetadata,\s*type AccountTier,\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*AccountOrganizationSchema,\s*AccountProxyInputSchema,\s*AccountProxyOsFingerprintSchema,\s*AccountProxyUpdateSchema,\s*AVATAR_MAX_BYTES,\s*findUnresolvableOpenvpnFileReferences,\s*lowerOpenvpnScriptSecurity,\s*PROFILES_PER_TIER,\s*PROXIES_PER_TIER,\s*TIER_CONCURRENT_SESSION_LIMITS,\s*UpdateAccountMeRequestSchema,\s*UploadAvatarRequestSchema,\s*UuidSchema,\s*type AccountProxyMetadata,\s*type AccountProxyOsFingerprint,\s*type AccountTier,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
       /import \{ resolveEffectiveAccount, type AccountAuthRepo \} from '\.\.\/services\/auth\.js';/,

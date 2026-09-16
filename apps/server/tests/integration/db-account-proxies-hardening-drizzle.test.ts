@@ -115,6 +115,12 @@ beforeAll(async () => {
       exit_observed jsonb,
       exit_observed_at timestamptz,
       exit_superseded_at timestamptz,
+      -- ITEM 4 (migration 0123). This table is a hand-written COPY of the real
+      -- one, so a column added to the schema and not to this literal makes every
+      -- Drizzle statement here fail with "column does not exist" — the copy has
+      -- to keep mirroring, column for column.
+      freshness_attempted_at timestamptz,
+      freshness_consecutive_failures integer NOT NULL DEFAULT 0,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )

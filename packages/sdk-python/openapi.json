@@ -3303,6 +3303,49 @@
           "exit_superseded_at": {
             "type": ["string", "null"]
           },
+          "os_fingerprint": {
+            "type": ["object", "null"],
+            "properties": {
+              "os": {
+                "type": "string",
+                "enum": ["macos-or-ios", "windows", "linux", "bsd", "unknown"]
+              },
+              "confidence": {
+                "type": "string",
+                "enum": ["high", "medium", "low", "none"]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "observed_ip": {
+                "type": "string"
+              },
+              "observed_via": {
+                "type": "string",
+                "enum": ["proxy_host", "exit_ip"]
+              },
+              "single_host_vantage": {
+                "type": "boolean",
+                "description": "True only when the proxy host you entered, the machine that opened the connection and the exit address are all one machine, so the reading describes the same path a website sees. Absent or false: do not draw a match/mismatch conclusion from it."
+              },
+              "web_port_vantage": {
+                "type": "boolean",
+                "description": "True when the reading was taken on the standard HTTPS port at the proxy's IP address, with no CDN in front — the same path a website connects on. It describes what a site sees on that path; with observed_via \"proxy_host\" it is still a reading, not a guarantee."
+              }
+            },
+            "required": [
+              "os",
+              "confidence",
+              "reason",
+              "observed_ip",
+              "observed_via",
+              "single_host_vantage",
+              "web_port_vantage"
+            ]
+          },
+          "os_fingerprint_at": {
+            "type": ["string", "null"]
+          },
           "created_at": {
             "type": "string"
           },
@@ -3488,6 +3531,9 @@
                   "web_port_vantage"
                 ]
               },
+              "os_fingerprint_at": {
+                "type": ["string", "null"]
+              },
               "os_fingerprint_unavailable": {
                 "type": ["string", "null"],
                 "enum": ["vpn_tunnel", "not_observed", "observer_off", null]
@@ -3572,6 +3618,9 @@
               },
               "udp_associate": {
                 "type": "boolean"
+              },
+              "udp_detail": {
+                "type": "string"
               },
               "can_route": {
                 "type": "boolean"
@@ -3658,6 +3707,9 @@
                   "single_host_vantage",
                   "web_port_vantage"
                 ]
+              },
+              "os_fingerprint_at": {
+                "type": ["string", "null"]
               },
               "os_fingerprint_unavailable": {
                 "type": ["string", "null"],

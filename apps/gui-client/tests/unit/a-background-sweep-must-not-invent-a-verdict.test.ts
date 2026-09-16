@@ -314,6 +314,12 @@ describe('deriveProbeViewState', () => {
       quicMeasured: {},
       serverVantage: {},
       quicProbe: {},
+      // (V6 2026-09-16) ITEM 3 — the fleet's MEASURED UDP-relay verdict, the map
+      // this item added. ⛔ It is listed here because this arm is exhaustive by
+      // design (see the note below) and the arm was RED in the tree until it was:
+      // the map reached `ProbeViewState` and the two derivations without reaching
+      // this pin, which is precisely the drift the pin exists to report.
+      udpProbe: {},
       // (V-219) The exit's own measurement time, keyed only beside an address
       // the view surfaces. Empty here like every sibling — and this arm is an
       // EXHAUSTIVE shape pin on purpose: a new map added to the view state and

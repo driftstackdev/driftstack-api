@@ -21,12 +21,18 @@
 // arm reds. The SOCKS5 control is what pins that the fix did not simply rewrite
 // the cell for every row.
 
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import type * as ProxiesModule from '../../src/lib/proxies';
 import type * as AccountProxiesModule from '../../src/lib/account-proxies';
 import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
-import { CHECK_VPN_ACTION, CHECK_VPN_TITLE, VPN_NO_EXIT_YET } from '../../src/lib/proxy-check-copy';
+import {
+  CHECK_VPN_ACTION,
+  CHECK_VPN_TITLE,
+  VPN_NO_EXIT_YET,
+  VPN_UDP_MEASURED_NONE_TITLE,
+  VPN_UDP_NOT_MEASURED_TITLE,
+} from '../../src/lib/proxy-check-copy';
 
 const stores = new Map<string, Map<string, unknown>>();
 vi.mock('@tauri-apps/plugin-store', () => ({
@@ -208,9 +214,16 @@ vi.mock('../../src/lib/proxies', async (importOriginal) => ({
   probeProxyExit: vi.fn(() => Promise.resolve(null)),
   setProxyServerId: vi.fn(() => Promise.resolve()),
 }));
+/** (V6 2026-09-16, refuter #1) — the fleet reply is now STEERABLE from a test.
+ *  It was a flat rejection, which is why this file could pin the list's VPN cells
+ *  only in their untested state — and the UDP cell's not-measured arm is exactly
+ *  the arm a swallowed verdict leaves intact. */
+const { testAccountProxy } = vi.hoisted(() => ({
+  testAccountProxy: vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+}));
 vi.mock('../../src/lib/account-proxies', async (importOriginal) => ({
   ...(await importOriginal<typeof AccountProxiesModule>()),
-  testAccountProxy: vi.fn(() => Promise.reject(new Error('not under test'))),
+  testAccountProxy: (...args: unknown[]) => testAccountProxy(...args),
   updateProxy: vi.fn(() => Promise.resolve({})),
   createProxy: vi.fn(() => Promise.resolve({ id: 'aprx_new' })),
 }));
@@ -264,6 +277,13 @@ function seedCache(): void {
   );
 }
 
+beforeEach(() => {
+  testAccountProxy.mockReset();
+  // The default every arm but the two UDP ones runs under: this file's subject is
+  // what the row RENDERS, not what the fleet says.
+  testAccountProxy.mockRejectedValue(new Error('not under test'));
+});
+
 async function renderList(): Promise<void> {
   seedCache();
   render(<ProfilesView onGoToSettings={vi.fn()} />);
@@ -311,6 +331,63 @@ describe('(n) N18 — the Profiles LIST view carries the VPN check, verdict and 
     expect(q.getByText('UDP via tunnel')).toBeTruthy();
     expect(row.querySelector('[data-udp="tunnel"]')).not.toBeNull();
     expect(q.queryByText('–')).toBeNull();
+  });
+
+  it('CRITICAL (V6, refuter #1) a MEASURED UDP verdict reaches the LIST CELL through ProfilesView — the feed, not just the component', async () => {
+    // ⛔ THE GAP THIS ARM CLOSES. `ProfilesTable`'s three UDP states were pinned by
+    // rendering `<ProfilesTable>` with hand-built rows, and the grid's chip end to
+    // end through ProxiesView — but the lines that DERIVE `udp` for this table from
+    // the probe view, in ProfilesView, were pinned by nothing. MEASURED 2026-09-16:
+    // reverting them to the pre-change `? 'unknown'` left eight files / 245 tests
+    // green while every measured tunnel verdict on this surface was swallowed by
+    // the "UDP via tunnel" pill — a row reading "nothing measured this" over a
+    // tunnel a Mac had just measured as carrying no UDP.
+    //
+    // The one VPN-UDP assertion this file had (`getByText('UDP via tunnel')`, in
+    // the arm above) asserts the NOT-MEASURED state, which that revert leaves
+    // exactly as it was. An absence arm cannot catch a swallowed presence.
+    testAccountProxy.mockResolvedValueOnce({
+      ok: true,
+      latency_ms: 61,
+      measured_from: 'fleet',
+      node_id: 'mac-mini-07',
+      udp_associate: false,
+      udp_detail: 'udp relay refused by the tunnel peer',
+    });
+    await renderList();
+    const row = rowFor('London tunnel');
+    fireEvent.click(within(row).getByRole('button', { name: CHECK_VPN_ACTION }));
+
+    const chip = await waitFor(() => {
+      const el = within(rowFor('London tunnel')).queryByText('⤵');
+      expect(el, 'the measured verdict reached the list cell').not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(chip.getAttribute('title')).toBe(VPN_UDP_MEASURED_NONE_TITLE);
+    // …and the pill that means "nothing measured this" is gone from the row.
+    expect(within(rowFor('London tunnel')).queryByText('UDP via tunnel')).toBeNull();
+  });
+
+  it('CONTROL (V6) today\'s node asserts UDP and the cell still reads NOT MEASURED — the arm above is not "any reply lights the chip"', async () => {
+    // The bare literal with no `udp_detail`: the control plane drops it, so a
+    // SUCCESSFUL check leaves the cell where it was. Without this control the arm
+    // above is satisfied by a list that renders a verdict for every fleet answer.
+    testAccountProxy.mockResolvedValueOnce({
+      ok: true,
+      latency_ms: 61,
+      measured_from: 'fleet',
+      node_id: 'mac-mini-07',
+    });
+    await renderList();
+    fireEvent.click(
+      within(rowFor('London tunnel')).getByRole('button', { name: CHECK_VPN_ACTION }),
+    );
+    await waitFor(() => {
+      expect(within(rowFor('London tunnel')).queryByText('61ms')).not.toBeNull();
+    });
+    const pill = within(rowFor('London tunnel')).getByText('UDP via tunnel');
+    expect(pill.getAttribute('title')).toBe(VPN_UDP_NOT_MEASURED_TITLE);
+    expect(within(rowFor('London tunnel')).queryByText('⤵')).toBeNull();
   });
 
   it('CONTROL — the SOCKS5-bound row in the SAME table keeps "Test" and "no exit IP" (the cells were scoped, not rewritten)', async () => {

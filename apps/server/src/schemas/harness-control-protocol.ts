@@ -2338,11 +2338,37 @@ export const ProbeEgressResultSchema = z
     status: z.enum(PROBE_EGRESS_STATUSES).optional(),
     reachable: z.boolean(),
     auth_ok: z.boolean(),
-    udp_associate: z.boolean(),
+    /**
+     * (V6 2026-09-16) — THREE-STATE: `true` | `false` | `null`, and `null` means
+     * NOT MEASURED. Accepted NOW, ahead of the node change that emits it, for the
+     * reason the `exit_*` keys below give: `.nullable().optional()` makes the
+     * contract deployable in either order and leaves no window in which a frame is
+     * refused. A node that predates it still sends a bare boolean and still parses.
+     *
+     * ⛔ A BOOLEAN HERE IS NOT AUTOMATICALLY A MEASUREMENT. On the VPN path today's
+     * node sends the LITERAL `true` — the tunnel's nature, asserted, never probed —
+     * and the same is true of `h2_ok`. So the reading is `udp_detail` + the scheme,
+     * not this field alone; `udpReadingForReply` in routes/account-me.ts is the one
+     * place that decides, and it reports a value to the customer only when the node
+     * both measured it and said so.
+     */
+    udp_associate: z.boolean().nullable().optional(),
+    /** (V6) — the node's own sentence about the UDP leg, the sibling of
+     *  `quic_detail` and read the same way: a `"skipped: …"` prefix means the leg
+     *  NEVER RAN, so any boolean beside it is not a verdict. Its PRESENCE beside a
+     *  boolean is also what tells a VPN reply apart from the asserted literal. */
+    udp_detail: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).nullable().optional(),
     can_route: z.boolean(),
     latency_ms: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    /** ⛔ On the VPN path this is a LITERAL asserting the tunnel's capability, never
+     *  a probe. It is therefore never reported to a customer for an openvpn/wireguard
+     *  row (routes/account-me.ts) — an asserted field must not reach a surface that
+     *  means "we measured this". */
     h2_ok: z.boolean(),
-    quic_ok: z.boolean(),
+    /** (V6) — THREE-STATE, exactly like `udp_associate` above: `null` = not
+     *  measured. The pre-existing reading of a `"skipped: …"` `quic_detail` says the
+     *  same thing for a node that has not migrated yet; both land as "not measured". */
+    quic_ok: z.boolean().nullable().optional(),
     quic_detail: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).nullable(),
     exit_ip: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).nullable(),
     /** VPN exit parity — the exit's geo/timezone as the NODE resolved it, beside

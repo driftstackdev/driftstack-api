@@ -2297,6 +2297,34 @@ function buildRegistry(): OpenAPIRegistry {
       wireguard: WireGuardConfigOpenApi.optional(),
     })
     .openapi('AccountProxyInput');
+  // N-2 — the passive OS fingerprint of the proxy's own TCP stack. ONE definition,
+  // used by the /proxies LIST's stored reading and by BOTH ok-shaped test members
+  // below on purpose: the observation is made by
+  // the CONTROL PLANE on either vantage (it dials through the proxy to our own
+  // raw-socket observer), so a fleet result carries it too. It was documented on the
+  // cp member alone once, and that is exactly how the field went missing from the
+  // fleet response — a second copy is a second thing to forget.
+  const OsFingerprintOpenApi = z.object({
+    os: z.enum(['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown']),
+    confidence: z.enum(['high', 'medium', 'low', 'none']),
+    reason: z.string(),
+    observed_ip: z.string(),
+    observed_via: z.enum(['proxy_host', 'exit_ip']),
+    // (V-219) The two vantage flags the route has sent since they were added, and
+    // this schema never listed — so every SDK generated from it dropped them, and
+    // an API consumer could not tell a web-port reading from an observer-port one
+    // or apply the withholding rule the desktop client applies.
+    single_host_vantage: z
+      .boolean()
+      .describe(
+        'True only when the proxy host you entered, the machine that opened the connection and the exit address are all one machine, so the reading describes the same path a website sees. Absent or false: do not draw a match/mismatch conclusion from it.',
+      ),
+    web_port_vantage: z
+      .boolean()
+      .describe(
+        'True when the reading was taken on the standard HTTPS port at the proxy\'s IP address, with no CDN in front — the same path a website connects on. It describes what a site sees on that path; with observed_via "proxy_host" it is still a reading, not a guarantee.',
+      ),
+  });
   const AccountProxyMetadataOpenApi = z
     .object({
       id: z.string(),
@@ -2332,6 +2360,15 @@ function buildRegistry(): OpenAPIRegistry {
       // refuses an observation dated at or before it. Cleared (null) by the next
       // exit observation. null = never contradicted. Mirrors api-types.
       exit_superseded_at: z.string().nullable().optional(),
+      // (p) 2026-09-16 — the LAST OS fingerprint the control plane observed for
+      // this proxy's own stack, and when (ISO 8601). Written by POST :id/test and
+      // stored; this list is its route back out, so a reading taken on one machine
+      // is readable from every other one. null = never measured (never a default,
+      // and not "no OS"). Age it by `os_fingerprint_at`: this is a stored reading,
+      // not one this request took, and an undatable one must be treated as stale.
+      // Mirrors AccountProxyMetadataSchema in api-types.
+      os_fingerprint: OsFingerprintOpenApi.nullable().optional(),
+      os_fingerprint_at: z.string().nullable().optional(),
       created_at: z.string(),
       updated_at: z.string(),
     })
@@ -2422,33 +2459,6 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
-  // N-2 — the passive OS fingerprint of the proxy's own TCP stack. ONE definition,
-  // spread into BOTH ok-shaped members below on purpose: the observation is made by
-  // the CONTROL PLANE on either vantage (it dials through the proxy to our own
-  // raw-socket observer), so a fleet result carries it too. It was documented on the
-  // cp member alone once, and that is exactly how the field went missing from the
-  // fleet response — a second copy is a second thing to forget.
-  const OsFingerprintOpenApi = z.object({
-    os: z.enum(['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown']),
-    confidence: z.enum(['high', 'medium', 'low', 'none']),
-    reason: z.string(),
-    observed_ip: z.string(),
-    observed_via: z.enum(['proxy_host', 'exit_ip']),
-    // (V-219) The two vantage flags the route has sent since they were added, and
-    // this schema never listed — so every SDK generated from it dropped them, and
-    // an API consumer could not tell a web-port reading from an observer-port one
-    // or apply the withholding rule the desktop client applies.
-    single_host_vantage: z
-      .boolean()
-      .describe(
-        'True only when the proxy host you entered, the machine that opened the connection and the exit address are all one machine, so the reading describes the same path a website sees. Absent or false: do not draw a match/mismatch conclusion from it.',
-      ),
-    web_port_vantage: z
-      .boolean()
-      .describe(
-        'True when the reading was taken on the standard HTTPS port at the proxy\'s IP address, with no CDN in front — the same path a website connects on. It describes what a site sees on that path; with observed_via "proxy_host" it is still a reading, not a guarantee.',
-      ),
-  });
   // (o) 2026-09-11 — WHY an ok result carries no `os_fingerprint`. ONE definition
   // spread into BOTH ok-bearing members, for the reason the block above states:
   // the cp member and the fleet member reach the same three causes, and a second
@@ -2481,8 +2491,15 @@ function buildRegistry(): OpenAPIRegistry {
         // null when never measured. Carried on every ok:true test result.
         quic_measured: z.enum(['h3', 'h2-only']).nullable().optional(),
         quic_measured_at: z.string().nullable().optional(),
-        // N-2 — present ONLY when the passive observer recorded the proxy's SYN.
+        // N-2 — present when the passive observer recorded the proxy's SYN, and
+        // (p) — also when it did NOT but the row holds a stored reading, which
+        // then arrives with `os_fingerprint_at` and keeps its cause beside it.
         os_fingerprint: OsFingerprintOpenApi.optional(),
+        // (p) 2026-09-16 — WHEN `os_fingerprint` was measured, and so WHICH
+        // reading it is: absent = this test measured it (dated by this reply);
+        // present = a stored reading of that age, attached because this test
+        // observed none. Age a stored one by this, never by the reply time.
+        os_fingerprint_at: z.string().nullable().optional(),
         // (o) — and when it is absent, WHY. Nullable + optional: an older server
         // sends neither field and a client must read that as "no cause reported".
         os_fingerprint_unavailable: OsFingerprintUnavailableOpenApi.nullable().optional(),
@@ -2558,12 +2575,26 @@ function buildRegistry(): OpenAPIRegistry {
         // bad_config, timeout): nothing ran, so nothing is a fact except `reason`.
         reachable: z.boolean().optional(),
         auth_ok: z.boolean().optional(),
-        // Also absent on VPN rows: a tunnel carries UDP by nature — no probed SOCKS5 grant.
+        // ⛔ (V6) ABSENT MEANS "NOT MEASURED", NEVER "no". Absent when the node
+        // reports `udp_associate: null` (it did not look), when `udp_detail` starts
+        // with "skipped:" (the leg never ran), and on a VPN row whose node sent the
+        // bare literal with no `udp_detail` — on the VPN path that boolean asserts
+        // the tunnel's nature and no probe stands behind it. A VPN row DOES report
+        // it once the node sends a real verdict beside its `udp_detail` sentence.
         udp_associate: z.boolean().optional(),
+        // (V6) The node's sentence about the UDP leg, the sibling of `quic_detail`:
+        // a "skipped: …" prefix says the leg never ran. Present whenever the node
+        // sent one, including beside an absent `udp_associate`.
+        udp_detail: z.string().optional(),
         can_route: z.boolean().optional(),
         latency_ms: z.number().int().nullable(),
+        // ⛔ (V6) NEVER present on a VPN row. On that path the node asserts HTTP/2
+        // as the tunnel's capability without probing it, and an asserted field must
+        // not reach a customer under a name that means "we measured this".
         h2_ok: z.boolean().optional(),
-        // Also absent when quic_detail starts with "skipped:" (the QUIC leg never ran).
+        // ⛔ (V6) Same "absent means not measured" rule: absent when quic_detail
+        // starts with "skipped:" (the QUIC leg never ran) and when the node reports
+        // `quic_ok: null`.
         quic_ok: z.boolean().optional(),
         quic_detail: z.string().nullable().optional(),
         exit_ip: z.string().nullable().optional(),
@@ -2586,6 +2617,11 @@ function buildRegistry(): OpenAPIRegistry {
         // N-2 — the fingerprint the CONTROL PLANE observed while the node measured
         // the latency. Same field, same shape, same "absent means unobserved" rule.
         os_fingerprint: OsFingerprintOpenApi.optional(),
+        // (p) 2026-09-16 — WHEN `os_fingerprint` was measured, and so WHICH
+        // reading it is: absent = this test measured it (dated by this reply);
+        // present = a stored reading of that age, attached because this test
+        // observed none. Age a stored one by this, never by the reply time.
+        os_fingerprint_at: z.string().nullable().optional(),
         // (o) — and the cause when it is absent. `vpn_tunnel` is REACHED HERE and
         // only here in practice: a VPN row is measurable from a node alone, and a
         // tunnel has no SOCKS5 endpoint for the control plane's observer to dial.

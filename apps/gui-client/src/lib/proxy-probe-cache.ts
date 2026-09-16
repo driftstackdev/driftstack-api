@@ -99,6 +99,36 @@ export interface CachedProbe {
   /** T-1 — the fleet Mac's standalone QUIC-relay verdict (true/false), separate
    *  from quicMeasured (a live session's HTTP/3) and never merged with it. */
   quicProbe?: boolean;
+  /** (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP-relay verdict, its
+   *  exact sibling. ⛔ ABSENT IS "NOT MEASURED", never "no UDP": the control
+   *  plane emits `udp_associate` only for a real reading, so nothing asserted
+   *  (a VPN tunnel's literal `true`) or unlooked-at (an explicit null, a skipped
+   *  leg) can ever be stored here and later render as a verdict. */
+  udpProbe?: boolean;
+  /**
+   * (V6 2026-09-16, refuter #5) — epoch ms when the UDP verdict beside it was
+   * MEASURED, and the reason it exists at all.
+   *
+   * ⛔ THE VERDICT IS CARRIED ACROSS EVERY REPLY THAT MEASURED NOTHING (see
+   * `saveServerProbeResult`), which is right — a non-measurement must not retire a
+   * measurement — and, undated, it also meant the verdict was aged by NOTHING while
+   * `serverProbeAt` beside it was re-stamped on every one of those replies. Concrete
+   * sequence during the contracted node rollout: a migrated Mac measures
+   * `udp_associate: false`; the provider fixes UDP; every later Check lands on a
+   * legacy Mac whose VPN frame is the bare literal, which the route correctly drops
+   * — so the surfaces show "⤵ UDP — No UDP through this tunnel — measured from
+   * Driftstack's network" beside "Tested just now", for ever, about a measurement
+   * that may be hours old and is no longer true. A negative verdict about a
+   * customer's tunnel, stated in the present tense, is the same failure this item
+   * exists to prevent, arriving through the cache instead of the wire.
+   *
+   * So the date travels WITH the verdict: written when a reply measures one, carried
+   * unchanged when a reply carries one (a carry re-measures nothing and must not
+   * refresh the clock), and read by `isUdpVerdictFresh` in both derivations. An
+   * ABSENT stamp is NOT fresh — an entry written before this field existed holds a
+   * verdict nobody can date, and the honest rendering of that is "not measured".
+   */
+  udpProbeAt?: number;
   /** (h) — epoch ms when the SERVER test that wrote serverLatencyMs / the
    *  vantage / quicProbe ran. `at` is the row's LAST check (for a VPN row the
    *  DNS pre-flight, which runs before every fleet test and is re-stamped even
@@ -124,6 +154,26 @@ export interface CachedProbe {
    *  failure (`saveExitResult`); a `not_run` clears neither, because it said
    *  nothing about the tunnel. */
   fleetFailureReason?: string;
+  /**
+   * (p) 2026-09-16 — this entry exists ONLY to carry a reading the SERVER holds
+   * (the account list's stored OS fingerprint). NOTHING on this Mac has probed
+   * the row: `result` is the fail-closed placeholder, so it is never usable, and
+   * the derivation keys neither `testResults` nor `testedAt` from it.
+   *
+   * ⛔ That suppression is the whole point and it is not cosmetic. Without it a
+   * proxy nobody here has tested would render a red "not reachable" pill and a
+   * "Tested just now" stamp, invented from an entry we wrote ourselves — strictly
+   * worse than the blank chip this item exists to fill. Same shape as the
+   * endpoint-row placeholder, whose overlay deletes its `result` for the same
+   * reason.
+   *
+   * ⛔ It must survive a reload (`cleanEntry` admits it): dropped on load, the
+   * placeholder becomes an ordinary SOCKS5 verdict and the red pill appears on the
+   * next app start. And it is DROPPED the moment a real local verdict lands —
+   * `saveProbeResult` / `saveEndpointResult` rebuild the entry field by field and
+   * do not carry it, which is exactly right: the row is then tested.
+   */
+  serverSeeded?: true;
 }
 
 export type ProbeCacheMap = Record<string, CachedProbe>;
@@ -161,6 +211,10 @@ export interface ProbeViewState {
   serverVantage: Record<string, ServerVantage>;
   /** T-1 — the fleet Mac's QUIC-relay verdict, same usable-only rule. */
   quicProbe: Record<string, boolean>;
+  /** (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP-relay verdict, same
+   *  usable-only rule. ⛔ NOT KEYED is "not measured", which every surface renders
+   *  as "not measured yet"; only a keyed `false` is a negative verdict. */
+  udpProbe: Record<string, boolean>;
   /**
    * (V-219) WHEN the exit beside it was measured — `exitAt`, keyed only for rows
    * that surface an exit at all.
@@ -245,6 +299,28 @@ export const QUIC_VERDICT_TTL_MS = 30 * 60 * 1000;
  * the next observation stamps a time.
  */
 export function isQuicVerdictFresh(atMs: number | undefined, nowMs: number): boolean {
+  if (typeof atMs !== 'number') return false;
+  return nowMs - atMs < QUIC_VERDICT_TTL_MS;
+}
+
+/**
+ * (V6 2026-09-16, refuter #5) Is a measured UDP-relay verdict still current?
+ *
+ * Same thirty minutes as the QUIC verdict above, the exit identity and the OS
+ * fingerprint, and for the reason all three comments already give: it describes
+ * something measured THROUGH the proxy that the proxy can change underneath us.
+ * A tunnel whose peer starts or stops relaying UDP is the ordinary case, not the
+ * exotic one.
+ *
+ * ⛔ An ABSENT timestamp is NOT fresh, like every neighbour: a verdict we cannot
+ * date must not render in the present tense. That is not a theoretical entry —
+ * it is every entry written before this stamp existed, and the honest rendering
+ * of an undatable verdict is the not-measured chip, which self-heals on the next
+ * check. The alternative is what shipped: "No UDP through this tunnel — measured
+ * from Driftstack's network" beside a "Tested just now" stamp belonging to a
+ * different, later reply that measured nothing about UDP at all.
+ */
+export function isUdpVerdictFresh(atMs: number | undefined, nowMs: number): boolean {
   if (typeof atMs !== 'number') return false;
   return nowMs - atMs < QUIC_VERDICT_TTL_MS;
 }
@@ -338,6 +414,22 @@ export function endpointPlaceholderResult(endpoint: CachedEndpointVerdict): Prox
 }
 
 /**
+ * (p) 2026-09-16 — the `result` a SERVER-SEEDED entry carries: every field that
+ * could read as a pass is false, exactly like the endpoint placeholder, so
+ * `isProxyUsable` is false and no consumer that predates `serverSeeded` can read
+ * the entry as a healthy proxy. The message says what is true of it.
+ */
+export const SERVER_SEEDED_PLACEHOLDER_RESULT: ProxyTestResult = {
+  reachable: false,
+  auth_ok: false,
+  udp_associate: false,
+  can_route: false,
+  connect_reply: 0xff,
+  latency_ms: 0,
+  message: 'Not checked on this Mac.',
+};
+
+/**
  * T-20 — does a cached entry hold a verdict of the kind THIS row can earn?
  *
  * A SOCKS5 verdict on a VPN row is what the un-gated probe wrote before the
@@ -348,6 +440,11 @@ export function endpointPlaceholderResult(endpoint: CachedEndpointVerdict): Prox
  * verdict that says nothing about the listener it now is.
  */
 export function verdictMatchesScheme(socks5Probeable: boolean, entry: CachedProbe): boolean {
+  // (p) — a server-seeded entry is not a verdict of ANY kind: nothing on this Mac
+  // has checked the row, and its `result` is a placeholder. Saying otherwise here
+  // would tell the auto-probe the row is already tested and leave it with the
+  // server's reading and no local verdict for ever.
+  if (entry.serverSeeded === true) return false;
   return socks5Probeable ? entry.endpoint === undefined : entry.endpoint !== undefined;
 }
 
@@ -363,17 +460,29 @@ export function deriveProbeViewState(
   const quicMeasured: Record<string, MeasuredQuic> = {};
   const serverVantage: Record<string, ServerVantage> = {};
   const quicProbe: Record<string, boolean> = {};
+  const udpProbe: Record<string, boolean> = {};
   const exitSeenAt: Record<string, number> = {};
   const serverMeasuredAt: Record<string, number> = {};
   for (const [id, c] of Object.entries(cache)) {
-    testResults[id] = c.result;
-    if (typeof c.at === 'number') testedAt[id] = c.at;
+    // (p) — a SERVER-SEEDED entry holds no local verdict and no local check: it
+    // keys neither map, so the row reads as untested everywhere (no red pill from
+    // a placeholder, no "Tested …" stamp for a check that never ran) while still
+    // carrying the server's reading below.
+    if (c.serverSeeded !== true) {
+      testResults[id] = c.result;
+      if (typeof c.at === 'number') testedAt[id] = c.at;
+    }
     // (V-219) Aged HERE, beside the QUIC verdict, for the reason that comment
     // gives: every consumer must age identically, and dropping out of this map
     // is what "not measured" already means downstream.
+    // (p) — the usable gate is "no OS verdict beside a red unreachable pill", and
+    // a server-seeded row has no pill to sit beside: nothing here has probed it.
+    // So the reading shows, under the SAME freshness rule — an old stored reading
+    // is hidden exactly as an old local one is, because it is aged by the same
+    // function against the stamp the server sent.
     if (
       c.osFingerprint !== undefined &&
-      isProxyUsable(c.result) &&
+      (isProxyUsable(c.result) || c.serverSeeded === true) &&
       isOsFingerprintFresh(c.osFingerprint, nowMs)
     )
       osFingerprints[id] = c.osFingerprint;
@@ -402,6 +511,21 @@ export function deriveProbeViewState(
         ...(c.nodeId !== undefined ? { nodeId: c.nodeId } : {}),
       };
     if (c.quicProbe !== undefined && isProxyUsable(c.result)) quicProbe[id] = c.quicProbe;
+    // (V6) — the UDP-relay verdict rides the same usable-only rule as the QUIC
+    // one above it, AND the same freshness rule as `quicMeasured` two lines up.
+    //
+    // ⛔ It shipped aged by nothing, on the theory that it is "replaced by the next
+    // check". It is not: a reply that measured nothing about UDP CARRIES it (the
+    // rollout rule in `saveServerProbeResult`), so a measured `false` outlives every
+    // subsequent check indefinitely while the "Tested" stamp beside it moves. Aged
+    // HERE, beside its neighbours, so every consumer ages identically and dropping
+    // out of this map means exactly what it already means downstream: not measured.
+    if (
+      c.udpProbe !== undefined &&
+      isProxyUsable(c.result) &&
+      isUdpVerdictFresh(c.udpProbeAt, nowMs)
+    )
+      udpProbe[id] = c.udpProbe;
     if (c.exitIp !== undefined && isProxyUsable(c.result)) {
       exitResults[id] = {
         ip: c.exitIp,
@@ -431,6 +555,7 @@ export function deriveProbeViewState(
     quicMeasured,
     serverVantage,
     quicProbe,
+    udpProbe,
     exitSeenAt,
     serverMeasuredAt,
   };
@@ -624,6 +749,15 @@ function cleanEntry(raw: unknown): CachedProbe | null {
   // is kept only as a boolean — a string "true" is not a measurement.
   const vantage = cleanServerVantage(r.measuredFrom, r.nodeId);
   const quicProbe = typeof r.quicProbe === 'boolean' ? r.quicProbe : undefined;
+  // (V6) — the stored UDP-relay verdict, kept only as a boolean for the reason
+  // above it: a string "true" is not a measurement.
+  const udpProbe = typeof r.udpProbe === 'boolean' ? r.udpProbe : undefined;
+  // (V6, refuter #5) — and its date, kept only BESIDE the verdict it dates, the
+  // same rule `quicMeasuredAt` obeys above. ⛔ This allowlist is the only way the
+  // stamp survives a load: dropped here, every stored verdict comes back undatable
+  // and `isUdpVerdictFresh` hides it — a green ✓ UDP that vanishes on app start.
+  const udpProbeAt =
+    udpProbe !== undefined && typeof r.udpProbeAt === 'number' ? r.udpProbeAt : undefined;
   // T-17 — the exit identity's own stamp; absent reads as "not fresh".
   const exitAt = typeof r.exitAt === 'number' ? r.exitAt : undefined;
   // (l) #14 — the failed-exit-probe stamp; same allowlist rule as below.
@@ -643,8 +777,14 @@ function cleanEntry(raw: unknown): CachedProbe | null {
   // the entry then reads as a (non-usable) SOCKS5 verdict, which is the
   // conservative reading for both kinds of row.
   const endpoint = cleanEndpointVerdict(r.endpoint);
+  // (p) — ⛔ THIS ALLOWLIST IS THE ONLY WAY THE FLAG SURVIVES A LOAD, and dropping
+  // it does not fail quietly: the entry's fail-closed placeholder would come back
+  // as an ordinary SOCKS5 verdict, and a proxy nobody has tested here would render
+  // a red "not reachable" pill on the next app start. Only the literal `true`.
+  const serverSeeded = r.serverSeeded === true ? (true as const) : undefined;
   return {
     ...(endpoint !== undefined ? { endpoint } : {}),
+    ...(serverSeeded !== undefined ? { serverSeeded } : {}),
     ...(exitIp !== undefined ? { exitIp } : {}),
     ...(exitCountry !== undefined ? { exitCountry } : {}),
     ...(exitAt !== undefined ? { exitAt } : {}),
@@ -660,6 +800,8 @@ function cleanEntry(raw: unknown): CachedProbe | null {
     ...(vantage !== undefined ? { measuredFrom: vantage.measuredFrom } : {}),
     ...(vantage?.nodeId !== undefined ? { nodeId: vantage.nodeId } : {}),
     ...(quicProbe !== undefined ? { quicProbe } : {}),
+    ...(udpProbe !== undefined ? { udpProbe } : {}),
+    ...(udpProbeAt !== undefined ? { udpProbeAt } : {}),
     ...(serverProbeAt !== undefined ? { serverProbeAt } : {}),
     ...(exitSupersededAt !== undefined ? { exitSupersededAt } : {}),
     ...(fleetFailureReason !== undefined ? { fleetFailureReason } : {}),
@@ -800,6 +942,12 @@ export function saveProbeResult(
       ...(prior?.measuredFrom !== undefined ? { measuredFrom: prior.measuredFrom } : {}),
       ...(prior?.nodeId !== undefined ? { nodeId: prior.nodeId } : {}),
       ...(prior?.quicProbe !== undefined ? { quicProbe: prior.quicProbe } : {}),
+      // (V6) — and the fleet UDP-relay verdict with them: a native SOCKS5 re-test
+      // measured nothing about the fleet's legs and must not erase one. Its DATE
+      // travels with it, unchanged: this re-test did not re-measure UDP, so it may
+      // not make an old verdict look new.
+      ...(prior?.udpProbe !== undefined ? { udpProbe: prior.udpProbe } : {}),
+      ...(prior?.udpProbeAt !== undefined ? { udpProbeAt: prior.udpProbeAt } : {}),
       ...(prior?.serverProbeAt !== undefined ? { serverProbeAt: prior.serverProbeAt } : {}),
     };
     await getStore().set(KEY, all);
@@ -904,33 +1052,82 @@ export function saveOsFingerprint(
     const all = await loadProbeCache();
     const prior = all[proxyId];
     if (prior === undefined) return all;
-    all[proxyId] = {
-      ...prior,
-      // (o) O3 — the reported cause is written beside the reading it stands in for;
-      // without it the next load reproduces a bare `unknown` and the dead-end hint.
-      // ⛔⛔ (V-219) THE SECOND PLACE THE VANTAGE DIED. This rebuilds the record
-      // field by field, and it copied five of them — losing `observedVia`
-      // IMMEDIATELY, not merely across a restart. The load-path allowlist
-      // (`cleanOsFingerprint`) faithfully admits the field, so it looked covered;
-      // there was simply never anything in the store for it to admit, because
-      // this is the only mint path. The grid reads the cache-derived map, so the
-      // chip has never seen a vantage on a real row.
-      //
-      // A field-by-field rebuild is the shape that caused this. Anything added
-      // to the reading must be added HERE as well, or it is silently discarded.
-      osFingerprint: {
-        os: fp.os,
-        confidence: fp.confidence,
-        reason: fp.reason,
-        at,
-        ...(fp.observedVia !== undefined ? { observedVia: fp.observedVia } : {}),
-        ...(fp.singleHostVantage === true ? { singleHostVantage: true as const } : {}),
-        // (V-219) Named beside its twin: a field-by-field rebuild that omits it
-        // discards it silently — the drop that happened twice to `observedVia`.
-        ...(fp.webPortVantage === true ? { webPortVantage: true as const } : {}),
-        ...(fp.unavailable !== undefined ? { unavailable: fp.unavailable } : {}),
-      },
+    all[proxyId] = { ...prior, osFingerprint: cachedFingerprint(fp, at) };
+    await getStore().set(KEY, all);
+    await getStore().save();
+    emitProbeCache(all);
+    return all;
+  });
+}
+
+/**
+ * The stored form of a reading, built in ONE place.
+ *
+ * (o) O3 — the reported cause is written beside the reading it stands in for;
+ * without it the next load reproduces a bare `unknown` and the dead-end hint.
+ * ⛔⛔ (V-219) THE SECOND PLACE THE VANTAGE DIED. This rebuilds the record field by
+ * field, and it copied five of them — losing `observedVia` IMMEDIATELY, not merely
+ * across a restart. The load-path allowlist (`cleanOsFingerprint`) faithfully admits
+ * the field, so it looked covered; there was simply never anything in the store for
+ * it to admit, because this was the only mint path. The grid reads the cache-derived
+ * map, so the chip had never seen a vantage on a real row.
+ *
+ * A field-by-field rebuild is the shape that caused this. Anything added to the
+ * reading must be added HERE as well, or it is silently discarded.
+ *
+ * ⛔ (p) 2026-09-16 — and it is a FUNCTION now precisely because there are two mint
+ * paths since the account list started carrying the server's stored reading. Two
+ * copies of this rebuild is two places to forget the next field in, which is the
+ * exact failure written above; the seeder below calls this one.
+ */
+function cachedFingerprint(fp: OsFingerprint, at: number): CachedOsFingerprint {
+  return {
+    os: fp.os,
+    confidence: fp.confidence,
+    reason: fp.reason,
+    at,
+    ...(fp.observedVia !== undefined ? { observedVia: fp.observedVia } : {}),
+    ...(fp.singleHostVantage === true ? { singleHostVantage: true as const } : {}),
+    // (V-219) Named beside its twin: a field-by-field rebuild that omits it
+    // discards it silently — the drop that happened twice to `observedVia`.
+    ...(fp.webPortVantage === true ? { webPortVantage: true as const } : {}),
+    ...(fp.unavailable !== undefined ? { unavailable: fp.unavailable } : {}),
+  };
+}
+
+/**
+ * (p) 2026-09-16 — write the reading the SERVER holds for this proxy (the account
+ * list's `os_fingerprint`, dated by its `os_fingerprint_at`) into the same field a
+ * local test writes, so every surface reads ONE map and a reading taken on another
+ * Mac — or before a reinstall — shows here.
+ *
+ * ⛔ Unlike `saveOsFingerprint` this one INVENTS AN ENTRY when there is none, and
+ * that is the whole point: the machine that has never tested this proxy is exactly
+ * the machine with nothing to attach a reading to. The invented entry is marked
+ * `serverSeeded`, so it carries the reading and asserts NOTHING about reachability
+ * — see the flag's own note for what would happen if that mark were lost.
+ *
+ * ⛔ NEVER REWINDS and never churns: a reading at or before the one already stored
+ * writes nothing, so a local test measured minutes ago outranks the list's copy of
+ * an older one, and a poll every few seconds does not rewrite the store each tick.
+ * Freshness is NOT judged here — `deriveProbeViewState` ages every reading with the
+ * one TTL, and a second rule here could only disagree with it.
+ */
+export function seedServerOsFingerprint(
+  proxyId: string,
+  fp: OsFingerprint,
+  at: number,
+): Promise<ProbeCacheMap> {
+  return writeLock(async () => {
+    const all = await loadProbeCache();
+    const prior = all[proxyId];
+    if (prior?.osFingerprint !== undefined && prior.osFingerprint.at >= at) return all;
+    const base: CachedProbe = prior ?? {
+      result: SERVER_SEEDED_PLACEHOLDER_RESULT,
+      at,
+      serverSeeded: true,
     };
+    all[proxyId] = { ...base, osFingerprint: cachedFingerprint(fp, at) };
     await getStore().set(KEY, all);
     await getStore().save();
     emitProbeCache(all);
@@ -975,6 +1172,10 @@ export function saveServerProbeResult(
      *  standing as a control-plane fallback below: nothing about QUIC was
      *  measured, so the last fleet verdict stands. */
     quicSkipped?: boolean;
+    /** (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP-relay verdict.
+     *  A boolean REPLACES the stored one; absent means this reply measured
+     *  nothing about UDP and the stored one stands (see the write below). */
+    udpProbe?: boolean;
   },
   at: number,
 ): Promise<ProbeCacheMap> {
@@ -990,6 +1191,8 @@ export function saveServerProbeResult(
       measuredFrom: _m,
       nodeId: _n,
       quicProbe: _q,
+      udpProbe: _u,
+      udpProbeAt: _ua,
       fleetFailureReason: _failure,
       ...kept
     } = prior;
@@ -1053,6 +1256,38 @@ export function saveServerProbeResult(
         : (vantage?.measuredFrom === 'control_plane' || server.quicSkipped === true) &&
             typeof prior.quicProbe === 'boolean'
           ? { quicProbe: prior.quicProbe }
+          : {}),
+      // (V6 2026-09-16) ITEM 3 — the UDP-relay verdict, and its rule is SIMPLER
+      // than the QUIC one above on purpose. `quicProbe` has THREE incoming states
+      // (measured / the node ran the leg and reached no verdict / the node never
+      // ran it), which is why that clause needs `quicSkipped` to tell the last two
+      // apart. UDP has two: the control plane now emits `udp_associate` if and only
+      // if it is a reading, so ABSENCE IS ALWAYS A NON-MEASUREMENT — an explicit
+      // null, a skipped leg, a VPN row's asserted literal, or a control-plane
+      // fallback — and a non-measurement may never retire a measurement.
+      //
+      // ⛔ That carry is load-bearing through the node rollout: a fleet with one
+      // migrated Mac and one legacy Mac would otherwise erase a real verdict every
+      // time the legacy one happened to answer — the "a successful re-check turns
+      // the green chip untested" defect (V5), arriving through the field added
+      // beside the one it was fixed for. A leg that RAN always produces true or
+      // false, so nothing honest is being suppressed here.
+      //
+      // ⛔ AND THE CARRY IS WHY THE VERDICT NEEDS A DATE OF ITS OWN (refuter #5).
+      // `serverProbeAt` below is re-stamped on every one of these replies, so an
+      // undated verdict carried across them reads as current for ever — "No UDP
+      // through this tunnel — measured from Driftstack's network" beside "Tested
+      // just now", about a measurement nothing has repeated. A MEASUREMENT stamps
+      // `at`; a CARRY keeps the original stamp, because a carry measured nothing
+      // and may not make an old verdict look new; `isUdpVerdictFresh` then bounds
+      // how long either may speak in the present tense.
+      ...(typeof server.udpProbe === 'boolean'
+        ? { udpProbe: server.udpProbe, udpProbeAt: at }
+        : typeof prior.udpProbe === 'boolean'
+          ? {
+              udpProbe: prior.udpProbe,
+              ...(prior.udpProbeAt !== undefined ? { udpProbeAt: prior.udpProbeAt } : {}),
+            }
           : {}),
       // (h) — when THIS server test ran, so a VPN row's "Tested" can date the
       // fleet number it shows rather than the pre-flight that preceded a
@@ -1166,6 +1401,8 @@ function serverMeasuredFields(
     measuredFrom,
     nodeId,
     quicProbe,
+    udpProbe,
+    udpProbeAt,
     serverProbeAt,
     exitSupersededAt,
     fleetFailureReason,
@@ -1186,6 +1423,15 @@ function serverMeasuredFields(
     measuredFrom,
     nodeId,
     quicProbe,
+    // (V6 2026-09-16) ITEM 3 — the fleet UDP-relay verdict survives a pre-flight
+    // for the SAME address, exactly like the QUIC one above it. Omitting it here
+    // is how a "listed by name" allowlist loses a field silently: the pre-flight
+    // runs before EVERY check, so the verdict would be gone by the time the fleet
+    // answered and a measured `false` would read as "not measured yet".
+    udpProbe,
+    // …and its date with it. A verdict that survives the pre-flight undated is a
+    // verdict `isUdpVerdictFresh` then hides — the same silent loss, one field over.
+    udpProbeAt,
     serverProbeAt,
     // (h) — the superseded stamp is itself a fleet verdict about this row's
     // exit and must outlive the pre-flight that precedes the next test — and

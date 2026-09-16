@@ -144,10 +144,13 @@ describe('a recurring sweep re-arms even when its tick throws', () => {
     // order sweep, which had no scheduler at all until 2026-08-23).
     // 13 → 14 with registerSessionEventsArchiveJob (V-1591 — the 90-day
     // session_events archive, which had never run at all).
+    // 14 → 15 with registerProxyFreshnessJob (ITEM 4 — the background refresh of
+    // a saved proxy's exit identity and OS fingerprint, which nothing re-took
+    // after the one Test that first measured it).
     expect(
       helpers.map((h) => h.name).sort(),
       'the register*Job scan came back short — the checks below cover only what it found',
-    ).toHaveLength(14);
+    ).toHaveLength(15);
   });
 
   it('the detector detects — it must flag the broken shape and clear both working ones', () => {

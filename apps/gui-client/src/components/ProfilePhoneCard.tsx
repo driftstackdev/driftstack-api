@@ -138,6 +138,9 @@ import {
   VPN_NO_LATENCY_YET_TITLE,
   VPN_NOT_STORED_CHECK_NOTICE,
   VPN_TUNNEL_UP_NO_LATENCY_TITLE,
+  VPN_UDP_MEASURED_NONE_TITLE,
+  VPN_UDP_MEASURED_OK_TITLE,
+  VPN_UDP_NOT_MEASURED_TITLE,
 } from '../lib/proxy-check-copy';
 
 /** (o) — the pre-flight of a VPN/HTTP row: a DNS resolve of the configured
@@ -271,6 +274,13 @@ export interface ProfilePhoneCardProps {
    *  measurement, undefined = none. As of 2026-09-09 it FEEDS the single QUIC chip (a
    *  live h3/h2-only measurement outranks it) rather than rendering a separate chip. */
   quicProbe?: boolean;
+  /** (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP-relay verdict through
+   *  a TUNNEL. ⛔ `undefined` is NOT MEASURED, never "no UDP": on the VPN path the
+   *  node ASSERTS `udp_associate: true` about the tunnel's nature without probing
+   *  it, and the control plane drops the assertion rather than let it light a chip
+   *  that means "we measured this". A SOCKS5 row does not read this — its UDP chip
+   *  comes from the native probe's own `udp_associate`. */
+  udpProbe?: boolean;
   /** N-2 — passive OS fingerprint of the proxy's own stack, when the control
    *  plane observed one. Undefined = never measured. */
   osFingerprint?: OsFingerprint;
@@ -727,6 +737,7 @@ export type CapsInput = Pick<
   | 'capabilities'
   | 'quicMeasured'
   | 'quicProbe'
+  | 'udpProbe'
   | 'osFingerprint'
   | 'vpn'
   | 'vpnFailure'
@@ -808,9 +819,11 @@ const OVERFLOW_PILL_CLASS =
  *  relay verdict, with the QUIC clause read from the CANONICAL quic chip — never
  *  a guess from udp_associate. */
 function udpTitle(vpn: boolean, caps: ProxyCapability[] | null, quicCap?: ProxyCapability): string {
-  if (vpn) {
-    return `UDP travels inside the VPN. WebRTC and QUIC use it; run ${CHECK_VPN_ACTION} to measure QUIC through this VPN.`;
-  }
+  // (V6 2026-09-16) ITEM 3 — the NOT-MEASURED sentence, now shared with the
+  // Proxies grid and the profiles list (three surfaces, one state, one wording).
+  // A MEASURED VPN reading never reaches here: it takes the two constants beside
+  // this one, in `capabilityChips` below.
+  if (vpn) return VPN_UDP_NOT_MEASURED_TITLE;
   if (caps === null) return 'Run Test to check UDP (WebRTC + QUIC) support on this exit.';
   const udpOk = caps.find((c) => c.key === 'webrtc')?.ok ?? false;
   if (!udpOk) return 'No UDP — WebRTC uses a slower fallback and QUIC falls back to HTTP/2.';
@@ -917,20 +930,37 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
     // an unexplained pill is the complaint, and "we could not probe UDP here"
     // is a statable fact, not a measurement worth hiding behind one.
     //
-    // It gets its OWN glyph. `UDP ✓` means a relay was verified and `⤵ UDP`
-    // means one was measured and fell back; neither is true here. `⇢ UDP` is
-    // muted and says routed-through, with the full sentence as its title —
-    // reusing either existing label would claim a probe that never ran.
+    // (V6 2026-09-16) ITEM 3 — THREE states, and they are told apart by glyph:
+    //   • a MEASURED relay       → 'UDP ✓' (green), like a SOCKS5 row's;
+    //   • a MEASURED fall-back   → '⤵ UDP' (muted) — a negative verdict, which
+    //     only a probed `false` can reach;
+    //   • NOT MEASURED           → '⇢ UDP', its OWN glyph, muted, saying
+    //     routed-through with the full sentence as its title.
+    // Reusing '✓' or '⤵' for the third would claim a probe that never ran, and
+    // rendering nothing at all would make a measured NO indistinguishable from
+    // silence. Today's node asserts UDP on the VPN path and the control plane
+    // drops the assertion, so every VPN row is in the third state until a node
+    // sends the contracted three-state reading — at which point this lights up
+    // with no second client release.
+    const measured = typeof p.udpProbe === 'boolean';
+    const udpText = !measured ? '⇢ UDP' : p.udpProbe === true ? 'UDP ✓' : '⤵ UDP';
     eligible.push({
       key: 'udp',
-      text: '⇢ UDP',
-      width: chipWidth('⇢ UDP'),
-      className: CHIP_MUTED_CLASS,
-      title: udpTitle(true, null),
-      // Identical on every VPN row, so it yields the column to a chip that
-      // differs per proxy (the OS row, a measured QUIC verdict).
-      dropFirst: true,
-      attrs: { 'data-udp': 'tunnel' },
+      text: udpText,
+      width: chipWidth(udpText),
+      className: p.udpProbe === true ? CHIP_READY_CLASS : CHIP_MUTED_CLASS,
+      title: !measured
+        ? udpTitle(true, null)
+        : p.udpProbe === true
+          ? VPN_UDP_MEASURED_OK_TITLE
+          : VPN_UDP_MEASURED_NONE_TITLE,
+      // ⛔ `dropFirst` ONLY while it is the same on every VPN row. A MEASURED
+      // verdict differs per proxy and is the reason the row exists, so it takes
+      // its place in display order like every other measurement; yielding the
+      // column would put a real reading behind the '+N' the owner complained
+      // about, which is the defect this chip was promoted out of.
+      ...(measured ? {} : { dropFirst: true as const }),
+      attrs: { 'data-udp': !measured ? 'tunnel' : p.udpProbe === true ? 'true' : 'false' },
     });
   } else if (caps !== null) {
     const udpOk = caps.find((c) => c.key === 'webrtc')?.ok ?? false;

@@ -187,6 +187,33 @@ export function matchingProbe(
   return verdictMatchesScheme(isSocks5Probeable(px.scheme), entry) ? entry : undefined;
 }
 
+/**
+ * The hero's "proxy health" number: the share of saved proxies whose LAST probe
+ * was reachable, or `null` when nothing here has been probed at all (the hero then
+ * says "proxy health untested" rather than inventing a number).
+ *
+ * ⛔ (p) review — A SERVER-SEEDED ENTRY IS NOT A PROBE. It is the account list's OS
+ * reading with a fail-closed placeholder `result`, written by THIS Mac from a poll,
+ * and counting it made a machine that has tested nothing report "0.0% proxy health"
+ * in the ready colour — a fabricated failure rate, invented from entries we wrote
+ * ourselves, about proxies nobody here has checked. Both halves of the tally have to
+ * exclude it: excluding it from the numerator alone is worse than counting it.
+ *
+ * Pure and exported so the rule is guarded without rendering the hero.
+ */
+export function proxyHealthPercent(
+  proxies: ReadonlyArray<{ id: string }>,
+  probeCache: ProbeCacheMap,
+): number | null {
+  const probed = proxies.filter((p) => {
+    const c = probeCache[p.id];
+    return c !== undefined && c.serverSeeded !== true;
+  });
+  if (probed.length === 0) return null;
+  const ok = probed.filter((p) => probeCache[p.id]?.result.reachable === true).length;
+  return (ok / probed.length) * 100;
+}
+
 /** Probe only when nothing is cached for this proxy and no test is already in
  *  flight for it — handleTestProxy itself has no single-flight. */
 export function shouldAutoProbe(
@@ -2494,13 +2521,10 @@ export function ProfilesView({
     // carrying the server `liveness`) + its loaded flag; recompute on any move.
     [state.profiles, bindings, activeSessions, agentSessions, agentSessionsLoaded],
   );
-  const proxyHealthPct = useMemo<number | null>(() => {
-    if (proxies.length === 0) return null;
-    const probed = proxies.filter((p) => probeCache[p.id] !== undefined);
-    if (probed.length === 0) return null;
-    const ok = probed.filter((p) => probeCache[p.id]?.result.reachable === true).length;
-    return (ok / probed.length) * 100;
-  }, [proxies, probeCache]);
+  const proxyHealthPct = useMemo<number | null>(
+    () => proxyHealthPercent(proxies, probeCache),
+    [proxies, probeCache],
+  );
   // doc-150 items 5/6 — account-wide storage: sum every profile's size_bytes
   // (never-saved / pre-column profiles contribute 0), and resolve the per-tier
   // hard cap from the live tier (TIER_STORAGE_BYTES_CAP). The quota leg
@@ -2864,7 +2888,16 @@ export function ProfilesView({
      *  test); the `probeCache` state this closure holds predates that write. */
     cacheOverride?: ProbeCacheMap,
   ): Promise<{ country: string | null; timezone: string | null }> {
-    const cached = (cacheOverride ?? probeCache)[px.id];
+    // (p) review — ⛔ A SERVER-SEEDED ENTRY IS READ AS ABSENT HERE, exactly as
+    // `matchingProbe`/`verdictMatchesScheme` already read it. It is the account
+    // list's OS reading with a fail-closed placeholder `result` beside it, and
+    // this function is the FIFTH consumer of `CachedProbe.result` — the one that
+    // does not go through `matchingProbe`. Left raw, `!isProxyUsable(placeholder)`
+    // is true, so a proxy the SERVER holds a reading for stopped getting its exit
+    // probed at launch and the simulator got no country and no zone: the (l) #13
+    // regression restored, on every row a poll had seeded.
+    const rawCached = (cacheOverride ?? probeCache)[px.id];
+    const cached = rawCached?.serverSeeded === true ? undefined : rawCached;
     const fromCache = {
       country: cached?.exitCountry ?? null,
       timezone: cached?.exitTimezone ?? null,
@@ -4859,6 +4892,11 @@ export function ProfilesView({
                           // the fleet relay verdict now reaches the card too.
                           quicMeasured={px !== null ? probeView.quicMeasured[px.id] : undefined}
                           quicProbe={px !== null ? probeView.quicProbe[px.id] : undefined}
+                          // (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP
+                          // verdict through a TUNNEL. Absent for every VPN row until a
+                          // node sends the contracted three-state reading, and the card
+                          // renders that absence as "not measured", never as "no UDP".
+                          udpProbe={px !== null ? probeView.udpProbe[px.id] : undefined}
                           latencyVantage={px !== null ? probeView.serverVantage[px.id] : undefined}
                           osFingerprint={px !== null ? probeView.osFingerprints[px.id] : undefined}
                           // (V-219) WHEN the exit above was measured. The card's
@@ -4970,9 +5008,22 @@ export function ProfilesView({
                             px !== null ? probeView.quicProbe[px.id] : undefined,
                           )
                         : null;
+                    // (V6 2026-09-16) ITEM 3 — a VPN row has no SOCKS5 caps to derive
+                    // UDP from, so it reads the FLEET's measured tunnel verdict
+                    // instead. ⛔ 'unknown' is NOT MEASURED and the list renders it as
+                    // the routed-through pill, never as a negative: today's node
+                    // ASSERTS `udp_associate: true` on the VPN path and the control
+                    // plane drops the assertion, so every VPN row is 'unknown' until a
+                    // node measures. A measured `false` lands as 'fail' and reads as
+                    // the negative verdict it is.
+                    const vpnUdp = px !== null ? probeView.udpProbe[px.id] : undefined;
                     const udp: 'ok' | 'fail' | 'unknown' =
                       caps === null
-                        ? 'unknown'
+                        ? typeof vpnUdp === 'boolean'
+                          ? vpnUdp
+                            ? 'ok'
+                            : 'fail'
+                          : 'unknown'
                         : (caps.find((c) => c.key === 'webrtc')?.ok ?? false)
                           ? 'ok'
                           : 'fail';

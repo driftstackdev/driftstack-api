@@ -100,6 +100,20 @@ export interface OsFingerprint {
    * for exactly the reasons `singleHostVantage` gives.
    */
   webPortVantage?: boolean;
+  /**
+   * (p) 2026-09-16 — WHEN the control plane took this reading (epoch ms), when
+   * the holder knows. The probe cache has always carried it (`CachedOsFingerprint`
+   * narrows it to required) and the chip never showed it, so a reading of any age
+   * was rendered in bare present tense — and since the reading can now arrive from
+   * the SERVER's stored copy, taken on another machine, "how old is this" stopped
+   * being answerable from the screen at all.
+   *
+   * Optional because a record parsed straight off the wire has no date of its own:
+   * a /test reply's reading was measured by that reply, and a cause or the
+   * `measuring` sentinel is not a measurement. Absent simply means the hint says
+   * nothing about age — never that the reading is current.
+   */
+  at?: number;
   /** (o) O4 — set ONLY on `OS_FINGERPRINT_MEASURING`, the sentinel a view passes while
    *  a test THIS client started is in flight. "Measuring" is a claim about work in
    *  progress: it may be rendered from a running probe and from nothing else, never
@@ -194,9 +208,68 @@ export const OS_FINGERPRINT_MEASURING: OsFingerprint = {
   measuring: true,
 };
 
-/** Pure. `undefined` = never measured (no observer, or the proxy is not stored
- *  on the account so the control plane never tested it). */
-export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
+/**
+ * (p) 2026-09-16 — the age of a reading, in the app's plain words, for the hint
+ * sentence below. "just now" under a minute, then whole minutes / hours / days.
+ *
+ * ⛔ Deliberately its own formatter and not `formatRelativeNarrow`: that one
+ * writes a CHIP LABEL ("5 min ago", "3 mo ago") sized for a 178px tile, this
+ * writes half a SENTENCE a customer reads in a tooltip, and it lives in this
+ * import-free module for the reason the TTL above does — two surfaces age the same
+ * reading and neither may drag the Tauri store in to do it.
+ */
+function measuredAgo(ageMs: number): string {
+  if (ageMs < 60_000) return 'just now';
+  const plural = (n: number, unit: string): string =>
+    `${n.toString()} ${unit}${n === 1 ? '' : 's'} ago`;
+  const minutes = Math.floor(ageMs / 60_000);
+  if (minutes < 60) return plural(minutes, 'minute');
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return plural(hours, 'hour');
+  return plural(Math.floor(hours / 24), 'day');
+}
+
+/**
+ * (p) 2026-09-16 — WHERE the reading came from and HOW OLD it is, appended to the
+ * hint of every verdict that describes a real measurement.
+ *
+ * The customer's question, once a reading can arrive from a machine they are not
+ * sitting at, is "who says so and when": "Measured by Driftstack" is the same
+ * plain phrasing the latency vantage uses (`vantageLabel`), and the age is what
+ * stops a stored reading from reading as something taken just now. Plain words
+ * only — no vantage names, no ports, no mention of a cache or a list.
+ *
+ * ⛔ A stamp in the FUTURE (clock skew between this Mac and the server) says
+ * "just now" rather than a negative age: we cannot show it is old, so we claim
+ * nothing about its age.
+ */
+function provenanceSentence(at: number, nowMs: number): string {
+  return `Measured by Driftstack, ${measuredAgo(Math.max(0, nowMs - at))}.`;
+}
+
+/**
+ * Pure. `undefined` = never measured (no observer, or the proxy is not stored
+ * on the account so the control plane never tested it).
+ *
+ * (p) — a reading that carries its date (`fp.at`: every cached record, and every
+ * reading adopted from the account list) says so in its hint. The verdict itself
+ * — tone, glyph, label — is untouched by age: the TTL that decides whether a
+ * reading is shown AT ALL is applied by the cache derivation, once, for every
+ * surface; a second age rule here could only disagree with it.
+ */
+export function osFingerprintVerdict(
+  fp: OsFingerprint | undefined,
+  /** Reference moment for the age sentence; injected by tests. */
+  nowMs: number = Date.now(),
+): OsVerdict {
+  const v = osFingerprintVerdictUndated(fp);
+  // A cause, the in-flight sentinel and "never measured" describe no measurement,
+  // so there is nothing to date — and `at` is absent on all three anyway.
+  if (fp?.at === undefined || fp.measuring === true || fp.unavailable !== undefined) return v;
+  return { ...v, hint: `${v.hint} ${provenanceSentence(fp.at, nowMs)}` };
+}
+
+function osFingerprintVerdictUndated(fp: OsFingerprint | undefined): OsVerdict {
   // (o) O4 — "measuring…" asserts work IN PROGRESS. It is rendered from a probe this
   // client has actually started and from nothing else; absence below says "not
   // measured", which is the honest state of a proxy nobody has tested.

@@ -199,6 +199,31 @@ export const AccountProxyUpdateSchema = z.union([
 ]);
 export type AccountProxyUpdate = z.infer<typeof AccountProxyUpdateSchema>;
 
+/**
+ * (p) 2026-09-16 — the control plane's passive OS fingerprint of a proxy's own
+ * TCP stack, as it crosses the wire. ONE declaration, used by BOTH the /test
+ * reply (which has carried exactly this shape since N-2) and the /proxies list
+ * (which carries the STORED reading since this item), so a client needs one
+ * parser and the two surfaces cannot drift into two dialects of one reading.
+ *
+ * ⛔ `single_host_vantage` / `web_port_vantage` are REQUIRED, and they are what a
+ * client's match / mismatch CLAIM rests on (see the desktop client's
+ * `osFingerprintVerdict`). A reading that does not state them must read as FALSE
+ * — the cautious value — never as "unstated, so assume it describes the path a
+ * website gets". A row measured before those fields existed is normalised to
+ * false where it is read, not defaulted to true here.
+ */
+export const AccountProxyOsFingerprintSchema = z.object({
+  os: z.enum(['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown']),
+  confidence: z.enum(['high', 'medium', 'low', 'none']),
+  reason: z.string(),
+  observed_ip: z.string(),
+  observed_via: z.enum(['proxy_host', 'exit_ip']),
+  single_host_vantage: z.boolean(),
+  web_port_vantage: z.boolean(),
+});
+export type AccountProxyOsFingerprint = z.infer<typeof AccountProxyOsFingerprintSchema>;
+
 export const AccountProxyMetadataSchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -243,6 +268,19 @@ export const AccountProxyMetadataSchema = z.object({
   // next exit observation, session or probe. null = never contradicted.
   // Optional so a client built against an older server keeps parsing.
   exit_superseded_at: z.string().nullable().optional(),
+  // (p) 2026-09-16 — the LAST OS fingerprint the control plane observed for this
+  // proxy's own stack, and WHEN. The reading has been written by the /:id/test
+  // route and stored (migration 0119) since N-2, and read back by nothing the
+  // customer could see: a proxy checked on one Mac showed no reading on a second
+  // one, or after a reinstall — the owner's "we are not saving the OS fingerprint
+  // of already checked proxies". This is its route out.
+  // null = NEVER MEASURED. Not a default, and not "no OS".
+  // `os_fingerprint_at` (ISO 8601) is what a client must AGE it by: this is a
+  // stored reading, not something the request measured, and a reading a client
+  // cannot date must be treated as stale rather than as current. Optional so a
+  // client built against an older server keeps parsing.
+  os_fingerprint: AccountProxyOsFingerprintSchema.nullable().optional(),
+  os_fingerprint_at: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -288,18 +326,24 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
     // (V-219) The fingerprint itself, which the route has sent since N-2 and this
     // schema never declared — zod strips unknown keys, so a consumer parsing the
     // reply with it lost the whole object, vantage flags included. Optional: a
-    // result that observed nothing omits it and says why above.
-    os_fingerprint: z
-      .object({
-        os: z.enum(['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown']),
-        confidence: z.enum(['high', 'medium', 'low', 'none']),
-        reason: z.string(),
-        observed_ip: z.string(),
-        observed_via: z.enum(['proxy_host', 'exit_ip']),
-        single_host_vantage: z.boolean(),
-        web_port_vantage: z.boolean(),
-      })
-      .optional(),
+    // result that observed nothing, and holds no stored reading either, omits it
+    // and says why above. (p) — when this test observed nothing but the ROW holds
+    // a reading, that stored one rides here WITH `os_fingerprint_at` and the cause
+    // stays beside it; a fresh observation always wins and is dated by the reply.
+    os_fingerprint: AccountProxyOsFingerprintSchema.optional(),
+    // (p) 2026-09-16 — WHEN the `os_fingerprint` above was measured (ISO 8601),
+    // and therefore WHICH reading it is:
+    //   absent  — THIS test measured it; the reply's own time dates it (today's
+    //             shape, unchanged for every result that observed a SYN).
+    //   present — a STORED reading from the row, attached because this test
+    //             observed none. It is as old as this says, and a client must age
+    //             it by this stamp with the same rule it ages its own readings.
+    // A reply that carries a stored reading keeps `os_fingerprint_unavailable`
+    // beside it: the cause explains why THIS test produced nothing, and the two
+    // together are how a client tells a stored reading from a fresh one. A row
+    // whose stored reading cannot be dated is not attached at all — an undatable
+    // reading must never arrive looking freshly measured.
+    os_fingerprint_at: z.string().nullable().optional(),
     // VPN exit parity — the exit identity the measuring fleet node observed
     // (vantage=fleet only; the only vantage that can see through an OpenVPN /
     // WireGuard tunnel). Present exactly when the node saw an exit IP; the geo

@@ -52,13 +52,16 @@ import {
   deriveProbeViewState,
   isOsFingerprintFresh,
   isQuicVerdictFresh,
+  isUdpVerdictFresh,
   loadProbeCache,
   saveEndpointResult,
   saveExitResult,
   saveFleetFailure,
   saveOsFingerprint,
   saveServerProbeResult,
+  seedServerOsFingerprint,
   type CachedEndpointVerdict,
+  type CachedOsFingerprint,
   type CachedProbe,
   type ProbeCacheMap,
   type ProbeViewState,
@@ -87,7 +90,23 @@ export type ServerProbeOutcome =
        *  does across a control-plane fallback. Only ever `true`: a reply that ran
        *  the leg omits the field rather than claiming `false`. */
       quicLegSkipped?: true;
+      /** (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP-relay verdict,
+       *  present ONLY when the control plane reported one. ⛔ Absent means NOT
+       *  MEASURED: on the VPN path the node's `udp_associate: true` is a literal
+       *  about the tunnel's nature, and the route drops it (and every explicit
+       *  null / skipped leg) rather than let it reach a chip as a reading. A
+       *  present `false` is the real thing — a leg that ran and failed — and the
+       *  surfaces render it as a negative verdict, distinguishable from absence. */
+      udpProbe?: boolean;
       osFingerprint?: OsFingerprint;
+      /** (p) 2026-09-16 — when `osFingerprint` was MEASURED, which is not always
+       *  when this test ran: a reply whose own test observed no SYN carries the
+       *  row's STORED reading with the date it was taken. The cache is stamped
+       *  with this, so the one TTL ages a stored reading from its real age —
+       *  stamping it "now" would present last week's reading as current, which is
+       *  the defect this whole item exists to close. Absent for a reading this
+       *  test measured: `at` dates that one, as it always has. */
+      osFingerprintAt?: number;
       /** VPN exit parity (b) — the exit the fleet Mac observed through the
        *  proxy/tunnel, when the reply carried one. Persisted as the row's exit
        *  identity (the same cache fields the native exit probe writes for a
@@ -241,6 +260,13 @@ function quicLegSkipped(detail: string | undefined): boolean {
   return detail !== undefined && detail.startsWith(QUIC_LEG_SKIPPED_PREFIX);
 }
 
+/** (V6 2026-09-16) — the same reading for the UDP leg. One predicate, one prefix:
+ *  "the node said it did not run this leg" has to mean the same thing for both, or
+ *  one of them ends up rendering a hole as a verdict. */
+function udpLegSkipped(detail: string | undefined): boolean {
+  return detail !== undefined && detail.startsWith(QUIC_LEG_SKIPPED_PREFIX);
+}
+
 /** Translate the wire result into the outcome both views apply. Pure. */
 export function serverProbeOutcome(
   test: AccountProxyTestResult | null,
@@ -280,6 +306,16 @@ export function serverProbeOutcome(
     ...(vantage !== undefined ? { vantage } : {}),
     ...(typeof test.quic_probe === 'boolean' ? { quicProbe: test.quic_probe } : {}),
     ...(quicLegSkipped(test.quic_detail) ? { quicLegSkipped: true as const } : {}),
+    // (V6 2026-09-16) ITEM 3 — the UDP leg. The route has already dropped every
+    // non-reading (a VPN row's asserted literal, the node's explicit null, a
+    // `udp_detail: "skipped: …"` leg), so a boolean that survives to here is a
+    // MEASUREMENT and its absence is "not measured" — never "no UDP". Guarded
+    // again anyway against an older control plane that could still pass a false
+    // through beside a skipped detail: a false that reaches a chip is a negative
+    // verdict about a customer's tunnel that nobody measured.
+    ...(typeof test.udp_associate === 'boolean' && !udpLegSkipped(test.udp_detail)
+      ? { udpProbe: test.udp_associate }
+      : {}),
     // ⛔ NORMALISE THE VANTAGE AT THE WIRE BOUNDARY. The control plane sends
     // `observed_via`; the client type calls it `observedVia`, and passing the
     // wire object through unchanged left the field invisible to every consumer
@@ -288,6 +324,15 @@ export function serverProbeOutcome(
     // claiming it after a restart. One spelling downstream, from here on.
     ...(test.os_fingerprint !== undefined
       ? { osFingerprint: withObservedVia(test.os_fingerprint) }
+      : {}),
+    // (p) — the reading's own date when the server sent one (a STORED reading it
+    // attached because this test observed none), else this test's time. Same rule
+    // and the same implementation as the QUIC stamp above, which is named for its
+    // first caller rather than for the rule: the server's clock wins when it says
+    // when, and the reply time is the fallback for a measurement with no stated
+    // date. Only beside a reading — a stamp with nothing to date is meaningless.
+    ...(test.os_fingerprint !== undefined && typeof test.os_fingerprint_at === 'string'
+      ? { osFingerprintAt: quicVerdictStamp(test.os_fingerprint_at, now) }
       : {}),
     ...(test.exit_observed !== undefined ? { exitObserved: test.exit_observed } : {}),
   };
@@ -305,6 +350,34 @@ export async function testProxyOnServer(
     () => null,
   );
   return serverProbeOutcome(test, now());
+}
+
+/**
+ * (p) review — the IN-MEMORY copy of the reading a reply carried, for the grid's
+ * own state between the reply and the cache emit that follows it.
+ *
+ * ⛔ IT LIVES HERE BESIDE THE CACHE WRITE ON PURPOSE. `persistServerProbe` dates the
+ * reading by `outcome.osFingerprintAt ?? outcome.at` and `deriveProbeViewState` then
+ * ages it by `isOsFingerprintFresh`; the grid's twin of that write did neither, so a
+ * STORED reading the server attached to a miss (the server applies no age bound —
+ * `storedOsForReply` checks only that the row can be dated) was stamped with the
+ * REPLY time and rendered "Measured by Driftstack, just now", full green, for a
+ * reading that could be days old — and then blanked when the emit landed and the TTL
+ * dropped it. Same date, same TTL, one function: the two cannot drift again.
+ *
+ * `undefined` means SHOW NOTHING: either the reply carried no reading, or the one it
+ * carried is past the TTL, which is exactly what the emit a moment later will say.
+ */
+export function chipOsFingerprint(
+  outcome: ServerProbeOutcome,
+  nowMs: number = Date.now(),
+): CachedOsFingerprint | undefined {
+  if (outcome.kind !== 'ok' || outcome.osFingerprint === undefined) return undefined;
+  const rec: CachedOsFingerprint = {
+    ...outcome.osFingerprint,
+    at: outcome.osFingerprintAt ?? outcome.at,
+  };
+  return isOsFingerprintFresh(rec, nowMs) ? rec : undefined;
 }
 
 /**
@@ -360,7 +433,14 @@ export async function persistServerProbe(
   if (outcome.kind !== 'ok') return null;
   let latest: ProbeCacheMap | null = null;
   if (outcome.osFingerprint !== undefined) {
-    latest = await saveOsFingerprint(proxyId, outcome.osFingerprint, outcome.at).catch(() => null);
+    // (p) — dated by the MEASUREMENT, not by the reply: a stored reading the server
+    // attached carries its own date and must age from it, exactly as the QUIC
+    // verdict below does. `?? outcome.at` is the fresh case, unchanged.
+    latest = await saveOsFingerprint(
+      proxyId,
+      outcome.osFingerprint,
+      outcome.osFingerprintAt ?? outcome.at,
+    ).catch(() => null);
   }
   const next = await saveServerProbeResult(
     proxyId,
@@ -377,6 +457,10 @@ export async function persistServerProbe(
       // leg (nothing measured → the last one stands) or it ran and produced none
       // (→ the last one goes). The cache cannot tell those apart from an absence.
       quicSkipped: outcome.quicLegSkipped,
+      // (V6) — the UDP leg. No `skipped` twin is needed: the route emits
+      // `udp_associate` if and only if it is a reading, so an absent `udpProbe`
+      // IS the non-measurement and the cache keeps what it holds.
+      udpProbe: outcome.udpProbe,
     },
     outcome.at,
   ).catch(() => null);
@@ -603,7 +687,14 @@ export async function adoptListExitObserved(
     if (p.serverId === undefined || !isVpnScheme(p.scheme)) continue;
     const row = byServerId.get(p.serverId);
     if (row === undefined) continue;
-    let existing = cache[p.id];
+    // (p) 2026-09-16 — a SERVER-SEEDED entry is not an entry for this purpose. It
+    // holds the account list's OS reading and no verdict of any kind, and the exit
+    // write below only SHOWS on a VPN row beside a resolved pre-flight — so
+    // treating it as "already has an entry" would skip the resolve and leave the
+    // exit stored and invisible. Read as absent, the pre-flight below runs and the
+    // seeded reading survives it (`saveEndpointResult` carries no server fields
+    // across an endpoint it has not resolved before, so the next poll re-seeds it).
+    let existing = cache[p.id]?.serverSeeded === true ? undefined : cache[p.id];
     // (k) K3 — the server's EXPLICIT clear reaches this Mac. The list carries
     // `exit_superseded_at: null` (the key present, the value the literal null
     // — an absent key is an older server and says nothing) beside an entry
@@ -654,7 +745,18 @@ export async function adoptListExitObserved(
         // Re-read: a Test that completed while the resolve ran already wrote a
         // fuller entry (pre-flight + fleet fields), which this must not replace.
         cache = await loadProbeCache();
-        if (cache[p.id] === undefined) {
+        // (p) review — ⛔ THIS GUARD MUST AGREE WITH THE READ ABOVE IT. It used to
+        // write only when the key was ABSENT, so a SERVER-SEEDED entry — which the
+        // read above deliberately treats as absent — made this discard the resolve
+        // it had just spent, leave the row with no `endpoint`, and hand the seeded
+        // entry back as `existing`. The exit below was then written onto an entry
+        // no VPN surface reads (`deriveProbeViewWithEndpointRows` skips a row with
+        // no `endpoint`, and the base derivation refuses the placeholder's exit),
+        // so the row said "untested" for ever and burned a real DNS resolve every
+        // poll. `saveEndpointResult` rebuilds the entry and drops the seeded mark;
+        // the next poll's `adoptListOsFingerprint` re-seeds the reading onto the
+        // real entry, which is what the comment above already describes.
+        if (cache[p.id] === undefined || cache[p.id]?.serverSeeded === true) {
           cache = await saveEndpointResult(
             p.id,
             { resolved: r.resolved, ip: r.ip, message: r.message },
@@ -722,14 +824,89 @@ export async function adoptListExitObserved(
   return written;
 }
 
+/** (p) — the slice of a list row the OS adoption reads: the row, the reading the
+ *  server holds for it, and WHEN that reading was taken. */
+export type ListOsRow = Pick<AccountProxyMeta, 'id' | 'os_fingerprint' | 'os_fingerprint_at'>;
+
 /**
- * D2 — fetch the account proxy list and adopt its observed exits (above). The
+ * (p) 2026-09-16 — adopt the OS reading the SERVER holds for each proxy (the
+ * account list's `os_fingerprint`) into the same cache field a local test writes,
+ * so a proxy fingerprinted on ANOTHER Mac — or before a reinstall — shows its
+ * reading here without anyone pressing Test. The control plane is the only thing
+ * that can take this reading (it reads the SYN the proxy's own kernel sent to our
+ * observer), it has been storing it since N-2, and nothing the customer could see
+ * has ever read it back: that is the owner's "we are not saving the OS fingerprint
+ * of already checked proxies".
+ *
+ * ⛔ ONE FRESHNESS RULE. The reading is aged by `isOsFingerprintFresh` against the
+ * server's own `os_fingerprint_at`, the same function and the same TTL that age a
+ * locally measured one — so a stored reading past the TTL is never adopted, and one
+ * that goes stale later drops out at the derivation. A reading the server cannot
+ * date is REFUSED outright: an undatable reading cannot be aged, and the one thing
+ * it must never do is arrive looking current.
+ *
+ * ⛔ Never rewinds: a reading at or before the one this Mac already holds writes
+ * nothing, so a test run here minutes ago outranks the list's copy of an older one
+ * (the writer re-checks this under the lock — this check only keeps the returned
+ * "written" list honest). Best-effort per proxy; returns the proxy ids written.
+ *
+ * Every scheme, not just SOCKS5: a VPN row's reading comes from the observer record
+ * the fleet node caused through the tunnel, and it is stored on the row like any
+ * other. A list row can never carry a CAUSE (`unavailable`) rather than a reading —
+ * the wire parser mints those only from a /test reply — so nothing here can turn an
+ * explanation into a stored measurement.
+ */
+export async function adoptListOsFingerprint(
+  rows: ReadonlyArray<ListOsRow>,
+  proxies: ReadonlyArray<ListExitProxyLike>,
+  nowMs: number = Date.now(),
+): Promise<string[]> {
+  const written: string[] = [];
+  const byServerId = new Map<string, ListOsRow>();
+  for (const r of rows) byServerId.set(r.id, r);
+  let cache: ProbeCacheMap;
+  try {
+    cache = await loadProbeCache();
+  } catch {
+    return written;
+  }
+  for (const p of proxies) {
+    if (p.serverId === undefined) continue;
+    const row = byServerId.get(p.serverId);
+    const fp = row?.os_fingerprint;
+    if (row === undefined || fp === null || fp === undefined) continue;
+    const at =
+      typeof row.os_fingerprint_at === 'string' ? Date.parse(row.os_fingerprint_at) : Number.NaN;
+    if (!Number.isFinite(at)) continue;
+    if (!isOsFingerprintFresh({ ...fp, at }, nowMs)) continue;
+    const existing = cache[p.id];
+    if (existing?.osFingerprint !== undefined && existing.osFingerprint.at >= at) continue;
+    try {
+      cache = await seedServerOsFingerprint(p.id, fp, at);
+      written.push(p.id);
+    } catch {
+      /* best-effort — the next refresh retries */
+    }
+  }
+  return written;
+}
+
+/**
+ * D2 — fetch the account proxy list and adopt what the SERVER holds for these
+ * rows: the exit it last observed (above) and (p) the OS reading it stored. The
  * views call this fire-and-forget from their refresh; it is `async` so every
  * failure — offline, a 5xx, a mocked-away transport — is a rejection the caller
  * swallows, never a throw inside the refresh that would read as "couldn't load
- * proxies". Skips the request entirely when no local VPN proxy is synced to the
- * server: there would be nothing to adopt, and a SOCKS5-only account should not
- * pay a list round-trip per poll for it.
+ * proxies". Skips the request entirely when NO local proxy is synced to the server
+ * at all: there would be nothing to adopt either way.
+ *
+ * ⛔ (p) — the skip used to require a VPN row, because an exit was the only thing
+ * worth fetching for. A SOCKS5 row has an OS reading and no exit to adopt, so that
+ * condition now excludes exactly the rows this item exists for.
+ *
+ * The exit adoption runs FIRST on purpose: it is the one that creates a VPN row's
+ * endpoint entry, and the reading then lands on top of a real entry rather than on
+ * a seeded one.
  */
 export async function syncListExitObserved(
   baseUrl: string,
@@ -738,11 +915,13 @@ export async function syncListExitObserved(
   nowMs: number = Date.now(),
 ): Promise<string[]> {
   if (apiKey === null || apiKey.length === 0) return [];
-  if (!proxies.some((p) => p.serverId !== undefined && isVpnScheme(p.scheme))) return [];
+  if (!proxies.some((p) => p.serverId !== undefined)) return [];
   // `nowMs` is taken BEFORE the request (the default binds at the call), so
   // the adoption's K3 guard compares a local stamp with the fetch's start.
   const rows = await listAccountProxies(baseUrl, apiKey);
-  return adoptListExitObserved(rows, proxies, nowMs);
+  const exits = await adoptListExitObserved(rows, proxies, nowMs);
+  const readings = await adoptListOsFingerprint(rows, proxies, nowMs);
+  return [...new Set([...exits, ...readings])];
 }
 
 /**
@@ -814,6 +993,19 @@ export function deriveProbeViewWithEndpointRows(
         ...(c.nodeId !== undefined ? { nodeId: c.nodeId } : {}),
       };
     if (c.quicProbe !== undefined) view.quicProbe[id] = c.quicProbe;
+    // (V6 2026-09-16) ITEM 3 — and the UDP-relay verdict beside it. This overlay is
+    // the ONLY way a VPN row's fleet fields reach a surface (its placeholder
+    // `result` is never usable), so a field added to the base derivation and not
+    // here is a field that works for SOCKS5 rows and silently does not exist for
+    // tunnels — which are the rows this measurement was added for.
+    //
+    // ⛔ …and it ages the verdict the SAME way the base derivation does (refuter
+    // #5). An overlay that re-adds a field the TTL just removed makes the TTL true
+    // of SOCKS5 rows and false of VPN rows — with nothing in either function saying
+    // so, and for the rows this measurement was added for. The asymmetry is already
+    // spelled out two lines up for the QUIC verdict; this is the same rule.
+    if (c.udpProbe !== undefined && isUdpVerdictFresh(c.udpProbeAt, nowMs))
+      view.udpProbe[id] = c.udpProbe;
     if (c.exitIp !== undefined) {
       view.exitResults[id] = {
         ip: c.exitIp,

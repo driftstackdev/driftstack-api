@@ -756,6 +756,13 @@ export const accountProxies = pgTable(
       reason: string;
       observed_ip: string;
       observed_via: 'proxy_host' | 'exit_ip';
+      // (V-219) The route writes the WHOLE measurement object into this column,
+      // these two flags included, and they have been stored ever since the flags
+      // existed — the type simply never said so. Optional: a reading written
+      // before then has neither, and a reader must treat absent as FALSE. No
+      // migration: jsonb needs none, and this declares what the column holds.
+      single_host_vantage?: boolean;
+      web_port_vantage?: boolean;
     }>(),
     osFingerprintAt: timestamp('os_fingerprint_at', { withTimezone: true }),
     // VPN parity (migration 0120) — the last EXIT IDENTITY a live session OBSERVED
@@ -784,6 +791,19 @@ export const accountProxies = pgTable(
     // seen up again. A `not_run` (refusal / could-not-run) measured nothing and
     // never sets it. NULL = never contradicted.
     exitSupersededAt: timestamp('exit_superseded_at', { withTimezone: true }),
+    // ITEM 4 (migration 0123) — when the BACKGROUND freshness refresher last
+    // ATTEMPTED this row, success or failure. Both the cooldown clock and the
+    // claim: the tick stamps it inside the same statement that selects the row
+    // FOR UPDATE SKIP LOCKED, so a second worker can neither claim the row nor
+    // find it due again. NULL = never attempted (= due now).
+    // ⛔ NOT `updated_at`: a customer relabel or credential rotation bumps that,
+    // and an unrelated edit must never schedule a dial through their proxy.
+    freshnessAttemptedAt: timestamp('freshness_attempted_at', { withTimezone: true }),
+    // ITEM 4 (migration 0123) — consecutive BACKGROUND probe failures, reset to 0
+    // by the next success. Nothing customer-facing reads it; it exists only so a
+    // SUSTAINED run is distinguishable from one transient miss (the webhooks
+    // precedent: recordRetry does not bump consecutive_failures, recordDlq does).
+    freshnessConsecutiveFailures: integer('freshness_consecutive_failures').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -791,7 +811,23 @@ export const accountProxies = pgTable(
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [index('account_proxies_account_idx').on(t.accountId)],
+  (t) => [
+    index('account_proxies_account_idx').on(t.accountId),
+    // Matches the freshness due predicate exactly (migration 0123's partial
+    // index, scheme IN ('socks5','http') — a VPN row is never refreshed here).
+    //
+    // ⛔ The `.where()` is the half that used to be missing, and the comment above
+    // it asserted the opposite of what the code said: this declared a FULL index
+    // while 0123 creates a PARTIAL one. Nothing breaks today (drizzle-kit is not
+    // wired, so nothing generates from this file), but this file is the source of
+    // truth the moment TD-002 reinstates generation — and schema.ts already
+    // records that believing a partial index was full is what produced migration
+    // 0071, a duplicate index whose own rationale called a partial index "that
+    // full index". Spelled to match the migration's predicate byte for byte.
+    index('account_proxies_freshness_due_idx')
+      .on(t.freshnessAttemptedAt)
+      .where(sql`${t.scheme} IN ('socks5', 'http')`),
+  ],
 );
 
 /**

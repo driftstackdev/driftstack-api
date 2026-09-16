@@ -65,6 +65,7 @@ import { isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
 import { withProxyProbe } from '../lib/proxy-probe-sweeper';
 import {
   accountProxyInputFor,
+  chipOsFingerprint,
   deriveProbeViewWithEndpointRows,
   ensureAccountProxyRow,
   fleetFailureReasons,
@@ -102,6 +103,9 @@ import {
   VPN_NOT_STORED_CHECK_NOTICE,
   VPN_NOT_STORED_TALLY_REASON,
   VPN_TUNNEL_UP_NO_LATENCY_TITLE,
+  VPN_UDP_MEASURED_NONE_TITLE,
+  VPN_UDP_MEASURED_OK_TITLE,
+  VPN_UDP_NOT_MEASURED_TITLE,
 } from '../lib/proxy-check-copy';
 
 interface ListState {
@@ -536,6 +540,12 @@ export function ProxiesView(): JSX.Element {
   // verdict. Both label the row; neither is ever folded into quicMeasured.
   const [serverVantage, setServerVantage] = useState<Record<string, ServerVantage>>({});
   const [quicProbe, setQuicProbe] = useState<Record<string, boolean>>({});
+  // (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP-relay verdict. ⛔ A row
+  // that is NOT KEYED here was not measured; only a keyed `false` is a negative.
+  // On a VPN row the node's `udp_associate: true` is an ASSERTION about the tunnel
+  // (never probed) and the control plane drops it, so this map stays empty for
+  // tunnels until a node sends a real reading — and the chip says "not measured".
+  const [udpProbe, setUdpProbe] = useState<Record<string, boolean>>({});
   // VPN exit parity (b) — the fleet's failure sentence for a VPN row whose
   // endpoint resolved but whose tunnel the fleet Mac could not bring up.
   // (h) finding 3 — hydrated from the CACHE (`fleetFailureReasons`) on load
@@ -621,6 +631,7 @@ export function ProxiesView(): JSX.Element {
       setQuicMeasured(view.quicMeasured);
       setServerVantage(view.serverVantage);
       setQuicProbe(view.quicProbe);
+      setUdpProbe(view.udpProbe);
     } catch (err) {
       setState((s) => ({
         ...s,
@@ -649,6 +660,7 @@ export function ProxiesView(): JSX.Element {
         setQuicMeasured(view.quicMeasured);
         setServerVantage(view.serverVantage);
         setQuicProbe(view.quicProbe);
+        setUdpProbe(view.udpProbe);
       }),
     [],
   );
@@ -708,6 +720,7 @@ export function ProxiesView(): JSX.Element {
           setQuicMeasured((m) => dropKey(m, editId));
           setServerVantage((m) => dropKey(m, editId));
           setQuicProbe((m) => dropKey(m, editId));
+          setUdpProbe((m) => dropKey(m, editId));
           // Invalidating alone leaves the row with NO verdict, which reads as
           // "untested" rather than "the endpoint changed" — and the next launch
           // is where that gets discovered. Re-test instead.
@@ -815,6 +828,7 @@ export function ProxiesView(): JSX.Element {
     setQuicMeasured((m) => dropKey(m, id));
     setServerVantage((m) => dropKey(m, id));
     setQuicProbe((m) => dropKey(m, id));
+    setUdpProbe((m) => dropKey(m, id));
   }
 
   /**
@@ -1356,6 +1370,7 @@ export function ProxiesView(): JSX.Element {
     setQuicMeasured((m) => dropKey(m, id));
     setServerVantage((m) => dropKey(m, id));
     setQuicProbe((m) => dropKey(m, id));
+    setUdpProbe((m) => dropKey(m, id));
     // (o) O5 — and the "no Mac was free" state with them: it describes the last
     // server test, and this drop is taken where that test's answer no longer
     // stands (an endpoint that stopped resolving, an edit).
@@ -1386,10 +1401,16 @@ export function ProxiesView(): JSX.Element {
           : dropKey(m, id),
     );
     if (outcome.kind === 'ok') {
-      const fp = outcome.osFingerprint;
-      if (fp !== undefined) {
-        const rec: CachedOsFingerprint = { ...fp, at: outcome.at };
-        setOsFingerprints((m) => ({ ...m, [id]: rec }));
+      // (p) review — the reading's OWN date, and the ONE freshness rule, both
+      // applied by the same helper the cache write uses (`chipOsFingerprint`).
+      // Stamping it with the reply time rendered a STORED reading — which the
+      // server attaches with no age bound — as "Measured by Driftstack, just
+      // now", in full green, until the cache emit a moment later dropped it on
+      // the TTL. A reading past the TTL takes the old one with it, because that
+      // is precisely what the emit that follows will do.
+      if (outcome.osFingerprint !== undefined) {
+        const rec = chipOsFingerprint(outcome);
+        setOsFingerprints((m) => (rec !== undefined ? { ...m, [id]: rec } : dropKey(m, id)));
       }
       // T-1 — a fleet result can be ok with NO timing. The old number must
       // then GO: left in place beside a fresh vantage label it reads as "the
@@ -1427,6 +1448,16 @@ export function ProxiesView(): JSX.Element {
       setQuicProbe((m) =>
         relay !== undefined ? { ...m, [id]: relay } : cpFallback ? m : dropKey(m, id),
       );
+      // (V6 2026-09-16) ITEM 3 — the UDP-relay verdict, under the cache's rule
+      // (`saveServerProbeResult`): a reading REPLACES, and an ABSENCE KEEPS. The
+      // route emits `udp_associate` only when it is a measurement, so an absence
+      // here is always "this reply measured nothing about UDP" — a VPN row's
+      // asserted literal, an explicit null, a skipped leg, a cp fallback — and a
+      // non-measurement must never retire a measurement. The two copies of this
+      // rule (here and in the cache) have to agree or the chip flips on every
+      // emit; they are bound by tests/unit/a-vpn-udp-chip-is-a-reading-or-nothing.
+      const udpRelay = outcome.udpProbe;
+      setUdpProbe((m) => (udpRelay !== undefined ? { ...m, [id]: udpRelay } : m));
       // VPN exit parity (b) — the exit the fleet Mac observed is the exit the
       // profile will have; it lands in the same row cell as the native probe's
       // exit, and for a VPN row it is the only exit there can be.
@@ -1467,6 +1498,10 @@ export function ProxiesView(): JSX.Element {
       setServerProbeAt((m) => dropKey(m, id));
       setServerVantage((m) => dropKey(m, id));
       setQuicProbe((m) => dropKey(m, id));
+      // (V6) — and the UDP-relay verdict with it: the machine that runs the profile
+      // says this proxy does not work, so every server-measured value goes. The
+      // cache write does the same (`saveFleetFailure` rebuilds the entry).
+      setUdpProbe((m) => dropKey(m, id));
       setOsFingerprints((m) => dropKey(m, id));
       // ⛔ (P2) — but the REASON is kept, on a SOCKS5 row too. This is the
       // machine that runs the profile saying the proxy does not work, and it
@@ -1618,6 +1653,7 @@ export function ProxiesView(): JSX.Element {
         setQuicMeasured((m) => dropKey(m, p.id));
         setServerVantage((m) => dropKey(m, p.id));
         setQuicProbe((m) => dropKey(m, p.id));
+        setUdpProbe((m) => dropKey(m, p.id));
         // (P2) — the fleet leg does not run when the native probe failed, so a
         // standing fleet failure is exactly as stale as the numbers above it.
         setVpnFailures((m) => dropKey(m, p.id));
@@ -1643,6 +1679,7 @@ export function ProxiesView(): JSX.Element {
       setQuicMeasured((m) => dropKey(m, p.id));
       setServerVantage((m) => dropKey(m, p.id));
       setQuicProbe((m) => dropKey(m, p.id));
+      setUdpProbe((m) => dropKey(m, p.id));
       return result;
     } finally {
       // Always clear the spinner for the id THIS probe owns — even when a
@@ -1925,6 +1962,7 @@ export function ProxiesView(): JSX.Element {
           quicMeasured={quicMeasured}
           serverVantage={serverVantage}
           quicProbe={quicProbe}
+          udpProbe={udpProbe}
           vpnFailures={vpnFailures}
           vpnNotices={vpnNotices}
           noFleetMac={noFleetMac}
@@ -2136,6 +2174,7 @@ function ProxyTable({
   quicMeasured,
   serverVantage,
   quicProbe,
+  udpProbe,
   vpnFailures,
   vpnNotices,
   noFleetMac,
@@ -2163,6 +2202,9 @@ function ProxyTable({
   /** T-1 — where each server latency was measured, and the fleet relay verdict. */
   serverVantage: Record<string, ServerVantage>;
   quicProbe: Record<string, boolean>;
+  /** (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP-relay verdict per row.
+   *  ⛔ A row absent from this map was NOT MEASURED. */
+  udpProbe: Record<string, boolean>;
   /** (b) — the fleet's failure sentence per VPN row whose tunnel did not come up. */
   vpnFailures: Record<string, string>;
   /** (d) — the server's sentence per VPN row whose test was NOT RUN (a notice). */
@@ -2421,6 +2463,7 @@ function ProxyTable({
                 quicMeasured={quicMeasured[p.id]}
                 serverVantage={serverVantage[p.id]}
                 quicProbe={quicProbe[p.id]}
+                udpProbe={udpProbe[p.id]}
                 vpnFailure={vpnFailures[p.id]}
                 vpnNotice={vpnNotices[p.id]}
                 noFleetMac={noFleetMac[p.id] === true}
@@ -2506,6 +2549,7 @@ function ProxyRow({
   quicMeasured,
   serverVantage,
   quicProbe,
+  udpProbe,
   vpnFailure,
   vpnNotice,
   noFleetMac,
@@ -2542,6 +2586,11 @@ function ProxyRow({
   serverVantage: ServerVantage | undefined;
   /** T-1 — the fleet Mac's QUIC-relay verdict, its own chip; never merged. */
   quicProbe: boolean | undefined;
+  /** (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP-relay verdict.
+   *  ⛔ `undefined` is NOT MEASURED, never "no UDP": on the VPN path the node
+   *  ASSERTS `udp_associate: true` about the tunnel and probes nothing, so the
+   *  control plane drops it and this stays undefined until a node measures. */
+  udpProbe: boolean | undefined;
   /** (b) — the fleet's failure sentence when this VPN row's tunnel did not come
    *  up, and (P2) a SOCKS5 row's too: the Mac that runs the profile answering
    *  "this proxy does not work" is the same fact whatever the scheme, and on a
@@ -2828,9 +2877,24 @@ function ProxyRow({
           // (h) — a VPN row has no SOCKS5 `result` (its placeholder is deleted
           // from testResults by design), so the chip set below was unreachable
           // and the cell read a permanent "untested" naming a Test button the
-          // row does not have. A tunnel carries UDP; the one protocol probed
-          // through it is QUIC (the fleet's relay leg, or a live session's h3).
-          <VpnQuicChip quicMeasured={quicMeasured} quicProbe={quicProbe} noFleetMac={noFleetMac} />
+          // row does not have.
+          //
+          // (V6 2026-09-16) ITEM 3 — TWO chips now, and the UDP one is the point:
+          // this cell used to render none at all for UDP, on the rule "a tunnel
+          // carries UDP; nothing probes it here". That rule is about to stop
+          // being true — the node's three-state `udp_associate` is contracted —
+          // and a surface that renders nothing has no way to say a measured NO.
+          // Absence of the chip and a measured negative would have looked the
+          // same (they would both have looked like silence), which is the exact
+          // failure this item exists to remove.
+          <div className="flex flex-wrap items-center gap-1">
+            <VpnUdpChip udpProbe={udpProbe} />
+            <VpnQuicChip
+              quicMeasured={quicMeasured}
+              quicProbe={quicProbe}
+              noFleetMac={noFleetMac}
+            />
+          </div>
         ) : result !== undefined && reachable ? (
           <ProxyCapabilityChips
             result={result}
@@ -3132,10 +3196,60 @@ function HealthPill({
 const NO_TEST_MAC_QUIC_HINT = `Not measured yet — Driftstack was busy. QUIC is measured from Driftstack’s network; try ${CHECK_VPN_ACTION} again in a few minutes.`;
 
 /**
+ * (V6 2026-09-16) ITEM 3 — the UDP chip of a VPN row, in THREE states, and the
+ * third one is the whole point of the item:
+ *
+ *   • `true`      → `✓ UDP`, green. A leg RAN through the tunnel and relayed.
+ *   • `false`     → `⤵ UDP`, muted. A leg RAN and did not. A measured negative,
+ *                   and it must be distinguishable from the state below.
+ *   • `undefined` → `⇢ UDP`, muted, its OWN glyph and its own data attribute:
+ *                   NOT MEASURED. Neither `✓` nor `⤵` — reusing either would
+ *                   claim a probe that never ran.
+ *
+ * ⛔ The undefined arm is what a VPN row shows TODAY on every deployment: the
+ * node asserts `udp_associate: true` on the VPN path without probing anything
+ * and the control plane drops the literal (`capabilityReadingsForReply`), so
+ * nothing reaches this chip. It renders "UDP travels inside the VPN" — true of
+ * a tunnel, and NOT a verdict — never "no UDP", which is reserved for a `false`
+ * a Mac actually measured. Telling a customer their tunnel lacks UDP because we
+ * did not look is the failure this item exists to prevent.
+ */
+function VpnUdpChip({ udpProbe }: { udpProbe: boolean | undefined }): JSX.Element {
+  if (udpProbe === undefined) {
+    return (
+      <span
+        className="rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"
+        data-component="vpn-udp-chip"
+        data-ok="unmeasured"
+        data-udp="tunnel"
+        title={VPN_UDP_NOT_MEASURED_TITLE}
+      >
+        ⇢ UDP
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 rounded-sm px-1 py-px text-[9px] ${
+        udpProbe ? 'bg-status-ready/15 text-status-ready' : 'bg-surface-inset text-ink-muted'
+      }`}
+      data-component="vpn-udp-chip"
+      data-ok={udpProbe ? 'true' : 'false'}
+      data-udp={udpProbe ? 'true' : 'false'}
+      title={udpProbe ? VPN_UDP_MEASURED_OK_TITLE : VPN_UDP_MEASURED_NONE_TITLE}
+    >
+      <span aria-hidden="true">{udpProbe ? '✓' : '⤵'}</span>
+      UDP
+    </span>
+  );
+}
+
+/**
  * (h) — the Protocols cell of a VPN row: ONE QUIC chip, strongest evidence
  * first (a live session's HTTP/3 verdict outranks the fleet relay leg), and
  * an honest "not measured" that names the button this row HAS. Never a WebRTC
- * or UDP chip: UDP is not a probed grant on a tunnel — the tunnel carries it.
+ * chip: WebRTC is derived from a SOCKS5 UDP grant this row does not have, and
+ * the tunnel's own UDP state is `VpnUdpChip` above.
  */
 function VpnQuicChip({
   quicMeasured,

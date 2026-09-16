@@ -16,6 +16,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   AccountOrganizationSchema,
   AccountProxyInputSchema,
+  AccountProxyOsFingerprintSchema,
   AccountProxyUpdateSchema,
   AVATAR_MAX_BYTES,
   findUnresolvableOpenvpnFileReferences,
@@ -27,6 +28,7 @@ import {
   UploadAvatarRequestSchema,
   UuidSchema,
   type AccountProxyMetadata,
+  type AccountProxyOsFingerprint,
   type AccountTier,
 } from '@driftstack/api-types';
 import { resolveEffectiveAccount, type AccountAuthRepo } from '../services/auth.js';
@@ -52,8 +54,10 @@ import {
 } from '../services/account-proxies.js';
 import {
   encryptAccountProxySecret,
+  readAccountProxySecret,
   type AccountProxySecretSlot,
 } from '../lib/account-proxy-secret-encryption.js';
+import { readingWasTakenThroughCurrentIdentity } from '../services/proxy-reading-persist.js';
 import {
   classifyUnsafeHost,
   classifyUnsafeVpnTargets,
@@ -77,7 +81,10 @@ import {
   type ProxyConnectivityProbe,
 } from '../services/proxy-connectivity-probe.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
-import { probeReachedVerdict } from '../schemas/harness-control-protocol.js';
+import {
+  probeReachedVerdict,
+  type ProbeEgressResult,
+} from '../schemas/harness-control-protocol.js';
 import { z } from 'zod';
 
 /** V-352b — avatar presigned-GET TTL. 1h is long enough that a single
@@ -225,6 +232,69 @@ type OsFingerprintFields =
   | { os_fingerprint_unavailable: 'vpn_tunnel' | 'not_observed' | 'observer_off' };
 
 /**
+ * (V6 2026-09-16) ITEM 3 — the node's frame carries THREE kinds of field, and only
+ * one of them may reach a customer under a name that means "we measured this".
+ *
+ *   1. MEASUREMENTS — `reachable`, `auth_ok`, `can_route`, `exit_ip`, the `exit_*`
+ *      geo. Probed on every path. Reported.
+ *   2. ASSERTIONS — on the VPN path `udp_associate: true` and `h2_ok: true` are
+ *      LITERALS the node writes about the tunnel's NATURE. Nothing dialled, nothing
+ *      timed out, nothing could have come back false. Read from the node source
+ *      2026-09-16.
+ *   3. NON-MEASUREMENTS — `quic_ok: false` beside `quic_detail: "skipped: …"`, and
+ *      (contracted, arriving) an explicit `null` on `udp_associate` / `quic_ok`.
+ *      The node is saying IT DID NOT LOOK.
+ *
+ * ⛔ A customer must never be told their tunnel lacks QUIC because we did not look,
+ * and must never be shown a green "HTTP/2 ✓" that no probe earned. So (2) and (3)
+ * are ABSENT from the reply, and absence is the wire's "not measured" — every
+ * surface renders it as "not measured yet", never as a negative verdict.
+ *
+ * ⚠️ THE DISCRIMINATOR FOR UDP ON A VPN ROW IS `udp_detail`, NOT THE BOOLEAN.
+ * Today's node sends the bare literal `true` with no detail; the migrated node
+ * sends a real verdict WITH its sentence (or `null` + `"skipped: …"`). A bare
+ * boolean on a VPN row is therefore the legacy assertion and is dropped, while the
+ * same boolean beside a detail is the measurement and is reported. That makes the
+ * node change deployable in either order: nothing here needs to ship with it, and
+ * the field lights up the moment a node starts saying what it measured.
+ *
+ * ⚠️ QUIC takes no such clause, deliberately: the node has ALWAYS said "skipped:"
+ * on the VPN path, so a VPN `quic_ok` arriving without that prefix is already a
+ * genuine relay measurement and has been reported as one since (e).
+ *
+ * Exported and pure so the rule is pinned directly, not only through the route.
+ */
+export function capabilityReadingsForReply(
+  scheme: string,
+  frame: Pick<
+    ProbeEgressResult,
+    'udp_associate' | 'udp_detail' | 'h2_ok' | 'quic_ok' | 'quic_detail'
+  >,
+): { udp_associate?: boolean; udp_detail?: string; h2_ok?: boolean; quic_ok?: boolean } {
+  const vpn = scheme === 'openvpn' || scheme === 'wireguard';
+  const legSkipped = (detail: string | null | undefined): boolean =>
+    typeof detail === 'string' && detail.startsWith('skipped:');
+  const udpDetail = typeof frame.udp_detail === 'string' ? frame.udp_detail : undefined;
+  const udpMeasured =
+    typeof frame.udp_associate === 'boolean' &&
+    !legSkipped(udpDetail) &&
+    // The legacy VPN literal: a boolean the node never backed with a sentence.
+    !(vpn && udpDetail === undefined);
+  const quicMeasured = typeof frame.quic_ok === 'boolean' && !legSkipped(frame.quic_detail);
+  return {
+    ...(udpMeasured ? { udp_associate: frame.udp_associate as boolean } : {}),
+    // The node's own sentence rides even when the boolean does not: "skipped: …"
+    // is exactly what tells a surface WHY there is no verdict, and it is the only
+    // thing on the wire that can.
+    ...(udpDetail !== undefined ? { udp_detail: udpDetail } : {}),
+    // ⛔ NEVER on a VPN row. There is no three-state contract coming for h2_ok and
+    // no probe behind it on that path — the honest reply is silence.
+    ...(vpn ? {} : { h2_ok: frame.h2_ok }),
+    ...(quicMeasured ? { quic_ok: frame.quic_ok as boolean } : {}),
+  };
+}
+
+/**
  * The `reason` a customer sees beside an OS reading. The classifier's own sentence
  * describes packet internals a first-time user cannot act on; it stays in the log
  * line written beside the reading, and the customer is told in plain words where
@@ -234,6 +304,36 @@ function customerOsFingerprintReason(os: FingerprintedOs): string {
   return os === 'unknown'
     ? 'The operating system could not be determined from this connection.'
     : 'Based on how this proxy responds to a network connection.';
+}
+
+/**
+ * (p) 2026-09-16 — the row's STORED OS reading in the shape the wire already uses,
+ * or null when there is none this server can state truthfully.
+ *
+ * ⛔ Cleaned through the PUBLISHED schema rather than hand-copied field by field.
+ * The column is jsonb: it holds whatever object the route last wrote, which for a
+ * reading taken before V-219 has no vantage flags at all, and for a hypothetical
+ * newer writer could hold an `os` this contract cannot name. Parsing it with the
+ * one schema the reply and the list both publish means a value outside the closed
+ * set DROPS THE READING (null — "never measured") instead of reaching a client as
+ * an OS it cannot render, and there is no second copy of the closed set here to
+ * drift from the contract.
+ *
+ * ⛔ The two vantage flags are normalised to FALSE before the parse, never
+ * defaulted to true: they are what a client's match / mismatch claim rests on, and
+ * a reading that never stated them must not be promoted into one that does.
+ */
+function storedOsFingerprint(
+  row: Pick<AccountProxyRow, 'osFingerprint'>,
+): AccountProxyOsFingerprint | null {
+  const stored = row.osFingerprint;
+  if (stored === null) return null;
+  const parsed = AccountProxyOsFingerprintSchema.safeParse({
+    ...stored,
+    single_host_vantage: stored.single_host_vantage === true,
+    web_port_vantage: stored.web_port_vantage === true,
+  });
+  return parsed.success ? parsed.data : null;
 }
 
 /**
@@ -372,6 +472,176 @@ export function classifyVpnProbeFailure(
 function profileCapFor(tier: AccountTier): number | null {
   const cap = PROFILES_PER_TIER[tier];
   return cap === 'custom' ? null : cap;
+}
+
+/**
+ * ⛔ A stored reading may not outlive what it was measured THROUGH.
+ *
+ * Every reading an account_proxies row carries — the passive OS fingerprint,
+ * the exit identity (plus the stamp that dates its contradiction) and the
+ * measured QUIC verdict — was produced by connecting through this proxy. A PUT
+ * that repoints the row leaves some of them describing a machine the row no
+ * longer points at, so they are cleared in the SAME update that moves it: the
+ * row is never left half-invalidated (a reading beside an address that cannot
+ * have produced it, or a value beside a nulled timestamp).
+ *
+ * Which edit drops what, and why:
+ *
+ *  • host / port / scheme — a DIFFERENT machine (or a different service on the
+ *    same one) answers now, so EVERYTHING goes.
+ *
+ *  • VPN material — the .ovpn blob, the OpenVPN account inside it, the
+ *    WireGuard key / peer / endpoint / address / dns. ⛔ ITS OWN LINE, and NOT
+ *    covered by host/port: for a VPN row the display host and port are DERIVED
+ *    from the conf's endpoint (`buildOpenVpnProxyInput`) and username/password
+ *    are structurally null, so a provider key rotation — a new conf, the same
+ *    server — moves none of the fields above. The desktop client fixed exactly
+ *    this bug on its side (`vpnMaterialChanged` in ProxiesView), and a VPN row's
+ *    `exit_observed` is the ONLY source of its country and timezone, so a stale
+ *    one is not a cosmetic detail.
+ *    It takes the MACHINE arm rather than the credential one because the tunnel
+ *    endpoint lives INSIDE the material — `remote` is a line in the blob — and
+ *    this boundary cannot tell "same server, new keys" from "new server"
+ *    without parsing it. The cautious reading of an ambiguous change is that the
+ *    machine moved; the route's own SSRF note says the same thing (the real
+ *    egress is the embedded remote, not the display host).
+ *
+ *  • username / password — the same machine answers, but the credential is the
+ *    exit SELECTOR on a rotating-residential gateway (country / sticky session
+ *    are encoded in it), and BOTH writers of `exit_observed` ('session' and
+ *    'probe') measured it inside a session authenticated as that user. So the
+ *    exit identity goes, and with it the QUIC verdict — 'h3' vs 'h2-only' is
+ *    what that exit's path carried — and an OS reading taken OF THE EXIT
+ *    (`observed_via: 'exit_ip'`). What survives is an OS reading whose
+ *    `observed_via` is 'proxy_host': that is the TCP stack of the front door at
+ *    an unchanged host:port, and no credential moves it.
+ *
+ *  • label — invalidates nothing.
+ *
+ * ⛔ EVERY COMPARISON IS AGAINST THE STORED VALUE, NEVER AGAINST KEY PRESENCE.
+ * The desktop client PUTs the WHOLE proxy — label, scheme, host, port, username,
+ * password, VPN block — before every launch and every Test
+ * (`ensureAccountProxyRow` → `accountProxyInputFor` in
+ * apps/gui-client/src/lib/proxy-server-test.ts), so "a password key arrived" is
+ * the NORMAL case, and clearing on it would wipe a good reading on every launch
+ * — the very complaint this arc answers.
+ *
+ * ⛔ WHICH IS WHY SECRETS REACH THIS FUNCTION DECRYPTED. A stored secret is an
+ * AEAD envelope over a random nonce: the same string re-wrapped is different
+ * ciphertext, so comparing envelopes would report every launch as a rotation,
+ * and comparing their PRESENCE (the rule this replaced) cannot see a rotation at
+ * all — a password swapped for a different string, or a re-pasted VPN conf with
+ * new keys, invalidated nothing. The caller holds the master key and unwraps
+ * both sides, so a string→string rotation IS an edit here.
+ *   There is no client-side fallback to lean on: the desktop client does delete
+ * its local cache entry on such an edit, but the entry is re-seeded from THIS
+ * row on the next list refresh (`adoptListOsFingerprint` /
+ * `adoptListExitObserved` in proxy-server-test.ts), so a reading this route
+ * keeps comes straight back. The server is the only place the decision holds.
+ *
+ * ⛔ A stored secret this deployment CANNOT read (no master key, wrong key,
+ * corrupt envelope) counts as CHANGED against anything submitted. We cannot show
+ * the reading was taken through the material now on the row, and a reading we
+ * cannot justify is not one we may keep.
+ *
+ * Nothing here probes: the readings are dropped whether or not the new address
+ * answers. A reading we cannot replace is not a reading we may keep.
+ */
+export type ProxySecretMaterial = { readable: true; value: string | null } | { readable: false };
+
+/** Whether a submitted secret CHANGES the stored one. `undefined` means this PUT
+ *  carried none, which is never an edit; an unreadable stored secret differs
+ *  from everything (see the header). */
+function secretMaterialChanged(
+  existing: ProxySecretMaterial,
+  submitted: string | null | undefined,
+): boolean {
+  if (submitted === undefined) return false;
+  if (!existing.readable) return true;
+  return existing.value !== submitted;
+}
+
+/**
+ * A VPN block reduced to ONE comparable string.
+ *
+ * Field-wise and key-SORTED, never `JSON.stringify(row.config)`: the non-secret
+ * half is jsonb, Postgres does not preserve an object's key order, and a
+ * round-tripped row would then read as an edit on every launch. Fields that are
+ * absent are dropped, so "no dns" and "dns: undefined" are the same material —
+ * which is exactly how `buildVpnSecretAndConfig` stores them.
+ */
+export function canonicalVpnMaterial(fields: Record<string, string | undefined>): string {
+  return JSON.stringify(
+    Object.entries(fields)
+      .filter((entry): entry is [string, string] => entry[1] !== undefined)
+      .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)),
+  );
+}
+
+export function proxyReadingsInvalidatedByEdit(
+  existing: Pick<AccountProxyRow, 'scheme' | 'host' | 'port' | 'username' | 'osFingerprint'> & {
+    /** The row's stored password, DECRYPTED by the caller. */
+    password: ProxySecretMaterial;
+    /** The row's VPN material, decrypted + canonicalised. `{readable: true,
+     *  value: null}` on a socks5/http row, which has none. */
+    vpnMaterial: ProxySecretMaterial;
+  },
+  edit: {
+    scheme?: string;
+    host?: string;
+    port?: number;
+    username?: string | null;
+    /** The PLAINTEXT password this PUT writes — absent when it writes none. */
+    password?: string | null;
+    /** The canonicalised VPN material this PUT writes — absent when the body
+     *  carried no VPN block. */
+    vpnMaterial?: string | null;
+  },
+): AccountProxyRowUpdates {
+  const machineEdited =
+    (edit.host !== undefined && edit.host !== existing.host) ||
+    (edit.port !== undefined && edit.port !== existing.port) ||
+    (edit.scheme !== undefined && edit.scheme !== existing.scheme) ||
+    secretMaterialChanged(existing.vpnMaterial, edit.vpnMaterial);
+  const credentialEdited =
+    (edit.username !== undefined && edit.username !== existing.username) ||
+    secretMaterialChanged(existing.password, edit.password);
+  // Measured inside an authenticated session through this proxy's egress.
+  const sessionReadings = {
+    exitObserved: null,
+    exitObservedAt: null,
+    // The contradiction stamp dates the exit it contradicted. Left behind on a
+    // cleared exit it would make a list consumer refuse the NEXT observation
+    // (it refuses one dated at or before the stamp), so it goes with it.
+    exitSupersededAt: null,
+    quicMeasured: null,
+    quicMeasuredAt: null,
+  } satisfies AccountProxyRowUpdates;
+  const osReading = {
+    osFingerprint: null,
+    osFingerprintAt: null,
+  } satisfies AccountProxyRowUpdates;
+  // The background refresher's streak belongs to the address (and the credential)
+  // we could not reach, not to the row. `freshness_consecutive_failures` drives a
+  // linear backoff up to 24h (PROXY_FRESHNESS_MAX_BACKOFF_STEPS), so a proxy that
+  // was switched off long enough to condemn its exit and is then REPOINTED at a
+  // working server would not be dialled again for a day — the columns this very
+  // update just cleared staying blank, i.e. the customer's fix producing an empty
+  // chip instead of a fresh reading. Nulling the attempt stamp makes the row due
+  // on the next sweep tick (ITEM 4's claim reads exactly these two columns).
+  const freshnessSlate = {
+    freshnessConsecutiveFailures: 0,
+    freshnessAttemptedAt: null,
+  } satisfies AccountProxyRowUpdates;
+  if (machineEdited) return { ...sessionReadings, ...osReading, ...freshnessSlate };
+  if (credentialEdited) {
+    return {
+      ...sessionReadings,
+      ...(existing.osFingerprint?.observed_via === 'exit_ip' ? osReading : {}),
+      ...freshnessSlate,
+    };
+  }
+  return {};
 }
 
 export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRoutesOptions): void {
@@ -742,6 +1012,21 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // Cleared by the next exit observation (session or probe). null = never
       // contradicted — never a default.
       exit_superseded_at: r.exitSupersededAt?.toISOString() ?? null,
+      // (p) 2026-09-16 — the STORED OS reading, carried exactly as `exit_observed`
+      // above is. Until now this column had NO ROUTE OUT: the /:id/test route wrote
+      // it (migration 0119) and the only reader was a live session's capability
+      // report, so a proxy checked on one Mac showed nothing on a second one, or
+      // after a reinstall — the owner's "we are not saving the OS fingerprint of
+      // already checked proxies". null = never measured, never a default.
+      //
+      // ⛔ The DATE rides with it, and it is not decoration: this is a reading the
+      // row has been holding, not one this request took. A client ages it with the
+      // same TTL it ages its own readings by, so a stored reading from last week is
+      // hidden exactly as a local one from last week is — and a row that cannot be
+      // dated (`os_fingerprint_at: null`) is one a client must refuse rather than
+      // render as current.
+      os_fingerprint: storedOsFingerprint(r),
+      os_fingerprint_at: r.osFingerprintAt?.toISOString() ?? null,
       created_at: r.createdAt.toISOString(),
       updated_at: r.updatedAt.toISOString(),
     };
@@ -797,6 +1082,104 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
     return encryptAccountProxySecret(proxyMasterKey, { accountId, proxyId, slot }, secret);
   }
 
+  // Unwrap a STORED envelope for comparison only — `proxyReadingsInvalidatedByEdit`
+  // needs to know whether a submitted secret is the one already on the row, and
+  // the envelope itself cannot answer that (random nonce per write). The plaintext
+  // never leaves the comparison: it is not logged, not returned and not stored.
+  // An envelope this deployment cannot read is reported as UNREADABLE rather than
+  // as "no secret" — the rule treats the two differently, and quietly reading an
+  // unreadable credential as absent would make a rotation look like a no-op.
+  function storedSecretMaterial(args: {
+    accountId: string;
+    proxyId: string;
+    slot: AccountProxySecretSlot;
+    stored: string | null;
+  }): ProxySecretMaterial {
+    if (args.stored === null) return { readable: true, value: null };
+    if (proxyMasterKey === null) return { readable: false };
+    try {
+      return {
+        readable: true,
+        value: readAccountProxySecret(
+          proxyMasterKey,
+          { accountId: args.accountId, proxyId: args.proxyId, slot: args.slot },
+          args.stored,
+        ),
+      };
+    } catch {
+      return { readable: false };
+    }
+  }
+
+  // The identity material a STORED VPN row authenticates with, in the same
+  // canonical form `buildVpnSecretAndConfig` produces for an incoming block, so
+  // the two are comparable. The WireGuard preshared key is unwrapped as well: it
+  // lives in `config` as its own envelope (WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD)
+  // whose ciphertext changes on every write, so comparing it wrapped would read
+  // as a rotation on every launch.
+  function storedVpnMaterial(accountId: string, row: AccountProxyRow): ProxySecretMaterial {
+    if (row.scheme !== 'openvpn' && row.scheme !== 'wireguard') {
+      return { readable: true, value: null };
+    }
+    // A VPN row with no secret is malformed, not a row with nothing to compare.
+    if (row.wrappedSecret === null) return { readable: false };
+    const secret = storedSecretMaterial({
+      accountId,
+      proxyId: row.id,
+      slot: row.scheme === 'openvpn' ? 'openvpn-config' : 'wireguard-private-key',
+      stored: row.wrappedSecret,
+    });
+    if (!secret.readable || secret.value === null) return { readable: false };
+    const cfg = row.config;
+    const str = (k: string): string | undefined =>
+      typeof cfg[k] === 'string' ? cfg[k] : undefined;
+    if (row.scheme === 'openvpn') {
+      // The secret is `{config_blob[, password]}` as this route wrote it; the
+      // account username rides the non-secret config.
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(secret.value);
+      } catch {
+        return { readable: false };
+      }
+      const blob = (parsed as { config_blob?: unknown }).config_blob;
+      const password = (parsed as { password?: unknown }).password;
+      if (typeof blob !== 'string') return { readable: false };
+      return {
+        readable: true,
+        value: canonicalVpnMaterial({
+          config_blob: blob,
+          password: typeof password === 'string' ? password : undefined,
+          username: str('username'),
+        }),
+      };
+    }
+    const wrappedPresharedKey = str(WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD);
+    let presharedKey: string | undefined;
+    if (wrappedPresharedKey !== undefined) {
+      const psk = storedSecretMaterial({
+        accountId,
+        proxyId: row.id,
+        slot: 'wireguard-preshared-key',
+        stored: wrappedPresharedKey,
+      });
+      if (!psk.readable || psk.value === null) return { readable: false };
+      presharedKey = psk.value;
+    }
+    return {
+      readable: true,
+      value: canonicalVpnMaterial({
+        private_key: secret.value,
+        peer_public_key: str('peer_public_key'),
+        preshared_key: presharedKey,
+        endpoint: str('endpoint'),
+        allowed_ips: str('allowed_ips'),
+        address: str('address'),
+        dns: str('dns'),
+      }),
+    };
+  }
+
   function parseProxyId(value: string): string {
     const parsed = UuidSchema.safeParse(value);
     if (!parsed.success) throw new BadRequestError('Proxy id must be a valid UUID.');
@@ -811,6 +1194,12 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   // `config` (see WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD for why), so the key
   // is never in the jsonb in the clear. The non-secret structured fields ride
   // `config` (jsonb) so the GUI/dispatch can read them without decrypting.
+  //
+  // `material` is the same block as ONE comparable string (see
+  // `canonicalVpnMaterial`), built from the PLAINTEXT pieces here because the two
+  // stored halves cannot be compared: the envelopes re-encrypt on every write and
+  // the jsonb does not preserve key order. It is what tells a re-keyed VPN row
+  // from the desktop client's per-launch resync of the identical block.
   function buildVpnSecretAndConfig(
     accountId: string,
     proxyId: string,
@@ -827,7 +1216,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         dns?: string;
       };
     },
-  ): { wrappedSecret: string; config: Record<string, unknown> } | null {
+  ): { wrappedSecret: string; config: Record<string, unknown>; material: string } | null {
     if (input.scheme === 'openvpn') {
       if (!input.openvpn) {
         throw new BadRequestError('Add your OpenVPN configuration to save an OpenVPN proxy.');
@@ -874,6 +1263,15 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       return {
         wrappedSecret: wrapProxySecret(accountId, proxyId, 'openvpn-config', secret),
         config: { ...(username ? { username } : {}) },
+        // Mirrors exactly what is stored above (a falsy username/password is not
+        // stored, so it is not material either), and is read back by
+        // `storedVpnMaterial`. The LOWERED blob, because that is the artefact we
+        // keep — comparing the submitted one would call every re-upload a change.
+        material: canonicalVpnMaterial({
+          config_blob,
+          password: password ? password : undefined,
+          username: username ? username : undefined,
+        }),
       };
     }
     if (input.scheme === 'wireguard') {
@@ -909,6 +1307,17 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               }
             : {}),
         },
+        // Every field that decides which tunnel this is, including the two
+        // secrets — `storedVpnMaterial` unwraps both to compare against it.
+        material: canonicalVpnMaterial({
+          private_key,
+          peer_public_key,
+          preshared_key,
+          endpoint,
+          allowed_ips,
+          address,
+          dns: dns ? dns : undefined,
+        }),
       };
     }
     // socks5/http: a stray VPN block is a client error (avoids a half-typed row).
@@ -1059,6 +1468,47 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           updates.config = {};
         }
       }
+      // ⛔ A reading may not outlive the address — or the identity — it was taken
+      // through. Merged INTO the same `updates` object, so the row is repointed
+      // and its stale readings dropped by ONE statement: there is no window in
+      // which a moved proxy still advertises the old machine's OS / exit / QUIC,
+      // and no second round-trip that can fail after the first one landed.
+      // `proxyReadingsInvalidatedByEdit` carries the rule (and why each line of
+      // it) — host/port/scheme and the VPN material drop everything, a credential
+      // drops what was measured through the authenticated session, a label drops
+      // nothing. Both secrets are handed over DECRYPTED, because ciphertext
+      // cannot answer "is this the same credential".
+      Object.assign(
+        updates,
+        proxyReadingsInvalidatedByEdit(
+          {
+            scheme: existing.scheme,
+            host: existing.host,
+            port: existing.port,
+            username: existing.username,
+            osFingerprint: existing.osFingerprint,
+            password: storedSecretMaterial({
+              accountId: ctx.account.id,
+              proxyId: id,
+              slot: 'password',
+              stored: existing.wrappedPassword,
+            }),
+            vpnMaterial: storedVpnMaterial(ctx.account.id, existing),
+          },
+          {
+            scheme: parsed.data.scheme,
+            host: parsed.data.host,
+            port: parsed.data.port,
+            username: parsed.data.username,
+            // A VPN block forces the top-level password to null above, and that
+            // IS what this PUT writes. Otherwise the key is submitted only when
+            // the body carried one (omitted = keep existing = not an edit).
+            password:
+              vpn !== null ? null : 'password' in body ? (parsed.data.password ?? null) : undefined,
+            ...(vpn === null ? {} : { vpnMaterial: vpn.material }),
+          },
+        ),
+      );
       const row = await accountProxiesRepo.update({
         id,
         accountId: ctx.account.id,
@@ -1286,6 +1736,20 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         const fp = 'os_fingerprint' in fields ? fields.os_fingerprint : undefined;
         if (fp === undefined) return;
         try {
+          // ⛔ Rule 4 (services/proxy-reading-persist.ts) — `row` was read before a
+          // probe that can take ~12 seconds, and a PUT inside that window can have
+          // repointed the proxy, clearing this very column in the same statement.
+          // Writing now would restore a reading of the PREVIOUS address, dated
+          // after the move, onto the row the customer just fixed. The background
+          // refresher fences its write the same way, against the same helper.
+          const current = await proxiesRepo.findById({ id: row.id, accountId: ctx.account.id });
+          if (current === null || !readingWasTakenThroughCurrentIdentity(row, current)) {
+            request.log.info(
+              { proxyId: row.id },
+              'proxy test: the proxy changed while the test ran — the fingerprint describes the previous address and is not stored',
+            );
+            return;
+          }
           await proxiesRepo.update({
             id: row.id,
             accountId: ctx.account.id,
@@ -1297,6 +1761,34 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             'proxy test: failed to persist os fingerprint',
           );
         }
+      };
+
+      // (p) 2026-09-16 — the row's STORED OS reading, attached to a reply whose OWN
+      // test observed none. The precedent is two lines of this same handler: the
+      // QUIC verdict a live session measured is spread onto every ok reply from the
+      // row (`quicFields`), while the OS reading — measured by this very route,
+      // minutes earlier, and stored — was dropped, so a test that missed answered
+      // `os_fingerprint_unavailable` and nothing else and the customer's chip went
+      // blank on a proxy this deployment had already fingerprinted.
+      //
+      // ⛔ A FRESH OBSERVATION ALWAYS WINS: when `fields` already carries one this
+      // returns nothing, so the stored reading can never overwrite what this test
+      // just measured. The cause (`os_fingerprint_unavailable`) is NOT removed when
+      // a stored reading is attached — it explains why THIS test produced nothing,
+      // and the pair is how a client tells a stored reading from a fresh one.
+      //
+      // ⛔ And never a reading this server cannot DATE: `os_fingerprint_at` is what
+      // the client ages it by, so a row holding a reading with no timestamp is left
+      // alone rather than sent as something that will read as measured just now.
+      const storedOsForReply = (
+        fields: OsFingerprintFields | Record<string, never>,
+      ):
+        | { os_fingerprint: AccountProxyOsFingerprint; os_fingerprint_at: string }
+        | Record<string, never> => {
+        if ('os_fingerprint' in fields) return {};
+        const stored = storedOsFingerprint(row);
+        if (stored === null || row.osFingerprintAt === null) return {};
+        return { os_fingerprint: stored, os_fingerprint_at: row.osFingerprintAt.toISOString() };
       };
 
       // The control-plane probe — today's behaviour, byte-for-byte. It is BOTH the
@@ -1333,14 +1825,19 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           // asserting it away.
           if (!('host' in resolved)) {
             await proxyTcpProbe(row.host, row.port, 8_000);
+            // (o) — same cause as the fleet branch's twin of this narrowing: a
+            // VPN wire has no SOCKS5 endpoint for the observer to dial through,
+            // so there is no SYN to read and no retry can produce one.
+            const osFields = { os_fingerprint_unavailable: 'vpn_tunnel' as const };
             return {
               ok: true as const,
               latency_ms: Date.now() - startedAt,
               ...quicFields,
-              // (o) — same cause as the fleet branch's twin of this narrowing: a
-              // VPN wire has no SOCKS5 endpoint for the observer to dial through,
-              // so there is no SYN to read and no retry can produce one.
-              os_fingerprint_unavailable: 'vpn_tunnel' as const,
+              ...osFields,
+              // (p) — the cause says no reading can be taken HERE; it does not say
+              // the row has none. A tunnel the fleet has fingerprinted still shows
+              // its reading, dated, beside the cause.
+              ...storedOsForReply(osFields),
             };
           }
           const descriptor = {
@@ -1364,6 +1861,9 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               latency_ms,
               ...quicFields,
               ...osFields,
+              // (p) — this test observed nothing; the row may still hold a reading.
+              // A no-op when `osFields` carries a fresh one.
+              ...storedOsForReply(osFields),
             };
           }
           // The same four sentences the desktop client renders, so a customer who
@@ -1385,7 +1885,15 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         }
         try {
           await proxyTcpProbe(row.host, row.port, 8_000);
-          return { ok: true as const, latency_ms: Date.now() - startedAt, ...quicFields };
+          // (p) — a reachability check looks at no SYN at all, so it is the purest
+          // case of "this test observed none": the row's stored reading, dated,
+          // is the only OS answer there is.
+          return {
+            ok: true as const,
+            latency_ms: Date.now() - startedAt,
+            ...quicFields,
+            ...storedOsForReply({}),
+          };
         } catch {
           // The probe can surface Node socket/TLS details (and a remote endpoint
           // can influence some protocol text). Keep the public discriminated
@@ -1858,25 +2366,28 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             latency_ms: r.latency_ms,
             ...quicFields,
             ...osFields,
+            // (p) — the stored reading rides a fleet reply too, under the same rule
+            // (a fresh observation wins, the cause stays). Only on a USABLE verdict:
+            // a proxy the node could not use answers `ok:false`, where the OS half of
+            // the reply is not part of the published shape and the desktop client
+            // reads no reading at all — the list is what carries it there.
+            ...(usable ? storedOsForReply(osFields) : {}),
             // (e) 2026-09-10 — a `could_not_run` frame (node_busy, bad_config:*,
             // timeout…) carries no fact except `error`: every measurement field on
-            // it is a default false/null, so none is reported. On a verdict: a VPN
-            // row's `udp_associate` is the tunnel's nature, not a probed SOCKS5
-            // grant; and `quic_ok:false` beside a "skipped:" detail means the QUIC
-            // leg never ran (VPN path; endpoint never answered), not that QUIC
-            // failed — neither is reported as a measurement.
+            // it is a default false/null, so none is reported.
+            //
+            // (V6 2026-09-16) ITEM 3 — on a verdict, which of `udp_associate`,
+            // `h2_ok` and `quic_ok` is a READING is decided in ONE place,
+            // `capabilityReadingsForReply` above: a VPN row's UDP/HTTP-2 literals and
+            // a leg the node skipped are ABSENT, and absence is the wire's "not
+            // measured". `reachable` / `auth_ok` / `can_route` / `exit_ip` are probed
+            // on every path and are reported unchanged.
             ...(probeReachedVerdict(r)
               ? {
                   reachable: r.reachable,
                   auth_ok: r.auth_ok,
-                  ...(row.scheme === 'openvpn' || row.scheme === 'wireguard'
-                    ? {}
-                    : { udp_associate: r.udp_associate }),
                   can_route: r.can_route,
-                  h2_ok: r.h2_ok,
-                  ...(typeof r.quic_detail === 'string' && r.quic_detail.startsWith('skipped:')
-                    ? {}
-                    : { quic_ok: r.quic_ok }),
+                  ...capabilityReadingsForReply(row.scheme, r),
                   quic_detail: r.quic_detail,
                   exit_ip: r.exit_ip,
                 }

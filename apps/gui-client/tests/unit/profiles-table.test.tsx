@@ -209,7 +209,11 @@ describe('ProfilesTable', () => {
     // it measured +27px on the table shell and overflowed the marketing capture
     // (scripts/marketing-screens.mjs `profiles-list`, 1526px — run 2026-09-12,
     // which is how this arm got its shape).
-    rerender(<ProfilesTable {...props({ rows: [row({ vpn: true })] })} />);
+    // (V6 2026-09-16) ITEM 3 — `udp: 'unknown'` is now explicit rather than
+    // incidental: the tunnel pill is the NOT-MEASURED arm, and the factory's
+    // default `udp: 'ok'` would (correctly) render a MEASURED chip instead. This
+    // arm is about the OS chip, so it states the UDP state it means.
+    rerender(<ProfilesTable {...props({ rows: [row({ vpn: true, udp: 'unknown' })] })} />);
     expect(screen.getByText('UDP via tunnel')).toBeTruthy();
     expect(document.querySelector('[data-component="proxy-os-fingerprint"]')).toBeNull();
     rerender(<ProfilesTable {...props({ rows: [row()] })} />);
@@ -578,7 +582,11 @@ describe('the "UDP via tunnel" chip reads in secondary ink on its divider wash',
     // Mutation: `text-ink-muted` back on the chip → the class pin reds, and the
     // arithmetic below shows why (the gate's own measurement: fg #94a3b8 on
     // #374357 = 3.88 at 10px, need 4.5).
-    render(<ProfilesTable {...props({ rows: [row({ vpn: true })] })} />);
+    // (V6 2026-09-16) ITEM 3 — the pill renders for a VPN row with NO UDP
+    // measurement, which is every VPN row until the node's three-state reading
+    // lands; a MEASURED row renders the chip below it instead. Stated here so the
+    // contrast pin cannot start describing a different element.
+    render(<ProfilesTable {...props({ rows: [row({ vpn: true, udp: 'unknown' })] })} />);
     const chip = screen.getByText('UDP via tunnel');
     expect(chip.getAttribute('data-udp')).toBe('tunnel');
     const cls = chip.className.split(/\s+/);

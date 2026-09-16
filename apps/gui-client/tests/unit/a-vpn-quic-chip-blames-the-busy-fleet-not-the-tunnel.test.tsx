@@ -35,6 +35,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
 import type * as AccountProxiesModule from '../../src/lib/account-proxies';
 import type * as ProbeCacheModule from '../../src/lib/proxy-probe-cache';
+import { OS_FINGERPRINT_TTL_MS } from '../../src/lib/os-fingerprint-verdict';
 
 const resolveEndpoint =
   vi.fn<
@@ -280,6 +281,80 @@ describe('(o) O4/O3 — the grid never claims to be fingerprinting a tunnel', ()
       expect(osChip().getAttribute('title') ?? '').toMatch(/VPN connections/i);
       expect(osChip().getAttribute('title') ?? '').not.toMatch(/Run Test/i);
     });
+  });
+
+  // (p) review 2026-09-16 — the reply can now carry a STORED reading beside the
+  // cause, and the server attaches it with NO age bound: `storedOsForReply`
+  // (routes/account-me.ts) checks only that the row can be dated. The grid's own
+  // state is written straight from the reply, BEFORE any cache write, and every
+  // cache write here is mocked away — so these two arms observe exactly that write
+  // and nothing else.
+  //
+  // ⛔ PRODUCTION LINE: `applyServerProbeOutcome`'s
+  // `const rec = chipOsFingerprint(outcome)` in ProxiesView.tsx. Restore the old
+  // `{ ...fp, at: outcome.at }` (the reply's time, no TTL) and ARM 8 reds: a
+  // reading of any age renders as a full green match saying "just now", over the
+  // tunnel's own honest cause, until the next cache emit blanks it.
+  it('ARM 8 — CRITICAL: a STORED reading past the TTL never reaches the chip — the tunnel keeps its own cause instead of a stale green match dated "just now"', async () => {
+    testAccountProxy.mockResolvedValue({
+      ok: true,
+      latency_ms: 42,
+      measured_from: 'fleet',
+      node_id: 'mac-mini-07',
+      // The shape the WIRE PARSER hands the view (`cleanOsFingerprint` — camelCase,
+      // allowlisted), since `testAccountProxy` is mocked here and the parse it
+      // normally performs does not run.
+      os_fingerprint: {
+        os: 'macos-or-ios',
+        confidence: 'high',
+        reason: 'Based on how this proxy responds to a network connection.',
+        observedVia: 'exit_ip',
+        singleHostVantage: true,
+        webPortVantage: true,
+      },
+      os_fingerprint_at: new Date(Date.now() - OS_FINGERPRINT_TTL_MS - 60_000).toISOString(),
+      os_fingerprint_unavailable: 'vpn_tunnel',
+    } as unknown as AccountProxiesModule.AccountProxyTestResult);
+    render(<ProxiesView />);
+    await check();
+
+    // The reply landed (the row's latency cell shows the fleet number)…
+    await screen.findByText(/42\s*ms/i);
+    // …and the chip still states the cause, not a match nobody measured today.
+    expect(osChip().getAttribute('title') ?? '').toMatch(/VPN connections/i);
+    expect(osChip().getAttribute('title') ?? '').not.toMatch(/Measured by Driftstack/i);
+    expect(osChip().getAttribute('data-os-tone')).not.toBe('match');
+  });
+
+  it('ARM 9 — CONTROL: a stored reading INSIDE the TTL does reach it, dated by the measurement — "10 minutes ago", never "just now"', async () => {
+    testAccountProxy.mockResolvedValue({
+      ok: true,
+      latency_ms: 42,
+      measured_from: 'fleet',
+      node_id: 'mac-mini-07',
+      // The shape the WIRE PARSER hands the view (`cleanOsFingerprint` — camelCase,
+      // allowlisted), since `testAccountProxy` is mocked here and the parse it
+      // normally performs does not run.
+      os_fingerprint: {
+        os: 'macos-or-ios',
+        confidence: 'high',
+        reason: 'Based on how this proxy responds to a network connection.',
+        observedVia: 'exit_ip',
+        singleHostVantage: true,
+        webPortVantage: true,
+      },
+      os_fingerprint_at: new Date(Date.now() - 10 * 60_000).toISOString(),
+      os_fingerprint_unavailable: 'vpn_tunnel',
+    } as unknown as AccountProxiesModule.AccountProxyTestResult);
+    render(<ProxiesView />);
+    await check();
+
+    await waitFor(() => {
+      expect(osChip().getAttribute('data-os-tone')).toBe('match');
+    });
+    expect(osChip().getAttribute('title') ?? '').toContain(
+      'Measured by Driftstack, 10 minutes ago.',
+    );
   });
 
   it('ARM 7 — CRITICAL VACUITY CONTROL: a SOCKS5 row is untouched — no cause, and "measuring" is still what an in-flight Test says', async () => {

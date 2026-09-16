@@ -41,6 +41,7 @@ export const EXPECTED_RECURRING_JOB_TYPES: readonly string[] = [
   'oauth.retention_sweep',
   'privacy.retention_scrub',
   'profile_trash.purge',
+  'proxy.freshness_refresh',
   'scheduled_jobs.prune',
   'sessions.duration_sweep',
   'status_subscriber.purge',

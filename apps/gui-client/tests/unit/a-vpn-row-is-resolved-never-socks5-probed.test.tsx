@@ -24,6 +24,7 @@ import {
   NO_VERDICT_YET_NOTICE,
   SERVER_DID_NOT_ANSWER_NOTICE,
 } from '../../src/lib/proxy-server-test';
+import { VPN_UDP_MEASURED_NONE_TITLE } from '../../src/lib/proxy-check-copy';
 import type { SweepDeps } from '../../src/lib/proxy-probe-sweeper';
 import {
   __resetSweepLatchForTests,
@@ -867,6 +868,75 @@ describe('(h) — the profile card carries the VPN fleet outcome', () => {
       expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull(),
     );
     expect(await screen.findByText('31ms')).toBeTruthy();
+  });
+
+  it('CRITICAL (V6, refuter #1) a MEASURED UDP verdict reaches the CARD through ProfilesView — the feed, not just the component', async () => {
+    // ⛔ THE GAP THIS ARM CLOSES. `ProfilePhoneCard`'s three UDP states were pinned
+    // by calling `capabilityChips()` with hand-built props, and the grid's chip was
+    // pinned end to end through ProxiesView — but the ONE line that carries the
+    // verdict into the profile CARD, `udpProbe={px !== null ? probeView.udpProbe
+    // [px.id] : undefined}` in ProfilesView, was pinned by nothing. MEASURED
+    // 2026-09-16: deleting it left five files / 218 tests green while every VPN
+    // card on this surface went permanently "not measured" — the exact defect the
+    // item exists to prevent, reintroducible with the suite fully green.
+    //
+    // The reply is the MIGRATED node's: a verdict WITH the sentence that makes it a
+    // reading. Today's node sends the bare literal and the control plane drops it,
+    // which the arm below this one covers.
+    seedCache({ vpn1: measuredVpnEntry(5000) });
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: true,
+      latency_ms: 61,
+      measured_from: 'fleet',
+      node_id: 'mac-07',
+      udp_associate: false,
+      udp_detail: 'udp relay refused by the tunnel peer',
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    // Before the check: the not-measured chip, which is what every VPN row shows.
+    const before = await waitFor(() => {
+      const el = document.querySelector('[data-udp="tunnel"]');
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(before.textContent).toBe('⇢ UDP');
+
+    await clickCheckVpn();
+
+    const udp = await waitFor(() => {
+      const el = document.querySelector('[data-udp="false"]');
+      expect(el, 'the measured verdict reached the card').not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(udp.textContent).toBe('⤵ UDP');
+    expect(udp.getAttribute('title')).toBe(VPN_UDP_MEASURED_NONE_TITLE);
+    // …and the not-measured chip is GONE: a verdict swallowed by the pill that
+    // means "nothing measured this" is the failure, not a second chip.
+    expect(document.querySelector('[data-udp="tunnel"]')).toBeNull();
+  });
+
+  it('CONTROL (V6) today\'s node asserts UDP and the card still reads NOT MEASURED — the arm above is not "any reply lights the chip"', async () => {
+    // The bare literal, with no `udp_detail`: the route drops it
+    // (`capabilityReadingsForReply`), so a SUCCESSFUL check leaves the chip in the
+    // not-measured state. Without this control the arm above is satisfied by a
+    // client that renders a verdict for every fleet answer.
+    seedCache({ vpn1: measuredVpnEntry(5000) });
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: true,
+      latency_ms: 61,
+      measured_from: 'fleet',
+      node_id: 'mac-07',
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    // The reply landed — the fleet number is on the card.
+    expect(await screen.findByText('61ms')).toBeTruthy();
+    const udp = document.querySelector('[data-udp="tunnel"]');
+    expect(udp, 'still the not-measured chip').not.toBeNull();
+    expect(udp?.textContent).toBe('⇢ UDP');
+    expect(document.querySelector('[data-udp="false"]')).toBeNull();
   });
 
   it('a VPN card renders NO UDP chip — "UDP via tunnel" and its sentence ride in the caps "+N" title (Phase B); an unprobed SOCKS5 card offers Test and no UDP chip at all', async () => {

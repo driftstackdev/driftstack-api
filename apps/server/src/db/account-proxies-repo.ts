@@ -56,6 +56,17 @@ export interface AccountProxyRow {
     reason: string;
     observed_ip: string;
     observed_via: 'proxy_host' | 'exit_ip';
+    /**
+     * (V-219) The two vantage flags the /:id/test route has written into this
+     * jsonb since they existed — the column takes the whole measurement object
+     * — while this type listed neither, so a reader could not see the fields a
+     * match / mismatch CLAIM rests on. OPTIONAL because a reading persisted
+     * before V-219 has neither, and absent must be read as FALSE (the cautious
+     * value), never as "unstated, so assume it describes the path a website
+     * gets". Declared, not introduced: no migration — jsonb already holds them.
+     */
+    single_host_vantage?: boolean;
+    web_port_vantage?: boolean;
   } | null;
   /** When {@link osFingerprint} was recorded, or null when never measured. */
   osFingerprintAt: Date | null;
@@ -77,6 +88,24 @@ export interface AccountProxyRow {
    *  this dates the contradiction so a list consumer can refuse to adopt an
    *  observation dated at or before it. */
   exitSupersededAt: Date | null;
+  /**
+   * ITEM 4 (migration 0123) — when the BACKGROUND freshness refresher last
+   * ATTEMPTED this row, success or failure, or null when it never has (= due
+   * now). Both the cooldown clock and the claim: {@link
+   * AccountProxiesRepo.claimDueForFreshnessRefresh} stamps it in the same
+   * statement that locks the row.
+   *
+   * ⛔ Not `updatedAt`. A customer relabel bumps that, and an unrelated edit
+   * must never schedule a dial through their proxy.
+   */
+  freshnessAttemptedAt: Date | null;
+  /**
+   * ITEM 4 (migration 0123) — consecutive BACKGROUND probe failures; 0 after any
+   * success. Nothing customer-facing reads it. Its only purpose is to tell one
+   * transient miss apart from a SUSTAINED run, so a single failed background
+   * probe can leave every customer-visible field untouched.
+   */
+  freshnessConsecutiveFailures: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -118,6 +147,9 @@ export interface AccountProxyRowUpdates {
     reason: string;
     observed_ip: string;
     observed_via: 'proxy_host' | 'exit_ip';
+    /** (V-219) Written since the flags existed; see {@link AccountProxyRow}. */
+    single_host_vantage?: boolean;
+    web_port_vantage?: boolean;
   } | null;
   /** N-2 — timestamp the OS fingerprint was observed. */
   osFingerprintAt?: Date | null;
@@ -133,6 +165,16 @@ export interface AccountProxyRowUpdates {
   /** (i) I7 — set by the fleet-vantage Test when its verdict contradicts the
    *  stored exit; cleared (null) by every exit write (relay or probe). */
   exitSupersededAt?: Date | null;
+  /** ITEM 4 — reset to 0 by the background refresher on a successful probe. The
+   *  INCREMENT is not expressible here (it must read-modify-write atomically);
+   *  see {@link AccountProxiesRepo.recordFreshnessFailure}. */
+  freshnessConsecutiveFailures?: number;
+  /** ITEM 2 — nulled by an edit that repoints the row, which makes it DUE on the
+   *  next sweep tick. A repointed proxy must not inherit the cooldown (and the
+   *  failure backoff, up to 24h) earned by the address it no longer has, or the
+   *  columns the edit just cleared stay blank for a day. Ordinarily written only
+   *  by {@link AccountProxiesRepo.claimDueForFreshnessRefresh}, inside the claim. */
+  freshnessAttemptedAt?: Date | null;
 }
 
 export interface AccountProxiesRepo {
@@ -152,6 +194,98 @@ export interface AccountProxiesRepo {
   }): Promise<AccountProxyRow | null>;
   /** Returns true if a row was removed; false if no owned row matched. */
   delete(args: { id: string; accountId: string }): Promise<boolean>;
+  /**
+   * ITEM 4 — CLAIM the next proxy the background refresher should re-probe, or
+   * null when nothing is due. THE ONLY CROSS-ACCOUNT READ IN THIS REPO: every
+   * other method is owner-scoped because it serves a request made by the owner,
+   * and this one serves a sweep that has no owner. Everything it hands back is
+   * still written back through the owner-scoped methods (the caller passes the
+   * row's own `accountId`), so no cross-account WRITE becomes possible.
+   *
+   * Claim, not read: the row's `freshness_attempted_at` is stamped with `now`
+   * inside the same statement that selects it `FOR UPDATE SKIP LOCKED`. Two
+   * consequences, and both are the point:
+   *   * a second worker ticking at the same moment skips the locked row and,
+   *     once this one commits, no longer sees it as due — so one proxy is
+   *     probed once, never twice, without any lock outside the database;
+   *   * a tick that dies mid-probe has already recorded the attempt, so a
+   *     failing proxy is not re-dialled on the very next tick.
+   *
+   * Due = (never attempted, or attempted longer ago than
+   * `refreshIntervalMs * min(consecutiveFailures + 1, maxBackoffSteps)` — a
+   * linear backoff so a proxy that is simply switched off is dialled once per
+   * capped window instead of every interval forever) AND its stored exit is
+   * older than `refreshIntervalMs`.
+   *
+   * That second condition is the one that keeps the sweep off a proxy somebody
+   * else is already keeping current: a live session's relay and the customer's
+   * own Test both write `exit_observed_at`, and a reading taken an hour ago by
+   * either of them is exactly as fresh as one this sweep would take now. The
+   * point is a CURRENT reading, not a reading of our own.
+   *
+   * ⚠️ The EXIT is the freshness signal and the OS fingerprint deliberately is
+   * not, which means a row whose exit a live session keeps refreshing can carry
+   * an older fingerprint. That is the honest trade, not an oversight: the exit
+   * is what moves (providers rotate them), a proxy's own TCP stack is not, and
+   * `os_fingerprint_at` is written ONLY by a probe — so using it as the signal
+   * would leave every row permanently due and this clause would do nothing at
+   * all. Every reading is stored with its own date, so a consumer can always
+   * say how old the one it is reading is.
+   *
+   * The claim also RESETS `freshness_consecutive_failures` when the stored exit
+   * was observed since our previous attempt — see the CASE in the statement. The
+   * streak the condemn threshold counts must be failures that nothing
+   * contradicted, not merely failures with no success OF OURS in between.
+   *
+   * EXCLUDED, in SQL rather than by the caller (same discipline as
+   * `listOpenByAccount`'s closed-row filter — a caller that trusts the contract
+   * cannot forget the check):
+   *   * proxies belonging to an account that is not `active`. Deletion is SOFT
+   *     and the retention purge nulls the secrets rather than the rows, so a
+   *     deleted customer's proxies would otherwise stay claimable forever — and
+   *     credential-less, so the dial would be unauthenticated. See the join.
+   *   * VPN schemes. Bringing an OpenVPN/WireGuard tunnel up needs a fleet node;
+   *     the control plane cannot do it, so a VPN row is not refreshable here at
+   *     all. The predicate is a literal `IN ('socks5','http')` so it matches
+   *     migration 0123's partial index (a parameterised list would not).
+   *   * a proxy a LIVE agent session is using. Dialling it would add a
+   *     connection to the customer's proxy while their session is browsing
+   *     through it, and it is unnecessary: a live session's capabilityReport
+   *     relay is already writing `exit_observed` for that row, which is fresher
+   *     than anything this sweep could measure.
+   */
+  claimDueForFreshnessRefresh(args: {
+    now: Date;
+    refreshIntervalMs: number;
+    maxBackoffSteps: number;
+  }): Promise<AccountProxyRow | null>;
+  /**
+   * ITEM 4 — record that a background probe FAILED, atomically.
+   *
+   * Increments `freshness_consecutive_failures` and, ONLY when that new count
+   * reaches `condemnAfterFailures` and the row still carries an uncontradicted
+   * stored exit, dates the contradiction in `exit_superseded_at`. Below the
+   * threshold NOTHING customer-visible moves — not the exit, not the
+   * fingerprint, not even `updated_at` (this is raw SQL and deliberately does
+   * not touch it), which is the webhooks precedent: one transient failure is
+   * not a verdict about the customer's proxy.
+   *
+   * Returns the post-write counter and stamp, or null when no owned row matched.
+   */
+  recordFreshnessFailure(args: {
+    id: string;
+    accountId: string;
+    at: Date;
+    condemnAfterFailures: number;
+    /**
+     * The instant OUR dial began. The contradiction stamp is NOT written when the
+     * row already holds an exit observed after it — a customer pressing Test
+     * mid-sweep succeeds at t+5s while our probe fails at t+30s, and stamping
+     * then would condemn their fresh reading with our older evidence. It is the
+     * condemn-side twin of `yieldToReadingsAfter` on the success path.
+     */
+    probeStartedAt: Date;
+  }): Promise<{ consecutiveFailures: number; exitSupersededAt: Date | null } | null>;
   migrateSecretEnvelopes(
     masterKey: Buffer,
     limit?: number,
@@ -218,9 +352,72 @@ function toRow(r: typeof accountProxies.$inferSelect): AccountProxyRow {
     exitObserved: r.exitObserved,
     exitObservedAt: r.exitObservedAt,
     exitSupersededAt: r.exitSupersededAt,
+    freshnessAttemptedAt: r.freshnessAttemptedAt,
+    freshnessConsecutiveFailures: r.freshnessConsecutiveFailures,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
+}
+
+/**
+ * The same row out of a RAW `db.execute()` result.
+ *
+ * ⛔ Not interchangeable with {@link toRow}. Raw rows arrive snake_cased and
+ * BYPASS Drizzle's column-schema decoders, so postgres-js hands back timestamptz
+ * as an ISO STRING in the production driver configuration (the exact trap
+ * `scheduled-jobs-repo`'s `parseClaimedRunAt` documents). A `Date` typed field
+ * holding a string type-checks fine and only fails at the first `.getTime()`,
+ * which is why the conversion is centralised here rather than at the call site.
+ */
+function parseRawTimestamp(value: unknown): Date | null {
+  if (value === null || value === undefined) return null;
+  const parsed = value instanceof Date ? value : typeof value === 'string' ? new Date(value) : null;
+  if (parsed === null || !Number.isFinite(parsed.getTime())) {
+    throw new TypeError('account_proxies returned an invalid timestamp');
+  }
+  return parsed;
+}
+
+function requireRawTimestamp(value: unknown, column: string): Date {
+  const parsed = parseRawTimestamp(value);
+  if (parsed === null) {
+    throw new TypeError(`account_proxies.${column} returned null for a NOT NULL column`);
+  }
+  return parsed;
+}
+
+function toRowFromRaw(r: Record<string, unknown>): AccountProxyRow {
+  return {
+    id: r.id as string,
+    accountId: r.account_id as string,
+    label: r.label as string,
+    scheme: r.scheme as string,
+    host: r.host as string,
+    port: Number(r.port),
+    username: (r.username as string | null) ?? null,
+    wrappedPassword: (r.wrapped_password as string | null) ?? null,
+    wrappedSecret: (r.wrapped_secret as string | null) ?? null,
+    config: (r.config as Record<string, unknown> | null) ?? {},
+    quicMeasured: (r.quic_measured as string | null) ?? null,
+    quicMeasuredAt: parseRawTimestamp(r.quic_measured_at),
+    osFingerprint: (r.os_fingerprint as AccountProxyRow['osFingerprint']) ?? null,
+    osFingerprintAt: parseRawTimestamp(r.os_fingerprint_at),
+    exitObserved: (r.exit_observed as AccountProxyRow['exitObserved']) ?? null,
+    exitObservedAt: parseRawTimestamp(r.exit_observed_at),
+    exitSupersededAt: parseRawTimestamp(r.exit_superseded_at),
+    freshnessAttemptedAt: parseRawTimestamp(r.freshness_attempted_at),
+    freshnessConsecutiveFailures: Number(r.freshness_consecutive_failures ?? 0),
+    createdAt: requireRawTimestamp(r.created_at, 'created_at'),
+    updatedAt: requireRawTimestamp(r.updated_at, 'updated_at'),
+  };
+}
+
+/** Rows out of a raw `db.execute()`, which the driver returns either as an array
+ *  or as `{ rows }` depending on the adapter. Same normalisation as
+ *  `scheduled-jobs-repo.claimDue`. */
+function rawRows(result: unknown): Array<Record<string, unknown>> {
+  const rows = (result as { rows?: unknown[] }).rows ?? (result as unknown[]);
+  return rows as Array<Record<string, unknown>>;
 }
 
 export class DrizzleAccountProxiesRepo implements AccountProxiesRepo {
@@ -330,6 +527,176 @@ export class DrizzleAccountProxiesRepo implements AccountProxiesRepo {
       .where(and(eq(accountProxies.id, args.id), eq(accountProxies.accountId, args.accountId)))
       .returning({ id: accountProxies.id });
     return rows.length > 0;
+  }
+
+  async claimDueForFreshnessRefresh(args: {
+    now: Date;
+    refreshIntervalMs: number;
+    maxBackoffSteps: number;
+  }): Promise<AccountProxyRow | null> {
+    // CTE + UPDATE ... FROM ... RETURNING, exactly the shape
+    // `scheduled-jobs-repo.claimDue` uses, and for the same reason: the SELECT
+    // locks its row with FOR UPDATE SKIP LOCKED and the UPDATE stamps the attempt,
+    // so the claim and the bookkeeping are ONE statement. A concurrent worker
+    // skips the locked row rather than blocking on it, and after this commits the
+    // row is no longer due — a proxy cannot be probed twice in one window.
+    //
+    // Dates are pre-serialised to ISO strings: drizzle-orm's `construct(client)`
+    // replaces postgres-js's timestamp serialisers with a no-op, so a raw `sql`
+    // template that passes a Date through crashes in postgres-js's Bind step
+    // (see `scheduled-jobs-repo.claimDue`'s note, which this inherits).
+    //
+    // ⛔ THE `JOIN accounts … a.status = 'active'` BELOW IS LOAD-BEARING, AND IT
+    // IS A PRIVACY CONTROL, NOT A TIDINESS ONE. Account deletion is SOFT and the
+    // retention purge nulls the SECRETS, not the rows (`clearProxySecretsForAccount`
+    // below — "Nulls the SECRETS, not the rows"), so a deleted customer's
+    // `account_proxies` rows survive indefinitely. Without this join they stay
+    // claimable forever: the sweep dials an ex-customer's provider four times a
+    // day and keeps writing NEW measurements (`exit_observed`, `os_fingerprint`)
+    // onto the row of somebody who asked to be erased. And after that purge
+    // `wrapped_password IS NULL`, which `resolveProbeDescriptor` cannot tell from
+    // "no password configured" — so each of those dials is made UNAUTHENTICATED.
+    // Suspended accounts are excluded for the smaller reason: we do not spend a
+    // customer's bandwidth while their service is off.
+    //
+    // In SQL rather than resolved by the caller, the same discipline
+    // `findDeletedAccountIdsWithProxySecretsBefore` records: a caller that trusts
+    // the contract cannot forget the check. The status is a LITERAL so the
+    // planner keeps the index on `accounts(id)`.
+    //
+    // ⛔ THE STREAK IS BROKEN BY ANYBODY'S OBSERVATION, NOT ONLY BY OUR OWN
+    // SUCCESS — the `freshness_consecutive_failures = CASE …` in the UPDATE.
+    // That counter used to be reset only by this sweep's own successful probe, so
+    // the three failures the condemn threshold requires need not have been
+    // consecutive IN TIME and need not have been uncontradicted: background
+    // failures on day 1 and day 2 leave the counter at 2, the customer then uses
+    // the proxy for a month (a live session's relay keeps `exit_observed_at`
+    // fresh, so the row is never due and is never re-probed), they stop, and the
+    // first background blip six hours later is the THIRD failure — stamping
+    // `exit_superseded_at`, which `routes/account-me.ts` and
+    // `routes/agent-sessions.ts` then use to suppress the stored exit. One
+    // transient miss flipping customer-visible state is the exact outcome the
+    // threshold exists to prevent.
+    //
+    // Evaluated HERE because this is the only statement that can still see both
+    // timestamps: an UPDATE's SET reads the PRE-update row, so
+    // `p.freshness_attempted_at` on the right-hand side is still our PREVIOUS
+    // attempt. `exit_observed_at > freshness_attempted_at` therefore means exactly
+    // "somebody observed this exit up since the last time we dialled" — a fact no
+    // later statement could reconstruct, because the line beside it overwrites the
+    // value it is compared against.
+    //
+    // ⚠️ No backticks inside the template below — it is a tagged template
+    // literal, and one would terminate it mid-statement.
+    const nowIso = args.now.toISOString();
+    const intervalSeconds = args.refreshIntervalMs / 1000;
+    const result = await this.database.db.execute(sql`
+      WITH due AS (
+        SELECT p.id
+          FROM account_proxies p
+          -- The account must still be a customer: deletion is SOFT and the
+          -- retention purge keeps the rows, so without this the sweep dials an
+          -- erased customer's provider forever, unauthenticated. See above.
+          JOIN accounts a
+            ON a.id = p.account_id
+           AND a.status = 'active'
+         WHERE p.scheme IN ('socks5', 'http')
+           AND (
+                 p.freshness_attempted_at IS NULL
+              OR p.freshness_attempted_at <= ${nowIso}::timestamptz - make_interval(
+                   secs => ${intervalSeconds}::double precision
+                           * LEAST(GREATEST(p.freshness_consecutive_failures, 0) + 1,
+                                   ${args.maxBackoffSteps}::int)
+                 )
+               )
+           AND (
+                 p.exit_observed_at IS NULL
+              OR p.exit_observed_at <= ${nowIso}::timestamptz - make_interval(
+                   secs => ${intervalSeconds}::double precision
+                 )
+               )
+           AND NOT EXISTS (
+                 SELECT 1
+                   FROM agent_sessions s
+                  WHERE s.proxy_id = p.id
+                    AND s.status <> 'closed'
+               )
+         ORDER BY p.freshness_attempted_at ASC NULLS FIRST
+         LIMIT 1
+         FOR UPDATE SKIP LOCKED
+      )
+      UPDATE account_proxies p
+         SET freshness_attempted_at = ${nowIso}::timestamptz,
+             -- The streak is broken by ANYBODY's observation, not only by our own
+             -- success, and it can only be evaluated here. See the block comment
+             -- above the statement.
+             freshness_consecutive_failures = CASE
+               WHEN p.exit_observed_at IS NOT NULL
+                AND (
+                      p.freshness_attempted_at IS NULL
+                   OR p.exit_observed_at > p.freshness_attempted_at
+                    )
+               THEN 0
+               ELSE p.freshness_consecutive_failures
+             END
+        FROM due
+       WHERE p.id = due.id
+       RETURNING p.*;
+    `);
+    const row = rawRows(result)[0];
+    return row === undefined ? null : toRowFromRaw(row);
+  }
+
+  async recordFreshnessFailure(args: {
+    id: string;
+    accountId: string;
+    at: Date;
+    condemnAfterFailures: number;
+    probeStartedAt: Date;
+  }): Promise<{ consecutiveFailures: number; exitSupersededAt: Date | null } | null> {
+    // One statement so the read-modify-write of the counter cannot interleave,
+    // and OWNER-SCOPED (id + account_id) like every other write here even though
+    // the caller reached this row through the cross-account claim.
+    //
+    // `updated_at` is deliberately NOT in the SET list. A failed background probe
+    // must be invisible to everything the customer can see, and `updated_at` is
+    // on the metadata view; bumping it would report an edit that never happened.
+    const atIso = args.at.toISOString();
+    // ⛔ THE CONDEMN SIDE OF `yieldToReadingsAfter`. The SUCCESS path stands down
+    // when the row already holds a reading taken after our dial began; the
+    // CONDEMN path must too, and used not to. Our dial holds the proxy for up to
+    // ~30 seconds and the customer can press Test in the middle of it: their
+    // probe succeeds at t+5s and writes a verified exit, ours fails at t+30s and
+    // would stamp `exit_superseded_at` POSTDATING their observation — condemning
+    // the reading they are watching, with our older evidence. routes/account-me.ts
+    // then returns `null` for the stored exit and routes/agent-sessions.ts
+    // refuses to project it into the live cockpit, so this is customer-visible.
+    // "Do not fight the customer pressing Test" is the whole rule.
+    const probeStartedIso = args.probeStartedAt.toISOString();
+    const result = await this.database.db.execute(sql`
+      UPDATE account_proxies p
+         SET freshness_consecutive_failures = p.freshness_consecutive_failures + 1,
+             exit_superseded_at = CASE
+               WHEN p.freshness_consecutive_failures + 1 >= ${args.condemnAfterFailures}::int
+                AND p.exit_observed IS NOT NULL
+                AND p.exit_superseded_at IS NULL
+                AND (
+                      p.exit_observed_at IS NULL
+                   OR p.exit_observed_at <= ${probeStartedIso}::timestamptz
+                    )
+               THEN ${atIso}::timestamptz
+               ELSE p.exit_superseded_at
+             END
+       WHERE p.id = ${args.id}::uuid
+         AND p.account_id = ${args.accountId}::uuid
+       RETURNING p.freshness_consecutive_failures, p.exit_superseded_at;
+    `);
+    const row = rawRows(result)[0];
+    if (row === undefined) return null;
+    return {
+      consecutiveFailures: Number(row.freshness_consecutive_failures),
+      exitSupersededAt: parseRawTimestamp(row.exit_superseded_at),
+    };
   }
 
   /**
@@ -537,6 +904,8 @@ export class InMemoryAccountProxiesRepo implements AccountProxiesRepo {
       exitObserved: null,
       exitObservedAt: null,
       exitSupersededAt: null,
+      freshnessAttemptedAt: null,
+      freshnessConsecutiveFailures: 0,
       createdAt: now,
       updatedAt: now,
     };
@@ -579,6 +948,127 @@ export class InMemoryAccountProxiesRepo implements AccountProxiesRepo {
     if (!r || r.accountId !== args.accountId) return Promise.resolve(false);
     this.rows.delete(args.id);
     return Promise.resolve(true);
+  }
+
+  /**
+   * ITEM 4 — the double's stand-in for the Drizzle claim's `NOT EXISTS (SELECT 1
+   * FROM agent_sessions …)`. There is no session table in memory, so the set of
+   * proxies a live session is holding is injected instead.
+   *
+   * It lives HERE rather than in each test's own filter for the reason the
+   * repo's `listOpenByAccount` double records: the exclusion is the repository's
+   * contract, so a caller that trusts it must be unable to forget it, and the
+   * arm proving "a busy proxy is not dialled" must exercise the same code path
+   * production does rather than a condition the test wrote itself.
+   */
+  setLiveSessionProxyIds(ids: Iterable<string>): void {
+    this.liveSessionProxyIds = new Set(ids);
+  }
+
+  private liveSessionProxyIds = new Set<string>();
+
+  /**
+   * ITEM 4 — the double's stand-in for the Drizzle claim's
+   * `JOIN accounts a ON … a.status = 'active'`. There is no `accounts` table in
+   * memory, so the non-active accounts are injected instead.
+   *
+   * Unknown accounts read as `active`, matching production: `account_proxies`
+   * has a foreign key to `accounts`, so a proxy row without an account row
+   * cannot exist. (The SQL join also excludes that impossible case; the double
+   * does not, and the difference is unreachable.)
+   */
+  setNonActiveAccountIds(ids: Iterable<string>): void {
+    this.nonActiveAccountIds = new Set(ids);
+  }
+
+  private nonActiveAccountIds = new Set<string>();
+
+  claimDueForFreshnessRefresh(args: {
+    now: Date;
+    refreshIntervalMs: number;
+    maxBackoffSteps: number;
+  }): Promise<AccountProxyRow | null> {
+    // Mirror of the Drizzle predicate, clause for clause: an ACTIVE account's
+    // rows only, refreshable schemes only, the linear failure backoff, a stored
+    // exit older than the refresh interval, no proxy a live session holds, oldest
+    // attempt first (never-attempted rows first), one row, and the claim STAMPS
+    // the attempt — which is what makes a second caller in the same tick get a
+    // different row rather than the same one twice. The claim also breaks a
+    // failure streak that somebody else's observation has contradicted.
+    const candidates = [...this.rows.values()]
+      .filter((r) => !this.nonActiveAccountIds.has(r.accountId))
+      .filter((r) => r.scheme === 'socks5' || r.scheme === 'http')
+      .filter((r) => !this.liveSessionProxyIds.has(r.id))
+      .filter(
+        (r) =>
+          r.exitObservedAt === null ||
+          r.exitObservedAt.getTime() <= args.now.getTime() - args.refreshIntervalMs,
+      )
+      .filter((r) => {
+        if (r.freshnessAttemptedAt === null) return true;
+        const steps = Math.min(
+          Math.max(r.freshnessConsecutiveFailures, 0) + 1,
+          args.maxBackoffSteps,
+        );
+        return (
+          r.freshnessAttemptedAt.getTime() <= args.now.getTime() - args.refreshIntervalMs * steps
+        );
+      })
+      .sort((a, b) => {
+        const at = a.freshnessAttemptedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+        const bt = b.freshnessAttemptedAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+        if (at !== bt) return at - bt;
+        return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+      });
+    const claimed = candidates[0];
+    if (claimed === undefined) return Promise.resolve(null);
+    // Mirrors the SQL's `freshness_consecutive_failures = CASE …`, and reads the
+    // PRE-claim `freshnessAttemptedAt` for the same reason the SET's right-hand
+    // side does: after the line below that value is gone, so "somebody observed
+    // this exit up since the last time we dialled" is only answerable here.
+    const contradictedSinceLastAttempt =
+      claimed.exitObservedAt !== null &&
+      (claimed.freshnessAttemptedAt === null ||
+        claimed.exitObservedAt.getTime() > claimed.freshnessAttemptedAt.getTime());
+    const next: AccountProxyRow = {
+      ...claimed,
+      freshnessAttemptedAt: args.now,
+      freshnessConsecutiveFailures: contradictedSinceLastAttempt
+        ? 0
+        : claimed.freshnessConsecutiveFailures,
+    };
+    this.rows.set(next.id, next);
+    return Promise.resolve({ ...next });
+  }
+
+  recordFreshnessFailure(args: {
+    id: string;
+    accountId: string;
+    at: Date;
+    condemnAfterFailures: number;
+    probeStartedAt: Date;
+  }): Promise<{ consecutiveFailures: number; exitSupersededAt: Date | null } | null> {
+    const r = this.rows.get(args.id);
+    if (!r || r.accountId !== args.accountId) return Promise.resolve(null);
+    const consecutiveFailures = r.freshnessConsecutiveFailures + 1;
+    // Mirrors the SQL's condemn-side `yieldToReadingsAfter`: an exit observed
+    // after our dial began is newer evidence than our failure, so it is not
+    // contradicted by it. See the interface doc.
+    const yieldsToNewerObservation =
+      r.exitObservedAt !== null && r.exitObservedAt.getTime() > args.probeStartedAt.getTime();
+    const exitSupersededAt =
+      consecutiveFailures >= args.condemnAfterFailures &&
+      r.exitObserved !== null &&
+      r.exitSupersededAt === null &&
+      !yieldsToNewerObservation
+        ? args.at
+        : r.exitSupersededAt;
+    // `updatedAt` is untouched here, exactly as the SQL leaves it out of its SET
+    // list: a failed background probe must move nothing a customer can see.
+    const next: AccountProxyRow = { ...r, freshnessConsecutiveFailures: consecutiveFailures };
+    next.exitSupersededAt = exitSupersededAt;
+    this.rows.set(next.id, next);
+    return Promise.resolve({ consecutiveFailures, exitSupersededAt });
   }
 
   migrateSecretEnvelopes(

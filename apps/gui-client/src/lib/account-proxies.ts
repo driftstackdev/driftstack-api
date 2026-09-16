@@ -92,6 +92,23 @@ export interface AccountProxyMeta {
    *  Mac that never ran the failing test agrees with the one that did.
    *  Cleared (null) by the next exit observation; absent = an older server. */
   exit_superseded_at?: string | null;
+  /** (p) 2026-09-16 — the LAST OS reading the control plane took of this proxy's
+   *  own stack, as the SERVER holds it. Until now the reading lived only in this
+   *  Mac's probe cache, so a proxy checked on another machine — or before a
+   *  reinstall — showed no reading at all; this is the copy that survives both.
+   *
+   *  ⛔ Already through `cleanWireFingerprint` (the /test reply's parser, so there
+   *  is ONE), which is why the value is the client's `OsFingerprint` and not the
+   *  raw wire object: a value outside the closed set became `null` on the way in
+   *  and can never reach a chip. null = never measured / unusable; absent = an
+   *  older server, which is a different fact and stays absent. */
+  os_fingerprint?: OsFingerprint | null;
+  /** (p) — when that reading was taken (ISO 8601), null when the server holds
+   *  none. ⛔ Load-bearing: the reading is aged by THIS, with the same TTL a
+   *  locally measured one is aged by, so a stored reading from last week is
+   *  hidden exactly as a local one from last week is. An undatable reading is
+   *  refused, never shown as current. */
+  os_fingerprint_at?: string | null;
 }
 
 /** D2 — the LIST's observed exit. Narrower than the /test reply's
@@ -241,6 +258,22 @@ export async function listProxies(baseUrl: string, apiKey: string): Promise<Acco
     const raw = r as unknown as Record<string, unknown>;
     return {
       ...r,
+      // (p) — the STORED OS reading, cleaned by the SAME parser the /test reply
+      // uses: one closed-set allowlist for both routes, so a reading that reaches
+      // the chip from the list cannot differ from one that reaches it from a test.
+      // A malformed reading becomes this row's `null` ("never measured") and
+      // nothing else; an absent key (an older server) stays absent.
+      ...('os_fingerprint' in raw
+        ? { os_fingerprint: cleanWireFingerprint(raw.os_fingerprint) ?? null }
+        : {}),
+      // ...and its date, kept only as a string: an unparseable stamp reads as
+      // "we cannot date this", which the adoption refuses — never as "now".
+      ...('os_fingerprint_at' in raw
+        ? {
+            os_fingerprint_at:
+              typeof raw.os_fingerprint_at === 'string' ? raw.os_fingerprint_at : null,
+          }
+        : {}),
       ...('exit_observed' in raw
         ? { exit_observed: cleanListExitObserved(raw.exit_observed) }
         : {}),
@@ -405,6 +438,15 @@ export type AccountProxyTestResult =
        *  the previous number stayed on the card looking freshly measured. */
       latency_ms: number | null;
       os_fingerprint?: OsFingerprint;
+      /** (p) 2026-09-16 — set when `os_fingerprint` above is a STORED reading the
+       *  server attached because THIS test observed none (ISO 8601 — when it was
+       *  taken). Absent = the reply measured it, and this test's own time dates
+       *  it, which is what every reply before this did. ⛔ The cache is stamped
+       *  with THIS, so a stored reading ages from when it was measured and the
+       *  one TTL hides it exactly as it hides an old local one. A stored reading
+       *  arrives WITH `os_fingerprint_unavailable`: that names why this test
+       *  produced nothing, and the pair is how the two are told apart. */
+      os_fingerprint_at?: string | null;
       /** (o) O3 — WHY this reply carries no `os_fingerprint`. Optional + nullable on
        *  the wire, so an older server (which sends neither) is still parsed and the
        *  row falls back to today's neutral "not measured" wording. When present it is
@@ -434,7 +476,18 @@ export type AccountProxyTestResult =
       quic_probe?: boolean;
       quic_detail?: string;
       reachable?: boolean;
+      /** (V6 2026-09-16) — the fleet Mac's MEASURED UDP-relay verdict. ⛔ ABSENT
+       *  MEANS NOT MEASURED, never "no UDP": the control plane omits it for a
+       *  non-reading (the node's explicit null, a `udp_detail: "skipped: …"`, or a
+       *  VPN row's asserted literal), so a surface renders the absence as "not
+       *  measured yet" and only a present `false` as a negative verdict. */
       udp_associate?: boolean;
+      /** (V6) — the node's sentence about the UDP leg, the sibling of
+       *  `quic_detail`; present even when the boolean above is not. */
+      udp_detail?: string;
+      /** ⛔ Never present on a VPN row — on that path the node ASSERTS HTTP/2 as
+       *  the tunnel's capability and probes nothing, so the control plane drops it
+       *  rather than let it light a chip that means "we measured this". */
       h2_ok?: boolean;
       /** VPN exit parity (b) — the exit the fleet Mac OBSERVED through this
        *  proxy/tunnel during the test, resolved to geo server-side. For an
@@ -541,8 +594,12 @@ export function cleanExitObserved(raw: unknown): AccountProxyExitObserved | unde
 
 /** A wire fingerprint is kept only when every field is one the verdict can
  *  render. A value outside the closed set (a newer server, a proxy MITM-ing
- *  the response) drops the FIELD — it must never become a green chip. */
-function cleanWireFingerprint(raw: unknown): OsFingerprint | undefined {
+ *  the response) drops the FIELD — it must never become a green chip.
+ *
+ *  (p) — exported, and used by BOTH wire readers in this module: the /test
+ *  reply's parse below and `listProxies`' stored reading above. One allowlist,
+ *  so a reading the chip renders is the same object whichever route carried it. */
+export function cleanWireFingerprint(raw: unknown): OsFingerprint | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined;
   const f = raw as Record<string, unknown>;
   if (!isFingerprintedOs(f.os) || !isFingerprintConfidence(f.confidence)) return undefined;
@@ -739,8 +796,9 @@ export async function testAccountProxy(
       : undefined;
     // ⛔ A real reading always wins: a server that sent BOTH measured something, and the
     // measurement is the answer. The placeholder is minted ONLY in the absence branch.
+    const measured = cleanWireFingerprint(body.os_fingerprint);
     const fp =
-      cleanWireFingerprint(body.os_fingerprint) ??
+      measured ??
       (fpUnavailable !== undefined ? unavailableOsFingerprint(fpUnavailable) : undefined);
     // T-6 — a value outside the closed set is DROPPED (the field is omitted, read
     // downstream as "never measured"), never coerced into a would-be green chip.
@@ -763,15 +821,37 @@ export async function testAccountProxy(
         ? optBool(body.quic_ok)
         : undefined;
     const reachable = fleet ? optBool(body.reachable) : undefined;
-    const udpAssociate = fleet ? optBool(body.udp_associate) : undefined;
+    // (V6 2026-09-16) ITEM 3 — the UDP leg reads EXACTLY like the QUIC leg above,
+    // and for the same reason: the control plane omits `udp_associate` when it was
+    // not measured (an explicit null from the node, a "skipped:" detail, or a VPN
+    // row's asserted literal), so ABSENT here means NOT MEASURED — never "no UDP".
+    // The `"skipped:"` refusal is kept as the second belt: an older control plane
+    // could still pass a node's `udp_associate:false` through beside such a detail,
+    // and a false that reaches a chip is a negative verdict about a customer's
+    // tunnel that nobody measured.
+    const udpDetailRaw = fleet ? optStr(body.udp_detail) : undefined;
+    const udpAssociate =
+      fleet && !(udpDetailRaw !== undefined && udpDetailRaw.startsWith('skipped:'))
+        ? optBool(body.udp_associate)
+        : undefined;
     const h2Ok = fleet ? optBool(body.h2_ok) : undefined;
     // VPN exit parity (b) — the fleet-observed exit rides beside quic_probe under
     // the same fleet-only rule; a malformed one drops the field, never the reply.
     const exitObserved = fleet ? cleanExitObserved(body.exit_observed) : undefined;
+    // (p) — the stamp is kept ONLY beside a reading parsed off the wire, and only
+    // as a string: it says this reading is STORED and how old it is. Never minted
+    // for the placeholder a cause builds (a cause is not a measurement and has no
+    // measurement date), and a non-string stamp is dropped — the reading then
+    // reads as freshly measured, which is what an unstamped reply has always meant.
+    const fpAt =
+      measured !== undefined && typeof body.os_fingerprint_at === 'string'
+        ? body.os_fingerprint_at
+        : undefined;
     return {
       ok: true,
       latency_ms: latency,
       ...(fp !== undefined ? { os_fingerprint: fp } : {}),
+      ...(fpAt !== undefined ? { os_fingerprint_at: fpAt } : {}),
       ...(fpUnavailable !== undefined ? { os_fingerprint_unavailable: fpUnavailable } : {}),
       ...(quic !== null
         ? {
@@ -787,6 +867,7 @@ export async function testAccountProxy(
       ...(quicDetail !== undefined ? { quic_detail: quicDetail } : {}),
       ...(reachable !== undefined ? { reachable } : {}),
       ...(udpAssociate !== undefined ? { udp_associate: udpAssociate } : {}),
+      ...(udpDetailRaw !== undefined ? { udp_detail: udpDetailRaw } : {}),
       ...(h2Ok !== undefined ? { h2_ok: h2Ok } : {}),
       ...(exitObserved !== undefined ? { exit_observed: exitObserved } : {}),
     };

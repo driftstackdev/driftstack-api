@@ -283,6 +283,54 @@ describe('#13 — the launch reads the entry its own pre-launch probe just wrote
     expect(handed()).toMatchObject({ countryCode: 'US', timezone: 'America/New_York' });
   });
 
+  // (p) review 2026-09-16 — the OS-reading poll SEEDS an entry for a proxy the
+  // server holds a reading for and this Mac has never tested. That entry carries a
+  // fail-closed placeholder `result` (every field false, so nothing reads it as a
+  // healthy proxy), and read RAW it says "unusable" — which in this function means
+  // "hand over nothing and probe nothing". So the moment the seeding shipped, every
+  // seeded row lost its launch-time exit probe and the simulator went back to the
+  // host Mac's clock and no Dock flag: exactly the #13 regression above, restored
+  // for the rows the reading was added for. The four consumers that go through
+  // `matchingProbe` refuse a seeded entry already; this is the fifth, which reads
+  // the map directly.
+  //
+  // MUTATION: in `freshExitIdentity` (views/ProfilesView.tsx) restore the direct
+  // read — `const cached = (cacheOverride ?? probeCache)[px.id];` — and this arm
+  // reds (no probe, nothing handed over), while the bulk arm above stays green,
+  // which is why this arm exists.
+  it('CRITICAL a BULK launch of a SERVER-SEEDED proxy (a reading taken on another Mac, no local verdict) still gets the exit probe', async () => {
+    seedCache({
+      p1: {
+        // What `seedServerOsFingerprint` writes: the reading, and a result that
+        // asserts nothing.
+        result: {
+          reachable: false,
+          auth_ok: false,
+          udp_associate: false,
+          can_route: false,
+          connect_reply: 0xff,
+          latency_ms: 0,
+          message: 'Not checked on this Mac.',
+        },
+        at: Date.now() - 60_000,
+        serverSeeded: true,
+        osFingerprint: {
+          os: 'macos-or-ios',
+          confidence: 'high',
+          reason: 'Based on how this proxy responds to a network connection.',
+          at: Date.now() - 60_000,
+        },
+      },
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Select Demo' }));
+    fireEvent.click(await screen.findByTitle('Open a browser session for each selected profile'));
+    await waitFor(() => expect(openSimulatorWindow).toHaveBeenCalledTimes(1));
+    expect(testProxy).not.toHaveBeenCalled();
+    expect(probeProxyExit).toHaveBeenCalledTimes(1);
+    expect(handed()).toMatchObject({ countryCode: 'US', timezone: 'America/New_York' });
+  });
+
   it('fresh probe ALSO unusable (Launch anyway): nothing is handed over and the exit is not probed through a dead proxy', async () => {
     seedCache(STALE_NL(DOWN));
     testProxy.mockResolvedValue(DOWN);

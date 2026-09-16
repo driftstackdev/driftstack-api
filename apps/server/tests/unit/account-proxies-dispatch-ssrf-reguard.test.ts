@@ -70,6 +70,9 @@ function row(over: Partial<AccountProxyRow> & { scheme: string }): AccountProxyR
     exitObserved: over.exitObserved ?? null,
     exitObservedAt: over.exitObservedAt ?? null,
     exitSupersededAt: over.exitSupersededAt ?? null,
+    // ITEM 4 — the background-refresh bookkeeping columns (migration 0123).
+    freshnessAttemptedAt: over.freshnessAttemptedAt ?? null,
+    freshnessConsecutiveFailures: over.freshnessConsecutiveFailures ?? 0,
   };
 }
 

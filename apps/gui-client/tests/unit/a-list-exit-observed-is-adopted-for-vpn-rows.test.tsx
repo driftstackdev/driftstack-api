@@ -14,8 +14,9 @@
 //      MUTATION: delete that call and the CRITICAL arm reds (no exitIp) — and
 //      never for a SOCKS5 row (its native geo is authoritative), never as a
 //      downgrade (same ip, no geo, over stored geo), never as a rewind;
-//   3. syncListExitObserved only pays the list round-trip when a synced VPN row
-//      exists, and every failure is a rejection, never a throw;
+//   3. syncListExitObserved only pays the list round-trip when a row synced to
+//      the server exists ((p) 2026-09-16 — any scheme, since the list also carries
+//      the stored OS reading), and every failure is a rejection, never a throw;
 //   4. the Proxies grid runs it on refresh — MUTATION: drop the call in
 //      ProxiesView.refresh and the render arm reds (the row says "run Test").
 
@@ -97,9 +98,11 @@ import {
   saveFleetFailure,
   saveProbeResult,
   saveServerProbeResult,
+  seedServerOsFingerprint,
 } from '../../src/lib/proxy-probe-cache';
 import {
   adoptListExitObserved,
+  adoptListOsFingerprint,
   deriveProbeViewWithEndpointRows,
   LIST_TUNNEL_DOWN_REASON,
   syncListExitObserved,
@@ -166,6 +169,18 @@ const OK = {
   message: 'ok',
 };
 const NOW = 1_800_000_000_000;
+
+/** (p) — the OS reading the account list carries, in the shape the client parser
+ *  hands the adoption. Only the reading matters here: what is under test is the
+ *  ENTRY it lands on, not the reading itself. */
+const READING = {
+  os: 'macos-or-ios' as const,
+  confidence: 'high' as const,
+  reason: 'Based on how this proxy responds to a network connection.',
+  observedVia: 'exit_ip' as const,
+  singleHostVantage: true,
+  webPortVantage: true,
+};
 
 /** The endpoint pre-flight entry a VPN row has once Test/launch ran on THIS
  *  Mac. ⛔ Not a precondition of adoption: the no-entry arms below cover the
@@ -458,6 +473,59 @@ describe('adoptListExitObserved — a VPN row with NO entry on this Mac (second 
     expect(resolve).toHaveBeenCalledTimes(1);
   });
 
+  // (p) review — the entry the OS-reading poll SEEDS is not an entry for this
+  // purpose, and the read at the top of the loop already says so. The RE-READ
+  // guard below it did not: it wrote only when the key was ABSENT, so the
+  // resolve was spent and DISCARDED, the row never got an `endpoint`, and the
+  // exit written on top of the seeded entry was invisible in every VPN surface
+  // (`deriveProbeViewWithEndpointRows` skips a row with no `endpoint`) — for
+  // ever, because only a real local verdict clears the mark, and a real DNS
+  // resolve was burned on every poll to reach the same nothing.
+  //
+  // MUTATION: in `adoptListExitObserved` (lib/proxy-server-test.ts) drop the
+  // `|| cache[p.id]?.serverSeeded === true` disjunct from the re-read guard and
+  // this arm reds — no endpoint, no exit, and the mark still standing.
+  it('CRITICAL a row a SEEDED reading landed on first still gets its pre-flight STORED: the endpoint lands, the exit is visible, the seeded mark is gone — and the reading the poll re-seeds a moment later rides on the real entry', async () => {
+    await seedServerOsFingerprint('wg1', READING, NOW - 60_000);
+    expect((await loadProbeCache()).wg1?.serverSeeded, 'the state this arm is about').toBe(true);
+
+    expect(await adoptListExitObserved([WG_ROW], [WG], NOW)).toEqual(['wg1']);
+    expect(resolve).toHaveBeenCalledTimes(1);
+    const entry = (await loadProbeCache()).wg1;
+    expect(entry?.endpoint).toEqual({ resolved: true, ip: '1.2.3.4', message: 'ok' });
+    expect(entry?.exitIp).toBe('203.0.113.9');
+    // ⛔ The mark is gone: the row now holds a real pre-flight, which is exactly
+    // what makes the exit showable.
+    expect(entry?.serverSeeded).toBeUndefined();
+    const view = deriveProbeViewWithEndpointRows(await loadProbeCache(), NOW);
+    expect(view.exitResults.wg1?.ip).toBe('203.0.113.9');
+    expect(view.endpointResults.wg1?.resolved).toBe(true);
+
+    // The SAME poll re-seeds the reading (syncListExitObserved runs the exit
+    // adoption first, then the OS one), now onto the real entry.
+    await adoptListOsFingerprint(
+      [
+        {
+          id: 'aprx_wg',
+          os_fingerprint: READING,
+          os_fingerprint_at: new Date(NOW - 60_000).toISOString(),
+        },
+      ],
+      [WG],
+      NOW,
+    );
+    const after = (await loadProbeCache()).wg1;
+    expect(after?.osFingerprint?.os).toBe('macos-or-ios');
+    expect(after?.endpoint?.resolved).toBe(true);
+    expect(
+      deriveProbeViewWithEndpointRows(await loadProbeCache(), NOW).osFingerprints.wg1?.os,
+    ).toBe('macos-or-ios');
+
+    // …and no second resolve is burned: the row has an entry now.
+    expect(await adoptListExitObserved([WG_ROW], [WG], NOW + 15_000)).toEqual([]);
+    expect(resolve).toHaveBeenCalledTimes(1);
+  });
+
   it('CONTROL — a pre-flight that cannot RUN invents nothing: no entry, nothing written; the next poll retries', async () => {
     resolve.mockRejectedValueOnce(new Error('ipc down'));
     expect(await adoptListExitObserved([WG_ROW], [WG], NOW)).toEqual([]);
@@ -476,13 +544,28 @@ describe('adoptListExitObserved — a VPN row with NO entry on this Mac (second 
   });
 });
 
-describe('syncListExitObserved — the round-trip is paid only for a synced VPN row', () => {
-  it('skips the request with no api key or no synced VPN proxy', async () => {
+describe('syncListExitObserved — the round-trip is paid only for a row synced to the server', () => {
+  it('skips the request with no api key, and when NOTHING is synced to the server', async () => {
     expect(await syncListExitObserved('https://api.example', null, [WG], NOW)).toEqual([]);
-    expect(await syncListExitObserved('https://api.example', 'k', [SOCKS], NOW)).toEqual([]);
     const { serverId: _dropped, ...unsynced } = WG;
     expect(await syncListExitObserved('https://api.example', 'k', [unsynced], NOW)).toEqual([]);
     expect(fetchCalls).toEqual([]);
+  });
+
+  // (p) 2026-09-16 — THIS ARM REPLACES "a SOCKS5 row pays nothing", and the premise
+  // it rested on is what changed: the list carries only an exit, which a SOCKS5 row
+  // measures natively. It now also carries the OS reading the control plane stored
+  // for the row — and that reading is the one thing ONLY the server has, because it
+  // is taken from the SYN the proxy's own kernel sent to our observer, which no Mac
+  // can read for itself. A SOCKS5-only account is exactly the account this item is
+  // for, so refusing the round-trip for it refuses the feature.
+  // The request is still paid for nothing that is not synced (arm above), and a row
+  // the server holds no reading for still adopts NOTHING and writes NO entry.
+  it('pays the round-trip for a synced SOCKS5 row — the list carries its stored OS reading — and adopts nothing when the server holds none', async () => {
+    nextResponse = () => json({ data: [SOCKS_ROW] });
+    expect(await syncListExitObserved('https://api.example', 'k', [SOCKS], NOW)).toEqual([]);
+    expect(fetchCalls).toEqual(['https://api.example/v1/account/me/proxies']);
+    expect(await loadProbeCache()).toEqual({});
   });
 
   it('fetches the list and adopts for a synced VPN row', async () => {

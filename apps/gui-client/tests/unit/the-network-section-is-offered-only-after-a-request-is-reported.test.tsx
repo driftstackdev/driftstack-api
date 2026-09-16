@@ -300,7 +300,33 @@ describe('discovery for the withheld section terminates', () => {
    *  flushed between timers so each look's promise settles and schedules (or
    *  declines to schedule) the next. Two hours is far beyond the budget's reach. */
   async function runPastEveryBackoff(): Promise<void> {
-    await vi.advanceTimersByTimeAsync(2 * 60 * 60 * 1000);
+    // ⛔ Do NOT advance a wide window here. Two failures came out of trying:
+    //  1. ONE `advanceTimersByTimeAsync(2h)` drains only the timers already
+    //     queued when it starts. Each look settles a promise and only THEN
+    //     schedules its successor, so under the full suite (the push gate runs
+    //     every file in parallel) the render's first effect can land after the
+    //     advance begins and the run comes up a look short — green alone, red
+    //     in the gate.
+    //  2. Looping that wide advance is worse: two fake hours make every OTHER
+    //     timer the window mounts fire hundreds of times per pass, and the test
+    //     hit the 10s timeout instead.
+    // Step to the NEXT timer instead: it jumps exactly as far as the backoff
+    // chain asks for, settles the promise, and costs one iteration per look.
+    // Stop when nothing is scheduled at all, or when a long run of timers has
+    // produced no new look (the chain has stood down).
+    // ⛔ `idle` must be GENEROUS. The window mounts other timers, and they
+    // interleave with the backoff chain — a tight allowance (8) ended the loop
+    // between look 1 and look 2 and reported a budget of ONE, which reads as a
+    // product bug and is an artefact of this helper. Both bounds are runaway
+    // guards, never budgets: a chain that polls forever keeps resetting `idle`,
+    // runs to the iteration cap, and then fails the caller's exact-count
+    // assertion — which is the regression this file exists to catch.
+    for (let i = 0, idle = 0; i < 2000 && idle < 200; i += 1) {
+      if (vi.getTimerCount() === 0) break;
+      const before = networkMock.mock.calls.length;
+      await vi.advanceTimersToNextTimerAsync();
+      idle = networkMock.mock.calls.length === before ? idle + 1 : 0;
+    }
   }
 
   it('CRITICAL a healthy-but-empty deployment spends a bounded budget, not the session', async () => {

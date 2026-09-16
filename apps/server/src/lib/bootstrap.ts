@@ -222,6 +222,10 @@ import {
   registerCryptoOrderExpirySweepJob,
   enqueueNextCryptoOrderExpirySweep,
 } from '../services/crypto-order-expiry-sweep-job.js';
+import {
+  registerProxyFreshnessJob,
+  enqueueNextProxyFreshnessRefresh,
+} from '../services/proxy-freshness-job.js';
 import { AuditArchiveService } from '../services/audit-archive.js';
 import { DrizzleArchiveTableRepo, DrizzleArchiveLedgerRepo } from '../db/audit-archive-repo.js';
 import {
@@ -2110,6 +2114,25 @@ export async function createProductionDeps(
         }
       : {}),
   });
+  // ITEM 4 — background freshness refresher for saved SOCKS5/HTTP proxies. A
+  // reading is only ever TAKEN when someone presses Test on one machine, so on a
+  // second Mac (or after a reinstall) the row's exit identity and OS fingerprint
+  // can be months old. This re-takes them on a 6-hour per-proxy cadence, five at
+  // a time, serially, with a 2-minute wall-clock budget against the scheduler's
+  // 5-minute lease — see the job's header for the arithmetic and for why a
+  // failed background probe never changes anything a customer can see.
+  //
+  // Registered UNCONDITIONALLY, like the retention sweeps: the probe is passed
+  // through and a deployment without one simply claims nothing, rather than the
+  // chain vanishing from the liveness roster because an env var is unset.
+  registerProxyFreshnessJob({
+    scheduledJobs: scheduledJobsService,
+    proxies: accountProxiesRepo,
+    resolver: accountProxiesService,
+    probe: proxyConnectivityProbe,
+    logger, // chain survival: a swallowed tick failure is logged, then re-armed
+  });
+  await enqueueNextProxyFreshnessRefresh({ scheduledJobs: scheduledJobsService });
   const profilesService = new ProfilesService(
     profilesRepo,
     accountAuditService,

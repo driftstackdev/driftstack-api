@@ -207,11 +207,21 @@ export function ProxyCapabilityChips({
 export function ProxyOsChip({
   fingerprint,
   size = 'sm',
+  nowMs = Date.now(),
 }: {
   fingerprint: OsFingerprint | undefined;
   size?: 'xs' | 'sm';
+  /** (p) — reference moment for the hint's age sentence ("Measured by
+   *  Driftstack, 10 minutes ago"); injected by tests so the rendered output is
+   *  deterministic without freezing the global clock, exactly as OsReadout takes
+   *  it. Production passes nothing. */
+  nowMs?: number;
 }): JSX.Element {
-  const v = osFingerprintVerdict(fingerprint);
+  // (p) — the reading carries its own date (`fp.at`) when its holder knows one:
+  // every cached record does, and since this item that includes a reading the
+  // SERVER measured on another machine. The verdict appends where it came from
+  // and how old it is; a reading with no date says nothing about age.
+  const v = osFingerprintVerdict(fingerprint, nowMs);
   const text = size === 'xs' ? 'text-[9px]' : 'text-[10px]';
   const tone =
     v.tone === 'match'

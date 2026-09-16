@@ -174,3 +174,39 @@ export const RETEST_ACTION = 'Re-test';
 export const ENDPOINT_OK_PILL = 'address ok';
 export const ENDPOINT_OK_TITLE =
   'The address was found. The connection itself is tested once the proxy is saved to your account, and verified when a session launches.';
+
+/**
+ * (V6 2026-09-16) ITEM 3 — a VPN row's UDP state, in THREE states, defined once
+ * for the three surfaces that show it (the Proxies grid, the profile card, the
+ * profiles list). They described the same cache state in their own words before,
+ * which is the same defect this module was created for.
+ *
+ * ⛔ THE NOT-MEASURED SENTENCE LEADS WITH THE STATE, AND SAYS THE WORD.
+ * It read "UDP travels inside the VPN. WebRTC and QUIC use it; run Check VPN to
+ * measure QUIC through this VPN." — three true clauses, not one of which says
+ * nobody looked. That is a flat capability claim about the customer's tunnel,
+ * hedged by nothing, in the state that exists PRECISELY BECAUSE the control plane
+ * refused to forward the node's asserted `udp_associate: true` as a reading. A
+ * customer reading it concluded UDP had been checked and worked: the item's
+ * failure mode was not removed, only moved off the wire and into the copy.
+ *
+ * The repo's own honest twin is `NO_TEST_MAC_QUIC_HINT` in ProxiesView, which
+ * opens "Not measured yet — …" and renders in the cell 29 lines away. Same shape
+ * here: the absence first, then what is true of a tunnel.
+ *
+ * ⛔ AND IT STILL MUST NOT NAME A BUTTON THAT CANNOT PRODUCE THE VALUE. Today's
+ * fleet node does not probe UDP on the VPN path at all — it ASSERTS
+ * `udp_associate: true` about the tunnel's nature — so there is nothing a customer
+ * can press to fill this in. Check VPN is named only for QUIC, which that check
+ * really does measure. When the node's contracted three-state UDP arrives, the
+ * reading replaces this sentence with one of the two below.
+ *
+ * ⛔ AND NOT-MEASURED IS NEVER RENDERED AS A NEGATIVE. "No UDP" is reserved for
+ * `VPN_UDP_MEASURED_NONE_TITLE`, which only a probed `false` can reach: a
+ * customer must never be told their tunnel lacks UDP because nobody looked.
+ */
+export const VPN_UDP_NOT_MEASURED_TITLE = `UDP through this tunnel has not been measured yet. UDP travels inside the VPN. ${CHECK_VPN_ACTION} measures QUIC through the tunnel.`;
+export const VPN_UDP_MEASURED_OK_TITLE =
+  'UDP relays through this tunnel — measured from Driftstack’s network. WebRTC and QUIC can use it.';
+export const VPN_UDP_MEASURED_NONE_TITLE =
+  'No UDP through this tunnel — measured from Driftstack’s network. WebRTC falls back to a slower, more detectable path and QUIC falls back to HTTP/2.';

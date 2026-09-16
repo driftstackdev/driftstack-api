@@ -114,6 +114,12 @@ export function planSweep(
     .filter(([id, c]) => {
       const p = byId.get(id);
       if (p === undefined) return false; // deleted proxy, lingering entry
+      // (p) 2026-09-16 — a SERVER-SEEDED entry is the never-tested case, not a
+      // stale verdict: it exists only to carry the reading the server holds, and
+      // its `result` is a fail-closed placeholder. Reading that placeholder as a
+      // failing verdict would hand an unasked probe to every proxy the account
+      // list mentions — the exact thing the never-tested rule above forbids.
+      if (c.serverSeeded === true) return false;
       if (!isSocks5Probeable(p.scheme)) {
         // T-20 — never the SOCKS5 handshake for these; their own check, or nothing.
         if (opts.endpointRows !== true) return false;

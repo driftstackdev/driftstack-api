@@ -207,6 +207,79 @@ export class AccountProxiesService {
   }
 
   /**
+   * ITEM 4 — resolve a stored row to the descriptor the CP connectivity PROBE
+   * dials with. Owner-scoped; null when the row cannot be probed from here.
+   *
+   * Separate from `resolveForDispatch` on purpose, and the differences are the
+   * reason it exists rather than a convenience:
+   *
+   *   * `http` RESOLVES HERE. The dispatch slot cannot carry an HTTP proxy
+   *     (`scheme_not_dispatchable`), but `ProxyConnectivityProbe` speaks HTTP
+   *     CONNECT perfectly well, so an http row IS testable even though it is not
+   *     launchable. Sending the background refresher through the dispatch
+   *     resolver would have silently dropped every http row from a sweep whose
+   *     stated scope includes them.
+   *   * NO TIER ARGUMENT, because no tier-gated scheme can come out of it: the
+   *     VPN branch is refused below rather than resolved. `resolveForDispatch`
+   *     needs the tier only to gate `vpnEgress`, and a background sweep has no
+   *     request context to carry one. Refusing the gated schemes outright is the
+   *     fail-closed way to not need the gate — never a reason to skip it.
+   *
+   * What it keeps identical: the SSRF host re-guard (throws
+   * {@link UnsafeProxyHostError}, fail-closed) and the password unwrap bound to
+   * this exact account + proxy + `password` slot, so a wrong-account envelope
+   * fails GCM here exactly as it does on the launch path.
+   */
+  async resolveProbeDescriptor(args: { proxyId: string; accountId: string }): Promise<{
+    protocol: 'socks5' | 'http';
+    host: string;
+    port: number;
+    username?: string;
+    password?: string;
+  } | null> {
+    const row = await this.repo.findById({ id: args.proxyId, accountId: args.accountId });
+    if (row === null) return null;
+    // ⛔ A tunnel needs a fleet node to bring it up; the control plane cannot
+    // dial one. Refused rather than resolved, which is also what keeps the
+    // `vpnEgress` tier gate out of this method's contract.
+    //
+    // Narrowed through an explicit map rather than by `!==` tests: `scheme` is a
+    // free `text` column at the database layer, so a `!==` guard leaves it typed
+    // `string` and the protocol field would take whatever the column holds. This
+    // way an unrecognised scheme is a null, not a descriptor with a protocol the
+    // probe cannot speak.
+    const protocol: 'socks5' | 'http' | null =
+      row.scheme === 'socks5' ? 'socks5' : row.scheme === 'http' ? 'http' : null;
+    if (protocol === null) return null;
+    const unsafe = classifyUnsafeHost(row.host);
+    if (unsafe !== null) throw new UnsafeProxyHostError(unsafe);
+    let password: string | undefined;
+    if (row.wrappedPassword !== null) {
+      if (this.masterKey === null) return null;
+      try {
+        password = readAccountProxySecret(
+          this.masterKey,
+          { accountId: args.accountId, proxyId: row.id, slot: 'password' },
+          row.wrappedPassword,
+        );
+      } catch {
+        // Wrong-account TMK / corrupted blob / un-rewrapped row. Fail CLOSED to
+        // null: a probe dialled WITHOUT the password the row stores would be
+        // answered `auth_failed`, and a background sweep would then record a
+        // failure against a proxy that is perfectly healthy.
+        return null;
+      }
+    }
+    return {
+      protocol,
+      host: row.host,
+      port: row.port,
+      ...(row.username !== null ? { username: row.username } : {}),
+      ...(password !== undefined ? { password } : {}),
+    };
+  }
+
+  /**
    * Resolve a stored proxy to a dispatch-ready SocksProxyConfig. Owner-scoped.
    * Returns null when the proxy isn't found for this account, or isn't `socks5`
    * (http proxies aren't injectable through the SocksProxyConfig dispatch slot

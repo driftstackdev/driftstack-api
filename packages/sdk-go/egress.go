@@ -83,6 +83,15 @@ type AccountProxyMetadata struct {
 	// a caller adopting ExitObserved should refuse an observation dated at or
 	// before it. Cleared by the next exit observation (session or probe).
 	ExitSupersededAt *string `json:"exit_superseded_at"`
+	// OsFingerprint is the LAST OS fingerprint the control plane observed for
+	// this proxy's own TCP stack (POST :id/test takes it; this list is how it
+	// reaches a machine that never ran that test), or nil when never measured.
+	// Nil is "not measured", never "no OS" and never a placeholder.
+	OsFingerprint *AccountProxyOsFingerprint `json:"os_fingerprint"`
+	// OsFingerprintAt is when that reading was taken (RFC 3339), or nil. AGE the
+	// reading by this: it is a stored measurement, not one your request made, and
+	// a reading you cannot date should be treated as stale rather than current.
+	OsFingerprintAt *string `json:"os_fingerprint_at"`
 }
 
 // AccountProxyExitObserved is the stored exit identity on AccountProxyMetadata.
@@ -124,6 +133,12 @@ type AccountProxyTestResult struct {
 	// the control plane actually observed it. Absent is "not observed", never
 	// a placeholder OS.
 	OsFingerprint *AccountProxyOsFingerprint `json:"os_fingerprint,omitempty"`
+	// OsFingerprintAt is set when OsFingerprint is a STORED reading the server
+	// attached because THIS test observed none — it is when that reading was
+	// taken (RFC 3339). Nil means the fingerprint above was measured by this
+	// test and is dated by the reply. A stored reading keeps
+	// OsFingerprintUnavailable beside it: that names why this test found none.
+	OsFingerprintAt *string `json:"os_fingerprint_at,omitempty"`
 	// OsFingerprintUnavailable names WHY OsFingerprint is absent when the server
 	// knows: "vpn_tunnel" (a tunnel has no SOCKS5 stack to fingerprint),
 	// "not_observed" (the observer tunnel was refused) or "observer_off" (the

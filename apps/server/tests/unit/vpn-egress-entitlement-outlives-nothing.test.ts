@@ -51,6 +51,9 @@ function rowOf(scheme: AccountProxyRow['scheme']): AccountProxyRow {
     exitObserved: null,
     exitObservedAt: null,
     exitSupersededAt: null,
+    // ITEM 4 — the background-refresh bookkeeping columns (migration 0123).
+    freshnessAttemptedAt: null,
+    freshnessConsecutiveFailures: 0,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

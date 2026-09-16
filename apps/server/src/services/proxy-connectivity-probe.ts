@@ -34,7 +34,7 @@
 import { connect, type Socket } from 'node:net';
 import { isIP } from 'node:net';
 import { classifyUnsafeHost } from '../lib/webhook-target-guard.js';
-import type { OsObserverLookup } from '../lib/os-observer-lookup.js';
+import { OS_OBSERVER_LOOKUP_TIMEOUT_MS, type OsObserverLookup } from '../lib/os-observer-lookup.js';
 import {
   fingerprintOs,
   type OsFingerprintResult,
@@ -232,6 +232,30 @@ export interface ProxyConnectivityProbeDeps {
  *  be tight, but a hung proxy must not hold a Test open for long. */
 export const OS_OBSERVE_TIMEOUT_MS = 6_000;
 
+/**
+ * ⛔ WHAT `observeOs` CAN ACTUALLY SPEND, which is NOT `OS_OBSERVE_TIMEOUT_MS`.
+ *
+ * Unlike `probe()`, which tracks elapsed time and bounds its post-connect phase
+ * by what remains of ONE budget, `observeOs` arms its budgets in series and then
+ * does network work after them:
+ *
+ *   dial(OS_OBSERVE_TIMEOUT_MS)                       6s
+ * + a SECOND OS_OBSERVE_TIMEOUT_MS deadline
+ *   armed around the tunnel                           6s
+ * + lookupRecordedStack([exitIp, peerIp], …)          2 × OS_OBSERVER_LOOKUP_TIMEOUT_MS
+ *   — up to TWO sequential lookups, each with its
+ *     own AbortController deadline                    4s
+ *                                                    ───
+ *                                                     16s
+ *
+ * Anything budgeting for an `observeOs` call — the background freshness sweep's
+ * per-proxy ceiling, which the 5-minute scheduler lease rests on — must use THIS
+ * number. Reading `OS_OBSERVE_TIMEOUT_MS` as the whole cost understates it by
+ * 10 seconds per proxy.
+ */
+export const OS_OBSERVE_WORST_CASE_MS =
+  2 * OS_OBSERVE_TIMEOUT_MS + 2 * OS_OBSERVER_LOOKUP_TIMEOUT_MS;
+
 /** What `observeOs` learned. `observed: false` carries WHY, because "no
  *  fingerprint" has three unlike causes (observer off, tunnel refused, no SYN
  *  recorded for either address) and whoever reads the next miss must be able
@@ -341,6 +365,29 @@ export class ProxyConnectivityProbe {
     this.timeoutMs = deps.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
     this.target = new URL(deps.targetUrl ?? DEFAULT_PROBE_TARGET_URL);
     this.osObserver = deps.osObserver;
+  }
+
+  /**
+   * The deadline THIS INSTANCE enforces on `probe()`, which is not necessarily
+   * `DEFAULT_PROBE_TIMEOUT_MS`: bootstrap passes `DRIFTSTACK_PROXY_PROBE_TIMEOUT_MS`
+   * when it is set, deliberately, "so the budget can be retuned for slow
+   * residential/mobile proxies without a code change".
+   *
+   * ⛔ Exported for the BACKGROUND SWEEP'S LEASE ARITHMETIC. A caller that sizes
+   * its tick against the module constant instead of the wired instance is doing
+   * the sum for a probe it is not using: at a 120s env timeout the real per-proxy
+   * ceiling is ten times the compile-time one, and the sweep's whole safety
+   * argument is "the tick cannot outrun the 5-minute lock". Read the instance.
+   */
+  get effectiveTimeoutMs(): number {
+    return this.timeoutMs;
+  }
+
+  /** The most `observeOs` can spend — see {@link OS_OBSERVE_WORST_CASE_MS}. An
+   *  instance with no observer configured returns immediately and spends none of
+   *  it, so a deployment without `DS_OS_OBSERVER_HOST` budgets nothing for it. */
+  get observeWorstCaseMs(): number {
+    return this.osObserver === undefined ? 0 : OS_OBSERVE_WORST_CASE_MS;
   }
 
   async probe(proxy: ProbeProxyDescriptor): Promise<ProxyProbeResult> {

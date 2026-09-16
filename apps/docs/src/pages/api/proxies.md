@@ -59,6 +59,8 @@ difference. What you need:
   "has_secret": false,
   "exit_observed": null,
   "exit_superseded_at": null,
+  "os_fingerprint": null,
+  "os_fingerprint_at": null,
   "created_at": "2026-06-16T09:15:00Z",
   "updated_at": "2026-06-16T09:15:00Z"
 }
@@ -89,6 +91,19 @@ clears it; a test that finds the tunnel down sets it. A test that could not
 run (`not_run`) measured nothing and never sets it, and while it is set a
 `not_run` reply carries no `exit_observed` at all (see
 [Test a proxy](#test-a-proxy)).
+
+`os_fingerprint` is the last passive OS reading Driftstack took of the proxy's
+own TCP stack — the same object [Test a proxy](#test-a-proxy) returns
+(`os`, `confidence`, `reason`, `observed_ip`, `observed_via`,
+`single_host_vantage`, `web_port_vantage`) — or `null` when the proxy has never
+been fingerprinted. Only Driftstack can take this reading: it comes from the SYN
+the proxy's own kernel sends to our observer, which the machine you are calling
+from cannot see. `null` means not measured, never "no OS".
+
+`os_fingerprint_at` is when that reading was taken (ISO 8601), or `null`. Age the
+reading by this stamp rather than by the time of your request: it is a stored
+measurement, it can be any age, and a reading you cannot date should be treated
+as stale rather than current. The desktop app hides one older than 30 minutes.
 
 ## List
 
@@ -267,6 +282,15 @@ from the proxy itself never appears in the response.
 A proxy that authenticates but cannot route is the case worth knowing about: it
 looks healthy to anything that only opens the port, and it fails every launch.
 This test reports it.
+
+An `ok: true` result carries `os_fingerprint` when Driftstack read the proxy's
+own TCP stack during the test, and `os_fingerprint_unavailable` when it could
+not (`vpn_tunnel`, `not_observed`, `observer_off` — only the middle one is worth
+retrying). When this test read nothing but the proxy has a STORED reading, that
+one is returned instead, with `os_fingerprint_at` saying when it was taken and
+the `os_fingerprint_unavailable` cause still beside it: the cause is about this
+test, the stamp is about the reading. A reading with **no** `os_fingerprint_at`
+was measured by the request you just made.
 
 The default test (`vantage=cp`) is quick: for an `openvpn` or `wireguard`
 proxy it only checks that the address answers and does not connect the
