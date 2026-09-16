@@ -38,6 +38,64 @@ function pageStateFrame(sessionId: string, state: PageStateFrame['state']): Page
   return { type: 'pageState', sessionId, state, url: 'https://example.com', error: null };
 }
 
+describe('a memory reading that was never taken must not be logged as one', () => {
+  /** Captures the object handed to logger.info so the KEY SET can be asserted,
+   *  not just the values — the defect this guards is a key that exists with a
+   *  null, which is indistinguishable from a measured nothing. */
+  function capturingLogger(): { calls: Record<string, unknown>[]; logger: Logger } {
+    const calls: Record<string, unknown>[] = [];
+    return {
+      calls,
+      logger: {
+        info: (payload: unknown) => calls.push(payload as Record<string, unknown>),
+        warn: () => {},
+      } as unknown as Logger,
+    };
+  }
+
+  it('CRITICAL a renderer crash WITH a reading carries both the value and its age', async () => {
+    const repo = new InMemoryAgentSessionsRepo();
+    const created = await repo.create({ accountId: 'acct_1', tokenBudgetTotal: 1000 });
+    const { calls, logger } = capturingLogger();
+    await closeAgentSessionOnTerminalStatus({
+      agentSessions: repo,
+      frame: {
+        ...terminalFrame(created.id, 'errored', 'renderer_crashed'),
+        lastObservedRssMb: 1421,
+        lastObservedRssAgeSeconds: 2,
+      },
+      logger,
+    });
+    const closed = calls.find((c) => c.reason === 'renderer_crashed');
+    expect(closed?.lastObservedRssMb).toBe(1421);
+    // ⛔ The age is not decoration. A sample ninety seconds before a crash and one
+    // two seconds before support very different claims, and the number alone
+    // cannot tell them apart — so a reading that arrives without its age must
+    // never be rendered as though its staleness were known.
+    expect(closed?.lastObservedRssAgeSeconds).toBe(2);
+  });
+
+  it('CRITICAL a crash with NO reading omits both keys — absent is not zero', async () => {
+    // ⛔ THE WHOLE POINT. The node emits neither key when its sweep never sampled
+    // the session, because an early death genuinely has no reading. If this side
+    // logged `null` (or worse, 0) the key would exist on every close and "nobody
+    // looked" would render as a measured nothing — and "0 MB" argues for PLENTY
+    // OF HEADROOM, the opposite of the truth.
+    const repo = new InMemoryAgentSessionsRepo();
+    const created = await repo.create({ accountId: 'acct_1', tokenBudgetTotal: 1000 });
+    const { calls, logger } = capturingLogger();
+    await closeAgentSessionOnTerminalStatus({
+      agentSessions: repo,
+      frame: terminalFrame(created.id, 'errored', 'renderer_crashed'),
+      logger,
+    });
+    const closed = calls.find((c) => c.reason === 'renderer_crashed');
+    expect(closed, 'the close was logged at all').toBeDefined();
+    expect(Object.hasOwn(closed ?? {}, 'lastObservedRssMb')).toBe(false);
+    expect(Object.hasOwn(closed ?? {}, 'lastObservedRssAgeSeconds')).toBe(false);
+  });
+});
+
 describe('closeAgentSessionOnTerminalStatus (A3 W2682)', () => {
   it('closes an ACTIVE row with the frame reason on a terminal frame', async () => {
     const repo = new InMemoryAgentSessionsRepo();

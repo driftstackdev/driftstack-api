@@ -1120,6 +1120,41 @@ export const SessionStatusSchema = z.object({
     .string()
     .regex(/^[a-z][a-z0-9_]{0,127}$/)
     .optional(),
+  /**
+   * The last resident-memory reading taken for this session before it died, and
+   * how old that reading was — emitted on `renderer_crashed` ONLY, the one status
+   * whose cause is genuinely ambiguous.
+   *
+   * ⛔ WHY IT EXISTS: `renderer_crashed` and `session_resource_overuse` are two
+   * spellings of two different stories. The second is our own measured ceiling,
+   * so the memory sentence is a fact. The first can be an out-of-memory kill, a
+   * browser bug, or a hostile page, and the token alone cannot tell them apart —
+   * so its customer sentence is deliberately vague. Telling someone their page
+   * used too much memory when it did not is an instruction they cannot disprove
+   * and will waste time on. These two fields are what let that sentence route on
+   * evidence instead of on the token.
+   *
+   * ⛔ ABSENT MEANS NEVER SAMPLED, NEVER ZERO, and the node emits NEITHER key when
+   * there is no reading (the sweep skips a session until its child PIDs exist, so
+   * an early death genuinely has none). A missing measurement rendered as its own
+   * floor does not read as vague — "0 MB" reads as PLENTY OF HEADROOM, which
+   * argues for the opposite conclusion from the truth.
+   *
+   * ⛔ THE AGE RIDES WITH THE VALUE OR NEITHER SHIPS. A sample from ninety seconds
+   * before a crash and one from two seconds before support very different claims,
+   * and the number alone cannot tell them apart. Same rule as logging the sender's
+   * clock beside the receiver's: one figure with no way to judge its staleness is
+   * a fact nobody can weigh.
+   *
+   * ⚠️ NOTE FOR THE PRODUCER SIDE: this schema STRIPS unknown keys rather than
+   * rejecting them (measured by parsing a real terminal frame, not read off the
+   * type). So before these lines existed the node could emit both fields and see
+   * them vanish — and the control plane's `frameKeys` log prints the key set AFTER
+   * parsing, so the absence looked like an emitter bug. An absence there means
+   * this schema has not declared the field.
+   */
+  lastObservedRssMb: z.number().int().nonnegative().optional(),
+  lastObservedRssAgeSeconds: z.number().int().nonnegative().optional(),
 });
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 

@@ -149,7 +149,29 @@ export async function closeAgentSessionOnTerminalStatus(
       const updated = await agentSessions.closeWithReason(frame.sessionId, reason);
       if (updated.closedReason === reason) {
         logger.info?.(
-          { component: 'agent-session-terminal-close', sessionId: frame.sessionId, reason },
+          {
+            component: 'agent-session-terminal-close',
+            sessionId: frame.sessionId,
+            reason,
+            // ⛔ SPREAD, NOT `?? null`. These two are emitted only on
+            // `renderer_crashed`, and only when a reading was actually taken —
+            // the node sends NEITHER key when the sweep never sampled the
+            // session. Logging `null` would put a key on every close and make
+            // "never sampled" look like a measured nothing, which is the exact
+            // defect the producer avoided by omitting them. Absent stays absent
+            // here too, so a reader can tell the two apart in the log.
+            //
+            // They are here before anything renders them on purpose: this is how
+            // I find out a live frame CARRIES a value, rather than reporting that
+            // the schema shipped. A declared field and an arriving one are
+            // different claims and only the second is worth telling anyone.
+            ...(frame.lastObservedRssMb !== undefined
+              ? { lastObservedRssMb: frame.lastObservedRssMb }
+              : {}),
+            ...(frame.lastObservedRssAgeSeconds !== undefined
+              ? { lastObservedRssAgeSeconds: frame.lastObservedRssAgeSeconds }
+              : {}),
+          },
           'closed agent session on terminal worker status (worker-connected auto-close)',
         );
       } else {
