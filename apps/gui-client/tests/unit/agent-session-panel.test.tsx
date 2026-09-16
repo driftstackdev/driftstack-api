@@ -1309,6 +1309,15 @@ describe('AgentSessionPanel overlay UX', () => {
     ['config_rejected', 'Proxy config was rejected', 're-paste its config'],
     ['auth_failed', 'Proxy rejected the credentials', 'username or password'],
     ['no_output', 'Tunnel could not be started', 'ours, not yours'],
+    // The five that reached the generic sentence until 2026-09-16. Each is matched
+    // as a WHOLE TOKEN; `renderer_crashed` in particular is NOT covered by the
+    // `/^(launch_|render_|…)/` branch, because `render_` is not a prefix of
+    // `renderer_` — the near-miss this row exists to hold still.
+    ['browser_exited', 'Browser shut down', 'Starting a new session'],
+    ['session_resource_overuse', 'The page used too much memory', 'one heavy page'],
+    ['renderer_crashed', 'The page stopped unexpectedly', 'could not be recovered'],
+    ['intent_deadline_exceeded', 'A step took too long', 'smaller steps'],
+    ['reaped_during_provisioning', 'Stopped before it finished starting', 'never became usable'],
   ])('renders truthful bounded recap copy for %s', async (reason, outcome, explanation) => {
     connectMock.mockReset();
     connectMock.mockResolvedValue(undefined);
@@ -1321,6 +1330,79 @@ describe('AgentSessionPanel overlay UX', () => {
     expect(container.querySelector('[data-overlay="session-ended"]')).toHaveTextContent(
       explanation,
     );
+  });
+
+  /**
+   * ⛔ THE POPULATION ARM. The rows above say "this token renders that sentence";
+   * this one says "no REACHABLE token renders the blank one", which is the claim a
+   * new close reason can actually break.
+   *
+   * THE LIST IS THE WHOLE POINT, and it is not a grep. A token-shaped scan of the
+   * daemon's sources returns sixty-odd values and is wrong: most are internal error
+   * enums that never reach `closed_reason`. Derived 2026-09-16 the way the daemon's
+   * own clean-token test derives it — a reason reaches the wire only from a
+   * session-status construction or an end-session call in the coordinator and the
+   * daemon entry point, plus the two expiry-reason raw values the reaper passes —
+   * which gives ELEVEN. Five of them rendered "Session closed / This session has
+   * stopped." until this arm went in.
+   *
+   * ⚠️ It is HAND-MAINTAINED and cannot notice a twelfth on its own: this repo does
+   * not build the daemon, so nothing here can read its sources at test time. When a
+   * new reason is added over there, add it here. The cost of forgetting is one
+   * customer-visible blank sentence, not a red build, which is exactly why the
+   * derivation is written down above rather than left as folklore.
+   */
+  const REACHABLE_CLOSED_REASONS = [
+    'browser_crashed',
+    'browser_exited',
+    'egress_lost',
+    'idle_timeout',
+    'intent_deadline_exceeded',
+    'launch_timeout',
+    'max_duration',
+    'node_shutting_down',
+    'reaped_during_provisioning',
+    'renderer_crashed',
+    'session_resource_overuse',
+  ] as const;
+
+  async function outcomeFor(reason: string): Promise<string> {
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(undefined);
+    createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    const { container, unmount } = render(
+      <AgentSessionPanel info={INFO} sessionEnded={{ reason }} />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const text = container.querySelector('[data-overlay="session-ended"]')?.textContent ?? '';
+    unmount();
+    return text;
+  }
+
+  it.each(REACHABLE_CLOSED_REASONS)(
+    'CRITICAL %s does not fall through to the sentence that says nothing',
+    async (reason) => {
+      const text = await outcomeFor(reason);
+      // The fallback, verbatim. Matching the sentence rather than a flag is what
+      // makes this survive a refactor that moves the branches around.
+      expect(text).not.toMatch(/This session has stopped\./);
+      expect(text).not.toMatch(/^\s*Session closed\s*$/);
+      // ⛔ And it must not reflect the raw token either — unknown reasons may carry
+      // internal diagnostics, and the rule is that none of them reach the DOM.
+      expect(text).not.toContain(reason);
+    },
+  );
+
+  it('VACUITY CONTROL — an unknown reason still DOES render the generic sentence', async () => {
+    // Without this, the arm above would pass just as happily against a component
+    // that had stopped rendering the overlay at all, or one whose fallback wording
+    // had been changed so the regexes could never match. A guard that cannot
+    // produce its own negative is not measuring anything.
+    const text = await outcomeFor('a_reason_no_build_has_ever_emitted');
+    expect(text).toMatch(/This session has stopped\./);
+    expect(text).not.toContain('a_reason_no_build_has_ever_emitted');
   });
 
   /* ⛔ THE COARSE CODES COLLAPSE, AND THIS IS THE ARM THAT SAYS SO. The typed

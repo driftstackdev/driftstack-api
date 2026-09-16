@@ -215,6 +215,30 @@ export function makeSessionNetworkLogRelay(
       );
     }
     store.append(frame.sessionId, kept);
+    // ⛔ THE SUCCESS PATH HAS TO SPEAK, and until now this relay could only warn.
+    //
+    // Every other log in this file fires on a drop, a throw or an overflow. So a
+    // relay that was working perfectly emitted NOTHING, and on 2026-09-16 a search
+    // of production for any sign of this feature returned zero lines — which was
+    // read as "the device is not sending requests" when the only thing it actually
+    // established was "nothing went wrong". An instrument that can only report
+    // failure cannot answer "did it arrive", and that is the question anyone
+    // debugging an empty pane is asking.
+    //
+    // ⛔ COUNTS AND A SESSION ID ONLY. A URL must never reach a log line: the rows
+    // are a customer's real browsing, they are deliberately held in memory and
+    // never written to disk, and the privacy category published for this feature
+    // says exactly that. `kept.length` is ours to count; nothing here is theirs to
+    // read.
+    logger.info(
+      {
+        component: 'session-network-log-relay',
+        sessionId: frame.sessionId,
+        kept: kept.length,
+        coalescedFrames,
+      },
+      'networkRequests accepted: rows appended',
+    );
   };
 
   /**

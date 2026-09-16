@@ -720,6 +720,20 @@ export class FleetControlConnection {
                 nodeId: this.nodeId,
                 sessionId: frame.sessionId,
                 status: frame.status,
+                // ⛔ THE SENDER'S CLOCK, and the reason this line is worth more than
+                // it looks. pino stamps its own `time` on every record, which is when
+                // WE logged the frame — so a batch of phases drained together all
+                // carry the same receipt time and the ladder reads as seven steps in
+                // one millisecond whatever actually happened. That is not a
+                // hypothesis: on 2026-09-16 a VPN bring-up produced exactly that
+                // shape, and the conclusion drawn from it (the node batches its
+                // phases and should emit them live) could NOT be checked, because
+                // this projection dropped the only field that separates "fired
+                // together" from "delivered together". The value was on the wire the
+                // whole time — `timestamp` is REQUIRED by the frame schema.
+                //
+                // Two clocks, both named. Never one.
+                frameTimestamp: frame.timestamp,
                 ...(frame.status === 'provisioning' &&
                 typeof frame.detail === 'string' &&
                 PROVISIONING_DETAIL_TOKEN_RE.test(frame.detail)
@@ -931,6 +945,32 @@ export class FleetControlConnection {
               transportModeActive: frame.transportModeActive,
               transportModeRequested: frame.transportModeRequested,
               proxyUdpSupported: frame.proxyUdpSupported,
+              // ⛔ ARGUED PAST THE BAR ABOVE, not appended to the object.
+              //
+              // WHAT: how many safeguard layers reported, and the names of the ones
+              // that reported a failure. NOT the check `detail`, which is 4096 free
+              // characters and stays names-only like the rest of the denylist.
+              //
+              // WHY IT EARNS ITS PLACE: this is the one field whose ABSENCE is a
+              // distinct answer. The node omits a layer entirely when it never ran,
+              // so zero checks means "nobody looked", which is not the same as "a
+              // check failed" — and every consumer downstream has to be able to tell
+              // those apart or it will tell a customer a safeguard failed when
+              // nothing was ever measured. A count is the only way to read that back
+              // from a log.
+              //
+              // WHY IT IS SAFE: a count is ours. The layer names are node-supplied,
+              // so they pass the same token gate a provisioning detail passes — a
+              // bare snake_case token, which cannot express an IP, a host:port, or a
+              // sentence. A layer that fails the gate is counted and not named,
+              // because the count is the part that must never go missing.
+              safeguardCount: frame.safeguardChecks.length,
+              safeguardsFailed: frame.safeguardChecks
+                .filter((check) => !check.passed)
+                .map((check) =>
+                  PROVISIONING_DETAIL_TOKEN_RE.test(check.layer) ? check.layer : 'unnameable',
+                )
+                .join(','),
             },
             'capabilityReport accepted: key set',
           );

@@ -161,6 +161,37 @@ describe('a probe verdict is not a pass', () => {
     // And the correlation key: without it a report cannot be tied to the session
     // it describes, which is the hole that defeated the 2026-09-16 investigation.
     expect(src).toContain('sessionId: frame.sessionId,');
+    // ⛔ THE COUNT, pinned separately because it is not a `frame.<name>` read and
+    // the loop above cannot express it. Zero checks is a DISTINCT answer from a
+    // failed check — the node omits a layer it never ran — and without the count
+    // in the log there is no way to tell those apart after the fact. Losing this
+    // is how "we never looked" starts being reported to customers as "it failed".
+    expect(src).toContain('safeguardCount: frame.safeguardChecks.length,');
+  });
+
+  it('CRITICAL the provisioning line carries the SENDER clock, not only ours', () => {
+    // ⛔ THE FAILURE THIS PINS is not a missing log, it is a log that cannot answer.
+    // pino stamps `time` when the control plane WRITES the record. A node that
+    // queues its bring-up phases and drains them together produces records whose
+    // pino times are all the same millisecond, no matter when the phases actually
+    // fired — so a reader sees "seven steps instantly" and cannot tell a batched
+    // DELIVERY from a batched OCCURRENCE.
+    //
+    // That is exactly what happened on 2026-09-16: a conclusion was drawn about the
+    // node's emit behaviour from receipt times, and could not be checked, because
+    // this projection dropped `timestamp` — a field the frame schema makes
+    // REQUIRED, so it was on the wire for every one of those records.
+    //
+    // Two clocks or the line is not an instrument.
+    const src = readFileSync(
+      resolve(HERE, '..', '..', 'src', 'services', 'fleet-control-registry.ts'),
+      'utf8',
+    );
+    expect(src).toContain("'sessionStatus: provisioning transition'");
+    expect(
+      src,
+      'the frame timestamp is the only thing that separates fired-together from delivered-together',
+    ).toContain('frameTimestamp: frame.timestamp,');
   });
 
   it('CRITICAL h3ConnectionCount is accepted — a latched boolean cannot carry liveness', () => {

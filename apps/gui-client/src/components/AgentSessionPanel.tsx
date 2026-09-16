@@ -322,6 +322,73 @@ function friendlySessionEndCopy(
       explanation: 'The browser running this session stopped unexpectedly.',
     };
   }
+  // ── The five reachable close reasons that used to reach the generic sentence.
+  //
+  // POPULATION, derived 2026-09-16 the way the daemon's own W3188 test derives it
+  // rather than by grepping for tokens: a `reason` reaches `closed_reason` only
+  // from a session-status construction or an end-session call in the coordinator
+  // and the daemon entry point, plus the two expiry-reason raw values the reaper
+  // passes. That is ELEVEN values. A token-shaped grep of the same sources returns
+  // sixty-odd and is WRONG — most are internal error enums that never reach this
+  // field, and acting on that number would have meant writing customer copy for
+  // values no customer can receive.
+  //
+  // Six were already covered. These five fell through every branch to
+  // "Session closed / This session has stopped.", which tells a customer nothing
+  // and, for three of them, hides an errand they could act on.
+  //
+  // ⛔ `renderer_crashed` is the one to notice: it READS as though the
+  // `/^(launch_|render_|…)/` branch below already catches it, and it does not —
+  // `render_` is not a prefix of `renderer_`, so `render_failed` is caught and
+  // `renderer_crashed` is not. A near-miss like that is invisible in review, which
+  // is why every branch here matches a whole token.
+  if (normalized === 'browser_exited') {
+    return {
+      outcome: 'Browser shut down',
+      explanation:
+        'The browser running this session shut down. Starting a new session gives you a fresh one.',
+    };
+  }
+  if (normalized === 'session_resource_overuse') {
+    // Our own ceiling, so by the time this fires the overuse HAS been measured and
+    // the memory sentence is a fact rather than a guess.
+    return {
+      outcome: 'The page used too much memory',
+      explanation:
+        'A page in this session used more memory than a session is allowed, so it was stopped. This is almost always one heavy page rather than anything wrong with your setup.',
+    };
+  }
+  if (normalized === 'renderer_crashed') {
+    // ⛔ DELIBERATELY VAGUER THAN ITS NEIGHBOUR, and the first draft of this got it
+    // wrong by pairing the two under the memory sentence. Running out of memory is
+    // ONE cause of a renderer crash; a browser bug or a hostile page are others,
+    // and the reason alone cannot tell them apart. The two wrong answers are not
+    // equally cheap: "this page used too much memory" sent to someone whose page
+    // was fine is an instruction they cannot disprove and will waste time on, and
+    // it buries a bug report we want. A vaguer sentence for a real overrun only
+    // makes them retry, which is what they would do anyway. So this says what is
+    // known and stops. (A measured last-known memory reading on the frame would let
+    // this route on evidence instead of on the token; that is the daemon's to add.)
+    return {
+      outcome: 'The page stopped unexpectedly',
+      explanation:
+        'The page in this session stopped running and could not be recovered. Starting a new session is the quickest way back.',
+    };
+  }
+  if (normalized === 'intent_deadline_exceeded') {
+    return {
+      outcome: 'A step took too long',
+      explanation:
+        'One step ran past the time allowed for it, so the session was stopped. Breaking the instruction into smaller steps usually finishes well inside it.',
+    };
+  }
+  if (normalized === 'reaped_during_provisioning') {
+    return {
+      outcome: 'Stopped before it finished starting',
+      explanation:
+        'This session was still starting up when it was stopped, so it never became usable. Starting it again is the right next step.',
+    };
+  }
   if (/^(proxy_|egress_)/.test(normalized) || normalized === 'network_shim_boot_failed') {
     return {
       outcome: 'Proxy connection failed',

@@ -424,6 +424,19 @@ const BURST_OFFSETS_MS = [0, 60, 180, 300, 420, 540, 660, 780].map((s) => s * 10
 describe('discovery for the withheld section is bounded in RATE, not in reach', () => {
   beforeEach(() => {
     networkMock.mockReset();
+    // ⛔ These arms walk HOURS of virtual time one scheduled timer at a time — the
+    // 8-hour ones at :590 and :731 (the latter with 96 transport rebinds) step tens
+    // of thousands of timers each. Virtual time is free; the STEPPING is real work,
+    // and its wall-clock cost scales with how loaded the machine is. Alone the file
+    // finishes in 4 s; under the push gate, which runs all 3455 files in parallel,
+    // the same arms overran the default per-test deadline and reported as failures
+    // that no one could reproduce afterwards — the file was green by itself every
+    // time. That is the worst diagnostic shape available, so the deadline is stated
+    // here with the reason on it.
+    //
+    // This is headroom, NOT a licence to be slow: the cap still fails a genuine hang
+    // (the runaway guard inside advanceVirtualMs fails first anyway, and loudly).
+    vi.setConfig({ testTimeout: 60_000 });
   });
 
   /** Arm the fetch stub and hand back the (growing) list of look offsets, in
@@ -446,6 +459,28 @@ describe('discovery for the withheld section is bounded in RATE, not in reach', 
    *  before advancing anything, and ASSERT it happened: a run that quietly started
    *  from zero looks reads as a calm session when it is really a broken harness. */
   async function settleFirstLook(looks: number[]): Promise<void> {
+    // ⛔ ONE flush is not enough, and the failure is load-dependent — which is the
+    // worst shape: green on this file alone, red only in the push gate, where every
+    // file runs in parallel and the mount's effect can still be pending when the
+    // single `act` returns. It cost a whole gate cycle (5 arms red at 17:24, the
+    // same file green in 4 s by itself).
+    //
+    // Flushing until the look ARRIVES removes the assumption about how many
+    // microtask turns the effect needs, without weakening anything: the assertion
+    // below is unchanged, so a run where the look never lands still fails loudly
+    // rather than sliding on to advance a clock nobody is polling. The cap is a
+    // runaway guard, not a budget — reaching it falls through to the assertion,
+    // which is the honest report.
+    for (let i = 0; i < 50 && looks.length === 0; i += 1) {
+      await act(async () => {});
+    }
+    // ⛔ AND THEN ONE MORE, unconditionally. The loop above stops the moment the
+    // look is ISSUED, which is strictly earlier than the old single flush stopped:
+    // that one also settled the look's RESPONSE and rendered what it revealed. An
+    // arm that goes straight from here to reading the rail found no network icon
+    // and failed on `expect(icon).not.toBeNull()` — a green helper handing back a
+    // half-settled window. The loop makes the effect's arrival certain; this makes
+    // its answer's arrival certain.
     await act(async () => {});
     expect(looks).toEqual([0]);
   }
