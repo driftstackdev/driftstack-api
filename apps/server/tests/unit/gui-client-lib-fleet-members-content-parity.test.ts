@@ -133,7 +133,7 @@ describe('W469.B apps/gui-client/src/lib/fleet-members.ts content parity', () =>
       /if \(body\.driver === 'mock' \|\| body\.driver === 'webkit' \|\| body\.driver === 'playwright'\) \{\s*out\.driver = body\.driver;\s*\}\s*if \(\s*body\.playwright_browser === 'webkit' \|\|\s*body\.playwright_browser === 'chromium' \|\|\s*body\.playwright_browser === 'firefox'\s*\) \{\s*out\.playwrightBrowser = body\.playwright_browser;\s*\}/,
     );
     expect(body).toMatch(
-      /\} catch \(err\) \{\s*const dur = Math\.round\(performance\.now\(\) - start\);\s*const message = humanizeError\(\s*err,\s*"Couldn't reach this server\. Check its URL and try again\.",\s*\);\s*return \{ ok: false, durationMs: dur, error: message \};\s*\} finally \{\s*clearTimeout\(timer\);\s*\}/,
+      /\} catch \(err\) \{\s*const dur = Math\.round\(performance\.now\(\) - start\);\s*const message = humanizeError\(\s*err,\s*"Couldn't reach this server\. Check its URL and try again\.",?\s*\);\s*return \{ ok: false, durationMs: dur, error: message \};\s*\} finally \{\s*clearTimeout\(timer\);\s*\}/,
     );
     expect(body).not.toMatch(/err instanceof Error \? err\.message/);
   });
