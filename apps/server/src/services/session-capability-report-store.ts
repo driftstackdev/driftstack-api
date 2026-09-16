@@ -120,6 +120,41 @@ export type CustomerSafeCapabilityReport = Omit<
   os_fingerprint: { os: string; confidence: string; at: string } | null;
 };
 
+/**
+ * Did every safeguard the node expects actually report, and did all of them pass?
+ *
+ * Exported because the relay needs the SAME judgement to decide which warning to
+ * emit, and two copies of a safety predicate is how they drift apart.
+ *
+ * Three cases, deliberately distinct:
+ *   • expected set present → every expected layer reported AND all passed.
+ *     A missing layer is a NO, because "we did not look" cannot be reported as
+ *     "it passed" — that is the fail-open this function exists to close.
+ *   • expected set ABSENT → unverifiable. Fall back to at-least-one-and-all-pass,
+ *     the strongest honest claim available, and let the relay say completeness
+ *     was not verified. Absent is NOT an empty set: an empty set would satisfy
+ *     the superset test vacuously.
+ *   • no checks at all → false. A positive claim from no evidence.
+ */
+export function safeguardsPassed(frame: CapabilityReport): boolean {
+  const checks = frame.safeguardChecks;
+  if (checks.length === 0) return false;
+  if (!checks.every((check) => check.passed)) return false;
+  const expected = frame.safeguardLayersExpected;
+  if (expected === undefined) return true;
+  const reported = new Set(checks.map((check) => check.layer));
+  return expected.every((layer) => reported.has(layer));
+}
+
+/** Expected layers the frame did NOT report. Empty when the node declares no
+ *  expectation, which the caller must treat as UNVERIFIED rather than complete. */
+export function missingSafeguardLayers(frame: CapabilityReport): string[] {
+  const expected = frame.safeguardLayersExpected;
+  if (expected === undefined) return [];
+  const reported = new Set(frame.safeguardChecks.map((check) => check.layer));
+  return expected.filter((layer) => !reported.has(layer));
+}
+
 export function customerSafeCapabilityReport(
   report: SessionCapabilityReport,
   osFingerprint?: { os: string; confidence: string; at: string } | null,
@@ -200,16 +235,30 @@ export class SessionCapabilityReportStore {
       webrtc_candidate_ips: frame.webrtcCandidateIps ?? null,
       observed_at: frame.observedAt ?? null,
       // `every` on an EMPTY array is true, so a frame carrying no safeguard
-      // checks previously reported `safeguards_passed: true` — a positive
-      // safety claim asserted from no evidence, indistinguishable to a customer
-      // from every check having run and passed. The schema permits it:
-      // `safeguardChecks` is `.max(16)` with no `.min(1)`, so an older or
-      // misbehaving node sending `[]` validates cleanly. At least one check must
-      // have run before this asserts anything, and the relay emits
-      // `safeguards_unreported` so "we do not know" stays distinguishable from
-      // "a check failed".
-      safeguards_passed:
-        frame.safeguardChecks.length > 0 && frame.safeguardChecks.every((check) => check.passed),
+      // checks once reported `safeguards_passed: true` — a positive safety claim
+      // asserted from no evidence. Requiring at least one check fixed that case,
+      // and the case it fixed turned out not to be the one production produces.
+      //
+      // ⛔ THE REAL DEFECT WAS THE OPPOSITE, AND THIS LINE FAILED OPEN. The node
+      // always seeds its other layers and appends `screen_recording` only when
+      // the grant was actually checked — omitting a layer it never looked at,
+      // which is right, and which arrives here as a SHORTER array rather than an
+      // empty one. The seeded layers then satisfy both halves below, so a session
+      // whose screen-recording safeguard was never checked reported
+      // `safeguards_passed: TRUE`. `length > 0` is a presence test: it cannot see
+      // a member that is missing, only the absence of all of them.
+      //
+      // So completeness is now asserted against the set the NODE declares:
+      // every expected layer must have reported, and every reported check must
+      // have passed.
+      //
+      // ⚠️ An ABSENT expected set is not an empty one. Absent means the node does
+      // not declare its expectations, so completeness is unverifiable — fall back
+      // to the old predicate, which is the strongest honest claim available, and
+      // let the relay say so with `safeguards_expectation_unreported`. Treating
+      // absent as "expects nothing" would make the superset vacuously true and
+      // rebuild the fail-open one level up.
+      safeguards_passed: safeguardsPassed(frame),
       // `?? null` and never `?? {}` — see the field doc. Absent stays absent.
       streaming_health: frame.streamingHealth ?? null,
     });

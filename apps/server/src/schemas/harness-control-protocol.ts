@@ -1330,6 +1330,30 @@ const CapabilityReportPayloadSchema = z.object({
       }),
     )
     .max(16),
+  /**
+   * The layers a HEALTHY session is expected to report, declared by the node.
+   *
+   * ⛔ WITHOUT THIS THE SAFEGUARD VERDICT FAILS OPEN, which is the opposite of
+   * what everyone involved believed. The node omits a layer it never checked —
+   * correct, so absent means unmeasured rather than denied — but it always seeds
+   * the other layers, so `checks.length > 0 && checks.every(passed)` is satisfied
+   * by the ones that DID report and a customer is told every safeguard passed
+   * while one was never looked at. `length > 0` is a PRESENCE test; it cannot
+   * detect a MISSING member. Only comparing against an expected set can.
+   *
+   * ⛔ THE SET LIVES ON THE PRODUCER ON PURPOSE. A list maintained here would go
+   * stale the moment a layer is added over there, and its staleness would
+   * silently recreate exactly this fail-open — the control plane would keep
+   * asserting completeness against a set that no longer describes completeness.
+   * Read it off the frame; never mirror it.
+   *
+   * OPTIONAL, and the absent case is NOT an empty set. Absent means the node does
+   * not declare its expectations (an older build, or a rollback), so completeness
+   * is UNVERIFIABLE and must not be claimed. An empty array would make the
+   * superset test vacuously true, which is the same defect wearing a different
+   * function name — the node deliberately ships no default for that reason.
+   */
+  safeguardLayersExpected: z.array(z.string().min(1).max(64)).max(16).optional(),
   archetypeId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   webkitForkBuild: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
   // W-29 — the UPSTREAM this session's egress actually uses, `host:port`.

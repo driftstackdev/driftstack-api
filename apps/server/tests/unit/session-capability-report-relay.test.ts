@@ -84,6 +84,12 @@ describe('makeSessionCapabilityReportRelay', () => {
         warnings: [
           'udp_unsupported_by_proxy',
           'safeguard_failed:dns',
+          // ⛔ This fixture declares no `safeguardLayersExpected`, so the control
+          // plane has not been told what a complete set of safeguards looks like
+          // and cannot claim completeness. That is a DIFFERENT fact from a layer
+          // being absent, and it gets its own code so an operator is not sent
+          // looking for a check that was never expected in the first place.
+          'safeguards_expectation_unreported',
           'streaming_blank',
           'dead_proxy',
         ],

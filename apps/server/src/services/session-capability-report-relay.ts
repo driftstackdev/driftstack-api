@@ -9,6 +9,7 @@ import type { Logger } from '../lib/logger.js';
 import type { CapabilityReport } from '../schemas/harness-control-protocol.js';
 import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import type { SessionCapabilityReportStore } from './session-capability-report-store.js';
+import { missingSafeguardLayers } from './session-capability-report-store.js';
 
 interface CapabilityReportAgentSessions {
   get(id: string): Promise<{
@@ -102,6 +103,24 @@ function deriveWarnings(frame: CapabilityReport): string[] {
   }
   for (const check of frame.safeguardChecks) {
     if (!check.passed) warnings.push(`safeguard_failed:${check.layer}`);
+  }
+  // ⛔ THE CASE THAT USED TO PASS SILENTLY. A layer the node never checked is
+  // omitted rather than reported false — right at the source, and it arrives here
+  // as a SHORTER array, not an empty one, so neither the empty-array warning
+  // above nor the failed-check loop can see it. A session whose screen-recording
+  // safeguard was never looked at reported every safeguard passed.
+  //
+  // Named per layer, because "something is missing" and "the screen-recording
+  // check never ran" send an operator to different places.
+  for (const layer of missingSafeguardLayers(frame)) {
+    warnings.push(`safeguard_missing:${layer}`);
+  }
+  // And the honest gap: a node that declares no expected set has not told us what
+  // complete looks like, so completeness is UNVERIFIED rather than confirmed.
+  // This is not the same as a missing layer and must not read as one — it is the
+  // difference between "a check is absent" and "we cannot tell whether one is".
+  if (frame.safeguardLayersExpected === undefined) {
+    warnings.push('safeguards_expectation_unreported');
   }
   if (frame.streamingState === 'blank') warnings.push('streaming_blank');
   if (frame.streamingState === 'failed') warnings.push('streaming_failed');
