@@ -234,7 +234,23 @@ function egressWarnings(s: { egress_capabilities: unknown }): string[] {
   };
   const out: string[] = [];
   if (c.udp_associate === false) out.push('UDP not supported');
-  if (c.quic_route === false) out.push('HTTP/3 not available');
+  // ⛔ THIS LINE WAS `c.quic_route === false` AND COULD NEVER BE TRUE.
+  // `quic_route` is 'proxy' | 'direct' | 'disabled' — a string enum — so the
+  // comparison against a boolean is a type error the fixture hid: the test
+  // helper takes `Record<string, unknown>`, so the covering test could pass
+  // `quic_route: true`, which is not a member of the enum and cannot be produced
+  // by anything upstream. A test that can express what the writer cannot emit
+  // certifies a branch that never runs.
+  if (c.quic_route === 'disabled') out.push('HTTP/3 not available');
+  // ⚠️ THIS ONE IS CORRECT CODE ABOVE A BROKEN WRITER, and is left alone
+  // deliberately. Local DNS resolution is named in this function's own doc as
+  // the classic proxy leak, and the branch is right — but the sole writer
+  // hardcodes `dns_remote_resolve: true` (session-capability-report-relay.ts),
+  // because nothing measures it per session: the device frame carries no DNS
+  // field at all. So the warning cannot fire today, and the fix belongs at the
+  // producer, not here. The measurement is being added as a per-PROXY fact
+  // (ATYP=DOMAINNAME support, measured at validation) plus a per-session
+  // structural fact; this stays ready for the day the value becomes real.
   if (c.dns_remote_resolve === false) out.push('DNS resolved outside the proxy');
   if (Array.isArray(c.warnings)) {
     for (const w of c.warnings) if (typeof w === 'string' && w.length > 0) out.push(w);

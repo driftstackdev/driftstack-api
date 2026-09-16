@@ -14,6 +14,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
+// The real wire schema, so a fixture cannot express a value the producer
+// is incapable of emitting. See the note at its first use below.
+import { EgressCapabilitiesSchema } from '@driftstack/api-types';
 
 const sessionsList = vi.fn<() => Promise<{ data: unknown[] }>>(() => Promise.resolve({ data: [] }));
 let ctx: { client: { sessions: { list: typeof sessionsList } } | null } = {
@@ -178,12 +181,27 @@ describe('a history row names the session instead of showing only its id', () =>
           label: 'Leaky run',
           status: 'destroyed',
           destroyed_at: '2026-08-31T10:00:00.000Z',
-          egress_capabilities: {
+          // ⛔ THIS FIXTURE USED TO SAY `quic_route: true`, WHICH IS NOT A MEMBER
+          // OF THAT ENUM. The helper above takes `Record<string, unknown>`, so an
+          // impossible value typechecks, and the arm below then proved a branch
+          // (`c.quic_route === false`) that no real payload could ever reach. A
+          // consumer-side test cannot establish reachability on its own: the
+          // question is what the PRODUCER can emit, not what this function will
+          // accept. It is parsed through the real wire schema below for that
+          // reason — an impossible fixture now reds here instead of certifying a
+          // dead branch.
+          //
+          // ⚠️ `dns_remote_resolve: false` IS schema-valid but is NOT producible
+          // today: the sole writer hardcodes `true` because nothing measures it
+          // per session. The branch it exercises is correct code above a broken
+          // writer, so this keeps it alive and honest rather than pretending the
+          // warning is reachable in production. See the note in egressWarnings.
+          egress_capabilities: EgressCapabilitiesSchema.parse({
             udp_associate: false,
-            quic_route: true,
+            quic_route: 'disabled',
             dns_remote_resolve: false,
             warnings: [],
-          },
+          }),
         }),
       ],
     });
@@ -194,6 +212,13 @@ describe('a history row names the session instead of showing only its id', () =>
     const line = await screen.findByText(/DNS resolved outside the proxy/);
     expect(line.textContent).toContain('Proxy limits: UDP not supported');
     expect(line.textContent).not.toMatch(/associate|egress/i);
+    // ⛔ THE BRANCH THAT WAS DEAD. `quic_route` is a string enum and the check
+    // compared it against `false`, so this warning could not appear for any
+    // payload — including this one, whose route really is disabled. It only
+    // looked covered because the old fixture put a boolean in that field.
+    expect(line.textContent, 'a disabled QUIC route is reported, not silently dropped').toContain(
+      'HTTP/3 not available',
+    );
   });
 
   it('⛔ says NOTHING when the harness never reported capabilities', async () => {
