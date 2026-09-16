@@ -1045,7 +1045,7 @@ describe('AgentSessionPanel overlay UX', () => {
     ['session-ended', 'Session completed', 'ended normally'],
     // A3's typed VPN bring-up reasons. The POINT of each is where it sends the
     // customer, so the assertion is on the destination words, not the label.
-    ['remote_unresolved', 'Proxy address did not resolve', 'supplies the proxy'],
+    ['remote_unresolved', 'Proxy address not found', 'supplies the proxy'],
     ['remote_refused', 'Proxy refused the connection', 'whoever supplies it'],
     ['remote_unreachable', 'Proxy did not respond', 'unreachable'],
     ['remote_closed_during_setup', 'Proxy hung up during setup', 'whoever supplies it'],

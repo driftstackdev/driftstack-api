@@ -464,7 +464,12 @@ describe('POST /v1/profiles/:id/trim', () => {
     const res = await trim(app);
     expect(res.statusCode).toBe(200);
     expect(res.json<TrimBody>()).toMatchObject({ status: 'unavailable' });
-    expect(res.json<TrimBody>().reason).toMatch(/no fleet node is connected/);
+    // Customer-facing reason (2026-09-15 plain-words directive): no "fleet"/"node";
+    // the GUI renders it as `Couldn't clear …: ${reason}.`, so it stays a fragment.
+    expect(res.json<TrimBody>().reason).toBe(
+      'no machine is available to run this right now — try again in a minute',
+    );
+    expect(res.json<TrimBody>().reason).not.toMatch(/fleet|node|control plane/i);
   });
 
   it('connected node confirms the trim → 200 { status:"ok", size_bytes, bytes_reclaimed } + persists the new size', async () => {

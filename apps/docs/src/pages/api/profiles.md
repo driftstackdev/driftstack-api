@@ -11,8 +11,8 @@ remembers between sessions. Cookies, `localStorage`, `IndexedDB`,
 service workers, and any other state the browser retains are kept
 under one logical handle so you can resume where you left off.
 
-A profile's metadata is intentionally light — a name, archetype,
-optional description, and last-used timestamp. The browser state
+A profile's metadata is intentionally light — a name, device profile
+(`archetype`), optional description, and last-used timestamp. The browser state
 itself is managed by Driftstack and isn't directly exposed through
 this API.
 
@@ -76,14 +76,15 @@ With no header, the calling account remains the owner.
   max 120 chars. Must start and end with an alphanumeric character;
   allowed inner characters are letters, digits, spaces, underscore,
   hyphen, and dot. Leading/trailing whitespace is trimmed.
-- `archetype` — the pinned device + OS + Safari version triple. When omitted,
-  new profiles get the tier's default device: the iPhone 17 launch archetype
+- `archetype` — the pinned device profile: the iPhone model, iOS version and
+  Safari version. When omitted,
+  new profiles get the tier's default device: iPhone 17
   (`iphone17_ios18_7_safari26_4`) on tiers with every device, the newest
-  iPhone 13 archetype on the free tier. When supplied,
+  iPhone 13 on the free tier. When supplied,
   the id must be present in the current
   [`GET /v1/archetypes`](/api/archetypes/) response; this includes any
   older combination the platform still marks `available`. Once set,
-  the archetype is sticky for that profile's lifetime.
+  the device profile is fixed for that profile's lifetime.
 - `description` — free-form, max 2048 chars; nullable.
 - `folder` — optional organising folder name; `null` when the profile
   isn't filed under a folder.
@@ -116,7 +117,7 @@ Use `GET /v1/archetypes` to generate the request from the live selectable
 catalog. Any id absent from the current response is rejected before anything
 is written. Omitting the field selects the tier's default
 device (the catalog's `default_archetype_id` on tiers entitled to every device,
-the newest iPhone 13 archetype on the free tier).
+the newest iPhone 13 device profile on the free tier).
 
 Errors:
 
@@ -161,8 +162,8 @@ account (we don't leak existence cross-account).
 ```
 
 Both fields optional; pass `description: null` to clear. The
-archetype is intentionally not editable — repin via
-`POST /v1/profiles/:id/clone` with a new archetype, then delete the
+device profile is intentionally not editable — to move to a different
+device, create a new profile with the new `archetype`, then delete the
 old profile after migration.
 
 ## Launch
@@ -237,10 +238,10 @@ gets there).
 
 The clone inherits source's `archetype` + `description`. Underlying
 browser state is NOT cloned — the new profile starts with a fresh
-state slot under the same archetype. Use clone primarily for:
+state slot under the same device profile. Use clone primarily for:
 
-- Forking metadata before pinning the source to a different
-  archetype.
+- Keeping a copy of a profile's settings before you replace it with a
+  new profile on a different device.
 - Splitting a busy production profile into per-environment copies
   before they diverge.
 - Pre-creating staging profiles ahead of a load test.
@@ -271,7 +272,7 @@ The transfer creates a fresh profile under the recipient (inheriting
 the source's `archetype` + `description`) and deletes the source from
 your account in the same operation. Underlying browser state is not
 carried across — the recipient's profile starts with a fresh state
-slot under the same archetype. If the recipient already has a profile
+slot under the same device profile. If the recipient already has a profile
 with the same name, the new one is suffixed `${name} (transferred)`.
 
 Returns:
@@ -353,7 +354,7 @@ teammates).
 Errors:
 
 - `400 ValidationFailed` — the envelope is malformed, is not a v1 shape, or
-  carries an archetype absent from the live selectable catalog.
+  carries an `archetype` absent from the live selectable catalog.
 - `409 Conflict` — `name` (or `name_override`) already exists.
 - `429 TierLimit` — importing would exceed your tier's profile cap.
 
@@ -372,9 +373,9 @@ is honored — admin members can import on the owner's account.
 ## Snapshots
 
 Snapshots are immutable point-in-time metadata records of a
-profile. The parent profile keeps evolving — its archetype, name,
+profile. The parent profile keeps evolving — its device profile, name,
 description, and underlying browser state mutate as you use it.
-The snapshot's recorded metadata (archetype, name, description) is
+The snapshot's recorded metadata (device profile, name, description) is
 frozen the moment you capture it. Browser state (cookies, logins)
 is NOT captured today — see
 [/api/profile-snapshots](/api/profile-snapshots/) for the full
@@ -434,10 +435,10 @@ expires it. Until then the id is present but a `GET` on that profile
 404s, so do not treat a non-null `parent_profile_id` as proof the parent
 is reachable.
 
-## Stored-archetype compatibility
+## Profiles pinned to a retired device
 
 Catalog restrictions apply to new direct session/profile creates and profile
-imports. Existing profiles preserve their stored archetype even after it leaves
+imports. Existing profiles keep their stored device profile even after it leaves
 the selectable catalog. They remain listable, readable, clonable, transferable,
 snapshot-restorable, and launchable; these compatibility operations do not
 silently rewrite the pinned browser identity.

@@ -1,7 +1,9 @@
 // W305.C — drift guard for /self-hosted page positioning. The
-// page must describe the two-box architecture (control plane +
-// customer-owned hardware), reference Mac hardware as the runtime,
-// and tie each SKU to a concrete hardware configuration.
+// page must describe the deployment model (the customer runs the
+// Driftstack server on their own Macs — corrected 2026-09-15 from a
+// Driftstack-hosted "coordination service" the code never had),
+// reference Mac hardware as the runtime, and tie each SKU to a
+// concrete hardware configuration.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -20,10 +22,16 @@ function read(p: string): string {
 describe('W305.C /self-hosted narrative baseline', () => {
   const body = read(PAGE);
 
-  it('describes the two-sided architecture (Driftstack coordination service + customer hardware)', () => {
+  it("describes the deployment model: the Driftstack server runs on the customer's own Macs", () => {
     // 2026-09-15 owner directive: "control plane" is banned on customer
-    // surfaces; the page now names the two sides in plain words.
-    expect(body).toMatch(/Driftstack's coordination service starts and\s+manages sessions/);
+    // surfaces. Same day, refuter: the page had described a Driftstack-
+    // hosted coordination service; apps/docs license-activation.md, Terms
+    // §3 and the self-hosted runbook all have the customer running the
+    // server, and no code reports to a hosted service.
+    expect(body).toMatch(
+      /The Driftstack server that starts and manages your sessions runs\s+on your Macs as well/,
+    );
+    expect(body).not.toMatch(/coordination service|Driftstack hosts the service/);
     expect(body).toMatch(/hardware you own/i);
   });
 

@@ -25,7 +25,7 @@ describe('V-820 GET /v1/fleet/events activation gate (both wired + disabled retu
     expect(res.headers['content-type']).toMatch(/application\/problem\+json/);
     const body = res.json<{ type?: string; detail?: string }>();
     expect(body.type).toMatch(/feature-unavailable|feature_unavailable/);
-    expect(body.detail ?? '').toBe('Fleet events stream is unavailable on this deployment.');
+    expect(body.detail ?? '').toBe('Machine connections are not enabled on this deployment.');
   });
 
   it('disabled-stub detail does not expose internal infrastructure or planning references', async () => {

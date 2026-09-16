@@ -60,16 +60,61 @@ describe('W365.A marketing-site /security page parity', () => {
     // 2026-09-15 plain-language pass: same facts, customer words.
     expect(body).toMatch(/02 · Proxies/);
     expect(body).toMatch(/A profile can attach a SOCKS5 proxy at a public address as its\s+exit/);
-    expect(body).toMatch(/Per-profile SOCKS5; UDP support shown once the session is running\./);
+    // 2026-09-15 refuter: the Test cannot MEASURE HTTP/3 before launch — the
+    // native probe has no QUIC signal and apps/gui-client/src/components/
+    // ProxyCapabilities.tsx renders it as an inference ("~", never green) until
+    // a session or relay check measured it — so the small print says what to
+    // expect, not what the proxy "carries".
+    expect(body).toMatch(
+      /Per-profile SOCKS5, OpenVPN or WireGuard; the Test button shows what to expect from a proxy before you launch\./,
+    );
+    expect(body).not.toMatch(/shows what your proxy carries/);
     // Fail-closed limitation disclosures — load-bearing.
     expect(body).toMatch(/website address lookups go through the proxy\s+too/);
     expect(body).toMatch(/Proxies on\s+private or local addresses[\s\S]{0,90}are not accepted/);
     expect(body).toMatch(
-      /Whether WebRTC and HTTP\/3\s+traffic can use the proxy depends on your proxy's UDP support/,
+      /whether WebRTC and HTTP\/3 traffic can use the\s+proxy depends on your proxy's UDP support/,
     );
+    // 2026-09-15 truth pass — the OpenVPN / WireGuard word-bans flipped to
+    // positive pins. Customer-attached VPN egress IS shipped: account_proxies
+    // rows carry scheme openvpn|wireguard (apps/server/src/db/schema.ts,
+    // migration 0082) with AES-256-GCM secrets (apps/server/src/lib/
+    // account-proxy-secret-encryption.ts), /v1/account/me/proxies CRUD is
+    // live, a proxy_id resolves into the dispatch's inlineProxyConfig, the
+    // .ovpn directive sweep refuses program-running lines (packages/api-types/
+    // src/openvpn-directives.ts), and the public API docs (apps/docs/src/pages/
+    // api/proxies.md) document all three schemes. What the old ban actually
+    // guarded — claiming the SOCKS5 live connection check covers a VPN tunnel
+    // — is pinned directly instead: the check is scoped to SOCKS5 and the VPN
+    // check is described as what it is. The desktop app never builds a
+    // proxy-less create body (apps/gui-client/src/views/ProfilesView.tsx,
+    // "Every session needs a proxy").
+    // 2026-09-15 refuter: the "managed exit" fallback was an INVENTED feature —
+    // no Driftstack-run exit is configured for production (infra/env-templates/
+    // production.env.template leaves DEFAULT_EGRESS_HOST/PORT empty on purpose:
+    // "UNSET IS VALID AND DELIBERATE"; production.env carries no DEFAULT_EGRESS_*
+    // line; apps/server/src/routes/agent-sessions.ts dispatches NO proxy when
+    // proxy_id is omitted and a REQUIRE_PROXY=1 node refuses by name). The page
+    // now says an API session names a saved proxy and that no shared Driftstack
+    // exit exists; the old clause is negatively pinned so it cannot return.
+    // 2026-09-15 refuter: VPN exits are tier-gated (TIER_FEATURES.free.vpnEgress
+    // = false; routes/account-me.ts requireTierFeature('vpnEgress')), and the
+    // line-naming refusal is OpenVPN-only (packages/api-types/src/
+    // openvpn-directives.ts); a WireGuard .conf is parsed GUI-side into
+    // structured fields and its PostUp/PreUp hooks are read but never consulted
+    // (apps/gui-client/src/lib/parse-wireguard.ts). Both are now stated.
+    expect(body).toMatch(/or an OpenVPN file \(\.ovpn\) or WireGuard file \(\.conf\)/);
+    expect(body).toMatch(/VPN exits\s+are on paid plans/);
+    expect(body).toMatch(/a SOCKS5 proxy can be reached\s+with a real connection through it/);
+    expect(body).toMatch(/Driftstack does not run scripts\s+from VPN configs/);
     expect(body).toMatch(
-      /Without a proxy\s+attached, session traffic exits through Driftstack's managed\s+exit/,
+      /An OpenVPN file that carries a script directive\s+is refused with the line named; from a WireGuard file only the\s+keys, addresses, endpoint, allowed IPs, DNS and MTU are read — its\s+PostUp\/PreUp hooks are never used\./,
     );
+    expect(body).not.toMatch(/a file that asks it to is refused with the\s+line named/);
+    expect(body).toMatch(
+      /desktop app launches a profile only through a proxy or VPN you\s+attach, and a session created through the API names one of your\s+saved proxies when it is created\. Driftstack does not route your\s+traffic through a shared exit of its own\./,
+    );
+    expect(body).not.toMatch(/managed exit/);
     expect(body).toMatch(/We never store the pages your sessions visit/);
     // The two claims the implementation contradicts must stay gone.
     expect(body).not.toMatch(/DNS\s+leaks blocked/);

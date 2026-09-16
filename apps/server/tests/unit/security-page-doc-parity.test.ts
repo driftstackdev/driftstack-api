@@ -2,6 +2,12 @@
 // page). Previous revisions asserted unsupported mTLS and treated
 // SOCKS5 / WireGuard / OpenVPN as one all-or-nothing capability.
 // Production currently wires only the concrete SOCKS5 backend.
+//
+// 2026-09-15 truth pass: that backend is the LIVE CONNECTION CHECK; the VPN
+// schemes ship as customer-attached egress (encrypted account_proxies rows,
+// /v1/account/me/proxies, proxy_id → dispatch, the .ovpn directive sweep in
+// packages/api-types/src/openvpn-directives.ts) and are named on the page
+// with their own check described. The word-bans below became positive pins.
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -52,18 +58,44 @@ describe('W246.A /security page doc parity', () => {
     expect(doc).not.toMatch(/client-cert validation/);
   });
 
-  it('publishes only the concrete SOCKS5 egress backend', () => {
+  it('scopes the live connection check to the concrete SOCKS5 backend and names the VPN schemes with their own check', () => {
     expect(serverSourceMatches(/class SocksProxyBackend implements SessionEgressService/)).toBe(
       true,
     );
-    // 2026-09-15 plain-language pass: same facts (public-address SOCKS5
-    // only; managed exit when none is attached), customer words.
+    // 2026-09-15 plain-language pass: same facts (public-address SOCKS5),
+    // customer words.
     expect(doc).toMatch(/SOCKS5 proxy at a public address/);
+    // 2026-09-15 truth pass: the desktop app refuses to build a proxy-less
+    // create body (apps/gui-client/src/views/ProfilesView.tsx, "Every session
+    // needs a proxy"), and the OpenVPN / WireGuard word-bans became positive
+    // pins with the check described per scheme.
+    // 2026-09-15 refuter: the "managed exit" fallback was an INVENTED feature —
+    // no Driftstack-run exit is configured for production (infra/env-templates/
+    // production.env.template leaves DEFAULT_EGRESS_HOST/PORT empty on purpose:
+    // "UNSET IS VALID AND DELIBERATE"; production.env carries no DEFAULT_EGRESS_*
+    // line; apps/server/src/routes/agent-sessions.ts dispatches NO proxy when
+    // proxy_id is omitted and a REQUIRE_PROXY=1 node refuses by name). The page
+    // now says an API session names a saved proxy and that no shared Driftstack
+    // exit exists; the old clause is negatively pinned so it cannot return.
+    // 2026-09-15 refuter: VPN exits are tier-gated (TIER_FEATURES.free.vpnEgress
+    // = false; routes/account-me.ts requireTierFeature('vpnEgress')), and the
+    // line-naming refusal is OpenVPN-only (packages/api-types/src/
+    // openvpn-directives.ts); a WireGuard .conf is parsed GUI-side into
+    // structured fields and its PostUp/PreUp hooks are read but never consulted
+    // (apps/gui-client/src/lib/parse-wireguard.ts). Both are now stated.
     expect(doc).toMatch(
-      /Without a proxy\s+attached, session traffic exits through Driftstack's managed\s+exit/,
+      /a session created through the API names one of your\s+saved proxies when it is created\. Driftstack does not route your\s+traffic through a shared exit of its own\./,
     );
-    expect(doc).not.toMatch(/OpenVPN/);
-    expect(doc).not.toMatch(/WireGuard/);
+    expect(doc).not.toMatch(/managed exit/);
+    expect(doc).toMatch(/or an OpenVPN file \(\.ovpn\) or WireGuard file \(\.conf\)/);
+    expect(doc).toMatch(/VPN exits\s+are on paid plans/);
+    expect(doc).toMatch(/a SOCKS5 proxy can be reached\s+with a real connection through it/);
+    expect(doc).toMatch(/Driftstack does not run scripts\s+from VPN configs/);
+    expect(doc).toMatch(
+      /An OpenVPN file that carries a script directive\s+is refused with the line named/,
+    );
+    expect(doc).toMatch(/PostUp\/PreUp hooks are never used/);
+    expect(doc).not.toMatch(/that (?:the|a) VPN[^.]{0,60}can be reached/);
   });
 
   it('does not promise "session traffic exits through your proxy" as a current scope-exclusion', () => {
@@ -91,6 +123,17 @@ describe('W246.A /security page doc parity', () => {
     expect(doc).toMatch(/used to deliver the session to you,\s+and dropped when the session ends/);
     expect(doc).toMatch(/no\s+built-in way to join a customer's live session/);
     expect(doc).toMatch(/returned directly in\s+the API response and are not stored/);
+    // 2026-09-15 refuter: "not stored" is true for POST /v1/sessions/:id/capture
+    // only. In an AI-agent session every screenshot step IS retained — the
+    // executor puts the bytes in a bounded in-memory SessionCaptureStore
+    // (apps/server/src/services/session-capture-store.ts: CAPTURES_PER_SESSION =
+    // 20, CAPTURE_SESSION_TTL_MS = 30 min, Map only — never disk) so the desktop
+    // app can fetch GET /v1/agent-sessions/:id/captures/:captureId. The page
+    // scopes the no-retention claim to the sessions API and discloses the agent
+    // path.
+    expect(doc).toMatch(/you request through the sessions API are\s+returned directly in/);
+    expect(doc).toMatch(/held in server\s+memory for up to 30 minutes \(at most 20 per session\)/);
+    expect(doc).toMatch(/never written to\s+disk/);
     expect(doc).not.toMatch(/We don't see your traffic\. We can't read your keys\./);
     expect(doc).not.toMatch(/Nobody at Driftstack can watch your sessions/);
     expect(doc).not.toMatch(/none of it ever reaches our servers/);

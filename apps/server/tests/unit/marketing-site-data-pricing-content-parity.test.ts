@@ -58,6 +58,32 @@ describe('marketing-site data/pricing content parity', () => {
     expect(tierBlockIn(body, 'solo_manual')).toMatch(/profiles: 10,[\s\S]*?concurrent: 1,/);
   });
 
+  // 2026-09-15 — /pricing + /pricing/comparison render these two gates from
+  // pricing.ts; apps/marketing-site/tests/unit/pricing-tier-feature-gates-parity
+  // pins them to TIER_FEATURES. Here: the rows' shape in the source text.
+  it('free row carries apiAccess: false + vpnEgress: false + aiAgent: false + the iPhone 13 / 13 mini device entitlement; every paid row carries apiAccess: true + vpnEgress: true', () => {
+    const free = tierBlockIn(body, 'free');
+    expect(free).not.toBe('');
+    expect(free).toMatch(/archetypeAccess: 'iPhone 13 and iPhone 13 mini',/);
+    expect(free).toMatch(/aiAgent: false,/);
+    expect(free).toMatch(/apiAccess: false,/);
+    expect(free).toMatch(/vpnEgress: false,/);
+    for (const id of [
+      'solo_manual',
+      'team_manual',
+      'agency_manual',
+      'api_starter',
+      'api_builder',
+      'api_scale',
+      'enterprise',
+    ]) {
+      const block = tierBlockIn(body, id);
+      expect(block, id).not.toBe('');
+      expect(block, id).toMatch(/apiAccess: true,/);
+      expect(block, id).toMatch(/vpnEgress: true,/);
+    }
+  });
+
   it("Team highlight=true pinned (the recommended Manual-tier): drift would shift the dashboard's highlighted recommendation, which affects conversion rate on the pricing page", () => {
     expect(tierBlockIn(body, 'team_manual')).toMatch(/highlight: true,/);
   });

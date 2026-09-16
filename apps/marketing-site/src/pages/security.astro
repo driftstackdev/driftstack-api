@@ -16,7 +16,7 @@ import CtaBand from '../components/CtaBand.astro';
 
 <BaseLayout
   title="Security"
-  description="How Driftstack protects your keys and content: encrypted connections, API keys nobody can read back, encrypted storage tied to your account, signed webhooks, and live sessions with no built-in way for our staff to join."
+  description="How Driftstack protects your keys and content: encrypted connections, API keys nobody can read back, encrypted storage tied to your account, your own proxy or VPN per profile, two-factor sign-in, signed webhooks, and live sessions with no built-in way for our staff to join."
   ogImage="/og/security.png"
 >
   <!-- Hero -->
@@ -83,22 +83,36 @@ import CtaBand from '../components/CtaBand.astro';
           02 · Proxies
         </p>
         <h3 class="mt-3 text-2xl font-semibold text-tk-ink">
-          Sessions can use your own SOCKS5 proxy.
+          Sessions use your own proxy or VPN.
         </h3>
-        <p class="mt-2 font-mono text-xs text-tk-ink-3">Per-profile SOCKS5; UDP support shown once the session is running.</p>
+        <p class="mt-2 font-mono text-xs text-tk-ink-3">Per-profile SOCKS5, OpenVPN or WireGuard; the Test button shows what to expect from a proxy before you launch.</p>
         <p class="mt-3 text-tk-ink-2">
           A profile can attach a SOCKS5 proxy at a public address as its
           exit to the internet (<a href="/glossary/#egress" class="text-tk-accent-text underline">egress</a>),
-          so websites see the proxy's address instead of ours. Before the
-          session starts we check the proxy details and that the proxy can
-          be reached, and website address lookups go through the proxy
-          too, so they do not reveal your real location. Proxies on
+          or an OpenVPN file (.ovpn) or WireGuard file (.conf) — VPN exits
+          are on paid plans — so websites see that address instead of ours. Before the session starts we
+          check the proxy details and that a SOCKS5 proxy can be reached
+          with a real connection through it, and
+          website address lookups go through the proxy
+          too, so they do not reveal your real location. A VPN file is
+          checked before it is accepted: Driftstack does not run scripts
+          from VPN configs. An OpenVPN file that carries a script directive
+          is refused with the line named; from a WireGuard file only the
+          keys, addresses, endpoint, allowed IPs, DNS and MTU are read — its
+          PostUp/PreUp hooks are never used. Proxies on
           private or local addresses (for example localhost or a home
-          network address) are not accepted. Whether WebRTC and HTTP/3
-          traffic can use the proxy depends on your proxy's UDP support,
-          and is shown once the session is running. Without a proxy
-          attached, session traffic exits through Driftstack's managed
-          exit. We never store the pages your sessions visit. See
+          network address) are not accepted. A VPN tunnel carries
+          everything the profile does, including WebRTC and HTTP/3. On a
+          SOCKS5 proxy, whether WebRTC and HTTP/3 traffic can use the
+          proxy depends on your proxy's UDP support: the Test button
+          shows what to expect before you launch, and a running session
+          shows whether HTTP/3 is actually in use. On a proxy that
+          cannot carry HTTP/3, it is switched off rather than leaked. The
+          desktop app launches a profile only through a proxy or VPN you
+          attach, and a session created through the API names one of your
+          saved proxies when it is created. Driftstack does not route your
+          traffic through a shared exit of its own.
+          We never store the pages your sessions visit. See
           <a href="/trust/security-overview/" class="text-tk-accent-text underline">/trust/security-overview</a>
           for the full picture.
         </p>
@@ -127,7 +141,11 @@ import CtaBand from '../components/CtaBand.astro';
           breach would expose scrambled values, not keys. To keep
           requests fast, a key that was just checked is remembered in
           protected short-term memory for 30 seconds — speed without
-          weakening how keys are stored.
+          weakening how keys are stored. Keys can be rotated with a
+          24-hour overlap and revoked at any time. The desktop app signs in
+          with a short code you approve in the dashboard, so it receives its
+          own restricted sign-in credential without a key being copied by
+          hand.
         </p>
       </div>
 
@@ -176,14 +194,18 @@ import CtaBand from '../components/CtaBand.astro';
         </h3>
         <p class="mt-2 font-mono text-xs text-tk-ink-3">Admin and member roles; only admins can make changes.</p>
         <p class="mt-3 text-tk-ink-2">
-          Team members can see everything on the owner's account, but
-          only admins can change anything (role-based access control).
-          Sessions, profiles, webhooks, API keys, email preferences —
-          every change is permission-checked before it runs. Audit
-          entries record who acted (the member) separately from whose
-          account it was (the owner). Owners can review recorded
-          activity in the dashboard's audit log or via
-          <code class="font-mono">/v1/account/audit-log</code>.
+          Invite teammates by email from the desktop app or the
+          dashboard; each invitation link works for seven days. Members
+          can view the owner's profiles, past sessions, audit log and
+          settings, but only admins can change anything or work in a
+          live session (role-based access control). Sessions, profiles,
+          webhooks, API keys, email preferences — every change is
+          permission-checked before it runs. Audit entries record who
+          acted (the member) separately from whose account it was (the
+          owner). Owners can review recorded activity in the dashboard's
+          audit log, via
+          <code class="font-mono">/v1/account/audit-log</code>, or as a
+          CSV export.
         </p>
       </div>
 
@@ -209,8 +231,12 @@ import CtaBand from '../components/CtaBand.astro';
           are encrypted in transit, used to deliver the session to you,
           and dropped when the session ends. Driftstack staff have no
           built-in way to join a customer's live session. Screenshots,
-          page snapshots and PDFs you request are returned directly in
-          the API response and are not stored; desktop recordings stay
+          page snapshots and PDFs you request through the sessions API are
+          returned directly in the API response and are not stored. In an
+          AI-agent session the screenshot from each step is held in server
+          memory for up to 30 minutes (at most 20 per session) so the
+          desktop app can show it, then dropped; it is never written to
+          disk. Your desktop recordings stay
           on your own computer and are not uploaded. For self-hosted
           deployments, even session records stay inside your network;
           only periodic "is this license still valid?" check-ins reach
@@ -368,7 +394,8 @@ import CtaBand from '../components/CtaBand.astro';
           impossible by design. Account passwords are protected the
           same way. Secrets that must stay usable — two-factor login
           secrets, any Anthropic API key you bring for the AI agent,
-          and the keys that authenticate desktop-app control commands —
+          the passwords and keys of your saved proxies and VPNs, and
+          the keys that authenticate desktop-app control commands —
           are stored encrypted (AES-256-GCM) under a key that exists
           only on our server, decrypted in memory only when needed and
           never written to logs. Our database and cache providers also
@@ -393,7 +420,8 @@ import CtaBand from '../components/CtaBand.astro';
           changes, webhook secret rotations, logins and password
           changes — are recorded and cannot be edited after the fact.
           Everyday use of an API key is not recorded in the audit
-          trail. You can export your records from the dashboard or via
+          trail. You can export your records as a CSV or JSON file from
+          the dashboard or via
           <code class="font-mono">/v1/account/audit-log/export</code>
           (your data-portability right under GDPR Article 20).
         </p>
@@ -479,9 +507,13 @@ import CtaBand from '../components/CtaBand.astro';
               <span class="text-tk-accent-text">•</span>
               <span>
                 <strong>Stolen browser session token</strong> (dashboard).
-                Mitigation: MFA on sensitive ops; active-sign-ins page
-                lets customers revoke; session tokens have configurable
-                idle timeouts.
+                Mitigation: two-factor sign-in (authenticator app plus
+                recovery codes) with a fresh code demanded before risky
+                actions such as disabling it or deleting the account; an
+                active-sign-ins page that lists every session and lets
+                you revoke one or all of the others; sign-ins that
+                expire; and a password change that signs out every other
+                session.
               </span>
             </li>
           </ul>
@@ -504,11 +536,12 @@ import CtaBand from '../components/CtaBand.astro';
               <span>
                 <strong>Detection-vendor cat-and-mouse evolution.</strong>
                 Our anti-detection work is built into the browser
-                itself rather than added on afterwards, and is
+                engine itself rather than added on afterwards, and is
                 continuously updated; we can't promise forever-perfect
                 parity against every detection vendor. See the
                 <a href="/trust/cumulative-rig/" class="text-tk-accent-text underline">cumulative rig
-                methodology</a> for what we do guarantee.
+                methodology</a> for what we check, and on which device
+                profiles.
               </span>
             </li>
             <li class="flex gap-3">

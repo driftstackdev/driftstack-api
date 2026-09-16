@@ -164,7 +164,7 @@ describe('W761 docs /api/sessions content parity', () => {
     );
     expect(p).not.toMatch(/\bplanned ids?\b|reference-only/i);
     expect(p).toMatch(
-      /Profile-backed launches inherit the already-stored profile archetype\.[\s\S]*?existing profile remains launchable if its pinned id is\s*\n?no longer offered for new direct creates\./,
+      /Profile-backed launches inherit the device profile already stored on the\s*\n?profile\.[\s\S]*?existing profile remains launchable if its pinned id is\s*\n?no longer offered for new direct creates\./,
     );
   });
 

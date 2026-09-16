@@ -138,6 +138,95 @@ describe('W370.A marketing-site /changelog page content parity', () => {
     expect(body).toMatch(/<time class="font-mono text-xs text-tk-ink-3" datetime=\{entry\.date\}/);
   });
 
+  it('2026-09-15 summer round-up pinned: only July-or-later work under the window, the June work (VPN + HTTP proxy editors, Trim) in the never-announced list, HTTP/3 indicator green only when measured, dated readings, and the scoped Approve / Deny, OAuth and sign-in sentences', () => {
+    expect(body).toMatch(/title: 'What shipped this summer',/);
+    const entry = body.match(/date: '2026-09-15',[\s\S]*?body: '([\s\S]*?)',\n/)?.[1] ?? '';
+    expect(entry.length).toBeGreaterThan(0);
+    // Refuter 2026-09-15: the VPN / HTTP proxy editors (2026-06-16/17
+    // 2fc819b2c, 14e4a83bb) and Trim (2026-06-25 f4c493465) predate the
+    // July window, so they sit after the never-announced marker; the .ovpn
+    // screening (2026-09-07 c8b03c2a8), Activity panel (2026-09-05
+    // 612a88034), measured-HTTP/3 chip (2026-09-03 3d96c72d0) and dated
+    // readings (2026-09-15 e2def2e1e) stay under the window.
+    expect(entry).toMatch(
+      /^A round-up of what landed between July and mid-September, followed by a list of what has been in the product for a while and was never announced here\./,
+    );
+    const marker = entry.indexOf('Also in the product for a while, though never announced here:');
+    expect(marker).toBeGreaterThan(0);
+    const summer = entry.slice(0, marker);
+    const older = entry.slice(marker);
+    expect(summer).toContain('an OpenVPN file is now screened before it is saved');
+    expect(summer).toContain('the new Activity panel on a profile');
+    expect(summer).toContain(
+      'the HTTP/3 indicator turns green only when HTTP/3 was actually measured through that exit',
+    );
+    expect(summer).toContain('a reading we cannot date is no longer shown as if it were current');
+    // Second refuter pass 2026-09-15: the exit's country and city were on
+    // the Test readout from 2026-06-21 (c593b6da9 — ProxiesView renders
+    // exit.city / .country), so only latency (2026-08-24 690b19461) is new
+    // under the window; the exit is framed as what the readout already
+    // showed, never as summer work.
+    expect(summer).toContain(
+      'The Test button on a proxy now also reports its latency, next to what it already showed — whether it is reachable and authenticated, whether it can carry UDP (which is what WebRTC needs) and the country and city it exits from',
+    );
+    expect(summer).not.toMatch(
+      /now also reports its latency and the exit|reports .{0,40}the exit\\'s location/,
+    );
+    expect(summer).not.toMatch(
+      /OpenVPN \(\.ovpn file\) or WireGuard \(\.conf file\) tunnel|Trim reclaims/,
+    );
+    expect(older).toContain(
+      'OpenVPN (.ovpn file) or WireGuard (.conf file) tunnel as well as a SOCKS5 or HTTP proxy',
+    );
+    expect(older).toContain(
+      'on a proxy that cannot carry HTTP/3, it is switched off rather than leaked',
+    );
+    expect(older).toContain('Trim reclaims space by clearing a profile');
+    // apps/server/src/services/agent-consequential-action.ts: a keyword
+    // heuristic on buy / pay / delete-account button text, not "any action
+    // with real-world consequences".
+    expect(older).toContain(
+      'an Approve or Deny pause before the AI agent taps a buy, pay or delete-account button',
+    );
+    // docs/oauth-apps: client registration is admin-gated (email request).
+    expect(older).toContain(
+      "OAuth 2.0 for an app that acts on a customer\\'s behalf (client registration on request)",
+    );
+    // apps/docs license-activation.md + FirstRunWizard: pasting a key stays
+    // the documented fallback, so "never needs a pasted API key" was false.
+    expect(older).toContain('a browser sign-in that creates and stores the desktop app');
+    expect(older).toContain(
+      'so you no longer need to paste an API key (pasting one remains available as a fallback)',
+    );
+    // Overclaims the 2026-09-15 truth sheets and the refuter rule out must
+    // not appear on the page.
+    expect(body).not.toMatch(
+      /so nothing leaks|every interaction|identical for every|the same browser Apple ships|replay a recipe/i,
+    );
+    expect(body).not.toMatch(
+      /never needs a pasted API key|real-world consequences|every iPhone from/i,
+    );
+  });
+
+  it('2026-09-14 device-catalog entry pins the two published numbers (96 selectable / 81 verified) and the launch default', () => {
+    expect(body).toMatch(/title: '96 device profiles, and two numbers we publish separately',/);
+    // 2026-09-15 refuter: 19 models, not "every iPhone" (no SE / 16e / Air).
+    expect(body).toContain(
+      'The device catalog now spans 19 iPhone models, from the iPhone 13 to the 17 Pro Max',
+    );
+    expect(body).toContain('96 selectable device profiles');
+    expect(body).toContain('renders the same way (81)');
+    expect(body).toContain('The default for a new profile is iPhone 17 / iOS 18.7 / Safari 26.4');
+  });
+
+  it('2026-08-26 free-plan device entry pinned (iPhone 13 + 13 mini, enforced where you pick, catalog not hidden)', () => {
+    expect(body).toMatch(/title: 'Free plan: iPhone 13 and iPhone 13 mini',/);
+    expect(body).toContain('not by hiding the catalog');
+    expect(body).toContain(
+      'one profile, one session at a time, 20-minute sessions, no card required',
+    );
+  });
+
   it('cross-link to /docs resolves', () => {
     expect(body).toMatch(/href="\/docs\/"/);
     expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs.astro'))).toBe(true);

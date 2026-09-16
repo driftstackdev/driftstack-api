@@ -55,11 +55,11 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     );
   });
 
-  it("CRITICAL restore creates-NEW-profile-row framing pinned. S36 2026-07-07 (fable-truth-audit): the old 'populated from the snapshot's frozen state' framing was FALSE — restore() creates a fresh profile carrying only the snapshot's parent archetype + description (services/profile-snapshots.ts restore(); capture() writes stateBlob: {}), so the doc now says frozen archetype + description and fresh empty browser state.", () => {
+  it("CRITICAL restore creates-NEW-profile-row framing pinned. S36 2026-07-07 (fable-truth-audit): the old 'populated from the snapshot's frozen state' framing was FALSE — restore() creates a fresh profile carrying only the snapshot's parent archetype + description (services/profile-snapshots.ts restore(); capture() writes stateBlob: {}), so the doc now says frozen device profile + description and fresh empty browser state.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Restoring a snapshot creates a \*\*new profile\*\* carrying the\s*\n?snapshot's frozen archetype \+ description — the source profile is\s*\n?untouched, and the new profile starts with fresh \(empty\) browser\s*\n?state\./,
+      /Restoring a snapshot creates a \*\*new profile\*\* carrying the\s*\n?snapshot's frozen device profile \+ description — the source profile is\s*\n?untouched, and the new profile starts with fresh \(empty\) browser\s*\n?state\./,
     );
     // Negative pin — the retired frozen-STATE fiction must not come back.
     expect(p).not.toMatch(/populated from\s*\n?the snapshot's frozen state/);
@@ -156,7 +156,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     expect(p).toMatch(/`POST \/v1\/profile-snapshots\/:id\/restore`/);
     // S36 2026-07-07 (fable-truth-audit): metadata-only restore truth.
     expect(p).toMatch(
-      /Creates a new profile carrying the snapshot's frozen metadata —\s*\n?archetype and description — under the name you supply\./,
+      /Creates a new profile carrying the snapshot's frozen metadata —\s*\n?device profile and description — under the name you supply\./,
     );
     expect(p).toMatch(
       /The new profile starts with fresh \(empty\)\s*\n?browser state: restore does not bring back cookies or logins\./,
@@ -239,7 +239,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     expect(p).toMatch(
       /Snapshots are metadata only, stored separately from live profiles —\s*\n?no browser state is stored \(the state field is always empty\)/,
     );
-    expect(p).toMatch(/freezes the source profile's archetype \+ name/);
+    expect(p).toMatch(/freezes the source profile's device profile \+ name/);
     expect(p).toMatch(/There is no per-account snapshot quota\s*\n?today\./);
     // Guards against the stale claims returning.
     expect(p).not.toMatch(/`size_bytes`/);

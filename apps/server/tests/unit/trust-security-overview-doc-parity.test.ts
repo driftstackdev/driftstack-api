@@ -75,6 +75,19 @@ describe('W238.A trust/security-overview doc parity', () => {
     // 2026-09-15 plain-language pass: same boundary, customer words.
     expect(doc).toMatch(/returned to you directly in the response/);
     expect(doc).toMatch(/the capture\s+service keeps no copy/);
+    // 2026-09-15 refuter: "not stored" is true for POST /v1/sessions/:id/capture
+    // only. In an AI-agent session every screenshot step IS retained — the
+    // executor puts the bytes in a bounded in-memory SessionCaptureStore
+    // (apps/server/src/services/session-capture-store.ts: CAPTURES_PER_SESSION =
+    // 20, CAPTURE_SESSION_TTL_MS = 30 min, Map only — never disk) so the desktop
+    // app can fetch GET /v1/agent-sessions/:id/captures/:captureId. The page
+    // scopes the no-retention claim to the sessions API and discloses the agent
+    // path.
+    expect(doc).toMatch(
+      /you request through the\s+sessions API are returned to you directly in the response/,
+    );
+    expect(doc).toMatch(/held in server memory for up to 30 minutes \(at most\s+20 per session\)/);
+    expect(doc).toMatch(/never written to disk/);
     expect(doc).toMatch(
       /Desktop recordings are saved only on your own computer; the\s+recording feature never uploads them/,
     );

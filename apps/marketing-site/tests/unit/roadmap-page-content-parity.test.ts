@@ -20,4 +20,41 @@ describe('/roadmap legacy URL current-state content', () => {
   it('contains no forward-looking feature inventory', () => {
     expect(body).not.toMatch(/RoadmapItem|const (?:NOW|NEXT|LATER)|forward-looking|lands next/i);
   });
+
+  it('2026-09-15 what-ships inventory: device counts bind to DEVICE_SUPPORT, the AI agent carries its plan qualifier, and the Free plan states its limits', () => {
+    expect(body).toContain("import { DEVICE_SUPPORT } from '../data/capabilities'");
+    expect(body).toContain('{DEVICE_SUPPORT.selectableCount} device profiles');
+    expect(body).toContain('Safari {DEVICE_SUPPORT.safariVersions}');
+    expect(body).toMatch(/On Team plans and up, and on every API\s+plan/);
+    expect(body).toMatch(/iPhone\s+13 and iPhone 13 mini, no API access, proxy only \(no VPN\)/);
+    expect(body).toMatch(
+      /A build of Apple's own WebKit — the engine family behind iPhone\s+Safari/,
+    );
+    expect(body).not.toMatch(/identical|every interaction|the same browser Apple ships|Chrome/i);
+  });
+
+  it('2026-09-15 refuter pins: the model span counts models, the Approve / Deny pause is scoped to the buttons the gate recognises, and OAuth registration is on request', () => {
+    // packages/api-types/src/common.ts ARCHETYPE_REGISTRY has 19 iPhone
+    // models and no SE / 16e / Air, so "every iPhone from the 13 to the
+    // 17 Pro Max" was false; capabilities.ts describes deviceFamilies as
+    // "19 iPhone models between the endpoints".
+    expect(body).toMatch(
+      /device profiles across\s+19 iPhone models, from the iPhone 13 to the 17 Pro Max \(\{DEVICE_SUPPORT\.deviceFamilies\}\)/,
+    );
+    expect(body).not.toMatch(/every iPhone from/i);
+    // apps/server/src/services/agent-consequential-action.ts is a
+    // conservative keyword heuristic on the tap target (buy / order /
+    // checkout / pay / delete-account phrases) whose header accepts false
+    // negatives for v1.0, so the page must not promise a pause before "any
+    // action with real-world consequences".
+    expect(body).toMatch(
+      /an Approve \/ Deny pause before it taps a\s+button to buy, pay, or delete an account\./,
+    );
+    expect(body).not.toMatch(/real-world consequences|before any action/i);
+    // apps/marketing-site/src/pages/docs/oauth-apps.astro: client
+    // registration is admin-gated (email request), not self-serve.
+    expect(body).toMatch(
+      /OAuth 2\.0 for an app that acts on a customer's behalf\s+\(client registration on request\)\./,
+    );
+  });
 });

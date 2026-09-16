@@ -16,7 +16,10 @@
 //   • Custom-archetype-dev 3-state: none / limited (1/yr) / unlimited.
 //   • Architecture: 'Your hardware, our software, one secure
 //     connection.' + session content stays inside customer network
-//     framing (2026-09-15: plain words, no 'control plane').
+//     framing (2026-09-15: plain words, no 'control plane'; the same
+//     day the deployment model was corrected — the customer runs the
+//     Driftstack server on their own Macs, so no Driftstack-hosted
+//     service and no license / session-detail reporting is described).
 //   • 3-card When self-hosted makes sense: Privacy / Volume /
 //     Sovereignty.
 //   • 4-step process: Contact sales → Procure hardware → Onboard →
@@ -34,6 +37,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/self-hosted.astro');
+const PRICING_PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing.astro');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -57,11 +61,20 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
     );
   });
 
-  it("fmtSupportTier 3-state map: 2026-05-19 founder verdict dropped tiered SLA ladder (theatre for a small operation). All three states route to a single 48h best-effort target; email_slack_12h + dedicated_csm_1h surfaces add 'Email + Slack Connect' framing.", () => {
+  it("fmtSupportTier 3-state map: Solo and Pro state the support channel plus the operational 48h target (Terms §9.1 — no contractual SLA); Self-Hosted Enterprise (dedicated_csm_1h) states the grant pricing.ts gives the Enterprise tier — a dedicated account manager and the contractual 1h first-reply SLA on Severity-1 incidents (Terms §9.2). 2026-09-15: until then all three SKUs rendered the same '48h target' string, contradicting pricing.ts and the /pricing Enterprise row.", () => {
     expect(body).toMatch(/case 'email_48h':\s*return 'Email · 48h target';/);
     expect(body).toMatch(/case 'email_slack_12h':\s*return 'Email \+ Slack Connect · 48h target';/);
     expect(body).toMatch(
+      /case 'dedicated_csm_1h':\s*return 'Dedicated account manager · 1h SLA for first reply on critical \(Severity-1\) incidents';/,
+    );
+    // The under-claim must not return: the SKU whose data says 1h Sev-1
+    // rendered as a 48h target for two months.
+    expect(body).not.toMatch(
       /case 'dedicated_csm_1h':\s*return 'Email \+ Slack Connect · 48h target';/,
+    );
+    // The page glosses "target" vs "SLA" the same way /pricing does.
+    expect(body).toMatch(
+      /"Target" is the reply time we aim for, not a contractual promise\s+\(Terms §9\.1\)\. "SLA" is a contractual promise: on Self-Hosted\s+Enterprise it covers our first reply to the most serious\s+\("Severity-1"\) incidents \(Terms §9\.2\)\./,
     );
   });
 
@@ -87,18 +100,34 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
     // 2026-09-15 owner directive: "control plane" / "orchestration" are
     // banned on customer surfaces; the two-sided architecture and the
     // never-holds-content promise survive in plain words.
+    // 2026-09-15 refuter: apps/docs license-activation.md, Terms §3 and the
+    // self-hosted runbook all have the customer running the Driftstack
+    // server; no code implements a Driftstack-hosted coordination service
+    // for self-hosted deployments, so the paragraph now names what runs on
+    // the customer's Macs and what Driftstack supplies.
     expect(body).toMatch(/Your hardware, our software, one secure connection\./);
     expect(body).toMatch(
-      /Driftstack's coordination service starts and\s+manages sessions and gives you the developer kit \(SDK\) and the\s+desktop app — and it never holds what happens inside your\s+sessions\./,
+      /Self-hosted is the whole of Driftstack running on Mac hardware\s+you own: the server that starts and manages sessions, the desktop\s+app pointed at it, and the sessions themselves\. We supply the\s+software, its updates and new device profiles, and the developer\s+kit \(SDK\) — and we never hold what happens inside your sessions\./,
+    );
+    expect(body).not.toMatch(
+      /coordination service|Driftstack hosts the service|you supply the machines/,
     );
   });
 
   it("Session-content-stays-inside-perimeter framing pinned: 'Session content (URLs, form data, captures, recordings) stays inside your network. Driftstack's control plane sees license + session metadata, never the session itself.' — pinned so the explicit 4-state scope (URLs / form data / captures / recordings) + the control-plane-sees-only-metadata commitment survive (drift to dropping the explicit scope would let customers question what 'session content' means)", () => {
     // S20c 2026-07-06 plain-language pass: metadata said plainly,
     // term kept in parens; 4-state scope + never-the-session survive.
+    // 2026-09-15: the session record (when one started, which profile ran)
+    // is kept by the customer's own server, so Driftstack holds no copy of
+    // content or record; the old "sees only your license and basic session
+    // details" described reporting that does not exist in the code.
     expect(body).toMatch(
-      /Session content \(URLs, form data, captures, recordings\) stays inside\s+your network\. Driftstack sees only your license and basic session\s+details — when a session started, which profile ran — never the\s+session itself\./,
+      /Session content \(URLs, form data, captures, recordings\) stays inside\s+your network, and so does the record of your sessions — when one\s+started, which profile ran — because the server that keeps it is\s+yours\. Driftstack holds no copy of either\./,
     );
+    expect(body).toMatch(
+      /Crash reporting in the\s+desktop app is off by default when the app points at a self-hosted\s+server\./,
+    );
+    expect(body).not.toMatch(/sees only your license|license, API keys|session details\)/);
   });
 
   it("3-card 'When self-hosted makes sense': Privacy (sessions never leave your network) + Volume (10 or more sessions at once, sustained through a month, break-even) + Sovereignty (own S3-compatible storage, no extra DPA) — pinned so the 3 motivators stay explicit (drift to dropping any would orphan customers needing that specific self-host driver: privacy-conscious / volume-driven / sovereignty-required)", () => {
@@ -128,7 +157,11 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
   });
 
   it("Architecture ASCII diagram framing pinned: 'YOUR MACS' + 'DRIFTSTACK SERVICE' columns + 'Sessions reach the web through your network' + 'Your network exit' (direct / VPN / your own SOCKS5 / OpenVPN / WireGuard). 2026-05-22 — diagram flipped 'roadmap: BYO' → shipped BYO per planning 133 Phase 1; 2026-09-15 — banned words (fleet / control plane / multi-node / orchestration / egress) and the DC/BYO/WG abbreviations left the diagram.", () => {
-    expect(body).toMatch(/YOUR MACS\s+DRIFTSTACK SERVICE/);
+    // 2026-09-15: the right-hand column is Driftstack the supplier
+    // (software releases, device-profile updates), not a hosted service.
+    expect(body).toMatch(/YOUR MACS {2,}DRIFTSTACK\n/);
+    expect(body).toMatch(/│ {2}Driftstack {6}│\s+│ {2}server, desktop │\s+│ {2}app, sessions {3}│/);
+    expect(body).not.toMatch(/DRIFTSTACK SERVICE|Driftstack service/);
     expect(body).toMatch(/Sessions reach the web through your network/);
     expect(body).toMatch(/SOCKS5 \//);
     expect(body).toMatch(/OpenVPN \//);
@@ -142,6 +175,20 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
     );
     expect(body).toMatch(/secondaryHref="\/pricing\/#self-hosted"\s*secondaryLabel="See pricing"/);
     expect(body).not.toContain('secondaryHref="/pricing#self-hosted"');
+  });
+
+  it('cross-page parity: pricing.astro renders the same fmtSupportTier strings as self-hosted.astro for all three self-hosted SKUs (refuter 2026-09-15: /pricing#self-hosted still said 48h target for dedicated_csm_1h)', () => {
+    const cases = (src: string): Record<string, string> =>
+      Object.fromEntries(
+        Array.from(
+          src.matchAll(/case '(email_48h|email_slack_12h|dedicated_csm_1h)':\s*return '([^']+)';/g),
+        ).map((m) => [m[1] as string, m[2] as string]),
+      );
+    const here = cases(body);
+    const there = cases(read(PRICING_PAGE));
+    expect(Object.keys(here).sort()).toEqual(['dedicated_csm_1h', 'email_48h', 'email_slack_12h']);
+    expect(there).toEqual(here);
+    expect(there['dedicated_csm_1h']).not.toMatch(/48h target/);
   });
 
   it('file exists at canonical path', () => {

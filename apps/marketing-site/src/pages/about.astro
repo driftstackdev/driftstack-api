@@ -14,18 +14,18 @@ import CtaBand from '../components/CtaBand.astro';
 
 <BaseLayout
   title="About"
-  description="Driftstack builds pixel-identical iPhone Safari sessions on demand. Servers and account data in the EU, no behavioural data collection, and your own proxy or VPN per profile (SOCKS5 · WireGuard · OpenVPN)."
+  description="Driftstack builds real iPhone Safari sessions on demand, checked against real iPhones. Servers and account data in the EU, no behavioural data collection, and your own proxy or VPN per profile (SOCKS5 · WireGuard · OpenVPN)."
 >
   <!-- Hero — Band A: the plain sentence leads, the positioning line
        rides underneath as mono small print. -->
-  <PageHero label="About" title="We build one thing: real iPhones in the cloud.">
+  <PageHero label="About" title="We build one thing: real iPhone Safari in the cloud.">
     <p class="mt-5 font-mono text-sm text-tk-ink-3">
       One engine. One product. Engineered for fidelity.
     </p>
     <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
-      Driftstack ships iPhone Safari sessions on demand, built on
-      real <a href="/glossary/#webkit" class="text-tk-accent-text underline">WebKit</a>
-      — the same engine every physical iPhone runs — with nothing
+      Driftstack ships iPhone Safari sessions on demand, running a
+      build of Apple's own <a href="/glossary/#webkit" class="text-tk-accent-text underline">WebKit</a>
+      — the engine family behind iPhone Safari — with nothing
       quietly modified while the browser is running ("patched at
       runtime"), so there's nothing for detection systems to spot.
       Our servers and your account data live in the EU, and the scope
@@ -51,12 +51,14 @@ import CtaBand from '../components/CtaBand.astro';
             <a href="/glossary/#canvas-hash" class="text-tk-accent-text underline">canvas</a>
             and WebGL fingerprints): the values those tools return come
             out different every session — the opposite of a real iPhone,
-            which returns the same value as millions of other iPhones.
-            Driftstack takes a different approach: we run Apple's WebKit
-            source code, the same engine that ships on every real iPhone.
+            whose answers blend in with millions of other iPhones: the
+            fixed ones stay fixed, and the ones Safari deliberately
+            varies are varied the same way. Driftstack takes a different
+            approach: we run Apple's WebKit source code — our own build
+            of the engine family behind iPhone Safari.
             Nothing is changed on the fly, so there's nothing for
-            detection to find. The fingerprint a website reads is the
-            fingerprint a real iPhone would send.
+            detection to find. The answers a website reads are checked
+            against real iPhones, check by check.
           </p>
         </div>
         <div class="card p-8">
@@ -146,13 +148,13 @@ import CtaBand from '../components/CtaBand.astro';
         </IconTile>
         <h3 class="font-semibold text-tk-ink">Honest scope</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          We say no to things we can't ship well. Touch, scroll, and
-          typing are built from real human recordings and move like a
-          real hand, and each profile keeps its own habits. You can also
-          save a finished agent session as a step-by-step recipe you can
-          replay, then view or delete your saved recipes. We document
-          only the capabilities available in the current product and
-          API.
+          We say no to things we can't ship well. Human-like touch,
+          scroll, and typing — patterns taken from real human movement —
+          are available per profile, and each profile keeps its own
+          habits. You can also save a finished agent session as a
+          step-by-step recipe, a readable record of what the agent did,
+          then view or delete your saved recipes. We document only the
+          capabilities available in the current product and API.
         </p>
       </div>
     </div>

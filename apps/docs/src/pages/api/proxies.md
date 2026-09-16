@@ -266,6 +266,12 @@ A proxy that authenticates but cannot route is the case worth knowing about: it
 looks healthy to anything that only opens the port, and it fails every launch.
 This test reports it.
 
+The default test (`vantage=cp`) is quick: for an `openvpn` or `wireguard`
+proxy it only checks that the address answers and does not connect the
+tunnel. Add `?vantage=fleet` to run the full test, which connects the
+tunnel the way a session would. The `not_run` values below cover the
+cases where the full test could not run.
+
 An `ok: false` result that also carries `not_run` is **not a result about the
 proxy** — nothing was measured. Branch on `not_run`, never on the `reason`
 prose, before treating the result as a failed proxy:

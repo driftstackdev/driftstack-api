@@ -9,6 +9,8 @@
 // keeps every word. Accent-colored link text uses text-tk-accent-text
 // (AA-safe on the dark bg) — never raw text-tk-accent.
 
+import { DEVICE_SUPPORT } from './capabilities.js';
+
 export interface FaqEntry {
   /** Question — plain text; rendered as the visible heading AND as the schema.org Question name. */
   q: string;
@@ -35,7 +37,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'How does this compare to Chromium-cloud stealth services?',
-        a: "Chromium-cloud services take Chrome and dress it up with 'stealth' plugins — a faked identity string plus patched-over JavaScript functions that intercept the checks websites run (on graphics, fonts, and the browser's own built-in functions). The disguise holds if a website only checks the painted-over surfaces; it fails the moment a detector looks underneath — at timing, at how errors are worded, at the graphics chip's raw output. Driftstack runs Apple's actual WebKit browser code, so there is no underneath: the fingerprint your session shows is the one a real iPhone shows, produced by the same code all the way down.",
+        a: "Chromium-cloud services take Chrome and dress it up with 'stealth' plugins — a faked identity string plus patched-over JavaScript functions that intercept the checks websites run (on graphics, fonts, and the browser's own built-in functions). The disguise holds if a website only checks the painted-over surfaces; it fails the moment a detector looks underneath — at timing, at how errors are worded, at the graphics chip's raw output. Driftstack runs a build of Apple's own WebKit — the engine family behind iPhone Safari — so there is no painted-over surface to look underneath: the answers a website reads come from the engine itself, checked against real iPhones check by check.",
       },
       {
         q: 'How does concurrent metering work?',
@@ -60,7 +62,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
     entries: [
       {
         q: 'What do I get on the free tier?',
-        a: 'One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from our desktop app — $0 forever, no card required. The free tier is manual-only (no API/SDK access from code); it exists so you can try the real thing before paying anything: open real iPhone Safari sessions on real WebKit and watch the fingerprint match in your own flows.',
+        a: "One persistent profile, one concurrent session, and sessions up to 20 minutes each, driven from our desktop app — $0 forever, no card required. The free tier is manual-only (no API/SDK access from code); it exists so you can try the real thing before paying anything: open real iPhone Safari sessions on a build of Apple's own WebKit and watch the fingerprint checks match in your own flows. The free tier runs the iPhone 13 and iPhone 13 mini device profiles, exits through your own SOCKS5 proxy (VPN files are a paid-plan feature), and does not include the AI agent.",
       },
       {
         q: 'Does the free tier expire?',
@@ -77,7 +79,11 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'Is there any usage metering on the free tier?',
-        a: 'None. No per-hour metering, no credit decrement, no overage. One concurrent session is the only limit, and within it you can run as many manual session-hours as you want.',
+        // 2026-09-15 refuter fix: the old answer named one concurrent session
+        // as the sole limit — false: the free tier also caps a session at 20 minutes
+        // (MAX_SESSION_MINUTES_PER_TIER.free in services/sessions.ts; pricing.ts
+        // hoursLabel '20-minute sessions'). Both limits are named here.
+        a: 'None. No per-hour metering, no credit decrement, no overage. The only limits are one session at a time and 20 minutes per session: a session that reaches 20 minutes ends on its own, and you can start another straight away, as often as you like.',
       },
       {
         q: 'How do I move from the free tier to a paid tier?',
@@ -103,7 +109,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
         // Stripe cancellation downgrades the account to the perpetual
         // free tier (services/stripe-webhooks.ts), nothing is deleted,
         // and no 'subscription needs renewing' error exists.
-        a: 'Service continues through the end of your current billing period. After that your account moves to the free tier automatically — nothing is deleted, your profiles and account data stay, and you can resubscribe any time. Free-tier limits then apply (1 profile, 1 concurrent session, manual-only). Invoice history is retained for the legally-required period.',
+        a: 'Service continues through the end of your current billing period. After that your account moves to the free tier automatically — nothing is deleted, your profiles and account data stay, and you can resubscribe any time. Free-tier limits then apply (1 profile, 1 concurrent session, manual-only); the <a href="/faq/#free-tier" class="text-tk-accent-text underline">Free tier</a> section has the full shape — 20-minute sessions, iPhone 13 / 13 mini device profiles, proxy only, no AI agent. Invoice history is retained for the legally-required period.',
       },
       {
         q: 'How does Enterprise pricing work?',
@@ -128,7 +134,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'Can I pay in crypto?',
-        a: 'Yes — via NowPayments on tiers where crypto checkout is enabled. Open the crypto checkout from the billing dashboard, send the displayed amount in the displayed currency, and the order moves through pending → confirming → paid as on-chain confirmations land. (For developers: the webhook events — the automatic notifications our system sends yours as a payment progresses — are documented in the <a href="https://docs.driftstack.io/webhooks/crypto-events/" class="text-tk-accent-text underline">crypto webhook events docs</a>.) <strong>Crypto payments are non-refundable</strong> — you can cancel anytime, which stops future billing, but the current period is not refunded (see <a href="/legal/refunds/" class="text-tk-accent-text underline">refund policy</a>). Most customers use Stripe; crypto is a fallback for jurisdictions where card payments are awkward.',
+        a: 'Yes — via NowPayments on tiers where crypto checkout is enabled. Open the crypto checkout from the billing dashboard, send the displayed amount in the displayed currency, and the order moves through pending → confirming → paid as on-chain confirmations land; the desktop app shows each order\'s event timeline and downloads its receipt as PDF or plain text. (For developers: the webhook events — the automatic notifications our system sends yours as a payment progresses — are documented in the <a href="https://docs.driftstack.io/webhooks/crypto-events/" class="text-tk-accent-text underline">crypto webhook events docs</a>.) <strong>Crypto payments are non-refundable</strong> — you can cancel anytime, which stops future billing, but the current period is not refunded (see <a href="/legal/refunds/" class="text-tk-accent-text underline">refund policy</a>). Most customers use Stripe; crypto is a fallback for jurisdictions where card payments are awkward.',
       },
       {
         q: "Where can I see what I've actually been billed?",
@@ -149,11 +155,11 @@ export const FAQ_GROUPS: FaqGroup[] = [
     entries: [
       {
         q: 'What is the bundled LLM?',
-        a: 'Driftstack\'s optional AI agent feature drives sessions with a large language model (LLM) — useful for describing tests in plain English, automatically spotting what changed between screenshots, or letting the AI explore a flow on its own. On Builder / Scale / Enterprise, you have two options: <strong>BYOK</strong> (bring your own API key — get one from your model provider, e.g. <a href="https://console.anthropic.com" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>; the AI usage is then billed to you by your provider, not Driftstack), or use Driftstack-provided model access. On Builder and Scale, each AI turn counts $0.10 against a monthly budget you control; it is not a separate line on today\'s invoice. Enterprise can use a contracted custom budget.',
+        a: 'Driftstack\'s optional AI agent (Team plans and up, and every API plan) drives a session with a large language model (LLM): describe the task in plain English, watch it run step by step, and approve or deny a step that looks like a purchase, a payment, or an account deletion. Team, Agency, and API Starter use your own model key (BYOK). On Builder / Scale / Enterprise, you have two options: <strong>BYOK</strong> (bring your own API key — get one from your model provider, e.g. <a href="https://console.anthropic.com" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>; the AI usage is then billed to you by your provider, not Driftstack), or use Driftstack-provided model access. On Builder and Scale, each AI turn counts $0.10 against a monthly budget you control; it is not a separate line on today\'s invoice. Enterprise can use a contracted custom budget.',
       },
       {
         q: 'How do agent sessions work?',
-        a: 'An <strong>agent session</strong> sits on top of a regular session and works like a chat: you type what you want (e.g. <span class="font-mono">"open https://example.com and capture a screenshot"</span>), the AI breaks it into concrete steps (<span class="font-mono">navigate</span>, <span class="font-mono">interact</span>, <span class="font-mono">wait</span>, <span class="font-mono">capture</span>), and the session carries them out. Three modes: <strong>AI</strong> (default — the AI plans every message), <strong>manual</strong> (your own app passes instructions straight through), and <strong>pair</strong> (the AI drives, but you can take over and hand back). You can watch a live transcript as it runs (streamed via Server-Sent Events, for developers). Full reference at <a href="https://docs.driftstack.io/api/agent-sessions/" class="text-tk-accent-text underline">docs.driftstack.io/api/agent-sessions</a>.',
+        a: 'An <strong>agent session</strong> (Team plans and up, and every API plan) sits on top of a regular session and works like a chat: you type what you want (e.g. <span class="font-mono">"open https://example.com and capture a screenshot"</span>), the AI breaks it into concrete steps (<span class="font-mono">navigate</span>, <span class="font-mono">interact</span>, <span class="font-mono">wait</span>, <span class="font-mono">capture</span>), and the session carries them out. The steps come from a fixed set of actions — the AI cannot invent new ones — and a step that looks like a purchase, a payment, or an account deletion waits for your approval before it runs. Three modes: <strong>AI</strong> (default — the AI plans every message), <strong>manual</strong> (your own app passes instructions straight through), and <strong>pair</strong> (the AI drives, but you can take over and hand back). You can watch it live, with a transcript as it runs (streamed via Server-Sent Events, for developers) and the screenshots it takes along the way. Full reference at <a href="https://docs.driftstack.io/api/agent-sessions/" class="text-tk-accent-text underline">docs.driftstack.io/api/agent-sessions</a>.',
       },
       {
         q: 'How is AI usage billed?',
@@ -186,7 +192,11 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'What does my team see when I add them to my account?',
-        a: 'Team members with the <em>member</em> role see read-only views of your sessions, profiles, API keys, webhooks, audit log, and usage. Members with the <em>admin</em> role can also create/update/delete those resources. They never see your billing, your password, or your MFA recovery codes. When a member acts on your account, the audit log records both the action AND which member did it — so you can see who on your team did what without cross-referencing anything. Sign-in and sign-out entries also record the IP address and browser used; that detail is visible to both you and any team member with read access on your account, so don\'t add team members you wouldn\'t share that level of detail with. Full reference: <a href="https://docs.driftstack.io/api/team/" class="text-tk-accent-text underline">docs.driftstack.io/api/team</a>.',
+        a: 'Invite teammates by email from the desktop app\'s Team view (or the API), as <em>member</em> or <em>admin</em>, and remove them the same way. Team members with the <em>member</em> role see read-only views of your sessions, profiles, API keys, webhooks, audit log, and usage. Members with the <em>admin</em> role can also create/update/delete those resources. They never see your billing, your password, or your MFA recovery codes. When a member acts on your account, the audit log records both the action AND which member did it — so you can see who on your team did what without cross-referencing anything, and the whole audit log can be exported as CSV or JSON at any time. Sign-in and sign-out entries also record the IP address and browser used; that detail is visible to both you and any team member with read access on your account, so don\'t add team members you wouldn\'t share that level of detail with. Full reference: <a href="https://docs.driftstack.io/api/team/" class="text-tk-accent-text underline">docs.driftstack.io/api/team</a>.',
+      },
+      {
+        q: 'Can I protect my dashboard sign-in with two-factor authentication?',
+        a: 'Yes. The web dashboard supports time-based one-time passwords (TOTP — the six-digit codes from an authenticator app) plus single-use recovery codes; once enrolled, dashboard sign-in asks for a code as well as your password. You can also see every active dashboard session and revoke any of them. Team members never see your recovery codes. Reference: <a href="https://docs.driftstack.io/api/mfa/" class="text-tk-accent-text underline">docs.driftstack.io/api/mfa</a>.',
       },
       {
         q: 'Are you GDPR-compliant?',
@@ -210,7 +220,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
     entries: [
       {
         q: 'Are these real iPhones or emulated?',
-        a: "Neither — and that's the point. Driftstack runs the same browser code Apple ships on the iPhone: our own build of Apple's WebKit + Safari source code (the same C++ program code that runs on iOS), running on Apple's M-series Macs (macOS, Apple Silicon). Macs and iPhones share the same Apple chip family, so the engine is identical to a physical iPhone's — the same JavaScript engine (JavaScriptCore), the same page-rendering engine (WebCore), the same building blocks a fingerprint is made from, and, crucially, the same family of graphics chips. Everything a website can measure from inside a page — drawing output (canvas), 3D graphics (WebGL), audio, and the browser's own internals (navigator, prototype chain, error stacks) — matches a real iPhone bit for bit, because the same code produces it on the same chip family. The only differences sit so deep in the operating system that no website can read them from a page (kernel timings far below the web's reach), and detection that targets those is vanishingly rare in practice.",
+        a: 'Neither — and that\'s the point. Driftstack runs its own build of Apple\'s WebKit + Safari source code (the same C++ program code that runs on iOS) — the engine family behind iPhone Safari — on Apple\'s M-series Macs (macOS, Apple Silicon). Macs and iPhones share the same Apple chip family, so the engine runs the way it runs on a phone: the same JavaScript engine (JavaScriptCore), the same page-rendering engine (WebCore), the same building blocks a fingerprint is made from, and the same family of graphics chips. What a website can measure from inside a page — drawing output (canvas), 3D graphics (WebGL), audio, fonts, screen geometry, and the browser\'s own internals — is checked against real iPhones, check by check; where Safari deliberately varies a value, Driftstack varies it the same way. Any difference we find is treated as a bug and fixed in the engine, never patched over. The <a href="/trust/cumulative-rig/" class="text-tk-accent-text underline">signal-by-signal table</a> lists what is checked and against which phone.',
       },
       {
         q: 'Does Driftstack work with Playwright / Selenium / Puppeteer?',
@@ -225,6 +235,27 @@ export const FAQ_GROUPS: FaqGroup[] = [
         // was blanket; added the file-storage scope (R2 default
         // jurisdiction replicates EU + US).
         a: 'The sessions themselves — the iPhone Safari browsers — run on Mac hardware hosted in the US (MacStadium), under the EU\'s Standard Contractual Clauses (SCCs) and the EU-US Data Privacy Framework. Customer data in our databases — accounts, profiles, audit logs, session metadata — stays in the EU; uploaded files (avatars, for example) use Cloudflare\'s storage network, which can replicate outside the EU. The <a href="/trust/sub-processors/" class="text-tk-accent-text underline">sub-processor list</a> has the full breakdown with each provider\'s region. Our API runs in the EU, so from EU locations your commands typically reach it in under 30 milliseconds.',
+      },
+      {
+        // 2026-09-15 refuter fix: the catalog names 19 specific models between
+        // its endpoints (ARCHETYPE_REGISTRY carries no iPhone SE, 16e or Air row),
+        // so this answer says "19 iPhone models, iPhone 13 → 17 Pro Max" and
+        // states the gap — never the "every iPhone in that span" form.
+        // The 19 is held to the registry by a cross-source invariant test.
+        q: 'Which iPhones can I run?',
+        a: `${DEVICE_SUPPORT.selectableCount} device profiles across 19 iPhone models, ${DEVICE_SUPPORT.deviceFamilies}, on iOS ${DEVICE_SUPPORT.iosVersions}, with Safari ${DEVICE_SUPPORT.safariVersions}. A device profile is one specific iPhone model + iOS version + Safari version combination, and every profile you create is built on one; the default is the iPhone 17 on iOS 18.7 / Safari 26.4. The free tier offers the iPhone 13 and iPhone 13 mini; every paid plan offers all of them. There are no iPad, Android, or desktop profiles. Not every iPhone in that span is included: there is no iPhone SE, 16e, or Air profile. (For developers: <span class="font-mono">GET /v1/archetypes</span> returns the current list, no sign-in needed.)`,
+      },
+      {
+        q: 'Can I record or replay a session?',
+        a: 'In the desktop app, yes: start a recording on a session you are driving, stop it, and replay it from the Recordings view or export it as a file. Recordings are saved on your own computer and never leave it — Driftstack keeps no server-side copy. Sessions driven from code take screenshots, page snapshots, or PDFs on request instead (<span class="font-mono">POST /v1/sessions/:id/capture</span>). Details on <a href="/docs/recordings/" class="text-tk-accent-text underline">/docs/recordings</a>.',
+      },
+      {
+        q: 'What happens to a profile I delete?',
+        a: 'It moves to a recycle bin, hidden from your list but restorable for 30 days; after that it is purged for good. From the API you can also take a snapshot of a profile\'s settings and restore it into a new profile later (snapshots do not include cookies or logins), export a profile\'s settings as a file and import them again, and read a per-profile activity feed. Every profile change lands in your audit log, which you can export as CSV or JSON at any time. Details on <a href="/docs/profiles/" class="text-tk-accent-text underline">/docs/profiles</a>.',
+      },
+      {
+        q: 'Can other tools sign in to my account on my behalf?',
+        a: 'Three ways, all with scoped access. API keys are the usual path for your own code. Third-party apps can connect through OAuth 2.0 with PKCE, so they never see your password and you can revoke them individually — see <a href="/docs/oauth-apps/" class="text-tk-accent-text underline">/docs/oauth-apps</a>. Command-line tools use a device-code sign-in: the tool shows a short code, you approve it in the dashboard, and the tool receives its own credentials. Every sign-in and key action is recorded in your audit log.',
       },
     ],
   },

@@ -3,6 +3,26 @@
 // cards and AA-safe accent text. Every pre-existing
 // entry is byte-identical; the 2026-07-03 entry announces the site
 // redesign itself (which deploys together with this entry).
+// 2026-09-15 what-ships pass — five entries added above 2026-07-03
+// (a summer round-up plus four dated from the feature's own commit);
+// every pre-existing entry is untouched. Dates cite the repo:
+// 2026-09-14 5f056b292 (catalog + selectable/verified split),
+// 2026-09-09 c13e3bedf (agent step screenshots), 2026-08-30 5faad231e
+// (paste as human typing), 2026-08-26 aaf71e16d (free-plan devices).
+// Refuter pass the same day: the round-up keeps only July-or-later work
+// under its window — .ovpn screening 2026-09-07 c8b03c2a8 / 09-10
+// 6432f848b, Activity panel 2026-09-05 612a88034, measured-HTTP/3 chip
+// 2026-09-03 3d96c72d0, proxy latency 2026-08-24 690b19461, dated
+// readings 2026-09-15 e2def2e1e — and moves the June work (VPN + HTTP
+// proxy editors 2026-06-16/17 2fc819b2c 14e4a83bb, Trim 2026-06-25
+// f4c493465, the Test chips 2026-06-14 ed4b56e5c) to the never-announced
+// list. Second pass: the exit's country and city were on the Test
+// readout from 2026-06-21 (c593b6da9, ProxiesView exit.city), so the
+// summer sentence names only latency as new and the exit as what the
+// readout already showed. The Approve / Deny pause is scoped to the
+// buttons the gate recognises, the model span counts models, OAuth
+// registration is on request, and browser sign-in keeps its
+// paste-a-key fallback.
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHero from '../components/PageHero.astro';
 
@@ -16,6 +36,36 @@ interface ChangelogEntry {
 }
 
 const ENTRIES: readonly ChangelogEntry[] = [
+  {
+    date: '2026-09-15',
+    category: 'launch',
+    title: 'What shipped this summer',
+    body: 'A round-up of what landed between July and mid-September, followed by a list of what has been in the product for a while and was never announced here. Proxies and VPNs: an OpenVPN file is now screened before it is saved — directives that would run scripts or reconfigure the machine are refused, with the reason shown. The Test button on a proxy now also reports its latency, next to what it already showed — whether it is reachable and authenticated, whether it can carry UDP (which is what WebRTC needs) and the country and city it exits from; the HTTP/3 indicator turns green only when HTTP/3 was actually measured through that exit — by a live session or a direct handshake check — and shows an inferred mark otherwise. Every measured value now carries the time it was measured, and a reading we cannot date is no longer shown as if it were current. Profiles: the new Activity panel on a profile lists what the AI agent did there recently (it is an account record, so it survives Clear history). Also in the product for a while, though never announced here: from the Proxies view in the desktop app a profile can be attached to an OpenVPN (.ovpn file) or WireGuard (.conf file) tunnel as well as a SOCKS5 or HTTP proxy — a VPN tunnel carries everything the profile does, including WebRTC and HTTP/3; on a proxy that cannot carry HTTP/3, it is switched off rather than leaked; Trim reclaims space by clearing a profile\'s re-fetchable caches while keeping its cookies, local storage and tabs; an Approve or Deny pause before the AI agent taps a buy, pay or delete-account button, and a refusal before any AI call — so no charge — when a task breaks the acceptable-use policy; profile export and import as a file (settings only — browser state stays where it is); a spend warning in the desktop app when your estimated monthly cost crosses a threshold; local session recording with replay and JSON export in the desktop app; crypto receipts as PDF or text with an order timeline; OAuth 2.0 for an app that acts on a customer\'s behalf (client registration on request); and a browser sign-in that creates and stores the desktop app\'s own credential, so you no longer need to paste an API key (pasting one remains available as a fallback).',
+  },
+  {
+    date: '2026-09-14',
+    category: 'launch',
+    title: '96 device profiles, and two numbers we publish separately',
+    body: 'The device catalog now spans 19 iPhone models, from the iPhone 13 to the 17 Pro Max, on iOS 18.4.1, 18.6 and 18.7, with Safari 18.4 through 26.6: 96 selectable device profiles, where a device profile is one iPhone model + iOS version + Safari version. The default for a new profile is iPhone 17 / iOS 18.7 / Safari 26.4. The catalog is public at GET /v1/archetypes and needs no key. From this release the trust pages give two numbers instead of one: how many device profiles you can select (96), and how many have had the five areas we check — canvas drawing, fonts, screen size, viewport height and browser configuration — verified against a real device, either directly or by matching a directly checked profile that renders the same way (81). The other 15 are configured and measured at that model and version but not yet verified to that standard, and the pages say so rather than rounding up.',
+  },
+  {
+    date: '2026-09-09',
+    category: 'launch',
+    title: 'AI agent: the screenshots it takes appear under each step',
+    body: 'When the AI agent takes a screenshot as one of its steps, the desktop app now shows it inline under that step in the transcript, so you can see what the agent saw without opening the session. Only a successful capture renders a thumbnail; a failed step, or a step that is not a capture, shows none. From code, POST /v1/sessions/:id/capture returns a screenshot, DOM snapshot or PDF of a session.',
+  },
+  {
+    date: '2026-08-30',
+    category: 'launch',
+    title: 'Desktop app: paste as human typing',
+    body: 'In the device window, Cmd+Shift+V (or Ctrl+Shift+V) pastes the clipboard as typed keystrokes instead of dropping the text into the field in one go — a field going from empty to two hundred characters in a single event is one of the clearest automation tells there is. The keystrokes follow a human-like typing cadence: a longer delay before the first key, natural variation between keys, the extra cost of switching to uppercase or digits on an iOS keyboard, and pauses at word boundaries.',
+  },
+  {
+    date: '2026-08-26',
+    category: 'pricing',
+    title: 'Free plan: iPhone 13 and iPhone 13 mini',
+    body: 'The Free plan\'s device choice is now iPhone 13 and iPhone 13 mini — nine device profiles across their iOS and Safari versions. Every paid plan keeps the full catalog. The limit applies where you pick the device, when a profile is created or launched, not by hiding the catalog. Nothing else on Free changes: one profile, one session at a time, 20-minute sessions, no card required.',
+  },
   {
     date: '2026-07-03',
     category: 'launch',

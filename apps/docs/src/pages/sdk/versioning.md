@@ -94,8 +94,8 @@ When a breaking change ships, the SDK release post includes a
 3. Sed/regex replacement when feasible.
 4. Behavioral differences (if any) that aren't a pure rename.
 
-For non-trivial breaks, a migration script ships in
-`packages/sdk-<lang>/scripts/migrate-<from>-to-<to>.<ext>`.
+For non-trivial breaks, a migration script ships inside the SDK package
+as `scripts/migrate-<from>-to-<to>.<ext>`.
 
 ## Cross-SDK consistency
 

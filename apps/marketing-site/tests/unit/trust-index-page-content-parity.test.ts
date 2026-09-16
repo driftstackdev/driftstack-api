@@ -83,17 +83,29 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
     ).toBe(true);
   });
 
-  it('6 quick-reference dl entries pinned (questions buyer evaluations always ask)', () => {
+  it('7 quick-reference dl entries pinned (questions buyer evaluations always ask; the MFA / active-sign-ins entry was added 2026-09-15 — both ship on every plan with no tier gate in TIER_FEATURES)', () => {
     for (const dt of [
       'Where is data hosted?',
       'Do you see our destination URLs?',
       'Are API keys recoverable by staff?',
       'How do we get a DPA on file?',
       "What's the incident-response SLA?",
+      'Can we use two-factor sign-in and see who is signed in?',
       'How do we get a security questionnaire answered?',
     ]) {
       expect(body, `quick-ref question missing: ${dt}`).toContain(dt);
     }
+    // The MFA answer names the shipped mechanics: TOTP + recovery codes
+    // (apps/server/src/services/mfa.ts), the step-up gate
+    // (routes/account-mfa.ts), web-session list + revoke
+    // (routes/account-web-sessions.ts), and the auth_epoch invalidation on
+    // password change (db/schema.ts V-590).
+    expect(body).toMatch(
+      /Yes, on every plan\. Two-factor sign-in uses an authenticator\s+app plus recovery codes/,
+    );
+    expect(body).toMatch(
+      /lets you revoke one or all of the others; a\s+password change signs out every other session/,
+    );
   });
 
   it('residency claim pinned: Hetzner Falkenstein / Neon Frankfurt / Cloudflare R2 with EU + US copies — S30 2026-07-07 (founder decision: soften): "EU only" → "EU by default" and the false "R2 EU jurisdiction" → "EU + US replication" (R2 uses the default jurisdiction; only DB-resident data is EU-guaranteed). 2026-09-15 plain-language pass: same three vendors + locations, "Nuremberg" corrected to Falkenstein per the sub-processor register', () => {
@@ -140,9 +152,28 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
     // /about and /trust/security-overview. Only the E1
     // /v1/sessions/:id/proxy route is a 503 scaffold. This guard must
     // not forbid the page from naming a real capability.
+    // 2026-09-15 truth pass: VPN named alongside SOCKS5 — the desktop app
+    // never launches a profile without an attached proxy (apps/gui-client/src/
+    // views/ProfilesView.tsx refuses to build a proxy-less create body).
+    // 2026-09-15 refuter: the "managed exit" fallback was an INVENTED feature —
+    // no Driftstack-run exit is configured for production (infra/env-templates/
+    // production.env.template leaves DEFAULT_EGRESS_HOST/PORT empty on purpose:
+    // "UNSET IS VALID AND DELIBERATE"; production.env carries no DEFAULT_EGRESS_*
+    // line; apps/server/src/routes/agent-sessions.ts dispatches NO proxy when
+    // proxy_id is omitted and a REQUIRE_PROXY=1 node refuses by name). The page
+    // now says an API session names a saved proxy and that no shared Driftstack
+    // exit exists; the old clause is negatively pinned so it cannot return.
     expect(body).toMatch(
-      /Yes\. When you or your agent open a URL, Driftstack processes\s+that URL and keeps a record of the visit for your account\. The\s+page traffic itself goes out through your own SOCKS5 proxy if\s+the profile has one, or through Driftstack's managed exit if\s+not\./,
+      /Yes\. When you or your agent open a URL, Driftstack processes\s+that URL and keeps a record of the visit for your account\. The\s+page traffic itself goes out through your own SOCKS5 proxy or\s+VPN — the desktop app always launches through one, and an API\s+session names one of your saved proxies\. Driftstack does not\s+route it through a shared exit of its own\./,
     );
+    expect(body).not.toMatch(/managed exit/);
+    // The security card and the security-overview card carry the same
+    // corrections: VPN on paid plans, no shared exit, device-code sign-in
+    // for the desktop app only (no command-line tool ships).
+    expect(body).toMatch(/SOCKS5 proxy or, on\s+paid plans, a VPN \(OpenVPN or WireGuard\)/);
+    expect(body).toMatch(/we do not route\s+your traffic through a shared exit of our own/);
+    expect(body).toMatch(/device-code sign-in for the desktop app/);
+    expect(body).not.toMatch(/sign-in for tools/);
     expect(body).not.toMatch(/addresses you visit don't pass through us/);
     // 2026-09-15 owner directive: "control plane" is banned on customer surfaces
     // (the S30 source comment may still use it; rendered copy may not).

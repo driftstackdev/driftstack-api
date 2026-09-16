@@ -1,5 +1,5 @@
 // P2 #7 — the ⌘K command palette must offer the same primary sidebar destinations
-// as the rail. Session log / Mac mini fleet / Team were missing. These pin the
+// as the rail. Session log / Your servers / Team were missing. These pin the
 // builder's destination set + the gating (fleet on self-hosted, Team for a member
 // or team-capable tier) so the palette stays in lockstep with the Sidebar.
 
@@ -20,12 +20,23 @@ describe('buildPaletteActions — sidebar destination parity (P2 #7)', () => {
     expect(ids(false, false)).toContain('nav-sessions-history');
   });
 
-  it('includes Mac mini fleet ONLY when showFleet (self-hosted), and Team ONLY when showTeam', () => {
+  it('includes Your servers ONLY when showFleet (self-hosted), and Team ONLY when showTeam', () => {
     expect(ids(false, false)).not.toContain('nav-fleet');
     expect(ids(false, false)).not.toContain('nav-team');
     const all = ids(true, true);
     expect(all).toContain('nav-fleet');
     expect(all).toContain('nav-team');
+  });
+
+  it('names the self-hosted destination the way the sidebar does — "your servers", never "fleet" / "Mac mini" (owner directive 2026-09-15)', () => {
+    const fleet = buildPaletteActions({
+      setView: vi.fn<(v: View) => void>(),
+      onShowShortcuts: vi.fn(),
+      showFleet: true,
+      showTeam: false,
+    }).find((a) => a.id === 'nav-fleet');
+    expect(fleet?.label).toBe('Go to your servers');
+    expect(fleet?.label).not.toMatch(/fleet|mac mini|node|control plane/i);
   });
 
   it('routes each new destination to its matching view kind', () => {

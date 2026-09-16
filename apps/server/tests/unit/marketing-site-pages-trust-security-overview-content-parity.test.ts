@@ -74,6 +74,10 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
       /Two-factor login uses authenticator-app codes \(TOTP\)\.\s+The seed that generates your codes is stored encrypted\s+\(AES-256-GCM at-rest encryption of TOTP secrets\)\.\s+Recovery codes are scrypt-hashed — one-way scrambled,\s+mirroring API key handling\. Dangerous admin actions\s+demand a fresh MFA check even if you're already signed\s+in \(a "step-up" check before risky admin actions\)\./,
     );
     expect(body).not.toMatch(/V-353e/);
+    // 2026-09-15: the step-up freshness window (routes/account-mfa.ts:
+    // "hasn't satisfied MFA in the last 15 min"; /docs/security-overview
+    // pins the same 15 minutes).
+    expect(body).toMatch(/check stays fresh for 15 minutes\./);
   });
 
   it("OAuth claim pinned: 'OAuth 2.0 (invite-only) with PKCE-S256' + 'no self-service client registration' + 'client_secret sha256-hashed at rest' + 'one-shot authorization codes' + 'opaque bearer tokens (no JWT)' — pinned so the invite-only + PKCE-S256 + secret-hash + one-shot + opaque-not-JWT 5-state OAuth posture survives (drift to dropping 'no self-service' would shift the trust model; drift to claiming JWT would create marketing↔engineering divergence)", () => {
@@ -104,16 +108,67 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     // "full UDP/WebRTC/QUIC tunnelling" overpromised against /security
     // ("depends on the proxy's reported UDP capability") and is retired.
     expect(body).toMatch(/Your own proxy or VPN, per profile/);
+    // 2026-09-15 refuter: the Test cannot MEASURE HTTP/3 — the native probe
+    // has no QUIC signal and apps/gui-client/src/components/
+    // ProxyCapabilities.tsx renders it as an inference ("~", never green)
+    // until a session or relay check measured it; a VPN row's Test is a DNS
+    // resolve + tunnel test (ProfilePhoneCard.tsx). The readout is listed as
+    // what it is: reachability, latency, exit geo, WebRTC, an HTTP/3 estimate,
+    // and the OS fingerprint where measurable.
     expect(body).toMatch(
-      /Whether UDP, WebRTC and QUIC\s+traffic travels through a SOCKS5 proxy depends on what\s+your proxy supports, and is shown after launch/,
+      /Whether UDP, WebRTC and QUIC\s+traffic travels through a SOCKS5 proxy depends on what\s+your proxy supports: the proxy's Test reports whether it\s+answers, its latency, the country and city it exits from,\s+whether it can carry WebRTC, what to expect for HTTP\/3 \(an\s+estimate until it has been measured\)/,
     );
+    expect(body).not.toMatch(/Test reports HTTP\/3/);
     expect(body).not.toMatch(/full\s+UDP\/WebRTC\/QUIC tunnelling/);
     expect(body).toMatch(/an OpenVPN\s+file \(\.ovpn\)/); // S20c 2026-07-06
     expect(body).toMatch(/a WireGuard\s+file \(\.conf\)/); // S20c 2026-07-06
-    // 2026-09-15: aligned with /security ("Driftstack's managed exit");
-    // sessions run on US hardware, so "own EU network" overstated the region.
+    // 2026-09-15 truth pass: the desktop app never launches without an
+    // attached proxy (apps/gui-client/src/views/ProfilesView.tsx), the
+    // pre-launch check is described per scheme (live connection for SOCKS5 to
+    // our own echo endpoint, apps/server/src/services/
+    // proxy-connectivity-probe.ts → /v1/egress/echo; directive sweep for an
+    // OpenVPN file, packages/api-types/src/openvpn-directives.ts; a WireGuard
+    // .conf is parsed GUI-side into structured fields with its PostUp/PreUp
+    // hooks read but never consulted, apps/gui-client/src/lib/
+    // parse-wireguard.ts), and the proxy-secret encryption
+    // (apps/server/src/lib/account-proxy-secret-encryption.ts, aes-256-gcm)
+    // + the Test readouts (apps/gui-client/src/components/
+    // ProxyCapabilities.tsx / OsReadout.tsx) are pinned.
+    // 2026-09-15 refuter: the "managed exit" fallback was an INVENTED feature —
+    // no Driftstack-run exit is configured for production (infra/env-templates/
+    // production.env.template leaves DEFAULT_EGRESS_HOST/PORT empty on purpose:
+    // "UNSET IS VALID AND DELIBERATE"; production.env carries no DEFAULT_EGRESS_*
+    // line; apps/server/src/routes/agent-sessions.ts dispatches NO proxy when
+    // proxy_id is omitted and a REQUIRE_PROXY=1 node refuses by name). The page
+    // now says an API session names a saved proxy and that no shared Driftstack
+    // exit exists; the old clause is negatively pinned so it cannot return.
+    // 2026-09-15 refuter: VPN exits are tier-gated (TIER_FEATURES.free.vpnEgress
+    // = false; routes/account-me.ts requireTierFeature('vpnEgress')), and the
+    // line-naming refusal is OpenVPN-only (packages/api-types/src/
+    // openvpn-directives.ts); a WireGuard .conf is parsed GUI-side into
+    // structured fields and its PostUp/PreUp hooks are read but never consulted
+    // (apps/gui-client/src/lib/parse-wireguard.ts). Both are now stated.
     expect(body).toMatch(
-      /Without\s+one attached, session traffic exits through Driftstack's\s+managed exit\./,
+      /desktop app launches a\s+profile only through a proxy or VPN you attach; a session\s+created through the API names one of your saved proxies by\s+its proxy_id\. Driftstack does not route your traffic through\s+a shared exit of its own\./,
+    );
+    expect(body).not.toMatch(/managed exit/);
+    expect(body).toMatch(/file \(\.conf\) — VPN exits are on paid plans\./);
+    expect(body).toMatch(
+      /to our own address-echo endpoint, so your exit address is\s+never sent to a third-party checker/,
+    );
+    expect(body).toMatch(
+      /directives that would run a program, which are refused\s+with the offending line named/,
+    );
+    expect(body).toMatch(
+      /a WireGuard file by reading\s+only its keys, addresses, endpoint, allowed IPs, DNS and\s+MTU, so its PostUp\/PreUp hooks are never used/,
+    );
+    expect(body).not.toMatch(/a VPN file for\s+directives/);
+    expect(body).toMatch(/Proxy passwords and VPN keys are\s+stored encrypted \(AES-256-GCM\)/);
+    expect(body).toMatch(
+      /where it can be\s+measured — which operating system the exit appears to run/,
+    );
+    expect(body).toMatch(
+      /apps\/server\/src\/services\/proxy-connectivity-probe\.ts · apps\/server\/src\/lib\/account-proxy-secret-encryption\.ts · packages\/api-types\/src\/openvpn-directives\.ts/,
     );
     // No-page-content-storage commitment (aligned with /security: "We never
     // store destination response bodies"). Destination URLs ARE processed and
@@ -178,9 +233,18 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     // 2026-09-15 plain-language pass: same boundary (capture service keeps no
     // copy; recordings never leave the customer's computer via the recording
     // feature), customer words.
+    // 2026-09-15 refuter: "not stored" is true for POST /v1/sessions/:id/capture
+    // only. In an AI-agent session every screenshot step IS retained — the
+    // executor puts the bytes in a bounded in-memory SessionCaptureStore
+    // (apps/server/src/services/session-capture-store.ts: CAPTURES_PER_SESSION =
+    // 20, CAPTURE_SESSION_TTL_MS = 30 min, Map only — never disk) so the desktop
+    // app can fetch GET /v1/agent-sessions/:id/captures/:captureId. The page
+    // scopes the no-retention claim to the sessions API and discloses the agent
+    // path.
     expect(body).toMatch(
-      /Screenshots and other captures you request through the API\s+are returned to you directly in the response, and the capture\s+service keeps no copy — you decide where to store them\.\s+Desktop recordings are saved only on your own computer; the\s+recording feature never uploads them\./,
+      /Screenshots and other captures you request through the\s+sessions API are returned to you directly in the response,\s+and the capture service keeps no copy — you decide where to\s+store them\. In an AI-agent session the screenshot from each\s+step is held in server memory for up to 30 minutes \(at most\s+20 per session\) so the desktop app can show it, then dropped;\s+it is never written to disk\.\s+Desktop recordings are saved only on your own computer; the\s+recording feature never uploads them\./,
     );
+    expect(body).toMatch(/apps\/server\/src\/services\/session-capture-store\.ts/);
     expect(body).not.toMatch(/roadmap|V-540/i);
   });
 

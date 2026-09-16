@@ -148,11 +148,11 @@ export const DOC_NAV: DocNavSection[] = [
       { href: '/api/versioning/', label: 'Versioning policy' },
       {
         href: '/api/archetypes/',
-        label: 'Archetypes',
+        label: 'Device profiles',
         children: [
           {
-            href: '/api/archetypes/#list-available-archetypes',
-            label: 'List available archetypes',
+            href: '/api/archetypes/#list-available-device-profiles',
+            label: 'List available device profiles',
             method: 'GET',
           },
         ],

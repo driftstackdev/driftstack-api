@@ -327,10 +327,20 @@ export function buildPaletteActions(opts: {
       ? [
           {
             id: 'nav-fleet',
-            label: 'Go to Mac mini fleet',
+            label: 'Go to your servers',
             kind: 'view' as const,
             glyph: '▤',
-            keywords: ['nav', 'fleet', 'mac', 'mini', 'cluster', 'nodes', 'workers'],
+            keywords: [
+              'nav',
+              'servers',
+              'self-hosted',
+              'fleet',
+              'mac',
+              'mini',
+              'cluster',
+              'nodes',
+              'workers',
+            ],
             run: () => setView({ kind: 'fleet' }),
           },
         ]

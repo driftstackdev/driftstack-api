@@ -37,7 +37,7 @@ import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry
 import { readClientIp } from '../lib/client-ip.js';
 
 const RegisterBodySchema = z.object({
-  mac_node_id: z.string().uuid('mac_node_id must be a UUID matching an existing fleet_nodes row.'),
+  mac_node_id: z.string().uuid('mac_node_id must be the UUID of a registered machine.'),
   livekit: z.object({
     api_key: z.string().min(1).max(256),
     api_secret: z.string().min(1).max(1024),
@@ -173,8 +173,8 @@ export function registerMacNodesRoutes(
       if (updated === null) {
         bumpOutcome('not_found');
         throw new NotFoundError(
-          `Mac node ${body.mac_node_id} not found in fleet_nodes. ` +
-            'The node must already be registered via the V-820 fleet-node provisioning path.',
+          `Machine ${body.mac_node_id} is not registered. ` +
+            'Register the machine first (POST /v1/mac-nodes), then add its streaming credentials.',
         );
       }
       bumpOutcome('ok');
@@ -281,7 +281,7 @@ export function registerMacNodesRoutes(
           (err as { code?: string }).code === '23505'
         ) {
           throw new BadRequestError(
-            'A fleet node with this node_id or public key is already registered.',
+            'A machine with this node_id or public key is already registered.',
           );
         }
         throw err;
@@ -365,11 +365,11 @@ export function registerMacNodesRoutes(
     },
     async (req, reply) => {
       if (deps.controlRegistry === undefined) {
-        throw new FeatureUnavailableError('Fleet control plane is not enabled.');
+        throw new FeatureUnavailableError('Machine control is not enabled on this deployment.');
       }
       const params = z.object({ id: z.string().uuid() }).safeParse(req.params);
       if (!params.success) {
-        throw new BadRequestError('mac node id must be a UUID.');
+        throw new BadRequestError('The machine id must be a UUID.');
       }
       const parsed = ControlNodeBodySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -380,7 +380,7 @@ export function registerMacNodesRoutes(
       // "not connected" for an id that was never registered).
       const detail = await repo.getDetail(nodeId);
       if (detail === null) {
-        throw new NotFoundError(`Fleet node ${nodeId} not found.`);
+        throw new NotFoundError(`Machine ${nodeId} not found.`);
       }
       // The registry is keyed by the node's human node_id (migration 0085 — the
       // JWT iss the connection authed with), NOT the uuid pk. Resolve the
@@ -388,7 +388,7 @@ export function registerMacNodesRoutes(
       const conn = detail.nodeId !== null ? deps.controlRegistry.get(detail.nodeId) : undefined;
       if (conn === undefined) {
         throw new ConflictError(
-          `Fleet node ${nodeId} has no live control-plane connection — cannot deliver the command.`,
+          `Machine ${nodeId} is not connected right now — the command was not delivered.`,
         );
       }
       // V-1722 — the send is the second way this route fails to deliver, and it
@@ -421,7 +421,7 @@ export function registerMacNodesRoutes(
           'controlCommand transport send failed; answering 409 rather than 500',
         );
         throw new ConflictError(
-          `Fleet node ${nodeId} could not be reached — the command was not delivered.`,
+          `Machine ${nodeId} could not be reached — the command was not delivered.`,
         );
       }
       // Audit: a node-control action changes a production worker's

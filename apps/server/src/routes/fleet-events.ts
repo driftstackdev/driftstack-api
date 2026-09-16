@@ -254,7 +254,7 @@ export async function registerFleetEventsRoutes(
 // Registered when fleet dependencies are omitted from AppDeps. Return a stable,
 // machine-readable deployment-state signal instead of a bare 404 or internal plan.
 export function registerFleetEventsDisabledRoutes(app: FastifyInstance): void {
-  const detail = 'Fleet events stream is unavailable on this deployment.';
+  const detail = 'Machine connections are not enabled on this deployment.';
   app.get('/v1/fleet/events', (): never => {
     throw new FeatureUnavailableError(detail);
   });

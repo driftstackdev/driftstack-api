@@ -130,8 +130,8 @@ default, records `{profile_id, profile_name}` in the session's
 from a missing one). See also `POST /v1/profiles/:id/launch` for
 the one-round-trip launch helper.
 
-Profile-backed launches inherit the already-stored profile archetype. This is a
-compatibility path: an existing profile remains launchable if its pinned id is
+Profile-backed launches inherit the device profile already stored on the
+profile. This is a compatibility path: an existing profile remains launchable if its pinned id is
 no longer offered for new direct creates. The exception cannot be requested by
 putting a retired id directly in a create-session body.
 

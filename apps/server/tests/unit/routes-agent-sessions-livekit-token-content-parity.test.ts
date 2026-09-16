@@ -73,10 +73,17 @@ describe('routes/agent-sessions-livekit-token content parity', () => {
     );
   });
 
-  it("No-Mac-with-LiveKit-503 framing pinned: 'No Mac in the fleet has registered LiveKit credentials yet. POST /v1/mac-nodes/register must run for at least one Mac before tokens can be minted.' — pinned so the LK.2-cross-reference operator-facing detail stays documented (drift to a generic 500 would lose the actionable 'register a Mac first' guidance)", () => {
+  it("No-machine-with-LiveKit-503 framing pinned: 'Live view is not available yet: no machine on this deployment has streaming set up. If you run Driftstack yourself, add streaming credentials for at least one machine (POST /v1/mac-nodes/register); otherwise try again shortly.' — pinned so the customer-readable detail (2026-09-15 plain-words directive: no 'fleet' / 'Mac' / 'tokens minted') keeps the actionable self-hosted 'register one machine first' guidance (drift to a generic 500 would lose it)", () => {
     expect(body).toMatch(
-      /throw new FeatureUnavailableError\(\s*'No Mac in the fleet has registered LiveKit credentials yet\. ' \+\s*'POST \/v1\/mac-nodes\/register must run for at least one Mac before ' \+\s*'tokens can be minted\.',\s*\);/,
+      /throw new FeatureUnavailableError\(\s*'Live view is not available yet: no machine on this deployment has streaming set up\. ' \+\s*'If you run Driftstack yourself, add streaming credentials for at least one machine ' \+\s*'\(POST \/v1\/mac-nodes\/register\); otherwise try again shortly\.',\s*\);/,
     );
+    // The 503 detail is what a customer sees when a live view cannot open; the
+    // internal words must not creep back in.
+    const detailStart = body.indexOf("'Live view is not available yet");
+    const detailEnd = body.indexOf('otherwise try again shortly.', detailStart);
+    expect(detailStart).toBeGreaterThan(-1);
+    expect(detailEnd).toBeGreaterThan(detailStart);
+    expect(body.slice(detailStart, detailEnd)).not.toMatch(/\bfleet\b|\bMac\b|\bnode\b|minted/);
   });
 
   it("Secret-unreadable catastrophic framing pinned: 'Decryption failure = catastrophic ... Surface as 503 + ops alert (the throw lands in Sentry via the error-handler).' + a GENERIC customer-facing 503 message — the node id + underlying crypto error are ops detail (Sentry), NOT leaked to the authenticated customer", () => {

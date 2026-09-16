@@ -27,11 +27,11 @@ Each tier has a profile cap, enforced at `POST /v1/profiles` creation time. Exce
 
 Pricing source of truth: [driftstack.io/pricing](https://driftstack.io/pricing/).
 
-Self-hosted tiers don't enforce per-account profile caps — they enforce concurrent-session caps and archetype (device profile) counts across the whole deployment instead.
+Self-hosted tiers don't enforce per-account profile caps — they enforce concurrent-session caps and device-profile counts across the whole deployment instead.
 
 ## Create a profile
 
-`POST /v1/profiles` with at minimum a `name`. The `archetype` field is optional and defaults to your tier's device: `iphone17_ios18_7_safari26_4` (iPhone 17 on iOS 18.7 with Safari 26.4) on tiers that include every device, or the newest iPhone 13 archetype on the free tier. Choose an older archetype only if your workflow specifically depends on that device's behaviour.
+`POST /v1/profiles` with at minimum a `name`. The `archetype` field is optional and defaults to your tier's device: `iphone17_ios18_7_safari26_4` (iPhone 17 on iOS 18.7 with Safari 26.4) on tiers that include every device, or the newest iPhone 13 device profile on the free tier. Choose an older device profile only if your workflow specifically depends on that device's behaviour.
 
 **TypeScript:**
 
@@ -206,13 +206,13 @@ Profile names are free-form strings up to 120 characters. Conventions that work 
 
 Names ARE visible in the dashboard and any team-member access logs. Don't put PII or secrets in profile names; use `description` for human notes if you need them.
 
-## Archetypes (device profiles)
+## Device profiles
 
 A **device profile** (`archetype` in the API) is the device, OS and browser version a session presents. The default is returned by [`GET /v1/archetypes`](/api/archetypes/) and is used for new profiles that omit `archetype`; read it from the API at runtime instead of predicting or constructing a slug.
 
-Profiles pin to one archetype at creation time. The pin is stable: a profile created against `iphone16pro_ios18_7_safari26_4` keeps that fingerprint forever, even after the default moves to a newer iPhone. This stability is intentional — a returning profile shouldn't suddenly show up on a different iOS version.
+Profiles pin to one device profile at creation time. The pin is stable: a profile created against `iphone16pro_ios18_7_safari26_4` keeps that fingerprint forever, even after the default moves to a newer iPhone. This stability is intentional — a returning profile shouldn't suddenly show up on a different iOS version.
 
-To migrate a profile to a newer archetype, create a fresh profile pinned to the new archetype and walk through any session-state migration manually.
+To move a profile to a newer device, create a fresh profile pinned to the new device profile and walk through any session-state migration manually.
 
 ## What gets persisted
 

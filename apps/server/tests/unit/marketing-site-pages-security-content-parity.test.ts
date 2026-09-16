@@ -131,8 +131,16 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
     expect(body).toMatch(
       /Driftstack staff have no\s+built-in way to join a customer's live session\./,
     );
+    // 2026-09-15 refuter: "not stored" is true for POST /v1/sessions/:id/capture
+    // only. In an AI-agent session every screenshot step IS retained — the
+    // executor puts the bytes in a bounded in-memory SessionCaptureStore
+    // (apps/server/src/services/session-capture-store.ts: CAPTURES_PER_SESSION =
+    // 20, CAPTURE_SESSION_TTL_MS = 30 min, Map only — never disk) so the desktop
+    // app can fetch GET /v1/agent-sessions/:id/captures/:captureId. The page
+    // scopes the no-retention claim to the sessions API and discloses the agent
+    // path.
     expect(body).toMatch(
-      /Screenshots,\s+page snapshots and PDFs you request are returned directly in\s+the API response and are not stored; desktop recordings stay\s+on your own computer and are not uploaded\./,
+      /Screenshots,\s+page snapshots and PDFs you request through the sessions API are\s+returned directly in the API response and are not stored\. In an\s+AI-agent session the screenshot from each step is held in server\s+memory for up to 30 minutes \(at most 20 per session\) so the\s+desktop app can show it, then dropped; it is never written to\s+disk\. Your desktop recordings stay\s+on your own computer and are not uploaded\./,
     );
     expect(body).toMatch(
       /For self-hosted\s+deployments, even session records stay inside your network;\s+only periodic "is this license still valid\?" check-ins reach\s+our servers\./,

@@ -316,6 +316,9 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
       'audience: string',
       'aiAgent: boolean',
       'llmBilling: LlmBilling',
+      // 2026-09-15 — the two server gates the pricing surfaces now render.
+      'apiAccess: boolean',
+      'vpnEgress: boolean',
       'cta: \\{ label: string; href: string \\}',
       'highlight\\?: boolean',
       'oneTime\\?: boolean',

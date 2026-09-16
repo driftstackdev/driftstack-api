@@ -62,7 +62,8 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               Recovery codes are scrypt-hashed — one-way scrambled,
               mirroring API key handling. Dangerous admin actions
               demand a fresh MFA check even if you're already signed
-              in (a "step-up" check before risky admin actions).
+              in (a "step-up" check before risky admin actions). That
+              check stays fresh for 15 minutes.
             </p>
             <p class="mt-1 text-xs font-mono text-tk-ink-3">
               apps/server/src/lib/mfa-totp.ts · apps/server/src/services/mfa.ts
@@ -86,6 +87,38 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
             </p>
             <p class="mt-1 text-xs font-mono text-tk-ink-3">
               apps/server/src/services/oauth.ts · apps/server/src/lib/oauth-pkce.ts
+            </p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-tk-ink">Device-code sign-in for the desktop app</p>
+            <p class="mt-1 text-sm text-tk-ink-2">
+              The desktop app shows a short code; you approve it in the
+              dashboard while signed in, and the app receives a restricted
+              credential of its own — nothing is copied by hand. The code is stored only as a
+              sha256 hash, compared in constant time, expires after five
+              minutes, and works exactly once.
+            </p>
+            <p class="mt-1 text-xs font-mono text-tk-ink-3">
+              apps/server/src/routes/auth-cli.ts · apps/server/src/services/cli-authorize.ts
+            </p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-tk-ink">Active sign-ins: listed, revocable, and ended by a password change</p>
+            <p class="mt-1 text-sm text-tk-ink-2">
+              The dashboard lists every active sign-in on your account
+              and lets you revoke one, or all except the one you are
+              using. Sign-in tokens are stored only as sha256 hashes and
+              expire; changing your password ends every other sign-in
+              at once.
+            </p>
+            <p class="mt-1 text-xs font-mono text-tk-ink-3">
+              apps/server/src/routes/account-web-sessions.ts
             </p>
           </div>
         </li>
@@ -142,14 +175,37 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
             <p class="mt-1 text-sm text-tk-ink-2">
               Each profile can use its own exit to the internet: a
               SOCKS5 proxy, an OpenVPN file (.ovpn), or a WireGuard
-              file (.conf). Driftstack checks the configuration before
-              launch and asks your proxy to handle DNS lookups so they
-              are not sent around it. Whether UDP, WebRTC and QUIC
+              file (.conf) — VPN exits are on paid plans. Driftstack checks
+              the configuration before launch — a SOCKS5 proxy with a real
+              connection through it
+              to our own address-echo endpoint, so your exit address is
+              never sent to a third-party checker; an OpenVPN file for
+              directives that would run a program, which are refused
+              with the offending line named; a WireGuard file by reading
+              only its keys, addresses, endpoint, allowed IPs, DNS and
+              MTU, so its PostUp/PreUp hooks are never used — and asks
+              your proxy to handle DNS lookups so they are not sent
+              around it. A VPN
+              tunnel carries everything the profile does, including
+              WebRTC and HTTP/3. Whether UDP, WebRTC and QUIC
               traffic travels through a SOCKS5 proxy depends on what
-              your proxy supports, and is shown after launch. Without
-              one attached, session traffic exits through Driftstack's
-              managed exit. Driftstack does not store the content of
+              your proxy supports: the proxy's Test reports whether it
+              answers, its latency, the country and city it exits from,
+              whether it can carry WebRTC, what to expect for HTTP/3 (an
+              estimate until it has been measured) and — where it can be
+              measured — which operating system the exit appears to run,
+              and a running session shows whether HTTP/3 is actually in
+              use. On a proxy that cannot carry HTTP/3, it is switched
+              off rather than leaked. Proxy passwords and VPN keys are
+              stored encrypted (AES-256-GCM). The desktop app launches a
+              profile only through a proxy or VPN you attach; a session
+              created through the API names one of your saved proxies by
+              its proxy_id. Driftstack does not route your traffic through
+              a shared exit of its own. Driftstack does not store the content of
               the pages your sessions load.
+            </p>
+            <p class="mt-1 text-xs font-mono text-tk-ink-3">
+              apps/server/src/services/proxy-connectivity-probe.ts · apps/server/src/lib/account-proxy-secret-encryption.ts · packages/api-types/src/openvpn-directives.ts
             </p>
           </div>
         </li>
@@ -239,14 +295,39 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <div>
             <p class="font-medium text-tk-ink">Direct captures and local recordings</p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Screenshots and other captures you request through the API
-              are returned to you directly in the response, and the capture
-              service keeps no copy — you decide where to store them.
+              Screenshots and other captures you request through the
+              sessions API are returned to you directly in the response,
+              and the capture service keeps no copy — you decide where to
+              store them. In an AI-agent session the screenshot from each
+              step is held in server memory for up to 30 minutes (at most
+              20 per session) so the desktop app can show it, then dropped;
+              it is never written to disk.
               Desktop recordings are saved only on your own computer; the
               recording feature never uploads them. See
               <a href="/docs/recordings/" class="text-tk-accent-text underline"
                 >/docs/recordings</a
               > for exactly what is and isn't stored.
+            </p>
+            <p class="mt-1 text-xs font-mono text-tk-ink-3">
+              apps/server/src/services/session-capture-store.ts
+            </p>
+          </div>
+        </li>
+        <li class="flex gap-4">
+          <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
+          <div>
+            <p class="font-medium text-tk-ink">Audit log: exportable as CSV or JSON</p>
+            <p class="mt-1 text-sm text-tk-ink-2">
+              Account-security and management events — key creation,
+              rotation and revocation, two-factor enrollment, profile
+              changes, webhook secret rotations, sign-ins and password
+              changes — are recorded with who acted and on whose
+              account. Read the log in the dashboard, or export it as
+              CSV or JSON (up to 10,000 rows per export; your GDPR
+              Article 20 portability right).
+            </p>
+            <p class="mt-1 text-xs font-mono text-tk-ink-3">
+              apps/server/src/routes/account-audit.ts
             </p>
           </div>
         </li>
@@ -281,7 +362,8 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               Customer-impacting outages are posted publicly; root
               cause and remediation follow within seven days of the
               incident closing. Live status at
-              <a href="https://status.driftstack.io" class="text-tk-accent-text underline">status.driftstack.io</a>;
+              <a href="https://status.driftstack.io" class="text-tk-accent-text underline">status.driftstack.io</a>,
+              with email subscriptions for incident updates;
               historical archive at
               <a href="/trust/incidents/" class="text-tk-accent-text underline">/trust/incidents</a>.
             </p>

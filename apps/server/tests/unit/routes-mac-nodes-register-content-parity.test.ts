@@ -47,7 +47,7 @@ describe('routes/mac-nodes-register content parity', () => {
 
   it("RegisterBodySchema 2-section shape pinned: mac_node_id UUID + livekit { api_key string min 1 max 256 + api_secret string min 1 max 1024 + ws_url url } + 'Wide URL bound — accepts wss://mac-NNN.driftstack.dev:8443 form per the orchestrator brief.' framing. Drift to dropping the api_secret max-1024 cap would let a customer POST a multi-MB string through; drift to dropping the UUID validator would break the fleet_nodes mac_node_id contract", () => {
     expect(body).toMatch(
-      /mac_node_id: z\.string\(\)\.uuid\('mac_node_id must be a UUID matching an existing fleet_nodes row\.'\),/,
+      /mac_node_id: z\.string\(\)\.uuid\('mac_node_id must be the UUID of a registered machine\.'\),/,
     );
     expect(body).toMatch(/api_key: z\.string\(\)\.min\(1\)\.max\(256\),/);
     expect(body).toMatch(/api_secret: z\.string\(\)\.min\(1\)\.max\(1024\),/);
@@ -85,10 +85,27 @@ describe('routes/mac-nodes-register content parity', () => {
     );
   });
 
-  it("404 with V-820-provisioning-must-run-first detail pinned: 'Mac node ${body.mac_node_id} not found in fleet_nodes. The node must already be registered via the V-820 fleet-node provisioning path.' — pinned so the must-pre-exist + V-820 cross-reference operator-facing detail stays documented (drift to creating-on-not-found would let arbitrary UUIDs spawn fleet_nodes rows)", () => {
+  it("404 with register-the-machine-first detail pinned: 'Machine ${body.mac_node_id} is not registered. Register the machine first (POST /v1/mac-nodes), then add its streaming credentials.' — pinned so the must-pre-exist guidance stays documented in the operator's words (2026-09-15 plain-words directive: no table name, no ticket id, no 'fleet'/'node'; drift to creating-on-not-found would let arbitrary UUIDs spawn machine rows)", () => {
     expect(body).toMatch(
-      /throw new NotFoundError\(\s*`Mac node \$\{body\.mac_node_id\} not found in fleet_nodes\. ` \+\s*'The node must already be registered via the V-820 fleet-node provisioning path\.',\s*\);/,
+      /throw new NotFoundError\(\s*`Machine \$\{body\.mac_node_id\} is not registered\. ` \+\s*'Register the machine first \(POST \/v1\/mac-nodes\), then add its streaming credentials\.',\s*\);/,
     );
+  });
+
+  it('every thrown error detail in this route reads in plain words — no fleet / node / control plane / table name / ticket id (2026-09-15 directive)', () => {
+    // Collect the literal detail strings of every thrown ApiError in the route.
+    const details = [
+      ...body.matchAll(
+        /throw new (?:NotFoundError|BadRequestError|ConflictError|FeatureUnavailableError)\(\s*((?:`[^`]*`|'[^']*'|\s|\+)+?)\s*,?\s*\)/g,
+      ),
+    ].map((m) => m[1] ?? '');
+    // 7 literal-detail throws: 404 not-registered, 400 duplicate, 503 control off,
+    // 400 bad id, 404 unknown machine, 409 not connected, 409 send failed.
+    expect(details.length).toBeGreaterThanOrEqual(7);
+    for (const detail of details) {
+      expect(detail).not.toMatch(
+        /\bfleet\b|\bnode\b|control[- ]plane|fleet_nodes|\bV-\d+\b|\bMac node\b/i,
+      );
+    }
   });
 
   it("Audit-payload non-sensitive-only framing pinned: 'The audit payload carries ONLY non-sensitive metadata (ws_url + mac_node_id); the api_key + api_secret never leave the encrypt scope above.' + action: 'mac_node.livekit_registered' + targetResourceId: `mac_node_${body.mac_node_id}` + inputPayload: { ws_url: body.livekit.ws_url } — pinned so the action-string + targetResourceId-prefix + ws_url-only-payload contract all stay documented (drift to including api_key in inputPayload would leak the key into the audit log)", () => {

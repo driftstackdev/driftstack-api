@@ -164,6 +164,30 @@ describe('W367.A marketing-site /about page content parity', () => {
     );
   });
 
+  it('2026-09-15 truth pass: identity claims are scoped (checked against real iPhones), the engine is a BUILD of the family behind iPhone Safari, motion is per-profile, recipe replay is not promised', () => {
+    expect(body).toMatch(/running a\s+build of Apple's own <a href="\/glossary\/#webkit"/);
+    expect(body).toMatch(/the engine family behind iPhone Safari/);
+    expect(body).toMatch(/checked\s+against real iPhones,\s+check by check/);
+    expect(body).toMatch(
+      /description="Driftstack builds real iPhone Safari sessions on demand, checked against real iPhones\./,
+    );
+    // 2026-09-15 refuter fix: the hero read "real iPhones in the cloud" — false as a
+    // literal product statement (faq.ts answers "real iPhones or emulated?" with
+    // "Neither": a WebKit build on Mac hardware) and the homepage never uses that
+    // form. Retitled to the homepage register, "real iPhone Safari ... in the cloud".
+    expect(body).toMatch(
+      /<PageHero label="About" title="We build one thing: real iPhone Safari in the cloud\.">/,
+    );
+    expect(body).not.toMatch(/real iPhones in the cloud/);
+    expect(body).toMatch(/patterns taken from real human movement/);
+    expect(body).toMatch(/a readable record of what the agent did/);
+    expect(body).not.toMatch(/pixel-identical/);
+    expect(body).not.toMatch(/the same engine every physical iPhone runs/);
+    expect(body).not.toMatch(/returns the same value as millions of other iPhones/);
+    expect(body).not.toMatch(/recipe you can\s+replay/);
+    expect(body).not.toMatch(/move like a\s+real hand/);
+  });
+
   it('source-modified-WebKit-not-JS-patches engineering claim pinned', () => {
     // Load-bearing differentiator vs every Chromium-stealth-
     // plugin competitor. A future copy softening to "stealth

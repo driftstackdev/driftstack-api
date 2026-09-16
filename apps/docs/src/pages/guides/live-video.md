@@ -48,9 +48,9 @@ if (session.livekit) {
 }
 ```
 
-`session.livekit` is `undefined` when live video is not yet
-available for the session. Clients that need a token in that
-state fall back to the explicit endpoint.
+`session.livekit` is `undefined` when live video has not started
+for the session. Clients that need a token in that state fall
+back to the explicit endpoint.
 
 ### Option B — explicit mint
 
@@ -221,22 +221,20 @@ The `livekit-client` library handles transient drops + auto-
 reconnect internally; you only need to mint a new token when the
 24h window closes.
 
-## Reference SDK
+## SDK helpers
 
-The desktop GUI client (Tauri) carries a working reference
-implementation:
+You do not have to hand-write the HTTP calls above. Each SDK wraps
+them:
 
-- `apps/gui-client/src/lib/livekit.ts` — typed wrapper
-  (`createLivekitRoom`, `connectToAgentSession`, `sendInputEvent`).
-- `apps/gui-client/src/components/AgentSessionPanel.tsx` — React
-  component that subscribes + renders the remote video.
-- `apps/gui-client/src/components/LivekitConnectionBadge.tsx` —
-  chrome badge consuming `LivekitConnectionState`.
-- `apps/gui-client/src/lib/livekit-input-capture.ts` — the
-  `useInputCapture` hook that translates browser keyboard +
-  mouse events into the InputEvent schema.
-- `apps/gui-client/src/lib/livekit-latency-ping.ts` — RTT
-  measurement via the `ping` event over the DataChannel.
+| Step                                                       | TypeScript                                       | Python                                              | Go                                                         |
+| ---------------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------- | ---------------------------------------------------------- |
+| Create a session (join info comes back in `livekit`)       | `client.agentSessions.create()`                  | `client.agent_sessions.create()`                    | `client.AgentSessions.Create(ctx, body, nil)`              |
+| Mint a fresh token after the 24-hour window                | `client.agentSessions.livekitToken(id)`          | `client.agent_sessions.livekit_token(id)`           | `client.AgentSessions.LivekitToken(ctx, id)`               |
+| Send an input event over HTTPS instead of the data channel | `client.agentSessions.sendInputEvent(id, event)` | `client.agent_sessions.send_input_event(id, event)` | `client.AgentSessions.SendInputEvent(ctx, id, event, nil)` |
+
+Connecting to the room and attaching the video track is done with
+the `livekit-client` library exactly as in steps 2–4; the Driftstack
+desktop app uses the same calls.
 
 ## See also
 

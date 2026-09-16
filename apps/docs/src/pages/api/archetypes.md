@@ -1,18 +1,18 @@
 ---
 layout: ../../layouts/DocLayout.astro
-title: Archetypes
+title: Device profiles
 description: Discover the currently selectable Driftstack device, iOS, and Safari combinations from the public API.
 ---
 
-# Archetypes
+# Device profiles
 
-An archetype is a device profile: the exact iPhone model, iOS version, and
-Safari version that a session or persistent profile is created with. Do not
+A device profile (`archetype` in the API) is the exact iPhone model, iOS
+version, and Safari version that a session or saved profile is created with. Do not
 hard-code a copied catalog: use this endpoint to populate selectors and
 validate configuration. It is the same list the desktop app and dashboard
 use.
 
-## List available archetypes
+## List available device profiles
 
 `GET /v1/archetypes`
 
@@ -49,10 +49,10 @@ Only customer-selectable entries are returned:
 - `available` — selectable, but not the default
 
 `default_archetype_id` is the launch default — what
-`POST /v1/sessions` or `POST /v1/profiles` gets when an archetype is omitted on
+`POST /v1/sessions` or `POST /v1/profiles` gets when `archetype` is omitted on
 a tier entitled to every device. A tier with a device entitlement (the free
 tier: iPhone 13 and iPhone 13 mini) gets its own default instead: the newest
-archetype of its first entitled device.
+device profile for its first entitled device.
 
 Direct session creation, profile creation, and profile import accept only an
 `id` present in the current response. Any other id returns
@@ -115,7 +115,7 @@ const sessionBody = await archetypeCreatePayload({
 ```
 
 If no capability filter is needed, omit `archetype` and let the server use
-the tier's default (`default_archetype_id` on tiers entitled to every device). Existing stored profiles keep their pinned archetype
+the tier's default (`default_archetype_id` on tiers entitled to every device). Existing stored profiles keep their pinned device profile
 even if it later leaves the selectable catalog; compatibility operations on
 those profiles remain available, but new direct creates and imports must choose
 from the live response.

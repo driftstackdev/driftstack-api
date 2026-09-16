@@ -31,6 +31,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ARCHETYPE_REGISTRY } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -128,6 +129,48 @@ describe('W599.A /use-cases/multi-account (operators + account teams)', () => {
     expect(body).toMatch(/\['Architecture \+ sessions', 'Acceptable use'\]\.includes\(g\.title\)/);
   });
 
+  // 2026-09-15 truth pass (product-truth sheets: repo §10.A.5, A1 §2, A3 §3/§4).
+  it('fingerprint / locale / motion claims are scoped: checked against real iPhones (not a blanket "match millions"), clock + time zone follow the exit (language is not claimed), motion is a per-profile MODE ("can follow"), and the free-tier device entitlement is data-bound from pricing.ts', () => {
+    expect(body).toMatch(/checked against real devices, check by check/);
+    expect(body).not.toMatch(/'device photos'/);
+    expect(body).not.toMatch(/match millions of real iPhones/);
+    expect(body).toMatch(/clock and time zone follow that location/);
+    expect(body).not.toMatch(/language and clock settings/);
+    expect(body).toMatch(
+      /can follow patterns taken from real human movement — available per profile/,
+    );
+    expect(body).not.toMatch(
+      /generated from patterns of real human movement, consistent per profile/,
+    );
+    expect(body).toMatch(/import \{ API_TIERS \} from '\.\.\/\.\.\/data\/pricing';/);
+    expect(body).toMatch(/on the\s*\{freeTier\.archetypeAccess\}, no card required/);
+    expect(body).toMatch(/is on Team and\s*Agency/);
+  });
+
+  // 2026-09-15 refuter pass: v1 profile snapshots carry metadata only
+  // (archetype + name — services/profile-snapshots.ts "Captures land empty
+  // {}"), restore mints a NEW empty profile rather than rolling one back, and
+  // the feature has no desktop-app surface — so a no-code operator page must
+  // not sell "snapshot before a risky change and bring that state back".
+  // Members are read-only (guides/team-rbac.md: every write is admin-only),
+  // and the audit log records a fixed event list (AccountAuditActionSchema),
+  // not "every account action".
+  it('under-sold shipped features named on the operator page — recycle bin, export/import, teammates with roles (admins run, members read-only), exportable audit log scoped to its recorded events (all live routes; repo truth sheet §10.B) — never the snapshot-as-rollback claim, never "members … work on your accounts", never "every account action"', () => {
+    expect(body).not.toMatch(/take a snapshot of a profile before a risky change/);
+    expect(body).not.toMatch(/bring that\s*state back later/);
+    expect(body).toMatch(/recover one you deleted from the recycle bin/);
+    expect(body).toMatch(/export\s*a profile and import it again/);
+    expect(body).not.toMatch(/invite teammates as members or\s*admins/);
+    expect(body).toMatch(
+      /invite teammates as admins who can\s*run your accounts under your plan, or as read-only members who can\s*view them but not change anything/,
+    );
+    expect(body).not.toMatch(/Every account action/);
+    expect(body).toMatch(
+      /Sign-ins, key changes, session\s*starts and stops, profile creates and deletes, and team changes land\s*in an audit log you can export/,
+    );
+    expect(body).toMatch(/audit log you can export/);
+  });
+
   it('CtaBand: primary /pricing#free + secondary /pricing#manual', () => {
     expect(body).toMatch(/primaryHref="\/pricing\/#free"/);
     expect(body).toMatch(/secondaryHref="\/pricing\/#manual"/);
@@ -164,6 +207,39 @@ describe('W599.A /use-cases/qa-testing (QA + engineering teams)', () => {
     expect(body).toMatch(/The free tier is manual-only/);
   });
 
+  // 2026-09-15 truth pass: engine claim in house style, device breadth data-bound.
+  it('engine claim is the house-style one — a build of Apple\'s own WebKit, the engine family behind iPhone Safari, checked against real iPhones — never "the exact engine" / "the same engine your iOS users actually run" / blanket "same rendering, same timing"', () => {
+    expect(body).toMatch(/the engine family behind iPhone Safari, checked against real iPhones/);
+    expect(body).not.toMatch(/the exact engine/);
+    expect(body).not.toMatch(/the same engine your iOS users actually run/);
+    expect(body).not.toMatch(/the same one your iOS users run/);
+    expect(body).not.toMatch(/Same rendering, same\s*JavaScript timing, same quirks/);
+  });
+
+  it('device Stat binds to DEVICE_SUPPORT (19 iPhone models, 13 → 17 Pro Max, selectableCount device profiles, Safari 18.4–26.6) instead of naming three model families by hand — and never "every iPhone", which the 19-model catalog does not support (no SE / 16e / Air)', () => {
+    expect(body).toMatch(/import \{ DEVICE_SUPPORT \} from '\.\.\/\.\.\/data\/capabilities';/);
+    expect(body).toMatch(
+      /19 iPhone models, from the 13 to the 17 Pro Max — \$\{DEVICE_SUPPORT\.selectableCount\} device profiles on iOS 18, Safari \$\{DEVICE_SUPPORT\.safariVersions\}/,
+    );
+    expect(body).not.toMatch(/every iPhone from the 13 to the 17 Pro Max/i);
+    expect(body).not.toMatch(/iPhone 15 Pro, 16 Pro, and the current 17 lineup/);
+  });
+
+  it('shipped developer surfaces named: capture kinds (screenshot / DOM / PDF), profile snapshots scoped to what ships (device + name, spins up a NEW profile, API only — never "known-good state to bring back"), session webhooks (completed / failed / challenge), device-code sign-in; AI agent on every API plan; free-tier devices data-bound', () => {
+    expect(body).toMatch(/returns a screenshot, the page's DOM, or a PDF/);
+    expect(body).not.toMatch(/snapshot that profile at a known-good state/);
+    expect(body).not.toMatch(/to bring back later/);
+    expect(body).toMatch(
+      /Through\s*the API, a profile snapshot saves that profile's device and name so\s*you can spin up a matching fresh profile later/,
+    );
+    expect(body).toMatch(
+      /Webhooks tell your pipeline when a session completes or fails, or\s*when a site throws a challenge/,
+    );
+    expect(body).toMatch(/browser-approved device code/);
+    expect(body).toMatch(/the AI agent is on every API plan/);
+    expect(body).toMatch(/The free tier is manual-only \(\{freeTier\.archetypeAccess\}\)/);
+  });
+
   it('CtaBand: primary /pricing#free + secondary docs.driftstack.io', () => {
     expect(body).toMatch(/primaryHref="\/pricing\/#free"/);
     expect(body).toMatch(/secondaryHref="https:\/\/docs\.driftstack\.io"/);
@@ -186,6 +262,26 @@ describe('W599.A /use-cases/web-scraping (data teams)', () => {
     expect(body).toMatch(/looks like one of millions of real iPhones/);
     expect(body).toMatch(
       /session after session; disguised desktop browsers produce a brand-new value every session — 100% unique, which is itself a giveaway/,
+    );
+  });
+
+  // 2026-09-15 truth pass (A1 §2: "population-stable" is false as a blanket; repo §10.A.5).
+  it('engine + identity claims scoped: a build of Apple\'s own WebKit (never "the browser Apple ships"), checked against real devices signal by signal (never "the real iPhone value on every one of them"), fixed-vs-deliberately-varied answers, clock + time zone (not language) follow the exit, AI agent + webhooks named for the API plans', () => {
+    expect(body).toMatch(
+      /Every session runs a build of\s*Apple's own WebKit — the engine family behind iPhone Safari/,
+    );
+    expect(body).not.toMatch(/browser\s*Apple ships/);
+    expect(body).toMatch(/checked against real devices, signal by signal/);
+    expect(body).not.toMatch(/real iPhone value on every one of them/);
+    expect(body).toMatch(/The fixed answers — screen, hardware, audio settings — stay fixed/);
+    expect(body).toMatch(
+      /the ones Safari deliberately varies are varied the way a real iPhone varies them/,
+    );
+    expect(body).not.toMatch(/'device photos'/);
+    expect(body).toMatch(/clock and time zone follow that location/);
+    expect(body).not.toMatch(/language and clock settings/);
+    expect(body).toMatch(
+      /The AI agent is on every API plan, and webhooks tell your job when a session completes, fails, or hits a challenge/,
     );
   });
 
@@ -270,6 +366,63 @@ describe('W599.A /how-it-works (zero-code explainer)', () => {
     expect(body).toMatch(/href="\/glossary\/"/);
   });
 
+  it('2026-09-15 truth pass: the AI agent carries its tier qualifier, the device breadth + default are BOUND to the registry / DEVICE_SUPPORT (not typed), and the retired install / wizard / blanket-takeover claims stay gone', () => {
+    // AI agent is OFF on Free and Personal (TIER_FEATURES.aiAgent) — every
+    // mention on this page names the plans that have it.
+    const qualifiers = body.match(/Team plans and up, and\s+(?:on\s+)?every API plan/g) ?? [];
+    expect(
+      qualifiers.length,
+      'every AI-agent mention carries the plan qualifier',
+    ).toBeGreaterThanOrEqual(4);
+    expect(body).toMatch(
+      /import \{ ARCHETYPE_REGISTRY, LOCKED_ARCHETYPE_ID \} from '@driftstack\/api-types';/,
+    );
+    expect(body).toMatch(/import \{ DEVICE_SUPPORT \} from '\.\.\/data\/capabilities';/);
+    expect(body).toMatch(/\{DEFAULT_DEVICE\}/);
+    expect(body).toMatch(/\{DEVICE_SUPPORT\.selectableCount\}/);
+    expect(body).toMatch(/\{DEVICE_SUPPORT\.safariVersions\}/);
+    // A missing registry entry fails the build rather than falling back.
+    // 2026-09-15 refuter fix: the catalog names 19 specific models between its
+    // endpoints (ARCHETYPE_REGISTRY carries no iPhone SE, 16e or Air row), so both
+    // breadth sentences say "N iPhone models, iPhone 13 → 17 Pro Max" with N DERIVED
+    // from the selectable registry rows — never "every iPhone" in that span, which
+    // would promise models the registry does not carry.
+    expect(body).toMatch(
+      /const DEVICE_MODEL_COUNT = new Set\(\s*ARCHETYPE_REGISTRY\.filter\(\(a\) => a\.status === 'launch' \|\| a\.status === 'available'\)\.map\(\s*\(a\) => a\.device,\s*\),\s*\)\.size;/,
+    );
+    expect(
+      (
+        body.match(/\{DEVICE_MODEL_COUNT\} iPhone models,\s+\{DEVICE_SUPPORT\.deviceFamilies\}/g) ??
+        []
+      ).length,
+      'both breadth sentences bind the derived model count to the DEVICE_SUPPORT span',
+    ).toBe(2);
+    expect(body).not.toMatch(/every iPhone from the\s+13/);
+    // Cross-source: the derivation the page runs yields the 19 the catalog documents.
+    const selectableModels = new Set(
+      ARCHETYPE_REGISTRY.filter((a) => a.status === 'launch' || a.status === 'available').map(
+        (a) => a.device,
+      ),
+    );
+    expect(selectableModels.size).toBe(19);
+    expect(body).toMatch(/if \(!lockedDevice\) \{\s*throw new Error/);
+    expect(body).not.toMatch(/iPhone 17 \/ iOS 18\.7 \/ Safari 26\.4/);
+    // The desktop app IS installed and HAS a first-run wizard (FirstRunWizard.tsx).
+    expect(body).not.toMatch(/nothing to install/);
+    expect(body).not.toMatch(/no\s+setup wizard/);
+    // Take-over is a pair-mode action, not a blanket promise.
+    expect(body).toMatch(/Run it in pair mode and you can take over any time/);
+    // Consequential-action gate + free-tier device entitlement named.
+    expect(body).toMatch(/looks like a purchase, a\s+payment, or an account deletion/);
+    expect(body).toMatch(/free tier starts you on an iPhone 13 or 13\s+mini/);
+    expect(body).toMatch(
+      /one profile on an iPhone 13 or 13 mini, 20-minute sessions, no card required/,
+    );
+    // Proxy Test readouts + the HTTP/3 fail-closed form (homepage wording).
+    expect(body).toMatch(/whether WebRTC and HTTP\/3 can travel through it/);
+    expect(body).toMatch(/switches HTTP\/3 off rather than letting it leak/);
+  });
+
   it('CtaBand: primary /pricing#free "Start free" + secondary /pricing "See pricing"', () => {
     expect(body).toMatch(/primaryHref="\/pricing\/#free"/);
     expect(body).toMatch(/secondaryHref="\/pricing\/"/);
@@ -338,6 +491,56 @@ describe('W599.A /glossary (quiet reference page)', () => {
   it('quiet reference page: no CtaBand (deliberate — the page is a dictionary, not a funnel step)', () => {
     expect(body).not.toMatch(/import CtaBand/);
     expect(body).not.toMatch(/<CtaBand/);
+  });
+
+  it('2026-09-15 truth pass: archetype breadth is BOUND to DEVICE_SUPPORT, egress drops the unverified locale claim and carries the HTTP/3 fail-closed form, identity claims are scoped, VPN is paid-plan, and the shipped AI agent / recording / recycle-bin terms exist', () => {
+    expect(body).toMatch(/import \{ DEVICE_SUPPORT \} from '\.\.\/data\/capabilities';/);
+    expect(body).toMatch(/id: 'archetype',[\s\S]{0,400}?\$\{DEVICE_SUPPORT\.selectableCount\}/);
+    expect(body).toMatch(/id: 'archetype',[\s\S]{0,600}?\$\{DEVICE_SUPPORT\.safariVersions\}/);
+    // 2026-09-15 refuter fix: 19 specific models, not every iPhone in the span (no
+    // iPhone SE, 16e or Air row). The glossary imports only DEVICE_SUPPORT, so the 19
+    // is typed there and held to the selectable registry rows here.
+    expect(body).toMatch(
+      /id: 'archetype',[\s\S]{0,600}?to choose from — 19 iPhone models, \$\{DEVICE_SUPPORT\.deviceFamilies\}, on iOS 18, with Safari \$\{DEVICE_SUPPORT\.safariVersions\}/,
+    );
+    expect(body).not.toMatch(/every iPhone from the\s+13/);
+    const selectableModels = new Set(
+      ARCHETYPE_REGISTRY.filter((a) => a.status === 'launch' || a.status === 'available').map(
+        (a) => a.device,
+      ),
+    );
+    expect(selectableModels.size, 'the typed 19 must track the selectable registry rows').toBe(19);
+    expect(
+      [...selectableModels].some((d) => /^iPhone (SE|16e|Air)\b/.test(d)),
+      'an iPhone SE / 16e / Air row landed — retype the glossary count and drop the gap wording',
+    ).toBe(false);
+    // Language/locale following the exit is unverified (A3 sheet); clock + time zone is the homepage claim.
+    expect(body).not.toMatch(/language and clock|locale and timezone/);
+    expect(body).toMatch(/clock and time zone follow the exit/);
+    expect(body).toMatch(
+      /on a proxy that can\\'t carry HTTP\/3, it is switched off rather than leaked/,
+    );
+    // Blanket identity claims are gone; the scoped form is present.
+    expect(body).not.toMatch(
+      /return the value a real iPhone returns, because the same engine draws/,
+    );
+    expect(body).not.toMatch(/the real iPhone engine|Apple's real browser engine/);
+    expect(body).toMatch(
+      /where Safari deliberately varies the value a little, Driftstack varies it the same way/,
+    );
+    // VPN files are a paid-plan feature (TIER_FEATURES.vpnEgress false on free).
+    expect(body).toMatch(
+      /On paid plans, Driftstack profiles accept your own OpenVPN \(\.ovpn\) or WireGuard \(\.conf\)/,
+    );
+    for (const id of ['ai-agent', 'recording', 'recycle-bin']) {
+      expect(body, `glossary anchor id missing: ${id}`).toMatch(new RegExp(`id: '${id}',`));
+    }
+    expect(body).toMatch(
+      /id: 'ai-agent',[\s\S]{0,200}?included on Team plans and up and on every API plan/,
+    );
+    expect(body).toMatch(/id: 'byok',[\s\S]{0,120}?\(Team plans and up, and every API plan\)/);
+    expect(body).toMatch(/id: 'recording',[\s\S]{0,200}?saved on your own computer/);
+    expect(body).toMatch(/id: 'recycle-bin',[\s\S]{0,120}?keeps it for 30 days/);
   });
 });
 

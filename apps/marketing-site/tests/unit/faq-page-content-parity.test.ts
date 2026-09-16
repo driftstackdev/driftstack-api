@@ -42,6 +42,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ARCHETYPE_REGISTRY } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -137,6 +138,15 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).not.toMatch(/within the free limits/);
     expect(body).not.toMatch(/driven from the API or the desktop GUI client/);
     expect(body).toMatch(/No per-hour metering, no credit decrement, no overage/);
+    // 2026-09-15 refuter fix: the old answer named one concurrent session as the
+    // sole limit — false: the free tier also ends a session at 20 minutes
+    // (MAX_SESSION_MINUTES_PER_TIER.free in services/sessions.ts; pricing.ts free
+    // row hoursLabel '20-minute sessions'). Both limits are named now.
+    expect(body).toMatch(
+      /The only limits are one session at a time and 20 minutes per session: a session that reaches 20 minutes ends on its own, and you can start another straight away, as often as you like\./,
+    );
+    expect(body).not.toMatch(/is the only limit/);
+    expect(body).not.toMatch(/as many manual session-hours as you want/);
   });
 
   it('concurrent-cap ladder pinned exactly (Solo=1 / Team=3 / Agency=8 / Starter=2 / Builder=8 / Scale=24)', () => {
@@ -267,6 +277,77 @@ describe('W368.A marketing-site /faq page content parity', () => {
 
   it('Enterprise pricing floor pinned: from $4,000/mo on annual contracts only', () => {
     expect(body).toMatch(/from \$4,000\/mo on annual contracts only/);
+  });
+
+  it('CRITICAL cross-source invariant: the "19 iPhone models" typed in the device-catalog answer is the count of distinct devices across the SELECTABLE registry rows (status launch | available), and the models the answer names as absent (iPhone SE / 16e / Air) are absent', () => {
+    const selectableModels = new Set(
+      ARCHETYPE_REGISTRY.filter((a) => a.status === 'launch' || a.status === 'available').map(
+        (a) => a.device,
+      ),
+    );
+    expect(selectableModels.size).toBe(19);
+    expect(body).toMatch(/across 19 iPhone models/);
+    expect(
+      [...selectableModels].some((d) => /^iPhone (SE|16e|Air)\b/.test(d)),
+      'an iPhone SE / 16e / Air row landed — retype the count and drop the gap sentence',
+    ).toBe(false);
+  });
+
+  it('2026-09-15 truth pass: AI-agent answers carry the tier qualifier, the free-tier device / proxy / no-agent shape is stated, the device catalog answer is BOUND to DEVICE_SUPPORT, and the retired blanket identity claims stay gone', () => {
+    expect(body).toMatch(/import \{ DEVICE_SUPPORT \} from '\.\/capabilities\.js';/);
+    // AI agent is OFF on Free and Personal (TIER_FEATURES.aiAgent).
+    expect(body).toMatch(/optional AI agent \(Team plans and up, and every API plan\)/);
+    expect(body).toMatch(
+      /<strong>agent session<\/strong> \(Team plans and up, and every API plan\)/,
+    );
+    expect(body).not.toMatch(/spotting what changed between screenshots|explore a flow on its own/);
+    // Consequential-action gate + closed verb set (agent-consequential-action.ts, agent-intents.ts).
+    expect(body).toMatch(/looks like a purchase, a payment, or an account deletion/);
+    expect(body).toMatch(/the AI cannot invent new ones/);
+    // Free tier: iPhone 13 / 13 mini (ARCHETYPE_DEVICES_PER_TIER.free), SOCKS5 only (vpnEgress false), no agent.
+    expect(body).toMatch(
+      /The free tier runs the iPhone 13 and iPhone 13 mini device profiles, exits through your own SOCKS5 proxy \(VPN files are a paid-plan feature\), and does not include the AI agent\./,
+    );
+    // Device catalog answer derives its counts, never types them.
+    expect(body).toMatch(
+      /q: 'Which iPhones can I run\?',\s*a: `\$\{DEVICE_SUPPORT\.selectableCount\} device profiles/,
+    );
+    expect(body).toMatch(/\$\{DEVICE_SUPPORT\.iosVersions\}/);
+    expect(body).toMatch(/\$\{DEVICE_SUPPORT\.safariVersions\}/);
+    expect(body).toMatch(/There are no iPad, Android, or desktop profiles\./);
+    // 2026-09-15 refuter fix: 19 specific models between the endpoints (no iPhone SE,
+    // 16e or Air row), the span bound to DEVICE_SUPPORT, and the gap stated in the one
+    // answer where a customer asks which iPhones exist — never "every iPhone" in the span.
+    expect(body).toMatch(
+      /device profiles across 19 iPhone models, \$\{DEVICE_SUPPORT\.deviceFamilies\}, on iOS \$\{DEVICE_SUPPORT\.iosVersions\}, with Safari \$\{DEVICE_SUPPORT\.safariVersions\}\./,
+    );
+    expect(body).toMatch(
+      /Not every iPhone in that span is included: there is no iPhone SE, 16e, or Air profile\./,
+    );
+    expect(body).not.toMatch(/every iPhone from the\s+13/);
+    // Blanket identity claims retired (A1 sheet: per-surface, noise-protected surfaces vary by design).
+    expect(body).not.toMatch(/bit for bit|all the way down|vanishingly rare|kernel timings/);
+    expect(body).not.toMatch(/the same browser code Apple ships/);
+    expect(body).toMatch(
+      /is checked against real iPhones, check by check; where Safari deliberately varies a value, Driftstack varies it the same way/,
+    );
+    expect(body).toMatch(/href="\/trust\/cumulative-rig\/"/);
+    // Under-sold shipped features now answered: recordings (local), recycle bin / snapshots, OAuth + CLI sign-in, MFA, crypto receipts, team invites + audit export.
+    expect(body).toMatch(/q: 'Can I record or replay a session\?'/);
+    expect(body).toMatch(/Driftstack keeps no server-side copy/);
+    expect(body).toMatch(/q: 'What happens to a profile I delete\?'/);
+    expect(body).toMatch(/restorable for 30 days/);
+    expect(body).toMatch(/snapshots do not include cookies or logins/);
+    expect(body).toMatch(/q: 'Can other tools sign in to my account on my behalf\?'/);
+    expect(body).toMatch(/OAuth 2\.0 with PKCE/);
+    expect(body).toMatch(/device-code sign-in/);
+    expect(body).toMatch(
+      /q: 'Can I protect my dashboard sign-in with two-factor authentication\?'/,
+    );
+    expect(body).toMatch(/single-use recovery codes/);
+    expect(body).toMatch(/downloads its receipt as PDF or plain text/);
+    expect(body).toMatch(/Invite teammates by email from the desktop app\\'s Team view/);
+    expect(body).toMatch(/the whole audit log can be exported as CSV or JSON at any time/);
   });
 
   it('accent-colored link text in answers uses the AA-safe text-tk-accent-text tone (design-system v2)', () => {

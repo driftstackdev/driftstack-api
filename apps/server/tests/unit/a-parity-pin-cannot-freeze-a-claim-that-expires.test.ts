@@ -95,6 +95,8 @@ const HAND_MAINTAINED_COUNT =
  * it was not the delta. Diffing the two offender sets was. An assumption about which
  * member a measurement added is not a measurement, and this one was wrong.
  *
+ * Ratcheted 90 → 89 on 2026-09-15 when the plain-words copy pass retired a hand-listed
+ * count in a marketing parity pin.
  * Ratcheted 91 → 90 by V-1130, which retired the SDK-installation pin's hand-listed
  * thirteen-accessor roster. That one was the offender shape in its purest form: the
  * roster WAS its own population, so it could not report the four shipped resources
@@ -129,7 +131,7 @@ const HAND_MAINTAINED_COUNT =
  * that were both broken — the comparison measured nothing and agreed with itself.
  * The fixture case below is what actually caught it.
  */
-const CEILINGS = { futureTense: 75, handMaintainedCount: 90 } as const;
+const CEILINGS = { futureTense: 75, handMaintainedCount: 89 } as const;
 
 function parityPinFiles(): string[] {
   return readdirSync(UNIT_DIR)

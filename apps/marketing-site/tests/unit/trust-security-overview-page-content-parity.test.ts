@@ -196,6 +196,38 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     );
   });
 
+  // 2026-09-15 truth pass — shipped, previously unmarketed controls now on the
+  // checklist, each with its code path (W262.C verifies every cited path exists).
+  it('device-code sign-in, active sign-ins list + revoke, and audit-log CSV/JSON export are on the checklist with their code paths', () => {
+    // 2026-09-15 refuter: no command-line tool ships (no package declares a
+    // bin; the SDKs have no console entry point) and the credential issued is
+    // a RESTRICTED device credential (apps/server/src/services/api-keys.ts
+    // assertNotDeviceKey: it cannot mint, rotate or revoke keys; routes/
+    // auth-cli.ts DEFAULT_KEY_NAME = 'Desktop client'; apps/docs api/auth.md
+    // "Desktop device activation flow"), so the heading names the desktop app
+    // only and the body no longer says "its own API key".
+    expect(body).toMatch(
+      /<p class="font-medium text-tk-ink">Device-code sign-in for the desktop app<\/p>/,
+    );
+    expect(body).toMatch(
+      /the app receives a restricted\s+credential of its own — nothing is copied by hand/,
+    );
+    expect(body).not.toMatch(/command-line tools/);
+    expect(body).not.toMatch(/receives its own API key/);
+    expect(body).toMatch(
+      /stored only as a\s+sha256 hash, compared in constant time, expires after five\s+minutes, and works exactly once/,
+    );
+    expect(body).toMatch(
+      /apps\/server\/src\/routes\/auth-cli\.ts · apps\/server\/src\/services\/cli-authorize\.ts/,
+    );
+    expect(body).toMatch(/Active sign-ins: listed, revocable, and ended by a password change/);
+    expect(body).toMatch(/revoke one, or all except the one you are\s+using/);
+    expect(body).toMatch(/apps\/server\/src\/routes\/account-web-sessions\.ts/);
+    expect(body).toMatch(/Audit log: exportable as CSV or JSON/);
+    expect(body).toMatch(/up to 10,000 rows per export; your GDPR\s+Article 20 portability right/);
+    expect(body).toMatch(/apps\/server\/src\/routes\/account-audit\.ts/);
+  });
+
   it('cross-link to /security architecture deep-dive pinned', () => {
     expect(body).toMatch(
       /<a href="\/security\/" class="text-tk-accent-text underline">architecture deep-dive at \/security<\/a>/,

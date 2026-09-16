@@ -233,7 +233,7 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     for (const [href, label] of [
       ['/api/', 'API overview'],
       ['/api/versioning/', 'Versioning policy'],
-      ['/api/archetypes/', 'Archetypes'],
+      ['/api/archetypes/', 'Device profiles'],
       ['/api/sessions/', 'Sessions'],
       ['/api/agent-sessions/', 'Agent sessions'],
       ['/api/recipes/', 'Recipes'],

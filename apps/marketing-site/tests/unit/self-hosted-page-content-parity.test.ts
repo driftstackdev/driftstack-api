@@ -12,8 +12,13 @@
 //     / Mac Studio Ultra / Mac Pro / multi-node cluster).
 //   • "Session content never leaves your perimeter" privacy
 //     framing pinned — the load-bearing differentiator vs SaaS.
-//   • Driftstack-side scope: "control plane sees license +
-//     session metadata, never the session itself".
+//   • Driftstack-side scope (2026-09-15): the customer runs the
+//     Driftstack server on their own Macs, so the session record is
+//     theirs too and Driftstack holds no copy of content or record.
+//     The page must not describe a Driftstack-hosted service that
+//     receives a license or session details — no such code exists;
+//     apps/docs license-activation.md, Terms §3 and the self-hosted
+//     runbook all have the customer running the server.
 //   • 3 "when self-hosted is the right call" categories pinned
 //     (Privacy / Volume / Sovereignty).
 //   • 4-step process pinned (Contact sales / Procure hardware
@@ -32,6 +37,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/self-hosted.astro');
 const PRICING_DATA = resolve(REPO_ROOT, 'apps/marketing-site/src/data/pricing.ts');
+const PRICING_PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/pricing.astro');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -72,12 +78,22 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
     );
   });
 
-  it('control-plane scope claim pinned (sees license + metadata, never session itself)', () => {
-    // S20c 2026-07-06 plain-language pass: metadata glossed inline.
-    // 2026-09-15: "control plane" is banned on customer surfaces; the
-    // sees-only-license-and-basic-details scope is unchanged.
+  it('Driftstack-side scope pinned (2026-09-15): the session record lives on the customer-run server too, Driftstack holds no copy of content or record, and desktop crash reporting is off by default on self-hosted', () => {
+    // Until 2026-09-15 this block pinned "Driftstack sees only your
+    // license and basic session details". No code sends either from a
+    // self-hosted server (grep -i license apps/server/src: nothing), and
+    // apps/docs/src/pages/license-activation.md ("Set up the Driftstack
+    // server on your own hardware"), Terms §3 ("a self-hosted deployment
+    // Customer runs") and docs/runbooks/self-hosted-mac-local.md all have
+    // the customer running the server — so the record of a session is on
+    // their server, not ours. The crash-reporting default is
+    // apps/gui-client/src/lib/telemetry.ts (`telemetryEnabled`: with no
+    // explicit opt-in it fires only for a cloud base URL).
     expect(body).toMatch(
-      /Driftstack sees only your license and basic session\s+details — when a session started, which profile ran — never the\s+session itself/,
+      /Session content \(URLs, form data, captures, recordings\) stays inside\s+your network, and so does the record of your sessions — when one\s+started, which profile ran — because the server that keeps it is\s+yours\. Driftstack holds no copy of either\. Crash reporting in the\s+desktop app is off by default when the app points at a self-hosted\s+server\./,
+    );
+    expect(body).not.toMatch(
+      /sees only your license|license, API keys|hosts the service that starts|coordination service|you supply the machines/,
     );
   });
 
@@ -128,9 +144,18 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
   it('ASCII architecture diagram present with secure-channel callout', () => {
     // 2026-09-15: banned words (fleet / control plane / orchestration)
     // left the diagram; the two sides and the HTTPS link survive.
-    expect(body).toMatch(/YOUR MACS[\s\S]+?DRIFTSTACK SERVICE/);
+    // 2026-09-15: the right-hand column is Driftstack the supplier
+    // (software releases, device-profile updates), not a hosted service;
+    // the left column shows the Driftstack server itself on the
+    // customer's Macs.
+    expect(body).toMatch(/YOUR MACS[\s\S]+?DRIFTSTACK\n/);
     expect(body).toMatch(/Your Macs/);
-    expect(body).toMatch(/Driftstack service/);
+    expect(body).toMatch(/│  Driftstack {10}│/);
+    expect(body).toMatch(/\(software releases,\s+│[\s\S]+?device-profile[\s\S]+?updates\)/);
+    expect(body).toMatch(/│  Driftstack {6}│\s+│  server, desktop │\s+│  app, sessions {3}│/);
+    expect(body).not.toMatch(
+      /DRIFTSTACK SERVICE|Driftstack service|license, API keys|session details\)/,
+    );
     expect(body).toMatch(/secure ───/);
     expect(body).toMatch(/connection/);
     expect(body).toMatch(/\(HTTPS\)/);
@@ -149,6 +174,72 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
     // doesn't gate concurrent count on owned hardware.
     expect(body).toMatch(
       /How many sessions can run at once depends on your hardware, not your license\./,
+    );
+  });
+
+  it('2026-09-15 what-ships pass: hero names the engine the house-style way, the privacy card scopes "never leaves" to session content, Onboard sets up team accounts and roles, and the Run step lists what the desktop app and account already include', () => {
+    expect(body).toMatch(
+      /Same SDK, same desktop app, and device profiles from the same\s+catalog — a build of Apple's own WebKit, the engine family behind\s+iPhone Safari, checked against real iPhones — just running on\s+hardware you own and inside a network you control\./,
+    );
+    expect(body).not.toMatch(/same iPhone Safari fidelity|the same browser Apple ships/i);
+    expect(body).toMatch(/Mac mini or Mac Studio; session content\s+never leaves your network\./);
+    expect(body).not.toMatch(/; nothing leaves\s+your network/);
+    expect(body).toMatch(/set up\s+your team's accounts and roles/);
+    expect(body).not.toMatch(/admin console/);
+    // 2026-09-15 refuter: the desktop app has no audit-log export and no
+    // two-factor step (grep audit-log/export|mfa|two-factor in
+    // apps/gui-client/src: only an error string and redaction keys), so
+    // those belong to the account, not the app.
+    // Second pass 2026-09-15: the desktop app has no profile-snapshot
+    // surface (apps/gui-client/src 'snapshot' hits are diagnostic dumps),
+    // v1 snapshots capture device + name only (services/profile-
+    // snapshots.ts), and GET /v1/profiles/:id/export is metadata-only, so
+    // the app is credited with a recycle bin and settings export/import.
+    expect(body).toMatch(
+      /The desktop app is the same as well: profiles with a\s+recycle bin and export\/import of their settings as a file, and a\s+proxy or VPN attached per profile, with a Test readout before\s+you launch\. Your account keeps team roles, an audit log you\s+can export as CSV, and two-factor sign-in\./,
+    );
+    expect(body).not.toMatch(/The desktop app is the same as well:[^.]*snapshots/);
+    expect(body).not.toMatch(
+      /The desktop app is the same as well:[^.]*(?:audit log|two-factor|team roles)/,
+    );
+  });
+
+  it("2026-09-15 deployment model: the Driftstack server runs on the customer's Macs (hero + architecture paragraph), and no Driftstack-hosted service is described", () => {
+    // apps/docs/src/pages/license-activation.md ("Set up the Driftstack
+    // server on your own hardware … paste the URL of your server"), Terms §3
+    // ("a self-hosted deployment Customer runs against Customer's own …")
+    // and docs/runbooks/self-hosted-mac-local.md agree; nothing in
+    // apps/server/src reports a license or session details to a hosted
+    // service.
+    expect(body).toMatch(
+      /The Driftstack server that starts and manages your sessions runs\s+on your Macs as well, with the desktop app pointed at it; we\s+install and set it up with you\./,
+    );
+    expect(body).toMatch(
+      /Self-hosted is the whole of Driftstack running on Mac hardware\s+you own: the server that starts and manages sessions, the desktop\s+app pointed at it, and the sessions themselves\. We supply the\s+software, its updates and new device profiles, and the developer\s+kit \(SDK\) — and we never hold what happens inside your sessions\./,
+    );
+    expect(body).not.toMatch(
+      /Driftstack hosts the service|coordination service|you supply the machines/,
+    );
+  });
+
+  it('cross-page parity: /pricing#self-hosted renders the same support line for every self-hosted SKU as this page (one data file, one promise)', () => {
+    // Refuter 2026-09-15: this page said "1h SLA" for Self-Hosted Enterprise
+    // while pricing.astro's mirror of fmtSupportTier still said "48h target"
+    // for the same `dedicated_csm_1h` SKU — and the two "See pricing"
+    // buttons here link straight to that row. Both formatters must agree,
+    // and the Enterprise string must be the Terms §9.2 grant.
+    const cases = (src: string): Record<string, string> =>
+      Object.fromEntries(
+        Array.from(
+          src.matchAll(/case '(email_48h|email_slack_12h|dedicated_csm_1h)':\s*return '([^']+)';/g),
+        ).map((m) => [m[1] as string, m[2] as string]),
+      );
+    const here = cases(body);
+    const there = cases(read(PRICING_PAGE));
+    expect(Object.keys(here).sort()).toEqual(['dedicated_csm_1h', 'email_48h', 'email_slack_12h']);
+    expect(there).toEqual(here);
+    expect(here['dedicated_csm_1h']).toBe(
+      'Dedicated account manager · 1h SLA for first reply on critical (Severity-1) incidents',
     );
   });
 });

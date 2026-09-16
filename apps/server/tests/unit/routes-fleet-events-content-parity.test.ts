@@ -172,7 +172,7 @@ describe('routes/fleet-events content parity', () => {
 
   it('disabled variant pinned: stable 503 detail without internal infrastructure or design-doc leakage', () => {
     expect(body).toMatch(
-      /export function registerFleetEventsDisabledRoutes\(app: FastifyInstance\): void \{\s*const detail = 'Fleet events stream is unavailable on this deployment\.';/,
+      /export function registerFleetEventsDisabledRoutes\(app: FastifyInstance\): void \{\s*const detail = 'Machine connections are not enabled on this deployment\.';/,
     );
     const disabled = body.slice(
       body.lastIndexOf('export function registerFleetEventsDisabledRoutes'),

@@ -79,17 +79,39 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     expect(body).toMatch(/Six promises in place today/);
     expect(body).not.toMatch(/Five pillars shipped today|Six pillars shipped today/);
     expect(body).toMatch(/everything between you and us\s+is encrypted \(TLS\)/);
+    // 2026-09-15 truth pass: the VPN schemes are named (they ship as
+    // customer-attached egress — see W332.B); the desktop app never launches a
+    // profile without an attached proxy (apps/gui-client/src/views/
+    // ProfilesView.tsx).
+    // 2026-09-15 refuter: the "managed exit" fallback was an INVENTED feature —
+    // no Driftstack-run exit is configured for production (infra/env-templates/
+    // production.env.template leaves DEFAULT_EGRESS_HOST/PORT empty on purpose:
+    // "UNSET IS VALID AND DELIBERATE"; production.env carries no DEFAULT_EGRESS_*
+    // line; apps/server/src/routes/agent-sessions.ts dispatches NO proxy when
+    // proxy_id is omitted and a REQUIRE_PROXY=1 node refuses by name). The page
+    // now says an API session names a saved proxy and that no shared Driftstack
+    // exit exists; the old clause is negatively pinned so it cannot return.
+    // VPN exits are tier-gated (TIER_FEATURES.free.vpnEgress = false) — stated.
     expect(body).toMatch(
-      /each profile can use a SOCKS5 proxy you\s+choose, or our managed exit if you don't attach one/,
+      /each profile can use a SOCKS5 proxy or, on\s+paid plans, a VPN \(OpenVPN or WireGuard\) you choose — the\s+desktop app launches only through one you attach, an API\s+session names one of your saved proxies, and we do not route\s+your traffic through a shared exit of our own/,
     );
+    expect(body).not.toMatch(/managed exit/);
     expect(body).not.toMatch(/OpenVPN \/ WireGuard VPN/);
     expect(body).toMatch(
       /API keys\s+are stored only as one-way hashes that nobody — including us —\s+can read back/,
     );
     expect(body).toMatch(/every webhook is signed so you can confirm it\s+came from us/);
     expect(body).toMatch(/your whole team can view but only admins can\s+change/);
+    // 2026-09-15: "no built-in way" — the same honest scope /security uses
+    // (W333.B negatively pins the blanket "no way to join" there).
     expect(body).toMatch(
-      /the live view of a session is encrypted in\s+transit, not kept by default, and gives Driftstack staff no\s+way to join it/,
+      /the live view of a session is encrypted in\s+transit, not kept by default, and gives Driftstack staff no\s+built-in way to join it/,
+    );
+    expect(body).not.toMatch(/gives Driftstack staff no\s+way to join it/);
+    // Shipped account-security controls the hub used to leave unmentioned;
+    // none is tier-gated (TIER_FEATURES carries no MFA / web-session / audit flag).
+    expect(body).toMatch(
+      /Two-factor sign-in, an active\s+sign-ins list you can revoke from, and a CSV export of your\s+audit log come with every plan\./,
     );
     expect(body).not.toMatch(/keeps our staff from\s+ever seeing your session content/);
     expect(body).toMatch(/Our API and main database run in the EU/);
@@ -135,12 +157,13 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     expect(body).not.toMatch(/certifications are in progress|penetration-test reports/);
   });
 
-  it("Quick-reference 6-question buyer FAQ: 'Where is data hosted?' + 'Do you see our destination URLs?' + 'Are API keys recoverable by staff?' + 'How do we get a DPA on file?' + 'What's the incident-response SLA?' + 'How do we get a security questionnaire answered?' — pinned so the 6-question buyer-evaluation FAQ stays complete (drift to dropping 'API keys recoverable' would obscure the scrypt-hashing posture; drift to dropping 'see destination URLs' would obscure the egress-via-customer-proxy posture)", () => {
+  it("Quick-reference 7-question buyer FAQ: 'Where is data hosted?' + 'Do you see our destination URLs?' + 'Are API keys recoverable by staff?' + 'How do we get a DPA on file?' + 'What's the incident-response SLA?' + 'Can we use two-factor sign-in and see who is signed in?' (added 2026-09-15) + 'How do we get a security questionnaire answered?' — pinned so the buyer-evaluation FAQ stays complete (drift to dropping 'API keys recoverable' would obscure the scrypt-hashing posture; drift to dropping 'see destination URLs' would obscure the egress-via-customer-proxy posture)", () => {
     expect(body).toMatch(/Where is data hosted\?/);
     expect(body).toMatch(/Do you see our destination URLs\?/);
     expect(body).toMatch(/Are API keys recoverable by staff\?/);
     expect(body).toMatch(/How do we get a DPA on file\?/);
     expect(body).toMatch(/What's the incident-response SLA\?/);
+    expect(body).toMatch(/Can we use two-factor sign-in and see who is signed in\?/);
     expect(body).toMatch(/How do we get a security questionnaire answered\?/);
   });
 
@@ -155,8 +178,13 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
   });
 
   it('Destination-URL answer distinguishes control-plane URL processing/event recording from browser egress', () => {
+    // 2026-09-15 truth pass: VPN named alongside SOCKS5 (desktop app always
+    // attaches one). 2026-09-15 refuter: the "managed exit" fallback for API
+    // sessions does not exist in the shipped config (see the security-card
+    // pin above) — the answer now says a saved proxy is named and no shared
+    // Driftstack exit is used.
     expect(body).toMatch(
-      /Yes\. When you or your agent open a URL, Driftstack processes\s+that URL and keeps a record of the visit for your account\. The\s+page traffic itself goes out through your own SOCKS5 proxy if\s+the profile has one, or through Driftstack's managed exit if\s+not\./,
+      /Yes\. When you or your agent open a URL, Driftstack processes\s+that URL and keeps a record of the visit for your account\. The\s+page traffic itself goes out through your own SOCKS5 proxy or\s+VPN — the desktop app always launches through one, and an API\s+session names one of your saved proxies\. Driftstack does not\s+route it through a shared exit of its own\./,
     );
     expect(body).not.toMatch(/OpenVPN \/ WireGuard VPN/);
     expect(body).not.toMatch(/the\s+addresses you visit don't pass through us/);

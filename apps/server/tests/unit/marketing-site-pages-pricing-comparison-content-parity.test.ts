@@ -131,6 +131,43 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
     expect(body).not.toMatch(/href="\/pricing"/);
   });
 
+  // 2026-09-15 truth pass — the free card previously claimed "every iPhone
+  // model, iOS version and Safari version we currently offer"; the free
+  // entitlement is iPhone 13 + 13 mini (ARCHETYPE_DEVICES_PER_TIER), no API,
+  // no VPN, no AI agent (TIER_FEATURES). The two gates now render as rows
+  // from pricing.ts, and the device-breadth gloss binds to DEVICE_SUPPORT.
+  it('free card states the real free shape (data-bound devices; no API/SDK, no VPN, no AI agent) and the old every-device claim is gone', () => {
+    expect(body).not.toMatch(
+      /Includes every iPhone model, iOS version and Safari\s*version we currently offer/,
+    );
+    expect(body).toMatch(
+      /\{freeTier\.profiles\} profile, \{freeTier\.concurrent\} session\s*at a time, driven by hand in the desktop app, on the\s*\{freeTier\.archetypeAccess\}\./,
+    );
+    // 2026-09-15 refuter: the free tier's one proxy may be SOCKS5 or HTTP —
+    // routes/account-me.ts gates only the openvpn/wireguard schemes.
+    expect(body).not.toMatch(/\(one\s*SOCKS5 proxy of your own\)/);
+    expect(body).toMatch(
+      /No API or SDK access, no VPN \(one\s*SOCKS5 or HTTP proxy of your own\), and no AI agent\./,
+    );
+    expect(body).toMatch(/the AI agent starts at\s*Team and is on every API tier\./);
+  });
+
+  it('Features group carries data-bound "API and SDK access" + "VPN exits" rows (pricing.ts apiAccess / vpnEgress) and the footnote binds the device-breadth gloss to DEVICE_SUPPORT', () => {
+    expect(body).toMatch(/import \{ DEVICE_SUPPORT \} from '\.\.\/\.\.\/data\/capabilities';/);
+    expect(body).toMatch(
+      /label: 'API and SDK access',\s*get: \(t: \(typeof API_TIERS\)\[number\]\): string =>\s*t\.apiAccess \? 'Included' : 'Not on this tier',/,
+    );
+    expect(body).toMatch(
+      /label: 'VPN exits \(OpenVPN, WireGuard\)',\s*get: \(t: \(typeof API_TIERS\)\[number\]\): string =>\s*t\.vpnEgress \? 'Included' : 'SOCKS5 or HTTP proxy only',/,
+    );
+    expect(body).not.toMatch(/'SOCKS5 proxy only'/);
+    // 2026-09-15 refuter: 19 named models, never "every iPhone" (no SE / 16e / Air).
+    expect(body).toMatch(
+      /means 19 iPhone models, from the 13 to the 17 Pro Max\s*\(\{DEVICE_SUPPORT\.selectableCount\} device types\) on iOS 18, Safari\s*\{DEVICE_SUPPORT\.safariVersions\}\./,
+    );
+    expect(body).not.toMatch(/every iPhone from the 13 to the 17 Pro Max/i);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

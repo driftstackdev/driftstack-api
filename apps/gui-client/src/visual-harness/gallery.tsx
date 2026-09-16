@@ -243,7 +243,11 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
     props: base({
       name: 'tokyo sneakers',
       quicMeasured: 'h3',
-      osFingerprint: { os: 'macos-or-ios', confidence: 'high', reason: 'SYN/TTL 64, MSS 1460' },
+      osFingerprint: {
+        os: 'macos-or-ios',
+        confidence: 'high',
+        reason: 'network signature matches an Apple device',
+      },
     }),
   },
   {
@@ -261,7 +265,11 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       onEdit: noop,
       onTrim: noop,
       onActivity: noop,
-      osFingerprint: { os: 'macos-or-ios', confidence: 'high', reason: 'SYN/TTL 64, MSS 1460' },
+      osFingerprint: {
+        os: 'macos-or-ios',
+        confidence: 'high',
+        reason: 'network signature matches an Apple device',
+      },
     }),
   },
   {
@@ -409,7 +417,7 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
   },
   { label: 'healthy · testing', props: base({ testing: true }) },
   {
-    label: 'vpn · idle (fleet latency)',
+    label: 'vpn · idle (latency from Driftstack)',
     props: base({
       name: 'zurich banking',
       monogram: 'ZB',
@@ -454,7 +462,7 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
     }),
   },
   {
-    label: 'vpn · no verdict yet',
+    label: 'vpn · no result yet',
     props: base({
       name: 'madrid tickets',
       monogram: 'MT',
@@ -541,7 +549,7 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
     }),
   },
   {
-    label: 'socks5 · server vantage',
+    label: 'socks5 · latency from the server',
     props: base({
       latencyFromServer: true,
       latencyVantage: { measuredFrom: 'control_plane' },
@@ -608,7 +616,11 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       onEdit: noop,
       onTrim: noop,
       onActivity: noop,
-      osFingerprint: { os: 'macos-or-ios', confidence: 'high', reason: 'SYN/TTL 64, MSS 1460' },
+      osFingerprint: {
+        os: 'macos-or-ios',
+        confidence: 'high',
+        reason: 'network signature matches an Apple device',
+      },
       detailsInitiallyOpen: true,
     }),
   },
@@ -859,7 +871,7 @@ export function Gallery(): JSX.Element {
       </div>
 
       <h1 className="mb-3 mt-10 text-lg font-semibold text-ink-primary">
-        Command Center — Plan KPI (T-18)
+        Command Center — Plan KPI
       </h1>
       <p className="mb-3 text-sm text-ink-secondary">
         The plan tier is a category, so the Plan value is a TierBadge pill, not the big-number
@@ -1150,9 +1162,9 @@ export const MARKETING_CARDS: ReadonlyArray<{ label: string; props: ProfilePhone
     },
   },
   {
-    label: 'vpn · idle (fleet latency)',
+    label: 'vpn · idle (latency from Driftstack)',
     props: {
-      ...stateProps('vpn · idle (fleet latency)'),
+      ...stateProps('vpn · idle (latency from Driftstack)'),
       proxyName: 'WireGuard CH #42',
       proxyAddress: 'ch-42.vpn.example.com:51820',
       exitIp: TEST_NET.ch,
@@ -2131,12 +2143,13 @@ function SimulatorScene(): JSX.Element {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1 space-y-0.5">
-                      {/* The real strip's own shape: mode · ws host · transport,
+                      {/* The real strip's own shape: mode · link state · route,
                           then fps · rtt · 🌍 proxy · timezone (SimulatorWindow.tsx
-                          ~9817). It used to read `Manual · ws ✓ · webrtc` /
-                          `60 fps · 38 ms · egress live` — three readouts the app
-                          never renders (`egress live` exists nowhere in src, and
-                          `· ws ✓` belongs to the Link card below). */}
+                          "sim-drawer-status"). It used to read a ws tick and
+                          `webrtc` / `60 fps · 38 ms · egress live` — readouts the
+                          app never renders; the live strip says `connected` and
+                          `direct`, and names no host (owner directive 2026-09-15:
+                          the customer sees WHAT they get, never HOW it runs). */}
                       {/* BOTH lines WRAP where the real strip truncates. The
                           real strip hangs no `title` on either, and a title is
                           invisible in a PNG anyway; a clipped untitled element
@@ -2148,9 +2161,9 @@ function SimulatorScene(): JSX.Element {
                       <div className="break-words">
                         <span className="text-white/90">Manual</span>
                         <span className="text-white/30"> · </span>
-                        <span>eu-1.fleet.example.com</span>
+                        <span>connected</span>
                         <span className="text-white/30"> · </span>
-                        <span className="text-ink-secondary">udp</span>
+                        <span className="text-ink-secondary">direct</span>
                       </div>
                       <div className="break-words">
                         <span>60fps · </span>
@@ -2248,14 +2261,13 @@ function SimulatorScene(): JSX.Element {
                     <div className="mt-0.5 truncate">iPhone 17</div>
                   </div>
                   <div className={infoCard}>
-                    {/* The fleet node that RUNS the device — deliberately not the
-                        exit's region: the Mac hosting the session and the proxy
-                        it egresses through are independent by design, which is
-                        why the drawer labels them Link and Egress separately. */}
+                    {/* The Link card mirrors the real drawer: "Connected ✓", no
+                        host and no "ws" marker (owner directive 2026-09-15). The
+                        machine hosting the session and the proxy it egresses
+                        through are independent by design, which is why the
+                        drawer labels them Link and Egress separately. */}
                     <div className={infoLabel}>Link</div>
-                    <div className="mt-0.5 truncate">
-                      eu-1.fleet.example.com<span className="text-white/50"> · ws ✓</span>
-                    </div>
+                    <div className="mt-0.5 truncate">Connected ✓</div>
                   </div>
                   <div className={infoCard}>
                     <div className={infoLabel}>Egress</div>
@@ -2272,12 +2284,12 @@ function SimulatorScene(): JSX.Element {
                   </div>
                   <div className={`${infoCard} font-mono text-[10px] leading-relaxed`}>
                     <div className={`font-sans ${infoLabel}`}>Identity</div>
-                    <div className="mt-0.5 truncate">engine-deep · bit-exact device</div>
+                    <div className="mt-0.5 truncate">Verified iPhone device</div>
                     {/* The real card's 4th line is `build {__BUILD_STAMP__}`.
                         Omitted: in the harness that define is absent, so it
                         renders `build dev` — and any value I typed instead
                         would be a build stamp nobody built. */}
-                    <div className="truncate">input human-cadence native</div>
+                    <div className="truncate">Native touch input</div>
                   </div>
                 </div>
               </div>

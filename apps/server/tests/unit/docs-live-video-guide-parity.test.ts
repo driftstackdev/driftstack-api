@@ -90,12 +90,15 @@ describe('Arc 6 docs.live-video — guides/live-video.md parity', () => {
     expect(body).not.toMatch(/HS256|per-Mac secret/);
   });
 
-  it('links to the gui-client reference implementation paths', () => {
-    expect(body).toMatch(/apps\/gui-client\/src\/lib\/livekit\.ts/);
-    expect(body).toMatch(/apps\/gui-client\/src\/components\/AgentSessionPanel\.tsx/);
-    expect(body).toMatch(/apps\/gui-client\/src\/components\/LivekitConnectionBadge\.tsx/);
-    expect(body).toMatch(/apps\/gui-client\/src\/lib\/livekit-input-capture\.ts/);
-    expect(body).toMatch(/apps\/gui-client\/src\/lib\/livekit-latency-ping\.ts/);
+  it('names the SDK helpers for each step instead of repo file paths (2026-09-15: the page used to list apps/gui-client/src/… files as a reference implementation, which a customer cannot open — the SDK methods are what they can call)', () => {
+    expect(body).toMatch(/^## SDK helpers$/m);
+    expect(body).toMatch(/`client\.agentSessions\.create\(\)`/);
+    expect(body).toMatch(/`client\.agentSessions\.livekitToken\(id\)`/);
+    expect(body).toMatch(/`client\.agentSessions\.sendInputEvent\(id, event\)`/);
+    expect(body).toMatch(/`client\.agent_sessions\.livekit_token\(id\)`/);
+    expect(body).toMatch(/`client\.AgentSessions\.LivekitToken\(ctx, id\)`/);
+    expect(body).not.toMatch(/apps\/gui-client\//);
+    expect(body).not.toMatch(/## Reference SDK/);
   });
 
   it('cross-links to /api/agent-sessions reference', () => {

@@ -62,14 +62,20 @@ import StatusBadge from '../../components/StatusBadge.astro';
                jurisdiction (EU + US replication). */}
           <p class="mt-3 text-sm text-tk-ink-2">
             Six promises in place today: everything between you and us
-            is encrypted (TLS); each profile can use a SOCKS5 proxy you
-            choose, or our managed exit if you don't attach one; API keys
+            is encrypted (TLS); each profile can use a SOCKS5 proxy or, on
+            paid plans, a VPN (OpenVPN or WireGuard) you choose — the
+            desktop app launches only through one you attach, an API
+            session names one of your saved proxies, and we do not route
+            your traffic through a shared exit of our own; API keys
             are stored only as one-way hashes that nobody — including us —
             can read back; every webhook is signed so you can confirm it
             came from us; your whole team can view but only admins can
             change; and the live view of a session is encrypted in
             transit, not kept by default, and gives Driftstack staff no
-            way to join it. Our API and main database run in the EU; the
+            built-in way to join it. Two-factor sign-in, an active
+            sign-ins list you can revoke from, and a CSV export of your
+            audit log come with every plan.
+            Our API and main database run in the EU; the
             live view is routed through a region chosen per session, EU
             preferred. The current status of each promise is on the
             security overview (its own card below).
@@ -176,8 +182,10 @@ import StatusBadge from '../../components/StatusBadge.astro';
           </h2>
           <p class="mt-3 text-sm text-tk-ink-2">
             Every security claim mapped to the code path, test, or
-            doc that backs it up. The page your security lead (CISO)
-            skims
+            doc that backs it up — two-factor sign-in, revocable
+            sign-ins, device-code sign-in for the desktop app, per-profile
+            proxy and VPN checks, audit-log export, retention. The page your
+            security lead (CISO) skims
             before scheduling a vendor review call.
           </p>
         </a>
@@ -199,8 +207,10 @@ import StatusBadge from '../../components/StatusBadge.astro';
             website can read about a browser — checked one by one
             against a real reference iPhone, shown side by side with
             what a typical disguised-Chromium ("stealth") tool
-            returns. The evidence behind our claim that sessions
-            can't be told apart from a real iPhone.
+            returns. It also states how many device profiles have been
+            checked directly, how many are verified, and how many are
+            selectable — the evidence behind what we claim about
+            matching a real iPhone.
           </p>
         </a>
       </div>
@@ -234,9 +244,10 @@ import StatusBadge from '../../components/StatusBadge.astro';
         <dd class="mt-1 text-sm text-tk-ink-2">
           Yes. When you or your agent open a URL, Driftstack processes
           that URL and keeps a record of the visit for your account. The
-          page traffic itself goes out through your own SOCKS5 proxy if
-          the profile has one, or through Driftstack's managed exit if
-          not.
+          page traffic itself goes out through your own SOCKS5 proxy or
+          VPN — the desktop app always launches through one, and an API
+          session names one of your saved proxies. Driftstack does not
+          route it through a shared exit of its own.
         </dd>
       </div>
       <div>
@@ -279,6 +290,17 @@ import StatusBadge from '../../components/StatusBadge.astro';
           <a href="/docs/sla-policy/" class="text-tk-accent-text underline"
             >SLA policy</a
           >.
+        </dd>
+      </div>
+      <div>
+        <dt class="text-sm font-medium text-tk-ink">Can we use two-factor sign-in and see who is signed in?</dt>
+        <dd class="mt-1 text-sm text-tk-ink-2">
+          Yes, on every plan. Two-factor sign-in uses an authenticator
+          app plus recovery codes, and risky actions ask for a fresh code
+          even when you are already signed in. The dashboard lists every
+          active sign-in and lets you revoke one or all of the others; a
+          password change signs out every other session. Every security
+          event is in your audit log, exportable as CSV.
         </dd>
       </div>
       <div>

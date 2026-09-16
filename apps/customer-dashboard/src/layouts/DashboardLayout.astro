@@ -1721,46 +1721,83 @@ const navSections: NavSection[] = [
                   style: 'currency',
                   currency: 'USD',
                 });
-                const sev =
-                  event.severity === 'resolved'
-                    ? 'recovered'
-                    : event.severity === 'critical'
-                      ? 'critical'
-                      : 'warn';
+                // Plain words for the customer: "warning limit" is the soft
+                // threshold, "spending limit" the hard one. The internal
+                // state names (under-soft / between-soft-and-hard / over-hard)
+                // never reach the screen.
+                if (event.severity === 'resolved') {
+                  return {
+                    title: 'Spending back under your warning limit',
+                    body:
+                      'Your spend for the ' +
+                      event.billingCycle +
+                      ' billing cycle is back under your warning limit (' +
+                      total +
+                      ' of ' +
+                      hard +
+                      ').',
+                  };
+                }
+                if (event.severity === 'critical') {
+                  return {
+                    title: 'Spending limit passed: ' + total + ' of ' + hard,
+                    body:
+                      'Your spend for the ' +
+                      event.billingCycle +
+                      ' billing cycle has gone over your ' +
+                      hard +
+                      ' spending limit.',
+                  };
+                }
                 return {
-                  title: 'Cost ' + sev + ': ' + total + ' / ' + hard,
+                  title: 'Spending warning: ' + total + ' of ' + hard,
                   body:
-                    event.severity === 'resolved'
-                      ? 'Spend dropped back below the soft threshold for ' +
-                        event.billingCycle +
-                        '.'
-                      : 'Billing cycle ' +
-                        event.billingCycle +
-                        ' crossed the ' +
-                        event.currentState +
-                        ' threshold.',
+                    'Your spend for the ' +
+                    event.billingCycle +
+                    ' billing cycle has passed your warning limit and is approaching your ' +
+                    hard +
+                    ' spending limit.',
                 };
               }
-              case 'incident.broadcast':
+              case 'incident.broadcast': {
+                // Fires on create, update AND resolve, and carries no status —
+                // so never say "in progress"; the status page has the current
+                // state.
+                const impact =
+                  event.severity === 'outage'
+                    ? 'Service outage'
+                    : event.severity === 'major'
+                      ? 'Major service issue'
+                      : 'Minor service issue';
                 return {
-                  title: 'Incident: ' + event.title,
-                  body: 'Severity ' + event.severity + ' — incident ' + event.incidentId + '.',
+                  title: 'Service status: ' + event.title,
+                  body: impact + ' — see status.driftstack.io for the latest update.',
                 };
-              case 'audit.high_severity':
+              }
+              case 'audit.high_severity': {
+                const madeBy =
+                  event.actorType === 'customer'
+                    ? 'Made from your account'
+                    : event.actorType === 'admin'
+                      ? 'Made by an administrator'
+                      : 'Made automatically by Driftstack';
                 return {
-                  title: 'Account event: ' + event.action,
+                  title: 'Account change: ' + event.action,
                   body:
-                    'Actor ' +
-                    event.actorType +
-                    (event.targetResourceId !== null
-                      ? ' · target ' + event.targetResourceId
-                      : '') +
-                    '.',
+                    madeBy +
+                    (event.targetResourceId !== null ? ' on ' + event.targetResourceId : '') +
+                    '. If you don’t recognise this, check your account settings.',
                 };
+              }
               case 'session.errored':
                 return {
                   title: 'Session error',
-                  body: 'Session ' + event.sessionId + ' hit ' + event.errorClass + '.',
+                  body:
+                    'Session ' +
+                    event.sessionId +
+                    ' stopped with an error: ' +
+                    event.errorClass +
+                    '.',
                 };
               default:
                 return null;

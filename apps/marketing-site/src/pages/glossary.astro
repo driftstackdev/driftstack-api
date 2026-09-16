@@ -10,6 +10,7 @@
 // impl-state disclosure surface). No CtaBand — reference page.
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHero from '../components/PageHero.astro';
+import { DEVICE_SUPPORT } from '../data/capabilities';
 
 interface GlossaryEntry {
   /** Stable anchor id — a public contract for deep links. */
@@ -38,17 +39,17 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'proxy',
     term: 'Proxy',
-    def: "A relay your session's traffic travels through, so a website sees the relay's address instead of the session's own — which would otherwise be our data center's. In Driftstack you attach your own proxy per profile — each phone browses from its own corner of the world.",
+    def: "A relay your session's traffic travels through, so a website sees the relay's address instead of the session's own — which would otherwise be our data center's. In Driftstack you attach your own SOCKS5 proxy per profile — each phone browses from its own corner of the world — and a Test button checks that it works, and where it exits, before you launch.",
   },
   {
     id: 'vpn',
     term: 'VPN',
-    def: 'Like a proxy, a way to give traffic a different exit — but as an encrypted tunnel that carries everything the device sends. Driftstack profiles accept your own VPN configuration as an alternative to a proxy.',
+    def: 'Like a proxy, a way to give traffic a different exit — but as an encrypted tunnel that carries everything the device sends, including WebRTC and HTTP/3. On paid plans, Driftstack profiles accept your own OpenVPN (.ovpn) or WireGuard (.conf) configuration as an alternative to a proxy.',
   },
   {
     id: 'egress',
     term: 'Egress',
-    def: 'Your session\'s own internet exit — where its traffic actually leaves for the open web. Driftstack routes a session\'s traffic through the exit you attach (proxy or VPN), and the phone\'s language and clock (locale and timezone) follow the exit\'s location so nothing contradicts the address a website sees. Implementation and security details are documented at <a href="/trust/security-overview/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/trust/security-overview</a>.',
+    def: 'Your session\'s own internet exit — where its traffic actually leaves for the open web. Driftstack routes a session\'s traffic through the exit you attach (proxy or VPN): a VPN tunnel carries everything the profile does, including WebRTC and HTTP/3; on a proxy that can\'t carry HTTP/3, it is switched off rather than leaked. The phone\'s clock and time zone follow the exit\'s location so nothing contradicts the address a website sees. Implementation and security details are documented at <a href="/trust/security-overview/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/trust/security-overview</a>.',
   },
   {
     id: 'fingerprint',
@@ -58,7 +59,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'canvas-hash',
     term: 'Canvas hash',
-    def: "One fingerprint signal: a page asks the browser to draw an invisible picture, then boils the pixels down to one short value. Different engines draw slightly differently, so the value betrays what's really rendering. Driftstack sessions return the value a real iPhone returns, because the same engine draws the picture.",
+    def: "One fingerprint signal: a page asks the browser to draw an invisible picture, then boils the pixels down to one short value. Different engines draw slightly differently, so the value betrays what's really rendering. Driftstack draws it with a build of Apple's own WebKit and checks the result against real iPhones — where Safari deliberately varies the value a little, Driftstack varies it the same way.",
   },
   {
     id: 'user-agent',
@@ -68,17 +69,17 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'webkit',
     term: 'WebKit',
-    def: "The browser engine Apple ships on every iPhone — Safari is built on it. Driftstack sessions are built from Apple's WebKit source, so what a website measures matches what a real iPhone would return.",
+    def: "The browser engine family behind Safari on every iPhone. Driftstack runs its own build of Apple's WebKit source, with nothing patched over while a page runs, and checks what a website measures against real iPhones, check by check.",
   },
   {
     id: 'archetype',
     term: 'Archetype',
-    def: "The API's name for a device profile: a specific iPhone model + iOS version + Safari version combination — say, an iPhone 17 on iOS 18.7 with Safari 26.4. Every Driftstack profile is built on one, so each measurable detail agrees with a phone Apple really shipped.",
+    def: `The API's name for a device profile: a specific iPhone model + iOS version + Safari version combination — say, an iPhone 17 on iOS 18.7 with Safari 26.4, the default. There are ${DEVICE_SUPPORT.selectableCount} to choose from — 19 iPhone models, ${DEVICE_SUPPORT.deviceFamilies}, on iOS 18, with Safari ${DEVICE_SUPPORT.safariVersions}; the free tier offers the iPhone 13 and 13 mini. Every Driftstack profile is built on one, so each measurable detail agrees with a phone Apple really shipped.`,
   },
   {
     id: 'anti-detect',
     term: 'Anti-detect browser',
-    def: 'A browser built so websites can\'t link or block its users by fingerprint. Most anti-detect tools disguise a desktop browser as something else; Driftstack takes the other path — running the real iPhone engine, so there\'s no disguise to spot. The <a href="/comparison/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">comparison page</a> walks the difference signal by signal.',
+    def: 'A browser built so websites can\'t link or block its users by fingerprint. Most anti-detect tools disguise a desktop browser as something else; Driftstack takes the other path — running a build of Apple\'s own WebKit, the engine family behind iPhone Safari, so there\'s no disguise to spot. The <a href="/comparison/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">comparison page</a> walks the difference signal by signal.',
   },
   {
     id: 'headless-browser',
@@ -88,7 +89,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'emulator',
     term: 'Emulator',
-    def: "Software pretending to be other hardware. Driftstack sessions are not emulated iPhones — they run Apple's real browser engine, which is why the measurements come out right.",
+    def: "Software pretending to be other hardware. Driftstack sessions are not emulated iPhones — they run a build of Apple's own WebKit, the engine family behind iPhone Safari, and the measurements are checked against real iPhones.",
   },
   {
     id: 'sdk',
@@ -98,7 +99,22 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'byok',
     term: 'BYOK',
-    def: "Bring Your Own Key. Driftstack's optional AI agent can use the key from your own AI-provider account (for example Anthropic) — the AI usage is then billed to you by your provider, with no Driftstack markup — instead of paying the bundled rate on one Driftstack invoice.",
+    def: "Bring Your Own Key. Driftstack's optional AI agent (Team plans and up, and every API plan) can use the key from your own AI-provider account (for example Anthropic) — the AI usage is then billed to you by your provider, with no Driftstack markup — instead of Driftstack's bundled model access, which starts on API Builder.",
+  },
+  {
+    id: 'ai-agent',
+    term: 'AI agent',
+    def: 'Driftstack\'s optional assistant that drives a session from a plain-English request, included on Team plans and up and on every API plan. It turns your request into a short list of actions from a fixed set, runs them on the phone while you watch, and stops for your approval before a step that looks like a purchase, a payment, or an account deletion. Three modes: AI, manual, and pair — in pair mode you can take over mid-task and hand back.',
+  },
+  {
+    id: 'recording',
+    term: 'Recording',
+    def: 'A replay of a session you drove in the desktop app, saved on your own computer. Open it in the app to scrub through it, or export it as a file. Recordings never leave your machine; sessions driven from code take screenshots, page snapshots, or PDFs on request instead. Details on <a href="/docs/recordings/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/docs/recordings</a>.',
+  },
+  {
+    id: 'recycle-bin',
+    term: 'Recycle bin',
+    def: 'Where a deleted profile waits. Deleting a profile hides it from your list but keeps it for 30 days, and you can restore it any time in that window; after that it is purged for good.',
   },
   {
     id: 'self-hosted',

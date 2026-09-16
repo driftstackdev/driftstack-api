@@ -77,6 +77,13 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     expect(body).toMatch(
       /Both plan families give you the same real iPhones and share the same free tier\./,
     );
+    // 2026-09-15 refuter: the free tier cannot run a session from code
+    // (TIER_FEATURES.free.apiAccess false; requireProgrammaticApiAccess) —
+    // the both-workflows card must not promise "run one from code".
+    expect(body).not.toMatch(/run one from code/);
+    expect(body).toMatch(
+      /Start free and drive a session by hand; the API and SDKs come with\s*any paid plan, so you can try code-driven sessions the moment you\s*upgrade\./,
+    );
   });
 
   it('one-sentence glossary above the ladders: concurrent (browser-tabs metaphor, matches homepage) + profile (saved iPhone identity)', () => {
@@ -197,6 +204,134 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     );
     expect(body).toMatch(/<h3 class="font-medium text-tk-ink">Does the free tier expire\?<\/h3>/);
     expect(body).toMatch(/<a href="\/faq\/" class="btn-secondary">See full FAQ<\/a>/);
+  });
+
+  // 2026-09-15 truth pass — the free tier's real shape (TIER_FEATURES: apiAccess
+  // false / vpnEgress false / aiAgent false; ARCHETYPE_DEVICES_PER_TIER.free =
+  // iPhone 13 + 13 mini) is stated on the card, data-bound where the data
+  // exists; paid-tier device breadth binds to DEVICE_SUPPORT; concurrency is
+  // counted in sessions, never people; the "What comes with your plan" band
+  // names shipped, un-gated features only.
+  it('free-tier card states no API/SDK, no VPN (one SOCKS5 or HTTP proxy you bring — only the VPN schemes are gated), no AI agent, and binds its device entitlement to freeTier.archetypeAccess; the engine bullet is house style', () => {
+    expect(body).toMatch(/our desktop app, on the \{freeTier\.archetypeAccess\}\./);
+    // 2026-09-15 refuter: the free tier's one saved proxy may be SOCKS5 or
+    // HTTP — routes/account-me.ts gates only openvpn/wireguard on vpnEgress.
+    expect(body).not.toMatch(/one saved SOCKS5 proxy on the free plan/);
+    expect(body).toMatch(
+      /no API or SDK access, and no VPN\. Sessions browse through a\s*proxy you bring — one saved SOCKS5 or HTTP proxy on the free plan\./,
+    );
+    expect(body).toMatch(
+      /Every paid plan includes the API and adds OpenVPN and\s*WireGuard exits\./,
+    );
+    expect(body).toMatch(
+      /No AI agent on the free plan — it starts at Team, and is\s*on every API plan\./,
+    );
+    expect(body).not.toMatch(/access from code \(the API and SDKs\) starts with the API\s*plans/);
+    expect(body).not.toMatch(/nothing patched on top to fake it/);
+    expect(body).toMatch(
+      /A build of Apple's own <a href="\/glossary\/#webkit"[^>]*>WebKit<\/a> — the engine family behind iPhone Safari\./,
+    );
+  });
+
+  it('"every tier gives you the same real iPhones" is gone: paid tiers get every device profile (DEVICE_SUPPORT-bound), the free tier runs freeTier.archetypeAccess, the AI agent is Team-and-up + every API plan (stated on the fork, the Manual header, the BYOK explainer and the free FAQ)', () => {
+    expect(body).toMatch(/import \{ DEVICE_SUPPORT \} from '\.\.\/data\/capabilities';/);
+    expect(body).not.toMatch(/Every tier gives you the same real iPhones\./);
+    expect(body).toMatch(
+      /Every paid tier gives you every device profile we offer — 19 iPhone\s*models, from the 13 to the 17 Pro Max/,
+    );
+    // 2026-09-15 refuter: the catalog is 19 named models, not "every iPhone"
+    // released between the endpoints (no SE 3rd gen, 16e or Air).
+    expect(body).not.toMatch(/every\s*iPhone from the 13 to the 17 Pro Max/i);
+    expect(body).toMatch(
+      /\{DEVICE_SUPPORT\.selectableCount\} device\s*profiles\) on iOS 18, with Safari \{DEVICE_SUPPORT\.safariVersions\}/,
+    );
+    expect(body).toMatch(/The free tier runs the\s*\{freeTier\.archetypeAccess\}\./);
+    expect(body).toMatch(/the AI agent \(Team and up, and every API\s*plan\)/);
+    expect(body).toMatch(
+      /The AI agent is on Team and Agency \(bring your own\s*Anthropic key\); Personal is hands-on only\./,
+    );
+    expect(body).toMatch(
+      /The AI agent is on Team and Agency and on every API plan; Free and\s*Personal don't include it\./,
+    );
+    expect(body).toMatch(
+      /The AI agent is on every API plan\. Your\s*code signs in with a scoped API key/,
+    );
+    expect(body).toMatch(
+      /When you need the API, every\s*device profile, a VPN exit, more sessions at once/,
+    );
+  });
+
+  it('concurrency is sessions, not people: the Team / Agency teaser cards and the Manual fork card count sessions at once (S31 conflation fix extended)', () => {
+    expect(body).not.toMatch(/people clicking at the same time/);
+    expect(body).not.toMatch(/people working at once/);
+    expect(body).not.toMatch(/how many people can work at once/);
+    expect(body).toMatch(
+      /3 sessions at the same time; 50 profiles, shared with the\s*teammates you invite\./,
+    );
+    expect(body).toMatch(/8 sessions at once; 200 profiles\./);
+    expect(body).toMatch(
+      /Tiers differ\s*by how many sessions run at once and how many profiles you keep\./,
+    );
+  });
+
+  it('both ladders carry a data-bound "Device types" row ({tier.archetypeAccess}) — exactly twice, once per ladder', () => {
+    const rows = body.match(
+      /<dt class="text-tk-ink-3">Device types<\/dt>\s*<dd class="text-right text-tk-ink">\{tier\.archetypeAccess\}<\/dd>/g,
+    );
+    expect(rows).toHaveLength(2);
+  });
+
+  it('"What comes with your plan" band names shipped, reachable features only (recycle bin / export-import / proxy Test readouts / floating device window / local recordings / teammates with roles / MFA + web sessions + audit CSV / per-turn AI cost + web-dashboard billing / card or crypto) — never cost ALERTS (sink logger-only in bootstrap.ts), never the unmounted account cost VIEW, never snapshot-as-rollback, never "members … work on", never receipts "from the desktop app"', () => {
+    expect(body).toMatch(/title="What comes with your plan\."/);
+    for (const h of [
+      'Profiles you can look after',
+      'Your own exits, tested before launch',
+      'A floating device window',
+      'Recordings that stay on your machine',
+      'Teammates with roles',
+      'Account security',
+      'Costs in view',
+      'Pay by card or crypto',
+    ]) {
+      expect(body, h).toContain(`<h3 class="font-medium text-tk-ink">${h}</h3>`);
+    }
+    expect(body).toMatch(
+      /Recordings are kept on your own computer and can be exported as a\s*file; they are not uploaded\./,
+    );
+    // 2026-09-15 refuter pass — four cards re-scoped to what a customer can
+    // reach: snapshots are metadata-only + API-only (dropped from the profiles
+    // card); members are read-only (team-rbac.md); the account cost view is
+    // mounted nowhere (BillingCostView has no importer; App.tsx routes
+    // 'billing' to BillingMovedView; the dashboard never reads
+    // /v1/account/cost); crypto receipts download from the web dashboard's
+    // billing page (customer-dashboard billing.astro), not the desktop app.
+    expect(body).not.toMatch(/Take a snapshot of a profile before a risky change/);
+    expect(body).not.toMatch(/bring that\s*state back later/);
+    expect(body).toMatch(
+      /Deleted profiles go to a recycle bin first, and you can bring one\s*back from there\./,
+    );
+    expect(body).not.toMatch(/On a paid plan, invite teammates as members or admins\./);
+    expect(body).toMatch(
+      /invite teammates as admins, who can run your\s*profiles and sessions under your account, or as read-only members,\s*who can view them but not change anything\./,
+    );
+    expect(body).not.toMatch(/billing cycle's spend in the desktop app/);
+    expect(body).toMatch(/The AI agent shows the cost of each turn as it runs\./);
+    expect(body).not.toMatch(/download as PDF from the desktop app/);
+    expect(body).toMatch(
+      /crypto receipts\s*download as PDF from the billing page of your web dashboard\./,
+    );
+    expect(body).not.toMatch(/cost alert/i);
+    // 2026-09-15 refuter (same class as the free card): the proxy a profile
+    // can carry is SOCKS5 or HTTP — routes/account-me.ts gates only the
+    // openvpn/wireguard schemes on vpnEgress, so the exits card must not
+    // say "SOCKS5" alone.
+    expect(body).not.toMatch(/Attach a SOCKS5 proxy to each profile/);
+    expect(body).toMatch(
+      /Attach a SOCKS5 or HTTP proxy to each profile; paid plans add OpenVPN and\s*WireGuard tunnels\./,
+    );
+    // The Network pane cannot populate today (no producer on either side) —
+    // the floating-window card must not advertise it.
+    expect(body).not.toMatch(/panes for cookies,[^.]*network/i);
   });
 
   it('free-tier header card cross-links: signup + docs + data-bound price', () => {

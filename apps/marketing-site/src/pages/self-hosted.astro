@@ -4,6 +4,21 @@
 // v2 recipes (PageHero/Section/Card/IconTile/CtaBand, AA-safe accent
 // text). SKU data binding, prices, the ASCII architecture diagram and
 // every substantive claim are byte-identical to the pre-redesign page.
+// 2026-09-15 what-ships pass — the support line now renders per SKU from
+// pricing.ts (Self-Hosted Enterprise = dedicated account manager + the
+// contractual 1h Severity-1 first-reply SLA, Terms §9.2; pricing.astro's
+// mirror of fmtSupportTier says the same, pinned cross-page); the hero
+// names the engine the house-style way; the Run step lists what the
+// desktop app and the account each include; a target-vs-SLA gloss sits
+// under the SKUs. Deployment model corrected the same day: the customer
+// runs the Driftstack server on their own Macs (apps/docs license-
+// activation.md, Terms §3, docs/runbooks/self-hosted-mac-local.md); no
+// code reports a license or session details to a Driftstack-hosted
+// service, so the page no longer describes one. Second pass: the Run
+// step no longer credits the desktop app with snapshots (no surface in
+// apps/gui-client/src; v1 captures device + name, API only) and scopes
+// export/import to a profile's settings (routes/profiles.ts export is
+// metadata-only).
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHero from '../components/PageHero.astro';
 import Section from '../components/Section.astro';
@@ -38,9 +53,15 @@ function fmtArchetypes(max: number | null): string {
   return max === 1 ? '1 device profile' : `${max.toString()} device profiles`;
 }
 
-// 2026-05-19 founder verdict — drop tiered SLA ladder (theatre for
-// a small operation). Single best-effort target across all SKUs;
-// Slack Connect available on request post-paid-subscription.
+// 2026-05-19 founder verdict — no tiered reply ladder below the
+// contractual tiers: Solo and Pro state the support channel plus the
+// honest operational 48h target (Terms §9.1 — no contractual SLA;
+// Slack Connect on Pro). 2026-09-15 — Self-Hosted Enterprise
+// (`dedicated_csm_1h`) states exactly the grant pricing.ts gives the
+// Enterprise tier: a dedicated account manager and the contractual 1h
+// first-reply SLA on Severity-1 incidents (Terms §9.2). Until today all
+// three SKUs rendered the same '48h target' string, contradicting
+// pricing.ts and the /pricing Enterprise row.
 function fmtSupportTier(tier: 'email_48h' | 'email_slack_12h' | 'dedicated_csm_1h'): string {
   switch (tier) {
     case 'email_48h':
@@ -48,7 +69,7 @@ function fmtSupportTier(tier: 'email_48h' | 'email_slack_12h' | 'dedicated_csm_1
     case 'email_slack_12h':
       return 'Email + Slack Connect · 48h target';
     case 'dedicated_csm_1h':
-      return 'Email + Slack Connect · 48h target';
+      return 'Dedicated account manager · 1h SLA for first reply on critical (Severity-1) incidents';
   }
 }
 
@@ -79,10 +100,13 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
       whole thing on Macs you own.
     </p>
     <p class="mt-4 max-w-2xl text-base leading-7 text-tk-ink-2">
-      Same SDK, same device profiles, same iPhone Safari fidelity — just
-      running on hardware you own and inside a network you control.
-      Driftstack hosts the service that starts and manages your
-      sessions; you supply the machines. Any Apple Silicon Mac works;
+      Same SDK, same desktop app, and device profiles from the same
+      catalog — a build of Apple's own WebKit, the engine family behind
+      iPhone Safari, checked against real iPhones — just running on
+      hardware you own and inside a network you control.
+      The Driftstack server that starts and manages your sessions runs
+      on your Macs as well, with the desktop app pointed at it; we
+      install and set it up with you. Any Apple Silicon Mac works;
       the package you choose (the SKU) is about how many sessions you
       need running at once, not about unlocking software features.
     </p>
@@ -109,23 +133,27 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
     title="Your hardware, our software, one secure connection."
   >
     <p class="mt-4 max-w-2xl text-base leading-7 text-tk-ink-2">
-      Self-hosted is one piece of Driftstack software running on Mac
-      hardware you own. Driftstack's coordination service starts and
-      manages sessions and gives you the developer kit (SDK) and the
-      desktop app — and it never holds what happens inside your
-      sessions.
+      Self-hosted is the whole of Driftstack running on Mac hardware
+      you own: the server that starts and manages sessions, the desktop
+      app pointed at it, and the sessions themselves. We supply the
+      software, its updates and new device profiles, and the developer
+      kit (SDK) — and we never hold what happens inside your sessions.
     </p>
 
     <div class="panel mt-10 overflow-x-auto p-8 font-mono text-sm leading-6 text-tk-ink">
-      <pre class="whitespace-pre">{`  YOUR MACS                                  DRIFTSTACK SERVICE
-  ─────────                                  ──────────────────
+      <pre class="whitespace-pre">{`  YOUR MACS                                  DRIFTSTACK
+  ─────────                                  ──────────
 
   ┌──────────────────┐                       ┌──────────────────────┐
-  │  Your Macs       │ ◀──── secure ───────▶ │  Driftstack service  │
-  │  (Mac mini or    │     connection        │  (license, API keys, │
-  │   Mac Studio,    │       (HTTPS)         │   session details)   │
-  │   one or more)   │                       │                      │
-  └──────────────────┘                       └──────────────────────┘
+  │  Your Macs       │ ◀──── secure ───────▶ │  Driftstack          │
+  │  (Mac mini or    │     connection        │  (software releases, │
+  │   Mac Studio,    │       (HTTPS)         │   device-profile     │
+  │   one or more)   │                       │   updates)           │
+  │                  │                       └──────────────────────┘
+  │  Driftstack      │
+  │  server, desktop │
+  │  app, sessions   │
+  └──────────────────┘
         │
         │  Sessions reach the web through your network
         ▼
@@ -142,9 +170,11 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
 
     <p class="mt-6 max-w-prose text-sm text-tk-ink-3">
       Session content (URLs, form data, captures, recordings) stays inside
-      your network. Driftstack sees only your license and basic session
-      details — when a session started, which profile ran — never the
-      session itself.
+      your network, and so does the record of your sessions — when one
+      started, which profile ran — because the server that keeps it is
+      yours. Driftstack holds no copy of either. Crash reporting in the
+      desktop app is off by default when the app points at a self-hosted
+      server.
     </p>
   </Section>
 
@@ -163,8 +193,8 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
           For work where session content (URLs, form data, captures,
           recordings) must never pass through anyone's servers but
           your own. Self-hosted runs the browser and the Driftstack
-          software on your own Mac mini or Mac Studio; nothing leaves
-          your network.
+          software on your own Mac mini or Mac Studio; session content
+          never leaves your network.
         </p>
       </div>
       <div>
@@ -289,6 +319,12 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         </div>
       ))}
     </div>
+    <p class="mt-8 max-w-prose text-xs text-tk-ink-3">
+      "Target" is the reply time we aim for, not a contractual promise
+      (Terms §9.1). "SLA" is a contractual promise: on Self-Hosted
+      Enterprise it covers our first reply to the most serious
+      ("Severity-1") incidents (Terms §9.2).
+    </p>
   </Section>
 
   <!-- Process -->
@@ -332,8 +368,8 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">03</p>
         <h3 class="mt-3 font-semibold text-tk-ink">Onboard</h3>
         <p class="mt-2 text-sm text-tk-ink-2">
-          We install the Driftstack software on your hardware, set
-          your team up in the admin console, and run a first live test
+          We install the Driftstack software on your hardware, set up
+          your team's accounts and roles, and run a first live test
           together on your real workload.
         </p>
       </li>
@@ -348,8 +384,12 @@ function fmtCustomArchetypeDev(level: 'none' | 'limited' | 'unlimited'): string 
         <p class="mt-2 text-sm text-tk-ink-2">
           Same SDK as cloud Driftstack — change one setting and your
           existing code talks to your own installation instead of our
-          cloud. Support channels and response targets match the
-          package you chose.
+          cloud. The desktop app is the same as well: profiles with a
+          recycle bin and export/import of their settings as a file, and a
+          proxy or VPN attached per profile, with a Test readout before
+          you launch. Your account keeps team roles, an audit log you
+          can export as CSV, and two-factor sign-in. Support channels
+          and response targets match the package you chose.
         </p>
       </li>
     </ol>

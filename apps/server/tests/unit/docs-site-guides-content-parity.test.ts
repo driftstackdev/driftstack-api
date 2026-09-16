@@ -67,7 +67,7 @@ describe('W603 apps/docs/guides pages content parity', () => {
     expect(body).toMatch(/\| API Scale\s+\| 500\s+\|/);
     expect(body).toMatch(/\| Enterprise\s+\| Custom\s+\|/);
     expect(body).toMatch(
-      /Self-hosted tiers don't enforce per-account profile caps — they enforce concurrent-session caps and archetype \(device profile\) counts across the whole deployment instead\./,
+      /Self-hosted tiers don't enforce per-account profile caps — they enforce concurrent-session caps and device-profile counts across the whole deployment instead\./,
     );
     expect(body).toMatch(/^## Create a profile$/m);
     expect(body).toMatch(/`iphone16pro_ios18_7_safari26_4`/);

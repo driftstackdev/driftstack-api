@@ -79,11 +79,11 @@ describe('W782 docs /guides/profile-management content parity', () => {
     );
   });
 
-  it("CRITICAL self-hosted-tiers deployment-wide-cap framing pinned. The 'Self-hosted tiers don\\'t enforce per-account profile caps — they enforce concurrent-session caps and archetype (device profile) counts across the whole deployment instead' wording explains the multi-deployment difference.", () => {
+  it("CRITICAL self-hosted-tiers deployment-wide-cap framing pinned. The 'Self-hosted tiers don\\'t enforce per-account profile caps — they enforce concurrent-session caps and device-profile counts across the whole deployment instead' wording explains the multi-deployment difference.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Self-hosted tiers don't enforce per-account profile caps — they enforce concurrent-session caps and archetype \(device profile\) counts across the whole deployment instead\./,
+      /Self-hosted tiers don't enforce per-account profile caps — they enforce concurrent-session caps and device-profile counts across the whole deployment instead\./,
     );
   });
 
@@ -91,10 +91,10 @@ describe('W782 docs /guides/profile-management content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The `archetype` field is optional and defaults to your tier's device: `iphone17_ios18_7_safari26_4` \(iPhone 17 on iOS 18\.7 with Safari 26\.4\) on tiers that include every device, or the newest iPhone 13 archetype on the free tier\./,
+      /The `archetype` field is optional and defaults to your tier's device: `iphone17_ios18_7_safari26_4` \(iPhone 17 on iOS 18\.7 with Safari 26\.4\) on tiers that include every device, or the newest iPhone 13 device profile on the free tier\./,
     );
     expect(p).toMatch(
-      /Choose an older archetype only if your workflow specifically depends on that device's behaviour\./,
+      /Choose an older device profile only if your workflow specifically depends on that device's behaviour\./,
     );
   });
 
@@ -262,11 +262,11 @@ describe('W782 docs /guides/profile-management content parity', () => {
     );
   });
 
-  it("CRITICAL archetype-stable-for-lifetime framing pinned. The 'Profiles pin to one archetype at creation time. The pin is stable: a profile created against iphone16pro_ios18_7_safari26_4 keeps that fingerprint forever, even after the default moves to a newer iPhone. This stability is intentional — a returning profile shouldn\\'t suddenly show up on a different iOS version' wording matches W763 /api/profiles archetype-is-sticky-for-lifetime contract.", () => {
+  it("CRITICAL archetype-stable-for-lifetime framing pinned. The 'Profiles pin to one device profile at creation time. The pin is stable: a profile created against iphone16pro_ios18_7_safari26_4 keeps that fingerprint forever, even after the default moves to a newer iPhone. This stability is intentional — a returning profile shouldn\\'t suddenly show up on a different iOS version' wording matches W763 /api/profiles archetype-is-sticky-for-lifetime contract.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Profiles pin to one archetype at creation time\. The pin is stable: a profile created against `iphone16pro_ios18_7_safari26_4` keeps that fingerprint forever, even after the default moves to a newer iPhone\./,
+      /Profiles pin to one device profile at creation time\. The pin is stable: a profile created against `iphone16pro_ios18_7_safari26_4` keeps that fingerprint forever, even after the default moves to a newer iPhone\./,
     );
     expect(p).toMatch(
       /This stability is intentional — a returning profile shouldn't suddenly show up on a different iOS version\./,

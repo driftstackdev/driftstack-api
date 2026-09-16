@@ -44,6 +44,18 @@ const SURFACES = [
   'lib/os-fingerprint-verdict.ts',
   'components/OsReadout.tsx',
   'components/ProfilesTable.tsx',
+  // (2026-09-15 sweep) The surfaces the owner's plain-words directive reached
+  // next: the ⌘K palette (App.tsx builds its labels), the self-hosted
+  // "Your servers" screen and the registry whose error sentence it renders,
+  // the session-end recap copy, the sidebar, the simulator cockpit — and the
+  // marketing gallery, which IS the screenshot: a word here ships in the PNG.
+  'App.tsx',
+  'components/Sidebar.tsx',
+  'lib/fleet-members.ts',
+  'lib/session-end-reason.ts',
+  'views/FleetView.tsx',
+  'views/SimulatorWindow.tsx',
+  'visual-harness/gallery.tsx',
 ];
 // ⛔ Owner directive 2026-09-15: customer copy says WHAT they get, never HOW we
 // run it. "test Mac" was the earlier customer-facing substitute for "fleet Mac"
@@ -63,6 +75,17 @@ const JARGON = [
   /endpoint resolver/i,
   /\bverdict\b/i,
   /\bvantage\b/i,
+  // Owner directive 2026-09-15, the rest of the banned list: the machine that
+  // runs a session is never named ("fleet", "Mac mini", "node"), and the
+  // device is "verified" / "matches the real device" — never "bit-exact",
+  // "engine-deep" or an "archetype" (that is the API field's name, not copy).
+  /\bfleet\b/i,
+  /Mac mini/i,
+  /bit-exact/i,
+  /engine-deep/i,
+  /human-cadence/i,
+  /\barchetypes?\b/i,
+  /\bharness\b/i,
 ];
 
 /** Strip line comments, block comments and JSX comment blocks, so a comment
@@ -125,7 +148,19 @@ function jsxTextNodes(src: string): Array<{ line: number; text: string }> {
 /** Not copy: the internal wire query (`?vantage=fleet` names a URL parameter)
  *  and module paths in import specifiers (`'../lib/proxy-vantage'`). A customer
  *  sentence never starts with `./`, `../` or `@`. */
-const ALLOWED = [/\?vantage=fleet/, /^['"`](\.{1,2}\/|@)[^'"`]*['"`]$/];
+const ALLOWED = [
+  /\?vantage=fleet/,
+  /^['"`](\.{1,2}\/|@)[^'"`]*['"`]$/,
+  // A literal that IS the bare token is a value, not a sentence: the wire
+  // vantage enum (`raw === 'fleet'`), the sidebar/view kind and the palette
+  // action id (`'nav-fleet'`), the gallery scene name (`'audit-fleet'`).
+  /^['"`](?:nav-|audit-)?fleet['"`]$/,
+  // The three diagnostics an OUT-OF-DATE server still sends, matched by
+  // `friendlyUnavailableNote` so they can be REPLACED with plain words. They
+  // are keys, never rendered — the mapping's own test pins that each maps to a
+  // sentence that names no node / fleet / control plane.
+  /^'(?:session is not live on a node|session node is not connected|fleet control plane not enabled)'$/,
+];
 
 function jargonHits(src: string): Array<{ line: number; text: string }> {
   const literals = stringLiterals(stripComments(src)).filter(

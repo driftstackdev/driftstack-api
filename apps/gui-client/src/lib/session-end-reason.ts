@@ -37,7 +37,7 @@ export const VPN_BRINGUP_END_COPY: Readonly<
   Record<string, { outcome: string; explanation: string }>
 > = {
   remote_unresolved: {
-    outcome: 'Proxy address did not resolve',
+    outcome: 'Proxy address not found',
     explanation:
       'The address this proxy points at does not exist any more, so nothing could be dialled. This is on the side that supplies the proxy — the endpoint is offline or its address has changed.',
   },

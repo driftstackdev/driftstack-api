@@ -117,7 +117,7 @@ itself.
   extractions replaces a dozen `$eval`s.
 - **Browser extensions / stealth plugins.** The managed browser
   doesn't load extensions; fingerprint consistency comes from the
-  [archetype](/api/archetypes/) you pick (the device, iOS and Safari
+  [device profile](/api/archetypes/) you pick (the device, iOS and Safari
   combination), not from plugins you ship.
 
 ## An incremental migration path
@@ -137,7 +137,7 @@ itself.
 ## Common gotchas
 
 - **Prefer stable selectors.** `wait` matches on selectors, URL
-  patterns, or elapsed time — there is no DOM-mutation observer. Put
+  patterns, or elapsed time — there is no wait-for-page-change option. Put
   `data-test-*` attributes on anything you own.
 - **Don't sleep client-side; `wait` server-side.** A client-side
   sleep holds your concurrent slot for the full duration no matter

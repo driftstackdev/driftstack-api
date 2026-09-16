@@ -59,6 +59,21 @@ export interface ApiTier {
   aiAgent: boolean;
   /** LLM billing model when aiAgent is true; `null` when aiAgent is false. */
   llmBilling: LlmBilling;
+  /**
+   * 2026-09-15 — programmatic API / SDK access. `false` on the free tier
+   * (desktop app only; it cannot mint usable API keys). Mirrors
+   * TIER_FEATURES.apiAccess in packages/api-types/src/common.ts — the
+   * pricing page and /pricing/comparison render this field, and a row
+   * that says "Included" while the server answers 403 is a false sale.
+   */
+  apiAccess: boolean;
+  /**
+   * 2026-09-15 — OpenVPN / WireGuard exits. `false` on the free tier
+   * (one saved SOCKS5 or HTTP proxy — PROXIES_PER_TIER.free = 1; only the
+   * openvpn / wireguard schemes are gated, routes/account-me.ts). Mirrors
+   * TIER_FEATURES.vpnEgress.
+   */
+  vpnEgress: boolean;
   cta: { label: string; href: string };
   highlight?: boolean;
   oneTime?: boolean;
@@ -82,6 +97,8 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Trying it out (1 session, 20-min cap)',
     aiAgent: false,
     llmBilling: null,
+    apiAccess: false,
+    vpnEgress: false,
     cta: { label: 'Get started — free', href: 'https://app.driftstack.io/signup/' },
     oneTime: false,
   },
@@ -103,6 +120,8 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Individuals working on their own',
     aiAgent: false,
     llmBilling: null,
+    apiAccess: true,
+    vpnEgress: true,
     cta: { label: 'Get started', href: 'https://app.driftstack.io/signup/' },
   },
   {
@@ -121,6 +140,8 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Teams of account managers',
     aiAgent: true,
     llmBilling: 'byok_only',
+    apiAccess: true,
+    vpnEgress: true,
     cta: { label: 'Get started', href: 'https://app.driftstack.io/signup/' },
     highlight: true,
   },
@@ -140,6 +161,8 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Agencies juggling many client profiles',
     aiAgent: true,
     llmBilling: 'byok_only',
+    apiAccess: true,
+    vpnEgress: true,
     cta: { label: 'Get started', href: 'https://app.driftstack.io/signup/' },
   },
 
@@ -160,6 +183,8 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Solo developers, early-stage automation',
     aiAgent: true,
     llmBilling: 'byok_only',
+    apiAccess: true,
+    vpnEgress: true,
     cta: { label: 'Get started', href: 'https://app.driftstack.io/signup/' },
   },
   {
@@ -178,6 +203,8 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Production automation at scale',
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
+    apiAccess: true,
+    vpnEgress: true,
     cta: { label: 'Get started', href: 'https://app.driftstack.io/signup/' },
     highlight: true,
   },
@@ -197,6 +224,8 @@ export const API_TIERS: ApiTier[] = [
     audience: 'High-volume automation running many sessions at once',
     aiAgent: true,
     llmBilling: 'byok_or_bundled',
+    apiAccess: true,
+    vpnEgress: true,
     cta: { label: 'Get started', href: 'https://app.driftstack.io/signup/' },
   },
   {
@@ -224,6 +253,8 @@ export const API_TIERS: ApiTier[] = [
     audience: 'Custom negotiated contracts',
     aiAgent: true,
     llmBilling: 'byok_or_bundled_custom',
+    apiAccess: true,
+    vpnEgress: true,
     cta: { label: 'Contact sales', href: 'mailto:sales@driftstack.dev' },
   },
 ];

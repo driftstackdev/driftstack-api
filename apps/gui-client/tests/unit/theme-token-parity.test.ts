@@ -538,14 +538,20 @@ describe('review — hover states, opacity, and the simulator dark scope', () =>
     expect(CSS).not.toMatch(/(?::root|html)\[data-mode=/);
   });
 
-  it('the harness replica drawer mirrors the real drawer — white/50 captions and "· ws ✓", a titled Egress line', () => {
+  it('the harness replica drawer mirrors the real drawer — white/50 captions, a "Connected ✓" Link card with no host or "ws" marker, a titled Egress line', () => {
     // The gate measures the scene, not SimulatorWindow.tsx; a replica that lags
     // the real drawer is how S1/S2 shipped "fixed" with 13 findings still open.
     const g = readSrc('visual-harness/gallery.tsx');
     expect(g).toContain(
       "const infoLabel = 'text-[9.5px] uppercase tracking-[0.04em] text-white/50'",
     );
-    expect(g).toContain('<span className="text-white/50"> · ws ✓</span>');
+    // The Link card reads "Connected ✓" in BOTH the scene and the real drawer:
+    // no host, no "ws" marker (owner directive 2026-09-15 — the customer sees
+    // WHAT they get, never HOW it runs). The scene is the marketing screenshot,
+    // so a host or transport marker here ships in the PNG.
+    expect(g).toContain('Connected ✓');
+    expect(g).not.toContain('· ws ✓');
+    expect(g).not.toMatch(/\.fleet\.example\.com/);
     // The Egress line is TRUNCATED, so it must carry a title — the same rule
     // the Linux text gate enforces on every clipped element. Pinned by SHAPE,
     // not by city: the literal `title="🌍 Residential NL #3 · Europe/Amsterdam"`
@@ -562,7 +568,11 @@ describe('review — hover states, opacity, and the simulator dark scope', () =>
     // the rendered DOM (which card is live), so it lives in
     // marketing-scenes.test.tsx, where the window and the card can be compared.
     expect(g).not.toMatch(/text-white\/40/);
-    expect(g).not.toContain('text-ink-secondary"> · ws ✓');
+    // …and the Identity card says what the live one says — plain words, not
+    // "engine-deep · bit-exact device" / "input human-cadence native".
+    expect(g).toContain('Verified iPhone device');
+    expect(g).toContain('Native touch input');
+    expect(g).not.toMatch(/engine-deep|bit-exact|human-cadence/);
     // and the real drawer says the same in the customer's words: the Link card
     // reads "Connected ✓" (no host, no "ws" marker — owner directive 2026-09-15)
     // in the pane's white tint

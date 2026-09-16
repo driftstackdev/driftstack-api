@@ -7,6 +7,13 @@
 // new percentages or scale claims), §8 SDK trio. AUP discipline: the
 // scraping boundary is named plainly with the /legal/aup link —
 // capability description, never encouragement.
+// 2026-09-15 truth pass: the ships-on-the-iPhone browser line → "a build of
+// Apple's own WebKit — the engine family behind iPhone Safari"; "the real iPhone
+// value on every one of them" → "checked against real devices, signal by
+// signal" (81/96 device profiles byte-identical, not a blanket identity);
+// the stability Stat now says which answers are fixed and which Safari
+// deliberately varies (canvas/audio carry per-read noise on a real iPhone
+// too); clock + time zone follow the exit, language is not claimed.
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHero from '../../components/PageHero.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
@@ -55,10 +62,10 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
         fake.
       </p>
       <p>
-        Driftstack doesn't wear a costume. Every session runs the browser
-        Apple ships on the iPhone, so what your collector sees is what an
-        iPhone visitor would see — the mobile layout, the mobile flow, no
-        app-steering redirects.
+        Driftstack doesn't wear a costume. Every session runs a build of
+        Apple's own WebKit — the engine family behind iPhone Safari — so
+        what your collector sees is what an iPhone visitor would see: the
+        mobile layout, the mobile flow, no app-steering redirects.
       </p>
     </div>
   </Section>
@@ -66,20 +73,20 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
   <Section
     label="Why it holds up"
     title="One iPhone among millions."
-    lead="Websites read hundreds of small signals. Driftstack sessions return the real iPhone value on every one of them — so your session looks like one of millions of real iPhones."
+    lead="Websites read hundreds of small signals. Driftstack gives the answers a real iPhone gives — checked against real devices, signal by signal — so your session looks like one of millions of real iPhones."
   >
     <div class="mt-10 grid gap-4 sm:grid-cols-3">
       <Stat
         plain="Looks human to every website"
-        technical="The hidden 'device photos' sites take to spot fakes match millions of real iPhones — not a brand-new value every session, which is itself a giveaway"
+        technical="The hidden checks websites run to spot fakes get the answers a real iPhone gives — checked against real devices, check by check"
       />
       <Stat
-        plain="Stable across sessions"
-        technical="Fingerprint values match what millions of real iPhones share, session after session; disguised desktop browsers produce a brand-new value every session — 100% unique, which is itself a giveaway"
+        plain="Stable where a real iPhone is stable"
+        technical="The fixed answers — screen, hardware, audio settings — stay fixed and match what millions of real iPhones share, and the ones Safari deliberately varies are varied the way a real iPhone varies them, session after session; disguised desktop browsers produce a brand-new value every session — 100% unique, which is itself a giveaway"
       />
       <Stat
         plain="Any country you need"
-        technical="Bring your own proxy or VPN, attached per profile — language and clock settings match the location of your proxy or VPN"
+        technical="Bring your own proxy or VPN, attached per profile — the phone's clock and time zone follow that location, so nothing contradicts the address a website sees"
       />
     </div>
     <p class="mt-8 max-w-prose text-sm leading-6 text-tk-ink-3">
@@ -92,7 +99,7 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
   <Section
     label="Which plan"
     title="Collectors are code — pick the API plan family."
-    lead="Drive sessions from the TypeScript, Python, or Go SDK — or any HTTP client — with structured actions: navigate, interact, capture, extract. One cap on how many sessions run at the same time (think browser tabs open at once) — hours inside it are never billed."
+    lead="Drive sessions from the TypeScript, Python, or Go SDK — or any HTTP client — with structured actions: navigate, interact, capture, extract. One cap on how many sessions run at the same time (think browser tabs open at once) — hours inside it are never billed. The AI agent is on every API plan, and webhooks tell your job when a session completes, fails, or hits a challenge."
   >
     <div class="mt-8 flex flex-wrap items-center gap-4">
       <a href="/pricing/#api" class="btn-secondary">See API pricing →</a>

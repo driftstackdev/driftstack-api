@@ -40,12 +40,22 @@ describe('W262.C /trust/security-overview ↔ live evidence parity', () => {
     expect(page).not.toMatch(/client-cert validation on internal hops/);
   });
 
-  it('customer-configurable egress is marked SHIPPED (emerald ✓, per profile). 2026-05-22 — flipped from amber ○ "(roadmap)" after the SocksProxyBackend impl + bootstrap wire landed per planning 133 Phase 1. Without an attached config, traffic still exits via Driftstack EU egress.', () => {
+  it('customer-configurable egress is marked SHIPPED (emerald ✓, per profile). 2026-05-22 — flipped from amber ○ "(roadmap)" after the SocksProxyBackend impl + bootstrap wire landed per planning 133 Phase 1. 2026-09-15 refuter: the "Driftstack EU egress" / "managed exit" fallback this title used to assert does not exist in the shipped config — an API session names a saved proxy_id and no shared Driftstack exit is configured.', () => {
     // 2026-09-15 plain-language pass: same shipped claim, customer words.
     expect(page).toMatch(/Your own proxy or VPN, per profile/);
-    // 2026-09-15: aligned with /security ("Driftstack's managed exit") —
-    // sessions run on US hardware, so "own EU network" overstated the region.
-    expect(page).toMatch(/Driftstack's\s+managed exit/);
+    // 2026-09-15 refuter: the "managed exit" fallback was an INVENTED feature —
+    // no Driftstack-run exit is configured for production (infra/env-templates/
+    // production.env.template leaves DEFAULT_EGRESS_HOST/PORT empty on purpose:
+    // "UNSET IS VALID AND DELIBERATE"; production.env carries no DEFAULT_EGRESS_*
+    // line; apps/server/src/routes/agent-sessions.ts dispatches NO proxy when
+    // proxy_id is omitted and a REQUIRE_PROXY=1 node refuses by name). The page
+    // now says an API session names a saved proxy and that no shared Driftstack
+    // exit exists; the old clause is negatively pinned so it cannot return.
+    expect(page).toMatch(/names one of your saved proxies by\s+its proxy_id/);
+    expect(page).toMatch(
+      /Driftstack does not route your traffic through\s+a shared exit of its own/,
+    );
+    expect(page).not.toMatch(/managed exit/);
   });
 
   it('webhook signing claim matches the live HMAC scheme (Stripe + NowPayments + outbound)', () => {

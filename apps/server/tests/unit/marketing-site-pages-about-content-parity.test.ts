@@ -48,8 +48,23 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // data" / "EU-resident infrastructure" over-reached since R2-held
     // file objects replicate EU + US.
     expect(body).toMatch(/One engine\. One product\. Engineered for fidelity\./);
+    // 2026-09-15 refuter fix: the hero read "real iPhones in the cloud" — false as a
+    // literal product statement (faq.ts answers "real iPhones or emulated?" with
+    // "Neither": a WebKit build on Mac hardware) and the homepage never uses that
+    // form. Retitled to the homepage register, "real iPhone Safari ... in the cloud".
     expect(body).toMatch(
-      /Driftstack ships iPhone Safari sessions on demand, built on\s+real <a href="\/glossary\/#webkit"[^>]*>WebKit<\/a>\s+— the same engine every physical iPhone runs — with nothing\s+quietly modified while the browser is running \("patched at\s+runtime"\), so there's nothing for detection systems to spot\./,
+      /<PageHero label="About" title="We build one thing: real iPhone Safari in the cloud\.">/,
+    );
+    expect(body).not.toMatch(/real iPhones in the cloud/);
+    // 2026-09-15 truth pass: "the same engine every physical iPhone runs"
+    // read as "the same browser Apple ships". The honest shape is a BUILD of
+    // Apple's own WebKit — the engine family behind iPhone Safari (the
+    // homepage's wording). The no-runtime-patching claim is unchanged.
+    expect(body).toMatch(
+      /Driftstack ships iPhone Safari sessions on demand, running a\s+build of Apple's own <a href="\/glossary\/#webkit"[^>]*>WebKit<\/a>\s+— the engine family behind iPhone Safari — with nothing\s+quietly modified while the browser is running \("patched at\s+runtime"\), so there's nothing for detection systems to spot\./,
+    );
+    expect(body, 'the same-browser-Apple-ships shape must not return').not.toMatch(
+      /the same engine every physical iPhone runs/,
     );
     // 2026-09-15 customer-copy pass: the "(EU-resident control plane)"
     // parenthetical restated the sentence in an internal term and is gone.
@@ -68,8 +83,28 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // gone; the hidden-test-image check is explained in one plain clause,
     // the canvas glossary link survives, and the same-value-as-millions
     // contrast + the WebKit-source-code claim are unchanged.
+    // 2026-09-15 truth pass (A1 fingerprint sheet): a real iPhone does NOT
+    // return one identical canvas value — Safari deliberately varies the
+    // noise-protected surfaces per read, and the fixed ones stay fixed. The
+    // contrast now says that (the homepage matrix footnote's wording), the
+    // engine claim is "our own build of the engine family behind iPhone
+    // Safari", and the blanket "the fingerprint a website reads is the
+    // fingerprint a real iPhone would send" became the scoped "checked
+    // against real iPhones, check by check".
     expect(body).toMatch(
-      /Most stealth browsers fake an iPhone by changing the\s+browser's behaviour on the fly\. Detection systems are built\s+to catch exactly that\. One common check asks the browser to\s+draw a hidden test image and compares the result \(the\s+<a href="\/glossary\/#canvas-hash"[^>]*>canvas<\/a>\s+and WebGL fingerprints\): the values those tools return come\s+out different every session — the opposite of a real iPhone,\s+which returns the same value as millions of other iPhones\.\s+Driftstack takes a different approach: we run Apple's WebKit\s+source code, the same engine that ships on every real iPhone\./,
+      /Most stealth browsers fake an iPhone by changing the\s+browser's behaviour on the fly\. Detection systems are built\s+to catch exactly that\. One common check asks the browser to\s+draw a hidden test image and compares the result \(the\s+<a href="\/glossary\/#canvas-hash"[^>]*>canvas<\/a>\s+and WebGL fingerprints\): the values those tools return come\s+out different every session — the opposite of a real iPhone,\s+whose answers blend in with millions of other iPhones: the\s+fixed ones stay fixed, and the ones Safari deliberately\s+varies are varied the same way\. Driftstack takes a different\s+approach: we run Apple's WebKit source code — our own build\s+of the engine family behind iPhone Safari\./,
+    );
+    expect(body).toMatch(
+      /The\s+answers a website reads are checked\s+against real iPhones,\s+check by check\./,
+    );
+    expect(body, 'the one-identical-value blanket must not return').not.toMatch(
+      /returns the same value as millions of other iPhones/,
+    );
+    expect(body, 'the blanket identity claim must not return').not.toMatch(
+      /The fingerprint a website reads is the\s+fingerprint a real iPhone would send/,
+    );
+    expect(body, 'the same-engine-that-ships shape must not return').not.toMatch(
+      /the same engine that ships on every real iPhone/,
     );
     expect(body).toMatch(
       /Nothing is changed on the fly, so there's nothing for\s+detection to find\./,
@@ -142,11 +177,24 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // input engine, per-profile persona) and the v1.0 version talk are
     // gone; the shipped facts (recorded human input, per-profile habits,
     // save/replay/view/delete recipes) are unchanged.
+    // 2026-09-15 truth pass (A3 harness sheet): human-like motion is a MODE
+    // available per profile — a flat non-behavioural input path exists — so
+    // "move like a real hand" as a blanket is gone; the homepage's "patterns
+    // taken from real human movement" wording is used instead. Recipe
+    // REPLAY is not shipped (routes/recipes.ts: execution is v1.1,
+    // RecipesView is read-only, recipe-library ships a mock runner), so the
+    // card now describes a recipe as a readable record you can view/delete.
     expect(body).toMatch(
-      /We say no to things we can't ship well\. Touch, scroll, and\s+typing are built from real human recordings and move like a\s+real hand, and each profile keeps its own habits\./,
+      /We say no to things we can't ship well\. Human-like touch,\s+scroll, and typing — patterns taken from real human movement —\s+are available per profile, and each profile keeps its own\s+habits\./,
     );
     expect(body).toMatch(
-      /You can also\s+save a finished agent session as a step-by-step recipe you can\s+replay, then view or delete your saved recipes\./,
+      /You can also save a finished agent session as a\s+step-by-step recipe, a readable record of what the agent did,\s+then view or delete your saved recipes\./,
+    );
+    expect(body, 'recipe replay is not shipped and must not be promised').not.toMatch(
+      /recipe you can\s+replay/,
+    );
+    expect(body, 'blanket humanised-motion claim must not return').not.toMatch(
+      /move like a\s+real hand/,
     );
     expect(body).not.toMatch(/behavioural input engine|per-profile persona/);
     expect(body).not.toMatch(/Running a saved recipe[\s\S]{0,80}v1\.1/);

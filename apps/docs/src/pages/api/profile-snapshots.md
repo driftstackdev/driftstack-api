@@ -8,9 +8,9 @@ description: Capture, list, and restore immutable point-in-time metadata records
 
 A **profile snapshot** is an immutable
 point-in-time record of a saved profile's **metadata** — its
-archetype, name, and description, frozen as they were at capture
-time. Snapshots stay meaningful even after the source profile is
-renamed, re-archetyped, or deleted.
+device profile (`archetype`), name, and description, frozen as they
+were at capture time. Snapshots stay meaningful even after the source
+profile is renamed or deleted.
 
 **What a snapshot does NOT capture today: browser state.**
 Cookies, `localStorage`, IndexedDB, and logins are not copied into
@@ -25,12 +25,12 @@ model:
 - **Profiles** evolve: every session you run against a profile
   may mutate cookies, `localStorage`, IndexedDB, etc.
 - **Snapshots** are frozen metadata: capture an evolving profile into a
-  named snapshot, and the snapshot's recorded archetype / name /
+  named snapshot, and the snapshot's recorded device profile / name /
   description remain unchanged even as the source profile keeps
   changing.
 
 Restoring a snapshot creates a **new profile** carrying the
-snapshot's frozen archetype + description — the source profile is
+snapshot's frozen device profile + description — the source profile is
 untouched, and the new profile starts with fresh (empty) browser
 state.
 
@@ -41,7 +41,7 @@ Snapshots are captured and restored in the Driftstack desktop app
 
 `POST /v1/profiles/:id/snapshots`
 
-Captures profile `:id`'s current metadata (archetype, name,
+Captures profile `:id`'s current metadata (device profile, name,
 description) as a new snapshot. No browser state is captured.
 
 Request:
@@ -69,8 +69,8 @@ Response (201):
 
 `parent_profile_id`, `parent_archetype`, and `parent_name` are
 frozen at capture time — they record the source profile's id,
-archetype, and name as they were, even if the profile is later
-renamed, re-archetyped, or deleted.
+device profile, and name as they were, even if the profile is later
+renamed or deleted.
 
 Errors:
 
@@ -174,7 +174,7 @@ Required scope: `read` or `read:profiles`.
 `POST /v1/profile-snapshots/:id/restore`
 
 Creates a new profile carrying the snapshot's frozen metadata —
-archetype and description — under the name you supply. The source
+device profile and description — under the name you supply. The source
 profile is untouched. The new profile starts with fresh (empty)
 browser state: restore does not bring back cookies or logins.
 
@@ -256,10 +256,10 @@ and the customer must either delete a profile first or upgrade tier.
 
 Snapshots are metadata only, stored separately from live profiles —
 no browser state is stored (the state field is always empty). Each
-snapshot freezes the source profile's archetype + name
+snapshot freezes the source profile's device profile + name
 (`parent_archetype` / `parent_name`) at capture time, so a snapshot
-stays meaningful even after the parent profile is renamed,
-re-archetyped, or deleted. There is no per-account snapshot quota
+stays meaningful even after the parent profile is renamed or
+deleted. There is no per-account snapshot quota
 today.
 
 ## SDK access

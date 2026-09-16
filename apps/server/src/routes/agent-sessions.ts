@@ -3747,7 +3747,7 @@ export function registerAgentSessionsRoutes(
           reason:
             vpnScheme === null
               ? 'This proxy has not been tested yet. Run POST /v1/account/me/proxies/:id/test first.'
-              : `This ${schemeName} proxy has not reported a working exit yet. Run Check (POST /v1/account/me/proxies/:id/test?vantage=fleet) or start a session through it first.`,
+              : `This ${schemeName} proxy has not reported a working exit yet. Run Check on the proxy (API: POST /v1/account/me/proxies/:id/test?vantage=fleet) or start a session through it first.`,
         };
       }
       const exitIdentity = {

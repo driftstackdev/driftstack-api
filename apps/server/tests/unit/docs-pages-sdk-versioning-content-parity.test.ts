@@ -130,7 +130,7 @@ describe('W777 docs /sdk/versioning content parity', () => {
     expect(p).toMatch(/v\(X\+1\)\.0\.0: removed\./);
   });
 
-  it('CRITICAL 4-item migration-guide framing pinned. Old code + new code + sed/regex replacement + behavioral diffs. The migration-script path is packages/sdk-<lang>/scripts/migrate-<from>-to-<to>.<ext>.', () => {
+  it('CRITICAL 4-item migration-guide framing pinned. Old code + new code + sed/regex replacement + behavioral diffs. The migration script ships inside the SDK package as scripts/migrate-<from>-to-<to>.<ext> (2026-09-15: the page used to print the monorepo path packages/sdk-<lang>/…, which a customer cannot open — the package-relative path is what they can find).', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/1\. What the old code looked like\./);
@@ -138,8 +138,10 @@ describe('W777 docs /sdk/versioning content parity', () => {
     expect(p).toMatch(/3\. Sed\/regex replacement when feasible\./);
     expect(p).toMatch(/4\. Behavioral differences \(if any\) that aren't a pure rename\./);
     expect(p).toMatch(
-      /For non-trivial breaks, a migration script ships in\s*\n?`packages\/sdk-<lang>\/scripts\/migrate-<from>-to-<to>\.<ext>`\./,
+      /For non-trivial breaks, a migration script ships inside the SDK package\s*\n?as `scripts\/migrate-<from>-to-<to>\.<ext>`\./,
     );
+    expect(p).not.toMatch(/packages\/sdk-<lang>/);
+    expect(p).toMatch(/a migration script ships inside the SDK package/);
   });
 
   it('CRITICAL 4-item cross-SDK lockstep framing pinned. Resource names + Error class hierarchy + verifyWebhookSignature helper + OpenAPI regen. The \'When a feature lands in one SDK but not another, the missing SDKs get a CHANGELOG note ("planned for v0.X.Y") and a tracking issue. The lag should be ≤ one MINOR release\' wording is the load-bearing parity contract.', () => {

@@ -101,7 +101,7 @@ Tauri Updater checks the signed GitHub Releases manifest once at startup. When
 a newer version exists, the app shows a non-blocking in-app banner; it does not
 download anything until you choose **Install**. The updater then downloads the
 bundle, verifies its signature against the embedded public key, installs it,
-and relaunches the app. See [the gui-client packaging notes](https://github.com/driftstackdev/driftstack-api/blob/main/apps/gui-client/PACKAGING.md) for the full update protocol.
+and relaunches the app.
 
 ## Troubleshooting
 

@@ -109,13 +109,16 @@ describe('W763 docs /api/profiles content parity', () => {
     expect(p).toMatch(/hyphen, and dot\. Leading\/trailing whitespace is trimmed\./);
   });
 
-  it("CRITICAL archetype-is-sticky-for-lifetime framing pinned. The 'Once set, the archetype is sticky for that profile\\'s lifetime' wording + the 'repin via POST /v1/profiles/:id/clone with a new archetype' fallback explains the no-archetype-edit contract.", () => {
+  it("CRITICAL device-profile-is-fixed-for-lifetime framing pinned. The 'Once set, the device profile is fixed for that profile\\'s lifetime' wording + the 'create a new profile with the new archetype, then delete the old profile' fallback explains the no-archetype-edit contract. (2026-09-15: the page said 'repin via clone with a new archetype', but CloneProfileRequestSchema is name-only — clone keeps the source's archetype — so the fallback now names the path that exists. Plain words: 'archetype' is the field name, 'device profile' is what a customer reads.)", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Once set,\s*\n?\s+the archetype is sticky for that profile's lifetime\./);
     expect(p).toMatch(
-      /The\s*\n?archetype is intentionally not editable — repin via\s*\n?`POST \/v1\/profiles\/:id\/clone` with a new archetype, then delete the\s*\n?old profile after migration\./,
+      /Once set,\s*\n?\s+the device profile is fixed for that profile's lifetime\./,
     );
+    expect(p).toMatch(
+      /The\s*\n?device profile is intentionally not editable — to move to a different\s*\n?device, create a new profile with the new `archetype`, then delete the\s*\n?old profile after migration\./,
+    );
+    expect(p).not.toMatch(/repin via\s*\n?`POST \/v1\/profiles\/:id\/clone` with a new archetype/);
   });
 
   it('new create/import archetypes come from the live catalog while stored legacy profile operations remain available', () => {
@@ -130,7 +133,7 @@ describe('W763 docs /api/profiles content parity', () => {
       /Import is a new-profile write, so `envelope\.profile\.archetype` must be present\s*\n?in the current selectable catalog\./,
     );
     expect(p).toMatch(
-      /Existing profiles preserve their stored archetype even after it leaves\s*\n?the selectable catalog\. They remain listable, readable, clonable, transferable,\s*\n?snapshot-restorable, and launchable/,
+      /Existing profiles keep their stored device profile even after it leaves\s*\n?the selectable catalog\. They remain listable, readable, clonable, transferable,\s*\n?snapshot-restorable, and launchable/,
     );
   });
 
@@ -174,11 +177,11 @@ describe('W763 docs /api/profiles content parity', () => {
     );
   });
 
-  it("CRITICAL clone-fresh-state framing pinned. The 'Underlying browser state is NOT cloned — the new profile starts with a fresh state slot under the same archetype' wording is the load-bearing customer-expectation framing.", () => {
+  it("CRITICAL clone-fresh-state framing pinned. The 'Underlying browser state is NOT cloned — the new profile starts with a fresh state slot under the same device profile' wording is the load-bearing customer-expectation framing.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Underlying\s*\n?browser state is NOT cloned — the new profile starts with a fresh\s*\n?state slot under the same archetype\./,
+      /Underlying\s*\n?browser state is NOT cloned — the new profile starts with a fresh\s*\n?state slot under the same device profile\./,
     );
   });
 
@@ -194,7 +197,7 @@ describe('W763 docs /api/profiles content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Snapshots are immutable point-in-time metadata records of a\s*\n?profile\. The parent profile keeps evolving — its archetype, name,\s*\n?description,/,
+      /Snapshots are immutable point-in-time metadata records of a\s*\n?profile\. The parent profile keeps evolving — its device profile, name,\s*\n?description,/,
     );
     expect(p).toMatch(/Browser state \(cookies, logins\)\s*\n?is NOT captured today/);
   });

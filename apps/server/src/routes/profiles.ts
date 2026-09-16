@@ -775,7 +775,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
         // refused clear was indistinguishable from a successful no-op.
         return {
           status: 'unavailable' as const,
-          reason: 'no fleet node is connected',
+          reason: 'no machine is available to run this right now — try again in a minute',
           blocked: true as const,
         };
       }
@@ -828,8 +828,8 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
             // so telling the customer "nothing happened" would be its own lie.
             reason:
               outcome.appliedScope === undefined
-                ? 'the fleet node that handled this is too old to clear anything beyond the cache. It cleared cached files instead; cookies, site data and tabs are unchanged. Retry once the fleet is updated'
-                : `the fleet node cleared "${outcome.appliedScope}" instead of "${scope}". Nothing else was changed`,
+                ? 'the machine that handled this is too old to clear anything beyond the cache. It cleared cached files instead; cookies, site data and tabs are unchanged. Try again once it has been updated'
+                : `the machine cleared "${outcome.appliedScope}" instead of "${scope}". Nothing else was changed`,
           };
         }
         if (outcome.status === 'ok') {

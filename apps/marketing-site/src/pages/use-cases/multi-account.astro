@@ -8,6 +8,11 @@
 // chip framing, pricing Manual card (10 to 200 profiles, browser tabs).
 // AUP discipline: capability description only — the page names the
 // boundary (/legal/aup) instead of encouraging anyone to cross it.
+// 2026-09-15 truth pass (product-truth sheets): fingerprint claims scoped
+// to "checked against real iPhones" (81/96 device profiles byte-identical,
+// not a blanket identity); human motion is a per-profile MODE, not every
+// interaction; clock + time zone follow the exit (language is not claimed);
+// the free tier's device entitlement is data-bound from pricing.ts.
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHero from '../../components/PageHero.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
@@ -16,6 +21,9 @@ import Stat from '../../components/Stat.astro';
 import FaqList from '../../components/FaqList.astro';
 import CtaBand from '../../components/CtaBand.astro';
 import { FAQ_GROUPS } from '../../data/faq';
+import { API_TIERS } from '../../data/pricing';
+
+const freeTier = API_TIERS.find((t) => t.id === 'free')!;
 
 // The two FAQ groups operators ask about before signing: whether the
 // iPhones are real, and where the acceptable-use line sits.
@@ -77,15 +85,15 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
       />
       <Stat
         plain="Identities that hold up"
-        technical="The hidden 'device photos' sites take to spot fakes match millions of real iPhones — not a brand-new value every session, which is itself a giveaway"
+        technical="The hidden checks websites run to spot fakes get the answers a real iPhone gives — checked against real devices, check by check — so a profile blends in instead of standing out"
       />
       <Stat
         plain="Its own corner of the world"
-        technical="Bring your own proxy or VPN, attached per profile — language and clock settings follow the location of your proxy or VPN"
+        technical="Bring your own proxy or VPN, attached per profile — the phone's clock and time zone follow that location, so nothing contradicts the address a website sees"
       />
       <Stat
-        plain="It even moves like a person"
-        technical="Taps, swipes and keystrokes generated from patterns of real human movement, consistent per profile"
+        plain="It can even move like a person"
+        technical="Taps, swipes and keystrokes can follow patterns taken from real human movement — available per profile, with a motion signature that stays consistent across that profile's sessions"
       />
     </div>
     {/* S31 2026-07-07 (fable-truth-audit) — "open at once" is the site's
@@ -100,6 +108,15 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
       tag them by client, launch with one click, and pop any account out
       into its own floating device window. No code anywhere in the loop.
     </p>
+    <p class="mt-5 max-w-prose text-base leading-7 text-tk-ink-2">
+      Profiles come with the housekeeping a real book of accounts needs:
+      recover one you deleted from the recycle bin, export
+      a profile and import it again, and invite teammates as admins who can
+      run your accounts under your plan, or as read-only members who can
+      view them but not change anything. Sign-ins, key changes, session
+      starts and stops, profile creates and deletes, and team changes land
+      in an audit log you can export.
+    </p>
   </Section>
 
   <Section
@@ -110,7 +127,10 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
     <div class="mt-8 flex flex-wrap items-center gap-4">
       <a href="/pricing/#manual" class="btn-secondary">See Manual pricing →</a>
       <p class="text-sm text-tk-ink-3">
-        Start free first — one profile, 20-minute sessions, no card required.
+        Start free first — one profile, 20-minute sessions, on the
+        {freeTier.archetypeAccess}, no card required. The AI agent —
+        describe a task in plain English and watch it run — is on Team and
+        Agency.
       </p>
     </div>
     <p class="mt-8 max-w-prose text-sm leading-6 text-tk-ink-3">

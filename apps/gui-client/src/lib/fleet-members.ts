@@ -206,10 +206,7 @@ export async function pingFleetMember(member: FleetMember): Promise<FleetMemberP
     return out;
   } catch (err) {
     const dur = Math.round(performance.now() - start);
-    const message = humanizeError(
-      err,
-      "Couldn't reach this fleet member. Check its URL and try again.",
-    );
+    const message = humanizeError(err, "Couldn't reach this server. Check its URL and try again.");
     return { ok: false, durationMs: dur, error: message };
   } finally {
     clearTimeout(timer);

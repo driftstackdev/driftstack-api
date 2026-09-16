@@ -49,7 +49,7 @@ describe('docs/pages/guides/live-video content parity', () => {
       /The simplest path\. When live video is available on your deployment,\s*`POST \/v1\/agent-sessions` returns the join info inline:/,
     );
     expect(body).toMatch(
-      /`session\.livekit` is `undefined` when live video is not yet\s*available for the session\. Clients that need a token in that\s*state fall back to the explicit endpoint\./,
+      /`session\.livekit` is `undefined` when live video has not started\s*for the session\. Clients that need a token in that state fall\s*back to the explicit endpoint\./,
     );
     expect(body).not.toMatch(/pre-LK deployments|no Mac has registered/);
   });

@@ -202,9 +202,9 @@ export function registerAgentSessionsLivekitTokenRoute(
       if (mac === null || mac.livekit === null) {
         bump('no_mac');
         throw new FeatureUnavailableError(
-          'No Mac in the fleet has registered LiveKit credentials yet. ' +
-            'POST /v1/mac-nodes/register must run for at least one Mac before ' +
-            'tokens can be minted.',
+          'Live view is not available yet: no machine on this deployment has streaming set up. ' +
+            'If you run Driftstack yourself, add streaming credentials for at least one machine ' +
+            '(POST /v1/mac-nodes/register); otherwise try again shortly.',
         );
       }
 

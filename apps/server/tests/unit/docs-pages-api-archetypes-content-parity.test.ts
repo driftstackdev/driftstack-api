@@ -13,7 +13,7 @@ describe('docs /api/archetypes live-contract parity', () => {
   it('exists and documents the cacheable public selectable catalog', () => {
     expect(existsSync(PAGE)).toBe(true);
     expect(page).toMatch(
-      /^---\nlayout: \.\.\/\.\.\/layouts\/DocLayout\.astro\ntitle: Archetypes\n/,
+      /^---\nlayout: \.\.\/\.\.\/layouts\/DocLayout\.astro\ntitle: Device profiles\n/,
     );
     expect(page).toContain('`GET /v1/archetypes`');
     expect(page).toContain('`Cache-Control: public, max-age=300`');
@@ -50,7 +50,7 @@ describe('docs /api/archetypes live-contract parity', () => {
     );
     expect(page).not.toMatch(/\bplanned\b|reference-only/i);
     expect(page).toMatch(
-      /Existing stored profiles keep their pinned archetype\s*\n?even if it later leaves the selectable catalog/,
+      /Existing stored profiles keep their pinned device profile\s*\n?even if it later leaves the selectable catalog/,
     );
   });
 });

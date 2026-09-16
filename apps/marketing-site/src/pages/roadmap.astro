@@ -1,6 +1,26 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHero from '../components/PageHero.astro';
+import Section from '../components/Section.astro';
+import Card from '../components/Card.astro';
+import { DEVICE_SUPPORT } from '../data/capabilities';
+// 2026-09-15 what-ships pass — this legacy route used to be a signpost
+// only. It keeps its two references (the changelog and the API docs)
+// and adds a plain inventory of what the product does today. Every line
+// is scoped to what ships: device counts bind to DEVICE_SUPPORT, plan
+// facts follow pricing.ts, and everything else names a released surface
+// that the changelog or the docs already describe. Refuter pass the same
+// day: the model span counts models (19; the catalog has no SE, 16e or
+// Air), the Approve / Deny pause is scoped to the buttons it recognises
+// (agent-consequential-action.ts: buy / pay / delete-account phrases),
+// and OAuth client registration is on request (docs/oauth-apps).
+// Second pass: profile snapshots have no desktop-app surface and v1
+// captures device + name only, restore minting a NEW profile
+// (services/profile-snapshots.ts), so they sit under From code, scoped;
+// export/import is settings-only (routes/profiles.ts: metadata-only).
+// The spend warning is a desktop-app notification (bootstrap.ts
+// sendAlert → NotificationEventBus → routes/account-notifications.ts
+// SSE → gui NotificationToastStack.tsx); no email channel is wired.
 ---
 
 <BaseLayout
@@ -21,4 +41,65 @@ import PageHero from '../components/PageHero.astro';
       <a href="https://docs.driftstack.io/api/" class="btn-secondary">Browse the API</a>
     </div>
   </PageHero>
+
+  <Section
+    label="Today"
+    title="What you get today."
+    lead="Everything below is in the product today, in plain words. The changelog has the day-by-day detail; the API documentation has the exact requests and responses."
+  >
+    <div class="mt-10 grid gap-6 md:grid-cols-2">
+      <Card title="Real iPhone Safari sessions">
+        A build of Apple's own WebKit — the engine family behind iPhone
+        Safari — checked against real iPhones, with no script injected into
+        the page. {DEVICE_SUPPORT.selectableCount} device profiles across
+        19 iPhone models, from the iPhone 13 to the 17 Pro Max ({DEVICE_SUPPORT.deviceFamilies})
+        on iOS {DEVICE_SUPPORT.iosVersions}, with Safari {DEVICE_SUPPORT.safariVersions}.
+        The default is iPhone 17 / iOS 18.7 / Safari 26.4.
+      </Card>
+      <Card title="The desktop app">
+        Profiles in folders with tags, one-click launch, and a floating device
+        window per session. A recycle bin, and export/import of a profile's
+        settings as a file. A proxy or VPN attached per profile — SOCKS5, HTTP,
+        OpenVPN (.ovpn file) or WireGuard (.conf file) — with a Test readout
+        before you launch. Paste as human typing. Local session recording with
+        replay and JSON export.
+      </Card>
+      <Card title="From code">
+        TypeScript, Python and Go SDKs, plus a plain HTTPS API any HTTP client
+        can drive. Sessions, profiles and their snapshots (a profile's device
+        and name, saved so you can start a new profile from it), webhooks
+        with test deliveries, secret rotation and replay, idempotency keys,
+        cursor pagination, standard rate-limit headers, and a public status
+        page with email incident alerts. OAuth 2.0 for an app that acts on a customer's behalf
+        (client registration on request).
+      </Card>
+      <Card title="The AI agent">
+        Describe a task in plain English and the agent drives the session
+        while you watch — AI, manual and pair modes, the screenshots it takes
+        shown under each step, and an Approve / Deny pause before it taps a
+        button to buy, pay, or delete an account.
+        On Team plans and up, and on every API
+        plan; bring your own Anthropic key, or use the bundled option from API
+        Builder up.
+      </Card>
+      <Card title="Your account">
+        Team roles, an audit log you can export as CSV, two-factor sign-in with
+        recovery codes, a list of active sign-ins you can revoke, a spend
+        warning in the desktop app when your estimated monthly cost crosses
+        a threshold, and payment by card or crypto.
+      </Card>
+      <Card title="Plans">
+        Free: one profile, one session at a time, 20-minute sessions, iPhone
+        13 and iPhone 13 mini, no API access, proxy only (no VPN), no card
+        required. Paid plans from $79/mo remove the session cap, open the full
+        catalog and include API access. Self-hosted runs on Macs you own, set
+        up with our sales team.
+      </Card>
+    </div>
+    <div class="mt-8 flex flex-wrap gap-3">
+      <a href="/pricing/" class="btn-secondary">See pricing</a>
+      <a href="/self-hosted/" class="btn-secondary">Self-hosted</a>
+      <a href="/trust/cumulative-rig/" class="btn-secondary">How we check devices</a>
+    </div>
+  </Section>
 </BaseLayout>

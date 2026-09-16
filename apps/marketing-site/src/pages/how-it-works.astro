@@ -21,6 +21,29 @@ import AgentPlanDemo from '../components/AgentPlanDemo.astro';
 import FingerprintDemo from '../components/FingerprintDemo.astro';
 import ProxyHealthDemo from '../components/ProxyHealthDemo.astro';
 import profilesGridScreen from '../assets/screens/profiles-grid.png';
+import { ARCHETYPE_REGISTRY, LOCKED_ARCHETYPE_ID } from '@driftstack/api-types';
+import { DEVICE_SUPPORT } from '../data/capabilities';
+
+// 2026-09-15 — the default device and the catalog counts are READ at build
+// time (the same bindings FingerprintDemo and the homepage use), so this page
+// cannot quote a default or a count the product stopped shipping. A missing
+// registry entry fails the build instead of falling back to a typed-out label.
+const lockedDevice = ARCHETYPE_REGISTRY.find((a) => a.id === LOCKED_ARCHETYPE_ID);
+if (!lockedDevice) {
+  throw new Error(`how-it-works: default device ${LOCKED_ARCHETYPE_ID} is not in the registry`);
+}
+const DEFAULT_DEVICE = lockedDevice.displayLabel;
+
+// The model count is DERIVED from the selectable rows the same way. The catalog
+// names specific iPhone models between its endpoints (19 today — there is no
+// iPhone SE, 16e or Air profile), so the copy says "N iPhone models, iPhone 13 →
+// 17 Pro Max" and never "every iPhone" in that span: that sentence would promise
+// models the registry does not carry.
+const DEVICE_MODEL_COUNT = new Set(
+  ARCHETYPE_REGISTRY.filter((a) => a.status === 'launch' || a.status === 'available').map(
+    (a) => a.device,
+  ),
+).size;
 
 // What the cockpit capture SHOWS, in plain words (Band A: cities spelled
 // out, no protocol jargon). The capture is the source of truth — the alt
@@ -35,7 +58,7 @@ const COCKPIT_ALT =
 
 <BaseLayout
   title="How it works"
-  description="The whole product in three steps, no code anywhere: pick an iPhone profile, start a session in the cloud, and drive it yourself or in plain English."
+  description="The whole product in three steps, no code anywhere: pick an iPhone profile, start a session in the cloud, and drive it yourself, from code, or in plain English with the built-in AI agent (Team plans and up, and every API plan)."
   ogImage="/og/how-it-works.png"
 >
   <PageHero
@@ -69,10 +92,11 @@ const COCKPIT_ALT =
       <div class="panel">
         <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Proxy</p>
         <p class="mt-3 text-sm leading-7 text-tk-ink-2">
-          Your session's <strong class="text-tk-ink">own internet exit</strong>.
-          Attach one per profile and that phone browses from its own corner of
-          the world — Amsterdam, New York, Tokyo — instead of from a data
-          center.
+          Your session's <strong class="text-tk-ink">own internet exit</strong>
+          — a SOCKS5 proxy you bring, or on paid plans an OpenVPN or WireGuard
+          tunnel. Attach one per profile and that phone browses from its own
+          corner of the world — Amsterdam, New York, Tokyo — instead of from a
+          data center.
         </p>
       </div>
     </div>
@@ -89,24 +113,28 @@ const COCKPIT_ALT =
     <div class="mt-10 grid gap-6 md:grid-cols-3">
       <Card title="Pick an iPhone profile">
         <IconTile slot="icon"><span class="font-mono text-base font-semibold">1</span></IconTile>
-        Start with the default iPhone, or create your own. Make one per
-        account, per client, or per job. Each profile remembers its logins,
-        cookies, and history across every run — set it up once, and it stays
-        set up.
+        Start with the default iPhone — {DEFAULT_DEVICE} — or pick any of the
+        {DEVICE_SUPPORT.selectableCount} device profiles across
+        {DEVICE_MODEL_COUNT} iPhone models, {DEVICE_SUPPORT.deviceFamilies}
+        (the free tier starts you on an iPhone 13 or 13 mini). Make one
+        profile per account, per client, or per job. Each remembers its
+        logins, cookies, and history across every run — set it up once, and
+        it stays set up.
       </Card>
       <Card title="Start a session">
         <IconTile slot="icon"><span class="font-mono text-base font-semibold">2</span></IconTile>
         One click in the desktop app and a real iPhone browser opens in the
-        cloud, ready in seconds. No hardware to buy, nothing to install, no
-        setup wizard — the phone appears in its own window, already being the
-        profile you picked.
+        cloud, ready in seconds. No hardware to buy, no phone to set up — it
+        appears in its own floating window, already being the profile you
+        picked. Developers get the same from one API call.
       </Card>
       <Card title="Drive it your way">
         <IconTile slot="icon"><span class="font-mono text-base font-semibold">3</span></IconTile>
-        Tap, scroll, and type yourself, like any phone. When a task is
+        Tap, swipe, scroll, and type yourself, like any phone. When a task is
         repetitive, describe it in plain English and the built-in AI agent
-        drives while you watch. And if your team writes code, the same sessions can be
-        driven from it — that story lives on the
+        drives while you watch (Team plans and up, and every API plan). And if
+        your team writes code, the same sessions can be driven from it — that
+        story lives on the
         <a href="/use-cases/qa-testing/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">QA page</a>.
       </Card>
     </div>
@@ -121,7 +149,10 @@ const COCKPIT_ALT =
       actions, then runs them on the phone. The list is not free-form: the agent
       can only choose from a fixed set of actions and cannot invent new ones, so what it is
       about to do is always something you can read before it happens &mdash; and
-      afterwards, in the session history.
+      afterwards, in the session history. A step that looks like a purchase, a
+      payment, or an account deletion stops and waits for your approval before it
+      runs, and the screenshots the agent takes land in the transcript as it goes.
+      The agent is included on Team plans and up, and on every API plan.
     </p>
     <AgentPlanDemo />
     <p class="max-w-prose text-tk-ink-2">
@@ -146,7 +177,11 @@ const COCKPIT_ALT =
     <FingerprintDemo />
     <p class="max-w-prose text-tk-ink-2">
       The device profile shown above is Driftstack's default iPhone, with the iOS and
-      Safari versions it runs today.
+      Safari versions it runs today. It is one of {DEVICE_SUPPORT.selectableCount}
+      device profiles you can choose from &mdash; {DEVICE_MODEL_COUNT} iPhone models,
+      {DEVICE_SUPPORT.deviceFamilies}, on iOS 18, with Safari
+      {DEVICE_SUPPORT.safariVersions} &mdash; each one matched to an iPhone Apple
+      really shipped.
     </p>
   </Section>
 
@@ -157,7 +192,10 @@ const COCKPIT_ALT =
     <p class="mt-6 max-w-prose text-tk-ink-2">
       Driftstack checks every proxy and shows you when it last checked. If a proxy fails,
       you see why. If a check is old, it is marked as out of date rather than shown as
-      current &mdash; so you know your proxy works instead of assuming it.
+      current &mdash; so you know your proxy works instead of assuming it. The Test
+      button also reports the proxy's response time, the country and city it exits
+      from, and whether WebRTC and HTTP/3 can travel through it; on a proxy that
+      can't carry HTTP/3, Driftstack switches HTTP/3 off rather than letting it leak.
     </p>
     <ProxyHealthDemo />
   </Section>
@@ -184,13 +222,18 @@ const COCKPIT_ALT =
           <strong class="text-tk-ready-text">Live</strong> dot means that phone is
           running right now; the flag says where it exits. Click a card and
           the session pops out into its own floating device window, so two
-          accounts sit side by side without sharing anything.
+          accounts sit side by side without sharing anything. Duplicate a
+          profile in a click; delete one and it waits in a recycle bin for
+          30 days in case you want it back. You can also record a session
+          and replay it in the app later — recordings stay on your own
+          computer.
         </p>
         <p>
           When a task is repetitive — check these listings, fill this form,
           collect these screenshots — type what you want in plain English and
-          the built-in AI agent drives while you watch. You can take over any
-          time, mid-task, with a click.
+          the built-in AI agent drives while you watch (Team plans and up, and
+          every API plan). Run it in pair mode and you can take over any time,
+          mid-task, with a click, then hand back.
         </p>
       </div>
     </div>
@@ -198,7 +241,7 @@ const COCKPIT_ALT =
 
   <CtaBand
     title="Try the whole loop in five minutes."
-    lead="The free tier is the tour: one profile, 20-minute sessions, no card required. Pick a profile, start a session, drive it — and decide on your own terms."
+    lead="The free tier is the tour: one profile on an iPhone 13 or 13 mini, 20-minute sessions, no card required. Pick a profile, start a session, drive it — and decide on your own terms."
     primaryHref="/pricing/#free"
     primaryLabel="Start free"
     secondaryHref="/pricing/"

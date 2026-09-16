@@ -2,6 +2,7 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { API_TIERS } from '../../data/pricing.ts';
 import type { LlmBilling } from '../../data/pricing.ts';
+import { DEVICE_SUPPORT } from '../../data/capabilities';
 
 // V-668 — per-tier comparison page. The main /pricing page is a
 // glanceable overview; /pricing/comparison is the spreadsheet-style
@@ -89,6 +90,16 @@ const DIMENSIONS = [
         get: (t: (typeof API_TIERS)[number]): string => fmtAiAgent(t.aiAgent, t.llmBilling),
       },
       {
+        label: 'API and SDK access',
+        get: (t: (typeof API_TIERS)[number]): string =>
+          t.apiAccess ? 'Included' : 'Not on this tier',
+      },
+      {
+        label: 'VPN exits (OpenVPN, WireGuard)',
+        get: (t: (typeof API_TIERS)[number]): string =>
+          t.vpnEgress ? 'Included' : 'SOCKS5 or HTTP proxy only',
+      },
+      {
         label: 'Audience',
         get: (t: (typeof API_TIERS)[number]): string => t.audience,
       },
@@ -131,8 +142,12 @@ const DIMENSIONS = [
         <h2 class="text-xl font-semibold tracking-tight text-tk-ink">Free ({fmtUsd(freeTier.monthlyUsd)}, forever)</h2>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
           {freeTier.hoursLabel} — a try-before-you-buy tier, no card
-          required. Includes every iPhone model, iOS version and Safari
-          version we currently offer.
+          required. {freeTier.profiles} profile, {freeTier.concurrent} session
+          at a time, driven by hand in the desktop app, on the
+          {freeTier.archetypeAccess}. No API or SDK access, no VPN (one
+          SOCKS5 or HTTP proxy of your own), and no AI agent. Every paid tier adds
+          the API, VPN exits and every device type; the AI agent starts at
+          Team and is on every API tier.
         </p>
         <p class="mt-2 text-sm">
           <a
@@ -209,7 +224,10 @@ const DIMENSIONS = [
         provides the AI access for you, counted against a monthly budget
         included in your plan. A
         <a href="/glossary/#archetype" class="text-tk-accent-text underline">device type</a>
-        is a specific iPhone model + iOS + Safari combination. SLA = the
+        is a specific iPhone model + iOS + Safari combination. "All current
+        device types" means 19 iPhone models, from the 13 to the 17 Pro Max
+        ({DEVICE_SUPPORT.selectableCount} device types) on iOS 18, Safari
+        {DEVICE_SUPPORT.safariVersions}. SLA = the
         reply time we commit to for support.
       </p>
     </div>
