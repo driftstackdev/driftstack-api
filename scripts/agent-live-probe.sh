@@ -27,6 +27,24 @@ PROXY_ID=""
 # secret and sends it over the network, which is exactly the shape one allow-list
 # rule should cover once. No session is created, so nothing is torn down.
 PROXY_TEST=""
+# --mode picks the session mode the create sends. Default stays "ai" so every
+# existing invocation behaves exactly as before.
+#
+# ⛔ WHY IT EXISTS: the customer-visible bug this script was used to chase is a
+# MANUAL-mode symptom ("stays connecting, cannot take control"), and the probe
+# could only ever create ai sessions. So the measurement that cleared the fix
+# was made on a mode the owner does not use, and generalising it was an
+# inference rather than an observation. The control-plane bring-up path has no
+# mode branching, which is why the inference is a good one — but a flag is
+# cheaper than an argument.
+MODE="ai"
+# --hold N creates the session, leaves it running for N seconds, then tears it
+# down. For a MANUAL session there is nothing to send — a manual session takes
+# taps over the data channel, not prompts — so without this the script had no
+# way to create one and observe it. Holding is the whole measurement: the
+# capability report, the bring-up phases and the network batches all arrive on
+# their own once the session is alive.
+HOLD=""
 VANTAGE="fleet"
 PROMPTS=()
 while [ $# -gt 0 ]; do
@@ -36,12 +54,14 @@ while [ $# -gt 0 ]; do
     --proxy-id) PROXY_ID="$2"; shift 2 ;;
     --proxy-test) PROXY_TEST="$2"; shift 2 ;;
     --vantage) VANTAGE="$2"; shift 2 ;;
+    --mode) MODE="$2"; shift 2 ;;
+    --hold) HOLD="$2"; shift 2 ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) PROMPTS+=("$1"); shift ;;
   esac
 done
-if [ "${#PROMPTS[@]}" -eq 0 ] && [ -z "$PROXY_TEST" ]; then
-  echo "usage: $0 [--base URL] [--profile-id ID] \"prompt\" [\"prompt\" ...]" >&2
+if [ "${#PROMPTS[@]}" -eq 0 ] && [ -z "$PROXY_TEST" ] && [ -z "$HOLD" ]; then
+  echo "usage: $0 [--base URL] [--profile-id ID] [--proxy-id ID] [--mode manual|ai|pair] \"prompt\" [...]" >&2
   echo "       $0 [--base URL] --proxy-test <proxyId> [--vantage fleet|cp]" >&2
   exit 1
 fi
@@ -198,10 +218,10 @@ fi
 # different proxy from anything in the account list — worth being able to pin.
 BODY=$(python3 -c '
 import json, sys
-b = {"mode": "ai"}
+b = {"mode": sys.argv[3] or "ai"}
 if sys.argv[1]: b["profile_id"] = sys.argv[1]
 if sys.argv[2]: b["proxy_id"] = sys.argv[2]
-print(json.dumps(b))' "$PROFILE_ID" "$PROXY_ID")
+print(json.dumps(b))' "$PROFILE_ID" "$PROXY_ID" "$MODE")
 CREATE=$(curl -sS --max-time 60 -w '\n%{http_code}' -X POST "$BASE/v1/agent-sessions" \
            -H "$AUTH" -H 'content-type: application/json' -d "$BODY")
 CCODE=${CREATE##*$'\n'}
@@ -217,6 +237,17 @@ if [ "$CCODE" != "201" ] || [ -z "$SESSION" ]; then
 fi
 echo "  base:    $BASE"
 echo "  session: $SESSION"
+
+# ── hold ───────────────────────────────────────────────────────────────────
+# Nothing to send: sleep, then fall through to the EXIT trap which deletes the
+# session. The session id is already printed above, which is what the caller
+# correlates control-plane logs against.
+if [ -n "$HOLD" ]; then
+  echo "  holding $HOLD s (mode=$MODE) — observe the control plane against this session id"
+  sleep "$HOLD"
+  echo "  hold complete"
+  exit 0
+fi
 
 # ── messages ───────────────────────────────────────────────────────────────
 WORST=0
