@@ -1642,13 +1642,54 @@ export function DeviceToolbar({
               data-component="simulator-connecting-indicator"
               data-wait-label={connectingLabel ?? undefined}
               title={connectingTitle ?? 'Connecting to the live video…'}
-              className="mr-0.5 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-status-busy"
+              // ⛔ CAPPED AND TRUNCATING, and I only found out why by LOOKING.
+              //
+              // The wait labels run to 26 characters where "Connecting…" was 11,
+              // and measurement said they were fine: the pill did not overflow and
+              // its right edge stayed inside the bar. Rendered, the same states
+              // showed the profile name crushed to the single letter "a" in one
+              // case and the profile AND device names gone entirely in the other.
+              // The pill was winning the flex fight and eating the bar's identity —
+              // so a customer with several windows open loses which phone is stuck
+              // at the exact moment they need to know.
+              //
+              // Neither gate could have caught it. The text-quality gate flags an
+              // element only when it clips WITH an ellipsis AND carries no title;
+              // this pill has a title, and without a truncate class it did not
+              // clip at all, it just pushed. The geometry gate measures profile
+              // cards. "No overflow" was true and irrelevant.
+              //
+              // ⛔ A max-width was TRIED HERE AND REMOVED, measured both ways.
+              // At 55% the label truncated at the DEFAULT 402px width ("WAITING
+              // FOR T…") — degrading the case every customer sees — and it still
+              // did not recover the profile name at SIM_MIN_WIDTH, because there
+              // the name is squeezed out by the flex layout rather than by this
+              // element's width. So the cap cost the common case and bought
+              // nothing in the rare one.
+              //
+              // What is shipped instead: no cap, and the trade is stated. At the
+              // default width the bar shows the profile name, the device and the
+              // whole blocker. Dragged to SIM_MIN_WIDTH (280px, which a customer
+              // can do) the names give way and the blocker survives. That is the
+              // right way round — someone who has just dragged one window narrow
+              // knows which window it is, and what they do not know is why it is
+              // stuck. The full sentence is on hover at every width.
+              //
+              // The chips stay long, because their other home is the address bar
+              // where there is room.
+              className="mr-0.5 inline-flex min-w-0 shrink items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-status-busy"
             >
               <span
                 aria-hidden="true"
-                className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-busy"
+                className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-status-busy"
               />
-              {connectingLabel ?? 'Connecting…'}
+              {/* ⛔ The label needs its OWN truncating span. `truncate` on the
+                  inline-flex parent does nothing for its children — text-overflow
+                  applies to the box holding the text — so the first attempt cut
+                  the words at a hard edge with no ellipsis, which reads as a
+                  rendering fault rather than as shortened text. The dot must not
+                  shrink or it collapses to a sliver before the text gives way. */}
+              <span className="min-w-0 truncate">{connectingLabel ?? 'Connecting…'}</span>
             </span>
           ) : null}
           {/* On-screen iOS keyboard toggle (founder 2026-06-25 "behave exactly

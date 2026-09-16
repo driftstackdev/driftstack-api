@@ -814,6 +814,83 @@ export function Gallery(): JSX.Element {
             onToggleKeyboard={noop}
           />
         </div>
+        {/* ⛔ THE CONNECTING STATE HAD NO SCENE AT ALL, which is how a bar that
+            says one word for twelve different problems survived review: the state
+            was never rendered where anyone looks. Added when that word was
+            replaced by the specific blocker — and the replacement is the reason
+            the SECOND tile below exists rather than just the first.
+
+            The label went from "Connecting…" (11 characters) to as many as 26,
+            in a 34px bar whose only truncating element is the device name. ⚠️
+            NEITHER automated gate can see that: the text-quality gate flags an
+            element only when it clips WITH AN ELLIPSIS AND lacks a title, and
+            this pill carries a title and no truncate class, so an over-long
+            label overflows rather than ellipses and is invisible on both counts.
+            The geometry gate measures profile cards, not this bar. So the tile is
+            here to be LOOKED AT, which is what the release runbook asks for and
+            what a green gate would not have given. */}
+        {/* ⚠️ 402px, not the w-72 the tiles above use: that is
+            DEVICE_LOGICAL_WIDTH, the real width this bar has in the app. The
+            release runbook asks for the REAL width, and the first pass of this
+            check was done at 288px — 30% narrower than anything a customer sees —
+            which makes every label look worse than it is and would have bought a
+            fix for a width that does not exist. */}
+        <div className="w-[402px]">
+          <span className="mb-1 block text-2xs uppercase tracking-wide text-ink-muted">
+            connecting — typical (real 402px width)
+          </span>
+          <DeviceToolbar
+            deviceName="iPhone 17"
+            profileName="amsterdam shopper"
+            running={false}
+            connecting
+            connectingLabel="waiting for the screen…"
+            connectingTitle="Connected — waiting for the phone’s screen to arrive."
+            keyboardVisible={false}
+            onToggleKeyboard={noop}
+          />
+        </div>
+        <div className="w-[402px]">
+          <span className="mb-1 block text-2xs uppercase tracking-wide text-ink-muted">
+            connecting — longest label (real 402px width)
+          </span>
+          <DeviceToolbar
+            deviceName="iPhone 17"
+            profileName="amsterdam shopper"
+            running={false}
+            connecting
+            connectingLabel="finishing the last change…"
+            connectingTitle="Finishing the last change to this session — one moment."
+            keyboardVisible={false}
+            onToggleKeyboard={noop}
+          />
+        </div>
+        {/* ⛔ 280px is SIM_MIN_WIDTH — the narrowest a customer can drag this
+            window, not a hypothetical. The first pass of this check happened to
+            be at 288px and showed the profile name crushed to the single letter
+            "a" with the device name gone; I nearly dismissed that as an artifact
+            of testing too narrow, and it is not. It is one pixel-width away from
+            a state the app actually permits.
+
+            So this tile stays as the adjacent state the release runbook asks you
+            to try on purpose: the longest label at the smallest window. What it
+            must show is graceful degradation — an ellipsis rather than a hard
+            cut, and enough of the profile name to tell two windows apart. */}
+        <div className="w-[280px]">
+          <span className="mb-1 block text-2xs uppercase tracking-wide text-ink-muted">
+            connecting — longest label at SIM_MIN_WIDTH (280px)
+          </span>
+          <DeviceToolbar
+            deviceName="iPhone 17"
+            profileName="amsterdam shopper"
+            running={false}
+            connecting
+            connectingLabel="finishing the last change…"
+            connectingTitle="Finishing the last change to this session — one moment."
+            keyboardVisible={false}
+            onToggleKeyboard={noop}
+          />
+        </div>
       </div>
 
       <h1 className="mb-3 mt-10 text-lg font-semibold text-ink-primary">
