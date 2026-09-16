@@ -13,6 +13,12 @@
 //     from prominent bar; brand tagline updated to "Pixel-identical
 //     iPhone Safari sessions in the cloud. API, SDK, or GUI." per
 //     Issue 4 framing (outcome > implementation, GUI added).
+//     ⚠️ 2026-09-16 SUPERSEDED: that tagline retired. It is the last
+//     line of every page on the site and still carried the blanket
+//     "identical" claim family the rest of the site dropped, plus
+//     "GUI" where the parity rule elsewhere is "desktop app". Now:
+//     "Real iPhone Safari sessions in the cloud. Drive them from code
+//     or from the desktop app." Same facts, plain words.
 //
 // Header:
 //   • V-133 mobile-responsive framing pinned in comment.
@@ -42,8 +48,10 @@
 //   • Product signal strip: bit-identical iPhone Safari fingerprint
 //     + SOCKS5/WireGuard/OpenVPN proxies + API/SDK/GUI access +
 //     EU-hosted.
-//   • Tagline: "Pixel-identical iPhone Safari sessions in the cloud.
-//     API, SDK, or GUI."
+//   • Tagline (2026-09-16): "Real iPhone Safari sessions in the cloud.
+//     Drive them from code or from the desktop app." (retired:
+//     "Pixel-identical iPhone Safari sessions in the cloud. API, SDK,
+//     or GUI.")
 //   • StatusBadge embed (live platform health on every page).
 //   • {year} dynamic copyright.
 
@@ -168,10 +176,15 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     expect(body).toMatch(/const year = new Date\(\)\.getUTCFullYear\(\);/);
   });
 
-  it('tagline (F-3): brand framing + proxy egress capability. 2026-05-23 — expanded with SOCKS5/OpenVPN/WireGuard per founder direction.', () => {
-    expect(body).toMatch(/Pixel-identical iPhone Safari sessions in the cloud\./);
+  it('tagline (F-3): brand framing + proxy egress capability. 2026-05-23 — expanded with SOCKS5/OpenVPN/WireGuard per founder direction. 2026-09-16 Band-A readability RE-PIN: the tagline is the last line of EVERY page, read by the same first-time visitor the homepage Band A is written for, and it still carried the retired blanket claim ("Pixel-identical") plus "GUI", which the rest of the site calls the desktop app. Same facts, plain words. The SOCKS5/WireGuard/OpenVPN signal strip below it is a separate element and is unchanged.', () => {
+    expect(body).toMatch(
+      /Real iPhone Safari sessions in the cloud\. Drive them from code or from\s+the desktop app\./,
+    );
     expect(body).toMatch(/SOCKS5/);
-    expect(body).toMatch(/API, SDK, or GUI\./);
+    // the retired claim family and the undefined access-path shorthand must
+    // not come back to the site-wide tagline
+    expect(body).not.toMatch(/Pixel-identical iPhone Safari sessions in the cloud\./);
+    expect(body).not.toMatch(/API, SDK, or GUI\./);
   });
 
   it('2 column headings in canonical order: Product / Company (F-3 — Trust + Legal moved to meta-link row)', () => {

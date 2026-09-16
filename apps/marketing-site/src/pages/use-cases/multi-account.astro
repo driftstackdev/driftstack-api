@@ -13,6 +13,10 @@
 // not a blanket identity); human motion is a per-profile MODE, not every
 // interaction; clock + time zone follow the exit (language is not claimed);
 // the free tier's device entitlement is data-bound from pricing.ts.
+// 2026-09-16 readability pass: pure Band A. Short sentences, benefit first,
+// "fingerprint" introduced once and linked to /glossary#fingerprint; no term
+// left undefined in the sentence that uses it. Facts, numbers and the AUP
+// boundary unchanged.
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHero from '../../components/PageHero.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
@@ -34,13 +38,13 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
 
 <BaseLayout
   title="Multi-account operations"
-  description="Run many accounts, safely apart. Persistent profiles give each account its own phone — separate identity, separate history, its own connection — managed from one desktop app."
+  description="Run many accounts, safely apart. Each account gets its own saved phone: its own logins, its own history, its own connection. You manage them all from one desktop app."
   ogImage="/og/use-cases.png"
 >
   <PageHero
     label="Use cases · Operators + account teams"
     title="Run many accounts, safely apart."
-    lead="You run more than one account because the work demands it — client accounts at an agency, regional storefronts, seller profiles. The hard part isn't running them. It's keeping them apart."
+    lead="You run more than one account because the work demands it: client accounts at an agency, regional storefronts, seller profiles. The hard part isn't running them. It's keeping them apart."
   >
     <Breadcrumbs
       slot="crumbs"
@@ -51,24 +55,26 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
 
   <Section
     label="The problem"
-    title="One shared fingerprint is all it takes."
+    title="One shared device links every account you own."
   >
     <div class="mt-8 max-w-prose space-y-5 text-base leading-7 text-tk-ink-2">
       <p>
-        Most services don't link accounts by name or email — they link them by
-        device. Every browser exposes a
-        <strong class="text-tk-ink">fingerprint</strong>: what a website can
-        measure about a visitor — screen, fonts, graphics quirks, dozens of
-        small signals that add up to <em>"this is the same machine again."</em>
+        Most services don't link accounts by name or email. They link them by
+        device. Every browser gives away a
+        <a href="/glossary/#fingerprint" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">fingerprint</a>:
+        what a website can
+        measure about a visitor. Screen size, fonts, small graphics quirks —
+        dozens of little signals that add up to
+        <em>"this is the same machine again."</em>
         Sign into ten accounts from one browser and the service quietly knows
         those ten accounts share a device.
       </p>
       <p>
-        That's why bans cascade. One account trips a rule, the device gets
-        flagged, and every account that ever touched that device goes down
-        with it — including the ones that never put a foot wrong. Separate
-        Chrome profiles, incognito windows, a spreadsheet of logins: none of
-        it changes what the site can measure.
+        That's why bans cascade. One account trips a rule and the device gets
+        flagged. Every account that ever touched that device can go down with
+        it, including the ones that never put a foot wrong. Separate Chrome
+        profiles, incognito windows, a spreadsheet of logins: none of it
+        changes what the site can measure.
       </p>
     </div>
   </Section>
@@ -76,7 +82,7 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
   <Section
     label="How Driftstack answers it"
     title="One account, one phone."
-    lead="A Driftstack profile is a persistent identity that lets each account look like its own physical phone — every session, every time."
+    lead="A Driftstack profile is a saved identity. It lets each account look like its own physical phone, every session, every time."
   >
     <div class="mt-10 grid gap-4 sm:grid-cols-2">
       <Stat
@@ -84,7 +90,7 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
         technical="Persistent profiles: separate cookies, storage, history, and device identity per profile"
       />
       <Stat
-        plain="Identities that hold up"
+        plain="It holds up when a site looks closely"
         technical="The hidden checks websites run to spot fakes get the answers a real iPhone gives — checked against real devices, check by check — so a profile blends in instead of standing out"
       />
       <Stat
@@ -101,17 +107,17 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
         1/3/8 concurrent; 10–200 is the stored-PROFILE cap. Reworded so
         the numbers describe what they actually are. */}
     <p class="mt-10 max-w-prose text-base leading-7 text-tk-ink-2">
-      The desktop app is built for exactly this workday: keep 10 to 200
-      logged-in profiles saved and ready, open the ones you need as live
-      sessions, and switch between them like browser tabs (your plan sets
-      how many run at the same time). Organize your profiles in folders,
-      tag them by client, launch with one click, and pop any account out
+      The desktop app is built for exactly this workday. You keep 10 to 200
+      logged-in profiles saved and ready. Open the ones you need as live
+      sessions and switch between them like browser tabs. Your plan sets
+      how many run at the same time. Organize your profiles in folders,
+      tag them by client, and launch with one click. Pop any account out
       into its own floating device window. No code anywhere in the loop.
     </p>
     <p class="mt-5 max-w-prose text-base leading-7 text-tk-ink-2">
-      Profiles come with the housekeeping a real book of accounts needs:
-      recover one you deleted from the recycle bin, export
-      a profile and import it again, and invite teammates as admins who can
+      Everyday housekeeping is built in. You can
+      recover one you deleted from the recycle bin, or export
+      a profile and import it again. You can also invite teammates as admins who can
       run your accounts under your plan, or as read-only members who can
       view them but not change anything. Sign-ins, key changes, session
       starts and stops, profile creates and deletes, and team changes land
@@ -127,18 +133,18 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
     <div class="mt-8 flex flex-wrap items-center gap-4">
       <a href="/pricing/#manual" class="btn-secondary">See Manual pricing →</a>
       <p class="text-sm text-tk-ink-3">
-        Start free first — one profile, 20-minute sessions, on the
-        {freeTier.archetypeAccess}, no card required. The AI agent —
-        describe a task in plain English and watch it run — is on Team and
+        Start free first: one profile, 20-minute sessions, on the
+        {freeTier.archetypeAccess}, no card required. The AI agent lets you
+        describe a task in plain English and watch it run. It is on Team and
         Agency.
       </p>
     </div>
     <p class="mt-8 max-w-prose text-sm leading-6 text-tk-ink-3">
-      One honest line before you build on us: Driftstack keeps accounts apart;
-      staying inside each service's rules stays your call. The boundary is
-      written down in plain words in the
-      <a href="/legal/aup/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Acceptable Use Policy</a>
-      — read it before you sign up if you're unsure.
+      One honest line before you build on us. Driftstack keeps accounts apart;
+      staying inside each service's rules stays your call. Our own rules are
+      written in plain words in the
+      <a href="/legal/aup/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Acceptable Use Policy</a>.
+      Read it before you sign up if you're unsure.
     </p>
   </Section>
 
@@ -164,7 +170,7 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
 
   <CtaBand
     title="Keep them apart. Keep them alive."
-    lead="Open a real iPhone session on the free tier and watch a profile hold its identity across runs — no card required."
+    lead="Open a real iPhone session on the free tier. Watch one profile keep its logins and history across runs. No card required."
     primaryHref="/pricing/#free"
     primaryLabel="Start free"
     secondaryHref="/pricing/#manual"

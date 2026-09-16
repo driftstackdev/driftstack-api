@@ -92,4 +92,49 @@ describe('W261.C /faq ↔ TIER_CONCURRENT_SESSION_LIMITS parity', () => {
     );
     expect(page).not.toMatch(/Agency support bundled-LLM/);
   });
+
+  // 2026-09-16 readability pass (verifier fix). The pass gave every answer a
+  // one-sentence lead, and the lead is what a hesitant buyer actually takes
+  // away — so a lead that generalises a tier gate is a false answer even when
+  // the body four sentences later is correct. Two leads had to be re-gated:
+  //
+  //   • "What is the bundled LLM?" opened "AI model access that comes with
+  //     your plan" — false for team_manual / agency_manual / api_starter,
+  //     which are byok_only. A Team buyer reading only the lead was told the
+  //     opposite of their gate.
+  //   • The concurrency answer's budget sentence had been broadened from
+  //     "the optional bundled LLM" to "the optional AI assistant". The AI
+  //     assistant exists on the BYOK-only tiers too, where there is no
+  //     Driftstack budget at all — that usage is billed by the customer's
+  //     own provider.
+  //
+  // Both are pinned against TIER_FEATURES here rather than by text alone, so
+  // the gate can never be re-generalised without this failing.
+  it('CRITICAL the bundled-LLM LEAD sentence is gated to the byok_or_bundled tiers, and the monthly budget is attributed to bundled access rather than to the AI assistant', () => {
+    const bundled = (['api_builder', 'api_scale', 'enterprise'] as const).filter((t) =>
+      String(TIER_FEATURES[t].llmBilling).startsWith('byok_or_bundled'),
+    );
+    expect(bundled, 'the bundled-capable ladder is Builder / Scale / Enterprise').toEqual([
+      'api_builder',
+      'api_scale',
+      'enterprise',
+    ]);
+    // Tiers that carry the AI agent but NOT bundled access — the ones the old
+    // lead silently promised bundled access to.
+    for (const t of ['team_manual', 'agency_manual', 'api_starter'] as const) {
+      expect(TIER_FEATURES[t].aiAgent, `${t} carries the AI agent`).toBe(true);
+      expect(TIER_FEATURES[t].llmBilling, `${t} is BYOK-only`).toBe('byok_only');
+    }
+    expect(page).toMatch(
+      /a: 'Model access Driftstack provides on API Builder, API Scale and Enterprise, so you don\\'t have to open an account with an AI provider yourself\. On Team, Agency and API Starter you bring your own key\./,
+    );
+    expect(page).not.toMatch(/AI model access that comes with your plan/);
+    // The $0.10 monthly budget belongs to bundled access, not to the assistant.
+    expect(page).toMatch(
+      /The optional bundled model access on API Builder and up has a separate monthly budget of its own/,
+    );
+    expect(page).not.toMatch(/The optional AI assistant has a separate monthly budget/);
+    // The anchor the sentence links to is the real group slug.
+    expect(page).toMatch(/href="\/faq\/#bundled-llm-byok"/);
+  });
 });

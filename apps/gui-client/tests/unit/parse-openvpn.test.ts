@@ -66,4 +66,19 @@ describe('validateOpenVpnConfig', () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toMatch(/too large/);
   });
+
+  it('every refusal carries its own CODE, so a caller can tell WHICH one it is without reading the sentence — the paste box offers its one-click `client` repair on exactly one of them, and an oversize file must not be mistaken for a client-less one', () => {
+    const codeOf = (input: string): string => {
+      const r = validateOpenVpnConfig(input);
+      return r.ok ? 'ok' : r.code;
+    };
+    expect(codeOf('')).toBe('empty');
+    expect(codeOf('   \n ')).toBe('empty');
+    // The size check runs FIRST: this blob is also client-less, and it must still
+    // report `too-large`, because the repair for a missing `client` line adds bytes.
+    expect(codeOf(`# ${'x'.repeat(256 * 1024)}\nremote vpn.example.com 1194\n`)).toBe('too-large');
+    expect(codeOf('remote vpn.example.com 1194\n')).toBe('missing-client');
+    expect(codeOf('client\ndev tun\n')).toBe('missing-remote');
+    expect(codeOf('client\nremote vpn.example.com 1194\n')).toBe('ok');
+  });
 });

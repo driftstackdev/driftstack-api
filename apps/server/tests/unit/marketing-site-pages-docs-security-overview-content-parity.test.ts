@@ -12,6 +12,12 @@
 //     + preload.
 //   • Object storage: S3-SSE on R2 + never-publicly-listable;
 //     desktop-local recording and no-upload boundary.
+//   • Payment details: card numbers never reach Driftstack systems
+//     (Stripe tokenises under its own PCI-DSS scope) + error reports
+//     scrubbed of personal data before they reach Sentry. These two
+//     commitments used to ride on the hand-written shortlist's Stripe
+//     and Sentry lines; the generated list quotes the register, which
+//     does not make them, so they live in data handling now.
 //   • Profile state: per-profile encrypted files on driver-host EU.
 //   • Auth: read/write/account_owner scope ladder + least-privilege
 //     default + 'create key' defaults to read + MFA TOTP + 15-min
@@ -23,8 +29,20 @@
 //   • Browser sandbox: action-based no-script-eval + one-WebKit-per-
 //     session + cross-session-state-never-bleeds + profile is the
 //     only persistence mechanism + 429 concurrency-limit RFC 7807.
-//   • Sub-processors shortlist 5: Stripe + NowPayments + Cloudflare +
-//     Postmark + Sentry (PII-scrubbed at SDK level).
+//   • Sub-processor list rendered from SUB_PROCESSORS in
+//     marketing-site/src/data/sub-processors.ts (2026-09-16),
+//     replacing the hand-written 5-name shortlist (Stripe +
+//     NowPayments + Cloudflare + Postmark + Sentry) that omitted
+//     Neon, Hetzner, MacStadium and LiveKit — all four named
+//     elsewhere on this same page. Entry-level coverage — including
+//     what firstSentence() actually returns for each entry — lives in
+//     marketing-site/tests/unit/docs-security-overview-sub-processor-register-binding.test.ts.
+//     The retired shortlist's wording is pinned negative against the
+//     sub-processor SECTION only; page-wide it would ban true
+//     statements the page makes in prose.
+//   • Network egress bullet names ONE list: /trust/sub-processors as
+//     the register, /legal/sub-processors as the same list under the
+//     DPA. It used to make a second completeness claim of its own.
 //   • 30-day notice before adding/rotating sub-processor + announcements@
 //     enterprise-only.
 //   • Audit + observability 3-stream: audit log + session logs + cost ledger.
@@ -44,8 +62,28 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+const SECTION_HEADING = '<h2>Sub-processors</h2>';
+
+/**
+ * The page's sub-processor section: its own `<h2>` up to the next one.
+ *
+ * The retired shortlist's wording is pinned negative against THIS
+ * slice, not against the whole page. Page-wide, those negatives would
+ * ban true statements — "no payment data touches our infra" and
+ * "PII-scrubbed" were commitments this page made, and the page is
+ * entitled to make them again outside the generated list.
+ */
+function subProcessorSection(page: string): string {
+  const start = page.indexOf(SECTION_HEADING);
+  expect(start, 'the page still has a <h2>Sub-processors</h2> section').toBeGreaterThan(-1);
+  const rest = page.slice(start + SECTION_HEADING.length);
+  const end = rest.indexOf('<h2>');
+  return end === -1 ? rest : rest.slice(0, end);
+}
+
 describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro content parity', () => {
   const body = read(LIB);
+  const subProcessors = subProcessorSection(body);
 
   it('V-713 framing pinned. Re-enabled by slice 269 after verifying the V-713 anchor + 3-companion-doc framing still exists verbatim at security-overview.astro:4-8', () => {
     expect(body).toMatch(
@@ -75,6 +113,15 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
     );
   });
 
+  it("Payment-details + error-report framing pinned: 'Card numbers never reach Driftstack systems. Stripe collects and tokenises them under its own PCI-DSS scope; we keep the token and the billing details that appear on your invoice.' + 'Server errors go to Sentry, our error-tracking service (EU region), with personal data scrubbed out first. Request logs record technical detail only — never the body of your request or of our response.' — these are the two commitments the retired 5-name shortlist carried in its Stripe and Sentry lines ('card billing only — no payment data touches our infra', 'PII-scrubbed at SDK level'). The generated list quotes the register, which does not make them, so they are pinned here in the data-handling section instead of leaving a procurement-facing page (drift to dropping either would silently retire a commitment while every other arm stayed green)", () => {
+    expect(body).toMatch(
+      /<strong>Payment details:<\/strong> Card numbers never reach\s*Driftstack systems\. Stripe collects and tokenises them under\s*its own PCI-DSS scope; we keep the token and the billing\s*details that appear on your invoice\./,
+    );
+    expect(body).toMatch(
+      /<strong>Error reports:<\/strong> Server errors go to Sentry,\s*our error-tracking service \(EU region\), with personal data\s*scrubbed out first\. Request logs record technical detail only\s*— never the body of your request or of our response\./,
+    );
+  });
+
   it('Auth + authz 4-bullet framing pins audit-log behavior without internal labels', () => {
     expect(body).toMatch(
       /Customer keys are scoped: <code>read<\/code> \/\s*<code>write<\/code> \/ <code>account_owner<\/code>\. We default to\s*least-privilege; the dashboard's "create key" flow defaults to\s*<code>read<\/code> with an explicit checkbox to widen\./,
@@ -90,15 +137,20 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
     );
   });
 
-  it("Network + infrastructure 4-bullet framing pinned: 'Driftstack runs primarily in the EU (Hetzner Falkenstein / Nuremberg). Customer-facing API endpoints are served from the EU region today; multi-region routing is on the roadmap.' + 'Postgres is managed by Neon (EU) with point-in-time recovery. Object storage (R2) is geo-replicated across Cloudflare's EU + US regions; presigned access is location-agnostic.' + 'Customer data egress to non-EU regions is restricted to the subprocessors enumerated below and on the sub-processor list.' + 'Rate-limiting is enforced application-side via token buckets (per-account + per-IP); DDoS absorption is handled at the CDN edge.' — pinned so the EU-primary Hetzner + Neon-PITR + R2-EU+US-geo-replicated + per-account+per-IP-token-buckets + edge-DDoS-absorption commitment survives", () => {
+  it("Network + infrastructure 4-bullet framing pinned: 'Driftstack runs primarily in the EU (Hetzner Falkenstein / Nuremberg). Customer-facing API endpoints are served from the EU region today; multi-region routing is on the roadmap.' + 'Postgres is managed by Neon (EU) with point-in-time recovery. Object storage (R2) is geo-replicated across Cloudflare's EU + US regions; presigned access is location-agnostic.' + 'Customer data egress to non-EU regions is restricted to the companies listed below. That one list is published in full at /trust/sub-processors, and it is the same list the Data Processing Addendum refers to at /legal/sub-processors.' (re-pinned 2026-09-16 — the bullet used to say 'the subprocessors enumerated below and on the sub-processor list' and link only /legal, which made a second completeness claim competing with the generated section's) + 'Rate-limiting is enforced application-side via token buckets (per-account + per-IP); DDoS absorption is handled at the CDN edge.' — pinned so the EU-primary Hetzner + Neon-PITR + R2-EU+US-geo-replicated + one-list-two-URLs + per-account+per-IP-token-buckets + edge-DDoS-absorption commitment survives", () => {
     expect(body).toMatch(
       /Driftstack runs <strong>primarily in the EU<\/strong> \(Hetzner,\s*Falkenstein, Germany\)\./,
     );
     expect(body).toMatch(
       /Postgres is managed by Neon \(EU\) with point-in-time recovery\.\s*Object storage \(R2\) is geo-replicated across Cloudflare's\s*EU \+ US regions; presigned access is location-agnostic\./,
     );
+    // Re-pinned 2026-09-16: the bullet used to make its own
+    // completeness claim ("the subprocessors enumerated below and on
+    // the sub-processor list", linking /legal) while the section four
+    // paragraphs down made a different one, naming /trust as the
+    // register. One list, named once, with both URLs identified.
     expect(body).toMatch(
-      /Customer data egress to non-EU regions is restricted to the\s*subprocessors enumerated below and on the\s*<a href="\/legal\/sub-processors\/">sub-processor list<\/a>\./,
+      /Customer data egress to non-EU regions is restricted to the\s*companies listed below\. That one list is published in full at\s*<a href="\/trust\/sub-processors\/">\/trust\/sub-processors<\/a>, and\s*it is the same list the Data Processing Addendum refers to at\s*<a href="\/legal\/sub-processors\/">\/legal\/sub-processors<\/a>\./,
     );
     expect(body).toMatch(
       /Rate-limiting is enforced application-side via token buckets\s*\(per-account \+ per-IP\); see\s*<a href="\/docs\/rate-limits\/">\/docs\/rate-limits<\/a> for the\s*bucket model\. DDoS absorption is handled at the CDN edge\./,
@@ -117,16 +169,24 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
     );
   });
 
-  it("Sub-processors 5-shortlist + 30-day-notice framing pinned: Stripe (card billing only — no payment data touches our infra) + NowPayments (crypto checkout) + Cloudflare (CDN, WAF, R2 object storage) + Postmark (transactional email) + Sentry (engineering error monitoring; PII-scrubbed at SDK level) + 'We publish 30-day notice before adding or rotating a sub-processor. Enterprise contracts can opt into the announcement mailing list at announcements@.' — pinned so the 5-shortlist + Stripe-no-payment-data-on-our-infra + Sentry-PII-scrubbed-at-SDK-level + 30-day-notice + enterprise-announcements@ commitment survives", () => {
+  it("Sub-processor section + 30-day-notice framing pinned: the list is rendered from the SUB_PROCESSORS register (import + <li> template + /trust/sub-processors as the full record + 'This is the complete list') and 'We publish 30-day notice before adding or rotating a sub-processor. Enterprise contracts can opt into the announcement mailing list at announcements@.' — re-pinned 2026-09-16, replacing the 5-name transcribed shortlist (Stripe / NowPayments / Cloudflare / Postmark / Sentry) that omitted Neon, Hetzner, MacStadium and LiveKit. The negatives keep a hand-maintained list from returning; the 30-day-notice + enterprise-announcements@ commitment is unchanged.", () => {
     expect(body).toMatch(
-      /<li>Stripe \(card billing only — no payment data touches our infra\)<\/li>/,
+      /import\s*\{[\s\S]*?\bSUB_PROCESSORS\b[\s\S]*?\}\s+from\s+['"][^'"]*data\/sub-processors/,
     );
-    expect(body).toMatch(/<li>NowPayments \(crypto checkout\)<\/li>/);
-    expect(body).toMatch(/<li>Cloudflare \(CDN, WAF, R2 object storage\)<\/li>/);
-    expect(body).toMatch(/<li>Postmark \(transactional email\)<\/li>/);
     expect(body).toMatch(
-      /<li>Sentry \(engineering error monitoring; PII-scrubbed at SDK level\)<\/li>/,
+      /\{\s*SUB_PROCESSORS\.map\(\(sp\) => \(\s*<li>\s*<strong>\{sp\.name\}<\/strong> — \{firstSentence\(sp\.purpose\)\}\s*<\/li>\s*\)\)\s*\}/,
     );
+    expect(body).toMatch(
+      /This is the complete list, taken from the register published at\s*<a href="\/trust\/sub-processors\/">\/trust\/sub-processors<\/a>/,
+    );
+    // The transcribed shortlist's own wording must not come back INTO
+    // THE SECTION. Scoped there, not page-wide: these are stale list
+    // entries, not forbidden facts.
+    expect(subProcessors).not.toMatch(/card billing only/);
+    expect(subProcessors).not.toMatch(/crypto checkout/);
+    expect(subProcessors).not.toMatch(/CDN, WAF, R2 object storage/);
+    expect(subProcessors).not.toMatch(/PII-scrubbed at SDK level/);
+    expect(subProcessors).not.toMatch(/shortlist as of/);
     expect(body).toMatch(
       /We publish 30-day notice before adding or rotating a sub-\s*processor\. Enterprise contracts can opt into the announcement\s*mailing list at <code>announcements@<\/code>\./,
     );

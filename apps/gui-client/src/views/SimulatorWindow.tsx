@@ -996,6 +996,43 @@ const SIM_DRAWER_PANES = [
 type SimDrawerPane = (typeof SIM_DRAWER_PANES)[number];
 const SIM_DRAWER_PANE_KEY = 'ds-sim-drawer-pane';
 
+/**
+ * Which sections the rail actually OFFERS, for the session state it is given.
+ *
+ * Every section is offered unconditionally except **Network**. Nothing on the
+ * device side reports requests today, so that section was a permanently empty
+ * table with an explanatory sentence under it — a customer clicked it once,
+ * learned there was nothing there, and was left with a dead icon for the rest of
+ * the session. An always-empty section is worse than no section (owner,
+ * 2026-09-16), so the entry is withheld until the session has actually reported
+ * a request. When one arrives the entry appears in the SAME place in the rail
+ * order, with the SAME label, and stays for the rest of the session — including
+ * across Clear, which empties the view but does not un-report what was seen.
+ *
+ * ⛔ This hides an ENTRY, never the receiving code: the store, the poll and the
+ * table all stay wired, and the reveal is driven by what they receive.
+ *
+ * Pure + exported so the predicate can be pinned without standing up the window.
+ */
+export function visibleSimDrawerPanes(state: {
+  networkEverReported: boolean;
+}): readonly SimDrawerPane[] {
+  if (state.networkEverReported) return SIM_DRAWER_PANES;
+  return SIM_DRAWER_PANES.filter((pane) => pane !== 'network');
+}
+
+/**
+ * How many times a session looks for its first reported request while the Network
+ * section is withheld (see the discovery poll in SimulatorWindow).
+ *
+ * A withheld section must not cost more than the closed pane it replaced cost
+ * before it was withheld — which was nothing. The route cannot tell a client
+ * "there will never be one here" on any deployment that can run a session, so a
+ * budget, not a route answer, is what makes discovery terminate. Exported so the
+ * bound is pinned as a number rather than inferred from a timer.
+ */
+export const NETWORK_DISCOVERY_MAX_LOOKS = 8;
+
 interface SessionQuery {
   info: LiveKitInfo | null;
   deviceName: string;
@@ -7095,7 +7132,10 @@ export function SimulatorWindow(): JSX.Element {
   // cursor. ⛔ There is NO networkRequests emitter anywhere — not in the harness
   // (nineteen outbound types, none a request log) and not in the fork — so a
   // healthy poll returns an EMPTY page and will keep doing so until the feature is
-  // built on both sides. The pane says that in capability terms rather than".
+  // built on both sides. Since 2026-09-16 that state is not shown to the customer
+  // at all: the rail withholds the section until the session reports a request
+  // (visibleSimDrawerPanes), and everything below keeps receiving so the section
+  // can appear the moment one does.
   const networkStoreRef = useRef<NetworkLogStore | null>(null);
   if (networkStoreRef.current === null) networkStoreRef.current = createNetworkLogStore();
   const networkStore = networkStoreRef.current;
@@ -7104,9 +7144,70 @@ export function SimulatorWindow(): JSX.Element {
   // Twin of hasCookiesRef — retain the last-known list through a transient/gated
   // tick; show the calm note ONLY when genuinely nothing has been fetched yet.
   const hasNetworkRef = useRef(false);
+  // Has THIS session ever reported a request? Drives whether the rail offers the
+  // Network section at all (visibleSimDrawerPanes). One-way for the session: a
+  // report cannot be taken back, and Clear empties the view without un-reporting.
+  // An empty-but-healthy page is NOT a report — it is the state we are hiding.
+  const [networkEverReported, setNetworkEverReported] = useState(false);
+  // ⛔ DISCOVERY IS BOUNDED, AND THE BOUND IS A REF, NOT AN EFFECT LOCAL.
+  // The looking-for-a-first-request poll below (see `discovering`) used to stop on
+  // exactly one condition — an HTTP 503 — and that condition is UNREACHABLE on
+  // every deployment a customer can open a session on. The route answers 200 with
+  // `status:'unavailable'` when there is no store, and 200 `{status:'ok',entries:[]}`
+  // forever when there is one (the store is always constructed); the 503 stub is
+  // registered only where GET /v1/agent-sessions/:id is ITSELF a 503, i.e. where no
+  // session exists to open a window on. So "one discovery request per session"
+  // was in fact a permanent background poll — one authenticated, owner-rate-limited
+  // request every 120s for the whole session lifetime, for a section that cannot
+  // appear until a producer that does not exist yet ships. Before the rail change a
+  // closed pane cost zero requests; the withheld section must not cost more.
+  //
+  // Two refs, both per SESSION and both surviving effect re-runs (the effect's deps
+  // include controlAuth/room/sessionEnded, so an effect-body `let` is reset by a
+  // control-key load or a room bind and "stops for good" is not true of it):
+  //   • looksLeft — a hard budget. Whatever the route answers, discovery gives up
+  //     after this many looks. This is the only stop that does not depend on the
+  //     route telling us something it currently cannot.
+  //   • stopped — latched early on a definitive "switched off here" (below), and by
+  //     the budget running out.
+  // The budget buys ~13 minutes of watching from window open (60s, then 120s a
+  // look), which covers the realistic reveal: a browser session that reports
+  // requests at all reports its first one on its first page load. A session whose
+  // first request lands after that keeps every receiving part wired but will not
+  // reveal the section on its own — the honest fix for that is a capability flag on
+  // the session's capabilityReport (which this window already polls, at no extra
+  // request cost), and that needs the control plane to publish one. Noted, not
+  // guessed at here.
+  const networkDiscoveryStoppedRef = useRef(false);
+  const networkDiscoveryLooksLeftRef = useRef(NETWORK_DISCOVERY_MAX_LOOKS);
+  // A session swap in place (the 'ds-session' relaunch listener changes sessionId
+  // WITHOUT a remount) starts a session that has reported nothing of its own, so
+  // the entry has to go away again — the latch is per SESSION, not per window.
+  // The discovery refs reset with it, for the same reason: the new session gets its
+  // own budget and its own verdict, not the previous session's exhausted one.
   useEffect(() => {
-    // Poll ONLY while the Network pane is the active section (perf twin of cookies).
-    if (!networkPaneActive || sessionId === '' || room === null) return;
+    setNetworkEverReported(false);
+    networkDiscoveryStoppedRef.current = false;
+    networkDiscoveryLooksLeftRef.current = NETWORK_DISCOVERY_MAX_LOOKS;
+  }, [sessionId]);
+  useEffect(() => {
+    // Two cadences, one poll. While the Network pane is the active section this is
+    // the live feed (3s, perf twin of cookies). While the section is not yet
+    // OFFERED it is a DISCOVERY poll instead: something has to look, or the entry
+    // could never appear and "it shows up when the first request arrives" would be
+    // a route with no reader. Discovery is deliberately slow, silent and BOUNDED —
+    // it backs off on every quiet answer, writes no note/refreshing state, and
+    // spends a per-session budget of looks (NETWORK_DISCOVERY_MAX_LOOKS) rather
+    // than polling for the session's whole life. Once the section IS offered and
+    // closed, polling stops exactly as it used to.
+    const discovering = !networkPaneActive && !networkEverReported;
+    if (!networkPaneActive && !discovering) return;
+    // Discovery already reached its verdict for this session (budget spent, or the
+    // deployment said the feature is switched off). Re-running the effect — a
+    // control-key load, a room bind — must not buy it a fresh start; that is what
+    // made "stops for good" false when this was an effect-body local.
+    if (discovering && networkDiscoveryStoppedRef.current) return;
+    if (sessionId === '' || room === null) return;
     // Terminal session: stop polling the dead session and show an honest note
     // (twin of the cookies terminal branch). Reset drops the list AND the cursor
     // so a fresh session starts from the beginning of its own ring.
@@ -7120,10 +7221,26 @@ export function SimulatorWindow(): JSX.Element {
     // Self-scheduling poll with exponential backoff — the next tick is scheduled
     // only inside .finally, so requests never overlap (twin of the cookies poll).
     let cancelled = false;
-    let backoff = 3000;
+    const baseMs = discovering ? 30000 : 3000;
+    const capMs = discovering ? 120000 : 30000;
+    let backoff = baseMs;
+    // A quiet answer slows the next look down. Discovery treats a HEALTHY BUT EMPTY
+    // page as quiet too: it is waiting for a rare first request, not tailing a feed,
+    // so it settles to one look every couple of minutes instead of every 3s.
+    const quieter = (): void => {
+      backoff = Math.min(backoff * 2, capMs);
+    };
     let handle: ReturnType<typeof setTimeout> | null = null;
     const tick = (): void => {
-      setNetworkRefreshing(true);
+      if (discovering) {
+        // Spend one look BEFORE the request goes out, so the budget counts requests
+        // actually issued whatever the answer is — a flapping gateway costs the same
+        // as a healthy empty page. The result of THIS look is still processed in
+        // full (a reveal on the last look still reveals); only the reschedule in
+        // .finally is what the latch suppresses.
+        networkDiscoveryLooksLeftRef.current -= 1;
+        if (networkDiscoveryLooksLeftRef.current <= 0) networkDiscoveryStoppedRef.current = true;
+      } else setNetworkRefreshing(true);
       void fetchAgentSessionNetwork(sessionId, networkStore.getCursor(), controlAuth)
         .then((page) => {
           if (cancelled) return;
@@ -7135,14 +7252,27 @@ export function SimulatorWindow(): JSX.Element {
           // from null to [], and the note can only render while it is null, so that
           // first swallowed poll ALSO disabled every later error message.
           if (page.status !== 'ok') {
-            setNetworkNote(page.reason ?? 'network activity is not available for this session');
-            backoff = Math.min(backoff * 2, 30000);
+            if (!discovering) {
+              setNetworkNote(page.reason ?? 'network activity is not available for this session');
+            }
+            quieter();
             return;
           }
           networkStore.append(page.entries, page.next_after);
           hasNetworkRef.current = true;
+          // THE REVEAL. One reported request is what earns the section its place in
+          // the rail; an empty page is the very state the section is withheld for,
+          // so only a non-empty one latches. Set unconditionally (not just while
+          // discovering) so the latch is also true on the path where the operator
+          // already had the section open — it is a fact about the session, not
+          // about which poll noticed it.
+          if (page.entries.length > 0) setNetworkEverReported(true);
+          if (discovering) {
+            quieter(); // healthy, but still nothing to show — keep waiting quietly
+            return;
+          }
           setNetworkNote(null);
-          backoff = 3000; // reset cadence on a real success
+          backoff = baseMs; // reset cadence on a real success
         })
         .catch((err: unknown) => {
           if (cancelled) return;
@@ -7150,6 +7280,25 @@ export function SimulatorWindow(): JSX.Element {
           // cookies #58 catch): 401/403 = the per-session control key expired;
           // 404 = no ring yet; 503 = the route is gated off; else transient.
           const status = err instanceof AgentSessionControlError ? err.status : 0;
+          if (discovering) {
+            // Nothing is displayed while the section is withheld, so a failure has
+            // no message to carry — it only decides whether to look again.
+            //
+            // ⛔ A BARE 503 IS NOT A VERDICT. It used to latch the stop on the HTTP
+            // status alone, which conflates "this deployment has the feature
+            // switched off" with "a gateway/load balancer/rolling restart is
+            // briefly unavailable" — and the second one would have permanently
+            // denied the section to a session that later DID report a request.
+            // The transport already carries the precise discriminant: the gated
+            // stub throws FeatureUnavailable, whose problem-type tail the shared
+            // fetch puts in `kind`, while a non-JSON gateway body lands on
+            // 'unknown'. Only the typed one is a statement about the deployment.
+            if (status === 503 && err instanceof AgentSessionControlError) {
+              if (err.kind === 'feature-unavailable') networkDiscoveryStoppedRef.current = true;
+              else quieter();
+            } else quieter();
+            return;
+          }
           const credsExpired = status === 401 || status === 403;
           const note = credsExpired
             ? "This session's access has expired — reopen the session to refresh."
@@ -7169,11 +7318,15 @@ export function SimulatorWindow(): JSX.Element {
           // setting it unconditionally is both simpler and the only honest option:
           // a failing poll is worth saying out loud even when stale rows are shown.
           setNetworkNote(note);
-          backoff = Math.min(backoff * 2, 30000);
+          quieter();
         })
         .finally(() => {
           if (cancelled) return;
-          setNetworkRefreshing(false);
+          // The discovery latch (budget spent, or a typed feature-unavailable) is
+          // what makes the poll terminate; it is a ref, so it also holds across an
+          // effect re-run rather than only until the next dep change.
+          if (discovering && networkDiscoveryStoppedRef.current) return;
+          if (!discovering) setNetworkRefreshing(false);
           handle = setTimeout(tick, backoff);
         });
     };
@@ -7182,7 +7335,20 @@ export function SimulatorWindow(): JSX.Element {
       cancelled = true;
       if (handle !== null) clearTimeout(handle);
     };
-  }, [networkPaneActive, sessionId, controlAuth, room, sessionEnded]);
+  }, [networkPaneActive, networkEverReported, sessionId, controlAuth, room, sessionEnded]);
+  // The sections the rail actually draws. Network is withheld until this session
+  // has reported a request (see visibleSimDrawerPanes); everything else is always
+  // offered, in the same order.
+  const visibleDrawerPanes = visibleSimDrawerPanes({ networkEverReported });
+  // An in-place session swap can WITHDRAW a section that is currently open — the
+  // replacement session has reported nothing of its own. Collapse instead of
+  // leaving the panel showing a section whose rail icon is no longer there.
+  // (No localStorage write: the stored pane is a relaunch preference the window
+  // deliberately does not restore, so persisting a forced collapse would only
+  // discard the operator's own last choice.)
+  useEffect(() => {
+    if (activePane === 'network' && !networkEverReported) setActivePane(null);
+  }, [activePane, networkEverReported]);
 
   // File-control upload (A3 W2851 / founder "control files"). Upload a file's bytes
   // (base64) into the running session's isolated 0o700 jail → get an OPAQUE handle
@@ -9988,7 +10154,7 @@ export function SimulatorWindow(): JSX.Element {
                 aria-label="Drawer sections"
                 className="flex w-12 shrink-0 flex-col items-center gap-1 py-2"
               >
-                {SIM_DRAWER_PANES.map((pane) => (
+                {visibleDrawerPanes.map((pane) => (
                   <DrawerRailButton
                     key={pane}
                     pane={pane}
@@ -10607,9 +10773,13 @@ export function SimulatorWindow(): JSX.Element {
                       protocol validation live in lib/network-log-feed (isolated from
                       the widely-mocked agent-session-control, N-1). ⛔ The harness has
                       NO networkRequests frame at all — measured 2026-09-06, not merely
-                      "not wired yet" — so this pane is permanently blank until one
-                      exists, and its empty state says so in capability terms rather
-                      than the old "captured yet", which read as "keep browsing". */}
+                      "not wired yet" — so until one exists the rail does not OFFER
+                      this section at all (visibleSimDrawerPanes), and nobody can reach
+                      a permanently blank table. The receiving code all stays: this
+                      renders unchanged the moment a session reports a request. The
+                      empty state below it is still the right copy for the narrow case
+                      it now covers — the section is open and the list is momentarily
+                      empty (a Clear, a fresh cursor). */}
                     {activePane === 'network' && (
                       <NetworkListSubscriber
                         store={networkStore}

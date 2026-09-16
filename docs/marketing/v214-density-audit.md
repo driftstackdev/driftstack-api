@@ -59,6 +59,34 @@ redline pass.
 4. ⏳ Apply redlines + commit on approval.
 5. ⏳ Repeat per page if additional surfaces need same treatment.
 
+## Addendum — 2026-09-16: three cited questions were renamed on /faq
+
+The findings table above is a **historical record and is not edited**. But three
+of the `/faq` questions it quotes verbatim no longer exist under those names, so
+a reader chasing a citation to the live page would find nothing. The 2026-09-16
+readability pass renamed them (wording only — every fact, number, tier gate and
+disclosure in the answers is unchanged):
+
+| Quoted in the findings above                                | Live question on /faq since 2026-09-16                        |
+| ----------------------------------------------------------- | ------------------------------------------------------------- |
+| "How does concurrent metering work?"                        | "How many sessions can I run at once ('concurrent')?"         |
+| "How does this compare to Chromium-cloud stealth services?" | "How is this different from Chrome-based 'stealth' services?" |
+| "What happens when I hit my concurrent cap?"                | "What happens if I start one session too many?"               |
+
+The renames are the audit's own redlines landing: the first finding asked for a
+visitor-first definition of "concurrent" ahead of the per-tier numbers, and the
+new question carries that gloss in the question itself. "Chromium" and
+"metering" were internal vocabulary to a first-time reader.
+
+The answers themselves are still the ones the audit marked **Leave dense** where
+it said so: the comparison answer and the HTTP 429 / RFC 9457 cap answer keep
+their developer-band precision.
+
+This mapping is pinned in
+`apps/server/tests/unit/docs-marketing-v214-density-audit-content-parity.test.ts`
+against the LIVE `apps/marketing-site/src/data/faq.ts`, so a further rename
+fails there instead of rotting silently here.
+
 ## Why the redlines are minimal-not-rewrite
 
 The current copy is mostly in correct company voice + good positioning. The visitor-density problem is jargon-on-first-use, not the surrounding paragraphs. Targeted parenthetical / lead-in additions fix the density without unsettling proven framing. If founder wants a broader rewrite (different positioning, different section ordering), that's a follow-up Tier 3 draft round, separately surfaced.

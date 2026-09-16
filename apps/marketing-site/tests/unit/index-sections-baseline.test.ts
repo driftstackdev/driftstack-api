@@ -4,7 +4,11 @@
 // dedupes "Indistinguishable" + simplifies EU compliance header:
 //   • "One iPhone among millions." fingerprint claim
 //     (M.3 dedupe; "Indistinguishable from a real iPhone" was the
-//     prior framing — the brand-line use survives in the hero h1)
+//     prior framing. The brand-line use survived in the hero h1 and
+//     then the developer-band title until 2026-09-16, when it was
+//     retired too — a blanket identity claim; evidence is per
+//     surface. The word now appears ZERO times on the page; the two
+//     content-parity tests pin that, this file only anchors sections)
 //   • "Apple's engine" stack positioning (replaces "Real WebKit")
 //   • "One metric. Concurrent sessions." pricing positioning
 //   • "EU-hosted by default." data plane section header

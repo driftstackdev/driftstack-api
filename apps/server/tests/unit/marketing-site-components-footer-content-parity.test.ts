@@ -10,8 +10,12 @@
 // prominent position.
 //
 //   • Auto-year copyright via new Date().getUTCFullYear() (UTC-pinned).
-//   • Brand tagline: 'Pixel-identical iPhone Safari sessions in the cloud.
-//     API, SDK, or GUI.'.
+//   • Brand tagline (2026-09-16): 'Real iPhone Safari sessions in the cloud.
+//     Drive them from code or from the desktop app.' — retired
+//     'Pixel-identical iPhone Safari sessions in the cloud. API, SDK, or
+//     GUI.': it renders as the last line of every page, so the blanket
+//     'identical' claim family the rest of the site dropped survived here,
+//     in a component the homepage's own guard never reads.
 //   • 2-category nav grid: Product / Company.
 //   • Product 6-link: /pricing + /comparison + /self-hosted +
 //     docs.driftstack.io (external) + app/signup + app/login.
@@ -45,9 +49,17 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
   it('Auto-year UTC + StatusBadge import + brand tagline framing. 2026-05-23 — tagline expanded with proxy/VPN egress capability per founder direction (UDP/QUIC/WebRTC + OpenVPN + WireGuard); pin loosened to per-clause assertions.', () => {
     expect(body).toMatch(/import StatusBadge from '\.\/StatusBadge\.astro';/);
     expect(body).toMatch(/const year = new Date\(\)\.getUTCFullYear\(\);/);
-    expect(body).toMatch(/Pixel-identical iPhone Safari sessions in the cloud\./);
+    // 2026-09-16 Band-A readability RE-PIN — the tagline renders as the last
+    // line of EVERY page, so the homepage's own retirement of the blanket
+    // "identical" claim family did not reach it while it lived in a
+    // component (the homepage guard only reads index.astro). "GUI" is the
+    // other casualty: the parity rule elsewhere is "desktop app", not "GUI".
+    expect(body).toMatch(
+      /Real iPhone Safari sessions in the cloud\. Drive them from code or from\s+the desktop app\./,
+    );
     expect(body).toMatch(/SOCKS5/);
-    expect(body).toMatch(/API, SDK, or GUI\./);
+    expect(body).not.toMatch(/Pixel-identical iPhone Safari sessions in the cloud\./);
+    expect(body).not.toMatch(/API, SDK, or GUI\./);
     expect(body).toMatch(/&copy; \{year\} Driftstack\. All rights reserved\./);
   });
 

@@ -28,7 +28,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ARCHETYPE_REGISTRY } from '@driftstack/api-types';
+import { ARCHETYPE_REGISTRY, PROFILES_PER_TIER } from '@driftstack/api-types';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -226,6 +226,24 @@ describe('W599.B /use-cases/qa-testing (QA + engineering teams)', () => {
     expect(body).toMatch(/The free tier is manual-only/);
   });
 
+  // 2026-09-16 readability pass (verifier fix). The plain line over the
+  // ephemerality Stat said "A fresh phone for every test run". Site-wide a
+  // phone IS a profile (glossary #profile: "to a website, each profile looks
+  // like the same physical phone coming back, every session, every time"), so
+  // that plain line over-reached its own technical line — which is about
+  // SESSIONS — and contradicted the persistent-profile reuse this same page
+  // offers for tests that need logged-in state. The plain line says session.
+  it('the ephemerality Stat says SESSION, not phone: a phone is a profile site-wide, its technical line is about sessions, and the developer band offers persistent-profile reuse', () => {
+    expect(body).toMatch(/plain="A fresh session for every test run"/);
+    expect(body).not.toMatch(/fresh phone for every test run/);
+    expect(body).toMatch(
+      /technical="Sessions are created for each test run and removed after — no devices to keep running between runs"/,
+    );
+    expect(body).toMatch(
+      /reuse a persistent profile\s*when a test needs logged-in state that survives between runs/,
+    );
+  });
+
   // 2026-09-15 truth pass: engine claim in house style, device breadth data-bound.
   it('engine claim is the house-style one — a build of Apple\'s own WebKit, the engine family behind iPhone Safari, checked against real iPhones — never "the exact engine" / "the same engine your iOS users actually run" / blanket "same rendering, same timing"', () => {
     expect(body).toMatch(/the engine family behind iPhone Safari, checked against real iPhones/);
@@ -299,14 +317,47 @@ describe('W599.B /use-cases/web-scraping (data teams)', () => {
     expect(body).not.toMatch(/'device photos'/);
     expect(body).toMatch(/clock and time zone follow that location/);
     expect(body).not.toMatch(/language and clock settings/);
+    // 2026-09-16 readability pass: this clause left the plain-text `lead` prop
+    // (Section renders `lead` as text, so it cannot carry a link) for a body
+    // paragraph, and "webhooks" is glossed in plain words there. Same facts,
+    // same plan qualifier — re-pinned to the shipped wording.
     expect(body).toMatch(
-      /The AI agent is on every API plan, and webhooks tell your job when a session completes, fails, or hits a challenge/,
+      /The AI agent is on every API plan\. Webhooks are messages Driftstack sends\s*to your own system\. They tell your job when a session completes, fails, or\s*hits a challenge/,
     );
   });
 
   it('plan pointer: API ladder → /pricing#api + comparison cross-link for the signal detail', () => {
     expect(body).toMatch(/<a href="\/pricing\/#api" class="btn-secondary">See API pricing →<\/a>/);
     expect(body).toMatch(/href="\/comparison\/"/);
+  });
+
+  // 2026-09-16 readability pass (verifier fixes) — two defects in one lead:
+  //   • "There is one cap: how many sessions run at the same time" asserted
+  //     that concurrency is the ONLY limit on an API plan. It is not: every API
+  //     tier also carries a stored-profile cap (PROFILES_PER_TIER 25/100/500,
+  //     mirrored in data/pricing.ts by W279.A and columned on /pricing). The
+  //     lead names the BILLING number, with no exclusivity claim.
+  //   • SDK / HTTP client / webhooks stood unexplained in a Band-A lead. The
+  //     `lead` prop renders as plain text and cannot carry a link, so they moved
+  //     into body paragraphs: "SDK" links to /glossary/#sdk exactly as proxy and
+  //     VPN do on /how-it-works, and webhooks are glossed in plain words.
+  it('the API-plan lead names the BILLING number without claiming it is the only limit (every API tier also caps stored profiles), and the code vocabulary is linked or glossed: SDK → /glossary/#sdk', () => {
+    expect(body).toMatch(
+      /Billing turns on one number: how many sessions run at the same time — think browser tabs\. Hours inside that number are never billed\./,
+    );
+    expect(body).not.toMatch(/There is one cap/);
+    expect(body).toMatch(
+      /<a href="\/glossary\/#sdk" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">SDK<\/a>/,
+    );
+    expect(body).toMatch(/— a ready-made code library —/);
+    // Cross-source: the second cap the old wording denied is live on every
+    // paid API tier, so "one cap" can never be re-derived from the data.
+    for (const tierId of ['api_starter', 'api_builder', 'api_scale'] as const) {
+      expect(
+        PROFILES_PER_TIER[tierId],
+        `API tier ${tierId} carries a stored-profile cap — concurrency is not its only limit`,
+      ).toBeTypeOf('number');
+    }
   });
 
   it('AUP boundary named for scraping specifically: auth-bypassing / rate-limit-abusing collection is out (capability description, never encouragement; S20b plain words, prohibition at full strength)', () => {
@@ -385,6 +436,34 @@ describe('W599.B /how-it-works (zero-code explainer)', () => {
     expect(body).toMatch(/href="\/glossary\/"/);
   });
 
+  // 2026-09-16 readability pass (verifier fixes) — two Band-A truth defects:
+  //   • The Proxy panel put "browses from Amsterdam, New York or Tokyo" a full
+  //     sentence AHEAD of the bring-your-own qualifier, which reads as a closed
+  //     list of exits Driftstack provides. Driftstack provides none: you attach
+  //     your own proxy or VPN (glossary #proxy / #vpn). The qualifier comes first.
+  //   • The proxy-health intro claimed "you find out that a connection has died
+  //     here, not halfway through a session". The same paragraph says a check can
+  //     be stale and is then marked out of date — which is exactly the case where
+  //     the failure DOES surface mid-session. The intro sells the reading and its
+  //     timestamp, not pre-session detection.
+  it('Band-A truth on the two proxy passages: bring-your-own is stated BEFORE the example cities, and the health intro promises a last-checked reading rather than pre-session failure detection', () => {
+    expect(body).toMatch(/You bring that connection\./);
+    const qualifier = body.indexOf('You bring that connection.');
+    const cities = body.indexOf('Amsterdam, New York, Tokyo');
+    expect(qualifier, 'bring-your-own qualifier missing').toBeGreaterThan(-1);
+    expect(cities, 'example exits missing').toBeGreaterThan(-1);
+    expect(
+      qualifier,
+      'the bring-your-own qualifier must precede the example exits — Driftstack supplies no exits',
+    ).toBeLessThan(cities);
+    expect(body).toMatch(
+      /This is where you see whether each connection is still working — and when it\s*was last checked\./,
+    );
+    expect(body).not.toMatch(/not halfway through a session/);
+    // the stale-check disclosure is precisely why that guarantee cannot be made
+    expect(body).toMatch(/marked out of date rather\s*than shown as current/);
+  });
+
   it('2026-09-15 truth pass: the AI agent carries its tier qualifier, the device breadth + default are BOUND to the registry / DEVICE_SUPPORT (not typed), and the retired install / wizard / blanket-takeover claims stay gone', () => {
     // AI agent is OFF on Free and Personal (TIER_FEATURES.aiAgent) — every
     // mention on this page names the plans that have it.
@@ -460,6 +539,78 @@ describe('W599.B /glossary (quiet reference page)', () => {
 
   it('h1 pinned: "The words, in plain words."', () => {
     expect(body).toMatch(/title="The words, in plain words\."/);
+  });
+
+  // 2026-09-16 readability pass (verifier fix) — a MEASURED Band-A guard.
+  //
+  // The pass before this one was reported as a plain-language win, and on
+  // eight of the 21 entries the longest sentence came out LONGER than the one
+  // it replaced (#ai-agent 41 -> 56 words, #canvas-hash 31 -> 40, #proxy
+  // 35 -> 41, #profile 29 -> 40, #vpn 26 -> 32, #user-agent 33 -> 35,
+  // #emulator 28 -> 31, #self-hosted 15 -> 17). Nothing caught it, because
+  // every glossary guard here pins STRINGS — and a string pin is satisfied by
+  // a sentence that grew around it. Sentence length is the property Band A is
+  // actually about, so it is measured rather than eyeballed.
+  //
+  // The ceiling is 25 words (Band A aims at 20; the headroom is for the two
+  // entries whose verbatim tier gate — "(Team plans and up, and every API
+  // plan)" — is itself 8 words inside a sentence).
+  it('CRITICAL Band A is MEASURED, not asserted: every glossary entry parses, and no entry contains a sentence longer than 25 words — string pins are satisfied by a sentence that grew around them, which is exactly how the previous pass lengthened 8 of 21 entries while reading as a plain-language win', () => {
+    const entries = [
+      ...body.matchAll(
+        /id: '([a-z0-9-]+)',\s*\n\s*term: '(?:[^'\\]|\\.)*',\s*\n\s*def:\s*([\s\S]*?),\n\s*\},/g,
+      ),
+    ].map(([, id, literal]) => ({ id: id as string, literal: literal as string }));
+
+    // Positive control on the PARSER, in the same breath as the measurement:
+    // a regex that stopped matching would report every entry short because it
+    // read none, and a word counter that returned 0 would agree with it.
+    expect(entries.length, 'the entry regex must find all 21 GLOSSARY entries').toBe(21);
+    expect(entries.map((e) => e.id)).toContain('ai-agent');
+    expect(entries.map((e) => e.id)).toContain('egress');
+
+    const plain = (literal: string): string => {
+      let t = literal.trim();
+      if (t.length > 1 && (t[0] === "'" || t[0] === '"' || t[0] === '`')) {
+        const q = t[0];
+        t = t.slice(1);
+        if (t.endsWith(q)) t = t.slice(0, -1);
+      }
+      return t
+        .replace(/\\'/g, "'")
+        .replace(/\\"/g, '"')
+        .replace(/<[^>]+>/g, '') // inline anchors render as their text
+        .replace(/\$\{[^}]+\}/g, 'X') // a bound figure is one word to a reader
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+    // Split on sentence-final punctuation followed by a capital / opening mark.
+    // "(.ovpn)" and "18.7" do not split — the char before the space must be the
+    // punctuation itself.
+    const sentences = (t: string): string[] =>
+      t.split(/(?<=[.!?])\s+(?=[A-Z"(—])/).filter((s) => s.trim().length > 0);
+    const words = (s: string): number => (s.match(/[A-Za-z0-9][A-Za-z0-9'’./#-]*/g) ?? []).length;
+
+    // Positive control on the COUNTER and the SPLITTER.
+    expect(words('one two three four five')).toBe(5);
+    expect(sentences('A short one. And a second one.')).toHaveLength(2);
+    expect(sentences('Try iOS 18.7 today.')).toHaveLength(1);
+
+    const LIMIT = 25;
+    const over = entries
+      .map((e) => {
+        const longest = Math.max(0, ...sentences(plain(e.literal)).map(words));
+        return { id: e.id, longest };
+      })
+      .filter((e) => e.longest > LIMIT);
+    expect(
+      over,
+      `glossary entries with a sentence over ${LIMIT} words — split it, do not push the words onto the next sentence`,
+    ).toEqual([]);
+
+    // And the measurement is not vacuous: the entries really do carry prose.
+    const lengths = entries.map((e) => Math.max(0, ...sentences(plain(e.literal)).map(words)));
+    expect(Math.max(...lengths), 'the longest glossary sentence').toBeGreaterThan(10);
   });
 
   it('all 18 anchor ids present — a public deep-link contract (Band-B small-print jargon links target these; renaming one strands every link to it)', () => {
@@ -544,9 +695,14 @@ describe('W599.B /glossary (quiet reference page)', () => {
       /return the value a real iPhone returns, because the same engine draws/,
     );
     expect(body).not.toMatch(/the real iPhone engine|Apple's real browser engine/);
+    // 2026-09-16 readability-pass re-pin: the 40-word #canvas-hash sentence was
+    // split, so this scoping clause now OPENS its own sentence and is capitalised.
+    // The clause itself is unchanged — it is what keeps the entry off blanket
+    // identity ground — so it is pinned case-sensitively in its new position.
     expect(body).toMatch(
-      /where Safari deliberately varies the value a little, Driftstack varies it the same way/,
+      /Where Safari deliberately varies the value a little, Driftstack varies it the same way\./,
     );
+    expect(body).not.toMatch(/and checks the result against real iPhones; where Safari/);
     // VPN files are a paid-plan feature (TIER_FEATURES.vpnEgress false on free).
     expect(body).toMatch(
       /On paid plans, Driftstack profiles accept your own OpenVPN \(\.ovpn\) or WireGuard \(\.conf\)/,

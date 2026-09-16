@@ -90,7 +90,12 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
     expect(body).not.toMatch(/starts on the API ladder/);
     expect(body).not.toMatch(/within the free limits/);
     expect(body).not.toMatch(/driven from the API or the desktop GUI client/);
-    expect(body).toMatch(/No per-hour metering, no credit decrement, no overage/);
+    // 2026-09-16 readability pass: same three facts (no per-hour metering, no
+    // credit decrement, no overage), said in words a first-time reader knows.
+    expect(body).toMatch(
+      /No\. Nothing is counted by the hour, no credits tick down, and there is no overage bill\./,
+    );
+    expect(body).not.toMatch(/no credit decrement/);
     // 2026-09-15 refuter fix: the old answer named one concurrent session as the
     // sole limit — false: the free tier also ends a session at 20 minutes
     // (MAX_SESSION_MINUTES_PER_TIER.free in services/sessions.ts; pricing.ts free
@@ -274,9 +279,20 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
     // Blanket identity claims retired (A1 sheet: per-surface, noise-protected surfaces vary by design).
     expect(body).not.toMatch(/bit for bit|all the way down|vanishingly rare|kernel timings/);
     expect(body).not.toMatch(/the same browser code Apple ships/);
+    // 2026-09-16 readability pass (verifier re-pin): the 52-word measurement
+    // sentence was split into three, so the semicolon form this used to pin no
+    // longer exists. Both halves are still pinned — no claim was dropped, and
+    // the "where Safari deliberately varies a value" scoping clause (the one
+    // that keeps this off blanket-identity ground) is pinned on its own.
+    expect(body).toMatch(/Every one of those is checked against real iPhones, check by check\./);
     expect(body).toMatch(
-      /is checked against real iPhones, check by check; where Safari deliberately varies a value, Driftstack varies it the same way/,
+      /Where Safari deliberately varies a value, Driftstack varies it the same way\./,
     );
+    // TRUTH re-pin: the subject of the Mac↔iPhone sentence is the ENGINE (what
+    // is actually checked), never a blanket "the browser behaves the way it
+    // behaves on a phone" — that is the identity family Rule 4 retired.
+    expect(body).toMatch(/so the engine runs the way it runs on a phone/);
+    expect(body).not.toMatch(/the browser behaves the way it behaves/);
     expect(body).toMatch(/href="\/trust\/cumulative-rig\/"/);
     // Under-sold shipped features now answered: recordings (local), recycle bin / snapshots, OAuth + CLI sign-in, MFA, crypto receipts, team invites + audit export.
     expect(body).toMatch(/q: 'Can I record or replay a session\?'/);

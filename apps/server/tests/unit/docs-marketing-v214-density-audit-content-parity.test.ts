@@ -178,4 +178,60 @@ describe('W572.C /docs/marketing/v214-density-audit.md content parity', () => {
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
+
+  // 2026-09-16 — STALE CROSS-REFERENCE, closed. Three /faq questions this doc
+  // quotes verbatim (and which this guard pins, above) were renamed by the
+  // readability pass. This guard reads the DOC, never faq.ts, so it stayed
+  // green while the citations rotted: the doc pointed at questions a reader
+  // could no longer find on the live page.
+  //
+  // The findings table is a historical record and is NOT edited — the quoted
+  // wording above stays exactly as the audit wrote it. Instead the doc carries
+  // a dated addendum mapping old → new, and the mapping is held to the LIVE
+  // faq.ts here. A further rename now fails in this file instead of rotting.
+  it('CRITICAL the dated rename addendum maps each renamed question to the wording LIVE on /faq today — pinned against src/data/faq.ts, not against the doc alone, so a fourth rename cannot rot this citation silently', () => {
+    const faq = read(resolve(REPO_ROOT, 'apps/marketing-site/src/data/faq.ts'));
+
+    expect(body).toMatch(
+      /^## Addendum — 2026-09-16: three cited questions were renamed on \/faq$/m,
+    );
+    expect(body).toMatch(
+      /The findings table above is a \*\*historical record and is not edited\*\*\./,
+    );
+
+    // old wording (still quoted in the findings table) → live wording today.
+    const renames: [string, string][] = [
+      ['How does concurrent metering work?', 'How many sessions can I run at once ("concurrent")?'],
+      [
+        'How does this compare to Chromium-cloud stealth services?',
+        'How is this different from Chrome-based "stealth" services?',
+      ],
+      [
+        'What happens when I hit my concurrent cap?',
+        'What happens if I start one session too many?',
+      ],
+    ];
+
+    for (const [oldQ, liveQ] of renames) {
+      // The historical finding is untouched — the doc still quotes it.
+      expect(body, `the findings table must keep quoting: ${oldQ}`).toContain(oldQ);
+      // And that old wording is genuinely GONE from the live page, which is
+      // what made the citation stale in the first place.
+      expect(faq, `still live on /faq, so the addendum is wrong: ${oldQ}`).not.toContain(oldQ);
+      // The addendum names the wording a reader will actually find. The doc
+      // writes the FAQ's straight double quotes as single quotes inside its
+      // Markdown table cell, so compare on the quote-insensitive form.
+      const docForm = liveQ.replace(/"/g, "'");
+      expect(body, `addendum must give the live wording for: ${oldQ}`).toContain(docForm);
+      // Cross-source: that live wording is a real question on /faq right now.
+      expect(faq, `not a live /faq question: ${liveQ}`).toContain(liveQ);
+    }
+
+    // Positive control on the cross-source read: a miswired path would make
+    // every `not.toContain` above vacuously true and every `toContain` fail
+    // loudly — but a faq.ts read as an EMPTY string would pass the negatives
+    // silently. Prove the file was actually read.
+    expect(faq.length, 'faq.ts was read').toBeGreaterThan(10000);
+    expect(faq).toContain('export const FAQ_GROUPS');
+  });
 });

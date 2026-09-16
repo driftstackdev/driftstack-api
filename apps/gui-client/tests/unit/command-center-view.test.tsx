@@ -93,11 +93,39 @@ describe('summarizeSessions', () => {
 describe('formatAuditAction', () => {
   it('humanises dotted/underscored action keys', () => {
     expect(formatAuditAction('profile.created')).toBe('Profile created');
-    expect(formatAuditAction('api_key.rotated')).toBe('Api key rotated');
+    expect(formatAuditAction('api_key.rotated')).toBe('API key rotated');
     expect(formatAuditAction('session.errored')).toBe('Session errored');
+  });
+  it('keeps known acronyms in the first word (was "Api key rotated" / "Mfa enabled")', () => {
+    expect(formatAuditAction('api_key.rotated')).toBe('API key rotated');
+    expect(formatAuditAction('api_key.minted')).toBe('API key minted');
+    expect(formatAuditAction('mfa.enabled')).toBe('MFA enabled');
+    expect(formatAuditAction('vpn.connected')).toBe('VPN connected');
+    expect(formatAuditAction('oauth.retention_sweep')).toBe('OAuth retention sweep');
+    expect(formatAuditAction('sso.enabled')).toBe('SSO enabled');
+    expect(formatAuditAction('url.changed')).toBe('URL changed');
+    expect(formatAuditAction('id.rotated')).toBe('ID rotated');
+    expect(formatAuditAction('csv.exported')).toBe('CSV exported');
+    expect(formatAuditAction('pdf.generated')).toBe('PDF generated');
+    expect(formatAuditAction('sdk.installed')).toBe('SDK installed');
+    expect(formatAuditAction('totp.enrolled')).toBe('TOTP enrolled');
+  });
+  it('keeps a known acronym later in the key too ("Account mfa enrolled" is the same defect one word later)', () => {
+    expect(formatAuditAction('account.mfa_enrolled')).toBe('Account MFA enrolled');
+    expect(formatAuditAction('team.member_id_changed')).toBe('Team member ID changed');
+  });
+  it('matches acronyms as whole words only — a word that merely starts with one still sentence-cases', () => {
+    expect(formatAuditAction('apiary.created')).toBe('Apiary created');
+    expect(formatAuditAction('identity.verified')).toBe('Identity verified');
+    expect(formatAuditAction('urlaub.booked')).toBe('Urlaub booked');
+  });
+  it('a key that names an Object.prototype member is an ordinary word, not a function body', () => {
+    expect(formatAuditAction('constructor.created')).toBe('Constructor created');
+    expect(formatAuditAction('to_string.changed')).toBe('To string changed');
   });
   it('degrades to "Activity" for an empty key', () => {
     expect(formatAuditAction('')).toBe('Activity');
+    expect(formatAuditAction('._-')).toBe('Activity');
   });
 });
 
@@ -487,7 +515,7 @@ describe('CommandCenterView', () => {
     });
     render(<CommandCenterView onNavigate={nav()} />);
     await waitFor(() => expect(screen.getByText('Profile created')).toBeTruthy());
-    expect(screen.getByText('Api key rotated')).toBeTruthy();
+    expect(screen.getByText('API key rotated')).toBeTruthy();
   });
 
   it('degrades to quiet messages when the fetches fail', async () => {

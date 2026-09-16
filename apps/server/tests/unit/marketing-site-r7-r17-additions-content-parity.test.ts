@@ -62,22 +62,39 @@ describe('W627 R7-R17 marketing additions content parity', () => {
       expect(body).not.toMatch(/Pre-launch trust signals/);
       expect(body).not.toMatch(/What sets us apart/);
       expect(body).toMatch(/plain="A real iPhone, not a lookalike"/);
-      expect(body).toMatch(/plain="Looks human to every website"/);
-      expect(body).toMatch(/plain="Drive it three ways"/);
-      expect(body).toMatch(/plain="Any country you need"/);
+      // 2026-09-16 Band-A readability pass — a Band-B big line has to STAND
+      // ALONE. "Drive it three ways" named a count and no ways; "Any country
+      // you need" named a place and no mechanism; "Looks human to every
+      // website" said how it looks, not what the reader gets. Each now says
+      // the benefit on its own, so the small mono line under it is optional
+      // reading rather than the decoder ring for the line above.
+      expect(body).toMatch(/plain="Websites see a normal iPhone visitor"/);
+      expect(body).toMatch(/plain="Click through it yourself, or drive it from code"/);
+      expect(body).toMatch(/plain="Each iPhone can browse from the country you choose"/);
+      expect(body).not.toMatch(/plain="Looks human to every website"/);
+      expect(body).not.toMatch(/plain="Drive it three ways"/);
+      expect(body).not.toMatch(/plain="Any country you need"/);
     });
 
-    it("differentiator sub-claims preserved in the Stat technical props (S20b 2026-07-06 plain-language pass: same facts — canvas+WebGL population-matched hashes glossed as the hidden 'device photos' sites take, Apple WebKit source code glossed as the engine inside every iPhone's Safari, code-or-dashboard access paths); the injects-nothing descriptor lives in the proof section Engine-deep card", () => {
+    it("differentiator sub-claims preserved in the Stat technical props — same facts, now stated ONCE and precisely (2026-09-16 Band-A pass): the small mono line is the precise line, so it no longer carries a beginner-facing decode of itself ('the engine family behind Safari on every iPhone', 'not a Chromium browser dressed up as a phone', 'the hidden checks websites run to spot fakes'). That work moved UP into the plain line, where the beginner reads; Chromium stays a Band-C word (the signal table and \"Apple's engine. Not a Chromium copy.\" still carry the contrast). The injects-nothing descriptor still lives in the proof-section Engine-deep card.", () => {
       expect(body).toMatch(
-        /The hidden checks websites run to spot fakes get the answers a real iPhone gives — measured against real devices, check by check/,
+        /technical="What a website can measure is checked against real iPhones, check by check"/,
       );
-      expect(body).toMatch(/Driftstack injects\s*no stealth JavaScript/);
       expect(body).toMatch(
-        /Runs a build of Apple's own WebKit — the engine family behind Safari on every iPhone — not a Chromium browser dressed up as a phone/,
+        /technical="Runs a build of Apple's own WebKit — the engine family behind iPhone Safari"/,
+      );
+      expect(body).toMatch(
+        /technical="Attach your own proxy or VPN to a profile — SOCKS5, OpenVPN or WireGuard"/,
       );
       expect(body).toMatch(
         /From code — TypeScript, Python, or Go — or point and click in the desktop app\. Same browser either way/,
       );
+      // the injects-nothing descriptor, in the reader's words
+      expect(body).toMatch(/slipping extra "stealth" code/);
+      expect(body).toMatch(/Driftstack adds no such code\./);
+      // the decodes must not creep back into the precise line
+      expect(body).not.toMatch(/not a Chromium browser dressed up as a phone/);
+      expect(body).not.toMatch(/The hidden checks websites run to spot fakes/);
     });
 
     it('Vendor names stay off the homepage splash (moved to /trust/sub-processors/)', () => {

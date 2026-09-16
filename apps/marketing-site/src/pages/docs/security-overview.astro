@@ -1,11 +1,28 @@
 ---
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { SUB_PROCESSORS, firstSentence } from '../../data/sub-processors.ts';
 
 // V-713 — public security overview. Pitched at customer security
 // review + procurement teams. Companion to https://docs.driftstack.io/reference/data-residency/,
 // /docs/audit-log, /docs/incident-policy. Keeps the surface area
 // honest — describes what we do, what we don't, and where to find
 // the auditable evidence.
+//
+// The sub-processor list below is rendered from the register in
+// `src/data/sub-processors.ts` — the same source /trust/sub-processors
+// renders and `scripts/check-subprocessor-mirror.mjs` mirrors against
+// DPA Annex 3. Until 2026-09-16 it was a hand-written five-name
+// shortlist (Stripe / NowPayments / Cloudflare / Postmark / Sentry)
+// that had gone stale and under-disclosed: Neon, Hetzner, MacStadium
+// and LiveKit are named elsewhere on this page but were missing from
+// it. Reading the register is what keeps the two from drifting again.
+//
+// `firstSentence` gives one line per entry — the purpose's first
+// sentence, verbatim. The rest of each purpose (conditional
+// engagement, billing detail, transfer mechanism, region) is on
+// /trust/sub-processors, which this section links as the full record.
+// It lives in the register module rather than here so the line that
+// reaches the customer is covered by a test of its own.
 ---
 
 <BaseLayout title="Security overview — Driftstack" description="Driftstack's security posture: data handling, encryption, auth, incident response, and what's in scope for our threat model.">
@@ -45,6 +62,18 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         recorder saves streamed session frames locally on the operator's
         machine; those recordings are not uploaded by the recording workflow.
         See <a href="/docs/recordings/">/docs/recordings</a> for the boundary.
+      </li>
+      <li>
+        <strong>Payment details:</strong> Card numbers never reach
+        Driftstack systems. Stripe collects and tokenises them under
+        its own PCI-DSS scope; we keep the token and the billing
+        details that appear on your invoice.
+      </li>
+      <li>
+        <strong>Error reports:</strong> Server errors go to Sentry,
+        our error-tracking service (EU region), with personal data
+        scrubbed out first. Request logs record technical detail only
+        — never the body of your request or of our response.
       </li>
       <li>
         <strong>Profile state:</strong> Per-profile browser state
@@ -98,8 +127,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </li>
       <li>
         Customer data egress to non-EU regions is restricted to the
-        subprocessors enumerated below and on the
-        <a href="/legal/sub-processors/">sub-processor list</a>. See
+        companies listed below. That one list is published in full at
+        <a href="/trust/sub-processors/">/trust/sub-processors</a>, and
+        it is the same list the Data Processing Addendum refers to at
+        <a href="/legal/sub-processors/">/legal/sub-processors</a>. See
         <a href="https://docs.driftstack.io/reference/data-residency/">/docs/data-residency</a> for
         the per-category breakdown.
       </li>
@@ -138,17 +169,22 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <h2>Sub-processors</h2>
     <p>
-      A full sub-processor list with a description of what each
-      receives is available at
-      <a href="/legal/sub-processors/">/legal/sub-processors</a>. The
-      shortlist as of 2026:
+      The companies below process customer data on Driftstack's behalf.
+      This is the complete list, taken from the register published at
+      <a href="/trust/sub-processors/">/trust/sub-processors</a> — the
+      full record, which also gives the region each company operates in,
+      the data it receives, and the legal basis for any transfer outside
+      the EU. Some entries are engaged only for a specific feature or
+      payment method; the full record says which.
     </p>
     <ul>
-      <li>Stripe (card billing only — no payment data touches our infra)</li>
-      <li>NowPayments (crypto checkout)</li>
-      <li>Cloudflare (CDN, WAF, R2 object storage)</li>
-      <li>Postmark (transactional email)</li>
-      <li>Sentry (engineering error monitoring; PII-scrubbed at SDK level)</li>
+      {
+        SUB_PROCESSORS.map((sp) => (
+          <li>
+            <strong>{sp.name}</strong> — {firstSentence(sp.purpose)}
+          </li>
+        ))
+      }
     </ul>
     <p>
       We publish 30-day notice before adding or rotating a sub-

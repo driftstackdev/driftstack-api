@@ -79,17 +79,34 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
 
   it("Free-tier mechanics framing pinned: 'No usage metering at all' + 'Upgrade to a paid tier when you need the API' — pinned so the no-metering / upgrade-for-API framing survives (drift here would blur the free↔paid boundary)", () => {
     expect(body).toMatch(/No hourly charges and no usage counting/);
-    expect(body).toMatch(/Upgrade to a paid tier when you need the\s+API/);
+    // 2026-09-16 (2nd pass): the upgrade trigger leads with the action instead
+    // of holding the verb behind a six-item list, and "a VPN exit" — a term
+    // Band A never glossed — became "your own VPN connection". Same free↔paid
+    // boundary, same reasons, still a REASON list (Personal has no AI agent and
+    // the same 1 session at a time as Free, so "every paid tier adds X" would
+    // be false).
+    expect(body).toMatch(
+      /Move up to a paid tier when you need more\. That could be the\s+API, every device type, or longer sessions\./,
+    );
+    expect(body).toMatch(
+      /Paid tiers also let sessions go out through your own VPN\s+connection, not just a proxy\./,
+    );
+    expect(body).not.toMatch(/a VPN exit/);
   });
 
   it('Positioning band pins fixed browser subscription, concurrent capacity and no browser-usage overages', () => {
     // 2026-09-15 plain-words pass — same four facts, no billing internals.
-    expect(body).toMatch(/Browser plans are priced by how many sessions you can run at once\./);
+    // 2026-09-16 readability pass — same four facts again, under ONE name for
+    // the thing being priced ("sessions at the same time"), with "concurrent
+    // sessions" named once as the industry word instead of as the definition.
+    expect(body).toMatch(
+      /Browser plans are priced by how many sessions you can run at the same time\./,
+    );
     expect(body).toMatch(/Use as many hours as you want within that limit\./);
     expect(body).toMatch(/No extra bills for browser usage\./);
-    expect(body).toMatch(/hours, API calls and page visits inside it are unlimited/);
+    expect(body).toMatch(/Hours, API calls and page visits\s+inside that limit are unlimited/);
     expect(body).toMatch(
-      /optional AI agent with Driftstack-supplied AI access \(the\s+"bundled" option\), that has its own monthly budget/,
+      /optional AI agent with\s+Driftstack-supplied AI access \(the "bundled" option\) has its own\s+monthly budget/,
     );
   });
 
@@ -130,15 +147,29 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     );
   });
 
-  it("concurrent/profile glossary pinned above the ladders: 'concurrent means sessions running at the same time — think browser tabs' + 'profile is a saved iPhone identity that keeps its logins and history' — pinned so both ladder column headers stay defined in plain words before the tables use them (the browser-tabs metaphor matches the homepage metering band; drift here would re-jargonize the ladders' two load-bearing terms)", () => {
-    expect(body).toMatch(
-      /concurrent<\/strong> means\s*sessions running at the same time — think browser tabs/,
-    );
+  it("ladder terms defined in plain words before the tables use them: 'sessions at the same time' explained ONCE in the positioning band and then carried as the ladder row label itself, plus 'profile is a saved iPhone identity that keeps its logins and history' and BYOK above the ladders — pinned so both ladder column headers stay defined in plain words before the tables use them (the browser-tabs metaphor matches the homepage metering band; drift here would re-jargonize the ladders' load-bearing terms)", () => {
+    // 2026-09-16 readability pass. The definition MOVED rather than vanished:
+    // 'concurrent' used to be defined twice, in two wordings, and the tables
+    // then used a third ('Concurrent sessions'). The page now explains
+    // 'sessions at the same time' once, in the positioning band, and the
+    // ladders carry that exact phrase as their row label — so this guard
+    // follows the definition and additionally pins that the label and the
+    // definition are the SAME words, which the old pin could not.
+    expect(body).toMatch(/Sessions at the same time<\/strong> is what\s+you pay for\./);
+    expect(body).toMatch(/Think of browser tabs you keep open at once\./);
+    // 2026-09-16 (2nd pass): the industry term is named, not disowned — the
+    // homepage still uses "concurrent sessions" as its own headline metric, so
+    // "Other tools call this …" made the two pages contradict each other.
+    expect(body).toMatch(/It is also\s+called "concurrent sessions"\./);
+    const conc = body.match(/<dt class="text-tk-ink-3">Sessions at the same time<\/dt>/g);
+    expect(conc, 'one plain-worded concurrency row label per ladder').toHaveLength(2);
+    expect(body).not.toMatch(/<dt class="text-tk-ink-3">Concurrent sessions<\/dt>/);
     // S20b 2026-07-06: the glossary line grew a third term (BYOK) — the
     // profile definition now continues with ", and" instead of a period.
     expect(body).toMatch(
       /profile<\/strong> is a saved iPhone identity\s*that keeps its logins and history/,
     );
+    expect(body).toMatch(/BYOK<\/strong> means you bring your own\s*Anthropic key/);
   });
 
   it("Product + AggregateOffer JSON-LD pinned: '@type Product' + '@type AggregateOffer' with lowPrice/highPrice/offerCount DERIVED from API_TIERS (String(freeTier.monthlyUsd) / String(Math.max(...listedMonthlyUsd)) / String(API_TIERS.length)) and NO aggregateRating/review keys — pinned so the structured data stays data-bound (hand-typed dollars would diverge from pricing.ts) and strictly factual (fabricated ratings are a hard guardrail violation + a Google structured-data penalty risk)", () => {
@@ -184,8 +215,18 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     );
   });
 
-  it('BYOK / Bundled LLM section pins the live included-service budget, Enterprise custom-budget boundary, enablement, and self-hosted BYOK-only posture', () => {
-    expect(body).toMatch(/BYOK or bundled — your call\./);
+  it('BYOK / Bundled LLM section pins the live included-service budget, Enterprise custom-budget boundary, enablement, self-hosted BYOK-only posture, and an intro that does not offer every plan a choice of who pays for the model', () => {
+    // 2026-09-16 (2nd pass) TRUTH re-pin. "BYOK or bundled — your call." and
+    // "you choose who pays for the AI behind it: you, or us" promised a choice
+    // that only api_builder / api_scale / enterprise have — team_manual,
+    // agency_manual and api_starter are llmBilling 'byok_only' in
+    // data/pricing.ts, and self-hosted is BYOK-only two paragraphs down.
+    expect(body).toMatch(/Who pays for the AI agent\./);
+    expect(body).not.toMatch(/BYOK or bundled — your call/);
+    expect(body).not.toMatch(/you choose who pays for the AI behind\s+it/);
+    expect(body).toMatch(
+      /On every plan that has it, you can bring your own\s+Anthropic key and pay Anthropic directly\. On API Builder, API Scale and\s+Enterprise you can instead use AI access Driftstack supplies\./,
+    );
     expect(body).toMatch(/Bundled LLM \(API Builder, API Scale, Enterprise\)/);
     // 2026-09-15 plain words: same $0.10-per-agent-turn budget, included in
     // the plan and not billed separately today; enablement via the desktop
@@ -205,7 +246,12 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
 
   it("Mini FAQ teaser 4 questions: 'Manual or API — which one?' + 'Why concurrent caps and not hours?' + 'Can I switch tiers mid-month?' + 'Does the free tier expire?' + 'See full FAQ' → /faq — pinned so the 4-question pricing-FAQ teaser stays complete (drift to dropping the concurrent-caps explainer would lose the why-not-hourly answer; drift to dropping the free-tier answer would orphan free-tier prospects)", () => {
     expect(body).toMatch(/Manual or API — which one\?/);
-    expect(body).toMatch(/Why limit sessions at once, and not hours\?/);
+    // 2026-09-16 (2nd pass) TRUTH re-pin: "at once" was the only word that made
+    // the heading true — the page caps simultaneous sessions, not how many you
+    // run ("Start as many iPhone Safari sessions as you like, one after
+    // another"). The heading now carries the page's unified phrase.
+    expect(body).toMatch(/Why limit sessions at the same time, and not hours\?/);
+    expect(body).not.toMatch(/Why limit sessions, and not hours\?/);
     expect(body).toMatch(/Can I switch tiers mid-month\?/);
     expect(body).toMatch(/Does the free tier expire\?/);
     expect(body).toMatch(/<a href="\/faq\/" class="btn-secondary">See full FAQ<\/a>/);
@@ -229,11 +275,16 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     // 2026-09-15 refuter: the free tier's one saved proxy may be SOCKS5 or
     // HTTP — routes/account-me.ts gates only openvpn/wireguard on vpnEgress.
     expect(body).not.toMatch(/one saved SOCKS5 proxy on the free plan/);
+    // 2026-09-16 (2nd pass) READABILITY re-pin: same facts (no API/SDK, no VPN,
+    // one saved proxy that may be SOCKS5 or HTTP, paid plans add the API and
+    // OpenVPN/WireGuard), with the mechanism glossed in the sentence that uses
+    // it. This bullet sits in the first screenful and used to drop SDK, SOCKS5,
+    // HTTP proxy and "exits" on a first-time reader unexplained.
     expect(body).toMatch(
-      /no API or SDK access, and no VPN\. Sessions browse through a\s*proxy you bring — one saved SOCKS5 or HTTP proxy on the free plan\./,
+      /no API or SDK access, and no VPN\. Free sessions reach the\s*internet through a connection you supply: one saved proxy,\s*either SOCKS5 or HTTP\. A site then sees that address instead\s*of ours\./,
     );
     expect(body).toMatch(
-      /Every paid plan includes the API and adds OpenVPN and\s*WireGuard exits\./,
+      /Paid plans add the API, and let you use your own VPN\s*\(OpenVPN or WireGuard\) instead of a proxy\./,
     );
     expect(body).toMatch(
       /No AI agent on the free plan — it starts at Team, and is\s*on every API plan\./,
@@ -248,14 +299,28 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
   it('"every tier gives you the same real iPhones" is gone: paid tiers get every device profile (DEVICE_SUPPORT-bound), the free tier runs freeTier.archetypeAccess, the AI agent is Team-and-up + every API plan (stated on the fork, the Manual header, the BYOK explainer and the free FAQ)', () => {
     expect(body).toMatch(/import \{ DEVICE_SUPPORT \} from '\.\.\/data\/capabilities';/);
     expect(body).not.toMatch(/Every tier gives you the same real iPhones\./);
+    // 2026-09-16 (2nd pass): ONE name for the device dimension. The ladder rows
+    // said "Device types" while the prose said "device profile", which collided
+    // with the glossary's "profile" (a saved iPhone identity) and made
+    // {selectableCount} read like a profile quota beside the "Saved profiles"
+    // row. Prose says "device type", the glossary defines it, and the 31-word
+    // stacked-aside opener is three short sentences. Bindings unchanged.
+    // (Negatives scoped to the RENDERED phrases — the file's doc-comment quotes
+    // the retired word to explain why it was retired.)
+    expect(body).not.toMatch(/gives you every device profile/);
+    expect(body).not.toMatch(/includes every device profile/);
+    expect(body).not.toMatch(/Every device profile,/);
     expect(body).toMatch(
-      /Every paid tier gives you every device profile we offer — 19 iPhone\s*models, from the 13 to the 17 Pro Max/,
+      /Every paid tier gives you every device type we offer\. That is 19 iPhone\s*models, from the 13 to the 17 Pro Max/,
     );
     // 2026-09-15 refuter: the catalog is 19 named models, not "every iPhone"
     // released between the endpoints (no SE 3rd gen, 16e or Air).
     expect(body).not.toMatch(/every\s*iPhone from the 13 to the 17 Pro Max/i);
     expect(body).toMatch(
-      /\{DEVICE_SUPPORT\.selectableCount\} device\s*profiles\) on iOS 18, with Safari \{DEVICE_SUPPORT\.safariVersions\}/,
+      /\{DEVICE_SUPPORT\.selectableCount\} device\s*types in total\. They run iOS 18, with Safari \{DEVICE_SUPPORT\.safariVersions\}/,
+    );
+    expect(body).toMatch(
+      /device type<\/strong> is one iPhone model,\s*paired with an iOS version and a Safari version\./,
     );
     expect(body).toMatch(/The free tier runs the\s*\{freeTier\.archetypeAccess\}\./);
     expect(body).toMatch(/the AI agent \(Team and up, and every API\s*plan\)/);
@@ -268,8 +333,10 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(
       /The AI agent is on every API plan\. Your\s*code signs in with a scoped API key/,
     );
+    // 2026-09-16 (2nd pass): the free-tier FAQ answer leads with the action and
+    // the reasons follow, in the page's one vocabulary.
     expect(body).toMatch(
-      /When you need the API, every\s*device profile, a VPN exit, more sessions at once/,
+      /Subscribe to a paid tier from\s+your dashboard when you need more\. That could be the API, every\s+device type, or longer sessions\./,
     );
   });
 
@@ -280,10 +347,12 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(
       /3 sessions at the same time; 50 profiles, shared with the\s*teammates you invite\./,
     );
-    expect(body).toMatch(/8 sessions at once; 200 profiles\./);
+    // 2026-09-16: one phrase for the cap everywhere on the page.
+    expect(body).toMatch(/8 sessions at the same time; 200 profiles\./);
     expect(body).toMatch(
-      /Tiers differ\s*by how many sessions run at once and how many profiles you keep\./,
+      /Tiers differ\s*by how many sessions run at the same time and how many profiles\s*you keep\./,
     );
+    expect(body).not.toMatch(/sessions at once;/);
   });
 
   it('both ladders carry a data-bound "Device types" row ({tier.archetypeAccess}) — exactly twice, once per ladder', () => {
@@ -297,7 +366,9 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(/title="What comes with your plan\."/);
     for (const h of [
       'Profiles you can look after',
-      'Your own exits, tested before launch',
+      // 2026-09-16 (2nd pass): "exits" is our word — the card body already says
+      // proxy / OpenVPN / WireGuard, so the heading says it too.
+      'Your own proxy or VPN, tested before launch',
       'A floating device window',
       'Recordings that stay on your machine',
       'Teammates with roles',

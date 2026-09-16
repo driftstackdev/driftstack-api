@@ -627,3 +627,211 @@ export function findUnresolvableOpenvpnFileReferences(
   }
   return hits;
 }
+
+/**
+ * The directives that declare which END of the tunnel a config is. `client` is
+ * the one the control plane requires (`OpenVpnProxyConfigSchema` in egress.ts:
+ * "This OpenVPN file must be a client configuration: it needs a `client` line.")
+ * and `tls-client` is its long half — `client` is shorthand for `tls-client`
+ * plus `pull`.
+ *
+ * A config carrying EITHER already says it is a client, so this module leaves it
+ * alone. That is deliberate and it has a known cost: a `tls-client`-only config
+ * is still refused by the server, because the server matches the literal `client`
+ * line. Adding `client` on top of `tls-client` would also add `pull`, which
+ * changes what the tunnel does with the routes and DNS the peer pushes — a
+ * behaviour change this helper has no business making silently.
+ */
+const OPENVPN_CLIENT_ROLE_DIRECTIVES: ReadonlySet<string> = new Set(['client', 'tls-client']);
+
+/**
+ * Directives that mark a config as the SERVER end. `server <net> <mask>` is the
+ * shorthand that expands to `mode server` + `tls-server` + a pool; `tls-server`
+ * is the bare role; `mode server` is what a hand-written server config says.
+ *
+ * Any of them means the file is not a client config that forgot to say so, and
+ * adding `client` to it would produce a config that contradicts itself. The
+ * helper refuses rather than guesses — a wrong rewrite of a customer's file is
+ * worse than the refusal they already have, which at least names its reason.
+ */
+const OPENVPN_SERVER_ROLE_DIRECTIVES: ReadonlySet<string> = new Set(['tls-server', 'server']);
+
+/**
+ * The STATIC-KEY marker — the THIRD mutually exclusive OpenVPN mode, and the one
+ * this helper used not to know about.
+ *
+ * `--secret` is point-to-point shared-key mode: no TLS, no roles, both ends hold
+ * the same key. OpenVPN refuses to start when it is combined with `--tls-client`
+ * ("specify only one of --tls-server, --tls-client, or --secret"), and `client`
+ * IS `tls-client` + `pull`. So a legacy static-key profile — no role line, a real
+ * `remote`, an inline `<secret>` block — is NOT a client config that forgot to say
+ * so, even though it looks exactly like one to a check that only knows the server
+ * role words.
+ *
+ * ⛔ Nothing downstream catches this. `OpenVpnProxyConfigSchema` checks only that
+ * `client` and `remote` are present, so the repaired blob is stored, the editor
+ * flips to its ✓ endpoint line, Save is enabled — and the failure moves to session
+ * launch, where nothing names it. That is the "a wrong rewrite of a customer's
+ * file is worse than the refusal they already have" case, so a static key stops
+ * the offer the same way a server role does.
+ *
+ * Both spellings count: a bare `secret static.key` directive, and the inline
+ * `<secret>`…`</secret>` block. The tag is in OPENVPN_INLINE_BLOCK_TAGS, so the
+ * flag must be set on the block-OPEN line — the body after it is key DATA that
+ * the scan skips without reading.
+ */
+const OPENVPN_STATIC_KEY_DIRECTIVES: ReadonlySet<string> = new Set(['secret']);
+
+/** A config's role/endpoint facts, read in ONE pass over the pasted bytes. */
+interface OpenvpnRoleScan {
+  /** A `client` or `tls-client` line, in any spelling openvpn's lexer accepts. */
+  declaresClient: boolean;
+  /** A `tls-server` / `server` / `mode server` line — this is the other end. */
+  declaresServer: boolean;
+  /** A `secret` directive or a `<secret>` block — static-key mode, not a TLS client. */
+  declaresStaticKey: boolean;
+  /** A bare lowercase `remote <arg>` line, i.e. one the SERVER's own regex sees. */
+  hasRemote: boolean;
+  /** 1-based line of the first real directive; 0 when the file has none. */
+  firstDirectiveLine: number;
+}
+
+/**
+ * Strip a trailing `# …` / `; …` comment. OpenVPN's parser breaks a line at an
+ * unquoted `#` or `;`, and the server's own `client` regex tolerates one
+ * (`^[ \t]*client[ \t]*(?:[#;].*)?$`), so `client  # provider note` is a
+ * `client` line and must read as one here too.
+ *
+ * ⚠️ NOT applied by `findUnsupportedOpenvpnLines` above, which only skips lines
+ * that START with a comment marker. That asymmetry is on purpose: over-reading a
+ * line is the safe direction for a SECURITY finder and the unsafe direction
+ * here, where reading a line as absent causes a rewrite.
+ */
+function stripOpenvpnInlineComment(line: string): string {
+  const at = line.search(/[#;]/);
+  return (at === -1 ? line : line.slice(0, at)).trim();
+}
+
+function scanOpenvpnRole(configBlob: string): OpenvpnRoleScan {
+  const lines = configBlob.split(/\r\n|\r|\n/);
+  const scan: OpenvpnRoleScan = {
+    declaresClient: false,
+    declaresServer: false,
+    declaresStaticKey: false,
+    hasRemote: false,
+    firstDirectiveLine: 0,
+  };
+  let openBlock: string | null = null;
+  for (let i = 0; i < lines.length; i += 1) {
+    const raw = (lines[i] ?? '').trim();
+    if (openBlock !== null) {
+      // Inside `<ca>`…`</ca>` and friends every byte is certificate/key/credential
+      // DATA. Reading a directive there would be as wrong as the rewrite it feeds.
+      if (raw.toLowerCase() === `</${openBlock}>`) openBlock = null;
+      continue;
+    }
+    if (raw === '' || raw.startsWith('#') || raw.startsWith(';')) continue;
+    const blockOpen = /^<([a-z0-9-]+)>$/i.exec(raw);
+    if (blockOpen !== null && OPENVPN_INLINE_BLOCK_TAGS.has(blockOpen[1]?.toLowerCase() ?? '')) {
+      const tag = blockOpen[1]?.toLowerCase() ?? null;
+      // The OPEN line is the last chance to read this block: everything below it,
+      // up to the closing tag, is key/certificate DATA the loop above skips. An
+      // inline `<secret>` block is how a static-key profile carries its key, and
+      // it is the mode marker — see OPENVPN_STATIC_KEY_DIRECTIVES.
+      if (tag !== null && OPENVPN_STATIC_KEY_DIRECTIVES.has(tag)) scan.declaresStaticKey = true;
+      openBlock = tag;
+      if (scan.firstDirectiveLine === 0) scan.firstDirectiveLine = i + 1;
+      continue;
+    }
+    if (scan.firstDirectiveLine === 0) scan.firstDirectiveLine = i + 1;
+    const text = stripOpenvpnInlineComment(raw);
+    if (text === '') continue;
+    const tokens = text.split(/\s+/);
+    // ROLE keywords are read the way the finders above read a directive — quotes
+    // stripped, a leading `--` stripped, lower-cased — so `"client"`, `--client`
+    // and `CLIENT` all count as "already declares a role" and this helper leaves
+    // the file alone. Over-detecting here only ever means NOT rewriting, which is
+    // the safe direction for a function that edits a customer's config.
+    let keyword = stripEnclosingQuotes(tokens[0] ?? '');
+    if (keyword.length >= 3 && keyword.startsWith('--')) keyword = keyword.slice(2);
+    keyword = stripEnclosingQuotes(keyword).toLowerCase();
+    if (OPENVPN_CLIENT_ROLE_DIRECTIVES.has(keyword)) scan.declaresClient = true;
+    if (OPENVPN_SERVER_ROLE_DIRECTIVES.has(keyword)) scan.declaresServer = true;
+    if (OPENVPN_STATIC_KEY_DIRECTIVES.has(keyword)) scan.declaresStaticKey = true;
+    if (keyword === 'mode' && (tokens[1] ?? '').toLowerCase() === 'server') {
+      scan.declaresServer = true;
+    }
+    // `remote` is read STRICTLY — the raw lowercase token with an argument, which
+    // is exactly what the control plane's own `/^[ \t]*remote\s+\S+/m` accepts.
+    // The point is not to detect the customer's intent loosely: it is that adding
+    // `client` must leave a config the server ACCEPTS. A `--remote` spelling is
+    // refused by that regex, so "fixing" it would hand back a config that is
+    // refused for a different reason, which reads as the fix not working.
+    if (tokens[0] === 'remote' && tokens[1] !== undefined) scan.hasRemote = true;
+  }
+  return scan;
+}
+
+/** The `client` line this module can add for the customer, and where it goes. */
+export interface OpenvpnClientDirectiveFix {
+  /** 1-based line the `client` directive is inserted BEFORE (the first directive). */
+  line: number;
+  /** The blob with a `client` line at the top of the directive section. */
+  config: string;
+}
+
+/**
+ * A config that never says it is a client, plus the same config with the missing
+ * `client` line added — or null when adding one would be a guess.
+ *
+ * ⛔ WHY THIS IS SAFE, AND ONLY HERE. `client` is documented shorthand for
+ * `tls-client` + `pull`. On a config that already carries a `remote` line and
+ * declares no server role, both halves are what the file already means: it dials
+ * out to a peer, so it is the TLS client, and pulling the peer's pushed routes is
+ * what every provider profile does. Nothing else about the file changes. It is
+ * the same one-line edit a customer makes by hand, and it is what OpenVPN 2.7
+ * requires — it refuses such a profile itself, so this is not a Driftstack-only
+ * rule being papered over.
+ *
+ * Returns null — offer nothing, leave the bytes alone — when:
+ *   • the config already declares `client` or `tls-client` (see the set above);
+ *   • it declares `tls-server`, `server` or `mode server` — that is the other end
+ *     of a tunnel, not a client profile missing a line;
+ *   • it carries a static key (`secret <file>`, or an inline `<secret>` block) —
+ *     that is the third OpenVPN mode, and OpenVPN refuses `--secret` together with
+ *     the `--tls-client` half of `client`, so the rewrite would produce a config
+ *     that stores fine and then cannot launch;
+ *   • it has no bare `remote <host>` line, so there is no evidence it dials out
+ *     and the control plane would refuse it for the missing `remote` anyway;
+ *   • it has no directive section at all (empty, or nothing but comments).
+ *
+ * Comment lines, inline comments and `<ca>`/`<cert>`/`<key>`/`<tls-auth>` blocks
+ * are not directives and are never read as one.
+ *
+ * Pure, dependency-free and total (never throws): safe to run on every paste.
+ */
+export function addMissingOpenvpnClientDirective(
+  configBlob: string,
+): OpenvpnClientDirectiveFix | null {
+  const scan = scanOpenvpnRole(configBlob);
+  if (scan.declaresClient || scan.declaresServer || scan.declaresStaticKey) return null;
+  if (!scan.hasRemote || scan.firstDirectiveLine === 0) return null;
+  // Same capture-the-separator walk the strippers use, so the customer's own line
+  // endings and indentation survive and the result diffs cleanly against the paste.
+  const parts = configBlob.split(/(\r\n|\r|\n)/);
+  // A file whose last line has no terminator still needs one after the inserted
+  // directive, or `client` and the line below it fuse into one unreadable token.
+  const fileEnding = /\r\n|\r|\n/.exec(configBlob)?.[0] ?? '\n';
+  let config = '';
+  let lineNo = 0;
+  for (let i = 0; i < parts.length; i += 2) {
+    lineNo += 1;
+    const text = parts[i] ?? '';
+    const ending = parts[i + 1] ?? '';
+    if (lineNo === scan.firstDirectiveLine) {
+      config += `client${ending === '' ? fileEnding : ending}`;
+    }
+    config += `${text}${ending}`;
+  }
+  return { line: scan.firstDirectiveLine, config };
+}

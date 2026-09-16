@@ -69,7 +69,7 @@ export interface FirstRunWizardProps {
 }
 
 export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element {
-  const { update } = useSettings();
+  const { update, client } = useSettings();
   const [step, setStep] = useState<WizardStep>('welcome');
   const [mode, setMode] = useState<DeploymentMode>('cloud');
   const [baseUrl, setBaseUrl] = useState(CLOUD_DEFAULT_URL);
@@ -187,14 +187,42 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
           {step === 'profile' && <ProfileStep onSkip={completeSetup} onCreated={completeSetup} />}
           {step === 'done' && (
             <section className="text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-status-success/15 text-2xl text-status-success">
-                ✓
+              {/* The glyph is a claim too: a green success tick above "One more
+                  step" says exactly what the copy below stopped saying. It
+                  branches with the copy — the success treatment only when the
+                  client exists, a neutral "next step" mark when it doesn't. */}
+              <div
+                aria-hidden="true"
+                className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full text-2xl ${
+                  client !== null
+                    ? 'bg-status-success/15 text-status-success'
+                    : 'bg-surface-raised text-ink-muted'
+                }`}
+              >
+                {client !== null ? '✓' : '→'}
               </div>
-              <h2 className="mt-4 text-xl font-semibold text-ink-primary">You’re all set</h2>
+              <h2 className="mt-4 text-xl font-semibold text-ink-primary">
+                {client !== null ? 'You’re all set' : 'One more step'}
+              </h2>
+              {/* The profile step can be reached with no SDK client (its own error
+                  says "Skip this step and sign in from Settings"), and this screen
+                  used to say "Your account is connected" regardless. State what
+                  actually happened: the connected sentence only when the client
+                  exists; otherwise the next step is Settings. */}
               <p className="mx-auto mt-2 max-w-sm text-sm text-ink-secondary">
-                Your account is connected. Head to{' '}
-                <span className="font-medium text-ink-primary">Profiles</span> to launch your first
-                live iPhone session.
+                {client !== null ? (
+                  <>
+                    Your account is connected. Head to{' '}
+                    <span className="font-medium text-ink-primary">Profiles</span> to launch your
+                    first live iPhone session.
+                  </>
+                ) : (
+                  <>
+                    Your account isn’t connected yet. Sign in from Settings to connect your account.
+                    Then head to <span className="font-medium text-ink-primary">Profiles</span> to
+                    launch your first live iPhone session.
+                  </>
+                )}
               </p>
               <button type="button" className="btn-primary mt-6" onClick={onComplete}>
                 Go to Profiles
@@ -227,7 +255,7 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
 const STEP_ORDER: WizardStep[] = ['welcome', 'mode', 'apikey', 'profile'];
 const STEP_LABELS: Record<WizardStep, string> = {
   welcome: 'Welcome',
-  mode: 'Deployment',
+  mode: 'Hosting',
   apikey: 'Sign in',
   profile: 'First profile',
   done: 'Done',

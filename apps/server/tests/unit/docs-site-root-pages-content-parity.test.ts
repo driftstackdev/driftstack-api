@@ -125,7 +125,7 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(body).toMatch(/On first launch, the GUI client opens a five-step wizard:/);
     expect(body).toMatch(/1\. \*\*Welcome\*\*/);
     expect(body).toMatch(
-      /2\. \*\*Deployment mode\*\* — radio: \*\*Cloud\*\* \(`https:\/\/api\.driftstack\.dev`\) or \*\*Self-hosted\*\*/,
+      /2\. \*\*Hosting\*\* — radio: \*\*Cloud\*\* \(`https:\/\/api\.driftstack\.dev`\) or \*\*Self-hosted\*\*/,
     );
     // 2026-09-15 — the dev port and package path left the customer page (how
     // we run it, not what the customer gets); the step now names what to paste.

@@ -9,6 +9,16 @@
 // Changes to this list trigger Art 28(2) sub-processor amendment
 // notice (30-day notice to customers) per the DPA. Adding or removing
 // an entry is a content change with compliance implications.
+//
+// 2026-09-16 — the `purpose` strings are published verbatim on
+// /trust/sub-processors and, as their first sentence, on
+// /docs/security-overview. Three of them described how the service is
+// run rather than what the company does for the customer, in words the
+// customer-facing copy rule bans ("control plane" x2, "fleet" x1).
+// They were reworded in customer language. The processing itself did
+// not change and no entry was added or removed, so this is a cosmetic
+// edit: no Art 28(2) notice, and no SUB_PROCESSOR_CHANGELOG entry (see
+// the `material_change` semantics below).
 
 export interface SubProcessor {
   /** Legal-entity name as it appears in the DPA Annex 3. */
@@ -25,7 +35,7 @@ export const SUB_PROCESSORS: SubProcessor[] = [
   {
     name: 'Hetzner Cloud',
     region: 'Falkenstein, Germany (EU)',
-    purpose: 'Compute infrastructure for the Driftstack control plane.',
+    purpose: 'Compute infrastructure for the Driftstack service.',
     transferMechanism: 'EU-resident — no transfer required.',
   },
   {
@@ -66,7 +76,7 @@ export const SUB_PROCESSORS: SubProcessor[] = [
   {
     name: 'Sentry',
     region: 'EU region (ingest.de.sentry.io)',
-    purpose: 'Error monitoring and observability for the Driftstack control plane.',
+    purpose: 'Error monitoring for the Driftstack service.',
     transferMechanism: 'EU ingest region — no transfer required for error data.',
   },
   {
@@ -92,7 +102,7 @@ export const SUB_PROCESSORS: SubProcessor[] = [
   {
     name: 'MacStadium',
     region: 'United States',
-    purpose: 'Mac hardware hosting for the iPhone Safari session execution fleet.',
+    purpose: 'Mac hardware hosting for iPhone Safari sessions.',
     transferMechanism: '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.',
   },
   {
@@ -111,6 +121,27 @@ export const SUB_PROCESSORS: SubProcessor[] = [
     transferMechanism: '2021 Standard Contractual Clauses + EU-US Data Privacy Framework.',
   },
 ];
+
+/**
+ * The one-line form of a register `purpose`: its first sentence.
+ *
+ * /trust/sub-processors publishes each `purpose` in full. Pages that
+ * only summarise the register — /docs/security-overview renders one
+ * line per entry — take the first sentence and link the full record,
+ * so the conditional-engagement, billing and transfer detail is read
+ * where it is stated in full rather than half-quoted.
+ *
+ * Exported (rather than living in a page's frontmatter) so the line
+ * that actually reaches the customer can be asserted in a test. A
+ * purpose with no sentence break is returned whole; the returned line
+ * is always a prefix of `purpose` and always ends in a full stop, and
+ * `docs-security-overview-sub-processor-register-binding.test.ts`
+ * holds both for every entry in the register.
+ */
+export function firstSentence(purpose: string): string {
+  const end = purpose.indexOf('. ');
+  return end === -1 ? purpose : purpose.slice(0, end + 1);
+}
 
 export const SUB_PROCESSOR_REGISTER_LAST_UPDATED = '2026-07-07';
 

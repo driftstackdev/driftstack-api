@@ -48,7 +48,7 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     );
   });
 
-  it("Steps framing pinned: 5-step list 'Welcome' / 'Deployment mode' (cloud vs self-hosted radio) / 'API key' (validated via client.account.me() so customer sees valid/wrong-key/unreachable before advancing) / 'First profile (skippable)' / 'Done' — pinned so the validation-before-advance UX stays documented", () => {
+  it("Steps framing pinned: 5-step list 'Welcome' / 'Hosting' (the mode step — cloud vs self-hosted radio; the source header comment still calls it 'Deployment mode', which never reaches a screen) / 'API key' (validated via client.account.me() so customer sees valid/wrong-key/unreachable before advancing) / 'First profile (skippable)' / 'Done' — pinned so the validation-before-advance UX stays documented", () => {
     expect(body).toMatch(
       /\/\/ {3}3\. API key — paste the key; validated via `client\.account\.me\(\)`\s*\/\/ {6}so the customer sees a clear "valid \/ wrong key \/ unreachable"\s*\/\/ {6}response before the wizard advances\./,
     );
@@ -68,13 +68,14 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     expect(body).toMatch(/const SELF_HOSTED_DEFAULT_URL = 'http:\/\/localhost:3000';/);
   });
 
-  it("STEP_ORDER 4-step array ['welcome', 'mode', 'apikey', 'profile'] + STEP_LABELS 5-key record (welcome:Welcome / mode:Deployment / apikey:Sign in / profile:First profile / done:Done) — pinned so the stepper progression matches the WizardStep union and 'done' is intentionally excluded from STEP_ORDER (no stepper entry past the final step)", () => {
+  it("STEP_ORDER 4-step array ['welcome', 'mode', 'apikey', 'profile'] + STEP_LABELS 5-key record (welcome:Welcome / mode:Hosting / apikey:Sign in / profile:First profile / done:Done) — pinned so the stepper progression matches the WizardStep union and 'done' is intentionally excluded from STEP_ORDER (no stepper entry past the final step). The mode step's visible label is 'Hosting' (2026-09-16: the choice is hosted-by-Driftstack vs host-it-yourself; 'Deployment' was operator vocabulary a beginner does not have) — the step KEY stays 'mode'", () => {
     expect(body).toMatch(
       /const STEP_ORDER: WizardStep\[\] = \['welcome', 'mode', 'apikey', 'profile'\];/,
     );
     expect(body).toMatch(
-      /const STEP_LABELS: Record<WizardStep, string> = \{\s*welcome: 'Welcome',\s*mode: 'Deployment',\s*apikey: 'Sign in',\s*profile: 'First profile',\s*done: 'Done',\s*\};/,
+      /const STEP_LABELS: Record<WizardStep, string> = \{\s*welcome: 'Welcome',\s*mode: 'Hosting',\s*apikey: 'Sign in',\s*profile: 'First profile',\s*done: 'Done',\s*\};/,
     );
+    expect(body).not.toMatch(/mode: 'Deployment',/);
   });
 
   it('Stepper is accessible: <nav aria-label="Setup progress"> wrapping an <ol> of <li> steps, the active step carries aria-current="step" + an sr-only "(current step)" cue, and the connector rule is aria-hidden — pinned so a screen-reader user can tell which setup step they are on (the progress was previously conveyed by colour alone)', () => {
@@ -181,6 +182,14 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     expect(body).toMatch(/function completeSetup\(\): void \{\s*setStep\('done'\);\s*\}/);
     expect(body).toMatch(
       /\{step === 'profile' && <ProfileStep onSkip=\{completeSetup\} onCreated=\{completeSetup\} \/>\}/,
+    );
+    // The done screen's success glyph branches with its copy (2026-09-16): a
+    // green tick renders ONLY when the client exists — an unconditional ✓ above
+    // 'One more step' / 'Your account isn't connected yet' would re-make, in the
+    // visual channel, the claim the copy stopped making.
+    expect(body).toMatch(/\{client !== null \? '✓' : '→'\}/);
+    expect(body).toMatch(
+      /client !== null\s*\? 'bg-status-success\/15 text-status-success'\s*: 'bg-surface-raised text-ink-muted'/,
     );
     // The done screen's primary CTA is now 'Go to Profiles' (was 'Get started'),
     // wired straight to onComplete to hand off into the shell.

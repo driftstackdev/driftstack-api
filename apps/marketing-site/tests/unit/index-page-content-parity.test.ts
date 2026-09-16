@@ -33,9 +33,11 @@ function read(p: string): string {
 describe('W371.A marketing-site /index (homepage) content parity', () => {
   const body = read(PAGE);
 
-  it('Hero positioning W452 noob-friendly rewrite — plain-language, jargon stripped (Canvas/WebGL-hash + Chromium-stealth-API removed). Two-line H1 kept ("Indistinguishable iPhone Safari." gradient span + "Programmable from any language."). Sub-paragraph leads with the outcome (every site sees a genuine iPhone, never a bot/emulator) + use-cases + the four access paths ("desktop app", not "GUI").', () => {
-    expect(body).toMatch(/Indistinguishable iPhone Safari\./);
+  it('Developer band ("// for developers") W452 noob-friendly rewrite — plain-language, jargon stripped (Canvas/WebGL-hash + Chromium-stealth-API removed). Two-line title: "Real iPhone Safari." + "Programmable from any language." (2026-09-16: "Indistinguishable iPhone Safari." retired — a blanket identity claim the fingerprint engineer asked us not to make; evidence is per surface). Lead sentence opens with the outcome (every site sees a genuine iPhone, never a bot/emulator) + use-cases + the four access paths ("desktop app", not "GUI").', () => {
+    expect(body).toMatch(/title="Real iPhone Safari\. Programmable from any language\."/);
     expect(body).toMatch(/Programmable from any language\./);
+    // The retired blanket claim must NOT return as the band title.
+    expect(body).not.toMatch(/Indistinguishable iPhone Safari\./);
     expect(body).toMatch(/Run a real iPhone browser in the cloud that every website treats as/);
     expect(body).toMatch(/a genuine iPhone — never a bot, never an emulator\. Built for/);
     expect(body).toMatch(/scraping, testing, and automation that has to pass as a real mobile/);
@@ -69,7 +71,7 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).not.toMatch(/Why not Browserless\?/);
   });
 
-  it('M.3 + M.6 — "One iPhone among millions." why-works hero (M.3 Plan Item 5 dedupe; "Indistinguishable" now appears once on the page in the hero h1 brand line) + multi-archetype iPhone family + Safari 26.4-26.5 launch-window reference (M.6 Path A per founder verdict 2026-05-17) + launch-blocking-bug fidelity commitment', () => {
+  it('M.3 + M.6 — "One iPhone among millions." why-works hero (M.3 Plan Item 5 dedupe took "Indistinguishable" down to once; 2026-09-16 the last use — the developer-band title — was retired too, so the word now appears ZERO times on the page) + multi-archetype iPhone family + Safari 26.4-26.5 launch-window reference (M.6 Path A per founder verdict 2026-05-17) + launch-blocking-bug fidelity commitment', () => {
     expect(body).toMatch(/One iPhone among millions\./);
     // M.6 Path A: multi-archetype launch family + Safari 26.5 span.
     // 2026-09-15: the device sentence is BOUND to DEVICE_SUPPORT (capabilities.ts)
@@ -85,6 +87,10 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).not.toMatch(
       /<span class="bg-gradient-to-br[^>]+>\s*Indistinguishable from a real iPhone\./,
     );
+    // 2026-09-16: ZERO occurrences, any case. "Indistinguishable" is a
+    // blanket identity claim the fingerprint engineer asked us not to make
+    // (evidence is per surface), so no slot on the page may carry it.
+    expect(body).not.toMatch(/indistinguishable/i);
     // Pre-M.6 single-archetype framing must NOT return.
     expect(body).not.toMatch(/Reference device: iPhone 16 Pro, iOS 18\.7, Safari 26\.4\./);
   });

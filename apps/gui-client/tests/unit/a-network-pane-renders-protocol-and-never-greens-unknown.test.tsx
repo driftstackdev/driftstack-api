@@ -114,11 +114,20 @@ describe('Network pane — protocol badges never green an unknown value', () => 
     expect(green[0]?.tone).toBe('h3');
   });
 
-  it('CRITICAL an empty feed explains the CAPABILITY, and never says requests are still coming', () => {
-    // ⛔ This arm replaces one that asserted the string "No requests captured yet"
-    // and called it honest. A pin that encodes a misleading string keeps it alive:
-    // the old copy is unreachable now, and asserting it would have made this fix
-    // look like the regression.
+  it('CRITICAL the empty state describes the state it is actually reachable in — a cleared list', () => {
+    // ⛔ THIS PIN HAS NOW BEEN RE-AIMED TWICE, BOTH TIMES BECAUSE THE COPY'S
+    // REACHABILITY MOVED UNDER IT — which is the whole lesson. It first asserted
+    // "No requests captured yet" (false: nothing reports requests, so nothing was
+    // ever going to be captured). It was then re-aimed at a CAPABILITY sentence,
+    // "requests aren't available for sessions yet", which was true while the
+    // section was always offered and always blank.
+    //
+    // Since 2026-09-16 the drawer withholds the section until the session reports
+    // a request, so that capability sentence became unreachable in the state it
+    // described and reachable only in the state it contradicts: the customer
+    // pressed Clear on a session whose requests they were just reading. A pin is
+    // not weakened by being re-aimed at the truth; it is weakened by asserting a
+    // shape loose enough to cover both, so this asserts the sentence.
     const store = createNetworkLogStore();
     store.append([], null); // an empty ok poll → [] snapshot, not null
     const { container, queryByText } = render(
@@ -127,16 +136,18 @@ describe('Network pane — protocol badges never green an unknown value', () => 
     const empty = container.querySelector('[data-component="simulator-network-empty"]');
     expect(empty, 'the empty state renders').not.toBeNull();
     const text = empty?.textContent ?? '';
-    // It must not promise arriving data. "yet" alone is fine ("don't report ... yet"
-    // is a capability statement); what is banned is the old claim that THIS session
-    // simply has not captured anything so far.
+    // Both banned predecessors stay banned by name, so neither can come back
+    // quietly: the fabricated-history one and the now-false capability one.
     expect(queryByText('No requests captured yet')).toBeNull();
     expect(text).not.toMatch(/captured yet/i);
-    // It must say the requests are not available, so a reader learns the pane
-    // is not waiting on them (customer words since 2026-09-15: no 'devices',
-    // no 'per-request logs', no 'pane').
-    expect(text).toMatch(/aren.t available|not available/i);
-    expect(text).not.toMatch(/per-request|pane fills in/i);
+    expect(text).not.toMatch(/aren.t available|not available/i);
+    // It says WHAT HAPPENED (they cleared the list) and WHAT COMES NEXT (requests
+    // still arrive) — the 2026-09-15 customer-copy rule. Customer words only: no
+    // 'devices', no 'per-request logs', no 'pane'.
+    expect(text).toContain('No network activity to show.');
+    expect(text).toContain('You cleared the list.');
+    expect(text).toMatch(/new requests appear here as the session makes them/i);
+    expect(text).not.toMatch(/per-request|pane fills in|device|fleet|node/i);
     // And no rows / no green badge in the empty state.
     expect(container.querySelectorAll('[data-component="simulator-network-row"]').length).toBe(0);
     expect(badges(container).length).toBe(0);

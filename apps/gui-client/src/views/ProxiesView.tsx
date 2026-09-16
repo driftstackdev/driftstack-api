@@ -46,6 +46,7 @@ import { validateOpenVpnConfig } from '../lib/parse-openvpn';
 import { openvpnRefusal, openvpnAutoStrip, type OpenvpnRefusal } from '../lib/openvpn-refusal';
 import { wireguardRefusal, type WireguardRefusal } from '../lib/wireguard-refusal';
 import {
+  addMissingOpenvpnClientDirective,
   findUnsupportedOpenvpnLines,
   findUnresolvableOpenvpnFileReferences,
   stripUnsupportedOpenvpnLines,
@@ -3363,6 +3364,31 @@ function VpnHint({ hint, isError }: { hint: string; isError: boolean }): JSX.Ele
   );
 }
 
+/**
+ * A one-click repair the .ovpn editor can offer for the config in the box.
+ *
+ * It used to be a bare string plus a hard-coded button label, which worked while
+ * there was exactly one repair. There are two now — take out the lines Driftstack
+ * will not run, and add the missing `client` line — and they are NOT
+ * interchangeable: a button that says "Remove unsupported lines" over a config
+ * whose only problem is a missing directive describes an edit that is not the one
+ * it makes. The label travels WITH the config it would apply, so the two cannot
+ * drift, and `action` gives each repair its own test/telemetry handle.
+ */
+interface OvpnFixup {
+  /** What the textarea becomes when the customer presses the button. */
+  config: string;
+  /** The button's `data-action`, one per repair. */
+  action: 'strip-unsupported-ovpn' | 'add-ovpn-client-line';
+  /** The button's visible label — it must describe the edit it actually makes. */
+  label: string;
+}
+
+/** The existing repair: drop what the server refuses, lower script-security to 1. */
+const OVPN_STRIP_FIXUP_LABEL = 'Remove unsupported lines (lower script-security to 1)';
+/** The new one. Backticks are how the rest of this editor writes a directive name. */
+const OVPN_CLIENT_FIXUP_LABEL = 'Add the missing `client` line';
+
 export function ProxyForm({
   initial,
   mode,
@@ -3407,10 +3433,11 @@ export function ProxyForm({
    *  which is the only one that opens with '✓'. Derived from the hint itself rather than
    *  tracked beside it at a dozen setVpnHint sites, where the two would drift. */
   const vpnHintIsError = vpnHint !== null && !vpnHint.startsWith('✓');
-  // #2 — when a pasted OVPN config has lines the server will refuse (e.g. a bare
-  // `script-security 2` with no script directives), hold the auto-fixed blob here so
-  // the hint can offer a one-click "Remove unsupported lines". Null = nothing to fix.
-  const [vpnFixable, setVpnFixable] = useState<string | null>(null);
+  // #2 — when a pasted OVPN config is one the server will refuse, hold the repaired
+  // blob AND the label that describes the repair here, so the hint can offer it as one
+  // click. Null = nothing to fix. See `OvpnFixup`: the label rides with the config
+  // because there is more than one repair and they make different edits.
+  const [vpnFixable, setVpnFixable] = useState<OvpnFixup | null>(null);
   const submitInFlightRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const locked = saving || submitting;
@@ -3541,6 +3568,40 @@ export function ProxyForm({
     }
     const v = validateOpenVpnConfig(text);
     if (!v.ok) {
+      // ⛔ THE REFUSAL WITH NO WAY OUT. A profile with no `client` line is refused by
+      // the control plane ("This OpenVPN file must be a client configuration: it needs
+      // a `client` line.") and by OpenVPN itself — and one major provider issues every
+      // profile without it, so the customer's only route was to open the file in an
+      // editor and type one word. `client` is shorthand for `tls-client` + `pull`, both
+      // of which are already what a file with a `remote` line and no server role means,
+      // so this is the same edit by hand, offered as a button. The shared helper
+      // declines to guess (a `tls-server`/`server` config, or one with no `remote`, is
+      // left alone), which is why the offer only appears when it is really the fix.
+      // ⛔ ONLY the refusal this repair answers. `validateOpenVpnConfig` refuses four
+      // different things and this button fixes exactly one of them. It used to sit in
+      // the bare `!v.ok` arm and never looked at WHICH refusal it was: an oversize
+      // client-less file (the size check runs BEFORE the `client` check, and the
+      // helper is size-blind) got the button under the sentence "Config is too large
+      // (max 256 KB). This file has a server address but never says it is a client
+      // configuration. Driftstack can add that line for you" — a promise to fix a size
+      // problem by adding a line, and pressing it produced a blob 7 bytes LARGER that
+      // the control plane still refuses. Gate on the CODE, not on the sentence, so the
+      // copy can be rewritten without widening the offer behind it.
+      const clientFix = v.code === 'missing-client' ? addMissingOpenvpnClientDirective(text) : null;
+      if (clientFix !== null) {
+        setVpnFixable({
+          config: clientFix.config,
+          action: 'add-ovpn-client-line',
+          label: OVPN_CLIENT_FIXUP_LABEL,
+        });
+        setVpnHint(
+          `${v.reason} This file has a server address but never says it is a client ` +
+            'configuration. Driftstack can add that line for you — nothing else in the ' +
+            'file changes.',
+        );
+        setDraft((d) => ({ ...d, openvpn: { ...(d.openvpn ?? {}), config_blob: text } }));
+        return;
+      }
       setVpnHint(v.reason);
       // Keep the blob so the user can fix it, but don't mark it valid. The spread
       // must come FIRST so the NEW text wins — `{ config_blob: text, ...(d.openvpn) }`
@@ -3575,7 +3636,15 @@ export function ProxyForm({
         `Line ${dangerous[0].line.toString()}: ${dangerous[0].reason}. Driftstack will refuse this config` +
           `${n > 1 ? ` (and ${(n - 1).toString()} more line${n - 1 > 1 ? 's' : ''})` : ''}.`,
       );
-      setVpnFixable(fixed.config !== text ? fixed.config : null);
+      setVpnFixable(
+        fixed.config !== text
+          ? {
+              config: fixed.config,
+              action: 'strip-unsupported-ovpn',
+              label: OVPN_STRIP_FIXUP_LABEL,
+            }
+          : null,
+      );
       setDraft((d) => ({ ...d, openvpn: { ...(d.openvpn ?? {}), config_blob: text } }));
       return;
     }
@@ -3759,7 +3828,12 @@ export function ProxyForm({
         `${vpnRefusalMessage(vpnRefusal)}. Fix this before saving — ` +
           `Driftstack will refuse this config.`,
       );
-      setVpnFixable('fixable' in vpnRefusal ? vpnRefusal.fixable : null);
+      const fixable = 'fixable' in vpnRefusal ? vpnRefusal.fixable : null;
+      setVpnFixable(
+        fixable !== null
+          ? { config: fixable, action: 'strip-unsupported-ovpn', label: OVPN_STRIP_FIXUP_LABEL }
+          : null,
+      );
       return;
     }
     submitInFlightRef.current = true;
@@ -4072,14 +4146,14 @@ export function ProxyForm({
             {vpnFixable !== null && (
               <button
                 type="button"
-                data-action="strip-unsupported-ovpn"
+                data-action={vpnFixable.action}
                 onClick={() => {
                   const fixed = vpnFixable;
-                  if (fixed !== null) handleOvpnPaste(fixed);
+                  if (fixed !== null) handleOvpnPaste(fixed.config);
                 }}
                 className="mt-1 self-start rounded border border-accent/40 bg-accent/10 px-2 py-0.5 text-2xs font-medium text-accent-text hover:bg-accent/20"
               >
-                Remove unsupported lines (lower script-security to 1)
+                {vpnFixable.label}
               </button>
             )}
           </div>

@@ -26,12 +26,19 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+// ⛔ 2026-09-16 — `apps/marketing-site/src/data` added and the filter widened
+// to `.ts`. This sweep walked only `src/pages` + `.astro|.md`, so the file
+// holding all 47 customer-facing FAQ answers (src/data/faq.ts, since the
+// Fleet-v2 move out of faq.astro) was outside it. A compliance overclaim typed
+// into an FAQ answer would have shipped with this file green. What a visitor
+// reads is the property; the extension that renders it is not.
 const targets = [
   resolve(REPO_ROOT, 'apps/marketing-site/src/pages'),
+  resolve(REPO_ROOT, 'apps/marketing-site/src/data'),
   resolve(REPO_ROOT, 'apps/docs/src/pages'),
   resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages'),
 ];
-const allFiles = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md)$/.test(f));
+const allFiles = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md|ts)$/.test(f));
 
 // Phrases that overclaim our compliance posture. Each pattern matches
 // the affirmative claim. Explicit current-state denials such as
@@ -68,7 +75,23 @@ const makesOverclaim = (pattern: RegExp, text: string): boolean =>
 
 describe('W276.A workspace-wide compliance-framing sweep', () => {
   it('CRITICAL the sweep read real pages, every phrase still matches, and the denial exemption has not widened into a blanket. Each assertion below runs INSIDE a loop over the collected pages, so a moved or renamed root leaves all eight vacuously true — reporting every page clean because it read none. This guard exists to stop us publishing a certification we do not hold, which makes a silent pass the expensive outcome.', () => {
-    expect(allFiles.length, 'pages across marketing-site, docs and dashboard').toBeGreaterThan(120);
+    expect(
+      allFiles.length,
+      'copy files across marketing-site pages + data, docs and dashboard',
+    ).toBeGreaterThan(120);
+    // ⛔ PER-ROOT. The floor above is met by marketing-site and docs alone, so a
+    // root that silently fails to exist — a rename, a typo, an app that moves —
+    // is invisible to a total count, and every assertion below then reports
+    // that root clean because it read none of it.
+    for (const dir of targets) {
+      expect(existsSync(dir), `walk root missing — this sweep read none of it: ${dir}`).toBe(true);
+    }
+    // And the widened extension filter really admits the file the widening was
+    // for: `src/data` existing says nothing about whether .ts gets through.
+    expect(
+      allFiles.some((f) => f.endsWith('apps/marketing-site/src/data/faq.ts')),
+      'the 47 customer-facing FAQ answers must be inside this sweep',
+    ).toBe(true);
 
     // Every pattern against a phrase it must catch. A pattern that stopped
     // matching would leave its own test permanently, silently green.

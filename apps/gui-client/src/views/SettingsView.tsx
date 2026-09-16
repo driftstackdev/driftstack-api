@@ -986,7 +986,7 @@ export function SettingsView(): JSX.Element {
             </span>
           </Field>
 
-          <Field label="Deployment">
+          <Field label="Hosting">
             <div className="flex gap-2">
               <button
                 type="button"

@@ -150,8 +150,10 @@ are the display endpoint (most clients fill them from the parsed config).
 
 **OpenVPN** — paste the full `.ovpn` as `config_blob` (it must be a client
 configuration: it needs a `client` line and a `remote` line with the server
-address; up to 256 KiB). `username`/`password` are optional inline
-credentials:
+address; up to 256 KiB). Some providers ship profiles without the `client`
+line — paste one into the desktop app and it offers to add that line for you,
+leaving the rest of the file unchanged. `username`/`password` are optional
+inline credentials:
 
 ```json
 {

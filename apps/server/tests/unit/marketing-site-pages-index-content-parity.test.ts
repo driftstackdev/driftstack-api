@@ -32,9 +32,11 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).not.toMatch(/Pixel-identical iPhone Safari sessions in the cloud\. Bit-identical/);
   });
 
-  it('Hero copy W452 noob-friendly rewrite — plain-language, benefit-led, jargon stripped (Canvas/WebGL-hash + Chromium-stealth-API removed). Two-line H1 kept: "Indistinguishable iPhone Safari." (gradient span) + "Programmable from any language." Sub-paragraph leads with the outcome (every site sees a genuine iPhone, never a bot/emulator) + use-cases (scraping/testing/automation) + the four access paths (desktop app, not "GUI").', () => {
-    expect(body).toMatch(/Indistinguishable iPhone Safari\./);
+  it('Developer band ("// for developers") W452 noob-friendly rewrite — plain-language, benefit-led, jargon stripped (Canvas/WebGL-hash + Chromium-stealth-API removed). Two-line title: "Real iPhone Safari." + "Programmable from any language." (2026-09-16: "Indistinguishable iPhone Safari." retired — a blanket identity claim the fingerprint engineer asked us not to make; evidence is per surface). Lead sentence opens with the outcome (every site sees a genuine iPhone, never a bot/emulator) + use-cases (scraping/testing/automation) + the four access paths (desktop app, not "GUI").', () => {
+    expect(body).toMatch(/title="Real iPhone Safari\. Programmable from any language\."/);
     expect(body).toMatch(/Programmable from any language\./);
+    // The retired blanket claim must NOT return as the band title.
+    expect(body).not.toMatch(/Indistinguishable iPhone Safari\./);
     expect(body).toMatch(/Run a real iPhone browser in the cloud that every website treats as/);
     expect(body).toMatch(/a genuine iPhone — never a bot, never an emulator\. Built for/);
     expect(body).toMatch(/scraping, testing, and automation that has to pass as a real mobile/);
@@ -51,9 +53,19 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/Pick an iPhone profile/);
     expect(body).toMatch(/Start a session/);
     expect(body).toMatch(/Drive it your way/);
+    // 2026-09-16 RE-PIN (truth): card 1 promises PERSISTENCE, never session
+    // RESUMPTION. A profile keeps cookies, local storage, IndexedDB and the
+    // fingerprint between sessions (docs guides/profile-management); nothing
+    // in packages/api-types profiles.ts stores open pages, tabs or a last
+    // URL. "so the next session carries on where the last one stopped" made
+    // a beginner expect their previous page back.
+    expect(body).toMatch(
+      /A profile remembers\s+its logins, cookies and history, so the next session is still signed\s+in\./,
+    );
+    expect(body).not.toMatch(/carries on where\s+the last one stopped/);
   });
 
-  it('M.3 + M.6 — "One iPhone among millions." giant-headline framing (M.3 Plan Item 5 dedupe: "Indistinguishable" now appears once on the page in the hero h1 brand line; M.6 Path A: multi-archetype family — iPhone 15 Pro / 16 Pro / 17 lineup, iOS 18.7 / Safari 26.4-26.5 per founder verdict 2026-05-17) + launch-blocking-bug fidelity commitment', () => {
+  it('M.3 + M.6 — "One iPhone among millions." giant-headline framing (M.3 Plan Item 5 dedupe took "Indistinguishable" down to once; 2026-09-16 the last use — the developer-band title — was retired too, so the word now appears ZERO times on the page; M.6 Path A: multi-archetype family — iPhone 15 Pro / 16 Pro / 17 lineup, iOS 18.7 / Safari 26.4-26.5 per founder verdict 2026-05-17) + launch-blocking-bug fidelity commitment', () => {
     expect(body).toMatch(/One iPhone among millions\./);
     // M.6 Path A: multi-archetype family + Safari 26.5 span.
     // 2026-09-15: the device sentence is bound to DEVICE_SUPPORT (19 models,
@@ -68,6 +80,10 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).not.toMatch(
       /<span class="bg-gradient-to-br[^>]+>\s*Indistinguishable from a real iPhone\./,
     );
+    // 2026-09-16: ZERO occurrences, any case. "Indistinguishable" is a
+    // blanket identity claim the fingerprint engineer asked us not to make
+    // (evidence is per surface), so no slot on the page may carry it.
+    expect(body).not.toMatch(/indistinguishable/i);
     expect(body).not.toMatch(/Reference device: iPhone 16 Pro, iOS 18\.7, Safari 26\.4\./);
   });
 
@@ -170,6 +186,16 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
   it("Pricing teaser: 'Two ladders. A free tier to start.' + 20% annual savings", () => {
     expect(body).toMatch(/Two plan families\. A free tier to start\./);
     expect(body).toMatch(/Annual contracts save 20%\./);
+    // 2026-09-16: the pricing LEAD offers the choice; it does not stop to
+    // TEACH the internal label. "We call the two kinds plan families —" did
+    // no work in the sentence (which reads identically without it) and the
+    // mandate was to remove terms a first-time visitor has to decode, not to
+    // introduce one and define it. The label still stands, unexplained and
+    // self-evident from its own clause, in the teaser line above.
+    expect(body).toMatch(
+      /Then pick the kind of plan that fits how you work — Manual if a person drives the sessions, API if your code does\./,
+    );
+    expect(body).not.toMatch(/We call the two kinds plan families/);
   });
 
   it('Self-hosted teaser pinned (v2 compact band): "Run Driftstack on your own infrastructure." + /self-hosted link', () => {
@@ -211,7 +237,14 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
   //   • The fan markup must NOT return (heroFleet / New Tab / market.example).
   it("Hero fleet visual pinned: 'Command a fleet of real iPhones.' + identity/history/geo triad + 'just people on phones' close + the REAL profiles-grid capture (AppScreen, priority/LCP, real alt) with the Band-A caption strip as real copy outside the decorative frame — the hand-drawn fan is gone", () => {
     expect(body).toMatch(/Your own real iPhones, in the cloud\./);
-    expect(body).toMatch(/its own\s*identity, its own history, its own corner of the world/);
+    // 2026-09-16 Band-A readability pass — the identity/history/geo triad
+    // survives, in words a first-time visitor can act on: "its own corner
+    // of the world" named no thing the reader gets, and the 27-word
+    // sentence carrying the triad is now two. The close is untouched.
+    expect(body).toMatch(
+      /Each one keeps its own\s*logins, its own history, and its own location\./,
+    );
+    expect(body).not.toMatch(/its own corner of the world/);
     expect(body).toMatch(/they're just\s*people on phones\./);
     // the capture, wired through AppScreen as the LCP element
     expect(body).toMatch(/import AppScreen from '\.\.\/components\/AppScreen\.astro'/);
@@ -295,22 +328,59 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/href="\/comparison\/"/);
     // the retired standalone teaser table headline must not return
     expect(body).not.toMatch(/Not another anti-detect browser\./);
+    // 2026-09-16 RE-PIN (truth consistency): the first proof card's eyebrow
+    // read "Pixel-exact" — an unscoped blanket identity claim of exactly the
+    // retired family, sitting as the STRONGEST claim on a card whose own body
+    // scopes to "checked against real iPhones, check by check" (the scoping
+    // rule the 2026-09-15 truth pass recorded: 81 of 96 device profiles
+    // byte-identical, not a blanket identity). The eyebrow now says only what
+    // the body under it supports.
+    expect(body).toMatch(/>Measured, not guessed<\/p>/);
+    expect(body).not.toMatch(/Pixel-exact/);
   });
 
-  it("Human-by-design behavioural section pinned (v2 headline 'It even moves like a person.'): the bots-move-in-straight-lines lead + touch/scroll + typing-cadence + per-profile-persona cards — all backed by packages/behavioural-simulation (prod-wired)", () => {
+  it("Human-by-design behavioural section pinned (v2 headline 'It even moves like a person.'): the bots-move-in-straight-lines lead + touch/scroll + typing-rhythm + same-person-each-time cards — all backed by packages/behavioural-simulation (prod-wired). 2026-09-16 Band-A readability pass: same three cards, same facts (motion is available per profile), in plain words — 'momentum flicks' / 'per-character rhythm with variance' / 'motion signature' were the mechanism's names, not the reader's.", () => {
     expect(body).toMatch(/It even moves like a person\./);
     expect(body).toMatch(/Bots move in straight lines at a constant speed\./);
+    // 2026-09-16 RE-PIN (truth): the readability pass briefly turned the
+    // availability statement into an INSTRUCTION — "Switch human-like motion
+    // on for a profile" — which tells a first-time visitor there is a
+    // per-profile on/off control and that motion is OFF until they find it.
+    // Neither is true: `behavioral_profile` is an optional per-SESSION persona
+    // on CreateSessionRequest (casual/regular/power_user, no "off" value) and
+    // the service defaults it (services/sessions.ts: `?? DEFAULT_BEHAVIORAL_
+    // PROFILE`); profiles.ts carries no behavioural field and the desktop app
+    // exposes no switch. The app's own Behavior tab is the wording of record:
+    // "On by default for every session this profile launches." The lead now
+    // states availability + default, still scoped per profile.
+    expect(body).toMatch(/on by default for every session a profile launches/);
+    // the non-existent per-profile control must not come back
+    expect(body).not.toMatch(/Switch human-like motion on/);
     expect(body).toMatch(
-      /Momentum flicks, natural variation in how long each touch rests,\s*and — when you take control yourself — curved touch paths/,
+      /Flicks that carry momentum, and touches that don't all last exactly\s*the same time\./,
     );
-    expect(body).toMatch(/Per-character rhythm with natural pauses/);
-    expect(body).toMatch(/consistent motion signature across\s*sessions/);
+    expect(body).toMatch(/the path your finger\s*traces curves the way a real one does/);
+    expect(body).toMatch(/Letters arrive one at a time, with the small pauses and uneven speed/);
+    expect(body).toMatch(/keeps the same way of moving from one session to the\s*next/);
+    // the mechanism-named phrasings must not return to Band A
+    expect(body).not.toMatch(/Momentum flicks, natural variation/);
+    expect(body).not.toMatch(/Per-character rhythm/);
+    expect(body).not.toMatch(/motion signature/);
   });
 
   it("Console section pins only current product surfaces: live Identity Wardrobe and live 'Exit anywhere. Leak nowhere.' egress", () => {
     expect(body).toMatch(/Your iPhones, kept in order\./);
     expect(body).toMatch(/title="Each profile is its own iPhone" chip="live"/);
     expect(body).toMatch(/Exit anywhere\. Know what gets through\./);
+    // 2026-09-16 RE-PIN (Band-A readability). Row 1 opened with a 26-word
+    // DEFINITION and a six-item parts list, so the reader met the parts
+    // before the point; it now leads with the payoff. Row 2 glossed the two
+    // acronyms a visitor is least likely to meet (WebRTC, HTTP/3) and left
+    // SOCKS5 — the term in that list that means nothing without one — bare;
+    // it is now glossed like its neighbours.
+    expect(body).toMatch(/Come back to a profile next month and websites see the same phone\./);
+    expect(body).toMatch(/a SOCKS5 proxy \(a\s+relay your traffic passes through\)/);
+    expect(body).not.toMatch(/A profile is a whole iPhone of its own/);
     expect(body).not.toMatch(/title="Session Replay"/);
     expect(body).not.toMatch(/title="Warm-up Scheduler"/);
     expect(body).not.toMatch(/chip="roadmap"|chip="rolling-out"/);

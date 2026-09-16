@@ -41,12 +41,26 @@ function read(p: string): string {
 // ⚠️ Extending found NOTHING: the added directory is clean today. That is the honest
 // result — this closes a latent gap rather than fixing a live defect, and the guard
 // simply now covers the surface its name has always claimed.
+//
+// ⛔ 2026-09-16 — SECOND scope hole, same shape as the first, and this one was
+// live. The sweep walked only `src/pages` and then filtered to `.astro|.md`,
+// so `apps/marketing-site/src/data/faq.ts` — which has held ALL 47
+// customer-facing FAQ answers since the Fleet-v2 move out of faq.astro — was
+// outside every honesty sweep in the workspace. A readability pass then landed
+// three false claims in it (a bundled-model tier gate generalised to every
+// plan, a Driftstack budget attributed to tiers that have none, and a widened
+// card-data disclosure) with the whole suite green.
+//
+// The honesty property these enforce is about WHAT A VISITOR READS, not about
+// which file extension renders it. So the data directory is a target and `.ts`
+// is a sweepable extension.
 const targets = [
   resolve(REPO_ROOT, 'apps/marketing-site/src/pages'),
+  resolve(REPO_ROOT, 'apps/marketing-site/src/data'),
   resolve(REPO_ROOT, 'apps/docs/src/pages'),
   resolve(REPO_ROOT, 'apps/status-site/src/pages'),
 ];
-const allFiles = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md)$/.test(f));
+const allFiles = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md|ts)$/.test(f));
 
 // Phrases that appear as overclaims; each pattern is paired with the
 // page subdirs where it would be a hard fail. trust/ and security
@@ -69,9 +83,19 @@ describe('W276.B workspace-wide marketing-overclaim sweep', () => {
     for (const dir of targets) {
       expect(existsSync(dir), `walk root missing — this sweep read none of it: ${dir}`).toBe(true);
     }
-    expect(allFiles.length, 'pages across marketing-site, docs and status-site').toBeGreaterThan(
-      100,
-    );
+    expect(
+      allFiles.length,
+      'copy files across marketing-site pages + data, docs and status-site',
+    ).toBeGreaterThan(100);
+    // ⛔ Per-FILE, not just per-root: `src/data` existing proves nothing about
+    // whether the extension filter lets its files through. faq.ts is the file
+    // this scope hole was found on, so it is named — a filter that stopped
+    // admitting .ts would otherwise leave every assertion below vacuously
+    // green on exactly the surface that motivated the widening.
+    expect(
+      allFiles.some((f) => f.endsWith('apps/marketing-site/src/data/faq.ts')),
+      'the 47 customer-facing FAQ answers must be inside this sweep',
+    ).toBe(true);
 
     const samples: [RegExp, string][] = [
       [/mTLS support\b/i, 'Includes mTLS support for every session.'],

@@ -14,6 +14,18 @@
 // the stability Stat now says which answers are fixed and which Safari
 // deliberately varies (canvas/audio carry per-read noise on a real iPhone
 // too); clock + time zone follow the exit, language is not claimed.
+// 2026-09-16 readability pass: pure Band A. Section leads open with what the
+// reader gets, sentences carry one idea each, and the user-agent/Chromium
+// vocabulary is stated in plain words. The Stat small print (Band B) keeps its
+// exact technical lines.
+// 2026-09-16 (verifier fixes, same pass):
+//   • The "Which plan" lead names the BILLING number and no longer reads as an
+//     exclusivity claim about plan limits. Every API tier also caps stored
+//     profiles (data/pricing.ts: 25 / 100 / 500, held to the live schema by
+//     W279.A and columned on /pricing), so concurrency is not the only limit.
+//   • SDK / HTTP client / webhooks left the lead, which Section renders as
+//     plain text and so cannot carry a link. They now live in body paragraphs
+//     where SDK links to /glossary/#sdk and webhooks are glossed in plain words.
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHero from '../../components/PageHero.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
@@ -38,7 +50,7 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
   <PageHero
     label="Use cases · Data teams"
     title="See what iPhone users see."
-    lead="Many sites serve mobile Safari a different site than desktop Chrome — different layouts, different flows, different content. If your collector isn't an iPhone, you're not collecting what iPhone users get."
+    lead="Many sites serve mobile Safari a different site than desktop Chrome: different layouts, different flows, different content. If your collector isn't an iPhone, you're not collecting what iPhone users get."
   >
     <Breadcrumbs
       slot="crumbs"
@@ -54,17 +66,17 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
     <div class="mt-8 max-w-prose space-y-5 text-base leading-7 text-tk-ink-2">
       <p>
         Point a desktop collector at a mobile-first site and you get the
-        desktop version — or worse, a full-screen "please use our app"
-        roadblock instead of the page. Fake the phone's browser identity and
-        you get the next problem: detection. Websites have gotten very good
-        at spotting a desktop browser wearing a phone costume, because the
-        disguise only covers the details the stealth tool remembered to
+        desktop version. Or worse, a full-screen "please use our app"
+        roadblock instead of the page. Change the browser's name so it claims
+        to be a phone and you hit the next problem: detection. Websites have
+        gotten very good at spotting a desktop browser in a phone costume.
+        The disguise only covers the details the stealth tool remembered to
         fake.
       </p>
       <p>
         Driftstack doesn't wear a costume. Every session runs a build of
-        Apple's own WebKit — the engine family behind iPhone Safari — so
-        what your collector sees is what an iPhone visitor would see: the
+        Apple's own WebKit — the engine family behind iPhone Safari. So
+        your collector sees what an iPhone visitor would see: the
         mobile layout, the mobile flow, no app-steering redirects.
       </p>
     </div>
@@ -73,7 +85,7 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
   <Section
     label="Why it holds up"
     title="One iPhone among millions."
-    lead="Websites read hundreds of small signals. Driftstack gives the answers a real iPhone gives — checked against real devices, signal by signal — so your session looks like one of millions of real iPhones."
+    lead="Your session looks like one of millions of real iPhones. Websites read hundreds of small signals. Driftstack gives the answers a real iPhone gives, checked against real devices, signal by signal."
   >
     <div class="mt-10 grid gap-4 sm:grid-cols-3">
       <Stat
@@ -90,30 +102,43 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
       />
     </div>
     <p class="mt-8 max-w-prose text-sm leading-6 text-tk-ink-3">
-      The signal-by-signal detail — what a detector measures and what each
-      side returns — is on the
-      <a href="/comparison/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">comparison page</a>.
+      Want the detail? The
+      <a href="/comparison/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">comparison page</a>
+      goes signal by signal: what a detector measures, and what each side
+      returns.
     </p>
   </Section>
 
   <Section
     label="Which plan"
     title="Collectors are code — pick the API plan family."
-    lead="Drive sessions from the TypeScript, Python, or Go SDK — or any HTTP client — with structured actions: navigate, interact, capture, extract. One cap on how many sessions run at the same time (think browser tabs open at once) — hours inside it are never billed. The AI agent is on every API plan, and webhooks tell your job when a session completes, fails, or hits a challenge."
+    lead="Collectors are written in code, so the API plans are the ones built for them. Billing turns on one number: how many sessions run at the same time — think browser tabs. Hours inside that number are never billed."
   >
+    <p class="mt-8 max-w-prose text-base leading-7 text-tk-ink-2">
+      Your own code drives the sessions. We publish an
+      <a href="/glossary/#sdk" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">SDK</a>
+      — a ready-made code library — for TypeScript, Python and Go. Any program
+      that can make an HTTPS request can drive a session too. A session takes a
+      short list of actions: navigate, interact, capture, extract.
+    </p>
+    <p class="mt-5 max-w-prose text-base leading-7 text-tk-ink-2">
+      The AI agent is on every API plan. Webhooks are messages Driftstack sends
+      to your own system. They tell your job when a session completes, fails, or
+      hits a challenge.
+    </p>
     <div class="mt-8 flex flex-wrap items-center gap-4">
       <a href="/pricing/#api" class="btn-secondary">See API pricing →</a>
       <p class="text-sm text-tk-ink-3">
-        Migrating from a Chromium vendor? The FAQ below covers what changes.
+        Switching from a Chrome-based tool? The FAQ below covers what changes.
       </p>
     </div>
     <p class="mt-8 max-w-prose text-sm leading-6 text-tk-ink-3">
-      Collect responsibly: the
-      <a href="/legal/aup/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Acceptable Use Policy</a>
-      draws the line in plain words — market research and price monitoring
-      are what this page is about; scraping that gets around logins
+      Collect responsibly. This page is about market research and price
+      monitoring. Scraping that gets around logins
       (authentication) or past a site's reasonable rate limits is not
-      allowed.
+      allowed. The
+      <a href="/legal/aup/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">Acceptable Use Policy</a>
+      draws that line in plain words.
     </p>
   </Section>
 
@@ -139,7 +164,7 @@ const faqGroups = FAQ_GROUPS.filter((g) =>
 
   <CtaBand
     title="Collect the web your users actually see."
-    lead="Run a free manual session next to your current vendor and compare the output on your own flows — no card required."
+    lead="Run a free session by hand, next to your current vendor, and compare what each one collects on your own pages. No card required."
     primaryHref="/pricing/#free"
     primaryLabel="Start free"
     secondaryHref="/pricing/#api"

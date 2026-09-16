@@ -8,6 +8,36 @@ import { DEVICE_SUPPORT } from '../../data/capabilities';
 // glanceable overview; /pricing/comparison is the spreadsheet-style
 // deep dive sales evaluations actually need. Pulls every dimension
 // directly from the same data file so the two pages can't drift.
+//
+// 2026-09-16 readability pass — this is the page a first-time buyer is
+// most likely to bounce from, so every ROW LABEL is now a phrase a
+// non-technical buyer reads without a glossary, and the one term the
+// whole table turns on is explained in the hero before the table uses
+// it: "sessions at the same time" (also called "concurrent
+// sessions"), the same phrase /pricing carries. Labels changed, values
+// and getters untouched: Monthly → Monthly price, Annual (monthly
+// equivalent) → Yearly plan (works out per month), Annual total →
+// Yearly plan, paid up front, Concurrent sessions (running at once) →
+// Sessions at the same time, Session hours → Hours included, API and
+// SDK access → Access from code (API and SDK), VPN exits → Connect
+// through your own VPN, Audience → Who this is for, Dimension → What
+// you're comparing. No figure, cap, tier name or data binding changed.
+//
+// 2026-09-16 second pass (verifier round), still labels-only:
+//   • "Yearly plan, price per month" read as a payment option — you
+//     cannot pay $199/mo on the yearly plan, it is billed up front for
+//     12 months. "(works out per month)" keeps the equivalence the old
+//     "Annual (monthly equivalent)" label carried.
+//   • "Your own VPN connection" paired with the getter's "Included"
+//     read as "a VPN is included in the plan". Driftstack does not
+//     supply the VPN; the label is now a capability, so
+//     "Connect through your own VPN … Included" is what is true.
+//   • The hero dropped a superlative the table's own data refuses:
+//     Agency and API Builder both show 8 sessions at the same time (6
+//     distinct values across 7 columns), while price and profiles
+//     differ on every column. The row is the one to look at first
+//     because it is what each plan is priced on, which is the point
+//     that sentence was making.
 
 const freeTier = API_TIERS.find((t) => t.id === 'free');
 const paidTiers = API_TIERS.filter((t) => t.id !== 'free');
@@ -42,16 +72,16 @@ const DIMENSIONS = [
     heading: 'Pricing',
     rows: [
       {
-        label: 'Monthly',
+        label: 'Monthly price',
         get: (t: (typeof API_TIERS)[number]): string => fmtUsd(t.monthlyUsd),
       },
       {
-        label: 'Annual (monthly equivalent)',
+        label: 'Yearly plan (works out per month)',
         get: (t: (typeof API_TIERS)[number]): string =>
           fmtUsd(t.annualMonthlyEquivalentUsd),
       },
       {
-        label: 'Annual total',
+        label: 'Yearly plan, paid up front',
         get: (t: (typeof API_TIERS)[number]): string => fmtUsd(t.annualUsd),
       },
       {
@@ -69,11 +99,11 @@ const DIMENSIONS = [
         get: (t: (typeof API_TIERS)[number]): string => fmtNumberOrString(t.profiles),
       },
       {
-        label: 'Concurrent sessions (running at once)',
+        label: 'Sessions at the same time',
         get: (t: (typeof API_TIERS)[number]): string => fmtNumberOrString(t.concurrent),
       },
       {
-        label: 'Session hours',
+        label: 'Hours included',
         get: (t: (typeof API_TIERS)[number]): string => t.hoursLabel,
       },
       {
@@ -90,17 +120,17 @@ const DIMENSIONS = [
         get: (t: (typeof API_TIERS)[number]): string => fmtAiAgent(t.aiAgent, t.llmBilling),
       },
       {
-        label: 'API and SDK access',
+        label: 'Access from code (API and SDK)',
         get: (t: (typeof API_TIERS)[number]): string =>
           t.apiAccess ? 'Included' : 'Not on this tier',
       },
       {
-        label: 'VPN exits (OpenVPN, WireGuard)',
+        label: 'Connect through your own VPN (OpenVPN, WireGuard)',
         get: (t: (typeof API_TIERS)[number]): string =>
           t.vpnEgress ? 'Included' : 'SOCKS5 or HTTP proxy only',
       },
       {
-        label: 'Audience',
+        label: 'Who this is for',
         get: (t: (typeof API_TIERS)[number]): string => t.audience,
       },
       {
@@ -128,8 +158,14 @@ const DIMENSIONS = [
         Everything that matters when you're comparing plans, in one
         table. These are the exact prices you'll be billed.
       </p>
+      <p class="mt-4 max-w-prose text-base text-tk-ink-2">
+        <strong class="text-tk-ink">Sessions at the same time</strong> is the
+        row to look at first — it is what each plan is priced on. It works
+        like browser tabs you keep open at once, and it is also called
+        "concurrent sessions".
+      </p>
       <p class="mt-4 max-w-prose text-sm text-tk-ink-3">
-        Looking for the glanceable view?
+        Looking for the short version?
         <a href="/pricing/" class="text-tk-accent-text underline">/pricing</a>
         has the headline cards.
       </p>
@@ -141,12 +177,14 @@ const DIMENSIONS = [
       <div class="mx-auto max-w-6xl px-6 py-12">
         <h2 class="text-xl font-semibold tracking-tight text-tk-ink">Free ({fmtUsd(freeTier.monthlyUsd)}, forever)</h2>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
+          Start here if you just want a look.
           {freeTier.hoursLabel} — a try-before-you-buy tier, no card
           required. {freeTier.profiles} profile, {freeTier.concurrent} session
           at a time, driven by hand in the desktop app, on the
           {freeTier.archetypeAccess}. No API or SDK access, no VPN (one
           SOCKS5 or HTTP proxy of your own), and no AI agent. Every paid tier adds
-          the API, VPN exits and every device type; the AI agent starts at
+          the API, every device type, and the option of connecting through your
+          own VPN. The AI agent starts at
           Team and is on every API tier.
         </p>
         <p class="mt-2 text-sm">
@@ -160,14 +198,22 @@ const DIMENSIONS = [
 
   <section class="border-t border-tk-border bg-tk-surface/40">
     <div class="mx-auto max-w-6xl px-6 py-12">
-      <div class="overflow-x-auto">
+      <h2 class="text-xl font-semibold tracking-tight text-tk-ink">
+        Every paid plan, side by side
+      </h2>
+      <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
+        The left-hand column names what you're comparing; each column after it
+        is one plan. The free tier is the card above, not a column here. On a
+        narrow screen, scroll the table sideways to reach the rest.
+      </p>
+      <div class="mt-6 overflow-x-auto">
         <table class="min-w-full border-separate border-spacing-0 text-sm">
           <thead>
             <tr>
               <th
                 class="sticky left-0 z-10 border-b border-tk-border bg-tk-surface py-3 pl-2 pr-4 text-left text-xs font-medium uppercase tracking-wider text-tk-ink-3"
               >
-                Dimension
+                What you're comparing
               </th>
               {paidTiers.map((t) => (
                 <th
@@ -224,7 +270,8 @@ const DIMENSIONS = [
         provides the AI access for you, counted against a monthly budget
         included in your plan. A
         <a href="/glossary/#archetype" class="text-tk-accent-text underline">device type</a>
-        is a specific iPhone model + iOS + Safari combination. "All current
+        is one iPhone model, paired with an iOS version and a Safari version.
+        "All current
         device types" means 19 iPhone models, from the 13 to the 17 Pro Max
         ({DEVICE_SUPPORT.selectableCount} device types) on iOS 18, Safari
         {DEVICE_SUPPORT.safariVersions}. SLA = the
@@ -235,7 +282,13 @@ const DIMENSIONS = [
 
   <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-6xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">How tier-switching works</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">
+        What happens when you switch plans
+      </h2>
+      <p class="mt-3 max-w-prose text-tk-ink-2">
+        Here is what moving up, moving down, cancelling and paying yearly each
+        do to your bill and your limits.
+      </p>
       <div class="mt-6 grid gap-6 md:grid-cols-2">
         <div class="rounded-lg border border-tk-border bg-tk-surface p-6">
           <h3 class="text-base font-semibold text-tk-ink">

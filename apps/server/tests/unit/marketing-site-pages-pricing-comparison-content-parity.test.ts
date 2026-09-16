@@ -63,9 +63,19 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
   });
 
   it("Pricing-group 4 rows: Monthly + Annual (monthly equivalent) + Annual total + Extra hourly charges (overage) — S20b 2026-07-06 plain-language label + the overage row now renders 'None' instead of a bare dash; pinned so the 4 pricing-dimensions stay complete (drift to dropping 'Annual (monthly equivalent)' would force buyers to do their own math; drift to dropping the overage row would hide overage exposure on hour-metered tiers)", () => {
-    expect(body).toMatch(/label: 'Monthly',/);
-    expect(body).toMatch(/label: 'Annual \(monthly equivalent\)',/);
-    expect(body).toMatch(/label: 'Annual total',/);
+    // 2026-09-16 readability pass — same four rows, same getters, labels a
+    // non-technical buyer reads without a glossary: 'Monthly' → 'Monthly
+    // price', and the two annual rows now say which one is the per-month
+    // figure and which is the up-front total.
+    // 2026-09-16 (2nd pass) TRUTH re-pin: 'Yearly plan, price per month' read as
+    // a payment option, i.e. that the yearly plan is paid monthly. It is billed
+    // up front for 12 months ("Annual billing is ~20% off the monthly rate,
+    // paid up-front" on this page; faq.ts says the same). The label keeps the
+    // equivalence 'Annual (monthly equivalent)' carried; getter unchanged.
+    expect(body).toMatch(/label: 'Monthly price',/);
+    expect(body).toMatch(/label: 'Yearly plan \(works out per month\)',/);
+    expect(body).not.toMatch(/label: 'Yearly plan, price per month',/);
+    expect(body).toMatch(/label: 'Yearly plan, paid up front',/);
     expect(body).toMatch(/label: 'Extra hourly charges \(overage\)',/);
     expect(body).toMatch(
       /t\.overagePerHourUsd === null \? 'None' : fmtUsd\(t\.overagePerHourUsd\)/,
@@ -73,15 +83,27 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
   });
 
   it("Quotas-group 4 rows: Saved profiles + Concurrent sessions + Session hours + Device types (archetypes) — S20b plain-language labels; pinned so the 4 quota-dimensions stay complete (drift to dropping the archetypes row would lose the per-tier device-mix differentiation; drift to dropping 'Session hours' would obscure the hour-metering boundary for the free column)", () => {
+    // 2026-09-16: the concurrency row carries the same phrase /pricing defines
+    // and the hero above this table explains; 'Session hours' says what the
+    // 'Unlimited' in it means.
     expect(body).toMatch(/label: 'Saved profiles',/);
-    expect(body).toMatch(/label: 'Concurrent sessions \(running at once\)',/);
-    expect(body).toMatch(/label: 'Session hours',/);
+    expect(body).toMatch(/label: 'Sessions at the same time',/);
+    expect(body).toMatch(/label: 'Hours included',/);
     expect(body).toMatch(/label: 'Device types',/);
+    // 2026-09-16 (2nd pass) TRUTH re-pin: the superlative is gone. Agency and
+    // API Builder both show 8 in this row (6 distinct values across 7 plan
+    // columns), while price and profiles differ on every column — so it is not
+    // the row most plans differ by. It IS the row each plan is priced on, which
+    // is why a buyer should read it first.
+    expect(body).toMatch(
+      /<strong class="text-tk-ink">Sessions at the same time<\/strong> is the\s+row to look at first — it is what each plan is priced on\./,
+    );
   });
 
   it("Features-group 3 rows: AI agent + Audience + Support — S20b: the '(bundled LLM)' label suffix moved into the footnote that now defines BYOK/bundled in plain words; pinned so the 3 feature-dimensions stay complete (drift to dropping 'Audience' would lose the use-case anchoring; drift to dropping 'Support' would hide the per-tier SLA escalation)", () => {
     expect(body).toMatch(/label: 'AI agent',/);
-    expect(body).toMatch(/label: 'Audience',/);
+    // 2026-09-16: 'Audience' is a marketer's word for "who this is for".
+    expect(body).toMatch(/label: 'Who this is for',/);
     expect(body).toMatch(/label: 'Support',/);
     expect(body).toMatch(/BYOK = bring your own key/);
   });
@@ -125,8 +147,10 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
   });
 
   it("Cross-link to glanceable /pricing pinned: 'Looking for the glanceable view? /pricing has the headline cards.' — pinned so the back-link to the glanceable page survives (drift to dropping would orphan buyers who land on /pricing/comparison first and want the simpler overview)", () => {
+    // 2026-09-16: "glanceable" is our word, not a buyer's — same link, same
+    // companion-page framing, in words a first-time visitor reads.
     expect(body).toMatch(
-      /Looking for the glanceable view\?\s*<a href="\/pricing\/" class="text-tk-accent-text underline">\/pricing<\/a>\s*has the headline cards\./,
+      /Looking for the short version\?\s*<a href="\/pricing\/" class="text-tk-accent-text underline">\/pricing<\/a>\s*has the headline cards\./,
     );
     expect(body).not.toMatch(/href="\/pricing"/);
   });
@@ -149,17 +173,24 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
     expect(body).toMatch(
       /No API or SDK access, no VPN \(one\s*SOCKS5 or HTTP proxy of your own\), and no AI agent\./,
     );
-    expect(body).toMatch(/the AI agent starts at\s*Team and is on every API tier\./);
+    // 2026-09-16: the semicolon splice became its own sentence — same claim.
+    expect(body).toMatch(/The AI agent starts at\s*Team and is on every API tier\./);
   });
 
   it('Features group carries data-bound "API and SDK access" + "VPN exits" rows (pricing.ts apiAccess / vpnEgress) and the footnote binds the device-breadth gloss to DEVICE_SUPPORT', () => {
     expect(body).toMatch(/import \{ DEVICE_SUPPORT \} from '\.\.\/\.\.\/data\/capabilities';/);
     expect(body).toMatch(
-      /label: 'API and SDK access',\s*get: \(t: \(typeof API_TIERS\)\[number\]\): string =>\s*t\.apiAccess \? 'Included' : 'Not on this tier',/,
+      /label: 'Access from code \(API and SDK\)',\s*get: \(t: \(typeof API_TIERS\)\[number\]\): string =>\s*t\.apiAccess \? 'Included' : 'Not on this tier',/,
     );
+    // 2026-09-16 (2nd pass) re-pin: label as capability, not possession. With
+    // the getter's 'Included', 'Your own VPN connection' rendered as "Your own
+    // VPN connection — Included", which a first-time buyer reads as "a VPN is
+    // included in the plan". Driftstack does not supply the VPN; the customer
+    // brings the config. Values and getter deliberately unchanged.
     expect(body).toMatch(
-      /label: 'VPN exits \(OpenVPN, WireGuard\)',\s*get: \(t: \(typeof API_TIERS\)\[number\]\): string =>\s*t\.vpnEgress \? 'Included' : 'SOCKS5 or HTTP proxy only',/,
+      /label: 'Connect through your own VPN \(OpenVPN, WireGuard\)',\s*get: \(t: \(typeof API_TIERS\)\[number\]\): string =>\s*t\.vpnEgress \? 'Included' : 'SOCKS5 or HTTP proxy only',/,
     );
+    expect(body).not.toMatch(/label: 'Your own VPN connection/);
     expect(body).not.toMatch(/'SOCKS5 proxy only'/);
     // 2026-09-15 refuter: 19 named models, never "every iPhone" (no SE / 16e / Air).
     expect(body).toMatch(

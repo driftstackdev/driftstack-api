@@ -56,12 +56,27 @@ describe('W330.B /pricing hero baseline', () => {
     // apps/server/tests/unit/marketing-site-pages-pricing-content-parity.test.ts:87-91
     // were repinned in that same commit; this one was missed.)
     // 2026-09-15 plain-words pass — same substance, no billing internals.
-    expect(body).toMatch(/Browser plans are priced by how many sessions you can run at once\./);
-    expect(body).toMatch(/Use as many hours as you want within that limit\./);
-    expect(body).toMatch(/hours, API calls and page visits inside it are unlimited/);
-    expect(body).toMatch(/No extra bills for browser usage\./);
+    // 2026-09-16 readability pass — same four facts, and the page now names
+    // the thing it prices ONCE, in plain words, right here: "sessions at the
+    // same time", with "concurrent sessions" given as the industry word. The
+    // guard follows that definition rather than the old jargon-first one.
     expect(body).toMatch(
-      /optional AI agent with Driftstack-supplied AI access \(the\s+"bundled" option\), that has its own monthly budget/,
+      /Browser plans are priced by how many sessions you can run at the same time\./,
+    );
+    expect(body).toMatch(/Use as many hours as you want within that limit\./);
+    expect(body).toMatch(/Hours, API calls and page visits\s+inside that limit are unlimited/);
+    expect(body).toMatch(/No extra bills for browser usage\./);
+    expect(body).toMatch(/Sessions at the same time<\/strong> is what\s+you pay for\./);
+    expect(body).toMatch(/Think of browser tabs you keep open at once\./);
+    // 2026-09-16 (2nd pass): the industry term is still named once, but not
+    // attributed to other tools — the homepage uses "concurrent sessions" as
+    // Driftstack's own headline metric ("One metric. Concurrent sessions."), so
+    // "Other tools call this …" disowned a word the visitor had just read on
+    // the previous page. Same definition, same place, softened attribution.
+    expect(body).toMatch(/It is also\s+called "concurrent sessions"\./);
+    expect(body).not.toMatch(/Other tools\s+call this "concurrent sessions"/);
+    expect(body).toMatch(
+      /optional AI agent with\s+Driftstack-supplied AI access \(the "bundled" option\) has its own\s+monthly budget/,
     );
   });
 });

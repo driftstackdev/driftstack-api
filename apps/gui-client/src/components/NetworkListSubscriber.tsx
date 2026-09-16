@@ -35,6 +35,23 @@ import {
 // change this string in the same commit that consumes it; a capability flag on
 // capabilityReport would let the pane tell the two apart properly, and that is
 // proposed to A3 rather than guessed at here.
+//
+// 2026-09-16 — the surrounding drawer no longer OFFERS this section until the
+// session has actually reported a request (SimulatorWindow visibleSimDrawerPanes),
+// so the permanently-blank case above is unreachable from the UI. This component
+// is unchanged and still receives: it is what the section renders once it appears.
+//
+// ⛔ THAT INVERTED THE EMPTY STATE'S REACHABILITY, AND THE SECOND SENTENCE WENT
+// FROM TRUE TO FALSE. The old line — "Network requests aren't available for
+// sessions yet." — was a statement about the CAPABILITY, honest while the section
+// was always on offer and always blank. It is now reachable in exactly one way:
+// the customer pressed Clear on a session that has just been showing them real
+// requests. Telling someone that requests are not available, one second after
+// they were reading them, is the same class of untrue copy the old "No requests
+// captured yet" was. The sentence now says what actually happened (they cleared
+// the list) and what happens next (new requests still arrive here), which is true
+// of the only state that reaches it — a session that reported a request, which is
+// the only way this section is on screen at all.
 
 type ProtocolTone = MeasuredProtocol | 'neutral';
 
@@ -233,7 +250,7 @@ export function NetworkListSubscriber({
           >
             <div>No network activity to show.</div>
             <div className="mt-1 text-white/30">
-              Network requests aren&rsquo;t available for sessions yet.
+              You cleared the list. New requests appear here as the session makes them.
             </div>
           </div>
         ) : filtered.length === 0 ? (

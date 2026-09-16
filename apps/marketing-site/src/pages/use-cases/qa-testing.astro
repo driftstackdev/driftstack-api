@@ -16,6 +16,17 @@
 // of naming three model families by hand (the catalog offers 19 models);
 // capture kinds, profile snapshots, webhooks and device-code sign-in are
 // shipped routes the page never mentioned.
+// 2026-09-16 readability pass: the hero and the problem section are Band A —
+// short sentences, no unexplained vocabulary ("CI" is spelled out where the
+// developer band introduces it). The "// wire it into CI" band stays Band C:
+// its intro sentence was made plain, the snippet and the technical paragraphs
+// beside it keep their precision.
+// 2026-09-16 (verifier fix): the plain line over the ephemerality Stat says
+// SESSION, not phone. Site-wide a phone IS a profile (glossary #profile: "each
+// profile looks like the same physical phone coming back, every session, every
+// time"), so a plain line about a new phone each run over-reached its own
+// technical line — which is about sessions — and contradicted the
+// persistent-profile reuse this page offers a few lines below.
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import PageHero from '../../components/PageHero.astro';
 import Breadcrumbs from '../../components/Breadcrumbs.astro';
@@ -31,13 +42,13 @@ const freeTier = API_TIERS.find((t) => t.id === 'free')!;
 
 <BaseLayout
   title="QA on real iPhone Safari"
-  description="Run end-to-end tests on a build of Apple's own WebKit — the engine family behind iPhone Safari — as cloud sessions your CI starts with one API call. TypeScript, Python, and Go SDKs."
+  description="Run your end-to-end tests on a real iPhone browser in the cloud, started with one API call. It is a build of Apple's own WebKit, the engine family behind iPhone Safari. TypeScript, Python, and Go SDKs."
   ogImage="/og/use-cases.png"
 >
   <PageHero
     label="Use cases · QA + engineering teams"
     title="Test on the real thing."
-    lead="Your users are on iPhones. Your test grid probably isn't. Driftstack gives your suite a build of Apple's own WebKit — the engine family behind iPhone Safari — as a cloud session your CI (your automated build-and-test pipeline) starts with one API call."
+    lead="Your users are on iPhones. Your test grid probably isn't. Driftstack gives your tests a real iPhone browser in the cloud, started with one API call. It runs a build of Apple's own WebKit, the engine family behind iPhone Safari."
   >
     <Breadcrumbs
       slot="crumbs"
@@ -53,22 +64,22 @@ const freeTier = API_TIERS.find((t) => t.id === 'free')!;
     <div class="mt-8 max-w-prose space-y-5 text-base leading-7 text-tk-ink-2">
       <p>
         Mobile Safari is its own world: its own rendering, its own JavaScript
-        timing, its own quirks. A desktop browser shrunk to 390 pixels doesn't
-        reproduce it — the layout break your iPhone users hit simply isn't
-        there, so your suite stays green while your users see a broken page.
+        timing, its own quirks. A desktop browser shrunk to 390 pixels wide
+        does not reproduce it. The layout break your iPhone users hit simply
+        isn't there. Your suite stays green while your users see a broken page.
       </p>
       <p>
         Driftstack sessions run a browser built from Apple's WebKit source —
         the engine family behind iPhone Safari, checked against real iPhones.
-        The rendering, JavaScript timing and quirks come from that engine,
-        not from a desktop browser in a phone-sized window: the bug you reproduce is the bug your
-        users hit, and the fix you verify is the fix they get. No hardware to
-        buy, nothing to install.
+        The rendering, the JavaScript timing and the quirks all come from that
+        engine, not from a desktop browser in a phone-sized window. So the bug you reproduce is the bug your
+        users hit, and the fix you verify is the fix they get. There is no
+        hardware to buy.
       </p>
     </div>
     <div class="mt-10 grid gap-4 sm:grid-cols-3">
       <Stat
-        plain="The engine, not an approximation"
+        plain="A real iPhone browser, not a lookalike"
         technical="Built from Apple's WebKit source code — the engine family behind Safari on every iPhone — not a desktop browser shrunk to phone width"
       />
       <Stat
@@ -76,7 +87,7 @@ const freeTier = API_TIERS.find((t) => t.id === 'free')!;
         technical={`19 iPhone models, from the 13 to the 17 Pro Max — ${DEVICE_SUPPORT.selectableCount} device profiles on iOS 18, Safari ${DEVICE_SUPPORT.safariVersions}; the default is the iPhone 17 on iOS 18.7 / Safari 26.4`}
       />
       <Stat
-        plain="Ready when CI is"
+        plain="A fresh session for every test run"
         technical="Sessions are created for each test run and removed after — no devices to keep running between runs"
       />
     </div>
@@ -85,7 +96,7 @@ const freeTier = API_TIERS.find((t) => t.id === 'free')!;
   <Section
     label="// wire it into CI"
     title="Your pipeline speaks HTTPS. So do we."
-    lead="First-party SDKs in TypeScript, Python, and Go — plus a plain HTTPS API any HTTP client can drive: Playwright test fixtures, n8n workflows, plain curl from a cron job. The snippet below is the whole session lifecycle."
+    lead="Your build-and-test pipeline — CI — starts a session with one call and tears it down when the run ends. First-party SDKs in TypeScript, Python, and Go, plus a plain HTTPS API any HTTP client can drive. Playwright test fixtures, n8n workflows, plain curl from a cron job. The snippet below is the whole session lifecycle."
   >
     <div class="mt-10 grid gap-10 md:grid-cols-2 md:items-center">
       <CodeWindow title="driftstack-typescript-sdk" copyTargetId="qa-sdk-code">
@@ -131,9 +142,9 @@ try {
         </p>
         <p>
           Sessions are billed on one number:
-          <strong class="text-tk-ink">concurrent</strong> — how many run at
-          the same time, like browser tabs. Run your suite in parallel up to
-          that limit; hours and calls inside it are never billed.
+          <strong class="text-tk-ink">concurrent</strong>, meaning how many run
+          at the same time — think browser tabs. Run your suite in parallel up
+          to that limit. Hours and calls inside it are never billed.
         </p>
       </div>
     </div>
@@ -146,21 +157,21 @@ try {
   <Section
     label="Which plan"
     title="Code calling → the API plan family."
-    lead="The API plan family is built for code-first workloads — SDK keys, sessions started from CI, and session limits sized for parallel test suites. (Every paid plan includes API access; the API plans' limits are sized for it, and the AI agent is on every API plan.)"
+    lead="If code is doing the calling, the API plans are the ones built for it. That means SDK keys, sessions started from your pipeline, and limits sized for test suites that run in parallel. Every paid plan includes API access. The API plans' limits are sized for it, and the AI agent is on every API plan."
   >
     <div class="mt-8 flex flex-wrap items-center gap-4">
       <a href="/pricing/#api" class="btn-secondary">See API pricing →</a>
       <p class="text-sm text-tk-ink-3">
-        The free tier is manual-only ({freeTier.archetypeAccess}) — use it
-        to check by hand that pages render right and the fingerprint holds
-        up, before you connect the SDK.
+        The free tier is manual-only ({freeTier.archetypeAccess}). Use it to
+        click through your own pages by hand and see how they render, before
+        you connect the SDK.
       </p>
     </div>
   </Section>
 
   <CtaBand
-    title="Green in CI. Green on the phone."
-    lead="Verify the rendering by hand on the free tier, then point your pipeline at the API plans when you're convinced."
+    title="Green in your tests. Green on the phone."
+    lead="Check the rendering by hand on the free tier. Point your pipeline at the API plans once you're convinced."
     primaryHref="/pricing/#free"
     primaryLabel="Start free"
     secondaryHref="https://docs.driftstack.io"

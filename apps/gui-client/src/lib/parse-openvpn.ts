@@ -18,9 +18,23 @@
 const MAX_OVPN_BYTES = 256 * 1024;
 const OVPN_DEFAULT_PORT = 1194; // OpenVPN's default when `remote` omits the port
 
+/**
+ * WHICH refusal this is, as a value rather than as prose.
+ *
+ * ⛔ The paste box offers a one-click repair for exactly ONE of these (the missing
+ * `client` line). A caller that decided by reading `reason` — or, worse, by not
+ * reading it at all — offers that repair over the other three too: on an oversize
+ * file the repair is size-blind, so the customer is told "Config is too large (max
+ * 256 KB). … Driftstack can add that line for you", and pressing the button hands
+ * back a blob 7 bytes LARGER that the control plane still refuses. The sentence is
+ * for the customer and may be rewritten at any time; this code is for the code, so
+ * rewording a refusal can never silently widen an offer.
+ */
+export type OpenVpnRefusalCode = 'empty' | 'too-large' | 'missing-client' | 'missing-remote';
+
 export type OpenVpnValidation =
   | { ok: true; remoteHost: string; remotePort: number }
-  | { ok: false; reason: string };
+  | { ok: false; code: OpenVpnRefusalCode; reason: string };
 
 /**
  * Strip a trailing `# ...` / `; ...` inline comment and trim. OpenVPN treats
@@ -32,10 +46,11 @@ function stripComment(line: string): string {
 }
 
 export function validateOpenVpnConfig(input: string): OpenVpnValidation {
-  if (input.trim() === '') return { ok: false, reason: 'Paste your .ovpn configuration.' };
+  if (input.trim() === '')
+    return { ok: false, code: 'empty', reason: 'Paste your .ovpn configuration.' };
   // Byte length (UTF-8), matching the server's 256 KB cap.
   if (new TextEncoder().encode(input).length > MAX_OVPN_BYTES) {
-    return { ok: false, reason: 'Config is too large (max 256 KB).' };
+    return { ok: false, code: 'too-large', reason: 'Config is too large (max 256 KB).' };
   }
 
   let hasClient = false;
@@ -66,10 +81,18 @@ export function validateOpenVpnConfig(input: string): OpenVpnValidation {
   }
 
   if (!hasClient) {
-    return { ok: false, reason: 'Missing a `client` directive (this is not a client .ovpn).' };
+    return {
+      ok: false,
+      code: 'missing-client',
+      reason: 'Missing a `client` directive (this is not a client .ovpn).',
+    };
   }
   if (remoteHost === null) {
-    return { ok: false, reason: 'Missing a `remote <host> <port>` directive.' };
+    return {
+      ok: false,
+      code: 'missing-remote',
+      reason: 'Missing a `remote <host> <port>` directive.',
+    };
   }
   const remotePort = remotePortFromRemote ?? portDirective ?? OVPN_DEFAULT_PORT;
   return { ok: true, remoteHost, remotePort };

@@ -28,7 +28,7 @@ as a fallback.
 On first launch, the GUI client opens a five-step wizard:
 
 1. **Welcome** — brand intro and a one-line value prop.
-2. **Deployment mode** — radio: **Cloud** (`https://api.driftstack.dev`) or **Self-hosted** (you paste the URL of your own Driftstack server).
+2. **Hosting** — radio: **Cloud** (`https://api.driftstack.dev`) or **Self-hosted** (you paste the URL of your own Driftstack server).
 3. **Sign in** — use **Sign in with browser** by default. After you approve the
    device, the wizard exchanges the one-time code, stores the returned
    credential, and calls `GET /v1/account/me` to validate it. Free receives a

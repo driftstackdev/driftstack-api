@@ -26,7 +26,7 @@ describe('marketing-site trust/cumulative-rig content parity', () => {
   it("V-668 doc-comment framing pinned: 'Cumulative rig methodology page. The homepage repeatedly references /trust/cumulative-rig as the full signal-by-signal table backing the Indistinguishable claim'. Drift to dropping V-668 would orphan the homepage's repeated references", () => {
     expect(body).toMatch(/\/\/ V-668 — Cumulative rig methodology page\. The homepage repeatedly/);
     expect(body).toMatch(/references \/trust\/cumulative-rig as "the full signal-by-signal/);
-    expect(body).toMatch(/table" backing the Indistinguishable claim/);
+    expect(body).toMatch(/table" backing the per-signal fidelity claims/);
   });
 
   it("launch-blocker policy framing pinned: 'any drift from the reference phone is a launch-blocking bug' — the load-bearing commitment the page reinforces. Drift would weaken Driftstack's positioning vs Chromium-stealth tools", () => {

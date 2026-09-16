@@ -13,9 +13,26 @@
 //   • API key scopes list (read / write / account_owner) cites the
 //     three customer-facing scopes
 //   • driftstack_internal_admin gated separately
-//   • 5-item sub-processor shortlist (Stripe / NowPayments /
-//     Cloudflare / Postmark / Sentry) — the legal sub-processors
-//     page is the authoritative list; the page name-checks all 5
+//   • Sub-processor list rendered from SUB_PROCESSORS in
+//     src/data/sub-processors.ts (2026-09-16). It was a hand-written
+//     5-name shortlist — Stripe / NowPayments / Cloudflare / Postmark
+//     / Sentry — that omitted Neon, Hetzner, MacStadium and LiveKit
+//     while this same page named them in its data-handling and
+//     network sections. Entry-level coverage is proved in
+//     docs-security-overview-sub-processor-register-binding.test.ts;
+//     this arm pins that the page reads the register at all and that
+//     the transcribed shortlist cannot come back — the negatives are
+//     scoped to the sub-processor SECTION, because page-wide they
+//     would forbid true statements the page makes elsewhere.
+//   • Card-numbers-never-reach-us + errors-scrubbed-before-Sentry:
+//     the two commitments the old shortlist carried in its Stripe and
+//     Sentry lines. The generated list quotes the register, which does
+//     not make them, so they moved to the data-handling section rather
+//     than leaving the page.
+//   • One complete list, named once: /trust/sub-processors is the
+//     register and /legal/sub-processors is the same list under the
+//     DPA — the egress bullet no longer makes a rival completeness
+//     claim of its own.
 //   • 30-day sub-processor change notice
 //   • Customer-disclosure window: 72h
 //   • Cross-links: /docs/api-security-headers, /docs/data-residency,
@@ -39,8 +56,28 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+const SECTION_HEADING = '<h2>Sub-processors</h2>';
+
+/**
+ * The page's sub-processor section: its own `<h2>` up to the next one.
+ *
+ * The shortlist negatives below are scoped to this slice, not to the
+ * whole page. They exist to stop a hand-maintained list returning HERE;
+ * page-wide they would ban true statements the page is entitled to make
+ * elsewhere — "no payment data touches our infra" and "PII-scrubbed"
+ * were commitments this page carried before the list was generated.
+ */
+function subProcessorSection(page: string): string {
+  const start = page.indexOf(SECTION_HEADING);
+  expect(start, 'the page still has a <h2>Sub-processors</h2> section').toBeGreaterThan(-1);
+  const rest = page.slice(start + SECTION_HEADING.length);
+  const end = rest.indexOf('<h2>');
+  return end === -1 ? rest : rest.slice(0, end);
+}
+
 describe('W354.A /docs/security-overview parity', () => {
   const body = read(PAGE);
+  const subProcessors = subProcessorSection(body);
 
   it('scrypt logN=15 claim matches the api-keys.ts kdf parameters', () => {
     const lib = read(API_KEYS_LIB);
@@ -69,10 +106,36 @@ describe('W354.A /docs/security-overview parity', () => {
     expect(body).toMatch(/15\s*minutes of step-up inactivity/);
   });
 
-  it('5-item sub-processor shortlist names Stripe, NowPayments, Cloudflare, Postmark, Sentry', () => {
-    for (const name of ['Stripe', 'NowPayments', 'Cloudflare', 'Postmark', 'Sentry']) {
-      expect(body).toContain(name);
-    }
+  it('the sub-processor list is generated from the register, not transcribed (the 5-name shortlist this replaces omitted Neon, Hetzner, MacStadium and LiveKit)', () => {
+    expect(body).toMatch(
+      /import\s*\{[\s\S]*?\bSUB_PROCESSORS\b[\s\S]*?\}\s+from\s+['"][^'"]*data\/sub-processors/,
+    );
+    expect(body).toMatch(/SUB_PROCESSORS\.map\(/);
+    expect(body).toContain('href="/trust/sub-processors/"');
+    // The old shortlist's own wording, pinned negative IN THE SECTION
+    // so a hand-maintained list cannot quietly return. Scoped, not
+    // page-wide: the page is free to state the same facts in prose.
+    expect(subProcessors).not.toMatch(/card billing only/);
+    expect(subProcessors).not.toMatch(/crypto checkout/);
+    expect(subProcessors).not.toMatch(/CDN, WAF, R2 object storage/);
+    expect(subProcessors).not.toMatch(/PII-scrubbed at SDK level/);
+  });
+
+  it('the payment-data and error-report commitments the old shortlist carried are still made on this page, in the data-handling section', () => {
+    expect(body).toMatch(/Card numbers never reach\s*Driftstack systems\./);
+    expect(body).toMatch(/with personal data\s*scrubbed out first\./);
+  });
+
+  it('the page names one complete list, not two competing ones: the register is /trust/sub-processors and /legal/sub-processors is named as the same list, the one the DPA refers to', () => {
+    expect(subProcessors).toMatch(/This is the complete list/);
+    // Every other mention of /legal/sub-processors in the body prose
+    // (the Related cluster aside) must say it is the same list.
+    expect(body).toMatch(
+      /That one list is published in full at\s*<a href="\/trust\/sub-processors\/">\/trust\/sub-processors<\/a>, and\s*it is the same list the Data Processing Addendum refers to at\s*<a href="\/legal\/sub-processors\/">\/legal\/sub-processors<\/a>\./,
+    );
+    // The section makes the completeness claim; the egress bullet no
+    // longer makes a second one of its own.
+    expect(body).not.toMatch(/subprocessors enumerated below and on the/);
   });
 
   it('30-day sub-processor change notice pinned', () => {

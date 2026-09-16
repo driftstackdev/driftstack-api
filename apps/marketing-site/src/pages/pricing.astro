@@ -3,6 +3,44 @@
 // as the homepage: Band A (hero → decision helper) speaks plain language;
 // the ladders keep full technical precision. Every figure BINDS to
 // src/data/pricing.ts (W292.B — no hand-typed dollars in the matrix).
+//
+// 2026-09-16 readability pass — the last pass fixed claims sentence by
+// sentence and the page still READ the same. Changed here, facts untouched:
+//   • ONE name for the thing every plan is priced by — "sessions at the same
+//     time". It is explained once, in the positioning band under the free
+//     card ("what you pay for", browser-tabs metaphor, with "concurrent
+//     sessions" named as the industry word), and every later mention, row
+//     label and tier card uses that same phrase, so "concurrent" and "at
+//     once" no longer take turns meaning the same thing. The one surviving
+//     "one session at a time" is the free tier's cap of 1, where that is the
+//     natural English and the pinned wording.
+//   • Row labels a non-technical buyer reads without a glossary: Browser
+//     profiles → Saved profiles, Concurrent sessions → Sessions at the same
+//     time, Hours → Hours included.
+//   • Band A sentences split: no stacked em-dash asides, shorter sentences,
+//     benefit first. Band C (the ladder rows, the API band's auth sentence,
+//     the self-hosted SKU rows) keeps its precision — only its intros moved.
+// No figure, cap, tier name, price, limit or data binding changed.
+//
+// 2026-09-16 second readability pass (verifier round). Same discipline,
+// four things the first pass left behind:
+//   • ONE name for the device dimension. The ladder rows say "Device types";
+//     the prose said "device profile", which collided with the glossary's
+//     "profile" (a saved iPhone identity) and made the count read like a
+//     profile quota. Prose now says "device type" everywhere, and the
+//     glossary band carries the gloss /pricing/comparison already had, so
+//     the term is defined before the tables use it.
+//   • "VPN exit" / "OpenVPN and WireGuard exits" left Band A: the free card
+//     and the two upgrade-trigger sentences now say "your own VPN
+//     connection" and gloss the proxy once, in the same sentence.
+//   • Upgrade triggers lead with the action, then list the reasons — and
+//     stay reason-lists, never "every paid tier adds X" (Personal has no AI
+//     agent and the same 1 session at a time as Free).
+//   • Two overstatements removed: the AI-agent intro no longer offers every
+//     plan a choice of who pays for the model (Team / Agency / API Starter
+//     and self-hosted are BYOK-only), and the mini-FAQ heading says
+//     "sessions at the same time", which is the thing that is capped.
+// Again: no figure, cap, tier name, price, limit or data binding changed.
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHero from '../components/PageHero.astro';
 import Section from '../components/Section.astro';
@@ -110,7 +148,7 @@ const pricingStructuredData = {
 
 <BaseLayout
   title="Pricing"
-  description="Driftstack pricing — start free, then pay only for the sessions you run at once. Pick Manual (drive sessions yourself in our desktop app) or API (automate with code). Or self-host and run it all yourself."
+  description="Driftstack pricing — start free, then pay only for the sessions you run at the same time. Pick Manual (drive sessions yourself in our desktop app) or API (automate with code). Or self-host and run it all yourself."
   ogImage="/og/pricing.png"
 >
   <!-- Hero — Fleet v2 PageHero (label + h1 + lead over hero-glow + grid). -->
@@ -119,8 +157,8 @@ const pricingStructuredData = {
       <strong class="text-tk-ink">Manual</strong> if a person is driving
       sessions in our desktop app.
       <strong class="text-tk-ink">API</strong> if your code is calling
-      the SDK — our ready-made code library. Same real iPhones underneath —
-      start free and see which one fits.
+      the SDK, our ready-made code library. Both run the same real iPhones.
+      Start free and see which one fits.
     </p>
   </PageHero>
 
@@ -161,10 +199,13 @@ const pricingStructuredData = {
             our desktop app, on the {freeTier.archetypeAccess}.
           </p>
           <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
-            No hourly charges and no usage counting — start as many iPhone
-            Safari sessions as you like, one after another. Upgrade to a paid tier when you need the
-            API, every device profile, a VPN exit, more profiles, more
-            sessions running at once, or the AI agent.
+            No hourly charges and no usage counting. Start as many iPhone
+            Safari sessions as you like, one after another.
+            Move up to a paid tier when you need more. That could be the
+            API, every device type, or longer sessions. It could also be
+            more profiles, more sessions at the same time, or the AI agent.
+            Paid tiers also let sessions go out through your own VPN
+            connection, not just a proxy.
           </p>
           <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
             The desktop app is available for macOS, Windows and Linux. It
@@ -187,7 +228,7 @@ const pricingStructuredData = {
                   `gap`, which rendered as "Apple'sWebKit". The sibling bullets are
                   safe only because they contain no inline link. */}
               <span>
-                A build of Apple's own <a href="/glossary/#webkit" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">WebKit</a> — the engine family behind iPhone Safari. Not an emulator, and no stealth scripts patched on top.
+                A build of Apple's own <a href="/glossary/#webkit" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">WebKit</a> — the engine family behind iPhone Safari. Not an emulator, and no add-on scripts to disguise it.
               </span>
             </li>
             {/* S26 2026-07-06 (#132) — accuracy fix (audit M2): this
@@ -207,11 +248,13 @@ const pricingStructuredData = {
                  refuter) and the AI-agent gate (aiAgent:
                  false on Free and Personal). */}
             <li class="flex gap-2">
-              <span class="arrow-bullet">›</span> Same desktop app as the paid tiers — but manual-only:
-              no API or SDK access, and no VPN. Sessions browse through a
-              proxy you bring — one saved SOCKS5 or HTTP proxy on the free plan.
-              Every paid plan includes the API and adds OpenVPN and
-              WireGuard exits.
+              <span class="arrow-bullet">›</span> The same desktop app as the paid plans, but you drive
+              every session by hand:
+              no API or SDK access, and no VPN. Free sessions reach the
+              internet through a connection you supply: one saved proxy,
+              either SOCKS5 or HTTP. A site then sees that address instead
+              of ours. Paid plans add the API, and let you use your own VPN
+              (OpenVPN or WireGuard) instead of a proxy.
             </li>
             <li class="flex gap-2">
               <span class="arrow-bullet">›</span> Never expires — no time limit, no credits to run out.
@@ -238,19 +281,19 @@ const pricingStructuredData = {
   <section id="no-overages" class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-4xl px-6 py-16">
       <p class="text-2xl font-medium tracking-tight text-tk-ink md:text-3xl">
-        Browser plans are priced by how many sessions you can run at once.
+        Browser plans are priced by how many sessions you can run at the same time.
         <span class="text-tk-ink-3"
           >Use as many hours as you want within that limit.</span
         > No extra bills for browser usage.
       </p>
       <p class="mt-4 max-w-prose text-sm text-tk-ink-2">
-        <strong class="text-tk-ink">Concurrent sessions</strong> = how many
-        sessions you can run at the same time, like browser tabs you'd have
-        open at once. The number on each tier (e.g. "3 concurrent") is that
-        limit; hours, API calls and page visits inside it are unlimited. If you
-        use the optional AI agent with Driftstack-supplied AI access (the
-        "bundled" option), that has its own monthly budget, explained below —
-        it is separate from your browser subscription.
+        <strong class="text-tk-ink">Sessions at the same time</strong> is what
+        you pay for. Think of browser tabs you keep open at once. It is also
+        called "concurrent sessions". Hours, API calls and page visits
+        inside that limit are unlimited. The optional AI agent with
+        Driftstack-supplied AI access (the "bundled" option) has its own
+        monthly budget, explained below, separate from your browser
+        subscription.
       </p>
     </div>
   </section>
@@ -300,8 +343,9 @@ const pricingStructuredData = {
           </h3>
           <p class="mt-3 text-sm leading-6 text-tk-ink-2">
             You drive iPhones by hand in the desktop app. Open a profile,
-            click around, keep logins alive — no code anywhere. Tiers differ
-            by how many sessions run at once and how many profiles you keep.
+            click around, keep logins alive. No code anywhere. Tiers differ
+            by how many sessions run at the same time and how many profiles
+            you keep.
           </p>
           <p class="mt-5 text-sm font-medium text-tk-accent-text">See Manual tiers ↓</p>
         </a>
@@ -331,7 +375,7 @@ const pricingStructuredData = {
           <p class="mt-3 text-sm leading-6 text-tk-ink-2">
             Your scripts and automated jobs run the sessions. Start them from
             TypeScript, Python, or Go and read back what they find. Tiers
-            differ by how many sessions run at once.
+            differ by how many sessions run at the same time.
           </p>
           <p class="mt-5 text-sm font-medium text-tk-accent-text">See API tiers ↓</p>
         </a>
@@ -350,14 +394,16 @@ const pricingStructuredData = {
       </div>
 
       <p class="mt-12 max-w-2xl text-sm leading-6 text-tk-ink-2">
-        Every paid tier gives you every device profile we offer — 19 iPhone
-        models, from the 13 to the 17 Pro Max ({DEVICE_SUPPORT.selectableCount} device
-        profiles) on iOS 18, with Safari {DEVICE_SUPPORT.safariVersions} — plus
-        API access and VPN exits. The free tier runs the
-        {freeTier.archetypeAccess}. Paying more buys more sessions at once,
-        more saved profiles, and the AI agent (Team and up, and every API
+        Every paid tier gives you every device type we offer. That is 19 iPhone
+        models, from the 13 to the 17 Pro Max — {DEVICE_SUPPORT.selectableCount} device
+        types in total. They run iOS 18, with Safari {DEVICE_SUPPORT.safariVersions}.
+        Every paid tier also includes API access, and lets sessions go out
+        through your own VPN connection.
+        The free tier runs the
+        {freeTier.archetypeAccess}. Paying more buys more sessions at the same
+        time, more saved profiles, and the AI agent (Team and up, and every API
         plan). Upgrade any time and you only pay the difference for the rest
-        of your billing period; downgrades take effect at your next renewal.
+        of your billing period. Downgrades take effect at your next renewal.
       </p>
       <p class="mt-3 text-sm text-tk-ink-2">
         Need every dimension side-by-side?
@@ -377,10 +423,10 @@ const pricingStructuredData = {
             Free — $0, forever
           </h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            One profile, one session at a time, up to 20 minutes, on the
-            {freeTier.archetypeAccess} — no card required. The right entry
-            if you want to click around a real iPhone in the cloud before
-            paying for anything.
+            One profile and one session at a time, up to 20 minutes, on the
+            {freeTier.archetypeAccess}. No card required. Start here if you
+            want to click around a real iPhone in the cloud before you pay
+            for anything.
           </p>
         </li>
         <li class="card p-5">
@@ -390,10 +436,11 @@ const pricingStructuredData = {
           <h3 class="mt-2 font-medium text-tk-ink">Personal — $79/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
             One person clicking in the desktop app; up to 10 saved profiles.
-            Run 1 session at a time across 10 different client identities —
-            sneaker resellers, sole-trader compliance work, individual
-            researchers. Every device profile, API access and VPN exits
-            included; the AI agent is not on this plan.
+            Run 1 session at a time across 10 different client identities.
+            Built for sneaker resellers, sole traders doing their own
+            compliance work, and individual researchers. Every device type and
+            API access are included, and sessions can go out through your own
+            VPN connection. The AI agent is not on this plan.
           </p>
         </li>
         <li class="card p-5">
@@ -403,8 +450,8 @@ const pricingStructuredData = {
           <h3 class="mt-2 font-medium text-tk-ink">Team — $249/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
             3 sessions at the same time; 50 profiles, shared with the
-            teammates you invite. Account managers keeping several client
-            identities open at once. AI agent available (bring your own
+            teammates you invite. Built for account managers who keep several
+            client identities open at once. AI agent available (bring your own
             Anthropic key).
           </p>
         </li>
@@ -414,9 +461,9 @@ const pricingStructuredData = {
           </p>
           <h3 class="mt-2 font-medium text-tk-ink">Agency — $699/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            8 sessions at once; 200 profiles. Marketing agencies,
-            compliance teams, legal-tech ops juggling many client identities
-            at once.
+            8 sessions at the same time; 200 profiles. Built for marketing
+            agencies, compliance teams and legal teams juggling many client
+            identities at once.
           </p>
         </li>
         <li class="card p-5">
@@ -425,9 +472,9 @@ const pricingStructuredData = {
           </p>
           <h3 class="mt-2 font-medium text-tk-ink">API Starter — $149/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            Your code runs the sessions — 2 at a time, 25 profiles. Solo
-            developers writing test automation or early-stage scrapers. AI
-            agent available (bring your own Anthropic key).
+            Your code runs the sessions: 2 at the same time, 25 profiles.
+            Built for solo developers writing test automation or early
+            scrapers. AI agent available (bring your own Anthropic key).
           </p>
         </li>
         <li class="card p-5">
@@ -436,11 +483,11 @@ const pricingStructuredData = {
           </p>
           <h3 class="mt-2 font-medium text-tk-ink">API Builder — $499/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            8 sessions at a time; 100 profiles. Production automation and CI
-            test suites (the checks that run automatically on every code
-            change) that need real iPhone Safari. AI agent with your own
-            key, or with Driftstack-provided AI access under a monthly budget
-            you set.
+            8 sessions at the same time; 100 profiles. Built for production
+            automation, and for CI test suites that need real iPhone Safari.
+            A CI test suite is the set of checks that run automatically on
+            every code change. AI agent with your own key, or with
+            Driftstack-provided AI access under a monthly budget you set.
           </p>
         </li>
         <li class="card p-5">
@@ -449,9 +496,10 @@ const pricingStructuredData = {
           </p>
           <h3 class="mt-2 font-medium text-tk-ink">API Scale — $1,499/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            24 sessions at a time; 500 profiles. High-volume automation
-            teams and agencies running jobs across many sites at once. AI
-            agent with your own key or Driftstack-provided AI access.
+            24 sessions at the same time; 500 profiles. Built for high-volume
+            automation teams and agencies running jobs across many sites at
+            once. AI agent with your own key, or with Driftstack-provided AI
+            access.
           </p>
         </li>
         <li class="card p-5">
@@ -460,11 +508,11 @@ const pricingStructuredData = {
           </p>
           <h3 class="mt-2 font-medium text-tk-ink">Enterprise — from $4,000/mo</h3>
           <p class="mt-2 text-sm text-tk-ink-2">
-            Annual contracts only. Custom limits on sessions-at-once and
-            profiles, custom device types, plus tailored reply-time
+            Annual contracts only. Custom limits on sessions at the same time
+            and on profiles, plus custom device types. Tailored reply-time
             commitments (SLA) and data-protection agreements (DPA). For
-            regulated industries (finance, healthcare) that need custom
-            paperwork or a dedicated account manager.
+            regulated industries such as finance and healthcare that need
+            custom paperwork or a dedicated account manager.
           </p>
         </li>
       </ul>
@@ -475,20 +523,18 @@ const pricingStructuredData = {
         <a
           href="#self-hosted"
           class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
-        >
-          See self-hosted plans
-        </a>
-        — priced as a software license with source escrow (a copy of the code
-        held in trust for you by a third party), not like the monthly tiers
-        above. Or
+          >See self-hosted plans</a
+        >. They are priced as a software license, not like the monthly tiers
+        above. That license includes source escrow: a copy of the code, held
+        in trust for you by a third party.
+      </p>
+      <p class="mt-3 max-w-3xl text-sm text-tk-ink-2">
+        Still deciding whether a real iPhone browser fits what you're doing?
         <a
           href="/faq/#architecture-sessions"
           class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
-        >
-          read the FAQ on how sessions work
-        </a>
-        if you're still deciding whether a real iPhone browser fits what
-        you're doing.
+          >Read the FAQ on how sessions work</a
+        >.
       </p>
     </div>
   </section>
@@ -497,13 +543,23 @@ const pricingStructuredData = {
   <section class="border-t border-tk-border bg-tk-bg">
     <div class="mx-auto max-w-6xl px-6 py-10">
       <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        {/* One-sentence glossary for the ladders below — same browser-tabs
-            metaphor as the homepage metering band. */}
+        {/* Glossary for the ladders below. 2026-09-16: "sessions at the same
+            time" is explained ONCE, in the positioning band above, and the
+            tables then carry that phrase as their own row label — so this line
+            defines only the terms the tables use without explaining
+            themselves. Same browser-tabs metaphor as the homepage metering
+            band. 2026-09-16 (2nd pass): "device type" joined them. The ladder
+            row label was already "Device types" and the gloss lived only on
+            /pricing/comparison, so on THIS page the term met the reader
+            undefined — next to a "Saved profiles" row, with the prose calling
+            the same thing a "device profile". One name, defined here, in the
+            sibling page's words. */}
         <p class="max-w-2xl text-sm leading-6 text-tk-ink-2">
-          Three words to know: <strong class="font-medium text-tk-ink">concurrent</strong> means
-          sessions running at the same time — think browser tabs — a
+          Three terms for the tables below. A
           <strong class="font-medium text-tk-ink">profile</strong> is a saved iPhone identity
-          that keeps its logins and history, and
+          that keeps its logins and history. A
+          <strong class="font-medium text-tk-ink">device type</strong> is one iPhone model,
+          paired with an iOS version and a Safari version.
           <strong class="font-medium text-tk-ink">BYOK</strong> means you bring your own
           Anthropic key for the optional AI agent and pay Anthropic directly.
         </p>
@@ -574,8 +630,9 @@ const pricingStructuredData = {
             the desktop app. No code required.
           </p>
           <p class="mt-3 max-w-prose text-sm text-tk-ink-2">
-            Every Manual plan includes every device profile, API access and
-            VPN exits. The AI agent is on Team and Agency (bring your own
+            Every Manual plan includes every device type and API access, and
+            lets sessions go out through your own VPN connection.
+            The AI agent is on Team and Agency (bring your own
             Anthropic key); Personal is hands-on only.
           </p>
         </div>
@@ -603,11 +660,11 @@ const pricingStructuredData = {
               </div>
               <dl class="mt-6 space-y-3 text-sm">
                 <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                  <dt class="text-tk-ink-3">Browser profiles</dt>
+                  <dt class="text-tk-ink-3">Saved profiles</dt>
                   <dd class="text-right font-medium text-tk-ink">{tier.profiles.toString()}</dd>
                 </div>
                 <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                  <dt class="text-tk-ink-3">Concurrent sessions</dt>
+                  <dt class="text-tk-ink-3">Sessions at the same time</dt>
                   <dd class="text-right font-medium text-tk-ink">{tier.concurrent.toString()}</dd>
                 </div>
                 <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
@@ -615,7 +672,7 @@ const pricingStructuredData = {
                   <dd class="text-right text-tk-ink">{tier.archetypeAccess}</dd>
                 </div>
                 <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                  <dt class="text-tk-ink-3">Hours</dt>
+                  <dt class="text-tk-ink-3">Hours included</dt>
                   <dd class="text-right text-tk-ink">{tier.hoursLabel}</dd>
                 </div>
                 <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
@@ -680,7 +737,7 @@ const pricingStructuredData = {
           <p class="mt-3 max-w-prose text-tk-ink-2">
             A code library (SDK) for TypeScript, Python, or Go. Your code
             starts and stops the sessions itself. Higher tiers let more
-            sessions run at once. The AI agent is on every API plan. Your
+            sessions run at the same time. The AI agent is on every API plan. Your
             code signs in with a scoped API key; your own command-line tools
             can sign in with a browser-approved device code, and third-party
             apps can connect through OAuth 2.0.
@@ -735,11 +792,11 @@ const pricingStructuredData = {
               )}
               <dl class="mt-6 space-y-3 text-sm">
                 <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                  <dt class="text-tk-ink-3">Browser profiles</dt>
+                  <dt class="text-tk-ink-3">Saved profiles</dt>
                   <dd class="text-right font-medium text-tk-ink">{tier.profiles.toString()}</dd>
                 </div>
                 <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                  <dt class="text-tk-ink-3">Concurrent sessions</dt>
+                  <dt class="text-tk-ink-3">Sessions at the same time</dt>
                   <dd class="text-right font-medium text-tk-ink">{tier.concurrent.toString()}</dd>
                 </div>
                 <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
@@ -747,7 +804,7 @@ const pricingStructuredData = {
                   <dd class="text-right text-tk-ink">{tier.archetypeAccess}</dd>
                 </div>
                 <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                  <dt class="text-tk-ink-3">Hours</dt>
+                  <dt class="text-tk-ink-3">Hours included</dt>
                   <dd class="text-right text-tk-ink">{tier.hoursLabel}</dd>
                 </div>
                 <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
@@ -849,7 +906,7 @@ const pricingStructuredData = {
               </div>
               <dl class="mt-6 space-y-3 text-sm">
                 <div class="flex justify-between gap-4 border-t border-tk-border pt-3">
-                  <dt class="text-tk-ink-3">Browser profiles</dt>
+                  <dt class="text-tk-ink-3">Saved profiles</dt>
                   <dd class="text-right font-medium text-tk-ink">
                     {sku.profilesMax === null ? 'Unlimited' : sku.profilesMax.toString()}
                   </dd>
@@ -890,8 +947,8 @@ const pricingStructuredData = {
                 </div>
               </dl>
               <p class="mt-4 text-xs text-tk-ink-3">
-                How many sessions run at once is limited by your hardware, not
-                by the license. Source escrow means a neutral third party
+                How many sessions run at the same time is limited by your
+                hardware, not by the license. Source escrow means a neutral third party
                 holds a copy of the code and releases it to you if we ever
                 shut down. Hardware guidance at{' '}
                 <a
@@ -913,23 +970,33 @@ const pricingStructuredData = {
   </section>
 
   <!-- BYOK / Bundled LLM explainer -->
-  <Section label="AI agent feature" title="BYOK or bundled — your call." class="bg-tk-surface">
+  <Section label="AI agent feature" title="Who pays for the AI agent." class="bg-tk-surface">
     <p class="mt-6 max-w-prose text-base leading-7 text-tk-ink-2">
+      This is the optional feature where an AI drives the session instead of a
+      person clicking. On every plan that has it, you can bring your own
+      Anthropic key and pay Anthropic directly. On API Builder, API Scale and
+      Enterprise you can instead use AI access Driftstack supplies.
       The AI agent is on Team and Agency and on every API plan; Free and
-      Personal don't include it. BYOK means you bring your <strong>Anthropic API key</strong> from
+      Personal don't include it. Turn it on in the desktop app under <strong
+        >Settings → AI &amp; billing</strong
+      >, or through the API.
+    </p>
+    <p class="mt-4 max-w-prose text-base leading-7 text-tk-ink-2">
+      BYOK means you bring your <strong>Anthropic API key</strong> from
       <a
         href="https://console.anthropic.com"
         class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
         target="_blank"
         rel="noopener noreferrer">console.anthropic.com</a
-      > and pay Anthropic directly. Bundled LLM (API Builder, API Scale, Enterprise)
+      > and pay Anthropic directly.
+    </p>
+    <p class="mt-4 max-w-prose text-base leading-7 text-tk-ink-2">
+      Bundled LLM (API Builder, API Scale, Enterprise)
       means Driftstack supplies the AI access: each agent turn counts <strong
         >$0.10</strong
       > against a monthly budget you set. That budget is included in your plan
       and is not billed separately today. Enterprise can arrange a custom budget.
-      Turn it on in the desktop app under <strong
-        >Settings → AI &amp; billing</strong
-      >, or through the API. Self-hosted plans are BYOK-only.
+      Self-hosted plans are BYOK-only.
     </p>
   </Section>
 
@@ -962,7 +1029,7 @@ const pricingStructuredData = {
         </p>
       </li>
       <li class="card p-5">
-        <h3 class="font-medium text-tk-ink">Your own exits, tested before launch</h3>
+        <h3 class="font-medium text-tk-ink">Your own proxy or VPN, tested before launch</h3>
         <p class="mt-2 text-sm leading-6 text-tk-ink-2">
           Attach a SOCKS5 or HTTP proxy to each profile; paid plans add OpenVPN and
           WireGuard tunnels. The Test button reports whether the proxy
@@ -1026,17 +1093,17 @@ const pricingStructuredData = {
       <div>
         <h3 class="font-medium text-tk-ink">Manual or API — which one?</h3>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Manual if a human will be clicking in the desktop app. API if your
-          code will drive sessions through the SDK. Same real iPhones, same
-          accuracy — the difference is how you drive it and what pushes you
-          to the next tier up.
+          Manual if a person will be clicking in the desktop app. API if your
+          code will drive sessions through the SDK. Both give you the same
+          real iPhones, with the same accuracy. The difference is how you
+          drive them, and what pushes you to the next tier up.
         </p>
       </div>
       <div>
-        <h3 class="font-medium text-tk-ink">Why limit sessions at once, and not hours?</h3>
+        <h3 class="font-medium text-tk-ink">Why limit sessions at the same time, and not hours?</h3>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Charging by the hour punishes manual users — an account manager
-          keeping 3 profiles open 8 hours a day would rack up 720 hours a month
+          Charging by the hour punishes people who work by hand. An account
+          manager keeping 3 profiles open 8 hours a day would rack up 720 hours a month
           and a surprise bill. Instead, you pay for how many sessions you can
           run at the same time, and use them as much as you like within that
           limit. The optional AI agent has its own included monthly budget.
@@ -1054,11 +1121,13 @@ const pricingStructuredData = {
       <div>
         <h3 class="font-medium text-tk-ink">Does the free tier expire?</h3>
         <p class="mt-2 text-sm text-tk-ink-2">
-          No. The free tier never expires — one profile, one session at a
-          time of up to 20 minutes, no card. When you need the API, every
-          device profile, a VPN exit, more sessions at once, more profiles,
-          longer sessions, or the AI agent, subscribe
-          to a paid tier from your dashboard.
+          No. The free tier never expires: one profile, one session at a
+          time of up to 20 minutes, no card. Subscribe to a paid tier from
+          your dashboard when you need more. That could be the API, every
+          device type, or longer sessions. It could also be more profiles,
+          more sessions at the same time, or the AI agent. Paid tiers also
+          let sessions go out through your own VPN connection, not just a
+          proxy.
         </p>
       </div>
     </div>
@@ -1070,7 +1139,7 @@ const pricingStructuredData = {
   <!-- Final CTA -->
   <CtaBand
     title="Start free. Upgrade when you outgrow it."
-    lead="One profile, 20-minute manual sessions, no card required — and the free tier never expires. Move up a plan when you need more sessions at once."
+    lead="One profile, 20-minute sessions you drive by hand, no card required. The free tier never expires. Move up a plan when you need more sessions at the same time."
     primaryHref="https://app.driftstack.io/signup/"
     primaryLabel="Get started free"
     secondaryHref="/pricing/comparison/"

@@ -137,7 +137,12 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).not.toMatch(/starts on the API ladder/);
     expect(body).not.toMatch(/within the free limits/);
     expect(body).not.toMatch(/driven from the API or the desktop GUI client/);
-    expect(body).toMatch(/No per-hour metering, no credit decrement, no overage/);
+    // 2026-09-16 readability pass: same three facts (no per-hour metering, no
+    // credit decrement, no overage), said in words a first-time reader knows.
+    expect(body).toMatch(
+      /No\. Nothing is counted by the hour, no credits tick down, and there is no overage bill\./,
+    );
+    expect(body).not.toMatch(/no credit decrement/);
     // 2026-09-15 refuter fix: the old answer named one concurrent session as the
     // sole limit — false: the free tier also ends a session at 20 minutes
     // (MAX_SESSION_MINUTES_PER_TIER.free in services/sessions.ts; pricing.ts free
@@ -210,6 +215,18 @@ describe('W368.A marketing-site /faq page content parity', () => {
     // Load-bearing trust claim.
     expect(body).toMatch(/Card details are stored by Stripe, never by Driftstack/);
     expect(body).toMatch(/the card number itself never touches our servers/);
+    // 2026-09-16 readability pass (verifier fix). The new "Why Stripe?" lead
+    // said "your card details never reach our servers" — broader on both nouns
+    // and verb than the disclosure this site has carefully held. Card METADATA
+    // does reach the server: Stripe's payment_method.attached webhook body
+    // (brand, last4, expiry) is delivered to and handled by our endpoint
+    // (apps/server/src/services/stripe-webhooks.ts — nothing card-related is
+    // persisted, but "never reach" is still the wrong verb). The lead now uses
+    // the narrow claim verbatim.
+    expect(body).toMatch(
+      /Stripe is our payment processor, so your card number never touches our servers\./,
+    );
+    expect(body).not.toMatch(/card details never reach our servers/i);
   });
 
   it('"What if Driftstack goes away" two-protection answer pinned (portability + escrow)', () => {
@@ -233,6 +250,30 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).toMatch(/fraud \(ad fraud, fake-account creation, payment fraud\)/);
     expect(body).toMatch(/CSAM \(child sexual abuse material\) or other illegal content/);
     expect(body).toMatch(/sneaker bots \/ ticket bots/);
+    // 2026-09-16 readability pass (verifier fix), two halves of one defect:
+    //   • The lead answered "Fraud and attacks, no" — neither half named
+    //     sneaker bots or scraping, the two cases the QUESTION asks about and
+    //     the two the body actually restricts. A reader who takes the lead and
+    //     leaves was told the opposite of a disclosed restriction.
+    //   • The prohibition itself was a single 59-word sentence (the longest on
+    //     the page) inside an answer this pass presents as plain language.
+    expect(body).toMatch(
+      /Legitimate automation, yes\. Fraud, attacks, and bots against vendors that ban them, no — and scraping only within a site\\?'s own terms\./,
+    );
+    expect(body).not.toMatch(/Legitimate automation, yes\. Fraud and attacks, no\./);
+    // Four sentences now, each still carrying its own prohibition verbatim.
+    expect(body).toMatch(
+      /We don\\?'t allow attacks on third-party systems, or fraud \(ad fraud, fake-account creation, payment fraud\)\./,
+    );
+    expect(body).toMatch(
+      /We don\\?'t allow CSAM \(child sexual abuse material\) or other illegal content\./,
+    );
+    expect(body).toMatch(
+      /Large-scale scraping is out when it breaks a site\\?'s terms of service \(ToS\) — by getting around logins, or past a site\\?'s reasonable rate limits\./,
+    );
+    expect(body).toMatch(
+      /So are sneaker bots \/ ticket bots run against vendors who have publicly prohibited bot purchasing\./,
+    );
   });
 
   it('support response framing pinned: single 48h business-time target (explicitly non-contractual) + ToS §9.2 Severity-1 grant on Scale/Enterprise (S43 2026-07-07)', () => {
@@ -328,9 +369,20 @@ describe('W368.A marketing-site /faq page content parity', () => {
     // Blanket identity claims retired (A1 sheet: per-surface, noise-protected surfaces vary by design).
     expect(body).not.toMatch(/bit for bit|all the way down|vanishingly rare|kernel timings/);
     expect(body).not.toMatch(/the same browser code Apple ships/);
+    // 2026-09-16 readability pass (verifier re-pin): the 52-word measurement
+    // sentence was split into three, so the semicolon form this used to pin no
+    // longer exists. Both halves are still pinned — no claim was dropped, and
+    // the "where Safari deliberately varies a value" scoping clause (the one
+    // that keeps this off blanket-identity ground) is pinned on its own.
+    expect(body).toMatch(/Every one of those is checked against real iPhones, check by check\./);
     expect(body).toMatch(
-      /is checked against real iPhones, check by check; where Safari deliberately varies a value, Driftstack varies it the same way/,
+      /Where Safari deliberately varies a value, Driftstack varies it the same way\./,
     );
+    // TRUTH re-pin: the subject of the Mac↔iPhone sentence is the ENGINE (what
+    // is actually checked), never a blanket "the browser behaves the way it
+    // behaves on a phone" — that is the identity family Rule 4 retired.
+    expect(body).toMatch(/so the engine runs the way it runs on a phone/);
+    expect(body).not.toMatch(/the browser behaves the way it behaves/);
     expect(body).toMatch(/href="\/trust\/cumulative-rig\/"/);
     // Under-sold shipped features now answered: recordings (local), recycle bin / snapshots, OAuth + CLI sign-in, MFA, crypto receipts, team invites + audit export.
     expect(body).toMatch(/q: 'Can I record or replay a session\?'/);

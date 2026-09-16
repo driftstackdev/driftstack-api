@@ -39,13 +39,44 @@ import { TIER_LABEL, TierBadge } from '../components/TierBadge';
 
 export type HomeNavTarget = 'ai' | 'recipes' | 'profiles' | 'proxies' | 'sessions' | 'settings';
 
+// Acronyms that keep their casing when an audit action key is humanised, so
+// 'api_key.rotated' reads "API key rotated" rather than "Api key rotated".
+// Whole-word match on the separator-split key, so 'apiary' still sentence-cases.
+// A Map, not an object literal: a key like 'constructor' would otherwise hit
+// Object.prototype and render a function body into the activity feed.
+const AUDIT_ACRONYMS: ReadonlyMap<string, string> = new Map([
+  ['api', 'API'],
+  ['vpn', 'VPN'],
+  ['mfa', 'MFA'],
+  ['oauth', 'OAuth'],
+  ['sso', 'SSO'],
+  ['url', 'URL'],
+  ['id', 'ID'],
+  ['csv', 'CSV'],
+  ['pdf', 'PDF'],
+  ['sdk', 'SDK'],
+  ['totp', 'TOTP'],
+]);
+
 // Humanise an audit action key for the activity feed: 'profile.created' →
-// 'Profile created', 'api_key.rotated' → 'Api key rotated'. Pure + exported so
-// the formatting is unit-tested independently of the fetch.
+// 'Profile created', 'api_key.rotated' → 'API key rotated', 'account.mfa_enrolled'
+// → 'Account MFA enrolled'. The first word is sentence-cased; a word that is a
+// known acronym (any position) keeps its acronym casing. Pure + exported so the
+// formatting is unit-tested independently of the fetch.
 export function formatAuditAction(action: string): string {
-  const words = action.replace(/[._-]+/g, ' ').trim();
+  const words = action
+    .replace(/[._-]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 0);
   if (words.length === 0) return 'Activity';
-  return words.charAt(0).toUpperCase() + words.slice(1);
+  return words
+    .map((w, i) => {
+      const acronym = AUDIT_ACRONYMS.get(w.toLowerCase());
+      if (acronym !== undefined) return acronym;
+      return i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w;
+    })
+    .join(' ');
 }
 
 interface ActivityEntry {

@@ -194,12 +194,12 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     );
   });
 
-  it('CRITICAL 5-step first-run wizard pinned — Welcome + Deployment mode + browser sign-in + First profile + Done.', () => {
+  it('CRITICAL 5-step first-run wizard pinned — Welcome + Hosting + browser sign-in + First profile + Done.', () => {
     const p = read(LIC);
     const wizard = read(FIRST_RUN);
 
     expect(p).toMatch(/1\. \*\*Welcome\*\* — brand intro and a one-line value prop\./);
-    expect(p).toMatch(/2\. \*\*Deployment mode\*\* — radio: \*\*Cloud\*\*/);
+    expect(p).toMatch(/2\. \*\*Hosting\*\* — radio: \*\*Cloud\*\*/);
     expect(p).toMatch(/3\. \*\*Sign in\*\* — use \*\*Sign in with browser\*\* by default/);
     expect(p).toMatch(/\*\*Have an API key\? Paste it instead\*\* is the/);
     expect(p).toMatch(/4\. \*\*First profile\*\* \(skippable\)/);

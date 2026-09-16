@@ -2098,6 +2098,15 @@ function SimulatorScene(): JSX.Element {
                   <circle cx="13" cy="15" r="0.6" />
                   <circle cx="16" cy="11.5" r="0.6" />
                 </SimRailButton>
+                {/* Network is a CONDITIONAL entry in the shipped rail since
+                    2026-09-16 (SimulatorWindow visibleSimDrawerPanes): it is
+                    withheld until the session has reported a request, so an
+                    always-empty section is never offered. Drawing it here is a
+                    scene choice, not a default — this window is a session that
+                    HAS reported one, which is the state that shows the icon. A
+                    scene of a session that has reported nothing would simply
+                    omit this button and close the gap; the rest of the rail is
+                    unchanged either way. */}
                 <SimRailButton pane="network" label="Network" title="Network">
                   <circle cx="12" cy="12" r="9" />
                   <path d="M3 12h18M12 3v18M5 6.5c2 1.4 12 1.4 14 0M5 17.5c2-1.4 12-1.4 14 0" />

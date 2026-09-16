@@ -10,6 +10,44 @@
 // cockpit, the detection matrix, the works-with-your-stack cards, and
 // the real SDK snippet. Pricing figures are BOUND to src/data/pricing.ts
 // (no hand-typed dollar amounts in this file).
+//
+// 2026-09-16 — Band-A readability pass (owner: "I don't see much changes
+// to website text"). Earlier passes made every claim true but edited
+// sentence by sentence, so Band A still read like Band C: long sentences,
+// asides stacked inside asides, and terms a first-time visitor has to
+// decode. This pass restores the band split instead. Band A now says the
+// benefit first and the mechanism second or not at all, in sentences that
+// stop; a term only appears where the same sentence explains it (WebKit =
+// the software behind Safari on iPhone, fingerprint = what a website
+// measures to tell devices apart, concurrent = running at the same time,
+// plan family = the kind of plan). The Band-B tiles keep a precise small
+// line but no longer try to decode themselves for a beginner — the big
+// plain line above carries that. Band C (// for developers, the signal
+// table + its footnote, "Apple's engine. Not a Chromium copy.") KEEPS ITS
+// PRECISION — it is the one band where full precision is the point — with
+// exactly ONE edit in this pass, recorded here because the earlier version
+// of this comment claimed the band was untouched and was wrong: the
+// developer-band title now reads "Real iPhone Safari." The blanket identity
+// claim it replaced (the adjective this page's own guard forbids, in the
+// same family as "identical") is retired — precision unchanged, claim
+// retired, evidence is per surface and never a blanket identity. The signal
+// table, its footnote and every technical row are untouched.
+//
+// 2026-09-16 (follow-up) — verifier defects fixed, all in Band A:
+//   • the behavioural lead no longer implies a per-profile on/off switch
+//     that does not exist. The app's own Behavior tab is the source:
+//     human-like input is ON BY DEFAULT for every session a profile
+//     launches (apps/gui-client ProfilesView; the API's behavioral_profile
+//     is an optional persona choice, and omitting it defaults).
+//   • the how-it-works card no longer promises session RESUMPTION — a
+//     profile persists logins, cookies and history, not open pages.
+//   • the first proof card's eyebrow no longer makes an unscoped blanket
+//     claim that the card's own body scopes away; it reads "Measured, not
+//     guessed", which is what "checked against real iPhones" supports.
+//   • SOCKS5 is glossed in plain words like its neighbours in that row.
+//   • the pricing lead stops teaching the internal label "plan families".
+// Footer.astro moved in the same pass: the site-wide tagline left the
+// retired "Pixel-identical" family (and the undefined "GUI") behind.
 import BaseLayout from '../layouts/BaseLayout.astro';
 import Section from '../components/Section.astro';
 import Card from '../components/Card.astro';
@@ -103,9 +141,9 @@ const PROXIES_ALT =
             Your own real iPhones, in the cloud.
           </h1>
           <p class="mt-4 max-w-prose text-sm text-tk-ink-2 leading-relaxed sm:mt-5 sm:text-base md:text-lg">
-            Spin up as many real iPhones as you need — each with its own
-            identity, its own history, its own corner of the world. Drive
-            them by hand, by code, or by AI. To every website, they're just
+            Start as many real iPhones as you need. Each one keeps its own
+            logins, its own history, and its own location. Drive them by hand,
+            by code, or by AI. To every website, they're just
             people on phones.
           </p>
           <div class="mt-5 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-4">
@@ -152,24 +190,24 @@ const PROXIES_ALT =
   <Section
     label="What is Driftstack?"
     title="Real iPhones in the cloud, ready in seconds."
-    lead="Websites can tell when a browser is pretending to be a phone. Driftstack doesn't pretend — every session runs on the real thing."
+    lead="Websites can tell when a desktop browser is pretending to be a phone. Driftstack doesn't pretend. Every session runs a real iPhone browser."
   >
     <div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Stat
         plain="A real iPhone, not a lookalike"
-        technical="Runs a build of Apple's own WebKit — the engine family behind Safari on every iPhone — not a Chromium browser dressed up as a phone"
+        technical="Runs a build of Apple's own WebKit — the engine family behind iPhone Safari"
       />
       <Stat
-        plain="Looks human to every website"
-        technical="The hidden checks websites run to spot fakes get the answers a real iPhone gives — measured against real devices, check by check"
+        plain="Websites see a normal iPhone visitor"
+        technical="What a website can measure is checked against real iPhones, check by check"
       />
       <Stat
-        plain="Drive it three ways"
+        plain="Click through it yourself, or drive it from code"
         technical="From code — TypeScript, Python, or Go — or point and click in the desktop app. Same browser either way"
       />
       <Stat
-        plain="Any country you need"
-        technical="Bring your own proxy or VPN, attached per profile"
+        plain="Each iPhone can browse from the country you choose"
+        technical="Attach your own proxy or VPN to a profile — SOCKS5, OpenVPN or WireGuard"
       />
     </div>
   </Section>
@@ -184,19 +222,21 @@ const PROXIES_ALT =
     <div class="mt-10 grid gap-6 md:grid-cols-3">
       <Card title="Pick an iPhone profile">
         <IconTile slot="icon"><span class="font-mono text-base font-semibold">1</span></IconTile>
-        Start with the default iPhone, or create your own. Each profile is a
-        persistent identity that remembers its logins, cookies, and history
-        across every run.
+        Start with the default iPhone, or set up your own. A profile remembers
+        its logins, cookies and history, so the next session is still signed
+        in.
       </Card>
       <Card title="Start a session">
         <IconTile slot="icon"><span class="font-mono text-base font-semibold">2</span></IconTile>
-        Spin up a real iPhone Safari browser in the cloud — one click in the
-        desktop app, or one API call. No hardware to buy, nothing to install.
+        One click in the desktop app starts a real iPhone Safari browser in the
+        cloud. Your code can start one the same way. No phones to buy, nothing
+        to install.
       </Card>
       <Card title="Drive it your way">
         <IconTile slot="icon"><span class="font-mono text-base font-semibold">3</span></IconTile>
-        Click around yourself, or automate it from TypeScript, Python, or Go.
-        Every website it visits sees a genuine iPhone — never a bot.
+        Click around it yourself, or let your code drive it from TypeScript,
+        Python or Go. Every website it visits sees a genuine iPhone, never a
+        bot.
       </Card>
     </div>
   </Section>
@@ -215,11 +255,11 @@ const PROXIES_ALT =
             <path d="M20 8v6M23 11h-6" />
           </svg>
         </IconTile>
-        Keep separate identities on services that recognize your device by its
-        <a href="/glossary/#fingerprint" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">fingerprint</a>
-        — the traits a website can measure about a browser. Persistent
-        profiles let each account look like its own physical phone, every
-        session, every time.
+        Some websites recognize the device behind an account, and link the
+        accounts that share one. Give each account its own profile and it looks
+        like its own physical phone, every session, every time. What a website
+        measures to tell devices apart is called its
+        <a href="/glossary/#fingerprint" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">fingerprint</a>.
         <a
           href="/use-cases/multi-account/"
           class="mt-3 block text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
@@ -233,10 +273,10 @@ const PROXIES_ALT =
             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
           </svg>
         </IconTile>
-        Run your automated tests — the kind that click through your site like
-        a real user — against the exact engine your iOS users run. Same
-        rendering, same JavaScript timing, same quirks — the bug you
-        reproduce is the bug your users hit.
+        Your automated tests click through your site the way a real person
+        would. Run them on a real iPhone browser instead of a desktop browser
+        in a phone costume. The bug you reproduce is the bug your iPhone users
+        hit.
         <a
           href="/use-cases/qa-testing/"
           class="mt-3 block text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
@@ -251,9 +291,10 @@ const PROXIES_ALT =
             <path d="M3 11v6c0 1.7 4 3 9 3s9-1.3 9-3v-6" />
           </svg>
         </IconTile>
-        Many sites serve different content to mobile Safari than to desktop
-        Chrome. With Driftstack, your scraper sees what an iPhone visitor
-        would see — no redirects to "please use our app" pages.
+        Many sites show phones a different page than they show computers. With
+        Driftstack you collect the phone version: the prices, the layout and
+        the offers an iPhone visitor sees. No bouncing to a "please use our
+        app" page.
         <a
           href="/use-cases/web-scraping/"
           class="mt-3 block text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
@@ -271,7 +312,7 @@ const PROXIES_ALT =
   <Section
     label="Two ways to drive it"
     title="Point and click — or just say what you want."
-    lead="The desktop app keeps every iPhone one click away — folders, tags, floating device windows. And when a task is repetitive, type it in plain English and the built-in AI agent drives while you watch (Team plans and up, and every API plan)."
+    lead="The desktop app keeps every iPhone one click away, in folders and tags you choose. When a job is repetitive, type what you want in plain English. The built-in AI agent does it while you watch. The agent comes with Team plans and up, and with every API plan."
   >
       {/* The desktop app with its floating device window lifted over it —
           a REAL capture of both (the app's own Profiles view behind, the
@@ -285,12 +326,11 @@ const PROXIES_ALT =
       </div>
 
       <p class="mt-10 max-w-prose text-sm text-tk-ink-2">
-        The desktop app is home base: organize profiles in folders, launch
-        with one click, and pop any session out into its own floating device
-        window. Developers get the same from code with our SDK (a ready-made
-        code library) —
-        <strong class="text-tk-ink">and a task written as code runs without
-        the AI agent at all: no AI cost, no AI wait</strong>.
+        The desktop app is home base. Keep profiles in folders, launch one
+        with a click, and pop any session out into its own floating phone
+        window. Developers can do all of it from code instead.
+        <strong class="text-tk-ink">A job written as code runs without the
+        AI agent at all: no AI cost, no AI wait.</strong>
       </p>
   </Section>
 
@@ -309,41 +349,41 @@ const PROXIES_ALT =
         One iPhone among millions.
       </h2>
       <p class="mt-6 max-w-prose text-base text-tk-ink-2 leading-relaxed sm:mt-8 md:text-lg">
-        Most tools dress up a desktop browser to look like a phone — and
-        websites have gotten very good at spotting the costume. Driftstack
+        Most tools dress up a desktop browser to look like a phone.
+        Websites have gotten very good at spotting the costume. Driftstack
         doesn't wear one. It runs a build of Apple's own WebKit — the
-        engine family behind iPhone Safari — so the iPhone behaviour is
-        compiled in, not painted on. To a website, your session looks like
-        a real iPhone.
+        software behind Safari on iPhone. So the iPhone behaviour is part of
+        the browser itself, not a coat of paint on top. To a website, your
+        session looks like a real iPhone.
       </p>
       <div class="mt-10 grid gap-5 md:grid-cols-3">
         <div class="card p-6">
-          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Pixel-exact</p>
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Measured, not guessed</p>
           <h3 class="mt-3 text-lg font-semibold text-tk-ink">Checked against real iPhones</h3>
           <p class="mt-2 text-sm leading-relaxed text-tk-ink-2">
-            Websites quietly test how your browser draws images and 3D
-            graphics. Driftstack gives the answers a real iPhone gives —
-            measured against real devices, check by check, not approximated.
+            Websites quietly test how a browser draws pictures and graphics.
+            Tiny differences are what give a fake away. Driftstack's answers
+            are checked against real iPhones, check by check.
           </p>
         </div>
         <div class="card p-6">
           <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Real models</p>
           <h3 class="mt-3 text-lg font-semibold text-tk-ink">The iPhones your users hold</h3>
           <p class="mt-2 text-sm leading-relaxed text-tk-ink-2">
-            Every iPhone from the 13 to the 17 Pro Max
-            ({DEVICE_SUPPORT.deviceFamilies}, {DEVICE_SUPPORT.selectableCount} device
-            profiles) on iOS 18, with Safari {DEVICE_SUPPORT.safariVersions}. The
-            default is the iPhone 17 on iOS 18.7 / Safari 26.4.
+            Pick the iPhone your customers actually carry:
+            {DEVICE_SUPPORT.deviceFamilies}, {DEVICE_SUPPORT.selectableCount} device
+            profiles in all, on iOS 18 with Safari {DEVICE_SUPPORT.safariVersions}.
+            Or start with the default — the iPhone 17 on iOS 18.7 / Safari 26.4.
           </p>
         </div>
         <div class="card p-6">
           <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Nothing added</p>
           <h3 class="mt-3 text-lg font-semibold text-tk-ink">Nothing bolted on top</h3>
           <p class="mt-2 text-sm leading-relaxed text-tk-ink-2">
-            Other tools hide their differences by adding "stealth" scripts to
-            the page — and websites know how to spot those. Driftstack injects
-            no stealth JavaScript: the iPhone behaviour is compiled into the
-            engine itself, where page scripts can't see it.
+            Other tools hide their differences by slipping extra "stealth" code
+            into every page they open, and websites know how to spot that.
+            Driftstack adds no such code. The iPhone behaviour is inside the
+            browser, where a web page cannot look.
           </p>
         </div>
       </div>
@@ -448,30 +488,30 @@ const PROXIES_ALT =
   <Section
     label="Human by design"
     title="It even moves like a person."
-    lead="Bots move in straight lines at a constant speed. Driftstack's sessions don't have to: taps, swipes and keystrokes can follow patterns taken from real human movement, so an automated session moves like a person holding a phone."
+    lead="Bots move in straight lines at a constant speed. Driftstack sessions don't have to. Taps, swipes and typing follow timing taken from real people — on by default for every session a profile launches. The session moves like someone holding a phone."
   >
     <div class="mt-10 grid gap-6 md:grid-cols-3">
       <Card title="Touch & scroll">
         <IconTile slot="icon">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18c4-8 8-10 16-12"/><circle cx="4" cy="18" r="1.6"/><circle cx="20" cy="6" r="1.6"/></svg>
         </IconTile>
-        Momentum flicks, natural variation in how long each touch rests,
-        and — when you take control yourself — curved touch paths. None of
-        it moves like a script.
+        Flicks that carry momentum, and touches that don't all last exactly
+        the same time. When you take control yourself, the path your finger
+        traces curves the way a real one does. None of it moves like a script.
       </Card>
-      <Card title="Typing cadence">
+      <Card title="Typing rhythm">
         <IconTile slot="icon">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 14h10M7 10h.01M11 10h.01M15 10h.01"/></svg>
         </IconTile>
-        Per-character rhythm with natural pauses and variance — typed the way
-        thumbs type, not the way scripts paste.
+        Letters arrive one at a time, with the small pauses and uneven speed
+        of real thumbs. Nothing is pasted in all at once.
       </Card>
-      <Card title="Per-profile persona">
+      <Card title="The same person each time">
         <IconTile slot="icon">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
         </IconTile>
-        Each profile keeps its own consistent motion signature across
-        sessions — the same "person", every visit.
+        Each profile keeps the same way of moving from one session to the
+        next, so it behaves like the same person on every visit.
       </Card>
     </div>
   </Section>
@@ -481,7 +521,7 @@ const PROXIES_ALT =
        former code-demo hero, works-with-your-stack, and egress cards. ═══ -->
   <Section
     label="// for developers"
-    title="Indistinguishable iPhone Safari. Programmable from any language."
+    title="Real iPhone Safari. Programmable from any language."
     lead="Run a real iPhone browser in the cloud that every website treats as a genuine iPhone — never a bot, never an emulator. Built for scraping, testing, and automation that has to pass as a real mobile user. Drive it from TypeScript, Python, Go, or the desktop app."
   >
     <div class="mt-10 grid gap-10 md:grid-cols-2 md:items-center">
@@ -578,10 +618,9 @@ try {
   >
     <div class="mt-10 grid gap-10">
       <FeatureRow title="Each profile is its own iPhone" chip="live">
-        A complete iPhone — its model, iOS version, Safari and fonts, right
-        down to how it draws pages and opens secure connections — with its
-        own cookies, saved data, proxy and way of moving. Reuse a profile and
-        every website sees the same phone.
+        Come back to a profile next month and websites see the same phone. It
+        carries its own model, iOS and Safari version, and fonts. It keeps its
+        own cookies, saved logins, connection and way of moving.
         <AppScreen
           slot="media"
           src={profilesListScreen}
@@ -590,13 +629,15 @@ try {
         />
       </FeatureRow>
       <FeatureRow title="Exit anywhere. Know what gets through." chip="live" reverse>
-        Bring your own proxy or VPN to each profile — a SOCKS5 proxy,
-        OpenVPN (.ovpn file), or WireGuard (.conf file). A VPN tunnel carries
-        everything the profile does, including WebRTC and HTTP/3; on a proxy
-        that can't carry HTTP/3, it is switched off rather than leaked, and
-        the Test button shows which you have before you launch. The phone's
-        clock and time zone follow its location, so nothing contradicts the
-        address a website sees.
+        Give each profile its own way onto the internet. Use a SOCKS5 proxy (a
+        relay your traffic passes through), or an OpenVPN (.ovpn) or WireGuard
+        (.conf) file from your VPN. A VPN tunnel
+        carries everything the profile does, including WebRTC (live audio and
+        video) and HTTP/3 (a faster way of loading pages). On a proxy that
+        can't carry HTTP/3, it is switched off rather than leaked. The Test
+        button shows which you have before you launch. The phone's clock and
+        time zone follow its location, so nothing contradicts where a website
+        thinks it is.
         <AppScreen
           slot="media"
           src={proxiesScreen}
@@ -625,9 +666,9 @@ try {
         <h3 class="text-lg font-semibold text-tk-ink">One metric. Concurrent sessions. That's it.</h3>
         <p class="mt-3 text-sm leading-7 text-tk-ink-2">
           <strong class="text-tk-ink">Concurrent</strong> means sessions
-          running at the same time — think browser tabs. Pick a plan, get a
-          number of sessions you can run at once, and run anything inside
-          it. No per-call markup. No per-element fees. Visit 200 pages on one
+          running at the same time — think browser tabs. Your plan sets how
+          many you can run at once. Inside that, do as much as you like.
+          No per-call markup. No per-element fees. Visit 200 pages on one
           session for the cost of visiting one.
         </p>
       </div>
@@ -706,17 +747,17 @@ try {
   <Section
     label="Pricing"
     title="Drive it by hand, or drive it from code."
-    lead="Start free — one profile, 20-minute sessions, no card required. Then pick the plan family that fits how you work: Manual if a person drives the sessions, API if your code does. Annual contracts save 20%."
+    lead="Start free: one profile, 20-minute sessions, no card required. Then pick the kind of plan that fits how you work — Manual if a person drives the sessions, API if your code does. Annual contracts save 20%."
   >
     <div class="mt-10 grid gap-6 md:grid-cols-2">
       <div class="card p-8">
         <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Manual</p>
         <h3 class="mt-3 text-2xl font-semibold text-tk-ink">Desktop app</h3>
         <p class="mt-3 leading-7 text-tk-ink-2">
-          A desktop app for your computer that keeps 10 to 200 logged-in
-          profiles saved and ready, so you can switch between them like
-          browser tabs. The same real iPhone browser, no code required. Built
-          for teams who keep several sign-ins alive through the workday.
+          A desktop app that keeps 10 to 200 logged-in profiles saved and
+          ready, so you can switch between them like browser tabs. The same
+          real iPhone browser, and no code to write. Built for teams who keep
+          several sign-ins alive through the workday.
         </p>
         <ul class="mt-5 space-y-2.5 text-sm text-tk-ink-2">
           <li class="flex gap-2.5"><span class="arrow-bullet">→</span><span>{manualLineup}</span></li>
@@ -764,7 +805,7 @@ try {
   <Section
     label="Self-hosted"
     title="Run Driftstack on your own infrastructure."
-    lead="For privacy, full control, or sustained high-volume use. We help you pick the hardware, install the software, and keep it running. Three packages, annual contracts, hands-on onboarding."
+    lead="The same product, on hardware you own and inside a network you control. Good when you need full control, extra privacy, or steady high volume. We help you choose the hardware, install the software, and keep it running. Three packages, annual contracts, hands-on setup."
   >
     <a href="/self-hosted/" class="btn-secondary mt-8 inline-flex">See self-hosted →</a>
   </Section>
@@ -772,7 +813,7 @@ try {
   <!-- ═══ 13 · FINAL CTA ═══ -->
   <CtaBand
     title="See it for yourself. Free."
-    lead="iPhone Safari sessions on Apple's real WebKit — one profile, 20-minute sessions, no card required. Enough to try it on your own work and decide for yourself."
+    lead="Free iPhone Safari sessions in the cloud: one profile, 20-minute sessions, no card required. Enough to try it on your own work and decide for yourself."
     primaryHref="/pricing/#free"
     primaryLabel="Start free"
     secondaryHref="https://docs.driftstack.io"

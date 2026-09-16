@@ -9,11 +9,13 @@
 // the stripper removes exactly what the finder reports and nothing else.
 
 import { describe, expect, it } from 'vitest';
+import { OpenVpnProxyConfigSchema } from '../src/egress.js';
 import {
   DANGEROUS_OPENVPN_DIRECTIVES,
   OPENVPN_INLINE_REQUIRED_DIRECTIVES,
   OPENVPN_UNRECOGNISED_DIRECTIVES,
   findUnresolvableOpenvpnFileReferences,
+  addMissingOpenvpnClientDirective,
   findUnsupportedOpenvpnLines,
   lowerOpenvpnScriptSecurity,
   stripUnsupportedOpenvpnLines,
@@ -654,5 +656,177 @@ describe('a directive OpenVPN cannot parse is refused at entry, not at launch', 
     // be a one-character bypass of the entry check.
     const hits = findUnsupportedOpenvpnLines('client\n--keysize 256\n');
     expect(hits.map((h) => h.directive)).toContain('keysize');
+  });
+});
+
+// ⛔ THE REFUSAL THIS CLOSES. `OpenVpnProxyConfigSchema` answers any .ovpn with no
+// `client` line with "This OpenVPN file must be a client configuration: it needs a
+// `client` line." The owner's own provider profile has neither `client` nor
+// `tls-client`, so every upload of it was refused — and OpenVPN 2.7 refuses it too,
+// so the customer's only route was to open the file and type one word.
+//
+// `client` is shorthand for `tls-client` + `pull`. On a file that already dials out
+// (`remote`) and declares no server role, both halves are what the file already
+// means, so adding the line is the same edit the customer would make by hand.
+//
+// ⛔ PRODUCTION LINES WHOSE REVERSION REDS THESE ARMS, named per arm below. The
+// whole-function control is arm 1: it asserts the SERVER SCHEMA accepts the result,
+// so a fix that rewrites the blob into something still refused reds here rather than
+// looking green on a string comparison.
+describe('addMissingOpenvpnClientDirective — the missing `client` line the app can add', () => {
+  /** A provider profile as issued: a real endpoint, certificates, and no role line. */
+  const CLIENTLESS = [
+    '# Provider profile — generated 2026-09-01',
+    'dev tun',
+    'proto udp',
+    'remote vpn.example.com 1194 udp',
+    'resolv-retry infinite',
+    'nobind',
+    'persist-key',
+    'persist-tun',
+    'remote-cert-tls server',
+    'verb 3',
+    '',
+  ].join('\n');
+
+  it('ARM 1 — CRITICAL: a client-less provider config gains a `client` line, and the CONTROL PLANE SCHEMA then accepts it. The string is not the point: the refusal is, and this arm asks the refuser.', () => {
+    expect(OpenVpnProxyConfigSchema.safeParse({ config_blob: CLIENTLESS }).success).toBe(false);
+    const fix = addMissingOpenvpnClientDirective(CLIENTLESS);
+    expect(fix, 'a client-less config with a remote must be fixable').not.toBeNull();
+    expect(OpenVpnProxyConfigSchema.safeParse({ config_blob: fix?.config ?? '' }).success).toBe(
+      true,
+    );
+  });
+
+  it('ARM 2 — the line goes at the TOP OF THE DIRECTIVE SECTION: after the leading comments, before the first directive, and every other byte survives', () => {
+    const fix = addMissingOpenvpnClientDirective(CLIENTLESS);
+    expect(fix?.line).toBe(2); // line 1 is the provider's comment header
+    expect(fix?.config).toBe(CLIENTLESS.replace('dev tun', 'client\ndev tun'));
+  });
+
+  it('ARM 3 — CRITICAL VACUITY CONTROL: a config that already says `client` is not touched. Without this arm a function that appended `client` unconditionally would satisfy arms 1-2 and duplicate the line on every clean paste.', () => {
+    expect(addMissingOpenvpnClientDirective(CLEAN)).toBeNull();
+    expect(addMissingOpenvpnClientDirective(PROVIDER)).toBeNull();
+    // Idempotent: the fixed config is one of these.
+    const once = addMissingOpenvpnClientDirective(CLIENTLESS)?.config ?? '';
+    expect(addMissingOpenvpnClientDirective(once)).toBeNull();
+  });
+
+  it('ARM 4 — CRITICAL: `tls-client` already declares the role, so nothing is added. `client` would also add `pull`, which changes what the tunnel does with pushed routes and DNS — a behaviour change this must not make silently.', () => {
+    expect(
+      addMissingOpenvpnClientDirective('tls-client\nremote vpn.example.com 1194\n'),
+    ).toBeNull();
+  });
+
+  it('ARM 5 — CRITICAL: a SERVER config is never converted into a client one. `tls-server`, the `server` shorthand and `mode server` each stop the fix.', () => {
+    for (const roleLine of ['tls-server', 'server 10.8.0.0 255.255.255.0', 'mode server']) {
+      expect(
+        addMissingOpenvpnClientDirective(`dev tun\n${roleLine}\nremote vpn.example.com 1194\n`),
+        roleLine,
+      ).toBeNull();
+    }
+  });
+
+  it('ARM 6 — no `remote` line means no evidence this file dials out, and the control plane would refuse it for the missing `remote` anyway: offering a fix that does not fix is worse than offering none', () => {
+    expect(addMissingOpenvpnClientDirective('dev tun\nproto udp\n')).toBeNull();
+    expect(addMissingOpenvpnClientDirective('dev tun\nremote\n')).toBeNull();
+    expect(addMissingOpenvpnClientDirective('')).toBeNull();
+    expect(addMissingOpenvpnClientDirective('# only a comment\n\n')).toBeNull();
+  });
+
+  it('ARM 7 — CRITICAL: a `client` line inside an inline `<ca>` block is certificate DATA, not a directive, and a commented-out one is not a directive either. Reading either as "already declared" would leave the customer refused with no offer.', () => {
+    const certOnly = [
+      'dev tun',
+      'remote vpn.example.com 1194',
+      '# client',
+      ';client',
+      '<ca>',
+      '-----BEGIN CERTIFICATE-----',
+      'client',
+      '-----END CERTIFICATE-----',
+      '</ca>',
+      '',
+    ].join('\n');
+    const fix = addMissingOpenvpnClientDirective(certOnly);
+    expect(fix, 'a commented / in-block `client` must not count as declared').not.toBeNull();
+    expect(fix?.line).toBe(1);
+    // The certificate block is untouched — the bytes between <ca> and </ca> are
+    // never rewritten, and the inserted line never lands inside one.
+    expect(fix?.config).toContain('-----BEGIN CERTIFICATE-----\nclient\n-----END CERTIFICATE-----');
+    expect(OpenVpnProxyConfigSchema.safeParse({ config_blob: fix?.config ?? '' }).success).toBe(
+      true,
+    );
+  });
+
+  it('ARM 8 — a commented-out `server` line does NOT block the fix (it is a comment), and a trailing inline comment on a `client` line DOES count as declared (openvpn breaks the line at `#`, and so does the control plane regex)', () => {
+    expect(
+      addMissingOpenvpnClientDirective('# server 10.8.0.0\nremote vpn.example.com 1194\n'),
+    ).not.toBeNull();
+    expect(
+      addMissingOpenvpnClientDirective('client # provider note\nremote vpn.example.com 1194\n'),
+    ).toBeNull();
+  });
+
+  it('ARM 9 — the customer’s own line endings survive: CRLF stays CRLF, a bare-CR file stays CR, so the result diffs cleanly against the paste', () => {
+    const crlf = CLIENTLESS.replace(/\n/g, '\r\n');
+    expect(addMissingOpenvpnClientDirective(crlf)?.config).toBe(
+      crlf.replace('dev tun', 'client\r\ndev tun'),
+    );
+    const cr = CLIENTLESS.replace(/\n/g, '\r');
+    expect(addMissingOpenvpnClientDirective(cr)?.config).toBe(
+      cr.replace('dev tun', 'client\rdev tun'),
+    );
+  });
+
+  it('ARM 10 — a last line with no terminator still gets a newline after the inserted directive, or `client` and the line below it fuse into one unreadable token', () => {
+    expect(addMissingOpenvpnClientDirective('remote vpn.example.com 1194')?.config).toBe(
+      'client\nremote vpn.example.com 1194',
+    );
+  });
+
+  it('ARM 11 — a `--client` or quoted `"client"` spelling counts as declared. OpenVPN’s lexer resolves both to the directive, so inserting a second one would be a rewrite for nothing.', () => {
+    expect(addMissingOpenvpnClientDirective('--client\nremote a.example.com 1194\n')).toBeNull();
+    expect(addMissingOpenvpnClientDirective('"client"\nremote a.example.com 1194\n')).toBeNull();
+  });
+
+  it('ARM 12 — CONTROL: the fix does not launder a config that is refusable for another reason. A script hook is still reported by the security finder afterwards.', () => {
+    const withHook = 'dev tun\nremote a.example.com 1194\nup /etc/openvpn/up.sh\n';
+    const fix = addMissingOpenvpnClientDirective(withHook);
+    expect(fix).not.toBeNull();
+    expect(findUnsupportedOpenvpnLines(fix?.config ?? '').map((h) => h.directive)).toEqual(['up']);
+  });
+
+  it('ARM 13 — CRITICAL: a STATIC-KEY config is never rewritten either. `--secret` is the THIRD mutually exclusive mode — OpenVPN refuses it together with `--tls-client`, and `client` IS `tls-client` + `pull` — so the repaired file would store cleanly and then fail to launch, with nothing downstream naming why.', () => {
+    const staticKey = [
+      '# legacy point-to-point profile',
+      'dev tun',
+      'remote vpn.example.com 1194',
+      'ifconfig 10.8.0.2 10.8.0.1',
+      '<secret>',
+      '-----BEGIN OpenVPN Static key V1-----',
+      '6acef03f62675b4b1bbd03e53b187727',
+      '-----END OpenVPN Static key V1-----',
+      '</secret>',
+      '',
+    ].join('\n');
+    expect(
+      addMissingOpenvpnClientDirective(staticKey),
+      'an inline <secret> block is the static-key mode marker, read on the block-OPEN line',
+    ).toBeNull();
+    expect(
+      addMissingOpenvpnClientDirective('dev tun\nremote vpn.example.com 1194\nsecret static.key\n'),
+      'a bare `secret <file>` directive is the same mode',
+    ).toBeNull();
+    // ⛔ WHY THE GUARD HAS TO LIVE HERE: the control plane is NOT the backstop. Its
+    // schema checks only that `client` and `remote` are present, so it ACCEPTS the
+    // very blob this function must refuse to produce — which is why a green schema
+    // parse below is the evidence for the assertions above, not a contradiction.
+    expect(
+      OpenVpnProxyConfigSchema.safeParse({ config_blob: `client\n${staticKey}` }).success,
+      'the schema would store the broken rewrite — only this helper can decline it',
+    ).toBe(true);
+    // And the other shared finders are silent on it too: no later check catches it.
+    expect(findUnsupportedOpenvpnLines(`client\n${staticKey}`)).toEqual([]);
+    expect(findUnresolvableOpenvpnFileReferences(`client\n${staticKey}`)).toEqual([]);
   });
 });
