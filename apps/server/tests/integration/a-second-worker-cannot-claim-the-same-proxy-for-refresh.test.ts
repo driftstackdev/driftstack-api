@@ -196,11 +196,17 @@ describe.skipIf(!RUN_DB_TESTS)('the freshness claim, on real Postgres', () => {
 
     // 1. THE SERIOUS ONE. The same proxy claimed twice in one window means
     //    SKIP LOCKED is not doing its job and a customer's proxy is dialled twice.
-    if (claimed.length === 2) {
+    // ⛔ Destructured, not indexed: `noUncheckedIndexedAccess` is on for the test
+    // tsconfig, so `claimed[0]` is `T | undefined` however recently length was
+    // checked. `npm run typecheck` does NOT cover test files — only the gate's
+    // tsconfig.test.json pass does — so the indexed version was clean locally and
+    // red at the push gate, which cost a cycle.
+    const [firstClaim, secondClaim] = claimed;
+    if (firstClaim !== undefined && secondClaim !== undefined) {
       expect(
-        claimed[0].id,
-        `two workers took the SAME proxy (${claimed[0].id}) — SKIP LOCKED is not holding`,
-      ).not.toBe(claimed[1].id);
+        firstClaim.id,
+        `two workers took the SAME proxy (${firstClaim.id}) — SKIP LOCKED is not holding`,
+      ).not.toBe(secondClaim.id);
     }
     // 2. VACUITY CONTROL. Both workers coming back empty against two due rows
     //    would satisfy every "not the same" check above.
