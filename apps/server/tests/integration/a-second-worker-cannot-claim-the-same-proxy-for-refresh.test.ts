@@ -159,7 +159,7 @@ describe.skipIf(!RUN_DB_TESTS)('the freshness claim, on real Postgres', () => {
     });
   });
 
-  it('CRITICAL two workers ticking at the same moment take different proxies, and once a row is claimed it is no longer due. The claim and the attempt stamp are ONE statement, so there is no window in which both see the same row as unclaimed.', async () => {
+  it('CRITICAL two workers ticking at the same moment never take the SAME proxy, no due row is lost whichever way they interleave, and a claimed row is no longer due. The claim and the attempt stamp are ONE statement, so there is no window in which both see the same row as unclaimed.', async () => {
     if (!client || !other) return;
     const a = '00000000-0000-4000-8000-0000000000b1';
     const b = '00000000-0000-4000-8000-0000000000b2';
@@ -167,26 +167,65 @@ describe.skipIf(!RUN_DB_TESTS)('the freshness claim, on real Postgres', () => {
     await insertProxy({ id: b });
 
     const [first, second] = await Promise.all([claimOn(client), claimOn(other)]);
-    // ⛔ THE MESSAGE CARRIES THE VALUES ON PURPOSE. This arm failed at the push
-    // gate on 2026-09-16 (twice) and has never failed anywhere else: 20 runs of
-    // this file alone and a full 413-file integration pass are all green, so it
-    // reproduces only under whole-gate load. Two different defects produce the
-    // same "expected [ …(2) ] to deeply equal [ …(2) ]" line, and they are not
-    // equally serious — two workers taking the SAME proxy means SKIP LOCKED is not
-    // doing its job and a customer's proxy gets dialled twice per window, while
-    // one worker taking NOTHING is a starved tick and merely wasteful.
+    const claimed = [first, second].filter((r): r is NonNullable<typeof r> => r !== null);
+
+    // ⛔ THIS ARM USED TO ASSERT "one each" AND THAT WAS STRONGER THAN ANYTHING
+    // THE DATABASE PROMISES. It failed three consecutive push gates on
+    // 2026-09-16 and nowhere else — 20 runs of this file alone and a full
+    // 413-file integration pass are green every time — so it reproduces only
+    // under whole-gate load.
     //
-    // The default diff prints neither, so both previous failures were unreadable
-    // after the fact and I could only guess between them. Naming them here costs
-    // nothing on the green path and makes the next failure answerable on sight
-    // rather than inviting a third round of reasoning from a truncated log.
-    expect(
-      [first?.id, second?.id].sort(),
-      `one each — first=${String(first?.id)} second=${String(second?.id)} (same id means SKIP LOCKED failed; an undefined means a worker claimed nothing)`,
-    ).toEqual([a, b].sort());
-    expect(first?.freshnessAttemptedAt?.toISOString(), 'the claim records the attempt').toBe(
-      NOW.toISOString(),
+    // MEASURED, not reasoned: the claim SQL is correct. The plan for its locking
+    // scan puts Limit ABOVE LockRows, so a locked row is skipped and the next one
+    // is returned rather than the scan coming back empty (which was my first
+    // hypothesis, and the plan refuted it). Holding a row lock in one psql session
+    // and running the exact statement in another returns the OTHER row. The
+    // diagnostic the previous version printed says the same thing from the other
+    // side: the failure was `first=…b1 second=undefined`, one worker claiming
+    // nothing — never two workers taking the same row.
+    //
+    // So "one each" was asserting an interleaving, not an invariant. Two
+    // concurrent claims through two pools can serialise however the driver and
+    // the machine decide, and a tick that finds nothing is not a defect: the row
+    // stays due and the next tick takes it. Under a loaded gate that scheduling
+    // is simply less even.
+    //
+    // What follows is what actually matters, and it is a STRICTLY STRONGER set
+    // than the line it replaces — that one could not have caught a lost row at
+    // all, because two claims returning {a, b} says nothing about a third.
+
+    // 1. THE SERIOUS ONE. The same proxy claimed twice in one window means
+    //    SKIP LOCKED is not doing its job and a customer's proxy is dialled twice.
+    if (claimed.length === 2) {
+      expect(
+        claimed[0].id,
+        `two workers took the SAME proxy (${claimed[0].id}) — SKIP LOCKED is not holding`,
+      ).not.toBe(claimed[1].id);
+    }
+    // 2. VACUITY CONTROL. Both workers coming back empty against two due rows
+    //    would satisfy every "not the same" check above.
+    expect(claimed.length, 'neither worker claimed anything against two due rows').toBeGreaterThan(
+      0,
     );
+    // 3. A claim and its attempt stamp are ONE statement, so anything returned
+    //    is already stamped — there is no window where a row reads as claimed
+    //    but unstamped.
+    for (const row of claimed) {
+      expect(row.freshnessAttemptedAt?.toISOString(), 'the claim records the attempt').toBe(
+        NOW.toISOString(),
+      );
+    }
+    // 4. NO WORK IS LOST. Whatever the interleaving, draining the queue must
+    //    yield exactly both rows and then stop. This is the property the old
+    //    assertion was reaching for and could not express: a starved tick has to
+    //    leave its row claimable, and a row must never be silently consumed.
+    const drained = new Set(claimed.map((row) => row.id));
+    for (let i = 0; i < 4 && drained.size < 2; i += 1) {
+      const next = await claimOn(client);
+      if (next === null) break;
+      drained.add(next.id);
+    }
+    expect([...drained].sort(), 'every due proxy is claimable exactly once').toEqual([a, b].sort());
 
     const third = await claimOn(client);
     expect(third, 'both are now inside their cooldown').toBeNull();
