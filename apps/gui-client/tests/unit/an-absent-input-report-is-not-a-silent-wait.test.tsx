@@ -467,3 +467,64 @@ describe('SessionControlSection — the Manual caption never claims input works 
     expect(screen.getByText(MANUAL_INPUT_UNREPORTED_CAPTION)).toBeVisible();
   });
 });
+
+describe('the toolbar pill names the blocker instead of saying Connecting forever', () => {
+  /** The amber pill beside the device name. */
+  function pill(container: HTMLElement): Element | null {
+    return container.querySelector('[data-component="simulator-connecting-indicator"]');
+  }
+
+  /**
+   * ⛔ THE DEFECT THIS ARM EXISTS FOR, reported five times in the owner's own
+   * words — "keeps status 'connecting'", "connected, but no video arrived".
+   *
+   * `connecting` on the toolbar is true for EVERY state that is not fully live,
+   * and the bar rendered the single word "Connecting…" over all of them. A failed
+   * stream, a phone that never sent a screen, a session not running yet and a
+   * session that has not reported it accepts taps were four different problems
+   * wearing one word — and that word says "in progress", so it reads as "wait
+   * longer" in every case, including the ones where waiting never helps.
+   *
+   * The specific sentence was computed in the same render the whole time and
+   * thrown away at the prop boundary.
+   */
+  it('CRITICAL a connected transport with no video says the screen is missing, not "Connecting…"', async () => {
+    const { container } = renderSession(liveManual, { bringUpRoom: false });
+    // Connected, deliberately WITHOUT a publisher: the exact state behind
+    // "connected, but no video arrived".
+    act(() => {
+      panelCbs.onRoom?.(fakeRoom, fakeRoom);
+      panelCbs.onStateChange?.({ kind: 'connected' }, fakeRoom);
+    });
+    await vi.waitFor(() => {
+      expect(waitGroup(container)).toBe('screen');
+    });
+    expect(pill(container)).not.toBeNull();
+    expect(pill(container)?.textContent).toContain('waiting for the screen');
+    // ⛔ THE HALF THAT MATTERS: the old word is GONE. Asserting only that the new
+    // text is present would pass against a pill that rendered both.
+    expect(pill(container)?.textContent).not.toContain('Connecting…');
+    // And the hover carries the full sentence, not the old generic one.
+    expect(pill(container)?.getAttribute('title')).toBe(
+      'Connected — waiting for the phone’s screen to arrive.',
+    );
+  });
+
+  it('CONTROL — a transport that has not come up still says "connecting", because there it is true', async () => {
+    // ⛔ The fix is not "never say connecting". A session whose transport has not
+    // come up yet IS connecting, and that word is the honest one — the defect was
+    // using it for the twelve states where it is not.
+    //
+    // This arm is what stops the one above from passing against a pill that had
+    // simply been re-hardcoded to the screen wording: same component, same render
+    // path, different wait group, different words.
+    const { container } = renderSession(liveManual, { bringUpRoom: false });
+    await vi.waitFor(() => {
+      expect(waitGroup(container)).toBe('stream');
+    });
+    expect(pill(container)?.textContent).toContain('connecting');
+    expect(pill(container)?.getAttribute('title')).toBe(
+      'Connecting to the phone — this usually takes a few seconds.',
+    );
+  });
+});

@@ -87,7 +87,18 @@ describe('describeAgentSessionState', () => {
       true,
     );
     expect(d.label).toBe('Ended');
-    expect(d.title).toContain('budget_exhausted');
+    // ⛔ THIS ASSERTION USED TO BE `toContain('budget_exhausted')` — it pinned a
+    // raw internal token into a customer-facing tooltip as though that were the
+    // intended behaviour, and it is the reason the leak survived: anyone removing
+    // it would have reddened a test whose name is about something else entirely
+    // (closed winning over a live beat, which is what this arm is really for).
+    //
+    // Every other end-reason surface in this app maps the token to a sentence and
+    // the recap overlay states in its own comment that unknown reasons may carry
+    // internal diagnostics and must never reach the DOM. The tooltip now obeys
+    // that too, so the guard is inverted: the token must NOT appear.
+    expect(d.title).not.toContain('budget_exhausted');
+    expect(d.title).toBe('This session has ended.');
   });
 
   it('reports paused from the binding when no beat contradicts it', () => {

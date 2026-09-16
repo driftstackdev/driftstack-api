@@ -167,7 +167,23 @@ describe.skipIf(!RUN_DB_TESTS)('the freshness claim, on real Postgres', () => {
     await insertProxy({ id: b });
 
     const [first, second] = await Promise.all([claimOn(client), claimOn(other)]);
-    expect([first?.id, second?.id].sort(), 'one each').toEqual([a, b].sort());
+    // ⛔ THE MESSAGE CARRIES THE VALUES ON PURPOSE. This arm failed at the push
+    // gate on 2026-09-16 (twice) and has never failed anywhere else: 20 runs of
+    // this file alone and a full 413-file integration pass are all green, so it
+    // reproduces only under whole-gate load. Two different defects produce the
+    // same "expected [ …(2) ] to deeply equal [ …(2) ]" line, and they are not
+    // equally serious — two workers taking the SAME proxy means SKIP LOCKED is not
+    // doing its job and a customer's proxy gets dialled twice per window, while
+    // one worker taking NOTHING is a starved tick and merely wasteful.
+    //
+    // The default diff prints neither, so both previous failures were unreadable
+    // after the fact and I could only guess between them. Naming them here costs
+    // nothing on the green path and makes the next failure answerable on sight
+    // rather than inviting a third round of reasoning from a truncated log.
+    expect(
+      [first?.id, second?.id].sort(),
+      `one each — first=${String(first?.id)} second=${String(second?.id)} (same id means SKIP LOCKED failed; an undefined means a worker claimed nothing)`,
+    ).toEqual([a, b].sort());
     expect(first?.freshnessAttemptedAt?.toISOString(), 'the claim records the attempt').toBe(
       NOW.toISOString(),
     );

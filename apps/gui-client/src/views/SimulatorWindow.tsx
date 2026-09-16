@@ -1505,6 +1505,9 @@ export function DeviceToolbar({
   onToggleKeyboard,
   inputEnabled = true,
   inputUnavailableReason = 'agent',
+  connectingLabel,
+  connectingTitle,
+  inputUnavailableSentence,
 }: {
   deviceName: string;
   profileName: string;
@@ -1525,6 +1528,32 @@ export function DeviceToolbar({
    *  'unreported' = it has not reported either way yet (never the same thing —
    *  see lib/manual-input-capability), 'agent' = the agent is driving. */
   inputUnavailableReason?: 'agent' | 'device' | 'unreported';
+  /**
+   * ⛔ WHY THE PILL TAKES ITS WORDS FROM OUTSIDE NOW.
+   *
+   * `connecting` above is true for EVERY state that is not fully live, and this
+   * bar rendered the single word "Connecting…" over all of them. A stream that
+   * failed, a phone that never sent a screen, a session that is not running yet
+   * and a session waiting to report that it accepts taps all looked identical,
+   * and all looked like something still in progress. That is the "it just says
+   * connecting forever" the owner reported five times, and each report was a
+   * different underlying cause wearing the same word.
+   *
+   * The specific answer already existed in the same render — `manualInputWait`
+   * carries a chip and a sentence per wait group — and was simply never passed
+   * down. Both stay optional so the bar keeps working without them and falls back
+   * to today's wording.
+   */
+  connectingLabel?: string;
+  connectingTitle?: string;
+  /**
+   * The wait sentence for the keyboard toggle. Its tooltip is a three-way on a
+   * coarse reason whose last arm is "the agent is driving", and that arm is the
+   * DEFAULT — so a session held up by its video, its screen or its lifecycle was
+   * told the agent was driving, which is a false explanation rather than a vague
+   * one. When a real wait sentence exists it wins.
+   */
+  inputUnavailableSentence?: string;
 }): JSX.Element {
   // The activity-bar rail is always docked beside the phone (it lives in the main
   // layout, not this thin toolbar); panes expand on a rail-icon click. There is no
@@ -1611,14 +1640,15 @@ export function DeviceToolbar({
           ) : connecting ? (
             <span
               data-component="simulator-connecting-indicator"
-              title="Connecting to the live video…"
+              data-wait-label={connectingLabel ?? undefined}
+              title={connectingTitle ?? 'Connecting to the live video…'}
               className="mr-0.5 inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-status-busy"
             >
               <span
                 aria-hidden="true"
                 className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-busy"
               />
-              Connecting…
+              {connectingLabel ?? 'Connecting…'}
             </span>
           ) : null}
           {/* On-screen iOS keyboard toggle (founder 2026-06-25 "behave exactly
@@ -1643,7 +1673,13 @@ export function DeviceToolbar({
                   ? 'This session is view only because device input is unavailable'
                   : inputUnavailableReason === 'unreported'
                     ? MANUAL_INPUT_UNREPORTED_TOOLTIP
-                    : 'The agent is driving — switch to Manual to type'
+                    : // ⛔ The 'agent' arm is the DEFAULT, not a verdict. Anything
+                      // that is not an explicit device-no and not the unreported
+                      // tri-state lands here, so a session waiting on its video or
+                      // its screen was told the agent was driving. A wait sentence,
+                      // when there is one, is the actual blocker and wins.
+                      (inputUnavailableSentence ??
+                      'The agent is driving — switch to Manual to type')
                 : keyboardVisible
                   ? 'Hide the on-screen keyboard'
                   : 'Show the on-screen keyboard'
@@ -9821,6 +9857,23 @@ export function SimulatorWindow(): JSX.Element {
                   manualInputUnreported
                   ? 'unreported'
                   : 'agent'
+            }
+            // The specific blocker, computed in this same render and previously
+            // thrown away here. `manualInputWait` is null exactly when the session
+            // is fully interactive, in which case the bar shows neither.
+            connectingLabel={manualInputWait?.chip}
+            connectingTitle={manualInputWait?.sentence}
+            // ⛔ NOT passed when the agent really IS driving. There the toggle's
+            // own wording is the better of the two — it is about TYPING ("switch
+            // to Manual to type") where the shared sentence is about taking
+            // control generally, and a keyboard button should say what pressing it
+            // would do. The override exists for the other thirteen groups, where
+            // "the agent is driving" was a default standing in for a stream, a
+            // screen or a lifecycle wait and was simply untrue.
+            inputUnavailableSentence={
+              manualInputWait !== null && manualInputWait.group !== 'session-agent-driving'
+                ? manualInputWait.sentence
+                : undefined
             }
           />
           {/* Browser-style page TAB strip (doc-150 item 4) — full-width row between

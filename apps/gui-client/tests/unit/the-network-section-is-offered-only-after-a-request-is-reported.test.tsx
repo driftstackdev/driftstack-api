@@ -424,19 +424,22 @@ const BURST_OFFSETS_MS = [0, 60, 180, 300, 420, 540, 660, 780].map((s) => s * 10
 describe('discovery for the withheld section is bounded in RATE, not in reach', () => {
   beforeEach(() => {
     networkMock.mockReset();
-    // ⛔ These arms walk HOURS of virtual time one scheduled timer at a time — the
-    // 8-hour ones at :590 and :731 (the latter with 96 transport rebinds) step tens
-    // of thousands of timers each. Virtual time is free; the STEPPING is real work,
-    // and its wall-clock cost scales with how loaded the machine is. Alone the file
-    // finishes in 4 s; under the push gate, which runs all 3455 files in parallel,
-    // the same arms overran the default per-test deadline and reported as failures
-    // that no one could reproduce afterwards — the file was green by itself every
-    // time. That is the worst diagnostic shape available, so the deadline is stated
-    // here with the reason on it.
+    // ⛔ THE DEADLINE IS THE THIRD ARGUMENT ON EACH HEAVY `it`, NOT A CALL HERE.
     //
-    // This is headroom, NOT a licence to be slow: the cap still fails a genuine hang
-    // (the runaway guard inside advanceVirtualMs fails first anyway, and loudly).
-    vi.setConfig({ testTimeout: 60_000 });
+    // The four arms that walk HOURS of virtual time step tens of thousands of
+    // scheduled timers one at a time. Virtual time is free; the STEPPING is real
+    // work whose wall-clock cost scales with machine load. Alone this file finishes
+    // in 4 s; under the push gate, which runs all 3455 files in parallel, those arms
+    // overran the 10 s default and failed — green by themselves every time anyone
+    // went to look, which is the worst diagnostic shape there is.
+    //
+    // The first attempt at this fix put `vi.setConfig({ testTimeout: 60_000 })`
+    // right here. It silently did nothing: the next gate reported the identical
+    // "Test timed out in 10000ms", because the deadline for a test is already
+    // running by the time its own `beforeEach` executes. That cost a whole gate
+    // cycle and is exactly the shape worth leaving a note about — a remedy that
+    // looks applied, reads as applied in review, and never took effect. The
+    // per-test argument is unambiguous, so that is what is used.
   });
 
   /** Arm the fetch stub and hand back the (growing) list of look offsets, in
@@ -631,7 +634,7 @@ describe('discovery for the withheld section is bounded in RATE, not in reach', 
     } finally {
       vi.useRealTimers();
     }
-  });
+  }, 60_000);
 
   it('CRITICAL a typed feature-unavailable 503 stops discovery at one look', async () => {
     // The one answer that IS a statement about the deployment: the gated stub's
@@ -653,7 +656,7 @@ describe('discovery for the withheld section is bounded in RATE, not in reach', 
     } finally {
       vi.useRealTimers();
     }
-  });
+  }, 60_000);
 
   it('CRITICAL a bare 503 from an intermediary does NOT permanently deny the section', async () => {
     // A gateway / load balancer / rolling restart answers 503 with a non-JSON body,
@@ -682,7 +685,7 @@ describe('discovery for the withheld section is bounded in RATE, not in reach', 
     } finally {
       vi.useRealTimers();
     }
-  });
+  }, 60_000);
 
   /** Rebuild the session's transport the way the product does it to itself: the
    *  mocked panel hands the window a NEW Room object, which changes the identity of
@@ -788,5 +791,5 @@ describe('discovery for the withheld section is bounded in RATE, not in reach', 
     } finally {
       vi.useRealTimers();
     }
-  });
+  }, 60_000);
 });

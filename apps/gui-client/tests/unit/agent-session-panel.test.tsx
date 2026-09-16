@@ -1318,6 +1318,12 @@ describe('AgentSessionPanel overlay UX', () => {
     ['renderer_crashed', 'The page stopped unexpectedly', 'could not be recovered'],
     ['intent_deadline_exceeded', 'A step took too long', 'smaller steps'],
     ['reaped_during_provisioning', 'Stopped before it finished starting', 'never became usable'],
+    // Found by the same audit that corrected the population above.
+    ['control_plane_unreachable', 'Contact with the phone was lost', 'ours, not yours'],
+    ['vpn_bringup_failed', 'VPN connection could not be started', 'not enough detail'],
+    ['vpn_bringup_no_active_state', 'VPN connection could not be started', 'not enough detail'],
+    ['archetype_not_supported', 'This device is not available', 'Choosing another device'],
+    ['unknown_error', 'Session stopped unexpectedly', 'Something went wrong'],
   ])('renders truthful bounded recap copy for %s', async (reason, outcome, explanation) => {
     connectMock.mockReset();
     connectMock.mockResolvedValue(undefined);
@@ -1337,24 +1343,29 @@ describe('AgentSessionPanel overlay UX', () => {
    * this one says "no REACHABLE token renders the blank one", which is the claim a
    * new close reason can actually break.
    *
-   * THE LIST IS THE WHOLE POINT, and it is not a grep. A token-shaped scan of the
-   * daemon's sources returns sixty-odd values and is wrong: most are internal error
-   * enums that never reach `closed_reason`. Derived 2026-09-16 the way the daemon's
-   * own clean-token test derives it — a reason reaches the wire only from a
-   * session-status construction or an end-session call in the coordinator and the
-   * daemon entry point, plus the two expiry-reason raw values the reaper passes —
-   * which gives ELEVEN. Five of them rendered "Session closed / This session has
-   * stopped." until this arm went in.
+   * ⚠️ THIS LIST IS A LOWER BOUND, NOT THE POPULATION, and the first version of
+   * this comment claimed otherwise. It said "eleven", derived by scanning literal
+   * arguments at the daemon's two known emit sinks. Adversarial review put the real
+   * figure at 28+ for the daemon alone: the scan could not see a value passed
+   * through a forwarding function (two of them terminate in those same sinks), and
+   * could not see a DEFAULT argument at all — a default appears at zero call sites,
+   * so no search of the calls can ever surface it, and one of them is used bare at
+   * about nine places.
    *
-   * ⚠️ It is HAND-MAINTAINED and cannot notice a twelfth on its own: this repo does
-   * not build the daemon, so nothing here can read its sources at test time. When a
-   * new reason is added over there, add it here. The cost of forgetting is one
-   * customer-visible blank sentence, not a red build, which is exactly why the
-   * derivation is written down above rather than left as folklore.
+   * So the guarantee here is one-directional and worth stating plainly: every token
+   * listed renders a real sentence. It does NOT say these are all of them.
+   *
+   * ⚠️ Nor can it. This repo does not build the daemon, so nothing here can read its
+   * sources at test time, and the vocabulary is not even one set — the panel is fed
+   * `preferTypedEndReason(errorEvent.code, closedReason)`, so it sees error codes
+   * and close reasons interleaved. When a new one is added over there, add it here.
+   * The cost of forgetting is one customer-visible blank sentence, not a red build.
    */
   const REACHABLE_CLOSED_REASONS = [
+    'archetype_not_supported',
     'browser_crashed',
     'browser_exited',
+    'control_plane_unreachable',
     'egress_lost',
     'idle_timeout',
     'intent_deadline_exceeded',
@@ -1364,6 +1375,9 @@ describe('AgentSessionPanel overlay UX', () => {
     'reaped_during_provisioning',
     'renderer_crashed',
     'session_resource_overuse',
+    'unknown_error',
+    'vpn_bringup_failed',
+    'vpn_bringup_no_active_state',
   ] as const;
 
   async function outcomeFor(reason: string): Promise<string> {

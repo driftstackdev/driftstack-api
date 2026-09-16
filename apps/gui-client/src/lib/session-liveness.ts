@@ -1,4 +1,5 @@
 import type { AgentSession } from '@driftstack/sdk';
+import { vpnBringupEndCopy } from './session-end-reason';
 
 /**
  * What the header pill should say about a chat session, and how it should look.
@@ -30,6 +31,20 @@ export interface SessionStateDescriptor {
  * contradicting it. We only ever let the beat OVERRULE `status` when the beat
  * is present, fresh, and has an actual state.
  */
+/**
+ * The tooltip sentence for an ended session — never the raw reason token.
+ *
+ * `lastPhase` is deliberately not threaded here: it refines exactly one code
+ * (`tunnel_setup_timeout`) and this surface is a hover title, not the recap
+ * overlay that owns that refinement. Passing null keeps the routeless sentence,
+ * which is the honest one when the phase is unknown.
+ */
+function endedTitle(reason: string | null): string {
+  if (reason === null) return 'This session has ended.';
+  const vpn = vpnBringupEndCopy(reason, null);
+  return vpn === undefined ? 'This session has ended.' : `${vpn.outcome}. ${vpn.explanation}`;
+}
+
 export function describeAgentSessionState(
   session: AgentSession | null,
   aiReady: boolean,
@@ -48,10 +63,25 @@ export function describeAgentSessionState(
     return {
       label: 'Ended',
       tone: 'ready',
-      title:
-        session.closed_reason === null
-          ? 'This session has ended.'
-          : `This session has ended: ${session.closed_reason}`,
+      // ⛔ THE RAW TOKEN USED TO GO STRAIGHT INTO THIS TOOLTIP. It read
+      // `This session has ended: ${session.closed_reason}`, so hovering the status
+      // pill on a real session showed a customer the literal internal string —
+      // "This session has ended: reaped_during_provisioning". Every other surface
+      // in this app maps the token to a sentence first and the recap overlay says
+      // in its own comment that unknown reasons may carry internal diagnostics and
+      // must never be reflected into the DOM. This one surface was interpolating it.
+      //
+      // The nine typed bring-up codes already have customer sentences in lib, so
+      // they are used here. Everything else gets the plain sentence rather than a
+      // token: losing a word of detail in a tooltip is cheaper than showing someone
+      // a string that means nothing to them and leaks how the thing is built.
+      //
+      // ⚠️ Deliberately NOT a second copy of the recap table. That table lives in a
+      // component and is not importable here, and duplicating it would leave two
+      // tables to update and one of them silently stale — the shape this very file
+      // header warns about. Consolidating both onto one exported selector is the
+      // real fix and is a separate change.
+      title: endedTitle(session.closed_reason),
     };
   }
 

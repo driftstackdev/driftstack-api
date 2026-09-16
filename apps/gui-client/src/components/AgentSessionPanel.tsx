@@ -322,20 +322,31 @@ function friendlySessionEndCopy(
       explanation: 'The browser running this session stopped unexpectedly.',
     };
   }
-  // ── The five reachable close reasons that used to reach the generic sentence.
+  // ── Reachable end reasons that used to reach the generic sentence.
   //
-  // POPULATION, derived 2026-09-16 the way the daemon's own W3188 test derives it
-  // rather than by grepping for tokens: a `reason` reaches `closed_reason` only
-  // from a session-status construction or an end-session call in the coordinator
-  // and the daemon entry point, plus the two expiry-reason raw values the reaper
-  // passes. That is ELEVEN values. A token-shaped grep of the same sources returns
-  // sixty-odd and is WRONG — most are internal error enums that never reach this
-  // field, and acting on that number would have meant writing customer copy for
-  // values no customer can receive.
+  // ⛔ THIS FUNCTION'S DOMAIN IS NOT `closed_reason`, and getting that wrong is
+  // what produced the near-miss below. Both call sites pass
+  // `preferTypedEndReason(errorEvent.code, closedReason)`, which hands over the
+  // ERROR-EVENT CODE unless the closed reason is one of the nine typed VPN codes.
+  // Those are two separate vocabularies. The prefix branches further down were
+  // written against the error-code one — which is exactly why `renderer_crashed`
+  // slips past `/^(launch_|render_|…)/`: it is a closed reason that never becomes
+  // an error code, so it was never in the vocabulary those prefixes were shaped
+  // for. Match whole tokens here; the prefixes cannot be trusted across the seam.
   //
-  // Six were already covered. These five fell through every branch to
-  // "Session closed / This session has stopped.", which tells a customer nothing
-  // and, for three of them, hides an errand they could act on.
+  // ⚠️ THE POPULATION IS A LOWER BOUND, NOT A SET, and an earlier version of this
+  // comment said "eleven" with a straight face. Adversarial review put it at 28+
+  // for the daemon alone. The derivation that produced eleven scanned literal
+  // arguments at the two known sinks and therefore could not see values passed
+  // through a forwarding function — `shutdownAll(reason:)` and
+  // `failVPNProvisionTail(reason:)` both terminate in those sinks — nor, worse,
+  // a DEFAULT argument, which appears at zero call sites and so is invisible to
+  // any search of the calls. `shutdownAll`'s default alone is used bare at about
+  // nine of them. Treat any list here as a subset and add to it.
+  //
+  // What follows is every value confirmed to reach the generic
+  // "Session closed / This session has stopped." — a sentence true of every ended
+  // session and useful about none.
   //
   // ⛔ `renderer_crashed` is the one to notice: it READS as though the
   // `/^(launch_|render_|…)/` branch below already catches it, and it does not —
@@ -383,10 +394,55 @@ function friendlySessionEndCopy(
     };
   }
   if (normalized === 'reaped_during_provisioning') {
+    // ⚠️ A FALLBACK, not the normal path — corrected after review. This value
+    // normally arrives classified as the error code `provisioning_interrupted`,
+    // which `preferTypedEndReason` prefers and which the branch below already
+    // covers. It reaches here only when no error event accompanied the close.
+    // Kept because that case is real and the sentence is right for it, but it is
+    // not the customer-visible defect the four above were.
     return {
       outcome: 'Stopped before it finished starting',
       explanation:
         'This session was still starting up when it was stopped, so it never became usable. Starting it again is the right next step.',
+    };
+  }
+  if (normalized === 'control_plane_unreachable') {
+    return {
+      outcome: 'Contact with the phone was lost',
+      explanation:
+        'We lost contact with the phone running this session, so it was stopped. This one is ours, not yours — starting a new session is the fix.',
+    };
+  }
+  if (normalized === 'vpn_bringup_failed' || normalized === 'vpn_bringup_no_active_state') {
+    // ⛔ NOT one of the nine typed bring-up codes, and that is the whole meaning
+    // of it: those nine each carry an errand, and this pair is what the device
+    // sends when it could NOT classify the failure. So the sentence must not
+    // guess a destination. Sending someone to their provider on an unclassified
+    // failure is the same unfalsifiable wrong instruction the renderer sentence
+    // above avoids.
+    return {
+      outcome: 'VPN connection could not be started',
+      explanation:
+        'The VPN for this session could not be brought up, and there was not enough detail to say whether that is the config or the endpoint. Trying again will often say more.',
+    };
+  }
+  if (normalized === 'archetype_not_supported') {
+    // Near-miss of the covered `archetype_lookup_failed`, and a different fact:
+    // the profile was found and names a device we cannot currently give them.
+    return {
+      outcome: 'This device is not available',
+      explanation:
+        'The iPhone model and iOS version this profile asks for are not available right now. Choosing another device for the profile will let it start.',
+    };
+  }
+  if (normalized === 'unknown_error') {
+    // The device's own "I do not know". It still beats the generic fallback,
+    // which says only that the session stopped — this at least says something
+    // went wrong, which is the part that tells a customer to retry.
+    return {
+      outcome: 'Session stopped unexpectedly',
+      explanation:
+        'Something went wrong and this session could not continue. Starting a new session usually clears it.',
     };
   }
   if (/^(proxy_|egress_)/.test(normalized) || normalized === 'network_shim_boot_failed') {
