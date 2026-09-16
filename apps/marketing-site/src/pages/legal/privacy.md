@@ -355,6 +355,65 @@ connection using DTLS-SRTP. LiveKit receives, processes, and forwards
 the media as a Sub-processor. Driftstack does not currently provide
 application-level end-to-end encryption through the SFU.
 
+### 3.12 Live network metadata (Network pane)
+
+**What:** the per-request metadata a Session's own browser reports for
+each resource it loads, rendered live in the Network pane of the GUI
+Client's session drawer: the request address (a URL, which can carry a
+query string), the HTTP method, the response status code, the
+negotiated wire protocol (HTTP/1.1, HTTP/2, HTTP/3) and ALPN token,
+the resource type and the initiator, the transferred size in bytes, a
+timestamp and the basis it was taken on, the load duration, and
+whether the response was served from cache.
+
+The entry format Driftstack validates and holds defines no request or
+response headers, no request or response bodies, and no cookies. Any
+other field a report carries is discarded when the entry is validated
+— before it is held, served, or logged — so headers, bodies, and
+cookies cannot be held or served even where a report sends them.
+
+**Why:** to render the Network pane, so Customer can see which
+requests an in-progress Session made and over which wire protocol.
+
+**Legal basis (GDPR Art 6):** Article 6(1)(b) — performance of the
+contract; the Network pane is a Service feature, populated by
+Customer's own Session.
+
+**Source:** reported by the browser running Customer's own Session.
+Driftstack accepts a report only from the fleet node that Session is
+running on, and only while that Session is live.
+
+**Retention:** live network metadata is **not stored**. Entries are
+held in the control-plane API server's memory only — never written to
+a database, to object storage, or to any store that outlives the
+server process, and never written to a log line. Driftstack's
+operational logs record identifiers, a status, counts, and the field
+name of a rejected row — never an address, and never any part of an
+entry. At most 2,000 entries are held for a Session, oldest evicted
+first, and at most 5,000 Sessions' entries at once, stalest evicted
+first. The read endpoint serves entries only while the Session is
+running and returns none once it is not. The entries themselves are
+discarded when the server process restarts, and a Session's entries
+are swept — on the next report the server receives — once 30 minutes
+have passed with no further report for that Session.
+
+**Recipients:** no additional Sub-processor. The reporting browser
+runs on the Mac mini fleet hosted by MacStadium and the entries are
+held in the control plane hosted by Hetzner, both listed in Section 7;
+nothing is sent to LiveKit, to Cloudflare R2, to the Postgres
+database, or to Redis. Entries are read back only over the
+owner-scoped network endpoint for that Session, which serves them to
+the account that owns the Session, to any account the Customer has
+given the admin role on that account's team, or to the single-Session
+control key the GUI Client holds for it, and to no one else.
+
+**Processor role:** Driftstack Processes live network metadata as
+**Processor on Customer's behalf** under the [DPA](/legal/dpa/), not
+as Controller, on the same footing as live-session media and API
+Capture requests.
+
+**Cookies:** none.
+
 ## 4. Special Category Data
 
 Driftstack does **not** intentionally collect Special Category Data
@@ -364,12 +423,13 @@ data, biometric data uniquely identifying a person, data concerning
 health, or data concerning sex life or sexual orientation).
 
 If Customer's automated browsing causes Special Category Data to
-pass through live-session media or an API Capture request, that data
-is Processed by Driftstack only as Processor on Customer's behalf
-under the DPA. A desktop-local recording may contain the same data,
-but that file remains on Customer's device and is not uploaded or
-retained by Driftstack. Customer is responsible for ensuring it has
-a lawful basis under Article 9(2) GDPR for processing such data.
+pass through live-session media, live network metadata, or an API
+Capture request, that data is Processed by Driftstack only as
+Processor on Customer's behalf under the DPA. A desktop-local
+recording may contain the same data, but that file remains on
+Customer's device and is not uploaded or retained by Driftstack.
+Customer is responsible for ensuring it has a lawful basis under
+Article 9(2) GDPR for processing such data.
 
 ## 5. Data we do not collect
 
@@ -463,19 +523,20 @@ the response observed during the Session.
 
 ## 9. Retention
 
-| Category                                            | Retention period                                                                                                                                                                                                                                         |
-| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Account data                                        | Duration of Subscription + 7 years post-termination (Article 52 _Algemene wet inzake rijksbelastingen_ — 7-year retention of administration).                                                                                                            |
-| Authentication data (hashed API keys, key metadata) | Until revocation; 90 days after revocation the record is anonymised — the key hash and key name are destroyed. The anonymised record is retained because audit and incident records reference it, so an audit entry can never point at a vanished actor. |
-| Session metadata                                    | 90 days operational; aggregated counters (no PII) retained indefinitely for capacity planning.                                                                                                                                                           |
-| Desktop-local recordings                            | Not uploaded to or retained by Driftstack; Customer controls retention and deletion on Customer's device.                                                                                                                                                |
-| API Capture artifacts                               | Returned inline to Customer; the Capture endpoint does not retain the response bytes.                                                                                                                                                                    |
-| Live-session media                                  | Not stored by Driftstack; streamed through LiveKit and dropped on session end.                                                                                                                                                                           |
-| Customer-Provided Secrets                           | Deleted within 30 days of Customer Account termination, or earlier on Customer's documented request.                                                                                                                                                     |
-| Profile metadata + Profile Snapshots                | Customer-controlled. Profile rows persist until Customer deletes them; Profile Snapshots (immutable point-in-time copies) persist until Customer deletes them. All deleted within 30 days of Customer Account termination.                               |
-| Billing data                                        | 7 years post-transaction (Dutch tax law, AWR Art 52).                                                                                                                                                                                                    |
-| Support correspondence                              | 3 years post-resolution.                                                                                                                                                                                                                                 |
-| Marketing-site access logs                          | 30 days.                                                                                                                                                                                                                                                 |
+| Category                                            | Retention period                                                                                                                                                                                                                                                        |
+| --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Account data                                        | Duration of Subscription + 7 years post-termination (Article 52 _Algemene wet inzake rijksbelastingen_ — 7-year retention of administration).                                                                                                                           |
+| Authentication data (hashed API keys, key metadata) | Until revocation; 90 days after revocation the record is anonymised — the key hash and key name are destroyed. The anonymised record is retained because audit and incident records reference it, so an audit entry can never point at a vanished actor.                |
+| Session metadata                                    | 90 days operational; aggregated counters (no PII) retained indefinitely for capacity planning.                                                                                                                                                                          |
+| Desktop-local recordings                            | Not uploaded to or retained by Driftstack; Customer controls retention and deletion on Customer's device.                                                                                                                                                               |
+| API Capture artifacts                               | Returned inline to Customer; the Capture endpoint does not retain the response bytes.                                                                                                                                                                                   |
+| Live-session media                                  | Not stored by Driftstack; streamed through LiveKit and dropped on session end.                                                                                                                                                                                          |
+| Live network metadata                               | Not stored by Driftstack; held in the API server's memory only, served only while the Session is running, and retained after the Session ends until swept — on the next report the server receives — once 30 idle minutes have passed, or discarded on process restart. |
+| Customer-Provided Secrets                           | Deleted within 30 days of Customer Account termination, or earlier on Customer's documented request.                                                                                                                                                                    |
+| Profile metadata + Profile Snapshots                | Customer-controlled. Profile rows persist until Customer deletes them; Profile Snapshots (immutable point-in-time copies) persist until Customer deletes them. All deleted within 30 days of Customer Account termination.                                              |
+| Billing data                                        | 7 years post-transaction (Dutch tax law, AWR Art 52).                                                                                                                                                                                                                   |
+| Support correspondence                              | 3 years post-resolution.                                                                                                                                                                                                                                                |
+| Marketing-site access logs                          | 30 days.                                                                                                                                                                                                                                                                |
 
 When the retention period for a category expires, Driftstack
 deletes the Personal Data or anonymises it (rendering it no longer

@@ -495,10 +495,28 @@ function publicAgentSession(
     //
     // `provisioningDetail` is non-null exactly while the node has reported a
     // provisioning step and not yet reported `active`: the relay clears it
-    // unconditionally on `active` and on every terminal status
-    // (CLEARING_STATUSES, session-provisioning-detail-relay.ts), serialised per
-    // session so a replayed pair cannot leave a stale token. So it is precisely
-    // the predicate for "not live yet", and reporting it costs the cap nothing.
+    // unconditionally on `active`, serialised per session so a replayed pair
+    // cannot leave a stale token. So it is precisely the predicate for "not
+    // live yet", and reporting it costs the cap nothing.
+    //
+    // ⛔ CORRECTED 2026-09-16 — this comment used to say the relay also clears
+    // on "every terminal status (CLEARING_STATUSES)". It does not, and the
+    // reason is one level up: fleet-control-registry.ts routes a frame to the
+    // provisioning consumer ONLY when its status is `provisioning` or `active`
+    // (terminal frames go to the separate close handler), so the relay's
+    // terminal branch is unreachable in production. A closed row therefore
+    // KEEPS its last step token.
+    //
+    // That is deliberate now rather than merely true: on 2026-09-16 the last
+    // step a session reached was the single most useful fact in diagnosing a
+    // customer's stuck VPN session, and clearing it on close would have thrown
+    // it away. It is safe to keep because this projection only rewrites the
+    // status while the row is `active` — a closed row reports `closed`, token
+    // or not.
+    //
+    // The correction matters more than the behaviour: a comment asserting the
+    // opposite of the code is what sends the next reader down a day-long path,
+    // and this file had one.
     status:
       rec.status === 'active' && rec.provisioningDetail !== null ? 'provisioning' : rec.status,
     closed_reason: rec.closedReason,

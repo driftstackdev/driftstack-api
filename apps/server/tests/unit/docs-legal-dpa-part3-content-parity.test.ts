@@ -43,14 +43,38 @@ describe('W575.C /docs/legal/dpa.md (part 3) content parity', () => {
     expect(body).toMatch(/URLs\)\./);
     expect(body).toMatch(/Content of pages browsed where transmitted through live-session/);
     expect(body).toMatch(/media or returned inline as an API Capture artifact\./);
+    // T-9 2026-09-16 — the Network pane's category. Privacy Policy §3.12
+    // asserts Driftstack Processes live network metadata as Processor under
+    // THIS instrument, so Annex 1 has to describe it; an Annex that enumerates
+    // only the two older content-bearing routes leaves the two documents
+    // disagreeing on the same Article 28(3)(a) question. Whitespace-tolerant
+    // (\s+) throughout: the wrap point is Prettier's, not the author's.
+    expect(body).toMatch(
+      /-\s+Request\s+metadata\s+for\s+the\s+resources\s+a\s+Session's\s+browser\s+loads/,
+    );
+    expect(body).toMatch(
+      /the\s+request\s+address,\s+which\s+can\s+carry\s+a\s+query\s+string,\s+the\s+HTTP\s+method,\s+the\s+response\s+status,\s+the\s+negotiated\s+wire\s+protocol,\s+timing,\s+and\s+transferred\s+size/,
+    );
+    expect(body).toMatch(
+      /held\s+in\s+the\s+control\s+plane's\s+memory\s+only\s+while\s+the\s+Network\s+pane\s+can\s+serve\s+it\./,
+    );
+    expect(body).toMatch(/No\s+request\s+or\s+response\s+headers,?\s+bodies,?\s+or\s+cookies\./);
     expect(body).toMatch(/3\. \*\*Customer-Provided Secrets\*\*: credentials Customer supplies/);
     expect(body).toMatch(/\(proxy auth, captcha API keys, email credentials, SMS API keys\)\./);
     expect(body).toMatch(/### Special categories/);
     expect(body).toMatch(/Driftstack does \*\*not\*\* intentionally Process Special Category Data/);
     expect(body).toMatch(/under Article 9 GDPR\./);
     expect(body).toMatch(/Where Customer's automated browsing causes/);
-    expect(body).toMatch(/such data to pass through live-session media or an API Capture/);
-    expect(body).toMatch(/request, Customer is responsible for the underlying Article 9 lawful/);
+    // T-9 2026-09-16 — three routes, not two. The Privacy Policy §4 list gained
+    // `live network metadata` when the Network pane's category was disclosed;
+    // this sentence is its DPA counterpart and has to move with it. \s+ between
+    // every word so a re-wrap cannot red a document nobody edited.
+    expect(body).toMatch(
+      /such\s+data\s+to\s+pass\s+through\s+live-session\s+media,\s+live\s+network\s+metadata,\s+or\s+an\s+API\s+Capture\s+request,\s+Customer\s+is\s+responsible\s+for\s+the\s+underlying\s+Article\s+9\s+lawful\s+basis\./,
+    );
+    expect(body).not.toMatch(
+      /pass\s+through\s+live-session\s+media\s+or\s+an\s+API\s+Capture\s+request/,
+    );
     expect(body).toMatch(/desktop-local recording may contain the same data/);
     expect(body).toMatch(/not uploaded to or retained by/);
     expect(body).toMatch(/### Processing operations/);

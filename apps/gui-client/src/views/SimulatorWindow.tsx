@@ -1033,16 +1033,93 @@ export function visibleSimDrawerPanes(state: {
 }
 
 /**
- * How many times a session looks for its first reported request while the Network
- * section is withheld (see the discovery poll in SimulatorWindow).
+ * How many times a session looks for its first reported request IN THE OPENING
+ * BURST, while the Network section is withheld (see the discovery poll in
+ * SimulatorWindow).
  *
  * A withheld section must not cost more than the closed pane it replaced cost
  * before it was withheld — which was nothing. The route cannot tell a client
  * "there will never be one here" on any deployment that can run a session, so a
- * budget, not a route answer, is what makes discovery terminate. Exported so the
- * bound is pinned as a number rather than inferred from a timer.
+ * budget, not a route answer, is what keeps the FAST looking bounded. Exported so
+ * the bound is pinned as a number rather than inferred from a timer.
+ *
+ * ⛔ THIS IS THE END OF THE BURST, NOT THE END OF DISCOVERY. It used to be both,
+ * and that made the section permanently unrevealable about 13 minutes into a
+ * session that was still running: a customer who reads quietly for a quarter of an
+ * hour and then loads a page got no pane at all for the rest of the session, while
+ * the store was perfectly willing to serve the entries. After the burst, discovery
+ * drops to NETWORK_DISCOVERY_HEARTBEAT_MS and keeps looking for as long as the
+ * session is live.
  */
 export const NETWORK_DISCOVERY_MAX_LOOKS = 8;
+
+/**
+ * The cadence discovery settles at once the opening burst is spent: ONE look every
+ * 15 minutes, indefinitely, while the session is live.
+ *
+ * WHAT IT COSTS — the number is written down because the cost is the entire reason
+ * a budget exists at all:
+ *   • steady state: 3_600_000 / 900_000 = 4 authenticated requests per hour, per
+ *     open simulator window (NETWORK_DISCOVERY_IDLE_LOOKS_PER_HOUR).
+ *   • AN IDLE 8-HOUR SESSION: 8 burst looks (t = 0, 60, 180, 300, 420, 540, 660,
+ *     780 s) + floor((28800 − 780) / 900) = 31 heartbeats = 39 requests in 8 hours
+ *     — 4.875/hour averaged over the session, 4/hour after the first hour.
+ * For scale, the unbounded poll this whole budget was introduced to kill ran at its
+ * 120 s cap forever: 30 requests/hour, 240 in those same 8 hours. So the burst
+ * keeps the fast looking where a first request actually lands (a browser session
+ * that reports at all reports on its first page load), and the heartbeat makes "the
+ * section appears when the first request arrives" true for the WHOLE session
+ * instead of only for its first 13 minutes, at an eighth of the old idle cost.
+ *
+ * What a 15-minute heartbeat buys that with is reveal LATENCY: a first request at
+ * minute 20 is seen by the look at minute 28, not at minute 20. That trade is
+ * deliberate — latency on a session that has been quiet for a quarter of an hour is
+ * cheap, a permanent dead end is not. Cutting the latency means revealing on a
+ * signal that ALREADY flows (a page_state navigation could re-arm the burst at zero
+ * idle cost, since an idle session never navigates); that is a change to a shared
+ * poll and is not smuggled in here.
+ *
+ * ⛔ AND IT BUYS IT WITH A SECOND THING, WHICH IS NOT LATENCY. Pre-reveal this poll
+ * is the only reader copying the session's rows off the server, and the server ring
+ * is bounded: NETWORK_LOG_RING_MAX_ENTRIES = 2000 rows per session, evicted
+ * OLDEST-FIRST with no marker on the wire (session-network-log-store.ts). A
+ * 7.5x slower reader is a 7.5x wider drain window: the ring holds 2000 rows whatever
+ * the gap, so what changes is how many a session may PRODUCE before this poll copies
+ * them off. Above 2000 / 900 = ~2.2 requests/second the earliest are evicted before
+ * any look sees them and are missing from the pane's very FIRST page — where the
+ * 120 s cadence tolerated ~16.7/s. A page-loading
+ * session can sit above 2.2/s. It is invisible on both sides: entries reach the
+ * client with no seq (only the opaque `next_after` cursor), so neither the feed
+ * store nor the pane can notice a gap, let alone say so. Written down because it is
+ * a real cost of this constant and nothing else in the code states it.
+ *
+ * ⛔ AND IT DEPENDS ON A CONSTANT IN ANOTHER PROCESS: this must stay well under the
+ * server's NETWORK_LOG_SESSION_TTL_MS (30 min), or the reveal it promises is not
+ * reachable at all. A quiet session that reports ONE request and then goes silent
+ * has its whole ring dropped once its last append is older than that TTL (swept on
+ * the next append by any session); if the heartbeat ever exceeded it — or the TTL
+ * were lowered, a plausible tuning on an in-memory store — that single reported
+ * request would be gone before the next look landed, and the section would never be
+ * offered for the rest of the session, with no error on either side. 900 s against
+ * 1800 s is safe by 2x today, and the pair is pinned by apps/gui-client/tests/unit/
+ * a-discovery-heartbeat-longer-than-the-server-ttl-never-reveals.test.ts rather than
+ * left to whoever edits one file to remember the other.
+ */
+export const NETWORK_DISCOVERY_HEARTBEAT_MS = 900_000;
+
+/**
+ * The documented steady-state idle cost above, as a number a guard can pin rather
+ * than re-derive: 3_600_000 / NETWORK_DISCOVERY_HEARTBEAT_MS.
+ */
+export const NETWORK_DISCOVERY_IDLE_LOOKS_PER_HOUR = 4;
+
+/**
+ * The opening burst's FIRST gap, doubling to a 120 s cap from there. Named rather
+ * than written inline because the discovery ramp is now carried across effect
+ * re-runs in a ref, and the ref's initial value and the effect's seed have to be
+ * the same number or a re-run before the first look would change the cadence.
+ */
+const NETWORK_DISCOVERY_BASE_MS = 30_000;
 
 interface SessionQuery {
   info: LiveKitInfo | null;
@@ -7231,51 +7308,74 @@ export function SimulatorWindow(): JSX.Element {
   // appear until a producer that does not exist yet ships. Before the rail change a
   // closed pane cost zero requests; the withheld section must not cost more.
   //
-  // Two refs, both per SESSION and both surviving effect re-runs (the effect's deps
+  // Three refs, all per SESSION and all surviving effect re-runs (the effect's deps
   // include controlAuth/room/sessionEnded, so an effect-body `let` is reset by a
-  // control-key load or a room bind and "stops for good" is not true of it):
-  //   • looksLeft — a hard budget. Whatever the route answers, discovery gives up
-  //     after this many looks. This is the only stop that does not depend on the
-  //     route telling us something it currently cannot.
-  //   • stopped — latched early on a definitive "switched off here" (below), and by
-  //     the budget running out.
-  // The budget buys ~13 minutes of watching from window open (60s, then 120s a
-  // look), which covers the realistic reveal: a browser session that reports
-  // requests at all reports its first one on its first page load. A session whose
-  // first request lands after that keeps every receiving part wired but will not
-  // reveal the section on its own — the honest fix for that is a capability flag on
-  // the session's capabilityReport (which this window already polls, at no extra
-  // request cost), and that needs the control plane to publish one. Noted, not
-  // guessed at here.
-  const networkDiscoveryStoppedRef = useRef(false);
+  // control-key load or a room bind and "holds for the session" is not true of it):
+  //   • looksLeft — the BURST budget. Whatever the route answers, the fast looking
+  //     ends after this many looks. It bounds the RATE; it does not end discovery.
+  //   • burstSpent — latched when that budget runs out. From then on every quiet
+  //     answer schedules the next look one NETWORK_DISCOVERY_HEARTBEAT_MS out
+  //     (15 min → 4 requests/hour idle; the full arithmetic is on that constant).
+  //   • offHere — the one TERMINAL latch, and the only one: a typed
+  //     feature-unavailable 503 (below), i.e. the deployment stating the route is
+  //     switched off. Nothing else may stop discovery for a live session.
+  //   • lastLookAt — WHEN the last discovery request went out (null = none yet).
+  //     The documented rate is a claim about elapsed time; without this the effect
+  //     could only count looks per run, and a re-run started a fresh one.
+  //   • backoff — the ramp itself, so a re-run RESUMES the cadence at the point the
+  //     clock has reached instead of restarting the burst at 30 s.
+  //
+  // ⛔ THE BUDGET USED TO BE TERMINAL AND THAT WAS A DEFECT OF MINE (2026-09-16).
+  // The burst buys ~13 minutes of fast watching from window open (60 s, then 120 s a
+  // look), which covers the realistic reveal — a browser session that reports
+  // requests at all reports its first one on its first page load. But a session
+  // whose first request lands LATER is not a session that will never report one: a
+  // customer who browses quietly for a quarter of an hour and then loads a page was
+  // handed a window in which the section could never appear again, with every
+  // receiving part still wired and the store still willing to serve. The heartbeat
+  // keeps a live session's reveal reachable at ANY point in its life, and the burst
+  // still stops, so an empty deployment never polls forever at a high rate.
+  const networkDiscoveryOffHereRef = useRef(false);
+  const networkDiscoveryBurstSpentRef = useRef(false);
   const networkDiscoveryLooksLeftRef = useRef(NETWORK_DISCOVERY_MAX_LOOKS);
+  const networkDiscoveryLastLookAtRef = useRef<number | null>(null);
+  const networkDiscoveryBackoffRef = useRef(NETWORK_DISCOVERY_BASE_MS);
   // A session swap in place (the 'ds-session' relaunch listener changes sessionId
   // WITHOUT a remount) starts a session that has reported nothing of its own, so
   // the entry has to go away again — the latch is per SESSION, not per window.
   // The discovery refs reset with it, for the same reason: the new session gets its
-  // own budget and its own verdict, not the previous session's exhausted one.
+  // own burst, its own cadence and its own verdict, not the previous session's
+  // spent budget — a swapped-in session that starts life on the heartbeat would
+  // take up to 15 minutes to reveal a section its very first page load earned.
   useEffect(() => {
     setNetworkEverReported(false);
-    networkDiscoveryStoppedRef.current = false;
+    networkDiscoveryOffHereRef.current = false;
+    networkDiscoveryBurstSpentRef.current = false;
     networkDiscoveryLooksLeftRef.current = NETWORK_DISCOVERY_MAX_LOOKS;
+    networkDiscoveryLastLookAtRef.current = null;
+    networkDiscoveryBackoffRef.current = NETWORK_DISCOVERY_BASE_MS;
   }, [sessionId]);
   useEffect(() => {
     // Two cadences, one poll. While the Network pane is the active section this is
     // the live feed (3s, perf twin of cookies). While the section is not yet
     // OFFERED it is a DISCOVERY poll instead: something has to look, or the entry
     // could never appear and "it shows up when the first request arrives" would be
-    // a route with no reader. Discovery is deliberately slow, silent and BOUNDED —
-    // it backs off on every quiet answer, writes no note/refreshing state, and
-    // spends a per-session budget of looks (NETWORK_DISCOVERY_MAX_LOOKS) rather
-    // than polling for the session's whole life. Once the section IS offered and
-    // closed, polling stops exactly as it used to.
+    // a route with no reader. Discovery is deliberately slow and silent — it writes
+    // no note/refreshing state and backs off on every quiet answer — and its RATE is
+    // bounded in two stages: a burst of NETWORK_DISCOVERY_MAX_LOOKS looks that ends
+    // ~13 minutes in, then one look every NETWORK_DISCOVERY_HEARTBEAT_MS for as long
+    // as the session lives (4 requests/hour idle; see that constant for the full
+    // 8-hour arithmetic). Once the section IS offered and closed, polling stops
+    // exactly as it used to.
     const discovering = !networkPaneActive && !networkEverReported;
     if (!networkPaneActive && !discovering) return;
-    // Discovery already reached its verdict for this session (budget spent, or the
-    // deployment said the feature is switched off). Re-running the effect — a
-    // control-key load, a room bind — must not buy it a fresh start; that is what
-    // made "stops for good" false when this was an effect-body local.
-    if (discovering && networkDiscoveryStoppedRef.current) return;
+    // The deployment said the feature is switched off here — the one verdict that
+    // ends discovery. Re-running the effect (a control-key load, a room bind) must
+    // not buy it a fresh start; that is what made "holds for the session" false when
+    // this was an effect-body local. ⛔ A SPENT BURST IS NOT A VERDICT: it changes
+    // the cadence below, it does not land here, or a live session that reports its
+    // first request at minute 20 could never show the section again.
+    if (discovering && networkDiscoveryOffHereRef.current) return;
     if (sessionId === '' || room === null) return;
     // Terminal session: stop polling the dead session and show an honest note
     // (twin of the cookies terminal branch). Reset drops the list AND the cursor
@@ -7290,14 +7390,42 @@ export function SimulatorWindow(): JSX.Element {
     // Self-scheduling poll with exponential backoff — the next tick is scheduled
     // only inside .finally, so requests never overlap (twin of the cookies poll).
     let cancelled = false;
-    const baseMs = discovering ? 30000 : 3000;
+    const baseMs = discovering ? NETWORK_DISCOVERY_BASE_MS : 3000;
     const capMs = discovering ? 120000 : 30000;
-    let backoff = baseMs;
+    // ⛔ DISCOVERY'S RAMP SURVIVES AN EFFECT RE-RUN. `backoff` is an effect-body
+    // `let`, so a re-run (a control-key load, a transport rebuild) used to re-seed
+    // discovery at 30 s however far the ramp had already got — which both spent the
+    // burst faster than the documented timeline and, after it, put the next look
+    // 30 s out instead of a heartbeat. The live feed keeps the plain seed: at 3 s a
+    // re-run costs nothing and refreshing a VISIBLE pane on a new transport is the
+    // wanted behaviour.
+    // A SPENT BURST IS ALWAYS THE HEARTBEAT — reading that latch rather than the
+    // carried value also covers the re-run that races an in-flight look, whose
+    // cancelled tick never reaches `quieter` to record the drop to the heartbeat.
+    let backoff = !discovering
+      ? baseMs
+      : networkDiscoveryBurstSpentRef.current
+        ? NETWORK_DISCOVERY_HEARTBEAT_MS
+        : networkDiscoveryBackoffRef.current;
     // A quiet answer slows the next look down. Discovery treats a HEALTHY BUT EMPTY
     // page as quiet too: it is waiting for a rare first request, not tailing a feed,
     // so it settles to one look every couple of minutes instead of every 3s.
     const quieter = (): void => {
-      backoff = Math.min(backoff * 2, capMs);
+      // Discovery past its burst: drop straight to the heartbeat and STAY there, so
+      // the idle rate is exactly 3_600_000 / NETWORK_DISCOVERY_HEARTBEAT_MS = 4
+      // looks per hour rather than a doubling ramp that would spend 5 in the
+      // transitional hour. This is the branch that keeps a live session revealable
+      // for its whole life; deleting it leaves the poll running at the 120 s burst
+      // cap forever, which is the 30/hour poll the budget exists to prevent.
+      if (discovering && networkDiscoveryBurstSpentRef.current) {
+        backoff = NETWORK_DISCOVERY_HEARTBEAT_MS;
+      } else {
+        backoff = Math.min(backoff * 2, capMs);
+      }
+      // Carry it on the SESSION so the next effect re-run resumes the cadence here
+      // (see the seed above). Written on every discovery answer, quiet or failed —
+      // every path that changes discovery's backoff goes through this function.
+      if (discovering) networkDiscoveryBackoffRef.current = backoff;
     };
     let handle: ReturnType<typeof setTimeout> | null = null;
     const tick = (): void => {
@@ -7305,10 +7433,15 @@ export function SimulatorWindow(): JSX.Element {
         // Spend one look BEFORE the request goes out, so the budget counts requests
         // actually issued whatever the answer is — a flapping gateway costs the same
         // as a healthy empty page. The result of THIS look is still processed in
-        // full (a reveal on the last look still reveals); only the reschedule in
-        // .finally is what the latch suppresses.
+        // full (a reveal on the last burst look still reveals); the latch only
+        // changes what the reschedule in .finally waits.
+        // WHEN this look went out, stamped beside the budget it spends and for the
+        // same reason: the next effect run has to know how much of the current gap
+        // is already elapsed, or it would issue a look the moment it mounts.
+        // Stamped at ISSUE, not at answer — a rate bound is about requests leaving.
+        networkDiscoveryLastLookAtRef.current = Date.now();
         networkDiscoveryLooksLeftRef.current -= 1;
-        if (networkDiscoveryLooksLeftRef.current <= 0) networkDiscoveryStoppedRef.current = true;
+        if (networkDiscoveryLooksLeftRef.current <= 0) networkDiscoveryBurstSpentRef.current = true;
       } else setNetworkRefreshing(true);
       void fetchAgentSessionNetwork(sessionId, networkStore.getCursor(), controlAuth)
         .then((page) => {
@@ -7363,7 +7496,7 @@ export function SimulatorWindow(): JSX.Element {
             // fetch puts in `kind`, while a non-JSON gateway body lands on
             // 'unknown'. Only the typed one is a statement about the deployment.
             if (status === 503 && err instanceof AgentSessionControlError) {
-              if (err.kind === 'feature-unavailable') networkDiscoveryStoppedRef.current = true;
+              if (err.kind === 'feature-unavailable') networkDiscoveryOffHereRef.current = true;
               else quieter();
             } else quieter();
             return;
@@ -7391,15 +7524,41 @@ export function SimulatorWindow(): JSX.Element {
         })
         .finally(() => {
           if (cancelled) return;
-          // The discovery latch (budget spent, or a typed feature-unavailable) is
-          // what makes the poll terminate; it is a ref, so it also holds across an
-          // effect re-run rather than only until the next dep change.
-          if (discovering && networkDiscoveryStoppedRef.current) return;
+          // The one terminal latch (a typed feature-unavailable) is what makes the
+          // poll stop; it is a ref, so it also holds across an effect re-run rather
+          // than only until the next dep change. Everything else reschedules — at
+          // the burst cadence while the budget lasts, at the heartbeat after — so a
+          // live session never loses the ability to reveal the section.
+          if (discovering && networkDiscoveryOffHereRef.current) return;
           if (!discovering) setNetworkRefreshing(false);
           handle = setTimeout(tick, backoff);
         });
     };
-    tick();
+    // ⛔ THE FIRST LOOK OF AN EFFECT RUN IS RATE-BOUND, NOT FREE. This was a bare
+    // `tick()`, which made the documented cadence a property of HOW MANY TIMES THIS
+    // EFFECT RAN rather than of elapsed time — and the deps below include `room`,
+    // whose identity changes on every transport rebuild. AgentSessionPanel rebuilds
+    // the Room by ITSELF on an unexpected drop (auto-reconnect via `retryNonce`) and
+    // on the freeze driver's 'rebuild' escalation, neither of them anything the
+    // customer did, so a flaky link re-ran this effect on its own schedule and every
+    // re-run issued an immediate, un-throttled look with no memory of when the last
+    // one went out. MEASURED before this went in: one rebind bought an extra look at
+    // zero delay, ten rebinds two minutes apart sustained 30 looks/hour — exactly the
+    // rate the budget exists to kill — and three rebinds in the opening 30 s spent the
+    // whole burst by minute 7, leaving the session's first page load waiting up to a
+    // quarter of an hour for a heartbeat.
+    //
+    // A session that has never looked (`lastLookAt === null`) is due NOW, so a mount
+    // still looks immediately; so does the live feed, whose first arm keeps the old
+    // behaviour deliberately. `Math.min(backoff, …)` bounds a BACKWARDS system-clock
+    // jump to one interval rather than letting it park the next look indefinitely.
+    const lastLookAt = networkDiscoveryLastLookAtRef.current;
+    const dueInMs =
+      !discovering || lastLookAt === null
+        ? 0
+        : Math.min(backoff, Math.max(0, backoff - (Date.now() - lastLookAt)));
+    if (dueInMs === 0) tick();
+    else handle = setTimeout(tick, dueInMs);
     return () => {
       cancelled = true;
       if (handle !== null) clearTimeout(handle);

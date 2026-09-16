@@ -38,6 +38,21 @@ export interface SessionProvisioningDetailRelayDeps {
   readonly logger?: Logger | null;
 }
 
+/**
+ * Statuses whose frame CLEARS the step token.
+ *
+ * ⚠️ Only `active` is reachable in production, and a reader should know that
+ * here rather than discover it at the call site: fleet-control-registry.ts
+ * hands a frame to this relay ONLY when its status is `provisioning` or
+ * `active` — terminal frames go to the separate session-close handler — so the
+ * three terminal members below are defensive, not live. A closed row keeps the
+ * last step it reached, which on 2026-09-16 was the most useful fact available
+ * when diagnosing a customer's stuck session.
+ *
+ * They stay in the set because this function is also called directly by tests
+ * and could be wired to terminal frames later; removing them would make that
+ * wiring silently leave stale tokens.
+ */
 const CLEARING_STATUSES = new Set(['active', 'ended', 'errored', 'closed']);
 
 export async function handleSessionProvisioningDetail(

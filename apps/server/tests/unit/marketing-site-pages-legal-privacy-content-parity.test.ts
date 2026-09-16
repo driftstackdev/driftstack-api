@@ -5,8 +5,9 @@
 // Processor split that the DPA cross-reference rests on.
 //
 //   • Version 1.1 effective 2026-07-17 + Driftstack B.V. Dutch entity.
-//   • 11 data-category sections (3.1–3.11), including status data,
-//     double-opt-in subscriptions, and opt-in live-session media.
+//   • 12 data-category sections (3.1–3.12), including status data,
+//     double-opt-in subscriptions, opt-in live-session media, and the
+//     in-memory live network metadata behind the Network pane.
 //   • 'do not collect' 4-no-list: no sale / no behavioural-advertising
 //     /no Customer-Connected-cross-Customer / no ML-training without
 //     consent.
@@ -123,6 +124,39 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
     expect(body).toMatch(/DTLS-SRTP/);
   });
 
+  it('Section 3.12 live network metadata is disclosed as in-memory, owner-scoped (owning account + team admins), swept by TTL rather than at session end, and headerless/bodiless/cookieless in the entry format that is validated and held', () => {
+    expect(body).toMatch(/### 3\.12 Live network metadata \(Network pane\)/);
+    expect(body).toMatch(/\*\*Retention:\*\* live network metadata is \*\*not stored\*\*\./);
+    expect(body).toMatch(
+      /held\s+in\s+the\s+control-plane\s+API\s+server's\s+memory\s+only\s+—\s+never\s+written\s+to\s+a\s+database/,
+    );
+    // Bounded to the ENTRY format the relay validates, not to the wire: the
+    // frame schema is `z.array(z.unknown())`, so a report CAN carry extra keys
+    // and the per-entry safeParse is what discards them.
+    expect(body).toMatch(
+      /The\s+entry\s+format\s+Driftstack\s+validates\s+and\s+holds\s+defines\s+no\s+request\s+or\s+response\s+headers,\s+no\s+request\s+or\s+response\s+bodies,\s+and\s+no\s+cookies\./,
+    );
+    expect(body).toMatch(
+      /Any\s+other\s+field\s+a\s+report\s+carries\s+is\s+discarded\s+when\s+the\s+entry\s+is\s+validated/,
+    );
+    expect(body).not.toMatch(
+      /The\s+wire\s+format\s+carries\s+no\s+request\s+or\s+response\s+headers/,
+    );
+    expect(body).toMatch(/serves\s+them\s+to\s+the\s+account\s+that\s+owns\s+the\s+Session/);
+    // "and to no one else" is an absolute, so the sentence has to name every
+    // reachable path. `callerCanAccessAgentSession` admits a DIFFERENT account
+    // holding an admin-role membership on the owner's team.
+    expect(body).toMatch(
+      /to\s+any\s+account\s+the\s+Customer\s+has\s+given\s+the\s+admin\s+role\s+on\s+that\s+account's\s+team/,
+    );
+    expect(body).not.toMatch(/for\s+the\s+life\s+of\s+the\s+Session\s+only/);
+    // §4's Special-Category route list has to name it too: a request address is
+    // a route by which Article 9 data can reach Driftstack.
+    expect(body).toMatch(
+      /pass\s+through\s+live-session\s+media,\s+live\s+network\s+metadata,\s+or\s+an\s+API\s+Capture\s+request/,
+    );
+  });
+
   it("Section 5 'do not collect' 4-no commitment: no-sale + no-behavioural-advertising-beyond-operation + no-Customer-Connected-cross-Customer-combination + no-ML-training-without-consent — pinned so the 4-promise-of-restraint commitment survives (drift to dropping 'no ML training' would let bundled-LLM data slip into training; drift to dropping 'no sale' would weaken the most-frequently-asked privacy commitment)", () => {
     expect(body).toMatch(/Sell Personal Data to third parties\./);
     expect(body).toMatch(
@@ -206,6 +240,15 @@ describe('W506.A apps/marketing-site/src/pages/legal/privacy.md content parity',
     );
     expect(body).toMatch(/API Capture artifacts\s*\|\s*Returned inline to Customer/);
     expect(body).toMatch(/Live-session media\s*\|\s*Not stored by Driftstack/);
+    // ⛔ NOT "for the life of the Session only". Nothing drops a Session's ring
+    // at terminal-close (`SessionNetworkLogStore.delete()` is never called in
+    // src; the only eviction is the TTL sweep inside `append()`), so entries
+    // outlive the Session until that sweep or a restart. The §3.12 body always
+    // said so; this table is the half read as operative and has to match it.
+    expect(body).toMatch(
+      /Live\s+network\s+metadata\s+\|\s+Not\s+stored\s+by\s+Driftstack;\s+held\s+in\s+the\s+API\s+server's\s+memory\s+only,\s+served\s+only\s+while\s+the\s+Session\s+is\s+running,\s+and\s+retained\s+after\s+the\s+Session\s+ends\s+until\s+swept/,
+    );
+    expect(body).not.toMatch(/for\s+the\s+life\s+of\s+the\s+Session\s+only/);
     expect(body).toMatch(/Profile metadata \+ Profile Snapshots/);
     expect(body).toMatch(/persist until Customer deletes them/);
     expect(body).toMatch(/within 30 days of Customer Account termination/);

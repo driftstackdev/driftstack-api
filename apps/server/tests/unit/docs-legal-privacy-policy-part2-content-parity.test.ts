@@ -39,12 +39,19 @@ describe('W577.B /docs/legal/privacy-policy.md (part 2) content parity', () => {
     expect(body).toMatch(/data, biometric data uniquely identifying a person, data concerning/);
     expect(body).toMatch(/health, or data concerning sex life or sexual orientation\)\./);
     expect(body).toMatch(/If Customer's automated browsing causes Special Category Data to/);
-    expect(body).toMatch(/pass through live-session media or an API Capture request, that data/);
-    expect(body).toMatch(/is Processed by Driftstack only as Processor on Customer's behalf/);
-    expect(body).toMatch(/desktop-local recording may contain the same data/);
+    // T-9 2026-09-16 — the §4 route list gained `live network metadata` when the
+    // Network pane's producer was about to be switched on: a request address is a
+    // route by which Article 9 data can reach Driftstack, so leaving the list at
+    // two routes would have understated it. \s*-joined because the wrap point
+    // moved here and the pre-commit re-wrapper can move it again.
+    expect(body).toMatch(
+      /pass\s+through\s+live-session\s+media,\s+live\s+network\s+metadata,\s+or\s+an\s+API\s+Capture\s+request,\s+that\s+data/,
+    );
+    expect(body).toMatch(/is Processed by Driftstack only as\s*Processor on Customer's behalf/);
+    expect(body).toMatch(/desktop-local\s*recording may contain the same data/);
     expect(body).toMatch(/not uploaded or/);
-    expect(body).toMatch(/retained by Driftstack\. Customer is responsible/);
-    expect(body).toMatch(/lawful basis under Article 9\(2\)/);
+    expect(body).toMatch(/retained by Driftstack\.\s*Customer is responsible/);
+    expect(body).toMatch(/lawful basis under\s*Article 9\(2\)/);
     expect(body).toMatch(/GDPR for processing such data\./);
   });
 

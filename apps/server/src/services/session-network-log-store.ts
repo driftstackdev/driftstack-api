@@ -57,7 +57,19 @@ export interface SessionNetworkLog {
 /** Idle-session eviction window. A session whose frames stop arriving is swept
  *  on the next append after this long. Generous (a live pane may sit idle while
  *  the user reads a page) but bounded so a dead session cannot be retained
- *  forever. Injectable via the constructor for deterministic tests. */
+ *  forever. Injectable via the constructor for deterministic tests.
+ *
+ *  ⛔ A CLIENT CONSTANT DEPENDS ON THIS ONE. The desktop window withholds its
+ *  Network section until the session reports a request and looks for that first
+ *  report every NETWORK_DISCOVERY_HEARTBEAT_MS (900 s, SimulatorWindow.tsx). A
+ *  session that reports ONE request and goes quiet has its ring swept here once
+ *  its last append is this old — so if that heartbeat ever grew past this TTL, or
+ *  this TTL were lowered under it, the one reported request would be swept before
+ *  the client's next look and the section would never be offered for the rest of a
+ *  live session, with no error on either side. Lowering this is therefore a
+ *  CROSS-PROCESS change, not a local memory-hygiene tweak; the inequality is
+ *  pinned in apps/gui-client/tests/unit/
+ *  a-discovery-heartbeat-longer-than-the-server-ttl-never-reveals.test.ts. */
 export const NETWORK_LOG_SESSION_TTL_MS = 30 * 60 * 1000;
 
 export class SessionNetworkLogStore {

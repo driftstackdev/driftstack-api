@@ -11,6 +11,8 @@
 //     2026-05-08 (V-352b + V-313 + V-306a + V-308a + V-297 + V-327) +
 //     2026-05-09 (V-353 + V-359 + V-298a + V-352b cycle).
 //   • Privacy Policy §15 anchors customer-readable update entries.
+//   • 2026-09-16 (T-9 live network metadata) — the entry required by the rule
+//     this same file states, for the §3.12 / §4 / §9 change.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -48,6 +50,30 @@ describe('W574.A /docs/legal/changes-log.md content parity', () => {
     expect(body).toMatch(/When the next material revision ships, the \*\*Privacy Policy Section/);
     expect(body).toMatch(/15\*\* "Updates to this Privacy Policy" gets a new dated entry that/);
     expect(body).toMatch(/references the corresponding rows in this log\./);
+  });
+
+  it('2026-09-16 T-9 live-network-metadata entry exists and records the version decision it did NOT make. The file above states the rule ("Each entry MUST be added in the same commit that makes the legal change"); an entry-less privacy edit satisfies every content pin in this file while breaking the one rule the file is for.', () => {
+    expect(body).toMatch(/## 2026-09-16 — T-9 live network metadata \(Network pane\) disclosure/);
+    expect(body).toMatch(/\*\*Privacy Policy §3\.12 \(new\):\*\*/);
+    expect(body).toMatch(/\*\*Privacy Policy §4 \(Special Category Data\):\*\*/);
+    expect(body).toMatch(/\*\*Privacy Policy §9 \(retention schedule\):\*\*/);
+    // The version decision is the half a reader of the policy cannot see: the
+    // header still says v1.1 / 2026-07-17, so the log has to say why, and has to
+    // say that re-acceptance fires anyway. Dropping this sentence would leave a
+    // changed document silently published under an unchanged version string.
+    expect(body).toMatch(/\*\*Version \/ effective date:\*\* UNCHANGED at v1\.1 \/ 2026-07-17\./);
+    expect(body).toMatch(/`content_hash_changed`/);
+    // This bullet used to read "**Still open:** the DPA carries the same
+    // Special-Category-Data route sentence … and both have the same gap".
+    // Disclosure in a changelog is not a correction in a published contract, and
+    // it would have shipped in the same deploy as §3.12's claim that Driftstack
+    // Processes this category as Processor UNDER that DPA. The gap is closed in
+    // both DPA copies, so the log records the edit rather than the omission.
+    expect(body).toMatch(/\*\*DPA Annex 1 \(Description of Processing\):\*\*/);
+    expect(body).toMatch(
+      /pass\s+through\s+live-session\s+media,\s+live\s+network\s+metadata,\s+or\s+an\s+API\s+Capture\s+request/,
+    );
+    expect(body).not.toMatch(/\*\*Still open:\*\* the DPA carries the same Special-Category-Data/);
   });
 
   it('2026-07-17 legal v1.1 product/storage truth correction includes Definitions and included-service AI accounting', () => {

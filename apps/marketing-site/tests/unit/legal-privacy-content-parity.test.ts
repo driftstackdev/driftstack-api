@@ -12,7 +12,8 @@
 //     no cloud/API/R2 recording or server retention window.
 //   • §3.6 Renewal-reminder email mechanism (Stripe invoice.upcoming
 //     ~7 days before invoice).
-//   • §3.8–3.11 current marketing/status/live-session disclosures.
+//   • §3.8–3.12 current marketing/status/live-session disclosures plus
+//     the in-memory live network metadata behind the Network pane.
 //   • §5 4 do-not-do honesty list: no sale / no behavioural ads /
 //     no cross-customer aggregation / no ML training without consent.
 //   • §7 13 Sub-processor rows pinned with transfer mechanism.
@@ -152,6 +153,45 @@ describe('W377.B marketing-site /legal/privacy.md content parity', () => {
     }
   });
 
+  it('§3.12 live network metadata is published in BOTH copies as in-memory, owner-scoped, and bounded by the TTL sweep rather than by session end', () => {
+    // Read over both copies for the same reason the §3.9–3.11 arm above does:
+    // this document ships twice and a disclosure added to one copy leaves the
+    // other publishing a category list that is still missing a category.
+    for (const doc of [body, canonical]) {
+      expect(doc).toMatch(/### 3\.12 Live network metadata \(Network pane\)/);
+      expect(doc).toMatch(/live network metadata is \*\*not stored\*\*/);
+      expect(doc).toMatch(/held in the control-plane API server's memory only/);
+      // The headers/bodies/cookies sentence is bounded to the ENTRY format the
+      // relay validates and holds. The FRAME schema is `z.array(z.unknown())`
+      // on purpose, so a report may legitimately carry extra keys; what the
+      // customer is protected by is the per-entry safeParse that strips them.
+      // Claiming the wire cannot carry them would be the stronger of the two
+      // and the false one.
+      expect(doc).toMatch(
+        /The\s+entry\s+format\s+Driftstack\s+validates\s+and\s+holds\s+defines\s+no\s+request\s+or\s+response\s+headers,\s+no\s+request\s+or\s+response\s+bodies,\s+and\s+no\s+cookies\./,
+      );
+      expect(doc).toMatch(
+        /Any\s+other\s+field\s+a\s+report\s+carries\s+is\s+discarded\s+when\s+the\s+entry\s+is\s+validated/,
+      );
+      expect(doc).not.toMatch(/Those\s+fields\s+do\s+not\s+exist\s+in\s+it/);
+      // Recipients names the team-admin path the route's gate actually allows
+      // (`callerCanAccessAgentSession`: self OR an admin-role membership on the
+      // owner's team), because the sentence ends in "and to no one else".
+      expect(doc).toMatch(
+        /to\s+any\s+account\s+the\s+Customer\s+has\s+given\s+the\s+admin\s+role\s+on\s+that\s+account's\s+team/,
+      );
+      expect(doc).toMatch(
+        /Live\s+network\s+metadata\s+\|\s+Not\s+stored\s+by\s+Driftstack;\s+held\s+in\s+the\s+API\s+server's\s+memory\s+only,?\s+served\s+only\s+while\s+the\s+Session\s+is\s+running,?\s+and\s+retained\s+after\s+the\s+Session\s+ends\s+until\s+swept/,
+      );
+      // The row must NOT come back to the life-of-the-Session claim: nothing
+      // drops a ring at terminal-close, so entries outlive the Session.
+      expect(doc).not.toMatch(/for\s+the\s+life\s+of\s+the\s+Session\s+only/);
+      expect(doc).toMatch(
+        /pass\s+through\s+live-session\s+media,\s+live\s+network\s+metadata,\s+or\s+an\s+API\s+Capture\s+request/,
+      );
+    }
+  });
+
   it('§5 4 do-not-do honesty list: no sale / no behavioural ads / no cross-customer / no ML training without consent', () => {
     expect(body).toMatch(/Sell Personal Data to third parties\./);
     expect(body).toMatch(/Use Customer's Personal Data for behavioural advertising or\s+profiling/);
@@ -224,6 +264,7 @@ describe('W377.B marketing-site /legal/privacy.md content parity', () => {
     );
     expect(body).toMatch(/API Capture artifacts\s*\|\s*Returned inline to Customer/);
     expect(body).toMatch(/Live-session media\s*\|\s*Not stored by Driftstack/);
+    expect(body).toMatch(/Live network metadata\s*\|\s*Not stored by Driftstack/);
     for (const doc of [body, canonical]) {
       expect(doc).toMatch(/Profile metadata \+ Profile Snapshots/);
       expect(doc).toMatch(/persist until Customer deletes them/);

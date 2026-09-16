@@ -9,7 +9,7 @@
 // breach-notification window, or loosens the §14 under-16 children posture.
 //
 //   • §8: CCS (proxies / captcha / email / SMS) NOT Sub-processors.
-//   • §9: 8-row retention schedule.
+//   • §9: retention schedule, incl. the T-9 live-network-metadata row.
 //   • §10: Article 15-22 GDPR Data Subject Rights (incl. Art 20 audit-log
 //     export at /v1/account/audit-log/export, 10,000-row ceiling).
 //   • §11: DPO-threshold policy (1M sessions / 5,000 unique DS / AP guidance).
@@ -76,6 +76,22 @@ describe('W577.C /docs/legal/privacy-policy.md (part 3) content parity', () => {
     );
     expect(body).toMatch(/\| API Capture artifacts\s+\| Returned inline to Customer/);
     expect(body).toMatch(/\| Live-session media\s+\| Not stored by Driftstack/);
+    // T-9 2026-09-16 — the Network pane holds a category the schedule now names.
+    // Prettier re-pads this table whenever a cell grows, so every gap is \s+.
+    //
+    // ⛔ The row deliberately does NOT say "for the life of the Session only",
+    // which is what it said when the category was first added. Nothing drops a
+    // Session's ring at terminal-close — `SessionNetworkLogStore.delete()` is
+    // never called in src, and the only eviction is the TTL sweep that runs
+    // INSIDE `append()`. Entries therefore outlive the Session by at least the
+    // 30-minute idle window, and in a process that receives no further accepted
+    // append they are held until restart. The §3.12 body always got this right;
+    // the retention table is the half a regulator reads as operative, so the two
+    // have to agree. The negative below is the load-bearing half of this arm.
+    expect(body).toMatch(
+      /\|\s+Live\s+network\s+metadata\s+\|\s+Not\s+stored\s+by\s+Driftstack;\s+held\s+in\s+the\s+API\s+server's\s+memory\s+only,\s+served\s+only\s+while\s+the\s+Session\s+is\s+running,\s+and\s+retained\s+after\s+the\s+Session\s+ends\s+until\s+swept\s+—\s+on\s+the\s+next\s+report\s+the\s+server\s+receives\s+—\s+once\s+30\s+idle\s+minutes\s+have\s+passed,\s+or\s+discarded\s+on\s+process\s+restart\./,
+    );
+    expect(body).not.toMatch(/for\s+the\s+life\s+of\s+the\s+Session\s+only/);
     expect(body).not.toMatch(/\| Session Recordings\s+\|/);
     expect(body).not.toMatch(/1–365 days/);
     expect(body).toMatch(

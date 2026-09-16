@@ -7,10 +7,16 @@
 //
 //   • Privacy Policy Version 1.1. Effective 2026-07-17.
 //   • Driftstack B.V. (NL) is Controller; DPA governs Processor path.
-//   • §3 collected: 11 categories — each with What/Why/Legal-basis/Source.
+//   • §3 collected: 12 categories — each with What/Why/Legal-basis/Source.
 //   • §3.10 status-page email subs: double-opt-in (Art 6(1)(a) consent).
 //   • §3.11 live-session media: NOT stored; encrypted in transit;
 //     LiveKit processes/forwards it; no application-level E2EE claim.
+//   • §3.12 live network metadata: NOT stored; held in the API server's memory
+//     only; read scoped to the owning account, a team admin on it, or the
+//     single-Session control key; the ENTRY FORMAT Driftstack validates and
+//     holds carries no headers, no bodies, no cookies — the wire itself is
+//     `z.array(z.unknown())` and the relay's per-entry safeParse is what strips
+//     anything else.
 //   • Part 1: header + sections 1-3 (Controller through 11 data categories).
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -185,6 +191,77 @@ describe('W577.A /docs/legal/privacy-policy.md (part 1) content parity', () => {
     expect(body).not.toMatch(/E2EE (?:on|is enabled by) default/i);
     expect(body).not.toMatch(/end-to-end encryption is enabled by default/i);
     expect(body).not.toMatch(/cannot decrypt/i);
+  });
+
+  it('Section 3.12 Live network metadata: not stored, in-memory, owner-scoped (owning account + team admins), swept by TTL rather than at session end, and no headers/bodies/cookies in the entry format that is validated and held', () => {
+    expect(body).toMatch(/### 3\.12 Live network metadata \(Network pane\)/);
+    expect(body).toMatch(
+      /\*\*What:\*\* the per-request metadata a Session's own browser reports for/,
+    );
+    expect(body).toMatch(
+      /the\s+request\s+address\s+\(a\s+URL,\s+which\s+can\s+carry\s+a\s+query\s+string\)/,
+    );
+    expect(body).toMatch(/negotiated\s+wire\s+protocol\s+\(HTTP\/1\.1,\s+HTTP\/2,\s+HTTP\/3\)/);
+    // The no-headers/no-bodies/no-cookies claim is the one a reviewer leans on
+    // hardest, and it is bounded — deliberately — to the ENTRY format the relay
+    // validates and holds, not to the wire. `NetworkRequestsFrameSchema` types
+    // `entries` as `z.array(z.unknown())` on purpose (one malformed row must not
+    // drop a whole frame), so a report may legitimately carry extra keys and
+    // they DO reach the control plane's parser. What protects the customer is
+    // the per-entry `NetworkRequestEntrySchema.safeParse` in
+    // session-network-log-relay.ts, which strips unknown keys before anything is
+    // held, served, or logged. The guard in
+    // the-network-pane-holds-a-category-the-policy-lists.test.ts reads BOTH the
+    // entry schema and that strip, so the sentence cannot outlive either.
+    expect(body).toMatch(
+      /The\s+entry\s+format\s+Driftstack\s+validates\s+and\s+holds\s+defines\s+no\s+request\s+or\s+response\s+headers,\s+no\s+request\s+or\s+response\s+bodies,\s+and\s+no\s+cookies\./,
+    );
+    expect(body).toMatch(
+      /Any\s+other\s+field\s+a\s+report\s+carries\s+is\s+discarded\s+when\s+the\s+entry\s+is\s+validated\s+—\s+before\s+it\s+is\s+held,\s+served,\s+or\s+logged/,
+    );
+    // The stronger claim must not come back: the wire CAN carry them.
+    expect(body).not.toMatch(
+      /The\s+wire\s+format\s+carries\s+no\s+request\s+or\s+response\s+headers/,
+    );
+    expect(body).not.toMatch(/Those\s+fields\s+do\s+not\s+exist\s+in\s+it/);
+    expect(body).toMatch(/\*\*Retention:\*\* live network metadata is \*\*not stored\*\*\./);
+    expect(body).toMatch(
+      /held\s+in\s+the\s+control-plane\s+API\s+server's\s+memory\s+only\s+—\s+never\s+written\s+to\s+a\s+database,\s+to\s+object\s+storage,\s+or\s+to\s+any\s+store\s+that\s+outlives\s+the\s+server\s+process,\s+and\s+never\s+written\s+to\s+a\s+log\s+line\./,
+    );
+    expect(body).toMatch(
+      /operational\s+logs\s+record\s+identifiers,\s+a\s+status,\s+counts,\s+and\s+the\s+field\s+name\s+of\s+a\s+rejected\s+row\s+—\s+never\s+an\s+address,\s+and\s+never\s+any\s+part\s+of\s+an\s+entry\./,
+    );
+    expect(body).toMatch(/At\s+most\s+2,000\s+entries\s+are\s+held\s+for\s+a\s+Session/);
+    expect(body).toMatch(/at\s+most\s+5,000\s+Sessions'\s+entries\s+at\s+once/);
+    expect(body).toMatch(
+      /serves\s+entries\s+only\s+while\s+the\s+Session\s+is\s+running\s+and\s+returns\s+none\s+once\s+it\s+is\s+not/,
+    );
+    expect(body).toMatch(
+      /once\s+30\s+minutes\s+have\s+passed\s+with\s+no\s+further\s+report\s+for\s+that\s+Session/,
+    );
+    expect(body).toMatch(/\*\*Recipients:\*\* no additional Sub-processor\./);
+    // The Recipients sentence ends in "and to no one else" — an absolute that
+    // appears nowhere else in this document, so it has to enumerate every path
+    // the gate admits. `callerCanAccessAgentSession` (routes/agent-sessions.ts)
+    // returns true for a DIFFERENT account holding an admin-role membership on
+    // the owner's team, so the team-admin path is named.
+    expect(body).toMatch(
+      /to\s+any\s+account\s+the\s+Customer\s+has\s+given\s+the\s+admin\s+role\s+on\s+that\s+account's\s+team/,
+    );
+    expect(body).toMatch(/and\s+to\s+no\s+one\s+else\./);
+    expect(body).toMatch(
+      /nothing\s+is\s+sent\s+to\s+LiveKit,\s+to\s+Cloudflare\s+R2,\s+to\s+the\s+Postgres/,
+    );
+    expect(body).toMatch(/\*\*Processor role:\*\* Driftstack Processes live network metadata as/);
+    // Negatives: the protections that must NOT be overstated. The entries are
+    // not encrypted end-to-end, are not tied to session end (the store's delete
+    // is not wired to terminal-close), and are not anonymous — the Session id
+    // and the owning account scope every read.
+    expect(body).not.toMatch(/network metadata is (?:end-to-end )?encrypted at rest/i);
+    expect(body).not.toMatch(
+      /live network metadata is (?:deleted|dropped) (?:the moment|when) the Session ends/i,
+    );
+    expect(body).not.toMatch(/live network metadata (?:is|are) anonymous/i);
   });
 
   it('file exists at canonical path', () => {

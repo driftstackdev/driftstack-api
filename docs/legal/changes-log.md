@@ -23,6 +23,69 @@ references the corresponding rows in this log.
 
 ---
 
+## 2026-09-16 — T-9 live network metadata (Network pane) disclosure
+
+- **Privacy Policy §3.12 (new):** discloses the per-request metadata a
+  Session's own browser reports for each resource it loads — the
+  request address, HTTP method, response status, negotiated wire
+  protocol and ALPN token, resource type, initiator, transferred size,
+  timestamp, duration, and cache flag — which the GUI Client's Network
+  pane renders live. The section states the implemented boundary: the
+  entries are held in the control-plane API server's memory only, are
+  never written to a database, to object storage, to any store that
+  outlives the server process, or to a log line; are capped at 2,000
+  entries per Session and 5,000 Sessions at once; are served only
+  while the Session is running and only to the account that owns the
+  Session, to an account the Customer has given the admin role on that
+  account's team, or to the single-Session control key the GUI Client
+  holds; and are discarded on process restart or swept after 30
+  minutes with no further report. The entry format Driftstack
+  validates and holds defines no headers, no bodies, and no cookies:
+  any other field a report carries is discarded at validation, before
+  anything is held, served, or logged.
+- **Privacy Policy §4 (Special Category Data):** live network metadata
+  is added to the routes by which Customer's automated browsing can
+  cause Special Category Data to reach Driftstack. Nothing about the
+  Processor allocation, the Article 9(2) responsibility, or the
+  desktop-local recording boundary changed.
+- **Privacy Policy §9 (retention schedule):** new "Live network
+  metadata" row — not stored; held in the API server's memory only;
+  served only while the Session is running; retained after the Session
+  ends until swept, on the next report the server receives, once 30
+  idle minutes have passed; discarded on process restart. The row
+  deliberately makes no "life of the Session only" claim: nothing
+  drops a Session's ring at terminal-close (`SessionNetworkLogStore`'s
+  `delete` is not wired to it), so the entries do outlive the Session
+  until the TTL sweep or a restart, and the schedule states the
+  boundary the code actually enforces.
+- **Sub-processors / transfers:** none changed. No additional
+  Sub-processor receives live network metadata; it stays inside the
+  already-disclosed MacStadium fleet node and Hetzner control plane
+  and reaches neither LiveKit, Cloudflare R2, Neon Postgres, nor
+  Upstash Redis.
+- **Version / effective date:** UNCHANGED at v1.1 / 2026-07-17. Both
+  published copies carry the disclosure so the category is listed
+  before the producing surface is switched on. Whether this is a
+  material update under §15 — and therefore whether it needs a version
+  bump, a dated §15 entry, and 30 days' notice before taking effect —
+  is a counsel and product decision this entry does not make. Note
+  that acceptance re-prompting fires either way: `services/legal.ts`
+  `required()` reports `content_hash_changed` on any content edit, and
+  `services/api-keys.ts` gates key minting on a non-empty result with
+  no filter on reason.
+- **DPA Annex 1 (Description of Processing):** the same two gaps the
+  Privacy Policy edits closed are closed here, in both published
+  copies, so the instrument §3.12 points at describes the category it
+  asserts a footing under. "Special categories" now reads "pass
+  through live-session media, live network metadata, or an API Capture
+  request", and "Categories of Personal Data" gains a
+  Session-related bullet for the request metadata of the resources a
+  Session's browser loads — address, method, status, negotiated wire
+  protocol, timing, size — held in the control plane's memory only,
+  with no headers, bodies, or cookies. Nothing in Annex 2 (TOMs),
+  Annex 3 (Sub-processors), Annex 4 (SCC modules), or Annex 5 changed;
+  no new Sub-processor and no new transfer path is involved.
+
 ## 2026-07-17 — Privacy, DPA, Terms, and Definitions v1.1 (product + storage truth)
 
 - **Version / effective date:** the canonical and customer-facing

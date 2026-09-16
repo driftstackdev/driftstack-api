@@ -388,6 +388,12 @@ are set out in Section 9 of the [Privacy Policy](privacy-policy.md#9-retention) 
      authentication, not third parties').
    - Content of pages browsed where transmitted through live-session
      media or returned inline as an API Capture artifact.
+   - Request metadata for the resources a Session's browser loads
+     (the request address, which can carry a query string, the HTTP
+     method, the response status, the negotiated wire protocol,
+     timing, and transferred size), held in the control plane's
+     memory only while the Network pane can serve it. No request or
+     response headers, bodies, or cookies.
 3. **Customer-Provided Secrets**: credentials Customer supplies
    (proxy auth, captcha API keys, email credentials, SMS API keys).
    These are technically credentials of natural persons or accounts
@@ -397,9 +403,9 @@ are set out in Section 9 of the [Privacy Policy](privacy-policy.md#9-retention) 
 
 Driftstack does **not** intentionally Process Special Category Data
 under Article 9 GDPR. Where Customer's automated browsing causes
-such data to pass through live-session media or an API Capture
-request, Customer is responsible for the underlying Article 9 lawful
-basis. A desktop-local recording may contain the same data, but it
+such data to pass through live-session media, live network metadata,
+or an API Capture request, Customer is responsible for the underlying
+Article 9 lawful basis. A desktop-local recording may contain the same data, but it
 remains on Customer's device and is not uploaded to or retained by
 Driftstack.
 
