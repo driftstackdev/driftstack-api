@@ -52,12 +52,23 @@ With the frame clock logged (session `agt_7d0951fb`):
 The phases fire across ~5s. `pushVPNPhaseFrame` stamps at append, as A3 said, so
 there is no batched-occurrence bug.
 
-⛔ **`active` fires at 22:38:49 and arrives at 22:38:57.745 — 8.7s late.** For
+⛔ **`active` fired at 22:38:49 and arrived at 22:38:57.745 — 8.7s late.** For
 those 8.7s the session is running and nothing downstream can know it. That is not
 the reported bug, but it is the same experience on every VPN session and it is
 exactly the kind of noise that made a real fault take five reports to isolate.
-**Open, A3: drain the outbound queue sooner, or on append of a terminal-ish
-phase.** A2 is deliberately not rendering a progress bar off this — it would
+**FIXED and verified.** A3 `46ce4c703`, pid 98494 (inode-matched before trusting
+it). `pendingVPNSessionStatuses` drained on the heartbeat (default 10s) or on
+inbound traffic, and a VPN bring-up runs detached off the inbound loop, so
+nothing woke it. Appending a terminal-ish status now arms the existing one-shot
+force-heartbeat. Re-measured on session `agt_e4685ea2`: **`active` fired 22:57:45,
+received 22:57:46.328 — 1.3s, down from 8.7s.**
+
+⚠️ The intermediate phase frames STILL batch, and that is correct, not a
+remainder: waking on every phase would be up to ten forced beats to make
+cosmetic text land sooner. A3's test asserts both directions, because one
+asserting only the wake would pass against an implementation that woke on
+everything — and from the control plane those two look identical on the number
+that matters. A2 is deliberately not rendering a progress bar off this — it would
 animate nine seconds after the thing it describes finished.
 
 ## 3. Network pane — every artefact present, nothing arriving. Open, A3.
@@ -95,8 +106,17 @@ A3's fix is better than either option A2 offered: the producer declares
 reads it off the frame and never mirrors the list. Live and reporting: 4 layers,
 0 failures.
 
-**Open, A2:** wire the superset check; treat an ABSENT expected set as "cannot
-verify completeness", never as an empty one, so a rollback degrades honestly.
+**BUILT, not yet verified live.** A2 asserts reported ⊇ expected AND all passed,
+reading `safeguardLayersExpected` off the frame and never mirroring it. An ABSENT
+expected set falls back to the old predicate and emits
+`safeguards_expectation_unreported`; an EMPTY one is a different fact and there is
+an arm pinning the two apart, because treating absent as "expects nothing" makes
+the superset vacuously true and rebuilds the fail-open one level up. A missing
+layer emits `safeguard_missing:<layer>` per layer. Mutation-proved.
+
+⚠️ The control plane in production still runs the build that STRIPS the new field,
+so this has not yet been seen working against a live frame. Verified when a real
+report carries it, not when the code to read it shipped.
 
 ## 5. `dns_remote_resolve` — agreed shape, A3 building
 
