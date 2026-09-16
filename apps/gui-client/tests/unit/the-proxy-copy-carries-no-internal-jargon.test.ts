@@ -56,6 +56,17 @@ const SURFACES = [
   'views/FleetView.tsx',
   'views/SimulatorWindow.tsx',
   'visual-harness/gallery.tsx',
+  // ⛔ (2026-09-16) THE GATE FOLLOWS THE SENTENCES, NOT THE FILE THEY LIVED IN.
+  // The simulator's input-availability copy ("View only — device input is
+  // unavailable" and the new not-yet-reported wording) moved OUT of
+  // views/SimulatorWindow.tsx — which is scanned — and into these two lib
+  // modules, which were not. Nothing went red, because moving copy out of a
+  // scanned file looks exactly like deleting it: the literal simply stopped
+  // being found. Both are listed here in the same change that moved the copy,
+  // so an edit to the constants ("the node has not reported", "the harness…")
+  // meets the same gate it would have met in the view.
+  'lib/manual-input-capability.ts',
+  'lib/manual-input-wait.ts',
 ];
 // ⛔ Owner directive 2026-09-15: customer copy says WHAT they get, never HOW we
 // run it. "test Mac" was the earlier customer-facing substitute for "fleet Mac"

@@ -136,6 +136,31 @@ describe('a probe verdict is not a pass', () => {
     // question it exists for. It is a small non-negative integer: it identifies no
     // customer, names no endpoint, and correlates to no person.
     expect(src).toContain('h3ConnectionCount: frame.h3ConnectionCount,');
+    // ⛔ THE SECOND EXEMPTION GROUP (2026-09-16), pinned the same way and for the
+    // same reason: asserted, not left as an absence. The owner sat through a
+    // session that never became interactive and neither end could say why —
+    // this line recorded THAT a report arrived without recording what it
+    // CLAIMED, and the desktop app gates both the address bar and remote control
+    // on these exact fields. Each is an enum or a boolean we mint: it identifies
+    // no customer, names no endpoint, and correlates to no person. Pinning them
+    // means a later "trim the log line" REDS this arm instead of silently
+    // restoring the blindness that cost a day.
+    for (const field of [
+      'egressPhase',
+      'streamingState',
+      'streamingHealth',
+      'manualInputAvailable',
+      'transportModeActive',
+      'transportModeRequested',
+      'proxyUdpSupported',
+    ]) {
+      expect(src, `${field} is logged by value so a stuck session is answerable`).toContain(
+        `${field}: frame.${field},`,
+      );
+    }
+    // And the correlation key: without it a report cannot be tied to the session
+    // it describes, which is the hole that defeated the 2026-09-16 investigation.
+    expect(src).toContain('sessionId: frame.sessionId,');
   });
 
   it('CRITICAL h3ConnectionCount is accepted — a latched boolean cannot carry liveness', () => {

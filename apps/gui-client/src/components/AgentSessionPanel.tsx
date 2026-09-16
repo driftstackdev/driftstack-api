@@ -199,6 +199,39 @@ export function playoutDelaySupport(track: { receiver?: unknown } | null): boole
  *  slow-but-working start never trips it. */
 export const NO_PUBLISHER_TIMEOUT_MS = 30_000;
 
+/** Item 2 (owner 2026-09-16) — how long the customer may sit in front of the
+ *  pre-pixel spinner before the panel SAYS the wait has gone long. Measured from
+ *  the moment the room reports connected, i.e. it covers BOTH halves of that wait:
+ *  the 'waiting' half ("Connected — starting the browser…") and the 'publishing'
+ *  half ("Almost there — the video stream is arriving…", the gap between
+ *  TrackSubscribed and the first decoded frame). Both were silent for their whole
+ *  duration, and the second had no bound at all — a track that subscribes but never
+ *  paints leaves NO_PUBLISHER_TIMEOUT_MS inert (it only fires while publisher is
+ *  still 'waiting'), so the spinner ran forever. The owner closed the window at 33s.
+ *
+ *  ⛔ It is a NOTICE, not a deadline on the session: nothing is cancelled, no Room is
+ *  torn down, no state flips. A frame arriving at 40s still clears the overlay and the
+ *  session works normally. The only thing that changes at the deadline is what is SAID,
+ *  plus the actions offered (all customer-initiated).
+ *
+ *  THE NUMBER, from this file's own measurements rather than a fresh guess:
+ *  NO_PUBLISHER_TIMEOUT_MS records a warm publish at ~2-5s and that 10s fired "right as
+ *  the stream was about to appear" on a cold spawn — so 10s is a measured LOWER bound:
+ *  at or under it we would call a HEALTHY start slow. There is NO measured upper bound
+ *  on a healthy cold start in this repo — 30s was picked to "comfortably cover" one, not
+ *  measured as its ceiling — so 15s is explicitly NOT a claim that a slower start is
+ *  broken. It is the midpoint between the last recorded false alarm and the point where
+ *  the panel gives up, chosen so the customer still has the back half of the give-up
+ *  window to act in. That missing upper bound is exactly why the notice is NON-CAUSAL
+ *  (it reports the wait, never diagnoses a cause) and cancels nothing: a healthy cold
+ *  spawn that publishes at 20s gets told it is slow, and must still simply work.
+ *  ⛔ The magnitude is pinned by a guard (agent-session-panel.test.tsx, "the deadline's
+ *  magnitude") so it cannot drift up toward NO_PUBLISHER_TIMEOUT_MS with a green suite.
+ *  PUBLISHER_LOST_GRACE_MS (2s) is the recorded magnitude for a re-publish/keyframe
+ *  re-arrival, so 15s is generous for the first-frame half too — deliberately one
+ *  constant, because the customer's wait is one wait, not two phases. */
+export const SLOW_START_NOTICE_MS = 15_000;
+
 /** Map raw livekit-client connection errors to customer-friendly copy. The raw
  *  messages leak transport jargon into the overlay — e.g. "could not establish
  *  signal connection: invalid authorization token" (founder saw it 2026-06-18).
@@ -514,6 +547,13 @@ export function AgentSessionPanel({
   // stays true for the connection (mid-session drops keep the calmer
   // reconnecting-pill path over the last good frame — deliberate).
   const [firstFramePainted, setFirstFramePainted] = useState(false);
+  // Item 2 — true once SLOW_START_NOTICE_MS has passed with the room connected and
+  // still no painted frame. Purely a COPY flag: it swaps the reassuring sentence for
+  // an honest "this is taking longer than expected" one and offers the actions that
+  // already exist here (Retry / the direct viewer / Close). It never cancels, never
+  // disconnects, and never blocks a late frame from clearing the overlay. Re-armed per
+  // connection attempt alongside setFirstFramePainted(false).
+  const [slowStart, setSlowStart] = useState(false);
   // #1 — during the post-track-drop grace window (before we know whether the
   // publisher is truly gone or just re-negotiating), show a CALM "reconnecting…"
   // pill over the last good frame instead of the scary launch-failed overlay. True
@@ -555,6 +595,16 @@ export function AgentSessionPanel({
   // link that flaps without ever delivering a frame escalates to the manual
   // overlay instead of thrashing. (Fable GUI re-audit 2026-07-02.)
   const autoReconnectAttemptRef = useRef(0);
+
+  // #59 / Item 2 — the ONE customer-initiated relaunch of the live view, shared by the
+  // launch-failed overlay and the slow-start notice so both spell the same recovery.
+  // Bumps retryNonce → the connect effect re-runs (new Room + reconnect + a fresh
+  // NO_PUBLISHER_TIMEOUT_MS and SLOW_START_NOTICE_MS window), and grants a fresh
+  // auto-reconnect budget (1s→3s→9s) because a USER asked for this attempt.
+  const retryLaunch = useCallback((): void => {
+    autoReconnectAttemptRef.current = 0;
+    setRetryNonce((n) => n + 1);
+  }, []);
 
   // Keep the latest onStateChange in a ref so the connect effect does NOT
   // depend on the callback's identity. onStateChange exists for consumers (the
@@ -822,12 +872,19 @@ export function AgentSessionPanel({
     setS({ kind: 'connecting' });
     setP('waiting');
     setFirstFramePainted(false);
+    setSlowStart(false);
     setPublisherReconnecting(false);
     // W617 / #59 — empty-room detector: connected but no video track within the
     // timeout means the launch never produced a stream (no worker publishing /
     // proxy down so the box never started → an indefinite "connecting…"). Flips
     // to 'none' → the launch-failed overlay + Retry. Cleared by TrackSubscribed.
     let noPublisherTimer: ReturnType<typeof setTimeout> | null = null;
+    // Item 2 — the SAY-SO deadline on the pre-pixel wait. Deliberately NOT cleared by
+    // TrackSubscribed: the customer is still looking at a spinner until a frame paints,
+    // and that second half is the half that had no bound at all. It flips a copy flag
+    // and nothing else — no setP, no disconnect, no retry — so a frame that arrives
+    // after it still clears the overlay and the session runs normally.
+    let slowStartTimer: ReturnType<typeof setTimeout> | null = null;
     connectToAgentSession(room, info)
       .then(() => {
         if (cancelled) return;
@@ -836,6 +893,10 @@ export function AgentSessionPanel({
           if (cancelled) return;
           if (publisherRef.current === 'waiting') setP('none');
         }, NO_PUBLISHER_TIMEOUT_MS);
+        slowStartTimer = setTimeout(() => {
+          if (cancelled) return;
+          setSlowStart(true);
+        }, SLOW_START_NOTICE_MS);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -845,6 +906,7 @@ export function AgentSessionPanel({
     return () => {
       cancelled = true;
       if (noPublisherTimer !== null) clearTimeout(noPublisherTimer);
+      if (slowStartTimer !== null) clearTimeout(slowStartTimer);
       // #1/#8 — drop any pending grace + auto-reconnect timer so a torn-down panel
       // can't flip publisher state or schedule a stray reconnect after unmount.
       clearPublisherLostTimer();
@@ -1214,28 +1276,124 @@ export function AgentSessionPanel({
         state.kind === 'connected' &&
         (publisher !== 'publishing' || !firstFramePainted) && (
           <div
+            // Item 2 (a11y) — the premise is that no wait may be unbounded and SILENT,
+            // and for a screen-reader user the notice was literally silent: the deadline
+            // swaps the sentence IN PLACE inside this container and the spinner is
+            // aria-hidden, so nothing was announced at 15s or when the buttons appeared.
+            // This container is mounted for the whole pre-pixel wait (a live region has
+            // to pre-exist the change it announces — a region inserted at the deadline
+            // is unreliably announced), so the role goes HERE, not on the notice span.
+            // Same treatment as the reconnecting pill above.
+            role="status"
             data-overlay="publisher-state"
             data-state={publisher}
+            data-slow={publisher !== 'none' && slowStart ? 'true' : 'false'}
             className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 px-6 text-center text-sm text-ink-primary"
           >
             {publisher === 'waiting' || publisher === 'publishing' ? (
               <>
+                {/* The spinner STAYS after the deadline: the session has not been given
+                    up on, and a frame arriving later still clears this whole overlay. */}
                 <span
                   className="h-7 w-7 animate-spin rounded-full border-2 border-white/25 border-t-white/90"
                   aria-hidden="true"
                 />
-                <span>
-                  {publisher === 'publishing'
-                    ? 'Almost there — the video stream is arriving…'
-                    : 'Connected — starting the browser… this can take a few seconds.'}
-                </span>
+                {slowStart ? (
+                  /* Item 2 — past SLOW_START_NOTICE_MS. The reassuring sentence has
+                     stopped being true, so say so plainly, name which half of the wait
+                     is stuck, and make it explicit that nothing was cancelled — then
+                     offer the actions this component already owns. */
+                  <>
+                    {/* ⛔ NON-CAUSAL, both halves. This component observes exactly two
+                        things — whether a video track has been subscribed on this Room,
+                        and whether the element has decoded a frame — and it receives no
+                        box/harness signal at all (see the prop list at the top). So it
+                        states WHAT IT SAW and never why. "The browser hasn't started" was
+                        a diagnosis `publisher === 'waiting'` cannot support: that value is
+                        set unconditionally at connect start and equally produced by a
+                        publish failure, an SFU delivery gap, or a subscribe failure on our
+                        side — and in the owner's own 2026-09-16 incident the node was
+                        reporting normally throughout, so it would have printed a false
+                        cause. The give-up copy below already refuses this same inference on
+                        this same evidence ("connected, but no video arrived"). Causal
+                        wording here needs the harness page_state/browser_spawning signal
+                        the parent has and this panel does not. */}
+                    <span data-summary="slow-start-notice">
+                      {publisher === 'publishing'
+                        ? 'This is taking longer than expected — the video stream connected but still hasn’t shown a frame.'
+                        : 'This is taking longer than expected — the live view still hasn’t arrived.'}
+                    </span>
+                    <span className="max-w-sm text-xs text-ink-secondary">
+                      {/* True on BOTH halves and past the give-up point too: a late
+                          TrackSubscribed still flips publisher back to 'publishing'. */}
+                      Nothing has been cancelled — if it arrives, the live view appears here on its
+                      own.{' '}
+                      {/* "You can keep waiting" only where nothing retracts it. On the
+                          'waiting' half NO_PUBLISHER_TIMEOUT_MS flips this overlay to the
+                          give-up verdict 15s later, so telling that customer to keep
+                          waiting is advice we ourselves overrule. Once publisher is
+                          'publishing' that timer is inert, so the wait really is open. */}
+                      {publisher === 'publishing'
+                        ? 'You can keep waiting, or press Retry to reconnect the live view.'
+                        : 'Press Retry to reconnect the live view.'}
+                      {/* Surface-neutral: AgentChatView mounts this same panel as a 300px
+                          column INSIDE the main window with no onClose — there is no window
+                          to close there and no profile relaunch in a chat session. Name the
+                          close/relaunch route only where the surface can actually offer it. */}
+                      {onClose !== undefined &&
+                        ' You can also close this window and relaunch the profile from the main Driftstack window.'}
+                    </span>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        data-action="retry-launch"
+                        onClick={retryLaunch}
+                        className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
+                      >
+                        Retry
+                      </button>
+                      {onNoPublisher !== undefined && (
+                        <button
+                          type="button"
+                          data-action="open-polling-viewer"
+                          onClick={onNoPublisher}
+                          className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
+                        >
+                          Open in the direct viewer instead
+                        </button>
+                      )}
+                      {onClose !== undefined && (
+                        <button
+                          type="button"
+                          data-action="close-slow-session"
+                          onClick={onClose}
+                          className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
+                        >
+                          Close
+                        </button>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <span>
+                    {publisher === 'publishing'
+                      ? 'Almost there — the video stream is arriving…'
+                      : 'Connected — starting the browser… this can take a few seconds.'}
+                  </span>
+                )}
               </>
             ) : (
               <>
+                {/* Item 2 — a CONTINUATION of the slow-start notice, not a contradiction
+                    of it. A customer who reached here read "nothing has been cancelled"
+                    15s ago; that is still true (a late TrackSubscribed flips this back to
+                    'publishing'), so say it rather than letting the verdict read as a
+                    retraction. */}
                 <span>
                   Couldn’t show the live view — connected, but no video arrived. The task itself may
-                  still have run. This is usually temporary, so press Retry. If it keeps happening,
-                  contact support.
+                  still have run, and nothing here was cancelled — a stream that arrives late still
+                  appears. This is usually temporary, so press Retry. If it keeps happening, contact
+                  support.
                 </span>
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   {/* #59 — a no-stream launch can recover on a fresh connect (the worker
@@ -1245,12 +1403,7 @@ export function AgentSessionPanel({
                   <button
                     type="button"
                     data-action="retry-launch"
-                    onClick={() => {
-                      // #8 — a USER-initiated retry grants a fresh auto-reconnect
-                      // budget (1s→3s→9s) if the new connection later drops.
-                      autoReconnectAttemptRef.current = 0;
-                      setRetryNonce((n) => n + 1);
-                    }}
+                    onClick={retryLaunch}
                     className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
                   >
                     Retry
@@ -1263,6 +1416,19 @@ export function AgentSessionPanel({
                       className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
                     >
                       Open in the direct viewer instead
+                    </button>
+                  )}
+                  {/* Item 2 — the slow-start notice offers Close; this branch is where a
+                      'waiting' half LANDS 15s later. Without this, an affordance the panel
+                      had just offered silently disappeared at the worst moment. */}
+                  {onClose !== undefined && (
+                    <button
+                      type="button"
+                      data-action="close-failed-session"
+                      onClick={onClose}
+                      className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-ink-primary transition hover:bg-white/20"
+                    >
+                      Close
                     </button>
                   )}
                 </div>

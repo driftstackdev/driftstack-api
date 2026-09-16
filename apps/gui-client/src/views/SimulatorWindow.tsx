@@ -113,6 +113,17 @@ import {
   type PendingNavigation,
 } from '../lib/url-bar-inflight';
 import { capabilityReportsEqual } from '../lib/capability-report-equal';
+import {
+  MANUAL_INPUT_SESSION_OVER_CAPTION,
+  MANUAL_INPUT_UNAVAILABLE_BADGE,
+  MANUAL_INPUT_UNREPORTED_BADGE,
+  MANUAL_INPUT_UNREPORTED_CAPTION,
+  MANUAL_INPUT_UNREPORTED_LABEL,
+  MANUAL_INPUT_UNREPORTED_TOOLTIP,
+  manualInputCapabilityFromFlag,
+  manualInputCapabilityOf,
+} from '../lib/manual-input-capability';
+import { describeManualInputWait, type ManualInputWait } from '../lib/manual-input-wait';
 import { pageErrorCopy, pageErrorInfoEqual, type PageErrorInfo } from '../lib/page-error-copy';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import { downloadBlob, downloadJson, downloadResponse } from '../lib/download';
@@ -1433,7 +1444,10 @@ export function DeviceToolbar({
    *  input unavailable. Disable the toggle rather than showing a keyboard that
    *  cannot safely forward to the device. */
   inputEnabled?: boolean;
-  inputUnavailableReason?: 'agent' | 'device';
+  /** WHY the toggle is off: 'device' = the phone reported input unavailable,
+   *  'unreported' = it has not reported either way yet (never the same thing —
+   *  see lib/manual-input-capability), 'agent' = the agent is driving. */
+  inputUnavailableReason?: 'agent' | 'device' | 'unreported';
 }): JSX.Element {
   // The activity-bar rail is always docked beside the phone (it lives in the main
   // layout, not this thin toolbar); panes expand on a rail-icon click. There is no
@@ -1539,7 +1553,9 @@ export function DeviceToolbar({
               !inputEnabled
                 ? inputUnavailableReason === 'device'
                   ? 'Keyboard unavailable because device input is offline'
-                  : 'Keyboard unavailable while the agent is driving'
+                  : inputUnavailableReason === 'unreported'
+                    ? MANUAL_INPUT_UNREPORTED_LABEL
+                    : 'Keyboard unavailable while the agent is driving'
                 : keyboardVisible
                   ? 'Hide keyboard'
                   : 'Show keyboard'
@@ -1548,7 +1564,9 @@ export function DeviceToolbar({
               !inputEnabled
                 ? inputUnavailableReason === 'device'
                   ? 'This session is view only because device input is unavailable'
-                  : 'The agent is driving — switch to Manual to type'
+                  : inputUnavailableReason === 'unreported'
+                    ? MANUAL_INPUT_UNREPORTED_TOOLTIP
+                    : 'The agent is driving — switch to Manual to type'
                 : keyboardVisible
                   ? 'Hide the on-screen keyboard'
                   : 'Show the on-screen keyboard'
@@ -1792,6 +1810,7 @@ function ControlActionSpinner(): JSX.Element {
 export function SessionControlSection({
   mode,
   manualInputAvailable,
+  sessionOver = false,
   pairKind,
   action,
   composerText,
@@ -1805,6 +1824,12 @@ export function SessionControlSection({
 }: {
   mode: SessionMode | null;
   manualInputAvailable?: boolean | null;
+  /** ⛔ The session reached a terminal end. The prop above goes `undefined` for
+   *  EVERY closed session — the control plane stops projecting the capability
+   *  report at `status === 'closed'` — so without a liveness signal here the
+   *  caption reports our own serialisation rule as the phone's silence, on a
+   *  session that will never report again. */
+  sessionOver?: boolean;
   pairKind: string | null;
   action: SessionControlAction | null;
   composerText: string;
@@ -1822,6 +1847,9 @@ export function SessionControlSection({
   // One source of truth for the caption + the take-over/hand-back verb: the
   // pair_mode_state.kind carries 'human' when the human holds the pair lock.
   const humanDriving = pairKind !== null && /human/i.test(pairKind);
+  // The tri-state behind the Manual caption: the prop is `undefined` when no
+  // capability report has arrived, which is NOT the device's "no".
+  const inputCapability = manualInputCapabilityFromFlag(manualInputAvailable);
   const busy = action !== null;
   const messageBusy = action?.kind === 'message';
   const pairAction =
@@ -1846,9 +1874,20 @@ export function SessionControlSection({
                 : mode === null
                   ? 'Connecting…'
                   : mode === 'manual'
-                    ? manualInputAvailable === false
-                      ? 'Manual mode — view only (device input unavailable)'
-                      : 'Manual — tap the screen to drive'
+                    ? // ⛔ THREE states, not two. `=== false` alone made the absence
+                      // of a report read as "tap the screen to drive" — a claim that
+                      // input works, made from no answer at all. And an ended session
+                      // is a FOURTH case, not a fourth state of the flag: the report is
+                      // dropped for every closed session, so the phone's answer — yes,
+                      // no, or none — is unknowable here and none of the three
+                      // sentences below is true of it.
+                      sessionOver
+                      ? MANUAL_INPUT_SESSION_OVER_CAPTION
+                      : inputCapability === 'unavailable'
+                        ? 'Manual mode — view only (device input unavailable)'
+                        : inputCapability === 'unreported'
+                          ? MANUAL_INPUT_UNREPORTED_CAPTION
+                          : 'Manual — tap the screen to drive'
                     : mode === 'pair'
                       ? humanDriving
                         ? "You're driving — agent is paused"
@@ -1990,6 +2029,7 @@ function NavigateAddressBar({
   onNavigate,
   liveUrl,
   vpnTunnelUp = null,
+  wait = null,
 }: {
   canNavigate: boolean;
   onNavigate: (url: string) => void;
@@ -1999,6 +2039,9 @@ function NavigateAddressBar({
   /** (b) — non-null while a VPN session's tunnel is up but the browser has not
    *  attached: the caption says that instead of the generic "connecting…". */
   vpnTunnelUp?: VpnTunnelUp | null;
+  /** WHICH signal the bar is waiting for (lib/manual-input-wait), non-null exactly
+   *  while `canNavigate` is false. Its sentence replaces the bare word "connecting". */
+  wait?: ManualInputWait | null;
 }): JSX.Element {
   const [draftUrl, setDraftUrl] = useState('');
   // While the control channel is still connecting (the room can take up to ~30s
@@ -2008,15 +2051,20 @@ function NavigateAddressBar({
   // surfaces separately as a navigate-error notice toast).
   // (b) — a VPN session whose tunnel is up reads that, not "connecting…".
   const tunnelUp = !canNavigate && vpnTunnelUp !== null ? vpnTunnelUp : null;
+  // ⛔ "connecting" was the answer to SIX different questions (owner 2026-09-16). The
+  // derived wait names the one that is actually open; the VPN tunnel-up caption still
+  // wins where it applies (it describes the same two transport groups more precisely,
+  // with the exit it observed). The literals below are the fallback for a wait the
+  // caller did not pass — no surface should reach them.
   const placeholder = canNavigate
     ? 'Search or enter address'
     : tunnelUp !== null
       ? vpnAddressPlaceholder(tunnelUp)
-      : 'connecting… — the address bar unlocks once the device is live';
+      : (wait?.placeholder ?? 'connecting… — the address bar unlocks once the device is live');
   const disabledTitle =
     tunnelUp !== null
       ? vpnTunnelUpCaption(tunnelUp)
-      : 'Connecting to the device — the address bar unlocks once it is live';
+      : (wait?.sentence ?? 'Connecting to the device — the address bar unlocks once it is live');
   return (
     <div data-component="simulator-address" className="px-3 pb-1.5 pt-0.5">
       <div className="flex items-center justify-between px-0 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
@@ -2037,13 +2085,15 @@ function NavigateAddressBar({
           !canNavigate && (
             <span
               data-component="simulator-address-connecting"
+              data-wait-group={wait?.group}
+              title={wait?.sentence}
               className="inline-flex items-center gap-1 font-medium normal-case tracking-normal text-ink-secondary"
             >
               <span
                 aria-hidden="true"
                 className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"
               />
-              connecting…
+              {wait?.chip ?? 'connecting…'}
             </span>
           )
         )}
@@ -2150,12 +2200,16 @@ function BrowserBar({
   downloadsStore,
   onOpenDownloads,
   vpnTunnelUp = null,
+  wait = null,
 }: {
   canNavigate: boolean;
   onNavigate: (url: string) => void;
   /** (b) — non-null while a VPN session's tunnel is up but the browser has not
    *  attached: the connecting cue says that instead of the generic "connecting…". */
   vpnTunnelUp?: VpnTunnelUp | null;
+  /** WHICH signal the bar is waiting for (lib/manual-input-wait), non-null exactly
+   *  while `canNavigate` is false. Its sentence replaces the bare word "connecting". */
+  wait?: ManualInputWait | null;
   // Sim back/forward (A3 W2870) — steps the device's browser history via
   // navigateAgentSessionHistory. Rendered only when BACK_FORWARD_ENABLED (flag-off
   // until A3's daemon handler lands).
@@ -2177,6 +2231,23 @@ function BrowserBar({
   // Opens the Downloads drawer pane (mirrors the rail buttons' pane switch).
   onOpenDownloads: () => void;
 }): JSX.Element {
+  // ⛔ "Connecting…" was this bar's answer to six different questions. The derived
+  // wait names the one that is actually open; the VPN tunnel-up caption still wins
+  // where it applies (it describes the same two transport groups more precisely, with
+  // the exit it observed), and the literal stays as the fallback for a caller that
+  // passes no wait at all.
+  const lockedTitle =
+    vpnTunnelUp !== null
+      ? vpnTunnelUpCaption(vpnTunnelUp)
+      : (wait?.sentence ?? 'Connecting to the device — the address bar unlocks once it is live');
+  // ⛔ The locked field's PLACEHOLDER, not its chip. This bar rendered `wait.chip`
+  // here while the Controls-pane bar rendered `wait.placeholder`, so one field said
+  // "waiting on the phone…" where the other said the whole sentence about the same
+  // session — and the per-group placeholder was dead code on half the product.
+  const lockedPlaceholder =
+    vpnTunnelUp !== null
+      ? vpnAddressPlaceholder(vpnTunnelUp)
+      : (wait?.placeholder ?? 'connecting…');
   const [draft, setDraft] = useState(liveUrl);
   const [focused, setFocused] = useState(false);
   // Follow the live URL when the user isn't editing (so a redirect/link-tap
@@ -2329,7 +2400,7 @@ function BrowserBar({
           <button
             type="button"
             aria-label="Back"
-            title={canNavigate ? 'Back' : 'Connecting…'}
+            title={canNavigate ? 'Back' : lockedTitle}
             disabled={!canNavigate}
             onClick={() => onHistory('back')}
             className="shrink-0 rounded-md p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary disabled:opacity-40"
@@ -2351,7 +2422,7 @@ function BrowserBar({
           <button
             type="button"
             aria-label="Forward"
-            title={canNavigate ? 'Forward' : 'Connecting…'}
+            title={canNavigate ? 'Forward' : lockedTitle}
             disabled={!canNavigate}
             onClick={() => onHistory('forward')}
             className="shrink-0 rounded-md p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary disabled:opacity-40"
@@ -2375,7 +2446,7 @@ function BrowserBar({
       <button
         type="button"
         aria-label="Reload"
-        title={canNavigate ? 'Reload' : 'Connecting…'}
+        title={canNavigate ? 'Reload' : lockedTitle}
         disabled={!canNavigate}
         onClick={reload}
         className="shrink-0 rounded-md p-1 text-ink-secondary transition hover:bg-white/10 hover:text-ink-primary disabled:opacity-40"
@@ -2417,13 +2488,15 @@ function BrowserBar({
         !canNavigate && (
           <span
             data-component="simulator-address-bar-connecting"
+            data-wait-group={wait?.group}
+            title={wait?.sentence}
             className="inline-flex shrink-0 items-center gap-1 text-[10.5px] font-medium text-white/55"
           >
             <span
               aria-hidden="true"
               className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"
             />
-            connecting…
+            {wait?.chip ?? 'connecting…'}
           </span>
         )
       )}
@@ -2508,12 +2581,8 @@ function BrowserBar({
             e.currentTarget.select();
           }}
           onBlur={() => setFocused(false)}
-          placeholder={canNavigate ? 'Search or enter address' : 'connecting…'}
-          title={
-            canNavigate
-              ? undefined
-              : 'Connecting to the device — the address bar unlocks once it is live'
-          }
+          placeholder={canNavigate ? 'Search or enter address' : lockedPlaceholder}
+          title={canNavigate ? undefined : lockedTitle}
           spellCheck={false}
           autoComplete="off"
           aria-label="Address bar"
@@ -2536,7 +2605,7 @@ function BrowserBar({
           type="submit"
           data-component="simulator-address-bar-go"
           aria-label="Go"
-          title={canNavigate ? 'Go' : 'Connecting…'}
+          title={canNavigate ? 'Go' : lockedTitle}
           disabled={!canNavigate || draft.trim() === ''}
           className="shrink-0 rounded p-1 text-white/45 transition hover:bg-white/10 hover:text-white/90 disabled:opacity-30"
         >
@@ -7762,6 +7831,12 @@ export function SimulatorWindow(): JSX.Element {
   // the moment it lands and fall back to the launch value until then.
   const displayTimezone = sessionCapabilityReport?.exit_timezone ?? timezone;
   const manualInputAvailable = sessionCapabilityReport?.manual_input_available;
+  // ⛔ The THREE states of that flag, derived ONCE (lib/manual-input-capability).
+  // A report that NEVER ARRIVED is 'unreported' — not a quiet 'unavailable', and
+  // never available. The `=== false` gates below are unchanged; this names the
+  // state they structurally could not express, so absence stops reading as
+  // nothing on the surfaces that speak about input.
+  const manualInputCapability = manualInputCapabilityOf(sessionCapabilityReport);
   const streamingHealth = sessionCapabilityReport?.streaming_state;
   const egressHealth = sessionCapabilityReport?.egress_state;
   const streamingUnavailable = streamingHealth === 'blank' || streamingHealth === 'failed';
@@ -8073,6 +8148,59 @@ export function SimulatorWindow(): JSX.Element {
   // the box readiness the navigate actually needs.
   const canNavigate = ownsManualInputAuthority(sessionId, room, manualInputControl.epoch);
   const canManipulateTabs = canNavigate && !inputCongested;
+  // ⛔ WHICH signal the wait is on (owner 2026-09-16 — a session that opened, painted
+  // its first page, and then said the single word "connecting" for 33 seconds). Every
+  // unmet conjunct of the predicate above rendered that same word, so a missing screen,
+  // a session that never went active and a phone that never reported were one state to
+  // the customer and to us. This says which, in the customer's words.
+  //
+  // Reads the SAME render-time state `humanInputEnabled` reads (and the binding the
+  // predicate reads), so the sentence cannot claim a wait the bar has already unlocked.
+  // It loosens NOTHING: `canNavigate` above is still the only gate.
+  const manualInputWait = describeManualInputWait({
+    sessionId,
+    roomPresent: room !== null,
+    roomBound: roomBinding?.sessionId === sessionId && roomBinding.room === room,
+    connState,
+    publisherState,
+    // ⛔ The device's OWN answer about its video. Without it the chip promises a
+    // screen "on the way" while the overlay two inches up already says the device
+    // could not start its video — an absence rendered over a verdict we hold.
+    streamingState: streamingHealth,
+    authorityCurrent: manualInputControl.sessionId === sessionId,
+    mode: controlMode,
+    modeConfirmed: controlModeConfirmed,
+    lifecycleConfirmed: manualInputControl.lifecycleConfirmed,
+    // ⛔ Every control-read rejection blanks modeConfirmed/lifecycleConfirmed AND
+    // raises this — and the failing paths do not retry (the 5s poll keeps failing
+    // on an expired key; refreshControl only re-runs when a pane opens). Without
+    // this flag the bar says "checking this session's status…" forever about a
+    // check nobody is running, next to the pane's own "Retry".
+    controlReadFailed: controlLinkUnreachable || controlError !== null,
+    lifecycleTerminal: manualInputControl.lifecycleTerminal,
+    lifecycleStatus: manualInputControl.lifecycleStatus,
+    manualInputAvailable,
+    mutationPending: manualInputControl.mutationPending,
+    controlActionPending: controlAction !== null,
+    sessionEnded: sessionEnded !== null,
+  });
+  // ⛔ The ONE condition under which any surface may say "the phone has not
+  // reported". The tri-state alone is NOT that condition: 'unreported' is also
+  // true of every healthy session before the room is up, before the session is
+  // running, and after it has ended — and on a CLOSED session the control plane
+  // deliberately stops returning the report at all (routes/agent-sessions.ts:
+  // `if (rec.status !== 'closed')`), so a phone that answered YES for the whole
+  // session arrives here as silence. Blaming the device for any of those is the
+  // mirror of the defect this item closes: absence read as a verdict.
+  //
+  // Read off the SHARED derivation, never re-spelled: `input-unreported` is the
+  // group only once every upstream conjunct (transport, screen, our own
+  // mutations, the session read, manual mode) holds and the report is genuinely
+  // the last thing missing. That also keeps the badge, the keyboard affordance
+  // and the address bar naming the SAME blocker in the same render — two
+  // surfaces stating different reasons for one session is exactly what the
+  // shared module exists to prevent.
+  const manualInputUnreported = manualInputWait?.group === 'input-unreported';
   // Event handlers must re-check the live transport owner at invocation time. React
   // can retain a rendered handler for one turn after onRoom synchronously replaces or
   // clears the binding; captured `room`/readiness values would otherwise admit one
@@ -9521,7 +9649,20 @@ export function SimulatorWindow(): JSX.Element {
             keyboardVisible={keyboardVisible}
             onToggleKeyboard={toggleKeyboard}
             inputEnabled={humanInputEnabled}
-            inputUnavailableReason={manualInputAvailable === false ? 'device' : 'agent'}
+            inputUnavailableReason={
+              manualInputCapability === 'unavailable'
+                ? 'device'
+                : // In Manual with nothing reported, "the agent is driving" is a false
+                  // explanation: the agent is not driving and the phone has not answered.
+                  // ⛔ Gated on the shared wait group, not on the bare tri-state: on an
+                  // ENDED session the report is dropped server-side, so the tri-state
+                  // reads 'unreported' for a phone that answered all session long, and
+                  // this tooltip would promise "input stays off until it does" about a
+                  // session that will never report again.
+                  manualInputUnreported
+                  ? 'unreported'
+                  : 'agent'
+            }
           />
           {/* Browser-style page TAB strip (doc-150 item 4) — full-width row between
               the toolbar and the address bar, gated on browserMode exactly like the
@@ -9543,6 +9684,7 @@ export function SimulatorWindow(): JSX.Element {
             <BrowserBar
               canNavigate={canNavigate}
               vpnTunnelUp={vpnTunnelUp}
+              wait={manualInputWait}
               onNavigate={onNavigate}
               onHistory={onHistory}
               liveUrl={liveUrl}
@@ -9709,13 +9851,40 @@ export function SimulatorWindow(): JSX.Element {
                       </button>
                     </div>
                   )}
-                  {manualInputAvailable === false && (
+                  {manualInputCapability === 'unavailable' && (
                     <div
                       role="status"
                       data-component="view-only-capability-badge"
                       className="pointer-events-auto rounded-full bg-amber-400/95 px-3 py-1 text-[10px] font-semibold text-black shadow"
                     >
-                      View only — device input is unavailable
+                      {MANUAL_INPUT_UNAVAILABLE_BADGE}
+                    </div>
+                  )}
+                  {/* ⛔ ABSENCE IS NOT NOTHING (owner 2026-09-16). The badge above
+                      fires only on the device's EXPLICIT "no". When the report never
+                      arrives there was no badge, no caption, nothing — so a session
+                      whose phone has said nothing looked exactly like a healthy one
+                      that is merely slow, and the wait had no statement to read. This
+                      says what is missing, in words distinct from the explicit "input
+                      is unavailable": we have not been told, either way.
+
+                      ⛔ Gated on `manualInputUnreported` — the SHARED wait group, which
+                      is 'input-unreported' only once the transport, the screen, our own
+                      in-flight mutations and a confirmed, running, manual session all
+                      hold. A partial re-derivation here (the tri-state plus a mode
+                      check) lit this amber badge from the FIRST control poll of every
+                      healthy session, while the address bar in the same render said
+                      "Connecting to the phone" — two surfaces naming different blockers
+                      for one session, and a normal bring-up blamed on the device.
+                      Mutually exclusive with the badge above by construction — one
+                      tri-state, three values. */}
+                  {manualInputUnreported && (
+                    <div
+                      role="status"
+                      data-component="input-capability-unreported-badge"
+                      className="pointer-events-auto rounded-full bg-amber-400/95 px-3 py-1 text-[10px] font-semibold text-black shadow"
+                    >
+                      {MANUAL_INPUT_UNREPORTED_BADGE}
                     </div>
                   )}
                   {egressHealth === 'dead_proxy' && (
@@ -10337,6 +10506,11 @@ export function SimulatorWindow(): JSX.Element {
                         <SessionControlSection
                           mode={controlMode}
                           manualInputAvailable={manualInputAvailable}
+                          // The liveness the capability prop above cannot carry: a
+                          // closed session has no report to be undefined ABOUT.
+                          sessionOver={
+                            sessionEnded !== null || manualInputControl.lifecycleTerminal
+                          }
                           pairKind={pairKind}
                           action={controlAction}
                           composerText={composerText}
@@ -10366,6 +10540,7 @@ export function SimulatorWindow(): JSX.Element {
                             onNavigate={onNavigate}
                             liveUrl={liveUrl}
                             vpnTunnelUp={vpnTunnelUp}
+                            wait={manualInputWait}
                           />
                         )}
                         <LabeledControl

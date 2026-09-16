@@ -97,6 +97,7 @@ import {
 } from './harness-control-codec.js';
 import type { Cookie } from '../schemas/harness-control-protocol.js';
 import type { Logger } from '../lib/logger.js';
+import { PROVISIONING_DETAIL_TOKEN_RE } from './session-provisioning-detail-relay.js';
 import {
   describeRejection,
   frameTypeLabel,
@@ -696,7 +697,37 @@ export class FleetControlConnection {
           // deliberately does not claim `active`; the relay records the token so
           // the customer read can say why the session is still provisioning. An
           // `active` frame clears it. Ownership-checked by the consumer.
+          // ⭐ 2026-09-16 — LOG THE TRANSITION. This branch logged nothing, and
+          // that hole cost a day: a customer reported "OpenVPN sessions always
+          // sit on connecting and I can never take control, SOCKS5 is fine", and
+          // the decisive question — does a VPN session ever send `active`? — was
+          // unanswerable from this side. The public read reports `provisioning`
+          // (not `active`) for exactly as long as a detail token is set, and the
+          // desktop app gates the address bar AND remote control on `active`, so
+          // a VPN tail that stops at `vpn_egress_active` is indistinguishable
+          // here from one that never ran. An empty grep of this log was twice
+          // mistaken for evidence of absence; now it is evidence.
+          //
+          // ⛔ The detail is logged ONLY on the `provisioning` branch, where the
+          // relay's own contract constrains it to a snake_case step token
+          // (PROVISIONING_DETAIL_TOKEN_RE) from a fixed vocabulary. An `errored`
+          // frame's detail is diagnostic prose and can carry a node's real IP
+          // (see the prefix-filter note at the top of this file) — it is not
+          // logged here and must not be added.
           if (frame.status === 'provisioning' || frame.status === 'active') {
+            this.logger?.info(
+              {
+                nodeId: this.nodeId,
+                sessionId: frame.sessionId,
+                status: frame.status,
+                ...(frame.status === 'provisioning' &&
+                typeof frame.detail === 'string' &&
+                PROVISIONING_DETAIL_TOKEN_RE.test(frame.detail)
+                  ? { provisioningStep: frame.detail }
+                  : {}),
+              },
+              'sessionStatus: provisioning transition',
+            );
             this.onSessionProvisioning?.(frame, this.nodeId);
           }
           if (TERMINAL_SESSION_STATUSES.has(frame.status)) {
@@ -869,11 +900,37 @@ export class FleetControlConnection {
           // cannot, and a rate is unobservable from a key set. It is a small
           // non-negative integer: it identifies no customer, names no endpoint,
           // and cannot be correlated back to a person. Every other field stays out.
+          // ⭐ SECOND EXEMPTION GROUP, added 2026-09-16 under the same bar the
+          // count clears: identifies no customer, names no endpoint, correlates
+          // to no person — and answers the one question this log could not.
+          //
+          // The owner sat through a session that never became interactive, and
+          // NOBODY could say why: the desktop app gates both the address bar and
+          // remote control on a 13-way predicate whose conjuncts come from three
+          // producers, and this line recorded that a report arrived without
+          // recording what it CLAIMED. The node's own log had the same hole, so
+          // neither end could reconstruct it. These fields are the state machine,
+          // nothing else: an enum or a boolean each, all minted by us.
+          //
+          // ⛔ The names-only rule still governs everything not listed here, and
+          // the denylist is unchanged: `proxyUpstream` is CUSTOMER
+          // INFRASTRUCTURE, `proxyGeoRegion` narrows a person's location past
+          // country, and `archetypeId`, `webkitForkBuild` and the safeguard
+          // detail stay names. Adding a field here means arguing it past that
+          // bar in this comment, not appending it to an object.
           this.logger?.info(
             {
               nodeId: this.nodeId,
+              sessionId: frame.sessionId,
               frameKeys: Object.keys(frame).sort().join(','),
               h3ConnectionCount: frame.h3ConnectionCount,
+              egressPhase: frame.egressPhase,
+              manualInputAvailable: frame.manualInputAvailable,
+              streamingState: frame.streamingState,
+              streamingHealth: frame.streamingHealth,
+              transportModeActive: frame.transportModeActive,
+              transportModeRequested: frame.transportModeRequested,
+              proxyUdpSupported: frame.proxyUdpSupported,
             },
             'capabilityReport accepted: key set',
           );

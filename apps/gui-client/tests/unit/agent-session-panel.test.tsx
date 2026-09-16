@@ -11,6 +11,7 @@ import {
   isAuthConnectError,
   NO_PUBLISHER_TIMEOUT_MS,
   PUBLISHER_LOST_GRACE_MS,
+  SLOW_START_NOTICE_MS,
   AUTO_RECONNECT_BACKOFF_MS,
 } from '../../src/components/AgentSessionPanel';
 import {
@@ -725,6 +726,261 @@ describe('AgentSessionPanel overlay UX', () => {
       expect(container.querySelector('[data-action="retry-launch"]')).toBeNull();
       // publisher === 'publishing' → no publisher-state overlay at all.
       expect(container.querySelector('[data-overlay="publisher-state"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Item 2 (owner 2026-09-16, "stays on connecting forever … closed it after 33 seconds")
+  // — the FIRST half of the pre-pixel wait. "Connected — starting the browser… this can
+  // take a few seconds." repeated that same promise for the full 30s give-up window with
+  // nothing ever said. Past SLOW_START_NOTICE_MS it must say plainly that the wait has
+  // gone long, say what the customer can do, and OFFER those actions — while cancelling
+  // nothing (still 'waiting', no reconnect of its own, no Room torn down).
+  it('Item 2: the "starting the browser" wait says it is taking longer after the deadline and offers Retry — cancelling nothing', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      connectMock.mockResolvedValue(undefined);
+      const onClose = vi.fn();
+      const onNoPublisher = vi.fn();
+      const { container } = render(
+        <AgentSessionPanel info={INFO} onClose={onClose} onNoPublisher={onNoPublisher} />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const connectCallsAtStart = connectMock.mock.calls.length;
+      // BEFORE the deadline — the ORIGINAL sentence, no notice, no action offered.
+      act(() => {
+        vi.advanceTimersByTime(SLOW_START_NOTICE_MS - 1_000);
+      });
+      let overlay = container.querySelector('[data-overlay="publisher-state"]');
+      expect(overlay?.getAttribute('data-slow')).toBe('false');
+      expect(overlay?.textContent).toMatch(/starting the browser/i);
+      expect(overlay?.textContent).not.toMatch(/taking longer than expected/i);
+      expect(container.querySelector('[data-action="retry-launch"]')).toBeNull();
+      // AFTER the deadline — the honest sentence, the "what you can do" line, and the
+      // actions that already exist in this component.
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+      overlay = container.querySelector('[data-overlay="publisher-state"]');
+      expect(overlay?.getAttribute('data-slow')).toBe('true');
+      expect(overlay?.textContent).toMatch(/taking longer than expected/i);
+      // ⛔ NON-CAUSAL. The panel observes "no video track has been subscribed on this
+      // Room yet" — set unconditionally at connect start and equally produced by a
+      // publish failure, an SFU delivery gap, or a subscribe failure on our side. It
+      // receives NO box/harness signal, so it may not say the browser hasn't started
+      // (in the owner's own incident the node reported normally throughout, and that
+      // sentence would have been a false cause). It reports the wait, not a diagnosis.
+      expect(overlay?.textContent).toMatch(/live view still hasn.t arrived/i);
+      expect(overlay?.textContent).not.toMatch(/browser still hasn.t started/i);
+      // …and it is THIS half's sentence, not the other half's (mutation: swap the two
+      // half-sentences and this arm reds).
+      expect(overlay?.textContent).not.toMatch(/shown a frame/i);
+      expect(overlay?.textContent).not.toMatch(/this can take a few seconds/i);
+      // Item 2 (a11y) — "unbounded and silent" includes silent to a screen reader: the
+      // copy is swapped IN PLACE inside a container that must be a live region.
+      expect(overlay?.getAttribute('role')).toBe('status');
+      // Says what the customer can do…
+      expect(overlay?.textContent).toMatch(/press Retry to reconnect the live view/i);
+      expect(overlay?.textContent).toMatch(/relaunch the profile from the main Driftstack/i);
+      // …but NOT "you can keep waiting" on this half: NO_PUBLISHER_TIMEOUT_MS flips this
+      // very overlay to the give-up verdict 15s from now, so that advice is one the panel
+      // itself overrules. (It stands on the 'publishing' half, where the timer is inert.)
+      expect(overlay?.textContent).not.toMatch(/keep waiting/i);
+      // …and offers it.
+      expect(container.querySelector('[data-action="retry-launch"]')).not.toBeNull();
+      expect(container.querySelector('[data-action="open-polling-viewer"]')).not.toBeNull();
+      expect(container.querySelector('[data-action="close-slow-session"]')).not.toBeNull();
+      // ⛔ THE DEADLINE CANCELS NOTHING. Still 'waiting' (not flipped to the
+      // launch-failed 'none'), no reconnect fired on its own, no close on the
+      // customer's behalf — it changed only what is SAID.
+      expect(overlay?.getAttribute('data-state')).toBe('waiting');
+      expect(connectMock.mock.calls.length).toBe(connectCallsAtStart);
+      expect(onClose).not.toHaveBeenCalled();
+      expect(onNoPublisher).not.toHaveBeenCalled();
+      // The offered Retry is real: it re-runs the connect effect.
+      act(() => {
+        fireEvent.click(container.querySelector('[data-action="retry-launch"]') as HTMLElement);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(connectMock.mock.calls.length).toBeGreaterThan(connectCallsAtStart);
+      // …and the notice's OWN primary action gets a CLEAN slate. The fresh attempt is
+      // one second old, so it must show the original sentence again — not the 15s
+      // verdict inherited from the attempt the customer just abandoned. (Mutation:
+      // delete `setSlowStart(false)` from the connect effect and this arm reds; without
+      // it every retry renders "taking longer than expected" the instant it connects.)
+      overlay = container.querySelector('[data-overlay="publisher-state"]');
+      expect(overlay?.getAttribute('data-slow')).toBe('false');
+      expect(overlay?.textContent).toMatch(/starting the browser/i);
+      expect(overlay?.textContent).not.toMatch(/taking longer than expected/i);
+      expect(container.querySelector('[data-action="retry-launch"]')).toBeNull();
+      // The retry's own deadline is armed fresh — it arrives on ITS schedule, not the
+      // old timer's (which the effect cleanup cleared).
+      act(() => {
+        vi.advanceTimersByTime(SLOW_START_NOTICE_MS - 1_000);
+      });
+      expect(
+        container.querySelector('[data-overlay="publisher-state"]')?.getAttribute('data-slow'),
+      ).toBe('false');
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+      expect(
+        container.querySelector('[data-overlay="publisher-state"]')?.getAttribute('data-slow'),
+      ).toBe('true');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Item 2 — the SECOND half, which had NO bound at all: once TrackSubscribed fires,
+  // NO_PUBLISHER_TIMEOUT_MS is inert (it only fires while publisher is still 'waiting'),
+  // so a track that subscribes and never paints spins on "Almost there…" forever. Same
+  // deadline; and a frame arriving LATE must still clear it and leave the session normal.
+  it('Item 2: the "video stream is arriving" wait gets the same deadline, and a frame arriving AFTER it still works', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      const handlers: Record<string, (arg: unknown) => void> = {};
+      const roomOn = vi.fn((evt: string, cb: (arg: unknown) => void) => {
+        handlers[evt] = cb;
+      });
+      const disconnect = vi.fn();
+      createRoomMock.mockReturnValueOnce({ on: roomOn, disconnect });
+      connectMock.mockResolvedValue(undefined);
+      const { container } = render(<AgentSessionPanel info={INFO} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const connectCallsAtStart = connectMock.mock.calls.length;
+      // The track subscribes promptly — but no frame ever decodes.
+      act(() => {
+        handlers['trackSubscribed']?.({ kind: 'video', attach: vi.fn() });
+      });
+      let overlay = container.querySelector('[data-overlay="publisher-state"]');
+      expect(overlay?.getAttribute('data-state')).toBe('publishing');
+      expect(overlay?.textContent).toMatch(/almost there/i);
+      // BEFORE the deadline — the original sentence stands.
+      // ⛔ LITERAL milliseconds here, not `SLOW_START_NOTICE_MS - 1_000`: an arm that
+      // advances relative to the constant passes for ANY value of it, so the deadline
+      // could drift to 28s (2s before the panel gives up, 5s before the owner closed
+      // the window) with a green suite. 14_000 / 16_000 pin the magnitude itself —
+      // moving the number now takes a deliberate edit to this guard too. The bounds and
+      // the reasoning behind 15s are asserted in "the deadline's magnitude" below.
+      act(() => {
+        vi.advanceTimersByTime(14_000);
+      });
+      overlay = container.querySelector('[data-overlay="publisher-state"]');
+      expect(overlay?.getAttribute('data-slow')).toBe('false');
+      expect(overlay?.textContent).toMatch(/almost there/i);
+      expect(overlay?.textContent).not.toMatch(/taking longer than expected/i);
+      // AFTER — the honest sentence names THIS half, and Retry is offered.
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+      overlay = container.querySelector('[data-overlay="publisher-state"]');
+      expect(overlay?.getAttribute('data-slow')).toBe('true');
+      expect(overlay?.textContent).toMatch(/taking longer than expected/i);
+      // Both halves report only what was observed — here TrackSubscribed fired and
+      // videoWidth is still 0, which is exactly what this sentence says.
+      expect(overlay?.textContent).toMatch(/hasn.t shown a frame/i);
+      expect(overlay?.textContent).not.toMatch(/live view still hasn.t arrived/i);
+      expect(overlay?.textContent).not.toMatch(/almost there/i);
+      expect(overlay?.getAttribute('role')).toBe('status');
+      // "You can keep waiting" is TRUE on this half and nothing retracts it: once
+      // publisher is 'publishing', NO_PUBLISHER_TIMEOUT_MS is inert.
+      expect(overlay?.textContent).toMatch(/keep waiting/i);
+      expect(container.querySelector('[data-action="retry-launch"]')).not.toBeNull();
+      // SURFACE-NEUTRAL copy. This render passes no onClose — the shape AgentChatView
+      // mounts, a 300px column inside the MAIN window, where there is no window to close
+      // and no profile to relaunch. The copy must not name an action the surface cannot
+      // offer. (Mutation: un-gate the close/relaunch clause and this arm reds.)
+      expect(overlay?.textContent).not.toMatch(/close this window/i);
+      expect(overlay?.textContent).not.toMatch(/relaunch the profile/i);
+      expect(container.querySelector('[data-action="close-slow-session"]')).toBeNull();
+      // ⛔ Nothing was cancelled: same Room, same connect, still 'publishing'.
+      expect(disconnect).not.toHaveBeenCalled();
+      expect(connectMock.mock.calls.length).toBe(connectCallsAtStart);
+      expect(overlay?.getAttribute('data-state')).toBe('publishing');
+      // A frame that finally paints LONG after the deadline clears the overlay
+      // outright — the slow session still becomes a working one.
+      act(() => {
+        const video = container.querySelector('video') as HTMLVideoElement;
+        Object.defineProperty(video, 'videoWidth', { configurable: true, value: 393 });
+        Object.defineProperty(video, 'videoHeight', { configurable: true, value: 790 });
+        video.dispatchEvent(new Event('loadeddata'));
+      });
+      expect(container.querySelector('[data-overlay="publisher-state"]')).toBeNull();
+      expect(container.querySelector('[data-action="retry-launch"]')).toBeNull();
+      // …and stays cleared past the give-up window (the notice armed no give-up).
+      act(() => {
+        vi.advanceTimersByTime(NO_PUBLISHER_TIMEOUT_MS + 5_000);
+      });
+      expect(container.querySelector('[data-overlay="publisher-state"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Item 2 — the deadline's MAGNITUDE, asserted absolutely rather than relative to
+  // itself. Both behavioural arms above could pass with SLOW_START_NOTICE_MS at 28s —
+  // firing 2s before the panel gives up and 5s after the owner had already closed the
+  // window, i.e. the item's entire purpose defeated with a green suite. The number was
+  // the part of this change that had to come from evidence, so it gets its own guard.
+  it('Item 2: the deadline’s magnitude sits between the recorded cold-start false alarm and the give-up point', () => {
+    // LOWER bound, from NO_PUBLISHER_TIMEOUT_MS's own recorded measurement: 10s fired
+    // "right as the stream was about to appear" on a cold spawn, so a notice at or
+    // under 10s calls a HEALTHY start slow.
+    expect(SLOW_START_NOTICE_MS).toBeGreaterThan(10_000);
+    // UPPER bound: the notice exists so the customer learns the wait has gone long
+    // while there is still time to act. Past the halfway point of the give-up window
+    // it is telling them something they are about to be told anyway — and the owner
+    // (who left at 33s) would have seen nothing until the verdict.
+    expect(SLOW_START_NOTICE_MS).toBeLessThanOrEqual(NO_PUBLISHER_TIMEOUT_MS / 2);
+    // It must be a NOTICE before a VERDICT, never the other way round.
+    expect(SLOW_START_NOTICE_MS).toBeLessThan(NO_PUBLISHER_TIMEOUT_MS);
+  });
+
+  // Item 2 — the notice must not hand the customer an affordance and then take it away.
+  // The 'waiting' half LANDS in the give-up branch NO_PUBLISHER_TIMEOUT_MS later; the
+  // Close button lived only in the slow branch, so it silently vanished at exactly the
+  // moment the copy turned into a failure verdict.
+  it('Item 2: the give-up overlay keeps the Close the notice offered, and reads as a continuation of it', async () => {
+    vi.useFakeTimers();
+    try {
+      connectMock.mockReset();
+      connectMock.mockResolvedValue(undefined);
+      const onClose = vi.fn();
+      const { container } = render(<AgentSessionPanel info={INFO} onClose={onClose} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      // Past the notice: Close is offered.
+      act(() => {
+        vi.advanceTimersByTime(16_000);
+      });
+      expect(container.querySelector('[data-action="close-slow-session"]')).not.toBeNull();
+      // Past the give-up point: the verdict branch — and Close is STILL offered.
+      act(() => {
+        vi.advanceTimersByTime(NO_PUBLISHER_TIMEOUT_MS - 16_000 + 100);
+      });
+      const overlay = container.querySelector('[data-overlay="publisher-state"]');
+      expect(overlay?.getAttribute('data-state')).toBe('none');
+      expect(overlay?.textContent).toMatch(/couldn’t show the live view/i);
+      expect(container.querySelector('[data-action="close-failed-session"]')).not.toBeNull();
+      expect(container.querySelector('[data-action="retry-launch"]')).not.toBeNull();
+      // …and it continues the notice rather than retracting it: "nothing has been
+      // cancelled" was true at 15s and is still true here — a late TrackSubscribed
+      // flips this overlay straight back to 'publishing'.
+      expect(overlay?.textContent).toMatch(/nothing here was cancelled/i);
+      expect(overlay?.textContent).toMatch(/arrives late still appears/i);
+      // Nothing was closed on the customer's behalf at either deadline.
+      expect(onClose).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }

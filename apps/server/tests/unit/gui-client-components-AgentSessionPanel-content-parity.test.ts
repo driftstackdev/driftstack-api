@@ -155,7 +155,7 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).toMatch(/The task itself may\s+still have run/);
     // \s+ — prettier wraps this JSX text node at a depth-dependent column (the
     // ww5k0xkmx first-frame hold deepened the conditional), so tolerate any wrap.
-    expect(body).toMatch(/If it keeps happening,\s+contact support/);
+    expect(body).toMatch(/If it keeps happening,\s+contact\s+support/);
     // 2026-09-15 owner directive: no device / screen-capture mechanics on a customer surface.
     expect(body).not.toMatch(/automation device|screen capture/);
     expect(body).not.toMatch(/the proxy or connection may be down/);
