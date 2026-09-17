@@ -165,7 +165,15 @@ export class HttpClient {
    * contract. Non-idempotent streams are never transparently retried — a dropped
    * connection may have already dispatched browser actions.
    */
-  async requestEventStream<T>(opts: RequestOptions, onStep?: (event: unknown) => void): Promise<T> {
+  async requestEventStream<T>(
+    opts: RequestOptions,
+    onStep?: (event: unknown) => void,
+    /** Every non-terminal frame that is not `step`, by its SSE event name. The
+     *  server may add progress events at any time, so a consumer of this MUST
+     *  ignore names it does not recognise rather than treat one as a protocol
+     *  error. */
+    onEvent?: (event: { type: string; data: unknown }) => void,
+  ): Promise<T> {
     const fetchImpl = this.config.fetch ?? fetch;
     const timeoutMs = this.resolveTimeoutMs(opts);
     const url = this.buildUrl(opts.path, opts.query);
@@ -204,8 +212,8 @@ export class HttpClient {
       // the terminal `event: response` becomes the return value. Every other
       // caller (no onStep, a non-2xx, or a JSON downgrade) falls through to the
       // buffered path below, unchanged.
-      if (onStep !== undefined && response.ok && isEventStream) {
-        const streamed = await readStreamingSseResponse(response, response.status, onStep);
+      if ((onStep !== undefined || onEvent !== undefined) && response.ok && isEventStream) {
+        const streamed = await readStreamingSseResponse(response, response.status, onStep, onEvent);
         if (streamed.status >= 200 && streamed.status < 300) return streamed.body as T;
         if (!isProblem(streamed.body)) {
           throw new TransportError(
@@ -322,7 +330,8 @@ function decodeTerminalFrame(payload: string, transportStatus: number): Terminal
 async function readStreamingSseResponse(
   response: Response,
   transportStatus: number,
-  onStep: (event: unknown) => void,
+  onStep?: (event: unknown) => void,
+  onEvent?: (event: { type: string; data: unknown }) => void,
 ): Promise<TerminalSseResponse> {
   if (response.body === null) {
     throw new TransportError(
@@ -356,15 +365,21 @@ async function readStreamingSseResponse(
       terminal = decodeTerminalFrame(payload, transportStatus);
       return;
     }
-    if (event === 'step') {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(payload);
-      } catch {
-        return; // a malformed progress frame is ignored, never fatal
-      }
-      onStep(parsed);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(payload);
+    } catch {
+      return; // a malformed progress frame is ignored, never fatal
     }
+    if (event === 'step') {
+      onStep?.(parsed);
+      return;
+    }
+    // Any other non-terminal frame — `phase`, `plan`, `step_start`, `answer`,
+    // and whatever the server adds next. Forwarded by NAME rather than decoded
+    // here, so an event this build has never heard of reaches the caller intact
+    // instead of being dropped by a switch that would need editing first.
+    onEvent?.({ type: event, data: parsed });
   };
 
   try {

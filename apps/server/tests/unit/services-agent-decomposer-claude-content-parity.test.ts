@@ -254,8 +254,28 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(/body,\s*redirect: 'error',\s*signal: ac\.signal,/);
     // The timeout machinery itself — AbortController + abort + teardown.
     expect(body).toMatch(/const ac = new AbortController\(\);/);
-    expect(body).toMatch(/setTimeout\(\(\) => ac\.abort\(\), this\.requestTimeoutMs\)/);
+    // B3 — the per-attempt bound is now chosen by transport, and BOTH arms are
+    // pinned. A streamed planning call is bounded by SILENCE (an idle timer the
+    // reader re-arms on every delta) plus an absolute cap; a non-streamed call
+    // keeps the single total timer. Losing the streamed pair would reinstate the
+    // exact defect this replaced: a 30s TOTAL budget that a long-but-healthy plan
+    // blew, aborting a working call and paying for the whole thing twice.
+    expect(body).toMatch(
+      /opts\.streaming === true \? this\.streamIdleTimeoutMs : this\.requestTimeoutMs;/,
+    );
+    expect(body).toMatch(/let timer = setTimeout\(\(\) => ac\.abort\(\), attemptTimeoutMs\);/);
+    expect(body).toMatch(/timer = setTimeout\(\(\) => ac\.abort\(\), attemptTimeoutMs\);/);
+    expect(body).toMatch(/setTimeout\(\(\) => ac\.abort\(\), this\.streamTotalTimeoutMs\)/);
     expect(body).toMatch(/clearTimeout\(timer\);/);
+    expect(body).toMatch(/if \(capTimer !== undefined\) clearTimeout\(capTimer\);/);
+    // The streamed request must actually ASK for a stream, and must reassemble
+    // into the SAME envelope the non-streamed path returns — that identity is
+    // what keeps the plan parse, the usage accounting and the error
+    // classification below provably shared rather than duplicated.
+    expect(body).toMatch(/stream: true,/);
+    expect(body).toMatch(/accept: 'text\/event-stream'/);
+    expect(body).toMatch(/streamedEnvelope = await readAnthropicStream\(res, rearmIdle\);/);
+    expect(body).toMatch(/if \(streamedEnvelope !== undefined\) return streamedEnvelope;/);
     // Body read INSIDE the try (bug-class fix bc72ff48 — reading after the
     // clearTimeout left res.json() unbounded); the reader itself is byte-bounded
     // and its errors propagate into retry. Parse stays OUTSIDE so a malformed
@@ -266,6 +286,16 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(/bytesRead \+= value\.byteLength;/);
     expect(body).toMatch(/if \(bytesRead > MAX_ANTHROPIC_RESPONSE_BYTES\) \{/);
     expect(body).toMatch(/return JSON\.parse\(bodyText\) as unknown;/);
+    // ⛔ The streamed path must bound the PAYLOAD, not the framing. Anthropic
+    // wraps every few characters of text in ~120 bytes of SSE envelope, so
+    // counting raw stream bytes against this payload ceiling trips at roughly
+    // 2 KB of plan JSON — and AnthropicResponseTooLargeError is exempt from
+    // retry and classified fatal, so the long plans the streaming change exists
+    // to rescue would fail harder than before it. The raw stream keeps a
+    // separate, far larger transport backstop.
+    expect(body).toMatch(/if \(text\.length > MAX_ANTHROPIC_RESPONSE_BYTES\) throw new /);
+    expect(body).toMatch(/const MAX_ANTHROPIC_STREAM_TRANSPORT_BYTES = 4 \* 1024 \* 1024;/);
+    expect(body).toMatch(/if \(bytesRead > MAX_ANTHROPIC_STREAM_TRANSPORT_BYTES\) \{/);
   });
 
   it('every provider attempt and retry backoff is fenced by the admitted control authority', () => {

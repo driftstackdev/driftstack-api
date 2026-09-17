@@ -5355,6 +5355,9 @@ function buildRegistry(): OpenAPIRegistry {
         intents: z.array(AgentIntentSchema),
         results: z.array(IntentResultSchema),
         ok: z.boolean(),
+        // The read-back answer to the customer's question, present only when
+        // the turn read the page back and produced one.
+        answer: z.string().optional(),
         usage: AgentMessageUsageOpenApi.optional(),
       }),
       z.object({
@@ -5393,9 +5396,13 @@ function buildRegistry(): OpenAPIRegistry {
     tokens_consumed: z.number().int().nonnegative().optional(),
     usage: AgentMessageUsageOpenApi.optional(),
     partial_results: z.array(IntentResultSchema).optional(),
+    // Lifecycle discriminators, so a client tells these conflicts apart by field
+    // rather than by parsing the sentence.
+    session_status: z.enum(['active', 'paused', 'closed']).optional(),
+    turn_in_progress: z.literal(true).optional(),
   }).openapi('AgentMessageConflictProblem', {
     description:
-      'RFC 7807 conflict with bounded agent-turn evidence. Idempotency conflicts identify mismatch versus unresolved work; authority/lifecycle conflicts may include consumed usage and redacted settled results that must be inspected before another action.',
+      'RFC 7807 conflict with bounded agent-turn evidence. Idempotency conflicts identify mismatch versus unresolved work; authority/lifecycle conflicts may include consumed usage and redacted settled results that must be inspected before another action, plus `session_status` when the session itself ended and `turn_in_progress` when another turn still holds the session.',
   });
 
   registerRoute(r, {
@@ -5457,7 +5464,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       200: {
         description:
-          'Turn result — discriminated by `kind`: plan-executed (intents + results + ok) / clarify (clarifying_question) / refuse (refuse_reason) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.',
+          'Turn result — discriminated by `kind`: plan-executed (intents + results + ok, plus `answer` when the turn read the page back to answer the question) / clarify (clarifying_question) / refuse (refuse_reason) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.',
         content: {
           'application/json': {
             schema: AgentMessageResponseOpenApi,
@@ -5465,7 +5472,7 @@ function buildRegistry(): OpenAPIRegistry {
           'text/event-stream': {
             schema: z.string().openapi('AgentMessageResponseStream', {
               description:
-                'Heartbeat-backed SSE representation selected by Accept: text/event-stream. Comments keep the connection active; exactly one terminal event named response carries JSON { status, body }, where body is the ordinary AgentMessageResponse or RFC 7807 Problem.',
+                'Heartbeat-backed SSE representation selected by Accept: text/event-stream. Comments keep the connection active; exactly one terminal event named response carries JSON { status, body }, where body is the ordinary AgentMessageResponse or RFC 7807 Problem. Progress events arrive before it and are purely additive — step ({index, result}), phase ({phase}), plan ({total, intents, labels}), step_start ({index, total, label}) and answer ({answer}). A client must ignore any event name it does not recognise; new ones may be added, and none of them is required to read the turn result.',
             }),
           },
         },

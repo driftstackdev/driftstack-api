@@ -65,17 +65,59 @@ const DEFAULT_RETRY_BACKOFF_MS = 1000;
 // timeout every other outbound caller already uses (stripe-api, nowpayments,
 // webhook-delivery, health-probe, incident-broadcast).
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+// Streaming planning call (B3). A 30s TOTAL budget is the wrong instrument for a
+// call whose duration scales with the length of the plan: a long plan blew the
+// timer, aborted, backed off 1s and re-ran the WHOLE call — paying twice and
+// roughly doubling the wait, for an upstream that was healthy and talking. With
+// `stream: true` the discriminator becomes SILENCE, so the per-attempt budget is
+// an IDLE timer reset by every delta, plus a generous absolute cap that only a
+// genuinely stuck stream can reach.
+const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 25_000;
+const DEFAULT_STREAM_TOTAL_TIMEOUT_MS = 300_000;
 // Anthropic's legitimate 2,048-token planning response is only a few KiB.
 // 64 KiB remains generous while also fitting, with the bounded eight-result
 // summary and read-back answer, inside AgentRuntime's 128 KiB AI-turn transcript
 // reserve. A broken/compromised upstream therefore cannot make Response.text()
 // allocate arbitrarily or cross the transcript limit after turn preflight.
 const MAX_ANTHROPIC_RESPONSE_BYTES = 64 * 1024;
+// ⛔ The ceiling above measures the PAYLOAD, and SSE framing is not payload.
+// Anthropic sends roughly one `content_block_delta` frame per few characters of
+// text, and each frame costs ~120 bytes of `event:`/`data:`/JSON wrapper — a
+// ~30x expansion. Counting raw stream bytes against a 64 KiB payload ceiling
+// therefore trips at ~2 KB of plan JSON, which a single validator-legal `type`
+// intent (MAX_AGENT_TYPED_TEXT_CHARS is 10,000) exceeds on its own — and the
+// failure is the worst available, since AnthropicResponseTooLargeError is
+// exempt from retry and classified FATAL. So the streamed path bounds the
+// ASSEMBLED TEXT against MAX_ANTHROPIC_RESPONSE_BYTES (the same quantity the
+// buffered path bounded) and keeps this far larger figure purely as a transport
+// backstop against an upstream that streams framing forever without ever
+// producing text.
+const MAX_ANTHROPIC_STREAM_TRANSPORT_BYTES = 4 * 1024 * 1024;
 
 class AnthropicResponseTooLargeError extends Error {
   constructor() {
     super(`Anthropic response body exceeded ${MAX_ANTHROPIC_RESPONSE_BYTES} bytes`);
     this.name = 'AnthropicResponseTooLargeError';
+  }
+}
+
+/**
+ * A provider error delivered as a mid-stream `error` frame rather than as an
+ * HTTP status.
+ *
+ * ⛔ Typed, and not a bare Error, because it is thrown from INSIDE the
+ * fetch/read try block — where the generic `catch (networkErr)` retries
+ * unconditionally. The buffered path reaches the non-ok branch instead, which
+ * retries only a 429 or a 5xx and lets a 4xx escape on the first attempt.
+ * Carrying the mapped status out is what lets the streamed path apply that same
+ * policy instead of paying twice for an authentication failure.
+ */
+class AnthropicStreamError extends Error {
+  readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'AnthropicStreamError';
+    this.status = status;
   }
 }
 
@@ -259,19 +301,36 @@ export interface ClaudeAgentDecomposerDeps {
   fetch?: typeof globalThis.fetch;
   /** Retry backoff in ms (test override). Defaults to 1000. */
   retryBackoffMs?: number;
-  /** Per-request Anthropic timeout in ms (test override). Defaults to 30000. */
+  /** Per-request Anthropic timeout in ms (test override). Defaults to 30000.
+   *  Applies to the NON-streamed calls; the streamed planning call is bounded by
+   *  the idle + absolute pair below. */
   requestTimeoutMs?: number;
+  /** Abort a streamed planning call after this long with NO delta (test
+   *  override). Defaults to 25000. */
+  streamIdleTimeoutMs?: number;
+  /** Absolute ceiling on one streamed planning attempt (test override).
+   *  Defaults to 300000. */
+  streamTotalTimeoutMs?: number;
 }
 
 export class ClaudeAgentDecomposer implements AgentDecomposer {
   private readonly fetchImpl: typeof globalThis.fetch;
   private readonly retryBackoffMs: number;
   private readonly requestTimeoutMs: number;
+  private readonly streamIdleTimeoutMs: number;
+  private readonly streamTotalTimeoutMs: number;
 
   constructor(deps: ClaudeAgentDecomposerDeps = {}) {
     this.fetchImpl = deps.fetch ?? globalThis.fetch.bind(globalThis);
     this.retryBackoffMs = deps.retryBackoffMs ?? DEFAULT_RETRY_BACKOFF_MS;
     this.requestTimeoutMs = deps.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    // `requestTimeoutMs` is the caller's "bound one attempt" knob. On the
+    // streamed path the equivalent bound is SILENCE, so it lands on the idle
+    // timer rather than being quietly ignored — otherwise a caller that asked
+    // for a 5ms attempt would get the 300s absolute cap instead.
+    this.streamIdleTimeoutMs =
+      deps.streamIdleTimeoutMs ?? deps.requestTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS;
+    this.streamTotalTimeoutMs = deps.streamTotalTimeoutMs ?? DEFAULT_STREAM_TOTAL_TIMEOUT_MS;
   }
 
   async decompose(args: DecomposeArgs): Promise<DecomposeResult> {
@@ -325,10 +384,18 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
       max_tokens: MAX_OUTPUT_TOKENS,
       system: SYSTEM_PROMPT,
       messages,
+      // B3 — stream the planning call. The RESULT is unchanged: the deltas are
+      // reassembled into the same envelope shape the non-streamed call returns,
+      // so parsing, validation, usage accounting and error classification below
+      // are the ones that already shipped. What changes is that a slow plan is
+      // now bounded by silence rather than by total duration.
+      stream: true,
     });
 
     // 5. Call Anthropic with single retry on 5xx.
-    const response = await this.callWithRetry(body, args.byokAnthropicApiKey, args.shouldContinue);
+    const response = await this.callWithRetry(body, args.byokAnthropicApiKey, args.shouldContinue, {
+      streaming: true,
+    });
 
     // 6. Parse the response. Token accounting comes from the API's
     //    usage block — input + output combined, since the customer
@@ -378,6 +445,10 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
     body: string,
     apiKey: string,
     shouldContinue: DecomposeArgs['shouldContinue'] | AnswerArgs['shouldContinue'],
+    /** `streaming` reads an Anthropic SSE body and reassembles the non-streamed
+     *  envelope from it. Everything else about the call — headers, retry policy,
+     *  size ceiling, error text — is identical either way. */
+    opts: { streaming?: boolean } = {},
   ): Promise<unknown> {
     let attempt = 0;
     // Single retry on 5xx; let 4xx + post-retry 5xx escape as exceptions.
@@ -394,8 +465,27 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
       // left the body read unbounded (only undici's ~300s default backstops),
       // the bug-class fixed in stripe-api bc72ff48.
       const ac = new AbortController();
-      const timer = setTimeout(() => ac.abort(), this.requestTimeoutMs);
+      // A streamed attempt is bounded by SILENCE — an idle timer the reader
+      // re-arms on every chunk — plus an absolute cap that only a stream which
+      // never stops trickling can reach. A non-streamed one keeps the single
+      // total timer it has always had. The idle timer is armed BEFORE the fetch
+      // so an upstream that opens a connection and never sends headers is
+      // covered by the same bound as one that goes quiet mid-body. All of them
+      // abort the same controller, so the catch below treats any of them as the
+      // network failure it is.
+      const attemptTimeoutMs =
+        opts.streaming === true ? this.streamIdleTimeoutMs : this.requestTimeoutMs;
+      let timer = setTimeout(() => ac.abort(), attemptTimeoutMs);
+      const rearmIdle = (): void => {
+        clearTimeout(timer);
+        timer = setTimeout(() => ac.abort(), attemptTimeoutMs);
+      };
+      const capTimer =
+        opts.streaming === true
+          ? setTimeout(() => ac.abort(), this.streamTotalTimeoutMs)
+          : undefined;
       let bodyText: string;
+      let streamedEnvelope: unknown;
       try {
         res = await this.fetchImpl(ANTHROPIC_API_URL, {
           method: 'POST',
@@ -403,16 +493,36 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
             'content-type': 'application/json',
             'x-api-key': apiKey,
             'anthropic-version': ANTHROPIC_VERSION_HEADER,
+            ...(opts.streaming === true ? { accept: 'text/event-stream' } : {}),
           },
           body,
           redirect: 'error',
           signal: ac.signal,
         });
-        bodyText = await readBoundedBody(res);
+        // Only a 2xx event-stream is read as one. A non-2xx carries an ordinary
+        // JSON problem body, and an upstream that ignored `stream: true` answers
+        // with the ordinary envelope — both fall through to the buffered read, so
+        // neither degrades into a "missing text content" protocol error.
+        if (opts.streaming === true && res.ok && isEventStreamResponse(res)) {
+          streamedEnvelope = await readAnthropicStream(res, rearmIdle);
+          bodyText = '';
+        } else {
+          bodyText = await readBoundedBody(res);
+        }
       } catch (networkErr) {
         // Size is a deterministic protocol violation, not a transient network
         // failure. Do not spend a second request on the same oversized body.
         if (networkErr instanceof AnthropicResponseTooLargeError) throw networkErr;
+        // A provider error that arrived as a stream FRAME is a status, not a
+        // transport failure, so it gets the status branch's policy rather than
+        // this one's: retry a 429 or a 5xx, let a 4xx escape on the first
+        // attempt. Without this an authentication_error is re-sent once with a
+        // backoff — double the latency of the failure B3 set out to stop paying
+        // twice for — where the identical failure on an HTTP status is not.
+        if (networkErr instanceof AnthropicStreamError) {
+          const retryable = networkErr.status === 429 || networkErr.status >= 500;
+          if (!retryable || attempt >= MAX_RETRIES_5XX) throw networkErr;
+        }
         if (attempt < MAX_RETRIES_5XX) {
           attempt++;
           await sleep(this.retryBackoffMs);
@@ -422,11 +532,15 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
         throw networkErr;
       } finally {
         clearTimeout(timer);
+        if (capTimer !== undefined) clearTimeout(capTimer);
       }
 
       if (res.ok) {
-        // Parse OUTSIDE the try so a malformed-JSON success body throws (not
-        // retried) — same semantics as the prior res.json().
+        // An assembled stream is already an envelope object; there is no text to
+        // re-parse. Everything else parses OUTSIDE the try so a malformed-JSON
+        // success body throws (not retried) — same semantics as the prior
+        // res.json().
+        if (streamedEnvelope !== undefined) return streamedEnvelope;
         return JSON.parse(bodyText) as unknown;
       }
 
@@ -937,6 +1051,182 @@ function estimateTokens(task: string, history: readonly { body: string }[]): num
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** True when the upstream really answered with an SSE body. */
+function isEventStreamResponse(res: Response): boolean {
+  return (res.headers.get('content-type') ?? '').toLowerCase().includes('text/event-stream');
+}
+
+/**
+ * Anthropic streaming error events carry a typed `error.type`, not a status. Map
+ * it back onto the status the SAME failure would have arrived as on the
+ * non-streamed path, so `classifyDecomposerError` keeps sorting transient from
+ * fatal by exactly the rules it already has. An unrecognised type is treated as
+ * a 500: transient, retried, and never silently swallowed.
+ */
+const ANTHROPIC_STREAM_ERROR_STATUS: Record<string, number> = {
+  invalid_request_error: 400,
+  authentication_error: 401,
+  permission_error: 403,
+  not_found_error: 404,
+  request_too_large: 413,
+  rate_limit_error: 429,
+  api_error: 500,
+  overloaded_error: 529,
+};
+
+/**
+ * Reassemble an Anthropic SSE response into the ordinary non-streamed envelope:
+ * `{ content: [{ type: 'text', text }], usage: { input_tokens, output_tokens } }`.
+ *
+ * Returning the SAME SHAPE is the whole point — the plan parse, the field
+ * validation, the usage accounting and the error classification downstream are
+ * then provably the ones that already shipped, rather than a parallel copy that
+ * can drift. Only the transport changed.
+ *
+ * `onChunk` resets the caller's idle bound on every chunk, so a healthy-but-slow
+ * plan is never aborted for taking long; only a stream that goes quiet is.
+ */
+async function readAnthropicStream(res: Response, onChunk: () => void): Promise<unknown> {
+  if (res.body === null) throw new Error('Anthropic response envelope was not a JSON object');
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let text = '';
+  let bytesRead = 0;
+  // ⛔ `number | undefined`, never 0. A zero default would make the assembled
+  // envelope ALWAYS satisfy parseAnthropicUsage, so a stream whose usage frames
+  // are missing (a future API revision, a lost frame) would bill a zero-cost
+  // row instead of throwing the protocol error the buffered path throws — and
+  // the bundled-LLM monthly soft-cap, whose ONLY enforcement is that row, would
+  // silently stop advancing for the turn.
+  let inputTokens: number | undefined;
+  let outputTokens: number | undefined;
+  // A body that closes cleanly but EARLY (an intermediary cutting a chunked
+  // response) assembles into an envelope that looks whole. Recording the
+  // terminal frame is what lets a truncated stream be re-raised as the
+  // transport failure it is — retried — rather than parsed into a settled
+  // "not valid JSON" that is classified fatal and billed.
+  let sawTerminalFrame = false;
+  // Collected rather than held in a `let`: the assignment happens inside the
+  // frame closure, where narrowing a nullable local back to `Error` at the
+  // terminal check is not something the compiler will do.
+  const streamErrors: Error[] = [];
+  const consume = (block: string): void => {
+    const data: string[] = [];
+    for (const line of block.split(/\r?\n/)) {
+      if (line.startsWith('data:')) data.push(line.slice('data:'.length).trimStart());
+    }
+    if (data.length === 0) return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(data.join('\n'));
+    } catch {
+      // A frame we cannot read is not a plan we may act on, but it is also not
+      // proof the stream is broken — the terminal shape check below decides.
+      return;
+    }
+    if (typeof parsed !== 'object' || parsed === null) return;
+    const frame = parsed as Record<string, unknown>;
+    if (frame.type === 'message_start') {
+      const message = frame.message as Record<string, unknown> | undefined;
+      const usage = message?.usage as Record<string, unknown> | undefined;
+      if (typeof usage?.input_tokens === 'number') inputTokens = usage.input_tokens;
+      if (typeof usage?.output_tokens === 'number') outputTokens = usage.output_tokens;
+      return;
+    }
+    if (frame.type === 'content_block_delta') {
+      const delta = frame.delta as Record<string, unknown> | undefined;
+      if (typeof delta?.text === 'string') text += delta.text;
+      // The PAYLOAD ceiling, applied to the same quantity the buffered read
+      // applied it to. Checked here rather than on the raw stream so the limit
+      // still means "the model wrote too much", not "the transport framed it".
+      if (text.length > MAX_ANTHROPIC_RESPONSE_BYTES) throw new AnthropicResponseTooLargeError();
+      return;
+    }
+    if (frame.type === 'message_delta') {
+      // The authoritative output count: it is only final on the last
+      // message_delta, so the last one wins rather than the first.
+      const usage = frame.usage as Record<string, unknown> | undefined;
+      if (typeof usage?.output_tokens === 'number') outputTokens = usage.output_tokens;
+      // `stop_reason` on a message_delta is the other shape a completed stream
+      // ends with; either it or message_stop proves the body was not truncated.
+      const delta = frame.delta as Record<string, unknown> | undefined;
+      if (delta?.stop_reason !== undefined && delta.stop_reason !== null) sawTerminalFrame = true;
+      return;
+    }
+    if (frame.type === 'message_stop') {
+      sawTerminalFrame = true;
+      return;
+    }
+    if (frame.type === 'error') {
+      const error = frame.error as Record<string, unknown> | undefined;
+      const errorType = typeof error?.type === 'string' ? error.type : 'api_error';
+      const message = typeof error?.message === 'string' ? error.message : errorType;
+      const status = ANTHROPIC_STREAM_ERROR_STATUS[errorType] ?? 500;
+      // An error frame IS the upstream's terminal: the stream is over and the
+      // absence of message_stop after it is not truncation.
+      sawTerminalFrame = true;
+      streamErrors.push(
+        new AnthropicStreamError(
+          status,
+          `Anthropic API ${status.toString()}: ${message.slice(0, 300)}`,
+        ),
+      );
+    }
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      // Progress: reset the caller's idle bound. A long plan is slow, not stuck.
+      onChunk();
+      bytesRead += value.byteLength;
+      // Transport backstop only — see MAX_ANTHROPIC_STREAM_TRANSPORT_BYTES. The
+      // payload ceiling lives on the assembled text, in `consume`.
+      if (bytesRead > MAX_ANTHROPIC_STREAM_TRANSPORT_BYTES) {
+        throw new AnthropicResponseTooLargeError();
+      }
+      buffer += decoder.decode(value, { stream: true });
+      let idx = buffer.search(/\r?\n\r?\n/);
+      while (idx !== -1) {
+        const sep = /\r?\n\r?\n/.exec(buffer.slice(idx))?.[0] ?? '\n\n';
+        consume(buffer.slice(0, idx));
+        buffer = buffer.slice(idx + sep.length);
+        idx = buffer.search(/\r?\n\r?\n/);
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer.trim().length > 0) consume(buffer);
+  } catch (err) {
+    // Release the connection on the abandon path too; never await it, so a
+    // hostile stream cannot delay the rejection.
+    void reader.cancel().catch(() => undefined);
+    throw err;
+  } finally {
+    reader.releaseLock();
+  }
+
+  // An error frame is the upstream's own verdict on the call and outranks
+  // whatever partial text arrived before it.
+  const firstError = streamErrors[0];
+  if (firstError !== undefined) throw firstError;
+  // A plain Error (not a typed one) on purpose: the caller's network catch is
+  // exactly the right handler for a body that stopped early, and it retries.
+  if (!sawTerminalFrame) {
+    throw new Error('Anthropic stream ended before the message completed');
+  }
+  return {
+    content: [{ type: 'text', text }],
+    usage: {
+      // Omitted, not zeroed, when a usage frame never arrived — parseAnthropicUsage
+      // then throws exactly as it does for a buffered envelope with no usage block.
+      ...(inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
+      ...(outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
+    },
+  };
 }
 
 async function readBoundedBody(res: Response): Promise<string> {

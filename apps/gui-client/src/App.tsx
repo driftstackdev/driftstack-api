@@ -44,6 +44,7 @@ import {
 import { LazyStore } from '@tauri-apps/plugin-store';
 import { RecordingsProvider } from './lib/recordings';
 import { SettingsProvider, useSettings } from './lib/SettingsContext';
+import { AgentChatProvider } from './lib/AgentChatProvider';
 import { useConnectionStatus } from './lib/use-connection-status';
 import { isCloudBaseUrl } from './lib/telemetry';
 import { useAppVersion } from './lib/app-version';
@@ -411,7 +412,13 @@ export function App(): JSX.Element {
             swallowed to console.warn only. Transparent for the loading /
             first-run-wizard early returns. */}
         <ToastProvider>
-          <Shell />
+          {/* B5 — the AI chat is owned here, ABOVE the view switch, so leaving
+              the AI view no longer unmounts the hook that owns the running
+              server session (which closed it mid-task). The view itself still
+              mounts and unmounts normally. */}
+          <AgentChatProvider>
+            <Shell />
+          </AgentChatProvider>
         </ToastProvider>
       </RecordingsProvider>
     </SettingsProvider>

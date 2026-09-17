@@ -45,9 +45,10 @@ import {
   AGENT_SEED_MAX_SERIALIZED_BYTES,
   type AgentTurnAdmission,
   type AgentRuntime,
+  type AgentTurnProgressEvent,
 } from '../services/agent-runtime.js';
 import { consequentialSignature } from '../services/agent-executor.js';
-import type { DecomposeUsage, TranscriptEntry } from '../services/agent-decomposer.js';
+import type { AgentIntent, DecomposeUsage, TranscriptEntry } from '../services/agent-decomposer.js';
 import {
   publicAgentIntent,
   publicIntentResult,
@@ -436,6 +437,52 @@ export interface PublicLivekitInfo {
   token: string;
   participant_identity: string;
   expires_at: string;
+}
+
+/**
+ * A customer-safe caption for a step that is ABOUT to run, for the `step_start`
+ * progress frame.
+ *
+ * Deliberately says only what the customer gets — "Typing", never the typed
+ * value, never a selector, and never how any of it is dispatched. The value of a
+ * sensitive `type` is exactly what the public projection strips, so a label must
+ * not smuggle it back through a different door; the same reasoning covers
+ * selectors, which routinely contain field names a customer never wrote.
+ */
+function progressStepLabel(intent: AgentIntent): string {
+  const INTERACT_LABELS = {
+    tap: 'Tapping',
+    type: 'Typing',
+    scroll: 'Scrolling',
+    swipe: 'Swiping',
+    press: 'Pressing a key',
+  } as const;
+  const CAPTURE_LABELS = {
+    screenshot: 'Taking a screenshot',
+    dom_snapshot: 'Reading the page',
+    pdf: 'Saving a PDF',
+  } as const;
+  switch (intent.kind) {
+    case 'navigate':
+      // The host is the customer's own destination and the single most useful
+      // word in the caption. A URL the parser rejects degrades to the generic
+      // caption rather than echoing an unparsed string back at the customer.
+      try {
+        return `Opening ${new URL(intent.url).hostname}`;
+      } catch {
+        return 'Opening the page';
+      }
+    case 'interact':
+      return INTERACT_LABELS[intent.action];
+    case 'wait':
+      return 'Waiting for the page';
+    case 'capture':
+      return CAPTURE_LABELS[intent.capture];
+    case 'scroll':
+      return 'Scrolling';
+    case 'behavioral_pause':
+      return 'Pausing';
+  }
 }
 
 /**
@@ -5394,6 +5441,10 @@ export function registerAgentSessionsRoutes(
     // passes one that writes an SSE `event: step` frame per intent as it lands.
     // Undefined on the non-streaming path.
     onStep?: (result: Parameters<typeof publicIntentResult>[0], index: number) => void,
+    // Additive turn-progress hook (planning / plan / step_start / answer). The
+    // streaming handler passes one that writes a same-named SSE frame; every
+    // other caller leaves it undefined and the turn behaves exactly as before.
+    onProgress?: (event: AgentTurnProgressEvent) => void,
   ) => {
     const parsed = RunTurnRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
@@ -5485,10 +5536,14 @@ export function registerAgentSessionsRoutes(
         userMessage: parsed.data.user_message,
         admission,
         ...(onStep !== undefined ? { onStep } : {}),
+        ...(onProgress !== undefined ? { onProgress } : {}),
       });
       if (result.kind === 'turn-in-progress') {
         throw new ConflictError(
           'This agent session is still working on a previous request. Wait for it to finish, then try again.',
+          // Typed, so a client can say "still working" rather than guessing from
+          // the sentence which kind of conflict this is.
+          { turn_in_progress: true },
         );
       }
       if (result.kind === 'session-closed') {
@@ -5497,10 +5552,10 @@ export function registerAgentSessionsRoutes(
           result.usage !== undefined ||
           result.tokensConsumed !== undefined ||
           result.executor !== undefined;
-        throw new ConflictError(
-          terminalConflictMessage(result, hasSettledWork),
-          settledWorkExtensions(result),
-        );
+        throw new ConflictError(terminalConflictMessage(result, hasSettledWork), {
+          ...settledWorkExtensions(result),
+          session_status: result.session.status,
+        });
       }
       if (result.kind === 'ai-control-unavailable') {
         throw new ConflictError(
@@ -5808,11 +5863,15 @@ export function registerAgentSessionsRoutes(
         ...(resolvedByokKey !== undefined ? { byokApiKey: resolvedByokKey } : {}),
         ...(approvedConsequentialActions !== undefined ? { approvedConsequentialActions } : {}),
         ...(onStep !== undefined ? { onStep } : {}),
+        ...(onProgress !== undefined ? { onProgress } : {}),
         keySource,
       });
       if (result.kind === 'turn-in-progress') {
         throw new ConflictError(
           'This agent session is still working on a previous request. Wait for it to finish, then try again.',
+          // Typed, so a client can say "still working" rather than guessing from
+          // the sentence which kind of conflict this is.
+          { turn_in_progress: true },
         );
       }
       if (result.kind === 'account-turn-limit') {
@@ -5844,10 +5903,15 @@ export function registerAgentSessionsRoutes(
           result.usage !== undefined ||
           result.tokensConsumed !== undefined ||
           result.executor !== undefined;
-        throw new ConflictError(
-          terminalConflictMessage(result, hasSettledWork),
-          settledWorkExtensions(result, keySource),
-        );
+        throw new ConflictError(terminalConflictMessage(result, hasSettledWork), {
+          ...settledWorkExtensions(result, keySource),
+          // Typed lifecycle discriminator. Without it a client can only tell a
+          // closed session from a busy one by reading the prose, so every 409
+          // collapsed into one unhelpful "changed or is busy" sentence — and a
+          // customer whose session had simply ended was never offered the one
+          // thing that would help (continue in a fresh session).
+          session_status: result.session.status,
+        });
       }
       // Q.1.c — if this turn closed the session (e.g. the runtime's
       // budget-exhausted close via closeWithReason), drop the cached BYOK
@@ -5892,6 +5956,10 @@ export function registerAgentSessionsRoutes(
           intents: plan.intents.map(publicAgentIntent),
           results: result.executor.results.map(publicIntentResult),
           ok: result.executor.ok,
+          // The read-back answer — the thing the customer asked for. It was
+          // already computed, sanitized and billed; before this it stopped at
+          // the transcript and the reply carried only the step list.
+          ...(result.answer !== undefined ? { answer: result.answer } : {}),
           ...(usage !== undefined ? { usage } : {}),
         };
       }
@@ -5963,6 +6031,8 @@ export function registerAgentSessionsRoutes(
     // streaming branch passes one; the compatibility branch and the idempotency
     // replay leave it undefined (a replayed turn does no live execution).
     onStep?: (result: Parameters<typeof publicIntentResult>[0], index: number) => void,
+    // Forwarded to executeAgentMessage alongside onStep; see its JSDoc.
+    onProgress?: (event: AgentTurnProgressEvent) => void,
   ): Promise<AgentMessageTerminal> => {
     // Authenticate ownership and validate the exact canonical body before
     // reserving a key. Invalid/foreign requests must not poison the account's
@@ -5980,7 +6050,10 @@ export function registerAgentSessionsRoutes(
 
     if (idempotency.kind === 'absent') {
       const admission = await resolveAgentMessageAdmission(req.params.id, pre);
-      return { status: 200, body: await executeAgentMessage(req, pre, admission, onStep) };
+      return {
+        status: 200,
+        body: await executeAgentMessage(req, pre, admission, onStep, onProgress),
+      };
     }
     if (agentTurnReceipts === undefined) {
       throw new FeatureUnavailableError(
@@ -6024,7 +6097,7 @@ export function registerAgentSessionsRoutes(
       // spend, or provider access. Existing receipts replay first, independent
       // of current authority or a transient authority-store read failure.
       const admission = await resolveAgentMessageAdmission(req.params.id, pre);
-      const body = await executeAgentMessage(req, pre, admission, onStep);
+      const body = await executeAgentMessage(req, pre, admission, onStep, onProgress);
       terminal = { status: 200, body };
     } catch (error) {
       // Persist typed failures too. If browser work finished and a later
@@ -6231,6 +6304,52 @@ export function registerAgentSessionsRoutes(
         reply.raw.write(`event: step\ndata: ${frame}\n\n`);
       };
 
+      // Additive progress frames. `step` above is untouched — these are NEW
+      // event names alongside it, so a client that only knows `step` (and the
+      // SDK parsers, which skip any frame that is not `response`) is unaffected.
+      // The turn never depends on them: nothing here can fail the run, and a
+      // caller that never opens the stream simply gets none of it.
+      const writeProgressFrame = (event: string, payload: unknown): void => {
+        if (viewerClosed) return;
+        if (reply.raw.writableLength > MAX_SSE_BUFFER_BYTES) {
+          viewerClosed = true;
+          reply.raw.end();
+          return;
+        }
+        reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`);
+      };
+      // The plan as the customer may see it, kept so a later `step_start` can be
+      // captioned without the raw intent crossing this boundary a second time.
+      let publicPlan: ReadonlyArray<AgentIntent> = [];
+      const onProgress = (event: AgentTurnProgressEvent): void => {
+        switch (event.kind) {
+          case 'phase':
+            writeProgressFrame('phase', { phase: event.phase });
+            return;
+          case 'plan': {
+            publicPlan = event.intents.map(publicAgentIntent);
+            writeProgressFrame('plan', {
+              total: event.total,
+              intents: publicPlan,
+              labels: publicPlan.map(progressStepLabel),
+            });
+            return;
+          }
+          case 'step_start': {
+            const intent = publicPlan[event.index];
+            writeProgressFrame('step_start', {
+              index: event.index,
+              total: event.total,
+              label: intent === undefined ? 'Working' : progressStepLabel(intent),
+            });
+            return;
+          }
+          case 'answer':
+            writeProgressFrame('answer', { answer: event.answer });
+            return;
+        }
+      };
+
       let status = 200;
       let body: unknown;
       try {
@@ -6244,7 +6363,7 @@ export function registerAgentSessionsRoutes(
         if (pre === undefined) {
           throw new InternalError('Agent message admission did not resolve.');
         }
-        const terminal = await handleAgentMessage(req, pre, onStep);
+        const terminal = await handleAgentMessage(req, pre, onStep, onProgress);
         status = terminal.status;
         body = terminal.body;
         if (terminal.error !== undefined) {

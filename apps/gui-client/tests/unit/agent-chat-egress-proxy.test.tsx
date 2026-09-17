@@ -90,6 +90,11 @@ const chatState: UseAgentChatResult = {
 vi.mock('../../src/lib/use-agent-chat', () => ({ useAgentChat: h.useAgentChat }));
 
 const { AgentChatView } = await import('../../src/views/AgentChatView');
+// B5 — the chat hook now lives in a provider ABOVE the view switch (leaving the
+// AI view used to unmount it and close a running session). The view reads it
+// from context, so every render here mounts that provider; the `use-agent-chat`
+// mock above is what the provider calls, exactly as the view used to.
+const { AgentChatProvider } = await import('../../src/lib/AgentChatProvider');
 
 /** The opts of the latest useAgentChat render — the proxyId resolves async, so the
  *  LAST call carries the resolved id. */
@@ -118,7 +123,7 @@ describe('AgentChatView egress — resolve the profile proxy → proxyId opt', (
     // First launch → no cached serverId → create the encrypted account row.
     h.createAccountProxy.mockResolvedValue({ id: 'apx_server_1' });
 
-    render(<AgentChatView initialProfileId="prof_x" />);
+    render(<AgentChatView initialProfileId="prof_x" />, { wrapper: AgentChatProvider });
 
     // The view resolves the proxy and re-renders the hook with proxyId set.
     await waitFor(() => expect(lastOpts()?.proxyId).toBe('apx_server_1'));
@@ -145,7 +150,7 @@ describe('AgentChatView egress — resolve the profile proxy → proxyId opt', (
     ]);
     h.updateAccountProxy.mockResolvedValue({ id: 'apx_existing' });
 
-    render(<AgentChatView initialProfileId="prof_x" />);
+    render(<AgentChatView initialProfileId="prof_x" />, { wrapper: AgentChatProvider });
 
     await waitFor(() => expect(lastOpts()?.proxyId).toBe('apx_existing'));
     expect(h.updateAccountProxy).toHaveBeenCalledTimes(1);
@@ -156,7 +161,7 @@ describe('AgentChatView egress — resolve the profile proxy → proxyId opt', (
     h.listBindings.mockResolvedValue([]);
     h.listProxies.mockResolvedValue([]);
 
-    render(<AgentChatView initialProfileId="prof_x" />);
+    render(<AgentChatView initialProfileId="prof_x" />, { wrapper: AgentChatProvider });
 
     await waitFor(() => expect(lastOpts()?.profileId).toBe('prof_x'));
     await new Promise((r) => setTimeout(r, 0));
@@ -172,7 +177,7 @@ describe('AgentChatView egress — resolve the profile proxy → proxyId opt', (
     // The account-proxy create fails (offline / SSRF-rejected host / unauth).
     h.createAccountProxy.mockRejectedValue(new Error('SSRF: private host rejected'));
 
-    render(<AgentChatView initialProfileId="prof_x" />);
+    render(<AgentChatView initialProfileId="prof_x" />, { wrapper: AgentChatProvider });
 
     await waitFor(() => expect(lastOpts()?.profileId).toBe('prof_x'));
     await new Promise((r) => setTimeout(r, 0));
@@ -218,7 +223,7 @@ describe('AgentChatView egress — resolve the profile proxy → proxyId opt', (
       },
     ]);
 
-    render(<AgentChatView initialProfileId="prof_x" />);
+    render(<AgentChatView initialProfileId="prof_x" />, { wrapper: AgentChatProvider });
 
     await waitFor(() => expect(lastOpts()?.profileId).toBe('prof_x'));
     await new Promise((r) => setTimeout(r, 0));

@@ -642,6 +642,27 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       expect(got.map((d) => d.intentName)).toEqual(['navigate']);
     });
 
+    it('does not ANNOUNCE the halted action as the step in progress', async () => {
+      // The live-progress announcement sits in the same loop as the gate, and it
+      // used to come first — so the chat showed "Tapping Buy Now…" as the
+      // current step beside an Approve prompt that was blocking exactly that.
+      // Being untrue here is the most expensive place to be untrue: the customer
+      // is deciding whether a purchase already happened.
+      const { dispatcher } = mockDispatcher((d) => okResult(d.intentId));
+      const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+      const announced: number[] = [];
+      const res = await exec.execute({
+        ...planArgs([
+          { kind: 'navigate', url: 'https://shop.example.com' },
+          { kind: 'interact', action: 'tap', selector: 'Buy Now' },
+        ]),
+        onStepStart: (_intent, index) => announced.push(index),
+      });
+      expect(res.awaitingConfirmation).toBe(true);
+      // The navigate really ran and is announced; the halted purchase is not.
+      expect(announced).toEqual([0]);
+    });
+
     it('proceeds to dispatch when the consequential action is pre-approved', async () => {
       const { got, dispatcher } = mockDispatcher((d) => okResult(d.intentId));
       const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());

@@ -51,6 +51,11 @@ vi.mock('../../src/lib/chat-history', () => ({
 }));
 
 const { AgentChatView } = await import('../../src/views/AgentChatView');
+// B5 — the chat hook now lives in a provider ABOVE the view switch (leaving the
+// AI view used to unmount it and close a running session). The view reads it
+// from context, so every render here mounts that provider; the `use-agent-chat`
+// mock above is what the provider calls, exactly as the view used to.
+const { AgentChatProvider } = await import('../../src/lib/AgentChatProvider');
 
 function profileSelect(c: HTMLElement): HTMLSelectElement {
   return c.querySelector('select[aria-label="Profile"]') as HTMLSelectElement;
@@ -62,7 +67,9 @@ beforeEach(() => {
 
 describe('AgentChatView — initialProfileId re-deep-link sync (P2 #6)', () => {
   it('updates the selected profile when initialProfileId changes on a re-render', async () => {
-    const { container, rerender } = render(<AgentChatView initialProfileId="prof_a" />);
+    const { container, rerender } = render(<AgentChatView initialProfileId="prof_a" />, {
+      wrapper: AgentChatProvider,
+    });
     // The picker is seeded with the initial profile.
     await waitFor(() => expect(profileSelect(container).value).toBe('prof_a'));
     // A NEW deep-link arrives for a different profile while still mounted.
@@ -71,7 +78,9 @@ describe('AgentChatView — initialProfileId re-deep-link sync (P2 #6)', () => {
   });
 
   it('does NOT clobber the selection when initialProfileId is unchanged/absent on re-render', async () => {
-    const { container, rerender } = render(<AgentChatView initialProfileId="prof_a" />);
+    const { container, rerender } = render(<AgentChatView initialProfileId="prof_a" />, {
+      wrapper: AgentChatProvider,
+    });
     await waitFor(() => expect(profileSelect(container).value).toBe('prof_a'));
     // The user manually picks a different profile in-session.
     const select = profileSelect(container);

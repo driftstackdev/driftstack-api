@@ -89,6 +89,11 @@ const chatState: UseAgentChatResult = {
 vi.mock('../../src/lib/use-agent-chat', () => ({ useAgentChat: () => chatState }));
 
 const { AgentChatView } = await import('../../src/views/AgentChatView');
+// B5 — the chat hook now lives in a provider ABOVE the view switch (leaving the
+// AI view used to unmount it and close a running session). The view reads it
+// from context, so every render here mounts that provider; the `use-agent-chat`
+// mock above is what the provider calls, exactly as the view used to.
+const { AgentChatProvider } = await import('../../src/lib/AgentChatProvider');
 
 /** The latest sessionEnded prop the live pane handed the panel. */
 function lastSessionEnded(): { reason: string | null } | null | undefined {
@@ -104,7 +109,7 @@ beforeEach(() => {
 describe('AgentChatView live view — session-ended plumbing (finding #3)', () => {
   it('passes sessionEnded=null to the panel while the session is active', async () => {
     h.getSession.mockResolvedValue(SESSION); // status active, no close fields
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
     await waitFor(() => expect(h.agentSessionPanel).toHaveBeenCalled());
     expect(lastSessionEnded()).toBeNull();
   });
@@ -116,7 +121,7 @@ describe('AgentChatView live view — session-ended plumbing (finding #3)', () =
       closed_reason: 'idle_timeout',
       closed_at: '2026-06-14T01:00:00Z',
     });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
     await waitFor(() =>
       expect(lastSessionEnded()).toEqual({
         reason: 'idle_timeout',
@@ -132,7 +137,7 @@ describe('AgentChatView live view — session-ended plumbing (finding #3)', () =
       status: 'active',
       closed_reason: 'browser-closed',
     });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
     await waitFor(() =>
       expect(lastSessionEnded()).toEqual({
         reason: 'browser-closed',
@@ -144,7 +149,7 @@ describe('AgentChatView live view — session-ended plumbing (finding #3)', () =
 
   it('a transient GET failure is NOT a terminal end (panel keeps reconnecting)', async () => {
     h.getSession.mockRejectedValue(new Error('network blip'));
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
     await waitFor(() => expect(h.agentSessionPanel).toHaveBeenCalled());
     expect(lastSessionEnded()).toBeNull();
   });

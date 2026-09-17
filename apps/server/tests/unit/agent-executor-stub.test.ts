@@ -375,6 +375,28 @@ describe('AI-B2 runResultToTranscriptEntry', () => {
     }
   });
 
+  it('does not announce the halted action as the step in progress', async () => {
+    // Same position contract as ControlPlaneAgentExecutor: the live-progress
+    // announcement follows the gate, so a blocked purchase is never shown as the
+    // thing the agent is currently doing.
+    const exec = new StubAgentExecutor();
+    const announced: number[] = [];
+    const result = await exec.execute({
+      sessionId: 'sess_1',
+      plan: {
+        kind: 'plan',
+        intents: [
+          { kind: 'navigate', url: 'https://shop.example.com' },
+          { kind: 'interact', action: 'tap', selector: 'Buy Now' },
+        ],
+        tokensConsumed: 1,
+      },
+      onStepStart: (_intent, index) => announced.push(index),
+    });
+    expect(result.awaitingConfirmation).toBe(true);
+    expect(announced).toEqual([0]);
+  });
+
   it('proceeds past the consequential tap once its signature is approved', async () => {
     const exec = new StubAgentExecutor();
     const result = await exec.execute({

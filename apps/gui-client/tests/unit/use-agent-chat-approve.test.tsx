@@ -13,8 +13,15 @@ const create = vi.fn();
 const message = vi.fn();
 const close = vi.fn();
 
+// ⛔ ONE client object, module-scoped. `useSettings` memoises the SDK client on
+// [apiKey, baseUrl, workspace], and the chat now treats a CHANGE of that object
+// as the auth boundary — it is what tells sign-out (and a re-sign-in under a
+// different key) apart from an ordinary re-render. A mock that built a fresh
+// literal per call reported a sign-out on every render.
+const CLIENT = { agentSessions: { create, message, close } };
+
 vi.mock('../../src/lib/SettingsContext', () => ({
-  useSettings: () => ({ client: { agentSessions: { create, message, close } } }),
+  useSettings: () => ({ client: CLIENT }),
 }));
 
 // Egress + profiles-hub parity: the hook writes/clears the local profile binding so
@@ -107,6 +114,9 @@ describe('useAgentChat approve()', () => {
       idempotencyKey: expect.any(String) as string,
       approveConsequentialActions: [{ category: 'purchase', matchedText: 'place order' }],
       onStep: expect.any(Function) as () => void,
+      // B2 — the hook also subscribes to the additive progress frames
+      // (phase / plan / step_start) on the same stream.
+      onEvent: expect.any(Function) as () => void,
     });
 
     // Gate cleared after approve.
@@ -289,10 +299,16 @@ describe('useAgentChat approve()', () => {
       idempotencyKey: expect.any(String) as string,
       approveConsequentialActions: [{ category: 'purchase', matchedText: 'place order' }],
       onStep: expect.any(Function) as () => void,
+      // B2 — the hook also subscribes to the additive progress frames
+      // (phase / plan / step_start) on the same stream.
+      onEvent: expect.any(Function) as () => void,
     });
     expect(message.mock.calls[2]?.[2]).toEqual({
       idempotencyKey: expect.any(String) as string,
       onStep: expect.any(Function) as () => void,
+      // B2 — the hook also subscribes to the additive progress frames
+      // (phase / plan / step_start) on the same stream.
+      onEvent: expect.any(Function) as () => void,
       approveConsequentialActions: [
         { category: 'purchase', matchedText: 'place order' },
         { category: 'payment', matchedText: 'confirm payment' },
@@ -317,6 +333,9 @@ describe('useAgentChat approve()', () => {
     expect(message.mock.calls[2]?.[2]).toEqual({
       idempotencyKey: expect.any(String) as string,
       onStep: expect.any(Function) as () => void,
+      // B2 — the hook also subscribes to the additive progress frames
+      // (phase / plan / step_start) on the same stream.
+      onEvent: expect.any(Function) as () => void,
     });
   });
 
@@ -332,6 +351,9 @@ describe('useAgentChat approve()', () => {
     expect(message.mock.calls[0]?.[2]).toEqual({
       idempotencyKey: expect.any(String) as string,
       onStep: expect.any(Function) as () => void,
+      // B2 — the hook also subscribes to the additive progress frames
+      // (phase / plan / step_start) on the same stream.
+      onEvent: expect.any(Function) as () => void,
     });
   });
 
@@ -384,10 +406,16 @@ describe('useAgentChat approve()', () => {
       await result.current.send('hello');
     });
 
-    expect(result.current.error?.message).toBe('The agent request failed — try again.');
-    expect(result.current.error?.message).not.toMatch(
-      /private-control|\/Users|token=secret|worker/i,
-    );
+    // The sentence now lives ON THE INTERRUPTED TURN rather than in a banner
+    // beside it: the turn says what happened AND keeps the steps that ran, and
+    // showing both surfaces at once produced two different instructions on one
+    // screen. What must not change is that the raw exception never reaches the
+    // customer, so that is asserted where the sentence actually is.
+    const reason = result.current.turns.at(-1)?.interrupted?.reason;
+    expect(reason).toBe('This turn stopped before it finished. The steps above are what ran.');
+    expect(reason).not.toMatch(/private-control|\/Users|token=secret|worker/i);
+    // …and no banner is raised to contradict it.
+    expect(result.current.error).toBeNull();
   });
 });
 

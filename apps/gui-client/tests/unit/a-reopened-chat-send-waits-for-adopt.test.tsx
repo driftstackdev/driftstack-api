@@ -68,11 +68,19 @@ function chatWith(adopting: boolean): UseAgentChatResult {
     session: null,
     sending: false,
     liveSteps: [],
+    // B2/B4 — progress captions and the "was the message kept?" accessor are
+    // part of the interface now; a double that omits them is incomplete, and
+    // this file exists to keep the pinned type backlog from growing.
+    livePhase: null,
+    livePlan: null,
+    liveStepIndex: null,
+    liveAnswer: null,
     error: null,
     pendingConfirmation: null,
     deniedTurnIds: new Set<number>(),
     approvedTurnIds: new Set<number>(),
     send,
+    lastSendKeptMessage: () => false,
     approve: vi.fn(() => Promise.resolve()),
     deny: vi.fn(),
     reset: vi.fn(),
@@ -89,6 +97,11 @@ function chatWith(adopting: boolean): UseAgentChatResult {
 vi.mock('../../src/lib/use-agent-chat', () => ({ useAgentChat: h.useAgentChat }));
 
 const { AgentChatView } = await import('../../src/views/AgentChatView');
+// B5 — the chat hook now lives in a provider ABOVE the view switch (leaving the
+// AI view used to unmount it and close a running session). The view reads it
+// from context, so every render here mounts that provider; the `use-agent-chat`
+// mock above is what the provider calls, exactly as the view used to.
+const { AgentChatProvider } = await import('../../src/lib/AgentChatProvider');
 
 const PROMPT = /Describe a task in plain English/i;
 
@@ -103,7 +116,7 @@ beforeEach(() => {
 describe('N5 — a reopened chat holds the send until adopt() settles', () => {
   it('disables Send AND drops the Enter-to-send path while adopting', async () => {
     h.useAgentChat.mockReturnValue(chatWith(true));
-    render(<AgentChatView initialProfileId="prof_x" />);
+    render(<AgentChatView initialProfileId="prof_x" />, { wrapper: AgentChatProvider });
     // Let the proxy resolution settle so the only remaining gate is `adopting`.
     await waitFor(() => expect(screen.getByPlaceholderText(PROMPT)).toBeInTheDocument());
     await new Promise((r) => setTimeout(r, 0));
@@ -127,7 +140,7 @@ describe('N5 — a reopened chat holds the send until adopt() settles', () => {
     // be enabled — otherwise the disabled arm above would pass even if Send were
     // wired off entirely.
     h.useAgentChat.mockReturnValue(chatWith(false));
-    render(<AgentChatView initialProfileId="prof_x" />);
+    render(<AgentChatView initialProfileId="prof_x" />, { wrapper: AgentChatProvider });
     await waitFor(() => expect(screen.getByPlaceholderText(PROMPT)).toBeInTheDocument());
     await new Promise((r) => setTimeout(r, 0));
 

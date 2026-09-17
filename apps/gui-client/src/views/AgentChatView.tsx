@@ -32,7 +32,8 @@ import { useConfirm } from '../components/ConfirmProvider';
 import { useFocusTrap } from '../lib/use-focus-trap';
 import { humanizeError } from '../lib/humanize-error';
 import { useToasts } from '../lib/toasts';
-import { useAgentChat, type ChatModel, type ChatTurn } from '../lib/use-agent-chat';
+import { type ChatModel, type ChatTurn, type InterruptedTurn } from '../lib/use-agent-chat';
+import { useAgentChatSession } from '../lib/AgentChatProvider';
 import { CONNECT_API_KEY_IN_SETTINGS } from '../lib/proxy-check-copy';
 
 /** (l) #8 — the reattach notice: the composer caption, the notice row and the
@@ -256,8 +257,6 @@ export function AgentChatView({
    * watching the video — a session runs perfectly well with the pane closed.
    */
   const [liveSession, setLiveSession] = useState<AgentSession | null>(null);
-  const [model, setModel] = useState<ChatModel>('claude-opus-5');
-  const [profileId, setProfileId] = useState<string>(initialProfileId ?? '');
   const [profiles, setProfiles] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
   const [draft, setDraft] = useState('');
   // (l) #8 — the customer pressed Enter while a reopened chat was still
@@ -288,11 +287,27 @@ export function AgentChatView({
     kind: 'none',
   });
   const proxyId = proxyState.kind === 'ready' ? proxyState.proxyId : undefined;
-  const chat = useAgentChat({
+  // B5 — the chat lives ABOVE the view switch, so leaving this view no longer
+  // tears the hook down and closes a running session. Its identity and the
+  // customer's picks live up there too: this view re-mounts on every switch
+  // back, and anything seeded by `useState` here would reset while the
+  // conversation carried on (a second copy of it in the history rail, under a
+  // new id and a default model, per round trip). Only the proxy — which the
+  // view resolves over the network — is pushed up.
+  const {
+    chat,
+    setChatOptions,
+    chatId,
+    setChatId,
     model,
-    ...(profileId !== '' ? { profileId } : {}),
-    ...(proxyId !== undefined ? { proxyId } : {}),
-  });
+    setModel,
+    profileId,
+    setProfileId,
+    createdAtRef,
+  } = useAgentChatSession();
+  useEffect(() => {
+    setChatOptions(proxyId !== undefined ? { proxyId } : {});
+  }, [setChatOptions, proxyId]);
   const started = chat.turns.length > 0;
   // (l) #8 — the "held" caption belongs to ONE reattach: it goes when that settles.
   useEffect(() => {
@@ -373,8 +388,11 @@ export function AgentChatView({
   // Multi-chat history (memory): each chat is persisted as its own transcript
   // so the customer can keep several conversations and reopen past ones.
   const [chats, setChats] = useState<ReadonlyArray<StoredChat>>([]);
-  const [activeChatId, setActiveChatId] = useState<string>(() => crypto.randomUUID());
-  const createdAtRef = useRef<Record<string, number>>({});
+  // `activeChatId` and `createdAtRef` come from the provider (see the chat
+  // destructure above): they identify the CONVERSATION, which now outlives this
+  // component.
+  const activeChatId = chatId;
+  const setActiveChatId = setChatId;
   // Set when we've just restored a chat for READING (handleSelectChat). The
   // persist effect skips the single turns-change the restore itself causes, so
   // merely opening an old chat to re-read it does NOT bump its updatedAt or
@@ -384,20 +402,22 @@ export function AgentChatView({
   useEffect(() => {
     void loadChats().then(setChats);
   }, []);
-  // P2 #6 — sync profileId when a re-deep-link changes initialProfileId. profileId
-  // is seeded from initialProfileId via useState (mount-only), so opening the agent
-  // chat again for a DIFFERENT profile (the deep-link arrives while the component
-  // stays mounted) left the previous profile selected. Update on a REAL change only
-  // (a defined, different value) so a user's manual in-session selection isn't
-  // clobbered by an unchanged/absent prop on every render. Skips undefined (no
-  // deep-link context → keep the current selection).
-  const prevInitialProfileIdRef = useRef(initialProfileId);
+  // P2 #6 — adopt the deep-linked profile, and re-adopt it when a later
+  // deep-link names a DIFFERENT one while this view stays mounted. Applied on a
+  // REAL change only (a defined, different value) so a manual in-session
+  // selection isn't clobbered by an unchanged/absent prop on every render, and
+  // never over a conversation that has already started — the picker is locked by
+  // then, and the profile the chat actually ran with is the one to keep. The ref
+  // starts UNSET (not seeded with the prop) because `profileId` now lives in the
+  // provider: this effect is the seeding, not just the sync.
+  const prevInitialProfileIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (initialProfileId !== undefined && initialProfileId !== prevInitialProfileIdRef.current) {
-      setProfileId(initialProfileId);
-    }
+    const changed = initialProfileId !== prevInitialProfileIdRef.current;
     prevInitialProfileIdRef.current = initialProfileId;
-  }, [initialProfileId]);
+    if (initialProfileId === undefined || !changed) return;
+    if (chat.turns.length > 0) return;
+    setProfileId(initialProfileId);
+  }, [initialProfileId, chat.turns.length, setProfileId]);
   // Egress-leak fix — resolve the selected profile's bound proxy to a server
   // proxy_id BEFORE the first send creates the session, so the AI session exits
   // through the configured proxy (not the operator default). Re-runs when the
@@ -672,7 +692,11 @@ export function AgentChatView({
     // Retry-friendly: if the send fails, restore the draft so the user can
     // re-send without retyping (don't clobber a draft they've since started).
     void chat.send(text).then((ok) => {
-      if (!ok) setDraft((d) => (d.length === 0 ? text : d));
+      // A failed turn now KEEPS the customer's message in the transcript (with
+      // an interrupted agent turn beside it), so putting it back in the composer
+      // too would show the same sentence twice. A soft Stop still removes the
+      // bubble, and there the draft restore is exactly right.
+      if (!ok && !chat.lastSendKeptMessage()) setDraft((d) => (d.length === 0 ? text : d));
     });
   }
 
@@ -904,7 +928,12 @@ export function AgentChatView({
                 </Fragment>
               ))}
               {chat.sending &&
-                (chat.liveSteps.length > 0 ? (
+                // B2 — the progress the server streams BEFORE any step has
+                // completed. Until this landed, Send produced three dots for 10
+                // to 30 seconds (up to ~150s at worst) with nothing to read.
+                // Each source is independently optional: a server that sends no
+                // progress falls through to exactly the old spinner.
+                (chat.livePlan !== null || chat.liveSteps.length > 0 || chat.livePhase !== null ? (
                   // Live progress: render each step as it streams in, so the
                   // customer watches the agent work instead of waiting on a lone
                   // spinner until everything is done. The settled turn's full
@@ -913,9 +942,24 @@ export function AgentChatView({
                     <div className="max-w-[85%] rounded-lg rounded-bl-sm border border-surface-divider bg-surface-raised px-3 py-2">
                       <div className="flex flex-col gap-1.5">
                         <p className="section-label flex items-center gap-1.5">
-                          Working…
+                          {chat.livePhase ?? 'Working…'}
                           <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-status-busy" />
                         </p>
+                        {/* The answer, the moment the server publishes it —
+                            ahead of the terminal body, which is the only reason
+                            it is streamed. The settled turn renders the same
+                            text a beat later, in the same position. */}
+                        {chat.liveAnswer !== null && (
+                          <p
+                            className="whitespace-pre-wrap text-sm text-ink-primary"
+                            data-testid="live-answer"
+                          >
+                            {chat.liveAnswer}
+                          </p>
+                        )}
+                        {/* Completed steps render in full (screenshots, links,
+                            failures). The rest of the plan sits below them,
+                            greyed, so the customer can see how much is left. */}
                         <ol className="flex flex-col gap-1">
                           {chat.liveSteps.map((r, i) => (
                             <PlanStep
@@ -931,6 +975,26 @@ export function AgentChatView({
                             />
                           ))}
                         </ol>
+                        {chat.livePlan !== null && (
+                          <ol className="flex flex-col gap-1" data-testid="live-plan">
+                            {chat.livePlan.labels.map((label, i) =>
+                              i < chat.liveSteps.length ? null : (
+                                <li
+                                  key={i}
+                                  data-current={i === chat.liveStepIndex ? 'true' : undefined}
+                                  className={
+                                    i === chat.liveStepIndex
+                                      ? 'text-xs text-ink-primary'
+                                      : 'text-xs text-ink-muted'
+                                  }
+                                >
+                                  {i === chat.liveStepIndex ? '▶ ' : '· '}
+                                  {label}
+                                </li>
+                              ),
+                            )}
+                          </ol>
+                        )}
                       </div>
                     </div>
                   </li>
@@ -1865,6 +1929,14 @@ const TurnRow = memo(function TurnRow({
   return (
     <li className="flex justify-start">
       <div className="max-w-[85%] rounded-lg rounded-bl-sm border border-surface-divider bg-surface-raised px-3 py-2">
+        {turn.interrupted !== undefined && (
+          <InterruptedTurnBody
+            interrupted={turn.interrupted}
+            sessionId={sessionId}
+            baseUrl={baseUrl}
+            apiKey={apiKey}
+          />
+        )}
         {turn.response !== undefined && (
           <AgentResponseBody
             response={turn.response}
@@ -1879,6 +1951,49 @@ const TurnRow = memo(function TurnRow({
     </li>
   );
 });
+
+/**
+ * B6 — a turn that stopped partway.
+ *
+ * The steps it DID run are the point: they were dispatched, they were billed,
+ * and some of them changed a real page. Clearing them (which is what happened
+ * before) both hid that work and made repeating the request look free.
+ */
+function InterruptedTurnBody({
+  interrupted,
+  sessionId,
+  baseUrl,
+  apiKey,
+}: {
+  interrupted: InterruptedTurn;
+  sessionId: string | null;
+  baseUrl: string;
+  apiKey: string | null;
+}): JSX.Element {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {interrupted.steps.length > 0 && (
+        <>
+          <p className="section-label">Interrupted — these steps ran</p>
+          <ol className="flex flex-col gap-1">
+            {interrupted.steps.map((r, i) => (
+              <PlanStep
+                key={i}
+                result={r}
+                denied={false}
+                approved={false}
+                sessionId={sessionId}
+                baseUrl={baseUrl}
+                apiKey={apiKey}
+              />
+            ))}
+          </ol>
+        </>
+      )}
+      <p className="text-sm text-status-error">{interrupted.reason}</p>
+    </div>
+  );
+}
 
 function AgentResponseBody({
   response,
@@ -1899,16 +2014,28 @@ function AgentResponseBody({
     case 'plan-executed':
       return (
         <div className="flex flex-col gap-1.5">
+          {/* B1 — the answer the customer actually asked for, above the steps.
+              It was computed, sanitised and billed on every read-back turn and
+              then shown nowhere: asking for an IP returned "✓ navigated ·
+              ✓ captured screenshot" and not the address. The plan below is now
+              supporting detail for it rather than the whole reply. */}
+          {response.answer !== undefined && response.answer.length > 0 && (
+            <p className="whitespace-pre-wrap text-sm text-ink-primary">{response.answer}</p>
+          )}
           {response.results.length === 0 ? (
             // A plan that executed ZERO steps — the decomposer produced no runnable
             // browser actions for this request (the #139 "responds without steps" /
             // "it did nothing" class). Render an honest, actionable message instead of a
             // bare empty "Plan" heading, which reads as a silent bug (server also now
             // converts an empty plan to a clarify, so this is defence-in-depth).
-            <p className="text-sm text-ink-primary">
-              I couldn’t turn that into browser actions to run. Try rephrasing it as a concrete step
-              — e.g. “go to example.com and take a screenshot.”
-            </p>
+            // ...unless an answer was already rendered above, in which case the
+            // turn plainly did something and this copy would contradict it.
+            response.answer === undefined || response.answer.length === 0 ? (
+              <p className="text-sm text-ink-primary">
+                I couldn’t turn that into browser actions to run. Try rephrasing it as a concrete
+                step — e.g. “go to example.com and take a screenshot.”
+              </p>
+            ) : null
           ) : (
             <>
               <p className="section-label">Plan</p>

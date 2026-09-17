@@ -49,6 +49,11 @@ vi.mock('../../src/lib/use-agent-chat', () => ({
 }));
 
 const { AgentChatView } = await import('../../src/views/AgentChatView');
+// B5 — the chat hook now lives in a provider ABOVE the view switch (leaving the
+// AI view used to unmount it and close a running session). The view reads it
+// from context, so every render here mounts that provider; the `use-agent-chat`
+// mock above is what the provider calls, exactly as the view used to.
+const { AgentChatProvider } = await import('../../src/lib/AgentChatProvider');
 
 const SESSION: AgentSession = {
   id: 'agt_42',
@@ -105,7 +110,7 @@ describe('AgentChatView Save-as-recipe', () => {
     settingsState.apiKey = null;
     chatState = baseChat();
     const onGoToSettings = vi.fn();
-    render(<AgentChatView onGoToSettings={onGoToSettings} />);
+    render(<AgentChatView onGoToSettings={onGoToSettings} />, { wrapper: AgentChatProvider });
 
     const gate = screen.getByRole('status');
     expect(gate).toHaveAttribute('data-component', 'ai-api-key-gate');
@@ -127,7 +132,7 @@ describe('AgentChatView Save-as-recipe', () => {
       session: SESSION,
       turns: [{ id: 1, role: 'user', text: 'do a thing' }, clarifyTurn],
     });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
     const btn = screen.getByRole('button', { name: 'Save as task' });
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
@@ -138,7 +143,7 @@ describe('AgentChatView Save-as-recipe', () => {
       session: SESSION,
       turns: [{ id: 1, role: 'user', text: 'open example.com' }, planTurn],
     });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
     fireEvent.click(screen.getByRole('button', { name: 'Save as task' }));
     expect(screen.getByRole('dialog')).toBeTruthy();
     fireEvent.keyDown(document.body, { key: 'Escape' });
@@ -155,6 +160,7 @@ describe('AgentChatView Save-as-recipe', () => {
       <ConfirmProvider>
         <AgentChatView />
       </ConfirmProvider>,
+      { wrapper: AgentChatProvider },
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Save as task' }));
@@ -204,7 +210,7 @@ describe('AgentChatView Save-as-recipe', () => {
       session: SESSION,
       turns: [{ id: 1, role: 'user', text: 'open example.com' }, planTurn],
     });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
 
     const open = screen.getByRole('button', { name: 'Save as task' });
     expect((open as HTMLButtonElement).disabled).toBe(false);
@@ -234,7 +240,7 @@ describe('AgentChatView Save-as-recipe', () => {
     );
     const planTurn: ChatTurn = { id: 2, role: 'agent', response: PLAN_EXECUTED };
     chatState = baseChat({ session: SESSION, turns: [planTurn] });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
 
     fireEvent.click(screen.getByRole('button', { name: 'Save as task' }));
     const name = await screen.findByPlaceholderText('e.g. Add 3 items to cart');
@@ -262,7 +268,7 @@ describe('AgentChatView Save-as-recipe', () => {
     );
     const planTurn: ChatTurn = { id: 2, role: 'agent', response: PLAN_EXECUTED };
     chatState = baseChat({ session: SESSION, turns: [planTurn] });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
 
     fireEvent.click(screen.getByRole('button', { name: 'Save as task' }));
     fireEvent.change(await screen.findByPlaceholderText('e.g. Add 3 items to cart'), {
@@ -289,7 +295,7 @@ describe('AgentChatView Save-as-recipe', () => {
 describe('AgentChatView live-view toggle (narrow widths)', () => {
   it('a "Live view" toggle reveals the live pane as an overlay (it is not silently dropped below lg)', () => {
     chatState = baseChat({ session: SESSION, turns: [] });
-    const { container } = render(<AgentChatView />);
+    const { container } = render(<AgentChatView />, { wrapper: AgentChatProvider });
     const pane = container.querySelector('[data-component="ai-automation-live-pane"]');
     // Closed initially → the pane carries the `hidden` class (no overlay).
     expect(pane?.className).toContain('hidden');
@@ -326,7 +332,7 @@ describe('AgentChatView live-view token-fetch failure (friendly copy + Retry)', 
   it('finding #2 — a 503/DriverNotIntegrated shows the calm "simulated" steady-state with NO Retry (a Retry would 503 forever)', async () => {
     reject503();
     chatState = baseChat({ session: SESSION, turns: [] });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
 
     // The preview-mode copy states the current capability without a roadmap
     // promise or alarming failure, never leaks the raw "HTTP 503" jargon, and
@@ -344,7 +350,7 @@ describe('AgentChatView live-view token-fetch failure (friendly copy + Retry)', 
   it('maps a network/transport failure to a connection message (raw text not surfaced) — and keeps a Retry', async () => {
     livekitToken.mockRejectedValueOnce(new Error('fetch failed'));
     chatState = baseChat({ session: SESSION, turns: [] });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
 
     expect(
       await screen.findByText(
@@ -376,7 +382,7 @@ describe('AgentChatView live-view token-fetch failure (friendly copy + Retry)', 
       }),
     );
     chatState = baseChat({ session: SESSION, turns: [] });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
 
     expect(await screen.findByText(copy)).toBeTruthy();
     expect(screen.queryByText(/private-api\.internal|\/Users\/customer|token=secret/i)).toBeNull();
@@ -390,7 +396,7 @@ describe('AgentChatView live-view token-fetch failure (friendly copy + Retry)', 
       ),
     );
     chatState = baseChat({ session: SESSION, turns: [] });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
 
     expect(await screen.findByText('Could not start the live view. Try again.')).toBeTruthy();
     expect(screen.queryByText(/\/Users\/customer|10\.0\.0\.8|token=secret|live-token/i)).toBeNull();
@@ -401,7 +407,7 @@ describe('AgentChatView live-view token-fetch failure (friendly copy + Retry)', 
     // First attempt is a TRANSIENT network failure (Retry-able); the retry resolves.
     livekitToken.mockRejectedValueOnce(new Error('fetch failed'));
     chatState = baseChat({ session: SESSION, turns: [] });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
 
     const retry = await screen.findByRole('button', { name: 'Retry' });
     expect(livekitToken).toHaveBeenCalledTimes(1);
@@ -419,14 +425,14 @@ describe('AgentChatView Model/Profile select locking', () => {
     // created the session with the OLD model/profile while the header showed the
     // new one.
     chatState = baseChat({ session: null, sending: true, turns: [] });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
     expect(screen.getByLabelText<HTMLSelectElement>('Model').disabled).toBe(true);
     expect(screen.getByLabelText<HTMLSelectElement>('Profile').disabled).toBe(true);
   });
 
   it('leaves Model + Profile enabled before any send (idle, nothing in flight)', () => {
     chatState = baseChat({ session: null, sending: false, turns: [] });
-    render(<AgentChatView />);
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
     expect(screen.getByLabelText<HTMLSelectElement>('Model').disabled).toBe(false);
     expect(screen.getByLabelText<HTMLSelectElement>('Profile').disabled).toBe(false);
   });

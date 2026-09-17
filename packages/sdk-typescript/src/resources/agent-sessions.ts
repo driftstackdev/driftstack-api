@@ -385,6 +385,13 @@ export type AgentMessageResponse =
       /** True iff every intent succeeded. False if any failed OR the plan
        *  halted on a `confirmation_required` result (check `results`). */
       ok: boolean;
+      /**
+       * The agent's answer to the question the turn asked ("what is my IP?"),
+       * read back from the page the plan landed on. Present only when a
+       * read-back ran and produced one; a turn that only acts (navigate, tap,
+       * screenshot) has no answer and omits the field.
+       */
+      answer?: string;
       usage?: AgentUsage;
     }
   | {
@@ -529,10 +536,22 @@ export class AgentSessionsResource {
        * calls it.
        */
       onStep?: (step: { index: number; result: AgentIntentResult }) => void;
+      /**
+       * Every OTHER live frame on the turn's stream, by event name — today
+       * `phase`, `plan`, `step_start` and `answer`, which together cover the
+       * long silence between sending a turn and its first completed step.
+       *
+       * ⛔ Treat an unrecognised `type` as nothing at all. The set is open: the
+       * server adds progress events without a version bump, and a consumer that
+       * throws (or shows an error) on an unknown name breaks itself on a server
+       * that is behaving correctly. `data` is likewise unvalidated here.
+       */
+      onEvent?: (event: { type: string; data: unknown }) => void;
     },
   ): Promise<AgentMessageResponse> {
     const approvals = opts?.approveConsequentialActions;
     const onStep = opts?.onStep;
+    const onEvent = opts?.onEvent;
     return this.http.requestEventStream<AgentMessageResponse>(
       {
         method: 'POST',
@@ -571,6 +590,7 @@ export class AgentSessionsResource {
         : (event) => {
             onStep(event as { index: number; result: AgentIntentResult });
           },
+      onEvent,
     );
   }
 

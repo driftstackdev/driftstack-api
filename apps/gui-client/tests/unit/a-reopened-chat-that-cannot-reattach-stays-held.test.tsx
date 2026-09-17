@@ -84,6 +84,11 @@ vi.mock('../../src/lib/use-agent-chat', async (importOriginal) => {
 const realHook = await import('../../src/lib/use-agent-chat');
 const { AgentChatView, REATTACHING_NOTICE, SEND_HELD_SUFFIX } =
   await import('../../src/views/AgentChatView');
+// B5 — the chat hook now lives in a provider ABOVE the view switch (leaving the
+// AI view used to unmount it and close a running session). The view reads it
+// from context, so every render here mounts that provider; the `use-agent-chat`
+// mock above is what the provider calls, exactly as the view used to.
+const { AgentChatProvider } = await import('../../src/lib/AgentChatProvider');
 const useAgentChat = (): UseAgentChatResult => {
   const fn = h.useAgentChatReal;
   if (fn === null) throw new Error('real hook not captured');
@@ -313,11 +318,19 @@ function chatWith(over: Partial<UseAgentChatResult>): UseAgentChatResult {
     session: null,
     sending: false,
     liveSteps: [],
+    // B2/B4 — progress captions and the "was the message kept?" accessor are
+    // part of the interface now; a double that omits them is incomplete, and
+    // this file exists to keep the pinned type backlog from growing.
+    livePhase: null,
+    livePlan: null,
+    liveStepIndex: null,
+    liveAnswer: null,
     error: null,
     pendingConfirmation: null,
     deniedTurnIds: new Set<number>(),
     approvedTurnIds: new Set<number>(),
     send,
+    lastSendKeptMessage: () => false,
     approve: vi.fn(() => Promise.resolve()),
     deny: vi.fn(),
     reset: vi.fn(),
@@ -342,7 +355,7 @@ describe('#8 — while adopting, Enter shows the notice instead of a silent no-o
   it('CRITICAL the reattach is visible without hovering, and Enter names the held send', async () => {
     // A reopened chat has turns — the notice row lives in the transcript list.
     h.useAgentChat.mockReturnValue(chatWith({ turns: PRIOR }));
-    render(<AgentChatView initialProfileId="prof_x" />);
+    render(<AgentChatView initialProfileId="prof_x" />, { wrapper: AgentChatProvider });
     await waitFor(() => expect(screen.getByPlaceholderText(PROMPT)).toBeInTheDocument());
     await new Promise((r) => setTimeout(r, 0));
     // The notice row (same slot as "Starting a session…").
@@ -363,7 +376,7 @@ describe('#8 — while adopting, Enter shows the notice instead of a silent no-o
 
   it('CONTROL — not adopting: the ordinary "Enter to send" caption, no notice row', async () => {
     h.useAgentChat.mockReturnValue(chatWith({ adopting: false }));
-    render(<AgentChatView initialProfileId="prof_x" />);
+    render(<AgentChatView initialProfileId="prof_x" />, { wrapper: AgentChatProvider });
     await waitFor(() => expect(screen.getByPlaceholderText(PROMPT)).toBeInTheDocument());
     expect(document.querySelector('[data-component="chat-adopt-notice"]')).toBeNull();
     expect(screen.queryByRole('status', { name: REATTACHING_NOTICE })).toBeNull();
@@ -384,7 +397,7 @@ describe('#8 — while adopting, Enter shows the notice instead of a silent no-o
       },
     ]);
     h.useAgentChat.mockReturnValue(chatWith({ adoptError: realHook.ADOPT_FAILED_NOTICE }));
-    render(<AgentChatView initialProfileId="prof_x" />);
+    render(<AgentChatView initialProfileId="prof_x" />, { wrapper: AgentChatProvider });
     await waitFor(() => expect(screen.getByPlaceholderText(PROMPT)).toBeInTheDocument());
     // Open the stored chat (the rail row), which is what makes it the active one.
     const row = (await screen.findByText('Chat')).closest('button');

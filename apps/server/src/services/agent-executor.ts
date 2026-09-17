@@ -204,6 +204,15 @@ export interface ExecuteArgs {
    * unaffected (they simply never call it).
    */
   onStep?: (result: IntentResult, index: number) => void;
+  /**
+   * Live-progress hook fired BEFORE an intent is dispatched, as the mirror of
+   * `onStep` (which only fires once the result has landed). A single intent can
+   * occupy the customer for tens of seconds, so "step 2 of 5 is starting" is the
+   * difference between visible progress and a frozen list. Same best-effort
+   * contract as `onStep`: wrapped in try/catch, never affects the run, and
+   * optional so existing executors/callers are unaffected.
+   */
+  onStepStart?: (intent: AgentIntent, index: number) => void;
 }
 
 export async function executionMayContinue(check: ExecuteArgs['shouldContinue']): Promise<boolean> {
@@ -265,7 +274,7 @@ export class StubAgentExecutor implements AgentExecutor {
     // Treat approvals as one-shot capabilities. Copy so execution consumes its
     // local grant without mutating the caller-owned set.
     const approved = new Set(args.approvedConsequentialActions ?? []);
-    for (const intent of args.plan.intents) {
+    for (const [planIndex, intent] of args.plan.intents.entries()) {
       if (!(await executionMayContinue(args.shouldContinue))) {
         return { results, ok: false, authorityLost: true };
       }
@@ -273,6 +282,14 @@ export class StubAgentExecutor implements AgentExecutor {
       if (halt) {
         emitStep(halt);
         return Promise.resolve({ results, ok: false, awaitingConfirmation: true });
+      }
+      // Same before-dispatch progress contract as the control-plane executor —
+      // including its position AFTER the safety gate, so a halted intent is
+      // never announced as the step in progress.
+      try {
+        args.onStepStart?.(intent, planIndex);
+      } catch {
+        /* a broken progress handler must not affect execution */
       }
       emitStep({
         kind: 'success',

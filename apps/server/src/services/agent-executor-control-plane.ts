@@ -160,7 +160,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     // routing key). Fall back to `sessionId` only if the runtime didn't thread it
     // (legacy callers) — never dispatch on the `unattached` sentinel.
     const dispatchSessionId = args.agentSessionId ?? args.sessionId;
-    for (const intent of args.plan.intents) {
+    for (const [planIndex, intent] of args.plan.intents.entries()) {
       if (!(await executionMayContinue(args.shouldContinue))) {
         return { results, ok: false, authorityLost: true };
       }
@@ -174,6 +174,18 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       if (halt) {
         emitStep(halt);
         return { results, ok: false, awaitingConfirmation: true };
+      }
+      // Announce the step BEFORE it runs — but AFTER the safety gate above.
+      // ⛔ Announcing first told the customer the agent was doing the very thing
+      // the gate was blocking ("Tapping Buy now…" beside an unanswered Approve),
+      // which is untrue in the one place being untrue costs the most. Keyed on
+      // the PLAN index, not results.length, so the marker lines up with the plan
+      // list the customer is looking at even where a result is skipped. Same
+      // best-effort contract as emitStep: a broken handler cannot stall a dispatch.
+      try {
+        args.onStepStart?.(intent, planIndex);
+      } catch {
+        /* a broken progress handler must not affect execution */
       }
 
       // 1. Map the customer verb → harness intentName + params (or unsupported).

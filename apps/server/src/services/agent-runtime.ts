@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type {
   AgentDecomposer,
+  AgentIntent,
   DecomposeResult,
   DecomposeUsage,
   TranscriptEntry,
@@ -79,11 +80,52 @@ export interface RunTurnArgs {
    * replay (a replayed turn does no live execution, so no steps fire).
    */
   onStep?: (result: IntentResult, index: number) => void;
+  /**
+   * Live-progress hook for everything that happens BEFORE a step result exists.
+   * `onStep` only fires once an intent has COMPLETED, so between Send and the
+   * first completed intent a customer saw nothing at all — planning alone can
+   * take tens of seconds. These events are strictly additive: a caller that
+   * omits the hook, or a client that never subscribes, behaves exactly as
+   * before. Best-effort — a throwing sink never affects the turn.
+   */
+  onProgress?: (event: AgentTurnProgressEvent) => void;
   /** Route-admitted control lane. Production captures this before any
    * credential, budget, or provider work so a mode change cannot reinterpret
    * the same request. Direct/test callers may omit it; the runtime then admits
    * exactly the current durable lane itself. */
   admission?: AgentTurnAdmission;
+}
+
+/**
+ * Turn-progress events, in the order a normal plan turn emits them:
+ *
+ *   phase:planning → plan → phase:starting_browser → phase:executing →
+ *   step_start(0) → (existing `step` result) → step_start(1) → … →
+ *   phase:reading_page → phase:answering → answer
+ *
+ * Phases are skipped, never reordered: a turn with no read-back never emits
+ * `reading_page`/`answering`/`answer`, and a refuse/clarify stops after
+ * `planning`. The `intents` on a `plan` event are the RAW planned intents —
+ * the route projects them through `publicAgentIntent` before they reach a
+ * client, exactly like the turn response does.
+ */
+export type AgentTurnProgressEvent =
+  | {
+      kind: 'phase';
+      phase: 'planning' | 'starting_browser' | 'executing' | 'reading_page' | 'answering';
+    }
+  | { kind: 'plan'; intents: ReadonlyArray<AgentIntent>; total: number }
+  | { kind: 'step_start'; index: number; total: number }
+  | { kind: 'answer'; answer: string };
+
+/** Publish a progress event without ever letting a broken sink break the turn. */
+function emitProgress(sink: RunTurnArgs['onProgress'], event: AgentTurnProgressEvent): void {
+  if (sink === undefined) return;
+  try {
+    sink(event);
+  } catch {
+    /* a broken progress handler must not affect the turn */
+  }
 }
 
 export interface AgentControlAuthoritySnapshot {
@@ -165,6 +207,15 @@ export type RunTurnResult =
       decomposer: DecomposeResult;
       executor: ExecutorRunResult;
       session: AgentSessionRecord;
+      /**
+       * The read-back answer — what the customer actually asked for ("tell me
+       * the IP"). It was computed, sanitized, billed and appended to the
+       * transcript, and then went nowhere: the turn result carried only the
+       * step list, so the chat showed "✓ navigated · ✓ captured" and never the
+       * answer. Present only when a read-back ran AND survived sanitisation;
+       * absent otherwise, which renders exactly as before.
+       */
+      answer?: string;
     }
   | {
       kind: 'clarify';
@@ -940,6 +991,9 @@ export class AgentRuntime {
         }
       }
       try {
+        // The customer is now staring at three dots for however long the model
+        // takes. Say what is happening before the call, not after it.
+        emitProgress(args.onProgress, { kind: 'phase', phase: 'planning' });
         decomposed = await this.deps.decomposer.decompose({
           task: args.userMessage,
           archetype: turnArchetype,
@@ -1208,7 +1262,34 @@ export class AgentRuntime {
     // attaching a driftstack session before letting the customer
     // request plan-actionable tasks.
     const targetSessionId = sessionWithUser.driftstackSessionId ?? 'unattached';
+    // Publish the plan BEFORE the first dispatch: the browser warm-up alone can
+    // run into double-digit seconds, and a customer who can see the list of
+    // steps that is about to run is not waiting on an unexplained spinner.
+    // Bound to a const: the callback below outlives the narrowing TypeScript
+    // applies to the `let decomposed`, so reading `.intents` inside it would
+    // not compile against the union.
+    const plannedIntents = decomposed.intents;
+    emitProgress(args.onProgress, {
+      kind: 'plan',
+      intents: plannedIntents,
+      total: plannedIntents.length,
+    });
+    emitProgress(args.onProgress, { kind: 'phase', phase: 'starting_browser' });
+    let announcedExecuting = false;
     const executorResult = await this.deps.executor.execute({
+      onStepStart: (_intent, index): void => {
+        // The first dispatch is the real end of the warm-up, so `executing`
+        // is announced from here rather than guessed before execute().
+        if (!announcedExecuting) {
+          announcedExecuting = true;
+          emitProgress(args.onProgress, { kind: 'phase', phase: 'executing' });
+        }
+        emitProgress(args.onProgress, {
+          kind: 'step_start',
+          index,
+          total: plannedIntents.length,
+        });
+      },
       sessionId: targetSessionId,
       // #139 — the fleet control-plane executor routes on the AGENT session id
       // (the id the box was dispatched to via sessionAssign + the key on
@@ -1296,6 +1377,9 @@ export class AgentRuntime {
     let latestReadbackEvidence:
       | { usage?: DecomposeUsage; tokensConsumed?: number; executor: ExecutorRunResult }
       | undefined;
+    // The published read-back answer, hoisted out of the try below so the turn
+    // result can carry it to the caller instead of leaving it in the transcript.
+    let publishedAnswer: string | undefined;
     const observe = this.deps.executor.observe?.bind(this.deps.executor);
     const answerFromObservation = this.deps.decomposer.answerFromObservation?.bind(
       this.deps.decomposer,
@@ -1312,6 +1396,7 @@ export class AgentRuntime {
       READ_INTENT_RE.test(args.userMessage)
     ) {
       try {
+        emitProgress(args.onProgress, { kind: 'phase', phase: 'reading_page' });
         const observation = await observe(session.id, authorityMayContinue);
         if (!(await this.authorityStillCurrent(session.id, admission))) {
           return this.interruptedTurnResult(session.id, sessionAfter, 'observation', {
@@ -1321,6 +1406,7 @@ export class AgentRuntime {
           });
         }
         if (observation !== null && observation.trim().length > 0) {
+          emitProgress(args.onProgress, { kind: 'phase', phase: 'answering' });
           const answer = await answerFromObservation({
             task: args.userMessage,
             observation,
@@ -1411,6 +1497,14 @@ export class AgentRuntime {
               index: sessionAfter.transcript.length - 1,
               entry: answerEntry,
             });
+            // Publication succeeded under a still-current controller, so this
+            // answer is the turn's. ⛔ It is NOT streamed here: the turn can
+            // still lose authority at the finalize check below and return an
+            // interrupted result that deliberately carries no answer — which
+            // would leave a subscriber holding text the body withholds, the
+            // exact leak under a successor controller the surrounding code
+            // exists to prevent. The emit happens once that check has passed.
+            publishedAnswer = answerBody;
           }
         }
       } catch (error) {
@@ -1479,11 +1573,18 @@ export class AgentRuntime {
       );
     }
 
+    // Authority held all the way through, so the answer is this turn's to
+    // publish. Streamed here — still ahead of the response body a subscriber
+    // would otherwise wait for — and never before the check above.
+    if (publishedAnswer !== undefined) {
+      emitProgress(args.onProgress, { kind: 'answer', answer: publishedAnswer });
+    }
     return {
       kind: 'plan-executed',
       decomposer: decomposed,
       executor: executorResult,
       session: sessionAfter,
+      ...(publishedAnswer !== undefined ? { answer: publishedAnswer } : {}),
     };
   }
 }

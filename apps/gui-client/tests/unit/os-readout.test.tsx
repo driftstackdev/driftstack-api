@@ -118,7 +118,12 @@ describe('OsReadout', () => {
     });
 
   it('CRITICAL a reading past the freshness window says WHEN it was taken — a stored fact rendered in bare present tense is the whole defect', () => {
-    const at = new Date(NOW - OS_FINGERPRINT_TTL_MS * 100).toISOString();
+    // ⛔ PIN UPDATED 2026-09-17 — a MULTIPLE of the window, so the arm follows the
+    // constant instead of a literal. The window went from 30 min to 8 h, and ×100
+    // of the new one is 33 DAYS, which the narrow formatter renders as "1 mo ago"
+    // — the `d ago` assertion below was failing on the age, not on the behaviour.
+    // ×10 keeps it in days, which is what this arm is about.
+    const at = new Date(NOW - OS_FINGERPRINT_TTL_MS * 10).toISOString();
     render(<OsReadout report={observed(at)} nowMs={NOW} />);
     const el = screen.getByText(/OS: windows · high ·/);
     expect(el.getAttribute('data-age')).toBe('aged');
