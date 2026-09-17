@@ -780,6 +780,9 @@ function measuredVpnEntry(ageMs: number): Record<string, unknown> {
     measuredFrom: 'fleet',
     nodeId: 'mac-07',
     quicProbe: true,
+    // PIN UPDATED 2026-09-17 — the relay verdict carries its own date now
+    // (`quicProbeAt`); an undated one is not shown, exactly like an undated UDP verdict.
+    quicProbeAt: at,
     serverProbeAt: at,
     exitIp: '198.51.100.9',
     exitCountry: 'NL',
@@ -1187,7 +1190,13 @@ describe('(h) findings 3/4/5 — the card reads the failure from the cache, clea
       'address unknown',
     );
     expect(storedProbe('vpn1')?.fleetFailureReason).toBeUndefined();
-    expect(storedProbe('vpn1')?.exitSupersededAt).toBeUndefined();
+    // ⛔ The SENTENCE goes; the STAMP stays (this line used to pin it gone). The
+    // stamp paints nothing — every assertion above holds with it present — and it
+    // is the only thing that stops the list sync putting the readings from BEFORE
+    // the failure back once the address resolves again: one failed DNS lookup must
+    // not un-retire what the failed test retired. Pinned end to end in
+    // a-retired-reading-stays-retired-across-an-unresolved-address-check.test.ts.
+    expect(typeof storedProbe('vpn1')?.exitSupersededAt).toBe('number');
     // The fleet was never asked the second time: the pre-flight answered.
     expect(vi.mocked(AccountProxies.testAccountProxy).mock.calls.length).toBe(fleetCalls);
   });

@@ -200,6 +200,9 @@ function seed(quicMeasuredAt: number, extra: Record<string, unknown> = {}): void
             quicMeasured: 'h3',
             quicMeasuredAt,
             quicProbe: true,
+            // PIN UPDATED 2026-09-17 — the relay verdict carries its own date now
+            // (`quicProbeAt`); an undated one is not shown, exactly like an undated UDP verdict.
+            quicProbeAt: Date.now(),
             serverLatencyMs: 20,
             measuredFrom: 'fleet',
             nodeId: 'mac-mini-07',
@@ -271,15 +274,31 @@ describe('T-27 (drop 2) — the hub poll writes a live h3 observation onto the l
 });
 
 describe('the profile card ages the measured QUIC verdict', () => {
-  it('CRITICAL a verdict older than the TTL renders as INFERRED (~), never green', async () => {
+  it('CRITICAL a verdict older than the TTL is never green — it renders as an AGED reading', async () => {
     // No relay verdict here so this isolates the LIVE-h3 ageing: with quicProbe:true
     // present the single chip would (correctly) go green from the fresher relay signal.
+    //
+    // PIN UPDATED 2026-09-17 — this pinned `data-quic-inferred="true"` and a '~':
+    // the aged-out verdict fell back to the INFERENCE, whose hover says "not yet
+    // tested. Run Test". The card now takes the view's `aged` readings, so the
+    // same entry renders as what it is: measured, a while ago. What this test
+    // exists for is unchanged and still asserted first — the chip is NOT green.
     seed(Date.now() - QUIC_VERDICT_TTL_MS - 60_000, { quicProbe: undefined });
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
     const chip = await quicChip(container);
-    expect(chip.getAttribute('data-quic-inferred')).toBe('true');
     expect(chip.className).not.toContain('status-ready');
-    expect(chip.textContent).toContain('~');
+    expect(chip.getAttribute('data-ok')).toBe('aged');
+    expect(chip.getAttribute('data-quic-inferred')).toBe('false');
+    expect(chip.getAttribute('title')).toMatch(/^Last checked /);
+    expect(chip.getAttribute('title')).not.toContain('not yet tested');
+    // …and its TEXT is not the green chip's either: the pin this replaced read the
+    // '~' off the text, and an aged chip whose text was the bare 'QUIC ✓' would
+    // announce a current verdict to anything that reads text and not chrome.
+    // (Printed, not hidden: this row's only aged chip is this one, and beside
+    // 'UDP ✓' and '— OS' the dated form fits the card's default 206px.)
+    expect(chip.textContent).toBe('QUIC ✓ · 31 min');
+    expect(chip.querySelector('.sr-only')).toBeNull();
+    expect(chip.className).toContain('bg-surface-inset');
   });
 
   it('VACUITY CONTROL — the same verdict a few minutes old renders GREEN', async () => {

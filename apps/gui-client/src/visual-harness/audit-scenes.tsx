@@ -58,6 +58,13 @@
 //                                         false, StrictMode's simulated unmount → remount never sets it back,
 //                                         and every refresh() result is then dropped as "unmounted". Fix in
 //                                         TeamView: set `mountedRef.current = true` inside that effect.
+//   audit-proxies       ProxiesView      loaded — the TABLE (the marketing `proxies` scene shows only the editor
+//                                         cards): 7 saved proxies over a probe cache that puts one row in each
+//                                         state the grid has to hold — every reading fresh, every reading 5 h
+//                                         old, failed with a long sentence, a tunnel that is up, never tested,
+//                                         an HTTP row, and a label + host long enough to truncate (stub:
+//                                         plugin-store settings.json + proxy-probe-cache.json, `secret_load`).
+//                                         `?stage=<W>x<H>` renders it at another window size (see auditSceneSizes).
 //
 // ⚠️ CYCLE with gallery.tsx (it imports AuditScene + AUDIT_SCENE_SIZES; we
 // import AppWindow + the fixtures): nothing here reads a gallery export at
@@ -82,6 +89,13 @@ import { ConfirmProvider } from '../components/ConfirmProvider';
 import type { FleetMember } from '../lib/fleet-members';
 import type { RecordingHeader } from '../lib/recordings-store';
 import type { StoredChat } from '../lib/chat-history';
+import type { ProxyMetadata } from '../lib/proxies';
+import {
+  PROBE_CACHE_SCHEMA_VERSION,
+  endpointPlaceholderResult,
+  type CachedProbe,
+} from '../lib/proxy-probe-cache';
+import { unavailableOsFingerprint } from '../lib/os-fingerprint-verdict';
 import { SessionsView } from '../views/SessionsView';
 import { FleetView } from '../views/FleetView';
 import { RecordingsView } from '../views/RecordingsView';
@@ -91,6 +105,7 @@ import { FirstRunWizard } from '../views/FirstRunWizard';
 import { RecipesView } from '../views/RecipesView';
 import { AgentChatView } from '../views/AgentChatView';
 import { TeamView } from '../views/TeamView';
+import { ProxiesView } from '../views/ProxiesView';
 import {
   AppWindow,
   FIXTURE_ACCOUNT,
@@ -115,6 +130,43 @@ const noopAsync = (): Promise<void> => Promise.resolve();
  *  which turned every audit stage into `undefinedpx` the first time). */
 export function auditSceneSizes(): Record<AuditSceneName, { width: number; height: number }> {
   const stage = { width: SCENE_WIDTH, height: SCENE_HEIGHT };
+  const sizes = auditDefaultSizes(stage);
+  const override = stageOverrideFromSearch(
+    typeof window === 'undefined' ? '' : window.location.search,
+  );
+  if (override === null) return sizes;
+  for (const name of Object.keys(sizes) as AuditSceneName[]) sizes[name] = override;
+  return sizes;
+}
+
+/** `?stage=<W>x<H>` (CSS px) — render an audit scene's window at another size.
+ *  The stage is a fixed box that ignores the viewport, so a 960-wide screenshot
+ *  of the default stage is a 1280 layout CROPPED, and a scaled one is a 1280
+ *  layout shrunk; neither shows what the app does in a 960 window (which
+ *  columns truncate, whether the table overflows). With this the stage IS that
+ *  window. Audit scenes only: the marketing stages are mirrored by scripts/
+ *  marketing-screens.mjs and pinned byte-for-byte. Absent → null and nothing
+ *  changes (the text-quality gate and both jsdom arms never pass it). A value
+ *  that is present and unusable THROWS: falling back to the default would hand
+ *  back a 1280 render labelled as whatever was asked for. */
+export function stageOverrideFromSearch(search: string): { width: number; height: number } | null {
+  const raw = new URLSearchParams(search).get('stage');
+  if (raw === null) return null;
+  const m = /^(\d{3,4})x(\d{3,4})$/.exec(raw);
+  const width = m === null ? NaN : Number(m[1]);
+  const height = m === null ? NaN : Number(m[2]);
+  if (!(width >= 640 && width <= 3840 && height >= 400 && height <= 4000)) {
+    throw new Error(
+      `visual harness: ?stage=${raw} is not <W>x<H> with W 640–3840 and H 400–4000 (e.g. ?stage=960x600)`,
+    );
+  }
+  return { width, height };
+}
+
+function auditDefaultSizes(stage: {
+  width: number;
+  height: number;
+}): Record<AuditSceneName, { width: number; height: number }> {
   return {
     'audit-sessions': stage,
     'audit-fleet': stage,
@@ -129,6 +181,10 @@ export function auditSceneSizes(): Record<AuditSceneName, { width: number; heigh
     'audit-recipes': stage,
     'audit-agent-chat': stage,
     'audit-team': stage,
+    // Seven rows measure 860 CSS px in the 1280×800 window's 764 px main area
+    // (896 would just fit); 920 keeps the last row in frame when a chip wraps.
+    // A look at a real window size passes ?stage= instead (above).
+    'audit-proxies': { width: SCENE_WIDTH, height: 920 },
   };
 }
 
@@ -413,6 +469,260 @@ export function auditStoredChats(): StoredChat[] {
   ];
 }
 
+/** The saved proxies (plugin-store settings.json → proxies), as `listProxies`
+ *  persists them: metadata only — the secret half is `auditProxySecrets`. One
+ *  row per state the table has to hold; the probe cache below is keyed by these
+ *  ids. The first row carries a `serverId` so the view's account-list sync
+ *  actually fires (it is skipped when no row has one) against AUDIT_BASE_URL,
+ *  which answers nothing — the scene shows that failing quietly. */
+export function auditProxies(): ProxyMetadata[] {
+  return [
+    {
+      id: 'px_audit_socks_fresh',
+      label: 'Amsterdam residential',
+      host: 'ams.proxy.example.com',
+      port: 1080,
+      username: null,
+      createdAt: minutesBefore(60 * 24 * 21),
+      serverId: 'apx_audit_socks_fresh',
+      scheme: 'socks5',
+    },
+    {
+      id: 'px_audit_socks_aged',
+      label: 'Berlin datacenter',
+      host: 'ber.proxy.example.com',
+      port: 1080,
+      username: null,
+      createdAt: minutesBefore(60 * 24 * 18),
+      scheme: 'socks5',
+    },
+    {
+      id: 'px_audit_socks_failed',
+      label: 'London mobile',
+      host: 'lon.proxy.example.com',
+      port: 1080,
+      username: null,
+      createdAt: minutesBefore(60 * 24 * 14),
+      scheme: 'socks5',
+    },
+    {
+      id: 'px_audit_wireguard_up',
+      label: 'Tokyo tunnel',
+      host: 'wg-tyo.example.com',
+      port: 51820,
+      username: null,
+      createdAt: minutesBefore(60 * 24 * 9),
+      scheme: 'wireguard',
+    },
+    {
+      id: 'px_audit_openvpn_untested',
+      label: 'Amsterdam OpenVPN',
+      host: 'ovpn-ams.example.com',
+      port: 1194,
+      username: null,
+      createdAt: minutesBefore(60 * 24 * 4),
+      scheme: 'openvpn',
+    },
+    {
+      id: 'px_audit_http',
+      label: 'Office gateway',
+      host: 'gateway.example.com',
+      port: 8080,
+      username: null,
+      createdAt: minutesBefore(60 * 24 * 2),
+      scheme: 'http',
+    },
+    {
+      // Truncation: a label and a host that cannot fit the Proxy column at any
+      // window size, and a username (it prints in the detail row only).
+      id: 'px_audit_socks_long',
+      label: 'Rotating residential pool · sticky 30 min · checkout and price-watch profiles',
+      host: 'rotating-residential-sticky-sessions.eu-west.gateway.proxy.example.com',
+      port: 10800,
+      username: 'customer-audit-zone-eu-session-sticky30',
+      createdAt: minutesBefore(60 * 24),
+      scheme: 'socks5',
+    },
+  ];
+}
+
+/** `secret_load` answers, keyed as lib/proxies.ts asks (`proxy_secret:<id>`).
+ *  `listProxies` refuses a row with no protected half ("Protected proxy
+ *  credentials are missing"), so every fixture row gets one — holding NO
+ *  credential: a null password and no tunnel config, bound to the row's own
+ *  endpoint (a binding that does not match its metadata is refused too, hence
+ *  built from `auditProxies` and never retyped). */
+export function auditProxySecrets(): Record<string, string> {
+  return Object.fromEntries(
+    auditProxies().map((p) => [
+      `proxy_secret:${p.id}`,
+      JSON.stringify({
+        version: 1,
+        binding: { host: p.host, port: p.port, username: p.username, scheme: p.scheme ?? null },
+        password: null,
+      }),
+    ]),
+  );
+}
+
+/** The probe cache (plugin-store proxy-probe-cache.json → probes). Typed as the
+ *  real CachedProbe because `cleanEntry` rebuilds each entry from an allowlist:
+ *  a field it does not name is dropped on load, without an error, and the row
+ *  then renders "untested" for a reason nothing on screen explains. The native
+ *  `message`s are the shipped ones (src-tauri/src/lib.rs). */
+export function auditProxyProbes(): Record<string, CachedProbe> {
+  const now = Date.parse(FROZEN_NOW_ISO);
+  const healthyMessage =
+    'Working — CONNECT succeeded. UDP ASSOCIATE supported — QUIC / WebRTC / HTTP-3 tunnel through it too.';
+  const healthy = (latency_ms: number): CachedProbe['result'] => ({
+    reachable: true,
+    auth_ok: true,
+    udp_associate: true,
+    can_route: true,
+    connect_reply: 0,
+    latency_ms,
+    message: healthyMessage,
+  });
+  /** Everything the two healthy SOCKS5 rows hold, measured at `at`: both
+   *  latencies, UDP + QUIC, the OS reading, the exit with its place.
+   *  ⛔ Every reading rides with ITS OWN stamp (`exitAt`, `osFingerprint.at`,
+   *  `serverProbeAt`, `quicMeasuredAt`, `quicProbeAt`, `udpProbeAt`). The stamps
+   *  are optional on the type, so a reading without one still typechecks and
+   *  still survives `cleanEntry` — and `deriveProbeViewState` then files it as
+   *  neither fresh nor aged: it never reaches the screen, at any age. */
+  const fullReading = (
+    at: number,
+    exit: { ip: string; country: string; city: string; region: string; timezone: string },
+    latency: { native: number; server: number },
+    os: { webPortVantage: boolean },
+  ): CachedProbe => ({
+    result: healthy(latency.native),
+    at,
+    exitIp: exit.ip,
+    exitCountry: exit.country,
+    exitCity: exit.city,
+    exitRegion: exit.region,
+    exitTimezone: exit.timezone,
+    exitAsnOrg: 'Example Broadband',
+    exitAt: at,
+    osFingerprint: {
+      os: 'macos-or-ios',
+      confidence: 'high',
+      reason: 'matches a Mac or iPhone network stack',
+      at,
+      observedVia: 'exit_ip',
+      // Absent means FALSE (lib/os-fingerprint-verdict.ts): without a vantage
+      // that describes the path a website gets, the chip names the OS behind a
+      // "?" and asserts nothing. `true` is what unlocks the green match chip.
+      ...(os.webPortVantage ? { webPortVantage: true as const } : {}),
+    },
+    serverLatencyMs: latency.server,
+    serverProbeAt: at,
+    measuredFrom: 'fleet',
+    quicMeasured: 'h3',
+    quicMeasuredAt: at,
+    quicProbe: true,
+    quicProbeAt: at,
+    udpProbe: true,
+    udpProbeAt: at,
+  });
+  const tunnelEndpoint = {
+    resolved: true,
+    ip: '198.51.100.44',
+    message: 'Endpoint resolves to 198.51.100.44 — tunnel verified at launch.',
+  };
+  const gatewayEndpoint = {
+    resolved: true,
+    ip: '192.0.2.80',
+    message: 'Endpoint resolves to 192.0.2.80 — tunnel verified at launch.',
+  };
+  return {
+    // (a) every reading fresh — two minutes old, inside every 30-minute TTL.
+    px_audit_socks_fresh: fullReading(
+      now - 2 * 60_000,
+      {
+        ip: '203.0.113.24',
+        country: 'NL',
+        city: 'Amsterdam',
+        region: 'North Holland',
+        timezone: 'Europe/Amsterdam',
+      },
+      { native: 84, server: 41 },
+      // The table's best case: the OS reading asserts (green match chip).
+      { webPortVantage: true },
+    ),
+    // (b) the SAME readings five hours old: past the 30-minute TTLs (exit
+    // identity, OS, QUIC, UDP), inside the six-hour PROBE_TTL_MS.
+    px_audit_socks_aged: fullReading(
+      now - 5 * 3_600_000,
+      {
+        ip: '198.51.100.61',
+        country: 'DE',
+        city: 'Berlin',
+        region: 'Berlin',
+        timezone: 'Europe/Berlin',
+      },
+      { native: 132, server: 96 },
+      // No vantage: whenever this aged reading is shown, it is the "?" chip —
+      // the two healthy rows cover both OS arms between them.
+      { webPortVantage: false },
+    ),
+    // (c) authenticates and cannot route — the longest sentence the native
+    // probe ships (SOCKS5 reply 0x02).
+    px_audit_socks_failed: {
+      result: {
+        reachable: true,
+        auth_ok: true,
+        udp_associate: false,
+        can_route: false,
+        connect_reply: 0x02,
+        latency_ms: 210,
+        message:
+          'Authenticates, but cannot route: the proxy refused it: not allowed by its ruleset (usually an expired plan, or a destination/port your provider blocks). Credentials are fine — this proxy will not carry traffic, so a profile launched through it cannot reach anything.',
+      },
+      at: now - 6 * 60_000,
+    },
+    // (d) a tunnel that came up: the endpoint verdict + the server-measured
+    // fields beside it, UDP measured, QUIC never (no quicProbe / quicMeasured).
+    px_audit_wireguard_up: {
+      endpoint: tunnelEndpoint,
+      result: endpointPlaceholderResult(tunnelEndpoint),
+      at: now - 9 * 60_000,
+      exitIp: '203.0.113.150',
+      exitCountry: 'JP',
+      exitCity: 'Tokyo',
+      exitRegion: 'Tokyo',
+      exitTimezone: 'Asia/Tokyo',
+      exitAt: now - 9 * 60_000,
+      osFingerprint: { ...unavailableOsFingerprint('vpn_tunnel'), at: now - 9 * 60_000 },
+      serverLatencyMs: 58,
+      serverProbeAt: now - 9 * 60_000,
+      measuredFrom: 'fleet',
+      udpProbe: true,
+      udpProbeAt: now - 9 * 60_000,
+    },
+    // (e) px_audit_openvpn_untested has NO entry — never tested.
+    // (f) an HTTP row's only check is the endpoint resolve.
+    px_audit_http: {
+      endpoint: gatewayEndpoint,
+      result: endpointPlaceholderResult(gatewayEndpoint),
+      at: now - 40 * 60_000,
+    },
+    // (g) healthy from this Mac, nothing else measured.
+    px_audit_socks_long: { result: healthy(118), at: now - 15 * 60_000 },
+  };
+}
+
+/** The fresh row's measured exit, read off the probe fixture rather than
+ *  retyped. It throws when the fixture stops carrying one: an empty marker is
+ *  contained in every string, so it would be satisfied by a blank table. */
+function auditFreshExitIp(): string {
+  const ip = auditProxyProbes()['px_audit_socks_fresh']?.exitIp;
+  if (ip === undefined || ip === '')
+    throw new Error('visual harness: px_audit_socks_fresh has no exitIp to mark as loaded');
+  return ip;
+}
+
 /** What each audit scene must have RENDERED for it to count as loaded — the
  *  fixtures the view was fed, read back off the DOM (text nodes + attributes +
  *  input values). Both jsdom arms (tests/unit/marketing-scenes.test.tsx's
@@ -456,6 +766,19 @@ export function auditLoadedMarkers(name: AuditSceneName): ReadonlyArray<string> 
       return [
         ...auditTeam().members.map((m) => m.member_email),
         ...auditTeam().invites.map((i) => i.invitee_email),
+      ];
+    case 'audit-proxies':
+      // The row's label and its endpoint — the endpoint in full even where the
+      // cell truncates it, because the cell's own `title` carries it. Rows only
+      // exist once `listProxies` has hydrated every secret through the stub.
+      // ⛔ The fresh row's measured exit goes LAST, and the order is the point:
+      // ProxiesView renders its rows and only THEN awaits the probe cache, and
+      // the privacy arm snapshots the DOM the moment the last marker appears. A
+      // list ending on a row string lets that scan run before any exit IP,
+      // place, or failure sentence is on screen — green for having read less.
+      return [
+        ...auditProxies().flatMap((p) => [p.label, `${p.host}:${String(p.port)}`]),
+        auditFreshExitIp(),
       ];
   }
 }
@@ -519,7 +842,12 @@ type WindowWithTauri = Window & { __TAURI_INTERNALS__?: TauriInternalsStub | obj
 /** Store files the views open, by path — the rid a `plugin:store|load` returns
  *  is the path's index + 1 here, so a Store the plugin cached under an earlier
  *  stub instance still resolves (LazyStore memoises its load per module). */
-const STORE_PATHS = ['settings.json', 'agent-chats.json', 'assistant-templates.json'] as const;
+const STORE_PATHS = [
+  'settings.json',
+  'agent-chats.json',
+  'assistant-templates.json',
+  'proxy-probe-cache.json',
+] as const;
 
 interface DirEntry {
   name: string;
@@ -533,20 +861,34 @@ export interface TauriStubFixtures {
   stores: Record<(typeof STORE_PATHS)[number], Record<string, unknown>>;
   files: Record<string, string>;
   dirs: Record<string, ReadonlyArray<DirEntry>>;
+  /** `secret_load` answers by key; a key that is not here reads null (nothing
+   *  saved), which is what every scene but audit-proxies has always been told. */
+  secrets: Record<string, string>;
   appVersion: string;
 }
 
-export function auditTauriFixtures(): TauriStubFixtures {
+/** The saved proxies, their secrets and the probe cache are fed to the
+ *  audit-proxies scene ONLY: the Sidebar counts saved proxies from the same
+ *  settings.json in every stubbed scene, and the other scenes' chrome stays as
+ *  the gate has always measured it. */
+export function auditTauriFixtures(scene?: AuditSceneName): TauriStubFixtures {
   const recordings = auditRecordings();
+  const withProxies = scene === 'audit-proxies';
   return {
     stores: {
       'settings.json': {
         fleetMembers: auditFleetMembers(),
         profile_bindings: [],
-        proxies: [],
+        proxies: withProxies ? auditProxies() : [],
       },
       'agent-chats.json': { chats: auditStoredChats() },
       'assistant-templates.json': { templates: [] },
+      // `probes_schema` at the current version: the one-time backfill has
+      // nothing to do, so the load is a pure read.
+      'proxy-probe-cache.json': {
+        probes: withProxies ? auditProxyProbes() : {},
+        probes_schema: PROBE_CACHE_SCHEMA_VERSION,
+      },
     },
     files: {
       'recordings/index.json': JSON.stringify(recordings),
@@ -559,6 +901,7 @@ export function auditTauriFixtures(): TauriStubFixtures {
         isSymlink: false,
       })),
     },
+    secrets: withProxies ? auditProxySecrets() : {},
     appVersion: '0.1.49',
   };
 }
@@ -644,8 +987,12 @@ export function buildTauriInvoke(f: TauriStubFixtures): TauriInternalsStub['invo
         case 'plugin:fs|remove':
           return Promise.resolve(null);
         // Commands the app's Rust side answers.
-        case 'secret_load':
-          return Promise.resolve(null);
+        case 'secret_load': {
+          const key = String(argOf(args, 'key'));
+          return Promise.resolve(
+            Object.prototype.hasOwnProperty.call(f.secrets, key) ? f.secrets[key] : null,
+          );
+        }
         case 'secret_save':
         case 'secret_delete':
           return Promise.resolve(null);
@@ -752,7 +1099,8 @@ function StubbedAuditWindow(props: {
   current: Parameters<typeof AppWindow>[0]['current'];
   children: ReactNode;
 }): JSX.Element {
-  const fixtures = useMemo(() => auditTauriFixtures(), []);
+  const { scene } = props;
+  const fixtures = useMemo(() => auditTauriFixtures(scene), [scene]);
   useTauriStub(fixtures);
   return <AuditWindow {...props} />;
 }
@@ -846,6 +1194,12 @@ export function AuditScene({ name }: { name: AuditSceneName }): JSX.Element {
         <AuditWindow scene={name} current="team">
           <TeamView onGoToSettings={noop} />
         </AuditWindow>
+      );
+    case 'audit-proxies':
+      return (
+        <StubbedAuditWindow scene={name} current="proxies">
+          <ProxiesView />
+        </StubbedAuditWindow>
       );
   }
 }

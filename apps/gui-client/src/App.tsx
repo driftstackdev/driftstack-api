@@ -47,9 +47,8 @@ import { SettingsProvider, useSettings } from './lib/SettingsContext';
 import { useConnectionStatus } from './lib/use-connection-status';
 import { isCloudBaseUrl } from './lib/telemetry';
 import { useAppVersion } from './lib/app-version';
-import { listProxies, testProxy, type ProxyConfig } from './lib/proxies';
-import { loadProbeCache, saveProbeResult } from './lib/proxy-probe-cache';
-import { runSweep, installProxySweepSchedule } from './lib/proxy-probe-sweeper';
+import { installProxySweepSchedule, type SweepRun } from './lib/proxy-probe-sweeper';
+import { runInstalledSweep } from './lib/proxy-server-test';
 import { FirstRunWizard } from './views/FirstRunWizard';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
 import { ToastProvider, useToasts } from './lib/toasts';
@@ -695,21 +694,23 @@ function Shell(): JSX.Element {
   // is deferred by one interval rather than fired at startup — launch is the
   // busiest moment for the machine and nothing is stale-urgent in the first
   // quarter hour.
+  //
+  // The account is read at CALL time through a ref, never captured at mount: this
+  // effect runs once, while `kbSettings` is DEFAULT_SETTINGS until the store has
+  // loaded and changes again when the customer signs in or out — a captured key
+  // would be `null` for the life of the window. Same pattern as `autoUpdateRef`
+  // below.
+  const sweepCredsRef = useRef({ baseUrl: kbSettings.baseUrl, apiKey: kbSettings.apiKey });
+  sweepCredsRef.current = { baseUrl: kbSettings.baseUrl, apiKey: kbSettings.apiKey };
   useEffect(() => {
-    const deps = {
-      loadCache: loadProbeCache,
-      listProxies,
-      testProxy: (px: ProxyConfig) =>
-        testProxy({ host: px.host, port: px.port, username: px.username, password: px.password }),
-      saveResult: saveProbeResult,
-      now: () => Date.now(),
-      sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
-    };
-    // runSweep is single-flight; a trigger arriving while one runs is a no-op.
-    const sweep = (): void => void runSweep(deps).catch(() => undefined);
+    // Both runners are single-flight; a trigger arriving while one runs is a no-op.
+    // `runInstalledSweep` forwards the trigger's staleness window and checks VPN /
+    // HTTP rows with their own check — the two connections this wiring used to
+    // drop (see `installedSweepDeps`) — then runs the automatic capability check.
+    const sweep = (run: SweepRun): void => void runInstalledSweep(run, () => sweepCredsRef.current);
     // N3 — refresh on THREE triggers (staggered startup + steady interval + window
     // focus/visibility), not only every 15 min. planSweep only re-probes entries
-    // already past their TTL, so the focus trigger touches genuinely-stale rows only.
+    // already past their window, so the focus trigger touches genuinely-stale rows only.
     return installProxySweepSchedule(sweep, {
       setTimeout: (fn, ms) => window.setTimeout(fn, ms),
       clearTimeout: (handle) => window.clearTimeout(handle),

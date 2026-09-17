@@ -51,11 +51,34 @@ const h = vi.hoisted(() => ({
   ),
   saveExitResult: vi.fn<(...a: unknown[]) => Promise<ProbeCacheMap>>(() => Promise.resolve({})),
   loadProbeCache: vi.fn<() => Promise<ProbeCacheMap>>(() => Promise.resolve({})),
+  // The saved rows. An automatic server test re-reads the row AFTER the reply and
+  // drops a reply about a row that is gone or was edited meanwhile, so the row the
+  // sweep checks has to be one the list still holds.
+  localRows: [] as ProxyConfig[],
 }));
 
+// The sweep's server leg reads the automatic check's backoff ledger FIRST and does
+// not run when it cannot (an unreadable ledger answered as "never attempted" is the
+// unbounded dial) — so this suite needs a store that can be read. In memory, empty.
+const storeKeys = new Map<string, unknown>();
+vi.mock('@tauri-apps/plugin-store', () => ({
+  LazyStore: class {
+    get(key: string): Promise<unknown> {
+      return Promise.resolve(storeKeys.get(key));
+    }
+    set(key: string, value: unknown): Promise<void> {
+      storeKeys.set(key, structuredClone(value));
+      return Promise.resolve();
+    }
+    save(): Promise<void> {
+      return Promise.resolve();
+    }
+  },
+}));
 vi.mock('../../src/lib/proxies', async (importOriginal) => ({
   ...(await importOriginal<typeof ProxiesModule>()),
   resolveEndpoint: (host: string, port: number) => h.resolveEndpoint(host, port),
+  listProxies: () => Promise.resolve(h.localRows),
   testProxy: () => Promise.reject(new Error('the SOCKS5 handshake must never run here')),
 }));
 vi.mock('../../src/lib/account-proxies', async (importOriginal) => ({
@@ -137,6 +160,8 @@ const HTTP = proxy('web', { scheme: 'http', port: 8080 });
 
 beforeEach(() => {
   __resetSweepLatchForTests();
+  storeKeys.clear();
+  h.localRows = [VPN, WG, HTTP];
   h.resolveEndpoint.mockReset();
   h.resolveEndpoint.mockResolvedValue({ resolved: true, ip: '198.51.100.1', message: 'Resolved' });
   h.testAccountProxy.mockReset();
@@ -388,6 +413,25 @@ describe('checkEndpointRowForSweep — the grid’s two legs, silently', () => {
     expect(h.saveServerProbeResult.mock.calls[0]?.[0]).toBe('vpn');
     expect(h.saveExitResult).toHaveBeenCalledTimes(1);
     expect(h.saveExitResult.mock.calls[0]?.slice(0, 3)).toEqual(['vpn', '203.0.113.9', 'NL']);
+  });
+
+  it('ARM 9b — CRITICAL ⛔ a row EDITED or DELETED while the test was in flight (a VPN test runs up to 95 s, and the sweep cannot push local changes) persists NOTHING of the reply: it describes the endpoint the account held when the test started. MUTATION: delete the `rowIdentity(current) !== asked` return in testStoredRowAutomatically and both blocks red', async () => {
+    h.testAccountProxy.mockImplementationOnce(() => {
+      h.localRows = [{ ...VPN, host: 'moved.example' }, WG, HTTP];
+      return Promise.resolve({ ok: true, latency_ms: 42, measured_from: 'fleet' });
+    });
+    await checkEndpointRowForSweep(VPN, creds, () => NOW);
+    expect(h.testAccountProxy).toHaveBeenCalledTimes(1);
+    expect(h.saveServerProbeResult).not.toHaveBeenCalled();
+    expect(h.saveExitResult).not.toHaveBeenCalled();
+
+    h.testAccountProxy.mockImplementationOnce(() => {
+      h.localRows = [VPN, HTTP];
+      return Promise.resolve({ ok: true, latency_ms: 42, measured_from: 'fleet' });
+    });
+    await checkEndpointRowForSweep(WG, creds, () => NOW + 60 * 60 * 1000);
+    expect(h.testAccountProxy).toHaveBeenCalledTimes(2);
+    expect(h.saveServerProbeResult).not.toHaveBeenCalled();
   });
 
   it('ARM 10 — CONTROL: an unresolved endpoint never reaches the fleet (the pre-flight IS the answer)', async () => {

@@ -99,6 +99,52 @@ export interface CachedProbe {
   /** T-1 — the fleet Mac's standalone QUIC-relay verdict (true/false), separate
    *  from quicMeasured (a live session's HTTP/3) and never merged with it. */
   quicProbe?: boolean;
+  /**
+   * Epoch ms when the relay verdict beside it was MEASURED — the twin of
+   * `udpProbeAt` below, and it exists for the reason that one gives: the verdict
+   * is CARRIED across every reply that measured nothing about QUIC (a
+   * control-plane fallback, a skipped leg — see `saveServerProbeResult`), so
+   * undated it was aged by nothing and a `✓ QUIC` from a Test pressed last month
+   * read in the present tense for the life of the install.
+   *
+   * Written when a reply measures the leg, carried unchanged when a reply carries
+   * the verdict, and read by `isQuicProbeFresh`. ⛔ An ABSENT stamp is NOT fresh
+   * and is not an AGED reading either — a verdict nobody can date has no age to
+   * state — so an entry written before this field existed falls back to the
+   * inferred chip and the automatic capability check (proxy-probe-sweeper) treats
+   * it as never measured and re-takes it.
+   */
+  quicProbeAt?: number;
+  /**
+   * Epoch ms when a check RAN the relay leg, reached no verdict, and so removed
+   * the one this entry held (`saveServerProbeResult`). It exists because the
+   * removal alone is undone by the next list sync: the server writes nothing for a
+   * leg that reached no verdict, so its row still carries the reading from BEFORE
+   * that check, and an entry with no relay verdict admits any datable one. A
+   * stored reading dated at or before this stamp is the one that was just retired
+   * and is refused (`serverCapabilityReadingsToAdopt`) — the `exitSupersededAt`
+   * rule, for the one leg. Dropped by the next reply that MEASURES the leg;
+   * carried by every writer that carries the verdict's own date.
+   */
+  quicProbeRetiredAt?: number;
+  /**
+   * Epoch ms when an address check could not CONFIRM this row's endpoint is still
+   * at the address the readings were taken through — found at a different one, or
+   * unresolved on either side of the comparison — and every server-measured field
+   * was dropped for it (`saveEndpointResult`). Same reason as the stamp above, for
+   * every reading at once: what the server holds was measured before that, and the
+   * list adoption must not put it back. A reading dated after it was taken since.
+   *
+   * Refuses the stored QUIC / UDP readings (`serverCapabilityReadingsToAdopt`) and
+   * the stored OS reading (`refusesServerOsReading`). ⛔ NOT the observed EXIT, on
+   * purpose: that is refused by `exitSupersededAt` alone. The exit is what a launch
+   * sets the device clock's timezone from, only a live session can re-date it, and
+   * this stamp is minted by ONE failed lookup — refusing the exit on it would leave
+   * every VPN row without the exit its next launch reads, after one sweep that ran
+   * offline. The price is that an exit seen through the old address can show
+   * beside a new one until a session re-observes it, as it always could.
+   */
+  serverReadingsRetiredAt?: number;
   /** (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP-relay verdict, its
    *  exact sibling. ⛔ ABSENT IS "NOT MEASURED", never "no UDP": the control
    *  plane emits `udp_associate` only for a real reading, so nothing asserted
@@ -252,6 +298,104 @@ export interface ProbeViewState {
    * and both surfaces read one map.
    */
   serverMeasuredAt: Record<string, number>;
+  /**
+   * The readings that are NO LONGER CURRENT but are still worth showing — see
+   * `AgedReadings`. ⛔ A PARALLEL structure on purpose: every map above keeps
+   * exactly the entries it had before this existed, so the launch path and every
+   * present-tense consumer behave as they did. A reading is in a map above OR in
+   * here, never both.
+   */
+  aged: AgedReadings;
+}
+
+/** A reading that has aged out of the present tense: what was measured, and when. */
+export interface AgedReading<T> {
+  value: T;
+  atMs: number;
+}
+
+/**
+ * The THIRD display state, between "current" and "not measured".
+ *
+ * ⛔ WHY IT EXISTS. The four readings below leave their present-tense map after
+ * thirty minutes, and that rule is right — a chip that says `✓ QUIC` must be true
+ * now. But dropping out of the map is also what "never measured" looks like, so a
+ * proxy the customer tested 31 minutes ago rendered exactly like one nobody had
+ * ever tested, and told them to press Test on a row they had just tested. The
+ * value was on disk the whole time.
+ *
+ * An entry here is a reading that EXISTS, can be DATED, is NOT fresh, is younger
+ * than `AGED_READING_MAX_MS`, and passes the same usable / server-seeded gate its
+ * fresh sibling passes. A surface renders it in the PAST tense, muted, with its
+ * age — never in the tone of a current verdict — and nothing that ACTS on a
+ * reading (the launch path, the sort, the hero) may read this structure.
+ */
+export interface AgedReadings {
+  osFingerprints: Record<string, AgedReading<CachedOsFingerprint>>;
+  quicMeasured: Record<string, AgedReading<MeasuredQuic>>;
+  quicProbe: Record<string, AgedReading<boolean>>;
+  udpProbe: Record<string, AgedReading<boolean>>;
+}
+
+/** One row's aged readings — the slice a row component takes. */
+export interface AgedRowReadings {
+  osFingerprint?: AgedReading<CachedOsFingerprint>;
+  quicMeasured?: AgedReading<MeasuredQuic>;
+  quicProbe?: AgedReading<boolean>;
+  udpProbe?: AgedReading<boolean>;
+}
+
+export function emptyAgedReadings(): AgedReadings {
+  return { osFingerprints: {}, quicMeasured: {}, quicProbe: {}, udpProbe: {} };
+}
+
+/** The aged readings of ONE proxy, or undefined when it has none — so a row that
+ *  has nothing aged gets a stable `undefined` prop rather than a fresh `{}`. */
+export function agedReadingsFor(aged: AgedReadings, proxyId: string): AgedRowReadings | undefined {
+  const osFingerprint = aged.osFingerprints[proxyId];
+  const quicMeasured = aged.quicMeasured[proxyId];
+  const quicProbe = aged.quicProbe[proxyId];
+  const udpProbe = aged.udpProbe[proxyId];
+  if (
+    osFingerprint === undefined &&
+    quicMeasured === undefined &&
+    quicProbe === undefined &&
+    udpProbe === undefined
+  )
+    return undefined;
+  return {
+    ...(osFingerprint !== undefined ? { osFingerprint } : {}),
+    ...(quicMeasured !== undefined ? { quicMeasured } : {}),
+    ...(quicProbe !== undefined ? { quicProbe } : {}),
+    ...(udpProbe !== undefined ? { udpProbe } : {}),
+  };
+}
+
+/**
+ * How long an aged reading is still worth showing.
+ *
+ * Thirty days. Past that a reading describes a provider configuration nobody
+ * should reason from, and "last checked 7 months ago" beside a proxy is noise
+ * rather than information — the row then says "not measured", which is what is
+ * true of anything a customer could act on. Not shorter: the automatic capability
+ * check re-takes a reading after six hours but is budgeted, backed off and needs
+ * an API key, so a reading can honestly sit for days on a Free account or a long
+ * list, and hiding it again is the defect this state exists to close.
+ */
+export const AGED_READING_MAX_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Is a reading taken at `atMs` an AGED one — datable, and old enough to have left
+ * the present tense (the caller has already established it is not fresh) but
+ * younger than the cap above?
+ *
+ * ⛔ An ABSENT or non-finite stamp is NOT aged: an age sentence needs a date, and
+ * "Last checked NaN days ago" is not a fallback anyone should see. Such a reading
+ * is simply not measured, and the automatic check re-takes it.
+ */
+export function isAgedReadingShowable(atMs: number | undefined, nowMs: number): boolean {
+  if (typeof atMs !== 'number' || !Number.isFinite(atMs)) return false;
+  return nowMs - atMs < AGED_READING_MAX_MS;
 }
 
 /**
@@ -321,6 +465,30 @@ export function isQuicVerdictFresh(atMs: number | undefined, nowMs: number): boo
  * different, later reply that measured nothing about UDP at all.
  */
 export function isUdpVerdictFresh(atMs: number | undefined, nowMs: number): boolean {
+  if (typeof atMs !== 'number') return false;
+  return nowMs - atMs < QUIC_VERDICT_TTL_MS;
+}
+
+/**
+ * Is the Test's QUIC-relay verdict (`quicProbe`) still current?
+ *
+ * ⛔ It was the ONE reading measured through the proxy that nothing aged. Its
+ * three neighbours — the live QUIC verdict, the UDP verdict, the OS reading — all
+ * leave the present tense after thirty minutes, and this one kept its green tick
+ * for the life of the install: the very failure the comment on
+ * `QUIC_VERDICT_TTL_MS` describes, surviving in the sibling field.
+ *
+ * It was left undated deliberately (see `saveObservedQuic`): the verdict is only
+ * written when someone presses Test, so a thirty-minute window meant the green
+ * chip was essentially never shown. That objection is answered rather than
+ * overruled — a verdict past the window now renders as an AGED reading ("✓ QUIC ·
+ * 4h ago", `AgedReadings`) instead of vanishing, and the automatic capability
+ * check re-takes it, so the customer keeps the information and loses only the
+ * claim that it is current.
+ *
+ * Same rule as `isUdpVerdictFresh`, including the absent stamp: NOT fresh.
+ */
+export function isQuicProbeFresh(atMs: number | undefined, nowMs: number): boolean {
   if (typeof atMs !== 'number') return false;
   return nowMs - atMs < QUIC_VERDICT_TTL_MS;
 }
@@ -463,6 +631,7 @@ export function deriveProbeViewState(
   const udpProbe: Record<string, boolean> = {};
   const exitSeenAt: Record<string, number> = {};
   const serverMeasuredAt: Record<string, number> = {};
+  const aged = emptyAgedReadings();
   for (const [id, c] of Object.entries(cache)) {
     // (p) — a SERVER-SEEDED entry holds no local verdict and no local check: it
     // keys neither map, so the row reads as untested everywhere (no red pill from
@@ -480,12 +649,14 @@ export function deriveProbeViewState(
     // So the reading shows, under the SAME freshness rule — an old stored reading
     // is hidden exactly as an old local one is, because it is aged by the same
     // function against the stamp the server sent.
-    if (
-      c.osFingerprint !== undefined &&
-      (isProxyUsable(c.result) || c.serverSeeded === true) &&
-      isOsFingerprintFresh(c.osFingerprint, nowMs)
-    )
-      osFingerprints[id] = c.osFingerprint;
+    // The AGED arm of each reading sits directly under its fresh one and repeats
+    // its gate word for word, so the two cannot drift: a reading lands in the
+    // fresh map, or (datable, under the cap) in `aged`, or nowhere.
+    if (c.osFingerprint !== undefined && (isProxyUsable(c.result) || c.serverSeeded === true)) {
+      if (isOsFingerprintFresh(c.osFingerprint, nowMs)) osFingerprints[id] = c.osFingerprint;
+      else if (isAgedReadingShowable(c.osFingerprint.at, nowMs))
+        aged.osFingerprints[id] = { value: c.osFingerprint, atMs: c.osFingerprint.at };
+    }
     if (c.serverLatencyMs !== undefined && isProxyUsable(c.result)) {
       serverLatency[id] = c.serverLatencyMs;
       // Keyed beside the number it dates and only when we can date it: an entry
@@ -497,12 +668,11 @@ export function deriveProbeViewState(
     // so every consumer ages identically: the Proxies grid, the profile card, and
     // anything added later. Falling out of this map is exactly "never measured",
     // which the chip already renders as the inferred `~`.
-    if (
-      c.quicMeasured !== undefined &&
-      isProxyUsable(c.result) &&
-      isQuicVerdictFresh(c.quicMeasuredAt, nowMs)
-    )
-      quicMeasured[id] = c.quicMeasured;
+    if (c.quicMeasured !== undefined && isProxyUsable(c.result)) {
+      if (isQuicVerdictFresh(c.quicMeasuredAt, nowMs)) quicMeasured[id] = c.quicMeasured;
+      else if (c.quicMeasuredAt !== undefined && isAgedReadingShowable(c.quicMeasuredAt, nowMs))
+        aged.quicMeasured[id] = { value: c.quicMeasured, atMs: c.quicMeasuredAt };
+    }
     // T-1 — the vantage only means something beside the server number it
     // labels, so it follows the same usable-only rule; the node id rides with it.
     if (c.measuredFrom !== undefined && isProxyUsable(c.result))
@@ -510,7 +680,13 @@ export function deriveProbeViewState(
         measuredFrom: c.measuredFrom,
         ...(c.nodeId !== undefined ? { nodeId: c.nodeId } : {}),
       };
-    if (c.quicProbe !== undefined && isProxyUsable(c.result)) quicProbe[id] = c.quicProbe;
+    // The relay verdict is aged like the UDP one below it — see `isQuicProbeFresh`
+    // for why it no longer speaks in the present tense for ever.
+    if (c.quicProbe !== undefined && isProxyUsable(c.result)) {
+      if (isQuicProbeFresh(c.quicProbeAt, nowMs)) quicProbe[id] = c.quicProbe;
+      else if (c.quicProbeAt !== undefined && isAgedReadingShowable(c.quicProbeAt, nowMs))
+        aged.quicProbe[id] = { value: c.quicProbe, atMs: c.quicProbeAt };
+    }
     // (V6) — the UDP-relay verdict rides the same usable-only rule as the QUIC
     // one above it, AND the same freshness rule as `quicMeasured` two lines up.
     //
@@ -520,12 +696,11 @@ export function deriveProbeViewState(
     // subsequent check indefinitely while the "Tested" stamp beside it moves. Aged
     // HERE, beside its neighbours, so every consumer ages identically and dropping
     // out of this map means exactly what it already means downstream: not measured.
-    if (
-      c.udpProbe !== undefined &&
-      isProxyUsable(c.result) &&
-      isUdpVerdictFresh(c.udpProbeAt, nowMs)
-    )
-      udpProbe[id] = c.udpProbe;
+    if (c.udpProbe !== undefined && isProxyUsable(c.result)) {
+      if (isUdpVerdictFresh(c.udpProbeAt, nowMs)) udpProbe[id] = c.udpProbe;
+      else if (c.udpProbeAt !== undefined && isAgedReadingShowable(c.udpProbeAt, nowMs))
+        aged.udpProbe[id] = { value: c.udpProbe, atMs: c.udpProbeAt };
+    }
     if (c.exitIp !== undefined && isProxyUsable(c.result)) {
       exitResults[id] = {
         ip: c.exitIp,
@@ -558,6 +733,7 @@ export function deriveProbeViewState(
     udpProbe,
     exitSeenAt,
     serverMeasuredAt,
+    aged,
   };
 }
 
@@ -617,6 +793,8 @@ export function isProbeStaleAfter(at: number | undefined, now: number, ttlMs: nu
 
 const STORE_FILE = 'proxy-probe-cache.json';
 const KEY = 'probes';
+/** The automatic capability check's backoff ledger — see `CapabilityCheckAttempt`. */
+const ATTEMPTS_KEY = 'capability_attempts';
 
 let store: LazyStore | null = null;
 function getStore(): LazyStore {
@@ -749,6 +927,12 @@ function cleanEntry(raw: unknown): CachedProbe | null {
   // is kept only as a boolean — a string "true" is not a measurement.
   const vantage = cleanServerVantage(r.measuredFrom, r.nodeId);
   const quicProbe = typeof r.quicProbe === 'boolean' ? r.quicProbe : undefined;
+  // …and its date, kept only BESIDE the verdict it dates (the `udpProbeAt` rule
+  // below). ⛔ This allowlist is the only way the stamp survives a load: dropped
+  // here, every relay verdict comes back undatable on the next app start and the
+  // chip falls to the inferred `~` until something re-measures it.
+  const quicProbeAt =
+    quicProbe !== undefined && typeof r.quicProbeAt === 'number' ? r.quicProbeAt : undefined;
   // (V6) — the stored UDP-relay verdict, kept only as a boolean for the reason
   // above it: a string "true" is not a measurement.
   const udpProbe = typeof r.udpProbe === 'boolean' ? r.udpProbe : undefined;
@@ -758,6 +942,12 @@ function cleanEntry(raw: unknown): CachedProbe | null {
   // and `isUdpVerdictFresh` hides it — a green ✓ UDP that vanishes on app start.
   const udpProbeAt =
     udpProbe !== undefined && typeof r.udpProbeAt === 'number' ? r.udpProbeAt : undefined;
+  // The two retirement stamps. ⛔ Dropped here, a retired reading comes back from
+  // the account list on the first sync after every app start.
+  const quicProbeRetiredAt =
+    typeof r.quicProbeRetiredAt === 'number' ? r.quicProbeRetiredAt : undefined;
+  const serverReadingsRetiredAt =
+    typeof r.serverReadingsRetiredAt === 'number' ? r.serverReadingsRetiredAt : undefined;
   // T-17 — the exit identity's own stamp; absent reads as "not fresh".
   const exitAt = typeof r.exitAt === 'number' ? r.exitAt : undefined;
   // (l) #14 — the failed-exit-probe stamp; same allowlist rule as below.
@@ -800,6 +990,9 @@ function cleanEntry(raw: unknown): CachedProbe | null {
     ...(vantage !== undefined ? { measuredFrom: vantage.measuredFrom } : {}),
     ...(vantage?.nodeId !== undefined ? { nodeId: vantage.nodeId } : {}),
     ...(quicProbe !== undefined ? { quicProbe } : {}),
+    ...(quicProbeAt !== undefined ? { quicProbeAt } : {}),
+    ...(quicProbeRetiredAt !== undefined ? { quicProbeRetiredAt } : {}),
+    ...(serverReadingsRetiredAt !== undefined ? { serverReadingsRetiredAt } : {}),
     ...(udpProbe !== undefined ? { udpProbe } : {}),
     ...(udpProbeAt !== undefined ? { udpProbeAt } : {}),
     ...(serverProbeAt !== undefined ? { serverProbeAt } : {}),
@@ -942,6 +1135,14 @@ export function saveProbeResult(
       ...(prior?.measuredFrom !== undefined ? { measuredFrom: prior.measuredFrom } : {}),
       ...(prior?.nodeId !== undefined ? { nodeId: prior.nodeId } : {}),
       ...(prior?.quicProbe !== undefined ? { quicProbe: prior.quicProbe } : {}),
+      // Its DATE travels with it, unchanged — this re-test re-measured nothing
+      // about QUIC and may not make an old verdict look new (the `udpProbeAt` rule).
+      ...(prior?.quicProbeAt !== undefined ? { quicProbeAt: prior.quicProbeAt } : {}),
+      // …and so does the record that a check RETIRED one: a native re-test says
+      // nothing about QUIC, so it cannot lift the refusal of the reading retired.
+      ...(prior?.quicProbeRetiredAt !== undefined
+        ? { quicProbeRetiredAt: prior.quicProbeRetiredAt }
+        : {}),
       // (V6) — and the fleet UDP-relay verdict with them: a native SOCKS5 re-test
       // measured nothing about the fleet's legs and must not erase one. Its DATE
       // travels with it, unchanged: this re-test did not re-measure UDP, so it may
@@ -1096,6 +1297,29 @@ function cachedFingerprint(fp: OsFingerprint, at: number): CachedOsFingerprint {
 }
 
 /**
+ * Whether the OS reading the SERVER holds, dated `at`, must NOT be written onto
+ * this entry. Pure; shared by the list adoption's pre-check and the locked write.
+ *
+ * Never rewinds (a reading at or before the one held), and never resurrects: the
+ * two stamps that refuse a stored QUIC / UDP reading refuse this one too
+ * (`serverCapabilityReadingsToAdopt`). A check that found the tunnel down dropped
+ * the OS reading with every other server-measured field, and so did an address
+ * check that could not confirm the endpoint is where it was — and the account,
+ * which stores nothing on a failure and knows nothing of this Mac's DNS, still
+ * holds the reading from BEFORE either. MEASURED without this: the QUIC and UDP
+ * readings were refused and the OS chip alone came back beside "tunnel down", and
+ * beside an address nobody had fingerprinted. A reading dated after the stamp was
+ * taken since, and is adopted.
+ */
+export function refusesServerOsReading(prior: CachedProbe | undefined, at: number): boolean {
+  if (prior === undefined) return false;
+  if (prior.osFingerprint !== undefined && prior.osFingerprint.at >= at) return true;
+  return [prior.exitSupersededAt, prior.serverReadingsRetiredAt].some(
+    (t) => t !== undefined && at <= t,
+  );
+}
+
+/**
  * (p) 2026-09-16 — write the reading the SERVER holds for this proxy (the account
  * list's `os_fingerprint`, dated by its `os_fingerprint_at`) into the same field a
  * local test writes, so every surface reads ONE map and a reading taken on another
@@ -1112,6 +1336,9 @@ function cachedFingerprint(fp: OsFingerprint, at: number): CachedOsFingerprint {
  * an older one, and a poll every few seconds does not rewrite the store each tick.
  * Freshness is NOT judged here — `deriveProbeViewState` ages every reading with the
  * one TTL, and a second rule here could only disagree with it.
+ *
+ * ⛔ …and NEVER RESURRECTS — see `refusesServerOsReading`, the one decision this
+ * writer and the adoption's pre-check both make.
  */
 export function seedServerOsFingerprint(
   proxyId: string,
@@ -1121,13 +1348,203 @@ export function seedServerOsFingerprint(
   return writeLock(async () => {
     const all = await loadProbeCache();
     const prior = all[proxyId];
-    if (prior?.osFingerprint !== undefined && prior.osFingerprint.at >= at) return all;
+    if (refusesServerOsReading(prior, at)) return all;
     const base: CachedProbe = prior ?? {
       result: SERVER_SEEDED_PLACEHOLDER_RESULT,
       at,
       serverSeeded: true,
     };
     all[proxyId] = { ...base, osFingerprint: cachedFingerprint(fp, at) };
+    await getStore().set(KEY, all);
+    await getStore().save();
+    emitProbeCache(all);
+    return all;
+  });
+}
+
+/**
+ * The entry a row with NO local verdict rides on when an AUTOMATIC capability
+ * check answers for it: the same fail-closed, `serverSeeded` placeholder the
+ * account-list adoption invents, so the reply's readings have somewhere to land
+ * and the row still asserts nothing about reachability. A no-op (no store write)
+ * when the row already has an entry of any kind.
+ */
+export function ensureServerSeededEntry(proxyId: string, at: number): Promise<ProbeCacheMap> {
+  return writeLock(async () => {
+    const all = await loadProbeCache();
+    if (all[proxyId] !== undefined) return all;
+    all[proxyId] = { result: SERVER_SEEDED_PLACEHOLDER_RESULT, at, serverSeeded: true };
+    await getStore().set(KEY, all);
+    await getStore().save();
+    emitProbeCache(all);
+    return all;
+  });
+}
+
+/** A reading the SERVER holds, with the date the server took it (epoch ms). */
+export interface DatedServerReading<T> {
+  value: T;
+  at: number;
+}
+
+/** The capability readings the account list (or a /test reply that measured
+ *  neither leg) carries for one row. Each is independent; absent = the server
+ *  holds none, cannot date it, or predates the field. */
+export interface ServerCapabilityReadings {
+  quicMeasured?: DatedServerReading<MeasuredQuic>;
+  quicProbe?: DatedServerReading<boolean>;
+  udpProbe?: DatedServerReading<boolean>;
+}
+
+/**
+ * Which of the server's readings THIS entry should adopt. Pure, and the one
+ * decision both the adoption's pre-check and the locked write make.
+ *
+ * ⛔ NEWER WINS, BY THE READING'S OWN DATE — never by arrival. A reading at or
+ * before the one already held writes nothing, so a Test run here minutes ago
+ * outranks the list's copy of an older one and a poll does not rewrite the store
+ * every tick. A local reading with NO stamp is the one exception: it is shown by
+ * nothing (undatable is neither fresh nor aged), so a datable reading replaces it.
+ *
+ * ⛔ …and NEVER RESURRECT, the rule the exit adoption keeps: a check that found
+ * this proxy down dropped every server-measured field and stamped when
+ * (`exitSupersededAt`). The server stores nothing on a failed test, so its row
+ * still carries the readings from BEFORE that failure, and adopting one dated at
+ * or before the stamp would put a relay chip back beside "tunnel down".
+ *
+ * ⛔ The same rule has two more stamps, because a failure is not the only thing
+ * that retires a reading while the server keeps its copy. A check that RAN the
+ * relay leg and reached no verdict removes the relay verdict
+ * (`quicProbeRetiredAt`), and an endpoint found at a different address drops every
+ * server-measured field (`serverReadingsRetiredAt`). MEASURED without them: an
+ * entry with no relay verdict admits any datable one, so the next list sync put
+ * the retired `true` back — as a CURRENT green chip when the stored reading was
+ * under thirty minutes old, seconds after the check that retired it.
+ */
+export function serverCapabilityReadingsToAdopt(
+  prior: CachedProbe | undefined,
+  readings: ServerCapabilityReadings,
+): ServerCapabilityReadings {
+  const admits = (
+    incoming: DatedServerReading<unknown> | undefined,
+    held: unknown,
+    heldAt: number | undefined,
+    /** This leg's own retirement stamp, when it has one. */
+    legRetiredAt?: number,
+  ): boolean => {
+    if (incoming === undefined || !Number.isFinite(incoming.at)) return false;
+    const retiredAt = [prior?.exitSupersededAt, prior?.serverReadingsRetiredAt, legRetiredAt];
+    if (retiredAt.some((t) => t !== undefined && incoming.at <= t)) return false;
+    return held === undefined || heldAt === undefined || heldAt < incoming.at;
+  };
+  const adopt: ServerCapabilityReadings = {
+    ...(readings.quicMeasured !== undefined &&
+    admits(readings.quicMeasured, prior?.quicMeasured, prior?.quicMeasuredAt)
+      ? { quicMeasured: readings.quicMeasured }
+      : {}),
+    ...(readings.quicProbe !== undefined &&
+    admits(readings.quicProbe, prior?.quicProbe, prior?.quicProbeAt, prior?.quicProbeRetiredAt)
+      ? { quicProbe: readings.quicProbe }
+      : {}),
+    ...(readings.udpProbe !== undefined &&
+    admits(readings.udpProbe, prior?.udpProbe, prior?.udpProbeAt)
+      ? { udpProbe: readings.udpProbe }
+      : {}),
+  };
+  // ⛔ …and never adopt a reading only to retire it. The live verdict and the
+  // Test's verdict answer ONE question, and the writer keeps the later of two that
+  // contradict (see `seedServerCapabilityReadings`). An incoming reading that would
+  // lose that comparison on arrival is not adopted at all — adopted-then-deleted
+  // reads as "written" to the caller, and the next poll would write it again, and
+  // the one after: the store rewritten every tick to change nothing.
+  const live =
+    adopt.quicMeasured ??
+    (prior?.quicMeasured !== undefined
+      ? { value: prior.quicMeasured, at: prior.quicMeasuredAt }
+      : undefined);
+  const relay =
+    adopt.quicProbe ??
+    (prior?.quicProbe !== undefined
+      ? { value: prior.quicProbe, at: prior.quicProbeAt }
+      : undefined);
+  // (An undated LIVE verdict is shown by nothing and contests nothing — the same
+  // condition the writer's own comparison opens with.)
+  if (
+    live !== undefined &&
+    relay !== undefined &&
+    live.at !== undefined &&
+    (live.value === 'h3') !== relay.value
+  ) {
+    if (relay.at === undefined || relay.at <= live.at) delete adopt.quicProbe;
+    else delete adopt.quicMeasured;
+  }
+  return adopt;
+}
+
+/**
+ * Write the capability readings the SERVER holds for this proxy into the fields a
+ * local check writes — the twin of `seedServerOsFingerprint`, for the live QUIC
+ * verdict and the Test's QUIC / UDP readings, and for the same reason: a proxy
+ * checked on another Mac, or before a reinstall, otherwise shows nothing here.
+ *
+ * Like that seeder it INVENTS a `serverSeeded` entry when there is none, judges
+ * NO freshness (the derivation ages every reading, fresh or aged, by the one
+ * rule), and re-checks the newer-wins decision under the lock.
+ *
+ * ⛔ THE LATER MEASUREMENT RETIRES THE ONE IT CONTRADICTS — the rule
+ * `saveObservedQuic` and `saveServerProbeResult` already keep between the live
+ * verdict and the relay verdict, applied by DATE because an adopted reading is
+ * dated in the past: a live `h2-only` adopted here retires a relay `true` only
+ * when that relay verdict is not the newer of the two, and the mirror likewise.
+ * Without it the chip's strongest-evidence order would let an older live verdict
+ * mask a newer relay reading the server has since stored.
+ */
+export function seedServerCapabilityReadings(
+  proxyId: string,
+  readings: ServerCapabilityReadings,
+): Promise<ProbeCacheMap> {
+  return writeLock(async () => {
+    const all = await loadProbeCache();
+    const prior = all[proxyId];
+    const adopt = serverCapabilityReadingsToAdopt(prior, readings);
+    const stamps = [adopt.quicMeasured?.at, adopt.quicProbe?.at, adopt.udpProbe?.at].filter(
+      (t): t is number => t !== undefined,
+    );
+    if (stamps.length === 0) return all;
+    const next: CachedProbe = {
+      ...(prior ?? {
+        result: SERVER_SEEDED_PLACEHOLDER_RESULT,
+        at: Math.max(...stamps),
+        serverSeeded: true as const,
+      }),
+    };
+    if (adopt.quicMeasured !== undefined) {
+      next.quicMeasured = adopt.quicMeasured.value;
+      next.quicMeasuredAt = adopt.quicMeasured.at;
+    }
+    if (adopt.quicProbe !== undefined) {
+      next.quicProbe = adopt.quicProbe.value;
+      next.quicProbeAt = adopt.quicProbe.at;
+    }
+    if (adopt.udpProbe !== undefined) {
+      next.udpProbe = adopt.udpProbe.value;
+      next.udpProbeAt = adopt.udpProbe.at;
+    }
+    const contradicts =
+      (next.quicMeasured === 'h3' && next.quicProbe === false) ||
+      (next.quicMeasured === 'h2-only' && next.quicProbe === true);
+    if (contradicts && next.quicMeasuredAt !== undefined) {
+      // An undatable relay verdict cannot be shown to be the later one, so it
+      // yields; otherwise the older of the two goes, and a tie keeps the live one.
+      if (next.quicProbeAt === undefined || next.quicProbeAt <= next.quicMeasuredAt) {
+        delete next.quicProbe;
+        delete next.quicProbeAt;
+      } else {
+        delete next.quicMeasured;
+        delete next.quicMeasuredAt;
+      }
+    }
+    all[proxyId] = next;
     await getStore().set(KEY, all);
     await getStore().save();
     emitProbeCache(all);
@@ -1191,6 +1608,8 @@ export function saveServerProbeResult(
       measuredFrom: _m,
       nodeId: _n,
       quicProbe: _q,
+      quicProbeAt: _qa,
+      quicProbeRetiredAt: priorRelayRetiredAt,
       udpProbe: _u,
       udpProbeAt: _ua,
       fleetFailureReason: _failure,
@@ -1251,12 +1670,34 @@ export function saveServerProbeResult(
       // caller's report of that detail; a fleet answer that RAN the leg and
       // produced no verdict still drops the prior one (the control this rule
       // must not swallow).
+      //
+      // ⛔ The DATE follows the rule `udpProbeAt` follows below: a MEASUREMENT
+      // stamps `at`; a CARRY keeps the original stamp, because a carry measured
+      // nothing and may not make an old verdict look new. `serverProbeAt` is
+      // re-stamped on every one of these replies, which is exactly why the
+      // verdict cannot borrow it.
+      //
+      // ⛔ AND THE THIRD CASE LEAVES A STAMP. The leg ran and reached no verdict, so
+      // the verdict goes — and the SERVER, which writes nothing for such a leg,
+      // still holds the one from before. `quicProbeRetiredAt` is what stops the next
+      // list sync from adopting it back (`serverCapabilityReadingsToAdopt`). A
+      // MEASURED leg drops the stamp (its verdict is newer than anything retired);
+      // a carry keeps whatever stamp the entry held, having retired nothing.
       ...(typeof server.quicProbe === 'boolean'
-        ? { quicProbe: server.quicProbe }
-        : (vantage?.measuredFrom === 'control_plane' || server.quicSkipped === true) &&
-            typeof prior.quicProbe === 'boolean'
-          ? { quicProbe: prior.quicProbe }
-          : {}),
+        ? { quicProbe: server.quicProbe, quicProbeAt: at }
+        : vantage?.measuredFrom === 'control_plane' || server.quicSkipped === true
+          ? {
+              ...(typeof prior.quicProbe === 'boolean'
+                ? {
+                    quicProbe: prior.quicProbe,
+                    ...(prior.quicProbeAt !== undefined ? { quicProbeAt: prior.quicProbeAt } : {}),
+                  }
+                : {}),
+              ...(priorRelayRetiredAt !== undefined
+                ? { quicProbeRetiredAt: priorRelayRetiredAt }
+                : {}),
+            }
+          : { quicProbeRetiredAt: at }),
       // (V6 2026-09-16) ITEM 3 — the UDP-relay verdict, and its rule is SIMPLER
       // than the QUIC one above on purpose. `quicProbe` has THREE incoming states
       // (measured / the node ran the leg and reached no verdict / the node never
@@ -1337,6 +1778,19 @@ export function saveFleetFailure(
       result: prior.result,
       at: prior.at,
       ...(prior.endpoint !== undefined ? { endpoint: prior.endpoint } : {}),
+      // ⛔ The OTHER retirement stamps survive this rebuild. While the stamp below
+      // stands it refuses everything they would, which is how their loss hid: the
+      // failure's stamp is the one stamp that is later REMOVED (`clearFleetFailure`,
+      // an exit seen after it), and with these gone nothing was left to refuse a
+      // reading taken through an address the endpoint has since moved from.
+      // MEASURED: A → unresolved → B, a failed test, the account's clear — and the
+      // readings taken through A were adopted beside B.
+      ...(prior.serverReadingsRetiredAt !== undefined
+        ? { serverReadingsRetiredAt: prior.serverReadingsRetiredAt }
+        : {}),
+      ...(prior.quicProbeRetiredAt !== undefined
+        ? { quicProbeRetiredAt: prior.quicProbeRetiredAt }
+        : {}),
       exitSupersededAt: at,
       ...(reason.length > 0 ? { fleetFailureReason: reason } : {}),
     };
@@ -1401,6 +1855,9 @@ function serverMeasuredFields(
     measuredFrom,
     nodeId,
     quicProbe,
+    quicProbeAt,
+    quicProbeRetiredAt,
+    serverReadingsRetiredAt,
     udpProbe,
     udpProbeAt,
     serverProbeAt,
@@ -1423,6 +1880,14 @@ function serverMeasuredFields(
     measuredFrom,
     nodeId,
     quicProbe,
+    // …with its date: a verdict that survives the pre-flight undated is one
+    // `isQuicProbeFresh` then hides — the silent loss `udpProbeAt` names below.
+    quicProbeAt,
+    // The retirement stamps outlive the pre-flight for the reason `exitSupersededAt`
+    // does below: the pre-flight runs before EVERY check and a list sync follows
+    // every refresh, so a stamp lost here is a retired reading adopted back.
+    quicProbeRetiredAt,
+    serverReadingsRetiredAt,
     // (V6 2026-09-16) ITEM 3 — the fleet UDP-relay verdict survives a pre-flight
     // for the SAME address, exactly like the QUIC one above it. Omitting it here
     // is how a "listed by name" allowlist loses a field silently: the pre-flight
@@ -1456,15 +1921,57 @@ export function saveEndpointResult(
   return writeLock(async () => {
     const all = await loadProbeCache();
     const prior = all[proxyId];
-    const carried =
+    const sameAddress =
       endpoint.resolved &&
       prior?.endpoint !== undefined &&
       prior.endpoint.resolved &&
-      prior.endpoint.ip === endpoint.ip
-        ? serverMeasuredFields(prior)
-        : {};
+      prior.endpoint.ip === endpoint.ip;
+    const carried = sameAddress ? serverMeasuredFields(prior) : {};
+    // ⛔ THE RETIREMENT FACTS CROSS EVERY PRE-FLIGHT, RESOLVED OR NOT, because
+    // dropping the fields is not the end of them: the account row still carries the
+    // readings Driftstack took before, and the list sync that follows every refresh
+    // adopts whatever no stamp refuses. They used to travel only inside `carried`,
+    // i.e. only across a same-address pre-flight, and ONE failed DNS lookup rebuilt
+    // the entry as the bare verdict triple. MEASURED: tunnel found down at T1
+    // (`exitSupersededAt`), the background pre-flight fails once at T2, resolves
+    // again at T3 — the prior verdict was unresolved, so nothing was carried and
+    // nothing minted, and the next sync put the pre-T1 readings back beside a
+    // tunnel that was down.
+    //
+    // The STAMPS only. The failure's sentence (`fleetFailureReason`) still travels
+    // in `carried` alone, i.e. with a confirmed same address: it is what the grid
+    // paints as "tunnel down", it outranks "address not found" there, and a check
+    // that finds the endpoint unresolved — or at an address nobody has tested — is
+    // an answer that moves it. A stamp without its sentence refuses old readings
+    // and asserts nothing on screen. ⛔ It also no longer LOOKS lost to the list
+    // sync, which used to re-stamp the row and bring "tunnel down" back by that
+    // accident — so the sync restores the sentence deliberately, once the address
+    // resolves again and the account still says down (`adoptListExitObserved`).
+    const kept: Partial<CachedProbe> = {
+      ...(prior?.exitSupersededAt !== undefined
+        ? { exitSupersededAt: prior.exitSupersededAt }
+        : {}),
+      ...(prior?.quicProbeRetiredAt !== undefined
+        ? { quicProbeRetiredAt: prior.quicProbeRetiredAt }
+        : {}),
+    };
+    // ⛔ …AND ANY PRE-FLIGHT THAT CANNOT CONFIRM THE ADDRESS IS THE SAME MINTS ONE.
+    // An address we could not confirm is the same is not the same address for the
+    // purpose of trusting an old reading: a different ip, an unresolved verdict now,
+    // or an unresolved one before (A → unresolved → B names no address to compare
+    // in either step, and used to slip through as "no change observed"). Only a row
+    // that HAS an address check behind it: a first pre-flight — a second Mac, a
+    // fresh install, a server-seeded entry — retires nothing, or the adoption that
+    // exists for exactly that row would refuse everything the account holds.
+    // Never rewinds: a clock that moved back must not re-admit a retired reading.
+    const unconfirmed = prior?.endpoint !== undefined && !sameAddress;
+    const readingsRetiredAt = unconfirmed
+      ? Math.max(at, prior.serverReadingsRetiredAt ?? Number.NEGATIVE_INFINITY)
+      : prior?.serverReadingsRetiredAt;
     all[proxyId] = {
+      ...kept,
       ...carried,
+      ...(readingsRetiredAt !== undefined ? { serverReadingsRetiredAt: readingsRetiredAt } : {}),
       result: endpointPlaceholderResult(endpoint),
       at,
       endpoint: { resolved: endpoint.resolved, ip: endpoint.ip, message: endpoint.message },
@@ -1508,11 +2015,17 @@ export function saveObservedQuic(
     // The expiry of the strong signal was being undone by the immortality of the
     // weak one, silently, half an hour later.
     //
-    // ⚠️ NOT fixed with a TTL on the relay verdict, and the reason matters. A
-    // live verdict is re-emitted by a running session every ~300s; the relay
-    // verdict is written ONLY when someone presses Test. A thirty-minute window
-    // on it would mean the green chip is essentially never shown -- which is the
-    // owner's original complaint, reintroduced by a fix for a different one.
+    // ⚠️ NOT fixed with a TTL on the relay verdict ALONE, and the reason matters.
+    // A live verdict is re-emitted by a running session every ~300s; the relay
+    // verdict was written ONLY when someone pressed Test. A thirty-minute window
+    // on it, with nothing else, would mean the green chip is essentially never
+    // shown -- which is the owner's original complaint, reintroduced by a fix for
+    // a different one. (The relay verdict IS aged now -- `isQuicProbeFresh` -- but
+    // only together with the two things that answer that objection: an aged
+    // verdict still renders, in the past tense with its age, and the automatic
+    // capability check re-takes it. This retirement rule is unchanged by that: an
+    // AGED relay verdict a live session has since contradicted must not resurface
+    // as "✓ QUIC · 4h ago" either.)
     //
     // The rule that needs no window: both are statements about the same MUTABLE
     // property -- does HTTP/3 work through this exit -- so the later measurement
@@ -1534,7 +2047,9 @@ export function saveObservedQuic(
     // keeping a positive for ever that the customer's own browser has since
     // failed to reproduce. Recording an exit alongside each verdict would settle
     // it properly and is not in this change.
-    const { quicProbe: priorRelay, ...withoutRelay } = prior;
+    // The relay verdict's date goes with it: a stamp with nothing to date is how
+    // a later carry would come to wear the wrong age.
+    const { quicProbe: priorRelay, quicProbeAt: _priorRelayAt, ...withoutRelay } = prior;
     const relayContradicted =
       (quic === 'h3' && priorRelay === false) || (quic === 'h2-only' && priorRelay === true);
     all[proxyId] = {
@@ -1643,20 +2158,286 @@ export function clearFleetFailure(proxyId: string, notAfterMs?: number): Promise
   });
 }
 
+/**
+ * The rows edited in THIS app session — the in-memory half of `materialUnsynced`,
+ * for the moments the stored mark cannot cover:
+ *
+ *   • the mark is written under the lock, awaits later, and the view does not wait
+ *     for `invalidateProbe` before it refreshes — this is recorded synchronously,
+ *     in the same turn as the call;
+ *   • the mark is best-effort (a ledger that will not read must not keep a stale
+ *     verdict on screen), so an edit can land with the entry deleted and NO mark;
+ *   • a list sync reads the ledger around its request, and an edit saved after
+ *     that — or a mark LIFTED while a list fetched before the store was still in
+ *     flight — is one its snapshot cannot show.
+ *
+ * Two facts, because they answer two questions. `pending` is "edited, and the
+ * account not yet shown to hold it": lifted by `clearCapabilityMaterialUnsynced`.
+ * `lastEdit` is "edited AFTER count N", which a lift does not undo — a list
+ * requested before an edit describes the old endpoint whatever happened since.
+ *
+ * ⛔ A reader asks IMMEDIATELY before it calls a writer, with no await between.
+ * The write lock is a FIFO chain, so an edit that arrives after the question
+ * queues its delete BEHIND the adoption's write and removes it; one that arrived
+ * before is seen. Not persisted: across a restart the stored mark is the only belt.
+ */
+const pendingMaterialEdits = new Set<string>();
+const lastMaterialEdit = new Map<string, number>();
+let materialEditCount = 0;
+
+/** A COPY — a list sync keeps the set as it stood BEFORE its request. */
+export function materialEditsPending(): ReadonlySet<string> {
+  return new Set(pendingMaterialEdits);
+}
+
+/** How many edits this session has seen — the "N" a list sync takes at entry. */
+export function materialEditCountNow(): number {
+  return materialEditCount;
+}
+
+export function materialEditedAfter(proxyId: string, count: number): boolean {
+  return (lastMaterialEdit.get(proxyId) ?? 0) > count;
+}
+
+export function __resetMaterialEditsForTests(): void {
+  pendingMaterialEdits.clear();
+  lastMaterialEdit.clear();
+  materialEditCount = 0;
+}
+
 /** Drop a proxy's cached probe (capability + exit-geo). Called when the
  *  proxy's connection details change — the cached reachability/UDP/exit-IP
  *  no longer describes the live endpoint, so showing it on profile cards
  *  would be dishonest — and when a proxy is deleted, so its entry can't
- *  linger (and a future re-minted id can't inherit stale geo). Idempotent:
- *  a no-op (no store write) when the proxy has no cached probe. */
+ *  linger (and a future re-minted id can't inherit stale geo). Idempotent.
+ *
+ *  ⛔ It also marks the row `materialUnsynced` in the automatic check's ledger,
+ *  and that is the half of an edit the cache cannot express. The automatic check
+ *  never uploads (the consent rule), so it tests whatever the ACCOUNT holds — and
+ *  from this moment until something pushes the new material, that is the OLD
+ *  endpoint. A check in that window would write the predecessor's OS / QUIC / UDP
+ *  readings onto the edited row in the present tense. The mark keeps the row out
+ *  of every automatic plan until `clearCapabilityMaterialUnsynced` lifts it (a
+ *  successful store of the row). Its previous attempt stamp is dropped: that
+ *  backoff described the endpoint that was checked, and this is a different one.
+ *  A DELETED proxy's mark is pruned by the next run (`pruneCapabilityAttempts`). */
 export function invalidateProbe(proxyId: string): Promise<ProbeCacheMap> {
+  // Before the lock, before any await — see `pendingMaterialEdits`.
+  if (proxyId.length > 0) {
+    pendingMaterialEdits.add(proxyId);
+    lastMaterialEdit.set(proxyId, ++materialEditCount);
+  }
   return writeLock(async () => {
     const all = await loadProbeCache();
-    if (all[proxyId] === undefined) return all;
+    // Best-effort beside the cache drop: a ledger the store will not read must
+    // not keep a stale verdict on screen. The identity guard in the automatic
+    // check (`checkCapabilitiesForRow`) is the second belt for that case.
+    const attempts = await readCapabilityAttemptsStrict().catch(() => null);
+    const held = attempts?.[proxyId];
+    // An ACCOUNT refusal is not a fact about the endpoint, so it (and its date)
+    // survives the edit; an ordinary attempt stamp does not.
+    const next: CapabilityCheckAttempt =
+      held?.planExcluded === true
+        ? {
+            capabilityCheckAttemptedAt: held.capabilityCheckAttemptedAt,
+            planExcluded: true,
+            materialUnsynced: true,
+          }
+        : { capabilityCheckAttemptedAt: 0, materialUnsynced: true };
+    const alreadyMarked =
+      held?.materialUnsynced === true &&
+      held.capabilityCheckAttemptedAt === next.capabilityCheckAttemptedAt &&
+      held.readingsNotProducedAt === undefined;
+    const marks = attempts !== null && proxyId.length > 0 && !alreadyMarked;
+    if (marks) {
+      attempts[proxyId] = next;
+      await getStore().set(ATTEMPTS_KEY, attempts);
+    }
+    if (all[proxyId] === undefined) {
+      if (marks) await getStore().save();
+      return all;
+    }
     delete all[proxyId];
     await getStore().set(KEY, all);
     await getStore().save();
     emitProbeCache(all);
     return all;
+  });
+}
+
+// ─── The automatic capability check's backoff ledger ─────────────────────────
+
+/**
+ * When the app last asked Driftstack, UNPROMPTED, to check a proxy's
+ * capabilities, and what it learned that bounds the next ask.
+ *
+ * ⛔ ITS OWN KEY IN THIS STORE, NOT A FIELD ON `CachedProbe`, and that is a
+ * decision rather than a convenience. Four writers in this file rebuild an entry
+ * field by field (`saveProbeResult`, `saveEndpointResult`, `saveFleetFailure`,
+ * and the load-path allowlist), and this file's own history records a field
+ * silently lost to such a rebuild three separate times. A backoff stamp lost that
+ * way does not fail visibly — it turns "at most once every six hours" into "after
+ * every reachability sweep", i.e. an 11-second dial through the customer's proxy
+ * every fifteen minutes, for ever. It also has to exist for a row that has NO
+ * entry at all (a refused check writes none), which a field could only do by
+ * inventing one. Same file, same lock.
+ */
+export interface CapabilityCheckAttempt {
+  /** Epoch ms of the last AUTOMATIC attempt, whatever its outcome. `0` = none yet
+   *  for this endpoint (the record exists only to carry a mark below). */
+  capabilityCheckAttemptedAt: number;
+  /** The answer was a refusal of the ACCOUNT (its plan, or the credential it
+   *  signed in with) — a retry cannot change it, so it backs off for longer.
+   *  Only ever `true`. */
+  planExcluded?: true;
+  /** The local row changed since the account last received it — see
+   *  `invalidateProbe`. Only ever `true`. */
+  materialUnsynced?: true;
+  /** Epoch ms when a SUCCESSFUL automatic check came back and a reading this row
+   *  should have was still missing: a leg this proxy does not produce (a VPN's
+   *  QUIC leg is skipped today). The planner stops counting the blank as "never
+   *  measured" for a long window, instead of bringing a tunnel up every six hours
+   *  for ever to be told the same. */
+  readingsNotProducedAt?: number;
+}
+
+export type CapabilityAttemptMap = Record<string, CapabilityCheckAttempt>;
+
+/** The ledger, read STRICTLY: a store that cannot be read REJECTS. A malformed
+ *  record is dropped — that row then reads as never attempted, which costs one
+ *  extra check and can never suppress one for ever. */
+async function readCapabilityAttemptsStrict(): Promise<CapabilityAttemptMap> {
+  const raw = await getStore().get<Record<string, unknown>>(ATTEMPTS_KEY);
+  if (typeof raw !== 'object' || raw === null) return {};
+  const out: CapabilityAttemptMap = {};
+  for (const [id, v] of Object.entries(raw)) {
+    if (typeof v !== 'object' || v === null) continue;
+    const rec = v as Record<string, unknown>;
+    const at = rec.capabilityCheckAttemptedAt;
+    if (id.length === 0 || typeof at !== 'number' || !Number.isFinite(at)) continue;
+    const notProducedAt = rec.readingsNotProducedAt;
+    out[id] = {
+      capabilityCheckAttemptedAt: at,
+      ...(rec.planExcluded === true ? { planExcluded: true as const } : {}),
+      ...(rec.materialUnsynced === true ? { materialUnsynced: true as const } : {}),
+      ...(typeof notProducedAt === 'number' && Number.isFinite(notProducedAt)
+        ? { readingsNotProducedAt: notProducedAt }
+        : {}),
+    };
+  }
+  return out;
+}
+
+/**
+ * Load the ledger.
+ *
+ * ⛔ REJECTS when the store cannot be read, and both kinds of caller depend on it.
+ * It used to answer `{}`, which reads as "nothing was ever attempted": the runner
+ * would then plan every row as overdue, and a WRITER that rebuilt the map from that
+ * answer would write the empty map back — one transient read failure wiping every
+ * row's backoff, the unbounded dial this ledger exists to prevent. A run that
+ * cannot read its ledger does not run; a write that cannot read it does not write.
+ */
+export function loadCapabilityAttempts(): Promise<CapabilityAttemptMap> {
+  return readCapabilityAttemptsStrict();
+}
+
+/** One locked read-modify-write of the ledger. `change` returns false for "no
+ *  write needed". Rejects when the store refuses the read or the write. */
+function updateCapabilityAttempts(
+  change: (attempts: CapabilityAttemptMap) => boolean,
+): Promise<CapabilityAttemptMap> {
+  return writeLock(async () => {
+    const attempts = await readCapabilityAttemptsStrict();
+    if (!change(attempts)) return attempts;
+    await getStore().set(ATTEMPTS_KEY, attempts);
+    await getStore().save();
+    return attempts;
+  });
+}
+
+/** Stamp an automatic attempt on each of these rows, in ONE write. Written BEFORE
+ *  the request goes out (see the runner), and again with `planExcluded` — for
+ *  every row the refusal applies to — when that is what came back. The attempt
+ *  and the refusal are REPLACED; the two marks that describe the ROW rather than
+ *  the attempt (`materialUnsynced`, `readingsNotProducedAt`) are kept.
+ *
+ *  ⛔ Rejects when the store refuses the read or the write, and the runner depends
+ *  on that: a check whose attempt could not be recorded is a check nothing bounds. */
+export function recordCapabilityAttempt(
+  proxyIds: ReadonlyArray<string>,
+  at: number,
+  planExcluded = false,
+): Promise<CapabilityAttemptMap> {
+  return updateCapabilityAttempts((attempts) => {
+    for (const id of proxyIds) {
+      if (id.length === 0) continue;
+      const { planExcluded: _was, ...kept } = attempts[id] ?? { capabilityCheckAttemptedAt: at };
+      attempts[id] = {
+        ...kept,
+        capabilityCheckAttemptedAt: at,
+        ...(planExcluded ? { planExcluded: true as const } : {}),
+      };
+    }
+    return true;
+  });
+}
+
+/** The account now holds this row's current material (a store of the row
+ *  succeeded): lift the `materialUnsynced` mark. No write when there is none. */
+export function clearCapabilityMaterialUnsynced(proxyId: string): Promise<CapabilityAttemptMap> {
+  // The store SUCCEEDED, whatever the ledger write below does: if that write
+  // fails the stored mark stands and still refuses.
+  pendingMaterialEdits.delete(proxyId);
+  return updateCapabilityAttempts((attempts) => {
+    const held = attempts[proxyId];
+    if (held?.materialUnsynced !== true) return false;
+    const { materialUnsynced: _mark, ...kept } = held;
+    attempts[proxyId] = kept;
+    return true;
+  });
+}
+
+/** Record (or, with `undefined`, lift) the "a full answer still left a reading
+ *  missing" mark — see `CapabilityCheckAttempt.readingsNotProducedAt`. */
+export function noteCapabilityReadingsNotProduced(
+  proxyId: string,
+  at: number | undefined,
+): Promise<CapabilityAttemptMap> {
+  return updateCapabilityAttempts((attempts) => {
+    const held = attempts[proxyId];
+    if (at === undefined) {
+      if (held?.readingsNotProducedAt === undefined) return false;
+      const { readingsNotProducedAt: _mark, ...kept } = held;
+      attempts[proxyId] = kept;
+      return true;
+    }
+    attempts[proxyId] = {
+      ...(held ?? { capabilityCheckAttemptedAt: at }),
+      readingsNotProducedAt: at,
+    };
+    return true;
+  });
+}
+
+/** Drop the ledger records of proxies that no longer exist — a deleted proxy's
+ *  record (its `materialUnsynced` mark above all) otherwise lives for ever. */
+export function pruneCapabilityAttempts(
+  liveProxyIds: ReadonlyArray<string>,
+): Promise<CapabilityAttemptMap> {
+  const live = new Set(liveProxyIds);
+  for (const id of [...lastMaterialEdit.keys()]) {
+    if (live.has(id)) continue;
+    pendingMaterialEdits.delete(id);
+    lastMaterialEdit.delete(id);
+  }
+  return updateCapabilityAttempts((attempts) => {
+    let changed = false;
+    for (const id of Object.keys(attempts)) {
+      if (live.has(id)) continue;
+      delete attempts[id];
+      changed = true;
+    }
+    return changed;
   });
 }

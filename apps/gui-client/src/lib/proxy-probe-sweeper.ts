@@ -10,9 +10,18 @@
 // It is therefore NOT a UI nicety. It is the thing that makes the one
 // cache-trusting path safe.
 
-import type { ProxyConfig, ProxyTestResult } from './proxies';
-import { isProbeStaleAfter, PROBE_TTL_MS, type ProbeCacheMap } from './proxy-probe-cache';
-import { isSocks5Probeable } from './proxy-scheme';
+import { isProxyUsable, type ProxyConfig, type ProxyTestResult } from './proxies';
+import {
+  AGED_READING_MAX_MS,
+  isProbeStaleAfter,
+  PROBE_TTL_MS,
+  verdictMatchesScheme,
+  type CachedProbe,
+  type CapabilityAttemptMap,
+  type CapabilityCheckAttempt,
+  type ProbeCacheMap,
+} from './proxy-probe-cache';
+import { isSocks5Probeable, isVpnScheme } from './proxy-scheme';
 
 /** Proxies re-probed per sweep. Each is a real TCP + SOCKS5 handshake against
  *  someone else's infrastructure, so a sweep is deliberately a trickle rather
@@ -370,9 +379,601 @@ export function installProxySweepSchedule(
   };
 }
 
-/** Test seam — resets the single-flight latch (and the per-proxy claims)
+// ─── The automatic CAPABILITY check ──────────────────────────────────────────
+//
+// The sweep above re-takes REACHABILITY, natively, from this Mac. What a proxy
+// can carry — its QUIC and UDP readings, and the OS its stack presents as — is
+// measured by Driftstack and was only ever taken when the customer pressed Test.
+// Those readings leave the present tense after thirty minutes (rightly), so a
+// proxy tested this morning read "not measured" by lunch and nothing would look
+// again: the owner's "if it's missing … it should automatically check this proxy".
+//
+// ⛔ THIS IS NOT A SECOND SWEEP, and its limits are what make it shippable. One
+// check dials the customer's proxy for ~11 s (a VPN one can hold a tunnel up for
+// 95 s) on a machine every customer shares, so it runs a TRICKLE: three rows a
+// run, one of them a VPN at most, each row at most once in six hours whatever
+// came back — the cadence Driftstack's own background job settled on after
+// rejecting thirty minutes as too costly for the customer's bandwidth.
+
+/** How old a capability reading may be before the app re-takes it unasked.
+ *  Six hours — Driftstack's own re-check cadence, deliberately NOT the
+ *  thirty-minute display TTL: between the two the reading shows AGED (muted,
+ *  with its age), which costs the customer nothing. */
+export const CAPABILITY_REFRESH_AFTER_MS = 6 * 60 * 60 * 1000;
+
+/** How long after ANY automatic attempt on a row before the next one. The
+ *  outcome is deliberately not consulted: "no machine free", "a session is using
+ *  this VPN" and "the server did not answer" are each a reason to come back
+ *  later, and none is a reason to come back in fifteen minutes. */
+export const CAPABILITY_RETRY_AFTER_MS = 6 * 60 * 60 * 1000;
+
+/** …and after the PLAN refusal, which no retry can change until the account does. */
+export const CAPABILITY_PLAN_EXCLUDED_RETRY_MS = 24 * 60 * 60 * 1000;
+
+/** Rows checked per run, and how many of them may be VPN rows. */
+export const CAPABILITY_MAX_PER_RUN = 3;
+export const CAPABILITY_MAX_VPN_PER_RUN = 1;
+
+/**
+ * The newest datable stamp among the readings that answer ONE question about a
+ * row, or undefined when none of them can be dated — which is "never measured":
+ * a reading with no date is shown by nothing, fresh or aged. A reading past the
+ * aged cap is likewise shown by nothing, so it counts for nothing here either.
+ */
+function newestReadingAt(
+  stamps: ReadonlyArray<number | undefined>,
+  now: number,
+): number | undefined {
+  let newest: number | undefined;
+  for (const t of stamps) {
+    if (t === undefined || !Number.isFinite(t) || now - t >= AGED_READING_MAX_MS) continue;
+    if (newest === undefined || t > newest) newest = t;
+  }
+  return newest;
+}
+
+/**
+ * When each reading THIS KIND OF ROW can have was last taken — `undefined` per
+ * reading for "never". Which readings a row can have is decided by its scheme,
+ * because asking for one it cannot produce would plan the row for ever:
+ *
+ *   • a SOCKS5 row: its OS reading and its QUIC reading (the live session's or
+ *     the Test's, whichever is newer — they answer one question). Its UDP state
+ *     is the native handshake's own `udp_associate`, which the reachability
+ *     sweep keeps current; there is nothing of Driftstack's to re-take.
+ *   • a VPN row: its QUIC and UDP readings. It has NO OS reading to take — there
+ *     is no proxy stack behind a tunnel to fingerprint — and says so from its
+ *     scheme, so OS is never a reason to bring a tunnel up.
+ *
+ * An OS entry that is a CAUSE rather than a reading answers the question for
+ * good when no retry can change it (`vpn_tunnel`, `observer_off`); only
+ * `not_observed` — the one cause a retry can clear — ages like a reading.
+ */
+function capabilityReadingStamps(
+  p: Pick<ProxyConfig, 'scheme'>,
+  entry: CachedProbe | undefined,
+  now: number,
+): Array<number | undefined> {
+  const quic = newestReadingAt(
+    [
+      entry?.quicMeasured !== undefined ? entry.quicMeasuredAt : undefined,
+      entry?.quicProbe !== undefined ? entry.quicProbeAt : undefined,
+    ],
+    now,
+  );
+  if (isVpnScheme(p.scheme)) {
+    const udp = newestReadingAt(
+      [entry?.udpProbe !== undefined ? entry.udpProbeAt : undefined],
+      now,
+    );
+    return [quic, udp];
+  }
+  const fp = entry?.osFingerprint;
+  const settledCause = fp?.unavailable === 'vpn_tunnel' || fp?.unavailable === 'observer_off';
+  const os = settledCause ? now : newestReadingAt([fp?.at], now);
+  return [os, quic];
+}
+
+/** The window the run budget is counted over. One sweep interval, so the steady
+ *  schedule gets exactly the per-run budget it always had and every OTHER trigger
+ *  (window focus, the Proxies tab opening) spends from the same purse. */
+export const CAPABILITY_BUDGET_WINDOW_MS = SWEEP_INTERVAL_MS;
+
+/** How long a "Driftstack answered in full and this reading was still missing"
+ *  mark stands before the blank counts as never-measured again. */
+export const CAPABILITY_NOT_PRODUCED_RETRY_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * ⛔ THE BUDGET IS A RATE, NOT A PER-CALL CAP. MEASURED with it per call: three
+ * back-to-back runs at one instant checked nine of nine rows, because the per-row
+ * backoff only stops the SAME row repeating and each new run took the next three.
+ * A run fires on every window focus, so after an upgrade (every relay verdict
+ * undated → every row "never measured") a few alt-tabs dialled the whole saved
+ * list through the customer's proxies, one VPN tunnel per focus event.
+ *
+ * What is left of the budget is read off the ledger itself — every automatic
+ * check, the reachability sweep's VPN one included, stamps it BEFORE asking — so
+ * it survives a restart and needs no second record to drift from the first.
+ */
+export function capabilityBudgetLeft(
+  attempts: CapabilityAttemptMap,
+  proxies: ReadonlyArray<ProxyConfig>,
+  now: number,
+  max: number = CAPABILITY_MAX_PER_RUN,
+  maxVpn: number = CAPABILITY_MAX_VPN_PER_RUN,
+): { rows: number; vpn: number } {
+  const vpnIds = new Set(proxies.filter((p) => isVpnScheme(p.scheme)).map((p) => p.id));
+  let rows = 0;
+  let vpn = 0;
+  for (const [id, a] of Object.entries(attempts)) {
+    const age = now - a.capabilityCheckAttemptedAt;
+    // (A stamp from the future is a clock that moved; it spends nothing.)
+    if (a.capabilityCheckAttemptedAt <= 0 || age < 0 || age >= CAPABILITY_BUDGET_WINDOW_MS)
+      continue;
+    rows += 1;
+    if (vpnIds.has(id)) vpn += 1;
+  }
+  return { rows: Math.max(0, max - rows), vpn: Math.max(0, maxVpn - vpn) };
+}
+
+/**
+ * Whether the app will EVER check this row by itself as things stand — the
+ * standing half of the plan, with no clock in it except the account refusal's.
+ * The planner opens with it, and the grid reads it to decide whether an aged
+ * chip may promise "It will be rechecked automatically." (a promise made to a row
+ * this returns false for is a customer told to wait for nothing).
+ *
+ * ⛔ THE CONSENT RULE COMES FIRST AND NOTHING BELOW IT CAN RE-ADMIT A ROW. A
+ * proxy with no `serverId` has never been stored on the account: its credentials
+ * are device-only until the customer's own act (pressing Test / Check) uploads
+ * them, and a background timer is not that act — see the note in
+ * `checkEndpointRowForSweep`. Such a row is never planned, so it is never sent.
+ *
+ * Then, in order:
+ *   • the scheme must be one Driftstack tests on request here — SOCKS5 or a VPN
+ *     (an HTTP row gets its address check alone, on the grid and in the sweep);
+ *   • a row whose local material CHANGED since the account last received it
+ *     (`materialUnsynced`): the check never uploads, so it would test the OLD
+ *     endpoint and write its readings onto the edited row;
+ *   • a row whose LOCAL verdict is a failing one is the reachability sweep's
+ *     business: nothing can be measured through a proxy that is down, and a
+ *     check that says so again is a dial spent to learn nothing;
+ *   • a VPN row must hold a resolved address check: that is the only thing its
+ *     readings are ever shown beside, and a tunnel is too costly to bring up for
+ *     a reading no surface would render. (A SOCKS5 row with no local verdict IS
+ *     admitted — its OS reading shows on a row nobody has tested here.)
+ *   • and an ACCOUNT refusal (its plan, its credential) inside its 24 h window:
+ *     every row would be refused identically.
+ */
+export function isCapabilityRowCheckable(
+  p: ProxyConfig,
+  entry: CachedProbe | undefined,
+  attempt: CapabilityCheckAttempt | undefined,
+  now: number,
+  hasApiKey: boolean,
+): boolean {
+  if (!hasApiKey) return false;
+  if (p.serverId === undefined) return false; // ⛔ never uploaded → never sent
+  const vpn = isVpnScheme(p.scheme);
+  if (!vpn && !isSocks5Probeable(p.scheme)) return false;
+  if (attempt?.materialUnsynced === true) return false;
+  // A verdict of the wrong kind for this scheme (or a server-seeded entry) is
+  // not a local verdict — `verdictMatchesScheme` is the one reading of that.
+  const local =
+    entry !== undefined && verdictMatchesScheme(isSocks5Probeable(p.scheme), entry)
+      ? entry
+      : undefined;
+  if (local !== undefined) {
+    const failing =
+      local.fleetFailureReason !== undefined ||
+      (local.endpoint !== undefined ? !local.endpoint.resolved : !isProxyUsable(local.result));
+    if (failing) return false;
+  }
+  if (vpn && local === undefined) return false;
+  if (
+    attempt?.planExcluded === true &&
+    now - attempt.capabilityCheckAttemptedAt < CAPABILITY_PLAN_EXCLUDED_RETRY_MS
+  )
+    return false;
+  return true;
+}
+
+/** The rows an aged chip may promise a recheck for — `isCapabilityRowCheckable`
+ *  over a list, keyed by proxy id. Absent = name the button instead. */
+export function capabilityRecheckPromises(
+  cache: ProbeCacheMap,
+  attempts: CapabilityAttemptMap,
+  proxies: ReadonlyArray<ProxyConfig>,
+  now: number,
+  hasApiKey: boolean,
+): Record<string, true> {
+  const out: Record<string, true> = {};
+  for (const p of proxies) {
+    if (isCapabilityRowCheckable(p, cache[p.id], attempts[p.id], now, hasApiKey)) out[p.id] = true;
+  }
+  return out;
+}
+
+/**
+ * Whether an automatic SERVER check of this row is due, by the two clocks that
+ * bound one — shared by the planner and by the reachability sweep's VPN check
+ * (`checkEndpointRowForSweep`), so the sweep cannot be the door the backoff is
+ * walked round through:
+ *
+ *   • BACKOFF: never within `CAPABILITY_RETRY_AFTER_MS` of the last automatic
+ *     attempt, whatever came back; 24 h after an account refusal;
+ *   • and never within `CAPABILITY_REFRESH_AFTER_MS` of the last time Driftstack
+ *     ANSWERED for the row (`serverProbeAt` — a Test the customer pressed counts):
+ *     every leg that can be taken has just been taken.
+ */
+export function isAutomaticServerCheckDue(
+  entry: CachedProbe | undefined,
+  attempt: CapabilityCheckAttempt | undefined,
+  now: number,
+): boolean {
+  if (attempt !== undefined) {
+    const wait =
+      attempt.planExcluded === true ? CAPABILITY_PLAN_EXCLUDED_RETRY_MS : CAPABILITY_RETRY_AFTER_MS;
+    if (now - attempt.capabilityCheckAttemptedAt < wait) return false;
+  }
+  return !(
+    entry?.serverProbeAt !== undefined && now - entry.serverProbeAt < CAPABILITY_REFRESH_AFTER_MS
+  );
+}
+
+/** Whether a reading this kind of row should have is missing from its entry —
+ *  what the automatic check reads AFTER a full answer to learn that this proxy
+ *  does not produce it (`readingsNotProducedAt`). */
+export function hasUnmeasuredCapabilityReading(
+  p: Pick<ProxyConfig, 'scheme'>,
+  entry: CachedProbe | undefined,
+  now: number,
+): boolean {
+  return capabilityReadingStamps(p, entry, now).some((t) => t === undefined);
+}
+
+export interface PlanCapabilityOptions {
+  /** ⛔ Without an API key nothing can be asked of Driftstack: the plan is empty. */
+  hasApiKey: boolean;
+  max?: number;
+  maxVpn?: number;
+  /** Plan as if nothing had been spent in the budget window. ONLY for questions
+   *  about eligibility (which rows an account refusal applies to; whether ONE row
+   *  is still eligible when its turn comes) — never for what a run will send. */
+  ignoreBudget?: boolean;
+}
+
+/**
+ * Which rows this run should ask Driftstack to check, in order. Pure — `now`
+ * injected, no I/O — so every exclusion below is testable.
+ *
+ * A row must be CHECKABLE at all (`isCapabilityRowCheckable` — the consent rule
+ * and the standing exclusions live there) and DUE (`isAutomaticServerCheckDue` —
+ * the two clocks). What remains is ELIGIBLE when at least one of its readings was
+ * never taken or is older than `CAPABILITY_REFRESH_AFTER_MS`.
+ *
+ * ⛔ "NEVER TAKEN" STOPS COUNTING ONCE DRIFTSTACK HAS ANSWERED IN FULL AND THE
+ * READING WAS STILL MISSING (`readingsNotProducedAt`, for
+ * `CAPABILITY_NOT_PRODUCED_RETRY_MS`). A VPN's QUIC leg is skipped today, so its
+ * QUIC reading stays blank whatever is asked; counted as never-measured it
+ * re-planned every saved VPN row, and brought a tunnel up, every six hours for
+ * ever. The row is then planned on its DATED readings alone, like any other.
+ *
+ * SCOPE, stated: which readings count is decided per scheme in
+ * `capabilityReadingStamps` — a SOCKS5 row's UDP state is the native handshake's
+ * and is not re-taken here; an HTTP row is not planned at all.
+ *
+ * Never-measured rows first (the customer is looking at a blank), then the oldest
+ * reading first; ties go to the row attempted longest ago, so a long list rotates
+ * instead of starving its tail. At most `max` rows and `maxVpn` VPN rows PER
+ * BUDGET WINDOW (`capabilityBudgetLeft`), not per call.
+ */
+export function planCapabilityRefresh(
+  cache: ProbeCacheMap,
+  attempts: CapabilityAttemptMap,
+  proxies: ReadonlyArray<ProxyConfig>,
+  now: number,
+  opts: PlanCapabilityOptions,
+): ProxyConfig[] {
+  if (!opts.hasApiKey) return [];
+  const spendable =
+    opts.ignoreBudget === true
+      ? { rows: opts.max ?? CAPABILITY_MAX_PER_RUN, vpn: opts.maxVpn ?? CAPABILITY_MAX_VPN_PER_RUN }
+      : capabilityBudgetLeft(attempts, proxies, now, opts.max, opts.maxVpn);
+  const max = spendable.rows;
+  const maxVpn = spendable.vpn;
+  if (max <= 0) return [];
+  const candidates: Array<{ p: ProxyConfig; never: boolean; oldest: number; attemptedAt: number }> =
+    [];
+  for (const p of proxies) {
+    const entry = cache[p.id];
+    const attempt = attempts[p.id];
+    if (!isCapabilityRowCheckable(p, entry, attempt, now, true)) continue;
+    if (!isAutomaticServerCheckDue(entry, attempt, now)) continue;
+    const stamps = capabilityReadingStamps(p, entry, now);
+    const notProduced =
+      attempt?.readingsNotProducedAt !== undefined &&
+      now - attempt.readingsNotProducedAt < CAPABILITY_NOT_PRODUCED_RETRY_MS;
+    const never = !notProduced && stamps.some((t) => t === undefined);
+    const dated = stamps.filter((t): t is number => t !== undefined);
+    if (!never && dated.length === 0) continue; // nothing this row produces is due
+    const oldest = dated.length > 0 ? Math.min(...dated) : now;
+    if (!never && now - oldest < CAPABILITY_REFRESH_AFTER_MS) continue;
+    candidates.push({
+      p,
+      never,
+      oldest,
+      attemptedAt: attempt?.capabilityCheckAttemptedAt ?? Number.NEGATIVE_INFINITY,
+    });
+  }
+  candidates.sort((a, b) => {
+    if (a.never !== b.never) return a.never ? -1 : 1;
+    if (!a.never && a.oldest !== b.oldest) return a.oldest - b.oldest;
+    return a.attemptedAt - b.attemptedAt;
+  });
+  const plan: ProxyConfig[] = [];
+  let vpnPlanned = 0;
+  for (const c of candidates) {
+    if (plan.length >= max) break;
+    if (isVpnScheme(c.p.scheme)) {
+      if (vpnPlanned >= maxVpn) continue; // over the VPN cap: the slot goes to the next row
+      vpnPlanned += 1;
+    }
+    plan.push(c.p);
+  }
+  return plan;
+}
+
+/** What one automatic check came to, as far as the RUN needs to know. */
+export interface CapabilityCheckResult {
+  /** Driftstack answered (anything). False = the request never got a reply. */
+  answered: boolean;
+  /** The answer was a refusal of the ACCOUNT — its plan, or the credential it
+   *  signed in with. Every other row would be refused identically. */
+  accountRefused: boolean;
+}
+
+/** Everything the capability run touches, injected like `SweepDeps`. */
+export interface CapabilityRefreshDeps {
+  loadCache: () => Promise<ProbeCacheMap>;
+  /** ⛔ Must REJECT when the ledger cannot be read (`loadCapabilityAttempts`
+   *  does): an unreadable ledger answered as `{}` reads "nothing was ever
+   *  attempted", and the run would dial every row. */
+  loadAttempts: () => Promise<CapabilityAttemptMap>;
+  listProxies: () => Promise<ReadonlyArray<ProxyConfig>>;
+  /** Read at RUN time, never captured: the key the customer signed in with an
+   *  hour after launch is the one that must be used. */
+  readCreds: () => { baseUrl: string; apiKey: string | null };
+  /** Stamp the backoff for these rows. ⛔ A rejection aborts the row: a check
+   *  whose attempt could not be recorded is a check nothing will ever bound. */
+  recordAttempt: (proxyIds: string[], at: number, planExcluded: boolean) => Promise<unknown>;
+  /** Drop ledger records of proxies that no longer exist. Best-effort. */
+  pruneAttempts?: (liveProxyIds: string[]) => Promise<unknown>;
+  /** Ask Driftstack to check ONE already-stored row and persist what it says
+   *  (`checkCapabilitiesForRow` in lib/proxy-server-test). ⛔ Must never store,
+   *  create or update the row on the account — see the consent rule above. */
+  check: (
+    p: ProxyConfig,
+    creds: { baseUrl: string; apiKey: string },
+  ) => Promise<CapabilityCheckResult>;
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+}
+
+export interface CapabilityRefreshReport {
+  checked: string[];
+  failed: string[];
+  skippedBusy: string[];
+  /** Planned rows that were no longer eligible when their turn came — tested by
+   *  the customer meanwhile, edited, deleted, stamped by another path, or left
+   *  without budget because another path spent it since the plan was made. */
+  skippedChanged: string[];
+  /** True when a run (or a reachability sweep) was in flight and this call did
+   *  nothing. */
+  skipped: boolean;
+}
+
+let capabilityInFlight = false;
+
+/**
+ * Whether an automatic capability run is in flight — the OTHER half of "after,
+ * never beside". The run has always refused to start while a sweep is probing;
+ * nothing told the sweep about a run, and a run lasts minutes (11–95 s a row), so
+ * a window focus during one started a full sweep beside it. MEASURED: the sweep's
+ * VPN check read the ledger live, found budget, stamped and tested its row; the
+ * run then reached its own planned VPN row, re-validated it as still eligible,
+ * and tested that too — four rows and two tunnels inside one window, possibly at
+ * once, against "at most three rows and one VPN, whoever asks".
+ *
+ * ⛔ ONLY the sweep's SERVER test consults this (`checkEndpointRowForSweep`). The
+ * sweep itself still runs beside a capability run on purpose: its native
+ * handshakes and address checks are what keep the verdicts a bulk launch trusts
+ * young, and parking them behind a multi-minute run on every focus would starve
+ * the thing the sweep exists for. The row it skips is not stamped, so the run's
+ * own follow-up — or the next sweep — takes it from the same purse.
+ */
+export function isCapabilityRunInFlight(): boolean {
+  return capabilityInFlight;
+}
+
+/**
+ * The account rows Driftstack is being asked to test RIGHT NOW, whoever asked:
+ * the grid's Test, the card's, the sweep's VPN check, this run. Keyed on the
+ * ACCOUNT row id, because that is what the request names.
+ *
+ * ⛔ SEPARATE FROM `probesInFlight` ON PURPOSE. That claim makes user callers
+ * QUEUE, and the pre-launch probe takes it: held across a server test (30 s for a
+ * SOCKS5 row, 95 s for a VPN) it let a background timer stall a profile launch
+ * with nothing on screen to say why. And it never covered what it needed to — the
+ * manual Test claims only its native handshake, then asks Driftstack OUTSIDE the
+ * claim, so the run could not see the customer's own server test and sent a
+ * second one through the same proxy beside it. Every server test registers here
+ * (`testProxyOnServer` does it for all of them). An AUTOMATIC caller that finds
+ * the row taken skips it; the customer's own test waits for an automatic one to
+ * finish and then runs — two tests at once through one proxy is how the second
+ * gets "busy" for an answer, and that must never be the one they pressed.
+ */
+const serverTestsInFlight = new Map<string, Promise<void>>();
+
+/** Whether Driftstack is being asked to test this account row now (any caller). */
+export function isServerTestInFlight(serverId: string): boolean {
+  return serverTestsInFlight.has(serverId);
+}
+
+/** Run `test` as THE server test of this account row: waits for one already
+ *  running against it, then holds the registration until `test` settles. */
+export async function withServerTest<T>(serverId: string, test: () => Promise<T>): Promise<T> {
+  while (serverTestsInFlight.has(serverId)) {
+    await serverTestsInFlight.get(serverId)?.catch(() => undefined);
+  }
+  let release!: () => void;
+  const claim = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  serverTestsInFlight.set(serverId, claim);
+  try {
+    return await test();
+  } finally {
+    if (serverTestsInFlight.get(serverId) === claim) serverTestsInFlight.delete(serverId);
+    release();
+  }
+}
+
+/**
+ * Run one automatic capability check. Single-flight like `runSweep` — the two
+ * triggers (after each reachability sweep; the Proxies tab opening) can land
+ * together, and opening the tab twice must not check a row twice. The latch
+ * covers the overlap; the backoff stamp, written BEFORE each request, covers the
+ * second open that arrives after the first has finished; and the budget is a
+ * rate (`capabilityBudgetLeft`), so a burst of triggers spends one purse.
+ *
+ * ⛔ It does not run BESIDE a reachability sweep: the installed schedule runs it
+ * after each one, and a trigger that lands while a sweep is still probing (the
+ * tab opening, a second focus) is answered `skipped` — one customer's proxies are
+ * not dialled by two loops at once, and the sweep's own follow-up covers it.
+ *
+ * Serial with `SWEEP_GAP_MS` between rows. ⛔ EACH ROW IS RE-VALIDATED WHEN ITS
+ * TURN COMES, from a fresh read of the row, its entry and its ledger record: a
+ * run lasts minutes (11–95 s a row), and a row the customer tested, edited or
+ * deleted meanwhile must not be dialled on the strength of a plan made before.
+ * (`runSweep` does not re-plan because it would observe its own writes; here a
+ * row's only own write is its stamp, made AFTER its re-validation.) A row under a
+ * native probe or a server test right now is skipped, unstamped — that test is
+ * the fresher answer. The per-proxy probe claim is consulted and NOT held: see
+ * `serverTestsInFlight`.
+ *
+ * Two outcomes end the RUN, not just the row: no reply at all (the server is not
+ * answering — spending the other rows' six-hour backoff to learn that twice more
+ * helps nobody), and an account refusal: every other eligible row would be
+ * refused identically, so they are all stamped with it in one write rather than
+ * each costing a request to find out.
+ */
+export async function runCapabilityRefresh(
+  deps: CapabilityRefreshDeps,
+): Promise<CapabilityRefreshReport> {
+  const nothing = (skipped: boolean): CapabilityRefreshReport => ({
+    checked: [],
+    failed: [],
+    skippedBusy: [],
+    skippedChanged: [],
+    skipped,
+  });
+  if (capabilityInFlight || inFlight) return nothing(true);
+  capabilityInFlight = true;
+  const report = nothing(false);
+  try {
+    const { baseUrl, apiKey } = deps.readCreds();
+    if (apiKey === null || apiKey.length === 0) return report;
+    const creds = { baseUrl, apiKey };
+    const read = (): Promise<[ProbeCacheMap, CapabilityAttemptMap, ReadonlyArray<ProxyConfig>]> =>
+      Promise.all([deps.loadCache(), deps.loadAttempts(), deps.listProxies()]);
+    const [cache, attempts, proxies] = await read();
+    // ⛔ Never on an EMPTY list: a transient empty read of the proxy store would
+    // otherwise wipe every row's backoff, and there is nothing to plan anyway.
+    if (proxies.length > 0) {
+      await deps.pruneAttempts?.(proxies.map((p) => p.id)).catch(() => undefined);
+    }
+    const plan = planCapabilityRefresh(cache, attempts, proxies, deps.now(), { hasApiKey: true });
+    for (let i = 0; i < plan.length; i += 1) {
+      const planned = plan[i] as ProxyConfig;
+      if (i > 0) await deps.sleep(SWEEP_GAP_MS);
+      let stop = false;
+      try {
+        const [cacheNow, attemptsNow, proxiesNow] =
+          i === 0 ? [cache, attempts, proxies] : await read();
+        const p = proxiesNow.find((row) => row.id === planned.id);
+        const stillEligible =
+          p !== undefined &&
+          planCapabilityRefresh(cacheNow, attemptsNow, [p], deps.now(), {
+            hasApiKey: true,
+            ignoreBudget: true,
+          }).length === 1;
+        if (p === undefined || !stillEligible) {
+          report.skippedChanged.push(planned.id);
+          continue;
+        }
+        // ⛔ …AND THE PURSE IS RE-READ TOO, from the same fresh ledger. The question
+        // above is asked with `ignoreBudget` because it is about ONE row's
+        // eligibility (the run's own earlier stamps must not make a one-row plan
+        // come back empty for the wrong reason) — but that also made the run deaf to
+        // anything ANOTHER path spent since the plan was made, and the plan's
+        // budget was a promise about a ledger minutes old. Counted here instead:
+        // what is left is read off the ledger as it stands, which holds this run's
+        // own stamps (each written before its request) beside everyone else's, so
+        // nothing is counted twice and nothing is missed. This row's own record
+        // cannot be inside the window — it would not be due.
+        const left = capabilityBudgetLeft(attemptsNow, proxiesNow, deps.now());
+        if (left.rows <= 0 || (isVpnScheme(p.scheme) && left.vpn <= 0)) {
+          report.skippedChanged.push(planned.id);
+          continue;
+        }
+        if (
+          isProxyProbeInFlight(p.id) ||
+          (p.serverId !== undefined && isServerTestInFlight(p.serverId))
+        ) {
+          report.skippedBusy.push(p.id);
+          continue;
+        }
+        // ⛔ Stamped BEFORE the request: a check that hangs, throws, or is cut
+        // off by the app quitting must still have used its turn.
+        await deps.recordAttempt([p.id], deps.now(), false);
+        const result = await deps.check(p, creds);
+        if (result.accountRefused) {
+          const everyEligible = planCapabilityRefresh(
+            cacheNow,
+            attemptsNow,
+            proxiesNow,
+            deps.now(),
+            {
+              hasApiKey: true,
+              max: Number.POSITIVE_INFINITY,
+              maxVpn: Number.POSITIVE_INFINITY,
+              ignoreBudget: true,
+            },
+          ).map((row) => row.id);
+          await deps.recordAttempt([...new Set([p.id, ...everyEligible])], deps.now(), true);
+          stop = true;
+        } else if (!result.answered) {
+          stop = true;
+        }
+        report.checked.push(p.id);
+      } catch {
+        // One row's failure must not abandon the rest — the `runSweep` rule.
+        report.failed.push(planned.id);
+      }
+      if (stop) break;
+    }
+    return report;
+  } finally {
+    capabilityInFlight = false;
+  }
+}
+
+/** Test seam — resets the single-flight latches (and the per-proxy claims)
  *  between cases. */
 export function __resetSweepLatchForTests(): void {
   inFlight = false;
+  capabilityInFlight = false;
   probesInFlight.clear();
+  serverTestsInFlight.clear();
 }

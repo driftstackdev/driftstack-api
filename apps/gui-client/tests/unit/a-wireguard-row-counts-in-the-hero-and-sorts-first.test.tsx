@@ -158,8 +158,11 @@ const { ProxiesView } = await import('../../src/views/ProxiesView');
 /** Row labels top-to-bottom — the subject of the sort arms. */
 function rowOrder(): string[] {
   const body = document.querySelector('[data-component="proxy-table"] tbody');
-  return [...(body?.querySelectorAll('tr') ?? [])].map(
-    (tr) => tr.querySelector('td:nth-child(2) > div')?.textContent?.trim() ?? '',
+  // The proxy ROWS, by their own hook: an open detail row is a <tr> in the
+  // same tbody, and the label's cell now also holds the type and the endpoint,
+  // so the label is read from its own element rather than by position.
+  return [...(body?.querySelectorAll('tr[data-component="proxy-row"]') ?? [])].map(
+    (tr) => tr.querySelector('[data-component="proxy-row-label"]')?.textContent?.trim() ?? '',
   );
 }
 

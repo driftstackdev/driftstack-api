@@ -61,6 +61,7 @@ import { ProxyOsChip } from '../../src/components/ProxyCapabilities';
 import { listProxies, testAccountProxy } from '../../src/lib/account-proxies';
 import { OS_FINGERPRINT_TTL_MS, osFingerprintVerdict } from '../../src/lib/os-fingerprint-verdict';
 import {
+  AGED_READING_MAX_MS,
   deriveProbeViewState,
   loadProbeCache,
   saveOsFingerprint,
@@ -214,20 +215,50 @@ describe('a reading measured on another Mac reaches this one', () => {
     expect(chip?.getAttribute('title')).toContain('Measured by Driftstack, 10 minutes ago.');
   });
 
-  it('CRITICAL does NOT populate it from a reading older than the TTL — one freshness rule, the server’s stamp judged by the same function that ages a local reading, so a stale stored reading is hidden exactly as a stale local one is', async () => {
+  // PIN UPDATED 2026-09-17 — this arm used to assert that a stale stored reading is
+  // REFUSED at the door and leaves no trace. The rule it protects is unchanged and
+  // still asserted first: past the TTL the reading never reaches the present-tense
+  // map, by the same function that ages a local one. What changed is what happens
+  // instead of nothing: past the TTL a reading is shown AGED (muted, dated, neutral
+  // tone) rather than hidden, so the adoption admits it up to the aged cap — and it
+  // must, or a reading Driftstack re-took two hours ago would look "never measured"
+  // here and be dialled for again. Past the CAP it still leaves no trace.
+  it('CRITICAL does NOT populate the CURRENT chip from a reading older than the TTL — one freshness rule, the server’s stamp judged by the same function that ages a local reading. It is adopted as an AGED reading instead (neutral tone, dated), and past the aged cap it leaves no trace at all. MUTATION: in adoptListOsFingerprint (proxy-server-test.ts) replace `isAgedReadingShowable(at, nowMs)` with `true` and the last block reds; in deriveProbeViewState drop the `isOsFingerprintFresh` test and the first reds', async () => {
     const stale = new Date(NOW - OS_FINGERPRINT_TTL_MS - 60_000).toISOString();
 
     expect(
       await adoptListOsFingerprint([listRow({ os_fingerprint_at: stale })], [SOCKS], NOW),
-    ).toEqual([]);
-    // Nothing was invented either: a stale reading leaves no trace to re-render.
-    expect(await loadProbeCache()).toEqual({});
+    ).toEqual(['socks1']);
 
     const view = deriveProbeViewState(await loadProbeCache(), NOW);
     expect(view.osFingerprints.socks1).toBeUndefined();
-    const { container } = render(<ProxyOsChip fingerprint={undefined} nowMs={NOW} />);
+    expect(view.aged.osFingerprints.socks1?.atMs).toBe(Date.parse(stale));
+    const { container } = render(
+      <ProxyOsChip
+        fingerprint={view.osFingerprints.socks1}
+        aged={view.aged.osFingerprints.socks1}
+        nowMs={NOW}
+      />,
+    );
+    const chip = container.querySelector('[data-component="proxy-os-fingerprint"]');
+    // ⛔ Never the green of a current match, whatever the reading said.
+    expect(chip?.getAttribute('data-os-tone')).toBe('unknown');
+    expect(chip?.getAttribute('data-ok')).toBe('aged');
+    expect(chip?.className).not.toContain('status-ready');
+    expect(chip?.getAttribute('title')).toContain('Last checked 31 minutes ago.');
+
+    // Past the aged cap: refused at the door, nothing invented, "not measured".
+    stores.clear();
+    const ancient = new Date(NOW - AGED_READING_MAX_MS - 60_000).toISOString();
     expect(
-      container.querySelector('[data-component="proxy-os-fingerprint"]')?.getAttribute('title'),
+      await adoptListOsFingerprint([listRow({ os_fingerprint_at: ancient })], [SOCKS], NOW),
+    ).toEqual([]);
+    expect(await loadProbeCache()).toEqual({});
+    const none = render(<ProxyOsChip fingerprint={undefined} nowMs={NOW} />);
+    expect(
+      none.container
+        .querySelector('[data-component="proxy-os-fingerprint"]')
+        ?.getAttribute('title'),
     ).toBe('OS not measured yet. Run Test on this proxy.');
   });
 

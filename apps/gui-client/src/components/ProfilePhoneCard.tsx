@@ -62,11 +62,13 @@ import { createPortal } from 'react-dom';
 import {
   ProxyCapabilityChips,
   ProxyOsChip,
+  agedChipAge,
+  agedQuicReading,
   proxyCapabilities,
   type ProxyCapability,
 } from './ProxyCapabilities';
-import { formatRunningFor } from './ProfilesTable';
-import { formatRelativeNarrow, relativeNarrowParts } from './RelativeTime';
+import { agedOsVerdictFor, formatRunningFor } from './ProfilesTable';
+import { formatRelativeNarrow, relativeNarrowParts, type RelativeNarrowUnit } from './RelativeTime';
 import { proxyVerdict, type ProxyTestResult } from '../lib/proxies';
 
 /** Hover text on the card's probe measurements. The probe runs on this Mac; the
@@ -114,11 +116,13 @@ const SOFT_ACCENT_INK = 'text-accent-text';
 import {
   OS_FINGERPRINT_MEASURING,
   VPN_TUNNEL_OS_FINGERPRINT,
+  agedReadingHint,
   osFingerprintVerdict,
   type FingerprintedOs,
   type OsFingerprint,
 } from '../lib/os-fingerprint-verdict';
 import type { MeasuredQuic } from '../lib/account-proxies';
+import type { AgedRowReadings } from '../lib/proxy-probe-cache';
 import { vantageLabel, type ServerVantage } from '../lib/proxy-vantage';
 import {
   CHECK_VPN_ACTION,
@@ -284,6 +288,20 @@ export interface ProfilePhoneCardProps {
   /** N-2 — passive OS fingerprint of the proxy's own stack, when the control
    *  plane observed one. Undefined = never measured. */
   osFingerprint?: OsFingerprint;
+  /** The bound proxy's AGED readings (`ProbeViewState.aged`, sliced per proxy by
+   *  `agedReadingsFor`): what a Test found more than thirty minutes ago. Each is
+   *  consulted ONLY where the matching current value above is absent, and is
+   *  rendered muted, dashed and in the past tense — never in a verdict's colour.
+   *  ⛔ Without it a reading that aged out of the maps above looked exactly like
+   *  one nobody ever took: the QUIC chip fell back to "not yet tested — run
+   *  Test" on a proxy tested that morning, and the OS chip to "—". Display only:
+   *  nothing that ACTS on a reading (launch, sort, the health pill) reads this. */
+  aged?: AgedRowReadings;
+  /** Whether the app will re-take an aged reading by itself — asked of the
+   *  automatic check's own planner (`capabilityRecheckPromises`), never guessed.
+   *  ⛔ Absent = FALSE: the hover then names the button instead of promising a
+   *  recheck that may never come. */
+  autoRecheck?: boolean;
   /** (h) — the bound proxy is an OpenVPN/WireGuard TUNNEL: its Test is a DNS
    *  resolve + a fleet tunnel test (never a SOCKS5 probe), UDP is carried by the
    *  tunnel rather than probed, and the menu row says so. */
@@ -729,6 +747,21 @@ const HEALTH_TONE_CLASS: Readonly<Record<HealthTone, string>> = {
  *  must not read brighter than a measured negative ('⤵ QUIC'). */
 const CHIP_MUTED_CLASS = 'bg-ink-muted/15 text-ink-secondary';
 const CHIP_READY_CLASS = 'bg-status-ready/10 text-status-ready';
+/** A chip showing a reading that is NO LONGER CURRENT: the Proxies tab's
+ *  AGED_CHIP_CLASS in this row's chrome — a RECESSED ground where every current
+ *  chip is a raised wash, the muted ink, and a dashed edge no current chip has;
+ *  never the green / red of a present-tense claim.
+ *  ⛔ It must differ from CHIP_MUTED_CLASS in FILL, not only in edge. Its first
+ *  version was CHIP_MUTED_CLASS plus a divider-coloured outline, so a four-hour-
+ *  old '⤵ QUIC' differed from a current '⤵ QUIC' — which wears the muted class
+ *  too — by one pixel of low-contrast dashes: a present-tense negative in all
+ *  but name. (Muted ink on the inset ground: 7.46:1 dark, 4.77:1 light.)
+ *  ⛔ An OUTLINE drawn inside the box, not a border: a border is 2px of layout,
+ *  and the widest green trio has 1.32px to spare at the 178px column (see
+ *  visibleChips) — a bordered aged chip would have cost the row a chip. An
+ *  outline is paint only, so every CHIP_WIDTH entry holds for an aged chip too. */
+const CHIP_AGED_CLASS =
+  'bg-surface-inset text-ink-muted outline-dashed outline-1 -outline-offset-1 outline-ink-muted/60';
 
 export type CapsMode = 'none' | 'repair' | 'measured' | 'first';
 export type CapsInput = Pick<
@@ -739,6 +772,9 @@ export type CapsInput = Pick<
   | 'quicProbe'
   | 'udpProbe'
   | 'osFingerprint'
+  | 'aged'
+  | 'autoRecheck'
+  | 'nowMs'
   | 'vpn'
   | 'vpnFailure'
   | 'endpoint'
@@ -795,6 +831,19 @@ export interface CapChip {
   dropFirst?: true;
   className: string;
   title: string;
+  /** Set when this chip shows an AGED reading: when it was taken. `text` stays
+   *  one of the MEASURED literals in CHIP_WIDTH; `visibleChips` appends the age
+   *  ('QUIC ✓ · 31 min') on every row that has the room for it (`withAge`), and
+   *  where it has not — the ordinary trio at the 178px column has 1.32px to
+   *  spare — the chip still differs from a current one in fill, ink and edge
+   *  (CHIP_AGED_CLASS), carries the age for a text-only reader (`ageShown`), and
+   *  leads its hover with it. The details sheet always prints it. */
+  agedAtMs?: number;
+  /** True once `text` carries the age. The renderer adds a visually hidden
+   *  ' · 31 min ago' to an aged chip WITHOUT it: the dashed, recessed chrome says
+   *  "not current" to the eye only, and a screen reader handed the bare 'QUIC ✓'
+   *  would announce a present-tense verdict. */
+  ageShown?: true;
   /** Data attributes; the OS chip carries `data-component="proxy-os-fingerprint"`
    *  + `data-os-tone` here (polish: it renders with CHIP_BASE like its neighbours
    *  — ProxyOsChip's 9px/400 rounded-sm was a second chip typography in the row). */
@@ -827,12 +876,19 @@ function udpTitle(vpn: boolean, caps: ProxyCapability[] | null, quicCap?: ProxyC
   if (caps === null) return 'Run Test to check UDP (WebRTC + QUIC) support on this exit.';
   const udpOk = caps.find((c) => c.key === 'webrtc')?.ok ?? false;
   if (!udpOk) return 'No UDP — WebRTC uses a slower fallback and QUIC falls back to HTTP/2.';
+  // An aged QUIC reading first: its cap still carries the inference's `inferred`
+  // flag (ProxyCapability.aged), and "not yet measured" is the one thing that is
+  // false of a proxy whose QUIC chip, beside this one, shows a dated reading.
   const quicClause =
-    quicCap?.inferred === true
-      ? 'QUIC likely (not yet measured)'
-      : quicCap?.ok === true
-        ? 'QUIC ✓'
-        : 'QUIC ✗ (HTTP/2 on last measure)';
+    quicCap?.aged !== undefined
+      ? quicCap.aged.value
+        ? 'QUIC ✓ when last checked'
+        : 'QUIC ✗ (HTTP/2) when last checked'
+      : quicCap?.inferred === true
+        ? 'QUIC likely (not yet measured)'
+        : quicCap?.ok === true
+          ? 'QUIC ✓'
+          : 'QUIC ✗ (HTTP/2 on last measure)';
   return `UDP works — WebRTC ✓; ${quicClause} through this exit.`;
 }
 
@@ -840,10 +896,36 @@ function udpTitle(vpn: boolean, caps: ProxyCapability[] | null, quicCap?: ProxyC
  *  never from a SOCKS5 result (it has none). Reuses proxyCapabilities so the hint
  *  wording is the one shared definition; only a MEASURED verdict is admitted —
  *  the UDP inference has no UDP grant to infer from on a tunnel. */
-function vpnQuicCap(quicMeasured: MeasuredQuic | null | undefined, quicProbe: boolean | undefined) {
+function vpnQuicCap(
+  quicMeasured: MeasuredQuic | null | undefined,
+  quicProbe: boolean | undefined,
+  aged: AgedRowReadings | undefined,
+  past: { nowMs: number; autoRecheck: boolean },
+): ProxyCapability | undefined {
   const measured =
     quicMeasured === 'h3' || quicMeasured === 'h2-only' || typeof quicProbe === 'boolean';
-  if (!measured) return undefined;
+  if (!measured) {
+    // Nothing current — but an AGED reading is still a reading, and a tunnel
+    // checked this morning must not read like one nobody ever checked.
+    // ⛔ Built here rather than by `proxyCapabilities`: that admits an aged
+    // reading only over its UDP inference, and the synthetic result below grants
+    // no UDP. The sentence is the Proxies tab's for the same state, and names the
+    // button a VPN row actually has.
+    const agedQuic = agedQuicReading(aged);
+    if (agedQuic === undefined) return undefined;
+    return {
+      key: 'quic',
+      label: 'QUIC',
+      ok: agedQuic.value,
+      inferred: false,
+      aged: agedQuic,
+      hint: `${agedReadingHint(agedQuic.atMs, past.nowMs, past.autoRecheck, CHECK_VPN_ACTION)} ${
+        agedQuic.value
+          ? 'QUIC worked through this VPN then.'
+          : 'QUIC did not work through this VPN then — HTTP/3 fell back to HTTP/2.'
+      }`,
+    };
+  }
   const synthetic: ProxyTestResult = {
     reachable: true,
     auth_ok: true,
@@ -899,6 +981,23 @@ const OS_LABEL_COMPACT: Readonly<Record<FingerprintedOs, string>> = {
   unknown: 'OS',
 };
 
+/** The aged readings this card may SHOW right now — the Proxies tab's rule,
+ *  so a row and a card cannot disagree: never while a test is running (the
+ *  answer is on its way), and never beside a failure sentence, where a dated
+ *  tick would read as a second opinion about a proxy we just said is down. */
+export function shownAgedReadings(
+  p: Pick<CapsInput, 'aged' | 'vpnFailure' | 'testing'>,
+): AgedRowReadings | undefined {
+  return p.vpnFailure === undefined && !p.testing ? p.aged : undefined;
+}
+
+/** The chip's data attributes when it shows an aged reading. `data-ok="aged"` —
+ *  never "true" / "false", which every consumer reads as a current verdict. */
+const agedAttrs = (value: boolean): Readonly<Record<string, string>> => ({
+  'data-ok': 'aged',
+  'data-aged-value': value ? 'true' : 'false',
+});
+
 /**
  * R5 mode A — the chips a row is ELIGIBLE to show, in fixed order UDP → QUIC →
  * OS, plus the hints that never get a chip (a VPN's "UDP via tunnel", an OS
@@ -915,10 +1014,14 @@ const OS_LABEL_COMPACT: Readonly<Record<FingerprintedOs, string>> = {
  */
 export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: string[] } {
   const vpn = p.vpn === true;
+  const aged = shownAgedReadings(p);
+  const past = { nowMs: p.nowMs ?? Date.now(), autoRecheck: p.autoRecheck === true };
   const caps =
-    p.capabilities !== null ? proxyCapabilities(p.capabilities, p.quicMeasured, p.quicProbe) : null;
+    p.capabilities !== null
+      ? proxyCapabilities(p.capabilities, p.quicMeasured, p.quicProbe, aged, past)
+      : null;
   const quicCap = vpn
-    ? vpnQuicCap(p.quicMeasured, p.quicProbe)
+    ? vpnQuicCap(p.quicMeasured, p.quicProbe, aged, past)
     : caps?.find((c) => c.key === 'quic');
   const eligible: CapChip[] = [];
   const hidden: string[] = [];
@@ -942,25 +1045,48 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
     // drops the assertion, so every VPN row is in the third state until a node
     // sends the contracted three-state reading — at which point this lights up
     // with no second client release.
+    //   • …and a FOURTH, reached only through the third: nothing current, but a
+    //     reading taken a while ago. The glyph of what it found, in the aged
+    //     chrome, with the age leading its title — not '⇢ UDP', whose sentence
+    //     says nothing was ever measured.
     const measured = typeof p.udpProbe === 'boolean';
-    const udpText = !measured ? '⇢ UDP' : p.udpProbe === true ? 'UDP ✓' : '⤵ UDP';
+    const agedUdp = measured ? undefined : aged?.udpProbe;
+    const udpOk = agedUdp !== undefined ? agedUdp.value : p.udpProbe === true;
+    const udpText = !measured && agedUdp === undefined ? '⇢ UDP' : udpOk ? 'UDP ✓' : '⤵ UDP';
     eligible.push({
       key: 'udp',
       text: udpText,
       width: chipWidth(udpText),
-      className: p.udpProbe === true ? CHIP_READY_CLASS : CHIP_MUTED_CLASS,
-      title: !measured
-        ? udpTitle(true, null)
-        : p.udpProbe === true
-          ? VPN_UDP_MEASURED_OK_TITLE
-          : VPN_UDP_MEASURED_NONE_TITLE,
+      className:
+        agedUdp !== undefined
+          ? CHIP_AGED_CLASS
+          : p.udpProbe === true
+            ? CHIP_READY_CLASS
+            : CHIP_MUTED_CLASS,
+      title:
+        agedUdp !== undefined
+          ? `${agedReadingHint(agedUdp.atMs, past.nowMs, past.autoRecheck, CHECK_VPN_ACTION)} ${
+              agedUdp.value
+                ? 'UDP worked through this VPN then.'
+                : 'UDP did not work through this VPN then.'
+            }`
+          : !measured
+            ? udpTitle(true, null)
+            : p.udpProbe === true
+              ? VPN_UDP_MEASURED_OK_TITLE
+              : VPN_UDP_MEASURED_NONE_TITLE,
       // ⛔ `dropFirst` ONLY while it is the same on every VPN row. A MEASURED
       // verdict differs per proxy and is the reason the row exists, so it takes
       // its place in display order like every other measurement; yielding the
       // column would put a real reading behind the '+N' the owner complained
       // about, which is the defect this chip was promoted out of.
-      ...(measured ? {} : { dropFirst: true as const }),
-      attrs: { 'data-udp': !measured ? 'tunnel' : p.udpProbe === true ? 'true' : 'false' },
+      // An aged reading differs per proxy exactly as a current one does.
+      ...(measured || agedUdp !== undefined ? {} : { dropFirst: true as const }),
+      ...(agedUdp !== undefined ? { agedAtMs: agedUdp.atMs } : {}),
+      attrs:
+        agedUdp !== undefined
+          ? { 'data-udp': 'aged', ...agedAttrs(agedUdp.value) }
+          : { 'data-udp': !measured ? 'tunnel' : p.udpProbe === true ? 'true' : 'false' },
     });
   } else if (caps !== null) {
     const udpOk = caps.find((c) => c.key === 'webrtc')?.ok ?? false;
@@ -976,15 +1102,30 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
   }
 
   if (quicCap !== undefined) {
-    const inferred = quicCap.inferred === true;
-    const text = inferred ? 'QUIC ~' : quicCap.ok ? 'QUIC ✓' : '⤵ QUIC';
+    // ⛔ `aged` is read BEFORE `inferred` / `ok`: on an aged cap those two still
+    // describe the inference the chip would otherwise have shown
+    // (ProxyCapability.aged), and rendering them is the regression this closes —
+    // 'QUIC ~ … not yet tested. Run Test' on a proxy tested 31 minutes ago.
+    const agedQuic = quicCap.aged;
+    const inferred = agedQuic === undefined && quicCap.inferred === true;
+    const ok = agedQuic !== undefined ? agedQuic.value : quicCap.ok;
+    const text = inferred ? 'QUIC ~' : ok ? 'QUIC ✓' : '⤵ QUIC';
     eligible.push({
       key: 'quic',
       text,
       width: chipWidth(text),
-      className: !inferred && quicCap.ok ? CHIP_READY_CLASS : CHIP_MUTED_CLASS,
+      className:
+        agedQuic !== undefined
+          ? CHIP_AGED_CLASS
+          : !inferred && ok
+            ? CHIP_READY_CLASS
+            : CHIP_MUTED_CLASS,
       title: quicCap.hint,
-      attrs: { 'data-quic-inferred': inferred ? 'true' : 'false' },
+      ...(agedQuic !== undefined ? { agedAtMs: agedQuic.atMs } : {}),
+      attrs: {
+        'data-quic-inferred': inferred ? 'true' : 'false',
+        ...(agedQuic !== undefined ? agedAttrs(agedQuic.value) : {}),
+      },
     });
   }
 
@@ -992,10 +1133,23 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
   // in flight), never from an absent fingerprint; and never on a VPN row at
   // all: nothing fingerprints a tunnel, so a VPN row states that cause from its
   // own scheme in every state. A reading the server did send outranks both.
+  //
+  // An AGED reading fills the chip only where no current one does, and outranks
+  // the two synthesised states exactly as it does on the Proxies tab: a stack we
+  // did read, a while ago, says more than "nothing reads a tunnel". (`aged` is
+  // already empty while a test runs, so the in-flight sentinel still wins then.)
+  const agedOs = p.osFingerprint === undefined ? aged?.osFingerprint : undefined;
   const fingerprint =
     p.osFingerprint ??
+    agedOs?.value ??
     (vpn ? VPN_TUNNEL_OS_FINGERPRINT : p.testing ? OS_FINGERPRINT_MEASURING : undefined);
-  const os = osFingerprintVerdict(fingerprint);
+  // The aged verdict keeps the glyph and the label — so `osText` stays inside
+  // the measured CHIP_WIDTH set — and gives up the tone: green and red mean
+  // "now", which a reading from four hours ago cannot support.
+  const os =
+    agedOs !== undefined
+      ? agedOsVerdictFor(agedOs, past.nowMs, past.autoRecheck, vpn)
+      : osFingerprintVerdict(fingerprint);
   const osText = `${os.glyph} ${os.label}`;
   // C1 — the narrow-width label, keyed off the CLOSED FingerprintedOs union
   // rather than off the rendered string, so a renamed OS_LABEL cannot silently
@@ -1073,13 +1227,20 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
       // The colour rule is osFingerprintVerdict's (match green, the ONE measured
       // defect red, measuring muted) — only the chip chrome is the card's.
       className:
-        os.tone === 'match'
-          ? CHIP_READY_CLASS
-          : os.tone === 'mismatch'
-            ? `bg-status-error/15 ${SOFT_ERROR_INK}`
-            : CHIP_MUTED_CLASS,
+        os.aged === true
+          ? CHIP_AGED_CLASS
+          : os.tone === 'match'
+            ? CHIP_READY_CLASS
+            : os.tone === 'mismatch'
+              ? `bg-status-error/15 ${SOFT_ERROR_INK}`
+              : CHIP_MUTED_CLASS,
       title: os.hint,
-      attrs: { 'data-component': 'proxy-os-fingerprint', 'data-os-tone': os.tone },
+      ...(os.aged === true && agedOs !== undefined ? { agedAtMs: agedOs.atMs } : {}),
+      attrs: {
+        'data-component': 'proxy-os-fingerprint',
+        'data-os-tone': os.tone,
+        ...(os.aged === true ? { 'data-ok': 'aged' } : {}),
+      },
     });
   }
   return { eligible, hidden };
@@ -1147,6 +1308,57 @@ const compacted = (c: CapChip): CapChip =>
     ? c
     : { ...c, text: c.compact.text, width: c.compact.width };
 
+/** What ' · <age>' adds to a chip, per unit of the terse age (`terseAgo`: '31
+ *  min', '4 h', '2 d', '3 mo', '1 yr'). An age is an open set, but each UNIT is
+ *  a closed one, so every entry is the WIDEST member of its unit — the suffix
+ *  was measured for every n the unit can print (min 1–59, h 1–23, d 1–29, mo
+ *  1–11, yr 1–99) behind four different chip texts, and the maximum kept (' · 48
+ *  min', ' · 20 h', ' · 28 d', ' · 10 mo', ' · 88 yr'). Reserving the widest
+ *  member can only keep an age OFF a row it would have fitted, never clip one.
+ *  MEASURED 2026-09-17 the same way as CHIP_WIDTH (CHIP_BASE read out of this
+ *  file, the live harness at ?w=178, Chromium 1200×1400 @2x, after
+ *  document.fonts.ready, `document.fonts.size === 0`); the CONTROLS in the same
+ *  run reproduced 'QUIC ✓' 44.3, '✓ Apple' 47.16 and '? OS' 29.97. ⛔ Same font
+ *  caveat as that table, and re-measure the two together. */
+const AGE_SUFFIX_WIDTH: Readonly<Record<RelativeNarrowUnit, number>> = {
+  now: 40.04, // ' · <1 min' — a clock-skew artefact; an aged reading is ≥ 30 min old
+  min: 41.9,
+  h: 29.91,
+  d: 30.2,
+  mo: 37.36,
+  yr: 34.16,
+};
+
+/** The same chip with its age printed — 'QUIC ✓ · 31 min' — in both label forms;
+ *  a chip that shows no aged reading comes back untouched. The terse age is the
+ *  "checked" stamp's (`terseAgo`): the dashed, recessed chrome already places the
+ *  chip in the past, as the verb does there, so ' ago' would be 20px spent on
+ *  saying it twice. */
+const withAge = (c: CapChip, nowMs: number): CapChip => {
+  if (c.agedAtMs === undefined) return c;
+  const iso = new Date(c.agedAtMs).toISOString();
+  const suffix = ` · ${terseAgo(iso, nowMs)}`;
+  const extra = AGE_SUFFIX_WIDTH[relativeNarrowParts(iso, nowMs)?.unit ?? 'min'];
+  return {
+    ...c,
+    text: `${c.text}${suffix}`,
+    width: c.width + extra,
+    ...(c.compact !== undefined
+      ? { compact: { text: `${c.compact.text}${suffix}`, width: c.compact.width + extra } }
+      : {}),
+    ageShown: true,
+  };
+};
+
+/** The age of an aged chip the tile had no room to print, for a reader that gets
+ *  the TEXT and not the chrome: 'QUIC ✓ · 31 min ago'. `sr-only` is absolutely
+ *  positioned, so it is not a flex item of CHIP_BASE and costs the row nothing
+ *  (measured with the table: 44.3 with and without it). */
+function HiddenAge({ chip, nowMs }: { chip: CapChip; nowMs: number }): JSX.Element | null {
+  if (chip.agedAtMs === undefined || chip.ageShown === true) return null;
+  return <span className="sr-only"> · {agedChipAge(chip.agedAtMs, nowMs)}</span>;
+}
+
 /**
  * R5 mode A — the static width-table cut. C1 (2026-09-12), the owner: *"this +1
  * next to profile, i dont know if i like it, its unclear what its about, better
@@ -1206,6 +1418,22 @@ export function visibleChips(p: CapsInput, contentWidth: number): VisibleChips {
     ...dropped.map((c) => `${c.text} — ${c.title}`),
     ...hidden,
   ];
+  // Level 0 — an AGED row says how old it is, where it can: every aged chip with
+  // its age, full labels then compact ones. Ahead of level 1 on purpose: '✓ Apple
+  // · 4 h' tells the customer more than '✓ iOS/macOS' in a chrome they have to
+  // hover to date, and the long label is in the title either way. ALL the ages
+  // or none — one dated chip beside an undated dashed one would read as "only
+  // this one is old". ⛔ It can only ADD text to a row that then still fits whole:
+  // a row with no aged chip never enters it, and a row that fails it falls to the
+  // levels below unchanged, so no width that shows a chip today can lose it here.
+  if (eligible.some((c) => c.agedAtMs !== undefined)) {
+    const dated = eligible.map((c) => withAge(c, p.nowMs ?? Date.now()));
+    for (const level of [dated, dated.map(compacted)]) {
+      if (rowWidth(level, hidden.length) <= contentWidth) {
+        return { chips: level, hiddenHints: hints([]) };
+      }
+    }
+  }
   // Levels 1 and 2 — the whole row, full labels then compact ones.
   for (const level of [eligible, eligible.map(compacted)]) {
     if (rowWidth(level, hidden.length) <= contentWidth) {
@@ -1988,9 +2216,25 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
     ...allCaps.eligible.map((c) => `${c.text} — ${c.title}`),
     ...allCaps.hidden,
   ];
+  // The sheet has the room the tile does not, so an aged reading is printed here
+  // with its age, by the SHARED chips — the same '✓ QUIC · 4 h ago' the Proxies
+  // tab shows for the same cache entry. Same precedence as `capabilityChips`: an
+  // aged OS reading outranks the two synthesised states, never a current one.
+  const sheetAged = shownAgedReadings(p);
+  const sheetAgedOs = p.osFingerprint === undefined ? sheetAged?.osFingerprint : undefined;
+  // ⛔ …except a VPN row's: the shared chip's hover names "Test", a button a VPN
+  // row does not have (see agedOsVerdictFor), so that one reading is printed by
+  // the tile's own dated chip, in the row of VPN chips above it.
+  const sheetVpnAgedOs = vpn && sheetAgedOs !== undefined;
   const sheetFingerprint =
     p.osFingerprint ??
-    (vpn ? VPN_TUNNEL_OS_FINGERPRINT : p.testing ? OS_FINGERPRINT_MEASURING : undefined);
+    (sheetAgedOs !== undefined
+      ? undefined
+      : vpn
+        ? VPN_TUNNEL_OS_FINGERPRINT
+        : p.testing
+          ? OS_FINGERPRINT_MEASURING
+          : undefined);
   // (o) — 'tunnel up' (no number) is a fleet reading too: the vantage attribute
   // names the test Mac, never this Mac (no native probe runs on a tunnel).
   const latencyVantage =
@@ -2371,13 +2615,16 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                           result={p.capabilities}
                           quicMeasured={p.quicMeasured}
                           quicProbe={p.quicProbe}
+                          aged={sheetAged}
+                          autoRecheck={p.autoRecheck === true}
+                          nowMs={nowMs}
                           size="xs"
                         />
                       ) : null}
-                      {vpn && allCaps.eligible.some((c) => c.key !== 'os') ? (
+                      {vpn && allCaps.eligible.some((c) => c.key !== 'os' || sheetVpnAgedOs) ? (
                         <div className="flex flex-wrap items-center gap-1">
                           {allCaps.eligible
-                            .filter((c) => c.key !== 'os')
+                            .filter((c) => c.key !== 'os' || sheetVpnAgedOs)
                             .map((c) => (
                               <span
                                 key={c.key}
@@ -2386,11 +2633,22 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                                 className={`${CHIP_BASE} ${c.className}`}
                               >
                                 {c.text}
+                                {c.agedAtMs !== undefined
+                                  ? ` · ${agedChipAge(c.agedAtMs, nowMs)}`
+                                  : ''}
                               </span>
                             ))}
                         </div>
                       ) : null}
-                      <ProxyOsChip fingerprint={sheetFingerprint} size="xs" />
+                      {sheetVpnAgedOs ? null : (
+                        <ProxyOsChip
+                          fingerprint={sheetFingerprint}
+                          aged={sheetAgedOs}
+                          autoRecheck={p.autoRecheck === true}
+                          nowMs={nowMs}
+                          size="xs"
+                        />
+                      )}
                       <ul data-component="capability-hints" className="flex flex-col gap-px">
                         {capabilityHints.map((hint) => (
                           <li key={hint} className="break-words text-ink-muted">
@@ -2873,6 +3131,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     className={`${CHIP_BASE} ${c.className}`}
                   >
                     {c.text}
+                    <HiddenAge chip={c} nowMs={nowMs} />
                   </span>
                 ))}
                 {firstChips.hiddenHints.length > 0 ? (
@@ -2896,6 +3155,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     className={`${CHIP_BASE} ${c.className}`}
                   >
                     {c.text}
+                    <HiddenAge chip={c} nowMs={nowMs} />
                   </span>
                 ))}
                 {chips.hiddenHints.length > 0 ? (

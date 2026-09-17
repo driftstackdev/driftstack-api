@@ -36,6 +36,7 @@ import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
 import type * as AccountProxiesModule from '../../src/lib/account-proxies';
 import type * as ProbeCacheModule from '../../src/lib/proxy-probe-cache';
 import { OS_FINGERPRINT_TTL_MS } from '../../src/lib/os-fingerprint-verdict';
+import { __resetSweepLatchForTests } from '../../src/lib/proxy-probe-sweeper';
 
 const resolveEndpoint =
   vi.fn<
@@ -138,6 +139,10 @@ const FLEET_QUIC_FALSE: AccountProxiesModule.AccountProxyTestResult = {
 };
 
 beforeEach(() => {
+  // One server test of an account row at a time is a MODULE-level registration now
+  // (`withServerTest`), and ARM 5 leaves its test in flight on purpose — without
+  // this, every later Check of the same row queues behind it for ever.
+  __resetSweepLatchForTests();
   resolveEndpoint.mockReset();
   resolveEndpoint.mockResolvedValue({ resolved: true, ip: '198.51.100.1', message: 'Resolved' });
   testAccountProxy.mockReset();

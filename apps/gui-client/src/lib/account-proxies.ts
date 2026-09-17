@@ -109,6 +109,58 @@ export interface AccountProxyMeta {
    *  hidden exactly as a local one from last week is. An undatable reading is
    *  refused, never shown as current. */
   os_fingerprint_at?: string | null;
+  /**
+   * What a proxy TEST last measured about QUIC and UDP through this proxy, AS THE
+   * SERVER STORED IT, each with the date it was taken (ISO 8601). `true` and
+   * `false` are both readings; null = the server holds none (or could not date
+   * one); absent = an older server, which says nothing.
+   *
+   * ⛔⛔ THE WIRE CALLS THESE `quic_probe` / `udp_probe`, AND THIS CLIENT MUST NOT.
+   * `AccountProxyTestResult.quic_probe` already exists below and means the
+   * OPPOSITE thing: THIS test's fresh relay reading, derived from the wire's
+   * `quic_ok`, which `serverProbeOutcome` stamps with the reply time and renders
+   * in the present tense. The wire key of the same name is a reading that may be
+   * weeks old. One name for both would let a stored reading be stamped "now" the
+   * first time anyone spread a body onto a result. So the stored readings are
+   * renamed at the wire boundary, here and in `testAccountProxy`, and the raw
+   * wire keys are stripped from the row — see `storedProbeReadingsFromWire`.
+   */
+  stored_quic_probe?: boolean | null;
+  stored_quic_probe_at?: string | null;
+  stored_udp_probe?: boolean | null;
+  stored_udp_probe_at?: string | null;
+}
+
+/** The four client-side fields a row's / reply's stored Test readings parse into. */
+export interface StoredProbeReadings {
+  stored_quic_probe?: boolean | null;
+  stored_quic_probe_at?: string | null;
+  stored_udp_probe?: boolean | null;
+  stored_udp_probe_at?: string | null;
+}
+
+/**
+ * Parse the wire's STORED Test readings (`quic_probe` / `quic_probe_at` /
+ * `udp_probe` / `udp_probe_at`) into their distinctly named client fields.
+ *
+ * Per leg: a key that is ABSENT stays absent (an older server — nothing to
+ * adopt, and not the same fact as "never measured"); a boolean beside a string
+ * stamp is kept as the pair; anything else — null, a string "true", a reading
+ * with no stamp — becomes the pair of nulls, "the server holds no reading". The
+ * value never travels without its date: an undatable reading cannot be aged, and
+ * the one thing it must never do is arrive looking current.
+ */
+export function storedProbeReadingsFromWire(raw: Record<string, unknown>): StoredProbeReadings {
+  const leg = (value: unknown, at: unknown): { value: boolean | null; at: string | null } =>
+    typeof value === 'boolean' && typeof at === 'string'
+      ? { value, at }
+      : { value: null, at: null };
+  const quic = 'quic_probe' in raw ? leg(raw.quic_probe, raw.quic_probe_at) : undefined;
+  const udp = 'udp_probe' in raw ? leg(raw.udp_probe, raw.udp_probe_at) : undefined;
+  return {
+    ...(quic !== undefined ? { stored_quic_probe: quic.value, stored_quic_probe_at: quic.at } : {}),
+    ...(udp !== undefined ? { stored_udp_probe: udp.value, stored_udp_probe_at: udp.at } : {}),
+  };
 }
 
 /** D2 — the LIST's observed exit. Narrower than the /test reply's
@@ -256,8 +308,32 @@ export async function listProxies(baseUrl: string, apiKey: string): Promise<Acco
   return rows.map((r) => {
     if (typeof r !== 'object' || r === null) return r;
     const raw = r as unknown as Record<string, unknown>;
+    // ⛔ The wire's stored-reading keys are STRIPPED before the row is spread, and
+    // re-enter below under their client names only. Left on the row, a raw
+    // `quic_probe` would sit on an object one careless spread away from a test
+    // result, where the same name means "measured just now".
+    const {
+      quic_probe: _storedQuic,
+      quic_probe_at: _storedQuicAt,
+      udp_probe: _storedUdp,
+      udp_probe_at: _storedUdpAt,
+      ...rest
+    } = raw;
     return {
-      ...r,
+      ...(rest as unknown as AccountProxyMeta),
+      ...storedProbeReadingsFromWire(raw),
+      // T-6 — the live session's QUIC verdict was typed on this row and cleaned by
+      // nothing, because nothing read it. The list adoption reads it now, so it
+      // goes through the closed set the /test reply and the cache already use: a
+      // value outside it is this row's null, and the stamp is kept only as a
+      // string — an unparseable one reads as "cannot date", which adopts nothing.
+      ...('quic_measured' in raw ? { quic_measured: cleanMeasuredQuic(raw.quic_measured) } : {}),
+      ...('quic_measured_at' in raw
+        ? {
+            quic_measured_at:
+              typeof raw.quic_measured_at === 'string' ? raw.quic_measured_at : null,
+          }
+        : {}),
       // (p) — the STORED OS reading, cleaned by the SAME parser the /test reply
       // uses: one closed-set allowlist for both routes, so a reading that reaches
       // the chip from the list cannot differ from one that reaches it from a test.
@@ -474,6 +550,14 @@ export type AccountProxyTestResult =
        *  row, each under its own label, and are never merged — when they
        *  disagree, that disagreement is the finding. Only beside 'fleet'. */
       quic_probe?: boolean;
+      /** The row's STORED Test readings as they stand after this test (see
+       *  `AccountProxyMeta.stored_quic_probe`). ⛔ Parsed from the wire keys
+       *  `quic_probe` / `udp_probe` and NEVER into `quic_probe` above, which is
+       *  this test's own fresh reading and comes from `quic_ok` alone. */
+      stored_quic_probe?: boolean | null;
+      stored_quic_probe_at?: string | null;
+      stored_udp_probe?: boolean | null;
+      stored_udp_probe_at?: string | null;
       quic_detail?: string;
       reachable?: boolean;
       /** (V6 2026-09-16) — the fleet Mac's MEASURED UDP-relay verdict. ⛔ ABSENT
@@ -881,7 +965,11 @@ export async function testAccountProxy(
       ...(vantage !== undefined ? { measured_from: vantage } : {}),
       ...(nodeId !== undefined ? { node_id: nodeId } : {}),
       ...(exitIp !== undefined ? { exit_ip: exitIp } : {}),
+      // ⛔ `quicProbe` is `quic_ok` and nothing else. The wire's own `quic_probe`
+      // key is the STORED reading and lands in `stored_quic_probe` on the next
+      // line — the two are never merged, defaulted into, or read for each other.
       ...(quicProbe !== undefined ? { quic_probe: quicProbe } : {}),
+      ...storedProbeReadingsFromWire(body),
       ...(quicDetail !== undefined ? { quic_detail: quicDetail } : {}),
       ...(reachable !== undefined ? { reachable } : {}),
       ...(udpAssociate !== undefined ? { udp_associate: udpAssociate } : {}),

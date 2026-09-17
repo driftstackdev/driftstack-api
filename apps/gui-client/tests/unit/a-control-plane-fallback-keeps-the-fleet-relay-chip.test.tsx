@@ -87,6 +87,9 @@ vi.mock('../../src/lib/proxy-probe-cache', async (importOriginal) => ({
         measuredFrom: 'fleet',
         nodeId: 'mac-mini-07',
         quicProbe: true,
+        // PIN UPDATED 2026-09-17 — the relay verdict carries its own date now
+        // (`quicProbeAt`); an undated one is not shown, exactly like an undated UDP verdict.
+        quicProbeAt: Date.now() - 60_000,
         serverProbeAt: Date.now() - 60_000,
       },
     }),

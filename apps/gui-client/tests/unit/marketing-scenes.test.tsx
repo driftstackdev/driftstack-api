@@ -127,9 +127,13 @@ import {
   AuditScene,
   auditFleetMembers,
   auditLoadedMarkers,
+  auditProxyProbes,
   auditSceneSizes,
   isAuditTauriStubInstalled,
+  stageOverrideFromSearch,
 } from '../../src/visual-harness/audit-scenes';
+import { deriveProbeViewState } from '../../src/lib/proxy-probe-cache';
+import { osFingerprintVerdict } from '../../src/lib/os-fingerprint-verdict';
 
 afterEach(() => {
   cleanup();
@@ -209,7 +213,7 @@ describe('sceneFromSearch — the only door into a scene, marketing or audit', (
     expect(ALL_SCENES.slice(0, MARKETING_SCENES.length)).toEqual([...MARKETING_SCENES]);
     expect(ALL_SCENES.slice(MARKETING_SCENES.length)).toEqual([...AUDIT_SCENES]);
     expect(new Set(ALL_SCENES).size).toBe(ALL_SCENES.length);
-    expect(AUDIT_SCENES).toHaveLength(9);
+    expect(AUDIT_SCENES).toHaveLength(10);
     for (const name of ALL_SCENES) {
       expect(isAuditScene(name)).toBe(name.startsWith('audit-'));
       const size = sceneSize(name);
@@ -220,6 +224,71 @@ describe('sceneFromSearch — the only door into a scene, marketing or audit', (
     // The marketing sizes did not move (scripts/marketing-screens.mjs mirrors them).
     expect(sceneSize('profiles-list')).toEqual({ width: 1800, height: 880 });
     expect(sceneSize('proxies')).toEqual({ width: 1280, height: 800 });
+  });
+});
+
+describe('?stage=<W>x<H> — an audit scene rendered at another window size', () => {
+  it('is null when absent, parses W x H, and THROWS on a value it cannot use', () => {
+    expect(stageOverrideFromSearch('')).toBeNull();
+    expect(stageOverrideFromSearch('?scene=audit-proxies')).toBeNull();
+    expect(stageOverrideFromSearch('?scene=audit-proxies&stage=960x600')).toEqual({
+      width: 960,
+      height: 600,
+    });
+    // Never a silent fall-back to 1280: that is a 1280 render filed as a 960 one.
+    for (const bad of ['960', '960x', 'x600', '960X600', '96x60', '9600x600', '960x600px', '']) {
+      expect(() => stageOverrideFromSearch(`?stage=${bad}`), bad).toThrow(/stage=/);
+    }
+  });
+
+  it('resizes the audit stages and leaves the marketing stages (mirrored by the capture script) alone', () => {
+    const search = window.location.search;
+    window.history.replaceState(null, '', '?scene=audit-proxies&stage=960x600');
+    try {
+      expect(sceneSize('audit-proxies')).toEqual({ width: 960, height: 600 });
+      expect(sceneSize('proxies')).toEqual({ width: 1280, height: 800 });
+      expect(sceneSize('profiles-list')).toEqual({ width: 1800, height: 880 });
+    } finally {
+      window.history.replaceState(null, '', search === '' ? window.location.pathname : search);
+    }
+    expect(sceneSize('audit-proxies')).toEqual({ width: 1280, height: 920 });
+  });
+});
+
+describe('audit-proxies probe fixtures — every reading reaches the view state', () => {
+  // `CachedProbe`'s stamps are optional, so a reading written without its own
+  // date typechecks, survives `cleanEntry`, and is then filed by the derivation
+  // as neither fresh nor aged — it never renders, and nothing fails. That is how
+  // `quicProbe` shipped in this fixture once. Asked of the derivation itself,
+  // not of the screen: today the view draws no aged reading at all, so the
+  // screen cannot tell "aged" from "lost".
+  const FRESH = 'px_audit_socks_fresh';
+  const AGED = 'px_audit_socks_aged';
+  const READINGS = ['osFingerprints', 'quicMeasured', 'quicProbe', 'udpProbe'] as const;
+  const state = deriveProbeViewState(auditProxyProbes(), Date.parse(FROZEN_NOW_ISO));
+
+  it('row (a): every reading is FRESH, and none of it is filed as aged', () => {
+    for (const key of READINGS) {
+      expect(state[key][FRESH], `fresh ${key}`).toBeDefined();
+      expect(state.aged[key][FRESH], `aged ${key}`).toBeUndefined();
+    }
+    expect(state.exitResults[FRESH]).toMatchObject({ ip: '203.0.113.24' });
+    expect(state.serverLatency[FRESH]).toBe(41);
+    // The table's best case: the one OS chip in the scene that asserts.
+    expect(osFingerprintVerdict(state.osFingerprints[FRESH]).tone).toBe('match');
+  });
+
+  it('row (b): the SAME readings five hours old are all AGED, each with its date', () => {
+    const fiveHoursAgo = Date.parse(FROZEN_NOW_ISO) - 5 * 3_600_000;
+    // The instrument names every aged reading the lib has — a fifth added there
+    // and not dated here must red rather than go unlooked-at.
+    expect(Object.keys(state.aged).sort()).toEqual([...READINGS].sort());
+    for (const key of READINGS) {
+      expect(state[key][AGED], `fresh ${key}`).toBeUndefined();
+      expect(state.aged[key][AGED], `aged ${key}`).toMatchObject({ atMs: fiveHoursAgo });
+    }
+    // No vantage on this one: the hedged "?" arm, so the scene holds both.
+    expect(osFingerprintVerdict(state.aged.osFingerprints[AGED]?.value).tone).toBe('unknown');
   });
 });
 
@@ -295,8 +364,10 @@ describe('every marketing scene', () => {
 // no host and no IP and would otherwise pass the privacy scan as clean.
 
 /** Audit scenes that show an IPv4 the scan must have SEEN (the fleet rigs on
- *  TEST-NET). The rest render hosts only. */
-const AUDIT_IP_SCENES: ReadonlyArray<string> = ['audit-fleet'];
+ *  TEST-NET; the Proxies table's measured exits — which only render once the
+ *  probe cache has hydrated, so this is also that load's positive control).
+ *  The rest render hosts only. */
+const AUDIT_IP_SCENES: ReadonlyArray<string> = ['audit-fleet', 'audit-proxies'];
 /** The audit scenes render the views' OWN copy, which names two hosts the
  *  marketing allowlist does not: `api.driftstack.dev` — SettingsView's cloud
  *  option label, the product's public API endpoint every customer sees. It

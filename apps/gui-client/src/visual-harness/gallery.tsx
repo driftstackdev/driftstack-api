@@ -78,6 +78,7 @@ export const AUDIT_SCENES = [
   'audit-recipes',
   'audit-agent-chat',
   'audit-team',
+  'audit-proxies',
 ] as const;
 export type AuditSceneName = (typeof AUDIT_SCENES)[number];
 export type SceneName = MarketingSceneName | AuditSceneName;

@@ -21,7 +21,7 @@
 //      ProxiesView.refresh and the render arm reds (the row says "run Test").
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ProxyConfig } from '../../src/lib/proxies';
 
 const stores = new Map<string, Map<string, unknown>>();
@@ -92,7 +92,10 @@ import { cleanListExitObserved, listProxies } from '../../src/lib/account-proxie
 import { resolveEndpoint } from '../../src/lib/proxies';
 import {
   clearFleetFailure,
+  invalidateProbe,
+  loadCapabilityAttempts,
   loadProbeCache,
+  recordCapabilityAttempt,
   saveEndpointResult,
   saveExitResult,
   saveFleetFailure,
@@ -617,8 +620,143 @@ describe('the Proxies grid adopts on refresh', () => {
     nextResponse = () => json({ data: [{ ...WG_ROW, exit_observed: null }] });
     render(<ProxiesView />);
     expect(await screen.findByText('no exit measured yet — run Check VPN')).toBeTruthy();
-    await waitFor(() => expect(fetchCalls.length).toBe(1));
+    // PIN UPDATED 2026-09-17 — opening the tab now ALSO runs the automatic
+    // capability check once the list sync has answered, and this row is exactly
+    // what it is for: saved to the account, its address resolved, and no QUIC / UDP
+    // reading ever taken. So the list GET is followed by ONE request, and it is the
+    // test of the row the account ALREADY holds — never a create or an update (the
+    // check uploads nothing). What this control protects is unchanged: a list with
+    // no observation puts no exit on the row.
+    await waitFor(() => expect(fetchCalls.length).toBe(2));
+    expect(fetchCalls).toEqual([
+      'https://api.example/v1/account/me/proxies',
+      'https://api.example/v1/account/me/proxies/aprx_wg/test?vantage=fleet',
+    ]);
     expect(screen.queryByText('203.0.113.9')).toBeNull();
+  });
+});
+
+// 2026-09-17 — the Proxies tab opening is one of the two triggers of the automatic
+// capability check (lib/proxy-probe-sweeper `runCapabilityRefresh`). It lives in
+// this suite because this suite already stands the whole grid up against a real
+// probe cache and a counted transport, which is what the claim is about.
+describe('opening the Proxies tab checks a row with missing readings — once', () => {
+  const TEST_URL = 'https://api.example/v1/account/me/proxies/aprx_wg/test?vantage=fleet';
+
+  it('CRITICAL opening the tab TWICE does not check the row twice: the second open finds the attempt the first one recorded (or the run still in flight) and asks for nothing. MUTATION: delete the `recordAttempt` call before `deps.check` in runCapabilityRefresh, or the backoff `continue` in planCapabilityRefresh, and the second open sends a second test', async () => {
+    await seedVpnEntry('wg1');
+    stored = [WG];
+    nextResponse = () => json({ data: [{ ...WG_ROW, exit_observed: null }] });
+    const first = render(<ProxiesView />);
+    await waitFor(() => expect(fetchCalls.filter((u) => u === TEST_URL).length).toBe(1));
+    first.unmount();
+    render(<ProxiesView />);
+    // The second open DOES sync the list again — that is how we know it ran…
+    await waitFor(() =>
+      expect(
+        fetchCalls.filter((u) => u === 'https://api.example/v1/account/me/proxies').length,
+      ).toBe(2),
+    );
+    // …and having synced, it checks nothing: still exactly one test, ever.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fetchCalls.filter((u) => u === TEST_URL).length).toBe(1);
+  });
+
+  it('CRITICAL once per tab OPEN, not once per `refresh()`: the grid re-lists after every save, remove and retry, and each of those would have been another run — a save-time one starting before the re-test has sent the edited row to the account. MUTATION: delete the `capabilityCheckFiredRef` latch in ProxiesView.refresh and the second refresh tests `socks1`', async () => {
+    const SOCKS_TEST_URL =
+      'https://api.example/v1/account/me/proxies/aprx_socks/test?vantage=fleet';
+    await seedVpnEntry('wg1');
+    stored = [WG];
+    nextResponse = () => json({ data: [{ ...WG_ROW, exit_observed: null }] });
+    const view = render(<ProxiesView />);
+    await waitFor(() => expect(fetchCalls.filter((u) => u === TEST_URL).length).toBe(1));
+    // A second row appears — healthy here, saved to the account, no reading ever
+    // taken: exactly what a run would pick up — and the SAME mount refreshes again
+    // (`refresh` is re-made when the account changes, which is the one way to make
+    // it run again from outside without clicking through a save).
+    await saveProbeResult('socks1', OK, Date.now());
+    stored = [WG, SOCKS];
+    const before = settingsStub.settings;
+    settingsStub.settings = { ...before, apiKey: 'ds_key_rotated' };
+    try {
+      view.rerender(<ProxiesView />);
+      await waitFor(() =>
+        expect(
+          fetchCalls.filter((u) => u === 'https://api.example/v1/account/me/proxies').length,
+        ).toBe(2),
+      );
+      await new Promise((r) => setTimeout(r, 50));
+      expect(fetchCalls.filter((u) => u === SOCKS_TEST_URL)).toEqual([]);
+    } finally {
+      settingsStub.settings = before;
+    }
+  });
+
+  it('CRITICAL the aged chip’s hover promises "It will be rechecked automatically." ONLY for a row the planner would ever check — an account Driftstack refused (the free tier: every attempt is refused and backs off a day) names the button instead. MUTATION: pass `autoRecheck={p.serverId !== undefined}` to the row again and the second block reds', async () => {
+    const agedQuicTitle = async (): Promise<string> => {
+      const chip = await waitFor(() => {
+        const el = document.querySelector('[data-capability="quic"][data-ok="aged"]');
+        if (el === null) throw new Error('no aged QUIC chip yet');
+        return el;
+      });
+      return chip.getAttribute('title') ?? '';
+    };
+    const FOUR_H = 4 * 60 * 60 * 1000;
+    await saveProbeResult('socks1', OK, Date.now());
+    await saveServerProbeResult(
+      'socks1',
+      { latencyMs: 20, measuredFrom: 'fleet', quicProbe: true },
+      Date.now() - FOUR_H,
+    );
+    stored = [SOCKS];
+    nextResponse = () => json({ data: [SOCKS_ROW] });
+    const first = render(<ProxiesView />);
+    await waitFor(async () =>
+      expect(await agedQuicTitle()).toContain('It will be rechecked automatically.'),
+    );
+    first.unmount();
+
+    await recordCapabilityAttempt(['socks1'], Date.now() - 60 * 60 * 1000, true);
+    render(<ProxiesView />);
+    await waitFor(async () =>
+      expect(await agedQuicTitle()).toContain('Run Test to check it again.'),
+    );
+    expect(await agedQuicTitle()).not.toContain('rechecked automatically');
+  });
+
+  it('CRITICAL the customer’s own Check VPN sends this Mac’s material to the account, and THAT lifts the edited-row mark: from then on the automatic check may look at the row again. MUTATION: delete the `clearCapabilityMaterialUnsynced` line in ProxiesView.pushLocalMaterialToAccount and the mark stays for ever', async () => {
+    await seedVpnEntry('wg1');
+    await invalidateProbe('wg1'); // what a connection-changing save does
+    await seedVpnEntry('wg1');
+    expect((await loadCapabilityAttempts()).wg1?.materialUnsynced).toBe(true);
+    stored = [WG];
+    nextResponse = () => json({ data: [{ ...WG_ROW, exit_observed: null }] });
+    render(<ProxiesView />);
+    // ⛔ Marked, so opening the tab asks Driftstack NOTHING about it…
+    await waitFor(() => expect(fetchCalls.length).toBeGreaterThanOrEqual(1));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fetchCalls.filter((u) => u === TEST_URL)).toEqual([]);
+    // …and the customer pressing Check VPN stores the row, which lifts the mark.
+    fireEvent.click(await screen.findByRole('button', { name: /^check vpn$|^re-check$/i }));
+    await waitFor(async () =>
+      expect((await loadCapabilityAttempts()).wg1?.materialUnsynced).toBeUndefined(),
+    );
+  });
+
+  it('CRITICAL ⛔ a row that was never saved to the account is never sent, however empty its readings are — the tab opening is not the customer pressing Test. MUTATION: drop the `p.serverId === undefined` guard in planCapabilityRefresh AND in checkCapabilitiesForRow and a request goes out', async () => {
+    await seedVpnEntry('wg1');
+    const { serverId: _never, ...deviceOnly } = WG;
+    // A second, synced row makes the list sync (and so the trigger) actually run.
+    await saveProbeResult('socks1', OK, Date.now());
+    await saveServerProbeResult('socks1', { latencyMs: 20, measuredFrom: 'fleet' }, Date.now());
+    stored = [deviceOnly, SOCKS];
+    nextResponse = () => json({ data: [SOCKS_ROW] });
+    render(<ProxiesView />);
+    await waitFor(() => expect(fetchCalls.length).toBeGreaterThanOrEqual(1));
+    await new Promise((r) => setTimeout(r, 50));
+    // Only the list. `socks1` was answered for moments ago, so it is left alone;
+    // `wg1` has nothing at all and is left alone because it is device-only.
+    expect(fetchCalls).toEqual(['https://api.example/v1/account/me/proxies']);
   });
 });
 

@@ -162,9 +162,24 @@ describe('a live measurement retires the relay verdict it contradicts', () => {
     await rowWithRelay('p3', true);
     await saveObservedQuic('p3', 'h3', T0 + 1_000);
     expect((await loadProbeCache()).p3?.quicProbe, 'the corroborating verdict survives').toBe(true);
-    const later = await quicChip('p3', AFTER_EXPIRY);
-    expect(later.ok, 'so the chip is still green when the live verdict expires').toBe(true);
-    expect(later.hint).toMatch(/carries QUIC/i);
+    // PIN UPDATED 2026-09-17 — the relay verdict is dated and aged now
+    // (`quicProbeAt` / `isQuicProbeFresh`), so past the window NEITHER verdict
+    // speaks in the present tense and this arm can no longer read a current green.
+    // What it protects is unchanged and is asserted where it now lives: the
+    // corroborating evidence is still THERE after the live verdict expires — as an
+    // AGED `true`, the later of the two agreeing readings — instead of having been
+    // deleted with the verdict it agreed with.
+    const view = deriveProbeViewState(await loadProbeCache(), AFTER_EXPIRY);
+    expect(view.quicProbe.p3, 'not a present-tense claim past the window').toBeUndefined();
+    expect(view.aged.quicProbe.p3, 'the corroborating reading survives, dated').toEqual({
+      value: true,
+      atMs: T0,
+    });
+    const aged = proxyCapabilities(OK, undefined, undefined, {
+      quicProbe: view.aged.quicProbe.p3,
+      quicMeasured: view.aged.quicMeasured.p3,
+    }).find((c) => c.key === 'quic')?.aged;
+    expect(aged?.value, 'so the chip still says QUIC worked — in the past tense').toBe(true);
   });
 
   it('VACUITY CONTROL — a row with no relay verdict at all is untouched, so the arms above are about the CONTRADICTION and not about the write path clearing a field it does not like', async () => {

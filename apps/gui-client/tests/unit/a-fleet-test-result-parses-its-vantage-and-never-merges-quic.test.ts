@@ -484,11 +484,14 @@ describe('the cache', () => {
       { latencyMs: 31, measuredFrom: 'fleet', nodeId: 'mac-mini-07', quicProbe: true },
       2,
     );
-    let view = deriveProbeViewState(await loadProbeCache());
+    // PIN UPDATED 2026-09-17 — the relay verdict is dated now (`quicProbeAt`, written
+    // by the save above at t=2) and leaves the present tense after thirty minutes,
+    // so the derivation is asked about t=4 rather than about the wall clock.
+    let view = deriveProbeViewState(await loadProbeCache(), 4);
     expect(view.serverVantage.p1).toEqual({ measuredFrom: 'fleet', nodeId: 'mac-mini-07' });
     expect(view.quicProbe.p1).toBe(true);
     await saveProbeResult('p1', DOWN, 3);
-    view = deriveProbeViewState(await loadProbeCache());
+    view = deriveProbeViewState(await loadProbeCache(), 4);
     expect(view.serverVantage).toEqual({});
     expect(view.quicProbe).toEqual({});
   });

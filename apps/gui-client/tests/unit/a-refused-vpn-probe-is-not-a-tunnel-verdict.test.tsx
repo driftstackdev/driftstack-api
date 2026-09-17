@@ -399,8 +399,17 @@ describe('persistServerProbe — a refusal writes no measurement, adopts the ses
     expect(entry?.exitIp).toBeUndefined();
     expect(entry?.exitAt).toBeUndefined();
     // The entry holds ONLY the verdict triple — no server-measured key, even an
-    // absent one, so a later toEqual on the record sees nothing carried.
-    expect(Object.keys(entry ?? {}).sort()).toEqual(['at', 'endpoint', 'result']);
+    // absent one, so a later toEqual on the record sees nothing carried — plus the
+    // stamp that says WHEN the address changed (2026-09-17): the account row still
+    // carries the readings taken through the old address, and without the stamp
+    // the list sync that follows every refresh adopted them straight back.
+    expect(Object.keys(entry ?? {}).sort()).toEqual([
+      'at',
+      'endpoint',
+      'result',
+      'serverReadingsRetiredAt',
+    ]);
+    expect(entry?.serverReadingsRetiredAt).toBe(NOW);
   });
 
   it('CONTROL — a prior UNRESOLVED endpoint entry carries nothing over even when the address now matches', async () => {

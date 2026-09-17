@@ -124,6 +124,9 @@ export interface OsFingerprint {
 export type OsVerdictTone = 'match' | 'mismatch' | 'unknown';
 
 export interface OsVerdict {
+  /** Set ONLY by `agedOsFingerprintVerdict`: this describes a reading that is no
+   *  longer current. The tone beside it is then always the neutral one. */
+  aged?: true;
   tone: OsVerdictTone;
   /** One glyph before the label: ✓ match, ✗ mismatch, — not measured, ? measured but
    *  undetermined, … a probe this client started is running right now (o) O4. */
@@ -218,7 +221,7 @@ export const OS_FINGERPRINT_MEASURING: OsFingerprint = {
  * import-free module for the reason the TTL above does — two surfaces age the same
  * reading and neither may drag the Tauri store in to do it.
  */
-function measuredAgo(ageMs: number): string {
+export function measuredAgo(ageMs: number): string {
   if (ageMs < 60_000) return 'just now';
   const plural = (n: number, unit: string): string =>
     `${n.toString()} ${unit}${n === 1 ? '' : 's'} ago`;
@@ -245,6 +248,63 @@ function measuredAgo(ageMs: number): string {
  */
 function provenanceSentence(at: number, nowMs: number): string {
   return `Measured by Driftstack, ${measuredAgo(Math.max(0, nowMs - at))}.`;
+}
+
+/**
+ * The hover sentence of ANY reading that has aged out of the present tense — the
+ * OS chip's, and the QUIC / UDP chips', which import it from here so all of them
+ * say one thing (this module is import-free, which is why it is the shared home).
+ *
+ * Says when the reading was taken and what happens next, and nothing about how:
+ * "It will be rechecked automatically" only where that is TRUE — the caller asks
+ * the automatic check's own planner whether it would ever check this row
+ * (`isCapabilityRowCheckable`) — and the button that re-takes it otherwise. Never the present tense, never "just now":
+ * a reading only gets here by being older than the thirty-minute window.
+ */
+export function agedReadingHint(
+  atMs: number,
+  nowMs: number,
+  autoRecheck: boolean,
+  /** The button THIS row has — a VPN row's is not called Test, and a sentence that
+   *  names a button the row does not have sends the customer looking for it. */
+  manualAction = 'Test',
+): string {
+  const when = measuredAgo(Math.max(0, nowMs - atMs));
+  return `Last checked ${when}. ${
+    autoRecheck ? 'It will be rechecked automatically.' : `Run ${manualAction} to check it again.`
+  }`;
+}
+
+/**
+ * The verdict of an AGED reading: what was found, stated as what WAS found.
+ *
+ * ⛔ THE TONE IS ALWAYS THE NEUTRAL ONE, whatever the reading said. Green and red
+ * on this chip mean "matches / can be detected, NOW"; a reading from four hours
+ * ago about an exit that may have rotated to another machine supports neither,
+ * and an aged chip that kept its colour would be indistinguishable from a current
+ * one at a glance — the exact thing the thirty-minute TTL exists to prevent. The
+ * glyph and the label survive (that is the information), muted, and the hint
+ * leads with the age before it repeats what the reading found.
+ *
+ * A cause, the in-flight sentinel and "never measured" are not readings and do
+ * not age; they come back unchanged.
+ */
+export function agedOsFingerprintVerdict(
+  fp: OsFingerprint,
+  atMs: number,
+  nowMs: number = Date.now(),
+  // ⛔ False by default: a caller that does not know names the button rather than
+  // promising a recheck that may never come.
+  autoRecheck = false,
+): OsVerdict {
+  const v = osFingerprintVerdictUndated(fp);
+  if (fp.measuring === true || fp.unavailable !== undefined) return v;
+  return {
+    ...v,
+    aged: true,
+    tone: 'unknown',
+    hint: `${agedReadingHint(atMs, nowMs, autoRecheck)} What it found then: ${v.hint}`,
+  };
 }
 
 /**

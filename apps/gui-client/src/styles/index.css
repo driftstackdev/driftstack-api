@@ -477,3 +477,114 @@
     display: none;
   }
 }
+
+/* ─── Proxies grid: the column budget, in two tiers ───────────────────────
+   The proxies table is table-fixed inside a .ds-table-shell, so these <col>
+   widths decide everything and it never needs to scroll sideways. NOTHING is
+   hidden at any width (unlike the profiles list above): six grouped columns at
+   every size, and the tiers only move room between them. Health has no width
+   and takes what the others leave. A container query, not md:/lg: — the box
+   is the window minus the sidebar.
+
+   Every number below was MEASURED in Chromium against this file's compiled
+   output and the fonts the app really renders in (the OS fallbacks).
+
+   NARROW — the 960px minimum window gives a ~688px box, 686 inside its border:
+     32 select + 118 actions fixed; 20.4% + 17.5% + 15.4% = 140 + 120 + 106;
+     Health gets the remaining ~170. That 170 is the constraint everything else
+     is cut to: its 154px of content is the longest status pill ("healthy from
+     Driftstack", 153.5px), which is also the COMMONEST state of a working
+     proxy; the longest latency reading (a five-digit number and its machine
+     chip, 148px now the chip is set at a readable 9px — it was 139 at 8px)
+     fits inside it with 6px over. The 30px meter does not fit BESIDE a reading
+     there, so it sits UNDER its number instead — same bar, same colour, no
+     extra line. Actions at 118: "Check endpoint" (100.6px) is the widest
+     primary button and must not wrap inside itself; Edit and Remove go under.
+     Network at 106 holds two capability chips per line (90px).
+
+   WIDE — from 900px of TABLE width (the default 1280px window gives ~1008):
+     actions 190, so a SOCKS5 row's three buttons share a line. A VPN or HTTP
+     row still wraps there — its resolved address sits between the buttons —
+     and so does a row mid-"Removing…". 18.5% + 14.5% + 19% = 186 + 146 + 191,
+     Health ~261: Network holds three capability chips on a line, and Health
+     still has room for the second reading, its meter and the last-test time
+     to share one, which is what takes a measured row from four Health lines
+     to three. (The first cut was 21.4 / 15.9 / 13.3 — see the note inside the
+     tier for why it moved.) */
+.ds-proxy-col-proxy {
+  width: 20.4%;
+}
+.ds-proxy-col-exit {
+  width: 17.5%;
+}
+.ds-proxy-col-network {
+  width: 15.4%;
+}
+.ds-proxy-col-actions {
+  width: 118px;
+}
+.ds-proxy-reading {
+  position: relative;
+  padding-bottom: 5px;
+}
+.ds-proxy-meter {
+  position: absolute;
+  /* Past the reading's leading separator dot (10px), under the number. */
+  left: 10px;
+  bottom: 0;
+  margin-left: 0;
+}
+/* An aged chip is `whitespace-nowrap` (ProxyCapabilities.tsx AGED_CHIP_CLASS):
+   one phrase, never split. Below the wide tier that rule has one case it cannot
+   serve: Network's 90px of content is narrower than the longest aged chip
+   ("? iOS/macOS · 5 h ago", 108px — and "· yesterday" is longer still), a chip
+   alone on its line has no next line to move to, and it was painted 10px into
+   the Health column, over the last-test time. No width this tier can spare
+   holds it (Health is cut to its pill, Exit to its IP), so here the chip may
+   break — balanced, "iOS/macOS" over "· 5 h ago" rather than a stranded "ago" —
+   inside its one dashed border. The chip is an inline-flex whose glyph ("?",
+   "✓") is its own flex item: centred, it floated BETWEEN the two lines,
+   belonging to neither, so here it sits on the first line's baseline instead.
+   Scoped to the proxies grid by its hook, NOT to .ds-table-shell: the profiles
+   list is a .ds-table-shell too and draws its aged UDP chip with the same
+   class, and that chip has room and must stay one phrase. Hook + class, so it
+   still outranks the utility whatever order the stylesheet is emitted in. */
+@container (max-width: 899.98px) {
+  [data-component='proxy-table'] .ds-proxy-aged-chip {
+    white-space: normal;
+    text-wrap: balance;
+    align-items: baseline;
+  }
+}
+@container (min-width: 900px) {
+  /* ⚠️ REBALANCED AFTER LOOKING AT THE RENDER, not after measuring it. The first
+     cut gave Network 13.3% (~134px at the default window) and left Health ~276px:
+     every measurement passed — nothing overflowed, nothing scrolled — and the
+     table still looked wrong, because four capability chips stacked one per line
+     beside a Health column with a visible empty gap to its right. Rows were tall
+     for no reason a number could see. Network now holds three chips on a line
+     (the common healthy row is two lines, not four), paid for out of Health's
+     slack and the actions column's. */
+  .ds-proxy-col-proxy {
+    width: 18.5%;
+  }
+  .ds-proxy-col-exit {
+    width: 14.5%;
+  }
+  .ds-proxy-col-network {
+    width: 19%;
+  }
+  /* 190px keeps "Re-test · Edit · Remove" on ONE line; at 172 "Remove" dropped
+     under the other two on every SOCKS5 row. */
+  .ds-proxy-col-actions {
+    width: 190px;
+  }
+  .ds-proxy-reading {
+    position: static;
+    padding-bottom: 0;
+  }
+  .ds-proxy-meter {
+    position: static;
+    margin-left: 0.25rem;
+  }
+}

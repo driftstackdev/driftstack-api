@@ -5,13 +5,26 @@
 // owner-scoped account_proxies record whose secret fields are encrypted under
 // the account key hierarchy.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
 import { RelativeTime } from '../components/RelativeTime';
 import { Skeleton, SkeletonRegion } from '../components/Skeleton';
-import { ProxyCapabilityChips, ProxyOsChip } from '../components/ProxyCapabilities';
-import { OS_FINGERPRINT_MEASURING, VPN_TUNNEL_OS_FINGERPRINT } from '../lib/os-fingerprint-verdict';
+import {
+  AGED_CHIP_CLASS,
+  agedChipAge,
+  agedQuicReading,
+  ProxyCapabilityChips,
+  ProxyOsChip,
+  proxyCapabilities,
+} from '../components/ProxyCapabilities';
+import {
+  agedOsFingerprintVerdict,
+  agedReadingHint,
+  OS_FINGERPRINT_MEASURING,
+  VPN_TUNNEL_OS_FINGERPRINT,
+  osFingerprintVerdict,
+} from '../lib/os-fingerprint-verdict';
 import {
   isProxyUsable,
   addProxy,
@@ -30,12 +43,19 @@ import {
 import { ProxyHostWarning } from '../components/ProxyHostWarning';
 import {
   invalidateProbe,
+  clearCapabilityMaterialUnsynced,
+  loadCapabilityAttempts,
   loadProbeCache,
   subscribeProbeCache,
   clearExitResult,
   saveExitResult,
   saveProbeResult,
   saveEndpointResult,
+  agedReadingsFor,
+  emptyAgedReadings,
+  type AgedReading,
+  type AgedReadings,
+  type AgedRowReadings,
   type CachedOsFingerprint,
   type ProbeCacheMap,
 } from '../lib/proxy-probe-cache';
@@ -62,7 +82,7 @@ import {
 } from '../lib/account-proxies';
 import { profilesUsingProxy } from '../lib/profile-bindings';
 import { isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
-import { withProxyProbe } from '../lib/proxy-probe-sweeper';
+import { capabilityRecheckPromises, withProxyProbe } from '../lib/proxy-probe-sweeper';
 import {
   accountProxyInputFor,
   chipOsFingerprint,
@@ -71,6 +91,7 @@ import {
   fleetFailureReasons,
   persistHealedOpenvpn,
   persistServerProbe,
+  runInstalledCapabilityRefresh,
   serverProbeStamps,
   SOCKS5_TEST_NO_API_KEY_NOTICE,
   socks5FleetTestNotStoredNotice,
@@ -546,6 +567,34 @@ export function ProxiesView(): JSX.Element {
   // (never probed) and the control plane drops it, so this map stays empty for
   // tunnels until a node sends a real reading — and the chip says "not measured".
   const [udpProbe, setUdpProbe] = useState<Record<string, boolean>>({});
+  // The readings that have aged out of the maps above but are still worth showing
+  // — muted, in the past tense, with their age (`ProbeViewState.aged`). Hydrated
+  // from the cache only: nothing a reply carries is ever "aged" on arrival.
+  const [agedReadings, setAgedReadings] = useState<AgedReadings>(emptyAgedReadings);
+  // The rows an aged chip may promise "It will be rechecked automatically." for —
+  // asked of the automatic check's own planner, never inferred from "has a key":
+  // a row it will never check (a failing one, one the account refused, one edited
+  // since the account last received it) names its button instead.
+  const [autoRecheckIds, setAutoRecheckIds] = useState<Record<string, true>>({});
+  const proxiesRef = useRef<ReadonlyArray<ProxyConfig>>([]);
+  const hasApiKey = settings.apiKey !== null && settings.apiKey.length > 0;
+  const syncAutoRecheck = useCallback(
+    (cache: ProbeCacheMap): void => {
+      // A ledger that cannot be read promises nothing.
+      void loadCapabilityAttempts()
+        .then((attempts) =>
+          setAutoRecheckIds(
+            capabilityRecheckPromises(cache, attempts, proxiesRef.current, Date.now(), hasApiKey),
+          ),
+        )
+        .catch(() => setAutoRecheckIds({}));
+    },
+    [hasApiKey],
+  );
+  // The automatic capability check fires ONCE per mount of this tab, after the
+  // first list sync that answers — not from every `refresh()` (a save, a remove
+  // and a retry all call it, and each would have been another run).
+  const capabilityCheckFiredRef = useRef(false);
   // VPN exit parity (b) — the fleet's failure sentence for a VPN row whose
   // endpoint resolved but whose tunnel the fleet Mac could not bring up.
   // (h) finding 3 — hydrated from the CACHE (`fleetFailureReasons`) on load
@@ -599,13 +648,35 @@ export function ProxiesView(): JSX.Element {
     setState((s) => ({ ...s, loading: true }));
     try {
       const proxies = await listProxies();
+      proxiesRef.current = proxies;
       setState((s) => ({ ...s, proxies, loading: false, error: null }));
       // D2 — a VPN row's exit is whatever the server last OBSERVED through it
       // (a live session, or a fleet probe): adopt it from the account list into
       // the same cache the hydration below reads, so the row shows an exit
       // without a Test. Fire-and-forget; the cache subscription re-derives the
       // view when it lands, and a failure changes nothing the customer sees.
-      void syncListExitObserved(settings.baseUrl, settings.apiKey, proxies).catch(() => undefined);
+      //
+      // …and THEN, once per tab open, the automatic capability check: a row whose
+      // QUIC / UDP / OS reading is missing or has gone old is checked without the
+      // customer having to find the Test button. After the sync on purpose — what
+      // Driftstack already holds is adopted first, so a reading it re-took two
+      // hours ago is not dialled for again — and only when the sync got an answer:
+      // a server that is not answering is not asked a second, slower question.
+      // Single-flight, budgeted and backed off inside the runner, so a second open
+      // (or the schedule firing at the same moment) checks nothing twice. ⛔ It
+      // never uploads: a row not yet saved to the account is never sent.
+      //
+      // ⛔ ONCE PER MOUNT, latched when the sync ANSWERS: `refresh()` also runs
+      // after every save, remove and retry, and a save-time run would start before
+      // the re-test that follows has sent the edited row to the account.
+      const creds = { baseUrl: settings.baseUrl, apiKey: settings.apiKey };
+      void syncListExitObserved(creds.baseUrl, creds.apiKey, proxies)
+        .then(() => {
+          if (capabilityCheckFiredRef.current) return undefined;
+          capabilityCheckFiredRef.current = true;
+          return runInstalledCapabilityRefresh(() => creds);
+        })
+        .catch(() => undefined);
       // Hydrate the LAST persisted probe result per proxy so a tested proxy
       // keeps showing its reachability / UDP / exit-geo across visits instead
       // of reverting to "untested" + needing a re-test every time (the cache
@@ -632,6 +703,8 @@ export function ProxiesView(): JSX.Element {
       setServerVantage(view.serverVantage);
       setQuicProbe(view.quicProbe);
       setUdpProbe(view.udpProbe);
+      setAgedReadings(view.aged);
+      syncAutoRecheck(cache);
     } catch (err) {
       setState((s) => ({
         ...s,
@@ -639,7 +712,7 @@ export function ProxiesView(): JSX.Element {
         error: friendlyError(err, "Couldn't load proxies. Try again."),
       }));
     }
-  }, [settings.apiKey, settings.baseUrl]);
+  }, [settings.apiKey, settings.baseUrl, syncAutoRecheck]);
 
   // P-8 — the background sweep rewrites verdicts while this grid is open. Without
   // this, a proxy re-tested and found DOWN would keep showing the healthy pill it
@@ -661,8 +734,10 @@ export function ProxiesView(): JSX.Element {
         setServerVantage(view.serverVantage);
         setQuicProbe(view.quicProbe);
         setUdpProbe(view.udpProbe);
+        setAgedReadings(view.aged);
+        syncAutoRecheck(cache);
       }),
-    [],
+    [syncAutoRecheck],
   );
 
   useEffect(() => {
@@ -1177,6 +1252,9 @@ export function ProxiesView(): JSX.Element {
       }));
     }
     await updateAccountProxy(settings.baseUrl, apiKey, p.serverId, input);
+    // The account holds this Mac's material again, so the automatic capability
+    // check may look at the row (`invalidateProbe` marked it on the edit).
+    await clearCapabilityMaterialUnsynced(p.id).catch(() => undefined);
   }
 
   // N4 (owner: "Proxy check OVPN also not working") — a saved VPN row's on-demand
@@ -1884,7 +1962,7 @@ export function ProxiesView(): JSX.Element {
         />
       )}
 
-      {/* Pool summary — hidden while the form is open (it's noise then; founder:
+      {/* Pool summary — hidden while the form is open (it's noise then; the owner:
           the stats shouldn't show when New proxy is clicked) + only over TESTED
           proxies (no fabricated health for never-probed entries). */}
       {tested.length > 0 && editor.kind === 'idle' && (
@@ -1963,6 +2041,8 @@ export function ProxiesView(): JSX.Element {
           serverVantage={serverVantage}
           quicProbe={quicProbe}
           udpProbe={udpProbe}
+          agedReadings={agedReadings}
+          autoRecheckIds={autoRecheckIds}
           vpnFailures={vpnFailures}
           vpnNotices={vpnNotices}
           noFleetMac={noFleetMac}
@@ -2160,6 +2240,85 @@ function rowStatusRank(
   return (serverLatency[p.id] ?? 0) > LATENCY_GOOD_MS ? 1 : 3;
 }
 
+type ProxySort = { key: SortKey; dir: 'asc' | 'desc' };
+
+/**
+ * One header cell per GROUPED column. A column that merged several sortable
+ * data (Proxy + Type, Status + Latency + Last test) carries one sort button
+ * per datum, so every sort key the eleven-column grid offered is still one
+ * click away — and the names of the columns that stopped being columns are
+ * still on the page as those buttons' names.
+ *
+ * `aria-sort` describes the ACTIVE key only: a th holding three buttons is
+ * 'ascending' when one of its three is the sort, and 'none' otherwise. That
+ * alone cannot say WHICH of the three it is, so the active button also carries
+ * `aria-pressed` — state, not name: the buttons are found by their exact names.
+ *
+ * ⚠️ MODULE scope, not a function inside ProxyTable. Declared in there it was a
+ * new component type on every ProxyTable render, so React unmounted and
+ * remounted every header cell on every sort / select / expand — and the sort
+ * button a keyboard user had just pressed was destroyed under them, dropping
+ * focus to the body. With five sort buttons in two cells that meant tabbing
+ * back in from the top to flip a direction.
+ */
+function ProxyTh({
+  label,
+  sorts,
+  sort,
+  onSort,
+}: {
+  label?: string;
+  sorts?: ReadonlyArray<{ label: string; sortKey: SortKey }>;
+  sort: ProxySort;
+  onSort: (key: SortKey) => void;
+}): JSX.Element {
+  // No whitespace-nowrap: under table-fixed the th is as wide as its <col>
+  // says, and three sort buttons must WRAP inside it at the minimum window
+  // rather than push the table wider than its box.
+  const cls =
+    'px-2 py-2 text-left align-bottom text-[10px] font-semibold uppercase tracking-wider text-ink-muted';
+  if (sorts === undefined) {
+    return (
+      <th scope="col" className={cls}>
+        {label}
+      </th>
+    );
+  }
+  const activeSort = sorts.find((c) => c.sortKey === sort.key);
+  return (
+    <th
+      scope="col"
+      aria-sort={
+        activeSort === undefined ? 'none' : sort.dir === 'asc' ? 'ascending' : 'descending'
+      }
+      className={cls}
+    >
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        {sorts.map((c) => {
+          const active = sort.key === c.sortKey;
+          return (
+            <button
+              key={c.sortKey}
+              type="button"
+              aria-pressed={active}
+              data-sort-key={c.sortKey}
+              onClick={() => onSort(c.sortKey)}
+              className={`inline-flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-ink-primary ${
+                active ? 'text-ink-primary' : ''
+              }`}
+            >
+              {c.label}
+              <span aria-hidden="true" className={active ? '' : 'opacity-0 group-hover:opacity-40'}>
+                {active ? (sort.dir === 'asc' ? '\u2191' : '\u2193') : '\u2191'}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </th>
+  );
+}
+
 function ProxyTable({
   proxies,
   busyId,
@@ -2175,6 +2334,8 @@ function ProxyTable({
   serverVantage,
   quicProbe,
   udpProbe,
+  agedReadings,
+  autoRecheckIds,
   vpnFailures,
   vpnNotices,
   noFleetMac,
@@ -2205,6 +2366,13 @@ function ProxyTable({
   /** (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP-relay verdict per row.
    *  ⛔ A row absent from this map was NOT MEASURED. */
   udpProbe: Record<string, boolean>;
+  /** The readings that have aged out of the four maps above (`ProbeViewState.aged`).
+   *  Optional so a caller that predates the aged state renders exactly as before. */
+  agedReadings?: AgedReadings;
+  /** The rows the automatic capability check will re-take by itself
+   *  (`capabilityRecheckPromises`) — it decides whether an aged chip's hover
+   *  promises a recheck or names the row's button. Absent = names the button. */
+  autoRecheckIds?: Record<string, true>;
   /** (b) — the fleet's failure sentence per VPN row whose tunnel did not come up. */
   vpnFailures: Record<string, string>;
   /** (d) — the server's sentence per VPN row whose test was NOT RUN (a notice). */
@@ -2220,11 +2388,25 @@ function ProxyTable({
   onRemoveMany: (ids: string[]) => void;
   onTestMany: (ps: ProxyConfig[]) => void;
 }): JSX.Element {
-  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({
+  const [sort, setSort] = useState<ProxySort>({
     key: 'status',
     dir: 'asc',
   });
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  // The rows whose detail is open. Eleven columns became six by MERGING cells,
+  // and a merged cell has to truncate at the minimum window; the detail row is
+  // where every one of those values is printed in full, so nothing the old grid
+  // showed needs a hover or a sideways scroll to be read. A stale id (a proxy
+  // removed while open) is harmless: no row renders for it.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  function toggleExpanded(id: string): void {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   /**
    * The selection, intersected with the proxies that still exist.
@@ -2345,50 +2527,6 @@ function ProxyTable({
     });
   }
 
-  const ariaSort = (key: SortKey): 'ascending' | 'descending' | 'none' =>
-    sort.key !== key ? 'none' : sort.dir === 'asc' ? 'ascending' : 'descending';
-
-  function Th({
-    label,
-    sortKey,
-    align,
-  }: {
-    label: string;
-    sortKey?: SortKey;
-    align?: 'right';
-  }): JSX.Element {
-    const cls =
-      'whitespace-nowrap px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-ink-muted';
-    if (sortKey === undefined) {
-      return (
-        <th scope="col" className={`${cls} ${align === 'right' ? 'text-right' : 'text-left'}`}>
-          {label}
-        </th>
-      );
-    }
-    const active = sort.key === sortKey;
-    return (
-      <th
-        scope="col"
-        aria-sort={ariaSort(sortKey)}
-        className={`${cls} ${align === 'right' ? 'text-right' : 'text-left'}`}
-      >
-        <button
-          type="button"
-          onClick={() => toggleSort(sortKey)}
-          className={`inline-flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-ink-primary ${
-            active ? 'text-ink-primary' : ''
-          }`}
-        >
-          {label}
-          <span aria-hidden="true" className={active ? '' : 'opacity-0 group-hover:opacity-40'}>
-            {active ? (sort.dir === 'asc' ? '\u2191' : '\u2193') : '\u2191'}
-          </span>
-        </button>
-      </th>
-    );
-  }
-
   return (
     <div data-component="proxy-table" className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-3 px-1 text-[11px] text-ink-muted">
@@ -2414,13 +2552,42 @@ function ProxyTable({
         )}
       </div>
 
-      {/* The grid is wide by design; it scrolls INSIDE this box so the page
-          body never scrolls sideways. */}
-      <div className="overflow-x-auto rounded-lg border border-surface-divider bg-surface-raised">
-        <table className="w-full min-w-[880px] border-collapse text-[12px]">
+      {/* The grid FITS its box. The content area is the window minus the 224px
+          sidebar minus the view's padding: ~1008px at the default 1280 window
+          and ~688px at the 960 minimum. Eleven auto-layout, nowrap columns
+          needed well past 880px, so at every window size the owner had to
+          scroll left and right to read one proxy.
+
+          `table-fixed` + the <colgroup> is what makes that impossible rather
+          than unlikely: under AUTO layout a column is as wide as its widest
+          nowrap content and `truncate` / `max-w` on a cell are inert; under
+          FIXED layout the <col> widths are the law and content must wrap or
+          truncate inside them. The widths themselves — and the measured
+          budget behind each, at both window sizes — live with the container
+          tiers in styles/index.css (`.ds-proxy-col-*`).
+
+          `overflow-x-auto` STAYS on the box. With a w-full fixed table it shows
+          no scrollbar, because nothing is wider than the box; it is there for
+          the day some cell's content cannot wrap. Then a scrollbar appears and
+          the control is reachable — under `overflow-hidden` it would be cut
+          off with nothing on screen to say so.
+
+          `ds-table-shell` makes this box the query container — viewport
+          breakpoints misfire here because the box is not the window. */}
+      <div className="ds-table-shell overflow-x-auto rounded-lg border border-surface-divider bg-surface-raised">
+        <table className="w-full table-fixed border-collapse text-[12px]">
+          <colgroup>
+            <col className="w-8" />
+            <col className="ds-proxy-col-proxy" />
+            <col className="ds-proxy-col-exit" />
+            <col className="ds-proxy-col-network" />
+            {/* Health: no width, so it absorbs whatever the others leave. */}
+            <col />
+            <col className="ds-proxy-col-actions" />
+          </colgroup>
           <thead>
             <tr className="group border-b border-surface-divider">
-              <th scope="col" className="w-9 px-3 py-2">
+              <th scope="col" className="px-2 py-2">
                 <input
                   type="checkbox"
                   aria-label={allSelected ? 'Clear selection' : 'Select all proxies'}
@@ -2431,16 +2598,26 @@ function ProxyTable({
                   className="h-4 w-4 cursor-pointer accent-[rgb(var(--accent-rgb))]"
                 />
               </th>
-              <Th label="Proxy" sortKey="label" />
-              <Th label="Type" sortKey="scheme" />
-              <Th label="Endpoint" />
-              <Th label="Exit" />
-              <Th label="Latency" sortKey="latency" align="right" />
-              <Th label="Capabilities" />
-              <Th label="OS" />
-              <Th label="Status" sortKey="status" />
-              <Th label="Last test" sortKey="tested" />
-              <Th label="" />
+              <ProxyTh
+                sort={sort}
+                onSort={toggleSort}
+                sorts={[
+                  { label: 'Proxy', sortKey: 'label' },
+                  { label: 'Type', sortKey: 'scheme' },
+                ]}
+              />
+              <ProxyTh sort={sort} onSort={toggleSort} label="Exit" />
+              <ProxyTh sort={sort} onSort={toggleSort} label="Network" />
+              <ProxyTh
+                sort={sort}
+                onSort={toggleSort}
+                sorts={[
+                  { label: 'Status', sortKey: 'status' },
+                  { label: 'Latency', sortKey: 'latency' },
+                  { label: 'Last test', sortKey: 'tested' },
+                ]}
+              />
+              <ProxyTh sort={sort} onSort={toggleSort} label="" />
             </tr>
           </thead>
           <tbody>
@@ -2450,6 +2627,8 @@ function ProxyTable({
                 proxy={p}
                 selected={live.has(p.id)}
                 onToggle={(shiftKey) => toggleOne(p.id, shiftKey)}
+                expanded={expanded.has(p.id)}
+                onToggleExpanded={() => toggleExpanded(p.id)}
                 busy={busyId === p.id}
                 testing={testingId === p.id}
                 testingAll={testingAll}
@@ -2464,6 +2643,8 @@ function ProxyTable({
                 serverVantage={serverVantage[p.id]}
                 quicProbe={quicProbe[p.id]}
                 udpProbe={udpProbe[p.id]}
+                aged={agedReadings !== undefined ? agedReadingsFor(agedReadings, p.id) : undefined}
+                autoRecheck={autoRecheckIds?.[p.id] === true}
                 vpnFailure={vpnFailures[p.id]}
                 vpnNotice={vpnNotices[p.id]}
                 noFleetMac={noFleetMac[p.id] === true}
@@ -2537,6 +2718,8 @@ function ProxyRow({
   proxy: p,
   selected,
   onToggle,
+  expanded,
+  onToggleExpanded,
   busy,
   testing,
   testingAll,
@@ -2550,6 +2733,8 @@ function ProxyRow({
   serverVantage,
   quicProbe,
   udpProbe,
+  aged: agedProp,
+  autoRecheck = false,
   vpnFailure,
   vpnNotice,
   noFleetMac,
@@ -2562,6 +2747,10 @@ function ProxyRow({
   proxy: ProxyConfig;
   selected: boolean;
   onToggle: (shiftKey: boolean) => void;
+  /** Whether this row's detail row is open, and the chevron's handler. The
+   *  state lives in ProxyTable (a Set of ids) so it survives a re-sort. */
+  expanded: boolean;
+  onToggleExpanded: () => void;
   busy: boolean;
   testing: boolean;
   testingAll: boolean;
@@ -2591,6 +2780,12 @@ function ProxyRow({
    *  ASSERTS `udp_associate: true` about the tunnel and probes nothing, so the
    *  control plane drops it and this stays undefined until a node measures. */
   udpProbe: boolean | undefined;
+  /** This row's AGED readings — shown muted, with their age, ONLY where the
+   *  current reading above is missing. Undefined = nothing aged to show. */
+  aged?: AgedRowReadings | undefined;
+  /** Whether the app will re-take an aged reading by itself: an API key, and a
+   *  row already saved to the account (it never uploads one to do so). */
+  autoRecheck?: boolean;
   /** (b) — the fleet's failure sentence when this VPN row's tunnel did not come
    *  up, and (P2) a SOCKS5 row's too: the Mac that runs the profile answering
    *  "this proxy does not work" is the same fact whatever the scheme, and on a
@@ -2676,7 +2871,8 @@ function ProxyRow({
   // vantage (no API key, not storable): SOCKS5_TEST_NO_API_KEY_NOTICE says
   // "Tested from this Mac only… from the test Mac too — that is where … the
   // fleet latency are measured", so the label would be a second copy of a
-  // sentence the customer has read, on every row, in the widest column.
+  // sentence the customer has read, on every row — and since the grid went to
+  // six columns, in the Health cell's latency line, directly UNDER that notice.
   const serverMissingShown = hasNativeSide && vpnNotice === undefined ? serverMissing : null;
   const nativeMissing: { word: string; title: string } | null =
     nativeNumber !== undefined
@@ -2689,396 +2885,821 @@ function ProxyRow({
   const exitIp = exit?.ip;
   const exitCountry = exit?.country ?? null;
   const failed = result !== undefined && !healthy;
+  const scheme = schemeLabel(p.scheme);
+  const detailId = `proxy-detail-${p.id}`;
+
+  // ── The values BOTH the row and its detail row print ──────────────────────
+  // The grid merges eleven columns into six, so a cell truncates or clamps at
+  // the minimum window; the detail row prints the same values in full. Each is
+  // derived ONCE here and rendered twice, so the short form and the long form
+  // cannot disagree about the same proxy.
+
+  // (o) O4 — "measuring" is a claim about work in progress, and the ONLY thing
+  // that measures a proxy's stack is the Test this row's button starts (there
+  // is no scheduler behind it). So the measuring state is rendered from THIS
+  // client's in-flight probe — `testing` — and never from an absent value; a
+  // row nobody has tested says "not measured", which is what is true of it.
+  //
+  // ⛔ (o) 2026-09-11 follow-up — and NOT EVEN THEN on a VPN row. `testing` is
+  // set for the "Check VPN" button too, but the control plane fingerprints no
+  // tunnel: `'host' in resolved` is false for every openvpn/wireguard wire, so
+  // the observer is never consulted and the reply says `vpn_tunnel`. The chip
+  // claimed a stack measurement was running for the whole 30-45 s fleet wait
+  // and then contradicted itself. A VPN row states its cause from its own
+  // SCHEME — true before the first Check, while one runs, and after a tunnel
+  // that failed (states in which no reply carries the cause at all).
+  //
+  // An AGED reading fills the chip only where none of the above does — a current
+  // reading outranks it, and so does a test running right now (the answer is on
+  // its way). ⛔ And never beside a failure sentence: the view drops every
+  // Driftstack-measured value when a check says the proxy does not work, and a
+  // dated tick surviving that would read as a second opinion.
+  const aged = vpnFailure === undefined && !testing ? agedProp : undefined;
+  const agedOs = osFingerprint === undefined ? aged?.osFingerprint : undefined;
+  const osFp =
+    osFingerprint ??
+    (agedOs !== undefined
+      ? undefined
+      : isVpnScheme(p.scheme)
+        ? VPN_TUNNEL_OS_FINGERPRINT
+        : testing
+          ? OS_FINGERPRINT_MEASURING
+          : undefined);
+  const agedNowMs = Date.now();
+
+  // The capability cell of a row with nothing to chip: never tested, or down on
+  // the last test. One object so the chip's hover and the detail row's sentence
+  // are the same words.
+  const capsFallback =
+    result !== undefined
+      ? {
+          word: 'not verified',
+          title: 'This proxy was down on the last test — no protocols could be checked.',
+        }
+      : {
+          word: 'untested',
+          title: 'Not tested yet — click Test to check which protocols work.',
+        };
+  // Each capability as label + the sentence its chip keeps in a hover, for the
+  // detail row. Same three-way branch as the chips themselves, and the same
+  // sources (`proxyCapabilities`, the VPN chips' own helpers) — never retyped.
+  const capabilityLines: ReadonlyArray<{ label: string; hint: string }> = isVpnScheme(p.scheme)
+    ? [
+        { label: 'UDP', hint: vpnUdpHint(udpProbe, aged?.udpProbe, agedNowMs, autoRecheck) },
+        {
+          label: 'QUIC',
+          hint: vpnQuicReading(quicMeasured, quicProbe, noFleetMac, {
+            aged: agedQuicReading(aged),
+            nowMs: agedNowMs,
+            autoRecheck,
+          }).hint,
+        },
+      ]
+    : result !== undefined && reachable
+      ? proxyCapabilities(result, quicMeasured, quicProbe, aged, {
+          nowMs: agedNowMs,
+          autoRecheck,
+        }).map((c) => ({
+          label: c.label,
+          hint: c.hint,
+        }))
+      : [{ label: capsFallback.word, hint: capsFallback.title }];
+
+  // ⚠️ V-857 — THREE states, not two. `undefined` = never probed; `null` =
+  // probed and the echo round-trip did not complete through this proxy; an ip =
+  // a real measured exit. Collapsing null into undefined tells a customer who
+  // just ran a test to "run Test", sending them round the same loop. The null
+  // wording names the PROBE outcome and never our release schedule — pointing
+  // at a release tells them to wait instead of to look.
+  //
+  // `break-all`, not `truncate`: an exit IP is the one value in this column a
+  // customer copies, and a long IPv6 exit wraps inside the column rather than
+  // losing its tail.
+  const exitReadout =
+    exitIp !== undefined ? (
+      <span className="mono break-all text-[11px] text-ink-secondary">{exitIp}</span>
+    ) : exit === null ? (
+      <span className="text-[10.5px] text-ink-muted" title={EXIT_GEO_UNAVAILABLE_TITLE}>
+        {EXIT_GEO_UNAVAILABLE}
+      </span>
+    ) : isVpnScheme(p.scheme) ? (
+      // (l) #3 / #10 — a VPN row with no exit MEASURED: says why and names
+      // the check by its one name; the profile card reads the same
+      // constant, so grid and card agree about the same proxy.
+      <span className="italic text-[10.5px] text-ink-muted" title={VPN_NO_EXIT_YET_TITLE}>
+        {VPN_NO_EXIT_YET}
+      </span>
+    ) : isSocks5Probeable(p.scheme) ? (
+      <span className="italic text-[10.5px] text-ink-muted">run Test for exit IP</span>
+    ) : (
+      // (l) #2 — an HTTP row: no check here measures an exit, so no prompt
+      // promising one. The proxy itself is verified when a session launches.
+      <span className="italic text-[10.5px] text-ink-muted">{HTTP_VERIFIED_AT_LAUNCH}</span>
+    );
+  const exitPlace = [exit?.city, exit?.region]
+    .filter((part): part is string => typeof part === 'string' && part.length > 0)
+    .join(', ');
+
+  // Both latency sides as plain sentences for the detail row: the reading with
+  // the SAME label the compact line carries, then the explanation that line
+  // keeps in a hover (which machine measured it, and when). A missing side says
+  // why, from the same `serverMissing` / `nativeMissing` the row reads.
+  //
+  // ⛔ A VPN row reads the UNGATED `serverMissing`. `serverMissingShown` is null
+  // for every row without a native side (it exists to keep a SOCKS5 line short),
+  // so reading it here left a VPN row with NO line, and the fallback sentence
+  // then said "not measured" about a tunnel test that RAN and FAILED, and about
+  // a tunnel that came up and reported no timing — two of the four states the
+  // `serverMissing` comment above exists to keep apart. An HTTP row has no
+  // latency check at all, so it gets no line and the detail prints the same em
+  // dash the row does, never a "yet" that promises a number nothing will take.
+  const serverMissingForDetail = isVpnScheme(p.scheme) ? serverMissing : serverMissingShown;
+  const latencyLines: Array<{ reading: string; explain: string }> = [];
+  if (serverLatencyMs !== undefined) {
+    latencyLines.push({ reading: `${serverLatencyMs}ms ${vantageText}`, explain: serverLineTitle });
+  } else if (serverMissingForDetail !== null) {
+    latencyLines.push({
+      reading: `${serverMissingForDetail.word} \u00b7 ${TEST_MAC_CHIP_LABEL}`,
+      explain: serverMissingForDetail.title,
+    });
+  }
+  if (hasNativeSide) {
+    if (nativeNumber !== undefined) {
+      latencyLines.push({
+        reading: `${nativeNumber}ms ${NATIVE_VANTAGE_LABEL}`,
+        explain: nativeLineTitle,
+      });
+    } else if (nativeMissing !== null) {
+      latencyLines.push({
+        reading: `${nativeMissing.word} \u00b7 ${NATIVE_CHIP_LABEL}`,
+        explain: nativeMissing.title,
+      });
+    }
+  }
+
+  const statusPill = isSocks5Probeable(p.scheme) ? (
+    <HealthPill
+      result={result}
+      healthy={healthy}
+      latGood={latGood}
+      originPhrase={latOriginPhrase}
+      originTitle={latOriginTitle}
+      fleetFailure={vpnFailure}
+    />
+  ) : (
+    <EndpointHealthPill
+      endpoint={endpointResult}
+      tunnelUp={serverVantage?.measuredFrom === 'fleet'}
+      noLatency={!fromServer}
+      latGood={latGood}
+      failure={vpnFailure}
+      vantageTitle={vantageTitle}
+    />
+  );
+  const tested = (result !== undefined || endpointResult !== undefined) && testedAt !== undefined;
+  // In the row a status sentence gets two lines; the whole of it is in the
+  // detail row. (It used to wrap inside a 240px box, which under the old
+  // auto-layout grid is what pushed the Status column — and the table — wider.)
+  const sentenceCls = 'line-clamp-2 break-words text-[10px] leading-tight';
+  const hasSentence =
+    vpnFailure !== undefined || vpnNotice !== undefined || (failed && result.message.length > 0);
 
   return (
-    <tr
-      onClick={(e) => {
-        // #4 — a row click toggles selection; shift+click selects the range from the
-        // last-clicked row. Clicks on real controls (buttons, the checkbox, links,
-        // the row's inputs) keep their own behaviour, so this never eats a Test/Edit.
-        if (
-          (e.target as HTMLElement).closest(
-            'button, input, a, select, textarea, [contenteditable="true"]',
-          )
-        ) {
-          return;
-        }
-        onToggle(e.shiftKey);
-      }}
-      className={`cursor-pointer select-none border-b border-surface-divider/40 transition-colors last:border-b-0 hover:bg-surface-inset/50 ${
-        selected ? 'bg-[rgb(var(--accent-rgb)/0.07)]' : ''
-      }`}
-    >
-      <td
-        className={`px-3 py-2 ${failed ? 'shadow-[inset_3px_0_0_rgb(var(--status-error-rgb))]' : ''}`}
-      >
-        <input
-          type="checkbox"
-          aria-label={`Select ${p.label}`}
-          checked={selected}
-          // (q) Item 4 — the modifier SURVIVES a shift+click on the checkbox
-          // itself: the row handler returns early for a click on the input, and
-          // this handler used to call `onToggle(false)`, so shift-clicking A's
-          // box then E's box selected only A and E; the range worked only when
-          // the shift-click landed on the row body. React drives a checkbox's
-          // onChange from the native click, so its modifier keys are here.
-          onChange={(e) => onToggle((e.nativeEvent as MouseEvent).shiftKey === true)}
-          className="h-4 w-4 cursor-pointer accent-[rgb(var(--accent-rgb))]"
-        />
-      </td>
-
-      <td className="max-w-[190px] px-3 py-2">
-        <div className="truncate font-semibold tracking-tight text-ink-primary">{p.label}</div>
-        {p.username !== null && p.username.length > 0 && (
-          <div className="mono truncate text-[10px] text-ink-muted">{p.username}</div>
-        )}
-      </td>
-
-      <td className="whitespace-nowrap px-3 py-2 text-ink-secondary">
-        <span aria-hidden="true">{schemeLabel(p.scheme).icon}</span> {schemeLabel(p.scheme).text}
-      </td>
-
-      <td className="mono whitespace-nowrap px-3 py-2 text-[11px] text-ink-muted">
-        {p.host}:{p.port}
-      </td>
-
-      <td className="whitespace-nowrap px-3 py-2">
-        <span aria-hidden="true" className="mr-1.5">
-          {exitCountry !== null ? flagEmoji(exitCountry) : '\ud83c\udf0d'}
-        </span>
-        {/* ⚠️ V-857 — THREE states, not two. `undefined` = never probed;
-            `null` = probed and the echo round-trip did not complete through this
-            proxy; an ip = a real measured exit. Collapsing null into undefined
-            tells a customer who just ran a test to "run Test", sending them round
-            the same loop. The null wording names the PROBE outcome and never our
-            release schedule — pointing at a release tells them to wait instead of
-            to look. */}
-        {exitIp !== undefined ? (
-          <span className="mono text-[11px] text-ink-secondary">{exitIp}</span>
-        ) : exit === null ? (
-          <span className="text-[10.5px] text-ink-muted" title={EXIT_GEO_UNAVAILABLE_TITLE}>
-            {EXIT_GEO_UNAVAILABLE}
-          </span>
-        ) : isVpnScheme(p.scheme) ? (
-          // (l) #3 / #10 — a VPN row with no exit MEASURED: says why and names
-          // the check by its one name; the profile card reads the same
-          // constant, so grid and card agree about the same proxy.
-          <span className="italic text-[10.5px] text-ink-muted" title={VPN_NO_EXIT_YET_TITLE}>
-            {VPN_NO_EXIT_YET}
-          </span>
-        ) : isSocks5Probeable(p.scheme) ? (
-          <span className="italic text-[10.5px] text-ink-muted">run Test for exit IP</span>
-        ) : (
-          // (l) #2 — an HTTP row: no check here measures an exit, so no prompt
-          // promising one. The proxy itself is verified when a session launches.
-          <span className="italic text-[10.5px] text-ink-muted">{HTTP_VERIFIED_AT_LAUNCH}</span>
-        )}
-        {/* #6 — exit LOCATION (city, region). The flag already conveys the country;
-            city/region is the incremental detail, shown when the probe captured it.
-            Was not rendered anywhere on this tab before. */}
-        {exit?.city != null && exit.city.length > 0 && (
-          <div
-            data-component="exit-location"
-            className="mt-0.5 max-w-[180px] truncate text-[10px] font-normal text-ink-muted"
-            title={[exit.city, exit.region]
-              .filter((s): s is string => typeof s === 'string' && s.length > 0)
-              .join(', ')}
-          >
-            {[exit.city, exit.region]
-              .filter((s): s is string => typeof s === 'string' && s.length > 0)
-              .join(', ')}
-          </div>
-        )}
-      </td>
-
-      <td className="whitespace-nowrap px-3 py-2 text-right">
-        {/* (b) — a VPN row has no native `result`; its number is the fleet's, and
-            it shows on the fleet's say-so (fromServer), not on a handshake that
-            never ran.
-
-            (P2) — BOTH sides, stacked and each labelled: the machine that runs
-            the profile on top, this computer under it. When one side has no
-            number, its own line says which side is missing, so the other is
-            never read as the whole answer. A row with no number on either side
-            is unchanged ('down' after a failed handshake, else the em dash). */}
-        {serverLatencyMs !== undefined || (hasNativeSide && nativeNumber !== undefined) ? (
-          <div className="inline-flex flex-col items-end gap-0.5">
-            {serverLatencyMs !== undefined ? (
-              <span
-                className="inline-flex items-center justify-end gap-1.5"
-                title={serverLineTitle}
-                data-latency-vantage={serverVantage?.measuredFrom ?? 'server'}
-              >
-                <span className="mono tabular-nums text-ink-secondary">{serverLatencyMs}ms</span>
-                {/* T-1 — say WHERE a server-measured number came from: a test Mac
-                    (the kind that runs the profile) or, when none was free, the
-                    server itself — the fallback is visible, never silent. */}
-                <span className="rounded-sm bg-surface-inset px-1 text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
-                  {vantageText}
-                </span>
-                <LatencyMeter ms={serverLatencyMs} />
-              </span>
-            ) : (
-              serverMissingShown !== null && (
-                <span
-                  className="inline-flex items-center justify-end gap-1.5 opacity-60"
-                  title={serverMissingShown.title}
-                  data-latency-missing="server"
-                >
-                  {/* The state word sits where the NUMBER would, at the cell's
-                      own size — readable, and narrower than the measured line
-                      above it, so a missing side never widens the column. The
-                      8px chip is left holding a short machine name, which is
-                      what it held before this row printed two sides. */}
-                  <span className="mono text-ink-muted">{serverMissingShown.word}</span>
-                  <span className="rounded-sm bg-surface-inset px-1 text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
-                    {TEST_MAC_CHIP_LABEL}
-                  </span>
-                </span>
-              )
-            )}
-            {hasNativeSide &&
-              (nativeNumber !== undefined ? (
-                <span
-                  className="inline-flex items-center justify-end gap-1.5"
-                  title={nativeLineTitle}
-                  data-latency-vantage="this_mac"
-                >
-                  <span className="mono tabular-nums text-ink-secondary">{nativeNumber}ms</span>
-                  <span className="rounded-sm bg-surface-inset px-1 text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
-                    {NATIVE_VANTAGE_LABEL}
-                  </span>
-                  <LatencyMeter ms={nativeNumber} />
-                </span>
-              ) : (
-                nativeMissing !== null && (
-                  <span
-                    className="inline-flex items-center justify-end gap-1.5 opacity-60"
-                    title={nativeMissing.title}
-                    data-latency-missing="this_mac"
-                  >
-                    <span className="mono text-ink-muted">{nativeMissing.word}</span>
-                    <span className="rounded-sm bg-surface-inset px-1 text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
-                      {NATIVE_CHIP_LABEL}
-                    </span>
-                  </span>
-                )
-              ))}
-          </div>
-        ) : (
-          <span className="mono text-ink-muted opacity-60">
-            {result !== undefined ? 'down' : '\u2014'}
-          </span>
-        )}
-      </td>
-
-      <td className="px-3 py-2">
-        {isVpnScheme(p.scheme) ? (
-          // (h) — a VPN row has no SOCKS5 `result` (its placeholder is deleted
-          // from testResults by design), so the chip set below was unreachable
-          // and the cell read a permanent "untested" naming a Test button the
-          // row does not have.
-          //
-          // (V6 2026-09-16) ITEM 3 — TWO chips now, and the UDP one is the point:
-          // this cell used to render none at all for UDP, on the rule "a tunnel
-          // carries UDP; nothing probes it here". That rule is about to stop
-          // being true — the node's three-state `udp_associate` is contracted —
-          // and a surface that renders nothing has no way to say a measured NO.
-          // Absence of the chip and a measured negative would have looked the
-          // same (they would both have looked like silence), which is the exact
-          // failure this item exists to remove.
-          <div className="flex flex-wrap items-center gap-1">
-            <VpnUdpChip udpProbe={udpProbe} />
-            <VpnQuicChip
-              quicMeasured={quicMeasured}
-              quicProbe={quicProbe}
-              noFleetMac={noFleetMac}
-            />
-          </div>
-        ) : result !== undefined && reachable ? (
-          <ProxyCapabilityChips
-            result={result}
-            quicMeasured={quicMeasured}
-            quicProbe={quicProbe}
-            size="xs"
-          />
-        ) : (
-          <span
-            className="rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"
-            title={
-              result !== undefined
-                ? 'This proxy was down on the last test — no protocols could be checked.'
-                : 'Not tested yet — click Test to check which protocols work.'
-            }
-          >
-            {result !== undefined ? 'not verified' : 'untested'}
-          </span>
-        )}
-      </td>
-
-      <td className="px-3 py-2">
-        {/* (o) O4 — "measuring" is a claim about work in progress, and the ONLY thing
-            that measures a proxy's stack is the Test this row's button starts (there
-            is no scheduler behind it). So the measuring state is rendered from THIS
-            client's in-flight probe — `testing` — and never from an absent value; a
-            row nobody has tested says "not measured", which is what is true of it.
-
-            ⛔ (o) 2026-09-11 follow-up — and NOT EVEN THEN on a VPN row. `testing` is
-            set for the "Check VPN" button too, but the control plane fingerprints no
-            tunnel: `'host' in resolved` is false for every openvpn/wireguard wire, so
-            the observer is never consulted and the reply says `vpn_tunnel`. The chip
-            claimed a stack measurement was running for the whole 30-45 s fleet wait
-            and then contradicted itself. A VPN row states its cause from its own
-            SCHEME — true before the first Check, while one runs, and after a tunnel
-            that failed (states in which no reply carries the cause at all). */}
-        <ProxyOsChip
-          fingerprint={
-            osFingerprint ??
-            (isVpnScheme(p.scheme)
-              ? VPN_TUNNEL_OS_FINGERPRINT
-              : testing
-                ? OS_FINGERPRINT_MEASURING
-                : undefined)
+    <>
+      <tr
+        data-component="proxy-row"
+        onClick={(e) => {
+          // #4 — a row click toggles selection; shift+click selects the range from the
+          // last-clicked row. Clicks on real controls (buttons, the checkbox, links,
+          // the row's inputs) keep their own behaviour, so this never eats a Test/Edit
+          // — nor the detail chevron, which is a <button> for exactly this reason.
+          if (
+            (e.target as HTMLElement).closest(
+              'button, input, a, select, textarea, [contenteditable="true"]',
+            )
+          ) {
+            return;
           }
-          size="xs"
-        />
-      </td>
+          onToggle(e.shiftKey);
+        }}
+        className={`cursor-pointer select-none border-b border-surface-divider/40 align-top transition-colors last:border-b-0 hover:bg-surface-inset/50 ${
+          selected ? 'bg-[rgb(var(--accent-rgb)/0.07)]' : ''
+        }`}
+      >
+        <td
+          className={`px-2 py-2 ${failed ? 'shadow-[inset_3px_0_0_rgb(var(--status-error-rgb))]' : ''}`}
+        >
+          <input
+            type="checkbox"
+            aria-label={`Select ${p.label}`}
+            checked={selected}
+            // (q) Item 4 — the modifier SURVIVES a shift+click on the checkbox
+            // itself: the row handler returns early for a click on the input, and
+            // this handler used to call `onToggle(false)`, so shift-clicking A's
+            // box then E's box selected only A and E; the range worked only when
+            // the shift-click landed on the row body. React drives a checkbox's
+            // onChange from the native click, so its modifier keys are here.
+            onChange={(e) => onToggle((e.nativeEvent as MouseEvent).shiftKey === true)}
+            className="h-4 w-4 cursor-pointer accent-[rgb(var(--accent-rgb))]"
+          />
+        </td>
 
-      <td className="px-3 py-2">
-        <div className="flex flex-col items-start gap-0.5">
-          {isSocks5Probeable(p.scheme) ? (
-            <HealthPill
-              result={result}
-              healthy={healthy}
-              latGood={latGood}
-              originPhrase={latOriginPhrase}
-              originTitle={latOriginTitle}
-              fleetFailure={vpnFailure}
-            />
-          ) : (
-            <EndpointHealthPill
-              endpoint={endpointResult}
-              tunnelUp={serverVantage?.measuredFrom === 'fleet'}
-              noLatency={!fromServer}
-              latGood={latGood}
-              failure={vpnFailure}
-              vantageTitle={vantageTitle}
-            />
-          )}
-          {/* (P2) — NOT gated on the scheme any more. A SOCKS5 row's fleet
-              failure was stored nowhere and rendered nowhere, so the only thing
-              the grid said about the session-predicting vantage was a green
-              pill and a false "has not measured this proxy yet". This is the
-              sentence the pill's own comment promised was "beside this pill". */}
-          {vpnFailure !== undefined && (
-            <span
-              className="max-w-[240px] whitespace-normal break-words text-[10px] leading-tight text-status-error"
-              title={vpnFailure}
-            >
-              {vpnFailure}
-            </span>
-          )}
-          {/* (h) finding 3 — the notice sits beside a standing failure too: the
-              failure is the LAST verdict (the cache's), the notice is what THIS
-              check did not do; hiding one behind the other lost either. */}
-          {/* (q) Item 12-memory (A) — on a SOCKS5 row too: the notice is what
-              the Test did NOT do (no key / not storable → no fleet leg), which
-              the native pill alone cannot say. */}
-          {vpnNotice !== undefined && (
-            <span
-              data-component="proxy-row-notice"
-              className="max-w-[240px] whitespace-normal break-words text-[10px] leading-tight text-ink-muted"
-              title={vpnNotice}
-            >
-              {vpnNotice}
-            </span>
-          )}
-          {failed && result.message.length > 0 && (
-            <span
-              className="max-w-[240px] whitespace-normal break-words text-[10px] leading-tight text-status-error"
-              title={result.message}
-            >
-              {result.message}
-            </span>
-          )}
-        </div>
-      </td>
-
-      <td className="whitespace-nowrap px-3 py-2 text-[10.5px] text-ink-muted">
-        {(result !== undefined || endpointResult !== undefined) && testedAt !== undefined ? (
-          <RelativeTime iso={new Date(testedAt).toISOString()} tooltipPrefix="Tested" />
-        ) : (
-          <RelativeTime iso={p.createdAt} tooltipPrefix="Added" />
-        )}
-      </td>
-
-      <td className="whitespace-nowrap px-3 py-2 text-right">
-        <div className="inline-flex items-center gap-1.5">
-          {/* The row Test runs a SOCKS5 probe, which is meaningless for a
-              VPN/HTTP endpoint (it always read "unreachable"). Only offer it for
-              a SOCKS5 proxy; otherwise say where it IS verified. */}
-          {isSocks5Probeable(p.scheme) ? (
+        {/* PROXY — label over type · endpoint. Three old columns in one cell.
+            `truncate` lives on BLOCK children of a `min-w-0` flex item: under
+            table-fixed the cell is exactly its <col> wide, and that is the only
+            arrangement in which an ellipsis actually appears (a max-width on
+            the <td> itself did nothing). The username is in the detail row. */}
+        <td className="px-2 py-2">
+          <div className="flex min-w-0 items-start gap-1">
+            {/* Same disclosure idiom as the chat list (AgentChatView). */}
             <button
               type="button"
-              className="rounded-md border border-surface-divider px-2 py-1 text-[11px] text-ink-secondary transition-colors hover:border-ink-muted hover:text-ink-primary disabled:opacity-50"
-              onClick={onTest}
-              disabled={testing || testingAll}
+              aria-expanded={expanded}
+              aria-controls={detailId}
+              aria-label={`${expanded ? 'Hide' : 'Show'} details for ${p.label}`}
+              title={expanded ? 'Hide details' : 'Show details'}
+              onClick={onToggleExpanded}
+              // A 24px square, pulled 4px into the cell's own padding: the glyph
+              // is ~6px wide and this button is the way to every full value, so
+              // it gets a real target without costing the label the difference.
+              className="-ml-1 -mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-muted transition-colors hover:bg-surface-inset hover:text-ink-primary"
             >
-              {testing ? 'Testing…' : result !== undefined ? RETEST_ACTION : 'Test'}
+              <span
+                aria-hidden="true"
+                className={`inline-block transition-transform ${expanded ? 'rotate-90' : ''}`}
+              >
+                ›
+              </span>
             </button>
-          ) : (
-            <div className="inline-flex items-center gap-1.5">
-              {/* N4 — a VPN row has no SOCKS5 probe, but its endpoint host CAN be
-                  DNS-resolved on demand (endpoint_resolve); the tunnel itself still
-                  verifies at launch. Mirrors the in-form endpoint check. */}
-              {/* (l) #2 / #10 — the button is named for what the row's check
-                  DOES: a VPN row's "Check VPN" (the card's menu says the same)
-                  brings the tunnel up on the test Mac; an HTTP row's "Check
-                  endpoint" is the DNS pre-flight alone, and its title must not
-                  promise a tunnel test or an exit the code never runs for it. */}
+            <div className="min-w-0 flex-1">
+              <div
+                data-component="proxy-row-label"
+                className="truncate font-semibold tracking-tight text-ink-primary"
+                title={p.label}
+              >
+                {p.label}
+              </div>
+              {/* Type, then the endpoint. A WRAPPING run: where both fit they share
+                  a line; at the minimum window the endpoint drops to a line of
+                  its own and gets the column's whole width, so an ordinary
+                  host:port is readable there and only a genuinely long one is
+                  cut (its hover and the detail row have it in full). `.mono`
+                  carries its own 13px, hence the explicit size. */}
+              <DotRun className="items-baseline text-[10px] text-ink-muted">
+                <span className={`shrink-0 ${DOT_BEFORE}`}>
+                  <span aria-hidden="true">{scheme.icon}</span> <span>{scheme.text}</span>
+                </span>
+                {/* ⛔ THE HOST TRUNCATES; THE PORT NEVER DOES. As one truncating run,
+                    a long host ate the port first — "ams.proxy.example.com:10…" —
+                    and the port is the half that distinguishes two rows on the
+                    same provider. Seen in the render, not in a measurement: nothing
+                    overflowed, the cell just stopped saying which endpoint it was.
+                    The text content is still exactly `host:port`, so everything
+                    that reads this element reads what it read before. */}
+                <div
+                  data-component="proxy-row-endpoint"
+                  className={`mono flex min-w-0 max-w-full text-[10px] ${DOT_BEFORE}`}
+                  title={`${p.host}:${p.port.toString()}`}
+                >
+                  <span className="min-w-0 truncate">{p.host}</span>
+                  <span className="shrink-0">:{p.port}</span>
+                </div>
+              </DotRun>
+            </div>
+          </div>
+        </td>
+
+        {/* EXIT — unchanged content; it wraps inside its column now instead of
+            holding the column open with nowrap. */}
+        <td className="px-2 py-2">
+          <div className="flex min-w-0 items-start gap-1">
+            <span aria-hidden="true" className="shrink-0">
+              {exitCountry !== null ? flagEmoji(exitCountry) : '\ud83c\udf0d'}
+            </span>
+            <div className="min-w-0 flex-1">
+              {exitReadout}
+              {/* #6 — exit LOCATION (city, region). The flag already conveys the country;
+                  city/region is the incremental detail, shown when the probe captured it.
+                  Was not rendered anywhere on this tab before. */}
+              {exit?.city != null && exit.city.length > 0 && (
+                <div
+                  data-component="exit-location"
+                  className="mt-0.5 truncate text-[10px] font-normal text-ink-muted"
+                  title={exitPlace}
+                >
+                  {exitPlace}
+                </div>
+              )}
+            </div>
+          </div>
+        </td>
+
+        {/* NETWORK — the capability chips and the OS chip in ONE wrapping flex.
+            Two old columns; both were already chips of the same size. */}
+        <td className="px-2 py-2">
+          <div className="flex flex-wrap items-center gap-1">
+            {isVpnScheme(p.scheme) ? (
+              // (h) — a VPN row has no SOCKS5 `result` (its placeholder is deleted
+              // from testResults by design), so the chip set below was unreachable
+              // and the cell read a permanent "untested" naming a Test button the
+              // row does not have.
+              //
+              // (V6 2026-09-16) ITEM 3 — TWO chips now, and the UDP one is the point:
+              // this cell used to render none at all for UDP, on the rule "a tunnel
+              // carries UDP; nothing probes it here". That rule is about to stop
+              // being true — the node's three-state `udp_associate` is contracted —
+              // and a surface that renders nothing has no way to say a measured NO.
+              // Absence of the chip and a measured negative would have looked the
+              // same (they would both have looked like silence), which is the exact
+              // failure this item exists to remove.
+              <>
+                <VpnUdpChip
+                  udpProbe={udpProbe}
+                  aged={aged?.udpProbe}
+                  autoRecheck={autoRecheck}
+                  nowMs={agedNowMs}
+                />
+                <VpnQuicChip
+                  quicMeasured={quicMeasured}
+                  quicProbe={quicProbe}
+                  noFleetMac={noFleetMac}
+                  aged={agedQuicReading(aged)}
+                  autoRecheck={autoRecheck}
+                  nowMs={agedNowMs}
+                />
+              </>
+            ) : result !== undefined && reachable ? (
+              <ProxyCapabilityChips
+                result={result}
+                quicMeasured={quicMeasured}
+                quicProbe={quicProbe}
+                aged={aged}
+                autoRecheck={autoRecheck}
+                nowMs={agedNowMs}
+                size="xs"
+              />
+            ) : (
+              <span className={UNMEASURED_CHIP_CLS} title={capsFallback.title}>
+                {capsFallback.word}
+              </span>
+            )}
+            {/* The measuring/VPN-cause rule for this chip is on `osFp` above. */}
+            <ProxyOsChip
+              fingerprint={osFp}
+              aged={agedOs}
+              autoRecheck={autoRecheck}
+              nowMs={agedNowMs}
+              size="xs"
+            />
+          </div>
+        </td>
+
+        {/* HEALTH — the pill and its sentences, then latency · last test as one
+            muted run. Three old columns. */}
+        <td className="px-2 py-2">
+          <div className="flex min-w-0 flex-col items-start gap-0.5">
+            {/* A plain BLOCK, not a flex row: the pills are `shrink-0`, and as flex
+                items the longest ("healthy from Driftstack") would stick out of a
+                cell narrower than it. As inline content a pill that does not fit
+                wraps instead. The column is sized so that it does fit — see the
+                budget above the <table> — and this is what happens if it ever
+                does not. */}
+            <div className="max-w-full leading-[1.7]">
+              {statusPill}
+              {/* The way to the whole sentence, where the reader is looking: two
+                  clamped lines hold ~50 characters at the minimum window, and the
+                  chevron that opens the detail row is three columns to the left.
+                  A <button>, so the row's click handler leaves it alone. */}
+              {hasSentence && (
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  aria-controls={detailId}
+                  onClick={onToggleExpanded}
+                  className="ml-1.5 whitespace-nowrap text-[10px] text-ink-muted underline underline-offset-2 transition-colors hover:text-ink-primary"
+                >
+                  {expanded ? 'Hide full text' : 'Read in full'}
+                </button>
+              )}
+            </div>
+            {/* (P2) — NOT gated on the scheme any more. A SOCKS5 row's fleet
+                failure was stored nowhere and rendered nowhere, so the only thing
+                the grid said about the session-predicting vantage was a green
+                pill and a false "has not measured this proxy yet". This is the
+                sentence the pill's own comment promised was "beside this pill". */}
+            {vpnFailure !== undefined && (
+              <span className={`${sentenceCls} text-status-error`} title={vpnFailure}>
+                {vpnFailure}
+              </span>
+            )}
+            {/* (h) finding 3 — the notice sits beside a standing failure too: the
+                failure is the LAST verdict (the cache's), the notice is what THIS
+                check did not do; hiding one behind the other lost either. */}
+            {/* (q) Item 12-memory (A) — on a SOCKS5 row too: the notice is what
+                the Test did NOT do (no key / not storable → no fleet leg), which
+                the native pill alone cannot say. */}
+            {vpnNotice !== undefined && (
+              <span
+                data-component="proxy-row-notice"
+                className={`${sentenceCls} text-ink-muted`}
+                title={vpnNotice}
+              >
+                {vpnNotice}
+              </span>
+            )}
+            {failed && result.message.length > 0 && (
+              <span className={`${sentenceCls} text-status-error`} title={result.message}>
+                {result.message}
+              </span>
+            )}
+
+            {/* (b) — a VPN row has no native `result`; its number is the fleet's, and
+                it shows on the fleet's say-so (fromServer), not on a handshake that
+                never ran.
+
+                (P2) — BOTH sides, each labelled: the machine that runs the profile
+                first, this computer after it. When one side has no number, its own
+                entry says which side is missing, so the other is never read as the
+                whole answer. A row with no number on either side is unchanged
+                ('down' after a failed handshake, else the em dash).
+
+                One run now (the sides were stacked in a column of their own): each
+                reading is an UNBREAKABLE unit — number, machine chip, meter — so a
+                narrow cell moves a whole reading to the next line instead of
+                stranding its chip or its meter on a line alone, which is what made
+                this cell six lines tall. The run ends with the last-test time. */}
+            <DotRun className="mt-0.5 items-center gap-y-0.5 text-[10.5px] text-ink-muted">
+              {serverLatencyMs !== undefined || (hasNativeSide && nativeNumber !== undefined) ? (
+                <>
+                  {serverLatencyMs !== undefined ? (
+                    <span
+                      className={MEASURED_READING_CLS}
+                      title={serverLineTitle}
+                      data-latency-vantage={serverVantage?.measuredFrom ?? 'server'}
+                    >
+                      <span className="mono tabular-nums text-[11px] text-ink-secondary">
+                        {serverLatencyMs}ms
+                      </span>
+                      {/* T-1 — say WHERE a server-measured number came from: a test Mac
+                          (the kind that runs the profile) or, when none was free, the
+                          server itself — the fallback is visible, never silent. */}
+                      <span className={READING_CHIP_CLS}>{vantageText}</span>
+                      <LatencyMeter ms={serverLatencyMs} />
+                    </span>
+                  ) : (
+                    serverMissingShown !== null && (
+                      <span
+                        className={READING_CLS}
+                        title={serverMissingShown.title}
+                        data-latency-missing="server"
+                      >
+                        {/* The state word sits where the NUMBER would — readable,
+                            and narrower than a measured entry, so a missing side
+                            never widens the line. The chip is left holding a
+                            short machine name, which is what it held before this
+                            row printed two sides.
+
+                            Quieter than a measured reading by TOKEN — the word is
+                            ink-muted where a number is ink-secondary, and there is
+                            no meter — not by `opacity-60` on the whole reading,
+                            which painted the word at 3.0:1 (2.5 in light) and its
+                            chip at 3.4 (2.3): below the 4.5 the text-quality gate
+                            holds every scene to. */}
+                        <span className="mono text-[11px] text-ink-muted">
+                          {serverMissingShown.word}
+                        </span>
+                        <span className={READING_CHIP_CLS}>{TEST_MAC_CHIP_LABEL}</span>
+                      </span>
+                    )
+                  )}
+                  {hasNativeSide &&
+                    (nativeNumber !== undefined ? (
+                      <span
+                        className={MEASURED_READING_CLS}
+                        title={nativeLineTitle}
+                        data-latency-vantage="this_mac"
+                      >
+                        <span className="mono tabular-nums text-[11px] text-ink-secondary">
+                          {nativeNumber}ms
+                        </span>
+                        <span className={READING_CHIP_CLS}>{NATIVE_VANTAGE_LABEL}</span>
+                        <LatencyMeter ms={nativeNumber} />
+                      </span>
+                    ) : (
+                      nativeMissing !== null && (
+                        <span
+                          className={READING_CLS}
+                          title={nativeMissing.title}
+                          data-latency-missing="this_mac"
+                        >
+                          <span className="mono text-[11px] text-ink-muted">
+                            {nativeMissing.word}
+                          </span>
+                          <span className={READING_CHIP_CLS}>{NATIVE_CHIP_LABEL}</span>
+                        </span>
+                      )
+                    ))}
+                </>
+              ) : (
+                <span className={`mono text-[11px] text-ink-muted ${DOT_BEFORE}`}>
+                  {result !== undefined ? 'down' : '\u2014'}
+                </span>
+              )}
+              <span className={`whitespace-nowrap ${DOT_BEFORE}`}>
+                {tested ? (
+                  <RelativeTime iso={new Date(testedAt).toISOString()} tooltipPrefix="Tested" />
+                ) : (
+                  <RelativeTime iso={p.createdAt} tooltipPrefix="Added" />
+                )}
+              </span>
+            </DotRun>
+          </div>
+        </td>
+
+        <td className="px-2 py-2">
+          {/* Wraps, right-aligned: the column is 118px at the minimum window (the
+              primary button on one line, Edit and Remove under it) and 190px
+              from the container tier up, where a SOCKS5 row's three sit on one
+              line. A VPN or HTTP row wraps at both widths — its resolved
+              address sits between the buttons. A wrapped button is fully
+              visible; a nowrap one in a fixed column would not be. */}
+          <div className="flex flex-wrap items-center justify-end gap-x-1 gap-y-0.5">
+            {/* The row Test runs a SOCKS5 probe, which is meaningless for a
+                VPN/HTTP endpoint (it always read "unreachable"). Only offer it for
+                a SOCKS5 proxy; otherwise say where it IS verified. */}
+            {isSocks5Probeable(p.scheme) ? (
               <button
                 type="button"
                 className="rounded-md border border-surface-divider px-2 py-1 text-[11px] text-ink-secondary transition-colors hover:border-ink-muted hover:text-ink-primary disabled:opacity-50"
-                onClick={onCheckEndpoint}
+                onClick={onTest}
                 disabled={testing || testingAll}
-                title={isVpnScheme(p.scheme) ? CHECK_VPN_TITLE : CHECK_ENDPOINT_TITLE}
               >
-                {testing
-                  ? 'Checking…'
-                  : endpointResult !== undefined
-                    ? RECHECK_ACTION
-                    : isVpnScheme(p.scheme)
-                      ? CHECK_VPN_ACTION
-                      : CHECK_ENDPOINT_ACTION}
+                {testing ? 'Testing…' : result !== undefined ? RETEST_ACTION : 'Test'}
               </button>
-              {endpointResult !== undefined && (
-                <span
-                  className={`text-[10px] ${endpointResult.resolved ? 'text-status-ready' : 'text-status-error'}`}
-                  title={endpointResult.message}
+            ) : (
+              <>
+                {/* N4 — a VPN row has no SOCKS5 probe, but its endpoint host CAN be
+                    DNS-resolved on demand (endpoint_resolve); the tunnel itself still
+                    verifies at launch. Mirrors the in-form endpoint check. */}
+                {/* (l) #2 / #10 — the button is named for what the row's check
+                    DOES: a VPN row's "Check VPN" (the card's menu says the same)
+                    brings the tunnel up on the test Mac; an HTTP row's "Check
+                    endpoint" is the DNS pre-flight alone, and its title must not
+                    promise a tunnel test or an exit the code never runs for it. */}
+                <button
+                  type="button"
+                  className="rounded-md border border-surface-divider px-2 py-1 text-[11px] text-ink-secondary transition-colors hover:border-ink-muted hover:text-ink-primary disabled:opacity-50"
+                  onClick={onCheckEndpoint}
+                  disabled={testing || testingAll}
+                  title={isVpnScheme(p.scheme) ? CHECK_VPN_TITLE : CHECK_ENDPOINT_TITLE}
                 >
-                  {endpointResult.resolved ? `✓ ${endpointResult.ip}` : '✗ not found'}
+                  {testing
+                    ? 'Checking…'
+                    : endpointResult !== undefined
+                      ? RECHECK_ACTION
+                      : isVpnScheme(p.scheme)
+                        ? CHECK_VPN_ACTION
+                        : CHECK_ENDPOINT_ACTION}
+                </button>
+                {endpointResult !== undefined && (
+                  <span
+                    className={`max-w-full break-all text-[10px] ${endpointResult.resolved ? 'text-status-ready' : 'text-status-error'}`}
+                    title={endpointResult.message}
+                  >
+                    {endpointResult.resolved ? `✓ ${endpointResult.ip}` : '✗ not found'}
+                  </span>
+                )}
+              </>
+            )}
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 text-[11px] text-ink-muted transition-colors hover:text-ink-primary"
+              onClick={onEdit}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 text-[11px] text-ink-muted transition-colors hover:text-status-error disabled:opacity-60"
+              onClick={onRemove}
+              disabled={busy}
+            >
+              {busy ? 'Removing…' : 'Remove'}
+            </button>
+          </div>
+        </td>
+      </tr>
+
+      {/* DETAIL — everything the row shortens, in full and SELECTABLE (the row
+          above is select-none so a shift-click range does not smear a text
+          selection; this one is where a customer copies an endpoint from). It
+          has no click handler of its own, so reading it never toggles the
+          selection. */}
+      {expanded && (
+        <tr
+          id={detailId}
+          data-component="proxy-row-detail"
+          className="border-b border-surface-divider/40 bg-surface-inset/40 last:border-b-0"
+        >
+          <td
+            colSpan={6}
+            className={`cursor-auto select-text px-3 py-3 ${failed ? 'shadow-[inset_3px_0_0_rgb(var(--status-error-rgb))]' : ''}`}
+          >
+            {/* auto-fit: two label/value columns at the minimum window, three at
+                the default one — keyed off this cell's own width, so it needs
+                no breakpoint. */}
+            <dl className="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-x-6 gap-y-2 text-[11px]">
+              <DetailItem label="Proxy">{p.label}</DetailItem>
+              <DetailItem label="Type">
+                <span aria-hidden="true">{scheme.icon}</span> {scheme.text}
+              </DetailItem>
+              <DetailItem label="Endpoint">
+                <span className="mono text-[11px]">
+                  {p.host}:{p.port}
                 </span>
+              </DetailItem>
+              {p.username !== null && p.username.length > 0 && (
+                <DetailItem label="Username">
+                  <span className="mono text-[11px]">{p.username}</span>
+                </DetailItem>
               )}
-            </div>
-          )}
-          <button
-            type="button"
-            className="rounded-md px-2 py-1 text-[11px] text-ink-muted transition-colors hover:text-ink-primary"
-            onClick={onEdit}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            className="rounded-md px-2 py-1 text-[11px] text-ink-muted transition-colors hover:text-status-error disabled:opacity-60"
-            onClick={onRemove}
-            disabled={busy}
-          >
-            {busy ? 'Removing…' : 'Remove'}
-          </button>
-        </div>
-      </td>
-    </tr>
+              {endpointResult !== undefined && (
+                <DetailItem label="Address check">{endpointResult.message}</DetailItem>
+              )}
+              <DetailItem label="Exit IP">{exitReadout}</DetailItem>
+              {(exitCountry !== null || exitPlace.length > 0) && (
+                <DetailItem label="Exit location">
+                  {[
+                    exitCountry !== null ? `${flagEmoji(exitCountry)} ${exitCountry}` : '',
+                    exitPlace,
+                  ]
+                    .filter((part) => part.length > 0)
+                    .join(' \u00b7 ')}
+                </DetailItem>
+              )}
+              {typeof exit?.timezone === 'string' && exit.timezone.length > 0 && (
+                <DetailItem label="Exit timezone">{exit.timezone}</DetailItem>
+              )}
+              {typeof exit?.asn_org === 'string' && exit.asn_org.length > 0 && (
+                <DetailItem label="Exit network">{exit.asn_org}</DetailItem>
+              )}
+              <DetailItem label="Latency" wide>
+                {latencyLines.length > 0 ? (
+                  <ul className="flex flex-col gap-0.5">
+                    {latencyLines.map((l) => (
+                      <li key={l.reading}>
+                        <span className="mono text-[11px] text-ink-primary">{l.reading}</span> —{' '}
+                        {l.explain}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  // Only an HTTP row gets here (see `serverMissingForDetail`): the
+                  // same em dash its row prints, not a sentence about a
+                  // measurement that is never taken.
+                  '\u2014'
+                )}
+              </DetailItem>
+              <DetailItem label="Capabilities" wide>
+                <ul className="flex flex-col gap-0.5">
+                  {capabilityLines.map((c) => (
+                    <li key={c.label}>
+                      <span className="font-semibold text-ink-primary">{c.label}</span> — {c.hint}
+                    </li>
+                  ))}
+                </ul>
+              </DetailItem>
+              <DetailItem label="OS" wide>
+                <OsDetailLine fingerprint={osFp} aged={agedOs} autoRecheck={autoRecheck} />
+              </DetailItem>
+              <DetailItem label="Status" wide>
+                <div className="flex flex-col items-start gap-1">
+                  {statusPill}
+                  {vpnFailure !== undefined && (
+                    <span className="text-status-error">{vpnFailure}</span>
+                  )}
+                  {vpnNotice !== undefined && <span>{vpnNotice}</span>}
+                  {failed && result.message.length > 0 && (
+                    <span className="text-status-error">{result.message}</span>
+                  )}
+                </div>
+              </DetailItem>
+              <DetailItem label="Last test">
+                {tested
+                  ? `Tested ${new Date(testedAt).toLocaleString()}`
+                  : `Not tested yet \u00b7 added ${new Date(p.createdAt).toLocaleString()}`}
+              </DetailItem>
+            </dl>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+/**
+ * A wrapping run of items with a middle dot BETWEEN them — never at the end of
+ * one line or the start of the next.
+ *
+ * Each item draws its own LEADING dot (`DOT_BEFORE`, a 10px ::before), and the
+ * run is pulled 10px to the left inside a box that clips: the first item of
+ * every line — the very first one, and whichever item a narrow cell wraps —
+ * has its dot land in the clipped strip. A dot that was a separate element, or
+ * sat at the end of the item before it, was stranded by the wrap: "SOCKS5 ·"
+ * with nothing after it, "· 12 minutes ago" with nothing before it. A ::before
+ * is not text, so an item's `textContent` is still exactly its value.
+ */
+const DOT_BEFORE =
+  "before:inline-block before:w-2.5 before:shrink-0 before:text-center before:content-['·']";
+function DotRun({ className, children }: { className: string; children: ReactNode }): JSX.Element {
+  return (
+    <div className="min-w-0 max-w-full overflow-hidden">
+      <div className={`-ml-2.5 flex min-w-0 flex-wrap ${className}`}>{children}</div>
+    </div>
+  );
+}
+
+/** A chip for something NOBODY has measured ("⇢ UDP", "QUIC untested",
+ *  "untested"): a divider wash, which no measured chip sits on, and the muted
+ *  ink. The wash is /30, not the /60 it was: ink-muted on /60 is 3.88:1 in dark
+ *  (the wash is LIGHTER than the row there, where `bg-surface-inset` is darker)
+ *  and the first repair — keeping /60 and stepping the ink up to ink-secondary —
+ *  passed, but in the dark render it made the chip for a value nobody measured
+ *  BRIGHTER than the measured "— OS" chip beside it. On /30 ink-muted clears 4.5
+ *  on every ground a row has — plain 4.74 dark / 5.25 light, hovered 5.39 /
+ *  4.90, selected 4.61 / 4.88 — and the chip reads quieter than its measured
+ *  neighbours again, still visibly a pill in both themes. */
+const UNMEASURED_CHIP_CLS = 'rounded-sm bg-surface-divider/30 px-1 py-px text-[9px] text-ink-muted';
+
+/** One latency reading of the Health cell: number (or state word), machine
+ *  chip, meter. `whitespace-nowrap` + a non-wrapping flex is the point — see
+ *  the comment on the run that holds them. The spacing is a left margin on the
+ *  chip and the meter, NOT a flex gap: the leading dot is a flex item too, and
+ *  a gap after it would indent the first reading of every line by that gap. */
+const READING_CLS = `inline-flex max-w-full flex-wrap items-center whitespace-nowrap ${DOT_BEFORE}`;
+/** …and a MEASURED one, which has a meter: index.css puts that meter under the
+ *  number while the table is narrow and beside the chip once it is not. */
+const MEASURED_READING_CLS = `ds-proxy-reading ${READING_CLS}`;
+// 9px, the size of every other chip in this table and the smallest the
+// text-quality gate accepts (scripts/gui-text-quality.mjs MIN_PX); it was 8px,
+// which nobody could read. The longest reading still fits the narrow Health
+// column — the budget is with the column tiers in styles/index.css.
+// `text-2xs` (10px), the type scale's own chip size, was MEASURED and does not
+// fit: at the default window the reading + meter + last-test time stop sharing
+// a line (rows 103 → 121 and 76 → 94px), and at the minimum window a five-digit
+// "from Driftstack" reading drops its chip onto a line of its own.
+const READING_CHIP_CLS =
+  'ml-1 rounded-sm bg-surface-inset px-1 text-[9px] font-semibold uppercase tracking-wide text-ink-muted';
+
+/**
+ * One label/value pair of a proxy's detail row. The label column is a fixed
+ * width so the values of neighbouring pairs line up; the value is `min-w-0` +
+ * `break-words`, i.e. it WRAPS — this is the one place on the tab where nothing
+ * is shortened. `wide` spans the whole grid, for the values that are sentences.
+ */
+function DetailItem({
+  label,
+  wide = false,
+  children,
+}: {
+  label: string;
+  wide?: boolean;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <div className={`grid grid-cols-[96px_minmax(0,1fr)] gap-x-2 ${wide ? 'col-span-full' : ''}`}>
+      <dt className="pt-px text-[10px] font-semibold uppercase tracking-wider text-ink-muted">
+        {label}
+      </dt>
+      <dd className="min-w-0 break-words text-ink-secondary">{children}</dd>
+    </div>
+  );
+}
+
+/**
+ * The OS chip's label and its explanation, as a sentence. The words come from
+ * `osFingerprintVerdict` — the same function the chip renders its hover from —
+ * so the detail row cannot describe a fingerprint differently from the chip.
+ */
+function OsDetailLine({
+  fingerprint,
+  aged,
+  autoRecheck,
+}: {
+  fingerprint: Parameters<typeof osFingerprintVerdict>[0];
+  /** The row's aged OS reading — the same "only when nothing current" rule the
+   *  chip applies, so the detail row prints the words the chip keeps in a hover. */
+  aged: AgedReading<CachedOsFingerprint> | undefined;
+  autoRecheck: boolean;
+}): JSX.Element {
+  const v =
+    fingerprint === undefined && aged !== undefined
+      ? agedOsFingerprintVerdict(aged.value, aged.atMs, Date.now(), autoRecheck)
+      : osFingerprintVerdict(fingerprint);
+  return (
+    <>
+      <span className="font-semibold text-ink-primary">{v.label}</span> — {v.hint}
+    </>
   );
 }
 
@@ -3094,7 +3715,7 @@ function ProxyRow({
 function LatencyMeter({ ms }: { ms: number }): JSX.Element {
   const fill = ms > 0 ? Math.max(6, Math.min(100, (ms / 250) * 100)) : 0;
   return (
-    <span className="inline-block h-1 w-[30px] overflow-hidden rounded-[2px] bg-surface-divider">
+    <span className="ds-proxy-meter inline-block h-1 w-[30px] shrink-0 overflow-hidden rounded-[2px] bg-surface-divider">
       <span
         className="block h-full rounded-[2px]"
         style={{
@@ -3214,15 +3835,44 @@ const NO_TEST_MAC_QUIC_HINT = `Not measured yet — Driftstack was busy. QUIC is
  * a Mac actually measured. Telling a customer their tunnel lacks UDP because we
  * did not look is the failure this item exists to prevent.
  */
-function VpnUdpChip({ udpProbe }: { udpProbe: boolean | undefined }): JSX.Element {
+function VpnUdpChip({
+  udpProbe,
+  aged,
+  autoRecheck = false,
+  nowMs = Date.now(),
+}: {
+  udpProbe: boolean | undefined;
+  /** A FOURTH state, reached only through the third: no current reading, but one
+   *  was taken a while ago. Rendered muted and dated (`data-ok="aged"`), with the
+   *  glyph of what it found — never green, never as a current negative. */
+  aged?: AgedReading<boolean> | undefined;
+  autoRecheck?: boolean;
+  nowMs?: number;
+}): JSX.Element {
+  const hint = vpnUdpHint(udpProbe, aged, nowMs, autoRecheck);
+  if (udpProbe === undefined && aged !== undefined) {
+    return (
+      <span
+        className={`inline-flex items-center gap-0.5 rounded-sm px-1 py-px text-[9px] ${AGED_CHIP_CLASS}`}
+        data-component="vpn-udp-chip"
+        data-ok="aged"
+        data-aged-value={aged.value ? 'true' : 'false'}
+        data-udp="aged"
+        title={hint}
+      >
+        <span aria-hidden="true">{aged.value ? '✓' : '⤵'}</span>
+        UDP · {agedChipAge(aged.atMs, nowMs)}
+      </span>
+    );
+  }
   if (udpProbe === undefined) {
     return (
       <span
-        className="rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"
+        className={UNMEASURED_CHIP_CLS}
         data-component="vpn-udp-chip"
         data-ok="unmeasured"
         data-udp="tunnel"
-        title={VPN_UDP_NOT_MEASURED_TITLE}
+        title={hint}
       >
         ⇢ UDP
       </span>
@@ -3236,7 +3886,7 @@ function VpnUdpChip({ udpProbe }: { udpProbe: boolean | undefined }): JSX.Elemen
       data-component="vpn-udp-chip"
       data-ok={udpProbe ? 'true' : 'false'}
       data-udp={udpProbe ? 'true' : 'false'}
-      title={udpProbe ? VPN_UDP_MEASURED_OK_TITLE : VPN_UDP_MEASURED_NONE_TITLE}
+      title={hint}
     >
       <span aria-hidden="true">{udpProbe ? '✓' : '⤵'}</span>
       UDP
@@ -3244,8 +3894,74 @@ function VpnUdpChip({ udpProbe }: { udpProbe: boolean | undefined }): JSX.Elemen
   );
 }
 
+/** The UDP chip's hover sentence, one per state. Its own function so the row's
+ *  detail grid prints the words the chip keeps in a hover, not a second copy. */
+function vpnUdpHint(
+  udpProbe: boolean | undefined,
+  aged?: AgedReading<boolean>,
+  nowMs: number = Date.now(),
+  autoRecheck = false,
+): string {
+  if (udpProbe === undefined && aged !== undefined)
+    return `${agedReadingHint(aged.atMs, nowMs, autoRecheck, CHECK_VPN_ACTION)} ${
+      aged.value ? 'UDP worked through this VPN then.' : 'UDP did not work through this VPN then.'
+    }`;
+  if (udpProbe === undefined) return VPN_UDP_NOT_MEASURED_TITLE;
+  return udpProbe ? VPN_UDP_MEASURED_OK_TITLE : VPN_UDP_MEASURED_NONE_TITLE;
+}
+
 /**
- * (h) — the Protocols cell of a VPN row: ONE QUIC chip, strongest evidence
+ * The QUIC reading of a VPN row — `ok` (null = not measured) and the sentence
+ * that says so — shared by the chip below and the row's detail grid. The
+ * strongest-evidence order and the two causes of an absence are documented on
+ * `VpnQuicChip`, which is where they were written; this only makes them callable.
+ */
+function vpnQuicReading(
+  quicMeasured: MeasuredQuic | undefined,
+  quicProbe: boolean | undefined,
+  noFleetMac: boolean,
+  /** The row's aged QUIC reading, consulted ONLY when nothing current exists. */
+  past: { aged: AgedReading<boolean> | undefined; nowMs: number; autoRecheck: boolean } = {
+    aged: undefined,
+    nowMs: Date.now(),
+    autoRecheck: false,
+  },
+): { ok: boolean | null; hint: string; aged?: AgedReading<boolean> } {
+  if (quicMeasured === 'h3')
+    return { ok: true, hint: 'HTTP/3 verified in a live session through this tunnel.' };
+  if (quicMeasured === 'h2-only')
+    return {
+      ok: false,
+      hint: 'No HTTP/3 — a live session fell back to HTTP/2 through this tunnel.',
+    };
+  if (quicProbe === true)
+    return { ok: true, hint: 'QUIC works through this tunnel — sites can use HTTP/3.' };
+  if (quicProbe === false)
+    return {
+      ok: false,
+      hint: 'QUIC does not work through this tunnel — HTTP/3 falls back to HTTP/2.',
+    };
+  if (past.aged !== undefined)
+    return {
+      ok: null,
+      aged: past.aged,
+      hint: `${agedReadingHint(past.aged.atMs, past.nowMs, past.autoRecheck, CHECK_VPN_ACTION)} ${
+        past.aged.value
+          ? 'QUIC worked through this VPN then.'
+          : 'QUIC did not work through this VPN then — HTTP/3 fell back to HTTP/2.'
+      }`,
+    };
+  return {
+    ok: null,
+    hint: noFleetMac
+      ? NO_TEST_MAC_QUIC_HINT
+      : `Not measured yet — run ${CHECK_VPN_ACTION} to test QUIC through this tunnel.`,
+  };
+}
+
+/**
+ * (h) — a VPN row's half of the Network cell (the column that was called
+ * Protocols, then Capabilities): ONE QUIC chip, strongest evidence
  * first (a live session's HTTP/3 verdict outranks the fleet relay leg), and
  * an honest "not measured" that names the button this row HAS. Never a WebRTC
  * chip: WebRTC is derived from a SOCKS5 UDP grant this row does not have, and
@@ -3255,6 +3971,9 @@ function VpnQuicChip({
   quicMeasured,
   quicProbe,
   noFleetMac,
+  aged,
+  autoRecheck,
+  nowMs,
 }: {
   quicMeasured: MeasuredQuic | undefined;
   quicProbe: boolean | undefined;
@@ -3271,27 +3990,32 @@ function VpnQuicChip({
    *  the control plane never measures, the vantage is 'fleet' or undefined and a
    *  `vantage === 'control_plane'` test was dead on arrival. */
   noFleetMac: boolean;
+  /** The row's aged QUIC reading — shown, muted and dated, where the chip would
+   *  otherwise say "QUIC untested" about a tunnel that WAS tested, a while ago. */
+  aged?: AgedReading<boolean> | undefined;
+  autoRecheck?: boolean;
+  nowMs?: number;
 }): JSX.Element {
-  const verdict: { ok: boolean; hint: string } | null =
-    quicMeasured === 'h3'
-      ? { ok: true, hint: 'HTTP/3 verified in a live session through this tunnel.' }
-      : quicMeasured === 'h2-only'
-        ? {
-            ok: false,
-            hint: 'No HTTP/3 — a live session fell back to HTTP/2 through this tunnel.',
-          }
-        : quicProbe === true
-          ? {
-              ok: true,
-              hint: 'QUIC works through this tunnel — sites can use HTTP/3.',
-            }
-          : quicProbe === false
-            ? {
-                ok: false,
-                hint: 'QUIC does not work through this tunnel — HTTP/3 falls back to HTTP/2.',
-              }
-            : null;
-  if (verdict === null) {
+  const verdict = vpnQuicReading(quicMeasured, quicProbe, noFleetMac, {
+    aged,
+    nowMs: nowMs ?? Date.now(),
+    autoRecheck: autoRecheck === true,
+  });
+  if (verdict.aged !== undefined) {
+    return (
+      <span
+        className={`inline-flex items-center gap-0.5 rounded-sm px-1 py-px text-[9px] ${AGED_CHIP_CLASS}`}
+        data-component="vpn-quic-chip"
+        data-ok="aged"
+        data-aged-value={verdict.aged.value ? 'true' : 'false'}
+        title={verdict.hint}
+      >
+        <span aria-hidden="true">{verdict.aged.value ? '✓' : '⤵'}</span>
+        QUIC · {agedChipAge(verdict.aged.atMs, nowMs ?? Date.now())}
+      </span>
+    );
+  }
+  if (verdict.ok === null) {
     // (o) O5 — absence has two unlike causes and one of them is NOT about this row.
     // When the last test found no fleet Mac (busy, or a deployment with none), the
     // reply carried no QUIC leg at all, and no number of presses of Check can add one
@@ -3299,15 +4023,11 @@ function VpnQuicChip({
     // reads as "it's not detecting my QUIC". Name the cause.
     return (
       <span
-        className="rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"
+        className={UNMEASURED_CHIP_CLS}
         data-component="vpn-quic-chip"
         data-ok="unmeasured"
         data-unmeasured={noFleetMac ? 'no_fleet_mac' : 'never_tested'}
-        title={
-          noFleetMac
-            ? NO_TEST_MAC_QUIC_HINT
-            : `Not measured yet — run ${CHECK_VPN_ACTION} to test QUIC through this tunnel.`
-        }
+        title={verdict.hint}
       >
         QUIC untested
       </span>
@@ -4442,11 +5162,13 @@ function Field({
 
 function PoolStat({ k, v, tone }: { k: string; v: string; tone?: 'ok' }): JSX.Element {
   // Opaque surface-raised on every cell (matches the status-site card surface
-  // the founder asked us to mirror); the "healthy" signal comes from the green
+  // the owner asked us to mirror); the "healthy" signal comes from the green
   // label + value, not a translucent tint that washes out over the grid divider.
+  // The label is the status token at FULL strength: at /80 the light theme's
+  // green measured 4.15:1 on this surface at 10px, under the 4.5 it needs.
   return (
     <div className="bg-surface-raised px-3 py-2.5">
-      <p className={`section-label ${tone === 'ok' ? 'text-status-ready/80' : ''}`}>{k}</p>
+      <p className={`section-label ${tone === 'ok' ? 'text-status-ready' : ''}`}>{k}</p>
       <p
         className={`mono mt-0.5 text-2xl font-bold tracking-tight ${
           tone === 'ok' ? 'text-status-ready' : 'text-ink-primary'

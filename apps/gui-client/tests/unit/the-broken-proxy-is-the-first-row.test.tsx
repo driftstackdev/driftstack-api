@@ -101,11 +101,14 @@ const { ProxiesView } = await import('../../src/views/ProxiesView');
 /** Row labels top-to-bottom, which is the whole subject of this file. */
 function rowOrder(): string[] {
   const body = document.querySelector('[data-component="proxy-table"] tbody');
-  return [...(body?.querySelectorAll('tr') ?? [])].map(
-    // The label cell also carries the username underneath, so read the label
-    // element rather than the whole cell — otherwise a row identifies as
-    // "proxy-buser" and a toContain match starts passing by accident.
-    (tr) => tr.querySelector('td:nth-child(2) > div')?.textContent?.trim() ?? '',
+  // The proxy ROWS, by their own hook: an open detail row is a <tr> in the
+  // same tbody and is not a proxy.
+  return [...(body?.querySelectorAll('tr[data-component="proxy-row"]') ?? [])].map(
+    // The label cell also carries the type and the endpoint underneath (and the
+    // detail chevron beside it), so read the label ELEMENT rather than the
+    // whole cell — otherwise a row identifies as "›proxy-b🔒 SOCKS5 · b.example…"
+    // and a toContain match starts passing by accident.
+    (tr) => tr.querySelector('[data-component="proxy-row-label"]')?.textContent?.trim() ?? '',
   );
 }
 

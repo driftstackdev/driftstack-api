@@ -46,7 +46,9 @@ import {
   type AccountOrganization,
 } from '../lib/account-organization';
 import {
+  agedReadingsFor,
   isExitIdentityFresh,
+  loadCapabilityAttempts,
   loadProbeCache,
   recordLiveH3Observations,
   subscribeProbeCache,
@@ -78,7 +80,7 @@ import {
   type ProfileStatusFilter,
 } from '../components/ProfilesActionBar';
 import { proxyCapabilities } from '../components/ProxyCapabilities';
-import { ProfilePhoneCard } from '../components/ProfilePhoneCard';
+import { ProfilePhoneCard, shownAgedReadings } from '../components/ProfilePhoneCard';
 import { tierLabelFor } from '../components/TierBadge';
 import { DevicePicker, type PickerDevice } from '../components/DevicePicker';
 import { RelativeTime } from '../components/RelativeTime';
@@ -136,7 +138,7 @@ import {
 // mini-forms that used to live inline (and omitted the VPN auth fields) are gone.
 import { ProxyForm } from './ProxiesView';
 import { endpointUnresolvedCopy, isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
-import { withProxyProbe } from '../lib/proxy-probe-sweeper';
+import { capabilityRecheckPromises, withProxyProbe } from '../lib/proxy-probe-sweeper';
 import {
   VPN_NO_API_KEY_CHECK_NOTICE,
   VPN_NOT_STORED_CHECK_NOTICE,
@@ -870,6 +872,52 @@ export function ProfilesView({
   // window. Worth doing only without a timer — recomputing on window focus, the
   // moment a customer is actually looking — which is a separate change.
   const probeView = useMemo(() => deriveProbeViewWithEndpointRows(probeCache), [probeCache]);
+  // The rows an aged chip may promise "It will be rechecked automatically." for —
+  // asked of the automatic check's own planner, exactly as the Proxies tab asks
+  // it, never inferred from "has a key": a row it will never check (a failing
+  // one, one the account refused, one never saved to the account) names its
+  // button instead. Re-derived whenever the cache or the proxy list changes; a
+  // ledger that cannot be read promises nothing.
+  // ⛔ …AND whenever the window regains focus. The planner's answer also moves
+  // with its own ATTEMPTS LEDGER (a row the account just refused is excluded for
+  // a day), and a ledger write changes neither of the other two inputs — so the
+  // hover went on promising a recheck for a row the planner had just dropped,
+  // until some unrelated cache write happened by. The ledger has no subscription
+  // to hang this on, so it is re-read at the moment a customer comes back to
+  // look, which costs no timer and no render unless the answer changed.
+  // ⛔ DISPLAY ONLY, like `probeView.aged` itself: it words a hover. The launch
+  // path below reads the fresh maps and the raw cache, never either of these.
+  const [autoRecheckIds, setAutoRecheckIds] = useState<Record<string, true>>({});
+  const hasApiKey = settings.apiKey !== null && settings.apiKey.length > 0;
+  const [ledgerReadTick, setLedgerReadTick] = useState(0);
+  useEffect(() => {
+    const onFocus = (): void => setLedgerReadTick((n) => n + 1);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    // Same keys ⇒ the SAME object back, so a focus that changed nothing does not
+    // re-render the grid.
+    const adopt = (next: Record<string, true>): void =>
+      setAutoRecheckIds((prev) => {
+        const keys = Object.keys(next);
+        return keys.length === Object.keys(prev).length && keys.every((k) => prev[k] === true)
+          ? prev
+          : next;
+      });
+    void loadCapabilityAttempts()
+      .then((attempts) => {
+        if (cancelled) return;
+        adopt(capabilityRecheckPromises(probeCache, attempts, proxies, Date.now(), hasApiKey));
+      })
+      .catch(() => {
+        if (!cancelled) adopt({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [probeCache, proxies, hasApiKey, ledgerReadTick]);
   // (h) — when each VPN row's fleet fields were measured, for the card's
   // "checked" stamp: the entry's `at` is the DNS pre-flight, re-stamped before
   // every fleet test including a refused one.
@@ -4908,6 +4956,15 @@ export function ProfilesView({
                           // the fleet relay verdict now reaches the card too.
                           quicMeasured={px !== null ? probeView.quicMeasured[px.id] : undefined}
                           quicProbe={px !== null ? probeView.quicProbe[px.id] : undefined}
+                          // The readings that aged OUT of the maps on either side of
+                          // this line. Without them a relay reading older than thirty
+                          // minutes — and every one saved before relay readings were
+                          // dated at all drops out the same way — rendered as "QUIC ~
+                          // … not yet tested. Run Test" on a proxy tested this morning,
+                          // and the OS chip as "—". The card shows them muted and in
+                          // the past tense; it never acts on them.
+                          aged={px !== null ? agedReadingsFor(probeView.aged, px.id) : undefined}
+                          autoRecheck={px !== null && autoRecheckIds[px.id] === true}
                           // (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP
                           // verdict through a TUNNEL. Absent for every VPN row until a
                           // node sends the contracted three-state reading, and the card
@@ -5014,6 +5071,18 @@ export function ProfilesView({
                     // (b) — for a VPN row the predicate is the endpoint verdict + the
                     // fleet's own write (serverVerdictUsable); a SOCKS5 row is unchanged.
                     const exitOk = probe !== undefined && serverVerdictUsable(probe);
+                    // The row's AGED readings, under the card's own show rule (never
+                    // while its test runs, never beside a failure sentence) — so a
+                    // row and the card for the same profile cannot disagree.
+                    const rowAutoRecheck = px !== null && autoRecheckIds[px.id] === true;
+                    const rowAged =
+                      px !== null
+                        ? shownAgedReadings({
+                            aged: agedReadingsFor(probeView.aged, px.id),
+                            vpnFailure: vpnFailures[px.id],
+                            testing: testingProxyId === px.id,
+                          })
+                        : undefined;
                     // T-20 — an endpoint verdict has no SOCKS5 capabilities to derive.
                     // T-27 (drop 4) — the QUIC verdict comes from the derived view.
                     const caps =
@@ -5022,6 +5091,8 @@ export function ProfilesView({
                             probe.result,
                             px !== null ? probeView.quicMeasured[px.id] : undefined,
                             px !== null ? probeView.quicProbe[px.id] : undefined,
+                            rowAged,
+                            { nowMs: Date.now(), autoRecheck: rowAutoRecheck },
                           )
                         : null;
                     // (V6 2026-09-16) ITEM 3 — a VPN row has no SOCKS5 caps to derive
@@ -5047,14 +5118,19 @@ export function ProfilesView({
                     // caps the chip reads, so the list never claims "QUIC ✓" while the
                     // card shows a muted "~".
                     const quicCap = caps?.find((c) => c.key === 'quic');
-                    const quic: 'ok' | 'inferred' | 'fail' | 'unknown' =
+                    // ⛔ `aged` BEFORE `inferred`: an aged cap still carries the
+                    // inference's flags (ProxyCapability.aged), and reading them
+                    // first is what said "not yet measured" about a dated reading.
+                    const quic: NonNullable<ProfileTableRow['quic']> =
                       caps === null || quicCap === undefined
                         ? 'unknown'
-                        : quicCap.inferred
-                          ? 'inferred'
-                          : quicCap.ok
-                            ? 'ok'
-                            : 'fail';
+                        : quicCap.aged !== undefined
+                          ? 'aged'
+                          : quicCap.inferred
+                            ? 'inferred'
+                            : quicCap.ok
+                              ? 'ok'
+                              : 'fail';
                     // T-27 — prefer the SERVER/fleet latency (same source + gate as the
                     // grid card and ProxiesView) so grid and list never show a different
                     // number/colour for the same proxy; native probe is the fallback,
@@ -5092,6 +5168,9 @@ export function ProfilesView({
                       osFingerprint: px !== null ? probeView.osFingerprints[px.id] : undefined,
                       udp,
                       quic,
+                      ...(quicCap?.aged !== undefined ? { quicAgedHint: quicCap.hint } : {}),
+                      ...(rowAged !== undefined ? { aged: rowAged } : {}),
+                      autoRecheck: rowAutoRecheck,
                       // rowLat prefers the fleet number and falls back to the native
                       // probe (gated on exitOk in the rowLat computation above, so a dead
                       // proxy's 0ms never reads as the fastest exit).

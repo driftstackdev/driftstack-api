@@ -327,6 +327,11 @@ describe('deriveProbeViewState', () => {
       // the VPN surface as `undefined` and crash a consumer that indexes it.
       exitSeenAt: {},
       serverMeasuredAt: {},
+      // 2026-09-17 — the AGED readings: the third display state, a structure
+      // PARALLEL to the four maps above it (a reading is in one of those or in
+      // here, never both). Listed for the reason every sibling is: this arm is the
+      // exhaustive shape pin, and `deriveProbeViewWithEndpointRows` indexes into it.
+      aged: { osFingerprints: {}, quicMeasured: {}, quicProbe: {}, udpProbe: {} },
     });
   });
 });

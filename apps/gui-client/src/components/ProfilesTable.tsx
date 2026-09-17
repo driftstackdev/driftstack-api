@@ -21,8 +21,14 @@
 
 import { useRef, useState, type JSX } from 'react';
 import { RelativeTime } from './RelativeTime';
-import { ProxyOsChip } from './ProxyCapabilities';
-import { type OsFingerprint } from '../lib/os-fingerprint-verdict';
+import { ProxyOsChip, agedChipAge } from './ProxyCapabilities';
+import {
+  agedOsFingerprintVerdict,
+  agedReadingHint,
+  type OsFingerprint,
+  type OsVerdict,
+} from '../lib/os-fingerprint-verdict';
+import type { AgedReading, AgedRowReadings } from '../lib/proxy-probe-cache';
 import {
   CHECK_VPN_ACTION,
   CHECK_VPN_TITLE,
@@ -57,8 +63,27 @@ export interface ProfileTableRow {
   probed: boolean;
   udp: 'ok' | 'fail' | 'unknown';
   /** Canonical QUIC verdict (same source as the card's chip) for the UDP-column
-   *  tooltip, so the list never claims "QUIC ✓" while the card shows "~". */
-  quic?: 'ok' | 'inferred' | 'fail' | 'unknown';
+   *  tooltip, so the list never claims "QUIC ✓" while the card shows "~".
+   *  'aged' — nothing CURRENT was measured, but a Test did measure it more than
+   *  thirty minutes ago: the tooltip then prints `quicAgedHint` (the card's QUIC
+   *  chip's own sentence, age first) instead of "not yet measured", which is
+   *  false of a proxy the customer tested this morning. */
+  quic?: 'ok' | 'inferred' | 'fail' | 'unknown' | 'aged';
+  /** The aged QUIC reading's sentence — `proxyCapabilities`' hint for the same
+   *  cap the card renders, so the list and the card say one thing. Only read
+   *  beside `quic: 'aged'`. */
+  quicAgedHint?: string;
+  /** The bound proxy's AGED readings, the SAME slice the grid card takes
+   *  (`agedReadingsFor(probeView.aged, px.id)`). This table reads two of them,
+   *  each only where the current value beside it is absent: the OS reading (the
+   *  chip below would otherwise VANISH thirty minutes after every Test — a cell
+   *  that shows nothing is what "never measured" looks like here) and a VPN
+   *  row's UDP reading. Display only; the sort and the actions never read it. */
+  aged?: AgedRowReadings;
+  /** Whether the app will re-take an aged reading by itself, asked of the
+   *  automatic check's own planner. ⛔ Absent = FALSE: the hover names the
+   *  button rather than promising a recheck that may never come. */
+  autoRecheck?: boolean;
   /** C4 (2026-09-12) — the bound proxy's passive OS fingerprint, the SAME value
    *  the grid card takes (`probeView.osFingerprints[px.id]`, ProfilesView). The
    *  owner, on the release that shipped the card's OS chip: *"i dont see OS
@@ -126,6 +151,9 @@ export interface ProfileTableRow {
 
 export interface ProfilesTableProps {
   rows: ReadonlyArray<ProfileTableRow>;
+  /** Reference moment for an aged reading's age; injected by tests so the
+   *  rendered output is deterministic. Production passes nothing. */
+  nowMs?: number;
   sortKey: ProfilesTableSortKey;
   sortDir: 'asc' | 'desc';
   onSort: (key: ProfilesTableSortKey) => void;
@@ -194,12 +222,99 @@ const HIDE_MED = 'ds-col-m';
 // The QUIC clause of the UDP-column tooltip — the canonical verdict wording,
 // so the list agrees with the card's QUIC chip instead of asserting "QUIC ✓"
 // from UDP relay alone (which only means WebRTC, never that HTTP/3 carries).
-const QUIC_CLAUSE: Record<'ok' | 'inferred' | 'fail' | 'unknown', string> = {
+const QUIC_CLAUSE: Record<Exclude<NonNullable<ProfileTableRow['quic']>, 'aged'>, string> = {
   ok: 'QUIC ✓',
   inferred: 'QUIC likely (not yet measured)',
   fail: 'QUIC ✗ (HTTP/2 on last measure)',
   unknown: 'QUIC not tested',
 };
+
+/** How an aged reading looks in this table: the recessed ground of a non-verdict
+ *  and a dashed edge no current chip has (the grid card's CHIP_AGED_CLASS). ⛔ An
+ *  OUTLINE drawn inside the box, not the border the Proxies tab's AGED_CHIP_CLASS
+ *  uses: a border is 2px of layout, and this column has none to give (see
+ *  AgedOsCellChip). */
+const AGED_CELL_CHIP_CLASS =
+  'bg-surface-inset text-ink-muted outline-dashed outline-1 -outline-offset-1 outline-ink-muted/60';
+
+/**
+ * The verdict of an aged OS reading ON THIS ROW — `agedOsFingerprintVerdict`,
+ * with the hover naming the button the row actually has. Shared with the grid
+ * card, which imports it from here (the card already depends on this file).
+ *
+ * ⛔ The shared verdict words its hint with `agedReadingHint`'s DEFAULT action, so
+ * on a VPN row it said "Run Test to check it again" beside two chips that said
+ * "Run Check VPN" — and a VPN row has no Test button, which is the defect that
+ * function's own `manualAction` parameter exists to prevent. The shared verdict
+ * takes no such parameter, so the row's sentence is swapped in here, by PREFIX:
+ * if the hint ever stops leading with that sentence the swap does nothing and
+ * the shared wording stands, rather than a second sentence being bolted on.
+ * (Nothing to swap when the recheck is automatic — that sentence names no
+ * button — or on a cause / the in-flight sentinel, which do not age.)
+ */
+export function agedOsVerdictFor(
+  aged: AgedReading<OsFingerprint>,
+  nowMs: number,
+  autoRecheck: boolean,
+  vpn: boolean,
+): OsVerdict {
+  const v = agedOsFingerprintVerdict(aged.value, aged.atMs, nowMs, autoRecheck);
+  const shared = agedReadingHint(aged.atMs, nowMs, autoRecheck);
+  if (!vpn || v.aged !== true || !v.hint.startsWith(shared)) return v;
+  return {
+    ...v,
+    hint: `${agedReadingHint(aged.atMs, nowMs, autoRecheck, CHECK_VPN_ACTION)}${v.hint.slice(shared.length)}`,
+  };
+}
+
+/**
+ * The OS cell's AGED chip: what the last Test read, a while ago — the glyph and
+ * the label of that reading, muted and dashed, never in a verdict's colour
+ * (`agedOsFingerprintVerdict` gives up the tone for exactly that reason).
+ *
+ * ⛔ NOT the shared ProxyOsChip, which prints the age beside the label, and the
+ * reason is MEASURED, not assumed (2026-09-17, live harness, this table mounted
+ * at the `profiles-list` composition's 1526px): a current '✓ iOS/macOS' is
+ * 73.34px; '✓ iOS/macOS · 59 min ago' is 136.17px and widens the table by 62px
+ * more than the current chip does — horizontal scroll, for every customer,
+ * thirty minutes after any Test. No dated form fits the current chip's width
+ * either (that reading's shortest, '✓ Apple · 23 h', is 76.98px, and it gives up
+ * the full label to get there). So an aged chip here is EXACTLY as wide as the current
+ * one it stands in for (the dashed edge is an outline, so not even 2px wider),
+ * and the age is printed on a line of its OWN beneath the chips, where it costs
+ * the column nothing: the UDP column measured 119.05px with that line and
+ * 119.05px without it.
+ */
+function AgedOsCellChip({
+  aged,
+  autoRecheck,
+  nowMs,
+  vpn,
+}: {
+  aged: AgedReading<OsFingerprint>;
+  autoRecheck: boolean;
+  nowMs: number;
+  vpn: boolean;
+}): JSX.Element | null {
+  // The card's verdict for the same reading: a VPN row's hover names Check VPN,
+  // the button that row has, where the shared one says Test.
+  const v = agedOsVerdictFor(aged, nowMs, autoRecheck, vpn);
+  // A cause or the in-flight sentinel is not a reading and does not age; this
+  // cell never paints a placeholder for a row that holds no reading.
+  if (v.aged !== true) return null;
+  return (
+    <span
+      title={v.hint}
+      data-component="proxy-os-fingerprint"
+      data-os-tone={v.tone}
+      data-ok="aged"
+      className={`inline-flex cursor-help items-center gap-0.5 whitespace-nowrap rounded-sm px-1 py-px text-[10px] ${AGED_CELL_CHIP_CLASS}`}
+    >
+      <span aria-hidden="true">{v.glyph}</span>
+      {v.label}
+    </span>
+  );
+}
 
 export function ProfilesTable(p: ProfilesTableProps): JSX.Element {
   return (
@@ -252,6 +367,26 @@ export function ProfilesTable(p: ProfilesTableProps): JSX.Element {
 const OTHER_BUSY_HINT = 'Another profile is busy — wait for it to finish';
 
 function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Element {
+  // The aged readings this row may show — the card's rule and the Proxies tab's:
+  // never while a test is running (the answer is on its way) and never beside a
+  // failure sentence, where a dated tick would read as a second opinion.
+  const aged = r.vpnFailure === undefined && !r.testing ? r.aged : undefined;
+  const agedNowMs = p.nowMs ?? Date.now();
+  const agedUdp = r.vpn === true && r.udp === 'unknown' ? aged?.udpProbe : undefined;
+  const agedOs = r.osFingerprint === undefined ? aged?.osFingerprint : undefined;
+  // The age the cell PRINTS under its dashed chips. One line for the cell, so
+  // when its two aged chips were read at different moments it states the OLDER:
+  // "as of" is then true of both, and each hover still leads with its own age.
+  // ⛔ Only a chip that really renders counts — an aged OS value that is a cause
+  // or the in-flight sentinel paints nothing (AgedOsCellChip), and a date under
+  // an empty cell would be the age of nothing.
+  const agedOsShown =
+    agedOs !== undefined &&
+    agedOsVerdictFor(agedOs, agedNowMs, r.autoRecheck === true, r.vpn === true).aged === true;
+  const agedShownAt = [agedUdp?.atMs, agedOsShown ? agedOs.atMs : undefined].filter(
+    (at): at is number => at !== undefined,
+  );
+  const agedAsOfMs = agedShownAt.length > 0 ? Math.min(...agedShownAt) : undefined;
   // T-19 — stop() belongs on REAL controls only (the buttons below and the
   // checkbox), never on a container cell: the whole row is the select target,
   // and a cell that swallows clicks shrinks that target below what the row
@@ -527,7 +662,26 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
       {/* UDP + OS (collapses below md) */}
       <td className={`px-3 py-2 ${HIDE_MED}`}>
         <div className="flex items-center gap-1">
-          {r.vpn === true && r.udp === 'unknown' ? (
+          {agedUdp !== undefined ? (
+            // Nothing current, but this tunnel's UDP WAS measured a while ago. The
+            // pill below says "not measured", which is false of it; this states
+            // what was found, muted and dashed like every aged chip — never the
+            // green of a current verdict — and its hover leads with the age.
+            <span
+              data-udp="aged"
+              data-ok="aged"
+              data-aged-value={agedUdp.value ? 'true' : 'false'}
+              className={`inline-flex cursor-help items-center gap-0.5 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold ${AGED_CELL_CHIP_CLASS}`}
+              title={`${agedReadingHint(agedUdp.atMs, agedNowMs, r.autoRecheck === true, CHECK_VPN_ACTION)} ${
+                agedUdp.value
+                  ? 'UDP worked through this VPN then.'
+                  : 'UDP did not work through this VPN then.'
+              }`}
+            >
+              <span aria-hidden="true">{agedUdp.value ? '✓' : '⤵'}</span>
+              UDP
+            </span>
+          ) : r.vpn === true && r.udp === 'unknown' ? (
             // (n) N18 — nothing probes a UDP grant on a tunnel: UDP rides inside
             // it. The card's chip has said so since (h); the list showed a dash,
             // which reads as "not measured" for something that is not measurable.
@@ -572,7 +726,12 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
                     ? VPN_UDP_MEASURED_OK_TITLE
                     : VPN_UDP_MEASURED_NONE_TITLE
                   : r.udp === 'ok'
-                    ? `UDP works — WebRTC ✓; ${QUIC_CLAUSE[r.quic ?? 'unknown']}`
+                    ? r.quic === 'aged' && r.quicAgedHint !== undefined
+                      ? // An aged QUIC reading: its own sentence, age first. "QUIC
+                        // likely (not yet measured)" told a customer to test a
+                        // proxy they had tested that morning.
+                        `UDP works — WebRTC ✓. QUIC — ${r.quicAgedHint}`
+                      : `UDP works — WebRTC ✓; ${QUIC_CLAUSE[r.quic === undefined || r.quic === 'aged' ? 'unknown' : r.quic]}`
                     : 'UDP not supported — WebRTC and QUIC fall back to slower connections'
               }
             >
@@ -611,8 +770,37 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             Before widening this cell, or adding a fingerprint to
             MARKETING_TABLE_ROWS, measure the shell in the live harness — the
             capture will pass either way until something actually paints one. */}
-          {r.osFingerprint !== undefined ? <ProxyOsChip fingerprint={r.osFingerprint} /> : null}
+          {/* …and an AGED reading, where no current one exists: the chip used to
+            vanish thirty minutes after every Test, and an empty cell is exactly
+            what a never-measured proxy shows. Still nothing at all for a row with
+            no reading of either kind — the rule above is unchanged. */}
+          {r.osFingerprint !== undefined ? (
+            <ProxyOsChip fingerprint={r.osFingerprint} />
+          ) : agedOs !== undefined ? (
+            <AgedOsCellChip
+              aged={agedOs}
+              autoRecheck={r.autoRecheck === true}
+              nowMs={agedNowMs}
+              vpn={r.vpn === true}
+            />
+          ) : null}
         </div>
+        {/* The age of the dashed chips above, on a line of its own: beside the
+          label it scrolls the whole table sideways (see AgedOsCellChip). Under
+          the chips it is free — 'as of 59 min ago', the widest it prints,
+          measured 80.48px, narrower than the '✓' + '✓ iOS/macOS' pair a current
+          row already lays out above it (99px) and than the 'UDP via tunnel' pill
+          an aged VPN chip replaces (87.13px) — and it adds no height either: the
+          Exit IP cell beside it is two lines tall already (a row with the
+          line and a current row without it both measured 55px). */}
+        {agedAsOfMs !== undefined ? (
+          <div
+            data-component="aged-reading-age"
+            className="mt-0.5 whitespace-nowrap text-[10px] leading-[14px] text-ink-muted"
+          >
+            as of {agedChipAge(agedAsOfMs, agedNowMs)}
+          </div>
+        ) : null}
       </td>
       {/* Created */}
       <td className={`whitespace-nowrap px-3 py-2 text-ink-muted ${HIDE_SMALL}`}>

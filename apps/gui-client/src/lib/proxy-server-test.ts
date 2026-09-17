@@ -41,30 +41,66 @@ import {
 } from './proxy-check-copy';
 import {
   isProxyUsable,
+  listProxies as listLocalProxies,
   resolveEndpoint,
   setProxyServerId,
+  testProxy as testProxyNatively,
   updateProxy as updateLocalProxy,
   type ProxyConfig,
 } from './proxies';
 import { isSocks5Probeable, isVpnScheme } from './proxy-scheme';
 import {
+  capabilityBudgetLeft,
+  hasUnmeasuredCapabilityReading,
+  isAutomaticServerCheckDue,
+  isCapabilityRunInFlight,
+  isServerTestInFlight,
+  runCapabilityRefresh,
+  runSweep,
+  withServerTest,
+  type CapabilityCheckResult,
+  type CapabilityRefreshDeps,
+  type CapabilityRefreshReport,
+  type SweepDeps,
+  type SweepRun,
+} from './proxy-probe-sweeper';
+import {
   clearFleetFailure,
   deriveProbeViewState,
+  ensureServerSeededEntry,
+  isAgedReadingShowable,
   isOsFingerprintFresh,
+  isQuicProbeFresh,
   isQuicVerdictFresh,
   isUdpVerdictFresh,
+  clearCapabilityMaterialUnsynced,
+  loadCapabilityAttempts,
   loadProbeCache,
+  materialEditCountNow,
+  materialEditedAfter,
+  materialEditsPending,
+  noteCapabilityReadingsNotProduced,
+  pruneCapabilityAttempts,
+  recordCapabilityAttempt,
+  refusesServerOsReading,
   saveEndpointResult,
   saveExitResult,
   saveFleetFailure,
   saveOsFingerprint,
+  saveProbeResult,
   saveServerProbeResult,
+  seedServerCapabilityReadings,
   seedServerOsFingerprint,
+  serverCapabilityReadingsToAdopt,
+  verdictMatchesScheme,
   type CachedEndpointVerdict,
   type CachedOsFingerprint,
   type CachedProbe,
+  type CapabilityAttemptMap,
+  type DatedServerReading,
   type ProbeCacheMap,
   type ProbeViewState,
+  type ServerCapabilityReadings,
 } from './proxy-probe-cache';
 import { cleanServerVantage, type ServerVantage } from './proxy-vantage';
 
@@ -112,6 +148,21 @@ export type ServerProbeOutcome =
        *  identity (the same cache fields the native exit probe writes for a
        *  SOCKS5 row), which is the only way a VPN row can ever get one. */
       exitObserved?: AccountProxyExitObserved;
+      /**
+       * The row's STORED Test readings the reply carried, each with the date the
+       * SERVER took it — never this reply's time.
+       *
+       * ⛔ NOT `quicProbe` / `udpProbe` ABOVE, and the separation is the point:
+       * those are what THIS test measured, stamped `at` and rendered in the
+       * present tense; these may be weeks old. The wire spells the stored QUIC
+       * reading `quic_probe` — the very name the fresh one has on the parsed
+       * result — so the parse renames it (`stored_quic_probe`) and this type keeps
+       * the two apart all the way to the cache, where a stored reading is adopted
+       * under the newer-wins rule and a fresh one replaces. Present only for a
+       * reading the server could date.
+       */
+      storedQuicProbe?: DatedServerReading<boolean>;
+      storedUdpProbe?: DatedServerReading<boolean>;
     }
   | {
       /** The server says the proxy is NOT usable from where it measured. The
@@ -267,6 +318,21 @@ function udpLegSkipped(detail: string | undefined): boolean {
   return detail !== undefined && detail.startsWith(QUIC_LEG_SKIPPED_PREFIX);
 }
 
+/**
+ * A stored reading and its ISO stamp, as a dated reading — or undefined when the
+ * server holds none, or the stamp does not parse. ONE rule for the list and the
+ * /test reply: an undatable reading adopts nothing, because it could only ever
+ * arrive looking current.
+ */
+export function datedStoredReading<T>(
+  value: T | null | undefined,
+  at: string | null | undefined,
+): DatedServerReading<T> | undefined {
+  if (value === null || value === undefined || typeof at !== 'string') return undefined;
+  const parsed = Date.parse(at);
+  return Number.isFinite(parsed) ? { value, at: parsed } : undefined;
+}
+
 /** Translate the wire result into the outcome both views apply. Pure. */
 export function serverProbeOutcome(
   test: AccountProxyTestResult | null,
@@ -296,6 +362,10 @@ export function serverProbeOutcome(
       : undefined;
   // T-1 — the vantage is a closed set; the node id survives only beside 'fleet'.
   const vantage = cleanServerVantage(test.measured_from, test.node_id);
+  // The STORED readings, dated by the server. ⛔ Read from `stored_*` only — never
+  // from `test.quic_probe`, which is this test's fresh reading (see the type).
+  const storedQuic = datedStoredReading(test.stored_quic_probe, test.stored_quic_probe_at);
+  const storedUdp = datedStoredReading(test.stored_udp_probe, test.stored_udp_probe_at);
   return {
     kind: 'ok',
     at: now,
@@ -335,21 +405,31 @@ export function serverProbeOutcome(
       ? { osFingerprintAt: quicVerdictStamp(test.os_fingerprint_at, now) }
       : {}),
     ...(test.exit_observed !== undefined ? { exitObserved: test.exit_observed } : {}),
+    ...(storedQuic !== undefined ? { storedQuicProbe: storedQuic } : {}),
+    ...(storedUdp !== undefined ? { storedUdpProbe: storedUdp } : {}),
   };
 }
 
 /** Ask the control plane to test the proxy from the Mac that runs the profile
- *  (T-1 — `vantage: 'fleet'`). Never throws: a failed request is `unavailable`. */
+ *  (T-1 — `vantage: 'fleet'`). Never throws: a failed request is `unavailable`.
+ *
+ *  ONE test of an account row at a time, whoever asks (`withServerTest`): every
+ *  caller — the grid's Test, the card's, the sweep, the automatic check — comes
+ *  through here, so this is the one place the registration cannot be forgotten.
+ *  A caller the customer started waits out a test already running against the row;
+ *  the automatic callers look first (`isServerTestInFlight`) and do not ask. */
 export async function testProxyOnServer(
   baseUrl: string,
   apiKey: string,
   serverId: string,
   now: () => number = () => Date.now(),
 ): Promise<ServerProbeOutcome> {
-  const test = await testAccountProxy(baseUrl, apiKey, serverId, { vantage: 'fleet' }).catch(
-    () => null,
-  );
-  return serverProbeOutcome(test, now());
+  return withServerTest(serverId, async () => {
+    const test = await testAccountProxy(baseUrl, apiKey, serverId, { vantage: 'fleet' }).catch(
+      () => null,
+    );
+    return serverProbeOutcome(test, now());
+  });
 }
 
 /**
@@ -487,7 +567,32 @@ export async function persistServerProbe(
       outcome.at,
     );
   }
-  return withExit ?? next ?? latest;
+  // The row's STORED QUIC / UDP readings, adopted under the list adoption's own
+  // rules and dated by the SERVER — never by this reply.
+  //
+  // ⛔ AFTER the write above, on purpose, and through the SAME decision the list
+  // sync makes (`serverCapabilityReadingsToAdopt`). A leg this reply measured is
+  // already written, dated now, and newer-wins refuses the stored copy. A leg it
+  // RAN and reached no verdict on was deliberately removed by
+  // `saveServerProbeResult` — while the server, which writes nothing for such a
+  // leg, still holds the reading from before; the write left `quicProbeRetiredAt`,
+  // and that stamp refuses it here and on every list sync after. (This used to be
+  // a test of the reply's vantage, which covered this path only: the next list
+  // sync put the retired verdict straight back.) A leg the reply did NOT run — a
+  // fallback, a skipped leg — has no answer but the stored one, which is why the
+  // server attaches it.
+  let withStored: ProbeCacheMap | null = null;
+  const entryNow = (withExit ?? next ?? latest)?.[proxyId];
+  if (
+    entryNow !== undefined &&
+    (outcome.storedQuicProbe !== undefined || outcome.storedUdpProbe !== undefined)
+  ) {
+    withStored = await seedServerCapabilityReadings(proxyId, {
+      ...(outcome.storedQuicProbe !== undefined ? { quicProbe: outcome.storedQuicProbe } : {}),
+      ...(outcome.storedUdpProbe !== undefined ? { udpProbe: outcome.storedUdpProbe } : {}),
+    }).catch(() => null);
+  }
+  return withStored ?? withExit ?? next ?? latest;
 }
 
 /** The ONE write of a server-observed exit from a /test reply (measured or
@@ -633,6 +738,86 @@ export interface ListExitProxyLike {
 }
 
 /**
+ * The question the three list adoptions below ask about every row before they
+ * write — "was this row edited?" — or `null` for "adopt NOTHING, for anyone".
+ *
+ * ⛔ A ROW EDITED SINCE THE ACCOUNT LAST RECEIVED IT ADOPTS NOTHING
+ * (`materialUnsynced`), for the reason the automatic check leaves it alone: what
+ * the account holds for it describes the OLD endpoint. MEASURED: the customer
+ * tests a row (the account stores its OS / QUIC / UDP readings, dated), edits its
+ * host and saves. `invalidateProbe` deletes the whole entry — every retirement
+ * stamp with it — and the view refreshes BEFORE the re-test that pushes the new
+ * material, so the list sync found a row with no local entry, which admits
+ * everything, and seeded the predecessor's readings onto the edited row in the
+ * present tense. The mark is lifted by a successful store of the row
+ * (`clearCapabilityMaterialUnsynced`); the account's copy is this row's again then.
+ *
+ * ⛔ FAILS CLOSED. A ledger that cannot be read does not say "nobody edited
+ * anything": it says nothing, and adopting on it re-opens the hole for exactly the
+ * row it exists for. The next refresh — seconds away — reads it again.
+ *
+ * ⛔ THE STORED MARK IS NOT THE WHOLE ANSWER, so the gate asks three more things,
+ * all from memory (`pendingMaterialEdits` in the cache says why each exists): was
+ * the row pending when this adoption STARTED; was it marked in the ledger as read
+ * BEFORE the request as well as after (the view fires the list request and then
+ * the store that lifts the mark — a list the server answered from before that
+ * store, arriving after the lift, still carries the old endpoint's readings); and
+ * has it been edited SINCE this adoption started.
+ *
+ * `syncListExitObserved` opens ONE gate for all three, so they agree about which
+ * rows were edited; an adoption called by itself opens its own, so no caller can
+ * adopt round the mark by omission.
+ */
+export interface ListAdoptionGate {
+  /** Ask IMMEDIATELY before each write, with no await between — see
+   *  `pendingMaterialEdits`. */
+  refuses: (proxyId: string) => boolean;
+}
+
+/** What is known before the request goes out. */
+interface ListAdoptionEntry {
+  editCount: number;
+  pending: ReadonlySet<string>;
+  marked: CapabilityAttemptMap;
+}
+
+async function enterListAdoption(): Promise<ListAdoptionEntry | null> {
+  // Both taken synchronously, before the first await.
+  const editCount = materialEditCountNow();
+  const pending = materialEditsPending();
+  try {
+    return { editCount, pending, marked: await loadCapabilityAttempts() };
+  } catch {
+    return null;
+  }
+}
+
+/** `entry` = what `enterListAdoption` answered before the request; omitted = there
+ *  was no request (an adoption called by itself), and one read serves as both. */
+async function openListAdoptionGate(
+  entry?: ListAdoptionEntry | null,
+): Promise<ListAdoptionGate | null> {
+  if (entry === null) return null;
+  const before = entry ?? (await enterListAdoption());
+  if (before === null) return null;
+  let marked = before.marked;
+  if (entry !== undefined) {
+    try {
+      marked = await loadCapabilityAttempts();
+    } catch {
+      return null;
+    }
+  }
+  return {
+    refuses: (id) =>
+      marked[id]?.materialUnsynced === true ||
+      before.marked[id]?.materialUnsynced === true ||
+      before.pending.has(id) ||
+      materialEditedAfter(id, before.editCount),
+  };
+}
+
+/**
  * D2 — adopt the exit the SERVER last observed through each VPN proxy (from the
  * account proxy list's `exit_observed`) into the same cache fields the fleet
  * test and the native exit probe write, so a VPN row shows its exit — and the
@@ -673,10 +858,15 @@ export async function adoptListExitObserved(
    *  `syncListExitObserved` takes it before the request; a caller handing in
    *  a list it fetched earlier must pass that earlier time, not "now". */
   nowMs: number = Date.now(),
+  /** The gate, when the caller already opened one — see `ListAdoptionGate`.
+   *  Omitted = opened here, strictly. */
+  given?: ListAdoptionGate,
 ): Promise<string[]> {
   const written: string[] = [];
   const byServerId = new Map<string, ListExitRow>();
   for (const r of rows) byServerId.set(r.id, r);
+  const gate = given ?? (await openListAdoptionGate());
+  if (gate === null) return written;
   let cache: ProbeCacheMap;
   try {
     cache = await loadProbeCache();
@@ -685,6 +875,9 @@ export async function adoptListExitObserved(
   }
   for (const p of proxies) {
     if (p.serverId === undefined || !isVpnScheme(p.scheme)) continue;
+    // Before everything below, the address check included: that is an entry
+    // invented for the edited row, for the old endpoint's exit to land on.
+    if (gate.refuses(p.id)) continue;
     const row = byServerId.get(p.serverId);
     if (row === undefined) continue;
     // (p) 2026-09-16 — a SERVER-SEEDED entry is not an entry for this purpose. It
@@ -745,6 +938,10 @@ export async function adoptListExitObserved(
         // Re-read: a Test that completed while the resolve ran already wrote a
         // fuller entry (pre-flight + fleet fields), which this must not replace.
         cache = await loadProbeCache();
+        // …and asked again after every await from here on: the lookup above can
+        // take seconds, and an edit saved meanwhile makes everything below a write
+        // of the OLD endpoint's facts (its address first) onto the edited row.
+        if (gate.refuses(p.id)) continue;
         // (p) review — ⛔ THIS GUARD MUST AGREE WITH THE READ ABOVE IT. It used to
         // write only when the key was ABSENT, so a SERVER-SEEDED entry — which the
         // read above deliberately treats as absent — made this discard the resolve
@@ -779,15 +976,37 @@ export async function adoptListExitObserved(
     // sentence is the one this entry already holds, else a plain one — the
     // list carries the date of the contradiction, not the node's prose.
     // Idempotent: once stamped at T the next poll matches nothing here.
+    //
+    // ⛔ …OR THE STAMP IS HERE AND ITS SENTENCE IS NOT. The stamp crosses every
+    // address check now (`saveEndpointResult`); the sentence does not cross one
+    // that could not confirm the address. While the stamp was lost with it, the
+    // test above re-stamped the row on the next poll and "tunnel down" came back
+    // by accident. With the stamp kept — and it is this Mac's reply time, so
+    // normally at or after the server's — that test is false for ever, and a VPN
+    // whose last full check FAILED read as a plain resolved row until something
+    // re-tested it. So: the list still says down, the address resolves again,
+    // nothing here was measured since, and the entry says nothing — write the
+    // sentence back under the stamp this entry already holds. Not while the
+    // address is unresolved: that answer outranks this one on the row, and a card
+    // Test whose address check fails is meant to move "tunnel down" off it.
+    const heldStamp = existing.exitSupersededAt;
+    const stampMissing = heldStamp === undefined || heldStamp < (serverSupersededAt ?? 0);
+    const sentenceMissing =
+      heldStamp !== undefined &&
+      !stampMissing &&
+      existing.fleetFailureReason === undefined &&
+      existing.endpoint?.resolved === true &&
+      !holdsMeasurementAfter(existing, heldStamp);
     if (
       serverSupersededAt !== undefined &&
-      (existing.exitSupersededAt === undefined || existing.exitSupersededAt < serverSupersededAt) &&
-      !holdsMeasurementAfter(existing, serverSupersededAt)
+      (stampMissing || sentenceMissing) &&
+      !holdsMeasurementAfter(existing, serverSupersededAt) &&
+      !gate.refuses(p.id)
     ) {
       try {
         cache = await saveFleetFailure(
           p.id,
-          serverSupersededAt,
+          sentenceMissing ? heldStamp : serverSupersededAt,
           existing.fleetFailureReason ?? LIST_TUNNEL_DOWN_REASON,
         );
         existing = cache[p.id] ?? existing;
@@ -795,6 +1014,7 @@ export async function adoptListExitObserved(
         /* best-effort — the refusal below still holds by the server's stamp */
       }
     }
+    if (gate.refuses(p.id)) continue;
     // (h) — dated by the observation, and the shared refusal rule (rewind /
     // resurrect / churn / downgrade) decides — see `refusesStoredExit`.
     const at = storedExitStamp(e.observed_at, existing, nowMs);
@@ -840,15 +1060,19 @@ export type ListOsRow = Pick<AccountProxyMeta, 'id' | 'os_fingerprint' | 'os_fin
  *
  * ⛔ ONE FRESHNESS RULE. The reading is aged by `isOsFingerprintFresh` against the
  * server's own `os_fingerprint_at`, the same function and the same TTL that age a
- * locally measured one — so a stored reading past the TTL is never adopted, and one
- * that goes stale later drops out at the derivation. A reading the server cannot
- * date is REFUSED outright: an undatable reading cannot be aged, and the one thing
- * it must never do is arrive looking current.
+ * locally measured one — so a stored reading past the TTL never reaches the
+ * present-tense map, whether it was adopted stale or went stale later. (It used to
+ * be refused at the door; it is adopted now, up to the aged cap, because past the
+ * TTL a reading is shown AGED rather than hidden — see `AgedReadings`.) A reading
+ * the server cannot date is REFUSED outright: an undatable reading cannot be aged,
+ * and the one thing it must never do is arrive looking current.
  *
  * ⛔ Never rewinds: a reading at or before the one this Mac already holds writes
  * nothing, so a test run here minutes ago outranks the list's copy of an older one
  * (the writer re-checks this under the lock — this check only keeps the returned
- * "written" list honest). Best-effort per proxy; returns the proxy ids written.
+ * "written" list honest). And never RESURRECTS: a reading dated at or before a
+ * retirement stamp on the entry is refused like a stored QUIC / UDP reading is
+ * (`refusesServerOsReading`). Best-effort per proxy; returns the proxy ids written.
  *
  * Every scheme, not just SOCKS5: a VPN row's reading comes from the observer record
  * the fleet node caused through the tunnel, and it is stored on the row like any
@@ -860,10 +1084,14 @@ export async function adoptListOsFingerprint(
   rows: ReadonlyArray<ListOsRow>,
   proxies: ReadonlyArray<ListExitProxyLike>,
   nowMs: number = Date.now(),
+  /** See `ListAdoptionGate`. Omitted = opened here, strictly. */
+  given?: ListAdoptionGate,
 ): Promise<string[]> {
   const written: string[] = [];
   const byServerId = new Map<string, ListOsRow>();
   for (const r of rows) byServerId.set(r.id, r);
+  const gate = given ?? (await openListAdoptionGate());
+  if (gate === null) return written;
   let cache: ProbeCacheMap;
   try {
     cache = await loadProbeCache();
@@ -872,17 +1100,105 @@ export async function adoptListOsFingerprint(
   }
   for (const p of proxies) {
     if (p.serverId === undefined) continue;
+    if (gate.refuses(p.id)) continue; // the OLD endpoint's reading
     const row = byServerId.get(p.serverId);
     const fp = row?.os_fingerprint;
     if (row === undefined || fp === null || fp === undefined) continue;
     const at =
       typeof row.os_fingerprint_at === 'string' ? Date.parse(row.os_fingerprint_at) : Number.NaN;
     if (!Number.isFinite(at)) continue;
-    if (!isOsFingerprintFresh({ ...fp, at }, nowMs)) continue;
-    const existing = cache[p.id];
-    if (existing?.osFingerprint !== undefined && existing.osFingerprint.at >= at) continue;
+    // A reading past the thirty-minute TTL is ADOPTED now, up to the aged cap: it
+    // does not reach the present-tense map (the derivation ages it by the same
+    // function as ever) but it is what the chip shows muted, with its age, and
+    // what tells the automatic check that Driftstack re-took this reading two
+    // hours ago and the row needs no dial of its own. Past the cap, as before, it
+    // leaves no trace. (Every fresh reading is inside the cap, future stamps
+    // included, so this one test is the whole gate.)
+    if (!isAgedReadingShowable(at, nowMs)) continue;
+    // Never rewinds, never resurrects — the writer's own rule, asked here first.
+    if (refusesServerOsReading(cache[p.id], at)) continue;
     try {
       cache = await seedServerOsFingerprint(p.id, fp, at);
+      written.push(p.id);
+    } catch {
+      /* best-effort — the next refresh retries */
+    }
+  }
+  return written;
+}
+
+/** The slice of a list row the capability adoption reads. */
+export type ListCapabilityRow = Pick<
+  AccountProxyMeta,
+  | 'id'
+  | 'quic_measured'
+  | 'quic_measured_at'
+  | 'stored_quic_probe'
+  | 'stored_quic_probe_at'
+  | 'stored_udp_probe'
+  | 'stored_udp_probe_at'
+>;
+
+/**
+ * Adopt the QUIC / UDP readings the SERVER holds for each proxy — the live
+ * session's `quic_measured`, and what the last Test measured about QUIC and UDP
+ * — into the fields a local check writes. The sibling of `adoptListOsFingerprint`
+ * above, in the same style and for the same reason: the list has carried
+ * `quic_measured` since T-6 and NOTHING read it, so a proxy checked on another
+ * Mac, or before a reinstall, showed "not measured" about something Driftstack
+ * had measured.
+ *
+ * ⛔ A server reading replaces a local one only when it is NEWER BY ITS OWN DATE
+ * (`serverCapabilityReadingsToAdopt`, re-checked under the write lock); a reading
+ * the server cannot date adopts nothing; a field an older server does not send
+ * adopts nothing. Readings past the aged cap leave no trace, as for the OS.
+ * Freshness is otherwise NOT judged here — the derivation sorts each adopted
+ * reading into current, aged or neither by the one rule every reading obeys.
+ *
+ * ⛔ A row with no `serverId` is never looked at: nothing about it is on the
+ * server. Best-effort per proxy; returns the proxy ids written.
+ */
+export async function adoptListCapabilityReadings(
+  rows: ReadonlyArray<ListCapabilityRow>,
+  proxies: ReadonlyArray<ListExitProxyLike>,
+  nowMs: number = Date.now(),
+  /** See `ListAdoptionGate`. Omitted = opened here, strictly. */
+  given?: ListAdoptionGate,
+): Promise<string[]> {
+  const written: string[] = [];
+  const byServerId = new Map<string, ListCapabilityRow>();
+  for (const r of rows) byServerId.set(r.id, r);
+  const gate = given ?? (await openListAdoptionGate());
+  if (gate === null) return written;
+  let cache: ProbeCacheMap;
+  try {
+    cache = await loadProbeCache();
+  } catch {
+    return written;
+  }
+  // (A `function`, not a generic arrow: a surface scanner parses this file as
+  // TSX, where `<T>(` opens an element.)
+  function showable<T>(r: DatedServerReading<T> | undefined): DatedServerReading<T> | undefined {
+    return r !== undefined && isAgedReadingShowable(r.at, nowMs) ? r : undefined;
+  }
+  for (const p of proxies) {
+    if (p.serverId === undefined) continue;
+    if (gate.refuses(p.id)) continue; // the OLD endpoint's readings
+    const row = byServerId.get(p.serverId);
+    if (row === undefined) continue;
+    const quicMeasured = showable(datedStoredReading(row.quic_measured, row.quic_measured_at));
+    const quicProbe = showable(datedStoredReading(row.stored_quic_probe, row.stored_quic_probe_at));
+    const udpProbe = showable(datedStoredReading(row.stored_udp_probe, row.stored_udp_probe_at));
+    const readings: ServerCapabilityReadings = {
+      ...(quicMeasured !== undefined ? { quicMeasured } : {}),
+      ...(quicProbe !== undefined ? { quicProbe } : {}),
+      ...(udpProbe !== undefined ? { udpProbe } : {}),
+    };
+    // The pre-check keeps `written` honest and a poll from taking the lock for
+    // nothing; the writer decides again under the lock.
+    if (Object.keys(serverCapabilityReadingsToAdopt(cache[p.id], readings)).length === 0) continue;
+    try {
+      cache = await seedServerCapabilityReadings(p.id, readings);
       written.push(p.id);
     } catch {
       /* best-effort — the next refresh retries */
@@ -918,10 +1234,25 @@ export async function syncListExitObserved(
   if (!proxies.some((p) => p.serverId !== undefined)) return [];
   // `nowMs` is taken BEFORE the request (the default binds at the call), so
   // the adoption's K3 guard compares a local stamp with the fetch's start.
+  // ⛔ ONE gate for all three adoptions, so they agree about which rows were edited
+  // (a mark that lands between two of them would otherwise split one row's
+  // readings). The ledger is read on BOTH sides of the request and a row marked in
+  // either is refused: after, because an edit saved while the request was in
+  // flight is one the list predates; before, because the view sends this request
+  // and THEN the store that lifts the mark, and a list answered from before that
+  // store can arrive after the lift. Unreadable on either side = nothing is
+  // adopted for anyone, and before = no request at all.
+  const entry = await enterListAdoption();
+  if (entry === null) return [];
   const rows = await listAccountProxies(baseUrl, apiKey);
-  const exits = await adoptListExitObserved(rows, proxies, nowMs);
-  const readings = await adoptListOsFingerprint(rows, proxies, nowMs);
-  return [...new Set([...exits, ...readings])];
+  const gate = await openListAdoptionGate(entry);
+  if (gate === null) return [];
+  const exits = await adoptListExitObserved(rows, proxies, nowMs, gate);
+  const readings = await adoptListOsFingerprint(rows, proxies, nowMs, gate);
+  // …and the QUIC / UDP readings last, for the reason the OS one follows the exit:
+  // they land on the real entry the exit adoption made, not on a seeded one.
+  const capabilities = await adoptListCapabilityReadings(rows, proxies, nowMs, gate);
+  return [...new Set([...exits, ...readings, ...capabilities])];
 }
 
 /**
@@ -976,8 +1307,16 @@ export function deriveProbeViewWithEndpointRows(
     //
     // `isOsFingerprintFresh` keeps a CAUSE regardless of age, so the
     // `vpn_tunnel` placeholder these rows normally carry still renders.
-    if (c.osFingerprint !== undefined && isOsFingerprintFresh(c.osFingerprint, nowMs))
-      view.osFingerprints[id] = c.osFingerprint;
+    //
+    // …and the AGED arm rides under each fresh one here exactly as it does in the
+    // base derivation, for the same reason turned around: an overlay that knew
+    // only the fresh maps would make the aged state true of SOCKS5 rows and
+    // silently absent for tunnels.
+    if (c.osFingerprint !== undefined) {
+      if (isOsFingerprintFresh(c.osFingerprint, nowMs)) view.osFingerprints[id] = c.osFingerprint;
+      else if (isAgedReadingShowable(c.osFingerprint.at, nowMs))
+        view.aged.osFingerprints[id] = { value: c.osFingerprint, atMs: c.osFingerprint.at };
+    }
     if (c.serverLatencyMs !== undefined) {
       view.serverLatency[id] = c.serverLatencyMs;
       // ⛔ The date travels WITH the number here too. This overlay runs after the
@@ -985,14 +1324,21 @@ export function deriveProbeViewWithEndpointRows(
       // its stamp is one the sheet can only render as current.
       if (typeof c.serverProbeAt === 'number') view.serverMeasuredAt[id] = c.serverProbeAt;
     }
-    if (c.quicMeasured !== undefined && isQuicVerdictFresh(c.quicMeasuredAt, nowMs))
-      view.quicMeasured[id] = c.quicMeasured;
+    if (c.quicMeasured !== undefined) {
+      if (isQuicVerdictFresh(c.quicMeasuredAt, nowMs)) view.quicMeasured[id] = c.quicMeasured;
+      else if (c.quicMeasuredAt !== undefined && isAgedReadingShowable(c.quicMeasuredAt, nowMs))
+        view.aged.quicMeasured[id] = { value: c.quicMeasured, atMs: c.quicMeasuredAt };
+    }
     if (c.measuredFrom !== undefined)
       view.serverVantage[id] = {
         measuredFrom: c.measuredFrom,
         ...(c.nodeId !== undefined ? { nodeId: c.nodeId } : {}),
       };
-    if (c.quicProbe !== undefined) view.quicProbe[id] = c.quicProbe;
+    if (c.quicProbe !== undefined) {
+      if (isQuicProbeFresh(c.quicProbeAt, nowMs)) view.quicProbe[id] = c.quicProbe;
+      else if (c.quicProbeAt !== undefined && isAgedReadingShowable(c.quicProbeAt, nowMs))
+        view.aged.quicProbe[id] = { value: c.quicProbe, atMs: c.quicProbeAt };
+    }
     // (V6 2026-09-16) ITEM 3 — and the UDP-relay verdict beside it. This overlay is
     // the ONLY way a VPN row's fleet fields reach a surface (its placeholder
     // `result` is never usable), so a field added to the base derivation and not
@@ -1004,8 +1350,11 @@ export function deriveProbeViewWithEndpointRows(
     // of SOCKS5 rows and false of VPN rows — with nothing in either function saying
     // so, and for the rows this measurement was added for. The asymmetry is already
     // spelled out two lines up for the QUIC verdict; this is the same rule.
-    if (c.udpProbe !== undefined && isUdpVerdictFresh(c.udpProbeAt, nowMs))
-      view.udpProbe[id] = c.udpProbe;
+    if (c.udpProbe !== undefined) {
+      if (isUdpVerdictFresh(c.udpProbeAt, nowMs)) view.udpProbe[id] = c.udpProbe;
+      else if (c.udpProbeAt !== undefined && isAgedReadingShowable(c.udpProbeAt, nowMs))
+        view.aged.udpProbe[id] = { value: c.udpProbe, atMs: c.udpProbeAt };
+    }
     if (c.exitIp !== undefined) {
       view.exitResults[id] = {
         ip: c.exitIp,
@@ -1203,6 +1552,8 @@ export async function ensureAccountProxyRow(
   if (p.serverId !== undefined) {
     try {
       await updateAccountProxy(baseUrl, apiKey, p.serverId, input);
+      // The account holds this Mac's material again — see `invalidateProbe`.
+      await clearCapabilityMaterialUnsynced(p.id).catch(() => undefined);
       return { id: p.serverId, created: false, healed };
     } catch (err) {
       // Stale cached serverId: the account_proxies row was deleted server-side
@@ -1246,6 +1597,7 @@ export async function ensureAccountProxyRow(
     await deleteAccountProxy(baseUrl, apiKey, created.id).catch(() => undefined);
     return undefined;
   }
+  await clearCapabilityMaterialUnsynced(p.id).catch(() => undefined);
   return { id: created.id, created: true, healed };
 }
 
@@ -1390,6 +1742,302 @@ export async function checkEndpointRowForSweep(
   // sweep refreshes it like any other; only a row last checked on an older build
   // stays un-measured here, and its next Check stores it.
   if (creds.apiKey === null || creds.apiKey.length === 0 || p.serverId === undefined) return;
-  const outcome = await testProxyOnServer(creds.baseUrl, creds.apiKey, p.serverId);
-  await persistServerProbe(p.id, outcome, { adoptExit: true });
+  // ⛔ NEVER BESIDE A CAPABILITY RUN — see `isCapabilityRunInFlight`. The address
+  // check above has run and stands; only the server test waits. Not stamped: the
+  // row stays due, and the run's own plan or the next sweep takes it, from the one
+  // purse. (Nothing between this line and the test's own stamp can start a run: the
+  // app calls this from inside a sweep only, and a run does not start while a
+  // sweep is in flight.)
+  if (isCapabilityRunInFlight()) return;
+  // ⛔ THE ADDRESS CHECK ABOVE RUNS ON THE SWEEP'S WINDOW; THE SERVER TEST BELOW
+  // RUNS ON THE AUTOMATIC CHECK'S, and the two were one until this was measured.
+  // The sweep's window is twenty minutes on every window focus, five rows a run; a
+  // VPN server test brings a tunnel up for up to 95 s on a machine every customer
+  // shares. Gated only by that window, every alt-tab re-tested every saved VPN
+  // row — round the capability check's one-VPN cap and its six-hour backoff, and
+  // (on an account whose plan excludes it) one refused request per row per focus,
+  // for ever. So this leg obeys the SAME ledger, the same two clocks
+  // (`isAutomaticServerCheckDue`) and the same purse (`capabilityBudgetLeft`) as
+  // the capability run, and a row whose material the account does not hold yet
+  // (`materialUnsynced`) is left alone for the reason the planner gives.
+  //
+  // ⛔ A ledger that cannot be read means the leg does not run: answered as "never
+  // attempted" it would be the unbounded dial. The address check above stands.
+  let attempts: CapabilityAttemptMap;
+  let cache: ProbeCacheMap;
+  let rows: ReadonlyArray<ProxyConfig>;
+  try {
+    [cache, attempts, rows] = await Promise.all([
+      loadProbeCache(),
+      loadCapabilityAttempts(),
+      listLocalProxies(),
+    ]);
+  } catch {
+    return;
+  }
+  const attempt = attempts[p.id];
+  if (attempt?.materialUnsynced === true) return;
+  if (!isAutomaticServerCheckDue(cache[p.id], attempt, now())) return;
+  const budget = capabilityBudgetLeft(attempts, rows, now());
+  if (budget.rows <= 0 || budget.vpn <= 0) return;
+  const outcome = await testStoredRowAutomatically(p, creds.baseUrl, creds.apiKey, now);
+  if (outcome === null) return;
+  if (isAccountRefusal(outcome)) {
+    // A fact about the ACCOUNT: every stored row would be refused identically.
+    const stored = rows.filter((row) => row.serverId !== undefined).map((row) => row.id);
+    await recordCapabilityAttempt([...new Set([p.id, ...stored])], now(), true).catch(
+      () => undefined,
+    );
+  }
+  await persistAutomaticServerProbe(p, outcome, now);
+}
+
+// ─── The automatic capability check, and the installed schedule's wiring ─────
+
+/** The not_run answers that refuse the ACCOUNT rather than the row: its plan, or
+ *  the credential it signed in with ("retrying with this credential cannot change
+ *  it"). Both back every row off for the long window. */
+function isAccountRefusal(outcome: ServerProbeOutcome): boolean {
+  return (
+    outcome.kind === 'not_run' &&
+    (outcome.why === 'plan_excluded' || outcome.why === 'desktop_credential')
+  );
+}
+
+/** What of a local row decides WHICH endpoint a server test measured. */
+function rowIdentity(p: ProxyConfig): string {
+  return JSON.stringify([
+    p.scheme ?? null,
+    p.host,
+    p.port,
+    p.username,
+    p.password,
+    p.serverId ?? null,
+    p.openvpn ?? null,
+    p.wireguard ?? null,
+  ]);
+}
+
+/**
+ * The one automatic server test of a row the account ALREADY holds — shared by
+ * the capability check and the sweep's VPN check. Returns null when nothing may
+ * be persisted:
+ *
+ *   • the row is being tested right now by someone else (their answer is the
+ *     fresher one; nothing is stamped, nothing is asked);
+ *   • the backoff stamp could not be written (⛔ a check nothing bounds);
+ *   • ⛔ THE ROW CHANGED WHILE THE TEST WAS IN FLIGHT. A test lasts 11–95 s and
+ *     cannot push local changes (the consent rule), so it measured whatever the
+ *     account held when it started. The manual paths discard such a reply by
+ *     epoch; this path had no guard, and an edit of the host mid-check landed the
+ *     OLD endpoint's OS / QUIC / UDP readings (and a VPN's exit) on the edited
+ *     row — where the re-test's own write then carried them forward as current.
+ *     The row is re-read AFTER the reply and the reply is dropped when the row is
+ *     gone or is no longer the one that was asked about.
+ */
+async function testStoredRowAutomatically(
+  p: ProxyConfig,
+  baseUrl: string,
+  apiKey: string,
+  now: () => number,
+): Promise<ServerProbeOutcome | null> {
+  if (p.serverId === undefined || isServerTestInFlight(p.serverId)) return null;
+  try {
+    await recordCapabilityAttempt([p.id], now());
+  } catch {
+    return null;
+  }
+  const asked = rowIdentity(p);
+  const outcome = await testProxyOnServer(baseUrl, apiKey, p.serverId, now);
+  let current: ProxyConfig | undefined;
+  try {
+    current = (await listLocalProxies()).find((row) => row.id === p.id);
+  } catch {
+    return null;
+  }
+  if (current === undefined || rowIdentity(current) !== asked) return null;
+  return outcome;
+}
+
+/**
+ * Persist what an AUTOMATIC check came back with — `persistServerProbe`, the
+ * shared step the manual paths use, under two extra rules.
+ *
+ * ⛔ A ROW WITH NO LOCAL VERDICT ADOPTS A SUCCESS AND NOTHING ELSE. Such a row
+ * (no entry, or the `serverSeeded` placeholder the list adoption invents) has
+ * never been tested on this Mac, and the customer did not ask for this check. An
+ * `ok` reply's readings land on a seeded entry, which asserts nothing about
+ * reachability. A `failed` or `not_run` reply writes NOTHING: `saveFleetFailure`
+ * rebuilds the entry it is given WITHOUT the `serverSeeded` mark, so the
+ * fail-closed placeholder would come back as an ordinary verdict — a red "not
+ * reachable" pill and a "could not connect" sentence on a proxy nobody here has
+ * tested, painted by a timer. That is the thing `planSweep`'s never-tested rule
+ * exists to prevent, arriving through the other door.
+ *
+ * ⛔ AND A VPN ROW THE CUSTOMER ONLY EVER ADDRESS-CHECKED IS NOT PAINTED "TUNNEL
+ * DOWN" BY A TIMER EITHER. A resolved address check is a local verdict, but it
+ * says the name resolves — the customer never asked whether the tunnel comes up
+ * (the row can be on the account from a launch). A `failed` reply is written only
+ * onto an entry that already holds an answer of that kind (`holdsFleetVerdict`):
+ * there it replaces a "tunnel up" that has stopped being true.
+ *
+ * Otherwise a row that HAS a local verdict is persisted exactly as its manual
+ * check would be (`adoptExit` for a VPN row, whose only exit is the one
+ * Driftstack observes). After a full answer, a reading the row should have and
+ * still lacks is recorded as one this proxy does not produce (the planner's
+ * `readingsNotProducedAt` rule); a full answer that leaves none missing lifts it.
+ */
+export async function persistAutomaticServerProbe(
+  p: Pick<ProxyConfig, 'id' | 'scheme'>,
+  outcome: ServerProbeOutcome,
+  now: () => number = () => Date.now(),
+): Promise<ProbeCacheMap | null> {
+  if (outcome.kind === 'unavailable') return null;
+  let entry: CachedProbe | undefined;
+  try {
+    entry = (await loadProbeCache())[p.id];
+  } catch {
+    return null;
+  }
+  const hasLocalVerdict =
+    entry !== undefined && verdictMatchesScheme(isSocks5Probeable(p.scheme), entry);
+  let written: ProbeCacheMap | null;
+  if (hasLocalVerdict) {
+    const vpn = isVpnScheme(p.scheme);
+    if (vpn && outcome.kind === 'failed' && !holdsFleetVerdict(entry)) return null;
+    written = await persistServerProbe(p.id, outcome, { adoptExit: vpn });
+  } else {
+    if (outcome.kind !== 'ok') return null;
+    // A no-op when a (seeded, or wrong-kind) entry is already there.
+    await ensureServerSeededEntry(p.id, outcome.at).catch(() => null);
+    written = await persistServerProbe(p.id, outcome);
+  }
+  if (outcome.kind === 'ok') {
+    // Judged on the entry AS WRITTEN. No entry (the writes did not land, or the
+    // cache could not be read — `loadProbeCache` answers `{}` then) says nothing
+    // about what the reply produced, so nothing is noted either way.
+    const entryAfter = (written ?? (await loadProbeCache()))[p.id];
+    if (entryAfter !== undefined) {
+      await noteCapabilityReadingsNotProduced(
+        p.id,
+        hasUnmeasuredCapabilityReading(p, entryAfter, now()) ? now() : undefined,
+      ).catch(() => undefined);
+    }
+  }
+  return written;
+}
+
+/**
+ * The automatic capability check of ONE row: ask Driftstack to test the row it
+ * ALREADY holds, persist what it says, and report what the run needs to know.
+ *
+ * ⛔⛔ IT NEVER UPLOADS, and the asymmetry with the two user-initiated checks is
+ * the rule — the note in `checkEndpointRowForSweep` above is the whole argument.
+ * No `ensureAccountProxyRow`, no create, no update: a row with no `serverId` is
+ * answered "nothing asked" without a request, because its credentials are
+ * device-only until the customer's own Test sends them. The planner never plans
+ * such a row; this guard is the second belt, for a caller that is not the planner.
+ */
+export async function checkCapabilitiesForRow(
+  p: ProxyConfig,
+  creds: { baseUrl: string; apiKey: string | null },
+  now: () => number = () => Date.now(),
+): Promise<CapabilityCheckResult> {
+  if (creds.apiKey === null || creds.apiKey.length === 0 || p.serverId === undefined)
+    return { answered: false, accountRefused: false };
+  const asked = rowIdentity(p);
+  const outcome = await testProxyOnServer(creds.baseUrl, creds.apiKey, p.serverId, now);
+  // ⛔ The reply is about the row AS IT WAS ASKED ABOUT — see
+  // `testStoredRowAutomatically`, whose guard this is (the run stamps the ledger
+  // and looks for a test in flight itself, before it calls).
+  const current = await listLocalProxies()
+    .then((rows) => rows.find((row) => row.id === p.id))
+    .catch(() => undefined);
+  if (current !== undefined && rowIdentity(current) === asked) {
+    await persistAutomaticServerProbe(p, outcome, now);
+  }
+  return {
+    answered: outcome.kind !== 'unavailable',
+    accountRefused: isAccountRefusal(outcome),
+  };
+}
+
+/** Where the installed schedule reads the account from — a FUNCTION, called at
+ *  each run, so a key entered after launch (or a sign-out) is what the run sees. */
+export type ReadSweepCreds = () => { baseUrl: string; apiKey: string | null };
+
+/** The capability run's production deps. */
+export function capabilityRefreshDeps(readCreds: ReadSweepCreds): CapabilityRefreshDeps {
+  return {
+    loadCache: loadProbeCache,
+    loadAttempts: loadCapabilityAttempts,
+    listProxies: listLocalProxies,
+    readCreds,
+    recordAttempt: recordCapabilityAttempt,
+    pruneAttempts: pruneCapabilityAttempts,
+    check: (p, creds) => checkCapabilitiesForRow(p, creds),
+    now: () => Date.now(),
+    sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
+  };
+}
+
+/** The automatic capability check as the app runs it — from the schedule below
+ *  and from the Proxies tab opening. Single-flight and backed off inside
+ *  `runCapabilityRefresh`, so both callers can fire and forget. */
+export function runInstalledCapabilityRefresh(
+  readCreds: ReadSweepCreds,
+): Promise<CapabilityRefreshReport> {
+  return runCapabilityRefresh(capabilityRefreshDeps(readCreds));
+}
+
+/**
+ * The reachability sweep's production deps FOR ONE RUN.
+ *
+ * ⛔ Built per run, from the run, because both halves of that were dropped once.
+ * The wiring in App.tsx built its deps at mount with no `checkEndpoint` — so
+ * every VPN / HTTP row was excluded from every sweep, although
+ * `checkEndpointRowForSweep` exists for exactly that — and called
+ * `runSweep(deps)` from a `sweep()` that ignored its argument, so the app-open
+ * and focus triggers' short window (`ACTIVE_SWEEP_STALE_MS`) was discarded and
+ * everything waited the six-hour TTL. Each half had tested machinery behind it
+ * and neither was connected. This is the connection, in a function a test can
+ * call: tests/unit/the-installed-sweep-passes-its-window-and-checks-vpn-rows.
+ */
+export function installedSweepDeps(run: SweepRun, readCreds: ReadSweepCreds): SweepDeps {
+  return {
+    loadCache: loadProbeCache,
+    listProxies: listLocalProxies,
+    testProxy: (px) =>
+      testProxyNatively({
+        host: px.host,
+        port: px.port,
+        username: px.username,
+        password: px.password,
+      }),
+    saveResult: saveProbeResult,
+    now: () => Date.now(),
+    sleep: (ms) => new Promise<void>((r) => setTimeout(r, ms)),
+    checkEndpoint: (px) => checkEndpointRowForSweep(px, readCreds()),
+    staleAfterMs: run.staleAfterMs,
+  };
+}
+
+/**
+ * What the installed schedule runs on each trigger: the reachability sweep with
+ * the trigger's window, THEN the capability check — after, never beside, so the
+ * sweep's fresh verdicts (and the server tests its VPN rows just ran) are what
+ * the capability plan reads, and one customer's proxies are never dialled by two
+ * loops at once. Never rejects: both halves are best-effort background work.
+ *
+ * ⛔ "After" holds for a SKIPPED sweep too, and not by anything written here. A
+ * trigger that lands while another sweep is still probing (a focus event during
+ * the interval's sweep) gets `skipped` back from `runSweep` AT ONCE, and the line
+ * below then runs beside that sweep — which is why `runCapabilityRefresh` itself
+ * answers `skipped` while a sweep is in flight. The rule lives there so the OTHER
+ * trigger (the Proxies tab opening) obeys it as well; the sweep that is running
+ * makes its own follow-up call when it ends.
+ */
+export async function runInstalledSweep(run: SweepRun, readCreds: ReadSweepCreds): Promise<void> {
+  await runSweep(installedSweepDeps(run, readCreds)).catch(() => undefined);
+  await runInstalledCapabilityRefresh(readCreds).catch(() => undefined);
 }
