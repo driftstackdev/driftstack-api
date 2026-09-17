@@ -70,7 +70,14 @@ export const AgentSessionSchema = z.object({
     .object({
       timestamp: z.string(),
       manual_input_available: z.boolean().nullable(),
-      streaming_state: z.enum(['provisioning', 'live', 'blank', 'failed']).nullable(),
+      /** ⛔ `permission_denied` is a DISTINCT state, not a flavour of `failed`:
+       *  the device reports it when the machine running the phone has had its
+       *  screen-capture permission revoked. The video is guaranteed black, no
+       *  retry helps, and nothing the customer controls is involved — so it must
+       *  reach a customer as its own sentence rather than a generic failure. */
+      streaming_state: z
+        .enum(['provisioning', 'live', 'blank', 'failed', 'permission_denied'])
+        .nullable(),
       egress_state: z.enum(['live', 'dead_proxy']).nullable(),
       proxy_kind: z.enum(['socks5', 'openvpn', 'wireguard']),
       proxy_udp_supported: z.boolean(),

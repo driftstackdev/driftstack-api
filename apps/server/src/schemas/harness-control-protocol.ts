@@ -1453,8 +1453,36 @@ const CapabilityReportPayloadSchema = z.object({
   // harness already emits. Keep optional for older nodes, but never strip them:
   // the registry relay drives the installed GUI and persistence from this data.
   manualInputAvailable: z.boolean().optional(),
-  streamingState: z.enum(['provisioning', 'live', 'blank', 'failed']).optional(),
-  egressState: z.enum(['live', 'dead_proxy']).optional(),
+  /**
+   * ⛔ `permission_denied` WAS MISSING AND THE FIELD HAD NO `.catch`, SO THE WHOLE
+   * FRAME WAS REJECTED — on precisely the failure where it is needed most.
+   *
+   * The node emits this value deliberately and distinctly (HarnessCoordinator
+   * :9688 "real TCC denial — distinct from transient failed", and :10581) when
+   * macOS has revoked its Screen-Recording grant. That is the one state in which
+   * the video is GUARANTEED black. The enum here listed four values, none of them
+   * this one, and — uniquely among its neighbours below — carried no
+   * `.catch(undefined)`. So the value failed the enum and zod rejected the
+   * ENVELOPE, not the field.
+   *
+   * The cost is everything riding that envelope: `egressState` (including the
+   * `dead_proxy` signal), `exitIp`, `manualInputAvailable`, the safeguard checks
+   * and the h3 observations. The comment three lines above says of these exact
+   * fields "never strip them: the registry relay drives the installed GUI and
+   * persistence from this data" — and a node with a revoked grant stripped ALL of
+   * them, silently, with no reason reaching anyone.
+   *
+   * ⚠️ THE `.catch` MATTERS MORE THAN THE NEW MEMBER. Adding the value fixes the
+   * case we know about; the catch fixes the next one. Every sibling below already
+   * does this and says why: "the bad field alone is discarded rather than the
+   * whole capability report". This field was the exception, and an unknown future
+   * state must degrade to "not reported" rather than delete the frame.
+   */
+  streamingState: z
+    .enum(['provisioning', 'live', 'blank', 'failed', 'permission_denied'])
+    .optional()
+    .catch(undefined),
+  egressState: z.enum(['live', 'dead_proxy']).optional().catch(undefined),
   // T-26 — the LIVE exit identity this session's traffic actually leaves
   // through, plus the IPs a WebRTC handshake would surface, both OBSERVED on the
   // box and OPTIONAL. A pre-T-26 harness omits every key; the projection reads

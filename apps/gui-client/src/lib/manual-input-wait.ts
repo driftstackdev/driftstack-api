@@ -70,6 +70,7 @@ export type ManualInputWaitGroup =
   | 'screen'
   | 'screen-blank'
   | 'screen-failed'
+  | 'screen-capture-blocked'
   | 'local'
   | 'session-unreadable'
   | 'session-unconfirmed'
@@ -198,6 +199,25 @@ export const MANUAL_INPUT_WAIT_COPY: Readonly<
     placeholder: 'the phone’s video didn’t start — the address bar stays locked',
     awaitingScreen: false,
   },
+  /**
+   * ⛔ NOT A FLAVOUR OF `screen-failed`, and the device is explicit about the
+   * difference — it reports this state only for a real permission revocation,
+   * "distinct from transient failed". Collapsing the two would tell a customer
+   * something transient happened and invite them to retry, when the video is
+   * guaranteed black until somebody with access to the machine acts.
+   *
+   * ⚠️ The sentence says whose it is and does NOT suggest a retry. This is the
+   * same rule the crash-memory and egress-verification sentences follow: where
+   * retrying cannot help, saying "try again" is a second wrong instruction handed
+   * to someone who will have already tried.
+   */
+  'screen-capture-blocked': {
+    sentence:
+      'The phone’s screen can’t be captured at the moment. This one is ours, not your setup, and retrying will not clear it.',
+    chip: 'screen capture blocked',
+    placeholder: 'the phone’s screen can’t be captured — the address bar stays locked',
+    awaitingScreen: false,
+  },
   local: {
     sentence: 'Finishing the last change to this session — one moment.',
     chip: 'finishing the last change…',
@@ -289,6 +309,9 @@ export function manualInputWaitGroup(i: ManualInputWaitInputs): ManualInputWaitG
   if (i.sessionId === '' || !i.roomPresent || !i.roomBound || i.connState !== 'connected')
     return 'stream';
   if (i.publisherState !== 'publishing') {
+    // Checked BEFORE 'failed': the device distinguishes a permission revocation
+    // from a transient failure, and this is the one that no retry clears.
+    if (i.streamingState === 'permission_denied') return 'screen-capture-blocked';
     if (i.streamingState === 'failed') return 'screen-failed';
     if (i.streamingState === 'blank') return 'screen-blank';
     return 'screen';

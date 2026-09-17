@@ -515,7 +515,7 @@
               },
               "streaming_state": {
                 "type": ["string", "null"],
-                "enum": ["provisioning", "live", "blank", "failed", null]
+                "enum": ["provisioning", "live", "blank", "failed", "permission_denied", null]
               },
               "egress_state": {
                 "type": ["string", "null"],
@@ -4140,7 +4140,14 @@
                       },
                       "streaming_state": {
                         "type": ["string", "null"],
-                        "enum": ["provisioning", "live", "blank", "failed", null]
+                        "enum": [
+                          "provisioning",
+                          "live",
+                          "blank",
+                          "failed",
+                          "permission_denied",
+                          null
+                        ]
                       },
                       "egress_state": {
                         "type": ["string", "null"],
@@ -4928,7 +4935,14 @@
                       },
                       "streaming_state": {
                         "type": ["string", "null"],
-                        "enum": ["provisioning", "live", "blank", "failed", null]
+                        "enum": [
+                          "provisioning",
+                          "live",
+                          "blank",
+                          "failed",
+                          "permission_denied",
+                          null
+                        ]
                       },
                       "egress_state": {
                         "type": ["string", "null"],
@@ -5192,7 +5206,14 @@
                       },
                       "streaming_state": {
                         "type": ["string", "null"],
-                        "enum": ["provisioning", "live", "blank", "failed", null]
+                        "enum": [
+                          "provisioning",
+                          "live",
+                          "blank",
+                          "failed",
+                          "permission_denied",
+                          null
+                        ]
                       },
                       "egress_state": {
                         "type": ["string", "null"],
@@ -5456,7 +5477,14 @@
                       },
                       "streaming_state": {
                         "type": ["string", "null"],
-                        "enum": ["provisioning", "live", "blank", "failed", null]
+                        "enum": [
+                          "provisioning",
+                          "live",
+                          "blank",
+                          "failed",
+                          "permission_denied",
+                          null
+                        ]
                       },
                       "egress_state": {
                         "type": ["string", "null"],
@@ -35675,7 +35703,14 @@
                         },
                         "streaming_state": {
                           "type": ["string", "null"],
-                          "enum": ["provisioning", "live", "blank", "failed", null]
+                          "enum": [
+                            "provisioning",
+                            "live",
+                            "blank",
+                            "failed",
+                            "permission_denied",
+                            null
+                          ]
                         },
                         "egress_state": {
                           "type": ["string", "null"],
@@ -36125,7 +36160,14 @@
                               },
                               "streaming_state": {
                                 "type": ["string", "null"],
-                                "enum": ["provisioning", "live", "blank", "failed", null]
+                                "enum": [
+                                  "provisioning",
+                                  "live",
+                                  "blank",
+                                  "failed",
+                                  "permission_denied",
+                                  null
+                                ]
                               },
                               "egress_state": {
                                 "type": ["string", "null"],
@@ -36558,7 +36600,14 @@
                         },
                         "streaming_state": {
                           "type": ["string", "null"],
-                          "enum": ["provisioning", "live", "blank", "failed", null]
+                          "enum": [
+                            "provisioning",
+                            "live",
+                            "blank",
+                            "failed",
+                            "permission_denied",
+                            null
+                          ]
                         },
                         "egress_state": {
                           "type": ["string", "null"],

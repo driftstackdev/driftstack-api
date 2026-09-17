@@ -64,7 +64,7 @@ function guiControlCredentialFrom(body: {
 
 export interface AgentSessionCapabilityReport {
   manual_input_available: boolean | null;
-  streaming_state: 'provisioning' | 'live' | 'blank' | 'failed' | null;
+  streaming_state: 'provisioning' | 'live' | 'blank' | 'failed' | 'permission_denied' | null;
   egress_state: 'live' | 'dead_proxy' | null;
   /** T-27 — the live QUIC signal, present ONLY when the report carried one:
    *  `true` once a real HTTP/3 connection completed this session (latched

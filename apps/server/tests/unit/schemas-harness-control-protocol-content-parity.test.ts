@@ -938,10 +938,31 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain('.max(16),');
     expect(body).toContain('detail: z.string().max(4096).optional(),');
     expect(body).toContain('manualInputAvailable: z.boolean().optional(),');
+    // ⛔ PINNED AS THE MEMBER SET PLUS THE `.catch`, not as one formatted line.
+    // The old pin quoted the whole single-line declaration, so it reddened on a
+    // reformat AND, more importantly, it fossilised a four-member enum that could
+    // not carry `permission_denied` — the state the device reports for a revoked
+    // screen-capture grant. Because the field also had no `.catch`, that value
+    // rejected the ENTIRE capability report rather than the field.
+    //
+    // What must not regress is the MEMBERSHIP and the LENIENCY, so those are what
+    // is pinned. A formatting change is free; dropping a member or the catch reds.
+    for (const member of [
+      "'provisioning'",
+      "'live'",
+      "'blank'",
+      "'failed'",
+      "'permission_denied'",
+    ]) {
+      expect(body, `streamingState must still carry ${member}`).toContain(member);
+    }
+    expect(
+      body,
+      'a bad streaming state must drop the FIELD, never the frame — every sibling does this',
+    ).toMatch(/streamingState: z\s*\.enum\([\s\S]{0,160}?\.catch\(undefined\)/);
     expect(body).toContain(
-      "streamingState: z.enum(['provisioning', 'live', 'blank', 'failed']).optional(),",
+      "egressState: z.enum(['live', 'dead_proxy']).optional().catch(undefined),",
     );
-    expect(body).toContain("egressState: z.enum(['live', 'dead_proxy']).optional(),");
     // Derived, not quoted. The size used to appear twice — `> 64 * 1024` in
     // the check and a hardcoded "65536" in the message beside it — the same
     // shape as the upload-cap messages that drifted. Both now read the one
@@ -999,9 +1020,31 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
         egressState: 'dead_proxy',
       });
     }
-    expect(
-      HarnessOutboundSchema.safeParse({ ...valid, streamingState: 'looks-fine' }).success,
-    ).toBe(false);
+    // ⛔ THIS ASSERTION USED TO BE `.toBe(false)` — it pinned the harmful
+    // behaviour as though it were the contract, and that is how it survived.
+    //
+    // An unrecognised `streamingState` rejected the WHOLE ENVELOPE. The device
+    // emits `permission_denied` for a revoked screen-capture grant, which this
+    // enum did not carry, so on the one failure where the video is guaranteed
+    // black the control plane lost the entire capability report — `egressState`
+    // (including the dead-proxy signal), `exitIp`, `manualInputAvailable`, the
+    // safeguard checks, all of it. The schema's own comment says of those fields
+    // "never strip them: the registry relay drives the installed GUI and
+    // persistence from this data".
+    //
+    // The contract is now the one every sibling field already had: the bad FIELD
+    // is discarded, the frame survives. So the assertion inverts — and the value
+    // stays deliberately unrecognisable, because the point is what happens to a
+    // state nobody here has heard of, not to the one we just added.
+    const unknownState = HarnessOutboundSchema.safeParse({
+      ...valid,
+      streamingState: 'looks-fine',
+    });
+    expect(unknownState.success, 'an unknown state must not delete the frame').toBe(true);
+    if (unknownState.success && unknownState.data.type === 'capabilityReport') {
+      expect(unknownState.data.streamingState, 'the bad field alone is dropped').toBeUndefined();
+      expect(unknownState.data.egressState, 'its neighbours survive').toBe('dead_proxy');
+    }
     expect(
       HarnessOutboundSchema.safeParse({
         ...valid,
