@@ -259,3 +259,53 @@ describe('UNKNOWN never becomes a pass', () => {
     expect(compareOsToClaim('linux', 'other')).toBe('unknown');
   });
 });
+
+describe('a SYN in which nothing was observed cannot name an OS', () => {
+  /**
+   * ⛔ THIS RETURNED `windows` AT `high` — the highest confidence the system
+   * offers — from a SYN carrying neither of the options the classifier keys on.
+   *
+   * `layoutOf` answers 'none' when window-scale or SACK-permitted is missing,
+   * which is what a stripped, minimal or simply unobserved SYN looks like. With
+   * the layout unusable, `hasTs` is false for the SAME reason, and the old reason
+   * string said it aloud — "no TCP timestamps" — reading NOT OBSERVED as NOT
+   * PRESENT. All that actually remained was a TTL, and this file's own note
+   * records that TTL is rewritten in transit, which is why corroboration exists.
+   *
+   * ⚠️ A real Windows stack SENDS window-scale and SACK-permitted. Their joint
+   * absence is evidence against having measured a Windows stack, not for it.
+   *
+   * It is customer-visible: `os_fingerprint` is on the customer allowlist and
+   * renders as "OS: windows · high". Someone running an iPhone profile through an
+   * exit that strips options was told at maximum confidence that their exit looks
+   * like Windows — the exact mismatch this product exists to prevent shipping.
+   */
+  const NOTHING_OBSERVED: TcpSynSignature = {
+    ttl: 128,
+    windowSize: 64240,
+    mss: 1460,
+    windowScale: null,
+    optionOrder: [2],
+    df: true,
+  };
+
+  it('CRITICAL a stripped SYN at TTL 128 is unknown, not Windows at high confidence', () => {
+    const v = fingerprintOs(NOTHING_OBSERVED);
+    expect(v.os, 'no option layout means no family').toBe('unknown');
+    expect(v.confidence).toBe('none');
+    // ⛔ And the REASON must not repeat the original error by asserting the
+    // options were absent. It has to say they were not observed.
+    expect(v.reason).toMatch(/observed/i);
+    expect(v.reason).not.toMatch(/Windows default stack/);
+  });
+
+  it('CONTROL — a SYN that really does show the Windows layout still reads Windows at high', () => {
+    // Without this, the arm above would pass against a classifier that had simply
+    // stopped identifying Windows at all, which would be a worse defect than the
+    // one being fixed: the evidence is the LAYOUT, and when it is present the
+    // verdict is sound.
+    const v = fingerprintOs(WINDOWS);
+    expect(v.os).toBe('windows');
+    expect(v.confidence).toBe('high');
+  });
+});

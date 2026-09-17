@@ -311,7 +311,25 @@ export function FleetView(): JSX.Element {
             icon={<IconAlert />}
             l="Unreachable"
             value={unreachable}
-            sub={unreachable > 0 ? 'needs attention' : 'all healthy'}
+            // ⛔ "all healthy" USED TO SHOW WHENEVER NOTHING HAD FAILED — which
+            // includes when nothing has been dialled. On first open the strip
+            // claimed, simultaneously, "Unreachable 0 — all healthy" and "Not
+            // checked N — run Check all", and a customer reads the green health
+            // claim rather than the audit of it sitting next to it.
+            //
+            // `unreachable > 0` is a PRESENCE test over settled results: it can
+            // see a server that was measured and failed, and cannot see one that
+            // was never measured at all. Health may only be asserted once every
+            // member has actually answered.
+            sub={
+              unreachable > 0
+                ? 'needs attention'
+                : pinged === 0
+                  ? 'none checked yet'
+                  : pinged < members.length
+                    ? `${members.length - pinged} still unchecked`
+                    : 'all healthy'
+            }
           />
           <Stat
             icon={<IconClock />}

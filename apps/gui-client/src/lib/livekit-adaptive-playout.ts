@@ -118,8 +118,24 @@ export function nextPlayoutDelay(current: number, s: PlayoutSignals): number {
     froze ||
     loss >= ADAPTIVE_PLAYOUT.LOSS_STRESS_PCT ||
     jitter >= ADAPTIVE_PLAYOUT.JITTER_STRESS_MS;
+  // ⛔ CALM REQUIRES THE SIGNALS TO HAVE BEEN MEASURED. `loss` and `jitter` above
+  // default an ABSENT reading to 0 — the calmest value there is — so a sample
+  // carrying neither used to satisfy every calm threshold and the controller SHRANK
+  // the buffer. That is a bet that conditions are perfect, placed at the one moment
+  // we know least, and the type says as much: both fields are documented "or null
+  // when unknown".
+  //
+  // ⚠️ The asymmetry with `stressed` is deliberate, not an oversight. An absent
+  // reading must not manufacture stress either, so `?? 0` is right THERE: it keeps
+  // an unmeasured sample from ramping the buffer up. Unmeasured belongs in neither
+  // camp — it falls into the hold band, which is the honest neutral and leaves the
+  // delay exactly where the last real measurement put it.
+  const measured = s.packetLossPct !== null && s.jitterMs !== null;
   const calm =
-    !froze && loss <= ADAPTIVE_PLAYOUT.LOSS_CALM_PCT && jitter <= ADAPTIVE_PLAYOUT.JITTER_CALM_MS;
+    !froze &&
+    measured &&
+    loss <= ADAPTIVE_PLAYOUT.LOSS_CALM_PCT &&
+    jitter <= ADAPTIVE_PLAYOUT.JITTER_CALM_MS;
 
   let next = current;
   if (stressed) next = current + ADAPTIVE_PLAYOUT.STEP_UP_S;

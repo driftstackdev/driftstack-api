@@ -210,7 +210,23 @@ export function proxyHealthPercent(
     return c !== undefined && c.serverSeeded !== true;
   });
   if (probed.length === 0) return null;
-  const ok = probed.filter((p) => probeCache[p.id]?.result.reachable === true).length;
+  // ⛔ THIS COUNTED `reachable` ALONE — a FOURTH site of a predicate that was
+  // centralised precisely to stop a fourth site existing. `isProxyUsable` says so
+  // in its own comment: "One predicate on purpose … two surfaces disagreeing about
+  // whether a proxy works is exactly how a dead proxy keeps its green badge."
+  //
+  // `reachable` means the greeting completed. A pool that answers the greeting and
+  // refuses every CONNECT — the documented 2026-08-18 failure — rendered "100.0%
+  // proxy health" in the ready colour on this hub while the Proxies screen next
+  // door counted the same pool as zero healthy. The customer launches profiles
+  // against dead egress on the strength of the greener number.
+  //
+  // `auth_ok` and `can_route` are in the SAME result object that was already being
+  // read here, so this was never a data-availability problem.
+  const ok = probed.filter((p) => {
+    const result = probeCache[p.id]?.result;
+    return result !== undefined && isProxyUsable(result);
+  }).length;
   return (ok / probed.length) * 100;
 }
 

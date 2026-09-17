@@ -112,7 +112,9 @@ describe('nextPlayoutDelay — adaptive jitter-buffer control law', () => {
     );
   });
 
-  it('treats null loss/jitter as 0 (unknown → calm, not a spurious ramp)', () => {
+  it('an unknown sample does not ramp the buffer up — absence is not stress', () => {
+    // The `?? 0` on the STRESSED side is right and stays: a sample carrying no
+    // reading must not manufacture a ramp.
     expect(
       nextPlayoutDelay(ADAPTIVE_PLAYOUT.MIN_S, {
         freezeDelta: 0,
@@ -120,6 +122,44 @@ describe('nextPlayoutDelay — adaptive jitter-buffer control law', () => {
         jitterMs: null,
       }),
     ).toBe(ADAPTIVE_PLAYOUT.MIN_S);
+  });
+
+  it('CRITICAL an unknown sample does not SHRINK the buffer either — it holds', () => {
+    // ⛔ THE ARM ABOVE USED TO BE THE ONLY ONE, AND IT COULD NOT SEE THIS. It
+    // asserts at MIN_S, the floor — where "calm, step down" and "hold" produce the
+    // identical value, because the step down is clamped straight back to the
+    // floor. So it passed under both behaviours and was vacuous about the very
+    // distinction its name claimed ("unknown → calm").
+    //
+    // Measured above the floor, the old behaviour is visible: `?? 0` made an
+    // absent reading the CALMEST possible value, so a sample carrying no loss and
+    // no jitter satisfied every calm threshold and the controller shrank the
+    // buffer — a bet that conditions are perfect, placed at the one moment we know
+    // least. The type says both fields are "null when unknown".
+    // Rounded onto the control law's own 1/100s grid: MIN_S + 3 steps is
+    // 0.18000000000000002 in float, and the function returns 0.18, so an unrounded
+    // start would read as a change when nothing moved.
+    const start =
+      Math.round((ADAPTIVE_PLAYOUT.MIN_S + ADAPTIVE_PLAYOUT.STEP_DOWN_S * 3) * 100) / 100;
+    const held = nextPlayoutDelay(start, {
+      freezeDelta: 0,
+      packetLossPct: null,
+      jitterMs: null,
+    });
+    expect(held, 'unmeasured belongs in the hold band, not the calm one').toBe(start);
+  });
+
+  it('CONTROL — a genuinely calm MEASURED sample still steps the buffer down', () => {
+    // Without this, the arm above would pass against a controller that had simply
+    // stopped stepping down at all, which would strand every session at whatever
+    // delay a single bad patch produced.
+    // Rounded onto the control law's own 1/100s grid: MIN_S + 3 steps is
+    // 0.18000000000000002 in float, and the function returns 0.18, so an unrounded
+    // start would read as a change when nothing moved.
+    const start =
+      Math.round((ADAPTIVE_PLAYOUT.MIN_S + ADAPTIVE_PLAYOUT.STEP_DOWN_S * 3) * 100) / 100;
+    const stepped = nextPlayoutDelay(start, { freezeDelta: 0, packetLossPct: 0, jitterMs: 0 });
+    expect(stepped, 'a measured calm sample must still relax the buffer').toBeLessThan(start);
   });
 
   it("⛔ V-2168: the owner's own link sits in the HOLD band — with a 0 floor the buffer never builds", () => {

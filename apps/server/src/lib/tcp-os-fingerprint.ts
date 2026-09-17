@@ -253,6 +253,34 @@ export function fingerprintOs(sig: TcpSynSignature): OsFingerprintResult {
         reason: `initial TTL 128 says Windows but the option layout says ${layout === 'darwin' ? 'Darwin' : 'Linux'}, and neither is corroborated`,
       };
     }
+    // ⛔ NOTHING WAS OBSERVED, SO NOTHING MAY BE CLAIMED — and this branch used to
+    // fall through to `windows` at the HIGHEST confidence the system offers.
+    //
+    // `layoutOf` returns 'none' when window-scale or SACK-permitted is absent from
+    // the option order, which is what a stripped, minimal or simply unobserved SYN
+    // looks like. `hasTs` is then false for the same reason, and the old reason
+    // string said so out loud — "no TCP timestamps" — reading NOT OBSERVED as NOT
+    // PRESENT. That is the one inference this whole file exists to avoid.
+    //
+    // ⚠️ A real Windows stack SENDS window-scale and SACK-permitted, so the
+    // absence of both is evidence AGAINST having measured a Windows stack, not
+    // for it. All that remained was a TTL — and the note below records that TTL is
+    // rewritable in transit, which is precisely why layout corroboration exists.
+    //
+    // The cost of getting this wrong is not a vague chip: `os_fingerprint` is on
+    // the customer allowlist and renders as "OS: windows · high". A customer
+    // running an iPhone profile through an exit whose SYN options are stripped was
+    // told, at maximum confidence, that their exit stack is Windows — the exact
+    // mismatch this product exists to prevent them shipping. `unknown` is already
+    // wired end to end and renders as a plain "could not be determined".
+    if (layout === 'none') {
+      return {
+        os: 'unknown',
+        confidence: 'none',
+        reason:
+          'initial TTL 128 would suggest Windows, but neither window-scale nor SACK-permitted was observed in the SYN, so nothing corroborates it',
+      };
+    }
     return {
       os: 'windows',
       confidence: hasTs ? 'medium' : 'high',
