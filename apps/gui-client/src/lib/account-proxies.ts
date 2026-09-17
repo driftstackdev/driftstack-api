@@ -647,8 +647,26 @@ const PROXY_TEST_DEADLINE_MS = 30_000;
  *  the measurement it asked for was still running.
  *
  *  ⛔ Keep this ABOVE the control plane's fleet wait. If the server's wait ever
- *  exceeds this, the bug returns in full and looks exactly like a server fault. */
-const FLEET_PROXY_TEST_DEADLINE_MS = 90_000;
+ *  exceeds this, the bug returns in full and looks exactly like a server fault.
+ *
+ *  ⛔⛔ RAISED 90s → 95s, because the rule above named TWO layers and the chain
+ *  has FOUR. Reconciling this deadline against the control plane's wait said
+ *  nothing about the layer sitting between them: nginx's catch-all served this
+ *  route with `proxy_read_timeout 60s`, BELOW both, so a VPN probe allowed 80s by
+ *  the control plane and 90s here was killed at 60s by a wall neither side names,
+ *  and the customer got a gateway error page for a tunnel nobody had finished
+ *  measuring. The very symptom the 30s → 90s change was made to kill, relocated
+ *  one layer inward and invisible to the reasoning that fixed it.
+ *
+ *  The full ordering, outermost-longest, is now
+ *      handler 80s < nginx 90s < THIS 95s < Cloudflare's 524 wall at 100s
+ *  and Cloudflare's 100s is the hard outer bound — nothing in our repo can raise
+ *  it, so the whole chain has to fit underneath. The relationship is pinned by
+ *  apps/server/tests/unit/edge-timeout-vs-handler-budget-cross-source-invariant.test.ts,
+ *  which parses the shipped nginx config rather than trusting this comment: the
+ *  previous version of this same rule WAS just a comment, and it held for the two
+ *  layers it mentioned while the route stayed broken. */
+const FLEET_PROXY_TEST_DEADLINE_MS = 95_000;
 
 /** T-1 — a fleet `ok:false` frame carries no `reason` (the node reports the
  *  measurement, not prose), so the client says what happened in plain words. */
