@@ -32,10 +32,40 @@ export interface ProbeEgressTransport {
   send(request: ProbeEgressFrame): void;
 }
 
-/** A node-side egress probe dials the proxy, routes to the target, and measures
- *  H2/QUIC — several round-trips through a possibly-slow exit. Generous but
- *  bounded so a silent or wedged node can't hang the awaiting request forever. */
-export const PROBE_EGRESS_REQUEST_TIMEOUT_MS = 15_000;
+/**
+ * A node-side egress probe dials the proxy, routes to the target, and measures
+ * H2/QUIC — several round-trips through a possibly-slow exit. Generous but
+ * bounded so a silent or wedged node can't hang the awaiting request forever.
+ *
+ * ⛔ RAISED 15 s → 30 s, 2026-09-16, BECAUSE 15 s WAS SHORTER THAN THE NODE'S OWN
+ * WORST CASE — the exact defect the VPN constant below was created to fix, never
+ * carried across to socks5. The reasoning in N16 is reprinted there: a server
+ * that gives up first reports "no Mac was free" about a proxy the node was still
+ * measuring. It is a lie about OUR availability, told to a customer testing THEIR
+ * proxy, and it is worse than a slower honest answer.
+ *
+ * The node's socks5 path runs its QUIC leg through a child with a hard
+ * `ceilingMs: 20_000` (HarnessCoordinator, two call sites). So a wedged QUIC
+ * child alone outlives a 15 s dispatch, before counting the gost boot, the
+ * exit-IP leg or teardown. 20 s is therefore a LOWER bound on the node's worst
+ * case, not the worst case — hence the same `PROBE_EGRESS_BUDGET_SLACK_MS` the
+ * VPN tier uses, rather than a tighter number that merely moves the cliff.
+ *
+ * ⚠️ MEASURED BEFORE CHANGING IT, six fleet tests against a healthy socks5 row:
+ * 5.18 / 10.89 / 10.29 / 11.30 / 11.00 / 11.46 s end to end (wall, so an UPPER
+ * bound on the dispatch — it includes the client's round trip). Steady state is
+ * ~11 s, so this is NOT about the normal case being slow. It is about the tail
+ * being uncovered: the common path had ~4 s of headroom and the node's own
+ * ceiling needed ~20.
+ *
+ * ⚠️ Written as a literal, NOT as `20_000 + PROBE_EGRESS_BUDGET_SLACK_MS`, which
+ * is what I reached for first: that constant is declared ~28 lines BELOW this one
+ * and a `const` referenced before its declaration is a temporal-dead-zone
+ * ReferenceError at module load — it would have taken the server down on BOOT,
+ * not failed a test. The arithmetic is 20 s (the node's QUIC child ceiling) plus
+ * the same 10 s slack the VPN tier applies.
+ */
+export const PROBE_EGRESS_REQUEST_TIMEOUT_MS = 30_000;
 
 /**
  * (n) N16 — the wait for an openvpn/wireguard probe. 15 s is a SOCKS5 number and
