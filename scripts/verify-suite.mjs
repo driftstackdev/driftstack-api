@@ -136,7 +136,7 @@ export const EXPECTED_TEST_FILES_ALL = 3470;
  *
  * Locally those files skip for want of `DATABASE_URL`. They are MOST of the
  * skipped files in a local green, not all of them: 133 test files gate on
- * `DATABASE_URL`, 14 on `RUN_DB_TESTS` and 4 on `REDIS_URL`, with 17 more carrying
+ * `DATABASE_URL`, 15 on `RUN_DB_TESTS` and 4 on `REDIS_URL`, with 17 more carrying
  * some other condition. V-917 enumerated the skip mechanisms and V-1034 re-audited
  * all 19 of them against where each can be true, finding zero unconditional skips
  * and one deliberate inversion (`.npmrc`, gitignored, so its assertions run for an
