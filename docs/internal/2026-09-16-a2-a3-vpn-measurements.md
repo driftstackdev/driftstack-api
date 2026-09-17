@@ -106,7 +106,14 @@ A3's fix is better than either option A2 offered: the producer declares
 reads it off the frame and never mirrors the list. Live and reporting: 4 layers,
 0 failures.
 
-**BUILT, not yet verified live.** A2 asserts reported ⊇ expected AND all passed,
+**VERIFIED LIVE.** Session `agt_46c4a0ef`, manual socks5, production 4267340b6, three
+capability frames identical: `safeguardCount=4 safeguardExpectedCount=4`. Reported
+covers expected and all four passed, so the check asserts completeness against a
+set the device declares rather than falling back. `dnsLocalResolverAbsent=true`
+arrived on the same frames — the field the producer's own suite could not prove
+populated, because booting a real proxy child is out of scope there.
+
+Originally recorded as: A2 asserts reported ⊇ expected AND all passed,
 reading `safeguardLayersExpected` off the frame and never mirroring it. An ABSENT
 expected set falls back to the old predicate and emits
 `safeguards_expectation_unreported`; an EMPTY one is a different fact and there is
