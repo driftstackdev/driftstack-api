@@ -2,7 +2,8 @@
 //
 // PUT /v1/account/me/proxies/:id can repoint a row at a different machine. The
 // readings it carries — the passive OS fingerprint, the exit identity (+ the
-// stamp dating its contradiction) and the measured QUIC verdict — were all
+// stamp dating its contradiction), the measured QUIC verdict and what a Test
+// measured about QUIC and UDP (migration 0124) — were all
 // taken by connecting THROUGH the old one, and (now that the list surfaces
 // them) a customer who repoints a proxy would otherwise SEE a reading of a
 // server they no longer use.
@@ -51,6 +52,8 @@ const auth = (fixture: TestAppFixture): { authorization: string } => ({
 
 const MEASURED_AT = new Date('2026-09-16T10:00:00.000Z');
 const SUPERSEDED_AT = new Date('2026-09-16T10:05:00.000Z');
+/** When an earlier Test measured QUIC and UDP through this row (migration 0124). */
+const PROBED_AT = new Date('2026-09-16T10:02:00.000Z');
 /** The last time the BACKGROUND sweep attempted this row (migration 0123). */
 const ATTEMPTED_AT = new Date('2026-09-16T09:00:00.000Z');
 
@@ -88,7 +91,34 @@ const everyReading = (osFingerprint: StoredOsReading): AccountProxyRowUpdates =>
   exitSupersededAt: SUPERSEDED_AT,
   quicMeasured: 'h3',
   quicMeasuredAt: MEASURED_AT,
+  // (0124) — a Test's own QUIC / UDP readings. The QUIC one is a measured
+  // NEGATIVE on purpose: a stored `false` is the worst survivor of a repoint,
+  // because it tells every consumer not to look again — about a machine the row
+  // no longer points at. Opposite polarities, so an arm cannot pass on one leg.
+  quicProbe: false,
+  quicProbeAt: PROBED_AT,
+  udpProbe: true,
+  udpProbeAt: PROBED_AT,
 });
+
+/** The four Test-reading columns, gone. Spelled once so every arm that clears
+ *  them asserts the value AND its date on BOTH legs. */
+function expectProbeReadingsCleared(row: AccountProxyRow | null, why: string): void {
+  expect(row, why).not.toBeNull();
+  expect(row?.quicProbe, `${why}: quic_probe`).toBeNull();
+  expect(row?.quicProbeAt, `${why}: quic_probe_at`).toBeNull();
+  expect(row?.udpProbe, `${why}: udp_probe`).toBeNull();
+  expect(row?.udpProbeAt, `${why}: udp_probe_at`).toBeNull();
+}
+
+/** …and kept exactly as seeded — the vacuity control for the function above: an
+ *  arm that clears nothing must find `false` still false, not merely non-null. */
+function expectProbeReadingsKept(row: AccountProxyRow | null, why: string): void {
+  expect(row?.quicProbe, `${why}: quic_probe`).toBe(false);
+  expect(row?.quicProbeAt, `${why}: quic_probe_at`).toEqual(PROBED_AT);
+  expect(row?.udpProbe, `${why}: udp_probe`).toBe(true);
+  expect(row?.udpProbeAt, `${why}: udp_probe_at`).toEqual(PROBED_AT);
+}
 
 /** Create a proxy and put every stored reading on it, as a test + a live
  *  session would have. Returns its id. */
@@ -172,10 +202,15 @@ describe('PUT /v1/account/me/proxies/:id — a stored reading does not outlive i
       exitSupersededAt: null,
       quicMeasured: null,
       quicMeasuredAt: null,
+      quicProbe: null,
+      quicProbeAt: null,
+      udpProbe: null,
+      udpProbeAt: null,
     });
 
     const row = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
     expect(row?.port).toBe(1081);
+    expectProbeReadingsCleared(row, 'a port change');
     expect(row?.osFingerprint).toBeNull();
     expect(row?.osFingerprintAt).toBeNull();
     expect(row?.exitObserved).toBeNull();
@@ -193,6 +228,7 @@ describe('PUT /v1/account/me/proxies/:id — a stored reading does not outlive i
     expect(movedRow?.osFingerprint).toBeNull();
     expect(movedRow?.exitObserved).toBeNull();
     expect(movedRow?.quicMeasured).toBeNull();
+    expectProbeReadingsCleared(movedRow, 'a host change');
 
     // A different service answering on the same host:port is a different
     // machine as far as every reading is concerned.
@@ -208,6 +244,7 @@ describe('PUT /v1/account/me/proxies/:id — a stored reading does not outlive i
     expect(reschemedRow?.exitObserved).toBeNull();
     expect(reschemedRow?.exitSupersededAt).toBeNull();
     expect(reschemedRow?.quicMeasured).toBeNull();
+    expectProbeReadingsCleared(reschemedRow, 'a scheme change');
   });
 
   it('a label-only edit clears NOTHING — the machine, the identity and every reading are unchanged', async () => {
@@ -225,6 +262,7 @@ describe('PUT /v1/account/me/proxies/:id — a stored reading does not outlive i
     expect(row?.exitSupersededAt).toEqual(SUPERSEDED_AT);
     expect(row?.quicMeasured).toBe('h3');
     expect(row?.quicMeasuredAt).toEqual(MEASURED_AT);
+    expectProbeReadingsKept(row, 'a label-only edit');
   });
 
   it('the desktop client’s per-launch resync — every field resubmitted UNCHANGED — clears nothing', async () => {
@@ -252,6 +290,7 @@ describe('PUT /v1/account/me/proxies/:id — a stored reading does not outlive i
     expect(row?.exitSupersededAt).toEqual(SUPERSEDED_AT);
     expect(row?.quicMeasured).toBe('h3');
     expect(row?.quicMeasuredAt).toEqual(MEASURED_AT);
+    expectProbeReadingsKept(row, 'an unchanged resubmission');
   });
 
   it('a username change drops what the authenticated session measured, and an OS reading OF THE EXIT', async () => {
@@ -272,6 +311,7 @@ describe('PUT /v1/account/me/proxies/:id — a stored reading does not outlive i
     expect(row?.quicMeasuredAt).toBeNull();
     expect(row?.osFingerprint).toBeNull();
     expect(row?.osFingerprintAt).toBeNull();
+    expectProbeReadingsCleared(row, 'a username change');
   });
 
   it('a credential change KEEPS the front door’s own OS reading — no credential moves the machine at an unchanged host:port', async () => {
@@ -288,6 +328,7 @@ describe('PUT /v1/account/me/proxies/:id — a stored reading does not outlive i
     expect(row?.exitObserved).toBeNull();
     expect(row?.exitSupersededAt).toBeNull();
     expect(row?.quicMeasured).toBeNull();
+    expectProbeReadingsCleared(row, 'a removed password');
     // Measured OF the front door at an unchanged address → kept.
     expect(row?.osFingerprint).toEqual(frontDoorOsReading);
     expect(row?.osFingerprintAt).toEqual(MEASURED_AT);
@@ -327,6 +368,7 @@ describe('PUT /v1/account/me/proxies/:id — a stored reading does not outlive i
     expect(row?.exitSupersededAt).toBeNull();
     expect(row?.quicMeasured).toBeNull();
     expect(row?.quicMeasuredAt).toBeNull();
+    expectProbeReadingsCleared(row, 'a move to an unreachable address');
   });
 
   it('a password ROTATION at the same address is a credential edit — the stored envelope is DECRYPTED and compared, not weighed by its presence', async () => {
@@ -348,6 +390,7 @@ describe('PUT /v1/account/me/proxies/:id — a stored reading does not outlive i
     expect(row?.exitSupersededAt).toBeNull();
     expect(row?.quicMeasured).toBeNull();
     expect(row?.quicMeasuredAt).toBeNull();
+    expectProbeReadingsCleared(row, 'a password rotation');
     // Still the front door's own stack at an unchanged host:port.
     expect(row?.osFingerprint).toEqual(frontDoorOsReading);
     expect(row?.osFingerprintAt).toEqual(MEASURED_AT);
@@ -391,6 +434,7 @@ describe('PUT /v1/account/me/proxies/:id — a stored reading does not outlive i
     expect(row?.quicMeasuredAt).toBeNull();
     expect(row?.osFingerprint).toBeNull();
     expect(row?.osFingerprintAt).toBeNull();
+    expectProbeReadingsCleared(row, 'an OpenVPN account switch');
   });
 
   it('a WireGuard KEY ROTATION at an unchanged endpoint clears every reading, including a front-door OS reading: VPN material takes the MACHINE arm, because the tunnel endpoint lives INSIDE it', async () => {
@@ -436,6 +480,7 @@ describe('PUT /v1/account/me/proxies/:id — a stored reading does not outlive i
     expect(row?.quicMeasured).toBeNull();
     expect(row?.osFingerprint, 'the machine arm, not the credential one').toBeNull();
     expect(row?.osFingerprintAt).toBeNull();
+    expectProbeReadingsCleared(row, 'a WireGuard key rotation');
   });
 
   it('the per-launch resync of a VPN row — the identical block, host and port — clears NOTHING, so the VPN rule cannot be presence-based and cannot compare ciphertext', async () => {
@@ -470,6 +515,7 @@ describe('PUT /v1/account/me/proxies/:id — a stored reading does not outlive i
     expect(row?.exitObservedAt).toEqual(MEASURED_AT);
     expect(row?.exitSupersededAt).toEqual(SUPERSEDED_AT);
     expect(row?.quicMeasured).toBe('h3');
+    expectProbeReadingsKept(row, 'an unchanged VPN resubmission');
   });
 
   it('a repointed row does not inherit the OLD address’s failure streak — it is due for a background refresh at once, so the columns this PUT cleared are re-measured in minutes, not a day', async () => {

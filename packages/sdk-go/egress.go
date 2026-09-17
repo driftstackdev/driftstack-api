@@ -71,6 +71,16 @@ type AccountProxyMetadata struct {
 	// when that measurement was taken (RFC 3339), or null.
 	QuicMeasured   *string `json:"quic_measured"`
 	QuicMeasuredAt *string `json:"quic_measured_at"`
+	// QuicProbe and UDPProbe are what a proxy test last measured through this
+	// proxy: whether QUIC relays, and whether the proxy carries UDP. Separate
+	// from QuicMeasured, which is what a live session negotiated. Three states,
+	// and a caller must keep them apart: true = measured working, false =
+	// measured NOT working, nil = never measured. QuicProbeAt / UDPProbeAt are
+	// when each was measured (RFC 3339), or nil.
+	QuicProbe   *bool   `json:"quic_probe"`
+	QuicProbeAt *string `json:"quic_probe_at"`
+	UDPProbe    *bool   `json:"udp_probe"`
+	UDPProbeAt  *string `json:"udp_probe_at"`
 	// ExitObserved is the last exit identity observed THROUGH this proxy — by a
 	// live session (observed_via "session") or by the fleet-vantage test
 	// ("probe"), latest wins — or nil when never observed. For an OpenVPN /

@@ -51,6 +51,11 @@ function rowOf(scheme: AccountProxyRow['scheme']): AccountProxyRow {
     exitObserved: null,
     exitObservedAt: null,
     exitSupersededAt: null,
+    // The Test's QUIC / UDP readings (migration 0124) — never measured here.
+    quicProbe: null,
+    quicProbeAt: null,
+    udpProbe: null,
+    udpProbeAt: null,
     // ITEM 4 — the background-refresh bookkeeping columns (migration 0123).
     freshnessAttemptedAt: null,
     freshnessConsecutiveFailures: 0,

@@ -2340,6 +2340,14 @@ function buildRegistry(): OpenAPIRegistry {
       // a real 'h3' lands here).
       quic_measured: z.enum(['h3', 'h2-only']).nullable(),
       quic_measured_at: z.string().nullable(),
+      // What a proxy TEST last measured about QUIC and UDP through this proxy, and
+      // when (ISO 8601) — separate from `quic_measured`, which is what a live
+      // session negotiated. true = measured working, false = measured NOT working
+      // (a real negative), null = never measured. Mirrors api-types.
+      quic_probe: z.boolean().nullable().optional(),
+      quic_probe_at: z.string().nullable().optional(),
+      udp_probe: z.boolean().nullable().optional(),
+      udp_probe_at: z.string().nullable().optional(),
       // (d) B5 — the last exit identity observed THROUGH this proxy, by a live
       // session ('session') or the fleet-vantage Test ('probe'); latest wins. The
       // only source of a VPN row's location / timezone short of running a test.
@@ -2491,6 +2499,13 @@ function buildRegistry(): OpenAPIRegistry {
         // null when never measured. Carried on every ok:true test result.
         quic_measured: z.enum(['h3', 'h2-only']).nullable().optional(),
         quic_measured_at: z.string().nullable().optional(),
+        // The proxy's stored Test readings for QUIC and UDP as they stand after
+        // this test (see AccountProxyMetadata): true / false are readings, null =
+        // never measured; each is dated by its `_at` stamp, never by this reply.
+        quic_probe: z.boolean().nullable().optional(),
+        quic_probe_at: z.string().nullable().optional(),
+        udp_probe: z.boolean().nullable().optional(),
+        udp_probe_at: z.string().nullable().optional(),
         // N-2 — present when the passive observer recorded the proxy's SYN, and
         // (p) — also when it did NOT but the row holds a stored reading, which
         // then arrives with `os_fingerprint_at` and keeps its cause beside it.
@@ -2614,6 +2629,13 @@ function buildRegistry(): OpenAPIRegistry {
           .optional(),
         quic_measured: z.enum(['h3', 'h2-only']).nullable().optional(),
         quic_measured_at: z.string().nullable().optional(),
+        // The proxy's stored Test readings for QUIC and UDP as they stand after
+        // this test (see AccountProxyMetadata): true / false are readings, null =
+        // never measured; each is dated by its `_at` stamp, never by this reply.
+        quic_probe: z.boolean().nullable().optional(),
+        quic_probe_at: z.string().nullable().optional(),
+        udp_probe: z.boolean().nullable().optional(),
+        udp_probe_at: z.string().nullable().optional(),
         // N-2 — the fingerprint the CONTROL PLANE observed while the node measured
         // the latency. Same field, same shape, same "absent means unobserved" rule.
         os_fingerprint: OsFingerprintOpenApi.optional(),

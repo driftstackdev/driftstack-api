@@ -70,6 +70,12 @@ function row(over: Partial<AccountProxyRow> & { scheme: string }): AccountProxyR
     exitObserved: over.exitObserved ?? null,
     exitObservedAt: over.exitObservedAt ?? null,
     exitSupersededAt: over.exitSupersededAt ?? null,
+    // The Test's QUIC / UDP readings (migration 0124). `??` keeps a measured
+    // `false` — it yields only to a missing override.
+    quicProbe: over.quicProbe ?? null,
+    quicProbeAt: over.quicProbeAt ?? null,
+    udpProbe: over.udpProbe ?? null,
+    udpProbeAt: over.udpProbeAt ?? null,
     // ITEM 4 — the background-refresh bookkeeping columns (migration 0123).
     freshnessAttemptedAt: over.freshnessAttemptedAt ?? null,
     freshnessConsecutiveFailures: over.freshnessConsecutiveFailures ?? 0,

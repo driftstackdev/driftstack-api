@@ -57,6 +57,12 @@ difference. What you need:
   "username": "user",
   "has_password": true,
   "has_secret": false,
+  "quic_measured": null,
+  "quic_measured_at": null,
+  "quic_probe": null,
+  "quic_probe_at": null,
+  "udp_probe": null,
+  "udp_probe_at": null,
   "exit_observed": null,
   "exit_superseded_at": null,
   "os_fingerprint": null,
@@ -71,6 +77,28 @@ difference. What you need:
 are the only signals about the stored credentials; the plaintext is
 never readable back. For VPN schemes, `host`/`port` are the display
 endpoint (parsed from your `.ovpn` / `wg0.conf`).
+
+`quic_probe` is whether QUIC traffic got through this proxy the last time it
+was tested — `true`, `false`, or `null` when no test has checked it yet — and
+`quic_probe_at` is when that test ran (ISO 8601), or `null`. `udp_probe` and
+`udp_probe_at` say the same about UDP traffic. `false` is a result, not a gap: it
+means a test of a working proxy checked and the traffic did not get through.
+`null` means never tested, never "no" — it is the only value that tells you the
+answer is still missing, so do not treat it as `false`. Each answer keeps its own
+date, and one test can fill in one without the other. Age them by their `_at`
+stamps rather than by the time of your request: they are stored results and can
+be any age. Changing the proxy's address, scheme, or credentials resets all four
+to `null`, because the stored answer described the proxy as it was before. They
+are filled in by the full test described under [Test a proxy](#test-a-proxy) —
+the quick test does not check them — and an `openvpn` or `wireguard` proxy
+currently leaves them `null`. A server that
+predates them omits the four fields — read an absent field as `null`.
+
+`quic_measured` is a different fact: what a live session actually used through
+this proxy — `h3` (QUIC worked) or `h2-only` (it fell back) — or `null` when no
+session has reported one, with `quic_measured_at` saying when. A test result in
+`quic_probe` never changes it, and the two are dated separately, so they can
+disagree for a while after a provider changes what it carries.
 
 `exit_observed` is the last exit identity seen **through** the proxy —
 `{ ip, country, timezone, observed_via, observed_at }` — or `null` when
@@ -291,6 +319,17 @@ one is returned instead, with `os_fingerprint_at` saying when it was taken and
 the `os_fingerprint_unavailable` cause still beside it: the cause is about this
 test, the stamp is about the reading. A reading with **no** `os_fingerprint_at`
 was measured by the request you just made.
+
+An `ok: true` result also carries `quic_probe`, `quic_probe_at`, `udp_probe` and
+`udp_probe_at` exactly as the proxy object lists them **after** this test — so a
+full test that checked QUIC or UDP returns the answer it just stored, dated to
+the test, and any other returns the stored answer at its own, older date (or
+`null` when the proxy has never been tested for it). A proxy that fails the test
+stores nothing: there was no working proxy to check them over. If the proxy's
+address, scheme, or credentials were submitted again while the test was running
+— even with the same values — or the proxy was deleted, the test's answer may not
+be stored. Either way the four fields match the proxy object as it then stands:
+`null` after a change that resets them, and the earlier answer otherwise.
 
 The default test (`vantage=cp`) is quick: for an `openvpn` or `wireguard`
 proxy it only checks that the address answers and does not connect the

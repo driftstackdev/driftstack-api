@@ -2,7 +2,9 @@
 //
 // `account_proxies` carries two readings that are measured on one machine and
 // read on every other one: `os_fingerprint` (migration 0119) and `exit_observed`
-// (0120, with the contradiction stamp `exit_superseded_at` from 0122). Four
+// (0120, with the contradiction stamp `exit_superseded_at` from 0122) — and,
+// since 0124, what a Test measured about QUIC and UDP (`quic_probe`, `udp_probe`;
+// rules 1 and 4 apply to them, 2 and 3 are about the exit alone). Four
 // rules govern every write to them. The first three exist because the columns
 // mean "the last thing anyone OBSERVED", not "the current state"; the fourth
 // because the row can MOVE between the measurement and the write:
@@ -149,6 +151,57 @@ export function exitObservationUpdates(args: {
   };
 }
 
+/** The two capability legs a Test can measure, each either a READING or absent.
+ *  `undefined` is the only spelling of "not measured" — there is no null here, so
+ *  a caller cannot hand over a three-state wire value without first deciding
+ *  which of its states are measurements. */
+export interface MeasuredProbeCapabilities {
+  quic?: boolean;
+  udp?: boolean;
+}
+
+/**
+ * Rule 1 for the QUIC / UDP readings of a proxy Test (migration 0124): the
+ * update to apply, or null for "write nothing".
+ *
+ * ⛔ A MEASURED `false` IS A READING AND IS WRITTEN AS `false`. That is the point
+ * of the columns: a stored negative is what lets anything tell "this proxy does
+ * not relay QUIC" from "nobody has looked", and only the second may be re-probed
+ * on a schedule. The mirror image holds just as hard — an `undefined` leg (the
+ * node skipped it, the frame reached no verdict, a VPN row's asserted literal)
+ * writes NOTHING for that leg and leaves whatever an earlier Test stored.
+ *
+ * The legs are independent: a Test that measured UDP and skipped QUIC moves the
+ * UDP pair only. Each reading moves WITH its own date, never without it — a
+ * reading that cannot be dated cannot be aged, and the route refuses to serve one.
+ *
+ * Which wire states count as "measured" is NOT decided here. The route already
+ * owns that decision for the reply (`capabilityReadingsForReply`), and the stored
+ * reading must be the one the customer was just shown, so the caller passes that
+ * function's answer rather than this file growing a second reading of the frame.
+ */
+export function probeCapabilityUpdates(args: {
+  measured: MeasuredProbeCapabilities;
+  at: Date;
+  row: Pick<AccountProxyRow, 'quicProbeAt' | 'udpProbeAt'>;
+  /** Stand down, per leg, when the stored reading was taken after this instant —
+   *  see the header. Omitted by the interactive route, which is never the loser. */
+  yieldToReadingsAfter?: Date;
+}): AccountProxyRowUpdates | null {
+  const quic =
+    args.measured.quic !== undefined &&
+    !yieldsToNewerReading(args.row.quicProbeAt, args.yieldToReadingsAfter)
+      ? ({ quicProbe: args.measured.quic, quicProbeAt: args.at } satisfies AccountProxyRowUpdates)
+      : null;
+  const udp =
+    args.measured.udp !== undefined &&
+    !yieldsToNewerReading(args.row.udpProbeAt, args.yieldToReadingsAfter)
+      ? ({ udpProbe: args.measured.udp, udpProbeAt: args.at } satisfies AccountProxyRowUpdates)
+      : null;
+  if (quic === null && udp === null) return null;
+  return { ...(quic ?? {}), ...(udp ?? {}) };
+}
+
 /**
  * The `reason` a STORED OS reading carries.
  *
@@ -182,11 +235,11 @@ function yieldsToNewerReading(storedAt: Date | null, since: Date | undefined): b
 }
 
 /** The row fields a reading is measured THROUGH — the machine dialled and the
- *  credential it was dialled with. A `Pick`, so a caller cannot make this
- *  decision depend on a field the probe never used. */
+ *  credential it was dialled with (for a VPN row, the tunnel material). A `Pick`,
+ *  so a caller cannot make this decision depend on a field the probe never used. */
 export type ProxyProbedIdentity = Pick<
   AccountProxyRow,
-  'scheme' | 'host' | 'port' | 'username' | 'wrappedPassword'
+  'scheme' | 'host' | 'port' | 'username' | 'wrappedPassword' | 'wrappedSecret'
 >;
 
 /**
@@ -204,6 +257,23 @@ export type ProxyProbedIdentity = Pick<
  * launch) reads as a change here and costs that proxy one refresh cycle. That is
  * the cheap direction — the expensive one is writing an exit identity measured
  * under a credential the row no longer has.
+ *
+ * ⚠️ `wrappedSecret` is compared the same way, and for the same reason. A VPN
+ * row's `host`/`port` are a display address: a WireGuard key rotation or an
+ * OpenVPN account switch keeps both and still lands the tunnel on a different
+ * machine — `proxyReadingsInvalidatedByEdit` clears every reading for it — so
+ * without this column that edit is invisible here. Every PUT that carries a VPN
+ * block re-wraps the secret, so any change of tunnel material moves the envelope;
+ * a resubmission of the SAME material does too, at the same one-cycle cost.
+ *
+ * ⚠️ THESE SIX COLUMNS ARE SPELLED A SECOND TIME, in SQL:
+ * `storeProbeReadingsIfSameIdentity` (db/account-proxies-repo.ts) carries them in
+ * its WHERE, because for the QUIC/UDP readings a check made BEFORE the write
+ * still leaves a window a PUT can land in, and what slips through can be a stored
+ * `false` about the new address. A column added here must be added there;
+ * `a-probe-reading-is-only-written-onto-the-identity-it-was-measured-through.test.ts`
+ * moves each of the six in turn against real Postgres and requires the write to
+ * be declined.
  */
 export function readingWasTakenThroughCurrentIdentity(
   probed: ProxyProbedIdentity,
@@ -214,6 +284,7 @@ export function readingWasTakenThroughCurrentIdentity(
     probed.host === current.host &&
     probed.port === current.port &&
     probed.username === current.username &&
-    probed.wrappedPassword === current.wrappedPassword
+    probed.wrappedPassword === current.wrappedPassword &&
+    probed.wrappedSecret === current.wrappedSecret
   );
 }

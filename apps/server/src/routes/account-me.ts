@@ -57,7 +57,11 @@ import {
   readAccountProxySecret,
   type AccountProxySecretSlot,
 } from '../lib/account-proxy-secret-encryption.js';
-import { readingWasTakenThroughCurrentIdentity } from '../services/proxy-reading-persist.js';
+import {
+  probeCapabilityUpdates,
+  readingWasTakenThroughCurrentIdentity,
+  type MeasuredProbeCapabilities,
+} from '../services/proxy-reading-persist.js';
 import {
   classifyUnsafeHost,
   classifyUnsafeVpnTargets,
@@ -334,6 +338,38 @@ function storedOsFingerprint(
     web_port_vantage: stored.web_port_vantage === true,
   });
   return parsed.success ? parsed.data : null;
+}
+
+/**
+ * (0124) — the row's STORED Test readings for QUIC and UDP, in the wire shape the
+ * list, the single-row replies and the /:id/test result all carry.
+ *
+ * Three states per leg, and they must stay three on the wire: `true` (a Test
+ * measured it working), `false` (a Test measured it NOT working — a real
+ * negative, never re-spelled as null) and `null` (no Test has measured it).
+ *
+ * ⛔ Never a reading this server cannot DATE — the rule `storedOsForReply` keeps
+ * for the OS reading. The writer always moves a value with its timestamp, so an
+ * undated value can only be a row something else wrote; a client ages these by
+ * the `_at` stamp, and an undatable reading would arrive looking current. It is
+ * served as null ("never measured"), which errs toward looking again.
+ */
+export function storedProbeReadings(
+  row: Pick<AccountProxyRow, 'quicProbe' | 'quicProbeAt' | 'udpProbe' | 'udpProbeAt'>,
+): {
+  quic_probe: boolean | null;
+  quic_probe_at: string | null;
+  udp_probe: boolean | null;
+  udp_probe_at: string | null;
+} {
+  const quicDated = row.quicProbe !== null && row.quicProbeAt !== null;
+  const udpDated = row.udpProbe !== null && row.udpProbeAt !== null;
+  return {
+    quic_probe: quicDated ? row.quicProbe : null,
+    quic_probe_at: quicDated ? (row.quicProbeAt?.toISOString() ?? null) : null,
+    udp_probe: udpDated ? row.udpProbe : null,
+    udp_probe_at: udpDated ? (row.udpProbeAt?.toISOString() ?? null) : null,
+  };
 }
 
 /**
@@ -616,6 +652,16 @@ export function proxyReadingsInvalidatedByEdit(
     exitSupersededAt: null,
     quicMeasured: null,
     quicMeasuredAt: null,
+    // (0124) What a Test measured about QUIC and UDP. Both legs are measured
+    // THROUGH the proxy, authenticated as the stored user, so they describe the
+    // path that credential selects exactly as the exit identity does — and they
+    // go on the same two arms for the same reason. Left behind, a stored `false`
+    // would be the worst survivor of all: it is the one value that tells a client
+    // NOT to look again, said about a machine the row no longer points at.
+    quicProbe: null,
+    quicProbeAt: null,
+    udpProbe: null,
+    udpProbeAt: null,
   } satisfies AccountProxyRowUpdates;
   const osReading = {
     osFingerprint: null,
@@ -989,6 +1035,12 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // default.
       quic_measured: r.quicMeasured as AccountProxyMetadata['quic_measured'],
       quic_measured_at: r.quicMeasuredAt !== null ? r.quicMeasuredAt.toISOString() : null,
+      // (0124) — what a TEST last measured about QUIC and UDP through this proxy,
+      // each with its date. Separate from `quic_measured` above on purpose: that is
+      // what a live session negotiated, this is what a Test's own check found.
+      // true / false are both readings; null = never measured, never a default —
+      // it is the only value that tells a client the reading is still missing.
+      ...storedProbeReadings(r),
       // (d) B5 — the last exit identity observed THROUGH this proxy: by a live
       // session (the capabilityReport relay, 'session') or by the fleet-vantage
       // Test ('probe'), latest wins. The ONLY source of a VPN row's location /
@@ -1763,6 +1815,99 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         }
       };
 
+      // (0124) — persist what THIS test measured about QUIC and UDP onto the row,
+      // so the reading outlives the desktop that pressed Test and a stored `false`
+      // can be told apart from a reading nobody has taken. WHAT may be written is
+      // `probeCapabilityUpdates` (services/proxy-reading-persist.ts): a measured
+      // leg is stored as measured, true OR false, with its date; an absent leg
+      // writes nothing. Owner-scoped, best-effort, and it NEVER throws: on the fleet
+      // branch a throw is caught by `runFleetProbe`'s own handler and would relabel
+      // a node measurement `control_plane`.
+      //
+      // ⛔ Rule 4's identity fence is IN THE WRITE here, not before it
+      // (`storeProbeReadingsIfSameIdentity`). `persistOsFingerprintIfObserved`
+      // above reads the row and then updates it; for these columns that gap is
+      // not acceptable, because the value a PUT landing inside it would let
+      // through can be a `false` — on the NEW address, telling every consumer not
+      // to look again at a machine nobody has measured. `row` is the identity the
+      // node dialled, so it is the identity the statement must still find.
+      //
+      // `measuredAt` is the reading's date — when the node's frame resolved, not
+      // when this write runs (the OS observation sits between the two).
+      //
+      // ⛔ Returns the row AS THE STATEMENT LEFT IT, which is what the reply
+      // carries (a leg this test did not measure, or that a later measurement
+      // already holds, reads as stored) — or null when nothing was stored: no leg
+      // was measured, the write threw, or the statement matched no row because it
+      // is gone or no longer carries the identity the node dialled. That last case
+      // is NOT the same as "repointed": a PUT that resubmits the SAME password
+      // re-wraps the envelope (the desktop sends one before every launch), fails
+      // the fence, and KEEPS the stored readings. So on null the reply never
+      // guesses from `row`, which was read BEFORE the test — it re-reads
+      // (`probeReadingsAsTheRowStands`).
+      const persistProbeReadingsIfMeasured = async (
+        measured: MeasuredProbeCapabilities,
+        measuredAt: Date,
+      ): Promise<AccountProxyRow | null> => {
+        const updates = probeCapabilityUpdates({ measured, at: measuredAt, row });
+        if (updates === null) return null;
+        try {
+          const written = await proxiesRepo.storeProbeReadingsIfSameIdentity({
+            id: row.id,
+            accountId: ctx.account.id,
+            probedIdentity: row,
+            readings: updates,
+          });
+          if (written === null) {
+            request.log.info(
+              { proxyId: row.id },
+              'proxy test: the proxy was edited or removed while the test ran — the QUIC/UDP readings are not stored',
+            );
+          }
+          return written;
+        } catch (err) {
+          request.log.info(
+            { proxyId: row.id, err },
+            'proxy test: failed to persist the QUIC/UDP readings',
+          );
+          return null;
+        }
+      };
+
+      // (0124) — the Test readings the row holds NOW, for a reply whose own test
+      // stored none: a control-plane test (it measures neither leg, so the stored
+      // reading, dated, is the only QUIC/UDP answer it has) and a fleet test that
+      // wrote nothing. Carried beside `quicFields` on those replies.
+      //
+      // ⛔ RE-READ, never `row`. `row` was read before a test that can run for many
+      // seconds, and a PUT inside that window that repoints the proxy nulls these
+      // columns in the same statement. Serving the snapshot would hand back the
+      // PREVIOUS address's reading — possibly a `false` — for a row that now points
+      // somewhere else, while the list says "never tested". Re-reading makes the
+      // reply agree with the list in every case: a repointed row reads null, a row
+      // whose password was merely resubmitted reads the reading it kept, and a row
+      // deleted mid-test reads null.
+      //
+      // Never throws (on the fleet branch a throw would relabel a node measurement
+      // `control_plane`). When the store cannot be READ — the one case with no
+      // better knowledge of the row — the snapshot is served.
+      const probeReadingsAsTheRowStands = async (): Promise<
+        ReturnType<typeof storedProbeReadings>
+      > => {
+        try {
+          const current = await proxiesRepo.findById({ id: row.id, accountId: ctx.account.id });
+          return storedProbeReadings(
+            current ?? { quicProbe: null, quicProbeAt: null, udpProbe: null, udpProbeAt: null },
+          );
+        } catch (err) {
+          request.log.info(
+            { proxyId: row.id, err },
+            'proxy test: failed to re-read the stored QUIC/UDP readings',
+          );
+          return storedProbeReadings(row);
+        }
+      };
+
       // (p) 2026-09-16 — the row's STORED OS reading, attached to a reply whose OWN
       // test observed none. The precedent is two lines of this same handler: the
       // QUIC verdict a live session measured is spread onto every ok reply from the
@@ -1833,6 +1978,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               ok: true as const,
               latency_ms: Date.now() - startedAt,
               ...quicFields,
+              ...(await probeReadingsAsTheRowStands()),
               ...osFields,
               // (p) — the cause says no reading can be taken HERE; it does not say
               // the row has none. A tunnel the fleet has fingerprinted still shows
@@ -1860,6 +2006,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               ok: true as const,
               latency_ms,
               ...quicFields,
+              ...(await probeReadingsAsTheRowStands()),
               ...osFields,
               // (p) — this test observed nothing; the row may still hold a reading.
               // A no-op when `osFields` carries a fresh one.
@@ -1892,6 +2039,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             ok: true as const,
             latency_ms: Date.now() - startedAt,
             ...quicFields,
+            ...(await probeReadingsAsTheRowStands()),
             ...storedOsForReply({}),
           };
         } catch {
@@ -2118,6 +2266,13 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
                 ? proxyConnectivityProbe.observerTarget()
                 : undefined,
           });
+          // (0124) — WHEN the node's readings were taken, stamped the moment its
+          // frame resolves and before anything else is awaited. The QUIC/UDP
+          // readings are stored under THIS date, not the date of the write: on a
+          // SOCKS5 row the write sits behind the OS observation (seconds), so a
+          // date taken there would trail the measurement, and two Tests of one
+          // proxy finishing out of order would be ranked by who WROTE last.
+          const measuredAt = new Date();
           if (dispatch.status !== 'ok') {
             // (e) 2026-09-10 — a node that could not RUN the probe (node_busy,
             // bad_config:*, handshake_failed…) surfaces here as an error outcome.
@@ -2265,6 +2420,32 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
                 : {}
               : await vpnOsFingerprintFields(usable ? r.exit_ip : null, dispatchedAtMs);
           await persistOsFingerprintIfObserved(osFields);
+          // (0124) — which of the node's capability fields are READINGS is decided
+          // once, by `capabilityReadingsForReply`, and the SAME answer is both
+          // replied and stored: a leg absent from it (skipped, `null`, a VPN row's
+          // asserted literal) is absent from the reply AND writes nothing, so the
+          // row can never hold a value the customer was not just shown.
+          //
+          // ⛔ Stored only on a USABLE verdict, like the exit and the OS reading.
+          // A frame that reached no verdict carries default falses; a proxy that
+          // refused the credential or could not route has its cause in `reason`,
+          // and a `false` beside it says the leg had nothing to run over — not
+          // that this proxy lacks QUIC. A stored negative stops anyone looking
+          // again, so it must be earned by a test of a proxy that works.
+          const capabilityReadings = capabilityReadingsForReply(row.scheme, r);
+          const probeReadingsPersisted = usable
+            ? await persistProbeReadingsIfMeasured(
+                {
+                  ...(capabilityReadings.quic_ok !== undefined
+                    ? { quic: capabilityReadings.quic_ok }
+                    : {}),
+                  ...(capabilityReadings.udp_associate !== undefined
+                    ? { udp: capabilityReadings.udp_associate }
+                    : {}),
+                },
+                measuredAt,
+              )
+            : null;
           // VPN exit parity — persist the exit the NODE observed onto the proxy row
           // (`observed_via: 'probe'`, beside the relay's 'session' writes; latest
           // wins), so the /proxies list can show a VPN row's location and hand its
@@ -2365,6 +2546,15 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             ...(fleetFailure !== undefined ? { reason: fleetFailure } : {}),
             latency_ms: r.latency_ms,
             ...quicFields,
+            // (0124) — the row's Test readings AS THEY NOW STAND, so the reply
+            // agrees with the list. Where the write landed, that is the row the
+            // statement returned. Where nothing was stored — no leg measured, the
+            // proxy not usable, the write failed, the row gone or edited mid-test
+            // — it is a RE-READ: `row` predates the test and may still hold a
+            // reading an edit has since cleared.
+            ...(probeReadingsPersisted !== null
+              ? storedProbeReadings(probeReadingsPersisted)
+              : await probeReadingsAsTheRowStands()),
             ...osFields,
             // (p) — the stored reading rides a fleet reply too, under the same rule
             // (a fresh observation wins, the cause stays). Only on a USABLE verdict:
@@ -2387,7 +2577,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
                   reachable: r.reachable,
                   auth_ok: r.auth_ok,
                   can_route: r.can_route,
-                  ...capabilityReadingsForReply(row.scheme, r),
+                  ...capabilityReadings,
                   quic_detail: r.quic_detail,
                   exit_ip: r.exit_ip,
                 }

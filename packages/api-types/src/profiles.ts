@@ -243,6 +243,19 @@ export const AccountProxyMetadataSchema = z.object({
   quic_measured: z.enum(['h3', 'h2-only']).nullable(),
   // When quic_measured was recorded (ISO 8601), or null when never measured.
   quic_measured_at: z.string().nullable(),
+  // What a proxy TEST last measured about QUIC and UDP through this proxy, and
+  // when (ISO 8601). Separate from `quic_measured` on purpose: that is what a
+  // live browsing session negotiated, these are what a Test's own check found,
+  // and the two can honestly disagree.
+  // THREE states, and a client must keep them three: `true` = measured working,
+  // `false` = measured NOT working (a real negative — do not re-test it on a
+  // schedule), `null` = never measured (the only state that means "missing").
+  // Age a reading by its `_at` stamp; a value never arrives without one.
+  // Optional so a client built against an older server keeps parsing.
+  quic_probe: z.boolean().nullable().optional(),
+  quic_probe_at: z.string().nullable().optional(),
+  udp_probe: z.boolean().nullable().optional(),
+  udp_probe_at: z.string().nullable().optional(),
   // (d) B5 — the last exit identity observed THROUGH this proxy, by a live
   // session ('session') or by the fleet-vantage Test ('probe'); latest wins.
   // For an OpenVPN / WireGuard row this is the ONLY source of its location and
@@ -305,6 +318,15 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
     // null when never measured.
     quic_measured: z.enum(['h3', 'h2-only']).nullable().optional(),
     quic_measured_at: z.string().nullable().optional(),
+    // The proxy's STORED Test readings for QUIC and UDP (see AccountProxyMetadata),
+    // as they stand after this test: a fleet-vantage test that measured a leg has
+    // already stored it, so the value and its date are this test's own; a test
+    // that measured neither carries what the row held. true / false are readings,
+    // null = never measured. Dated by `_at`, never by the reply time.
+    quic_probe: z.boolean().nullable().optional(),
+    quic_probe_at: z.string().nullable().optional(),
+    udp_probe: z.boolean().nullable().optional(),
+    udp_probe_at: z.string().nullable().optional(),
     // (o) 2026-09-11 — WHY this result carries no OS fingerprint. Absence alone
     // was indistinguishable across three unlike causes, and the desktop client
     // rendered ALL of them as "press Test again" — advice that can never produce

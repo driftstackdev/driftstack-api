@@ -791,6 +791,22 @@ export const accountProxies = pgTable(
     // seen up again. A `not_run` (refusal / could-not-run) measured nothing and
     // never sets it. NULL = never contradicted.
     exitSupersededAt: timestamp('exit_superseded_at', { withTimezone: true }),
+    // (migration 0124) — what a proxy TEST last measured about QUIC and UDP
+    // through THIS proxy, and when. `quicProbe`: did QUIC relay. `udpProbe`: did
+    // the proxy carry UDP. NULL = never measured, which is NOT a measured "no":
+    // a stored FALSE is a real negative, and being able to tell the two apart is
+    // the whole reason these exist — without it nothing can fill in a missing
+    // reading without re-probing a genuine negative forever.
+    // ⛔ NOT `quicMeasured` above. That one is "a LIVE SESSION negotiated HTTP/3"
+    // and is written by the capabilityReport relay; this is "a Test measured the
+    // relay". Two measurements that can honestly disagree, two columns.
+    // Written best-effort by the fleet-vantage /:id/test route, ONLY for a leg the
+    // node genuinely measured (a skipped leg persists nothing); read by the
+    // /proxies list and the /:id/test result.
+    quicProbe: boolean('quic_probe'),
+    quicProbeAt: timestamp('quic_probe_at', { withTimezone: true }),
+    udpProbe: boolean('udp_probe'),
+    udpProbeAt: timestamp('udp_probe_at', { withTimezone: true }),
     // ITEM 4 (migration 0123) — when the BACKGROUND freshness refresher last
     // ATTEMPTED this row, success or failure. Both the cooldown clock and the
     // claim: the tick stamps it inside the same statement that selects the row

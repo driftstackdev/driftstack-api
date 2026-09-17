@@ -869,6 +869,13 @@
       "when": 1786665600011,
       "tag": "0123_add_account_proxy_freshness",
       "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1786665600012,
+      "tag": "0124_add_account_proxy_probe_readings",
+      "breakpoints": true
     }
   ]
 }

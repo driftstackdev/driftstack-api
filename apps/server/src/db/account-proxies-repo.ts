@@ -89,6 +89,25 @@ export interface AccountProxyRow {
    *  observation dated at or before it. */
   exitSupersededAt: Date | null;
   /**
+   * (migration 0124) — whether QUIC relayed through this proxy when a Test last
+   * MEASURED it, or null when no Test ever has. ⛔ Null is not false: a stored
+   * `false` is a genuine negative, and null is "never measured" — the distinction
+   * is the reason the column exists.
+   *
+   * ⛔ Not {@link quicMeasured}. That is what a LIVE SESSION negotiated ('h3' |
+   * 'h2-only'); this is what a Test's relay check found. They can honestly
+   * disagree, so neither is ever written from the other.
+   */
+  quicProbe: boolean | null;
+  /** When {@link quicProbe} was measured, or null when never measured. */
+  quicProbeAt: Date | null;
+  /** (migration 0124) — whether the proxy carried UDP when a Test last MEASURED
+   *  it, or null when no Test ever has. Same null-is-not-false rule as
+   *  {@link quicProbe}; a VPN row's asserted literal is never stored here. */
+  udpProbe: boolean | null;
+  /** When {@link udpProbe} was measured, or null when never measured. */
+  udpProbeAt: Date | null;
+  /**
    * ITEM 4 (migration 0123) — when the BACKGROUND freshness refresher last
    * ATTEMPTED this row, success or failure, or null when it never has (= due
    * now). Both the cooldown clock and the claim: {@link
@@ -165,6 +184,14 @@ export interface AccountProxyRowUpdates {
   /** (i) I7 — set by the fleet-vantage Test when its verdict contradicts the
    *  stored exit; cleared (null) by every exit write (relay or probe). */
   exitSupersededAt?: Date | null;
+  /** (0124) — the QUIC relay reading a fleet-vantage Test measured, true OR
+   *  false. Written ONLY for a measured leg (a skipped leg writes nothing); null
+   *  only from an edit that repoints the row. Each reading moves with its date. */
+  quicProbe?: boolean | null;
+  quicProbeAt?: Date | null;
+  /** (0124) — the UDP reading a fleet-vantage Test measured; same rules. */
+  udpProbe?: boolean | null;
+  udpProbeAt?: Date | null;
   /** ITEM 4 — reset to 0 by the background refresher on a successful probe. The
    *  INCREMENT is not expressible here (it must read-modify-write atomically);
    *  see {@link AccountProxiesRepo.recordFreshnessFailure}. */
@@ -175,6 +202,32 @@ export interface AccountProxyRowUpdates {
    *  columns the edit just cleared stay blank for a day. Ordinarily written only
    *  by {@link AccountProxiesRepo.claimDueForFreshnessRefresh}, inside the claim. */
   freshnessAttemptedAt?: Date | null;
+}
+
+/** (0124) — the four Test-reading keys of {@link AccountProxyRowUpdates}, which
+ *  is the shape `probeCapabilityUpdates` already returns: the caller hands its
+ *  answer over unchanged rather than re-spelling which legs were measured. */
+export type ProbeReadingsToStore = Pick<
+  AccountProxyRowUpdates,
+  'quicProbe' | 'quicProbeAt' | 'udpProbe' | 'udpProbeAt'
+>;
+
+/** One leg of {@link ProbeReadingsToStore}: the measured value and its date, or
+ *  null when the leg was not measured. Throws on half a leg — a value that
+ *  cannot be dated cannot be aged, and a date with no value is not a reading;
+ *  quietly skipping either would store less than the caller believes it stored.
+ *  A `null` VALUE is refused for the same reason: only an edit that repoints
+ *  the row clears these columns, and it does that through `update`. */
+function probeLegToStore(
+  leg: 'quic' | 'udp',
+  value: boolean | null | undefined,
+  at: Date | null | undefined,
+): { value: boolean; atIso: string } | null {
+  if (value === undefined && at === undefined) return null;
+  if (typeof value !== 'boolean' || !(at instanceof Date)) {
+    throw new Error(`A ${leg} probe reading must be stored as a boolean with its date.`);
+  }
+  return { value, atIso: at.toISOString() };
 }
 
 export interface AccountProxiesRepo {
@@ -191,6 +244,42 @@ export interface AccountProxiesRepo {
     accountId: string;
     expectedScheme?: string;
     updates: AccountProxyRowUpdates;
+  }): Promise<AccountProxyRow | null>;
+  /**
+   * (0124) — store a Test's QUIC / UDP readings, but ONLY onto a row that still
+   * carries the identity they were measured through. Returns the row as it stands
+   * AFTER the statement, or null when nothing matched: the row is gone, belongs to
+   * another account, or was repointed while the test ran.
+   *
+   * ⛔ WHY THIS IS NOT `findById` + `update`. A Test reads the row, spends seconds
+   * on the wire, then writes. Checking the identity in one statement and writing
+   * in the next leaves a window between them, and a PUT landing in it moves the
+   * row AND nulls these columns — after which the generic `update` (which matches
+   * on id + account alone) puts the old endpoint's reading onto the new one. The
+   * worst case is a stored `false`: it tells every consumer not to look again,
+   * about a machine nobody has measured. So the identity is part of the WHERE, and
+   * the database decides the race rather than the caller.
+   *
+   * `probedIdentity` is the same six columns
+   * `readingWasTakenThroughCurrentIdentity` (services/proxy-reading-persist.ts)
+   * compares — a fence two writers spell differently is a fence one of them
+   * lacks. `username`, `wrappedPassword` and `wrappedSecret` are nullable, so they
+   * are matched null-safely: a plain `=` against NULL is never true and would
+   * decline every write onto a proxy that has no credential.
+   *
+   * A leg is written only with its date, and only when the row does not already
+   * hold a reading of that leg measured LATER: two Tests of one proxy can finish
+   * out of order, and the row must end on the newer MEASUREMENT, not the later
+   * write. A leg absent from `readings` is left exactly as it was.
+   */
+  storeProbeReadingsIfSameIdentity(args: {
+    id: string;
+    accountId: string;
+    probedIdentity: Pick<
+      AccountProxyRow,
+      'scheme' | 'host' | 'port' | 'username' | 'wrappedPassword' | 'wrappedSecret'
+    >;
+    readings: ProbeReadingsToStore;
   }): Promise<AccountProxyRow | null>;
   /** Returns true if a row was removed; false if no owned row matched. */
   delete(args: { id: string; accountId: string }): Promise<boolean>;
@@ -352,6 +441,10 @@ function toRow(r: typeof accountProxies.$inferSelect): AccountProxyRow {
     exitObserved: r.exitObserved,
     exitObservedAt: r.exitObservedAt,
     exitSupersededAt: r.exitSupersededAt,
+    quicProbe: r.quicProbe,
+    quicProbeAt: r.quicProbeAt,
+    udpProbe: r.udpProbe,
+    udpProbeAt: r.udpProbeAt,
     freshnessAttemptedAt: r.freshnessAttemptedAt,
     freshnessConsecutiveFailures: r.freshnessConsecutiveFailures,
     createdAt: r.createdAt,
@@ -405,6 +498,13 @@ function toRowFromRaw(r: Record<string, unknown>): AccountProxyRow {
     exitObserved: (r.exit_observed as AccountProxyRow['exitObserved']) ?? null,
     exitObservedAt: parseRawTimestamp(r.exit_observed_at),
     exitSupersededAt: parseRawTimestamp(r.exit_superseded_at),
+    // ⛔ `typeof … === 'boolean'`, never `?? false` and never `Boolean(…)`: null is
+    // "never measured" and must survive the raw path as null. Coercing it would
+    // turn every unmeasured row the claim returns into a measured negative.
+    quicProbe: typeof r.quic_probe === 'boolean' ? r.quic_probe : null,
+    quicProbeAt: parseRawTimestamp(r.quic_probe_at),
+    udpProbe: typeof r.udp_probe === 'boolean' ? r.udp_probe : null,
+    udpProbeAt: parseRawTimestamp(r.udp_probe_at),
     freshnessAttemptedAt: parseRawTimestamp(r.freshness_attempted_at),
     freshnessConsecutiveFailures: Number(r.freshness_consecutive_failures ?? 0),
     createdAt: requireRawTimestamp(r.created_at, 'created_at'),
@@ -519,6 +619,95 @@ export class DrizzleAccountProxiesRepo implements AccountProxiesRepo {
       .returning();
     const row = rows[0];
     return row ? toRow(row) : null;
+  }
+
+  async storeProbeReadingsIfSameIdentity(args: {
+    id: string;
+    accountId: string;
+    probedIdentity: Pick<
+      AccountProxyRow,
+      'scheme' | 'host' | 'port' | 'username' | 'wrappedPassword' | 'wrappedSecret'
+    >;
+    readings: ProbeReadingsToStore;
+  }): Promise<AccountProxyRow | null> {
+    const quic = probeLegToStore('quic', args.readings.quicProbe, args.readings.quicProbeAt);
+    const udp = probeLegToStore('udp', args.readings.udpProbe, args.readings.udpProbeAt);
+    // ONE statement, so the identity check and the write cannot be separated by a
+    // concurrent PUT — see the interface. Raw SQL because the generic `update`
+    // cannot express either half: the identity predicate, or "keep the stored leg
+    // when it was measured later" (a CASE over the PRE-update row, which is what
+    // an UPDATE's SET reads — so both CASEs of a leg see the same stored date and
+    // a value can never move without its date).
+    //
+    // An unmeasured leg is passed as NULL and its CASE falls through to the
+    // stored value: the column is named in the SET list but not changed.
+    //
+    // Dates are pre-serialised to ISO strings for the reason recorded on
+    // `claimDueForFreshnessRefresh`. The booleans are passed as BOOLEANS — the
+    // `::boolean` cast makes the driver serialise the parameter as one, and it
+    // would turn the string 'true' into false.
+    //
+    // `updated_at` moves as it does for every other write a customer's own Test
+    // makes through `update` (the OS reading, the exit) — but only when a leg
+    // LANDS. A statement whose every leg stood down to a later measurement
+    // matched the row and changed nothing, and a change stamp that moves on a
+    // write that changed nothing is a false record.
+    //
+    // ⚠️ No backticks inside the template below — it is a tagged template
+    // literal, and one would terminate it mid-statement.
+    const quicValue = quic?.value ?? null;
+    const quicAtIso = quic?.atIso ?? null;
+    const udpValue = udp?.value ?? null;
+    const udpAtIso = udp?.atIso ?? null;
+    const nowIso = new Date().toISOString();
+    const result = await this.database.db.execute(sql`
+      UPDATE account_proxies p
+         SET quic_probe = CASE
+               WHEN ${quicAtIso}::timestamptz IS NOT NULL
+                AND (p.quic_probe_at IS NULL OR p.quic_probe_at <= ${quicAtIso}::timestamptz)
+               THEN ${quicValue}::boolean
+               ELSE p.quic_probe
+             END,
+             quic_probe_at = CASE
+               WHEN ${quicAtIso}::timestamptz IS NOT NULL
+                AND (p.quic_probe_at IS NULL OR p.quic_probe_at <= ${quicAtIso}::timestamptz)
+               THEN ${quicAtIso}::timestamptz
+               ELSE p.quic_probe_at
+             END,
+             udp_probe = CASE
+               WHEN ${udpAtIso}::timestamptz IS NOT NULL
+                AND (p.udp_probe_at IS NULL OR p.udp_probe_at <= ${udpAtIso}::timestamptz)
+               THEN ${udpValue}::boolean
+               ELSE p.udp_probe
+             END,
+             udp_probe_at = CASE
+               WHEN ${udpAtIso}::timestamptz IS NOT NULL
+                AND (p.udp_probe_at IS NULL OR p.udp_probe_at <= ${udpAtIso}::timestamptz)
+               THEN ${udpAtIso}::timestamptz
+               ELSE p.udp_probe_at
+             END,
+             updated_at = CASE
+               WHEN (${quicAtIso}::timestamptz IS NOT NULL
+                     AND (p.quic_probe_at IS NULL OR p.quic_probe_at <= ${quicAtIso}::timestamptz))
+                 OR (${udpAtIso}::timestamptz IS NOT NULL
+                     AND (p.udp_probe_at IS NULL OR p.udp_probe_at <= ${udpAtIso}::timestamptz))
+               THEN ${nowIso}::timestamptz
+               ELSE p.updated_at
+             END
+       WHERE p.id = ${args.id}::uuid
+         AND p.account_id = ${args.accountId}::uuid
+         -- The identity the reading was measured through. NULL-safe on the three
+         -- nullable columns: a plain = against NULL is never true.
+         AND p.scheme = ${args.probedIdentity.scheme}::text
+         AND p.host = ${args.probedIdentity.host}::text
+         AND p.port = ${args.probedIdentity.port}::int
+         AND p.username IS NOT DISTINCT FROM ${args.probedIdentity.username}::text
+         AND p.wrapped_password IS NOT DISTINCT FROM ${args.probedIdentity.wrappedPassword}::text
+         AND p.wrapped_secret IS NOT DISTINCT FROM ${args.probedIdentity.wrappedSecret}::text
+       RETURNING p.*;
+    `);
+    const row = rawRows(result)[0];
+    return row === undefined ? null : toRowFromRaw(row);
   }
 
   async delete(args: { id: string; accountId: string }): Promise<boolean> {
@@ -904,6 +1093,10 @@ export class InMemoryAccountProxiesRepo implements AccountProxiesRepo {
       exitObserved: null,
       exitObservedAt: null,
       exitSupersededAt: null,
+      quicProbe: null,
+      quicProbeAt: null,
+      udpProbe: null,
+      udpProbeAt: null,
       freshnessAttemptedAt: null,
       freshnessConsecutiveFailures: 0,
       createdAt: now,
@@ -939,6 +1132,53 @@ export class InMemoryAccountProxiesRepo implements AccountProxiesRepo {
       return Promise.resolve(null);
     }
     const next: AccountProxyRow = { ...r, ...args.updates, updatedAt: new Date() };
+    this.rows.set(next.id, next);
+    return Promise.resolve({ ...next });
+  }
+
+  storeProbeReadingsIfSameIdentity(args: {
+    id: string;
+    accountId: string;
+    probedIdentity: Pick<
+      AccountProxyRow,
+      'scheme' | 'host' | 'port' | 'username' | 'wrappedPassword' | 'wrappedSecret'
+    >;
+    readings: ProbeReadingsToStore;
+  }): Promise<AccountProxyRow | null> {
+    const quic = probeLegToStore('quic', args.readings.quicProbe, args.readings.quicProbeAt);
+    const udp = probeLegToStore('udp', args.readings.udpProbe, args.readings.udpProbeAt);
+    // Check and write in one synchronous step — the double's equivalent of the
+    // Drizzle repo's single statement: nothing can run between them.
+    const r = this.rows.get(args.id);
+    const probed = args.probedIdentity;
+    if (
+      !r ||
+      r.accountId !== args.accountId ||
+      r.scheme !== probed.scheme ||
+      r.host !== probed.host ||
+      r.port !== probed.port ||
+      r.username !== probed.username ||
+      r.wrappedPassword !== probed.wrappedPassword ||
+      r.wrappedSecret !== probed.wrappedSecret
+    ) {
+      return Promise.resolve(null);
+    }
+    // A leg lands unless the row already holds one measured LATER — same rule,
+    // per leg, as the statement's CASE.
+    const lands = (storedAt: Date | null, atIso: string): boolean =>
+      storedAt === null || storedAt.getTime() <= new Date(atIso).getTime();
+    const quicLands = quic !== null && lands(r.quicProbeAt, quic.atIso);
+    const udpLands = udp !== null && lands(r.udpProbeAt, udp.atIso);
+    const next: AccountProxyRow = {
+      ...r,
+      ...(quic !== null && quicLands
+        ? { quicProbe: quic.value, quicProbeAt: new Date(quic.atIso) }
+        : {}),
+      ...(udp !== null && udpLands ? { udpProbe: udp.value, udpProbeAt: new Date(udp.atIso) } : {}),
+      // Only a write that changed something moves the change stamp — as the
+      // statement's own CASE.
+      ...(quicLands || udpLands ? { updatedAt: new Date() } : {}),
+    };
     this.rows.set(next.id, next);
     return Promise.resolve({ ...next });
   }

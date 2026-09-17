@@ -3278,6 +3278,18 @@
           "quic_measured_at": {
             "type": ["string", "null"]
           },
+          "quic_probe": {
+            "type": ["boolean", "null"]
+          },
+          "quic_probe_at": {
+            "type": ["string", "null"]
+          },
+          "udp_probe": {
+            "type": ["boolean", "null"]
+          },
+          "udp_probe_at": {
+            "type": ["string", "null"]
+          },
           "exit_observed": {
             "type": ["object", "null"],
             "properties": {
@@ -3491,6 +3503,18 @@
               "quic_measured_at": {
                 "type": ["string", "null"]
               },
+              "quic_probe": {
+                "type": ["boolean", "null"]
+              },
+              "quic_probe_at": {
+                "type": ["string", "null"]
+              },
+              "udp_probe": {
+                "type": ["boolean", "null"]
+              },
+              "udp_probe_at": {
+                "type": ["string", "null"]
+              },
               "os_fingerprint": {
                 "type": "object",
                 "properties": {
@@ -3666,6 +3690,18 @@
                 "enum": ["h3", "h2-only", null]
               },
               "quic_measured_at": {
+                "type": ["string", "null"]
+              },
+              "quic_probe": {
+                "type": ["boolean", "null"]
+              },
+              "quic_probe_at": {
+                "type": ["string", "null"]
+              },
+              "udp_probe": {
+                "type": ["boolean", "null"]
+              },
+              "udp_probe_at": {
                 "type": ["string", "null"]
               },
               "os_fingerprint": {

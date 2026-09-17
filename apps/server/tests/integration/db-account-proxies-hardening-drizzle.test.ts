@@ -115,6 +115,12 @@ beforeAll(async () => {
       exit_observed jsonb,
       exit_observed_at timestamptz,
       exit_superseded_at timestamptz,
+      -- The Test's QUIC / UDP readings (migration 0124) — same mirroring rule as
+      -- the note below: every Drizzle RETURNING here names these columns.
+      quic_probe boolean,
+      quic_probe_at timestamptz,
+      udp_probe boolean,
+      udp_probe_at timestamptz,
       -- ITEM 4 (migration 0123). This table is a hand-written COPY of the real
       -- one, so a column added to the schema and not to this literal makes every
       -- Drizzle statement here fail with "column does not exist" — the copy has

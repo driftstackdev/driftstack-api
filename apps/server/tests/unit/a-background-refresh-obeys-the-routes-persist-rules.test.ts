@@ -171,12 +171,33 @@ describe('the rules for writing a measured reading onto a saved proxy row', () =
       port: 1080,
       username: 'user-country-us',
       wrappedPassword: 'v2:envelope-a',
+      wrappedSecret: null,
+    };
+    // A VPN row: host and port are a display address, so the tunnel material is
+    // the only column a key rotation moves.
+    const tunnel: ProxyProbedIdentity = {
+      scheme: 'wireguard',
+      host: 'vpn.example.com',
+      port: 51820,
+      username: null,
+      wrappedPassword: null,
+      wrappedSecret: 'v2:secret-a',
     };
 
     expect(
       readingWasTakenThroughCurrentIdentity(probed, { ...probed }),
       'the row did not move: the reading is ours to write',
     ).toBe(true);
+    expect(readingWasTakenThroughCurrentIdentity(tunnel, { ...tunnel })).toBe(true);
+    for (const rotated of [
+      { ...tunnel, wrappedSecret: 'v2:secret-b' },
+      { ...tunnel, wrappedSecret: null },
+    ]) {
+      expect(
+        readingWasTakenThroughCurrentIdentity(tunnel, rotated),
+        `a rotated tunnel is a different machine behind the same address: ${JSON.stringify(rotated)}`,
+      ).toBe(false);
+    }
 
     for (const moved of [
       { ...probed, host: 'gw2.example.com' },

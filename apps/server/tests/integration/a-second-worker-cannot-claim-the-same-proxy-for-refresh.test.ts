@@ -469,6 +469,72 @@ describe.skipIf(!RUN_DB_TESTS)('the freshness claim, on real Postgres', () => {
     expect(row?.exitSupersededAt).toBeNull();
   });
 
+  it("CRITICAL a Test reading (migration 0124) keeps its THREE states through real Postgres on BOTH row mappers: a stored FALSE comes back false, a stored TRUE comes back true, and an unmeasured leg comes back null — from the Drizzle update/find path AND from the raw `RETURNING p.*` the claim uses, which bypasses Drizzle's decoders and maps snake_case by hand. TWO ROWS WITH OPPOSITE STATES (quic=false+date / udp never; quic never / udp=true+date), because one row pins half a mapper: with quic=false and udp=null alone, `Boolean(r.quic_probe)` still yields false and a udp key typo still yields null. MUTATIONS, each red here: `quicProbe: Boolean(r.quic_probe)` (the never-measured quic reads false); `udpProbe: Boolean(r.udp_probe)` (the never-measured udp reads false); `r.udp_prob` for the udp key (the stored true reads null); `r.quic_probe_a` / `r.udp_probe_a` for a date key (the stored date reads null). It is also what proves 0124 APPLIES: this database is built by the migrator.", async () => {
+    if (!client) return;
+    const quicOnly = '00000000-0000-4000-8000-0000000000f4';
+    const udpOnly = '00000000-0000-4000-8000-0000000000f5';
+    const quicAt = new Date('2026-09-17T09:00:00.000Z');
+    // A DIFFERENT instant, so a mapper that crossed the two date keys is caught.
+    const udpAt = new Date('2026-09-17T09:30:00.000Z');
+    await insertProxy({ id: quicOnly });
+    await insertProxy({ id: udpOnly });
+    const repo = repoFor(client);
+
+    // Never measured: null on both paths' starting point.
+    for (const id of [quicOnly, udpOnly]) {
+      const before = await repo.findById({ id, accountId });
+      expect(before?.quicProbe).toBeNull();
+      expect(before?.quicProbeAt).toBeNull();
+      expect(before?.udpProbe).toBeNull();
+      expect(before?.udpProbeAt).toBeNull();
+    }
+
+    // The Drizzle path: a measured NEGATIVE on one leg of one row, a measured
+    // POSITIVE on the other leg of the other.
+    const writtenQuic = await repo.update({
+      id: quicOnly,
+      accountId,
+      updates: { quicProbe: false, quicProbeAt: quicAt },
+    });
+    expect(writtenQuic?.quicProbe).toBe(false);
+    expect(writtenQuic?.quicProbeAt).toEqual(quicAt);
+    expect(writtenQuic?.udpProbe).toBeNull();
+    expect(writtenQuic?.udpProbeAt).toBeNull();
+    const writtenUdp = await repo.update({
+      id: udpOnly,
+      accountId,
+      updates: { udpProbe: true, udpProbeAt: udpAt },
+    });
+    expect(writtenUdp?.udpProbe).toBe(true);
+    expect(writtenUdp?.udpProbeAt).toEqual(udpAt);
+    expect(writtenUdp?.quicProbe).toBeNull();
+    expect(writtenUdp?.quicProbeAt).toBeNull();
+    const foundQuic = await repo.findById({ id: quicOnly, accountId });
+    expect(foundQuic?.quicProbe).toBe(false);
+    expect(foundQuic?.udpProbe).toBeNull();
+    const foundUdp = await repo.findById({ id: udpOnly, accountId });
+    expect(foundUdp?.udpProbe).toBe(true);
+    expect(foundUdp?.quicProbe).toBeNull();
+
+    // The RAW path: both rows out of the claim's `RETURNING p.*`. Neither has
+    // been attempted, so which comes first is the database's choice — claim
+    // twice (a claimed row is no longer due) and look each up by id.
+    const claims = [await claimOn(client), await claimOn(client)];
+    expect(claims.map((c) => c?.id).sort()).toEqual([quicOnly, udpOnly]);
+    const rawQuic = claims.find((c) => c?.id === quicOnly);
+    const rawUdp = claims.find((c) => c?.id === udpOnly);
+
+    expect(rawQuic?.quicProbe, 'a stored false survives the raw mapper as false').toBe(false);
+    expect(rawQuic?.quicProbeAt).toEqual(quicAt);
+    expect(rawQuic?.udpProbe, 'an unmeasured leg survives the raw mapper as null').toBeNull();
+    expect(rawQuic?.udpProbeAt).toBeNull();
+
+    expect(rawUdp?.udpProbe, 'a stored true survives the raw mapper as true').toBe(true);
+    expect(rawUdp?.udpProbeAt).toEqual(udpAt);
+    expect(rawUdp?.quicProbe, 'an unmeasured leg survives the raw mapper as null').toBeNull();
+    expect(rawUdp?.quicProbeAt).toBeNull();
+  });
+
   it('a failure recorded against the wrong account matches no row — the sweep reached this proxy through a cross-account claim, and every WRITE is still owner-scoped', async () => {
     if (!client) return;
     const id = '00000000-0000-4000-8000-0000000000f3';
