@@ -27,6 +27,7 @@ import type * as ProxiesModule from '../../src/lib/proxies';
 import type * as AccountProxiesModule from '../../src/lib/account-proxies';
 import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
 import type { OsFingerprint } from '../../src/lib/os-fingerprint-verdict';
+import type { CachedOsFingerprint } from '../../src/lib/proxy-probe-cache';
 import {
   capabilityChips,
   ProfilePhoneCard,
@@ -221,6 +222,16 @@ const OS_READING = {
   webPortVantage: true,
 };
 
+/** An aged OS reading as the view state really holds it: the CACHED reading, which
+ *  carries the `at` it was taken at — the same instant as the aged entry's `atMs`.
+ *  These fixtures used to cast the bare reading (`OS_READING as OsFingerprint`), a
+ *  shape `deriveProbeViewState` can never produce; the test tsconfig said so, and
+ *  a chip that dates itself from `at` would have read `undefined`. */
+const agedOsReading = (at: number): CachedOsFingerprint => ({
+  ...(OS_READING as OsFingerprint),
+  at,
+});
+
 /** One stored SOCKS5 entry, healthy and swept just now; `extra` is the readings
  *  under test. Nothing else on the entry can light the QUIC or the OS chip. */
 function seed(extra: Record<string, unknown>): void {
@@ -325,7 +336,7 @@ describe('the profile CARD shows a reading that has aged out of the present tens
       nowMs: NOW,
       aged: {
         quicProbe: { value: true, atMs: NOW - min * MIN },
-        osFingerprint: { value: OS_READING as OsFingerprint, atMs: NOW - min * MIN },
+        osFingerprint: { value: agedOsReading(NOW - min * MIN), atMs: NOW - min * MIN },
       },
     });
     const texts = (p: CapsInput, w: number): string[] =>
@@ -604,7 +615,7 @@ describe('a VPN row: an aged reading outranks "not measured", and is suppressed 
   });
 
   it('⛔ the aged OS chip names Check VPN on a VPN row — and Test on a proxy row', () => {
-    const agedOs = { osFingerprint: { value: OS_READING as OsFingerprint, atMs: NOW - FOUR_H } };
+    const agedOs = { osFingerprint: { value: agedOsReading(NOW - FOUR_H), atMs: NOW - FOUR_H } };
     const osTitle = (p: CapsInput): string | undefined =>
       capabilityChips(p).eligible.find((c) => c.key === 'os')?.title;
     expect(osTitle(vpnCaps({ aged: agedOs }))).toMatch(
@@ -650,7 +661,7 @@ describe('a VPN row: an aged reading outranks "not measured", and is suppressed 
       capabilities: null,
       vpn: true,
       nowMs: NOW,
-      aged: { osFingerprint: { value: OS_READING as OsFingerprint, atMs: NOW - FOUR_H } },
+      aged: { osFingerprint: { value: agedOsReading(NOW - FOUR_H), atMs: NOW - FOUR_H } },
       checkedAtIso: null,
       busy: false,
       launching: false,
@@ -735,6 +746,7 @@ describe('a VPN row: an aged reading outranks "not measured", and is suppressed 
     onWatch: vi.fn(),
     onStop: vi.fn(),
     onTest: vi.fn(),
+    onEdit: vi.fn(),
     onTrim: vi.fn(),
     onDelete: vi.fn(),
     onSaveNote: vi.fn(),
@@ -760,7 +772,7 @@ describe('a VPN row: an aged reading outranks "not measured", and is suppressed 
   it('the list: one age line for the cell states the OLDER of its two aged chips', () => {
     const aged = {
       udpProbe: { value: true, atMs: NOW - FOUR_H },
-      osFingerprint: { value: OS_READING as OsFingerprint, atMs: NOW - 45 * MIN },
+      osFingerprint: { value: agedOsReading(NOW - 45 * MIN), atMs: NOW - 45 * MIN },
     };
     const { container } = render(<ProfilesTable {...tableProps(tableRow({ aged }))} />);
     expect(container.querySelectorAll('[data-ok="aged"]')).toHaveLength(2);

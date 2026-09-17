@@ -303,7 +303,9 @@ describe('⛔ a FAILED test rebuilds the entry too — and must not lose the oth
     // A reply that RAN the relay leg and reached no verdict retires the one held.
     await saveServerProbeResult(
       'v1',
-      { latencyMs: 30, measuredFrom: 'fleet', nodeId: 'n1', quicProbe: null },
+      // No `quicProbe` key at all: that — not `null` — is how a reply that ran the
+      // leg and reached no verdict actually arrives (`quicSkipped` absent too).
+      { latencyMs: 30, measuredFrom: 'fleet', nodeId: 'n1' },
       T1,
     );
     const retiredAt = (await loadProbeCache()).v1?.quicProbeRetiredAt;
@@ -323,6 +325,9 @@ describe('⛔ "tunnel down" comes back once the address resolves again — the s
       ip: '203.0.113.9',
       country: 'NL',
       timezone: 'Europe/Amsterdam',
+      // Required by the real type: the list parser NULLS an exit with no
+      // `observed_via`, so a fixture without it is a row production cannot send.
+      observed_via: 'session',
       observed_at: iso(T0),
     },
     exit_superseded_at: iso(T1 - 1_000),

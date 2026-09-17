@@ -176,6 +176,9 @@ const accountRow = (id: string): ListRow => ({
     ip: '203.0.113.9',
     country: 'NL',
     timezone: 'Europe/Amsterdam',
+    // Required by the real type: the list parser NULLS an exit with no
+    // `observed_via`, so a fixture without it is a row production cannot send.
+    observed_via: 'session',
     observed_at: iso(NOW - 10 * MIN),
   },
   exit_superseded_at: null,

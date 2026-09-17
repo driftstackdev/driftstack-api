@@ -486,7 +486,12 @@ describe('the proxies table fits the window without hiding anything', () => {
     // closest('button, …') guard no longer matches and the box gets checked.
     stored = [proxy('a')];
     render(<ProxiesView />);
-    const box = await screen.findByLabelText('Select proxy-a');
+    // The explicit generic, NOT `as HTMLInputElement`: `eslint --fix` strips that
+    // cast as an unnecessary assertion (the cast itself makes the generic infer
+    // the type), which silently re-breaks `.checked` under the test tsconfig — and
+    // because the pre-commit hook runs the fix, the change vanished from disk
+    // twice and lint-staged refused the commit as empty.
+    const box = await screen.findByLabelText<HTMLInputElement>('Select proxy-a');
 
     fireEvent.click(chevron('proxy-a'));
     await waitFor(() => expect(detailRows()).toHaveLength(1));
