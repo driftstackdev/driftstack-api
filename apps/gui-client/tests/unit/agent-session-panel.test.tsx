@@ -1324,6 +1324,13 @@ describe('AgentSessionPanel overlay UX', () => {
     ['vpn_bringup_no_active_state', 'VPN connection could not be started', 'not enough detail'],
     ['archetype_not_supported', 'This device is not available', 'Choosing another device'],
     ['unknown_error', 'Session stopped unexpectedly', 'Something went wrong'],
+    // A refusal whose fault is OURS. Distinct from the proxy-failure sentence
+    // below it, and the distinction is the point: the customer's proxy answered.
+    [
+      'egress_verification_unavailable',
+      'Could not confirm your proxy was carrying traffic',
+      'nothing to fix at your end',
+    ],
   ])('renders truthful bounded recap copy for %s', async (reason, outcome, explanation) => {
     connectMock.mockReset();
     connectMock.mockResolvedValue(undefined);
@@ -1366,6 +1373,7 @@ describe('AgentSessionPanel overlay UX', () => {
     'browser_crashed',
     'browser_exited',
     'control_plane_unreachable',
+    'egress_verification_unavailable',
     'egress_lost',
     'idle_timeout',
     'intent_deadline_exceeded',
@@ -1408,6 +1416,37 @@ describe('AgentSessionPanel overlay UX', () => {
       expect(text).not.toContain(reason);
     },
   );
+
+  it('CRITICAL the unverifiable refusal is NOT reported as a proxy failure', async () => {
+    // ⛔ THE ORDERING IS THE FIX. `egress_verification_unavailable` begins with
+    // `egress_`, so the `/^(proxy_|egress_)/` prefix branch would swallow it and
+    // return "could not connect through its proxy" — the exact falsehood the new
+    // branch exists to stop. Same near-miss shape as `render_` failing to match
+    // `renderer_crashed`, except here the prefix matches when it must not.
+    //
+    // Measured on the fleet: the case that produces this had a checker answer
+    // HTTP 503 with an empty body, which PROVES the request travelled through the
+    // customer's proxy. Their proxy carried traffic. Telling them it did not
+    // connect sends them to debug something that works, and they cannot disprove
+    // it from where they sit.
+    const text = await outcomeFor('egress_verification_unavailable');
+    expect(text).not.toMatch(/could not connect through its proxy/i);
+    expect(text).toMatch(/Could not confirm your proxy was carrying traffic/);
+    // ⚠️ And no retry promise. The path is already wrapped in transient retry, so
+    // every observed refusal had ALREADY failed every automatic attempt — telling
+    // someone "try again and it usually works" would be a second falsehood told
+    // to a person who has by then retried and failed.
+    expect(text).not.toMatch(/usually works|try again/i);
+  });
+
+  it('CONTROL — a genuine proxy failure still says so, and still points at them', async () => {
+    // Without this, the arm above would pass against a build that had softened
+    // EVERY egress failure into "ours". A proxy that genuinely did not carry
+    // traffic must keep telling the customer to act, or the change buries the
+    // failures they actually can fix.
+    const text = await outcomeFor('proxy_connection_failed');
+    expect(text).toMatch(/could not connect through its proxy/i);
+  });
 
   it('VACUITY CONTROL — an unknown reason still DOES render the generic sentence', async () => {
     // Without this, the arm above would pass just as happily against a component

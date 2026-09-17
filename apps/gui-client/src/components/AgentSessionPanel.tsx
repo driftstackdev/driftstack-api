@@ -445,6 +445,34 @@ function friendlySessionEndCopy(
         'Something went wrong and this session could not continue. Starting a new session usually clears it.',
     };
   }
+  // ⛔ THIS BRANCH MUST STAY ABOVE THE `/^(proxy_|egress_)/` PREFIX BELOW, and the
+  // ordering is the whole fix rather than a style choice: `egress_verification_
+  // unavailable` starts with `egress_`, so the prefix would swallow it and hand
+  // back the very sentence this exists to stop. The same near-miss shape as
+  // `render_` not matching `renderer_crashed`, one line apart.
+  //
+  // WHAT IT IS: we refuse a session when we cannot confirm its traffic is leaving
+  // through the customer's proxy. Until now that refusal was reported as
+  // `proxy_connection_failed` — "could not connect through its proxy", flagged as
+  // theirs to fix. Measured on the fleet: it fires, and the case that produced it
+  // was a checker answering HTTP 503 with an empty body. A 503 PROVES the request
+  // travelled through their proxy and reached the far end, so their proxy carried
+  // traffic and may be perfectly healthy. We were telling them it did not connect
+  // and sending them to debug something that works — a wrong instruction they
+  // cannot disprove from where they sit.
+  //
+  // ⚠️ NO RETRY PROMISE, and that is the detail that changed this copy late. The
+  // path is already wrapped in transient retry, so every observed refusal had
+  // ALREADY failed every automatic attempt — they were persistent, not blips.
+  // "Try again and it usually works" would be a second confident falsehood
+  // stacked on the first, told to someone who has by then retried and failed.
+  if (normalized === 'egress_verification_unavailable') {
+    return {
+      outcome: 'Could not confirm your proxy was carrying traffic',
+      explanation:
+        'Your proxy answered, but the checks we use to confirm where this session would appear from did not. We stopped it rather than risk it going out unprotected. This one is ours, not your proxy — if it keeps happening there is nothing to fix at your end.',
+    };
+  }
   if (/^(proxy_|egress_)/.test(normalized) || normalized === 'network_shim_boot_failed') {
     return {
       outcome: 'Proxy connection failed',
