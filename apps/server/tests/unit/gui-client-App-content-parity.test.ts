@@ -69,9 +69,21 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     // so the load-bearing invariant (RecordingsProvider stays inside
     // SettingsProvider, wraps all the way down to Shell) still holds; the regex
     // now tolerates that extra layer between RecordingsProvider and Shell.
+    // 2026-09-17 — AgentChatProvider added as a FOURTH layer, between
+    // ToastProvider and Shell, so the AI chat's hook outlives the view switch
+    // (leaving the AI view used to unmount it and close the running session
+    // mid-task). The load-bearing invariant is unchanged and still asserted
+    // below: RecordingsProvider stays inside SettingsProvider and wraps all the
+    // way down to Shell. The spans widen because two commented layers now sit
+    // in between; widening a tolerance is not the same as dropping the claim.
     expect(body).toMatch(
-      /<SettingsProvider>\s*<RecordingsProvider>\s*\n?[\s\S]{0,400}?<Shell \/>\s*\n?[\s\S]{0,200}?<\/RecordingsProvider>\s*<\/SettingsProvider>/,
+      /<SettingsProvider>\s*<RecordingsProvider>\s*\n?[\s\S]{0,900}?<Shell \/>\s*\n?[\s\S]{0,400}?<\/RecordingsProvider>\s*<\/SettingsProvider>/,
     );
+    // ⛔ And the new layer's own invariant, pinned rather than left implicit:
+    // AgentChatProvider must be the INNERMOST wrapper around Shell. Mounting it
+    // inside the view switch is exactly the defect it was added to fix, and a
+    // later refactor that moves it below Shell would restore that silently.
+    expect(body).toMatch(/<AgentChatProvider>\s*<Shell \/>\s*<\/AgentChatProvider>/);
   });
 
   it("V-263 hook-order framing pinned: 'Cmd+, shortcut. MUST live above any conditional returns below; React hooks order is positional, so registering the effect after an early-return pulls the hooks count out of sync between the wizard render (early return) and the post-wizard render (full shell), which unmounts the entire tree and shows a black screen.' — pinned so the useEffect placement above the loading + wizard early-returns doesn't get reordered (the black-screen incident framing must survive)", () => {

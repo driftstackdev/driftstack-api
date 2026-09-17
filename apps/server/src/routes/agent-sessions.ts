@@ -6347,6 +6347,15 @@ export function registerAgentSessionsRoutes(
           case 'answer':
             writeProgressFrame('answer', { answer: event.answer });
             return;
+          default: {
+            // A progress kind added to the union without a case here would be
+            // dropped silently — the customer would simply never see that frame,
+            // which is the failure mode this whole lane exists to remove.
+            // Assigning to `never` makes the omission a build error instead.
+            const _exhaustive: never = event;
+            void _exhaustive;
+            return;
+          }
         }
       };
 
