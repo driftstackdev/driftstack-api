@@ -40,6 +40,7 @@ import {
   SCHEDULED_JOB_STALE_LOCK_MS,
 } from '../../src/db/scheduled-jobs-repo.js';
 import { InMemoryScheduledJobsRepo } from './_helpers/in-memory-scheduled-jobs-repo.js';
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import type * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
@@ -48,6 +49,14 @@ const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 /**
  * This file's clock. Every `runAt` and every `claimDue({ now })` in it is
  * `NOW ± delta`, so the arms' semantics depend only on the offsets.
+ *
+ * ✅ RESOLVED 2026-09-17 — the contention documented at length below is GONE,
+ * because this file now runs against its own database (see ISOLATED_DB_NAME).
+ * No other file's rows exist in what `claimDue` sees, so the date is no longer
+ * load-bearing isolation and no date has to win a race. The history is kept
+ * because it cost two blocked pushes and because the trap it records — moving
+ * the clock to "fix" the flake makes it WORSE — is still true for anyone who
+ * reaches for that lever again.
  *
  * ⛔ THE DATE ITSELF IS ISOLATION, not flavour. The drizzle subject shares ONE
  * `scheduled_jobs` table with every other file in the run, and `claimDue` takes
@@ -109,8 +118,17 @@ let client: ReturnType<typeof postgres> | null = null;
 let dbReachable = false;
 const seededTypes: string[] = [];
 
+/** ⛔ THIS FILE GETS ITS OWN DATABASE. `claimDue` is a GLOBAL SWEEP: it takes the
+ *  oldest `batchSize` due rows with NO job-type filter, so on a shared database
+ *  its answer depends on rows belonging to whichever other file happens to be
+ *  running — exactly the class `_helpers/isolated-database.ts` was written for.
+ *  `driftstack_iso_scheduled_jobs_contract` is this file's alone. */
+const ISOLATED_DB_NAME = 'driftstack_iso_scheduled_jobs_contract';
+
 beforeAll(async () => {
-  const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return; // no reachable Postgres: the in-memory half still runs
+  const probe = postgres(isolated, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1 FROM scheduled_jobs LIMIT 0`;
     dbReachable = true;
@@ -118,7 +136,7 @@ beforeAll(async () => {
     /* the Drizzle half skips; the in-memory half still runs */
   }
   await probe.end({ timeout: 1 }).catch(() => {});
-  if (dbReachable) client = postgres(DB_URL, { max: 2 });
+  if (dbReachable) client = postgres(isolated, { max: 2 });
 });
 
 afterAll(async () => {
