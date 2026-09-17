@@ -173,6 +173,58 @@ name, which is what the workflow's release-exists check uses. And each platform 
 published) has NOT been observed and is not claimed to be covered — which is why step 5
 verifies the assets and the manifest before trusting a release, draft or not.
 
+### ⛔⛔ 2026-09-17 — BOTH claims above stopped being true. Measured on gui-v0.1.62 and gui-v0.1.63.
+
+**The draft is no longer used, so it no longer protects anything.** On both releases the draft
+was created exactly as step 4 says, against a tag already on origin. Each platform job then logged
+
+```
+Couldn't find release with tag gui-v0.1.63. Creating one.
+```
+
+and `tauri-action` created **its own release and published it**. Evidence, from the releases API:
+
+| tag         | release id | draft | assets | name                                                           |
+| ----------- | ---------- | ----- | ------ | -------------------------------------------------------------- |
+| gui-v0.1.62 | 389859928  | true  | 0      | Desktop client 0.1.62 ← the hand-made draft, orphaned          |
+| gui-v0.1.62 | 389864718  | false | 10     | Desktop client 0.1.62 ← created by the action, renamed by hand |
+| gui-v0.1.63 | 390862111  | true  | 0      | Desktop client 0.1.63 ← the hand-made draft, orphaned          |
+| gui-v0.1.63 | 390868508  | false | 6→10   | created by the action as "Driftstack GUI gui-v0.1.63"          |
+
+So "the org forbids Actions from creating a release" is **also no longer true** — the action
+created one, twice. 0.1.62's orphan went unnoticed for a day: `gh release view <tag>` resolves to
+the DRAFT while both exist, which is why a post-build check read `isDraft: true` on a release that
+was in fact live.
+
+**A partial publish HAS now been observed.** On 0.1.63 the Linux bundles built and signed, and the
+upload of the `.deb` was answered two minutes in by GitHub's own "Unicorn!" error page — a
+GitHub-side failure. Windows and macOS had already published. For ~25 minutes the release that was
+"latest" for every installed client carried 6 assets and no Linux.
+
+**What actually contained it was not the draft. It was the manifest's shape.** `latest.json` is
+keyed by platform, and a platform whose job failed has no key: the live manifest held 6 keys, all
+signed (4 darwin, 2 windows), so a Linux client saw no 0.1.63 and stayed on 0.1.62 — it was never
+offered a broken update. That property is load-bearing and nothing here states or tests it.
+
+**What to do until the workflow is fixed:**
+
+1. After a red platform job, read the log before anything else. If the bundles are listed under
+   "Found artifacts" and the error is an HTML page, it is an upload failure:
+   `gh run rerun <run-id> --failed`. `publish-manifest` is skipped while any platform is red and
+   runs after the re-run, which is what writes the last keys.
+2. Address releases **by id**, never by tag, while two exist:
+   `gh api repos/<org>/<repo>/releases --paginate -q '.[] | select(.tag_name=="gui-vX")'`.
+3. Put the real title and notes on the PUBLISHED one (`gh api -X PATCH …/releases/<id>`), then
+   delete the empty draft by id. Deleting a release never deletes the tag — confirm with
+   `git ls-remote --tags origin gui-vX` anyway.
+4. Then run step 5's verification as written: 10 assets, 9 platform keys, 0 unsigned.
+
+**The real fix** is in the workflow, not here: either have it find the draft (list releases and
+match `tag_name`, since `GET /releases/tags/:tag` does not return drafts) and publish only from
+`publish-manifest` once every platform is green, or drop the draft step from this runbook and say
+plainly that publication is per-platform. It is left open rather than patched blind — a release
+workflow cannot be tested without cutting a release.
+
 ## ⛔ Why the bump is a script: `Cargo.lock` is a copy nobody was checking
 
 `Cargo.lock` carries the app version a fourth time, in the `driftstack-gui` `[[package]]`
