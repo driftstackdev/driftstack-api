@@ -159,6 +159,67 @@ artefact — it had been "tracked" while never once being compared to anything.
 
 ---
 
+## 6. OWNER DECISION — the health prober has never run in production
+
+**Measured 2026-09-17.** `PUBLIC_API_BASE_URL` is absent from both
+`/opt/driftstack/api/.env` and the running process environment on prod, so
+`healthProbeService` is `null` there. Consequences, all live right now:
+
+- No probe row has ever been written, so `GET /v1/status/sla` returns `{"data":[]}`.
+- The auto-incident path has never been able to fire — the thing that opens an
+  incident after three consecutive failed health checks does not exist in prod.
+- The bootstrap comment claimed "(Hetzner deploy sets this)". It does not. That
+  comment is now corrected to state the measurement.
+
+**Why this is not flipped autonomously.** The poller opens a `public: true`,
+`severity: 'major'` incident on the customer-facing status page after three
+consecutive failed self-probes. Enabling it publishes customer-visible notices on
+a deployment still reporting `driver: "mock"`. That is a product decision, and it
+is the same call already on record for the metrics layer, which is inert in prod
+for exactly this shape of reason (`METRICS_SCRAPE_TOKEN` unset; surfaced to the
+owner rather than flipped).
+
+**To enable:** set `PUBLIC_API_BASE_URL=https://api.driftstack.dev` in
+`/opt/driftstack/api/.env` and restart the service. Nothing else is needed — the
+probe target, thresholds and incident wiring already exist. The SLA endpoint will
+then report real figures instead of an honest "unmeasured" entry.
+
+---
+
+## 7. A gate flake, fully diagnosed — and the obvious fix is a trap
+
+`tests/integration/scheduled-jobs-repo-contract.test.ts` failed one full-suite
+gate and passed in isolation seconds later. Not my change, and not random.
+
+`scheduled_jobs` is one table shared by every test file, and `claimDue` takes no
+job-type filter: it claims the oldest `batchSize` due rows, whatever they are. Two
+integration files each solved "don't get crowded out" by making their own rows the
+oldest — this one at 1990, `db-scheduled-jobs-repo-drizzle.test.ts` at 2020. The
+sibling then claims with a **present-day** clock (`batchSize: 50` at its :204), so
+the 1990 rows are due, sort first, and get locked under its worker. This file's
+next claim finds none of its own and fails as "the null-account duplicate was
+enqueued anyway" — about a repo that deduped perfectly. Each file's mitigation
+made it the other's crowd, and the older one always loses.
+
+**Moving the clock to the future does NOT fix it — I tried it and measured the
+result.** At 2190 no present-day claimer can take the rows, but this file's own
+claim then sees the whole table, its rows sort LAST, and `LIMIT batchSize` crowds
+them out — the exact failure 1990 was introduced to prevent. The properties
+conflict on a shared unfiltered queue: oldest is claimable by everyone, newest is
+crowded out by everyone, and raising `batchSize` only makes this file the
+antisocial one. There is no date that is both, so the clock is left at 1990 and
+the trap is written into the file.
+
+**The real fix is isolation, not arithmetic:** give the file its own table or
+schema, or merge it with the sibling so the two cannot interleave. Left open
+rather than half-done.
+
+⚠️ Until then: this arm failing under full-suite contention while passing in
+isolation means contention, not a repo defect. Do not change the repo on the
+strength of it.
+
+---
+
 ## The through-line
 
 Every item here is one shape: **an instrument that cannot express the answer

@@ -62,9 +62,39 @@ const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
  * fail; they pass with the clock below.
  *
  * ⚠️ Fixed by ORDERING rather than by raising `batchSize`, which only moves the
- * threshold and claims more of other files' rows on the way. 1990 is older than
- * anything another suite plausibly enqueues, so these jobs are always at the
- * head of the queue whatever else is in it.
+ * threshold and claims more of other files' rows on the way.
+ *
+ * ⛔⛔ STILL FLAKY, AND THE REMAINING MECHANISM IS KNOWN — read this before
+ * "fixing" the clock again, because the obvious fix is a trap that was tried and
+ * measured on 2026-09-17.
+ *
+ * The 1990 date buys READ isolation and nothing else. This file's own
+ * `claimDue({ now: NOW })` selects `run_at <= 1990`, which no other suite's rows
+ * satisfy, so its claims see only its own jobs. But the WRITE side is wide open:
+ * `tests/integration/db-scheduled-jobs-repo-drizzle.test.ts` shares this table and
+ * claims with a PRESENT-DAY clock (`batchSize: 50` at its :204, `16` at :166). A
+ * 1990 row is due at any present-day `now` AND sorts first, so that file claims
+ * these jobs and stamps its own `locked_by` on them. This file's next claim then
+ * finds none of its own and fails — on 2026-09-17 as "the null-account duplicate
+ * was enqueued anyway", about a repo that deduped perfectly. Both files had
+ * independently reasoned their way to "be the oldest"; each is the other's crowd,
+ * and the older one always loses.
+ *
+ * ⛔ MOVING THE CLOCK TO THE FUTURE DOES NOT FIX IT — measured, not assumed. At
+ * 2190 no present-day claimer can take these rows (`run_at <= now` excludes
+ * them), but this file's own claim at `now: NOW` then sees the WHOLE table, its
+ * rows sort LAST under `ORDER BY run_at ASC`, and `LIMIT batchSize` crowds them
+ * out — which is the exact failure the 1990 date was introduced to fix. The two
+ * properties are in direct conflict on a shared, unfiltered queue: oldest is
+ * claimable by everyone, newest is crowded out by everyone, and raising
+ * `batchSize` only makes THIS file the antisocial one by locking other files'
+ * rows. There is no date that is both.
+ *
+ * ⚠️ The real fix is isolation, not arithmetic: give this file its own table or
+ * schema, or merge it with the sibling file above so the two can never interleave.
+ * Until then this arm can fail under full-suite contention while passing in
+ * isolation — that signature means contention, NOT a repo defect, and the repo
+ * should not be changed on the strength of it.
  *
  * ⚠️ Safe because the repo NEVER mixes in the wall clock: `claimDue` writes
  * `locked_at = ${now}` from the value passed here, and the stale-lock arms
