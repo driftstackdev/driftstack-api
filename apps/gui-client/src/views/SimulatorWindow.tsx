@@ -43,6 +43,7 @@ import { useRecordings, type Recording } from '../lib/recordings';
 import { buildRecordingExport, recordingExportFilename } from '../lib/recordings-export';
 import { exportCookies } from '../lib/cookie-export';
 import { parseCookies } from '../lib/cookie-import';
+import { historyStepNotice } from '../lib/history-step-outcome';
 import { startSimulatorCrashMarker } from '../lib/simulator-crash-marker';
 import {
   browserStallCensusDeps,
@@ -9700,12 +9701,25 @@ export function SimulatorWindow(): JSX.Element {
     setPageStalled(false);
     setPageLoading(armLoadWatchdog(true));
     if (!ownsManualInputAuthority(sessionId, room, authorityEpoch)) return;
-    void navigateAgentSessionHistory(sessionId, direction, controlAuth).catch(() => {
-      if (!ownsManualInputAuthority(sessionId, room, authorityEpoch)) return;
-      showNotice(`Could not go ${direction}`, 3000);
-      setPageLoading(false);
-      clearLoadWatchdog();
-    });
+    // ⛔ The RESOLVED body used to be discarded — only `.catch` was wired, so a
+    // 200 carrying `{status:'unavailable', reason}` resolved silently and the
+    // button looked dead. `historyStepNotice` owns which outcomes speak and which
+    // stay quiet; see its doc for why `timeout` deliberately says nothing.
+    void navigateAgentSessionHistory(sessionId, direction, controlAuth)
+      .then((result) => {
+        const notice = historyStepNotice(result, direction);
+        if (notice === null) return;
+        if (!ownsManualInputAuthority(sessionId, room, authorityEpoch)) return;
+        showNotice(notice, 3000);
+        setPageLoading(false);
+        clearLoadWatchdog();
+      })
+      .catch(() => {
+        if (!ownsManualInputAuthority(sessionId, room, authorityEpoch)) return;
+        showNotice(`Could not go ${direction}`, 3000);
+        setPageLoading(false);
+        clearLoadWatchdog();
+      });
   };
   const togglePinned = (): void => {
     const next = !pinned;
