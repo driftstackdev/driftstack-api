@@ -75,6 +75,7 @@ import {
   buildWireGuardProxyInput,
   buildOpenVpnProxyInput,
   deleteProxy as deleteAccountProxy,
+  planExcludesVpnEgress,
   updateProxy as updateAccountProxy,
   type AccountProxyScheme,
   type AccountProxyTestNotRun,
@@ -83,6 +84,7 @@ import {
 import { profilesUsingProxy } from '../lib/profile-bindings';
 import { isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
 import { capabilityRecheckPromises, withProxyProbe } from '../lib/proxy-probe-sweeper';
+import { useDisplayClock } from '../lib/use-display-clock';
 import {
   accountProxyInputFor,
   chipOsFingerprint,
@@ -96,6 +98,7 @@ import {
   SOCKS5_TEST_NO_API_KEY_NOTICE,
   socks5FleetTestNotStoredNotice,
   syncListExitObserved,
+  vpnStoreRefusal,
   testProxyOnServer,
   unansweredCheckNotice,
   type ServerProbeOutcome,
@@ -116,7 +119,11 @@ import {
   EXIT_GEO_UNAVAILABLE_TITLE,
   HTTP_VERIFIED_AT_LAUNCH,
   MISSING_API_KEY_NEXT_STEP,
+  NOT_ON_THIS_PLAN_LABEL,
   RECHECK_ACTION,
+  VPN_CHECK_IN_PROGRESS,
+  VPN_PLAN_EXCLUDED_CHECK_NOTICE,
+  VPN_PLAN_EXCLUDED_TALLY_REASON,
   RETEST_ACTION,
   VPN_NO_API_KEY_CHECK_NOTICE,
   VPN_NO_EXIT_YET,
@@ -127,6 +134,8 @@ import {
   VPN_UDP_MEASURED_NONE_TITLE,
   VPN_UDP_MEASURED_OK_TITLE,
   VPN_UDP_NOT_MEASURED_TITLE,
+  VPN_UDP_NOT_ON_PLAN_HINT,
+  vpnQuicReading,
 } from '../lib/proxy-check-copy';
 
 interface ListState {
@@ -595,6 +604,100 @@ export function ProxiesView(): JSX.Element {
   // first list sync that answers — not from every `refresh()` (a save, a remove
   // and a retry all call it, and each would have been another run).
   const capabilityCheckFiredRef = useRef(false);
+  // ⛔ (2026-09-17) THE ONE PLACE A CACHE BECOMES RENDERED STATE, and the reason
+  // it had to become one.
+  //
+  // `refresh()` and the cache subscription each held their own copy of this
+  // sequence, and every window in the derivation (`isQuicProbeFresh`,
+  // `isOsFingerprintFresh`, …) is applied against `Date.now()` AT THE MOMENT ONE
+  // OF THEM RUNS. Since both run only when the cache is WRITTEN, the windows were
+  // never enforced continuously: a chip stayed green long past its window and
+  // then flipped grey the instant an unrelated proxy was written. That is what
+  // the owner saw as "sometimes … green on quic, and later not green box" — not a
+  // window that was too short or too long, but one that was checked at arbitrary
+  // moments. Collapsed into one callback so the sixty-second display clock below
+  // can re-run exactly what a cache write re-runs, with no third copy to drift.
+  const probeCacheRef = useRef<ProbeCacheMap>({});
+  const deriveIntoState = useCallback((cache: ProbeCacheMap): void => {
+    // Kept so the clock can re-derive the SAME cache at a later moment. A ref,
+    // not state: the derived maps below are the render inputs, and holding the
+    // raw cache in state too would re-render the grid twice per write.
+    probeCacheRef.current = cache;
+    const view = deriveProbeViewWithEndpointRows(cache);
+    setTestResults(view.testResults);
+    setEndpointResults(view.endpointResults);
+    setExitResults(view.exitResults);
+    // (h) — a VPN row's "Tested" dates the fleet number it shows, not the
+    // DNS pre-flight that ran before a refused test.
+    setTestedAt({ ...view.testedAt, ...serverProbeStamps(cache) });
+    setServerProbeAt(fleetProbeStamps(cache));
+    setVpnFailures(fleetFailureReasons(cache));
+    setOsFingerprints(view.osFingerprints);
+    setServerLatency(view.serverLatency);
+    setQuicMeasured(view.quicMeasured);
+    setServerVantage(view.serverVantage);
+    setQuicProbe(view.quicProbe);
+    setUdpProbe(view.udpProbe);
+    setAgedReadings(view.aged);
+  }, []);
+  /**
+   * A cache write's full effect: re-derive, then re-plan the automatic recheck.
+   *
+   * ⛔ (2026-09-17 review) THE SPLIT IS THE POINT. `syncAutoRecheck` reads the
+   * persisted attempt ledger off the Tauri store (`loadCapabilityAttempts`) and
+   * sets a fresh `autoRecheckIds` object every time it runs, so folding it into
+   * the sixty-second display tick below would have meant one disk read and one
+   * whole-grid re-render EVERY MINUTE for the life of the mount — and a transient
+   * read failure flipping every aged chip's hover between "It will be rechecked
+   * automatically" and the button wording, once a minute, for no reason a
+   * customer could see. The recheck plan is a function of the CACHE and the
+   * ledger; neither moves when the clock does.
+   */
+  const applyProbeCache = useCallback(
+    (cache: ProbeCacheMap): void => {
+      deriveIntoState(cache);
+      syncAutoRecheck(cache);
+    },
+    [deriveIntoState, syncAutoRecheck],
+  );
+  // ONE shared sixty-second tick (use-display-clock.ts), used as a dependency
+  // only — the derivation still reads the real clock. This is what actually
+  // ENFORCES the display windows: without it they are boundaries nothing crosses
+  // until some unrelated write happens by.
+  const displayTick = useDisplayClock();
+  /** The id being checked right now, readable from the tick effect below without
+   *  making it a dependency of it — see the note there. */
+  const testingIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    testingIdRef.current = testingId;
+  }, [testingId]);
+  useEffect(() => {
+    // ⛔ Deliberately a no-op before the first load: `probeCacheRef` starts empty
+    // and an empty cache derives to empty maps, which is exactly the state the
+    // view mounts in. Nothing is cleared and no request is made.
+    //
+    // ⛔⛔ (2026-09-17 review) AND NOT WHILE A CHECK IS RUNNING. The snapshot in
+    // `probeCacheRef` is stale for the whole window between an optimistic UI
+    // write and the cache emit that confirms it — `applyServerProbeOutcome` and
+    // `handleCheckEndpoint` both set the row's chips first and persist after —
+    // and `deriveIntoState` REPLACES every one of those maps wholesale. A tick
+    // landing inside that window would revert the row the customer is watching
+    // to whatever the last emit said, which is the opposite of what this clock is
+    // for. `testingId` is non-null for the whole of both paths (set at their
+    // entry, cleared in their `finally`), so this guard covers them.
+    // ⚠️ The residual is the fire-and-forget `persistServerProbe` tail, which can
+    // land after `testingId` clears: a tick in THAT window reverts the chips for
+    // as long as the write takes, and the emit then re-derives the true value. A
+    // one-shot flicker, not a wrong resting state — and nothing ages in the
+    // seconds a row skips, because the next tick re-derives it anyway.
+    if (testingIdRef.current !== null) return;
+    deriveIntoState(probeCacheRef.current);
+    // ⛔ `testingId` is read through a REF and is deliberately NOT a dependency.
+    // As a dependency it would re-run this effect the moment a check FINISHES —
+    // which is precisely the instant the held snapshot is most stale, before the
+    // write it triggered has emitted. The guard has to skip ticks, not schedule
+    // an extra re-derive at the one moment it must not happen.
+  }, [displayTick, deriveIntoState]);
   // VPN exit parity (b) — the fleet's failure sentence for a VPN row whose
   // endpoint resolved but whose tunnel the fleet Mac could not bring up.
   // (h) finding 3 — hydrated from the CACHE (`fleetFailureReasons`) on load
@@ -621,6 +724,16 @@ export function ProxiesView(): JSX.Element {
   // In memory only, like `vpnNotices`: a remount has not seen the reply, and the
   // chip then says "not measured yet" — which is what is true of what it knows.
   const [noFleetMac, setNoFleetMac] = useState<Record<string, true>>({});
+  // ⛔ (2026-09-17) The account's plan has no VPN egress, so NO check of a VPN row
+  // can ever run — the store is refused and the free-desktop route policy carries
+  // no test route at all. It is an ACCOUNT fact, not a row fact, which is why it
+  // is computed once here and threaded beside `noFleetMac` rather than keyed by
+  // id. ⛔ (2026-09-17 review) It was `accountMe?.tier === 'free'` — a hand-typed
+  // copy of the plan matrix. `planExcludesVpnEgress` reads `TIER_FEATURES`, the
+  // same table the server enforces from, so the client cannot drift from the
+  // policy that will actually answer; the null/unknown-tier rule and the reason
+  // for the optional chaining live on that function.
+  const planExcludesVpn = planExcludesVpnEgress(accountMe);
   const [testAllSummary, setTestAllSummary] = useState<TestAllSummary | null>(null);
   // A ref closes the one-render gap before `testingAll` disables the button. It
   // also owns the eventual summary, so an abandoned/stale sweep cannot announce
@@ -688,23 +801,7 @@ export function ProxiesView(): JSX.Element {
       // step as the fleet test, so a VPN row's fleet-measured latency and exit
       // hydrate here exactly as a SOCKS5 row's do.
       const cache = await loadProbeCache();
-      const view = deriveProbeViewWithEndpointRows(cache);
-      setTestResults(view.testResults);
-      setEndpointResults(view.endpointResults);
-      setExitResults(view.exitResults);
-      // (h) — a VPN row's "Tested" dates the fleet number it shows, not the
-      // DNS pre-flight that ran before a refused test.
-      setTestedAt({ ...view.testedAt, ...serverProbeStamps(cache) });
-      setServerProbeAt(fleetProbeStamps(cache));
-      setVpnFailures(fleetFailureReasons(cache));
-      setOsFingerprints(view.osFingerprints);
-      setServerLatency(view.serverLatency);
-      setQuicMeasured(view.quicMeasured);
-      setServerVantage(view.serverVantage);
-      setQuicProbe(view.quicProbe);
-      setUdpProbe(view.udpProbe);
-      setAgedReadings(view.aged);
-      syncAutoRecheck(cache);
+      applyProbeCache(cache);
     } catch (err) {
       setState((s) => ({
         ...s,
@@ -712,7 +809,7 @@ export function ProxiesView(): JSX.Element {
         error: friendlyError(err, "Couldn't load proxies. Try again."),
       }));
     }
-  }, [settings.apiKey, settings.baseUrl, syncAutoRecheck]);
+  }, [settings.apiKey, settings.baseUrl, applyProbeCache]);
 
   // P-8 — the background sweep rewrites verdicts while this grid is open. Without
   // this, a proxy re-tested and found DOWN would keep showing the healthy pill it
@@ -721,23 +818,9 @@ export function ProxiesView(): JSX.Element {
   useEffect(
     () =>
       subscribeProbeCache((cache) => {
-        const view = deriveProbeViewWithEndpointRows(cache);
-        setTestResults(view.testResults);
-        setEndpointResults(view.endpointResults);
-        setExitResults(view.exitResults);
-        setTestedAt({ ...view.testedAt, ...serverProbeStamps(cache) });
-        setServerProbeAt(fleetProbeStamps(cache));
-        setVpnFailures(fleetFailureReasons(cache));
-        setOsFingerprints(view.osFingerprints);
-        setServerLatency(view.serverLatency);
-        setQuicMeasured(view.quicMeasured);
-        setServerVantage(view.serverVantage);
-        setQuicProbe(view.quicProbe);
-        setUdpProbe(view.udpProbe);
-        setAgedReadings(view.aged);
-        syncAutoRecheck(cache);
+        applyProbeCache(cache);
       }),
-    [syncAutoRecheck],
+    [applyProbeCache],
   );
 
   useEffect(() => {
@@ -1346,7 +1429,66 @@ export function ProxiesView(): JSX.Element {
         setVpnNotices((m) => ({ ...m, [p.id]: VPN_NO_API_KEY_CHECK_NOTICE }));
         return { resolved: true, tunnelOk: null, notTested: MISSING_API_KEY_NEXT_STEP };
       }
-      if (p.serverId === undefined) {
+      // ⛔ (2026-09-17) A PLAN THAT HAS NO VPN EGRESS IS ANSWERED BEFORE THE
+      // UPLOAD, not by it. The store and the test are both refused on a Free
+      // account (the free-desktop route policy carries no `…/test` route at all),
+      // and asking anyway would send the customer's VPN key and private key to the
+      // control plane to be told no. The answer is the same and nothing leaves
+      // this Mac. ⚠️ Only when the account has actually ANSWERED: `accountMe` is
+      // null while /me is in flight, and refusing on a null would silently stop
+      // checking VPN rows for every paying customer during that window.
+      if (planExcludesVpn) {
+        settle();
+        setVpnNotices((m) => ({ ...m, [p.id]: VPN_PLAN_EXCLUDED_CHECK_NOTICE }));
+        return { resolved: true, tunnelOk: null, notTested: VPN_PLAN_EXCLUDED_TALLY_REASON };
+      }
+      let serverId: string | undefined = p.serverId;
+      if (serverId === undefined) {
+        // ⛔ (2026-09-17) THE ROW IS STORED HERE, and the early return this
+        // replaces was a CLOSED LOOP. It set `VPN_NOT_STORED_CHECK_NOTICE`
+        // ("launch a session through this proxy once") and stopped — but nothing
+        // on this tab ever stored a VPN row, so a VPN proxy added from the Proxies
+        // tab was never stored on the account and never tunnel-tested, while a SOCKS5
+        // proxy added beside it was both, automatically, at add time. The customer was
+        // told to go and do the one thing that could break: launch a session
+        // through a proxy nobody had checked.
+        //
+        // This is the SAME fix the profile card already carries (ProfilesView's
+        // `ensureServerProxy` arm) — the two surfaces now do the same thing for
+        // the same row, and `ensureAccountProxyRow` has one create call site for
+        // both. It runs on the check's own background path: the caller does not
+        // await it (`handleSave` fires it with `void`), the epoch guard below
+        // abandons it the moment the row is edited or removed, and the server
+        // test it leads to is single-flighted per account row by `withServerTest`
+        // inside `testProxyOnServer`, so a second Check cannot dial twice.
+        try {
+          const ensured = await ensureAccountProxyRow(p, settings.baseUrl, settings.apiKey);
+          if (stale()) return null;
+          serverId = ensured?.id;
+          if (ensured?.created === true) {
+            // Mirror the stored id into this grid's list, exactly as the SOCKS5
+            // arm does, so the NEXT check of the row takes the stored path at once
+            // instead of creating a second account row for one proxy.
+            const storedId = ensured.id;
+            setState((st) => ({
+              ...st,
+              proxies: st.proxies.map((x) => (x.id === p.id ? { ...x, serverId: storedId } : x)),
+            }));
+          }
+        } catch (err) {
+          if (stale()) return null;
+          settle();
+          const refusal = vpnStoreRefusal(err);
+          setVpnNotices((m) => ({ ...m, [p.id]: refusal.notice }));
+          return { resolved: true, tunnelOk: null, notTested: refusal.tally };
+        }
+      }
+      if (serverId === undefined) {
+        // What still reaches here: no API key (returned above, so not that) and a
+        // local row DELETED while this check was in flight, which
+        // `ensureAccountProxyRow` detects and cleans up after rather than
+        // orphaning the customer's VPN secret. The row is gone from the list by
+        // then, so this notice is a fail-safe rather than something read.
         settle();
         setVpnNotices((m) => ({ ...m, [p.id]: VPN_NOT_STORED_CHECK_NOTICE }));
         return { resolved: true, tunnelOk: null, notTested: VPN_NOT_STORED_TALLY_REASON };
@@ -1355,7 +1497,7 @@ export function ProxiesView(): JSX.Element {
       // up is the one this Mac holds and not the one the last launch stored.
       await pushLocalMaterialToAccount(p).catch(() => undefined);
       if (stale()) return null;
-      const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, p.serverId);
+      const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, serverId);
       if (stale()) return null;
       settle();
       applyServerProbeOutcome(p.id, outcome);
@@ -1758,6 +1900,20 @@ export function ProxiesView(): JSX.Element {
       setServerVantage((m) => dropKey(m, p.id));
       setQuicProbe((m) => dropKey(m, p.id));
       setUdpProbe((m) => dropKey(m, p.id));
+      // ⛔ (2026-09-17 review) AND IT IS PERSISTED, not held in component state.
+      // The eight lines above are the whole failure state, and until now they
+      // lived ONLY here: `testProxy` threw, so the `saveProbeResult` on the happy
+      // path never ran and the cache still holds the last HEALTHY result. Any
+      // re-derivation from that cache therefore restores a green row over
+      // "Couldn't test this proxy" — and the sixty-second display clock added for
+      // item A2 re-derives on a timer, so what used to need an unrelated write to
+      // happen by is now guaranteed within a minute. The neighbouring path
+      // already recognises this shape: `clearExitResult` is written to the cache
+      // at :1748 precisely so an optimistic drop survives the next emit.
+      //
+      // Fire-and-forget with the same swallow as the happy path: a cache that
+      // cannot be written must not turn a reported failure into a thrown one.
+      void saveProbeResult(p.id, result, Date.now()).catch(() => undefined);
       return result;
     } finally {
       // Always clear the spinner for the id THIS probe owns — even when a
@@ -1893,13 +2049,24 @@ export function ProxiesView(): JSX.Element {
                   <b className="font-semibold text-ink-primary">{udpCapable.length}</b> WebRTC +
                   QUIC
                   <span className="text-surface-divider">·</span>
+                  {/* ⛔ (2026-09-17) THESE THREE SENTENCES WERE ALREADY FALSE, before
+                      any of today's changes. "When a session starts" describes a
+                      boundary the app has not had for some time: adding a SOCKS5
+                      proxy fires its check immediately (`testAfterSave`), and that
+                      check stores the row on the account first — credentials and
+                      all — because only a stored row can be tested from
+                      Driftstack's network. So the upload happens at ADD time, and
+                      the sentence promised it would not happen until later.
+                      A promise about where a customer's credentials go is the last
+                      string in the app that may be approximately true. */}
                   <span className="text-ink-muted">
-                    protected on this device · synced encrypted when a session starts
+                    encrypted on this device · saved encrypted to your account when tested
                   </span>
                 </>
               ) : (
                 <span className="text-ink-muted">
-                  Protected locally on this device · synced encrypted when used for a session.
+                  Encrypted on this device · saved encrypted to your account when a proxy is tested
+                  or used for a session.
                 </span>
               )}
             </p>
@@ -2046,6 +2213,7 @@ export function ProxiesView(): JSX.Element {
           vpnFailures={vpnFailures}
           vpnNotices={vpnNotices}
           noFleetMac={noFleetMac}
+          planExcludesVpn={planExcludesVpn}
           onEdit={(id) => setEditor({ kind: 'edit', id })}
           onRemove={(id) => void handleRemove(id)}
           onTest={(p) => void handleTest(p)}
@@ -2082,7 +2250,7 @@ function Empty({ loading, onAdd }: { loading: boolean; onAdd: () => void }): JSX
         </svg>
       }
       title="No proxies configured"
-      description="Add a SOCKS5 proxy or VPN to route session traffic through your own IP address. Proxy credentials are protected on this device and synced in encrypted form to your account when used for a session."
+      description="Add a SOCKS5 proxy or VPN to route session traffic through your own IP address. Credentials are encrypted on this device, and saved encrypted to your account when the proxy is tested or used for a session — testing runs automatically when you add one."
       action={
         <button
           type="button"
@@ -2339,6 +2507,7 @@ function ProxyTable({
   vpnFailures,
   vpnNotices,
   noFleetMac,
+  planExcludesVpn,
   endpointResults,
   onEdit,
   onRemove,
@@ -2380,6 +2549,9 @@ function ProxyTable({
   /** (o) O5 — the rows whose last server test reached NO fleet Mac (`not_run:
    *  'no_node'`). Absent = a Mac answered, or no server test has landed yet. */
   noFleetMac: Record<string, true>;
+  /** The account's plan has no VPN egress — an ACCOUNT fact, so one boolean for
+   *  every row rather than a map. See `planExcludesVpn` where it is computed. */
+  planExcludesVpn: boolean;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
   endpointResults: Record<string, EndpointResolveResult>;
@@ -2648,6 +2820,7 @@ function ProxyTable({
                 vpnFailure={vpnFailures[p.id]}
                 vpnNotice={vpnNotices[p.id]}
                 noFleetMac={noFleetMac[p.id] === true}
+                planExcludesVpn={planExcludesVpn}
                 onEdit={() => onEdit(p.id)}
                 onRemove={() => onRemove(p.id)}
                 onTest={() => onTest(p)}
@@ -2738,6 +2911,7 @@ function ProxyRow({
   vpnFailure,
   vpnNotice,
   noFleetMac,
+  planExcludesVpn = false,
   endpointResult,
   onEdit,
   onRemove,
@@ -2799,6 +2973,11 @@ function ProxyRow({
    *  (`not_run: 'no_node'`). The QUIC absence it leaves behind is about the
    *  FLEET, not about this tunnel, and the chip says which. */
   noFleetMac: boolean;
+  /** The account's plan has no VPN egress, so "not measured YET" is the wrong
+   *  word for this row's server-only readings — nothing will ever measure them.
+   *  Defaults to false so a caller that does not know promises nothing about the
+   *  plan and the chips keep today's wording. */
+  planExcludesVpn?: boolean;
   endpointResult: EndpointResolveResult | undefined;
   onEdit: () => void;
   onRemove: () => void;
@@ -2945,14 +3124,19 @@ function ProxyRow({
   // sources (`proxyCapabilities`, the VPN chips' own helpers) — never retyped.
   const capabilityLines: ReadonlyArray<{ label: string; hint: string }> = isVpnScheme(p.scheme)
     ? [
-        { label: 'UDP', hint: vpnUdpHint(udpProbe, aged?.udpProbe, agedNowMs, autoRecheck) },
+        {
+          label: 'UDP',
+          hint: vpnUdpHint(udpProbe, aged?.udpProbe, agedNowMs, autoRecheck, planExcludesVpn),
+        },
         {
           label: 'QUIC',
-          hint: vpnQuicReading(quicMeasured, quicProbe, noFleetMac, {
-            aged: agedQuicReading(aged),
-            nowMs: agedNowMs,
-            autoRecheck,
-          }).hint,
+          hint: vpnQuicReading(
+            quicMeasured,
+            quicProbe,
+            noFleetMac,
+            { aged: agedQuicReading(aged), nowMs: agedNowMs, autoRecheck },
+            planExcludesVpn,
+          ).hint,
         },
       ]
     : result !== undefined && reachable
@@ -3218,11 +3402,13 @@ function ProxyRow({
                   aged={aged?.udpProbe}
                   autoRecheck={autoRecheck}
                   nowMs={agedNowMs}
+                  planExcluded={planExcludesVpn}
                 />
                 <VpnQuicChip
                   quicMeasured={quicMeasured}
                   quicProbe={quicProbe}
                   noFleetMac={noFleetMac}
+                  planExcluded={planExcludesVpn}
                   aged={agedQuicReading(aged)}
                   autoRecheck={autoRecheck}
                   nowMs={agedNowMs}
@@ -3461,6 +3647,21 @@ function ProxyRow({
                         ? CHECK_VPN_ACTION
                         : CHECK_ENDPOINT_ACTION}
                 </button>
+                {/* ⛔ (2026-09-17) HOW LONG, while it is happening. A VPN check
+                    resolves the address here, stores the row on the account and
+                    then waits for the tunnel to come up and be measured — which is
+                    a minute-and-a-half shape, not a local-handshake shape. "Checking…"
+                    alone over that gap reads as a hang, and a customer who thinks a
+                    button is stuck presses it again. */}
+                {testing && isVpnScheme(p.scheme) && (
+                  <span
+                    data-component="vpn-check-progress"
+                    className="text-[10px] text-ink-muted"
+                    role="status"
+                  >
+                    {VPN_CHECK_IN_PROGRESS}
+                  </span>
+                )}
                 {endpointResult !== undefined && (
                   <span
                     className={`max-w-full break-all text-[10px] ${endpointResult.resolved ? 'text-status-ready' : 'text-status-error'}`}
@@ -3814,7 +4015,11 @@ function HealthPill({
  *  unavailable, not because the tunnel failed anything. It names the cause and the
  *  machine that would measure it, and it does NOT tell the customer to press a button
  *  that cannot produce a value while every Mac is busy. */
-const NO_TEST_MAC_QUIC_HINT = `Not measured yet — Driftstack was busy. QUIC is measured from Driftstack’s network; try ${CHECK_VPN_ACTION} again in a few minutes.`;
+/* `NO_TEST_MAC_QUIC_HINT` and `vpnQuicReading` moved to lib/proxy-check-copy on
+ * 2026-09-17 so the profiles LIST can read the SAME four-branch choice the grid
+ * and the card read — it was hard-wired to "QUIC not tested" for every VPN row
+ * while these two showed a measured green for the same proxy. The words and the
+ * order are unchanged; see that module for why the choice travels with them. */
 
 /**
  * (V6 2026-09-16) ITEM 3 — the UDP chip of a VPN row, in THREE states, and the
@@ -3840,6 +4045,7 @@ function VpnUdpChip({
   aged,
   autoRecheck = false,
   nowMs = Date.now(),
+  planExcluded = false,
 }: {
   udpProbe: boolean | undefined;
   /** A FOURTH state, reached only through the third: no current reading, but one
@@ -3848,8 +4054,10 @@ function VpnUdpChip({
   aged?: AgedReading<boolean> | undefined;
   autoRecheck?: boolean;
   nowMs?: number;
+  /** The account's plan has no VPN egress — see `vpnUdpHint`. */
+  planExcluded?: boolean;
 }): JSX.Element {
-  const hint = vpnUdpHint(udpProbe, aged, nowMs, autoRecheck);
+  const hint = vpnUdpHint(udpProbe, aged, nowMs, autoRecheck, planExcluded);
   if (udpProbe === undefined && aged !== undefined) {
     return (
       <span
@@ -3866,15 +4074,21 @@ function VpnUdpChip({
     );
   }
   if (udpProbe === undefined) {
+    // ⛔ (2026-09-17 review) The plan refusal reaches the LABEL, not just the
+    // hover. Its neighbour `VpnQuicChip` already renders "QUIC — not included on
+    // this plan", and the two chips sit on one row describing one refusal: a bare
+    // "⇢ UDP" beside it reads as "not measured yet", which sends the customer to
+    // press a button that cannot run on their plan. One refusal, one story.
     return (
       <span
         className={UNMEASURED_CHIP_CLS}
         data-component="vpn-udp-chip"
         data-ok="unmeasured"
         data-udp="tunnel"
+        {...(planExcluded === true ? { 'data-unmeasured': 'plan_excluded' } : {})}
         title={hint}
       >
-        ⇢ UDP
+        {planExcluded === true ? `UDP — ${NOT_ON_THIS_PLAN_LABEL}` : '⇢ UDP'}
       </span>
     );
   }
@@ -3901,62 +4115,18 @@ function vpnUdpHint(
   aged?: AgedReading<boolean>,
   nowMs: number = Date.now(),
   autoRecheck = false,
+  /** The account's plan has no VPN egress — see `vpnQuicReading`'s twin flag: a
+   *  measured reading still wins, and this only replaces a "not measured yet"
+   *  that names a button no press of which can produce one. */
+  planExcluded = false,
 ): string {
   if (udpProbe === undefined && aged !== undefined)
     return `${agedReadingHint(aged.atMs, nowMs, autoRecheck, CHECK_VPN_ACTION)} ${
       aged.value ? 'UDP worked through this VPN then.' : 'UDP did not work through this VPN then.'
     }`;
+  if (udpProbe === undefined && planExcluded) return VPN_UDP_NOT_ON_PLAN_HINT;
   if (udpProbe === undefined) return VPN_UDP_NOT_MEASURED_TITLE;
   return udpProbe ? VPN_UDP_MEASURED_OK_TITLE : VPN_UDP_MEASURED_NONE_TITLE;
-}
-
-/**
- * The QUIC reading of a VPN row — `ok` (null = not measured) and the sentence
- * that says so — shared by the chip below and the row's detail grid. The
- * strongest-evidence order and the two causes of an absence are documented on
- * `VpnQuicChip`, which is where they were written; this only makes them callable.
- */
-function vpnQuicReading(
-  quicMeasured: MeasuredQuic | undefined,
-  quicProbe: boolean | undefined,
-  noFleetMac: boolean,
-  /** The row's aged QUIC reading, consulted ONLY when nothing current exists. */
-  past: { aged: AgedReading<boolean> | undefined; nowMs: number; autoRecheck: boolean } = {
-    aged: undefined,
-    nowMs: Date.now(),
-    autoRecheck: false,
-  },
-): { ok: boolean | null; hint: string; aged?: AgedReading<boolean> } {
-  if (quicMeasured === 'h3')
-    return { ok: true, hint: 'HTTP/3 verified in a live session through this tunnel.' };
-  if (quicMeasured === 'h2-only')
-    return {
-      ok: false,
-      hint: 'No HTTP/3 — a live session fell back to HTTP/2 through this tunnel.',
-    };
-  if (quicProbe === true)
-    return { ok: true, hint: 'QUIC works through this tunnel — sites can use HTTP/3.' };
-  if (quicProbe === false)
-    return {
-      ok: false,
-      hint: 'QUIC does not work through this tunnel — HTTP/3 falls back to HTTP/2.',
-    };
-  if (past.aged !== undefined)
-    return {
-      ok: null,
-      aged: past.aged,
-      hint: `${agedReadingHint(past.aged.atMs, past.nowMs, past.autoRecheck, CHECK_VPN_ACTION)} ${
-        past.aged.value
-          ? 'QUIC worked through this VPN then.'
-          : 'QUIC did not work through this VPN then — HTTP/3 fell back to HTTP/2.'
-      }`,
-    };
-  return {
-    ok: null,
-    hint: noFleetMac
-      ? NO_TEST_MAC_QUIC_HINT
-      : `Not measured yet — run ${CHECK_VPN_ACTION} to test QUIC through this tunnel.`,
-  };
 }
 
 /**
@@ -3971,6 +4141,7 @@ function VpnQuicChip({
   quicMeasured,
   quicProbe,
   noFleetMac,
+  planExcluded = false,
   aged,
   autoRecheck,
   nowMs,
@@ -3990,17 +4161,22 @@ function VpnQuicChip({
    *  the control plane never measures, the vantage is 'fleet' or undefined and a
    *  `vantage === 'control_plane'` test was dead on arrival. */
   noFleetMac: boolean;
+  /** The account's plan has no VPN egress, so this row's QUIC reading is not
+   *  "untested" — it is not included. See `vpnQuicReading`'s twin flag. */
+  planExcluded?: boolean;
   /** The row's aged QUIC reading — shown, muted and dated, where the chip would
    *  otherwise say "QUIC untested" about a tunnel that WAS tested, a while ago. */
   aged?: AgedReading<boolean> | undefined;
   autoRecheck?: boolean;
   nowMs?: number;
 }): JSX.Element {
-  const verdict = vpnQuicReading(quicMeasured, quicProbe, noFleetMac, {
-    aged,
-    nowMs: nowMs ?? Date.now(),
-    autoRecheck: autoRecheck === true,
-  });
+  const verdict = vpnQuicReading(
+    quicMeasured,
+    quicProbe,
+    noFleetMac,
+    { aged, nowMs: nowMs ?? Date.now(), autoRecheck: autoRecheck === true },
+    planExcluded,
+  );
   if (verdict.aged !== undefined) {
     return (
       <span
@@ -4026,10 +4202,20 @@ function VpnQuicChip({
         className={UNMEASURED_CHIP_CLS}
         data-component="vpn-quic-chip"
         data-ok="unmeasured"
-        data-unmeasured={noFleetMac ? 'no_fleet_mac' : 'never_tested'}
+        data-unmeasured={
+          verdict.planExcluded === true
+            ? 'plan_excluded'
+            : noFleetMac
+              ? 'no_fleet_mac'
+              : 'never_tested'
+        }
         title={verdict.hint}
       >
-        QUIC untested
+        {/* ⛔ "untested" says a check has not happened YET, which is false when
+            the plan has none to run: the customer presses the button, reads "not
+            measured yet" again, and concludes the app is broken. The label says
+            what is true of the reading; the hover says what would change it. */}
+        {verdict.planExcluded === true ? `QUIC — ${NOT_ON_THIS_PLAN_LABEL}` : 'QUIC untested'}
       </span>
     );
   }
@@ -5103,7 +5289,16 @@ export function ProxyForm({
             className="btn-secondary"
             onClick={() => void handleTestEndpoint()}
             disabled={resolving || locked}
-            title="Check the VPN server address can be found from this Mac — the full VPN is verified when a session starts"
+            // ⛔ (2026-09-17 review) It used to end "— the full VPN is verified
+            // when a session starts". That was already stale, and item A5 made it
+            // FALSE: saving a VPN row now fires its own check (`testAfterSave`),
+            // which saves the row to the account and tests the whole tunnel
+            // through Driftstack. Telling a customer the real verification waits
+            // for a session sends them to start one for a result already on its
+            // way. "Starts", not "runs": a plan without VPN egress gets the
+            // address leg and a notice saying so, and the check's own result is
+            // what names which legs ran.
+            title="Check the VPN server address can be found from this Mac — saving starts the full check automatically"
           >
             {resolving ? 'Checking…' : 'Check server'}
           </button>

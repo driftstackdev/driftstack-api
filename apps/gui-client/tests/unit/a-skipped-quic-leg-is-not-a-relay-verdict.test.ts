@@ -28,23 +28,34 @@
 //      (lib/account-proxies.ts) — correct, both of them: nothing was measured;
 //   2. `serverProbeOutcome` therefore has no `quicProbe`… and, before the fix,
 //      no way to say WHY. It now carries `quicLegSkipped: true`;
-//   3. `saveServerProbeResult` replaces the relay verdict on every server
-//      result (present → stored, absent → removed). That absent → removed rule
-//      is right for a Mac that RAN the leg and reached no verdict, and wrong for
-//      a leg that never ran — the same distinction the (q) control-plane keep
-//      already makes for the same field. `quicSkipped` carries it.
+//   3. `saveServerProbeResult` decides what an absent verdict means.
+//
+// ⛔ HOP 3 WAS INVERTED ON 2026-09-17, and this header's old text is kept below
+// because the inversion is the point. It read: "replaces the relay verdict on
+// every server result (present → stored, absent → removed). That absent → removed
+// rule is right for a Mac that RAN the leg and reached no verdict, and wrong for a
+// leg that never ran — `quicSkipped` carries it."
+//
+// The rule made ABSENCE OF EVIDENCE the trigger for throwing a verdict away, and
+// the list of reasons a reply can lack `quic_ok` is open: the control plane's own
+// schema documents `quic_ok: null` as NOT MEASURED and the route omits the field
+// entirely for a non-measurement. So every reply this client could not interpret
+// retired a green verdict AND stamped the row so the next list sync could not
+// adopt the stored one back — the owner, 2026-09-17: "a proxy was green on quic,
+// and later not green box".
+//
+// Now: retire only on POSITIVE evidence the leg ran and produced none — the node
+// described the leg (`quic_detail`, not a "skipped: …" one) and sent no verdict.
+// Everything else carries.
 //
 // ⛔ PRODUCTION LINE WHOSE REVERSION REDS THE CRITICAL ARM: in
-//    `saveServerProbeResult`, `(vantage?.measuredFrom === 'control_plane' ||
-//    server.quicSkipped === true) && typeof prior.quicProbe === 'boolean'`.
-//    Drop the `|| server.quicSkipped === true` half and "the skipped leg KEEPS
-//    the relay verdict" reds (MUTATION RUN 2026-09-12: 1 failed, 7 passed —
-//    `expected undefined to be true`).
-// ⛔ Widen it the other way — keep the verdict whenever a fleet reply carries no
-//    `quic_ok` — and the CONTROL arm reds: a Mac that ran the leg and produced
-//    none must drop the old one, or a row wears last week's green chip for ever.
-//    (MUTATION RUN 2026-09-12: 1 failed, 7 passed — `expected { …(15) } to not
-//    have property "quicProbe"`, received `true`.)
+//    `saveServerProbeResult`, the arm order
+//    `server.quicRan === true && server.quicSkipped !== true ? { quicProbeRetiredAt: at } : { …carry… }`.
+//    Swap the last two arms back (retire unless a reason is named) and "a fleet
+//    reply that simply LACKS the relay key keeps it" reds.
+// ⛔ Widen it the other way — carry whatever the reply says — and the CONTROL arm
+//    reds: a Mac that ran the leg and produced none must drop the old one, or a
+//    row wears last week's green chip for ever.
 //
 // The "skipped:" prefix is read in TWO modules (lib/account-proxies parses the
 // reply, lib/proxy-server-test classifies it) rather than one shared export,
@@ -137,9 +148,19 @@ const FLEET_OK = {
 const { quic_ok: _omitted, ...FLEET_SKIPPED_BASE } = FLEET_OK;
 const FLEET_SKIPPED = { ...FLEET_SKIPPED_BASE, quic_detail: 'skipped: quic_leg_not_run' };
 
-/** The CONTROL: the Mac RAN the leg and reached no verdict — no `quic_ok`, and
- *  no "skipped:" detail to explain the absence. */
+/** A reply that says NOTHING about the QUIC leg: no `quic_ok`, no detail at all.
+ *  ⛔ It used to be the control for "the Mac RAN the leg", which was an inference
+ *  from silence; it is now the control for the opposite — absence is not evidence,
+ *  and a reply shaped like this must CARRY the verdict it cannot speak about. */
 const { quic_detail: _dropped, ...FLEET_NO_RELAY } = FLEET_SKIPPED;
+
+/** The CONTROL that still retires: the node DESCRIBED the leg and reached no
+ *  verdict — a `quic_detail` that is not its own "skipped: …", beside no
+ *  `quic_ok`. This is the only shape that may throw a stored verdict away. */
+const FLEET_RAN_NO_VERDICT = {
+  ...FLEET_SKIPPED_BASE,
+  quic_detail: 'quic handshake aborted before a verdict',
+};
 
 const wire = async (body: unknown): Promise<AccountProxyTestResult> => {
   nextResponse = () => json(body);
@@ -181,10 +202,24 @@ describe('the wire → the outcome: a skipped leg is reported AS skipped', () =>
     expect(outcome.kind === 'ok' && 'quicLegSkipped' in outcome).toBe(false);
   });
 
-  it('VACUITY CONTROL — a reply that carries no QUIC leg at all sets neither field', async () => {
+  it('VACUITY CONTROL — a reply that carries no QUIC leg at all sets NO field: not a verdict, not "skipped", and not "it ran". Silence is not a report', async () => {
     const outcome = serverProbeOutcome(await wire(FLEET_NO_RELAY), 2_000);
     expect(outcome.kind === 'ok' && 'quicProbe' in outcome).toBe(false);
     expect(outcome.kind === 'ok' && 'quicLegSkipped' in outcome).toBe(false);
+    expect(outcome.kind === 'ok' && 'quicLegRan' in outcome).toBe(false);
+  });
+
+  it('CRITICAL — a detail that DESCRIBES the leg with no verdict beside it is the one reply that says "it ran and produced none"', async () => {
+    const outcome = serverProbeOutcome(await wire(FLEET_RAN_NO_VERDICT), 2_000);
+    expect(outcome.kind === 'ok' && outcome.quicLegRan).toBe(true);
+    expect(outcome.kind === 'ok' && 'quicProbe' in outcome).toBe(false);
+    expect(outcome.kind === 'ok' && 'quicLegSkipped' in outcome).toBe(false);
+    // …and a MEASURED reply never claims it, whatever its detail says.
+    const measured = serverProbeOutcome(
+      await wire({ ...FLEET_OK, quic_ok: false, quic_detail: 'quic handshake timed out' }),
+      2_000,
+    );
+    expect(measured.kind === 'ok' && 'quicLegRan' in measured).toBe(false);
   });
 });
 
@@ -202,10 +237,21 @@ describe('the cache: what a second, SUCCESSFUL check leaves on the row', () => {
 
   it('CONTROL — a fleet answer that RAN the leg and produced none drops the prior verdict', async () => {
     await firstGreenCheck();
-    await check(FLEET_NO_RELAY, 3_000);
+    await check(FLEET_RAN_NO_VERDICT, 3_000);
     const cache = await loadProbeCache();
     expect(cache[ID]).not.toHaveProperty('quicProbe');
     expect(deriveProbeViewWithEndpointRows(cache, 3_100).quicProbe).not.toHaveProperty(ID);
+  });
+
+  it('⛔ CRITICAL — a fleet answer that says NOTHING about the leg KEEPS the verdict and its date. Absence of evidence is not evidence of a re-measurement, and the customer watched this chip go grey for it', async () => {
+    await firstGreenCheck();
+    await check(FLEET_NO_RELAY, 3_000);
+    const cache = await loadProbeCache();
+    expect(cache[ID]?.quicProbe).toBe(true);
+    expect(cache[ID], 'nothing was retired, so nothing may block a re-adoption').not.toHaveProperty(
+      'quicProbeRetiredAt',
+    );
+    expect(deriveProbeViewWithEndpointRows(cache, 3_100).quicProbe[ID]).toBe(true);
   });
 
   it('CONTROL — a MEASURED `false` still overwrites a green verdict: the keep swallows no measurement', async () => {

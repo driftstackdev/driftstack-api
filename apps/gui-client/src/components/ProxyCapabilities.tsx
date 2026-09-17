@@ -200,17 +200,34 @@ export function proxyCapabilities(
   // was measured" from "a current verdict exists".
   const nothingCurrent =
     quicMeasured !== 'h3' && quicMeasured !== 'h2-only' && quicProbe === undefined;
-  // ⛔ …and only where the fallback IS the inference (`udp`). With no UDP the
-  // fallback chip is not a guess: "No UDP — HTTP/3 cannot work here" is deduced
-  // from the native handshake the sweep keeps CURRENT, and a past-tense "✓ QUIC ·
-  // 4 h ago" in its place would swap a present-tense negative for an old tick.
-  if (nothingCurrent && udp && agedQuic !== undefined) {
+  // WHICH fallback the aged reading may stand in for:
+  //
+  //  • UDP relays → the fallback is the INFERENCE ("QUIC is likely — not yet
+  //    tested"), which is a guess, and a dated reading beats a guess. Always.
+  //  • UDP does NOT relay → the fallback is "No UDP — HTTP/3 cannot work here",
+  //    deduced from the native handshake the sweep keeps current. An aged
+  //    NEGATIVE must not replace it: both say the same thing and the current one
+  //    says it in the present tense.
+  //
+  // ⛔ (2026-09-17) …but an aged POSITIVE in that second case is a CONTRADICTION,
+  // and hiding it was the defect. Driftstack measured HTTP/3 working through this
+  // exit; this Mac cannot open UDP to it now. Replacing that with a flat
+  // present-tense "HTTP/3 cannot work here" throws away the stronger, measured
+  // evidence in favour of a deduction from a different check — and the customer
+  // sees the card say one thing and the grid another about one proxy. The reading
+  // is shown, aged like every other aged reading, and the hint says the two checks
+  // disagree rather than pretending either one settles it.
+  const agedStandsIn = nothingCurrent && agedQuic !== undefined && (udp || agedQuic.value);
+  if (agedStandsIn && agedQuic !== undefined) {
     quicChip.aged = agedQuic;
-    quicChip.hint = `${agedReadingHint(agedQuic.atMs, agedHint.nowMs, agedHint.autoRecheck)} ${
-      agedQuic.value
-        ? 'HTTP/3 worked through this exit then.'
-        : 'HTTP/3 did not work through this exit then — it fell back to HTTP/2.'
-    }`;
+    const when = agedReadingHint(agedQuic.atMs, agedHint.nowMs, agedHint.autoRecheck);
+    quicChip.hint = udp
+      ? `${when} ${
+          agedQuic.value
+            ? 'HTTP/3 worked through this exit then.'
+            : 'HTTP/3 did not work through this exit then — it fell back to HTTP/2.'
+        }`
+      : `${when} HTTP/3 worked through this exit then, but UDP is not getting through from this device now — the two checks disagree, so HTTP/3 may fall back to HTTP/2.`;
   }
   return [
     {

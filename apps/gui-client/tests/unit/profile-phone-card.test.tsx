@@ -3124,7 +3124,9 @@ describe('P1 — the when row: compact relative forms, the left fact has priorit
     expect(
       vpnFailureClause('The Mac that runs your profiles could not bring this tunnel up.'),
     ).toBe('The Mac that runs your profiles could not bring this tunnel up.');
-    expect(vpnNoticeClause(VPN_NOT_STORED_CHECK_NOTICE)).toBe('not stored yet — launch once');
+    // ⛔ PIN UPDATED 2026-09-17 — "launch once" was a step nobody needs any more:
+    // both the Proxies tab's check and the card's store the row themselves.
+    expect(vpnNoticeClause(VPN_NOT_STORED_CHECK_NOTICE)).toBe('not saved — check again');
     expect(vpnNoticeClause(VPN_NO_API_KEY_CHECK_NOTICE)).toBe('needs an API key — Settings');
     expect(vpnNoticeClause(VPN_NOT_STORED_CHECK_NOTICE).length).toBeLessThanOrEqual(30);
     expect(vpnNoticeClause(VPN_NO_API_KEY_CHECK_NOTICE).length).toBeLessThanOrEqual(30);
@@ -3160,7 +3162,7 @@ describe('P1 — the when row: compact relative forms, the left fact has priorit
       />,
     );
     const notice = byComponent(container, 'proxy-vpn-notice') as HTMLElement;
-    expect(notice.textContent).toBe('not stored yet — launch once');
+    expect(notice.textContent).toBe('not saved — check again');
     expect(notice.getAttribute('title')?.startsWith(VPN_NOT_STORED_CHECK_NOTICE)).toBe(true);
     expect(classes(notice)).toContain('text-ink-muted');
     expect(classes(notice)).not.toContain('text-status-busy');

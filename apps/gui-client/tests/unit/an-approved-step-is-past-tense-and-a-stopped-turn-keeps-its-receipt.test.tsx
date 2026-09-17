@@ -25,8 +25,15 @@ const create = vi.fn();
 const message = vi.fn();
 const close = vi.fn();
 
+// ⛔ ONE client object, module-scoped. `useSettings` memoises the SDK client on
+// [apiKey, baseUrl, workspace], and the chat now treats a CHANGE of that object
+// as the auth boundary — it is what tells sign-out (and a re-sign-in under a
+// different key) apart from an ordinary re-render. A mock that built a fresh
+// literal per call reported a sign-out on every render.
+const CLIENT = { agentSessions: { create, message, close } };
+
 vi.mock('../../src/lib/SettingsContext', () => ({
-  useSettings: () => ({ client: { agentSessions: { create, message, close } } }),
+  useSettings: () => ({ client: CLIENT }),
 }));
 
 const markLaunched = vi.fn((_profileId: string, _sessionId: string) => Promise.resolve());

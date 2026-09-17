@@ -45,7 +45,18 @@ describe('v2-#37 AgentRuntime <-> SDK kind union parity', () => {
       'ai-control-unavailable',
     ] as const;
     const INTERNAL_CONTROL_KINDS = ['manual-transcript', 'ai-control'] as const;
-    const NON_SDK_KINDS = new Set([...ROUTE_ERROR_KINDS, ...INTERNAL_CONTROL_KINDS, 'plan']);
+    // AgentTurnProgressEvent discriminants. These are LIVE-STREAM frames, not
+    // turn results: they travel as their own SSE events while the turn runs and
+    // are gone by the time it settles, so the response union must NOT grow a
+    // member for them. ('plan' is already excluded above for its own reason, and
+    // 'step_start' carries an underscore the scan's pattern never matches.)
+    const PROGRESS_EVENT_KINDS = ['phase', 'answer'] as const;
+    const NON_SDK_KINDS = new Set([
+      ...ROUTE_ERROR_KINDS,
+      ...INTERNAL_CONTROL_KINDS,
+      ...PROGRESS_EVENT_KINDS,
+      'plan',
+    ]);
     const KIND_RE = /\bkind:\s*['"]([a-z][a-z-]+)['"]/g;
     const runtimeKinds = new Set<string>();
     let m: RegExpExecArray | null;

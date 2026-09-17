@@ -9,7 +9,11 @@
 // widening for a GUI feature. The local Tauri proxy store stays as the OFFLINE
 // cache; ProfilesView/ProxiesView reconcile (server wins on a successful load).
 
-import { FREE_DESKTOP_ROUTE_DENIED_DETAIL } from '@driftstack/api-types';
+import {
+  FREE_DESKTOP_ROUTE_DENIED_DETAIL,
+  TIER_FEATURES,
+  type AccountTier,
+} from '@driftstack/api-types';
 import { disposeResponseBody } from './dispose-response-body';
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { readBoundedApiJson } from './read-bounded-json';
@@ -23,6 +27,34 @@ import {
 } from './os-fingerprint-verdict';
 import { cleanProxyVantage, type ProxyVantage } from './proxy-vantage';
 import { MISSING_API_KEY_NEXT_STEP } from './proxy-check-copy';
+
+/**
+ * Whether this account's plan carries no VPN egress — so no check of a VPN row
+ * can run, and no VPN credential may be uploaded to be refused.
+ *
+ * ⛔ (2026-09-17 review) IT READS THE FEATURE, NOT THE TIER NAME. This shipped as
+ * `accountMe?.tier === 'free'` in ProxiesView, which re-derives by hand a matrix
+ * the repo already publishes and the server itself enforces from
+ * (`requireTierFeature(tier, 'vpnEgress')`). `free` is merely the only tier whose
+ * `vpnEgress` is false TODAY — and the failure mode of guessing is the expensive
+ * direction: a future tier without VPN egress would silently upload the
+ * customer's OpenVPN config or WireGuard private key to be refused on arrival.
+ * This is the same defect the display-window work was written to remove — a
+ * hand-typed value that cannot follow the number it depends on.
+ *
+ * ⚠️ AN UNKNOWN OR ABSENT TIER IS NOT EXCLUDED. `null` is "still loading, or no
+ * API key", and a tier this build has never heard of is a NEWER server: refusing
+ * on either would quietly stop checking VPN rows for a paying customer during
+ * every /me round trip, and the server's own refusal is the honest backstop.
+ * Optional chaining, not `!== null`: a view double (and every suite that
+ * hand-mocks the settings context) hands over an object with no `tier` key at
+ * all, and `undefined !== null` is TRUE.
+ */
+export function planExcludesVpnEgress(account: { tier?: AccountTier | null } | null): boolean {
+  const tier = account?.tier;
+  if (tier === undefined || tier === null) return false;
+  return TIER_FEATURES[tier]?.vpnEgress === false;
+}
 
 export type AccountProxyScheme = 'socks5' | 'http' | 'openvpn' | 'wireguard';
 

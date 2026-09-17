@@ -22,6 +22,7 @@ import {
   OS_FINGERPRINT_TTL_MS,
 } from './os-fingerprint-verdict';
 import { cleanServerVantage, type ProxyVantage, type ServerVantage } from './proxy-vantage';
+import { MEASURED_READING_TTL_MS } from './proxy-reading-windows';
 import {
   attributeSessionProxy,
   makeH3ObservationLedger,
@@ -435,6 +436,23 @@ export function isAgedReadingShowable(atMs: number | undefined, nowMs: number): 
 export const QUIC_VERDICT_TTL_MS = 30 * 60 * 1000;
 
 /**
+ * ⛔ THIRTY MINUTES IS CORRECT HERE AND NOWHERE ELSE, and this re-export is the
+ * line between the two cases. `QUIC_VERDICT_TTL_MS` above bounds a LIVE-SESSION
+ * observation, whose feeding cadence is the fleet's 300 s ±20% capability
+ * re-emit; six of those is the derivation in its own comment and it must not be
+ * touched. Every OTHER measured reading — the Test relay verdict, the UDP-relay
+ * verdict, the OS fingerprint — is fed by the automatic capability check at six
+ * hours, and inherited this number by imitation ("same thirty minutes as the QUIC
+ * verdict above") rather than by derivation. That imitation is the bug: three
+ * windows tracked a cadence that had moved out from under them by a factor of
+ * twelve.
+ *
+ * Re-exported so a reader who lands on the 30-minute literal above finds the
+ * other window beside it and can see which of the two their reading belongs to.
+ */
+export { MEASURED_READING_TTL_MS };
+
+/**
  * Is a measured QUIC verdict still current?
  *
  * ⛔ An ABSENT timestamp is NOT fresh. We cannot establish when it was taken, and
@@ -450,11 +468,18 @@ export function isQuicVerdictFresh(atMs: number | undefined, nowMs: number): boo
 /**
  * (V6 2026-09-16, refuter #5) Is a measured UDP-relay verdict still current?
  *
- * Same thirty minutes as the QUIC verdict above, the exit identity and the OS
- * fingerprint, and for the reason all three comments already give: it describes
- * something measured THROUGH the proxy that the proxy can change underneath us.
- * A tunnel whose peer starts or stops relaying UDP is the ordinary case, not the
- * exotic one.
+ * ⛔ IT WAS THE SAME THIRTY MINUTES as the live QUIC verdict above, and that was
+ * the mistake: this reading is not re-taken by a live session every five minutes,
+ * it is re-taken by the automatic capability check every SIX HOURS. A window
+ * shorter than the cadence that feeds it cannot be satisfied, so a tunnel that
+ * really does relay UDP showed its verdict for half an hour and then went quiet
+ * for five and a half. `MEASURED_READING_TTL_MS` is derived from that cadence —
+ * see proxy-reading-windows for the arithmetic.
+ *
+ * The reason for expiring it at all is untouched and still right: it describes
+ * something measured THROUGH the proxy that the proxy can change underneath us,
+ * and a tunnel whose peer starts or stops relaying UDP is the ordinary case, not
+ * the exotic one. Past the window it renders AGED, which is the safety net.
  *
  * ⛔ An ABSENT timestamp is NOT fresh, like every neighbour: a verdict we cannot
  * date must not render in the present tense. That is not a theoretical entry —
@@ -466,7 +491,7 @@ export function isQuicVerdictFresh(atMs: number | undefined, nowMs: number): boo
  */
 export function isUdpVerdictFresh(atMs: number | undefined, nowMs: number): boolean {
   if (typeof atMs !== 'number') return false;
-  return nowMs - atMs < QUIC_VERDICT_TTL_MS;
+  return nowMs - atMs < MEASURED_READING_TTL_MS;
 }
 
 /**
@@ -480,17 +505,24 @@ export function isUdpVerdictFresh(atMs: number | undefined, nowMs: number): bool
  *
  * It was left undated deliberately (see `saveObservedQuic`): the verdict is only
  * written when someone presses Test, so a thirty-minute window meant the green
- * chip was essentially never shown. That objection is answered rather than
- * overruled — a verdict past the window now renders as an AGED reading ("✓ QUIC ·
- * 4h ago", `AgedReadings`) instead of vanishing, and the automatic capability
- * check re-takes it, so the customer keeps the information and loses only the
- * claim that it is current.
+ * chip was essentially never shown. That objection was answered with the AGED
+ * reading ("✓ QUIC · 4h ago", `AgedReadings`) and the automatic capability check
+ * that re-takes it — and the objection was RIGHT ANYWAY. ⛔ The automatic check
+ * runs every six hours, so a thirty-minute window still left the green chip
+ * unshowable in steady state: aged became the normal state of a working proxy
+ * rather than the gap before its next measurement. That is the owner's "Has QUIC
+ * and Apple, but it aint green sometimes".
+ *
+ * `MEASURED_READING_TTL_MS` is derived from that same cadence — one sweep slot
+ * and an hour of margin past it, so a reading cannot go quiet before anything
+ * could have re-taken it. Past the window the AGED reading still stands: the
+ * safety net is unchanged, it just stops being where a healthy proxy lives.
  *
  * Same rule as `isUdpVerdictFresh`, including the absent stamp: NOT fresh.
  */
 export function isQuicProbeFresh(atMs: number | undefined, nowMs: number): boolean {
   if (typeof atMs !== 'number') return false;
-  return nowMs - atMs < QUIC_VERDICT_TTL_MS;
+  return nowMs - atMs < MEASURED_READING_TTL_MS;
 }
 
 /**
@@ -503,6 +535,18 @@ export function isQuicProbeFresh(atMs: number | undefined, nowMs: number): boole
  * something measured THROUGH the proxy that the proxy can change underneath us,
  * and a launch is the one moment the value is acted on. Not shorter: every
  * re-probe is a real request through the proxy at the customer's cost.
+ *
+ * ⛔ AND IT IS DELIBERATELY NOT `MEASURED_READING_TTL_MS`. The windows that moved
+ * to the capability cadence moved because they only ever DISPLAYED a reading, and
+ * a display that goes quiet before anything can re-take it is a lie about a
+ * healthy proxy. This one is ACTED ON: `freshExitIdentity` (ProfilesView) hands
+ * the country and timezone to the launch, which sets the simulator's status-bar
+ * clock and the Dock flag for the whole session. Past the window it does not go
+ * quiet, it RE-PROBES — so the cost of a short window here is one request, not a
+ * muted chip, and widening it would put a wrong clock on the device instead.
+ * A window a decision consumes is not a display window. Grepped 2026-09-17:
+ * `isExitIdentityFresh` is the ONLY freshness predicate in this file with a
+ * consumer outside the two view derivations.
  */
 export const EXIT_IDENTITY_TTL_MS = 30 * 60 * 1000;
 
@@ -529,12 +573,20 @@ export function isExitIdentityFresh(atMs: number | undefined, nowMs: number): bo
  * has since failed on every attempt, so what they were looking at could only
  * have been a cached reading with no way to tell its age.
  *
- * Thirty minutes, matching QUIC_VERDICT_TTL_MS and EXIT_IDENTITY_TTL_MS above,
- * and for the reason their comment already gives: all three describe something
- * measured THROUGH the proxy that the proxy can change underneath us. A stack
- * fingerprint feels more permanent than a QUIC verdict, and that intuition is
- * exactly the trap — a residential exit rotates to another machine entirely, and
- * the reading is about the machine, not the row.
+ * ⛔ (2026-09-17 review) THIS PARAGRAPH USED TO SAY "thirty minutes, matching
+ * QUIC_VERDICT_TTL_MS and EXIT_IDENTITY_TTL_MS above", and the number is now
+ * eight hours — so it stated the defect's own reasoning as current fact beside
+ * the fixed value. Copying a neighbour's number IS the bug: a window matched to
+ * whatever stood next to it could not follow the cadence when that cadence became
+ * six hours, and did not. It is now DERIVED, in `proxy-reading-windows.ts`, from
+ * the cadence that re-takes this very reading — see MEASURED_READING_TTL_MS for
+ * the arithmetic, and `os-fingerprint-verdict.ts` for the twin of this note.
+ *
+ * It expires at all for a reason that has not changed: a fingerprint describes
+ * something measured THROUGH the proxy, which the proxy can change underneath us.
+ * A stack fingerprint feels more permanent than a QUIC verdict, and that
+ * intuition is exactly the trap — a residential exit rotates to another machine
+ * entirely, and the reading is about the machine, not the row.
  *
  * ⚠️ Re-exported, not defined: the cockpit's session readout ages the SAME
  * reading and must use the SAME number, and it cannot import this module (the
@@ -1031,8 +1083,23 @@ function cleanEntry(raw: unknown): CachedProbe | null {
  * store: after the migration, an entry with a verdict and no stamp is once more
  * "we could not tell", and the not-fresh rule stands for it. A read-time
  * default would have weakened that rule for every entry forever.
+ *
+ * ⛔ VERSION 3 (2026-09-17) — THE SAME HOLE, ONE FIELD OVER, and it is an UPGRADE
+ * CLIFF rather than a theory. `quicProbeAt` did not exist before gui-v0.1.63:
+ * `git show gui-v0.1.62:…/proxy-probe-cache.ts | grep -c quicProbeAt` is 0 while
+ * `quicProbe` appears 26 times, so every install that ever pressed Test before
+ * that release holds a relay verdict with no date. An undated verdict is neither
+ * fresh (the not-fresh rule above) nor aged (`isAgedReadingShowable` refuses an
+ * absent stamp), so it is shown by NOTHING — a customer who tested yesterday and
+ * updated sees "~ QUIC … not yet tested" about a proxy they had just proved, and
+ * nothing restores it until they press Test again.
+ *
+ * `udpProbe` and `udpProbeAt` were added in the same commit (`grep -c udpProbe`
+ * on the same v0.1.62 file is 0), so that pair has no hole; `osFingerprint.at`
+ * is required by `cleanOsFingerprint` and a reading without it never survives a
+ * load, so that one has no hole either. One field, one backfill.
  */
-export const PROBE_CACHE_SCHEMA_VERSION = 2;
+export const PROBE_CACHE_SCHEMA_VERSION = 3;
 const SCHEMA_KEY = 'probes_schema';
 
 /** The one-time W-30 backfill, pure over a cleaned map. Returns the entries
@@ -1046,6 +1113,60 @@ export function backfillQuicMeasuredAt(cache: ProbeCacheMap, loadTimeMs: number)
     // survived `typeof === 'number'`) falls back to the load time rather than
     // stamping a value that no arithmetic can age.
     c.quicMeasuredAt = Number.isFinite(c.at) ? c.at : loadTimeMs;
+    changed.push(id);
+  }
+  return changed;
+}
+
+/**
+ * The V3 backfill — the same shape as the one above, for `quicProbeAt`.
+ *
+ * ⛔ THE STAMP IS `serverProbeAt ?? at`, IN THAT ORDER, and the order is the
+ * whole correctness argument. `quicProbe` is written by ONE writer, the server
+ * test, and `serverProbeAt` is that reply's own date — so it is the closest thing
+ * on the entry to "when this verdict was measured". `at` is the NATIVE probe's
+ * date and moves on every local re-test and every background sweep, so preferring
+ * it would make a relay verdict look as young as the last reachability check.
+ * Falling back to it anyway is right for an entry too old to carry either field:
+ * a date we recorded beats no date, which is what "shown by nothing" means.
+ *
+ * ⛔⛔ (2026-09-17 review) AND IT IS CLAMPED INTO THE AGED BAND, because NEITHER
+ * candidate is this verdict's own date. `saveServerProbeResult` writes
+ * `serverProbeAt: at` on EVERY reply including a pure carry — and item A4 has
+ * just made a carry the normal outcome — while the background sweep re-stamps
+ * `at` about every fifteen minutes. That file says so on itself, about this very
+ * field: "a CARRY keeps the original stamp, because a carry measured nothing and
+ * may not make an old verdict look new. `serverProbeAt` is re-stamped on every
+ * one of these replies, which is exactly why the verdict cannot borrow it."
+ * Borrowing it here unclamped would have promoted a verdict of unknown age — a
+ * year old, for all this entry can say — to a present-tense GREEN ✓ QUIC chip for
+ * a full display window. Clamping to `loadTime - W` restores the value and lands
+ * it in the AGED band (`isAgedReadingShowable`, thirty days): it speaks, muted
+ * and dated, which is the whole difference between "we measured this recently"
+ * and "we measured this, once". That is also what the item asked for in so many
+ * words — a pre-upgrade entry renders AGED, not untested.
+ *
+ * `Math.min`, not a flat `loadTime - W`, so an entry that really was measured
+ * moments before the upgrade keeps its older, honest date rather than being aged
+ * forward to the boundary.
+ *
+ * Non-finite guards on both, same as above: a NaN that survived `typeof ===
+ * 'number'` would stamp a value no arithmetic can age, so it takes the load time.
+ *
+ * Pure over a cleaned map; returns the ids it changed so the caller persists
+ * exactly those. Exported for the guard; production reaches it only through
+ * `loadProbeCache`.
+ */
+export function backfillQuicProbeAt(cache: ProbeCacheMap, loadTimeMs: number): string[] {
+  const changed: string[] = [];
+  // The newest a backfilled stamp may claim to be: exactly one display window
+  // old, so the reading renders aged rather than current.
+  const agedFloor = loadTimeMs - MEASURED_READING_TTL_MS;
+  for (const [id, c] of Object.entries(cache)) {
+    if (c.quicProbe === undefined || c.quicProbeAt !== undefined) continue;
+    const serverAt = Number.isFinite(c.serverProbeAt) ? c.serverProbeAt : undefined;
+    const borrowed = serverAt ?? (Number.isFinite(c.at) ? c.at : loadTimeMs);
+    c.quicProbeAt = Math.min(borrowed, agedFloor);
     changed.push(id);
   }
   return changed;
@@ -1077,7 +1198,25 @@ async function migrateOnce(cache: ProbeCacheMap): Promise<void> {
   const store = getStore();
   const version = await store.get<unknown>(SCHEMA_KEY);
   if (typeof version === 'number' && version >= PROBE_CACHE_SCHEMA_VERSION) return;
-  const changed = backfillQuicMeasuredAt(cache, Date.now());
+  const loadTime = Date.now();
+  // ⛔ EACH BACKFILL IS GATED ON THE VERSION IT WAS WRITTEN FOR, not on "we are
+  // migrating". Running them all on every bump would re-run a COMPLETED one, and
+  // for the V2 backfill that is not a no-op in principle: its own comment says
+  // that after it has run, an entry with a verdict and no stamp is once more "we
+  // could not tell", and the not-fresh rule stands for it. Re-stamping such an
+  // entry at the next version bump would quietly weaken that rule for ever —
+  // exactly the "read-time default" the V2 comment rejected, arriving by another
+  // door. A store already at V2 therefore gets only the V3 pass.
+  //
+  // A `Set` because one entry can need both stamps (an install arriving from V1)
+  // and the write loop below must not key it twice.
+  const before = typeof version === 'number' ? version : 0;
+  const changed = [
+    ...new Set([
+      ...(before < 2 ? backfillQuicMeasuredAt(cache, loadTime) : []),
+      ...(before < 3 ? backfillQuicProbeAt(cache, loadTime) : []),
+    ]),
+  ];
   try {
     // Only the migrated entries are written back — an unrelated entry the
     // cleaner dropped is left in the store exactly as every load before this
@@ -1589,6 +1728,25 @@ export function saveServerProbeResult(
      *  standing as a control-plane fallback below: nothing about QUIC was
      *  measured, so the last fleet verdict stands. */
     quicSkipped?: boolean;
+    /**
+     * ⛔ (2026-09-17) POSITIVE EVIDENCE THAT THE LEG RAN AND REACHED NO VERDICT —
+     * the ONLY thing that may now retire a stored relay verdict.
+     *
+     * Until today the retirement was driven by ABSENCE: a fleet-vantage reply
+     * that carried no `quic_probe` and no "skipped:" detail retired the verdict.
+     * But the control plane's own schema says `quic_ok` null = NOT MEASURED
+     * (apps/server/src/schemas/harness-control-protocol.ts) and the route OMITS
+     * the field for a non-measurement — so a reply that simply lacks the key,
+     * for any reason the client cannot see, threw away a true green verdict AND
+     * blocked the next list sync from adopting the stored one back. That is the
+     * owner's "a proxy was green on quic, and later not green box".
+     *
+     * The caller sets this only when the node SAID something about the leg (a
+     * `quic_detail` that is not "skipped: …") while sending no verdict. Absence
+     * of the detail is now absence of evidence, and carries — the rule the UDP
+     * leg below has always had.
+     */
+    quicRan?: boolean;
     /** (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP-relay verdict.
      *  A boolean REPLACES the stored one; absent means this reply measured
      *  nothing about UDP and the stored one stands (see the write below). */
@@ -1683,10 +1841,29 @@ export function saveServerProbeResult(
       // list sync from adopting it back (`serverCapabilityReadingsToAdopt`). A
       // MEASURED leg drops the stamp (its verdict is newer than anything retired);
       // a carry keeps whatever stamp the entry held, having retired nothing.
+      //
+      // ⛔⛔ (2026-09-17) THE ORDER OF THE LAST TWO ARMS IS REVERSED, and that is
+      // the fix. It used to read "carry if the caller could NAME a reason nothing
+      // was measured, else retire", which makes ABSENCE OF EVIDENCE the trigger
+      // for throwing a verdict away: every reply that lacked `quic_ok` for a
+      // reason this client cannot see — the server's schema documents null as NOT
+      // MEASURED and the route omits the key entirely — retired a green relay
+      // chip and stamped the entry so the next list sync could not adopt the
+      // stored verdict back either. A customer watched QUIC go green and then
+      // grey with nothing having changed about their proxy.
+      //
+      // Now it reads "retire only on POSITIVE evidence the leg ran and produced
+      // none (`quicRan`), else carry" — the rule the UDP leg below has always
+      // had, and the control this must not swallow is preserved rather than
+      // dropped: a MEASURED false still lands in the first arm and replaces the
+      // stored verdict with a negative one. `quicSkipped` stays as an explicit
+      // veto, so a node that somehow sent both a "skipped:" detail and whatever
+      // the caller read as "ran" cannot retire anything.
       ...(typeof server.quicProbe === 'boolean'
         ? { quicProbe: server.quicProbe, quicProbeAt: at }
-        : vantage?.measuredFrom === 'control_plane' || server.quicSkipped === true
-          ? {
+        : server.quicRan === true && server.quicSkipped !== true
+          ? { quicProbeRetiredAt: at }
+          : {
               ...(typeof prior.quicProbe === 'boolean'
                 ? {
                     quicProbe: prior.quicProbe,
@@ -1696,8 +1873,7 @@ export function saveServerProbeResult(
               ...(priorRelayRetiredAt !== undefined
                 ? { quicProbeRetiredAt: priorRelayRetiredAt }
                 : {}),
-            }
-          : { quicProbeRetiredAt: at }),
+            }),
       // (V6 2026-09-16) ITEM 3 — the UDP-relay verdict, and its rule is SIMPLER
       // than the QUIC one above on purpose. `quicProbe` has THREE incoming states
       // (measured / the node ran the leg and reached no verdict / the node never

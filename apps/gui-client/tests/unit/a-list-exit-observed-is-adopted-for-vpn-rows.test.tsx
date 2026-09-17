@@ -701,7 +701,11 @@ describe('opening the Proxies tab checks a row with missing readings — once', 
       });
       return chip.getAttribute('title') ?? '';
     };
-    const FOUR_H = 4 * 60 * 60 * 1000;
+    // ⛔ PIN UPDATED 2026-09-17 — NINE hours. The relay verdict's display window is
+    // now derived from the six-hourly automatic check that re-takes it (8 h), so a
+    // four-hour-old verdict is CURRENT and this arm — which is about the AGED
+    // chip's hover — had no aged chip to read.
+    const FOUR_H = 9 * 60 * 60 * 1000;
     await saveProbeResult('socks1', OK, Date.now());
     await saveServerProbeResult(
       'socks1',

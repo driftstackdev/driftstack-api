@@ -1739,7 +1739,10 @@ export function vpnFailureClause(sentence: string): string {
  * full sentence in the title. An unknown notice drops that first sentence.
  */
 export function vpnNoticeClause(notice: string): string {
-  if (notice === VPN_NOT_STORED_CHECK_NOTICE) return 'not stored yet — launch once';
+  // ⛔ 2026-09-17 — "launch once" named a step nobody needs any more: both
+  // surfaces' checks store the row themselves. The clause names what is true of
+  // the row and the button that fixes it.
+  if (notice === VPN_NOT_STORED_CHECK_NOTICE) return 'not saved — check again';
   if (notice === VPN_NO_API_KEY_CHECK_NOTICE) return 'needs an API key — Settings';
   const rest = notice.replace(/^(?:Endpoint resolves|Address found)\.\s*/, '').trim();
   return rest === '' ? notice : rest;

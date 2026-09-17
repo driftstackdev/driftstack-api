@@ -245,7 +245,11 @@ describe('a reading measured on another Mac reaches this one', () => {
     expect(chip?.getAttribute('data-os-tone')).toBe('unknown');
     expect(chip?.getAttribute('data-ok')).toBe('aged');
     expect(chip?.className).not.toContain('status-ready');
-    expect(chip?.getAttribute('title')).toContain('Last checked 31 minutes ago.');
+    // ⛔ PIN UPDATED 2026-09-17 — the age follows `OS_FINGERPRINT_TTL_MS`, which is
+    // now derived from the six-hourly check that re-takes the reading (8 h, not
+    // 30 min). `stale` above is one minute past whatever that is, so the sentence
+    // is read from the same constant rather than re-typed as a literal.
+    expect(chip?.getAttribute('title')).toContain('Last checked 8 hours ago.');
 
     // Past the aged cap: refused at the door, nothing invented, "not measured".
     stores.clear();

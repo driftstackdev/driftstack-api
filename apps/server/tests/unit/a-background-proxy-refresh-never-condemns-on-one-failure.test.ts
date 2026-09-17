@@ -1030,34 +1030,69 @@ describe('the background proxy-freshness chain', () => {
     expect((await rowOf(repo, 'p1')).freshnessAttemptedAt, 'and nothing stamped').toBeNull();
   });
 
-  it("CRITICAL the refresh cadence and the desktop client's TTL are PINNED AGAINST EACH OTHER, because they were chosen apart and they disagree. The client ages a SERVER-SEEDED reading with the same 30-minute TTL it uses for a locally-measured one (os-fingerprint-verdict.ts OS_FINGERPRINT_TTL_MS, applied in proxy-probe-cache.ts deriveProbeViewState), so a reading this sweep keeps at most 6 hours old is displayable for 30 of every 360 minutes — the owner's \"we are not saving the OS fingerprint of already checked proxies\" stays visibly unfixed most of the time on a second Mac. The cadence is not the half that should move (30-minute dials through a residential proxy is the bandwidth cost the job header refuses); the client's TTL for a DATED, sweep-backed reading is. Until that lands, neither number may move alone.", () => {
+  it("CRITICAL the refresh cadence and the desktop client's DISPLAY WINDOW are PINNED AGAINST EACH OTHER, and the window is now DERIVED FROM the cadence rather than chosen beside it. ⛔ PIN UPDATED 2026-09-17 — this arm asked for exactly this change and said so: a reading this sweep keeps at most 6 hours old was displayable for 30 of every 360 minutes (8%), and it recorded that the CADENCE was not the half that should move. The client's window is now `MEASURED_READING_TTL_MS` (proxy-reading-windows.ts) = the client's own copy of this cadence + one sweep slot + margin, so the two can no longer disagree: lowering the cadence narrows the window with it. MUTATION: type a literal back into OS_FINGERPRINT_TTL_MS and the re-export arm reds; change the client's CAPABILITY_REFRESH_AFTER_MS alone and the agreement arm reds.", () => {
+    const windowsSource = readFileSync(
+      resolve(HERE, '..', '..', '..', 'gui-client', 'src', 'lib', 'proxy-reading-windows.ts'),
+      'utf8',
+    );
     const clientSource = readFileSync(
       resolve(HERE, '..', '..', '..', 'gui-client', 'src', 'lib', 'os-fingerprint-verdict.ts'),
       'utf8',
     );
-    const match = /export const OS_FINGERPRINT_TTL_MS\s*=\s*([^;]+);/.exec(clientSource);
+
+    // ⛔ The OS reading's window is no longer DEFINED in os-fingerprint-verdict —
+    // it is re-exported from the one module that derives it, so the cockpit's
+    // session readout and the proxy grid cannot drift apart AND neither can drift
+    // from the cadence. A literal reappearing here is the defect coming back.
     expect(
-      match,
-      'the client constant was renamed or moved — re-read this contract',
-    ).not.toBeNull();
-    // Evaluated by PARSING, not by `new Function`: this reads a source file from
-    // another app, and a parity check must never execute what it is inspecting.
-    const factors = (match?.[1] ?? '').split('*').map((p) => Number(p.trim().replace(/_/g, '')));
-    expect(
-      factors.every((n) => Number.isFinite(n)),
-      'the client TTL is no longer a plain product of numeric literals — read it by hand',
+      /export \{\s*MEASURED_READING_TTL_MS as OS_FINGERPRINT_TTL_MS\s*\}\s*from '\.\/proxy-reading-windows'/.test(
+        clientSource,
+      ),
+      'the client no longer re-exports the derived window — re-read this contract',
     ).toBe(true);
-    const clientTtlMs = factors.reduce((a, b) => a * b, 1);
-    expect(clientTtlMs, 'the client TTL, read out of its own source').toBe(30 * 60 * 1000);
-    expect(PROXY_FRESHNESS_REFRESH_INTERVAL_MS, 'the server cadence').toBe(6 * 60 * 60 * 1000);
-    // The consequence, stated as a number so nobody has to derive it again.
-    const displayablePercent = Math.round(
-      (clientTtlMs / PROXY_FRESHNESS_REFRESH_INTERVAL_MS) * 100,
+    expect(
+      /export const OS_FINGERPRINT_TTL_MS\s*=/.test(clientSource),
+      'a hand-typed OS window is back in os-fingerprint-verdict',
+    ).toBe(false);
+
+    /** A plain product of numeric literals, read out of the client's own source.
+     *  Evaluated by PARSING, not by `new Function`: this reads a source file from
+     *  another app, and a parity check must never execute what it is inspecting. */
+    const literalMs = (name: string): number => {
+      const match = new RegExp(`export const ${name}\\s*=\\s*([^;]+);`).exec(windowsSource);
+      expect(match, `${name} was renamed or moved — re-read this contract`).not.toBeNull();
+      const factors = (match?.[1] ?? '').split('*').map((p) => Number(p.trim().replace(/_/g, '')));
+      expect(
+        factors.every((n) => Number.isFinite(n)),
+        `${name} is no longer a plain product of numeric literals — read it by hand`,
+      ).toBe(true);
+      return factors.reduce((a, b) => a * b, 1);
+    };
+
+    // ⛔ THE AGREEMENT THIS ARM EXISTS FOR: the client's idea of how often a
+    // reading is re-taken is the SERVER's actual cadence. They are two constants
+    // in two apps and nothing but this line holds them together.
+    const clientCadenceMs = literalMs('CAPABILITY_REFRESH_AFTER_MS');
+    expect(clientCadenceMs, "the client's copy of the refresh cadence").toBe(
+      PROXY_FRESHNESS_REFRESH_INTERVAL_MS,
     );
+    expect(PROXY_FRESHNESS_REFRESH_INTERVAL_MS, 'the server cadence').toBe(6 * 60 * 60 * 1000);
+
+    // The window, recomputed by the client's own arithmetic (cadence + one sweep
+    // slot + an hour of margin, rounded up to a whole hour) rather than restated.
+    const sweepMs = literalMs('SWEEP_INTERVAL_MS');
+    const HOUR_MS = 60 * 60 * 1000;
+    const windowMs = Math.ceil((clientCadenceMs + sweepMs + HOUR_MS) / HOUR_MS) * HOUR_MS;
+    expect(windowMs, 'the derived display window').toBe(8 * HOUR_MS);
+
+    // The consequence, stated as a number so nobody has to derive it again. It
+    // was 8: a healthy proxy's reading was muted for ~92% of every refresh cycle.
+    const displayablePercent = Math.round((windowMs / PROXY_FRESHNESS_REFRESH_INTERVAL_MS) * 100);
     expect(
       displayablePercent,
-      'a server-seeded OS reading is displayable for this % of each refresh cycle — raise the client TTL for a serverSeeded reading (it is DATED and sweep-backed, so it can honestly render "measured 4h ago") and update this pin together with it',
-    ).toBe(8);
+      'a server-seeded OS reading is displayable for this % of each refresh cycle — at or above 100 the green state is reachable in steady state, which is the whole point',
+    ).toBe(133);
+    expect(windowMs).toBeGreaterThanOrEqual(PROXY_FRESHNESS_REFRESH_INTERVAL_MS + sweepMs);
   });
 
   it('CRITICAL schema.ts declares the freshness due index as the PARTIAL index migration 0123 actually creates. It declared a FULL one, with a comment directly above it asserting the opposite — the precise drift schema.ts itself records as having produced migration 0071, a duplicate index whose own rationale called a partial index “that full index”. Nothing breaks while drizzle-kit is unwired; this file is the source of truth the moment TD-002 reinstates generation. MUTATION: delete the `.where(sql`…`)` from `account_proxies_freshness_due_idx` in schema.ts and this reds.', () => {

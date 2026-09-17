@@ -278,17 +278,41 @@ describe('audit-proxies probe fixtures — every reading reaches the view state'
     expect(osFingerprintVerdict(state.osFingerprints[FRESH]).tone).toBe('match');
   });
 
-  it('row (b): the SAME readings five hours old are all AGED, each with its date', () => {
-    const fiveHoursAgo = Date.parse(FROZEN_NOW_ISO) - 5 * 3_600_000;
-    // The instrument names every aged reading the lib has — a fifth added there
-    // and not dated here must red rather than go unlooked-at.
-    expect(Object.keys(state.aged).sort()).toEqual([...READINGS].sort());
+  it('row (b): PAST EVERY DISPLAY WINDOW the same readings are all AGED, each with its date', () => {
+    // ⛔ PIN UPDATED 2026-09-17. The scene's row (b) is five hours old, and five
+    // hours used to be past all four windows. Three of them (the Test relay
+    // verdict, the UDP verdict, the OS fingerprint) are now derived from the
+    // six-hourly check that re-takes them (`MEASURED_READING_TTL_MS`, 8 h), so
+    // five hours is a PRESENT-TENSE reading for them — see proxy-reading-windows.
+    //
+    // The instrument is kept whole by asking the derivation at a moment past every
+    // window instead of weakening it: it still names every aged reading the lib
+    // has, so a fifth added there and not dated here reds rather than going
+    // unlooked-at. The arm below records what the SCENE now shows.
+    const nowMs = Date.parse(FROZEN_NOW_ISO);
+    const agedAt = nowMs - 5 * 3_600_000;
+    const past = deriveProbeViewState(auditProxyProbes(), nowMs + 5 * 3_600_000);
+    expect(Object.keys(past.aged).sort()).toEqual([...READINGS].sort());
     for (const key of READINGS) {
-      expect(state[key][AGED], `fresh ${key}`).toBeUndefined();
-      expect(state.aged[key][AGED], `aged ${key}`).toMatchObject({ atMs: fiveHoursAgo });
+      expect(past[key][AGED], `fresh ${key}`).toBeUndefined();
+      expect(past.aged[key][AGED], `aged ${key}`).toMatchObject({ atMs: agedAt });
     }
     // No vantage on this one: the hedged "?" arm, so the scene holds both.
-    expect(osFingerprintVerdict(state.aged.osFingerprints[AGED]?.value).tone).toBe('unknown');
+    expect(osFingerprintVerdict(past.aged.osFingerprints[AGED]?.value).tone).toBe('unknown');
+  });
+
+  it('⛔ REPORTED, NOT FIXED — at the scene’s own frozen clock row (b) now demonstrates only ONE aged reading, because its fixture is five hours old and three of the four windows are eight', () => {
+    // The one-line repair is `now - 5 * 3_600_000` → nine hours in
+    // apps/gui-client/src/visual-harness/audit-scenes.tsx (~:657), which is
+    // outside this change's lane. Pinned rather than left silent: the visual audit
+    // scene exists to show the aged state on screen, and right now it shows it for
+    // the live QUIC verdict alone. When the fixture moves, this arm reds and is
+    // deleted — the arm above already covers the behaviour.
+    expect(state.aged.quicMeasured[AGED]).toBeDefined();
+    for (const key of ['osFingerprints', 'quicProbe', 'udpProbe'] as const) {
+      expect(state[key][AGED], `still present-tense at 5 h: ${key}`).toBeDefined();
+      expect(state.aged[key][AGED], `not yet aged at 5 h: ${key}`).toBeUndefined();
+    }
   });
 });
 

@@ -50,6 +50,16 @@ export function summariseTurn(turn: ChatTurn): TurnSummary {
   if (turn.role === 'user') {
     return { role: 'user', headline: oneLine(turn.text ?? '') };
   }
+  // An interrupted turn is a NORMAL outcome now (B6): it carries the reason the
+  // turn stopped and the steps that really ran. Falling through to "no response
+  // recorded" would throw away exactly what B6 was written to preserve, in the
+  // one place the customer scans when they are looking for what went wrong.
+  const stopped = turn.interrupted;
+  if (stopped !== undefined) {
+    const n = stopped.steps.length;
+    const ran = n === 0 ? 'nothing ran' : `${String(n)} step${n === 1 ? '' : 's'} ran`;
+    return { role: 'agent', headline: `interrupted — ${ran}: ${oneLine(stopped.reason, 60)}` };
+  }
   const r = turn.response;
   if (r === undefined) {
     // An agent turn with no response is a turn that never completed — a stop,

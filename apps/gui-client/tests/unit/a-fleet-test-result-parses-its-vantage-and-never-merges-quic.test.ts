@@ -421,14 +421,35 @@ describe('the cache', () => {
       { latencyMs: 31, measuredFrom: 'fleet', nodeId: 'mac-mini-07', quicProbe: true },
       2,
     );
+    // ⛔ PIN UPDATED 2026-09-17 — the ARM is unchanged, its INPUT is explicit.
+    // "That Mac ran and produced none" used to be inferred from the ABSENCE of a
+    // relay verdict on a fleet reply; a reply can lack `quic_ok` for reasons this
+    // client cannot see (the route omits it for any non-measurement), so absence
+    // now CARRIES and only `quicRan` retires. The vantage still flips either way.
     await saveServerProbeResult(
       'p1',
-      { latencyMs: 35, measuredFrom: 'fleet', nodeId: 'mac-mini-08' },
+      { latencyMs: 35, measuredFrom: 'fleet', nodeId: 'mac-mini-08', quicRan: true },
       3,
     );
     const c = (await loadProbeCache()).p1;
     expect(c?.nodeId).toBe('mac-mini-08');
     expect(c).not.toHaveProperty('quicProbe');
+    // …and the CONTROL for the new rule: the same reply without that evidence
+    // keeps the verdict while still moving the node label.
+    await saveProbeResult('p3', OK, 1);
+    await saveServerProbeResult(
+      'p3',
+      { latencyMs: 31, measuredFrom: 'fleet', nodeId: 'mac-mini-07', quicProbe: true },
+      2,
+    );
+    await saveServerProbeResult(
+      'p3',
+      { latencyMs: 35, measuredFrom: 'fleet', nodeId: 'mac-mini-08' },
+      3,
+    );
+    const kept = (await loadProbeCache()).p3;
+    expect(kept?.nodeId).toBe('mac-mini-08');
+    expect(kept?.quicProbe).toBe(true);
     // And a control-plane fallback with NO prior relay verdict invents none.
     await saveProbeResult('p2', OK, 1);
     await saveServerProbeResult('p2', { latencyMs: 90, measuredFrom: 'control_plane' }, 3);

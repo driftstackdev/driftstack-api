@@ -183,6 +183,35 @@ describe('summariseTurn', () => {
     expect(summariseTurn(t).headline).toBe('no response recorded');
   });
 
+  it('summarises an INTERRUPTED turn by what ran and why it stopped', () => {
+    // These are common now, and they are the rows a customer scans hardest.
+    // Reading one as "no response recorded" discards both the step count and the
+    // reason the turn is carrying.
+    const t: ChatTurn = {
+      id: 8,
+      role: 'agent',
+      interrupted: {
+        reason: 'This chat’s session ended while the turn was running.',
+        steps: [
+          {
+            kind: 'success',
+            intent: { kind: 'navigate', url: 'https://example.com' },
+            summary: 'x',
+          },
+          { kind: 'success', intent: { kind: 'capture', capture: 'screenshot' }, summary: 'y' },
+        ],
+      },
+    };
+    const s = summariseTurn(t);
+    expect(s.headline).toMatch(/^interrupted — 2 steps ran/);
+    expect(s.headline).toMatch(/session ended/);
+    expect(s.headline).not.toBe('no response recorded');
+    // Singular, and the zero case, both read correctly.
+    expect(
+      summariseTurn({ id: 9, role: 'agent', interrupted: { reason: 'r', steps: [] } }).headline,
+    ).toMatch(/nothing ran/);
+  });
+
   it('does not throw on a user turn with no text', () => {
     const t: ChatTurn = { id: 7, role: 'user' };
     expect(summariseTurn(t).headline).toBe('');

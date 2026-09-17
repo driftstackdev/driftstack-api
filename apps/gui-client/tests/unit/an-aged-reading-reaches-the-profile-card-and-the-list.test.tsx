@@ -213,6 +213,14 @@ vi.mock('../../src/lib/open-simulator', () => ({
 const { ProfilesView } = await import('../../src/views/ProfilesView');
 
 const MIN = 60_000;
+/** ⛔ PIN UPDATED 2026-09-17 — the readings on this page (the Test relay verdict
+ *  and the OS fingerprint) are re-taken by the six-hourly automatic capability
+ *  check, so their display window is `MEASURED_READING_TTL_MS` (8 h), not the
+ *  thirty minutes they inherited from the live-session verdict. 31 minutes is now
+ *  a PRESENT-TENSE reading, so every "aged" arm below was pinning the defect the
+ *  owner reported ("Has QUIC and Apple, but it aint green sometimes"). Nine hours
+ *  is past the new window; the arms themselves are unchanged. */
+const AGED_AGE = 9 * 60 * MIN;
 const OS_READING = {
   os: 'macos-or-ios',
   confidence: 'high',
@@ -291,20 +299,22 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('the profile CARD shows a reading that has aged out of the present tense', () => {
-  it('(a) CRITICAL a relay reading 31 minutes old is the aged past-tense chip, dated — not "not yet tested"', async () => {
-    seed(relayAt(31 * MIN));
+  it('(a) CRITICAL a relay reading nine hours old is the aged past-tense chip, dated — not "not yet tested"', async () => {
+    seed(relayAt(AGED_AGE));
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
     const chip = await cardQuicChip(container);
     await waitFor(() => expect(chip.getAttribute('title')).toContain('rechecked automatically'));
     expect(chip.getAttribute('data-ok')).toBe('aged');
     expect(chip.getAttribute('data-aged-value')).toBe('true');
     expect(chip.getAttribute('data-quic-inferred')).toBe('false');
-    // What it found AND how old it is. At this width (jsdom lays nothing out, so
-    // the card cuts against its 206px default, where two dated chips do not fit)
-    // the age is in the chip's text for a reader that gets no chrome, and costs
-    // the row no width; the arms below pin the width at which it is printed.
-    expect(chip.textContent).toBe('QUIC ✓ · 31 min ago');
-    expect(chip.querySelector('.sr-only')?.textContent).toBe(' · 31 min ago');
+    // What it found AND how old it is. ⛔ PIN UPDATED 2026-09-17 with the window:
+    // at 31 minutes the age did not fit the card's 206px default and rode in an
+    // `sr-only` span ("QUIC ✓" + " · 31 min ago"); an hours-unit suffix is
+    // narrower (29.91px against 41.9), so at nine hours the tile PRINTS it and the
+    // hidden span is correctly absent. The claim is the same — the age reaches the
+    // reader either way — and the width arm below pins both branches.
+    expect(chip.textContent).toBe('QUIC ✓ · 9 h');
+    expect(chip.querySelector('.sr-only')).toBeNull();
     // …never in the colour of a current verdict, NOR in the fill of a current
     // non-verdict ('⤵ QUIC' and 'QUIC ~' wear bg-ink-muted/15): recessed + dashed.
     expect(chip.className).not.toContain('status-ready');
@@ -313,7 +323,7 @@ describe('the profile CARD shows a reading that has aged out of the present tens
     expect(chip.className).toContain('outline-dashed');
     // The age leads the hover, in the past tense.
     expect(chip.getAttribute('title')).toBe(
-      'Last checked 31 minutes ago. It will be rechecked automatically. HTTP/3 worked through this exit then.',
+      'Last checked 9 hours ago. It will be rechecked automatically. HTTP/3 worked through this exit then.',
     );
     expect(chip.getAttribute('title')).not.toContain('not yet tested');
     // The OS reading came from the same Test and aged with it.
@@ -322,8 +332,10 @@ describe('the profile CARD shows a reading that has aged out of the present tens
     );
     expect(os?.getAttribute('data-ok')).toBe('aged');
     expect(os?.getAttribute('data-os-tone')).toBe('unknown');
-    expect(os?.getAttribute('title')).toMatch(/^Last checked 31 minutes ago\./);
-    expect(os?.textContent).toBe('✓ iOS/macOS · 31 min ago');
+    expect(os?.getAttribute('title')).toMatch(/^Last checked 9 hours ago\./);
+    // Same width story as the QUIC chip above: printed rather than hidden, and at
+    // the card's default width the OS chip takes its SHORT label beside the age.
+    expect(os?.textContent).toBe('✓ Apple · 9 h');
   });
 
   it('(a) the tile PRINTS the age on every aged chip as soon as the row has the room — all of them or none', () => {
@@ -389,7 +401,7 @@ describe('the profile CARD shows a reading that has aged out of the present tens
   });
 
   it('(a) the details sheet, which has the room, prints the age beside the label', async () => {
-    seed(relayAt(31 * MIN));
+    seed(relayAt(AGED_AGE));
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
     await cardQuicChip(container);
     fireEvent.click(container.querySelector('[data-action="open-details"]') as HTMLElement);
@@ -400,16 +412,16 @@ describe('the profile CARD shows a reading that has aged out of the present tens
     });
     const quic = sheet.querySelector('[data-capability="quic"]');
     expect(quic?.getAttribute('data-ok')).toBe('aged');
-    expect(quic?.textContent).toBe('✓QUIC · 31 min ago');
+    expect(quic?.textContent).toBe('✓QUIC · 9 h ago');
     const os = sheet.querySelector('[data-component="proxy-os-fingerprint"]');
     expect(os?.getAttribute('data-ok')).toBe('aged');
-    expect(os?.textContent).toBe('✓iOS/macOS · 31 min ago');
+    expect(os?.textContent).toBe('✓iOS/macOS · 9 h ago');
   });
 
   it('(a) ⛔ a row the automatic check will never take names its button — it promises nothing', async () => {
     proxyRef.serverId = undefined; // never saved to the account → never sent
     proxyRef.second = true; // …beside a row that IS, which the planner will take
-    seed(relayAt(31 * MIN));
+    seed(relayAt(AGED_AGE));
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
     const titleOf = (name: string): string | null | undefined =>
       [...container.querySelectorAll('article')]
@@ -422,23 +434,50 @@ describe('the profile CARD shows a reading that has aged out of the present tens
     // appearing is the proof that the answer is in.
     await waitFor(() =>
       expect(titleOf('Second')).toBe(
-        'Last checked 31 minutes ago. It will be rechecked automatically. HTTP/3 worked through this exit then.',
+        'Last checked 9 hours ago. It will be rechecked automatically. HTTP/3 worked through this exit then.',
       ),
     );
     expect(titleOf('Demo')).toBe(
-      'Last checked 31 minutes ago. Run Test to check it again. HTTP/3 worked through this exit then.',
+      'Last checked 9 hours ago. Run Test to check it again. HTTP/3 worked through this exit then.',
     );
   });
 
-  it('(b) CRITICAL a relay reading with NO stamp (saved before this update) is unmeasured — never current, never aged', async () => {
+  it('(b) CRITICAL ⛔ THE UPGRADE CLIFF — a relay reading with NO stamp (every install that pressed Test before gui-v0.1.63) is DATED by the load migration and RENDERS, as an AGED reading, never as "not yet tested" and never as a fresh green. MUTATION: drop backfillQuicProbeAt from migrateOnce and both blocks red', async () => {
+    // ⛔ PIN UPDATED 2026-09-17 (review) — THIS ARM USED TO ASSERT THE GREEN, and
+    // the green was the defect. The backfill borrows `serverProbeAt ?? at`, and
+    // NEITHER is this verdict's own date: `serverProbeAt` is re-stamped on every
+    // server reply including a pure carry, and the background sweep moves `at`
+    // about every fifteen minutes. So "the entry's own `at` is recent" — the
+    // sentence that used to justify the present tense here — says only that this
+    // row was pinged recently, not that its relay verdict was. A verdict of
+    // genuinely unknown age was being rendered as a present-tense ✓.
+    //
+    // The backfill now clamps the stamp into the AGED band, which is what the item
+    // asked for in so many words, and what the cliff needed: the value is
+    // RESTORED — visible, muted, dated — instead of being shown by nothing. What
+    // this arm proves is unchanged in spirit and stronger in fact: the reading
+    // comes back, and it does not lie about its age.
     seed({ quicProbe: true });
-    const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
-    const chip = await cardQuicChip(container);
-    expect(chip.getAttribute('data-ok')).toBeNull();
-    expect(chip.getAttribute('data-quic-inferred')).toBe('true');
-    expect(chip.textContent).toBe('QUIC ~');
-    expect(chip.className).not.toContain('status-ready');
-    expect(chip.className).not.toContain('outline-dashed');
+    let view = render(<ProfilesView onGoToSettings={vi.fn()} />);
+    let chip = await cardQuicChip(view.container);
+    await waitFor(() => expect(chip.getAttribute('data-ok')).toBe('aged'));
+    expect(chip.getAttribute('data-aged-value')).toBe('true');
+    // ⛔ NOT the inferred `~`: "shown by nothing" is exactly what the cliff was,
+    // and an inferred chip is how it looked. The reading is really rendered.
+    expect(chip.getAttribute('data-quic-inferred')).toBe('false');
+    expect(chip.textContent).toContain('QUIC ✓');
+    cleanup();
+
+    // …and one that tested LAST WEEK is aged too, from ITS OWN older date rather
+    // than the clamp boundary: the clamp is a ceiling on how YOUNG a recovered
+    // stamp may claim to be, never an assignment that throws the real date away.
+    stores.clear();
+    seed({ quicProbe: true, at: Date.now() - 7 * 24 * 60 * MIN });
+    view = render(<ProfilesView onGoToSettings={vi.fn()} />);
+    chip = await cardQuicChip(view.container);
+    await waitFor(() => expect(chip.getAttribute('data-ok')).toBe('aged'));
+    expect(chip.getAttribute('data-aged-value')).toBe('true');
+    expect(chip.textContent).toMatch(/7 d|days? ago/);
   });
 
   it('(c) PIN a FRESH reading renders exactly as it did before the aged state existed', async () => {
@@ -481,13 +520,13 @@ describe('the profile CARD shows a reading that has aged out of the present tens
 });
 
 describe('the profiles LIST shows a reading that has aged out of the present tense', () => {
-  it('(a) CRITICAL 31 minutes old: the tooltip dates the QUIC reading and the OS chip is aged — it does not vanish', async () => {
-    seed(relayAt(31 * MIN));
+  it('(a) CRITICAL nine hours old: the tooltip dates the QUIC reading and the OS chip is aged — it does not vanish', async () => {
+    seed(relayAt(AGED_AGE));
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
     const udp = await listUdpChip(container);
     await waitFor(() => expect(udp.getAttribute('title')).toContain('rechecked automatically'));
     expect(udp.getAttribute('title')).toBe(
-      'UDP works — WebRTC ✓. QUIC — Last checked 31 minutes ago. It will be rechecked automatically. HTTP/3 worked through this exit then.',
+      'UDP works — WebRTC ✓. QUIC — Last checked 9 hours ago. It will be rechecked automatically. HTTP/3 worked through this exit then.',
     );
     expect(udp.getAttribute('title')).not.toContain('not yet measured');
     const os = listOsChip(container);
@@ -498,11 +537,9 @@ describe('the profiles LIST shows a reading that has aged out of the present ten
     // AgedOsCellChip), so the age is PRINTED on its own line under the chips.
     expect(os?.textContent).toBe('✓iOS/macOS');
     const age = container.querySelector('table [data-component="aged-reading-age"]');
-    expect(age?.textContent).toBe('as of 31 min ago');
+    expect(age?.textContent).toBe('as of 9 h ago');
     expect(os?.closest('td')?.contains(age)).toBe(true);
-    expect(os?.getAttribute('title')).toMatch(
-      /^Last checked 31 minutes ago\. It will be rechecked/,
-    );
+    expect(os?.getAttribute('title')).toMatch(/^Last checked 9 hours ago\. It will be rechecked/);
     expect(os?.className).toContain('outline-dashed');
     expect(os?.className).not.toContain('border');
     expect(os?.className).not.toContain('status-ready');
@@ -511,7 +548,7 @@ describe('the profiles LIST shows a reading that has aged out of the present ten
   it('(a) ⛔ a row the automatic check will never take names its button in the list too', async () => {
     proxyRef.serverId = undefined;
     proxyRef.second = true;
-    seed(relayAt(31 * MIN));
+    seed(relayAt(AGED_AGE));
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
     await listUdpChip(container);
     const row = (name: string): HTMLElement | undefined =>
@@ -526,19 +563,32 @@ describe('the profiles LIST shows a reading that has aged out of the present ten
     await waitFor(() =>
       expect(udpTitle('Second')).toContain('It will be rechecked automatically.'),
     );
-    expect(osTitle('Second')).toMatch(/^Last checked 31 minutes ago\. It will be rechecked/);
+    expect(osTitle('Second')).toMatch(/^Last checked 9 hours ago\. It will be rechecked/);
     expect(udpTitle('Demo')).toBe(
-      'UDP works — WebRTC ✓. QUIC — Last checked 31 minutes ago. Run Test to check it again. HTTP/3 worked through this exit then.',
+      'UDP works — WebRTC ✓. QUIC — Last checked 9 hours ago. Run Test to check it again. HTTP/3 worked through this exit then.',
     );
-    expect(osTitle('Demo')).toMatch(/^Last checked 31 minutes ago\. Run Test to check it again\./);
+    expect(osTitle('Demo')).toMatch(/^Last checked 9 hours ago\. Run Test to check it again\./);
   });
 
-  it('(b) CRITICAL NO stamp: the tooltip says not yet measured, honestly', async () => {
+  it('(b) CRITICAL ⛔ THE UPGRADE CLIFF, on the list: an undated pre-upgrade verdict is dated by the migration and STATED — in the past tense — not reported as "not yet measured"', async () => {
+    // ⛔ PIN UPDATED 2026-09-17 (review) — the list half of the card arm above.
+    // It pinned the present-tense "QUIC ✓" for a verdict whose age is unknown; the
+    // backfill now clamps such a stamp into the aged band, so the list states the
+    // reading in the past tense. The thing this arm exists to prove is unchanged:
+    // the verdict is SAID, rather than being shown by nothing.
     seed({ quicProbe: true });
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
     const udp = await listUdpChip(container);
-    expect(udp.getAttribute('title')).toBe('UDP works — WebRTC ✓; QUIC likely (not yet measured)');
-    expect(container.querySelector('[data-component="aged-reading-age"]')).toBeNull();
+    expect(udp.getAttribute('title')).not.toContain('not yet measured');
+    const title = udp.getAttribute('title') ?? '';
+    expect(title).toContain('UDP works — WebRTC ✓');
+    expect(title).toContain('HTTP/3 worked through this exit then.');
+    // …and it leads with the AGE, which is the whole difference between a
+    // recovered reading and a fresh one.
+    expect(title).toMatch(/QUIC — Last checked 8 hours ago\./);
+    // NOT the present tense — the control that this arm did not simply swap one
+    // wrong sentence for another.
+    expect(title).not.toMatch(/; QUIC ✓/);
   });
 
   it('(c) PIN a FRESH reading renders exactly as it did before the aged state existed', async () => {

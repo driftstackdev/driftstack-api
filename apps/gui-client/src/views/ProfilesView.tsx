@@ -79,7 +79,7 @@ import {
   type ProfileSortDir,
   type ProfileStatusFilter,
 } from '../components/ProfilesActionBar';
-import { proxyCapabilities } from '../components/ProxyCapabilities';
+import { agedQuicReading, proxyCapabilities } from '../components/ProxyCapabilities';
 import { ProfilePhoneCard, shownAgedReadings } from '../components/ProfilePhoneCard';
 import { tierLabelFor } from '../components/TierBadge';
 import { DevicePicker, type PickerDevice } from '../components/DevicePicker';
@@ -139,10 +139,13 @@ import {
 import { ProxyForm } from './ProxiesView';
 import { endpointUnresolvedCopy, isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
 import { capabilityRecheckPromises, withProxyProbe } from '../lib/proxy-probe-sweeper';
+import { useDisplayClock } from '../lib/use-display-clock';
 import {
   VPN_NO_API_KEY_CHECK_NOTICE,
+  VPN_PLAN_EXCLUDED_CHECK_NOTICE,
   VPN_NOT_STORED_CHECK_NOTICE,
   VPN_STALE_CONFIG_CHECK_NOTICE,
+  vpnQuicReading,
 } from '../lib/proxy-check-copy';
 import {
   deriveProbeViewWithEndpointRows,
@@ -158,7 +161,7 @@ import {
   unansweredCheckNotice,
   vpnStoreRefusal,
 } from '../lib/proxy-server-test';
-import { type AccountProxyScheme } from '../lib/account-proxies';
+import { planExcludesVpnEgress, type AccountProxyScheme } from '../lib/account-proxies';
 import { teamWorkspaceLabel, teamWorkspaceTitle } from '../lib/team-label';
 
 /** Which proxy a freshly created profile should be auto-probed through.
@@ -856,22 +859,35 @@ export function ProfilesView({
   // Proxies grid reads, so a VPN row's fleet-measured latency and exit reach the
   // card exactly as a SOCKS5 row's do.
   //
-  // ⚠️ (V-219) KNOWN LIMIT, recorded rather than left to be rediscovered. The
-  // derivation ages the OS reading and the QUIC verdict against `Date.now()`,
-  // captured when this memo RECOMPUTES — and it recomputes only when the cache
-  // changes. So a reading keeps rendering past its window until the next cache
-  // emit rather than at the instant it expires.
+  // ⛔ (2026-09-17) THE KNOWN LIMIT RECORDED HERE IS NOW CLOSED, and the note it
+  // replaces was wrong about the cost. It read: "the derivation ages the reading
+  // against `Date.now()`, captured when this memo RECOMPUTES — and it recomputes
+  // only when the cache changes … not closed with a periodic tick in the deps:
+  // that re-renders the whole grid every minute to buy at most fifteen minutes of
+  // accuracy on a heuristic window."
   //
-  // Bounded, not unbounded: the background sweeper writes every fifteen minutes
-  // while the app is open, so the worst case is ~45 minutes against a 30-minute
-  // window. The pre-existing QUIC verdict TTL (W-30) has always had exactly this
-  // property.
+  // Two things were wrong with it. The bound was wrong — the sweeper's fifteen
+  // minutes only holds while a sweep still has a reachable proxy to write about,
+  // and a window can lapse for hours with no write at all — and the SIGN was
+  // wrong: without a clock the window is not enforced late, it is enforced at an
+  // ARBITRARY moment, so a chip flips grey when some unrelated proxy is written
+  // rather than when this reading actually expires. That is the erratic behaviour
+  // the owner reported, and widening the windows would have lengthened it.
   //
-  // Not closed with a periodic tick in the deps: that re-renders the whole grid
-  // every minute to buy at most fifteen minutes of accuracy on a heuristic
-  // window. Worth doing only without a timer — recomputing on window focus, the
-  // moment a customer is actually looking — which is a separate change.
-  const probeView = useMemo(() => deriveProbeViewWithEndpointRows(probeCache), [probeCache]);
+  // `useDisplayClock` is ONE shared sixty-second tick for the whole app (see
+  // use-display-clock.ts). It is a DEPENDENCY only — the derivation still reads
+  // the real clock — and the memo it re-runs is pure, so the cost is one
+  // re-render a minute on a view that already re-renders on every cache write.
+  const displayTick = useDisplayClock();
+  const probeView = useMemo(
+    () => deriveProbeViewWithEndpointRows(probeCache),
+    // ⚠️ `displayTick` is a DELIBERATE time dependency the memo body never names:
+    // the derivation's other input is the clock it reads internally, which no
+    // dependency array can express. (This repo configures no exhaustive-deps
+    // rule, so there is nothing to disable — a disable comment for an unloaded
+    // rule is itself a lint error.)
+    [probeCache, displayTick],
+  );
   // The rows an aged chip may promise "It will be rechecked automatically." for —
   // asked of the automatic check's own planner, exactly as the Proxies tab asks
   // it, never inferred from "has a key": a row it will never check (a failing
@@ -2839,6 +2855,21 @@ export function ProfilesView({
     // proxy, and stores nothing without a key — the grid orders them the same).
     if (settings.apiKey === null || settings.apiKey.length === 0) {
       setVpnNotices((m) => ({ ...m, [px.id]: VPN_NO_API_KEY_CHECK_NOTICE }));
+      return null;
+    }
+    // ⛔⛔ (2026-09-17 review) THE PLAN GATE, and it was MISSING on this surface.
+    // The Proxies tab's Check refuses before it stores when the account's plan
+    // carries no VPN egress; this card — the other in-app way to check a tunnel —
+    // had no such gate, so on such a plan it still POSTed the row's OpenVPN
+    // config blob or WireGuard private key to Driftstack (`ensureServerProxy`
+    // below) only to be refused on arrival. A secret the plan cannot use must not
+    // leave this Mac to be told so. Same refusal sentence as the grid's, for the
+    // same reason the API-key gate above shares one: one proxy in one state must
+    // not get two explanations on two screens.
+    //
+    // Ordered AFTER the key check and BEFORE the store, exactly like the grid's.
+    if (planExcludesVpnEgress(accountMe)) {
+      setVpnNotices((m) => ({ ...m, [px.id]: VPN_PLAN_EXCLUDED_CHECK_NOTICE }));
       return null;
     }
     // (V2 2026-09-12, owner: "openvpn … not showing info measurements of proxy
@@ -5121,16 +5152,63 @@ export function ProfilesView({
                     // ⛔ `aged` BEFORE `inferred`: an aged cap still carries the
                     // inference's flags (ProxyCapability.aged), and reading them
                     // first is what said "not yet measured" about a dated reading.
+                    // ⛔ (2026-09-17) A VPN ROW HAS A QUIC READING TOO, and this
+                    // was hard-wired to 'unknown' for every one of them: a tunnel
+                    // has no SOCKS5 capabilities, `caps` is null, and the list fell
+                    // through to "QUIC not tested" — while the Proxies grid and the
+                    // profile card showed a measured green for the same proxy from
+                    // the same cache. One proxy, two answers, on two screens the
+                    // customer reads side by side. `vpnQuicReading` is the grid's
+                    // own choice, moved to lib/proxy-check-copy so the list reads it
+                    // rather than growing a third version of it.
+                    //
+                    // `noFleetMac` is false here: that flag only picks between two
+                    // wordings of "not measured", and this surface prints neither —
+                    // it prints the CLAUSE, and an aged reading its own sentence.
+                    const vpnQuic =
+                      caps === null && px !== null
+                        ? vpnQuicReading(
+                            probeView.quicMeasured[px.id],
+                            probeView.quicProbe[px.id],
+                            false,
+                            {
+                              aged: agedQuicReading(rowAged),
+                              nowMs: Date.now(),
+                              autoRecheck: rowAutoRecheck,
+                            },
+                          )
+                        : undefined;
+                    // ⛔ 'fail' is a MEASURED negative and the list prints it as
+                    // "QUIC ✗ (HTTP/2 on last measure)". The no-UDP fallback chip is
+                    // also `ok:false, inferred:false`, but it is DEDUCED from this
+                    // Mac's own handshake, not measured through the proxy — so it
+                    // must land on 'unknown' rather than claim a measurement nobody
+                    // made. Keyed on the readings, not on the chip's flags, for the
+                    // reason the note above it gives about `aged` and `inferred`.
+                    const quicVerdictMeasured =
+                      px !== null &&
+                      (probeView.quicMeasured[px.id] !== undefined ||
+                        probeView.quicProbe[px.id] !== undefined);
                     const quic: NonNullable<ProfileTableRow['quic']> =
-                      caps === null || quicCap === undefined
-                        ? 'unknown'
-                        : quicCap.aged !== undefined
+                      vpnQuic !== undefined
+                        ? vpnQuic.aged !== undefined
                           ? 'aged'
-                          : quicCap.inferred
-                            ? 'inferred'
-                            : quicCap.ok
-                              ? 'ok'
-                              : 'fail';
+                          : vpnQuic.ok === true
+                            ? 'ok'
+                            : vpnQuic.ok === false
+                              ? 'fail'
+                              : 'unknown'
+                        : caps === null || quicCap === undefined
+                          ? 'unknown'
+                          : quicCap.aged !== undefined
+                            ? 'aged'
+                            : quicCap.inferred
+                              ? 'inferred'
+                              : quicCap.ok
+                                ? 'ok'
+                                : quicVerdictMeasured
+                                  ? 'fail'
+                                  : 'unknown';
                     // T-27 — prefer the SERVER/fleet latency (same source + gate as the
                     // grid card and ProxiesView) so grid and list never show a different
                     // number/colour for the same proxy; native probe is the fallback,
@@ -5168,7 +5246,14 @@ export function ProfilesView({
                       osFingerprint: px !== null ? probeView.osFingerprints[px.id] : undefined,
                       udp,
                       quic,
-                      ...(quicCap?.aged !== undefined ? { quicAgedHint: quicCap.hint } : {}),
+                      // The aged sentence comes from whichever of the two readings
+                      // produced this row's `quic`, so the list never prints one
+                      // surface's words beside the other's verdict.
+                      ...(vpnQuic?.aged !== undefined
+                        ? { quicAgedHint: vpnQuic.hint }
+                        : quicCap?.aged !== undefined
+                          ? { quicAgedHint: quicCap.hint }
+                          : {}),
                       ...(rowAged !== undefined ? { aged: rowAged } : {}),
                       autoRecheck: rowAutoRecheck,
                       // rowLat prefers the fleet number and falls back to the native

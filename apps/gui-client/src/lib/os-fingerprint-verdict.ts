@@ -15,21 +15,26 @@
 /**
  * How long a measured stack reading stays current, in ms.
  *
- * ⛔ DEFINED HERE, in the module with no imports, because TWO surfaces age the
- * same reading and they must age it by the same number: the proxy grid's cached
- * reading (proxy-probe-cache drops it past this) and the cockpit's session
- * readout (OsReadout labels it past this). A second literal in the component
- * would drift from this one silently, and the two surfaces would then disagree
- * about the same proxy on the same screen.
+ * ⛔ RE-EXPORTED HERE, from the import-free proxy-reading-windows, because TWO
+ * surfaces age the same reading and they must age it by the same number: the
+ * proxy grid's cached reading (proxy-probe-cache drops it past this) and the
+ * cockpit's session readout (OsReadout labels it past this). A second literal in
+ * the component would drift from this one silently, and the two surfaces would
+ * then disagree about the same proxy on the same screen. The windows module has
+ * no imports of its own, so this file still drags nothing in.
  *
- * Thirty minutes, matching QUIC_VERDICT_TTL_MS and EXIT_IDENTITY_TTL_MS, and for
- * the reason those give: all three describe something measured THROUGH the proxy
- * that the proxy can change underneath us. A stack fingerprint feels more
- * permanent than a QUIC verdict, and that intuition is exactly the trap — a
- * residential exit rotates to another machine entirely, and the reading is about
- * the machine, not the row.
+ * ⛔ IT WAS THIRTY MINUTES, matching QUIC_VERDICT_TTL_MS, and that was the defect
+ * the owner reported as "i see apple but not being green at proxies". Nothing
+ * re-takes this reading more often than every six hours, so the window closed
+ * five and a half hours before the next measurement could reopen it and a proxy
+ * whose stack really is Darwin spent ~92% of its life muted. It is now derived:
+ * W = the capability cadence + one sweep slot + margin. The reasoning that
+ * justified expiring it AT ALL is untouched and still right — a residential exit
+ * rotates to another machine entirely, and the reading is about the machine, not
+ * the row — so the reading still leaves the present tense, just not before
+ * anything could have re-taken it.
  */
-export const OS_FINGERPRINT_TTL_MS = 30 * 60 * 1000;
+export { MEASURED_READING_TTL_MS as OS_FINGERPRINT_TTL_MS } from './proxy-reading-windows';
 
 export const FINGERPRINTED_OS = ['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown'] as const;
 export type FingerprintedOs = (typeof FINGERPRINTED_OS)[number];

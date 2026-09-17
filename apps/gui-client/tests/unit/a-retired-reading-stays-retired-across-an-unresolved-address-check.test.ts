@@ -303,9 +303,12 @@ describe('⛔ a FAILED test rebuilds the entry too — and must not lose the oth
     // A reply that RAN the relay leg and reached no verdict retires the one held.
     await saveServerProbeResult(
       'v1',
-      // No `quicProbe` key at all: that — not `null` — is how a reply that ran the
-      // leg and reached no verdict actually arrives (`quicSkipped` absent too).
-      { latencyMs: 30, measuredFrom: 'fleet', nodeId: 'n1' },
+      // ⛔ PIN UPDATED 2026-09-17. No `quicProbe` key — that, not `null`, is how a
+      // reply with no verdict arrives — AND `quicRan`, the node's own report that
+      // it ran the leg and reached none. Before today the absence alone retired the
+      // verdict, which meant every reply that merely lacked the key did too; the
+      // fixture now says what it means instead of relying on that inference.
+      { latencyMs: 30, measuredFrom: 'fleet', nodeId: 'n1', quicRan: true },
       T1,
     );
     const retiredAt = (await loadProbeCache()).v1?.quicProbeRetiredAt;

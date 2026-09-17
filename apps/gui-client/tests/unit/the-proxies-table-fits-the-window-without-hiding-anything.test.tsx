@@ -39,6 +39,7 @@ import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
 import { CHECK_VPN_ACTION, VPN_UDP_NOT_MEASURED_TITLE } from '../../src/lib/proxy-check-copy';
 import type * as ProbeCacheModule from '../../src/lib/proxy-probe-cache';
 import type { CachedProbe } from '../../src/lib/proxy-probe-cache';
+import { MEASURED_READING_TTL_MS } from '../../src/lib/proxy-reading-windows';
 
 const testProxy = vi.fn<(input: unknown) => Promise<ProxyTestResult>>();
 const confirmFn = vi.fn(() => Promise.resolve(true));
@@ -692,15 +693,29 @@ describe('the proxies table fits the window without hiding anything', () => {
     // MUTATION: drop the `vpnFailure === undefined` test on `aged` in ProxyRow → the
     // failed row grows a dated tick → red.
     const now = Date.now();
-    const THREE_HOURS = 3 * 60 * 60_000;
+    // ⛔ PIN UPDATED 2026-09-17 — three hours is now INSIDE every one of these
+    // readings' display windows: the relay verdict, the UDP verdict and the OS
+    // fingerprint are all re-taken by the six-hourly automatic check, so their
+    // window is derived from that cadence rather than from the live-session
+    // verdict's thirty minutes. A three-hour-old reading renders CURRENT, which is
+    // the point of the change, so this arm — which is about the AGED rendering —
+    // needs an age that is really past the window.
+    //
+    // ⛔ (review) DERIVED AND RENAMED. It was left as `AGED_AGE = 9 * 60 *
+    // 60_000`: the value moved and the name did not, so the constant read as three
+    // hours in five fixtures and in assertions printing "9 h ago". Reconciling the
+    // pin against the window meant disbelieving the name. One hour past the window,
+    // computed from the window, so the fixture follows the constant the next time
+    // the cadence moves.
+    const AGED_AGE = MEASURED_READING_TTL_MS + 60 * 60_000;
     const vpnEntry = (over: Partial<CachedProbe>): CachedProbe => ({
       result: ENDPOINT_PLACEHOLDER,
       at: now - 60_000,
       endpoint: { resolved: true, ip: '198.51.100.23', message: 'ok' },
       quicProbe: true,
-      quicProbeAt: now - THREE_HOURS,
+      quicProbeAt: now - AGED_AGE,
       udpProbe: false,
-      udpProbeAt: now - THREE_HOURS,
+      udpProbeAt: now - AGED_AGE,
       ...over,
     });
     stored = [
@@ -709,20 +724,20 @@ describe('the proxies table fits the window without hiding anything', () => {
       proxy('s', { label: 'socks-aged' }),
     ];
     cache = {
-      w: vpnEntry({ serverLatencyMs: 80, measuredFrom: 'fleet', serverProbeAt: now - THREE_HOURS }),
+      w: vpnEntry({ serverLatencyMs: 80, measuredFrom: 'fleet', serverProbeAt: now - AGED_AGE }),
       f: vpnEntry({ fleetFailureReason: 'The tunnel did not come up.' }),
       s: {
         result: REACHABLE,
         at: now - 60_000,
         quicProbe: false,
-        quicProbeAt: now - THREE_HOURS,
+        quicProbeAt: now - AGED_AGE,
         osFingerprint: {
           os: 'macos-or-ios',
           confidence: 'high',
           reason: 'r',
           observedVia: 'exit_ip',
           singleHostVantage: true,
-          at: now - THREE_HOURS,
+          at: now - AGED_AGE,
         },
       },
     };
@@ -734,16 +749,16 @@ describe('the proxies table fits the window without hiding anything', () => {
     const udp = rowOf('wg-aged').querySelector('[data-component="vpn-udp-chip"]')!;
     expect(udp.getAttribute('data-ok')).toBe('aged');
     expect(udp.getAttribute('data-aged-value')).toBe('false');
-    expect(udp.textContent).toBe('\u2935UDP \u00b7 3 h ago');
+    expect(udp.textContent).toBe('\u2935UDP \u00b7 9 h ago');
     expect(udp.className).not.toContain('status-ready');
     expect(udp.getAttribute('title')).toBe(
       // No API key in this suite, so the hover names the button THIS row has.
-      `Last checked 3 hours ago. Run ${CHECK_VPN_ACTION} to check it again. UDP did not work through this VPN then.`,
+      `Last checked 9 hours ago. Run ${CHECK_VPN_ACTION} to check it again. UDP did not work through this VPN then.`,
     );
     const quic = rowOf('wg-aged').querySelector('[data-component="vpn-quic-chip"]')!;
     expect(quic.getAttribute('data-ok')).toBe('aged');
     expect(quic.getAttribute('data-aged-value')).toBe('true');
-    expect(quic.textContent).toBe('\u2713QUIC \u00b7 3 h ago');
+    expect(quic.textContent).toBe('\u2713QUIC \u00b7 9 h ago');
     expect(quic.className).not.toContain('status-ready');
 
     // A SOCKS5 row: the QUIC chip and the OS chip, same treatment.
@@ -753,7 +768,7 @@ describe('the proxies table fits the window without hiding anything', () => {
     const os = rowOf('socks-aged').querySelector('[data-component="proxy-os-fingerprint"]')!;
     expect(os.getAttribute('data-ok')).toBe('aged');
     expect(os.getAttribute('data-os-tone')).toBe('unknown');
-    expect(os.textContent).toContain('3 h ago');
+    expect(os.textContent).toContain('9 h ago');
 
     // ⛔ Beside a FAILED check nothing aged is shown: the view drops every
     // Driftstack-measured value when a check says the proxy does not work.
@@ -767,8 +782,8 @@ describe('the proxies table fits the window without hiding anything', () => {
     fireEvent.click(chevron('wg-aged'));
     await waitFor(() => expect(detailRows()).toHaveLength(1));
     const caps = detailValue(detailRows()[0]!, 'Capabilities').textContent ?? '';
-    expect(caps).toContain('UDP \u2014 Last checked 3 hours ago.');
-    expect(caps).toContain('QUIC \u2014 Last checked 3 hours ago.');
+    expect(caps).toContain('UDP \u2014 Last checked 9 hours ago.');
+    expect(caps).toContain('QUIC \u2014 Last checked 9 hours ago.');
     expect(caps).not.toMatch(/Not measured yet/);
   });
   it('(j) READABLE — nothing on the tab is set below the size the text-quality gate accepts, no ink carries an alpha, no text in the rendered table sits under an `opacity-NN`, the unmeasured chips wear an ink that clears their wash, and an aged chip may break only in THIS table, below the wide tier', async () => {

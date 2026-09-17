@@ -22,6 +22,18 @@ import {
   type ProbeCacheMap,
 } from './proxy-probe-cache';
 import { isSocks5Probeable, isVpnScheme } from './proxy-scheme';
+import {
+  CAPABILITY_REFRESH_AFTER_MS,
+  CAPABILITY_RETRY_AFTER_MS,
+  SWEEP_INTERVAL_MS,
+} from './proxy-reading-windows';
+
+// ⛔ The three cadence numbers this module plans against now live in the
+// import-free proxy-reading-windows, because the DISPLAY windows are derived from
+// them and the cache that applies those windows cannot import this file (it would
+// be a cycle — this file imports the cache). Re-exported unchanged so every
+// existing importer and test keeps reading them from the sweep that owns them.
+export { CAPABILITY_REFRESH_AFTER_MS, CAPABILITY_RETRY_AFTER_MS, SWEEP_INTERVAL_MS };
 
 /** Proxies re-probed per sweep. Each is a real TCP + SOCKS5 handshake against
  *  someone else's infrastructure, so a sweep is deliberately a trickle rather
@@ -35,13 +47,14 @@ export const SWEEP_MAX_PER_RUN = 5;
  *  "unreachable" verdicts, which is worse than not sweeping at all. */
 export const SWEEP_GAP_MS = 2_000;
 
-/** How often the driver attempts a sweep. Chosen against PROBE_TTL_MS: at five
- *  proxies per sweep this refreshes twenty per hour, so a normal list stays
- *  inside the TTL without the app ever probing in bursts. The first sweep is
- *  deferred by one interval rather than fired at startup — launch is the
- *  busiest moment for the machine, and nothing is stale-urgent in the first
- *  quarter hour. */
-export const SWEEP_INTERVAL_MS = 15 * 60 * 1000;
+/* How often the driver attempts a sweep — `SWEEP_INTERVAL_MS`, defined in
+ * proxy-reading-windows and re-exported above. Chosen against PROBE_TTL_MS: at
+ * five proxies per sweep this refreshes twenty per hour, so a normal list stays
+ * inside the TTL without the app ever probing in bursts. The first sweep is
+ * deferred by one interval rather than fired at startup — launch is the busiest
+ * moment for the machine, and nothing is stale-urgent in the first quarter hour.
+ * It is ALSO the slack term in the display-window invariant: a reading whose
+ * re-take falls due just after a sweep waits a whole slot for the next one. */
 
 /** N3 (owner: "auto update proxy states more often ... when opening application") —
  *  how long after the app opens the FIRST sweep fires. The interval alone deferred it a
@@ -395,17 +408,17 @@ export function installProxySweepSchedule(
 // came back — the cadence Driftstack's own background job settled on after
 // rejecting thirty minutes as too costly for the customer's bandwidth.
 
-/** How old a capability reading may be before the app re-takes it unasked.
- *  Six hours — Driftstack's own re-check cadence, deliberately NOT the
- *  thirty-minute display TTL: between the two the reading shows AGED (muted,
- *  with its age), which costs the customer nothing. */
-export const CAPABILITY_REFRESH_AFTER_MS = 6 * 60 * 60 * 1000;
-
-/** How long after ANY automatic attempt on a row before the next one. The
- *  outcome is deliberately not consulted: "no machine free", "a session is using
- *  this VPN" and "the server did not answer" are each a reason to come back
- *  later, and none is a reason to come back in fifteen minutes. */
-export const CAPABILITY_RETRY_AFTER_MS = 6 * 60 * 60 * 1000;
+/* `CAPABILITY_REFRESH_AFTER_MS` / `CAPABILITY_RETRY_AFTER_MS` — this cadence now
+ * lives in proxy-reading-windows and is re-exported at the top of this file.
+ *
+ * ⛔ It used to say "deliberately NOT the thirty-minute display TTL: between the
+ * two the reading shows AGED, which costs the customer nothing". That was wrong,
+ * and it is the owner's complaint: with a six-hour cadence and a thirty-minute
+ * window the AGED state was not the gap between refreshes, it was 92% of the life
+ * of every healthy reading, so "green" was the rare state rather than the normal
+ * one. The display window is now DERIVED from this number (`MEASURED_READING_TTL_MS`
+ * = C + one sweep slot + margin), so lowering the cadence here narrows the window
+ * with it and the two can no longer disagree. */
 
 /** …and after the PLAN refusal, which no retry can change until the account does. */
 export const CAPABILITY_PLAN_EXCLUDED_RETRY_MS = 24 * 60 * 60 * 1000;

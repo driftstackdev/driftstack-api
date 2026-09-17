@@ -204,13 +204,21 @@ describe('(n) N19 — a WireGuard verdict reaches the hero and the sort', () => 
     expect(rowOrder()[0]).toContain('proxy-socks');
   });
 
-  it('CRITICAL a WireGuard-only pool reaches the healthy summary instead of the generic "Protected locally…" sentence', async () => {
+  // ⛔ PIN UPDATED 2026-09-17 — the untested-hero sentence changed, and the old
+  // one was FALSE: "Protected locally on this device · synced encrypted when used
+  // for a session" promised the account copy waits for a session, while adding a
+  // SOCKS5 proxy already stores it at add time (the check fires on save, and the
+  // check stores the row). What these two arms pin is UNCHANGED — which of the two
+  // hero sentences a tested / untested pool gets — so only the literal moved.
+  const UNTESTED_HERO = 'Encrypted on this device';
+
+  it('CRITICAL a WireGuard-only pool reaches the healthy summary instead of the generic on-device sentence', async () => {
     stored = [wgRow()];
     cache = { wg1: WG_UP };
     render(<ProxiesView />);
 
     await waitFor(() => expect(heroText()).toMatch(/1\s*healthy/));
-    expect(heroText()).not.toContain('Protected locally on this device');
+    expect(heroText()).not.toContain(UNTESTED_HERO);
     // The pool stats appear for the same reason — the row is TESTED now.
     expect(document.querySelector('[data-component="proxy-pool-stats"]')).not.toBeNull();
   });
@@ -222,7 +230,7 @@ describe('(n) N19 — a WireGuard verdict reaches the hero and the sort', () => 
 
     await screen.findByText('proxy-wireguard');
     await new Promise((r) => setTimeout(r, 20));
-    expect(heroText()).toContain('Protected locally on this device');
+    expect(heroText()).toContain(UNTESTED_HERO);
     expect(heroText()).not.toMatch(/\d+\s*healthy/);
     expect(tableHeaderText()).not.toContain('needs attention');
     expect(document.querySelector('[data-component="proxy-pool-stats"]')).toBeNull();

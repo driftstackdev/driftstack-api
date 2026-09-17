@@ -126,6 +126,12 @@ export type ServerProbeOutcome =
        *  does across a control-plane fallback. Only ever `true`: a reply that ran
        *  the leg omits the field rather than claiming `false`. */
       quicLegSkipped?: true;
+      /** ⛔ (2026-09-17) — the node RAN the QUIC leg and reached no verdict: it
+       *  described the leg (`quic_detail`, not a "skipped: …" one) and sent no
+       *  `quic_ok`. The ONLY thing that may retire a stored relay verdict; every
+       *  other shape of absence carries it. Only ever `true`, like the field
+       *  above: a reply that produced a verdict sends the verdict. */
+      quicLegRan?: true;
       /** (V6 2026-09-16) ITEM 3 — the fleet Mac's MEASURED UDP-relay verdict,
        *  present ONLY when the control plane reported one. ⛔ Absent means NOT
        *  MEASURED: on the VPN path the node's `udp_associate: true` is a literal
@@ -311,6 +317,24 @@ function quicLegSkipped(detail: string | undefined): boolean {
   return detail !== undefined && detail.startsWith(QUIC_LEG_SKIPPED_PREFIX);
 }
 
+/**
+ * ⛔ (2026-09-17) Did the node RUN the QUIC leg and reach no verdict?
+ *
+ * This is the positive evidence the cache now requires before retiring a stored
+ * relay verdict, and it is deliberately narrow: the node SAID something about the
+ * leg — a `quic_detail` that is not its own "skipped: …" — while sending no
+ * `quic_ok`. Anything else (no detail at all, a control-plane fallback, a reply
+ * shaped by a route that simply omits the key for a non-measurement) is absence
+ * of evidence, and absence must not retire a verdict a customer watched go green.
+ *
+ * A boolean verdict short-circuits to false: a reply that MEASURED the leg
+ * replaces the stored verdict outright and retires nothing.
+ */
+function quicLegRanWithoutVerdict(quicProbe: unknown, detail: string | undefined): boolean {
+  if (typeof quicProbe === 'boolean') return false;
+  return detail !== undefined && detail.length > 0 && !quicLegSkipped(detail);
+}
+
 /** (V6 2026-09-16) — the same reading for the UDP leg. One predicate, one prefix:
  *  "the node said it did not run this leg" has to mean the same thing for both, or
  *  one of them ends up rendering a hole as a verdict. */
@@ -376,6 +400,9 @@ export function serverProbeOutcome(
     ...(vantage !== undefined ? { vantage } : {}),
     ...(typeof test.quic_probe === 'boolean' ? { quicProbe: test.quic_probe } : {}),
     ...(quicLegSkipped(test.quic_detail) ? { quicLegSkipped: true as const } : {}),
+    ...(quicLegRanWithoutVerdict(test.quic_probe, test.quic_detail)
+      ? { quicLegRan: true as const }
+      : {}),
     // (V6 2026-09-16) ITEM 3 — the UDP leg. The route has already dropped every
     // non-reading (a VPN row's asserted literal, the node's explicit null, a
     // `udp_detail: "skipped: …"` leg), so a boolean that survives to here is a
@@ -537,6 +564,12 @@ export async function persistServerProbe(
       // leg (nothing measured → the last one stands) or it ran and produced none
       // (→ the last one goes). The cache cannot tell those apart from an absence.
       quicSkipped: outcome.quicLegSkipped,
+      // ⛔ (2026-09-17) …and THIS is the half that was missing, which is why the
+      // cache had to guess from absence and guessed "it ran" — throwing away a
+      // green verdict on every reply that merely lacked the key. Now the two
+      // reasons are both named on the wire's own evidence and the cache retires
+      // only on this one.
+      quicRan: outcome.quicLegRan,
       // (V6) — the UDP leg. No `skipped` twin is needed: the route emits
       // `udp_associate` if and only if it is a reading, so an absent `udpProbe`
       // IS the non-measurement and the cache keeps what it holds.

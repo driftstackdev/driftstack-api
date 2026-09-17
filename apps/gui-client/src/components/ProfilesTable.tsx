@@ -229,11 +229,86 @@ const QUIC_CLAUSE: Record<Exclude<NonNullable<ProfileTableRow['quic']>, 'aged'>,
   unknown: 'QUIC not tested',
 };
 
+/**
+ * The whole sentence in the UDP cell's hover: what UDP does, then what QUIC does.
+ *
+ * ⛔ THE TWO CLAUSES COME FROM DIFFERENT MEASUREMENTS and are kept apart here on
+ * purpose. UDP is this Mac's own SOCKS5 grant (or, on a tunnel, Driftstack's
+ * measured verdict); QUIC is measured THROUGH the proxy. Deriving the second from
+ * the first is what made this cell contradict the card — see `quicClause`.
+ */
+function udpCellTitle(r: ProfileTableRow): string {
+  const quic = quicClause(r);
+  if (r.vpn === true) {
+    // ⛔ (2026-09-17 review) THREE-WAY, not two. `'unknown'` is NOT MEASURED, and
+    // `VPN_UDP_MEASURED_NONE_TITLE` opens "No UDP through this tunnel — measured
+    // from Driftstack's network": a negative VERDICT about a tunnel nobody
+    // probed. The constant's own doc block forbids exactly that ("a customer must
+    // never be told their tunnel lacks UDP because nobody looked"). The render
+    // branches below happen to catch `'unknown'` before this function is reached
+    // today, so no customer saw it — but the sentence chosen here has to be right
+    // on its own, not by the grace of a neighbouring branch's ordering, and the
+    // not-measured branch now calls straight in to pick up the QUIC clause.
+    const udp =
+      r.udp === 'ok'
+        ? VPN_UDP_MEASURED_OK_TITLE
+        : r.udp === 'fail'
+          ? VPN_UDP_MEASURED_NONE_TITLE
+          : VPN_UDP_NOT_MEASURED_TITLE;
+    // ⛔ The shared VPN sentences end with their own inference about QUIC ("WebRTC
+    // and QUIC can use it"). Where a real reading exists it is the last word, so
+    // the sentence ends on the measurement rather than on the guess.
+    return quic === null ? udp : `${udp} ${quic}`;
+  }
+  if (r.udp === 'ok') return `UDP works — WebRTC ✓${quicJoin(quic)}`;
+  // A failed UDP handshake says nothing about QUIC that a measurement cannot
+  // overrule — and when there IS no reading, it still says what it always said.
+  return quic === null
+    ? 'UDP not supported — WebRTC and QUIC fall back to slower connections'
+    : `UDP not supported — WebRTC falls back to a slower, more detectable path. ${quic}`;
+}
+
+/** The QUIC clause appended to the AGED-UDP chip's hover, pre-spaced, or the empty
+ *  string when there is nothing measured to say. Separate from `quicJoin` because
+ *  that hover is already two sentences and a semicolon would read as a third
+ *  clause of the UDP one. */
+function agedUdpQuicSuffix(r: ProfileTableRow): string {
+  const quic = quicClause(r);
+  return quic === null ? '' : ` ${quic}`;
+}
+
+/** An aged clause is its own sentence (it starts "QUIC — Last checked …"); a
+ *  one-word verdict rides the same sentence after a semicolon, exactly as it did
+ *  before this cell learned to print it everywhere. */
+function quicJoin(quic: string | null): string {
+  if (quic === null) return `; ${QUIC_CLAUSE.unknown}`;
+  return quic.startsWith('QUIC — ') ? `. ${quic}` : `; ${quic}`;
+}
+
 /** How an aged reading looks in this table: the recessed ground of a non-verdict
  *  and a dashed edge no current chip has (the grid card's CHIP_AGED_CLASS). ⛔ An
  *  OUTLINE drawn inside the box, not the border the Proxies tab's AGED_CHIP_CLASS
  *  uses: a border is 2px of layout, and this column has none to give (see
  *  AgedOsCellChip). */
+/**
+ * The QUIC clause this cell prints, from the SAME reading the card's chip renders.
+ *
+ * ⛔ (2026-09-17) It exists because the clause was printed in ONE of the cell's
+ * four branches. A row whose native UDP handshake failed read "UDP not supported —
+ * WebRTC and QUIC fall back to slower connections", which is a claim ABOUT QUIC
+ * deduced from a different check — and it was printed over a measured green: the
+ * card said HTTP/3 works through this exit, the list said it falls back, about one
+ * proxy, from one cache. A VPN row printed nothing about QUIC at all.
+ *
+ * `null` when there is genuinely nothing to say, so a caller can keep its own
+ * shorter sentence rather than append "QUIC not tested" to every row.
+ */
+function quicClause(r: ProfileTableRow): string | null {
+  if (r.quic === 'aged') return r.quicAgedHint !== undefined ? `QUIC — ${r.quicAgedHint}` : null;
+  if (r.quic === undefined || r.quic === 'unknown') return null;
+  return QUIC_CLAUSE[r.quic];
+}
+
 const AGED_CELL_CHIP_CLASS =
   'bg-surface-inset text-ink-muted outline-dashed outline-1 -outline-offset-1 outline-ink-muted/60';
 
@@ -672,11 +747,16 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               data-ok="aged"
               data-aged-value={agedUdp.value ? 'true' : 'false'}
               className={`inline-flex cursor-help items-center gap-0.5 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold ${AGED_CELL_CHIP_CLASS}`}
+              // ⛔ (2026-09-17 review) The QUIC clause rides along here too. An
+              // aged UDP reading and a CURRENT QUIC verdict are two different
+              // measurements on one row, and leaving QUIC out of the only hover
+              // this branch renders is how the list came to say less than the card
+              // about the same proxy — the defect A7(a) exists to close.
               title={`${agedReadingHint(agedUdp.atMs, agedNowMs, r.autoRecheck === true, CHECK_VPN_ACTION)} ${
                 agedUdp.value
                   ? 'UDP worked through this VPN then.'
                   : 'UDP did not work through this VPN then.'
-              }`}
+              }${agedUdpQuicSuffix(r)}`}
             >
               <span aria-hidden="true">{agedUdp.value ? '✓' : '⤵'}</span>
               UDP
@@ -695,6 +775,16 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             // "UDP via tunnel" over a tunnel a Mac had just measured as carrying
             // none. The sentence is shared with the grid and the card
             // (`VPN_UDP_NOT_MEASURED_TITLE`), which is the only state it describes.
+            //
+            // ⛔ (2026-09-17 review) AND IT PRINTS THE QUIC CLAUSE. This is the
+            // branch nearly every VPN row actually lands in — today's node ASSERTS
+            // `udp_associate: true` on the tunnel and the control plane drops the
+            // assertion, so a VPN row is `'unknown'` until a Mac measures one
+            // (ProfilesView's own comment says so where `vpnUdp` is read). The
+            // QUIC clause added for item A7(a) therefore reached almost no tunnel:
+            // a customer with a MEASURED green relay verdict on the card still
+            // read nothing about QUIC in the list. `udpCellTitle` now owns the
+            // not-measured sentence too, so both branches speak with one voice.
             <span
               data-udp="tunnel"
               // 2026-09-12 (review) — secondary ink, not muted: muted on the
@@ -702,7 +792,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               // profiles-list finding the gate still reported); secondary is 6.71
               // dark / 5.51 light there.
               className="inline-block cursor-help rounded bg-surface-divider/60 px-1.5 py-0.5 text-[10px] font-bold text-ink-secondary"
-              title={VPN_UDP_NOT_MEASURED_TITLE}
+              title={udpCellTitle(r)}
             >
               UDP via tunnel
             </span>
@@ -720,20 +810,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               // sentences talk about an exit and a UDP-ASSOCIATE grant, neither of
               // which exists on a tunnel. Both halves are shared with the grid and
               // the card so one measurement cannot be described three ways.
-              title={
-                r.vpn === true
-                  ? r.udp === 'ok'
-                    ? VPN_UDP_MEASURED_OK_TITLE
-                    : VPN_UDP_MEASURED_NONE_TITLE
-                  : r.udp === 'ok'
-                    ? r.quic === 'aged' && r.quicAgedHint !== undefined
-                      ? // An aged QUIC reading: its own sentence, age first. "QUIC
-                        // likely (not yet measured)" told a customer to test a
-                        // proxy they had tested that morning.
-                        `UDP works — WebRTC ✓. QUIC — ${r.quicAgedHint}`
-                      : `UDP works — WebRTC ✓; ${QUIC_CLAUSE[r.quic === undefined || r.quic === 'aged' ? 'unknown' : r.quic]}`
-                    : 'UDP not supported — WebRTC and QUIC fall back to slower connections'
-              }
+              title={udpCellTitle(r)}
             >
               {r.udp === 'ok' ? '✓' : '⤵'}
             </span>

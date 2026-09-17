@@ -225,14 +225,19 @@ describe('the list sync adopts the server’s QUIC and UDP readings — newer wi
     expect(view.udpProbe.p1).toBe(false);
     expect((await loadProbeCache()).p1?.quicProbeAt).toBe(NOW - 10 * MIN);
 
+    // ⛔ PIN UPDATED 2026-09-17 — nine hours, not four. The relay and UDP display
+    // windows are now derived from the six-hourly cadence that re-takes them
+    // (`MEASURED_READING_TTL_MS`, 8 h), so FOUR hours is a present-tense claim
+    // today and pinning it as aged would have pinned the defect. The arm is
+    // unchanged: a reading past its window is aged, dated by the SERVER.
     stores.clear();
     await saveProbeResult('p1', OK, NOW - MIN);
-    await adoptListCapabilityReadings([full(4 * HOUR)], [SOCKS], NOW);
+    await adoptListCapabilityReadings([full(9 * HOUR)], [SOCKS], NOW);
     view = deriveProbeViewState(await loadProbeCache(), NOW);
-    expect(view.quicProbe, 'four hours old is not a present-tense claim').toEqual({});
-    expect(view.aged.quicProbe.p1).toEqual({ value: true, atMs: NOW - 4 * HOUR });
-    expect(view.aged.udpProbe.p1).toEqual({ value: false, atMs: NOW - 4 * HOUR });
-    expect(view.aged.quicMeasured.p1).toEqual({ value: 'h3', atMs: NOW - 4 * HOUR });
+    expect(view.quicProbe, 'nine hours old is not a present-tense claim').toEqual({});
+    expect(view.aged.quicProbe.p1).toEqual({ value: true, atMs: NOW - 9 * HOUR });
+    expect(view.aged.udpProbe.p1).toEqual({ value: false, atMs: NOW - 9 * HOUR });
+    expect(view.aged.quicMeasured.p1).toEqual({ value: 'h3', atMs: NOW - 9 * HOUR });
   });
 
   it('CRITICAL NEWER WINS: a Test run HERE minutes ago outranks the list’s older copy, a newer server reading replaces an older local one, and re-adopting the same reading writes nothing (a poll must not rewrite the store every tick). MUTATION: in serverCapabilityReadingsToAdopt replace `heldAt < incoming.at` with `true` and the first block reds', async () => {
@@ -320,9 +325,12 @@ describe('the list sync adopts the server’s QUIC and UDP readings — newer wi
 });
 
 describe('a /test reply’s stored readings are adopted only from a reply that measured neither leg', () => {
-  const stored = { value: true, at: NOW - 2 * HOUR };
+  // ⛔ PIN UPDATED 2026-09-17: nine hours, not two. The point of the arm is that
+  // the reading is dated by the SERVER and not by the reply, which needs an age
+  // that is aged under today's window — and two hours no longer is.
+  const stored = { value: true, at: NOW - 9 * HOUR };
 
-  it('CRITICAL a reply that did NOT come from a test Mac ran neither leg, so the stored reading is its only QUIC answer: adopted, dated by the SERVER (two hours old → aged), never by the reply', async () => {
+  it('CRITICAL a reply that did NOT come from a test Mac ran neither leg, so the stored reading is its only QUIC answer: adopted, dated by the SERVER (nine hours old → aged), never by the reply', async () => {
     await saveProbeResult('p1', OK, NOW - MIN);
     await persistServerProbe('p1', {
       kind: 'ok',
@@ -333,10 +341,10 @@ describe('a /test reply’s stored readings are adopted only from a reply that m
     });
     const entry = (await loadProbeCache()).p1;
     expect(entry?.quicProbe).toBe(true);
-    expect(entry?.quicProbeAt, 'NOT the reply time').toBe(NOW - 2 * HOUR);
+    expect(entry?.quicProbeAt, 'NOT the reply time').toBe(NOW - 9 * HOUR);
     const view = deriveProbeViewState(await loadProbeCache(), NOW);
     expect(view.quicProbe).toEqual({});
-    expect(view.aged.quicProbe.p1).toEqual({ value: true, atMs: NOW - 2 * HOUR });
+    expect(view.aged.quicProbe.p1).toEqual({ value: true, atMs: NOW - 9 * HOUR });
   });
 
   it('CRITICAL a reply from a test Mac that RAN the leg and reached no verdict retires the old one — and the stored copy the reply carries must not put it back seconds later. MUTATION: in saveServerProbeResult replace `{ quicProbeRetiredAt: at }` with `{}` and the verdict reappears', async () => {
@@ -351,6 +359,13 @@ describe('a /test reply’s stored readings are adopted only from a reply that m
       at: NOW,
       latencyMs: 25,
       vantage: { measuredFrom: 'fleet', nodeId: 'n1' },
+      // ⛔ PIN UPDATED 2026-09-17 — the ARM IS UNCHANGED, its INPUT is now
+      // explicit. "The leg ran and reached no verdict" used to be inferred from
+      // the ABSENCE of `quicProbe` on a fleet reply, which meant every reply that
+      // merely lacked the key (the server's own schema documents `quic_ok` null as
+      // NOT MEASURED, and the route omits it) threw away a true green verdict. It
+      // is now said, on the node's own `quic_detail`, and only this says it.
+      quicLegRan: true,
       storedQuicProbe: stored,
     });
     expect((await loadProbeCache()).p1).not.toHaveProperty('quicProbe');
@@ -385,7 +400,9 @@ describe('⛔ the LIST SYNC never puts back a reading a newer local check retire
       { latencyMs: 20, measuredFrom: 'fleet', quicProbe: true },
       NOW - 10 * MIN,
     );
-    await saveServerProbeResult('p1', { latencyMs: 21, measuredFrom: 'fleet' }, NOW);
+    // `quicRan` — see the note above: positive evidence the leg ran, which is now
+    // the ONLY thing that retires a verdict.
+    await saveServerProbeResult('p1', { latencyMs: 21, measuredFrom: 'fleet', quicRan: true }, NOW);
     expect((await loadProbeCache()).p1).not.toHaveProperty('quicProbe');
     expect(await adoptListCapabilityReadings([stale(10 * MIN)], [SOCKS], NOW + MIN)).toEqual([]);
     const view = deriveProbeViewState(await loadProbeCache(), NOW + MIN);
@@ -395,7 +412,7 @@ describe('⛔ the LIST SYNC never puts back a reading a newer local check retire
 
   it('…the stamp survives the writers that REBUILD the entry (a native re-test; a reload) — lost there, the retired verdict returns on the first sync after', async () => {
     await saveProbeResult('p1', OK, NOW - HOUR);
-    await saveServerProbeResult('p1', { latencyMs: 21, measuredFrom: 'fleet' }, NOW);
+    await saveServerProbeResult('p1', { latencyMs: 21, measuredFrom: 'fleet', quicRan: true }, NOW);
     await saveProbeResult('p1', OK, NOW + MIN);
     expect((await loadProbeCache()).p1?.quicProbeRetiredAt).toBe(NOW);
     expect(await adoptListCapabilityReadings([stale(10 * MIN)], [SOCKS], NOW + 2 * MIN)).toEqual(
@@ -405,7 +422,11 @@ describe('⛔ the LIST SYNC never puts back a reading a newer local check retire
 
   it('CONTROL — a reading the server took AFTER the retirement is evidence about the proxy now and IS adopted; and a later MEASURED leg drops the stamp', async () => {
     await saveProbeResult('p1', OK, NOW - HOUR);
-    await saveServerProbeResult('p1', { latencyMs: 21, measuredFrom: 'fleet' }, NOW - 20 * MIN);
+    await saveServerProbeResult(
+      'p1',
+      { latencyMs: 21, measuredFrom: 'fleet', quicRan: true },
+      NOW - 20 * MIN,
+    );
     expect(await adoptListCapabilityReadings([stale(5 * MIN)], [SOCKS], NOW)).toEqual(['p1']);
     expect(deriveProbeViewState(await loadProbeCache(), NOW).quicProbe).toEqual({ p1: true });
     await saveServerProbeResult(
@@ -414,6 +435,58 @@ describe('⛔ the LIST SYNC never puts back a reading a newer local check retire
       NOW,
     );
     expect((await loadProbeCache()).p1).not.toHaveProperty('quicProbeRetiredAt');
+  });
+
+  it('⛔ CRITICAL ABSENCE IS NOT EVIDENCE: a fleet reply that simply LACKS the relay key retires nothing and carries the verdict — the owner’s "a proxy was green on quic, and later not green box". MUTATION: in saveServerProbeResult swap the last two arms back (retire unless a reason is named) and this reds', async () => {
+    await saveProbeResult('p1', OK, NOW - HOUR);
+    await saveServerProbeResult(
+      'p1',
+      { latencyMs: 20, measuredFrom: 'fleet', quicProbe: true },
+      NOW - 10 * MIN,
+    );
+    // No `quicProbe`, no `quicRan`, no `quicSkipped`: a fleet reply the client
+    // cannot interpret. The verdict AND its original date stand.
+    await saveServerProbeResult('p1', { latencyMs: 21, measuredFrom: 'fleet' }, NOW);
+    const entry = (await loadProbeCache()).p1;
+    expect(entry?.quicProbe).toBe(true);
+    expect(entry?.quicProbeAt, 'a carry may not make an old verdict look new').toBe(NOW - 10 * MIN);
+    expect(entry).not.toHaveProperty('quicProbeRetiredAt');
+    expect(deriveProbeViewState(await loadProbeCache(), NOW).quicProbe.p1).toBe(true);
+  });
+
+  it('⛔ CONTROL, THE OTHER DIRECTION — a MEASURED false still replaces the green verdict. The fix must not turn "we measured no QUIC" into "we saw nothing"', async () => {
+    await saveProbeResult('p1', OK, NOW - HOUR);
+    await saveServerProbeResult(
+      'p1',
+      { latencyMs: 20, measuredFrom: 'fleet', quicProbe: true },
+      NOW - 10 * MIN,
+    );
+    await saveServerProbeResult(
+      'p1',
+      { latencyMs: 21, measuredFrom: 'fleet', quicProbe: false },
+      NOW,
+    );
+    const entry = (await loadProbeCache()).p1;
+    expect(entry?.quicProbe).toBe(false);
+    expect(entry?.quicProbeAt).toBe(NOW);
+    expect(deriveProbeViewState(await loadProbeCache(), NOW).quicProbe.p1).toBe(false);
+  });
+
+  it('⛔ CONTROL — a "skipped" detail VETOES a `quicRan` the caller somehow also set: the two can never combine to retire a verdict', async () => {
+    await saveProbeResult('p1', OK, NOW - HOUR);
+    await saveServerProbeResult(
+      'p1',
+      { latencyMs: 20, measuredFrom: 'fleet', quicProbe: true },
+      NOW - 10 * MIN,
+    );
+    await saveServerProbeResult(
+      'p1',
+      { latencyMs: 21, measuredFrom: 'fleet', quicRan: true, quicSkipped: true },
+      NOW,
+    );
+    const entry = (await loadProbeCache()).p1;
+    expect(entry?.quicProbe).toBe(true);
+    expect(entry).not.toHaveProperty('quicProbeRetiredAt');
   });
 
   it('CONTROL — a fallback, or a SKIPPED leg, retired nothing and stamps nothing', async () => {

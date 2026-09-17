@@ -117,7 +117,9 @@ vi.mock('../../src/lib/SettingsContext', () => {
       startUrl: 'https://driftstack.io',
     },
     accountMe: {
-      tier: 'solo_manual',
+      get tier(): string {
+        return state.tier;
+      },
       concurrent_session_cap: 1,
       concurrent_session_active: 0,
       profile_cap: 10,
@@ -145,11 +147,14 @@ const { state } = vi.hoisted(() => ({
   // once", which is why a VPN row could never be measured at all). So an
   // unstored row only keeps a not-tested notice when the STORE is refused; this
   // makes the account's create answer the tier 403 a Free account gets.
+  // `tier` — (2026-09-17 review) the account's plan, read by the settings stub
+  // above, so an arm can put the card on a plan with no VPN egress.
   state: {
     boundProxyId: 'vpn1',
     vpnStored: true,
     vpn1Scheme: 'openvpn',
     storeRefused: false,
+    tier: 'solo_manual',
   },
 }));
 
@@ -331,6 +336,7 @@ beforeEach(() => {
   state.vpnStored = true;
   state.vpn1Scheme = 'openvpn';
   state.storeRefused = false;
+  state.tier = 'solo_manual';
 });
 
 // ⛔ (V4 follow-up 2026-09-12) — WHO ASKED FOR THE TUNNEL TO COME UP.
@@ -419,6 +425,46 @@ describe('(V4) an AUTOMATIC probe of a VPN row neither stores it nor asks the te
     await waitFor(() =>
       expect(vi.mocked(AccountProxies.testAccountProxy)).toHaveBeenCalledTimes(1),
     );
+  });
+
+  it('CRITICAL ⛔ ON A PLAN WITHOUT VPN EGRESS THE CARD UPLOADS NOTHING EITHER. The Proxies tab refuses before it stores; this card — the OTHER in-app way to check a tunnel — had no plan gate at all, so it POSTed the customer’s OpenVPN config / WireGuard private key to be refused on arrival. A secret the plan cannot use must not leave this Mac to be told so. MUTATION: drop the `planExcludesVpnEgress` gate in ProfilesView’s VPN check and `createProxy` is called', async () => {
+    state.tier = 'free';
+    state.vpnStored = false;
+    seedCache({});
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.createProxy).mockClear();
+    vi.mocked(AccountProxies.updateProxy).mockClear();
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    // The refusal is the ANSWER, and it is the same sentence the grid leaves —
+    // one proxy in one state must not get two explanations on two screens.
+    await waitFor(() => expect(cardNotice()).toBe(VPN_PLAN_EXCLUDED_CHECK_NOTICE));
+    expect(
+      vi.mocked(AccountProxies.createProxy),
+      'no VPN credential left this Mac',
+    ).not.toHaveBeenCalled();
+    expect(vi.mocked(AccountProxies.updateProxy), 'nor by the re-push path').not.toHaveBeenCalled();
+    expect(vi.mocked(AccountProxies.testAccountProxy)).not.toHaveBeenCalled();
+  });
+
+  it('VACUITY CONTROL — the SAME arm on a PAID plan stores and tests, so the gate above is about the plan and not about the card being broken', async () => {
+    state.tier = 'solo_manual';
+    state.vpnStored = false;
+    seedCache({});
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.createProxy).mockClear();
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: true,
+      latency_ms: 42,
+      measured_from: 'fleet',
+      node_id: 'mac-mini-07',
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    await waitFor(() => expect(vi.mocked(AccountProxies.createProxy)).toHaveBeenCalledTimes(1));
+    expect(cardNotice()).not.toBe(VPN_PLAN_EXCLUDED_CHECK_NOTICE);
   });
 
   it('VACUITY CONTROL — a SOCKS5 proxy is unchanged: the automatic probe still runs its native handshake', async () => {

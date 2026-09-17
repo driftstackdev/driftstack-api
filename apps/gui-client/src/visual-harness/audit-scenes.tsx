@@ -104,6 +104,7 @@ import { SettingsView } from '../views/SettingsView';
 import { FirstRunWizard } from '../views/FirstRunWizard';
 import { RecipesView } from '../views/RecipesView';
 import { AgentChatView } from '../views/AgentChatView';
+import { AgentChatProvider } from '../lib/AgentChatProvider';
 import { TeamView } from '../views/TeamView';
 import { ProxiesView } from '../views/ProxiesView';
 import {
@@ -1186,7 +1187,12 @@ export function AuditScene({ name }: { name: AuditSceneName }): JSX.Element {
     case 'audit-agent-chat':
       return (
         <StubbedAuditWindow scene={name} current="ai">
-          <AgentChatView onGoToSettings={noop} />
+          {/* The chat is owned above the view switch in the real app (B5), so
+              the scene has to stand that provider up too — the view reads it
+              from context and mounting it bare throws. */}
+          <AgentChatProvider>
+            <AgentChatView onGoToSettings={noop} />
+          </AgentChatProvider>
         </StubbedAuditWindow>
       );
     case 'audit-team':

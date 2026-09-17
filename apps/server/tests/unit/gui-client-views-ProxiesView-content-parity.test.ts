@@ -116,11 +116,34 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     }
   });
 
-  it('pins honest protected-local and encrypted account-sync empty-state copy plus the Add CTA', () => {
+  it('pins honest on-device and encrypted account-sync empty-state copy plus the Add CTA', () => {
+    // ⛔ PIN UPDATED 2026-09-17. The sentence this guarded said the credentials
+    // are synced "when used for a session", and that had stopped being true:
+    // adding a SOCKS5 proxy fires its check straight away (`testAfterSave`), and
+    // the check stores the row on the account — credentials included — because
+    // only a stored row can be tested from Driftstack's network. The upload is at
+    // ADD time. A drift guard over a false sentence pins the falsehood, so the
+    // sentence moved and the guard moved with it.
     expect(body).toMatch(
-      /Add a SOCKS5 proxy or VPN to route session traffic through your own IP address\. Proxy\s*credentials are protected on this device and synced in encrypted form to your account when used\s*for a session\./,
+      /Add a SOCKS5 proxy or VPN to route session traffic through your own IP address\. Credentials\s*are encrypted on this device, and saved encrypted to your account when the proxy is tested\s*or used for a session — testing runs automatically when you add one\./,
     );
+    // ⛔ …and neither the hero nor the empty state may promise the OLD boundary
+    // again: no surface may say the account copy waits for a session.
+    expect(body).not.toMatch(/synced encrypted when a session starts/);
+    expect(body).not.toMatch(/synced in encrypted form to your account when used/);
+    expect(body).toMatch(/encrypted on this device · saved encrypted to your account when tested/);
     expect(body).toMatch(/>\s*Add a proxy\s*<\/button>/);
+    // ⛔ PIN ADDED 2026-09-17 (review) — THE ADD/EDIT MODAL TOO. The hero and the
+    // empty state were rewritten and the modal's own button hover was not, so one
+    // surface still told the customer the real verification waits for a session:
+    // "Check the VPN server address can be found from this Mac — the full VPN is
+    // verified when a session starts". Saving a VPN row now fires its own check
+    // (`testAfterSave`), which saves the row and tests the whole tunnel, so that
+    // sentence sends the customer to start a session for a result already on its
+    // way. Pinned as a NEGATIVE beside the others: no surface, hero, empty state or
+    // modal, may promise the old boundary.
+    expect(body).not.toMatch(/the full VPN is verified when a session starts/);
+    expect(body).toMatch(/saving starts the full check automatically/);
   });
 
   it("ProxyForm submit: synchronous ref single-flight + awaited onSave + inert/busy form lock; port input type='number' min=1 max=65535; username/password empty → null", () => {

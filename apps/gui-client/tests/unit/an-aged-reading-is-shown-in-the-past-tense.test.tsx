@@ -1,12 +1,21 @@
 // 2026-09-17 — the THIRD display state: AGED.
 //
 // A capability reading (the OS its stack presents as, the live QUIC verdict, the
-// Test's QUIC and UDP readings) leaves its present-tense map after thirty minutes.
-// That rule is right and is NOT touched here: a chip that says `✓ QUIC` must be
-// true now, and the launch path acts on fresh identity. But leaving the map is
-// also what "never measured" looks like, so a proxy the customer tested 31 minutes
-// ago rendered exactly like one nobody had ever tested — and told them to press
-// Test on a row they had just tested. The value was on disk the whole time.
+// Test's QUIC and UDP readings) leaves its present-tense map once its DISPLAY
+// WINDOW closes. That rule is right and is NOT touched here: a chip that says
+// `✓ QUIC` must be true now, and the launch path acts on fresh identity. But
+// leaving the map is also what "never measured" looks like, so a proxy the
+// customer tested just outside the window rendered exactly like one nobody had
+// ever tested — and told them to press Test on a row they had just tested. The
+// value was on disk the whole time.
+//
+// ⛔ PIN UPDATED 2026-09-17. The window was thirty minutes for all four readings;
+// it is now thirty minutes for the LIVE session verdict (fed by a 300 s re-emit)
+// and `MEASURED_READING_TTL_MS` — eight hours, derived from the six-hour
+// capability cadence — for the three fed by the automatic check. The ages below
+// moved past the new boundary; the SHAPE of every arm is unchanged, and the
+// invariant that produced the new number has its own suite
+// (a-display-window-outlasts-the-refresh-that-feeds-it.test.ts).
 //
 // `ProbeViewState.aged` is a PARALLEL structure: a reading is in its fresh map or
 // in `aged`, never both; every fresh map holds exactly what it held before; and a
@@ -63,6 +72,7 @@ import {
   isQuicVerdictFresh,
   isUdpVerdictFresh,
   loadProbeCache,
+  MEASURED_READING_TTL_MS,
   QUIC_VERDICT_TTL_MS,
   saveEndpointResult,
   saveObservedQuic,
@@ -77,6 +87,10 @@ const NOW = 1_800_000_000_000;
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
+/** Past EVERY display window (the longest is `MEASURED_READING_TTL_MS`, 8 h) and
+ *  well inside `AGED_READING_MAX_MS`, so a reading taken this long ago is aged on
+ *  every one of the four maps. It was 4 h, which is now INSIDE three of them. */
+const AGED_AT = 9 * HOUR;
 
 const OK: ProxyTestResult = {
   reachable: true,
@@ -128,18 +142,18 @@ describe('deriveProbeViewState — the aged maps', () => {
     });
     expect(view.quicProbe.p).toBe(true);
 
-    // Four hours: every reading has left the present tense and is aged, dated.
-    view = deriveProbeViewState({ p: entry(4 * HOUR) }, NOW);
+    // Nine hours: every reading has left the present tense and is aged, dated.
+    view = deriveProbeViewState({ p: entry(AGED_AT) }, NOW);
     expect(view.osFingerprints).toEqual({});
     expect(view.quicMeasured).toEqual({});
     expect(view.quicProbe).toEqual({});
     expect(view.udpProbe).toEqual({});
-    expect(view.aged.osFingerprints.p?.atMs).toBe(NOW - 4 * HOUR);
+    expect(view.aged.osFingerprints.p?.atMs).toBe(NOW - AGED_AT);
     expect(view.aged.osFingerprints.p?.value.os).toBe('macos-or-ios');
-    expect(view.aged.quicMeasured.p).toEqual({ value: 'h3', atMs: NOW - 4 * HOUR });
-    expect(view.aged.quicProbe.p).toEqual({ value: true, atMs: NOW - 4 * HOUR });
+    expect(view.aged.quicMeasured.p).toEqual({ value: 'h3', atMs: NOW - AGED_AT });
+    expect(view.aged.quicProbe.p).toEqual({ value: true, atMs: NOW - AGED_AT });
     // A measured NEGATIVE ages as a negative — `false` is a reading, not an absence.
-    expect(view.aged.udpProbe.p).toEqual({ value: false, atMs: NOW - 4 * HOUR });
+    expect(view.aged.udpProbe.p).toEqual({ value: false, atMs: NOW - AGED_AT });
 
     // Past the cap: not current, not aged — not measured.
     expect(AGED_READING_MAX_MS).toBe(30 * DAY);
@@ -153,7 +167,7 @@ describe('deriveProbeViewState — the aged maps', () => {
   });
 
   it('CRITICAL an UNDATABLE reading is neither fresh nor aged — an age sentence needs a date. It reads as not measured, and the automatic check re-takes it', () => {
-    const { quicProbeAt: _q, udpProbeAt: _u, quicMeasuredAt: _m, ...undated } = entry(4 * HOUR);
+    const { quicProbeAt: _q, udpProbeAt: _u, quicMeasuredAt: _m, ...undated } = entry(AGED_AT);
     const view = deriveProbeViewState({ p: undated }, NOW);
     expect(view.quicProbe).toEqual({});
     expect(view.aged.quicProbe).toEqual({});
@@ -162,7 +176,7 @@ describe('deriveProbeViewState — the aged maps', () => {
   });
 
   it('CRITICAL the aged arm obeys the SAME gate as its fresh sibling: nothing aged beside a red "unreachable" pill — except the OS reading of a server-seeded row, which has no pill to sit beside. MUTATION: drop `isProxyUsable(c.result)` from an aged arm’s enclosing `if` and the first block reds', () => {
-    let view = deriveProbeViewState({ p: entry(4 * HOUR, { result: DOWN }) }, NOW);
+    let view = deriveProbeViewState({ p: entry(AGED_AT, { result: DOWN }) }, NOW);
     expect(view.aged).toEqual({
       osFingerprints: {},
       quicMeasured: {},
@@ -170,8 +184,8 @@ describe('deriveProbeViewState — the aged maps', () => {
       udpProbe: {},
     });
 
-    view = deriveProbeViewState({ p: entry(4 * HOUR, { result: DOWN, serverSeeded: true }) }, NOW);
-    expect(view.aged.osFingerprints.p?.atMs).toBe(NOW - 4 * HOUR);
+    view = deriveProbeViewState({ p: entry(AGED_AT, { result: DOWN, serverSeeded: true }) }, NOW);
+    expect(view.aged.osFingerprints.p?.atMs).toBe(NOW - AGED_AT);
     expect(view.aged.quicProbe).toEqual({});
     expect(view.aged.udpProbe).toEqual({});
   });
@@ -194,7 +208,7 @@ describe('deriveProbeViewState — the aged maps', () => {
     await saveServerProbeResult(
       'v',
       { latencyMs: 60, measuredFrom: 'fleet', quicProbe: true, udpProbe: true },
-      NOW - 3 * HOUR,
+      NOW - AGED_AT,
     );
     const cache = await loadProbeCache();
     // The BASE derivation shows nothing for a tunnel's placeholder — by design.
@@ -202,29 +216,51 @@ describe('deriveProbeViewState — the aged maps', () => {
     const view = deriveProbeViewWithEndpointRows(cache, NOW);
     expect(view.quicProbe).toEqual({});
     expect(view.udpProbe).toEqual({});
-    expect(view.aged.quicProbe.v).toEqual({ value: true, atMs: NOW - 3 * HOUR });
-    expect(view.aged.udpProbe.v).toEqual({ value: true, atMs: NOW - 3 * HOUR });
+    expect(view.aged.quicProbe.v).toEqual({ value: true, atMs: NOW - AGED_AT });
+    expect(view.aged.udpProbe.v).toEqual({ value: true, atMs: NOW - AGED_AT });
   });
 });
 
 describe('CONTROL — the fresh predicates and the fresh maps are exactly what they were', () => {
-  it('CRITICAL every present-tense predicate returns what it returned before the aged state existed: thirty minutes, absent stamp NOT fresh, a future stamp fresh. The launch path reads these and nothing in `aged`', () => {
-    const TTL = 30 * MIN;
-    expect(QUIC_VERDICT_TTL_MS).toBe(TTL);
-    expect(OS_FINGERPRINT_TTL_MS).toBe(TTL);
-    for (const fresh of [isQuicVerdictFresh, isUdpVerdictFresh, isExitIdentityFresh]) {
-      expect(fresh(NOW - TTL + 1, NOW)).toBe(true);
-      expect(fresh(NOW - TTL, NOW)).toBe(false);
+  it('CRITICAL every present-tense predicate keeps its SHAPE — a boundary that is exclusive at the edge, an absent stamp NOT fresh, a future stamp fresh — and each one now answers to the window of the thing that FEEDS it: thirty minutes for the live session verdict and the acted-on exit identity, eight hours for the three the six-hourly capability check re-takes. The launch path reads these and nothing in `aged`', () => {
+    // ⛔ PIN UPDATED 2026-09-17, and split in two rather than moved wholesale.
+    // The live verdict's thirty minutes is derived from the fleet's 300 s ±20%
+    // re-emit and is CORRECT; the exit identity's is derived from the fact that a
+    // launch ACTS on it. The other three inherited that number by imitation while
+    // being fed six-hourly, which is the defect — see proxy-reading-windows.
+    const LIVE_TTL = 30 * MIN;
+    const MEASURED_TTL = MEASURED_READING_TTL_MS;
+    expect(QUIC_VERDICT_TTL_MS).toBe(LIVE_TTL);
+    expect(OS_FINGERPRINT_TTL_MS).toBe(MEASURED_TTL);
+    expect(MEASURED_TTL).toBe(8 * HOUR);
+    for (const [fresh, ttl] of [
+      [isQuicVerdictFresh, LIVE_TTL],
+      [isExitIdentityFresh, LIVE_TTL],
+      [isUdpVerdictFresh, MEASURED_TTL],
+      [isQuicProbeFresh, MEASURED_TTL],
+    ] as const) {
+      expect(fresh(NOW - ttl + 1, NOW)).toBe(true);
+      expect(fresh(NOW - ttl, NOW)).toBe(false);
       expect(fresh(undefined, NOW)).toBe(false);
       expect(fresh(NOW + HOUR, NOW)).toBe(true);
     }
-    expect(isOsFingerprintFresh({ ...FP, at: NOW - TTL + 1 }, NOW)).toBe(true);
-    expect(isOsFingerprintFresh({ ...FP, at: NOW - TTL }, NOW)).toBe(false);
+    expect(isOsFingerprintFresh({ ...FP, at: NOW - MEASURED_TTL + 1 }, NOW)).toBe(true);
+    expect(isOsFingerprintFresh({ ...FP, at: NOW - MEASURED_TTL }, NOW)).toBe(false);
     expect(isOsFingerprintFresh(undefined, NOW)).toBe(false);
   });
 
   it('CRITICAL for the three readings that were ALREADY aged (OS, live QUIC, UDP) the fresh maps hold exactly the entries the pre-existing predicates admit — at every age, the aged state adds to the view and removes nothing. (The relay verdict is the one deliberate change, pinned below.)', () => {
-    for (const ageMs of [0, 10 * MIN, 30 * MIN - 1, 30 * MIN, 4 * HOUR, 40 * DAY]) {
+    for (const ageMs of [
+      0,
+      10 * MIN,
+      30 * MIN - 1,
+      30 * MIN,
+      4 * HOUR,
+      MEASURED_READING_TTL_MS - 1,
+      MEASURED_READING_TTL_MS,
+      AGED_AT,
+      40 * DAY,
+    ]) {
       const e = entry(ageMs);
       const view = deriveProbeViewState({ p: e }, NOW);
       expect('p' in view.osFingerprints, `os @${ageMs.toString()}`).toBe(
@@ -258,11 +294,11 @@ describe('CONTROL — FROZEN: the fresh maps of a fixed cache, as the commit bef
   const endpoint = { resolved: true, ip: '198.51.100.7', message: 'ok' };
   const cache: ProbeCacheMap = {
     fresh: entry(10 * MIN),
-    old: entry(4 * HOUR),
+    old: entry(AGED_AT),
     down: entry(10 * MIN, { result: DOWN }),
     seeded: entry(10 * MIN, { result: DOWN, serverSeeded: true }),
     vpn: entry(10 * MIN, { result: DOWN, endpoint }),
-    vpnOld: entry(4 * HOUR, { result: DOWN, endpoint }),
+    vpnOld: entry(AGED_AT, { result: DOWN, endpoint }),
   };
   const AT = NOW - MIN;
 
@@ -329,13 +365,18 @@ describe('the Test’s QUIC verdict is dated now — it was the one reading noth
     expect(e?.quicProbeAt).toBe(NOW);
   });
 
-  it('CRITICAL so a relay verdict from five hours ago is no longer a green tick "for the life of the install": it leaves the present tense at thirty minutes like its three neighbours, and shows aged instead of vanishing. MUTATION: in deriveProbeViewState replace `isQuicProbeFresh(c.quicProbeAt, nowMs)` with `true` and this reds', () => {
-    expect(isQuicProbeFresh(NOW - 30 * MIN + 1, NOW)).toBe(true);
-    expect(isQuicProbeFresh(NOW - 30 * MIN, NOW)).toBe(false);
+  it('CRITICAL so a relay verdict is no longer a green tick "for the life of the install": it leaves the present tense at its DISPLAY WINDOW like its neighbours, and shows aged instead of vanishing. MUTATION: in deriveProbeViewState replace `isQuicProbeFresh(c.quicProbeAt, nowMs)` with `true` and this reds', () => {
+    // ⛔ PIN UPDATED 2026-09-17: the window, not the arm. Five hours is now INSIDE
+    // it, deliberately — nothing re-takes this verdict more often than every six
+    // hours, so a five-hour-old green chip was being muted before anything could
+    // have replaced it. Both edges are still pinned, one step apart.
+    expect(isQuicProbeFresh(NOW - MEASURED_READING_TTL_MS + 1, NOW)).toBe(true);
+    expect(isQuicProbeFresh(NOW - MEASURED_READING_TTL_MS, NOW)).toBe(false);
     expect(isQuicProbeFresh(undefined, NOW)).toBe(false);
-    const view = deriveProbeViewState({ p: entry(5 * HOUR) }, NOW);
+    expect(deriveProbeViewState({ p: entry(5 * HOUR) }, NOW).quicProbe.p).toBe(true);
+    const view = deriveProbeViewState({ p: entry(AGED_AT) }, NOW);
     expect(view.quicProbe).toEqual({});
-    expect(view.aged.quicProbe.p).toEqual({ value: true, atMs: NOW - 5 * HOUR });
+    expect(view.aged.quicProbe.p).toEqual({ value: true, atMs: NOW - AGED_AT });
   });
 
   it('a live verdict that retires the relay verdict it contradicts retires its DATE with it — a stamp left behind would date the next carried verdict wrongly', async () => {
@@ -372,7 +413,7 @@ describe('the Test’s QUIC verdict is dated now — it was the one reading noth
 });
 
 describe('the chips — an aged reading can never be mistaken for a current one', () => {
-  const aged = agedReadingsFor(deriveProbeViewState({ p: entry(4 * HOUR) }, NOW).aged, 'p');
+  const aged = agedReadingsFor(deriveProbeViewState({ p: entry(AGED_AT) }, NOW).aged, 'p');
 
   it('CRITICAL the QUIC chip shows the last reading in the PAST tense, muted, with its age — `data-ok="aged"`, never "true"/"false", never the green of a current verdict — and the hover says when, and that it will be rechecked. MUTATION: render the aged chip with `data-ok={c.aged.value ? "true" : "false"}` and this reds', () => {
     const { container } = render(
@@ -381,12 +422,12 @@ describe('the chips — an aged reading can never be mistaken for a current one'
     const chip = container.querySelector('[data-capability="quic"]');
     expect(chip?.getAttribute('data-ok')).toBe('aged');
     expect(chip?.getAttribute('data-aged-value')).toBe('true');
-    expect(chip?.textContent).toBe('✓QUIC · 4 h ago');
+    expect(chip?.textContent).toBe('✓QUIC · 9 h ago');
     expect(chip?.className).not.toContain('status-ready');
     expect(chip?.className).not.toContain('status-error');
     expect(chip?.className).toContain('border-dashed');
     expect(chip?.getAttribute('title')).toBe(
-      'Last checked 4 hours ago. It will be rechecked automatically. HTTP/3 worked through this exit then.',
+      'Last checked 9 hours ago. It will be rechecked automatically. HTTP/3 worked through this exit then.',
     );
     // The chips that come from this Mac's own handshake have no aged state.
     expect(container.querySelector('[data-capability="webrtc"]')?.getAttribute('data-ok')).toBe(
@@ -415,16 +456,50 @@ describe('the chips — an aged reading can never be mistaken for a current one'
     expect(current?.ok).toBe(false);
     const live = proxyCapabilities(OK, 'h3', undefined, aged).find((c) => c.key === 'quic');
     expect(live?.aged).toBeUndefined();
-    // ⛔ …and "No UDP — HTTP/3 cannot work here" IS a current verdict: it is deduced
-    // from the native handshake the sweep keeps current, not guessed. An aged "✓
-    // QUIC · 2 h ago" in its place would swap a present-tense negative for an old
-    // tick. MUTATION: drop `&& udp` from the aged arm in proxyCapabilities and this
-    // block reds.
-    const noUdp = proxyCapabilities(
+    // ⛔ PIN UPDATED 2026-09-17 — SPLIT BY THE SIGN OF THE AGED READING, which is
+    // what this arm was missing. It read: "'No UDP — HTTP/3 cannot work here' IS a
+    // current verdict, deduced from the native handshake the sweep keeps current,
+    // not guessed; an aged '✓ QUIC · 2 h ago' in its place would swap a
+    // present-tense negative for an old tick."
+    //
+    // True of an aged NEGATIVE, which agrees with it and adds nothing — pinned
+    // below, unchanged. FALSE of an aged POSITIVE: Driftstack MEASURED HTTP/3
+    // working through this exit, and suppressing that in favour of a deduction
+    // from a different check is how one proxy came to say "✓ QUIC" on the card
+    // and "HTTP/3 cannot work here" on the grid. The measured reading is shown,
+    // aged like every other, and the hint says the two checks disagree.
+    const agedPositiveNoUdp = proxyCapabilities(
       { ...OK, udp_associate: false },
       undefined,
       undefined,
       aged,
+      // The reference moment, injected: the default is the real clock, and these
+      // fixtures are dated from a fixed NOW, so the age sentence would read
+      // "just now" about a reading taken nine hours before it.
+      { nowMs: NOW, autoRecheck: false },
+    ).find((c) => c.key === 'quic');
+    expect(agedPositiveNoUdp?.aged).toEqual({ value: true, atMs: NOW - AGED_AT });
+    expect(agedPositiveNoUdp?.hint).toContain('the two checks disagree');
+    expect(agedPositiveNoUdp?.hint).toContain('Last checked 9 hours ago.');
+    expect(agedPositiveNoUdp?.hint).not.toBe(
+      'No UDP — HTTP/3 cannot work here; it falls back to HTTP/2.',
+    );
+
+    // …and the NEGATIVE half, which is the part of the old rule that stands.
+    // MUTATION: drop `agedQuic.value` from `agedStandsIn` in proxyCapabilities and
+    // this block reds — a four-hour-old "no HTTP/3" replaces a current one.
+    const agedNegative = agedReadingsFor(
+      deriveProbeViewState(
+        { p: entry(AGED_AT, { quicProbe: false, quicMeasured: 'h2-only' }) },
+        NOW,
+      ).aged,
+      'p',
+    );
+    const noUdp = proxyCapabilities(
+      { ...OK, udp_associate: false },
+      undefined,
+      undefined,
+      agedNegative,
     ).find((c) => c.key === 'quic');
     expect(noUdp?.aged).toBeUndefined();
     expect(noUdp?.ok).toBe(false);
@@ -448,17 +523,17 @@ describe('the chips — an aged reading can never be mistaken for a current one'
     expect(agedQuicReading(undefined)).toBeUndefined();
   });
 
-  it('CRITICAL the OS chip shows the last reading muted with its age and in the NEUTRAL tone — a reading that was a green match four hours ago supports no claim about the exit now. MUTATION: in agedOsFingerprintVerdict drop `tone: "unknown"` and this reds', () => {
+  it('CRITICAL the OS chip shows the last reading muted with its age and in the NEUTRAL tone — a reading that was a green match nine hours ago supports no claim about the exit now. MUTATION: in agedOsFingerprintVerdict drop `tone: "unknown"` and this reds', () => {
     const { container } = render(
       <ProxyOsChip fingerprint={undefined} aged={aged?.osFingerprint} nowMs={NOW} autoRecheck />,
     );
     const chip = container.querySelector('[data-component="proxy-os-fingerprint"]');
     expect(chip?.getAttribute('data-os-tone')).toBe('unknown');
     expect(chip?.getAttribute('data-ok')).toBe('aged');
-    expect(chip?.textContent).toBe('✓iOS/macOS · 4 h ago');
+    expect(chip?.textContent).toBe('✓iOS/macOS · 9 h ago');
     expect(chip?.className).not.toContain('status-ready');
     expect(chip?.getAttribute('title')).toMatch(
-      /^Last checked 4 hours ago\. It will be rechecked automatically\. What it found then: /,
+      /^Last checked 9 hours ago\. It will be rechecked automatically\. What it found then: /,
     );
   });
 
@@ -482,7 +557,7 @@ describe('the chips — an aged reading can never be mistaken for a current one'
       manual.container
         .querySelector('[data-component="proxy-os-fingerprint"]')
         ?.getAttribute('title'),
-    ).toContain('Last checked 4 hours ago. Run Test to check it again.');
+    ).toContain('Last checked 9 hours ago. Run Test to check it again.');
   });
 
   // ⛔ PINNED AGAINST LITERALS RECORDED FROM THE COMMIT BEFORE THE AGED STATE EXISTED

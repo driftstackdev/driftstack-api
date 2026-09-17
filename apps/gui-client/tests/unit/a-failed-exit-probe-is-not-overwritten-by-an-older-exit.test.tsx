@@ -238,7 +238,23 @@ beforeEach(() => {
 
 describe('#14 — the cache records a failed exit probe', () => {
   it('clearExitResult drops every exit field, stamps exitProbeFailedAt, keeps the rest, and survives a reload', async () => {
-    seedCache({ socks1: { ...healthyWithExit(NOW - 1000), serverLatencyMs: 30, quicProbe: true } });
+    // ⛔ PIN UPDATED 2026-09-17 (review) — the relay verdict is seeded WITH its
+    // date. It was seeded undated, which made this arm depend on what the V3 load
+    // migration invents for such an entry — and that stamp is now clamped against
+    // the REAL clock (`loadTime - W`), while `NOW` here is a synthetic instant, so
+    // the expectation could no longer name a value. Giving the fixture its own
+    // stamp puts this arm back on its own subject: `clearExitResult` drops the exit
+    // fields and keeps everything else. The migration's behaviour is pinned in
+    // an-undated-relay-verdict-from-before-the-upgrade-is-dated.test.ts, which is
+    // where it belongs.
+    seedCache({
+      socks1: {
+        ...healthyWithExit(NOW - 1000),
+        serverLatencyMs: 30,
+        quicProbe: true,
+        quicProbeAt: NOW - 60_000,
+      },
+    });
     await cache.clearExitResult('socks1', NOW);
     const c = (await cache.loadProbeCache()).socks1;
     expect(c).toEqual({
@@ -246,6 +262,9 @@ describe('#14 — the cache records a failed exit probe', () => {
       at: NOW - 60_000,
       serverLatencyMs: 30,
       quicProbe: true,
+      // The verdict's own stamp, seeded above and carried across unchanged — a
+      // failed exit probe re-measured nothing about the relay.
+      quicProbeAt: NOW - 60_000,
       exitProbeFailedAt: NOW,
     });
   });

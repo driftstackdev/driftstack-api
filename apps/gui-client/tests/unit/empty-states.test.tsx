@@ -250,12 +250,20 @@ describe('V-277 ProxiesView empty state', () => {
     const heading = await screen.findByRole('heading', { name: /no proxies configured/i });
     expect(heading).toBeInTheDocument();
 
-    // Body explains SOCKS5 + protected local/encrypted account sync. SOCKS5
-    // appears in header + empty-state body.
+    // Body explains SOCKS5 + on-device encryption and the encrypted account copy.
+    // SOCKS5 appears in header + empty-state body.
+    //
+    // ⛔ PIN UPDATED 2026-09-17 — it said the account copy is made "when used for
+    // a session", and that boundary had already moved: adding a SOCKS5 proxy fires
+    // its check immediately, and the check stores the row (credentials included)
+    // because only a stored row can be tested from Driftstack's network. The
+    // string is now what happens, and the arm reads WHEN as well as WHERE, which
+    // is the half that was wrong.
     expect(screen.getAllByText(/SOCKS5/i).length).toBeGreaterThan(0);
     expect(
-      screen.getByText(/protected on this device and synced in encrypted form to your account/i),
+      screen.getByText(/encrypted on this device, and saved encrypted to your account/i),
     ).toBeInTheDocument();
+    expect(screen.getByText(/testing runs automatically when you add one/i)).toBeInTheDocument();
 
     // 5→10 consistency pass: migrated to the shared EmptyState with an
     // actionable CTA in place of the old "Click New proxy above" footnote.

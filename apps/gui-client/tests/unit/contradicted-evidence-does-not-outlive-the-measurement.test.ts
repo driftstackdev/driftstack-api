@@ -61,6 +61,7 @@ vi.mock('@tauri-apps/plugin-store', () => ({
 }));
 
 import {
+  MEASURED_READING_TTL_MS,
   QUIC_VERDICT_TTL_MS,
   deriveProbeViewState,
   loadProbeCache,
@@ -89,7 +90,14 @@ const T0 = 1_000_000;
  * live verdict still fresh — and every arm below then passes or fails for a
  * reason that has nothing to do with what it is testing. */
 const LAST_WRITE = T0 + 10_000;
-const AFTER_EXPIRY = LAST_WRITE + QUIC_VERDICT_TTL_MS + 1;
+/** ⛔ PIN UPDATED 2026-09-17 — past the LONGER of the two windows. The live
+ *  verdict still expires at `QUIC_VERDICT_TTL_MS` (30 min, derived from the 300 s
+ *  re-emit that feeds it); the relay verdict beside it now expires at
+ *  `MEASURED_READING_TTL_MS` (8 h, derived from the six-hourly check that feeds
+ *  it). A constant anchored to the shorter one leaves the relay verdict fresh and
+ *  the arms below pass or fail for a reason that has nothing to do with what they
+ *  test — the same trap the note above records for T0. */
+const AFTER_EXPIRY = LAST_WRITE + Math.max(QUIC_VERDICT_TTL_MS, MEASURED_READING_TTL_MS) + 1;
 
 /** What the chip ACTUALLY renders for a row, through the real derivation and the
  *  real capability builder — not a hand-read of the cache. The defect is a

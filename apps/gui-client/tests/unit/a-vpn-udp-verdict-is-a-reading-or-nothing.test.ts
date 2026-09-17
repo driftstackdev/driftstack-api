@@ -97,11 +97,18 @@ const json = (body: unknown): Response =>
   });
 
 const ID = 'p-ovpn';
-/** `QUIC_VERDICT_TTL_MS` — the one number the QUIC verdict, the exit identity, the
- *  OS reading and now the UDP verdict all age by. Spelled out rather than imported
- *  so an arm below reds when the shared constant is widened, instead of moving with
- *  it: a TTL that follows whatever the module says is not a pin on anything. */
-const THIRTY_MINUTES = 30 * 60 * 1000;
+/** ⛔ PIN UPDATED 2026-09-17, and it did its job on the way: it was thirty
+ *  minutes, spelled out rather than imported precisely so that widening the shared
+ *  constant would RED these arms instead of silently moving them — and it did.
+ *
+ *  `MEASURED_READING_TTL_MS` — the window for every reading the six-hourly
+ *  automatic capability check re-takes, of which the UDP verdict is one. It is NOT
+ *  `QUIC_VERDICT_TTL_MS` any more: that one bounds a LIVE-SESSION verdict fed by a
+ *  300 s re-emit and is still thirty minutes. The UDP verdict inherited the number
+ *  by imitation while being re-measured twelve times more slowly, so it spent ~92%
+ *  of a healthy tunnel's life muted — the owner's complaint. Still spelled out,
+ *  for the same reason as before. */
+const UDP_VERDICT_TTL = 8 * 60 * 60 * 1000;
 const ENDPOINT = { resolved: true, ip: '203.0.113.17', message: 'Resolved de-7 to 203.0.113.17' };
 
 /** The reply a VPN check gets TODAY, field for field as the route builds it: the
@@ -317,17 +324,17 @@ describe('the cache keeps a measurement and never lets a non-measurement retire 
     // A legacy Mac answers a minute later: the verdict stands, and is still the
     // freshest thing anyone measured.
     expect(await throughTheClient(FLEET_VPN_TODAY, 65_000)).toBe(false);
-    // Half an hour after the MEASUREMENT — not after the last reply — it stops
+    // A window after the MEASUREMENT — not after the last reply — it stops
     // being stated. Absence is what every surface renders as "not measured yet".
     expect(
-      deriveProbeViewWithEndpointRows(await loadProbeCache(), 5_000 + THIRTY_MINUTES).udpProbe[ID],
+      deriveProbeViewWithEndpointRows(await loadProbeCache(), 5_000 + UDP_VERDICT_TTL).udpProbe[ID],
     ).toBeUndefined();
   });
 
   it('VACUITY CONTROL a verdict INSIDE the TTL is still stated, so the arm above is not "it always drops"', async () => {
     expect(await throughTheClient(FLEET_VPN_UDP_FALSE, 5_000)).toBe(false);
     expect(
-      deriveProbeViewWithEndpointRows(await loadProbeCache(), 5_000 + THIRTY_MINUTES - 1_000)
+      deriveProbeViewWithEndpointRows(await loadProbeCache(), 5_000 + UDP_VERDICT_TTL - 1_000)
         .udpProbe[ID],
     ).toBe(false);
   });
@@ -338,15 +345,15 @@ describe('the cache keeps a measurement and never lets a non-measurement retire 
     // verdict for the life of the install, exactly as before, with a freshness
     // test in front of it that never fires. The stamp belongs to the MEASUREMENT.
     expect(await throughTheClient(FLEET_VPN_UDP_FALSE, 5_000)).toBe(false);
-    expect(await throughTheClient(FLEET_VPN_TODAY, 5_000 + THIRTY_MINUTES - 1_000)).toBe(false);
+    expect(await throughTheClient(FLEET_VPN_TODAY, 5_000 + UDP_VERDICT_TTL - 1_000)).toBe(false);
     expect(
-      deriveProbeViewWithEndpointRows(await loadProbeCache(), 5_000 + THIRTY_MINUTES).udpProbe[ID],
+      deriveProbeViewWithEndpointRows(await loadProbeCache(), 5_000 + UDP_VERDICT_TTL).udpProbe[ID],
     ).toBeUndefined();
     // …and a real re-measurement DOES restart it, which is the control that keeps
     // the rule from being "a verdict expires and can never be refreshed".
-    expect(await throughTheClient(FLEET_VPN_UDP_FALSE, 5_000 + THIRTY_MINUTES)).toBe(false);
+    expect(await throughTheClient(FLEET_VPN_UDP_FALSE, 5_000 + UDP_VERDICT_TTL)).toBe(false);
     expect(
-      deriveProbeViewWithEndpointRows(await loadProbeCache(), 5_000 + THIRTY_MINUTES + 1_000)
+      deriveProbeViewWithEndpointRows(await loadProbeCache(), 5_000 + UDP_VERDICT_TTL + 1_000)
         .udpProbe[ID],
     ).toBe(false);
   });
@@ -392,11 +399,11 @@ describe('the cache keeps a measurement and never lets a non-measurement retire 
     };
     const entry = { result: usable, at: 1_000, udpProbe: false, udpProbeAt: 1_000 };
 
-    expect(deriveProbeViewState({ s1: entry }, 1_000 + THIRTY_MINUTES - 1).udpProbe['s1']).toBe(
+    expect(deriveProbeViewState({ s1: entry }, 1_000 + UDP_VERDICT_TTL - 1).udpProbe['s1']).toBe(
       false,
     );
     expect(
-      deriveProbeViewState({ s1: entry }, 1_000 + THIRTY_MINUTES).udpProbe['s1'],
+      deriveProbeViewState({ s1: entry }, 1_000 + UDP_VERDICT_TTL).udpProbe['s1'],
       'a verdict past its TTL is not stated on a SOCKS5 row either',
     ).toBeUndefined();
     expect(
