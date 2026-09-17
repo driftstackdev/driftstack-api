@@ -965,6 +965,28 @@ export class FleetControlConnection {
               // sentence. A layer that fails the gate is counted and not named,
               // because the count is the part that must never go missing.
               safeguardCount: frame.safeguardChecks.length,
+              // ⛔ THREE STATES, AND HERE AN EXPLICIT NULL IS THE RIGHT CHOICE —
+              // the opposite of the rule applied to the crash memory reading, and
+              // worth saying why so the two do not look inconsistent.
+              //
+              // There, absence meant "never sampled" and a logged null would have
+              // looked like a measurement. Here, ABSENCE IS THE OBSERVATION: this
+              // line exists to answer "does the node declare its expected
+              // safeguard set on a live frame", and null / 0 / 4 are three
+              // distinguishable answers — not declared, declared empty, declared
+              // four. A spread would collapse the first two into one silence.
+              //
+              // Count only, never the names: the names-only rule above governs,
+              // and the count is what makes a MISSING layer detectable at all.
+              safeguardExpectedCount: frame.safeguardLayersExpected?.length ?? null,
+              // Same reason: this is how I learn whether the field ARRIVES, which
+              // is a different claim from having declared it — and the node's own
+              // suite cannot prove it is populated on a live session, because
+              // booting a real proxy child is out of scope there. So this frame is
+              // the evidence for both sides. `null` here means the node sent
+              // nothing (a VPN session, structurally, or an older build), never
+              // "a local resolver was in use".
+              dnsLocalResolverAbsent: frame.dnsLocalResolverAbsent ?? null,
               safeguardsFailed: frame.safeguardChecks
                 .filter((check) => !check.passed)
                 .map((check) =>

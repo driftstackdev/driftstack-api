@@ -1315,6 +1315,37 @@ const CapabilityReportPayloadSchema = z.object({
   egressPhase: z.enum(['phase_1_socks5', 'phase_2_openvpn', 'phase_3_wireguard']),
   proxyKind: z.enum(['socks5', 'openvpn', 'wireguard']),
   proxyUdpSupported: z.boolean(),
+  /**
+   * Was this session's proxy chain built with NO local resolver directive — i.e.
+   * is it configured to hand hostnames upstream rather than resolve them here?
+   *
+   * ⛔ ONE OF THREE INPUTS, AND NOT THE ANSWER. The customer-facing
+   * `dns_remote_resolve` is currently a HARDCODED `true` in this repo's relay,
+   * written by someone reasonable citing a real property of the proxy chain, and
+   * it is the defect this field exists to retire. But it needs three facts and
+   * this is one: (1) the chain is CONFIGURED for remote DNS — this field;
+   * (2) the customer's proxy ACCEPTS a hostname — measured per PROXY at
+   * validation, not per session; (3) the browser hands over a hostname rather
+   * than a pre-resolved IP — nobody's here, and not measured yet.
+   *
+   * Two of three is exactly how the hardcoded `true` came to exist, so the
+   * customer boolean stays unmeasured until the third lands. These two are
+   * individually renderable and individually true, which is the whole point of
+   * splitting them rather than filling one field that over-claims.
+   *
+   * ⛔ NOT A BUILD CONSTANT. The node reads it off the argument list actually
+   * handed to the proxy process, so the day somebody adds a resolver directive it
+   * flips to false for every session and we see it. A constant riding a
+   * measurement channel is how the next hardcoded `true` gets born.
+   *
+   * ⚠️ ABSENT ON A VPN SESSION, BY STRUCTURE rather than by condition: a VPN
+   * session has no such argument list to inspect, so there is nothing to observe
+   * and nothing is sent. `undefined` means UNMEASURED and must never render as
+   * "no local resolver was used" — the `dns_remote_resolve` contract is a SOCKS5
+   * concept and a value that is right for one tier and misleading for another is
+   * exactly the kind that gets read without its footnote.
+   */
+  dnsLocalResolverAbsent: z.boolean().optional(),
   proxyIpv4Supported: z.boolean(),
   proxyIpv6Supported: z.boolean(),
   proxyGeoCountry: z.string().max(64).optional(),

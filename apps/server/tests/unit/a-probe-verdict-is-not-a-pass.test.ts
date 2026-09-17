@@ -167,6 +167,27 @@ describe('a probe verdict is not a pass', () => {
     // in the log there is no way to tell those apart after the fact. Losing this
     // is how "we never looked" starts being reported to customers as "it failed".
     expect(src).toContain('safeguardCount: frame.safeguardChecks.length,');
+    // ⛔ THESE TWO ARE PINNED WITH AN EXPLICIT `?? null`, which is deliberately
+    // the OPPOSITE of the spread used for the crash memory reading — and the
+    // difference is the whole point, so a later tidy-up that "makes them
+    // consistent" must red here.
+    //
+    // For the memory reading, absence means NEVER SAMPLED and a logged null would
+    // read as a measurement. For these two, ABSENCE IS THE OBSERVATION: the line
+    // exists to answer whether the node declares its expected safeguard set and
+    // its resolver fact on a LIVE frame, and null / 0 / n are three
+    // distinguishable answers where a spread would collapse two of them into one
+    // silence.
+    //
+    // It also matters that these are the only evidence the producer has: its own
+    // suite can prove the predicate is right and cannot prove the field is
+    // populated on a live session, because booting a real proxy child is out of
+    // scope there. Losing this line takes away both sides' proof at once.
+    expect(
+      src,
+      'the expected-layer COUNT is what makes a missing safeguard detectable at all',
+    ).toContain('safeguardExpectedCount: frame.safeguardLayersExpected?.length ?? null,');
+    expect(src).toContain('dnsLocalResolverAbsent: frame.dnsLocalResolverAbsent ?? null,');
   });
 
   it('CRITICAL the provisioning line carries the SENDER clock, not only ours', () => {
