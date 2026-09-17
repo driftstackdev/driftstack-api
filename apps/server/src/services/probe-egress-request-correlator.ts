@@ -64,8 +64,19 @@ export interface ProbeEgressTransport {
  * ReferenceError at module load — it would have taken the server down on BOOT,
  * not failed a test. The arithmetic is 20 s (the node's QUIC child ceiling) plus
  * the same 10 s slack the VPN tier applies.
+ *
+ * ⛔ 30 s WAS ALSO WRONG, and in the same direction as the 15 s it replaced. I
+ * budgeted against the node's QUIC ceiling (20 s) plus slack, having read the
+ * ceiling and never looked for the leg in FRONT of it. The node runs its two legs
+ * SEQUENTIALLY — an exit-IP/geo chain bounded at 15 s, THEN the QUIC leg's 20 s
+ * watchdog — and now publishes the sum it enforces: 35 s. A partial population,
+ * committed inside the commit that fixed a partial population.
+ *
+ * 45 s = the node's published 35 s + the same 10 s slack. FIRST-DISPATCH FALLBACK
+ * ONLY: once a socks5 result reports its budget, the learned value is used, so a
+ * retune on the node moves this wait with it instead of leaving a number to drift.
  */
-export const PROBE_EGRESS_REQUEST_TIMEOUT_MS = 30_000;
+export const PROBE_EGRESS_REQUEST_TIMEOUT_MS = 45_000;
 
 /**
  * (n) N16 — the wait for an openvpn/wireguard probe. 15 s is a SOCKS5 number and
@@ -86,8 +97,18 @@ export const PROBE_EGRESS_REQUEST_TIMEOUT_MS = 30_000;
  * test this VPN tunnel. Try again in a minute." So every WireGuard row with a
  * down, wrong-port or UDP-filtered endpoint blamed the fleet, kept its stale exit,
  * and said the same thing on every retry.
+ *
+ * ⛔ RAISED 60 s → 80 s. The derivation above was correct WHEN WRITTEN — init 40 +
+ * listen 10, plus 10 for teardown and flight — and stopped being correct when the
+ * QUIC leg's 20 s ceiling landed beside those same constants and nothing
+ * re-derived the sum. The node enforces init + listen + ceiling = 70 s and now
+ * publishes it. A correct sum that silently loses a term is the same defect as the
+ * socks5 one above, arriving from the other direction, and neither of us noticed
+ * this one until the other tier was being fixed.
+ *
+ * 80 s = published 70 s + the 10 s slack. First-dispatch fallback only.
  */
-export const VPN_PROBE_EGRESS_REQUEST_TIMEOUT_MS = 60_000;
+export const VPN_PROBE_EGRESS_REQUEST_TIMEOUT_MS = 80_000;
 
 /** (n) N16 — added to a node-REPORTED `probe_budget_ms` to get the wait. The
  *  budget is what the node spends MEASURING; this covers teardown, the reply's
@@ -133,10 +154,37 @@ export type ProbeEgressOutcome =
 interface PendingProbeEgress {
   resolve: (outcome: ProbeEgressOutcome) => void;
   timer: ReturnType<typeof setTimeout>;
+  /**
+   * The tier THIS dispatch asked about, recorded when the request goes out.
+   *
+   * ⛔ IT IS HERE BECAUSE A RESULT FRAME CANNOT TELL YOU ITS SCHEME, and the code
+   * that needed to know used to infer it from a nullability: `probe_budget_ms`
+   * was null on socks5 and a number on VPN, so "it is a number" was read as "it
+   * is a VPN result". That held only while one tier happened not to publish, and
+   * broke the moment the node started telling the truth on both — see the write
+   * site below. A field's ABSENCE is not a discriminator; it asserts nothing.
+   *
+   * `'undecodable'` is carried rather than collapsed so the write site can decline
+   * to record at all, instead of guessing a tier and poisoning the other one.
+   */
+  isVpn: boolean | 'undecodable';
 }
 
 export class ProbeEgressRequestCorrelator {
   private readonly pending = new Map<string, PendingProbeEgress>();
+
+  /**
+   * (n) N16 / W3238 — the last `probe_budget_ms` this node reported, PER TIER.
+   *
+   * ⛔ ONE SLOT WAS A BUG THE MOMENT BOTH TIERS PUBLISHED. It was written when
+   * socks5 reported null, so only VPN frames could land in it. Once the node
+   * began publishing 35 s for socks5, a single socks5 probe overwrote the VPN
+   * budget and the next VPN dispatch waited 45 s against an enforced 70 s —
+   * SHORTER than the static constant it replaced, and degrading on the first
+   * probe rather than at deploy. Keyed by the tier that ASKED, so a reply can
+   * never be filed against the wrong one.
+   */
+  private lastSocks5BudgetMs: number | null = null;
 
   /** (n) N16 — the last `probe_budget_ms` THIS node reported on a VPN probe, or
    *  null until one arrives. The node derives it from the constants its bring-up
@@ -170,7 +218,16 @@ export class ProbeEgressRequestCorrelator {
       );
       return VPN_PROBE_EGRESS_REQUEST_TIMEOUT_MS;
     }
-    if (!isVpn) return PROBE_EGRESS_REQUEST_TIMEOUT_MS;
+    // ⚠️ The published budget EXCLUDES teardown, the reply's flight and
+    // control-plane scheduling — the node's own comment says so and is why the
+    // slack is added ON TOP rather than the published number being used as the
+    // deadline. Do not "simplify" this by dropping the slack on the grounds that
+    // the node now publishes everything: it does not.
+    if (!isVpn) {
+      return this.lastSocks5BudgetMs === null
+        ? PROBE_EGRESS_REQUEST_TIMEOUT_MS
+        : this.lastSocks5BudgetMs + PROBE_EGRESS_BUDGET_SLACK_MS;
+    }
     return this.lastVpnBudgetMs === null
       ? VPN_PROBE_EGRESS_REQUEST_TIMEOUT_MS
       : this.lastVpnBudgetMs + PROBE_EGRESS_BUDGET_SLACK_MS;
@@ -187,7 +244,13 @@ export class ProbeEgressRequestCorrelator {
       const timer = setTimeout(() => {
         this.settle(req.requestId, { status: 'timeout' });
       }, effectiveTimeoutMs);
-      this.pending.set(req.requestId, { resolve, timer });
+      // Computed once here, from the request, and carried on the pending entry —
+      // the reply cannot be asked which tier it belongs to.
+      this.pending.set(req.requestId, {
+        resolve,
+        timer,
+        isVpn: probeEgressConfigIsVpn(req.inlineProxyConfig),
+      });
       try {
         this.transport.send(req);
       } catch (err) {
@@ -211,12 +274,25 @@ export class ProbeEgressRequestCorrelator {
     const result = parsed.data;
     // (n) N16 — learn this node's real probe budget from any frame that reports
     // one, INCLUDING a `could_not_run` frame: `endpoint_unreachable` is the ~40 s
-    // case, the one that needs the budget most, and A3 fixed the VPN failure path
-    // specifically so it carries the field rather than nil. Recorded before the
-    // error branch below for exactly that reason. `null` means "not reported for
-    // this scheme" (socks5) and must NOT overwrite a budget already learned.
-    if (typeof result.probe_budget_ms === 'number') {
-      this.lastVpnBudgetMs = result.probe_budget_ms;
+    // case, the one that needs the budget most, and the node's VPN failure path
+    // was fixed specifically so it carries the field rather than nil. Recorded
+    // before the error branch below for exactly that reason.
+    //
+    // ⛔ FILED AGAINST THE TIER THAT ASKED, never inferred from the reply. The
+    // previous version read `typeof probe_budget_ms === 'number'` as "this is a
+    // VPN result", because socks5 reported null at the time. Its own comment said
+    // so: `null` means "not reported for this scheme" (socks5). That was a
+    // nullability standing in for a discriminator, and it was correct only while
+    // one tier withheld the value. When the node began publishing 35 s for socks5
+    // too, ONE socks5 probe set the VPN budget to 35 s and the next VPN dispatch
+    // waited 45 s against an enforced 70 s — shorter than the static it replaced.
+    //
+    // An UNDECODABLE request records nothing: a wrong slot is worse than no
+    // learning, because the fallback constant is at least known-safe.
+    const pendingForBudget = this.pending.get(result.requestId);
+    if (typeof result.probe_budget_ms === 'number' && pendingForBudget !== undefined) {
+      if (pendingForBudget.isVpn === true) this.lastVpnBudgetMs = result.probe_budget_ms;
+      else if (pendingForBudget.isVpn === false) this.lastSocks5BudgetMs = result.probe_budget_ms;
     }
     // Foreign-request guard: an unknown/stale requestId is a no-op. Unlike the
     // session correlators there is no sessionId to cross-check — the connection

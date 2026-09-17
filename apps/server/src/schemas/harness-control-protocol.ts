@@ -2495,6 +2495,41 @@ export const ProbeEgressResultSchema = z
      * order — and as of this writing NO node has ever sent it.
      */
     probe_budget_ms: z.number().int().nonnegative().nullable().optional(),
+    /**
+     * W3237 — did the customer's proxy accept a CONNECT naming a HOSTNAME rather
+     * than an address? One of the three inputs the customer-facing
+     * `dns_remote_resolve` needs, and the only one measured against their actual
+     * endpoint.
+     *
+     * ⛔ `false` ONLY on a SOCKS5 REP=0x08 ("address type not supported"). Every
+     * other refusal — a blocked target, a rejected credential, a dead endpoint —
+     * is `null`, because none of them distinguishes "will not take a name" from
+     * "did not get that far". A mapping that turned every refusal into `false`
+     * would tell a customer their proxy leaks DNS because a firewall blocked one
+     * host, which is a false accusation about their infrastructure.
+     *
+     * ⛔⛔ DO NOT USE THIS AS A SCHEME DISCRIMINATOR. It is populated at exactly one
+     * call site on the node — the socks5 success path — so today
+     * `!== null` means "socks5 success" with perfect accuracy. That is the SAME
+     * trap that just cost us a live defect, with the polarity inverted: the
+     * previous one read `probe_budget_ms !== null` as "this is a VPN result",
+     * which held only while socks5 withheld the value and broke the day it did
+     * not. This field will rot the same way the moment the VPN path learns to
+     * report it. The frame carries no scheme and should not grow one — key on
+     * `requestId`, which is echoed from the dispatch and already on every result.
+     */
+    dns_atyp_domainname_supported: z.boolean().nullable().optional(),
+    /**
+     * W3238 — did a QUIC/UDP handshake complete through this proxy? Derived on
+     * both tiers from the same probe binary, so it carries one proposition rather
+     * than two tier-specific ones.
+     *
+     * ⚠️ TRUE-OR-ABSENT, never a measured `false`: the node's helper can only turn
+     * a null into a true, and refusal frames carry null on both tiers. So an
+     * absent value means UNMEASURED and must never render as "UDP does not work" —
+     * the same contract as every other absent-until-measured field on this frame.
+     */
+    udp_echo_ok: z.boolean().nullable().optional(),
     error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).nullable(),
   })
   .superRefine((frame, ctx) => {

@@ -237,3 +237,76 @@ describe('(n) N16 the fleet probe wait is sized per dispatch', () => {
     expect(VPN_PROBE_EGRESS_REQUEST_TIMEOUT_MS).toBeGreaterThan(PROBE_EGRESS_REQUEST_TIMEOUT_MS);
   });
 });
+
+describe('a budget learned from one tier must never size the other', () => {
+  /**
+   * ⛔ THE DEFECT THIS EXISTS FOR, AND IT WAS LIVE. The correlator learned the
+   * node's budget from any frame reporting one, into a SINGLE slot:
+   *
+   *     if (typeof result.probe_budget_ms === 'number') this.lastVpnBudgetMs = …
+   *
+   * with a comment explaining that `null` means "not reported for this scheme"
+   * (socks5). That was a NULLABILITY STANDING IN FOR A DISCRIMINATOR, and it held
+   * only while one tier withheld the value. When the node began publishing 35 s
+   * for socks5 too, a single socks5 probe set the VPN budget to 35 s and the next
+   * VPN dispatch waited 45 s against an enforced 70 s — SHORTER than the static
+   * constant it replaced, and degrading on the first probe rather than at deploy.
+   *
+   * ⚠️ And the poisoning population is EVERY socks5 frame, not just successes: the
+   * node's refusal paths publish the budget too. So the cheapest, most frequent
+   * probe there is — a malformed config that never opened a socket — was enough.
+   * A fix keyed on "only learn from a completed measurement" would have left the
+   * bug alive while looking closed, which is why these arms use `could_not_run`.
+   *
+   * The key is `requestId`, already on every result and echoed from the dispatch.
+   * ⛔ NOT `dns_atyp_domainname_supported`, which is today populated at exactly one
+   * call site (the socks5 success path) and is therefore a perfect socks5
+   * discriminator — the identical trap with the polarity inverted, waiting to rot
+   * the day the other tier learns to report it.
+   */
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('CRITICAL a socks5 REFUSAL carrying a budget does not shorten the VPN wait', () => {
+    const { correlator } = makeCorrelator();
+    const socks5Budget = 35_000;
+
+    // A socks5 probe that refuses early — the cheap, frequent case — still
+    // publishes the node's socks5 budget.
+    void correlator.request(frameFor(SOCKS5));
+    correlator.onResultFrame(resultFrame(RQ, socks5Budget));
+
+    // A VPN dispatch afterwards must still wait on the VPN budget, not 35 s + slack.
+    const vpnWait = correlator.timeoutMsFor({
+      inlineProxyConfig: frameFor(WIREGUARD).inlineProxyConfig,
+    });
+    expect(vpnWait, 'a socks5 budget must not be filed against the VPN tier').toBe(
+      VPN_PROBE_EGRESS_REQUEST_TIMEOUT_MS,
+    );
+    expect(vpnWait).toBeGreaterThan(socks5Budget + PROBE_EGRESS_BUDGET_SLACK_MS);
+  });
+
+  it('CRITICAL a VPN budget does not lengthen the socks5 wait either', () => {
+    const { correlator } = makeCorrelator();
+    void correlator.request(frameFor(OPENVPN));
+    correlator.onResultFrame(resultFrame(RQ, 70_000));
+
+    expect(
+      correlator.timeoutMsFor({ inlineProxyConfig: frameFor(SOCKS5).inlineProxyConfig }),
+      'the socks5 tier keeps its own fallback until socks5 reports one',
+    ).toBe(PROBE_EGRESS_REQUEST_TIMEOUT_MS);
+  });
+
+  it('each tier DOES learn its own budget — the vacuity control', () => {
+    // Without this, both arms above would pass against a correlator that had
+    // simply stopped learning budgets at all, which would silently restore the
+    // stale-constant behaviour the learning exists to remove.
+    const { correlator } = makeCorrelator();
+    void correlator.request(frameFor(SOCKS5));
+    correlator.onResultFrame(resultFrame(RQ, 35_000));
+    expect(
+      correlator.timeoutMsFor({ inlineProxyConfig: frameFor(SOCKS5).inlineProxyConfig }),
+      'a socks5 budget DOES size the socks5 wait',
+    ).toBe(35_000 + PROBE_EGRESS_BUDGET_SLACK_MS);
+  });
+});
