@@ -144,12 +144,32 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       "lastFailureAt": "2026-05-09T14:23:00Z",
       "windowStart": "2026-04-11T13:00:00Z",
       "windowEnd": "2026-05-11T13:00:00Z"
+    },
+    {
+      "target": "example-target",
+      "uptimePct": null,
+      "totalProbes": 0,
+      "okCount": 0,
+      "failCount": 0,
+      "lastProbeAt": null,
+      "lastFailureAt": null,
+      "windowStart": "2026-04-11T13:00:00Z",
+      "windowEnd": "2026-05-11T13:00:00Z"
     }
   ]
 }`}</code></pre>
     <p>
       No auth — status surface is public. Window is a fixed rolling
       30 days. Field names are camelCase.
+    </p>
+    <p>
+      <strong>A null <code>uptimePct</code> means we have no
+      measurements for that target in the window — not that it was
+      perfect.</strong> <code>totalProbes: 0</code> says the same
+      thing in a number, and <code>lastProbeAt</code> is null for the
+      same reason. Treat null as unknown and show it as unknown; a
+      client that reads it as 100% will report an uptime figure
+      nobody measured.
     </p>
 
     <h2>Postmortems</h2>

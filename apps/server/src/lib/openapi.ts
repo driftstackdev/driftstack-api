@@ -7460,13 +7460,19 @@ function buildRegistry(): OpenAPIRegistry {
   // (`status-stream.ts`: `const data = await sla.report(...); return { data }`).
   // Not one field name overlapped, so a client generated from the published
   // spec read three undefined properties off an envelope it did not expect.
+  // `uptimePct` and `lastProbeAt` are NULLABLE (2026-09-17). A target the
+  // deployment is configured to probe but has no rows for in the window is now
+  // REPORTED as unmeasured rather than omitted from the array — previously it
+  // simply did not appear, so a consumer could not tell a healthy target from one
+  // nobody was watching. Null means "not measured": coercing it to 0 or 100 in a
+  // client re-creates the verdict-from-nothing this change removes.
   const StatusSlaTargetOpenApi = z.object({
     target: z.string(),
-    uptimePct: z.number(),
+    uptimePct: z.number().nullable(),
     totalProbes: z.number().int().nonnegative(),
     okCount: z.number().int().nonnegative(),
     failCount: z.number().int().nonnegative(),
-    lastProbeAt: z.string(),
+    lastProbeAt: z.string().nullable(),
     lastFailureAt: z.string().nullable(),
     windowStart: z.string(),
     windowEnd: z.string(),

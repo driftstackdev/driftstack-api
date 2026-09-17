@@ -53,7 +53,11 @@ describe('V-553.B-25 SlaReportingService.report — uptime math', () => {
     expect(out[0]?.totalProbes).toBe(10_000);
   });
 
-  it('returns 100 when there are no probes for the target (vacuous truth)', async () => {
+  it('returns NULL when there are no probes for the target — it is not a vacuous truth', async () => {
+    // ⛔ This arm asserted 100 and called it "vacuous truth". It is not vacuous:
+    // the endpoint is public and its whole purpose is to state measured
+    // reliability, so 100 is an assertion about a target the fixture literally
+    // names `unmonitored`. Null says the one true thing — nobody looked.
     const repo = makeRepo([
       {
         target: 'unmonitored.driftstack.dev',
@@ -65,7 +69,7 @@ describe('V-553.B-25 SlaReportingService.report — uptime math', () => {
     ]);
     const svc = new SlaReportingService(repo);
     const out = await svc.report(NOW);
-    expect(out[0]?.uptimePct).toBe(100);
+    expect(out[0]?.uptimePct).toBeNull();
   });
 
   it('returns 0 uptime when every probe failed', async () => {

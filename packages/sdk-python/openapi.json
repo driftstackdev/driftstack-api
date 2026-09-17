@@ -50626,7 +50626,7 @@
                             "type": "string"
                           },
                           "uptimePct": {
-                            "type": "number"
+                            "type": ["number", "null"]
                           },
                           "totalProbes": {
                             "type": "integer",
@@ -50641,7 +50641,7 @@
                             "minimum": 0
                           },
                           "lastProbeAt": {
-                            "type": "string"
+                            "type": ["string", "null"]
                           },
                           "lastFailureAt": {
                             "type": ["string", "null"]

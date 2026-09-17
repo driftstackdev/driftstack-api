@@ -25,10 +25,11 @@
 //     - windowStart         (ISO 8601).
 //     - windowEnd           (ISO 8601 = now).
 //
-//   Uptime formula: total === 0 ? 100 : Math.round(okCount / total
+//   Uptime formula: total === 0 ? null : Math.round(okCount / total
 //     * 100 * 1000) / 1000 (3-decimal precision).
 //
-//   Empty-window fallback: totalProbes === 0 → uptimePct = 100
+//   Empty-window fallback: totalProbes === 0 → uptimePct = NULL (was 100 —
+//   an unmeasured target scored as perfect on a public endpoint)
 //     (no data presented as 'fully up' rather than '0%' or NaN).
 //
 // stays in lockstep across apps/server/src/services/sla-reporting.ts.
@@ -99,11 +100,11 @@ describe('W921 V-295e SLA reporting cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/sla-reporting.ts'));
     expect(p).toMatch(/export interface SlaTargetReport \{/);
     expect(p).toMatch(/target: string;/);
-    expect(p).toMatch(/uptimePct: number;/);
+    expect(p).toMatch(/uptimePct: number \| null;/);
     expect(p).toMatch(/totalProbes: number;/);
     expect(p).toMatch(/okCount: number;/);
     expect(p).toMatch(/failCount: number;/);
-    expect(p).toMatch(/lastProbeAt: string;/);
+    expect(p).toMatch(/lastProbeAt: string \| null;/);
     expect(p).toMatch(/lastFailureAt: string \| null;/);
     expect(p).toMatch(/windowStart: string;/);
     expect(p).toMatch(/windowEnd: string;/);
@@ -121,10 +122,10 @@ describe('W921 V-295e SLA reporting cross-source invariant', () => {
 
   // ─── Uptime formula + 3-decimal rounding ─────────────────────
 
-  it("CRITICAL uptime formula — 'total === 0 ? 100 : Math.round((okCount / total) * 100 * 1000) / 1000' + '3 decimals'. The 3-decimal rounding is the precision contract — drift to 0 or 5 decimals would change status-page display.", () => {
+  it("CRITICAL uptime formula — 'total === 0 ? null : Math.round((okCount / total) * 100 * 1000) / 1000' + '3 decimals'. The 3-decimal rounding is the precision contract — drift to 0 or 5 decimals would change status-page display.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/sla-reporting.ts'));
     expect(p).toMatch(
-      /total === 0 \? 100 : Math\.round\(\(row\.okCount \/ total\) \* 100 \* 1000\) \/ 1000;.*\/\/ 3 decimals/,
+      /total === 0 \? null : Math\.round\(\(row\.okCount \/ total\) \* 100 \* 1000\) \/ 1000;.*\/\/ 3 decimals/,
     );
   });
 
@@ -175,7 +176,7 @@ describe('W921 V-295e SLA reporting cross-source invariant', () => {
     expect(result).toEqual([]);
   });
 
-  it('CRITICAL report() with single ok=0,fail=0 row → uptimePct=100, totalProbes=0. The empty-target row still emits 100% rather than NaN.', async () => {
+  it('CRITICAL report() with single ok=0,fail=0 row → uptimePct=NULL, totalProbes=0. Not NaN, and not 100 either: an unmeasured target must not read as a perfect one on a public endpoint.', async () => {
     const svc = new SlaReportingService(
       stubProbes(() =>
         Promise.resolve([
@@ -190,7 +191,7 @@ describe('W921 V-295e SLA reporting cross-source invariant', () => {
       ),
     );
     const result = await svc.report(new Date('2026-05-15T01:00:00Z'));
-    expect(result[0]!.uptimePct).toBe(100);
+    expect(result[0]!.uptimePct).toBeNull();
     expect(result[0]!.totalProbes).toBe(0);
   });
 

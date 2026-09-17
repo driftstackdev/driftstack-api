@@ -58,7 +58,13 @@ describe('V-553.B-5 SlaReportingService — uptime math', () => {
     expect(r?.uptimePct).toBe(99.9);
   });
 
-  it('0 totalProbes → uptimePct 100 (no data, treat as ok)', async () => {
+  it('0 totalProbes → uptimePct NULL, because nothing was measured', async () => {
+    // ⛔ THIS ARM USED TO ASSERT 100, AND ITS NAME SAID WHY: "no data, treat as
+    // ok". That is the whole defect written down as an intention — an absence of
+    // measurement scored as a perfect result, on a PUBLIC endpoint whose entire
+    // job is to say how reliable the service has been. Null is the only honest
+    // value: it forces a consumer to decide what to render for "unknown" instead
+    // of handing it a 100 it never earned.
     const repo = makeRepo([
       {
         target: 'api',
@@ -70,8 +76,51 @@ describe('V-553.B-5 SlaReportingService — uptime math', () => {
     ]);
     const svc = new SlaReportingService(repo);
     const [r] = await svc.report(NOW);
-    expect(r?.uptimePct).toBe(100);
+    expect(r?.uptimePct).toBeNull();
     expect(r?.totalProbes).toBe(0);
+  });
+
+  it('a CONFIGURED target with no history is reported as unmeasured, not omitted', async () => {
+    // The report used to be built only from a GROUP BY over rows that exist, so a
+    // target with no rows was not a group and simply did not appear. Absent and
+    // healthy render identically to any consumer, which is why production could
+    // answer `{"data":[]}` while nobody was probing anything at all.
+    const svc = new SlaReportingService(makeRepo([]), ['api']);
+    const report = await svc.report(NOW);
+    expect(report).toHaveLength(1);
+    expect(report[0]?.target).toBe('api');
+    expect(report[0]?.uptimePct, 'unmeasured must not read as a verdict').toBeNull();
+    expect(report[0]?.totalProbes).toBe(0);
+    expect(report[0]?.lastProbeAt, 'there is no last probe when there are none').toBeNull();
+  });
+
+  it('a target with history is still reported after it leaves the configured list', async () => {
+    // The mirror of the arm above: rows are real measurements, and dropping a
+    // de-configured target would re-create the same silence from the other side.
+    const svc = new SlaReportingService(
+      makeRepo([
+        {
+          target: 'retired',
+          okCount: 9,
+          failCount: 1,
+          lastProbeAt: new Date('2026-05-11T11:00:00Z'),
+          lastFailureAt: new Date('2026-05-10T05:00:00Z'),
+        },
+      ]),
+      ['api'],
+    );
+    const report = await svc.report(NOW);
+    expect(report.map((r) => r.target)).toEqual(['api', 'retired']);
+    expect(report[0]?.uptimePct, 'configured, never probed').toBeNull();
+    expect(report[1]?.uptimePct, 'de-configured, but really measured').toBe(90);
+  });
+
+  it('CONTROL — a deployment that probes nothing reports nothing, and that is honest', async () => {
+    // Without this, the two arms above would pass against an implementation that
+    // invented a placeholder row for every deployment, including the ones with no
+    // probing configured at all.
+    const svc = new SlaReportingService(makeRepo([]), []);
+    expect(await svc.report(NOW)).toEqual([]);
   });
 });
 

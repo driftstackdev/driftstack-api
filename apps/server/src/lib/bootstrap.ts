@@ -1008,21 +1008,48 @@ export async function createProductionDeps(
   );
 
   // V-295b — health-probe poller. The default probe target is this
-  // server's own /health endpoint via env-configured PUBLIC_API_BASE_URL
-  // (Hetzner deploy sets this). When unset (local dev), we skip probing
-  // — there's no useful target to probe from inside the same process.
+  // server's own /health endpoint via env-configured PUBLIC_API_BASE_URL.
+  // When unset, we skip probing — there's no useful target to probe from
+  // inside the same process.
+  //
+  // ⛔ THIS COMMENT USED TO SAY "(Hetzner deploy sets this)". MEASURED 2026-09-17
+  // ON PRODUCTION: it does not. PUBLIC_API_BASE_URL is absent from both
+  // /opt/driftstack/api/.env and the running process environment, so
+  // `healthProbeService` is null there and the poller has never run in
+  // production — no probe row has ever been written, `GET /v1/status/sla`
+  // returns `{"data":[]}`, and the auto-incident path below (which opens a
+  // PUBLIC major incident after `failureThreshold` consecutive failures) has
+  // never been able to fire. A comment asserting a deployment fact is not a
+  // check on it, and this one had been false long enough that nothing noticed:
+  // the only symptom is an empty list, which reads as healthy.
+  //
+  // Turning it on is a product decision, not a config typo, because the
+  // consequence is customer-visible: it publishes major incidents to the public
+  // status page. It is recorded for the owner rather than flipped here — the
+  // same call that was made for the metrics layer, which is inert in prod for
+  // exactly this shape of reason.
   const publicApiBaseUrl = process.env.PUBLIC_API_BASE_URL;
   const probesRepo = new DrizzleProbesRepo(dbHandle);
-  const slaReportingService = new SlaReportingService(probesRepo);
+  // Declared OUTSIDE the conditional so the SLA report knows which targets this
+  // deployment is configured to probe, and can say "configured but unmeasured"
+  // instead of omitting them. When probing is off this is empty, and the report
+  // is then honestly empty rather than misleadingly so.
+  const healthProbeTargets = publicApiBaseUrl
+    ? [
+        {
+          id: 'api',
+          label: 'API server',
+          url: `${publicApiBaseUrl.replace(/\/+$/, '')}/health`,
+        },
+      ]
+    : [];
+  const slaReportingService = new SlaReportingService(
+    probesRepo,
+    healthProbeTargets.map((t) => t.id),
+  );
   const healthProbeService = publicApiBaseUrl
     ? new HealthProbeService(probesRepo, incidentsService, new FetchProber(), logger, {
-        targets: [
-          {
-            id: 'api',
-            label: 'API server',
-            url: `${publicApiBaseUrl.replace(/\/+$/, '')}/health`,
-          },
-        ],
+        targets: healthProbeTargets,
       })
     : null;
 

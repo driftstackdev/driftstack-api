@@ -12,7 +12,8 @@
 //   • SlaTargetReport: 8 fields (target / uptimePct / totalProbes /
 //     okCount / failCount / lastProbeAt / lastFailureAt / windowStart
 //     / windowEnd).
-//   • Edge case: total=0 → uptimePct=100 (no data ≠ failure).
+//   • Edge case: total=0 → uptimePct=NULL (unmeasured is not a verdict; it
+//     used to be 100, which scored an unprobed target as perfect).
 //   • Rounding: 3 decimals (Math.round(pct*1000)/1000).
 //   • lastFailureAt: null when no failures in window.
 
@@ -54,13 +55,13 @@ describe('W398.C apps/server/src/services/sla-reporting.ts content parity', () =
   it('SlaTargetReport: 8 fields (target / uptimePct / totalProbes / okCount / failCount / lastProbeAt / lastFailureAt / windowStart / windowEnd)', () => {
     expect(body).toMatch(/export interface SlaTargetReport \{/);
     expect(body).toMatch(/target: string;/);
-    expect(body).toMatch(/uptimePct: number;/);
+    expect(body).toMatch(/uptimePct: number \| null;/);
     expect(body).toMatch(/Total probes in the window\. 0 means "no data yet for this target\."/);
     expect(body).toMatch(/totalProbes: number;/);
     expect(body).toMatch(/okCount: number;/);
     expect(body).toMatch(/failCount: number;/);
     expect(body).toMatch(/Most recent probe \(ok or fail\)\./);
-    expect(body).toMatch(/lastProbeAt: string;/);
+    expect(body).toMatch(/lastProbeAt: string \| null;/);
     expect(body).toMatch(/Most recent failed probe within the window, or null if none\./);
     expect(body).toMatch(/lastFailureAt: string \| null;/);
     expect(body).toMatch(/Window start, ISO\./);
@@ -69,9 +70,12 @@ describe('W398.C apps/server/src/services/sla-reporting.ts content parity', () =
     expect(body).toMatch(/windowEnd: string;/);
   });
 
-  it('SlaReportingService: constructor takes ProbesRepo only', () => {
+  it('SlaReportingService: constructor takes ProbesRepo + the configured target ids', () => {
     expect(body).toMatch(/export class SlaReportingService \{/);
-    expect(body).toMatch(/constructor\(private readonly probes: ProbesRepo\) \{\}/);
+    // The target list is what lets the report say "configured but unmeasured"
+    // instead of omitting a target that has no rows.
+    expect(body).toMatch(/private readonly probes: ProbesRepo,/);
+    expect(body).toMatch(/private readonly configuredTargets: readonly string\[\] = \[\],/);
   });
 
   it('report: default windowMs = 30 days (30*24*60*60*1000)', () => {
@@ -88,10 +92,10 @@ describe('W398.C apps/server/src/services/sla-reporting.ts content parity', () =
     expect(body).toMatch(/const rows = await this\.probes\.countByTargetSince\(windowStart\);/);
   });
 
-  it('uptimePct: total=0 → 100; else Math.round((ok/total)*100*1000)/1000 (3 decimals)', () => {
+  it('uptimePct: total=0 → null; else Math.round((ok/total)*100*1000)/1000 (3 decimals)', () => {
     expect(body).toMatch(/const total = row\.okCount \+ row\.failCount;/);
     expect(body).toMatch(
-      /const uptimePct = total === 0 \? 100 : Math\.round\(\(row\.okCount \/ total\) \* 100 \* 1000\) \/ 1000; \/\/ 3 decimals/,
+      /total === 0 \? null : Math\.round\(\(row\.okCount \/ total\) \* 100 \* 1000\) \/ 1000; \/\/ 3 decimals/,
     );
   });
 
