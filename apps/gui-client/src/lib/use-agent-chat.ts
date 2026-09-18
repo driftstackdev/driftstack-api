@@ -385,6 +385,16 @@ export interface UseAgentChatResult {
    *  discards the turn's result when it eventually resolves (the server may
    *  still finish it; this is a UI stop, not a network/turn abort). */
   cancel: () => void;
+  /**
+   * P6 — a turn the customer pressed Stop on is STILL RUNNING on the server.
+   *
+   * Stop is a UI stop: it frees the composer, but the server finishes the plan
+   * it already started. Sending again in that window hits a busy session and is
+   * refused — measured at 26% of every AI turn ever sent. While this is true the
+   * composer must say the previous task is still finishing rather than offering
+   * a Send that cannot land. Clears when that turn's own request settles.
+   */
+  stoppedTurnStillRunning: boolean;
   /** Load a saved transcript into the view (reopening a past chat). The live
    *  server session is dropped — continuing the chat starts a fresh session,
    *  while the restored transcript stays visible as the chat's memory. */
@@ -630,9 +640,31 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   // generation discards its result on resolve. (UI stop; the server turn may
   // still complete — a true network/turn abort is a follow-up.)
   const cancelGenRef = useRef(0);
+  // P6 — true while a STOPPED turn's server request has not settled yet. The
+  // composer reads it to stay honest about the session still being busy.
+  const [stoppedTurnStillRunning, setStoppedTurnStillRunning] = useState(false);
   const [adopting, setAdopting] = useState(false);
   const cancel = useCallback(() => {
     cancelGenRef.current += 1;
+    // P6 — STOP FREES THE COMPOSER, BUT THE TURN IS STILL RUNNING, AND THE UI NOW
+    // SAYS SO. This is a UI stop: the server keeps driving the browser to the end
+    // of the plan. Before this, the composer went straight back to "Send" — and
+    // the next Send hit a session that was still busy and came back 409, which is
+    // 26% of every AI turn this product has ever served. Holding a flag until the
+    // stopped turn's own request SETTLES is the honest signal: while it is set,
+    // the composer says the previous task is still finishing instead of inviting
+    // a send that cannot succeed.
+    //
+    // ⛔ IT IS TIED TO THE REQUEST PROMISE, NOT TO A TIMER. A timer would guess,
+    // and it would guess wrong in the direction that hurts: expiring early puts
+    // the customer back in front of the same 409.
+    const stopped = activePostRef.current;
+    if (stopped !== null) {
+      setStoppedTurnStillRunning(true);
+      void stopped.promise.finally(() => {
+        setStoppedTurnStillRunning(false);
+      });
+    }
     activePostRef.current = null;
     setSending(false);
     // Drop live progress now: cancel short-circuits the in-flight post()'s finally
@@ -1301,6 +1333,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     adopting,
     adoptError,
     cancel,
+    stoppedTurnStillRunning,
     restoredHistoryCount,
     restoredSessionId,
   };

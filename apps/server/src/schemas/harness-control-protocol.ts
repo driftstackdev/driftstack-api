@@ -479,9 +479,27 @@ export const HARNESS_INTENT_PARAM_SCHEMAS: Record<HarnessIntentName, z.ZodTypeAn
 // dispatched operation: every decoded payload is checked against the expected
 // intent below. Keep these exact mirrors of IntentExecutor.swift so a wrong or
 // drifted result fails closed as intent_dispatch_error at the correlator.
+// P4 — `http_status` is ADDITIVE AND OPTIONAL, and that is the whole contract.
+// A navigate result used to be {url} | {url, loadedAtTimeout}, with NO failure
+// variant: a 404 or a 500 LOADED, the step went green, and the plan then died
+// several steps later at a selector that was never going to be on an error
+// page. The status is what distinguishes "we are on the page you asked for"
+// from "we are on the site's error page", and only the device can know it.
+//
+// ⛔ AN OLDER DEVICE THAT NEVER SENDS THE FIELD MUST BEHAVE EXACTLY AS TODAY.
+// It is `.optional()` on both existing variants rather than a third variant, so
+// every payload that parsed before still parses to the same shape, and the
+// consumer (agent-intent-result.ts) treats an ABSENT status as "no opinion" —
+// never as an implied success or an implied failure.
 const NavigateResultSchema = z.union([
-  z.object({ url: z.string() }).strict(),
-  z.object({ url: z.string(), loadedAtTimeout: z.literal(true) }).strict(),
+  z.object({ url: z.string(), http_status: z.number().int().optional() }).strict(),
+  z
+    .object({
+      url: z.string(),
+      loadedAtTimeout: z.literal(true),
+      http_status: z.number().int().optional(),
+    })
+    .strict(),
 ]);
 
 function historyNavResultSchema(action: 'back' | 'forward') {

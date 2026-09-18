@@ -35,11 +35,16 @@
 import { randomUUID } from 'node:crypto';
 import type {
   AgentExecutor,
+  ElementWaitBudget,
   ExecuteArgs,
   ExecutorRunResult,
   IntentResult,
 } from './agent-executor.js';
-import { consequentialHalt, executionMayContinue } from './agent-executor.js';
+import {
+  consequentialHalt,
+  executionMayContinue,
+  substituteCredentials,
+} from './agent-executor.js';
 import { agentIntentToDispatch } from './agent-intent-to-dispatch.js';
 import { intentReplayMayDuplicateEffect, intentResultToCustomer } from './agent-intent-result.js';
 import type { SessionCaptureStore } from './session-capture-store.js';
@@ -90,6 +95,13 @@ export interface AutoRetryOptions {
    *  own per-intent budget is the full 30s; this shorter cap bounds the latency a
    *  hung/slow box can add to a turn whose plan ALREADY succeeded. Default 10000. */
   observeTimeoutMs?: number;
+  /** P3 — how long ONE step may wait for a selector that was not on the page
+   *  yet. See {@link DEFAULT_ELEMENT_APPEAR_WAIT_MS} for where the number comes
+   *  from. 0 disables the element wait and restores the pre-P3 behaviour. */
+  elementAppearWaitMs?: number;
+  /** P3 — total element-wait time ONE execute() run may spend across all its
+   *  steps. See {@link DEFAULT_ELEMENT_WAIT_RUN_BUDGET_MS}. */
+  elementWaitRunBudgetMs?: number;
   /** Injectable sleep so tests run instantly. Default: real setTimeout. */
   sleep?: (ms: number) => Promise<void>;
 }
@@ -109,12 +121,40 @@ const DEFAULT_SESSION_ESTABLISH_RETRY_DELAY_MS = 1500;
 // (returns well under) from "hung" (never returns) so the read-back degrades to
 // "no answer, plan result stands" fast instead of freezing the turn.
 const DEFAULT_OBSERVE_TIMEOUT_MS = 10_000;
+
+// ── P3 patience ──────────────────────────────────────────────────────
+// WHY A SEPARATE BUDGET FROM `retryDelayMs`. `intent_element_not_found` is not a
+// transient transport fault, it is a statement about the PAGE: the selector
+// resolved against a DOM that does not contain the element YET. Re-dispatching
+// the same lookup three times 400ms apart spends 800ms of patience and then
+// reports "no element matched" about a control that renders at 2500ms — the
+// measured death of the eval's F3 task, and the shape of "it gave up" the owner
+// reported. The two budgets answer different questions and must not share a
+// number.
+//
+// WHERE 5000ms COMES FROM. Largest Contentful Paint is the published field
+// threshold for when a page's main content is on screen: ≤2500ms at p75 is
+// "good" and >4000ms is "poor". The old 800ms gave up before even a GOOD page
+// had painted. 5000ms covers the whole good + needs-improvement band plus the
+// device round trip, so a page a real person would call "fine, a bit slow" is
+// inside the budget and a page nobody would wait for is not.
+const DEFAULT_ELEMENT_APPEAR_WAIT_MS = 5_000;
+// WHY A RUN-WIDE CEILING. Per-step patience alone multiplies: an 8-intent plan
+// where every selector is wrong would add 8 × 5s before failing, and a failing
+// page must not take forever (that is the same complaint from the other side).
+// 15s = three full waits — enough for the realistic case (a slow page costs the
+// wait once or twice), and a hard stop for the pathological one. Past the
+// ceiling a missing element fails immediately, exactly as it did before P3.
+const DEFAULT_ELEMENT_WAIT_RUN_BUDGET_MS = 15_000;
+
 export class ControlPlaneAgentExecutor implements AgentExecutor {
   private readonly maxRetries: number;
   private readonly retryDelayMs: number;
   private readonly sessionEstablishMaxRetries: number;
   private readonly sessionEstablishRetryDelayMs: number;
   private readonly observeTimeoutMs: number;
+  private readonly elementAppearWaitMs: number;
+  private readonly elementWaitRunBudgetMs: number;
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(
@@ -138,6 +178,23 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       opts.sessionEstablishRetryDelayMs ?? DEFAULT_SESSION_ESTABLISH_RETRY_DELAY_MS,
     );
     this.observeTimeoutMs = Math.max(0, opts.observeTimeoutMs ?? DEFAULT_OBSERVE_TIMEOUT_MS);
+    // ⛔ CLAMPED TO WHAT THE DEVICE CAN ACTUALLY BE ASKED FOR. `wait_for` takes
+    // whole SECONDS, so the mapper drops a sub-second timeout and the device
+    // falls back to its own 30s default — a setting of 500ms would have bought
+    // a THIRTY-second wait while the run ceiling was debited 500ms, i.e. a
+    // number meant to reduce patience multiplying it sixtyfold. Round a positive
+    // sub-second value up to the smallest expressible wait so the budget debits
+    // what is actually spent; 0 still means "disabled".
+    const requestedAppearWaitMs = Math.max(
+      0,
+      opts.elementAppearWaitMs ?? DEFAULT_ELEMENT_APPEAR_WAIT_MS,
+    );
+    this.elementAppearWaitMs =
+      requestedAppearWaitMs > 0 ? Math.max(1_000, requestedAppearWaitMs) : 0;
+    this.elementWaitRunBudgetMs = Math.max(
+      0,
+      opts.elementWaitRunBudgetMs ?? DEFAULT_ELEMENT_WAIT_RUN_BUDGET_MS,
+    );
     this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
@@ -156,6 +213,14 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       }
     };
     const approved = new Set(args.approvedConsequentialActions ?? []);
+    // P3 — the element-wait ceiling, shared by every step so the extra patience
+    // cannot multiply by plan length. Mutated by runIntent. The RUNTIME owns one
+    // per turn and threads it here (see ExecuteArgs.elementWaitBudget), because a
+    // turn now runs up to three plans and a per-run ceiling would be three
+    // ceilings. An unseeded or absent budget is filled from this executor's own
+    // configured run budget, so a caller never has to know the number.
+    const elementWaitBudget: ElementWaitBudget = args.elementWaitBudget ?? { remainingMs: null };
+    elementWaitBudget.remainingMs ??= this.elementWaitRunBudgetMs;
     // #139 — dispatch on the AGENT session id (the box + agent_sessions.node_id
     // routing key). Fall back to `sessionId` only if the runtime didn't thread it
     // (legacy callers) — never dispatch on the `unattached` sentinel.
@@ -188,8 +253,28 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         /* a broken progress handler must not affect execution */
       }
 
+      // 0.5. P2 — resolve credential placeholders into the value the DEVICE
+      //      gets. `intent` (the placeholder form) is what every result below
+      //      carries, so the secret reaches the dispatch and nothing else.
+      const substitution = substituteCredentials(intent, args.credentials);
+      if (!substitution.ok) {
+        emitStep({
+          kind: 'failure',
+          intent,
+          // Names the missing credential, never a value — and the customer-
+          // facing repair is real: they can add it.
+          reason:
+            substitution.why === 'not_held'
+              ? `this step needs a saved credential named "${substitution.unresolved}", and this chat does not have one`
+              : `this step tried to put the saved credential "${substitution.unresolved}" somewhere it cannot be used safely, so it was not sent`,
+          diagnosis: { category: 'invalid_request', retryable: false },
+        });
+        break;
+      }
+      const dispatchIntent = substitution.intent;
+
       // 1. Map the customer verb → harness intentName + params (or unsupported).
-      const mapped = agentIntentToDispatch(intent);
+      const mapped = agentIntentToDispatch(dispatchIntent);
       if (!mapped.ok) {
         emitStep({ kind: 'failure', intent, reason: mapped.reason });
         // #139 — a best-effort `wait` that can't even be MAPPED (e.g. the model
@@ -207,6 +292,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         mapped.intentName,
         mapped.params,
         args.shouldContinue,
+        elementWaitBudget,
       );
       if (result.result !== null) emitStep(result.result);
       if (result.authorityLost) return { results, ok: false, authorityLost: true };
@@ -263,6 +349,62 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   }
 
   /**
+   * P1 — the same read as {@link observe}, digested for PLANNING rather than for
+   * answering. One dispatch, then {@link summarizePageForPlanning}; null
+   * whenever observe() returns null, so a page that cannot be read degrades to
+   * "plan without it" exactly as before.
+   */
+  async observeDigest(
+    sessionId: string,
+    shouldContinue?: ExecuteArgs['shouldContinue'],
+  ): Promise<string | null> {
+    const source = await this.observe(sessionId, shouldContinue);
+    if (source === null) return null;
+    const digest = summarizePageForPlanning(source);
+    return digest.length > 0 ? digest : null;
+  }
+
+  /**
+   * P3 — dispatch ONE `wait_for` for `selector`, through the SAME mapper the
+   * plan's own waits go through (so the predicate the box evaluates is the one
+   * that is already under test, not a second hand-built copy that can drift).
+   *
+   * Returns 'appeared' only on a successful wait. Every other outcome — an
+   * unmappable selector, an encode error, a dispatch failure, the wait timing
+   * out — is 'absent': the caller then surfaces the original element-not-found
+   * failure, which is the honest reading in all of them.
+   */
+  private async waitForElement(
+    sessionId: string,
+    selector: string,
+    timeoutMs: number,
+    shouldContinue: ExecuteArgs['shouldContinue'],
+  ): Promise<'appeared' | 'absent' | 'authority_lost'> {
+    if (!(await executionMayContinue(shouldContinue))) return 'authority_lost';
+    const mapped = agentIntentToDispatch({
+      kind: 'wait',
+      condition: 'selector_visible',
+      selector,
+      timeoutMs,
+    });
+    if (!mapped.ok) return 'absent';
+    let dispatch: IntentDispatch;
+    try {
+      dispatch = serializeIntentDispatch({
+        sessionId,
+        intentId: this.genIntentId(),
+        intentName: mapped.intentName,
+        params: mapped.params,
+      });
+    } catch {
+      return 'absent';
+    }
+    const parsed = await this.dispatcher.dispatch(dispatch);
+    if (!(await executionMayContinue(shouldContinue))) return 'authority_lost';
+    return parsed.success ? 'appeared' : 'absent';
+  }
+
+  /**
    * One intent, with bounded auto-retry of RETRYABLE transient failures
    * (doc-132 §5.3). Read-only capture failures remain recoverable.
    *
@@ -289,12 +431,16 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     intentName: HarnessIntentName,
     params: Record<string, unknown>,
     shouldContinue: ExecuteArgs['shouldContinue'],
+    elementWaitBudget: ElementWaitBudget = { remainingMs: 0 },
   ): Promise<RunIntentOutcome> {
     let result: IntentResult | null = null;
     // Two independent budgets: the short general retryable-failure budget, and a
     // longer PATIENT budget reserved for a cold-starting session (see below).
     let retryAttempt = 0;
     let establishAttempt = 0;
+    // P3 — at most ONE element wait per step. A second would be re-asking a
+    // question the first already answered with the page's own timeout.
+    let elementWaitUsed = false;
     for (;;) {
       // Re-check on EVERY attempt, including after either retry sleep. A close
       // that wins while the box is cold or a retry backs off stops the suffix
@@ -371,6 +517,43 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         continue;
       }
 
+      // P3 PATIENCE — the element was not on the page. That is a statement about
+      // the PAGE, not about the transport, so the answer is to WAIT FOR THE
+      // ELEMENT rather than to re-ask the same question on a fixed 400ms
+      // cadence. One `wait_for` on the same selector returns the moment the
+      // element renders (a fast page pays almost nothing) and gives up at the
+      // budget (a page that will never render it pays it once). `element_not_found`
+      // proves the lookup ran and the intent did NOT execute, so the retry after
+      // a successful wait cannot double-apply anything — the same reasoning that
+      // already makes this code retryable.
+      //
+      // ⛔ A FAILED WAIT ENDS THE STEP. Returning the ORIGINAL element-not-found
+      // failure keeps the customer-facing reason about the thing that is
+      // actually wrong (the selector matched nothing) instead of renaming it as
+      // a wait timeout, and it stops the step from spending the general retry
+      // budget re-confirming an answer the wait just gave.
+      const waitSelector = selectorOf(intent);
+      if (
+        parsed.errorCode === 'intent_element_not_found' &&
+        waitSelector !== null &&
+        !elementWaitUsed &&
+        this.elementAppearWaitMs > 0 &&
+        elementWaitBudget.remainingMs !== null &&
+        elementWaitBudget.remainingMs >= this.elementAppearWaitMs
+      ) {
+        elementWaitUsed = true;
+        elementWaitBudget.remainingMs -= this.elementAppearWaitMs;
+        const appeared = await this.waitForElement(
+          sessionId,
+          waitSelector,
+          this.elementAppearWaitMs,
+          shouldContinue,
+        );
+        if (appeared === 'authority_lost') return { result, authorityLost: true };
+        if (appeared === 'appeared') continue;
+        return { result, authorityLost: false };
+      }
+
       // A coarse dispatch or WebDriver failure on a gesture/pacing intent MAY
       // have already executed, and a retry uses a fresh intentId with no harness
       // dedup. Fail safe: don't auto-retry those classes. The mapper uses the
@@ -399,6 +582,193 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       await this.sleep(this.retryDelayMs);
     }
   }
+}
+
+// ── P1 page digest ───────────────────────────────────────────────────
+//
+// WHY A DIGEST AND NOT THE PAGE. `get_page_source` returns the document. A real
+// one is tens to hundreds of kilobytes of markup, styling and script — the model
+// would pay for all of it, most of a context window would be spent on things
+// nothing can be planned against, and the handful of facts a plan actually needs
+// (what can I tap, what can I type into, where do the links go) would be buried.
+//
+// WHERE THE BUDGET COMES FROM. The planning call already carries a ~2.5k-token
+// system prompt plus the session transcript. 4,000 characters is roughly 1,000
+// tokens — about a tenth of a typical turn's input — and at ~60 characters a row
+// it holds ~60 interactive elements. Sixty is past the actionable surface of any
+// page a person navigates by hand: pages with more than that are navigation
+// indexes, where the first sixty in document order are the header, the primary
+// nav and the start of the content — the part a plan targets.
+const MAX_PAGE_DIGEST_CHARS = 4_000;
+const MAX_PAGE_DIGEST_ELEMENTS = 60;
+
+/** One interactive element, as the planner sees it: how to address it, what it
+ *  is, and what it says. Nothing else is plannable. */
+interface DigestedElement {
+  selector: string;
+  kind: string;
+  text: string;
+}
+
+const INTERACTIVE_TAG_RE =
+  /<(a|button|input|select|textarea|summary)\b([^>]*)>([\s\S]*?)<\/\1>|<(input|select|textarea)\b([^>]*)\/?>/gi;
+const ATTR_RE = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*"([^"]*)"/g;
+const TITLE_RE = /<title\b[^>]*>([\s\S]*?)<\/title>/i;
+
+/** Attributes as a plain map. Single-quoted and unquoted forms are skipped
+ *  deliberately: a selector built from a half-parsed attribute is worse than no
+ *  selector, because the model would plan against it and the dispatch would
+ *  fail somewhere that looks like the page's fault. */
+function readAttributes(raw: string): Map<string, string> {
+  const attrs = new Map<string, string>();
+  ATTR_RE.lastIndex = 0;
+  for (let m = ATTR_RE.exec(raw); m !== null; m = ATTR_RE.exec(raw)) {
+    const name = m[1];
+    const value = m[2];
+    if (name !== undefined && value !== undefined) attrs.set(name.toLowerCase(), value);
+  }
+  return attrs;
+}
+
+/** Strip tags and collapse whitespace — the element's visible label. */
+function visibleText(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * ⛔ P1/P2 — AN ELEMENT THE DIGEST MUST NOT DESCRIBE AT ALL.
+ *
+ * A `hidden` input is not interactive: nothing can tap it and nothing can type
+ * into it, so it fails this digest's own contract ("what can I tap, what can I
+ * type into, where do the links go"). It is also where a page keeps its CSRF
+ * token, its session id and its flow state — values that would otherwise travel
+ * into a planning prompt, a provider request and a provider log. Both reasons
+ * point the same way, so it never earns a row.
+ */
+function isHiddenInput(tag: string, attrs: Map<string, string>): boolean {
+  return tag === 'input' && attrs.get('type')?.toLowerCase() === 'hidden';
+}
+
+/**
+ * ⛔ P1/P2 — THE LABEL OF A FIELD, NEVER ITS CONTENTS.
+ *
+ * `value` is what the CUSTOMER (or the site) put in the box: an email already
+ * typed into a login form, a password a manager auto-filled, a one-time code. It
+ * describes no structure a plan could be written against — the model needs to
+ * know the box is there and what it is for, which is exactly what a placeholder,
+ * an aria-label or the associated label text says.
+ *
+ * So `value` is not read here, by ANY branch. That is the whole defence: an
+ * exclusion list ("skip password, skip token…") is a guess about naming, and the
+ * first field named `pw2` or `secret_answer` defeats it silently. Reading a
+ * label and never a value cannot be defeated by a name nobody predicted.
+ */
+function labelTextFor(inner: string, attrs: Map<string, string>): string {
+  return (
+    visibleText(inner) ||
+    attrs.get('placeholder') ||
+    attrs.get('aria-label') ||
+    attrs.get('title') ||
+    ''
+  );
+}
+
+/**
+ * The most SPECIFIC stable CSS selector the markup supports, in the order a
+ * person would pick one: a test id, then an id, then name, then an href or
+ * aria-label match. Returns null when nothing addressable is present — an
+ * element the plan could not target is not worth a row in the budget.
+ */
+function selectorFor(tag: string, attrs: Map<string, string>): string | null {
+  const testId = attrs.get('data-testid');
+  if (testId !== undefined && testId.length > 0) return `[data-testid="${testId}"]`;
+  const id = attrs.get('id');
+  if (id !== undefined && id.length > 0) return `#${id}`;
+  const name = attrs.get('name');
+  if (name !== undefined && name.length > 0) return `${tag}[name="${name}"]`;
+  const href = attrs.get('href');
+  if (tag === 'a' && href !== undefined && href.length > 0) return `a[href="${href}"]`;
+  const label = attrs.get('aria-label');
+  if (label !== undefined && label.length > 0) return `[aria-label="${label}"]`;
+  const type = attrs.get('type');
+  if (tag === 'input' && type !== undefined && type.length > 0) return `input[type="${type}"]`;
+  return null;
+}
+
+/**
+ * P1 — turn a raw page source into the BOUNDED digest of interactive elements a
+ * plan can be written against.
+ *
+ * ⛔ THE RESULT IS UNTRUSTED DATA. Every string in it is page-controlled, so the
+ * caller frames it as data and never as instructions — the same stance the
+ * read-back path already takes with the page text.
+ *
+ * ⛔ AND IT CARRIES NO FIELD CONTENTS. Every row is (selector · kind · label):
+ * the digest reads placeholders, aria-labels and link/button text, and never an
+ * input's `value`. It is the same invariant P2 holds on the other side — the
+ * credential reaches the dispatch and nothing else — and it would be worthless
+ * if the page route then read the filled password field back into the prompt.
+ * `hidden` inputs are dropped outright. See {@link labelTextFor}.
+ *
+ * Degrades rather than disappears: a source with no recognisable markup (a text
+ * -only page, or a device that returns rendered text) yields no element rows, so
+ * the bounded visible text is returned instead. Returning nothing there would
+ * tell the planner "the page is empty", which is a different and false claim.
+ */
+export function summarizePageForPlanning(
+  source: string,
+  maxChars: number = MAX_PAGE_DIGEST_CHARS,
+  maxElements: number = MAX_PAGE_DIGEST_ELEMENTS,
+): string {
+  const lines: string[] = [];
+  const title = TITLE_RE.exec(source)?.[1];
+  if (title !== undefined) {
+    const clean = visibleText(title);
+    if (clean.length > 0) lines.push(`page: ${clean.slice(0, 120)}`);
+  }
+  const elements: DigestedElement[] = [];
+  INTERACTIVE_TAG_RE.lastIndex = 0;
+  for (let m = INTERACTIVE_TAG_RE.exec(source); m !== null; m = INTERACTIVE_TAG_RE.exec(source)) {
+    if (elements.length >= maxElements) break;
+    const tag = (m[1] ?? m[4] ?? '').toLowerCase();
+    if (tag.length === 0) continue;
+    const attrs = readAttributes(m[2] ?? m[5] ?? '');
+    if (isHiddenInput(tag, attrs)) continue;
+    const selector = selectorFor(tag, attrs);
+    if (selector === null) continue;
+    const text = labelTextFor(m[3] ?? '', attrs);
+    elements.push({ selector, kind: tag, text: text.slice(0, 80) });
+  }
+  for (const el of elements) {
+    lines.push(
+      el.text.length > 0
+        ? `${el.selector} · ${el.kind} · "${el.text}"`
+        : `${el.selector} · ${el.kind}`,
+    );
+  }
+  if (elements.length === 0) {
+    const text = visibleText(source);
+    if (text.length === 0) return lines.join('\n').slice(0, maxChars);
+    lines.push(text);
+  }
+  const digest = lines.join('\n');
+  return digest.length > maxChars ? digest.slice(0, maxChars) : digest;
+}
+
+/**
+ * P3 — the selector an intent needs to EXIST on the page, or null.
+ *
+ * Scoped to `interact` deliberately. A `wait` already carries its own timeout,
+ * so waiting again for the selector it just waited for buys nothing; every other
+ * verb either has no selector or does not depend on one being present.
+ */
+function selectorOf(intent: ExecuteArgs['plan']['intents'][number]): string | null {
+  if (intent.kind !== 'interact') return null;
+  const selector = intent.selector;
+  return typeof selector === 'string' && selector.length > 0 ? selector : null;
 }
 
 /**

@@ -335,6 +335,9 @@ function chatWith(over: Partial<UseAgentChatResult>): UseAgentChatResult {
     deny: vi.fn(),
     reset: vi.fn(),
     cancel: vi.fn(),
+    // P6 — a stopped turn still running on the server. False here: these
+    // doubles describe a chat nobody pressed Stop on.
+    stoppedTurnStillRunning: false,
     restore: vi.fn(),
     adopt,
     adopting: true,

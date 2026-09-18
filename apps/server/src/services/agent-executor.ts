@@ -39,7 +39,13 @@
 // HTTP would double the latency budget + lose typed-error context.
 // AI-B2.b dispatches against the in-process SessionsService instead.
 
-import type { AgentIntent, DecomposeResult, TranscriptEntry } from './agent-decomposer.js';
+import type {
+  AgentIntent,
+  CredentialBag,
+  DecomposeResult,
+  TranscriptEntry,
+} from './agent-decomposer.js';
+import { resolveCredential } from './agent-decomposer.js';
 import type { AccountContext } from './auth.js';
 import type {
   CaptureKind,
@@ -124,6 +130,18 @@ export interface ExecutorRunResult {
    * fence failed; no undispatched suffix was started. The runtime suppresses
    * transcript publication and returns an honest authority conflict. */
   authorityLost?: boolean;
+  /**
+   * P1 — this result is the MERGE of a run that failed and a re-planned run that
+   * then finished the job. No single `execute()` ever sets it; only
+   * `mergeExecutorRuns` does.
+   *
+   * It exists because `ok` and "a failure row is present" stopped being
+   * mutually exclusive the moment a turn could recover. The transcript builder
+   * reads it to say "a step failed, the page was read, the rest was re-planned"
+   * instead of "(plan halted on failure)" — which would be a false claim
+   * replayed into the NEXT turn's model context as history.
+   */
+  recoveredAfterReplan?: boolean;
 }
 
 /** Stable signature of a consequential action, for the approve → re-run carry
@@ -156,6 +174,17 @@ export function consequentialHalt(
     category: v.category,
     matchedText: v.matchedText,
   };
+}
+
+/**
+ * P3 — a mutable element-wait ceiling, shared by every plan run in one turn.
+ *
+ * `remainingMs: null` is the UNSEEDED state (see {@link ExecuteArgs.elementWaitBudget});
+ * an executor that supports element waits replaces it with its own configured
+ * run budget on first use and debits from there.
+ */
+export interface ElementWaitBudget {
+  remainingMs: number | null;
 }
 
 export interface ExecuteArgs {
@@ -194,6 +223,34 @@ export interface ExecuteArgs {
    * intent dispatch; false/throw stops the undispatched suffix fail-closed. */
   shouldContinue?: () => boolean | Promise<boolean>;
   /**
+   * P2 — the session's credential bag, for resolving the plan's
+   * `{{credential:name}}` placeholders at dispatch time.
+   *
+   * ⛔ IN-MEMORY, FOR THE LENGTH OF THIS CALL. It is never logged, never put on
+   * a result, and never persisted — the whole reason the plan carries
+   * placeholders is so the resolved value exists only inside the dispatch that
+   * uses it. See {@link substituteCredentials}.
+   */
+  credentials?: CredentialBag;
+  /**
+   * P3 — the element-wait ceiling this run SHARES with the rest of the turn.
+   *
+   * ⛔ WHY THE CALLER OWNS IT. The ceiling exists so extra patience cannot
+   * multiply: a plan of twenty missing selectors must not spend twenty waits.
+   * A budget built inside `execute()` enforced that per RUN, which was the same
+   * thing as per turn until P1 made one turn run up to three plans — at which
+   * point the documented ceiling silently became three times itself. The runtime
+   * now builds ONE of these per turn and threads it through every run, so the
+   * number in the comment is the number the customer's turn can actually spend.
+   *
+   * `remainingMs: null` means NOT YET SEEDED: the executor fills it from its own
+   * configured run budget the first time it uses it. That keeps the caller from
+   * having to know an executor-private number, and keeps a stub executor that
+   * ignores the field costing nothing. Omitted entirely → the executor uses a
+   * private per-run budget, exactly as before.
+   */
+  elementWaitBudget?: ElementWaitBudget;
+  /**
    * Live-progress hook (step streaming). Called once per intent AS its result
    * lands — BEFORE the whole run finishes — so a streaming caller can surface
    * per-step progress instead of only the final ExecutorRunResult. `index` is
@@ -213,6 +270,94 @@ export interface ExecuteArgs {
    * optional so existing executors/callers are unaffected.
    */
   onStepStart?: (intent: AgentIntent, index: number) => void;
+}
+
+/**
+ * P2 — resolve a plan's credential placeholders into the values the DEVICE
+ * receives, at the last possible moment.
+ *
+ * ⛔ THE RETURNED INTENT IS FOR THE DISPATCH ONLY. Callers keep the ORIGINAL
+ * (placeholder-bearing) intent on the IntentResult, so the transcript, the
+ * message response and the next turn's model context all carry
+ * `{{credential:password}}` and never the password. That asymmetry is the
+ * feature; collapsing it — putting the resolved intent on the result "so the log
+ * matches" — would write the customer's password into encrypted-at-rest history
+ * and then replay it into the next prompt.
+ *
+ * Returns `unresolved` naming the placeholder when no such credential is held.
+ * Typing the literal `{{credential:otp}}` into a login form would be a
+ * confident, silent failure: the form accepts it, the step goes green, and the
+ * site rejects the login for a reason nothing in the turn explains.
+ */
+export type CredentialSubstitution =
+  | { ok: true; intent: AgentIntent; substituted: boolean }
+  /**
+   * The step cannot be dispatched, naming the credential and WHY:
+   *  · `not_held` — the plan asked for a credential this chat does not have.
+   *  · `unsupported_field` — the placeholder is somewhere a credential cannot be
+   *    resolved safely (a url, a selector), so it would have gone to the device
+   *    as literal text. Both fail the step; only the sentence differs.
+   */
+  | { ok: false; unresolved: string; why: 'not_held' | 'unsupported_field' };
+
+const CREDENTIAL_PLACEHOLDER_RE = /\{\{credential:([A-Za-z0-9_.-]{1,64})\}\}/g;
+
+/**
+ * The first credential name a placeholder mentions ANYWHERE in an intent, or
+ * null. Scans the serialized intent rather than a list of fields, because the
+ * list of fields is what drifts: a verb gains a `url` or a `script` and the
+ * scanner silently stops covering it.
+ */
+function firstPlaceholderAnywhere(intent: AgentIntent): string | null {
+  CREDENTIAL_PLACEHOLDER_RE.lastIndex = 0;
+  return CREDENTIAL_PLACEHOLDER_RE.exec(JSON.stringify(intent))?.[1] ?? null;
+}
+
+export function substituteCredentials(
+  intent: AgentIntent,
+  credentials: CredentialBag | undefined,
+): CredentialSubstitution {
+  if (intent.kind !== 'interact' || typeof intent.value !== 'string') {
+    // ⛔ NOT SUBSTITUTED IS NOT THE SAME AS FINE. Only an interact VALUE is a
+    // place a credential may be resolved into — that is the one field the
+    // device treats as text to type, and the one the `sensitive` flag protects.
+    // A placeholder in a url, a selector or anywhere else is a plan we cannot
+    // carry out safely, and dispatching it verbatim is the confident silent
+    // failure this whole mechanism exists to prevent: the device navigates to
+    // `https://api.test/?token={{credential:api_token}}`, the step goes green,
+    // and the site rejects it for a reason nothing in the turn explains.
+    const stray = firstPlaceholderAnywhere(intent);
+    return stray === null
+      ? { ok: true, intent, substituted: false }
+      : { ok: false, unresolved: stray, why: 'unsupported_field' };
+  }
+  const value = intent.value;
+  CREDENTIAL_PLACEHOLDER_RE.lastIndex = 0;
+  if (!CREDENTIAL_PLACEHOLDER_RE.test(value)) return { ok: true, intent, substituted: false };
+  let unresolved: string | null = null;
+  CREDENTIAL_PLACEHOLDER_RE.lastIndex = 0;
+  const resolved = value.replace(CREDENTIAL_PLACEHOLDER_RE, (whole, name: string) => {
+    const secret = resolveCredential(credentials, name);
+    if (secret === undefined) {
+      unresolved ??= name;
+      return whole;
+    }
+    return secret;
+  });
+  if (unresolved !== null) return { ok: false, unresolved, why: 'not_held' };
+  return {
+    intent: {
+      ...intent,
+      value: resolved,
+      // A substituted value IS a secret, whatever the selector looks like, so
+      // the device must not apply behavioural typo correction to it and must not
+      // log it. Set here rather than trusted from the plan: the model does not
+      // know which of its placeholders resolve to a password.
+      sensitive: true,
+    },
+    ok: true,
+    substituted: true,
+  };
 }
 
 export async function executionMayContinue(check: ExecuteArgs['shouldContinue']): Promise<boolean> {
@@ -247,6 +392,22 @@ export interface AgentExecutor {
    * null on any failure); the read-back is additive, it must never fail a turn.
    */
   observe?(
+    sessionId: string,
+    shouldContinue?: ExecuteArgs['shouldContinue'],
+  ): Promise<string | null>;
+
+  /**
+   * P1 perceive — read the current page as a BOUNDED digest of its interactive
+   * elements, for PLANNING. Same dispatch as {@link observe}; different
+   * consumer, and therefore a different shape: the answer pass wants the page's
+   * text, the planner wants selectors it can target.
+   *
+   * OPTIONAL and feature-detected by the runtime for the same reason `observe`
+   * is: an executor that cannot see the page still runs plans, it just plans
+   * them blind — which is the behaviour every executor had before this. Returns
+   * null on any failure; perceiving is additive and must never fail a turn.
+   */
+  observeDigest?(
     sessionId: string,
     shouldContinue?: ExecuteArgs['shouldContinue'],
   ): Promise<string | null>;
@@ -671,6 +832,13 @@ export function runResultToTranscriptEntry(
   }
   if (runResult.awaitingConfirmation) {
     lines.push('(plan paused — awaiting your confirmation of a consequential action)');
+  } else if (runResult.recoveredAfterReplan === true && runResult.ok) {
+    // P1 — a failure row is present and the turn still finished, because the
+    // agent looked at the page and planned the rest. Saying "halted" here would
+    // contradict the ✓ lines directly above it AND tell the next turn's model
+    // that the previous turn stopped, which is exactly the history that makes it
+    // plan defensively.
+    lines.push('(a step failed — read the page, worked out the rest, and carried on)');
   } else if (runResult.results.some((r) => r.kind === 'failure' && r.intent.kind !== 'wait')) {
     // #139 — a best-effort `wait` failure no longer halts the plan (later steps
     // still run), so `!ok` alone no longer implies a halt. Only a NON-wait failure

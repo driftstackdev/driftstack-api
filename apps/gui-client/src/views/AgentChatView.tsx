@@ -39,6 +39,15 @@ import { CONNECT_API_KEY_IN_SETTINGS } from '../lib/proxy-check-copy';
 /** (l) #8 — the reattach notice: the composer caption, the notice row and the
  *  disabled Send's title all say the same thing. */
 export const REATTACHING_NOTICE = 'Reattaching to the previous session…';
+/**
+ * P6 — what the composer says between Stop and the stopped turn actually
+ * finishing. Stop frees the composer; the task itself keeps running, and a send
+ * during that window is refused. Naming the state is the difference between a
+ * customer who waits a moment and a customer who gets an error they did nothing
+ * to deserve. Customer-facing copy: it names the TASK, never any part of how
+ * this is implemented.
+ */
+export const STILL_FINISHING_NOTICE = 'Still finishing the previous task…';
 /** (l) #8 — appended when Enter was pressed during the reattach. */
 export const SEND_HELD_SUFFIX = 'Your message is kept; Send unlocks when it settles.';
 import { DEFAULT_ASSISTANT_TEMPLATES } from '../lib/assistant-templates';
@@ -682,6 +691,15 @@ export function AgentChatView({
       setSendHeldByAdopt(true);
       return;
     }
+    // P6 — the SAME guard as the Send button's `disabled`, here, because this
+    // function is also what ⏎ calls and the composer's own placeholder tells the
+    // customer to press it. Guarding only the button left the doomed send one
+    // keystroke away — it would reach a session that is still finishing the
+    // stopped turn and come back refused, which is the 409 this item exists to
+    // remove. The draft is deliberately NOT cleared: the customer keeps what
+    // they typed, and the composer caption above already says why nothing
+    // happened.
+    if (chat.stoppedTurnStillRunning) return;
     // Egress gate. Only a settled resolution may start a session: 'pending'
     // means the proxy round-trip is still in flight, and 'blocked' means this
     // profile HAS a proxy we could not resolve. Sending in either state would
@@ -1170,11 +1188,14 @@ export function AgentChatView({
                 type="button"
                 onClick={() => {
                   chat.cancel();
-                  // Stop is a UI-only stop — the server turn may still complete on the
-                  // device (audit 2026-07-08); say so instead of implying the agent halted.
+                  // P6 — Stop is a UI-only stop: the task keeps running and keeps
+                  // the chat busy, so the toast now says what that means for the
+                  // customer's NEXT action rather than only what happened to this
+                  // one. A customer told "stopped" and then refused on their next
+                  // send has been misled by the word.
                   toasts.push({
                     title: 'Stopped waiting',
-                    body: 'The task may still be finishing on the device.',
+                    body: 'The task is still finishing. You can send the next one as soon as it does.',
                     tone: 'info',
                   });
                 }}
@@ -1191,6 +1212,10 @@ export function AgentChatView({
                   draft.trim().length === 0 ||
                   !aiReady ||
                   chat.adopting ||
+                  // P6 — the stopped turn is still running, so this send would be
+                  // refused. Holding the button is the honest state; offering it
+                  // and failing is what produced the 409s.
+                  chat.stoppedTurnStillRunning ||
                   proxyState.kind === 'pending' ||
                   proxyState.kind === 'blocked'
                 }
@@ -1199,11 +1224,13 @@ export function AgentChatView({
                     ? `${CONNECT_API_KEY_IN_SETTINGS} first`
                     : chat.adopting
                       ? (chat.adoptError ?? REATTACHING_NOTICE)
-                      : proxyState.kind === 'pending'
-                        ? 'Checking this profile’s proxy…'
-                        : proxyState.kind === 'blocked'
-                          ? proxyState.reason
-                          : undefined
+                      : chat.stoppedTurnStillRunning
+                        ? STILL_FINISHING_NOTICE
+                        : proxyState.kind === 'pending'
+                          ? 'Checking this profile’s proxy…'
+                          : proxyState.kind === 'blocked'
+                            ? proxyState.reason
+                            : undefined
                 }
                 className="btn-primary px-3 py-2 text-sm disabled:opacity-50"
               >
@@ -1212,7 +1239,14 @@ export function AgentChatView({
             )}
           </div>
           <p className="mx-auto mt-1 flex max-w-3xl items-center gap-2 text-2xs text-ink-muted">
-            {aiReady && chat.adopting ? (
+            {chat.stoppedTurnStillRunning ? (
+              // P6 — said in the composer, not only in a hover title. The customer
+              // who pressed Stop is looking right here when they decide whether to
+              // type the next thing.
+              <span role="status" data-component="chat-still-finishing-notice">
+                {STILL_FINISHING_NOTICE}
+              </span>
+            ) : aiReady && chat.adopting ? (
               // (l) #8 / #12 — the held send says why, here, not only in a hover
               // title; a reattach that could not be answered offers the retry
               // (adopt() again on the same session) instead of a dead end.

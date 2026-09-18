@@ -292,28 +292,42 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect(over.session.transcript).toHaveLength(AGENT_TRANSCRIPT_MAX_ENTRIES);
   });
 
-  it('#140 read-and-report: NO read-back without a BYOK key (feature-gated) — only user + plan turns', async () => {
+  it('#140/P5 read-and-report: NO read-back without a BYOK key — and the customer is TOLD, not left in silence', async () => {
     const { runtime, sessions, seedId } = await makeReadbackRuntime();
-    await runtime.runTurn({
+    const result = await runtime.runTurn({
       agentSessionId: seedId,
       userMessage: 'get the IP from https://browserleaks.com/ip and capture the page',
       // no byokApiKey → the answer pass is gated off
     });
     const final = await sessions.get(seedId);
-    expect(final?.transcript).toHaveLength(2);
+    // P5 — user + plan + the honest "here is why there is no answer" turn. This
+    // asserted 2 before, i.e. it pinned the silence: the customer asked for the
+    // IP, the agent did the work, and said nothing at all about the answer.
+    expect(final?.transcript).toHaveLength(3);
+    expect(final?.transcript.at(-1)?.role).toBe('agent');
+    expect(final?.transcript.at(-1)?.body).toMatch(/no AI key/i);
+    if (result.kind !== 'plan-executed') throw new Error('type narrow');
+    expect(result.answer).toBeUndefined();
+    expect(result.readbackUnavailable).toMatch(/no AI key/i);
   });
 
-  it('#140 read-and-report: an empty/failed observe does NOT append an answer turn (best-effort, never a blank reply)', async () => {
+  it('#140/P5 read-and-report: an empty/failed observe appends NO ANSWER — but does append the reason', async () => {
     const { runtime, sessions, seedId } = await makeReadbackRuntime({
       observe: () => Promise.resolve(null),
     });
-    await runtime.runTurn({
+    const result = await runtime.runTurn({
       agentSessionId: seedId,
       userMessage: 'get the IP from https://browserleaks.com/ip and capture the page',
       byokApiKey: 'sk-ant-test-fake-key',
     });
     const final = await sessions.get(seedId);
-    expect(final?.transcript).toHaveLength(2); // no answer turn on a null observation
+    // Still never a BLANK reply — the invariant this test was written for holds.
+    // What changed is that "no answer" is now SAID rather than implied by an
+    // absence the customer cannot distinguish from being ignored.
+    expect(final?.transcript).toHaveLength(3);
+    expect(final?.transcript.at(-1)?.body).toMatch(/could not read the page back/i);
+    if (result.kind !== 'plan-executed') throw new Error('type narrow');
+    expect(result.answer).toBeUndefined();
   });
 
   it('#140 read-and-report: a NON-read-intent task (scroll/click, no get/find/what…) does NOT trigger a read-back — cost-gated', async () => {
@@ -338,7 +352,12 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
       byokApiKey: 'sk-ant-test-fake-key',
     });
     const final = await sessions.get(seedId);
-    expect(final?.transcript).toHaveLength(2); // no read-back answer turn
+    // No read-back ANSWER turn — the overspend guard this test exists for is
+    // intact. P5 adds the sentence that says why, which costs no model call:
+    // "not enough budget left to read the page back" is a repair the customer
+    // can act on, where an unexplained absence is not.
+    expect(final?.transcript).toHaveLength(3);
+    expect(final?.transcript.at(-1)?.body).toMatch(/budget/i);
   });
 
   it('#140 read-and-report: SANITIZES the answer before appending — an injected newline cannot forge a transcript line', async () => {
@@ -627,7 +646,14 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(
       (remainingBeforeAnswer ?? 0) - 40,
     );
-    expect((await sessions.get(seed.id))?.transcript).toHaveLength(2);
+    // The ANSWER is still not published — an answer that sanitised to nothing is
+    // not an answer, and that is what this test guards. P5 adds the sentence
+    // saying there is none, which is not a second accounting event: the usage
+    // row and the debit above are unchanged, because no model call was made for
+    // it.
+    const settledTranscript = (await sessions.get(seed.id))?.transcript;
+    expect(settledTranscript).toHaveLength(3);
+    expect(settledTranscript?.at(-1)?.body).toMatch(/could not read the page back/i);
   });
 
   it('#140 read-and-report: finalize authority loss retains latest sanitized-empty answer evidence', async () => {
@@ -758,7 +784,13 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
     expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(
       (remainingBeforeAnswer ?? 0) - 40,
     );
-    expect((await sessions.get(seed.id))?.transcript).toHaveLength(2);
+    // The answer's OWN transcript write failed and was not retried — still
+    // additive, still accounted exactly once. P5's sentence then lands, because
+    // an answer lost to a storage failure is precisely the case where silence
+    // reads to the customer as "it ignored my question".
+    const throwTranscript = (await sessions.get(seed.id))?.transcript;
+    expect(throwTranscript).toHaveLength(3);
+    expect(throwTranscript?.at(-1)?.body).toMatch(/did not complete/i);
     if (result.kind !== 'plan-executed') throw new Error('type narrow');
     expect(result.session.tokenBudgetRemaining).toBe(
       (await sessions.get(seed.id))?.tokenBudgetRemaining,

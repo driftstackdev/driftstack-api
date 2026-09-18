@@ -159,6 +159,33 @@ describe('services/agent-decomposer-claude content parity', () => {
     );
   });
 
+  it("P1 — SYSTEM_PROMPT planning contract pinned AT ITS NEW VALUE, and the superseded sentence pinned ABSENT. WHAT MOVED: 'Your plan runs in order with NO BRANCHING and NO RETRIES' → 'runs IN ORDER and DOES NOT BRANCH … you get a COUPLE of chances to look at the page and re-plan the rest of this turn'. WHY: the old sentence was a true description of a runtime that halted on the first non-wait failure, and it is now false in both halves — the executor waits for an element that has not rendered yet (P3) and the runtime re-plans a bounded number of times from an observation of the page (P1). A locked prompt that describes behaviour the product no longer has is worse than an unpinned one: the model plans defensively for a constraint that was lifted. The no-branching half is UNCHANGED and still pinned, because the plan really is a flat ordered list", () => {
+    expect(body).toMatch(
+      /' {4}Your plan runs IN ORDER and DOES NOT BRANCH, so every step you add is a',/,
+    );
+    expect(body).toMatch(/' {4}step the whole task can die on\./);
+    expect(body).toMatch(
+      /' {4}plainly did not happen, you get a COUPLE of chances to look at the page and',\s*' {4}re-plan the rest of this turn/,
+    );
+    // ⛔ The superseded claim must not survive anywhere in the file — including
+    // in a comment that would read as the live contract to the next person.
+    expect(body).not.toMatch(/NO BRANCHING and NO RETRIES/);
+  });
+
+  it('P1 — SYSTEM_PROMPT instructs planning from the OBSERVED page when one is shown, and names planning from memory as the dominant death mode. Pinned because the perceive loop is worth nothing if the prompt does not tell the model the list is authoritative: a model handed a selector list it treats as advisory keeps emitting the selector it remembers', () => {
+    expect(body).toMatch(
+      /'WHEN THE PAGE IS SHOWN TO YOU, PLAN AGAINST IT AND NOT AGAINST MEMORY\./,
+    );
+    expect(body).toMatch(/'ground truth and every selector you emit should come from it\./);
+    expect(body).toMatch(/'list is present you ARE planning blind/);
+  });
+
+  it('P2 — SYSTEM_PROMPT pins credentials as PLACEHOLDERS the model never holds the values for, and forbids asking the customer to paste a secret into the chat. This is the model-facing half of the design whose other half is the executor substituting at dispatch time; if the prompt ever taught the model to expect real values, the runtime would have to start sending them', () => {
+    expect(body).toMatch(/'SAVED CREDENTIALS ARE PLACEHOLDERS, NEVER VALUES\./);
+    expect(body).toMatch(/\{\{credential:<name>\}\} as the entire type/);
+    expect(body).toMatch(/'customer to type a password or a one-time code into the chat\.',/);
+  });
+
   it("SYSTEM_PROMPT 6-verb constraint pins only executable model actions: 'CONSTRAINT: you can only emit the six intent verbs below. You CANNOT invent new verbs.' + 6-verb shape list (navigate / interact / wait / capture / scroll / behavioral_pause, W140). Swipe remains legacy API vocabulary but is not advertised because the live harness mapper cannot execute it", () => {
     expect(body).toMatch(
       /'CONSTRAINT: you can only emit the six intent verbs below\. You CANNOT',/,

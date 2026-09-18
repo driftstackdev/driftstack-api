@@ -45,6 +45,11 @@ const TEST_ROOTS = [
   'apps/server/tests/integration',
   'apps/server/tests/e2e',
   'apps/server/tests/unit',
+  // Added when the agent eval harness landed. Declaring it is this guard's own
+  // designed maintenance action for a new test directory — the arm below fails
+  // by name on any directory that holds tests and is not listed, precisely so a
+  // new root cannot sit outside the secrecy scan unnoticed.
+  'apps/server/tests/eval',
   'scripts/tests',
 ];
 

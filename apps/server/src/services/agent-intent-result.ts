@@ -84,6 +84,24 @@ export function intentResultToCustomer(
   parsed: ParsedIntentResult,
 ): IntentResult {
   if (parsed.success) {
+    // P4 — AN ERROR PAGE IS NOT A SUCCESSFUL NAVIGATION. The device reports a
+    // navigate that reached an HTTP error as a SUCCESS carrying the status, so
+    // without this branch the step is green, the plan continues, and the task
+    // dies several steps later at a selector that was never going to exist on a
+    // 404. Surfacing it HERE puts the failure on the step that actually went
+    // wrong, which is the only place a customer (or a re-plan) can act on it.
+    const errorPage = navigateErrorStatus(intent, parsed.outputData);
+    if (errorPage !== null) {
+      return {
+        kind: 'failure',
+        intent,
+        reason: errorPage.reason,
+        // Not retryable: the same URL returns the same status, so replaying it
+        // spends the budget to be told the same thing. The page needs to
+        // change, not the request.
+        diagnosis: { category: 'page_load_failed', retryable: false },
+      };
+    }
     // Sanitise at the BOUNDARY, not in each producer. `summarize` interpolates
     // `intent.selector` / `intent.value` — customer- and decomposer-supplied, and
     // bounded only by the dispatch schema's HARNESS_SCRIPT_MAX_CHARS (262_144),
@@ -104,6 +122,55 @@ export function intentResultToCustomer(
     reason: failureReason(intent, parsed.errorCode, parsed.errorMessage),
     diagnosis: diagnose(intent, parsed.errorCode),
   };
+}
+
+// ── P4 navigate error pages ───────────────────────────────────────────
+
+/**
+ * The lowest status the site itself is reporting as a problem. 4xx and 5xx are
+ * the two bands where the document that loaded is the site's error page rather
+ * than the page that was asked for. 3xx never reaches here as a final status —
+ * the browser has already followed it — and a 2xx is the ordinary case.
+ */
+const HTTP_ERROR_STATUS_FLOOR = 400;
+
+/**
+ * Customer-safe copy per status band. Says what the SITE did and what it means
+ * for the task; never names any internal component, and never speculates about
+ * a cause we did not observe.
+ */
+function navigateErrorCopy(status: number): string {
+  if (status === 404 || status === 410) {
+    return `that address does not exist on the site (it returned ${String(status)}) — the page may have moved, or the link may be wrong`;
+  }
+  if (status === 401 || status === 403) {
+    return `the site refused to show that page (${String(status)}) — it may require signing in first`;
+  }
+  if (status === 429) {
+    return 'the site asked us to slow down (429) — it is rate-limiting requests right now';
+  }
+  if (status >= 500) {
+    return `the site reported an error for that page (${String(status)}) — this is a problem on their side`;
+  }
+  return `the site returned ${String(status)} for that address instead of the page`;
+}
+
+/**
+ * P4 — an ADDITIVE read of the optional navigate `http_status`.
+ *
+ * Returns null — meaning "behave exactly as before" — for every non-navigate
+ * intent, for a device that sends no status at all, and for any status the site
+ * is not reporting as a problem. An absent field is NO OPINION, never an
+ * implied failure: that is what keeps an older device's behaviour unchanged.
+ */
+function navigateErrorStatus(
+  intent: AgentIntent,
+  outputData: unknown,
+): { status: number; reason: string } | null {
+  if (intent.kind !== 'navigate') return null;
+  const status = readNumber(outputData, 'http_status');
+  if (status === null || status < HTTP_ERROR_STATUS_FLOOR) return null;
+  return { status, reason: navigateErrorCopy(status) };
 }
 
 // ── success summary ───────────────────────────────────────────────────
@@ -335,6 +402,17 @@ function readString(obj: unknown, key: string): string | null {
   if (typeof obj === 'object' && obj !== null && key in obj) {
     const v = (obj as Record<string, unknown>)[key];
     if (typeof v === 'string') return v;
+  }
+  return null;
+}
+
+/** Read a finite number field from an unknown decoded outputData object, or
+ *  null. Non-finite and non-numeric values read as ABSENT rather than as 0 — a
+ *  0 here would compare below the error floor and silently assert "fine". */
+function readNumber(obj: unknown, key: string): number | null {
+  if (typeof obj === 'object' && obj !== null && key in obj) {
+    const v = (obj as Record<string, unknown>)[key];
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
   }
   return null;
 }

@@ -77,6 +77,62 @@ export interface CredentialBag {
 }
 
 /**
+ * P2 — the placeholder form a PLAN carries in place of a secret.
+ *
+ * ⛔ THIS IS THE WHOLE SAFETY DESIGN, IN ONE SENTENCE: the model plans
+ * `{{credential:username}}`, and the EXECUTOR swaps in the real value in the
+ * dispatch params, at the last possible moment. So the secret exists in exactly
+ * one place — the dispatch to the device — and never in a prompt, a provider
+ * request, a provider log, an executor result, or the encrypted transcript,
+ * which are the five places a plaintext credential would otherwise land.
+ *
+ * The bag's own doc comment is what settles this: "never persisted in
+ * plaintext", "rendered as `[redacted]` where applicable". A design that sent
+ * the values to the model would contradict both, because a transcript replays
+ * the plan the model was given.
+ */
+export const CREDENTIAL_PLACEHOLDER_PREFIX = '{{credential:';
+export const CREDENTIAL_PLACEHOLDER_SUFFIX = '}}';
+
+/** The placeholder text for one credential name. */
+export function credentialPlaceholder(name: string): string {
+  return `${CREDENTIAL_PLACEHOLDER_PREFIX}${name}${CREDENTIAL_PLACEHOLDER_SUFFIX}`;
+}
+
+/**
+ * P2 — the credential NAMES a bag holds. Names only: `username`, `password`,
+ * and each key of `extras`. This is the only projection of the bag that may
+ * reach a model.
+ *
+ * A key present but empty is NOT advertised: telling the model a saved password
+ * exists when the stored value is an empty string produces a plan that types
+ * nothing into a login form and reports success.
+ */
+export function credentialRefsFor(bag: CredentialBag | undefined): ReadonlyArray<string> {
+  if (bag === undefined) return [];
+  const names: string[] = [];
+  if (typeof bag.username === 'string' && bag.username.length > 0) names.push('username');
+  if (typeof bag.password === 'string' && bag.password.length > 0) names.push('password');
+  for (const [key, value] of Object.entries(bag.extras ?? {})) {
+    if (typeof value === 'string' && value.length > 0 && key.length > 0) names.push(key);
+  }
+  return names;
+}
+
+/** The value for one credential name, or undefined. Mirrors
+ *  {@link credentialRefsFor} exactly, so a name the model was told about is a
+ *  name the executor can resolve. */
+export function resolveCredential(
+  bag: CredentialBag | undefined,
+  name: string,
+): string | undefined {
+  if (bag === undefined) return undefined;
+  if (name === 'username') return bag.username;
+  if (name === 'password') return bag.password;
+  return bag.extras?.[name];
+}
+
+/**
  * v2-#4 Q.1.e — per-call usage telemetry. ClaudeAgentDecomposer fills
  * this in; DeterministicAgentDecomposer leaves it `undefined`. The
  * AgentRuntime records a usage row when this is present so we can
@@ -181,8 +237,40 @@ export interface DecomposeArgs {
    *  conversations stay coherent. */
   history: ReadonlyArray<TranscriptEntry>;
   /** Optional sensitive credentials the agent may need (opt-in
-   *  per session). */
+   *  per session).
+   *
+   * ⛔ P2 — NOTHING MAY SEND THIS TO A MODEL. It holds the customer's real
+   * secrets, and a prompt is a third-party request, a provider log and (via the
+   * transcript) durable storage. Implementations take the NAMES from
+   * {@link credentialRefs} instead and plan against the placeholder
+   * {@link CREDENTIAL_PLACEHOLDER_PREFIX} form, which the executor substitutes
+   * at dispatch time. The field stays on the interface because it is the type
+   * the runtime threads to the EXECUTOR; a decomposer reading it is the bug. */
   credentials?: CredentialBag;
+  /**
+   * P2 — the NAMES of the credentials this session holds, and nothing else
+   * (`['username', 'password']`). This is the half that is safe to put in a
+   * prompt: it tells the model a saved value exists and what to call it, so it
+   * can plan `type {{credential:username}} into #user` without any secret
+   * entering the request, the provider's logs, or the transcript.
+   */
+  credentialRefs?: ReadonlyArray<string>;
+  /**
+   * P1 perceive — a BOUNDED digest of what is on the page RIGHT NOW (selectors,
+   * kinds and visible text of the interactive elements), when one could be read.
+   *
+   * ⛔ UNTRUSTED, PAGE-DERIVED DATA. It is reasoned ABOUT, never obeyed — the
+   * same stance {@link AnswerArgs.observation} takes. Absent when there is no
+   * page yet or it could not be read, and a plan must still be possible without
+   * it: perceiving is an improvement to planning, not a precondition for it.
+   */
+  observation?: string;
+  /**
+   * P1 re-plan — why the previous plan in THIS turn stopped, in one customer-
+   * safe sentence, when this call is a re-plan of the remainder. Absent on the
+   * first decomposition of a turn.
+   */
+  priorFailure?: string;
   /** Remaining per-session token budget (tier-tiered cap, see
    *  B3 design). When 0, calls return a refuse with reason
    *  "token budget exhausted; start a new session". */

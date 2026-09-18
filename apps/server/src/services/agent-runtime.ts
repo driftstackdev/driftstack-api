@@ -16,6 +16,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type {
   AgentDecomposer,
   AgentIntent,
+  CredentialBag,
   DecomposeResult,
   DecomposeUsage,
   TranscriptEntry,
@@ -23,9 +24,16 @@ import type {
 import {
   AgentDecomposerContinuationDeniedError,
   AgentDecomposerSettledError,
+  credentialRefsFor,
 } from './agent-decomposer.js';
-import type { AgentExecutor, ExecutorRunResult, IntentResult } from './agent-executor.js';
+import type {
+  AgentExecutor,
+  ElementWaitBudget,
+  ExecutorRunResult,
+  IntentResult,
+} from './agent-executor.js';
 import { runResultToTranscriptEntry, sanitizeTranscriptText } from './agent-executor.js';
+import { intentReplayMayDuplicateEffect } from './agent-intent-result.js';
 import type {
   AgentSessionAuthoritySnapshot,
   AgentSessionRecord,
@@ -63,6 +71,25 @@ export interface RunTurnArgs {
    * generic 'agent_decomposer' record_type.
    */
   keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none';
+  /**
+   * P2 — the credentials this session may use to log in, held in memory for the
+   * length of this call only.
+   *
+   * ⛔ THE SPLIT IS THE POINT. The planner is told only the NAMES
+   * (`credentialRefsFor`) so it can plan `{{credential:username}}`; the executor
+   * is given the bag so it can substitute the real value into the dispatch. No
+   * value reaches a prompt, a provider request, an executor result, or the
+   * transcript — which is what the bag's own contract ("never persisted in
+   * plaintext") requires.
+   *
+   * ⚠️ WHAT IS NOT DECIDED HERE: where the bag comes from. There is no
+   * credential store and no UI that collects one; this threads the safe path end
+   * to end so that whatever product decision is made about storage has somewhere
+   * to deliver to. Until a caller supplies it, log-in tasks still cannot work —
+   * but they now fail for a reason someone can act on rather than silently
+   * planning against a field nothing populates.
+   */
+  credentials?: CredentialBag;
   /**
    * W443/W445 — consequential-action signatures the customer approved on a
    * prior turn (the executor halted with `confirmation_required`). Threaded to
@@ -216,6 +243,21 @@ export type RunTurnResult =
        * absent otherwise, which renders exactly as before.
        */
       answer?: string;
+      /**
+       * P5 — why the customer is NOT getting an answer, when they asked for one
+       * and the read-back could not produce it. Mutually exclusive with
+       * {@link answer}: exactly one of the two is present on a turn whose
+       * wording asked a question, and neither on a pure-action turn.
+       *
+       * It exists because the alternative was SILENCE. The read-back is gated on
+       * several conjuncts that have nothing to do with whether the customer
+       * asked — the AI budget left, whether a key is configured, whether the page
+       * could be read at all — and every one of them used to end the turn with
+       * the steps rendered and the question unanswered and unacknowledged. The
+       * sentence is already published as an agent transcript entry; this field
+       * carries it to callers that read the turn result directly.
+       */
+      readbackUnavailable?: string;
     }
   | {
       kind: 'clarify';
@@ -452,8 +494,50 @@ const SPEND_RECORD_RETRY_BASE_MS = 50;
 // an answer ("get the IP", "what's the price"), not pure action/screenshot tasks.
 // Conservative keyword match; the decomposer-signalled variant is the robust
 // follow-up (a `wantsAnswer` flag on the plan, prompt-eval-gated).
-const READ_INTENT_RE =
-  /\b(get|find|read|extract|scrape|fetch|show|tell|list|report|look\s?up|lookup|what|whats|which|when|where|who|how\s+(?:many|much|long|old|far|big))\b/i;
+// Exported (additively, no behaviour change) so the agent eval harness can
+// report WHICH of the read-back gate's conjuncts blocked an answer. A harness
+// that copied this pattern instead would keep naming the old gate after the real
+// one moved — confidently wrong about the one thing it exists to explain.
+// P5 — WIDENED, because the narrow version was refusing to answer people who
+// had plainly asked a question. The measured case: "search X and GIVE ME the
+// first result" ran every step, read nothing back, and told the customer
+// nothing — `give` was not a token here, and neither was a literal question
+// mark. The pattern's job is one question — DID THE CUSTOMER ASK FOR
+// INFORMATION BACK? — so it now covers the three ways people write that:
+//   (a) a verb aimed at the agent reporting back (get / give / tell / show /
+//       summarise / describe / check / verify / count / compare / quote …),
+//   (b) an interrogative (what / which / who / whether / does … have …),
+//   (c) a literal question mark, which is the cheapest and most reliable signal
+//       of all and was not being read at all.
+// ⛔ IT MUST STILL SAY NO. "open news.test and take a screenshot" is a pure
+// action task and matches nothing here — a second model call on it would be
+// money spent to answer a question nobody asked. `check` excludes "check out",
+// which is a purchase step, not a request for information.
+// ⛔ `confirm` excludes the PURCHASE sense for the same reason `check` excludes
+// "check out": "confirm the order" is the customer describing an action, not
+// asking to be told something.
+export const READ_INTENT_RE =
+  /\?|\b(get|give|find|read|extract|scrape|fetch|show|tell|say|list|report|summar\w*|describe|quote|compare|count|verify|confirm(?!\s+(?:the\s+)?(?:purchase|order|payment|checkout|booking|subscription))|check(?!\s*-?\s*out)|look\s?up|lookup|what|whats|which|when|where|who|whether|why|does|do\s+(?:i|we|they|you)|is\s+there|are\s+there|how\s+(?:many|much|long|old|far|big))\b/i;
+
+/**
+ * P5 — a URL is not prose, and its punctuation is not the customer's.
+ *
+ * The `?` alternative above is the cheapest and most reliable "did they ask a
+ * question" signal there is — in a SENTENCE. In a URL it is a query-string
+ * separator, and a browser-automation task is full of them:
+ * "open https://news.test/?utm_source=x and take a screenshot" is a pure action
+ * task that the raw pattern reads as a question, which is precisely the cost the
+ * pattern's own comment says it must refuse. Every URL-ish token is removed
+ * before the test, so the pattern judges what the person WROTE.
+ *
+ * `READ_INTENT_RE` stays exported unchanged — the eval harness reports the gate
+ * by name and must read the live pattern rather than a copy.
+ */
+const URLISH_RE = /\b(?:https?:\/\/|www\.)\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/\S*)?/gi;
+
+export function asksForInformation(message: string): boolean {
+  return READ_INTENT_RE.test(message.replace(URLISH_RE, ' '));
+}
 
 // #140 — only fire the read-back when the session has enough budget to cover a
 // FULL answer call (~MAX_OBSERVATION_CHARS=20k input chars ≈ ~5k tokens +
@@ -461,7 +545,183 @@ const READ_INTENT_RE =
 // a full ~5.5k-token call that debitTokens then floored to 0 — a silent
 // per-session budget-cap overspend (post-ship audit finding). Below this, skip
 // the read-back: the customer still gets the plan result, no overspend.
-const READBACK_MIN_BUDGET_TOKENS = 6_000;
+// Exported additively for the same reason as READ_INTENT_RE above: the eval
+// harness reports this gate by name and must read the live floor, not a copy.
+export const READBACK_MIN_BUDGET_TOKENS = 6_000;
+
+// ── P1 re-plan bounds ────────────────────────────────────────────────
+//
+// WHY TWO. The re-plan count bounds the LOOP and the model-call count bounds the
+// COST, and they are not the same question: the read-back is a model call that
+// is not a re-plan, and a future turn-local call would be another. Deriving one
+// from the other would make the cost ceiling drift silently the next time a call
+// is added.
+//
+// ⛔ AND SAY PLAINLY WHAT THIS ONE IS, because it was briefly described as a
+// second independent bound and it is not one. `modelCalls` counted the
+// decompose and the re-plans only, which made `modelCalls < MAX - 1` and
+// `replans < MAX_REPLANS_PER_TURN` the same inequality: deleting the conjunct
+// changed nothing and no test could tell the two apart. The read-back now
+// increments and checks it too, so the counter is at least HONEST about the
+// turn's provider calls — but at today's values (2 re-plans + 1 read-back + the
+// first plan = exactly 4) the RE-PLAN ceiling is still what stops the loop and
+// this constant never binds first. It is the turn's total-call BUDGET, and what
+// keeps it true is a test pinning the maximal turn's call count to it: raise
+// MAX_REPLANS_PER_TURN, or add a call anywhere in a turn, and that test fails
+// until this number is re-derived. Treat it as a fence, not as a gate.
+//
+// TWO RE-PLANS. The first covers the common real case by a wide margin — a
+// selector that was wrong because the model had not seen the page, fixed by
+// looking. A second covers the page that changed under the first re-plan (a
+// consent dialog appearing, a redirect). Beyond that the evidence is that the
+// model does not know how to do this task, and more attempts are the customer
+// paying to watch it fail more slowly.
+export const MAX_REPLANS_PER_TURN = 2;
+// FOUR MODEL CALLS: the initial decompose, at most two re-plans, and the
+// read-back. The loop stops one short of the ceiling so the LAST call is always
+// available to the read-back — a turn that spent every call re-planning and then
+// could not tell the customer what it found would have optimised the wrong half.
+export const MAX_MODEL_CALLS_PER_TURN = 4;
+// Never START a plan call the remaining budget cannot cover. Same floor and same
+// reason as the read-back's: a coarse `> 0` check lets a near-empty balance run
+// a full call that the debit then floors at zero, which is a silent per-session
+// budget overspend rather than a refusal.
+export const REPLAN_MIN_BUDGET_TOKENS = 6_000;
+
+/**
+ * P1 — failure categories a re-plan may follow, as an ALLOWLIST.
+ *
+ * ⛔ THE DIRECTION IS THE SAFETY PROPERTY, exactly as in
+ * `REPLAY_SAFE_INTENT_KINDS`. Every category here is one where the step
+ * PROVABLY did not take effect — the element was not found, the page did not
+ * load, the device refused the parameters, the result was too large to return,
+ * the capture failed, the condition was never met. Re-planning from those is
+ * safe because the page is in the state the failed step found it in.
+ *
+ * `unknown` is deliberately ABSENT, and it is the one that matters: it is the
+ * outcome-unknown class (a coarse WebDriver or dispatch failure on a click, a
+ * submit, a navigation) where the action MAY have applied and the result was
+ * lost. Re-planning there would plan against a page we cannot describe, and the
+ * new plan could repeat an effect that already happened. `session_error` is
+ * absent for a different reason: the box is unhealthy, and a new plan does not
+ * make it healthy. A category added later is unsafe by omission.
+ */
+const REPLANNABLE_FAILURE_CATEGORIES: ReadonlySet<string> = new Set([
+  'element_not_found',
+  'page_load_failed',
+  'condition_not_met',
+  'capture_failed',
+  'scroll_failed',
+  'invalid_request',
+  'result_too_large',
+]);
+
+/**
+ * P1 — may the turn look at the page and plan the remainder?
+ *
+ * Reads the LAST result, because that is the one that stopped the run. A
+ * failure with NO diagnosis at all is a MAPPING refusal: the intent never
+ * reached the device, so nothing happened and re-planning is the correct
+ * response — it is also the exact shape of the measured production failure
+ * where the model emits a Playwright selector that CSS cannot express.
+ */
+export function isReplannableFailure(run: ExecutorRunResult): boolean {
+  const last = run.results.at(-1);
+  if (last === undefined || last.kind !== 'failure') return false;
+  if (last.diagnosis === undefined) return true;
+  return REPLANNABLE_FAILURE_CATEGORIES.has(last.diagnosis.category);
+}
+
+/**
+ * P1 — one customer-safe sentence naming where the previous plan stopped, for
+ * the re-plan request. Built from the executor's own reason, which is already
+ * bounded and redacted by `intentResultToCustomer`; nothing new is exposed.
+ */
+export function describeExecutorStop(run: ExecutorRunResult): string {
+  const index = run.results.length - 1;
+  const last = run.results.at(-1);
+  if (last === undefined || last.kind !== 'failure') return 'the previous plan did not complete';
+  return `step ${String(index + 1)} (${last.intent.kind}) failed: ${last.reason}`;
+}
+
+/**
+ * P1 — one run of the plan, then the re-planned remainder, as a single result.
+ *
+ * `ok` and `awaitingConfirmation` come from the LAST run because they describe
+ * where the turn ended up; `results` are concatenated because they describe what
+ * happened, and the customer needs to see the steps that failed as well as the
+ * ones that worked. ⛔ A merge that dropped the failed prefix would report a
+ * clean run of a plan that is not the plan that ran.
+ */
+export function mergeExecutorRuns(
+  first: ExecutorRunResult,
+  second: ExecutorRunResult,
+): ExecutorRunResult {
+  return {
+    results: [...first.results, ...second.results],
+    ok: second.ok,
+    // P1 — the merged result carries a failure row AND, when the re-plan
+    // finished the job, `ok: true`. That combination is impossible for a single
+    // run (`execute()` derives ok from its own results), so the transcript
+    // builder cannot read "a failure is present" as "the plan halted" any more.
+    // Without this a recovered turn wrote "(plan halted on failure)" into the
+    // history the NEXT turn's model reads — telling it the last turn stopped
+    // when it had completed, which is the defensive planning P1 exists to end.
+    ...(second.ok && first.results.some((r) => r.kind === 'failure')
+      ? { recoveredAfterReplan: true }
+      : {}),
+    ...(second.awaitingConfirmation === true ? { awaitingConfirmation: true } : {}),
+    ...(second.authorityLost === true ? { authorityLost: true } : {}),
+  };
+}
+
+/**
+ * P1 — the part of a re-planned plan that has NOT already run.
+ *
+ * ⛔ THE HAZARD THIS EXISTS FOR. A re-plan is asked to continue a task, and a
+ * model asked that routinely returns the WHOLE task, prefix included — it is
+ * describing the job, not the remainder. Running that plan as returned re-taps
+ * the button that already worked. The measured shape: a plan ending in a `wait`
+ * that times out does NOT halt the executor (a wait is best-effort), so the run
+ * ends with a click already landed and a re-plannable `condition_not_met` last
+ * result; a re-plan of `[navigate, tap #send, wait longer]` then sends twice.
+ *
+ * Two rules, in the safe direction:
+ *  1. Drop the LEADING intents that deep-equal the intents that already
+ *     succeeded, in order. That is the common case and it is unambiguous.
+ *  2. Then, if any intent still in the plan deep-equals an intent that already
+ *     succeeded AND replaying it may duplicate an effect
+ *     ({@link intentReplayMayDuplicateEffect} — the same predicate the executor
+ *     already uses to refuse an outcome-unknown retry), REFUSE the whole
+ *     re-plan by returning null. That is the reordered case, where trimming a
+ *     prefix cannot see the repeat, and where guessing would risk a second
+ *     purchase-adjacent action. A refused re-plan costs the customer a turn
+ *     that stops; an accepted one can cost them a second order.
+ */
+export function suffixOf(
+  replanned: ReadonlyArray<AgentIntent>,
+  previousResults: ReadonlyArray<IntentResult>,
+): AgentIntent[] | null {
+  // Only the SUCCEEDED intents. A step that failed did not take effect, so
+  // re-emitting it is the re-plan doing its job rather than a duplicate.
+  const succeeded: AgentIntent[] = previousResults
+    .filter((r) => r.kind === 'success')
+    .map((r) => r.intent);
+  let trimmed = 0;
+  while (
+    trimmed < replanned.length &&
+    trimmed < succeeded.length &&
+    isDeepStrictEqual(replanned[trimmed], succeeded[trimmed])
+  ) {
+    trimmed += 1;
+  }
+  const suffix = replanned.slice(trimmed);
+  for (const intent of suffix) {
+    if (!intentReplayMayDuplicateEffect(intent)) continue;
+    if (succeeded.some((done) => isDeepStrictEqual(done, intent))) return null;
+  }
+  return [...suffix];
+}
 
 // Public message turns rewrite one application-encrypted JSONB transcript on
 // every append. Bound both axes before any browser work: entry count stops a
@@ -628,6 +888,66 @@ export class AgentRuntime {
     if (activeOnly !== undefined) return activeOnly.call(this.deps.sessions, sessionId, tokens);
     if (!(await this.sessionIsActive(sessionId))) return null;
     return this.deps.sessions.debitTokens(sessionId, tokens);
+  }
+
+  /**
+   * P1 — read the page for a RE-PLAN. Best-effort: perceiving improves the next
+   * plan, it is not a precondition for making one, so an executor that cannot
+   * observe, or an observation that fails, simply re-plans blind — which is
+   * still strictly better than stopping, because the model at least learns which
+   * step failed and why.
+   */
+  private async observeForReplan(
+    sessionId: string,
+    shouldContinue: () => Promise<boolean>,
+  ): Promise<string | undefined> {
+    const observeDigest = this.deps.executor.observeDigest?.bind(this.deps.executor);
+    if (observeDigest === undefined) return undefined;
+    try {
+      return (await observeDigest(sessionId, shouldContinue)) ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * P1 — account for a decompose call that is NOT the turn's first.
+   *
+   * ⛔ EVERY ITERATION RECORDS ITS OWN ROW. `sumMonthlySpendCents` is the sole
+   * enforcement of the bundled-LLM monthly cap and it sums exactly these rows,
+   * so a re-plan whose provider call settled but whose row was skipped would
+   * make the cap stop advancing while real upstream cost accrued. The flat
+   * bundled per-turn charge was already posted by the first decompose row, so
+   * this one is marked as such — the turn is charged once, the usage is recorded
+   * every time, which is the same split the read-back row already uses.
+   */
+  private async accountForExtraDecompose(
+    session: AgentSessionRecord,
+    driftstackSessionId: string | null,
+    decomposed: DecomposeResult,
+    args: RunTurnArgs,
+  ): Promise<void> {
+    try {
+      this.deps.metrics?.inc(METRIC_NAMES.agentDecomposeTotal, { result_kind: decomposed.kind });
+    } catch {
+      // Swallow; metrics are best-effort.
+    }
+    if (this.deps.usageRecorder === undefined || decomposed.usage === undefined) return;
+    await this.recordUsageRowWithRetry(
+      this.deps.usageRecorder,
+      {
+        accountId: session.accountId,
+        driftstackSessionId,
+        agentSessionId: session.id,
+        decomposeResultKind: decomposed.kind,
+        usage: decomposed.usage,
+        tokensConsumed: decomposed.tokensConsumed,
+        now: args.now ?? new Date(),
+        ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+        bundledFlatCostAlreadyPosted: true,
+      },
+      { accountId: session.accountId, agentSessionId: session.id, label: 'replan' },
+    );
   }
 
   /**
@@ -990,6 +1310,32 @@ export class AgentRuntime {
           );
         }
       }
+      // P1 (a) — PERCEIVE BEFORE PLANNING, when there is already a page to look
+      // at. The planner's worst failure is guessing a selector from memory on a
+      // page it has never seen, and the cheapest fix is to look first.
+      //
+      // ⛔ GATED ON THE SESSION HAVING DRIVEN THE BROWSER ALREADY, and not on
+      // "can we observe". On the FIRST turn of a session the device is on a
+      // blank page: the read would cost a dispatch and return nothing anyone
+      // could plan against, on every single first turn. A transcript entry
+      // carrying `intents` is the durable record that this session has actually
+      // navigated somewhere, so it is the honest test for "is there a page".
+      const hasPriorBrowserWork = sessionWithUser.transcript.some(
+        (entry) => entry.intents !== undefined && entry.intents.length > 0,
+      );
+      const observeDigest = this.deps.executor.observeDigest?.bind(this.deps.executor);
+      let pageObservation: string | undefined;
+      if (hasPriorBrowserWork && observeDigest !== undefined) {
+        emitProgress(args.onProgress, { kind: 'phase', phase: 'reading_page' });
+        // Best-effort by the same rule as the read-back: perceiving is an
+        // improvement to planning, never a precondition for it, so a failure
+        // here plans blind rather than failing the turn.
+        try {
+          pageObservation = (await observeDigest(session.id, authorityMayContinue)) ?? undefined;
+        } catch {
+          pageObservation = undefined;
+        }
+      }
       try {
         // The customer is now staring at three dots for however long the model
         // takes. Say what is happening before the call, not after it.
@@ -999,6 +1345,11 @@ export class AgentRuntime {
           archetype: turnArchetype,
           history: sessionWithUser.transcript,
           budgetTokensRemaining: sessionWithUser.tokenBudgetRemaining,
+          ...(pageObservation !== undefined ? { observation: pageObservation } : {}),
+          // P2 — NAMES ONLY. The values go to the executor, never here.
+          ...(args.credentials !== undefined
+            ? { credentialRefs: credentialRefsFor(args.credentials) }
+            : {}),
           // 6.c / #15 — the session's picked Claude 4.x model drives the
           // Anthropic call + the per-model cost-to-serve rate.
           model: sessionWithUser.model,
@@ -1268,44 +1619,242 @@ export class AgentRuntime {
     // Bound to a const: the callback below outlives the narrowing TypeScript
     // applies to the `let decomposed`, so reading `.intents` inside it would
     // not compile against the union.
-    const plannedIntents = decomposed.intents;
-    emitProgress(args.onProgress, {
-      kind: 'plan',
-      intents: plannedIntents,
-      total: plannedIntents.length,
-    });
-    emitProgress(args.onProgress, { kind: 'phase', phase: 'starting_browser' });
+    let plannedIntents = decomposed.intents;
+    // P1 — every intent ATTEMPTED this turn, across the first plan and any
+    // re-plan. The transcript entry carries this rather than the first plan
+    // alone, so the recipe/intent_log consumers see what actually ran.
+    const attemptedIntents: AgentIntent[] = [...plannedIntents];
     let announcedExecuting = false;
-    const executorResult = await this.deps.executor.execute({
-      onStepStart: (_intent, index): void => {
-        // The first dispatch is the real end of the warm-up, so `executing`
-        // is announced from here rather than guessed before execute().
-        if (!announcedExecuting) {
-          announcedExecuting = true;
-          emitProgress(args.onProgress, { kind: 'phase', phase: 'executing' });
-        }
-        emitProgress(args.onProgress, {
-          kind: 'step_start',
-          index,
-          total: plannedIntents.length,
+    // Both progress index spaces are offset by the results ALREADY accumulated,
+    // so a re-planned suffix continues the customer's step list instead of
+    // restarting it at 1. Using the same offset for starts and results keeps the
+    // two spaces aligned, which is what makes the join downstream well-defined.
+    let stepIndexOffset = 0;
+    // P3 — ONE element-wait ceiling for the WHOLE TURN, not one per plan run.
+    // The executor built its own per-`execute()` budget, which was the same
+    // thing as per turn until P1 made one turn run up to
+    // 1 + MAX_REPLANS_PER_TURN plans — at which point the documented ceiling
+    // silently became three times itself. "Patience cannot multiply by plan
+    // length" has to mean the turn, or the sentence is not true of the product.
+    // Unseeded: the executor fills it from its own configured run budget, so the
+    // runtime does not carry a copy of a number that lives over there.
+    const elementWaitBudget: ElementWaitBudget = { remainingMs: null };
+    const runPlan = async (
+      plan: Extract<DecomposeResult, { kind: 'plan' }>,
+      approvals: ReadonlySet<string> | undefined,
+    ): Promise<ExecutorRunResult> => {
+      emitProgress(args.onProgress, {
+        kind: 'plan',
+        intents: plan.intents,
+        total: stepIndexOffset + plan.intents.length,
+      });
+      if (!announcedExecuting) {
+        emitProgress(args.onProgress, { kind: 'phase', phase: 'starting_browser' });
+      }
+      return await this.deps.executor.execute({
+        onStepStart: (_intent, index): void => {
+          // The first dispatch is the real end of the warm-up, so `executing`
+          // is announced from here rather than guessed before execute().
+          if (!announcedExecuting) {
+            announcedExecuting = true;
+            emitProgress(args.onProgress, { kind: 'phase', phase: 'executing' });
+          }
+          emitProgress(args.onProgress, {
+            kind: 'step_start',
+            index: stepIndexOffset + index,
+            total: stepIndexOffset + plan.intents.length,
+          });
+        },
+        sessionId: targetSessionId,
+        // #139 — the fleet control-plane executor routes on the AGENT session id
+        // (the id the box was dispatched to via sessionAssign + the key on
+        // agent_sessions.node_id). driftstackSessionId is NULL for a pure
+        // /v1/agent-sessions run, so passing only that stranded every fleet dispatch
+        // as `unattached` → "no automation device is running this session". Always
+        // thread the agent session id so the control-plane executor can resolve the
+        // owning node; the legacy driver-path executor keeps using `sessionId`.
+        agentSessionId: session.id,
+        plan,
+        shouldContinue: authorityMayContinue,
+        // P3 — the TURN's element-wait ceiling, shared across every run below.
+        elementWaitBudget,
+        // P2 — the VALUES, to the executor only. Resolved into the dispatch and
+        // nowhere else; the results this returns still carry the placeholders.
+        ...(args.credentials !== undefined ? { credentials: args.credentials } : {}),
+        ...(approvals !== undefined ? { approvedConsequentialActions: approvals } : {}),
+        ...(args.onStep !== undefined
+          ? {
+              onStep: (result: IntentResult, index: number): void => {
+                args.onStep?.(result, stepIndexOffset + index);
+              },
+            }
+          : {}),
+      });
+    };
+
+    // Every provider call this TURN has made so far, against
+    // MAX_MODEL_CALLS_PER_TURN. An approval resume makes none (it replays a plan
+    // the customer already reviewed), so it starts at zero there.
+    let modelCalls = resumePlan === null ? 1 : 0;
+
+    let executorResult = await runPlan(decomposed, verifiedConsequentialApprovals);
+
+    // ── P1 (b) — LOOK, RE-PLAN, CONTINUE — INSIDE ONE TURN ──────────────
+    //
+    // Before this, a plan that hit a step the model had guessed wrong simply
+    // stopped, and the customer had to type "continue" to get one more blind
+    // guess. Now the turn looks at the page and re-plans the remainder itself.
+    //
+    // ⛔ WHAT BOUNDS IT, AND THE SEPARATE FAILURE EACH ONE PREVENTS:
+    //   · MAX_REPLANS_PER_TURN — a model that keeps failing cannot loop forever.
+    //     ⛔ THIS IS THE BOUND THAT STOPS THE LOOP. The model-call conjunct
+    //     beside it is arithmetically implied at today's values and does NOT
+    //     bind first — see MAX_MODEL_CALLS_PER_TURN's own comment. It is kept
+    //     so the loop reads against the turn's total-call budget rather than
+    //     silently outgrowing it, not because it is a second gate.
+    //   · REPLAN_MIN_BUDGET_TOKENS — never START a call this session's remaining
+    //     budget cannot cover. (A `> 0` check is what let an earlier version of
+    //     the read-back overspend a near-empty balance.)
+    //   · An IDENTICAL plan ends the loop. A model that re-emits the plan that
+    //     just failed will fail the same way, so asking again is money for the
+    //     same answer.
+    //   · THE ALREADY-EXECUTED PREFIX IS NEVER RE-RUN. See `suffixOf` — the
+    //     identical-plan guard alone defended only the byte-identical case, and
+    //     a plan that repeats the prefix with ONE selector changed is not
+    //     byte-identical, so it slipped through and clicked Send twice.
+    //
+    // ⛔ AND TWO THINGS IT MUST NOT BECOME:
+    //   · It never re-plans on a CONSEQUENTIAL HALT. That is a human decision in
+    //     progress, not a failure to route around, and a loop that re-planned
+    //     there would be a way to reach a purchase without the confirmation.
+    //     Each iteration also runs with NO approvals, so the gate is re-applied
+    //     in full against every re-planned step.
+    //   · It never re-plans an approval RESUME. The customer approved a specific
+    //     reviewed plan; re-planning it would execute something they did not see.
+    let replans = 0;
+    // The results of the LAST run only. `executorResult` is the MERGE of every
+    // run this turn, which is right for the customer's step list and wrong for
+    // any index into the plan that is currently running — see
+    // `resumeFromIntentIndex` below, where using the merged length sent an
+    // approval back into a plan the re-plan had abandoned.
+    let lastRunResults = executorResult.results;
+    // How many intents of `attemptedIntents` precede the plan now running.
+    let intentOffset = 0;
+    while (
+      resumePlan === null &&
+      replans < MAX_REPLANS_PER_TURN &&
+      modelCalls < MAX_MODEL_CALLS_PER_TURN - 1 &&
+      executorResult.authorityLost !== true &&
+      executorResult.awaitingConfirmation !== true &&
+      !executorResult.ok &&
+      isReplannableFailure(executorResult) &&
+      postDebitSession.tokenBudgetRemaining >= REPLAN_MIN_BUDGET_TOKENS
+    ) {
+      if (!(await this.authorityStillCurrent(session.id, admission))) break;
+      emitProgress(args.onProgress, { kind: 'phase', phase: 'reading_page' });
+      const replanObservation = await this.observeForReplan(session.id, authorityMayContinue);
+      emitProgress(args.onProgress, { kind: 'phase', phase: 'planning' });
+      let replanned: DecomposeResult;
+      try {
+        replanned = await this.deps.decomposer.decompose({
+          task: args.userMessage,
+          archetype: this.deps.archetype,
+          history: sessionWithUser.transcript,
+          budgetTokensRemaining: postDebitSession.tokenBudgetRemaining,
+          model: sessionWithUser.model,
+          priorFailure: describeExecutorStop(executorResult),
+          ...(replanObservation !== undefined ? { observation: replanObservation } : {}),
+          ...(args.credentials !== undefined
+            ? { credentialRefs: credentialRefsFor(args.credentials) }
+            : {}),
+          ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
+          shouldContinue: authorityMayContinue,
         });
-      },
-      sessionId: targetSessionId,
-      // #139 — the fleet control-plane executor routes on the AGENT session id
-      // (the id the box was dispatched to via sessionAssign + the key on
-      // agent_sessions.node_id). driftstackSessionId is NULL for a pure
-      // /v1/agent-sessions run, so passing only that stranded every fleet dispatch
-      // as `unattached` → "no automation device is running this session". Always
-      // thread the agent session id so the control-plane executor can resolve the
-      // owning node; the legacy driver-path executor keeps using `sessionId`.
-      agentSessionId: session.id,
-      plan: decomposed,
-      shouldContinue: authorityMayContinue,
-      ...(verifiedConsequentialApprovals !== undefined
-        ? { approvedConsequentialActions: verifiedConsequentialApprovals }
-        : {}),
-      ...(args.onStep !== undefined ? { onStep: args.onStep } : {}),
-    });
+      } catch (err) {
+        // ⛔ A SETTLED CALL IS BILLABLE WHETHER OR NOT WE COULD USE IT.
+        // AgentDecomposerSettledError exists to say exactly that: the provider
+        // responded and consumed tokens, and only the strict content codec
+        // rejected what came back. Breaking without accounting would drop the
+        // usage row AND the token debit for real upstream spend — and this is
+        // the MORE likely site for it, not the less, because a re-plan prompt
+        // carries untrusted page text, which is the input most able to steer a
+        // model into content the codec refuses. The first decompose handles this
+        // the same way; see the AgentDecomposerSettledError branch there.
+        if (err instanceof AgentDecomposerSettledError) {
+          modelCalls += 1;
+          await this.accountForExtraDecompose(
+            session,
+            sessionWithUser.driftstackSessionId ?? null,
+            {
+              kind: 'refuse',
+              refuseReason: '',
+              usage: err.usage,
+              tokensConsumed: err.tokensConsumed,
+            },
+            args,
+          );
+          if (err.tokensConsumed > 0) {
+            const debitedAfterSettled = await this.debitTokensIfActive(
+              session.id,
+              err.tokensConsumed,
+            );
+            if (debitedAfterSettled !== null) postDebitSession = debitedAfterSettled;
+          }
+        }
+        // A re-plan is an improvement on stopping, never a new way to fail a
+        // turn whose prefix already ran. Any decomposer error ends the loop and
+        // the turn reports what the plan actually achieved.
+        break;
+      }
+      modelCalls += 1;
+      // The provider has settled. Account for it exactly as the read-back's
+      // second call is accounted for: a row EVERY time, so per-turn telemetry
+      // and the audit trail see all of a turn's calls.
+      //
+      // ⛔ WHAT THIS ROW DOES NOT DO. The bundled monthly cap sums
+      // `metadata.cost_usd_cents`, and this row posts ZERO there
+      // (bundledFlatCostAlreadyPosted) because the bundled price is flat PER
+      // TURN, not per call — the same split the #140 read-back row already uses.
+      // So the cap advances once per turn however many calls the turn made. That
+      // is a deliberate pricing shape, not an accounting gap, and it is the
+      // reason a turn that can now make up to MAX_MODEL_CALLS_PER_TURN calls
+      // needs its flat price re-derived against that worst case rather than
+      // against the one-call turn it was set for. Flagged in the summary.
+      await this.accountForExtraDecompose(
+        session,
+        sessionWithUser.driftstackSessionId ?? null,
+        replanned,
+        args,
+      );
+      const debited =
+        replanned.tokensConsumed > 0
+          ? await this.debitTokensIfActive(session.id, replanned.tokensConsumed)
+          : postDebitSession;
+      if (debited === null) break;
+      postDebitSession = debited;
+      if (!(await this.authorityStillCurrent(session.id, admission))) break;
+      if (replanned.kind !== 'plan' || replanned.intents.length === 0) break;
+      if (isDeepStrictEqual([...replanned.intents], [...plannedIntents])) break;
+      // ⛔ RUN THE SUFFIX, NOT THE WHOLE RETURNED PLAN. A model asked to re-plan
+      // routinely re-emits the steps that already worked — it is describing the
+      // task, not the remainder — and handing that straight to the executor
+      // clicks Send a second time. `suffixOf` drops the leading intents that
+      // already succeeded, and REFUSES the re-plan outright if a replay-unsafe
+      // step that already ran survives further in, which is the reordered case
+      // trimming alone cannot see.
+      const suffix = suffixOf(replanned.intents, lastRunResults);
+      if (suffix === null || suffix.length === 0) break;
+      stepIndexOffset += lastRunResults.length;
+      intentOffset += plannedIntents.length;
+      plannedIntents = suffix;
+      attemptedIntents.push(...suffix);
+      // ⛔ NO APPROVALS. A re-planned step reaching a purchase must stop for a
+      // human exactly as the first plan would have.
+      const nextRun = await runPlan({ ...replanned, intents: suffix }, undefined);
+      lastRunResults = nextRun.results;
+      executorResult = mergeExecutorRuns(executorResult, nextRun);
+      replans += 1;
+    }
 
     if (
       executorResult.authorityLost === true ||
@@ -1328,15 +1877,28 @@ export class AgentRuntime {
     // confirmation halt is always its final result, so results.length - 1 is
     // the exact first unexecuted intent. Persist it with the reviewed plan: an
     // approval must not replay the successful prefix (scroll/type/toggle/etc.).
+    //
+    // ⛔ TWO INDEX SPACES, AND THEY ONLY COINCIDE WHEN NOTHING RE-PLANNED.
+    // The resume slices `attemptedIntents` (every intent of every plan this
+    // turn), so the index has to be in THAT space: `intentOffset` counts the
+    // intents of the earlier plans and `lastRunResults` is the current plan's
+    // own results. Reading the MERGED `executorResult.results` instead makes the
+    // index too small by exactly the intents an abandoned plan never executed —
+    // so approving a purchase would first replay steps from the plan the
+    // re-plan deliberately walked away from, and then hand the approval
+    // signature to a longer list than the customer reviewed.
     const resumeFromIntentIndex =
       executorResult.awaitingConfirmation === true &&
-      executorResult.results.length > 0 &&
-      executorResult.results.at(-1)?.kind === 'confirmation_required'
-        ? executorResult.results.length - 1
+      lastRunResults.length > 0 &&
+      lastRunResults.at(-1)?.kind === 'confirmation_required'
+        ? intentOffset + lastRunResults.length - 1
         : undefined;
     const planEntry = {
       ...transcriptEntry,
-      intents: decomposed.intents,
+      // P1 — everything ATTEMPTED this turn, first plan plus any re-plan, so the
+      // persisted intent_log is the record of what ran rather than of what was
+      // first proposed.
+      intents: attemptedIntents,
       ...(resumeFromIntentIndex !== undefined ? { resumeFromIntentIndex } : {}),
     };
     const updated = await this.appendTranscriptIfAuthorityRevision(
@@ -1385,16 +1947,57 @@ export class AgentRuntime {
       this.deps.decomposer,
     );
     const mayReadBack = await this.authorityStillCurrent(session.id, admission);
-    if (
+    // P5 — SPLIT INTO "DID THEY ASK?" AND "COULD WE?". The nine conjuncts used
+    // to be one `if`, so a customer who asked a question and hit any of the
+    // other eight got SILENCE — the work done, nothing said. Asking is the
+    // customer's half and it is now computed on its own, so that when one of the
+    // capability conjuncts blocks the answer we can say which one did instead of
+    // returning nothing and letting them conclude the agent ignored them.
+    //
+    // ⛔ READ OFF `attemptedIntents`, NOT THE FIRST PLAN. A turn whose first plan
+    // died and whose RE-PLAN carried the capture would otherwise answer neither
+    // way: no answer, and no sentence saying why — the exact P5 silence, walked
+    // back in through P1's door. Everything else about the turn (the transcript
+    // entry, the persisted intent log) already reads what was attempted.
+    const askedForInformation =
       executorResult.ok &&
+      attemptedIntents.some((i) => i.kind === 'capture') &&
+      asksForInformation(args.userMessage);
+    // Why this stays keyed on the capability list and not on a catch-all: every
+    // branch here has a DIFFERENT repair for the customer (top up the session,
+    // add a key, try again), so a single "could not read the page" would be
+    // honest about the outcome and useless about the fix.
+    //
+    // ⛔ THE READ-BACK IS A MODEL CALL AND IT COUNTS AS ONE. Until it did,
+    // `modelCalls` only ever counted plan calls, so MAX_MODEL_CALLS_PER_TURN was
+    // arithmetically the re-plan ceiling wearing a different name and could
+    // never bind. Counting the call here is what makes it a real ceiling over
+    // the turn's TOTAL provider calls, which is what its own comment claims and
+    // what the next call added to a turn will be measured against.
+    const modelCallsExhausted = modelCalls >= MAX_MODEL_CALLS_PER_TURN;
+    let readbackUnavailable: string | undefined = !askedForInformation
+      ? undefined
+      : observe === undefined || answerFromObservation === undefined
+        ? 'Reading the page back is not available in this chat, so I can only report the steps above.'
+        : args.byokApiKey === undefined
+          ? 'I could not read the page back to answer, because this chat has no AI key configured for it.'
+          : updated.tokenBudgetRemaining < READBACK_MIN_BUDGET_TOKENS
+            ? "I did the steps above, but there was not enough of this chat's AI budget left to read the page back and answer. Start a new chat and ask again."
+            : modelCallsExhausted
+              ? 'I finished the steps above, but this task took enough working-out that I ran out of room to read the page back and answer in the same message. Ask me again and I will read it.'
+              : undefined;
+    if (
+      askedForInformation &&
       mayReadBack &&
       observe !== undefined &&
       answerFromObservation !== undefined &&
       args.byokApiKey !== undefined &&
       updated.tokenBudgetRemaining >= READBACK_MIN_BUDGET_TOKENS &&
-      decomposed.intents.some((i) => i.kind === 'capture') &&
-      READ_INTENT_RE.test(args.userMessage)
+      !modelCallsExhausted
     ) {
+      // Counted here rather than only checked, so the ceiling keeps meaning
+      // "calls this turn has made" for whatever is added below it next.
+      modelCalls += 1;
       try {
         emitProgress(args.onProgress, { kind: 'phase', phase: 'reading_page' });
         const observation = await observe(session.id, authorityMayContinue);
@@ -1405,7 +2008,14 @@ export class AgentRuntime {
             executor: executorResult,
           });
         }
-        if (observation !== null && observation.trim().length > 0) {
+        if (observation === null || observation.trim().length === 0) {
+          // P5 — the one gate that is not knowable in advance. The plan ran and
+          // the page gave us nothing readable back, so the customer's question
+          // has no source. Saying that is strictly better than silence: it tells
+          // them the steps happened and the answer did not, which is the truth.
+          readbackUnavailable =
+            'I finished the steps above, but could not read the page back afterwards, so I cannot answer from it.';
+        } else {
           emitProgress(args.onProgress, { kind: 'phase', phase: 'answering' });
           const answer = await answerFromObservation({
             task: args.userMessage,
@@ -1505,6 +2115,13 @@ export class AgentRuntime {
             // exact leak under a successor controller the surrounding code
             // exists to prevent. The emit happens once that check has passed.
             publishedAnswer = answerBody;
+          } else {
+            // The answer path ran and produced nothing publishable (an empty
+            // reply, or one that sanitised down to nothing). Same customer-
+            // visible outcome as never reaching it, so it gets the same honest
+            // sentence rather than silence.
+            readbackUnavailable =
+              'I finished the steps above, but could not read the page back afterwards, so I cannot answer from it.';
           }
         }
       } catch (error) {
@@ -1556,7 +2173,11 @@ export class AgentRuntime {
             });
           }
         }
-        // Read-back is additive — never fail the turn on it.
+        // Read-back is additive — never fail the turn on it. But P5: it must not
+        // be silent either. The plan result still stands; the customer is told
+        // that the answer half did not, instead of being left to guess.
+        readbackUnavailable =
+          'I finished the steps above, but the step that reads the page back and answers did not complete. The steps above are what ran.';
       }
     }
 
@@ -1573,6 +2194,44 @@ export class AgentRuntime {
       );
     }
 
+    // P5 — SAY SO WHEN THERE IS NO ANSWER. "I did the steps but could not read
+    // the page back to you because X" is a far better answer than nothing, and
+    // nothing is what a blocked read-back used to return. Published exactly the
+    // way an answer is — one agent transcript entry, on the same event bus — so
+    // every surface that already renders the answer renders this too, with no
+    // new channel to keep in sync.
+    //
+    // ⛔ IT SITS AFTER THE FINALIZE AUTHORITY CHECK, and that position is the
+    // point. Every interrupted return above deliberately carries no answer; a
+    // sentence published before those checks would put this turn's words into a
+    // successor controller's chat — the exact leak the answer path is already
+    // ordered to prevent. Best-effort by the same rule as the read-back itself:
+    // a storage failure here cannot fail a turn whose plan succeeded.
+    if (publishedAnswer === undefined && readbackUnavailable !== undefined) {
+      const unavailableEntry = { at, role: 'agent' as const, body: readbackUnavailable };
+      try {
+        const appended = await this.appendTranscriptIfAuthorityRevision(
+          session.id,
+          admission,
+          unavailableEntry,
+        );
+        if (appended === null) {
+          readbackUnavailable = undefined;
+        } else {
+          sessionAfter = appended;
+          this.deps.eventBus?.publish({
+            agentSessionId: session.id,
+            index: sessionAfter.transcript.length - 1,
+            entry: unavailableEntry,
+          });
+        }
+      } catch {
+        readbackUnavailable = undefined;
+      }
+    } else {
+      readbackUnavailable = undefined;
+    }
+
     // Authority held all the way through, so the answer is this turn's to
     // publish. Streamed here — still ahead of the response body a subscriber
     // would otherwise wait for — and never before the check above.
@@ -1585,6 +2244,7 @@ export class AgentRuntime {
       executor: executorResult,
       session: sessionAfter,
       ...(publishedAnswer !== undefined ? { answer: publishedAnswer } : {}),
+      ...(readbackUnavailable !== undefined ? { readbackUnavailable } : {}),
     };
   }
 }

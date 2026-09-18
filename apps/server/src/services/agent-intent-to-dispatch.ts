@@ -309,8 +309,12 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       const params: Record<string, unknown> = { predicate };
       if (intent.timeoutMs !== undefined) {
         const seconds = Math.ceil(intent.timeoutMs / 1000);
-        // wait_for requires a positive integer; sub-second / zero waits fall
-        // back to the harness default (30s) by omitting the field.
+        // wait_for requires a positive integer, and this ROUNDS UP — any
+        // positive timeout asks for at least one whole second. Only a zero or
+        // negative timeout omits the field and falls back to the device's own
+        // 30s default. ⛔ The rounding is why a caller that debits a budget for
+        // this wait must debit the SECOND, not the milliseconds it configured:
+        // see the element-wait clamp in agent-executor-control-plane.ts.
         if (seconds >= 1) params.timeout_seconds = seconds;
       }
       return { ok: true, intentName: 'wait_for', params };

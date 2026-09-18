@@ -1,16 +1,17 @@
-// N5 — reopening a saved chat fires a background adopt() that reattaches to the
-// chat's still-live server session. If a send fires BEFORE adopt settles, it takes
-// the no-live-session path and creates a NEW session "continuing from" the still-
-// active id, which the server rejects with a 409 surfaced to the customer as
-// "The item changed or is busy. Refresh and try again." (api-errors.ts, HTTP 409).
+// P6 — Stop leaves the ENTER KEY offering the send that will be refused.
 //
-// The fix gates the send — both the Send button's `disabled` and submit()'s own
-// guard (the Enter-to-send path) — on `chat.adopting`, so the reattach resolves
-// first: an active session is adopted (the send then messages it, no continue-from)
-// and a closed one is continued cleanly. These arms pin both halves of that gate.
+// The client half of P6 disabled the Send BUTTON while the stopped turn is still
+// running on the server, and stopped there. `submit()` — the function the button
+// AND the ⏎ key both call — never read the new flag, and the composer's own
+// placeholder says "⏎ to send". So the 409 this item exists to remove was still
+// one keystroke away, and the P6 suite could not see it: it renders the hook and
+// never mounts the view, so it proves the flag EXISTS, not that the UI honours
+// it.
 //
-// Mirrors agent-chat-egress-proxy.test.tsx's render harness, but with a COMPLETE
-// UseAgentChatResult so it does not add to the tsconfig.test.json backlog.
+// ⛔ THE CONVENTION WAS ALREADY WRITTEN DOWN three lines above the guard list:
+// "The Send button is disabled too; this also guards the Enter-to-send path."
+// `chat.adopting` follows it (see a-reopened-chat-send-waits-for-adopt.test.tsx,
+// whose harness this file reuses). The new state did not.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, waitFor, screen, fireEvent } from '@testing-library/react';
@@ -62,7 +63,7 @@ const send = vi.fn(() => Promise.resolve(true));
 
 // COMPLETE UseAgentChatResult (every field the interface declares) so this mock does
 // not add a TS2739 to the pinned tsconfig.test.json backlog.
-function chatWith(adopting: boolean): UseAgentChatResult {
+function chatWith(stoppedTurnStillRunning: boolean): UseAgentChatResult {
   return {
     turns: [],
     session: null,
@@ -85,12 +86,12 @@ function chatWith(adopting: boolean): UseAgentChatResult {
     deny: vi.fn(),
     reset: vi.fn(),
     cancel: vi.fn(),
-    // P6 — a stopped turn still running on the server. False here: these
-    // doubles describe a chat nobody pressed Stop on.
-    stoppedTurnStillRunning: false,
+    stoppedTurnStillRunning,
     restore: vi.fn(),
     adopt: vi.fn(),
-    adopting,
+    // Not adopting and not sending: `stoppedTurnStillRunning` is the ONLY gate
+    // in play, so an arm that passes here passes because of it.
+    adopting: false,
     adoptError: null,
     restoredHistoryCount: 0,
     restoredSessionId: null,
@@ -111,43 +112,55 @@ const PROMPT = /Describe a task in plain English/i;
 beforeEach(() => {
   vi.clearAllMocks();
   // A profile with no bound proxy → egress resolves to operator-default (settled,
-  // not pending/blocked), so `adopting` is the ONLY thing that can gate the send.
+  // not pending/blocked), so the stopped turn is the ONLY thing that can gate the
+  // send.
   h.listBindings.mockResolvedValue([]);
   h.listProxies.mockResolvedValue([]);
 });
 
-describe('N5 — a reopened chat holds the send until adopt() settles', () => {
-  it('disables Send AND drops the Enter-to-send path while adopting', async () => {
-    h.useAgentChat.mockReturnValue(chatWith(true));
-    render(<AgentChatView initialProfileId="prof_x" />, { wrapper: AgentChatProvider });
-    // Let the proxy resolution settle so the only remaining gate is `adopting`.
-    await waitFor(() => expect(screen.getByPlaceholderText(PROMPT)).toBeInTheDocument());
-    await new Promise((r) => setTimeout(r, 0));
+async function renderComposer(stoppedTurnStillRunning: boolean) {
+  h.useAgentChat.mockReturnValue(chatWith(stoppedTurnStillRunning));
+  render(<AgentChatView initialProfileId="prof_x" />, { wrapper: AgentChatProvider });
+  await waitFor(() => expect(screen.getByPlaceholderText(PROMPT)).toBeInTheDocument());
+  await new Promise((r) => setTimeout(r, 0));
+  const composer = screen.getByPlaceholderText(PROMPT);
+  fireEvent.change(composer, { target: { value: 'the next task' } });
+  return composer;
+}
 
-    fireEvent.change(screen.getByPlaceholderText(PROMPT), { target: { value: 'reopen and go' } });
-
-    const sendBtn = screen.getByRole('button', { name: /^send$/i });
-    // The button gate. Reverting `chat.adopting` from the disabled list re-enables it.
-    expect(sendBtn).toBeDisabled();
-
-    // The Enter path is a SEPARATE guard in submit() — a disabled button does not
-    // cover it, so a mutation dropping `chat.adopting` from submit() stays green
-    // without this arm.
+describe('P6 — after Stop, the Enter key refuses too', () => {
+  it('⛔ PRESSING ENTER DOES NOT SEND while the stopped turn is still running', async () => {
+    const composer = await renderComposer(true);
     send.mockClear();
-    fireEvent.keyDown(screen.getByPlaceholderText(PROMPT), { key: 'Enter' });
+    fireEvent.keyDown(composer, { key: 'Enter' });
+    // A disabled button does not cover this path. Removing the guard from
+    // submit() leaves every button-level arm green and this one red.
     expect(send).not.toHaveBeenCalled();
   });
 
-  it('enables Send once adopt has settled (the gate is adopting, not a permanent block)', async () => {
-    // The vacuity control: with adopting=false and everything else valid, Send MUST
-    // be enabled — otherwise the disabled arm above would pass even if Send were
-    // wired off entirely.
-    h.useAgentChat.mockReturnValue(chatWith(false));
-    render(<AgentChatView initialProfileId="prof_x" />, { wrapper: AgentChatProvider });
-    await waitFor(() => expect(screen.getByPlaceholderText(PROMPT)).toBeInTheDocument());
-    await new Promise((r) => setTimeout(r, 0));
+  it('the Send button is held for the same reason, and says so on screen', async () => {
+    await renderComposer(true);
+    expect(screen.getByRole('button', { name: /^send$/i })).toBeDisabled();
+    // The customer is looking at the composer when they decide what to type, so
+    // the reason belongs there and not only in a hover title.
+    expect(screen.getByText(/still finishing the previous task/i)).toBeInTheDocument();
+  });
 
-    fireEvent.change(screen.getByPlaceholderText(PROMPT), { target: { value: 'reopen and go' } });
+  it('and the customer KEEPS WHAT THEY TYPED — a held send is not a lost message', async () => {
+    const composer = await renderComposer(true);
+    fireEvent.keyDown(composer, { key: 'Enter' });
+    expect(composer).toHaveValue('the next task');
+  });
+
+  it('⛔ THE VACUITY CONTROL: with no stopped turn, Enter sends exactly as before', async () => {
+    const composer = await renderComposer(false);
+    send.mockClear();
+    // Checked BEFORE the keystroke: a successful send clears the draft, which
+    // disables the button for the ordinary empty-composer reason and would make
+    // this control pass for the wrong one.
     expect(screen.getByRole('button', { name: /^send$/i })).not.toBeDisabled();
+    fireEvent.keyDown(composer, { key: 'Enter' });
+    expect(send).toHaveBeenCalledWith('the next task');
+    expect(screen.queryByText(/still finishing the previous task/i)).toBeNull();
   });
 });
