@@ -388,12 +388,22 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       timeoutMs,
     });
     if (!mapped.ok) return 'absent';
+    // ⛔ THE VERB ON THE WIRE IS A LITERAL, NOT `mapped.intentName`. The device
+    // has no allowlist of its own, so what keeps a request from steering the
+    // control plane into a verb it never meant to send is that every emit site
+    // names its verb in source (pinned by the-control-plane-never-dispatches-
+    // a-verb-it-does-not-hard-code). The mapper is used here for the PARAMS —
+    // the visibility predicate under test — and is only ASKED to agree on the
+    // verb. If it ever stops agreeing, the wait fails closed and the caller
+    // surfaces the original element-not-found, rather than this site quietly
+    // dispatching whatever the mapper now returns.
+    if (mapped.intentName !== 'wait_for') return 'absent';
     let dispatch: IntentDispatch;
     try {
       dispatch = serializeIntentDispatch({
         sessionId,
         intentId: this.genIntentId(),
-        intentName: mapped.intentName,
+        intentName: 'wait_for',
         params: mapped.params,
       });
     } catch {

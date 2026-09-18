@@ -118,7 +118,21 @@ describe('the decomposer knows it is driving a phone', () => {
     // the run died there.
     expect(prompt).toMatch(/COLLAPSED behind a menu toggle/);
     expect(prompt).toMatch(/PREFER A TARGET THAT DOES NOT DEPEND ON NAV/);
-    expect(prompt).toMatch(/NO BRANCHING and NO RETRIES/);
+    // ⛔ THIS LINE USED TO PIN /NO BRANCHING and NO RETRIES/, AND THAT SENTENCE
+    // IS GONE ON PURPOSE. It stopped being true in both halves: the executor now
+    // waits for a late element, and a turn may look at the page and re-plan its
+    // remainder a bounded number of times. A locked prompt describing a
+    // constraint the product no longer has makes the model plan defensively for
+    // nothing. What did NOT change is the reason this rule exists — the plan
+    // still runs in order and does not branch, so an unneeded menu tap is still
+    // an extra way to fail, not a fallback — and that is what is pinned now,
+    // together with the superseded sentence's ABSENCE, because a stale promise
+    // of "no retries" beside a re-plan loop is two rules contradicting.
+    expect(prompt).toMatch(/runs IN ORDER and DOES NOT BRANCH/);
+    // (The prompt is read as SOURCE, so a sentence that wraps across two string
+    // literals cannot be matched whole — pin the half that sits on one line.)
+    expect(prompt).toMatch(/A menu tap you did not need is not a safety/);
+    expect(prompt).not.toMatch(/NO BRANCHING and NO RETRIES/);
     expect(prompt).toMatch(/Only plan a menu tap when the link/);
     // The superseded instruction must be gone, not merely outweighed by newer
     // text: two contradictory rules in one prompt is worse than either alone.
