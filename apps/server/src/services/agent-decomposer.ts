@@ -401,6 +401,19 @@ export interface DecomposeArgs {
    * after backoff). False/throw means the admitted turn no longer owns AI
    * control and no new provider request may start. */
   shouldContinue?: () => boolean | Promise<boolean>;
+  /**
+   * B2 — aborts when the turn is cancelled (the customer pressed Stop). The
+   * authority fence above is checked BETWEEN attempts, so on its own it lets a
+   * model call already in flight run to completion — up to the whole streamed
+   * reply — after the customer has asked the agent to stop. A provider-backed
+   * implementation passes this to its HTTP call so the request ends promptly.
+   *
+   * Optional and additive: an implementation that ignores it is still stopped at
+   * the next fence check, only later. An abort is NOT a provider failure: a
+   * request that was cut short consumed whatever the provider had already
+   * counted, and the caller accounts for what it can observe.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -432,6 +445,9 @@ export interface AnswerArgs {
   model?: AgentModel;
   /** Same per-attempt authority fence as {@link DecomposeArgs.shouldContinue}. */
   shouldContinue?: () => boolean | Promise<boolean>;
+  /** Same cancellation as {@link DecomposeArgs.signal}: the read-back is a model
+   *  call too, and a Stop pressed while it streams must end it. */
+  signal?: AbortSignal;
 }
 
 /** Internal sentinel used to preserve an authority revocation through the
