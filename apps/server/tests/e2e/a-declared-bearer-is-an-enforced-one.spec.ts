@@ -162,7 +162,15 @@ test('an operation that declares a bearer token refuses a caller without one', a
   // `verify-suite` gate explicitly does NOT run — its verdict line says so — and the
   // deploy workflow is independent of CI, so production shipped green while this was
   // red. A census guard outside the gate you actually run is a guard on paper.
-  expect(gated.length, 'the gate-before-auth set stays bounded').toBeLessThanOrEqual(29);
+  //
+  // ⛔ 30 since 2026-09-18: the 30th is POST /v1/agent-sessions/{id}/stop, the new
+  // Stop route. Its disabled twin is the same FeatureUnavailableError stub every
+  // agent-session sibling registers (POST …/message beside it included), so a
+  // deployment that does not run the agent answers the documented activation state
+  // rather than a bare 404 — genuinely gated, which is the only reason this may rise.
+  // And it happened again: the local gate was green and this job went red on the
+  // first CI run after the route landed.
+  expect(gated.length, 'the gate-before-auth set stays bounded').toBeLessThanOrEqual(30);
   // Measured for THIS population, not borrowed. The sibling id-sweep bounds its
   // unrouted set at twelve, but that sweep walks the 106 single-parameter
   // operations and this one walks all 201 that declare a bearer requirement, so
