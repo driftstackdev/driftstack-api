@@ -47,15 +47,25 @@ for (const m of allCode.matchAll(/intentName:\s*'([a-z_]+)'/g)) {
 }
 
 /**
- * The nine the CP compiles its documented intents down to. Every one is reached
+ * The nine the CP compiles its documented intents down to — every one reached
  * only through `agent-intent-to-dispatch.ts`'s mapping of a customer/agent
- * intent — a customer never names these.
+ * intent, so a customer never names these — plus `perceive`.
+ *
+ * ⛔ `perceive` MOVED 2026-09-18 from "declared but never emitted" to here, on
+ * purpose. The executor now looks at what a tap will land on before sending it
+ * (agent-executor-control-plane.ts, `perceiveOnce`): one read-only `perceive`
+ * for the tap's own selector. It is emitted from ONE literal site, is never
+ * reached from a customer's words, and carries only a locator — the same
+ * selector the click that follows carries, never a typed value. It changes
+ * nothing on the page; even so, a tap the plan's own words already halt for
+ * the customer's confirmation is halted before any look is sent.
  */
 const EXPECTED_EMITTED = [
   'behavioral_pause',
   'click',
   'get_page_source',
   'navigate',
+  'perceive',
   'press_key',
   'screenshot',
   'scroll',
@@ -74,22 +84,16 @@ describe('the control plane never dispatches a harness verb it does not hard-cod
     expect(emitted.has('execute_script')).toBe(false);
   });
 
-  it.each([
-    'back',
-    'forward',
-    'detect_challenge',
-    'extract',
-    'perceive',
-    'fill_form',
-    'search',
-    'login',
-  ])('declares %s in the transport vocabulary but never emits it', (verb) => {
-    // Declared-but-unemitted is FINE — HARNESS_INTENT_NAMES is documented as an
-    // internal transport vocabulary, not a customer capability list. Pinned so
-    // the gap stays deliberate and readable rather than looking accidental.
-    expect(HARNESS_INTENT_NAMES).toContain(verb);
-    expect(emitted.has(verb)).toBe(false);
-  });
+  it.each(['back', 'forward', 'detect_challenge', 'extract', 'fill_form', 'search', 'login'])(
+    'declares %s in the transport vocabulary but never emits it',
+    (verb) => {
+      // Declared-but-unemitted is FINE — HARNESS_INTENT_NAMES is documented as an
+      // internal transport vocabulary, not a customer capability list. Pinned so
+      // the gap stays deliberate and readable rather than looking accidental.
+      expect(HARNESS_INTENT_NAMES).toContain(verb);
+      expect(emitted.has(verb)).toBe(false);
+    },
+  );
 
   it('no emit site computes the verb from a value', () => {
     // A literal cannot be steered by a request; an expression can. This is the
@@ -103,7 +107,7 @@ describe('the control plane never dispatches a harness verb it does not hard-cod
 
   it('the parse actually found emit sites', () => {
     // Non-vacuity: two silently-empty regexes would make every arm above pass.
-    expect(emitted.size).toBeGreaterThanOrEqual(9);
+    expect(emitted.size).toBeGreaterThanOrEqual(10);
     expect(files.length).toBeGreaterThan(100);
   });
 });

@@ -110,6 +110,10 @@ describe('scripted: a looping turn stopped mid-loop', () => {
     const runtime = new AgentRuntime({
       decomposer: planner,
       executor: new ControlPlaneAgentExecutor(device.dispatcher, undefined, {
+        // The look before a tap is off: this test holds each step's own dispatch
+        // open by position (its Stop contract is pinned in
+        // a-tap-looks-at-what-it-will-land-on-before-it-is-sent.test.ts).
+        preTapLookTimeoutMs: 0,
         // Backoffs are instant; the in-flight grace never runs out, so the tap's
         // own answer — not a race against a zero-length timer — decides its row.
         sleep: (ms) =>

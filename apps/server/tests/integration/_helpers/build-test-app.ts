@@ -53,6 +53,7 @@ import {
   AGENT_TURN_FIRST_PROGRESS_BUCKETS_SECONDS,
   AGENT_TURN_REPLAN_BUCKETS,
   AgentTurnTelemetry,
+  PRE_TAP_LOOK_DURATION_BUCKETS_SECONDS,
   type AgentTurnTelemetryWriter,
 } from '../../../src/services/agent-turn-telemetry.js';
 import { AgentTurnSummaryService } from '../../../src/services/agent-turn-summary.js';
@@ -1077,6 +1078,21 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   metricsRegistry.registerCounter(
     METRIC_NAMES.agentTurnTelemetryWriteTotal,
     'Per-turn diagnostics row writes.',
+    ['outcome'],
+  );
+  metricsRegistry.registerCounter(METRIC_NAMES.agentPreTapLookTotal, 'Looks before a tap.', [
+    'outcome',
+  ]);
+  metricsRegistry.registerHistogram(
+    METRIC_NAMES.agentPreTapLookDeviceSeconds,
+    'Device duration of the look before a tap.',
+    PRE_TAP_LOOK_DURATION_BUCKETS_SECONDS,
+    ['outcome'],
+  );
+  metricsRegistry.registerHistogram(
+    METRIC_NAMES.agentPreTapLookRoundTripSeconds,
+    'Round trip of the look before a tap.',
+    PRE_TAP_LOOK_DURATION_BUCKETS_SECONDS,
     ['outcome'],
   );
   // Wired unconditionally, as bootstrap does: an in-memory writer, so a test

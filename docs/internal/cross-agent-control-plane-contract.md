@@ -482,6 +482,35 @@ Founder greenlit the control-plane WSS arc ("you choose and do as recommended").
 All 3 wire questions are ANSWERED and the entire non-gated API data path is built + tested. This section is
 the turnkey checklist for going live once the founder/infra gates clear.
 
+### 2026-09-18 — result codes the control plane decodes but the harness emits only when armed
+
+The 12-code list below is the harness's DEFAULT vocabulary. The control plane's
+decode enum (`HARNESS_ERROR_CODES` in apps/server/src/schemas/harness-control-protocol.ts)
+additionally knows three codes the harness emits only behind a switch. The order is
+load-bearing in both directions: an intentResult carrying a code the control plane
+does not decode fails `IntentResultEnvelopeSchema`, the correlator drops the frame, and
+the dispatch hangs to its timeout. So the decode entry always ships first, and the
+harness keeps the legacy code with a byte-stable message prefix until A2 says the entry
+is LIVE IN PRODUCTION, not merely committed.
+
+| Code                       | Harness switch                               | Legacy form until armed                                                          | Control-plane meaning                                                               |
+| -------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `intent_element_not_found` | `DRIFTSTACK_INTENT_ELEMENT_NOT_FOUND_CODE=1` | `intent_invalid_parameter`, same prefix                                          | `element_not_found`, retryable                                                      |
+| `intent_page_load_failed`  | `DRIFTSTACK_INTENT_PAGE_LOAD_FAILED_CODE=1`  | `intent_webdriver_failed`, same prefix                                           | `page_load_failed`, retryable                                                       |
+| `intent_element_occluded`  | `DRIFTSTACK_INTENT_ELEMENT_OCCLUDED_CODE=1`  | `intent_webdriver_failed`, message starting `element occluded at the tap point:` | `element_covered`: nothing was tapped; not retryable as the same step, re-plannable |
+
+`intent_element_occluded` belongs to click `{ require_unoccluded: true }` (A3, not yet
+deployed), which runs the occlusion test at the ACTUAL jittered tap point. The pre-tap
+look that shipped on 2026-09-18 uses `perceive { selector }` instead: before every tap
+and every typed step, the executor asks the harness what the selector resolves to and
+what is under its tap point, never dispatches the click onto a covered control, gates
+purchases on the hit element's own label as well as the planner's words, and keys the
+repeat guard on the harness's canonical selector. Occlusion there is A3's definition:
+covered unless the hit is the element or a descendant (an ancestor hit is covered).
+A tap whose point is outside the viewport still goes ahead unchecked, because the click
+scrolls to a randomised band the control plane cannot reproduce. `require_unoccluded`
+closes that gap.
+
 ### 2026-07-15 protocol-truth correction (supersedes every older roster/count above)
 
 The live Swift `IntentExecutor` routes exactly 18 names, all of which are valid

@@ -116,6 +116,12 @@ export function intentResultToCustomer(
       summary: safeResultText(summarize(intent, parsed.outputData), RESULT_SUMMARY_MAX_LENGTH),
     };
   }
+  // Read BEFORE the per-code table: the legacy form of this refusal arrives as
+  // `intent_webdriver_failed`, which on an interact is otherwise the
+  // outcome-unknown class — and a refusal the device made before tapping is
+  // the opposite of outcome-unknown. The device's message is not appended: it
+  // describes the refusal in the device's terms, not the customer's.
+  if (isCoveredRefusal(parsed)) return elementCoveredResult(intent);
   return {
     kind: 'failure',
     intent,
@@ -255,6 +261,120 @@ function summarizeCapture(intent: Extract<AgentIntent, { kind: 'capture' }>): st
   }
 }
 
+// ── a covered control ─────────────────────────────────────────────────
+//
+// A native tap activates whatever is UNDER the tap point. When a banner, a
+// dialog or a sticky bar sits over the control the plan named, the thing that
+// would be activated is not the thing the plan asked for — so the tap is not
+// made, and the step fails in words the customer can act on. Two producers
+// share this copy: the executor's own look before a tap (see
+// agent-executor-control-plane.ts) and the device refusing a click whose tap
+// point is covered.
+//
+// ⛔ CUSTOMER COPY. It says what is on the page and that nothing happened. It
+// never names how that was found out.
+
+/**
+ * The prefix A3's click refusal ALWAYS carries while the dedicated code is not
+ * yet emitted (the legacy form: `intent_webdriver_failed` + this message). A
+ * refusal, not an ambiguous failure: the device checked BEFORE tapping, so the
+ * click provably did not happen.
+ */
+export const LEGACY_ELEMENT_COVERED_MESSAGE_PREFIX = 'element occluded at the tap point:';
+
+/** The longest cover label quoted back — a banner's whole text is not a name. */
+const COVER_LABEL_MAX_LENGTH = 60;
+
+/** What a perceive element `type` is called in a sentence. */
+function controlNoun(type: string | undefined): string {
+  switch (type) {
+    case 'button':
+    case 'link':
+    case 'checkbox':
+    case 'image':
+      return type;
+    case 'radio':
+      return 'option';
+    case 'select':
+      return 'menu';
+    case 'input':
+    case 'textarea':
+      return 'field';
+    default:
+      return 'control';
+  }
+}
+
+const ELEMENT_COVERED_REASON_UNNAMED =
+  'something on the page is covering this control, so nothing was tapped — it may need to be closed or dismissed first';
+
+/** What did NOT happen, in the customer's words: a typed step's first act is
+ *  a tap on the field, and it is the typing they asked for. */
+function nothingHappened(action: 'tap' | 'type'): string {
+  return action === 'type' ? 'nothing was typed' : 'nothing was tapped';
+}
+
+/**
+ * The sentence for a covered control. `coverLabel` is the page's own name for
+ * what is on top (a cookie banner's "Accept all cookies"), quoted so the
+ * customer — and the next plan — can see which thing to close. Page-controlled,
+ * so it is collapsed to one line, bounded and redacted like every other
+ * page-influenced string on a result.
+ */
+export function elementCoveredReason(
+  coverLabel?: string,
+  targetType?: string,
+  action: 'tap' | 'type' = 'tap',
+): string {
+  const noun = controlNoun(targetType);
+  // eslint-disable-next-line no-control-regex
+  const oneLine = (coverLabel ?? '').replace(/[\u0000-\u001F\u007F-\u009F\u2028\u2029\s]+/g, ' ');
+  const trimmed = oneLine.trim();
+  if (trimmed.length === 0) {
+    return noun === 'control' && action === 'tap'
+      ? ELEMENT_COVERED_REASON_UNNAMED
+      : `something on the page is covering this ${noun}, so ${nothingHappened(action)} — it may need to be closed or dismissed first`;
+  }
+  const bounded =
+    trimmed.length > COVER_LABEL_MAX_LENGTH
+      ? `${sliceWithoutSplittingSurrogate(trimmed, COVER_LABEL_MAX_LENGTH - 1).trimEnd()}…`
+      : trimmed;
+  return safeResultText(
+    `“${bounded}” is covering this ${noun}, so ${nothingHappened(action)} — it may need to be closed or dismissed first`,
+    RESULT_SUMMARY_MAX_LENGTH,
+  );
+}
+
+/** The failure a covered control produces. Not retryable as the same step: the
+ *  cover is still there. Re-plannable: nothing was tapped, so a new look can
+ *  find the cover and close it (see REPLANNABLE_FAILURE_CATEGORIES). */
+export function elementCoveredResult(
+  intent: AgentIntent,
+  coverLabel?: string,
+  targetType?: string,
+): Extract<IntentResult, { kind: 'failure' }> {
+  return {
+    kind: 'failure',
+    intent,
+    reason: elementCoveredReason(
+      coverLabel,
+      targetType,
+      intent.kind === 'interact' && intent.action === 'type' ? 'type' : 'tap',
+    ),
+    diagnosis: { category: 'element_covered', retryable: false },
+  };
+}
+
+/** The device refused the tap because its tap point is covered — the dedicated
+ *  code, or the legacy code with its fixed message prefix. */
+function isCoveredRefusal(parsed: ParsedIntentResult): boolean {
+  if (parsed.errorCode === 'intent_element_occluded') return true;
+  return (
+    parsed.errorCode === 'intent_webdriver_failed' &&
+    (parsed.errorMessage ?? '').trimStart().startsWith(LEGACY_ELEMENT_COVERED_MESSAGE_PREFIX)
+  );
+}
+
 // ── failure reason ────────────────────────────────────────────────────
 // Base copy per A3-locked error code + the harness's own message when present.
 // The harness is internal infra (A3 controls these strings); the message for
@@ -289,6 +409,7 @@ const ERROR_BASE: Record<HarnessErrorCode, string> = {
   session_paused: 'the browser session is paused — resume it before retrying this action',
   session_intent_in_flight:
     'the browser session is still processing another action — wait, then retry this action',
+  intent_element_occluded: ELEMENT_COVERED_REASON_UNNAMED,
 };
 
 // doc-132 §5.3 auto-debug (deterministic slice) — specialize the generic
@@ -363,9 +484,29 @@ function diagnose(intent: AgentIntent, code: HarnessErrorCode | undefined): Fail
       return { category: 'invalid_request', retryable: false };
     case 'result_too_large':
       return { category: 'result_too_large', retryable: false };
+    case 'intent_element_occluded':
+      // Normally answered by elementCoveredResult before this table is read;
+      // kept exhaustive so the code can never fall through to `unknown`.
+      return { category: 'element_covered', retryable: false };
     case undefined:
       return { category: 'unknown', retryable: false };
   }
+}
+
+/**
+ * The failure a tap gets when the device's own resolver finds nothing for its
+ * selector — word for word what the click itself would have come back with, so a
+ * step that failed before its click reads exactly like one that failed on it.
+ */
+export function elementNotFoundResult(
+  intent: AgentIntent,
+): Extract<IntentResult, { kind: 'failure' }> {
+  return {
+    kind: 'failure',
+    intent,
+    reason: ERROR_BASE.intent_element_not_found,
+    diagnosis: diagnose(intent, 'intent_element_not_found'),
+  };
 }
 
 const MAX_MESSAGE_LEN = 200;

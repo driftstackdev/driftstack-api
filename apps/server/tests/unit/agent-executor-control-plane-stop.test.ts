@@ -33,6 +33,13 @@ function ok(d: IntentDispatch, outputData?: unknown): ParsedIntentResult {
   return { sessionId: d.sessionId, intentId: d.intentId, success: true, durationMs: 1, outputData };
 }
 
+// These tests pin the wire order of each step exactly, holding each dispatch
+// open to land a Stop at a chosen moment. The look before a tap is a separate
+// dispatch with its own Stop contract, pinned in
+// a-tap-looks-at-what-it-will-land-on-before-it-is-sent.test.ts; here it is off,
+// so every held dispatch is the step itself.
+const NO_LOOK = { preTapLookTimeoutMs: 0 } as const;
+
 function seqIds(): () => string {
   let n = 0;
   return () => `int_${String(++n)}`;
@@ -111,7 +118,7 @@ describe('ControlPlaneAgentExecutor — Stop', () => {
   it('CRITICAL a Stop observed between steps dispatches nothing more, and the run says it stopped', async () => {
     const held = heldDispatcher();
     const controller = new AbortController();
-    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds());
+    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), NO_LOOK);
     const run = exec.execute(args([NAV, TAP, SHOT], controller.signal));
     await held.whenSent(1);
     // The navigate lands, THEN the customer presses Stop before the tap is sent.
@@ -128,7 +135,10 @@ describe('ControlPlaneAgentExecutor — Stop', () => {
     const held = heldDispatcher();
     const clock = manualClock();
     const controller = new AbortController();
-    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), { sleep: clock.sleep });
+    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), {
+      ...NO_LOOK,
+      sleep: clock.sleep,
+    });
     const run = exec.execute(args([NAV, TAP, SHOT], controller.signal));
     await held.whenSent(1);
     held.release(0);
@@ -150,7 +160,10 @@ describe('ControlPlaneAgentExecutor — Stop', () => {
     const held = heldDispatcher();
     const clock = manualClock();
     const controller = new AbortController();
-    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), { sleep: clock.sleep });
+    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), {
+      ...NO_LOOK,
+      sleep: clock.sleep,
+    });
     const run = exec.execute(args([TAP, SHOT], controller.signal));
     await held.whenSent(1);
     controller.abort();
@@ -172,7 +185,10 @@ describe('ControlPlaneAgentExecutor — Stop', () => {
     const held = heldDispatcher();
     const clock = manualClock();
     const controller = new AbortController();
-    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), { sleep: clock.sleep });
+    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), {
+      ...NO_LOOK,
+      sleep: clock.sleep,
+    });
     const run = exec.execute(args([WAIT, TAP], controller.signal));
     await held.whenSent(1);
     controller.abort();
@@ -189,6 +205,7 @@ describe('ControlPlaneAgentExecutor — Stop', () => {
     const held = heldDispatcher();
     const controller = new AbortController();
     const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), {
+      ...NO_LOOK,
       sleep: () => Promise.resolve(),
     });
     const run = exec.execute(args([TAP, SHOT], controller.signal));
@@ -221,6 +238,7 @@ describe('ControlPlaneAgentExecutor — Stop', () => {
     const controller = new AbortController();
     const clock = manualClock();
     const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), {
+      ...NO_LOOK,
       sleep: clock.sleep,
       maxRetries: 2,
     });
@@ -255,7 +273,10 @@ describe('ControlPlaneAgentExecutor — Stop', () => {
     const held = heldDispatcher();
     const controller = new AbortController();
     const clock = manualClock();
-    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), { sleep: clock.sleep });
+    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), {
+      ...NO_LOOK,
+      sleep: clock.sleep,
+    });
     const run = exec.execute(args([TAP], controller.signal));
     await held.whenSent(1);
     held.release(0, (d) => ({
@@ -277,7 +298,7 @@ describe('ControlPlaneAgentExecutor — Stop', () => {
     const held = heldDispatcher();
     const controller = new AbortController();
     controller.abort();
-    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds());
+    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), NO_LOOK);
     const result = await exec.execute(args([NAV, TAP], controller.signal));
     expect(result).toEqual({ results: [], ok: false, stopped: true });
     expect(held.sent).toHaveLength(0);
@@ -287,6 +308,7 @@ describe('ControlPlaneAgentExecutor — Stop', () => {
     const held = heldDispatcher();
     const controller = new AbortController();
     const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), {
+      ...NO_LOOK,
       sleep: () => new Promise<void>(() => undefined),
     });
     const read = exec.observe('agt_1', undefined, controller.signal);
@@ -300,7 +322,7 @@ describe('ControlPlaneAgentExecutor — Stop', () => {
 
   it('with no signal at all, a run is exactly what it was before Stop existed', async () => {
     const held = heldDispatcher();
-    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds());
+    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), NO_LOOK);
     const run = exec.execute({
       sessionId: 'agt_1',
       plan: { kind: 'plan', intents: [NAV], tokensConsumed: 0 },
@@ -317,7 +339,10 @@ describe('ControlPlaneAgentExecutor — Stop, round 2', () => {
     const held = heldDispatcher();
     const clock = manualClock();
     const controller = new AbortController();
-    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), { sleep: clock.sleep });
+    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), {
+      ...NO_LOOK,
+      sleep: clock.sleep,
+    });
     const run = exec.execute(args([NAV, TAP], controller.signal));
     await held.whenSent(1);
     held.release(0);
@@ -335,7 +360,10 @@ describe('ControlPlaneAgentExecutor — Stop, round 2', () => {
     const held = heldDispatcher();
     const clock = manualClock();
     const controller = new AbortController();
-    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), { sleep: clock.sleep });
+    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), {
+      ...NO_LOOK,
+      sleep: clock.sleep,
+    });
     const run = exec.execute(args([TAP], controller.signal));
     await held.whenSent(1);
     controller.abort();
@@ -348,7 +376,7 @@ describe('ControlPlaneAgentExecutor — Stop, round 2', () => {
   it('CRITICAL a Stop that lands during the authority read before a step: the step is never announced, and never sent', async () => {
     const held = heldDispatcher();
     const controller = new AbortController();
-    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds());
+    const exec = new ControlPlaneAgentExecutor(held.dispatcher, seqIds(), NO_LOOK);
     const announced: number[] = [];
     const result = await exec.execute({
       ...args([NAV, TAP], controller.signal),

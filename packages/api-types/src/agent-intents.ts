@@ -98,6 +98,11 @@ export const FailureDiagnosisCategorySchema = z.enum([
   'invalid_request',
   /** result exceeded the inline size cap — narrow the selector or paginate. */
   'result_too_large',
+  /** something on the page (a banner, a dialog, a sticky bar) is covering the
+   *  control, so nothing was tapped or typed. Not worth repeating as is — the
+   *  cover is still there — but the page can be looked at again and the cover
+   *  closed. */
+  'element_covered',
   /** no more-specific category applies. */
   'unknown',
 ]);

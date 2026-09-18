@@ -475,6 +475,9 @@ groups:
 #
 # Dashboard-only (drift-guard reference; no paging rule yet). Checked by
 #   - driftstack_agent_decompose_total
+#   - driftstack_agent_pre_tap_look_device_seconds
+#   - driftstack_agent_pre_tap_look_round_trip_seconds
+#   - driftstack_agent_pre_tap_look_total
 #   - driftstack_agent_turn_duration_seconds
 #   - driftstack_agent_turn_model_call_total
 #   - driftstack_agent_turn_phase_duration_seconds

@@ -259,6 +259,10 @@ export interface LiveRepReport {
     events: ReadonlyArray<DeviceEvent>;
     dispatches: number;
     simulatedMs: number;
+    /** The looks before a tap, from the device's own log: how many, what each
+     *  answered, and the modelled device time they added — the per-tap latency
+     *  cost of the look in this repetition. */
+    tapLooks: { count: number; deviceMs: number; answers: Readonly<Record<string, number>> };
   };
   answerExtraction: AnswerExtractionCheck | null;
   benignGoalMet: boolean | null;
@@ -307,6 +311,32 @@ export interface LiveRunContext {
    * must not move a deterministic fixture across a render boundary.
    */
   pageAgesWhileModelThinks?: (measuredMs: number) => number;
+  /** Drive a device that predates perceive-by-selector: it ignores the selector
+   *  and lists the page, so every look before a tap falls back and every tap
+   *  goes ahead exactly as it did before the look existed. How a test reaches
+   *  the device with a tap the look would now have stopped. */
+  devicePredatesTapLook?: boolean;
+  /** Run the executor with the look before a tap switched off — the wire it
+   *  sent before the look existed. */
+  tapLookOff?: boolean;
+}
+
+function tapLooksOf(device: FakeDevice): {
+  count: number;
+  deviceMs: number;
+  answers: Record<string, number>;
+} {
+  const looks = device.dispatches().filter((d) => d.intentName === 'perceive');
+  const answers: Record<string, number> = {};
+  for (const look of looks) {
+    const answer = look.tapLook ?? (look.success ? 'unread' : 'error');
+    answers[answer] = (answers[answer] ?? 0) + 1;
+  }
+  return {
+    count: looks.length,
+    deviceMs: looks.reduce((sum, look) => sum + look.deviceMs, 0),
+    answers,
+  };
 }
 
 /** What a customer types when the task did not finish. It repeats the ask on
@@ -360,6 +390,7 @@ export async function runLiveTask(
     startUrl: 'about:blank',
     clock,
     notFound: task.site.notFound,
+    ...(ctx.devicePredatesTapLook === true ? { predatesTapLook: true } : {}),
   });
   let captureSeq = 0;
   const captureStore = new SessionCaptureStore(
@@ -390,6 +421,8 @@ export async function runLiveTask(
       sessionEstablishRetryDelayMs: EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
       observeTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
       sleep: clock.sleep,
+      deadline: clock.deadline,
+      ...(ctx.tapLookOff === true ? { preTapLookTimeoutMs: 0 } : {}),
     },
     captureStore,
   );
@@ -628,6 +661,7 @@ export async function runLiveTask(
       events: device.events(),
       dispatches: device.dispatches().length,
       simulatedMs: device.deviceMs() + clock.countedSleepMs(),
+      tapLooks: tapLooksOf(device),
     },
     answerExtraction: verdict.answerExtraction,
     benignGoalMet: verdict.benignGoalMet,

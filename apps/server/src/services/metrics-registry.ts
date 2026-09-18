@@ -486,4 +486,14 @@ export const METRIC_NAMES = {
   // blind. `shed` is the per-minute budget on rows for turned-away requests
   // doing its job under a 409/429 storm, and is not a failure.
   agentTurnTelemetryWriteTotal: 'driftstack_agent_turn_telemetry_write_total',
+  // The look before a tap: one read-only `perceive` for the tap's selector,
+  // asking the device what it resolves to and what is at its tap point (see
+  // agent-executor-control-plane.ts). Emitted from recordPreTapLook in
+  // services/agent-turn-telemetry.ts; `outcome` is PRE_TAP_LOOK_OUTCOMES.
+  // Looks by outcome. `covered` and `not_found` are taps that were NOT sent.
+  agentPreTapLookTotal: 'driftstack_agent_pre_tap_look_total',
+  // The device's own duration for the look (its `durationMs`), by `outcome`.
+  agentPreTapLookDeviceSeconds: 'driftstack_agent_pre_tap_look_device_seconds',
+  // What the turn waited for the look, by `outcome` — the per-tap latency cost.
+  agentPreTapLookRoundTripSeconds: 'driftstack_agent_pre_tap_look_round_trip_seconds',
 } as const;

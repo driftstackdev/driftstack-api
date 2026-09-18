@@ -21,7 +21,7 @@
 // the contract therefore fails loudly instead of feeding the agent loop a shape
 // the real box never sends.
 
-import type { DomElement } from 'jsdom';
+import type { DomDocument, DomElement } from 'jsdom';
 import type { IntentDispatcher } from '../../../src/services/agent-executor-control-plane.js';
 import { ELEMENT_NOT_INTERACTABLE, NEVER_BECAME_VISIBLE } from './score.js';
 import {
@@ -83,6 +83,16 @@ const TRIVIAL_MS = 30;
 const CLICK_MS = 120;
 const TYPE_MS_PER_CHAR = 12;
 const SCROLL_MS = 180;
+/**
+ * perceive for ONE selector, as A3 describes it: the native find (which on the
+ * real device always fails fast), then the script resolver click falls back to,
+ * then one hit test. Two instantaneous device operations, each costed like any
+ * other here. This is the MODELLED per-tap cost of the look before a tap; the
+ * real one is what the look's round-trip histogram measures in production.
+ */
+export const PERCEIVE_BY_SELECTOR_MS = 2 * TRIVIAL_MS;
+/** A3's cap on the label perceive returns. */
+const PERCEIVE_LABEL_MAX_CHARS = 200;
 /** How long the harness spends before giving up on a page that never loads. */
 const NEVER_FINISHES_LOAD_MS = 30_000;
 /** Reading pace used to cost a `behavioral_pause{kind:'reading'}`. */
@@ -130,6 +140,16 @@ export interface DispatchRecord {
   errorMessage?: string;
   /** Simulated device time this single dispatch consumed. */
   deviceMs: number;
+  /** For a `perceive` for one selector: what the device answered about a tap
+   *  there — device-side truth a scorer may read, since a tap the look refused
+   *  leaves no failed click in this log. */
+  tapLook?:
+    | 'nothing_resolved'
+    | 'covered'
+    | 'clear'
+    | 'outside_viewport'
+    | 'nothing_hit'
+    | 'listing';
   urlBefore: string;
   urlAfter: string;
 }
@@ -176,6 +196,10 @@ export interface FakeDeviceOptions {
   authenticatedHosts?: ReadonlySet<string>;
   /** How these sites answer for an address they do not have. */
   notFound?: NotFoundBehaviour;
+  /** A device from before perceive-by-selector (A3 2026-09-18): it ignores
+   *  `selector` and answers with its page listing, carrying none of the new
+   *  fields — the older device the look before a tap must fall back on. */
+  predatesTapLook?: boolean;
 }
 
 /** The fixture asked the device to do something its page cannot support. A bug
@@ -243,6 +267,7 @@ export class FakeDevice {
   private readonly pageSourceMaxChars: number;
   private readonly authenticatedHosts: Set<string>;
   private readonly notFound: NotFoundBehaviour;
+  private readonly predatesTapLook: boolean;
 
   private currentUrl: string;
   private currentPage: FixturePage;
@@ -269,6 +294,7 @@ export class FakeDevice {
     this.pageSourceMaxChars = opts.pageSourceMaxChars ?? 8 * 1024 * 1024;
     this.authenticatedHosts = new Set(opts.authenticatedHosts ?? []);
     this.notFound = opts.notFound ?? {};
+    this.predatesTapLook = opts.predatesTapLook === true;
     this.currentUrl = opts.startUrl;
     // A device that starts ON a fixture page shows that page; one that starts
     // anywhere else (about:blank) shows an empty document.
@@ -362,6 +388,9 @@ export class FakeDevice {
       deviceMs,
       urlBefore,
       urlAfter: this.currentUrl,
+      ...(dispatch.intentName === 'perceive' && outcome.ok
+        ? { tapLook: tapLookOf(outcome.output) }
+        : {}),
     });
     const frame = outcome.ok
       ? {
@@ -410,6 +439,8 @@ export class FakeDevice {
         };
       case 'get_page_source':
         return this.doGetPageSource();
+      case 'perceive':
+        return this.doPerceive(params);
       case 'scroll':
         return this.doScroll(params);
       case 'behavioral_pause':
@@ -685,6 +716,180 @@ export class FakeDevice {
     }
   }
 
+  /**
+   * perceive for ONE selector (A3 2026-09-18) — what a tap on it would land on.
+   *
+   * ⛔ RESOLVED EXACTLY AS `click` RESOLVES IT: the same `queryFirst`, the same
+   * "cannot parse" answer. An element the click would find is the element this
+   * describes, so the look and the tap can never disagree about which element a
+   * selector means.
+   *
+   * ⛔ THE HIT TEST IS THE FIXTURE'S OWN DECLARATION. There is no layout here,
+   * so "what is under the tap point" is read off what the page already declares:
+   * a rendered `overlays` entry that does not contain the element is on top of
+   * it (the same rule that makes the click come back intercepted), and
+   * `offViewport` / `nothingAtTapPoint` say where the tap point is off-screen or
+   * over nothing. An element that is not rendered has an empty rect, so its tap
+   * point is the page's origin and the hit test finds the page, as on a real
+   * device. Read-only and deterministic: nothing here changes the page.
+   *
+   * perceive WITHOUT a selector — the page listing — is not modelled: nothing in
+   * the product sends it, so a request for it means the mapper gained a caller
+   * this corpus has never measured, and that must be loud.
+   */
+  private doPerceive(params: Record<string, unknown>): DeviceOutcome {
+    const selector = params.selector;
+    if (typeof selector !== 'string') {
+      throw new Error(
+        'fake device models perceive only for one selector — a page-listing perceive reached it',
+      );
+    }
+    if (params.strategy !== undefined && params.strategy !== 'css') {
+      throw new Error(
+        `fake device models perceive only with css selectors, got ${JSON.stringify(params.strategy)}`,
+      );
+    }
+    this.cost(PERCEIVE_BY_SELECTOR_MS);
+    if (this.predatesTapLook) {
+      return this.perceivePageListing(
+        typeof params.max_elements === 'number' ? params.max_elements : 200,
+      );
+    }
+    let element: DomElement | null;
+    try {
+      element = queryFirst(this.dom.document, selector);
+    } catch (err) {
+      if (!(err instanceof InvalidSelectorError)) throw err;
+      return { ok: false, errorCode: 'intent_invalid_parameter', message: err.message };
+    }
+    const value = {
+      url: this.currentUrl,
+      title: this.dom.document.title,
+      truncated: false,
+      resolved_by: 'script',
+    };
+    if (element === null) {
+      return { ok: true, output: { value: { ...value, elements: [], total_matched: 0 } } };
+    }
+    const rendered = isRendered(element);
+    const bounds = rendered ? this.boundsOf(element) : { x: 0, y: 0, width: 0, height: 0 };
+    const tapPoint = {
+      x: Math.round(bounds.x + bounds.width / 2),
+      y: Math.round(bounds.y + bounds.height / 2),
+    };
+    let hit: DomElement | null;
+    let occlusionReason: string | null;
+    if (!rendered) {
+      hit = this.dom.document.body;
+      occlusionReason = 'hit_is_not_target_or_descendant';
+    } else if (this.declares(this.currentPage.offViewport, element)) {
+      hit = null;
+      occlusionReason = 'tap_point_outside_viewport';
+    } else if (this.declares(this.currentPage.nothingAtTapPoint, element)) {
+      hit = null;
+      occlusionReason = 'nothing_hit';
+    } else {
+      const cover = this.coveringOverlay(element);
+      hit = cover ?? element;
+      occlusionReason = cover !== null ? 'hit_is_not_target_or_descendant' : null;
+    }
+    return {
+      ok: true,
+      output: {
+        value: {
+          ...value,
+          elements: [
+            {
+              id: 0,
+              type: perceiveTypeOf(element),
+              label: perceiveLabelOf(element, this.dom.document),
+              selector: canonicalSelectorOf(element),
+              bounds,
+              state: {
+                visible: rendered,
+                enabled: !element.hasAttribute('disabled'),
+                focused: this.focused === element,
+              },
+              position_summary: rendered ? 'in view' : 'not rendered',
+              tap_point: tapPoint,
+              hit:
+                hit === null
+                  ? null
+                  : {
+                      type: perceiveTypeOf(hit),
+                      label: perceiveLabelOf(hit, this.dom.document),
+                      selector: canonicalSelectorOf(hit),
+                      bounds: this.boundsOf(hit),
+                    },
+              occluded: occlusionReason !== null,
+              occlusion_reason: occlusionReason,
+            },
+          ],
+          total_matched: 1,
+        },
+      },
+    };
+  }
+
+  /** An older device's perceive: the selector is ignored and the rendered
+   *  controls are listed — capped by `max_elements`, which it does honour —
+   *  with no `resolved_by` and none of the new fields. */
+  private perceivePageListing(maxElements: number): DeviceOutcome {
+    const controls = Array.from(
+      this.dom.document.querySelectorAll('a, button, input, select, textarea'),
+    ).filter((element) => isRendered(element));
+    const listed = controls.slice(0, Math.max(1, Math.min(200, maxElements)));
+    return {
+      ok: true,
+      output: {
+        value: {
+          url: this.currentUrl,
+          title: this.dom.document.title,
+          elements: listed.map((element, index) => ({
+            id: index,
+            type: perceiveTypeOf(element),
+            label: perceiveLabelOf(element, this.dom.document),
+            selector: canonicalSelectorOf(element),
+            bounds: this.boundsOf(element),
+            state: {
+              visible: true,
+              enabled: !element.hasAttribute('disabled'),
+              focused: this.focused === element,
+            },
+            position_summary: 'in view',
+          })),
+          truncated: controls.length > listed.length,
+          total_matched: controls.length,
+        },
+      },
+    };
+  }
+
+  /** No layout, so a rect is a deterministic function of document order: every
+   *  element its own 32px row. Only its SHAPE is load-bearing (a rendered
+   *  element has a non-empty rect); nothing reads the numbers as geometry. */
+  private boundsOf(element: DomElement): { x: number; y: number; width: number; height: number } {
+    const all = Array.from(this.dom.document.querySelectorAll('*'));
+    const index = Math.max(0, all.indexOf(element));
+    return { x: 16, y: index * 32, width: 320, height: 32 };
+  }
+
+  /** Does the page declare `element` in this (fixture-authored) selector list? */
+  private declares(list: ReadonlyArray<string> | undefined, element: DomElement): boolean {
+    for (const selector of list ?? []) {
+      let matches: boolean;
+      try {
+        matches = element.matches(selector);
+      } catch {
+        throw new FixtureError(
+          `${this.currentPage.url} declares an unparsable selector: ${selector}`,
+        );
+      }
+      if (matches) return true;
+    }
+    return false;
+  }
+
   private doGetPageSource(): DeviceOutcome {
     this.cost(TRIVIAL_MS);
     const source = this.dom.serialize();
@@ -827,11 +1032,17 @@ export class FakeDevice {
   }
 
   private coveredByOverlay(element: DomElement): boolean {
+    return this.coveringOverlay(element) !== null;
+  }
+
+  /** The declared overlay on top of `element`, or null — the ONE rule both the
+   *  click's interception and perceive's hit test read. */
+  private coveringOverlay(element: DomElement): DomElement | null {
     for (const overlaySelector of this.currentPage.overlays ?? []) {
       const overlay = queryFirst(this.dom.document, overlaySelector);
-      if (overlay !== null && isRendered(overlay) && !overlay.contains(element)) return true;
+      if (overlay !== null && isRendered(overlay) && !overlay.contains(element)) return overlay;
     }
-    return false;
+    return null;
   }
 
   /** `closest`, for a FIXTURE-authored selector: an unparsable one is a fixture
@@ -1171,6 +1382,123 @@ function isTypable(element: DomElement): boolean {
  * "[object Object]" as a url or selector — a confident value for an input that
  * was never valid.
  */
+/** What a perceive answer said about a tap, for the dispatch log. */
+function tapLookOf(output: Record<string, unknown>): NonNullable<DispatchRecord['tapLook']> {
+  const value = output.value as { resolved_by?: unknown; elements?: unknown } | undefined;
+  if (value?.resolved_by === undefined) return 'listing';
+  const elements = Array.isArray(value.elements) ? value.elements : [];
+  const first = elements[0] as { occluded?: unknown; occlusion_reason?: unknown } | undefined;
+  if (first === undefined) return 'nothing_resolved';
+  if (first.occluded !== true) return 'clear';
+  if (first.occlusion_reason === 'tap_point_outside_viewport') return 'outside_viewport';
+  if (first.occlusion_reason === 'nothing_hit') return 'nothing_hit';
+  return 'covered';
+}
+
+/** perceive's element `type` for an element. */
+function perceiveTypeOf(element: DomElement): string {
+  const tag = element.tagName;
+  const type = (element.getAttribute('type') ?? '').toLowerCase();
+  if (tag === 'A') return 'link';
+  if (tag === 'BUTTON') return 'button';
+  if (tag === 'SELECT') return 'select';
+  if (tag === 'TEXTAREA') return 'textarea';
+  if (tag === 'IMG') return 'image';
+  if (tag === 'INPUT') {
+    if (['submit', 'button', 'reset', 'image'].includes(type)) return 'button';
+    if (type === 'checkbox') return 'checkbox';
+    if (type === 'radio') return 'radio';
+    return 'input';
+  }
+  return 'other';
+}
+
+function collapsed(text: string | null): string {
+  return (text ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * The label A3's perceive-by-selector derives, in A3's order: aria-labelledby →
+ * aria-label → `<label for>` / a wrapping `<label>` → alt → placeholder → value
+ * (button inputs only) → text content → title; whitespace collapsed, at most 200
+ * characters. Never a typed value: a text field's `value` is not in the order.
+ */
+function perceiveLabelOf(element: DomElement, document: DomDocument): string {
+  const labelledBy = collapsed(element.getAttribute('aria-labelledby'));
+  const fromIds = labelledBy
+    .split(' ')
+    .filter((id) => id.length > 0)
+    .map((id) => {
+      const target = /^[A-Za-z_][-\w]*$/.test(id) ? document.querySelector(`#${id}`) : null;
+      return collapsed(target?.textContent ?? null);
+    })
+    .join(' ')
+    .trim();
+  const id = element.id;
+  const forLabel =
+    id.length > 0 && /^[A-Za-z_][-\w]*$/.test(id)
+      ? document.querySelector(`label[for="${id}"]`)
+      : null;
+  const wrapping = element.closest('label');
+  const type = (element.getAttribute('type') ?? '').toLowerCase();
+  const buttonValue =
+    element.tagName === 'INPUT' && ['submit', 'button', 'reset'].includes(type)
+      ? element.getAttribute('value')
+      : null;
+  const candidates = [
+    fromIds,
+    collapsed(element.getAttribute('aria-label')),
+    collapsed(forLabel?.textContent ?? null),
+    collapsed(wrapping?.textContent ?? null),
+    collapsed(element.getAttribute('alt')),
+    collapsed(element.getAttribute('placeholder')),
+    collapsed(buttonValue),
+    element.tagName === 'TEXTAREA' || element.tagName === 'INPUT'
+      ? ''
+      : collapsed(element.textContent),
+    collapsed(element.getAttribute('title')),
+  ];
+  return (candidates.find((c) => c.length > 0) ?? '').slice(0, PERCEIVE_LABEL_MAX_CHARS);
+}
+
+/**
+ * The device's canonical selector — one spelling per element, whatever the
+ * plan wrote: `#id` when it has a plain id, its test id next, and otherwise a
+ * structural path of `tag:nth-of-type(n)` steps from the nearest ancestor with a
+ * plain id (or from `html`). It resolves back to the same element, which is what
+ * lets the click take it.
+ */
+function canonicalSelectorOf(element: DomElement): string {
+  const plainId = (el: DomElement): string | null =>
+    /^[A-Za-z_][-\w]*$/.test(el.id) ? `#${el.id}` : null;
+  const own = plainId(element);
+  if (own !== null) return own;
+  const testId = element.getAttribute('data-testid');
+  if (testId !== null && testId.length > 0 && !testId.includes('"')) {
+    return `[data-testid="${testId}"]`;
+  }
+  const steps: string[] = [];
+  let node: DomElement | null = element;
+  while (node !== null) {
+    const anchor = plainId(node);
+    if (anchor !== null && node !== element) {
+      steps.unshift(anchor);
+      break;
+    }
+    const tag = node.tagName.toLowerCase();
+    const parent: DomElement | null = node.parentElement;
+    if (parent === null) {
+      steps.unshift(tag);
+      break;
+    }
+    const current: DomElement = node;
+    const sameTag = Array.from(parent.children).filter((c) => c.tagName === current.tagName);
+    steps.unshift(`${tag}:nth-of-type(${String(sameTag.indexOf(current) + 1)})`);
+    node = parent;
+  }
+  return steps.join(' > ');
+}
+
 function readString(params: Record<string, unknown>, key: string): string {
   const value = params[key];
   return typeof value === 'string' ? value : '';

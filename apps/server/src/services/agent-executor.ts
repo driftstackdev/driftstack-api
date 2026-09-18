@@ -154,6 +154,27 @@ export interface ExecutorRunResult {
    * replayed into the NEXT turn's model context as history.
    */
   recoveredAfterReplan?: boolean;
+  /**
+   * What the DEVICE says each successful tap actually landed on — its canonical
+   * selector for the element — keyed by the result object in `results`.
+   *
+   * ⛔ WHY IT IS NOT A FIELD ON THE RESULT. A result is handed to the customer
+   * as it stands (the message response and every streamed step frame project it
+   * without dropping fields), so anything put on it is public API. This is the
+   * repeat guard's evidence and nobody else's: the runtime reads it to compare
+   * two taps by the element they hit rather than by how the plan spelled them.
+   * Absent for every tap the device could not identify (an older device, a look
+   * that failed) — the guard then compares spellings exactly as before.
+   */
+  tapTargets?: ReadonlyMap<IntentResult, ReadonlyArray<string>>;
+  /**
+   * The run stopped BEFORE dispatching a tap the repeat guard
+   * ({@link ExecuteArgs.repeatGuard}) refused: the device identified it as an
+   * element an earlier segment of this turn already tapped, on a page that has
+   * not moved. Nothing was sent for it and no result was recorded; the runtime
+   * ends the turn with the matching stop sentence.
+   */
+  repeatRefused?: 'no_progress' | 'repeat_refused';
 }
 
 /** Stable signature of a consequential action, for the approve → re-run carry
@@ -206,22 +227,83 @@ function pageLabelForTap(intent: AgentIntent, pageLabels: ReadonlyMap<string, st
  *  turn that plans from the page's own selector list, `#cta-primary` is how a
  *  "Confirm purchase" button is addressed, and nothing in that says purchase. So an
  *  executor that has read the page passes what the PAGE calls each element, and
- *  the tap is classified on all three. It can only ever ADD a halt. */
+ *  the tap is classified on all three. It can only ever ADD a halt.
+ *
+ *  `deviceLabels` — what the DEVICE says is at the tap, read just before it:
+ *  the element the selector resolves to and the element its hit test returns at
+ *  the tap point. The digest's names are keyed by the selector the digest wrote,
+ *  so an id-less element the planner spelled its own way has no name there; the
+ *  device resolves ANY spelling, and the hit element is what a native tap would
+ *  actually activate. Same rule: more text to classify, so only ever more halts. */
 export function consequentialHalt(
   intent: AgentIntent,
   approved: Set<string>,
   pageLabels?: ReadonlyMap<string, string>,
+  deviceLabels?: ReadonlyArray<string>,
 ): Extract<IntentResult, { kind: 'confirmation_required' }> | null {
+  const withLabels = (labels: ReadonlyArray<string>): AgentIntent => {
+    const text = labels.filter((label) => label.length > 0).join(' ');
+    return text.length > 0 && intent.kind === 'interact'
+      ? { ...intent, value: `${intent.value ?? ''} ${text}` }
+      : intent;
+  };
   const pageLabel = pageLabels !== undefined ? pageLabelForTap(intent, pageLabels) : '';
-  const v = classifyConsequentialAction(
-    pageLabel.length > 0 && intent.kind === 'interact'
-      ? { ...intent, value: `${intent.value ?? ''} ${pageLabel}` }
-      : intent,
-  );
+  const deviceText =
+    intent.kind === 'interact' && intent.action === 'tap' ? (deviceLabels ?? []) : [];
+  // The plan's words and the digest's name FIRST, the device's labels only when
+  // those say nothing. Both readings can only add halts; ordering them keeps the
+  // phrase a halt is raised on — and so its approval signature — the same
+  // whether or not the device was asked, so an approval releases the tap it
+  // was given for instead of meeting a new phrase found in a longer text.
+  const planned = classifyConsequentialAction(withLabels([pageLabel]));
+  const v =
+    planned.requiresConfirmation || deviceText.length === 0
+      ? planned
+      : classifyConsequentialAction(withLabels([pageLabel, ...deviceText]));
   if (!v.requiresConfirmation || v.category === undefined || v.matchedText === undefined) {
     return null;
   }
   const signature = consequentialSignature(v.category, v.matchedText);
+  // ⛔ AN APPROVAL RELEASES THE KIND OF ACTION IT WAS GIVEN FOR, NOT THE TAP.
+  // When the plan's own words raised the halt, the device's labels were not
+  // read above — and an approval for a purchase must not release a tap the
+  // device says lands on deleting the account. So each device label is read on
+  // its own: one that names a DIFFERENT kind of consequential action halts
+  // under that kind unless it was approved too. The same kind in other words
+  // (a purchase worded differently from the approved one) is the approved
+  // action, and re-asking for it would re-prompt forever.
+  if (v === planned && approved.has(signature)) {
+    const crossKind: Array<{
+      category: ConsequentialActionCategory;
+      matchedText: string;
+      signature: string;
+    }> = [];
+    for (const label of deviceText) {
+      // The label ALONE: with the plan's words beside it, the planned kind
+      // would match first and hide the one the device names.
+      const d = classifyConsequentialAction({ kind: 'interact', action: 'tap', value: label });
+      if (!d.requiresConfirmation || d.category === undefined || d.matchedText === undefined) {
+        continue;
+      }
+      if (d.category === v.category) continue;
+      crossKind.push({
+        category: d.category,
+        matchedText: d.matchedText,
+        signature: consequentialSignature(d.category, d.matchedText),
+      });
+    }
+    const unapproved = crossKind.find((d) => !approved.has(d.signature));
+    if (unapproved !== undefined) {
+      // Nothing is released, so the plan's approval is NOT consumed.
+      return {
+        kind: 'confirmation_required',
+        intent,
+        category: unapproved.category,
+        matchedText: unapproved.matchedText,
+      };
+    }
+    for (const d of crossKind) approved.delete(d.signature);
+  }
   if (approved.delete(signature)) return null;
   return {
     kind: 'confirmation_required',
@@ -342,6 +424,23 @@ export interface ExecuteArgs {
    * optional so existing executors/callers are unaffected.
    */
   onStepStart?: (intent: AgentIntent, index: number) => void;
+  /**
+   * B1 — the turn's repeat guard, asked again at the moment a tap's TARGET is
+   * known.
+   *
+   * The runtime admits a segment by comparing selectors as the planner wrote
+   * them, which cannot see that `form > button.primary` and `[aria-label="Send"]`
+   * are one id-less button. An executor that has asked the device what a tap
+   * resolves to calls this with that answer (the device's canonical selectors
+   * for the element) before dispatching the tap; a non-null verdict stops the
+   * run there with nothing sent (see {@link ExecutorRunResult.repeatRefused}).
+   * Optional: an executor that cannot identify targets never calls it, and a
+   * caller that does not pass it gets no extra refusals.
+   */
+  repeatGuard?: (
+    intent: AgentIntent,
+    targets: ReadonlyArray<string>,
+  ) => 'no_progress' | 'repeat_refused' | null;
 }
 
 /**

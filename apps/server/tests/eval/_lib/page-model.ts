@@ -123,6 +123,14 @@ export interface FixturePage {
    *  aimed OUTSIDE it is intercepted. The target IS present — it is covered, not
    *  absent — and keeping that distinction is the whole point of the F1 task. */
   overlays?: ReadonlyArray<string>;
+  /** Elements whose tap point is below the fold: perceive reports it outside
+   *  the viewport. A click is unaffected — it scrolls its target into view
+   *  before it taps, which is exactly why "outside the viewport" is not
+   *  "covered". */
+  offViewport?: ReadonlyArray<string>;
+  /** Elements whose tap point the hit test finds NOTHING at. A click is
+   *  unaffected: the device gives no evidence either way. */
+  nothingAtTapPoint?: ReadonlyArray<string>;
   onClick?: ReadonlyArray<ClickBehaviour>;
   forms?: ReadonlyArray<FormBehaviour>;
 }

@@ -1023,6 +1023,7 @@
                       "session_error",
                       "invalid_request",
                       "result_too_large",
+                      "element_covered",
                       "unknown"
                     ]
                   },
@@ -4696,6 +4697,7 @@
                                 "session_error",
                                 "invalid_request",
                                 "result_too_large",
+                                "element_covered",
                                 "unknown"
                               ]
                             },
@@ -6036,6 +6038,7 @@
                                 "session_error",
                                 "invalid_request",
                                 "result_too_large",
+                                "element_covered",
                                 "unknown"
                               ]
                             },
@@ -6784,6 +6787,7 @@
                             "session_error",
                             "invalid_request",
                             "result_too_large",
+                            "element_covered",
                             "unknown"
                           ]
                         },

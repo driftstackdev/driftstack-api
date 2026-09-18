@@ -71,12 +71,19 @@ describe('ControlPlaneAgentExecutor', () => {
     expect(res.ok).toBe(true);
     expect(res.results).toHaveLength(3);
     expect(res.results.every((r) => r.kind === 'success')).toBe(true);
-    // Dispatched the 3 mapped intents in order with the right intentNames.
-    expect(got.map((d) => d.intentName)).toEqual(['navigate', 'click', 'screenshot']);
-    expect(got.map((d) => d.sessionId)).toEqual(['ses_x', 'ses_x', 'ses_x']);
+    // Dispatched the 3 mapped intents in order with the right intentNames — the
+    // tap preceded by the look at what it will land on. (This mock answers the
+    // look with no verdict, as a device that predates it does, so the tap goes.)
+    expect(got.map((d) => d.intentName)).toEqual(['navigate', 'perceive', 'click', 'screenshot']);
+    expect(got.map((d) => d.sessionId)).toEqual(['ses_x', 'ses_x', 'ses_x', 'ses_x']);
     // Params are base64-encoded on the wire.
     expect(decodeWireData(got[0]!.inputParams)).toEqual({ url: 'https://x' });
-    expect(decodeWireData(got[1]!.inputParams)).toEqual({ strategy: 'css selector', value: '#go' });
+    expect(decodeWireData(got[1]!.inputParams)).toEqual({
+      selector: '#go',
+      strategy: 'css',
+      max_elements: 1,
+    });
+    expect(decodeWireData(got[2]!.inputParams)).toEqual({ strategy: 'css selector', value: '#go' });
   });
 
   it('stops the undispatched suffix when the lifecycle fence closes after intent 1', async () => {
@@ -121,8 +128,10 @@ describe('ControlPlaneAgentExecutor', () => {
   });
 
   it('halts on the first dispatch failure (later intents not dispatched)', async () => {
-    const { got, dispatcher } = mockDispatcher((d, i) =>
-      i === 1 ? failResult(d.intentId, 'intent_webdriver_failed') : okResult(d.intentId),
+    const { got, dispatcher } = mockDispatcher((d) =>
+      d.intentName === 'click'
+        ? failResult(d.intentId, 'intent_webdriver_failed')
+        : okResult(d.intentId),
     );
     // maxRetries:0 — this test isolates halt-on-failure; auto-retry is covered
     // in its own describe block below.
@@ -138,7 +147,8 @@ describe('ControlPlaneAgentExecutor', () => {
     expect(res.results).toHaveLength(2);
     expect(res.results[0]!.kind).toBe('success');
     expect(res.results[1]!.kind).toBe('failure');
-    expect(got).toHaveLength(2); // 3rd intent never dispatched
+    // navigate, the look before the tap, the tap — the 3rd intent never dispatched
+    expect(got.map((d) => d.intentName)).toEqual(['navigate', 'perceive', 'click']);
   });
 
   it('#139 a failed `wait` does NOT halt the plan — later intents (screenshot) still run', async () => {
@@ -398,7 +408,9 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
     );
     expect(res.ok).toBe(false);
     expect(res.results[0]!.kind).toBe('failure');
-    expect(got).toHaveLength(1); // failed safe: dispatched exactly once, no retry
+    // failed safe: the tap dispatched exactly once, no retry. (The look before
+    // it failed too, which is no verdict, so the tap went as it always did.)
+    expect(got.filter((d) => d.intentName === 'click')).toHaveLength(1);
     expect(calls).toHaveLength(0);
   });
 
@@ -407,9 +419,11 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
     // TIMEOUT (intent_dispatch_error, maybe-executed), session_not_established
     // means the interact never ran, so retrying a side-effecting type through the
     // cold-start window can't double-apply. Succeeds once the fork is up.
+    // Counted on the TYPING alone: the look before it (typing starts with a tap
+    // on the field) would otherwise absorb one of the three refusals.
     let n = 0;
     const { got, dispatcher } = mockDispatcher((d) =>
-      n++ < 3
+      d.intentName === 'send_keys' && n++ < 3
         ? failResult(d.intentId, 'intent_session_not_established')
         : okResult(d.intentId, d.sessionId),
     );
@@ -419,7 +433,8 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       planArgs([{ kind: 'interact', action: 'type', selector: '#q', value: 'hi' }]),
     );
     expect(res.ok).toBe(true); // retried through the cold-start → succeeded
-    expect(got).toHaveLength(4); // 3 not-established + 1 success
+    // 3 not-established + 1 success
+    expect(got.filter((d) => d.intentName === 'send_keys')).toHaveLength(4);
   });
 
   it('a dispatch TIMEOUT/DROP (intent_dispatch_error = maybe-executed) on an interact is NOT auto-retried (double-apply fail-safe)', async () => {
@@ -434,7 +449,9 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       planArgs([{ kind: 'interact', action: 'type', selector: '#q', value: 'hi' }]),
     );
     expect(res.ok).toBe(false);
-    expect(got).toHaveLength(1);
+    // The typing is sent once. (The look before it failed too, which is no
+    // verdict, so the typing went as it always did.)
+    expect(got.map((d) => d.intentName)).toEqual(['perceive', 'send_keys']);
   });
 
   const ambiguousReplayIntents: Array<[AgentIntent, string]> = [
@@ -560,12 +577,17 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
     'does NOT replay %s after intent_webdriver_failed (%s may already have taken effect before confirmation failed)',
     async (intent, _description) => {
       let simulatedAppliedEffects = 0;
-      const { got, dispatcher } = mockDispatcher((dispatch) => {
+      const { got: sent, dispatcher } = mockDispatcher((dispatch) => {
         // Model the producer boundary precisely: the action or pacing took effect,
-        // then its confirmation failed and collapsed to the coarse code.
-        simulatedAppliedEffects += 1;
+        // then its confirmation failed and collapsed to the coarse code. The look
+        // before a tap is read-only and applies nothing; its failure is no verdict.
+        if (dispatch.intentName !== 'perceive') simulatedAppliedEffects += 1;
         return failResult(dispatch.intentId, 'intent_webdriver_failed');
       });
+      const got = {
+        map: <T>(f: (d: IntentDispatch) => T): T[] =>
+          sent.filter((d) => d.intentName !== 'perceive').map(f),
+      };
       const { sleep, calls } = instantSleep();
       const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
         maxRetries: 2,
@@ -582,7 +604,8 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       expect(res.results[0].diagnosis?.retryable).toBe(false);
       expect(res.results[0].reason).toContain('may have taken effect');
       expect(simulatedAppliedEffects).toBe(1);
-      expect(got.map((dispatch) => dispatch.intentId)).toEqual(['int_1']);
+      // Sent once — one intent id, whichever it was after a look before a tap.
+      expect(got.map((dispatch) => dispatch.intentId)).toHaveLength(1);
       expect(calls).toEqual([]);
     },
   );
@@ -678,7 +701,8 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       });
       expect(res.ok).toBe(true);
       expect(res.awaitingConfirmation).toBeUndefined();
-      expect(got.map((d) => d.intentName)).toEqual(['click']); // the approved tap WAS dispatched
+      // the approved tap WAS dispatched, after the look at what it lands on
+      expect(got.map((d) => d.intentName)).toEqual(['perceive', 'click']);
     });
 
     it('uses one approval for one matching dispatch and halts before a repeated target', async () => {
@@ -697,7 +721,8 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
         },
         approvedConsequentialActions: callerApprovals,
       });
-      expect(got.map((d) => d.intentName)).toEqual(['click']);
+      // One look + one tap; the second tap halts on its own words, before any look.
+      expect(got.map((d) => d.intentName)).toEqual(['perceive', 'click']);
       expect(res.results.map((item) => item.kind)).toEqual(['success', 'confirmation_required']);
       expect(res.awaitingConfirmation).toBe(true);
       expect(callerApprovals.size).toBe(1);

@@ -136,6 +136,7 @@ import {
   AGENT_TURN_FIRST_PROGRESS_BUCKETS_SECONDS,
   AGENT_TURN_REPLAN_BUCKETS,
   AgentTurnTelemetry,
+  PRE_TAP_LOOK_DURATION_BUCKETS_SECONDS,
 } from '../services/agent-turn-telemetry.js';
 import { AgentTurnSummaryService } from '../services/agent-turn-summary.js';
 import {
@@ -813,6 +814,25 @@ export async function createProductionDeps(
       'Per-turn diagnostics row writes by outcome (ok | error | dropped | shed). The write is fire-and-forget, so error or dropped here is the only place its failure shows; shed is the row budget for turned-away requests under a storm.',
       ['outcome'],
     );
+    // The look before a tap (agent-executor-control-plane.ts), emitted from
+    // recordPreTapLook in services/agent-turn-telemetry.ts.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.agentPreTapLookTotal,
+      'Looks before an agent tap by outcome (clear | covered | not_found | outside_viewport | fallback). covered and not_found are taps that were not sent; fallback is a tap sent without a verdict.',
+      ['outcome'],
+    );
+    metricsRegistry.registerHistogram(
+      METRIC_NAMES.agentPreTapLookDeviceSeconds,
+      'Device-reported duration of the look before an agent tap, by outcome. Absent when the look timed out.',
+      PRE_TAP_LOOK_DURATION_BUCKETS_SECONDS,
+      ['outcome'],
+    );
+    metricsRegistry.registerHistogram(
+      METRIC_NAMES.agentPreTapLookRoundTripSeconds,
+      'What an agent turn waited for the look before a tap, by outcome: the per-tap latency cost of the look.',
+      PRE_TAP_LOOK_DURATION_BUCKETS_SECONDS,
+      ['outcome'],
+    );
   }
 
   // Arc 7 obs.13 — construct the email service after the metrics
@@ -1486,7 +1506,9 @@ export async function createProductionDeps(
           logger,
         ),
         undefined,
-        {},
+        // The look before a tap counts its cost and outcome here when a
+        // registry exists; without one it runs uncounted.
+        metricsRegistry !== undefined ? { metrics: metricsRegistry } : {},
         sessionCaptureStore,
       )
     : new StubAgentExecutor();

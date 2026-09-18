@@ -16,7 +16,7 @@
 //   • Per-intent param shapes (navigate/click/send_keys/scroll/
 //     behavioral_pause/wait_for/execute_script + no-param intents).
 //   • intentName→schema map roster.
-//   • IntentDispatch + exclusive IntentResult envelopes + 14 live error codes.
+//   • IntentDispatch + exclusive IntentResult envelopes + 15 live error codes.
 //
 // Plus a behavioral block that exercises the schemas (accept/reject)
 // so the contract is enforced, not just pinned by regex.
@@ -1173,7 +1173,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     ).toBe(true);
   });
 
-  it('14 live error codes are pinned in canonical order', () => {
+  it('15 live error codes are pinned in canonical order', () => {
     // Exact .toEqual (not a source regex): order-sensitive + tolerant of the
     // inline rationale comments now interleaved in the source array.
     expect([...HARNESS_ERROR_CODES]).toEqual([
@@ -1198,6 +1198,11 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       'result_too_large',
       'session_paused',
       'session_intent_in_flight',
+      // A3 2026-09-18 — click { require_unoccluded } refusing a covered tap.
+      // Appended: it splits nothing out of a neighbour, and the decode entry
+      // ships before the device emits it (the legacy form is
+      // intent_webdriver_failed + "element occluded at the tap point:").
+      'intent_element_occluded',
     ]);
   });
 });
@@ -1205,7 +1210,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
 describe('harness-control-protocol behavioral contract', () => {
   it('intent vocab, strict schema maps, and error codes match canonical counts', () => {
     expect(HARNESS_INTENT_NAMES).toHaveLength(18);
-    expect(HARNESS_ERROR_CODES).toHaveLength(14);
+    expect(HARNESS_ERROR_CODES).toHaveLength(15);
     expect(Object.keys(HARNESS_INTENT_PARAM_SCHEMAS).sort()).toEqual(
       [...HARNESS_INTENT_NAMES].sort(),
     );

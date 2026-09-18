@@ -865,16 +865,26 @@ describe('executor eval — the findings this corpus exists to measure (executio
     ).toBeLessThan(2500);
   });
 
-  it('F1: an overlay is an OUTCOME-UNKNOWN browser failure, so it is not retried and the plan halts', () => {
+  it('F1: a covered control is seen BEFORE the tap — the click is never sent, not retried, and the plan halts', () => {
+    // MOVED 2026-09-18 (tap-look round). This used to be "an overlay is an
+    // OUTCOME-UNKNOWN browser failure": the click went to the device, came back
+    // `intent_webdriver_failed` / intercepted, and could not be replayed because
+    // it might have landed. Now the look before the tap asks the device what is
+    // at the tap point, sees the consent overlay, and the click is NEVER SENT —
+    // so the outcome is known (nothing happened), which is what makes the step
+    // re-plannable. The death class is unchanged: the same page, seen earlier.
     const f1 = task('F1');
     expect(f1.outcome).toBe('fail');
     expect(f1.diedAt?.reasonClass).toBe('element_click_intercepted');
     const step = f1.steps[f1.diedAt?.index ?? -1];
-    expect(step?.harnessErrorCode).toBe('intent_webdriver_failed');
-    // Not retried: replaying a click whose outcome is unknown could double-apply.
+    // One dispatch — the look — and it succeeded; no click is in the log.
+    expect(step?.harnessErrorCode).toBeUndefined();
     expect(step?.attempts).toBe(1);
+    expect(step?.diagnosisCategory).toBe('element_covered');
+    // Not retried: the cover is still there.
     expect(step?.retryable).toBe(false);
-    // And the plan halted: the capture after it never ran.
+    // And the plan halted: the capture after it never ran. (The scripted
+    // planner re-plans the same plan, which the runtime refuses to run twice.)
     expect(f1.steps.length).toBeLessThan(f1.plan.intents);
   });
 

@@ -37,6 +37,24 @@ installed for the browser-facing workspaces; typed by `_lib/jsdom.d.ts`).
 - Four different "no"s stay different, because the executor handles each one
   differently: unparsable selector, no match, a match that is not rendered
   (`element not interactable`), and a match that is covered (`click intercepted`).
+- **`perceive` for one selector** (the look before a tap) is resolved by the
+  SAME lookup the click uses, and its hit test is read off the fixture's own
+  declarations: a rendered `overlays` entry that does not contain the element is
+  what the tap point hits (the page the click would call intercepted), with the
+  cover's label; `offViewport` and `nothingAtTapPoint` declare the two answers
+  that are not "covered"; an element that is not rendered hits the page. Costed
+  at `PERCEIVE_BY_SELECTOR_MS` (two instantaneous device operations — the
+  modelled per-tap price of the look). `predatesTapLook` makes it a device from
+  before the look: it ignores the selector and lists the page (capped by
+  `max_elements`), so every tap falls back to the old path.
+  **Stated limits.** (1) The hit is the WHOLE declared overlay, labelled as the
+  overlay is (a consent dialog's `aria-label`); a real device's hit test
+  returns the innermost element at the tap point — a paragraph or a button
+  inside the banner, with its own label and selector — so the cover wording
+  the eval shows is the fixture's, not what a real page produces. (2) It
+  answers every dispatch at once and never refuses one for another still
+  running (`session_intent_in_flight`), so a look that outlives its deadline is
+  not modelled here: that path is pinned by the unit tests of the look.
 - A gesture the fixture has no behaviour for **throws** (`FixtureError`). It is
   never a quiet no-op, which would read as a finding about the agent.
 - **Enter does what a browser does with it**, because a kinder device flatters
@@ -120,18 +138,20 @@ EVAL_LIVE=1 TMPDIR=/private/tmp/ds-gate \
   npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
 ```
 
-| Variable               | Default                           |                                                                                                                   |
-| ---------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `EVAL_LIVE_MODEL`      | the product's default agent model | any id in the model registry                                                                                      |
-| `EVAL_LIVE_REPS`       | 1                                 | a live model is not deterministic — use ≥3 before believing a count                                               |
-| `EVAL_LIVE_MAX_TURNS`  | 2                                 | the customer's message plus one "please continue" — which a task should no longer need; `msg 1` says so           |
-| `EVAL_LIVE_MAX_USD`    | 3                                 | **the dollar cap**: priced per call at the registry's rates, output as output, cache at its own multipliers       |
-| `EVAL_LIVE_MAX_CALLS`  | 200                               | backstop, enforced in `_lib/live-meter.ts`                                                                        |
-| `EVAL_LIVE_MAX_TOKENS` | 600000                            | backstop. A token count is **not** a dollar bound: all-output, 600k tokens is $15                                 |
-| `EVAL_LIVE_TASKS`      | all                               | comma-separated task ids                                                                                          |
-| `EVAL_LIVE_THINKING`   | the product's own policy          | `disabled` or `adaptive-low` — measure one thinking policy against another through the product's request assembly |
-| `EVAL_LIVE_STRUCTURED` | the product's own (on)            | `0` sends requests without the reply schema, to measure the defensive parser on its own                           |
-| `EVAL_REPORT_DIR`      | OS temp dir                       | where the JSON and text reports go — a directory inside the repository is **refused**                             |
+| Variable               | Default                           |                                                                                                                                                                                          |
+| ---------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EVAL_LIVE_MODEL`      | the product's default agent model | any id in the model registry                                                                                                                                                             |
+| `EVAL_LIVE_REPS`       | 1                                 | a live model is not deterministic — use ≥3 before believing a count                                                                                                                      |
+| `EVAL_LIVE_MAX_TURNS`  | 2                                 | the customer's message plus one "please continue" — which a task should no longer need; `msg 1` says so                                                                                  |
+| `EVAL_LIVE_MAX_USD`    | 3                                 | **the dollar cap**: priced per call at the registry's rates, output as output, cache at its own multipliers                                                                              |
+| `EVAL_LIVE_MAX_CALLS`  | 200                               | backstop, enforced in `_lib/live-meter.ts`                                                                                                                                               |
+| `EVAL_LIVE_MAX_TOKENS` | 600000                            | backstop. A token count is **not** a dollar bound: all-output, 600k tokens is $15                                                                                                        |
+| `EVAL_LIVE_TASKS`      | all                               | comma-separated task ids                                                                                                                                                                 |
+| `EVAL_LIVE_THINKING`   | the product's own policy          | `disabled` or `adaptive-low` — measure one thinking policy against another through the product's request assembly                                                                        |
+| `EVAL_LIVE_STRUCTURED` | the product's own (on)            | `0` sends requests without the reply schema, to measure the defensive parser on its own                                                                                                  |
+| `EVAL_LIVE_DEVICE`     | `current`                         | `predates-tap-look` drives a device from before the look before a tap — the same product bytes, every tap on the old path. The A/B for the look; the header says which device ran        |
+| `EVAL_LIVE_TAP_LOOK`   | `on`                              | `off` runs the executor with the look before a tap switched off — the wire it sent before the look existed, no look paid for. The true "before" of a before/after; the header says which |
+| `EVAL_REPORT_DIR`      | OS temp dir                       | where the JSON and text reports go — a directory inside the repository is **refused**                                                                                                    |
 
 All three caps are checked **before every provider call**, inside the only fetch
 the product's planner is given, so retries, re-plans and read-backs all pass

@@ -855,7 +855,18 @@ export function classifyDispatchDeath(
   intentKind: AgentIntent['kind'],
   code: HarnessErrorCode | undefined,
   message?: string,
+  /** The step's own diagnosis. Read for the two deaths the look before a tap
+   *  decides WITHOUT a failing dispatch: the tap was refused because something
+   *  covers the control, or because the selector resolves to nothing. */
+  diagnosisCategory?: string,
 ): DeathReasonClass {
+  // The element is there and something is over it — the same finding as the
+  // device's own "click intercepted", seen before the tap instead of after.
+  if (diagnosisCategory === 'element_covered') return 'element_click_intercepted';
+  if (code === 'intent_element_occluded') return 'element_click_intercepted';
+  if (code === undefined && diagnosisCategory === 'element_not_found') {
+    return 'element_never_appeared_in_retry_budget';
+  }
   if (code === 'intent_element_not_found') return 'element_never_appeared_in_retry_budget';
   if (code === 'intent_page_load_failed') return 'page_load_failed';
   if (code === 'intent_invalid_parameter' || code === 'intent_missing_parameter') {
@@ -970,6 +981,7 @@ export function scoreTurn(obs: TurnObservation): TaskReport {
                 step.agentIntentKind,
                 step.harnessErrorCode,
                 step.harnessErrorMessage,
+                step.diagnosisCategory,
               );
       diedAt = {
         index: failingIndex,

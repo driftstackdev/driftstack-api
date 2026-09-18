@@ -31,6 +31,7 @@ import {
 import type {
   AgentExecutor,
   ElementWaitBudget,
+  ExecuteArgs,
   ExecutorRunResult,
   IntentResult,
 } from './agent-executor.js';
@@ -783,6 +784,12 @@ export const REPLAN_MIN_BUDGET_TOKENS = 6_000;
  * new plan could repeat an effect that already happened. `session_error` is
  * absent for a different reason: the box is unhealthy, and a new plan does not
  * make it healthy. A category added later is unsafe by omission.
+ *
+ * `element_covered` qualifies for the same reason as `element_not_found`: the
+ * tap was NOT made — the executor saw the cover before tapping, or the device
+ * refused the tap — so the page is as the step found it, and a new look is how
+ * the plan finds the banner and closes it. It is not RETRYABLE (the cover is
+ * still there), which is a different question from re-plannable.
  */
 const REPLANNABLE_FAILURE_CATEGORIES: ReadonlySet<string> = new Set([
   'element_not_found',
@@ -792,6 +799,7 @@ const REPLANNABLE_FAILURE_CATEGORIES: ReadonlySet<string> = new Set([
   'scroll_failed',
   'invalid_request',
   'result_too_large',
+  'element_covered',
 ]);
 
 /**
@@ -997,7 +1005,14 @@ function selectorTargets(selector: string | undefined): string[] {
  * typing the same text again doubles what is in the box), and a key press is its
  * key and its target. A kind this does not know is compared whole.
  */
-export function sameSiteEffect(a: AgentIntent, b: AgentIntent): boolean {
+export function sameSiteEffect(
+  a: AgentIntent,
+  b: AgentIntent,
+  /** What the device said `a` landed on (its canonical selectors), when known. */
+  aTargets?: ReadonlyArray<string>,
+  /** The same for `b`. */
+  bTargets?: ReadonlyArray<string>,
+): boolean {
   if (a.kind === 'navigate' && b.kind === 'navigate') {
     return navigationIdentity(a.url) === navigationIdentity(b.url);
   }
@@ -1010,8 +1025,41 @@ export function sameSiteEffect(a: AgentIntent, b: AgentIntent): boolean {
   ) {
     return false;
   }
-  const targetsOfB = new Set(selectorTargets(b.selector));
-  return selectorTargets(a.selector).some((target) => targetsOfB.has(target));
+  const targetsOfB = new Set(effectTargets(b.selector, bTargets));
+  return effectTargets(a.selector, aTargets).some((target) => targetsOfB.has(target));
+}
+
+/**
+ * Every identity a tap's element answers to: the selector as the plan spelled
+ * it, and — when the device identified the element before the tap — the
+ * device's CANONICAL selector for what the tap lands on.
+ *
+ * ⛔ WHY THE DEVICE'S NAME. An element with an id is one string however it is
+ * spelled ({@link selectorTargets}); one WITHOUT an id is not. `form > button.primary`
+ * and `[aria-label="Send"]` are one button, and compared as written they were two
+ * steps, so the second spelling could send the form again. The device resolves
+ * both to one canonical selector, and that is compared first.
+ *
+ * ⛔ WHY STILL THE SPELLING TOO. A union can only make two taps MORE alike —
+ * the safe direction for a guard against doing something twice. Dropping the
+ * spelling would let through a repeat the guard refuses today whenever the
+ * device's answer is missing or differs (a look that timed out, an older
+ * device), which is exactly when there is least evidence.
+ */
+function effectTargets(
+  selector: string | undefined,
+  deviceTargets: ReadonlyArray<string> | undefined,
+): string[] {
+  const planned = selectorTargets(selector);
+  if (deviceTargets === undefined || deviceTargets.length === 0) return planned;
+  // Prefixed so a canonical selector can never collide with a planner branch
+  // that merely LOOKS like one (the device's `div > button` is not the same
+  // claim as a plan that wrote `div > button`, which may match elsewhere).
+  const canonical = deviceTargets
+    .map((target) => target.replace(/\s+/g, ' ').trim())
+    .filter((target) => target.length > 0)
+    .map((target) => `device:${target}`);
+  return [...canonical, ...planned];
 }
 
 /** Two steps that are the same step: the same site effect, or — for a step that
@@ -1100,6 +1148,8 @@ export function mergeExecutorRuns(
     ...(second.authorityLost === true ? { authorityLost: true } : {}),
     // B2 — the run that honoured Stop is always the LAST one: nothing runs after it.
     ...(second.stopped === true ? { stopped: true } : {}),
+    // B1 — likewise a run the repeat guard stopped: nothing ran after it.
+    ...(second.repeatRefused !== undefined ? { repeatRefused: second.repeatRefused } : {}),
   };
 }
 
@@ -1110,6 +1160,9 @@ export function mergeExecutorRuns(
  */
 export interface RanStep {
   intent: AgentIntent;
+  /** What the device said the step landed on (ExecutorRunResult.tapTargets):
+   *  its canonical selectors, compared before the plan's spelling. */
+  targets?: ReadonlyArray<string>;
   /** The look the segment that ran this step was planned against. */
   pageBefore: string | undefined;
   /** The first look after that segment finished. */
@@ -1216,7 +1269,7 @@ export function admitSegment(args: {
   const repeats = suffix.filter(
     (intent) =>
       repeatMayDuplicateSiteEffect(intent) &&
-      ran.some((done) => sameSiteEffect(done.intent, intent)),
+      ran.some((done) => sameSiteEffect(done.intent, intent, done.targets)),
   );
   if (repeats.length === 0) return { admitted: true, intents: [...suffix] };
   if (cause === 'replan') return { admitted: false, reason: 'repeat_refused' };
@@ -1233,8 +1286,11 @@ function repeatRefusedOnThisPage(
   repeat: AgentIntent,
   ran: ReadonlyArray<RanStep>,
   pageNow: string | undefined,
+  repeatTargets?: ReadonlyArray<string>,
 ): 'no_progress' | 'repeat_refused' | null {
-  const earlier = ran.filter((done) => sameSiteEffect(done.intent, repeat));
+  const earlier = ran.filter((done) =>
+    sameSiteEffect(done.intent, repeat, done.targets, repeatTargets),
+  );
   if (pageNow !== undefined && earlier.some((done) => done.pageBefore === pageNow)) {
     return 'no_progress';
   }
@@ -1252,6 +1308,35 @@ function repeatRefusedOnThisPage(
     return 'repeat_refused';
   }
   return null;
+}
+
+/**
+ * B1 — {@link admitSegment}'s question again, for ONE tap, at the moment the
+ * device has said which element it lands on (ExecuteArgs.repeatGuard).
+ *
+ * Admission compares the plan's spellings, so it cannot see that a tap in this
+ * segment is the id-less button an earlier segment already pressed under another
+ * name. This compares by the device's canonical selector as well, against every
+ * step that succeeded in an EARLIER segment, and applies the same rules: after a
+ * failure any repeat is refused; after a success a repeat may run only on a page
+ * that has moved. It can only refuse more than admission did — a step admission
+ * already let through as a repeat gets the same verdict here, because the page
+ * rules are the same function.
+ */
+export function repeatRefusedAtTarget(args: {
+  cause: 'continue' | 'replan';
+  intent: AgentIntent;
+  targets: ReadonlyArray<string>;
+  ran: ReadonlyArray<RanStep>;
+  pageNow: string | undefined;
+}): 'no_progress' | 'repeat_refused' | null {
+  const { cause, intent, targets, ran, pageNow } = args;
+  if (!repeatMayDuplicateSiteEffect(intent)) return null;
+  if (!ran.some((done) => sameSiteEffect(done.intent, intent, done.targets, targets))) {
+    return null;
+  }
+  if (cause === 'replan') return 'repeat_refused';
+  return repeatRefusedOnThisPage(intent, ran, pageNow, targets);
 }
 
 // Public message turns rewrite one application-encrypted JSONB transcript on
@@ -2603,7 +2688,11 @@ export class AgentRuntime {
     const runPlan = async (
       plan: Extract<DecomposeResult, { kind: 'plan' }>,
       approvals: ReadonlySet<string> | undefined,
-      meta: { segment: number; status?: PlanStatus },
+      meta: {
+        segment: number;
+        status?: PlanStatus;
+        repeatGuard?: ExecuteArgs['repeatGuard'];
+      },
     ): Promise<ExecutorRunResult> => {
       emitProgress(args.onProgress, {
         kind: 'plan',
@@ -2653,6 +2742,7 @@ export class AgentRuntime {
         // nowhere else; the results this returns still carry the placeholders.
         ...(args.credentials !== undefined ? { credentials: args.credentials } : {}),
         ...(approvals !== undefined ? { approvedConsequentialActions: approvals } : {}),
+        ...(meta.repeatGuard !== undefined ? { repeatGuard: meta.repeatGuard } : {}),
         ...(args.onStep !== undefined
           ? {
               onStep: (result: IntentResult, index: number): void => {
@@ -2776,8 +2866,10 @@ export class AgentRuntime {
     const noteRan = (run: ExecutorRunResult, ranInSegment: number, pageBefore?: string): void => {
       for (const r of run.results) {
         if (r.kind !== 'success') continue;
+        const targets = run.tapTargets?.get(r);
         ranSteps.push({
           intent: r.intent,
+          ...(targets !== undefined ? { targets } : {}),
           pageBefore,
           pageAfter: undefined,
           segment: ranInSegment,
@@ -3064,9 +3156,15 @@ export class AgentRuntime {
       lastStatus = replanned.status;
       // ⛔ NO APPROVALS. A later segment reaching a purchase must stop for a
       // human exactly as the first plan would have.
+      // The segment's steps are judged again, tap by tap, once the device has
+      // said what each tap lands on — against the steps of EARLIER segments
+      // only: `ranSteps` gains this segment's steps after it has run.
+      const ranBeforeThisSegment = [...ranSteps];
       const nextRun = await runPlan({ ...replanned, intents: suffix }, undefined, {
         segment,
         ...(replanned.status !== undefined ? { status: replanned.status } : {}),
+        repeatGuard: (intent, targets) =>
+          repeatRefusedAtTarget({ cause, intent, targets, ran: ranBeforeThisSegment, pageNow }),
       });
       lastRunResults = nextRun.results;
       lastRun = nextRun;
@@ -3074,6 +3172,13 @@ export class AgentRuntime {
       executorResult = mergeExecutorRuns(executorResult, nextRun);
       if (cause === 'replan') replans += 1;
       if (nextRun.stopped === true) stoppedDuring = 'executing';
+      if (nextRun.repeatRefused !== undefined) {
+        // Set for BOTH causes, unlike `stopFor`: this run ended on no ✗ row of its
+        // own (nothing was sent for the refused tap), so without the sentence a
+        // re-planned turn would end on ticks over an unfinished task.
+        loopStopped = nextRun.repeatRefused;
+        break;
+      }
     }
 
     if (

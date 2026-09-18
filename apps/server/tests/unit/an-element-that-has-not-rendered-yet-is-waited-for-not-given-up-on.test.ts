@@ -180,6 +180,11 @@ function executor(dispatcher: IntentDispatcher, opts: Record<string, unknown> = 
   return new ControlPlaneAgentExecutor(dispatcher, () => `int_${String((n += 1))}`, {
     // No real sleeping: the thing under test is the WAIT budget, not wall clock.
     sleep: () => Promise.resolve(),
+    // The CLICK's own element-not-found path, which is still what every tap
+    // takes when the look before it has no answer (an older device, a look that
+    // timed out). The same wait, spent inside the look, is pinned in
+    // a-tap-looks-at-what-it-will-land-on-before-it-is-sent.test.ts.
+    preTapLookTimeoutMs: 0,
     ...opts,
   });
 }

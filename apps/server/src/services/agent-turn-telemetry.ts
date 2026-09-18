@@ -295,6 +295,76 @@ export const AGENT_TURN_FIRST_PROGRESS_BUCKETS_SECONDS = [
 /** Re-plan attempts; the runtime caps a turn at 2. */
 export const AGENT_TURN_REPLAN_BUCKETS = [0, 1, 2, 3] as const;
 
+/**
+ * What the look before a tap concluded (agent-executor-control-plane.ts).
+ *
+ *   clear             the tap point is on the control; the tap was sent
+ *   covered           something else is on top; the tap was NOT sent
+ *   not_found         the selector resolves to nothing. NOT sent when the
+ *                     element wait gave up on it; sent when no wait was left to
+ *                     spend, so the click's own retries still apply
+ *   outside_viewport  not scrolled into view; the tap was sent (it scrolls first)
+ *   unverified        a PAGE fact: the control resolved but the hit test says
+ *                     nothing about it (nothing at the tap point, or the control
+ *                     is not rendered); the tap was sent as before
+ *   fallback          an INFRASTRUCTURE fact: the look failed, timed out, or met
+ *                     a device that predates it; the tap was sent exactly as it
+ *                     was before the look existed
+ *
+ * `fallback` staying near zero is the evidence the look is not costing taps
+ * that would have worked; with `unverified` and `outside_viewport` it is the
+ * share of taps the look could not vouch for.
+ *
+ * A look typing makes is counted here too: typing begins with a tap on the
+ * field, and that tap is what the look protects.
+ */
+export const PRE_TAP_LOOK_OUTCOMES = [
+  'clear',
+  'covered',
+  'not_found',
+  'outside_viewport',
+  'unverified',
+  'fallback',
+] as const;
+export type PreTapLookOutcome = (typeof PRE_TAP_LOOK_OUTCOMES)[number];
+
+/** Seconds. The look is paid on every tap, so the resolution is at the low end:
+ *  tens of milliseconds is the difference between free and noticeable. The top
+ *  bound sits past the executor's 2s ceiling so a timed-out look is visible. */
+export const PRE_TAP_LOOK_DURATION_BUCKETS_SECONDS = [
+  0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2, 5,
+] as const;
+
+/**
+ * Count one look before a tap. `deviceMs` is the device's own `durationMs` for
+ * the perceive — null when no answer came back (a timeout) — and `roundTripMs`
+ * is what the customer's turn waited for it — null when no look was sent at
+ * all (a device already known to predate it), so a skipped look cannot pull
+ * the latency histogram towards zero. Best-effort: a registry without these
+ * metrics, or one that throws, costs the tap nothing.
+ */
+export function recordPreTapLook(
+  metrics: MetricsRegistry | undefined,
+  look: { outcome: PreTapLookOutcome; deviceMs: number | null; roundTripMs: number | null },
+): void {
+  if (metrics === undefined) return;
+  try {
+    metrics.inc(METRIC_NAMES.agentPreTapLookTotal, { outcome: look.outcome });
+    if (look.roundTripMs !== null) {
+      metrics.observe(METRIC_NAMES.agentPreTapLookRoundTripSeconds, look.roundTripMs / 1000, {
+        outcome: look.outcome,
+      });
+    }
+    if (look.deviceMs !== null) {
+      metrics.observe(METRIC_NAMES.agentPreTapLookDeviceSeconds, look.deviceMs / 1000, {
+        outcome: look.outcome,
+      });
+    }
+  } catch {
+    /* metrics are best-effort */
+  }
+}
+
 /** How long diagnostics rows are kept. See agent-turn-telemetry-prune-job.ts. */
 export const AGENT_TURN_TELEMETRY_RETENTION_DAYS = 90;
 
@@ -393,6 +463,15 @@ export function classifyStepFailure(
       return 'session_error';
     case 'scroll_failed':
       return 'harness_error_unclassified';
+    case 'element_covered':
+      // The eval's name for "the element is there and something is over it".
+      // Today's `unknown` branch below reaches the same class for a tap the
+      // device reports as intercepted AFTER trying; this is the same page seen
+      // BEFORE tapping, so it is the same word — and no new stored value.
+      // ⚠️ So this class does NOT separate "refused safely, nothing tapped" from
+      // "the tap hit the cover"; `driftstack_agent_pre_tap_look_total{outcome=
+      // "covered"}` counts the first alone.
+      return 'element_click_intercepted';
     case 'unknown':
     case undefined: {
       if (typeof result.reason === 'string' && result.reason.includes(NEVER_BECAME_VISIBLE)) {

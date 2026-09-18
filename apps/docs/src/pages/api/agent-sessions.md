@@ -317,7 +317,11 @@ string-matching the prose:
 
 `diagnosis.category` is one of `element_not_found`, `page_load_failed`,
 `condition_not_met`, `capture_failed`, `scroll_failed`, `session_error`,
-`invalid_request`, `result_too_large`, `unknown`. `retryable: true`
+`invalid_request`, `result_too_large`, `element_covered`, `unknown`.
+`element_covered` means something on the page — a cookie banner, a dialog, a
+sticky bar — was on top of the control, so nothing was tapped or typed; it is not
+retryable as the same step, but the agent may look at the page again and close
+what is covering it. `retryable: true`
 means automatic replay of the same step is considered safe. `false` means
 never replay automatically: an invalid request must change, while an
 outcome-unknown action or pacing may already have taken effect and requires state

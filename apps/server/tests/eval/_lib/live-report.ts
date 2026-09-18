@@ -62,6 +62,12 @@ export interface LiveReport {
   };
   /** The planner model as the run named it (a Claude id, or provider-qualified). */
   model: string;
+  /** Which device the run drove: today's, or one that predates the look before
+   *  a tap. Two runs on different devices are an A/B of the look, not of the
+   *  product — the header says which. */
+  device: 'current' | 'predates-tap-look';
+  /** Whether the executor looked before each tap (`EVAL_LIVE_TAP_LOOK`). */
+  tapLook: 'on' | 'off';
   /** Who served it: `anthropic`, or the chat provider's id from the table. */
   providerId: string;
   /** How each call was priced for the dollar cap and the spend estimate. */
@@ -182,6 +188,10 @@ export interface LiveSuiteArgs {
   retryBackoffMs?: number;
   /** See `LiveRunContext.pageAgesWhileModelThinks`. Identity when absent. */
   pageAgesWhileModelThinks?: (measuredMs: number) => number;
+  /** See `LiveRunContext.devicePredatesTapLook`. */
+  devicePredatesTapLook?: boolean;
+  /** See `LiveRunContext.tapLookOff`. */
+  tapLookOff?: boolean;
   /** See `LiveConfig.thinkingPolicy` / `structuredOutput`. Null or absent is the
    *  product's own default, which is what a run is about unless it says otherwise. */
   thinkingPolicy?: LiveThinkingPolicy | null;
@@ -226,6 +236,8 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
         maxTurns: args.maxTurns,
         secrets,
         ...(args.retryBackoffMs !== undefined ? { retryBackoffMs: args.retryBackoffMs } : {}),
+        ...(args.devicePredatesTapLook === true ? { devicePredatesTapLook: true } : {}),
+        ...(args.tapLookOff === true ? { tapLookOff: true } : {}),
         ...(args.pageAgesWhileModelThinks !== undefined
           ? { pageAgesWhileModelThinks: args.pageAgesWhileModelThinks }
           : {}),
@@ -313,6 +325,8 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
       return { atStart: sourceAtStart, atEnd, changedDuringRun: !sameSource(sourceAtStart, atEnd) };
     })(),
     model: args.model,
+    device: args.devicePredatesTapLook === true ? 'predates-tap-look' : 'current',
+    tapLook: args.tapLookOff === true ? 'off' : 'on',
     providerId: selection.kind === 'claude' ? 'anthropic' : selection.row.provider.id,
     pricedAt:
       selection.kind === 'claude'
@@ -393,6 +407,10 @@ export function renderLiveReport(report: LiveReport): string {
       '  ⛔ THE PRODUCT SOURCE CHANGED DURING THIS RUN — its repetitions were not all measured on the same bytes. Do not compare it with another run.',
     );
   }
+  lines.push(
+    `  device ${report.device === 'current' ? 'current (answers the look before a tap)' : 'PREDATES the look before a tap (every tap takes the old path)'}`,
+    `  look before a tap ${report.tapLook === 'on' ? 'on' : 'OFF (the executor sends the wire it sent before the look existed)'}`,
+  );
   lines.push(`  priced at ${report.pricedAt}`);
   lines.push(
     `  caps  $${String(report.caps.maxUsd)} at list price, ${String(report.caps.maxCalls)} model calls, ${String(report.caps.maxTotalTokens)} tokens — whichever is reached first stops the run`,

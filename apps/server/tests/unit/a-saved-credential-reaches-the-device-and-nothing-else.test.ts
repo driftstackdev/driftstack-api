@@ -56,11 +56,56 @@ const TYPE_PASSWORD: AgentIntent = {
   value: credentialPlaceholder('password'),
 };
 
+/** The look the executor takes before typing (typing starts with a tap on the
+ *  field): the field resolves, and its tap point is on it. */
+function fieldIsClear(selector: string): Record<string, unknown> {
+  const bounds = { x: 10, y: 100, width: 200, height: 40 };
+  return {
+    value: {
+      url: 'https://site.test/login',
+      title: 'Log in',
+      elements: [
+        {
+          id: 0,
+          type: 'input',
+          label: 'Password',
+          selector,
+          bounds,
+          state: { visible: true, enabled: true, focused: false },
+          position_summary: 'middle center',
+          tap_point: { x: 110, y: 120 },
+          hit: { type: 'input', label: 'Password', selector, bounds },
+          occluded: false,
+          occlusion_reason: null,
+        },
+      ],
+      truncated: false,
+      total_matched: 1,
+      resolved_by: 'script',
+    },
+  };
+}
+
 function recordingDevice(sent: Record<string, unknown>[]): IntentDispatcher {
   return {
     dispatch: (dispatch: IntentDispatch): Promise<ParsedIntentResult> => {
       const params = decodeWireData(dispatch.inputParams) as Record<string, unknown>;
       sent.push(params);
+      if (dispatch.intentName === 'perceive') {
+        return Promise.resolve(
+          parseIntentResult(
+            {
+              type: 'intentResult',
+              sessionId: dispatch.sessionId,
+              intentId: dispatch.intentId,
+              success: true,
+              durationMs: 1,
+              outputData: encodeWireData(fieldIsClear(readString(params, 'selector'))),
+            },
+            dispatch.intentName,
+          ),
+        );
+      }
       return Promise.resolve(
         parseIntentResult(
           {
@@ -127,8 +172,12 @@ describe('P2 — a saved credential reaches the device and nothing else', () => 
       plan: { kind: 'plan', intents: [TYPE_PASSWORD], tokensConsumed: 0 },
       credentials: BAG,
     });
-    expect(sent).toHaveLength(1);
-    expect(sent[0]?.text).toBe(SECRET);
+    // Two dispatches: the look at the field, then the typing. The look carries
+    // the field's locator and nothing else; the secret rides on the typing.
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toEqual({ selector: '#password', strategy: 'css', max_elements: 1 });
+    expect(JSON.stringify(sent[0])).not.toContain(SECRET);
+    expect(sent[1]?.text).toBe(SECRET);
   });
 
   it('⛔ AND NOWHERE ELSE: the RESULT still carries the placeholder, so the transcript never holds the secret', async () => {

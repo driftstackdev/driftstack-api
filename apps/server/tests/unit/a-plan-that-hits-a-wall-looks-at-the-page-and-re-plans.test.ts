@@ -433,6 +433,9 @@ describe('P1 — which failures may be re-planned, stated as an allowlist', () =
     'scroll_failed',
     'invalid_request',
     'result_too_large',
+    // Nothing was tapped: the cover was seen before the tap, or the device
+    // refused the tap. A new look is how the plan finds the cover and closes it.
+    'element_covered',
   ])('%s PROVABLY did not execute, so it may be re-planned', (category) => {
     expect(
       isReplannableFailure({

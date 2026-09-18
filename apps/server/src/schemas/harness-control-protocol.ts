@@ -338,8 +338,22 @@ export const ScreenshotParamsSchema = z
   })
   .strict();
 export const GetPageSourceParamsSchema = NoParamsSchema;
+/**
+ * `selector` / `strategy` — A3 2026-09-18: perceive ONE element, resolved by
+ * click's own code path, with its hit test at the tap point. Without `selector`
+ * the device answers exactly as before, so both fields are optional and an
+ * older device that has never heard of them is still sent a valid frame by
+ * every existing caller. `strategy` is perceive's own friendly vocabulary, not
+ * click's W3C rawValue — the executor maps one to the other at its emit site.
+ * The selector is bounded like every other selector the device takes.
+ */
+export const HARNESS_PERCEIVE_STRATEGIES = ['css', 'xpath'] as const;
 export const PerceiveParamsSchema = z
-  .object({ max_elements: z.number().int().min(1).max(HARNESS_PERCEIVE_MAX_ELEMENTS).optional() })
+  .object({
+    max_elements: z.number().int().min(1).max(HARNESS_PERCEIVE_MAX_ELEMENTS).optional(),
+    selector: z.string().min(1).max(HARNESS_WAIT_ARG_MAX_CHARS).optional(),
+    strategy: z.enum(HARNESS_PERCEIVE_STRATEGIES).optional(),
+  })
   .strict();
 
 const WaitForStructuredSchema = z.union([
@@ -588,30 +602,75 @@ const ScreenshotResultSchema = z
 
 const GetPageSourceResultSchema = z.object({ source: z.string(), truncated: z.boolean() }).strict();
 
+export const HARNESS_PERCEIVE_ELEMENT_TYPES = [
+  'button',
+  'link',
+  'select',
+  'textarea',
+  'checkbox',
+  'radio',
+  'input',
+  'image',
+  'other',
+] as const;
+
+const PerceiveBoundsSchema = z
+  .object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+  })
+  .strict();
+
+/**
+ * Why the element under the tap point is not the target (A3 2026-09-18). A
+ * CLOSED set, so the executor's handling of each is a switch the compiler checks:
+ *   hit_is_not_target_or_descendant    something else is on top of it (an
+ *                                      ANCESTOR hit counts: the target itself
+ *                                      is not hit-testable there)
+ *   covered_at_enclosing_shadow_level  the same, one shadow level up
+ *   nothing_hit                        the hit test returned no element at all
+ *   tap_point_outside_viewport         not scrolled into view — perceive never
+ *                                      scrolls, so this is NOT "covered"
+ */
+export const HARNESS_PERCEIVE_OCCLUSION_REASONS = [
+  'hit_is_not_target_or_descendant',
+  'covered_at_enclosing_shadow_level',
+  'nothing_hit',
+  'tap_point_outside_viewport',
+] as const;
+export type HarnessPerceiveOcclusionReason = (typeof HARNESS_PERCEIVE_OCCLUSION_REASONS)[number];
+
+/** The element the device's hit test returns at the tap point. */
+const PerceiveHitSchema = z
+  .object({
+    type: z.enum(HARNESS_PERCEIVE_ELEMENT_TYPES),
+    label: z.string(),
+    selector: z.string(),
+    bounds: PerceiveBoundsSchema,
+  })
+  .strict();
+
 const PerceiveElementSchema = z
   .object({
     id: z.number().int().nonnegative(),
-    type: z.enum([
-      'button',
-      'link',
-      'select',
-      'textarea',
-      'checkbox',
-      'radio',
-      'input',
-      'image',
-      'other',
-    ]),
+    type: z.enum(HARNESS_PERCEIVE_ELEMENT_TYPES),
     label: z.string(),
     selector: z.string(),
-    bounds: z
-      .object({
-        x: z.number(),
-        y: z.number(),
-        width: z.number(),
-        height: z.number(),
-      })
-      .strict(),
+    bounds: PerceiveBoundsSchema,
+    // ── A3 2026-09-18, perceive-by-selector only. Every one OPTIONAL: an older
+    // device never sends them, and the page-list answer never carries them.
+    // Validated when present, because the executor decides whether to TAP on
+    // them — a drifted shape must fail the frame, not be read as "clear".
+    /** The rect centre rounded exactly as click's geometry script rounds it,
+     *  WITHOUT the per-tap jitter. */
+    tap_point: z.object({ x: z.number(), y: z.number() }).strict().optional(),
+    /** What the hit test returns at `tap_point`; null when it returns nothing. */
+    hit: PerceiveHitSchema.nullable().optional(),
+    /** True unless the hit is the element itself or a descendant of it. */
+    occluded: z.boolean().optional(),
+    occlusion_reason: z.enum(HARNESS_PERCEIVE_OCCLUSION_REASONS).nullable().optional(),
     state: z
       .object({
         visible: z.boolean(),
@@ -634,6 +693,11 @@ const PerceiveResultSchema = z
         elements: z.array(PerceiveElementSchema).max(HARNESS_PERCEIVE_MAX_ELEMENTS),
         truncated: z.boolean(),
         total_matched: z.number().int().nonnegative(),
+        /** Present only on a perceive-by-selector answer: which of click's two
+         *  resolvers found the element. Its ABSENCE is how the executor tells an
+         *  older device (which ignored `selector` and listed the page) from a new
+         *  one that resolved nothing. */
+        resolved_by: z.enum(['native', 'script']).optional(),
       })
       .strict(),
   })
@@ -1054,6 +1118,20 @@ export const HARNESS_ERROR_CODES = [
   'result_too_large',
   'session_paused',
   'session_intent_in_flight',
+  // A3 2026-09-18 — click { require_unoccluded: true } refuses a tap whose
+  // (jittered) tap point would land on something other than the target. The
+  // click was NOT performed, so it maps to the public `element_covered`
+  // category: not retryable as the same step (the cover is still there), but
+  // re-plannable (nothing happened, so the loop may look again and dismiss it).
+  //
+  // ⚠️ ORDERING (same trap as intent_element_not_found above): this decode entry
+  // ships BEFORE the harness emits the code. A3 emits it only once we say our
+  // schema knows it, and until then refuses with intent_webdriver_failed and a
+  // message that ALWAYS starts "element occluded at the tap point:" — which the
+  // result mapper reads as the same category — because an unknown code fails
+  // IntentResultEnvelopeSchema → the correlator drops the frame → the dispatch
+  // hangs to its timeout.
+  'intent_element_occluded',
 ] as const;
 
 export const HarnessErrorCodeSchema = z.enum(HARNESS_ERROR_CODES);

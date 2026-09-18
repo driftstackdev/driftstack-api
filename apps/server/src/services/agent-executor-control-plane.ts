@@ -51,7 +51,14 @@ import {
   substituteCredentials,
 } from './agent-executor.js';
 import { agentIntentToDispatch } from './agent-intent-to-dispatch.js';
-import { intentReplayMayDuplicateEffect, intentResultToCustomer } from './agent-intent-result.js';
+import {
+  elementCoveredResult,
+  elementNotFoundResult,
+  intentReplayMayDuplicateEffect,
+  intentResultToCustomer,
+} from './agent-intent-result.js';
+import { recordPreTapLook, type PreTapLookOutcome } from './agent-turn-telemetry.js';
+import type { MetricsRegistry } from './metrics-registry.js';
 import type { SessionCaptureStore } from './session-capture-store.js';
 
 /** #7 — pull a screenshot's inline bytes out of a capture intent's harness result
@@ -116,6 +123,24 @@ export interface AutoRetryOptions {
   /** B2 — how long a step already in flight when Stop arrives is waited for.
    *  Default {@link STOP_IN_FLIGHT_GRACE_MS}; measured with `sleep`. */
   stopInFlightGraceMs?: number;
+  /** How long the look before a tap may take before the tap goes ahead without
+   *  it. See {@link DEFAULT_PRE_TAP_LOOK_TIMEOUT_MS}. 0 disables the look, which
+   *  restores exactly the behaviour before it existed. */
+  preTapLookTimeoutMs?: number;
+  /**
+   * A CANCELLABLE timer for the look's deadline. The look races every tap
+   * against it, and a timer that cannot be cancelled outlives the race: on a
+   * virtual clock that stale deadline later drags the page's time forward by the
+   * whole timeout, once per tap. Default: a real `setTimeout`, cleared when the
+   * look answers — NOT `sleep`, even when `sleep` is injected: `sleep` measures
+   * time the executor chose to spend (a backoff, a grace), and a deadline that
+   * is usually never reached must not appear among those.
+   */
+  deadline?: (ms: number) => { elapsed: Promise<void>; cancel: () => void };
+  /** Where the look's cost and outcome are counted. Absent → not counted. */
+  metrics?: MetricsRegistry;
+  /** Monotonic ms, for the look's round trip. Default `performance.now`. */
+  now?: () => number;
 }
 
 const DEFAULT_MAX_RETRIES = 2;
@@ -159,6 +184,245 @@ const DEFAULT_ELEMENT_APPEAR_WAIT_MS = 5_000;
 // ceiling a missing element fails immediately, exactly as it did before P3.
 const DEFAULT_ELEMENT_WAIT_RUN_BUDGET_MS = 15_000;
 
+// ── the look before a tap ────────────────────────────────────────────
+// WHERE 2000ms COMES FROM. The look is one `perceive` for ONE selector: on the
+// device, a native find that A3 reports always fails fast on this fork, then the
+// same script resolver click falls back to, then one hit test — no document
+// serialisation at all. The read-back's `get_page_source`, which serialises the
+// WHOLE document, returns in under 2s on a healthy box (DEFAULT_OBSERVE_TIMEOUT_MS
+// above), so a look that has not answered in the time a whole-document read
+// needs is not answering. Past it the tap goes ahead exactly as it did before
+// the look existed: the look is paid on every tap, so its ceiling is what a sick
+// box costs a customer PER TAP, and must stay a small fraction of the click's
+// own round trip plus the human pacing around it. What a healthy look actually
+// costs is the thing the look's own histograms exist to measure — A3 could not
+// measure it without a real session.
+const DEFAULT_PRE_TAP_LOOK_TIMEOUT_MS = 2_000;
+
+/** What the device said about the element a tap is about to land on. */
+interface TapTarget {
+  /** The resolved element's perceive `type`. */
+  type: string;
+  label: string;
+  /** The device's canonical selector for the resolved element. */
+  selector: string;
+  /** The element the hit test returns at the tap point, or null. */
+  hit: { type: string; label: string; selector: string } | null;
+}
+
+/** perceive element types a tap ACTIVATES as a control of its own. A hit of
+ *  any other type (a `<label>`, a span, a div) is inert text or a container. */
+const CONTROL_TYPES: ReadonlySet<string> = new Set([
+  'button',
+  'link',
+  'select',
+  'textarea',
+  'checkbox',
+  'radio',
+  'input',
+]);
+
+/**
+ * The look's verdict on one tap.
+ *
+ *  clear             the tap point lands on the target (or inside it)
+ *  covered           something else is on top — the tap is NOT made
+ *  outside_viewport  not scrolled into view; the click scrolls first, so the tap
+ *                    goes ahead as it always has (see `lookBeforeTap`)
+ *  unverified        the device resolved the element but its hit test says
+ *                    nothing about it (nothing hit, or the control is not
+ *                    rendered) — no evidence either way, so the tap goes ahead
+ *  not_found         the selector resolves to nothing and the element wait
+ *                    gave up on it — where the click's own path stops too
+ *  fallback          no usable answer (an error, a timeout, an older device),
+ *                    or nothing resolved with no wait left to spend: the tap
+ *                    goes ahead exactly as before the look existed
+ */
+type PreTapLook =
+  | {
+      verdict: 'clear' | 'covered' | 'outside_viewport' | 'unverified';
+      target: TapTarget;
+      waitedForElement: boolean;
+    }
+  | { verdict: 'not_found'; waitedForElement: boolean }
+  | {
+      verdict: 'fallback';
+      waitedForElement: boolean;
+      /**
+       * A look the deadline gave up on is STILL RUNNING on the device, and the
+       * device runs one intent per session: anything sent before it finishes is
+       * refused as `session_intent_in_flight`. Settles when that look does —
+       * never rejects, and never later than the dispatcher's own per-intent
+       * timeout. Absent when no look is outstanding.
+       */
+      deviceBusyUntil?: Promise<void>;
+    }
+  | { verdict: 'stopped' | 'authority_lost' };
+
+/** One perceive answer, read. */
+type PerceiveReading =
+  /** `predatesLook`: the device answered with its page listing — it ignores
+   *  `selector` — rather than failing; it will do the same for every tap. */
+  | { kind: 'no_usable_answer'; predatesLook?: true }
+  | { kind: 'nothing_resolved' }
+  | {
+      kind: 'resolved';
+      verdict: 'clear' | 'covered' | 'outside_viewport' | 'unverified';
+      target: TapTarget;
+    };
+
+function recordOf(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/**
+ * Read a perceive-by-selector answer — defensively, because an OLDER device
+ * ignores `selector` and answers with its page list, which is a valid perceive
+ * result and must not be mistaken for a verdict.
+ *
+ * `resolved_by` is the tell: only a device that resolved the selector sends it.
+ * Without it, or with anything but zero or one element, or with an element that
+ * carries no `occluded`, there is no verdict and the tap goes ahead as before.
+ */
+function readPerceiveAnswer(outputData: unknown): PerceiveReading {
+  const value = recordOf(recordOf(outputData)?.value);
+  if (value === null) return { kind: 'no_usable_answer' };
+  if (typeof value.resolved_by !== 'string') {
+    // A well-formed listing without the tell is an older device, not a glitch.
+    return Array.isArray(value.elements)
+      ? { kind: 'no_usable_answer', predatesLook: true }
+      : { kind: 'no_usable_answer' };
+  }
+  const elements = Array.isArray(value.elements) ? value.elements : null;
+  if (elements === null) return { kind: 'no_usable_answer' };
+  if (elements.length === 0) return { kind: 'nothing_resolved' };
+  if (elements.length !== 1) return { kind: 'no_usable_answer' };
+  const el = recordOf(elements[0]);
+  if (el === null || typeof el.occluded !== 'boolean' || typeof el.selector !== 'string') {
+    return { kind: 'no_usable_answer' };
+  }
+  const hitRecord = recordOf(el.hit);
+  const target: TapTarget = {
+    type: typeof el.type === 'string' ? el.type : 'other',
+    label: typeof el.label === 'string' ? el.label : '',
+    selector: el.selector,
+    hit:
+      hitRecord !== null && typeof hitRecord.selector === 'string'
+        ? {
+            type: typeof hitRecord.type === 'string' ? hitRecord.type : 'other',
+            label: typeof hitRecord.label === 'string' ? hitRecord.label : '',
+            selector: hitRecord.selector,
+          }
+        : null,
+  };
+  if (!el.occluded) return { kind: 'resolved', verdict: 'clear', target };
+  // ⛔ A HIT ON THE CONTROL'S OWN LABEL IS THE CONTROL. A styled checkbox or
+  // radio is commonly a visually hidden input inside (or pointed at by) its
+  // `<label>`; the tap point then lands on the label or the span drawn inside
+  // it, and a tap there toggles the input — the tap worked before the look
+  // existed. The device names such a target by that same label, and names the
+  // label (or anything inside it) by the same text, so "the hit is not a control
+  // and carries exactly the target's name" is that case. Anything else wearing
+  // the target's name is at worst tapped exactly as before the look existed.
+  if (
+    target.hit !== null &&
+    !CONTROL_TYPES.has(target.hit.type) &&
+    target.label.length > 0 &&
+    target.hit.label === target.label
+  ) {
+    return { kind: 'resolved', verdict: 'clear', target };
+  }
+  // ⛔ A CONTROL THAT IS NOT RENDERED IS NOT COVERED. Its rect is empty, so its
+  // "tap point" is the page's origin and the hit test finds whatever sits there
+  // — which reads as occluded. Calling that "covered" would tell the customer a
+  // banner is in the way of a control that is simply hidden (a collapsed menu's
+  // copy of a link). The tap goes ahead, and fails exactly as it did before the
+  // look existed, with the device's own "not interactable" answer.
+  const state = recordOf(el.state);
+  const bounds = recordOf(el.bounds);
+  const emptyRect =
+    bounds !== null &&
+    (!(typeof bounds.width === 'number' && bounds.width > 0) ||
+      !(typeof bounds.height === 'number' && bounds.height > 0));
+  if (state?.visible === false || emptyRect) {
+    return { kind: 'resolved', verdict: 'unverified', target };
+  }
+  const reason = el.occlusion_reason;
+  switch (reason) {
+    case 'tap_point_outside_viewport':
+      return { kind: 'resolved', verdict: 'outside_viewport', target };
+    case 'nothing_hit':
+      return { kind: 'resolved', verdict: 'unverified', target };
+    case 'hit_is_not_target_or_descendant':
+    case 'covered_at_enclosing_shadow_level':
+      return { kind: 'resolved', verdict: 'covered', target };
+    default:
+      // The device said OCCLUDED and gave no reason this build knows. That is
+      // still its statement that the tap point is not on the target, so it is
+      // read as covered: the direction in which nothing gets tapped by mistake.
+      return { kind: 'resolved', verdict: 'covered', target };
+  }
+}
+
+/**
+ * The element a tap will actually activate, as the device names it — the repeat
+ * guard's identity for the tap. The hit element when the tap point is on the
+ * target or inside it (that is what a native tap activates), and the resolved
+ * element too, because two spellings may land on one element by either route.
+ */
+function tapIdentities(look: PreTapLook): string[] {
+  if (!('target' in look)) return [];
+  const ids = [look.target.selector];
+  if (look.verdict === 'clear' && look.target.hit !== null) ids.unshift(look.target.hit.selector);
+  return [...new Set(ids.filter((id) => id.length > 0))];
+}
+
+/**
+ * Every name the device gave the tap's element and what is at its tap point.
+ *
+ * The hit's name only where the hit TEST MEANT SOMETHING: `clear` (the hit is
+ * what the tap activates) and `covered` (the hit is what it would activate).
+ * For an unrendered control the tap point is the page's origin, and whatever
+ * sits there — a sticky header whose text names a checkout — has nothing to do
+ * with the tap; asking the customer to approve a purchase over it would be a halt for a
+ * tap that is not one. Off-screen, the device ran no hit test at all.
+ */
+function deviceLabels(look: PreTapLook | null): string[] {
+  if (look === null || !('target' in look)) return [];
+  const hitMeansSomething = look.verdict === 'clear' || look.verdict === 'covered';
+  return [look.target.label, hitMeansSomething ? (look.target.hit?.label ?? '') : ''].filter(
+    (label) => label.length > 0,
+  );
+}
+
+/**
+ * What to call the cover in the customer's sentence, or undefined for the
+ * unnamed sentence. Never an ANCESTOR of the target: the device reads a hit on
+ * a container as occluded (the target is not hit-testable there), and a
+ * container's name is its whole text — quoting it as "what is covering this
+ * button" would name the page section the button sits in. The device's
+ * canonical selector is a descendant path from the nearest anchor, so an
+ * ancestor's selector is a strict prefix of the target's.
+ */
+function coverNameOf(target: TapTarget): string | undefined {
+  const hit = target.hit;
+  if (hit === null || hit.label.length === 0) return undefined;
+  const isAncestor = [' > ', ' >>> '].some((combinator) =>
+    target.selector.startsWith(`${hit.selector}${combinator}`),
+  );
+  return isAncestor ? undefined : hit.label;
+}
+
+/** click's W3C locator strategy, as perceive's own vocabulary names it. Null:
+ *  a strategy perceive does not take, so there is nothing to look with. */
+function perceiveStrategyFor(clickStrategy: unknown): 'css' | 'xpath' | null {
+  if (clickStrategy === 'css selector') return 'css';
+  if (clickStrategy === 'xpath') return 'xpath';
+  return null;
+}
+
 export class ControlPlaneAgentExecutor implements AgentExecutor {
   private readonly maxRetries: number;
   private readonly retryDelayMs: number;
@@ -169,6 +433,10 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   private readonly elementWaitRunBudgetMs: number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly stopInFlightGraceMs: number;
+  private readonly preTapLookTimeoutMs: number;
+  private readonly deadline: (ms: number) => { elapsed: Promise<void>; cancel: () => void };
+  private readonly metrics: MetricsRegistry | undefined;
+  private readonly now: () => number;
 
   constructor(
     private readonly dispatcher: IntentDispatcher,
@@ -210,6 +478,26 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     );
     this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.stopInFlightGraceMs = Math.max(0, opts.stopInFlightGraceMs ?? STOP_IN_FLIGHT_GRACE_MS);
+    this.preTapLookTimeoutMs = Math.max(
+      0,
+      opts.preTapLookTimeoutMs ?? DEFAULT_PRE_TAP_LOOK_TIMEOUT_MS,
+    );
+    this.deadline =
+      opts.deadline ??
+      ((ms) => {
+        let handle: ReturnType<typeof setTimeout> | undefined;
+        const elapsed = new Promise<void>((resolve) => {
+          handle = setTimeout(resolve, ms);
+        });
+        return {
+          elapsed,
+          cancel: () => {
+            if (handle !== undefined) clearTimeout(handle);
+          },
+        };
+      });
+    this.metrics = opts.metrics;
+    this.now = opts.now ?? (() => performance.now());
   }
 
   async execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
@@ -227,6 +515,10 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       }
     };
     const approved = new Set(args.approvedConsequentialActions ?? []);
+    // What the device said each successful tap landed on, for the runtime's
+    // repeat guard. See ExecutorRunResult.tapTargets for why it is not on the
+    // result itself.
+    const tapTargets = new Map<IntentResult, ReadonlyArray<string>>();
     // P3 — the element-wait ceiling, shared by every step so the extra patience
     // cannot multiply by plan length. Mutated by runIntent. The RUNTIME owns one
     // per turn and threads it here (see ExecuteArgs.elementWaitBudget), because a
@@ -249,16 +541,83 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // Again after that await: a Stop that landed during the authority read must
       // not see the step announced as starting when it will never be sent.
       if (stopRequested(args.signal)) return { results, ok: false, stopped: true };
+
+      // P2 — resolve credential placeholders into the value the DEVICE gets.
+      // `intent` (the placeholder form) is what every result below carries, so
+      // the secret reaches the dispatch and nothing else. Pure, so computing it
+      // here (for the look below) changes nothing about when its failure shows.
+      const substitution = substituteCredentials(intent, args.credentials);
+      const mapped = substitution.ok ? agentIntentToDispatch(substitution.intent) : null;
+
+      // THE LOOK BEFORE A TAP. A native tap activates whatever is under its tap
+      // point, which is not always what the selector names: a cookie banner, a
+      // sticky bar or a dialog over the control takes the tap instead. So before
+      // a tap is sent, the device is asked what that selector resolves to and
+      // what its hit test finds at the tap point — BEFORE the gate below, which
+      // reads what it says. Read-only; any failure to get an answer lets the tap
+      // go ahead exactly as it did before the look existed.
+      //
+      // A tap the PLAN'S OWN WORDS already halt is halted without a look: the
+      // customer is asked first, and nothing — not even a read — reaches the
+      // device for a step they have not approved. Asked on a COPY of the
+      // approvals so nothing is consumed twice; the real gate below reaches the
+      // same verdict for it, because it classifies those words first.
+      const haltsUnlooked = consequentialHalt(
+        intent,
+        new Set(approved),
+        this.gateLabelsBySession.get(dispatchSessionId),
+      );
+      //
+      // TYPING IS LOOKED AT TOO. On the device, typing begins with a tap on the
+      // field to focus it (IntentExecutor's tap-to-focus), so a cover over a
+      // field takes that tap exactly as it would a button's — a consent
+      // dialog's accept button pressed on the customer's behalf. The keys then go
+      // to the field (the device focuses it by selector), so what the look
+      // protects here is the cover, not the text. It sends the field's selector
+      // only: `send_keys` params carry the text beside the locator, and the look
+      // reads the locator alone.
+      let look: PreTapLook | null = null;
+      if (
+        haltsUnlooked === null &&
+        intent.kind === 'interact' &&
+        mapped !== null &&
+        mapped.ok &&
+        ((intent.action === 'tap' && mapped.intentName === 'click') ||
+          (intent.action === 'type' && mapped.intentName === 'send_keys'))
+      ) {
+        look = await this.lookBeforeTap(
+          dispatchSessionId,
+          mapped.params,
+          args.shouldContinue,
+          elementWaitBudget,
+          args.signal,
+        );
+        if (look.verdict === 'stopped') return { results, ok: false, stopped: true };
+        if (look.verdict === 'authority_lost') return { results, ok: false, authorityLost: true };
+      }
+
       // 0. W443/W445 consequential-action gate — halt (WITHOUT dispatching) on a
       //    purchase / payment / account-deletion the customer hasn't approved this
       //    run. Identical gate to Stub/RealAgentExecutor: the go-live swap must NOT
       //    silently drop it (a real box would otherwise execute the action for
       //    real). The customer approves → the plan re-runs with the signature in
       //    approvedConsequentialActions.
+      //
+      //    Over everything known about the tap — the plan's words, the digest's
+      //    name for the selector, and what the device says the selector resolves
+      //    to and what sits at its tap point. The plan's words are classified
+      //    FIRST and the device's only when they say nothing, so an approval is
+      //    always judged against the phrase that raised it: a combined reading
+      //    could match an earlier pattern in a device label and re-prompt for an
+      //    action the customer has just approved, forever.
+      //    Before a covered/not-found check on purpose: those only fail the step,
+      //    and a covered purchase button must still be put to the customer — the
+      //    look can only ADD halts, never trade one for a failure.
       const halt = consequentialHalt(
         intent,
         approved,
         this.gateLabelsBySession.get(dispatchSessionId),
+        deviceLabels(look),
       );
       if (halt) {
         emitStep(halt);
@@ -277,10 +636,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         /* a broken progress handler must not affect execution */
       }
 
-      // 0.5. P2 — resolve credential placeholders into the value the DEVICE
-      //      gets. `intent` (the placeholder form) is what every result below
-      //      carries, so the secret reaches the dispatch and nothing else.
-      const substitution = substituteCredentials(intent, args.credentials);
+      // 0.5. P2 — a placeholder that cannot be resolved fails the step here.
       if (!substitution.ok) {
         emitStep({
           kind: 'failure',
@@ -295,10 +651,11 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         });
         break;
       }
-      const dispatchIntent = substitution.intent;
-
-      // 1. Map the customer verb → harness intentName + params (or unsupported).
-      const mapped = agentIntentToDispatch(dispatchIntent);
+      // Null only when the substitution failed, which has just ended the plan;
+      // restated because the compiler cannot see the two are one condition.
+      if (mapped === null) break;
+      // 1. The customer verb → harness intentName + params (or unsupported),
+      //    mapped above from the credential-resolved intent.
       if (!mapped.ok) {
         emitStep({ kind: 'failure', intent, reason: mapped.reason });
         // #139 — a best-effort `wait` that can't even be MAPPED (e.g. the model
@@ -307,6 +664,94 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         // dispatch-failure exemption below. Any OTHER unmappable intent still halts.
         if (intent.kind === 'wait') continue;
         break;
+      }
+
+      // 1.5. What the look found. Nothing below it is sent for a tap that
+      //      would find nothing, or whose tap point is under something else.
+      if (look !== null) {
+        switch (look.verdict) {
+          case 'not_found':
+            // The element wait was spent inside the look and GAVE UP, so a
+            // control that renders late was waited for, and the click's own
+            // path would end here too: a failed wait ends the step unretried.
+            emitStep(elementNotFoundResult(intent));
+            break;
+          case 'covered':
+            // NOT DISPATCHED. The tap would activate whatever is on top, which is
+            // not what the plan named. The step fails in the page's own words
+            // and the turn may look again and close the cover.
+            {
+              const coverName = coverNameOf(look.target);
+              emitStep(
+                elementCoveredResult(
+                  intent,
+                  coverName !== undefined ? digestSafeLine(coverName) : undefined,
+                  look.target.type,
+                ),
+              );
+            }
+            break;
+          case 'clear':
+          case 'outside_viewport':
+          case 'unverified':
+          case 'fallback':
+            break;
+          case 'stopped':
+          case 'authority_lost':
+            // Returned above, before the gate; listed so the switch is total.
+            break;
+          default: {
+            // A verdict added without a case here is a build error, not a tap
+            // sent blind.
+            const _exhaustive: never = look;
+            void _exhaustive;
+          }
+        }
+        if (look.verdict === 'not_found' || look.verdict === 'covered') break;
+      }
+      // 1.6. B1 — the repeat guard, asked again now that the DEVICE has said
+      //      which element this tap lands on. Two spellings of one id-less
+      //      button are two strings to the runtime's admission check and one
+      //      element here.
+      //      Taps only: the guard's question is "the same step twice", and its
+      //      identity for a typed step is the field AND the text — which the
+      //      device's name for the field does not carry.
+      const identities =
+        look !== null && intent.kind === 'interact' && intent.action === 'tap'
+          ? tapIdentities(look)
+          : [];
+      if (identities.length > 0 && args.repeatGuard !== undefined) {
+        let refused: 'no_progress' | 'repeat_refused' | null = null;
+        try {
+          refused = args.repeatGuard(intent, identities);
+        } catch {
+          // A guard that cannot answer is not a guard that said yes.
+          refused = 'repeat_refused';
+        }
+        if (refused !== null) {
+          return {
+            results,
+            ok: false,
+            repeatRefused: refused,
+            ...(tapTargets.size > 0 ? { tapTargets } : {}),
+          };
+        }
+      }
+
+      // 1.7. A look the deadline gave up on may still be running on the device,
+      //      which refuses a second intent for the session while one runs. Sent
+      //      now, the tap would meet `session_intent_in_flight`, whose short
+      //      retry (maxRetries × retryDelayMs) is shorter than a slow look — and
+      //      the tap, which worked before the look existed, would fail for an
+      //      infrastructure reason. So it waits for the device to be free, no
+      //      longer than the dispatcher's own per-intent timeout (which settles
+      //      every dispatch), and Stop may cut the wait short: nothing is sent.
+      if (look !== null && look.verdict === 'fallback' && look.deviceBusyUntil !== undefined) {
+        const freed = await raceAbort(look.deviceBusyUntil, args.signal);
+        if (freed.aborted) return { results, ok: false, stopped: true };
+        if (!(await executionMayContinue(args.shouldContinue))) {
+          return { results, ok: false, authorityLost: true };
+        }
       }
 
       // 2-4. Dispatch (with bounded auto-retry) + map the result back.
@@ -318,8 +763,16 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         args.shouldContinue,
         elementWaitBudget,
         args.signal,
+        // The look already spent this step's element wait (or found the element
+        // without one); a second would re-ask what the first just answered.
+        look !== null && 'waitedForElement' in look && look.waitedForElement,
       );
-      if (result.result !== null) emitStep(result.result);
+      if (result.result !== null) {
+        emitStep(result.result);
+        if (result.result.kind === 'success' && identities.length > 0) {
+          tapTargets.set(result.result, identities);
+        }
+      }
       if (result.authorityLost) return { results, ok: false, authorityLost: true };
       // B2 — after the result is recorded, never before: a step that was running
       // when Stop arrived is part of what ran.
@@ -346,7 +799,11 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       if (result.result.kind === 'failure' && intent.kind !== 'wait') break;
     }
 
-    return { results, ok: results.every((r) => r.kind === 'success') };
+    return {
+      results,
+      ok: results.every((r) => r.kind === 'success'),
+      ...(tapTargets.size > 0 ? { tapTargets } : {}),
+    };
   }
 
   /**
@@ -499,6 +956,229 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   }
 
   /**
+   * THE LOOK BEFORE A TAP — ask the device, read-only, what `click`'s own
+   * resolver makes of this tap's selector and what its hit test finds at the tap
+   * point, and turn the answer into a verdict (see {@link PreTapLook}). Typing
+   * is looked at the same way: its first act on the device is a tap on the
+   * field (see the call site).
+   *
+   * ⛔ IT SENDS THE LOCATOR AND NOTHING ELSE. `dispatchParams` are the params
+   * the tap (or the typing) itself will carry, so perceive resolves exactly the
+   * element they would; only `value` (the selector) and `strategy` are read —
+   * `send_keys`' text sits beside them and is never touched.
+   *
+   * ⛔ IT CAN NEVER COST A TAP THAT WOULD HAVE WORKED. An error, a timeout, a
+   * malformed answer or an older device that ignores `selector` all read as
+   * `fallback`, and the caller then sends the tap exactly as it did before the
+   * look existed — after waiting for a timed-out look to leave the device (see
+   * {@link PreTapLook}). Only two answers stop a tap: the device says the tap
+   * point is on something else, or the element wait gave up on the selector.
+   *
+   * ⛔ NOTHING RESOLVED IS NOT YET NOT FOUND. A control that renders late is
+   * waited for first — the same one `wait_for`, from the same shared budget, that
+   * the click's own element-not-found path would have spent — then looked at
+   * again. Only when that wait GIVES UP is the verdict `not_found`, which is the
+   * point at which the click's own path also stops (a failed wait ends the step,
+   * see runIntent). When there is no wait to spend — the turn's budget is gone,
+   * or the wait said the element appeared and the second look still finds
+   * nothing — the tap goes ahead, so the click's own bounded retries of an
+   * element-not-found still get their chance at a control that is still arriving.
+   *
+   * `tap_point_outside_viewport` is NOT covered. perceive never scrolls, and the
+   * click scrolls its target into view before it taps, so a control below the
+   * fold reads "occluded" here while the tap would land on it. Scrolling first
+   * and looking again was the alternative, and it was not taken: the answer
+   * carries no viewport height, and the click aims its own scroll at a
+   * randomised band of it (the device's human-emulation rule that post-scroll
+   * taps must not cluster at one height) — a scroll sent from here either
+   * duplicates that scroll or parks every such tap at one fixed height, and the
+   * second look would then vouch for a tap point this scroll created rather than
+   * the one the click would have used. The check that closes this is the
+   * device's own occlusion test at the real (scrolled, jittered) tap point;
+   * until it is deployed the tap goes ahead exactly as it always has, and the
+   * outcome is counted so the share of taps the look cannot vouch for is visible.
+   */
+  private async lookBeforeTap(
+    sessionId: string,
+    dispatchParams: Record<string, unknown>,
+    shouldContinue: ExecuteArgs['shouldContinue'],
+    elementWaitBudget: ElementWaitBudget,
+    signal: AbortSignal | undefined,
+  ): Promise<PreTapLook> {
+    const selector = dispatchParams.value;
+    const strategy = perceiveStrategyFor(dispatchParams.strategy);
+    if (this.preTapLookTimeoutMs === 0) return { verdict: 'fallback', waitedForElement: false };
+    if (
+      typeof selector !== 'string' ||
+      selector.length === 0 ||
+      strategy === null ||
+      // A device that has already shown it predates the look answers every
+      // look with its whole page listing and no verdict: asking again would
+      // only make every tap on it slower.
+      this.sessionsPredatingLook.has(sessionId)
+    ) {
+      recordPreTapLook(this.metrics, { outcome: 'fallback', deviceMs: null, roundTripMs: null });
+      return { verdict: 'fallback', waitedForElement: false };
+    }
+    let waitedForElement = false;
+    for (;;) {
+      const answer = await this.perceiveOnce(sessionId, selector, strategy, shouldContinue, signal);
+      if (answer.kind === 'stopped') return { verdict: 'stopped' };
+      if (answer.kind === 'authority_lost') return { verdict: 'authority_lost' };
+      const reading: PerceiveReading =
+        answer.kind === 'answered'
+          ? readPerceiveAnswer(answer.outputData)
+          : { kind: 'no_usable_answer' };
+      if (reading.kind === 'no_usable_answer' && reading.predatesLook === true) {
+        this.rememberPredatesLook(sessionId);
+      }
+      const outcome: PreTapLookOutcome =
+        reading.kind === 'no_usable_answer'
+          ? 'fallback'
+          : reading.kind === 'nothing_resolved'
+            ? 'not_found'
+            : reading.verdict;
+      // A `not_found` that is about to be waited on is not the look's verdict
+      // yet; it is counted when the look ends, so one tap is one outcome.
+      const willWait =
+        reading.kind === 'nothing_resolved' &&
+        !waitedForElement &&
+        this.elementAppearWaitMs > 0 &&
+        elementWaitBudget.remainingMs !== null &&
+        elementWaitBudget.remainingMs >= this.elementAppearWaitMs;
+      if (!willWait) {
+        recordPreTapLook(this.metrics, {
+          outcome,
+          deviceMs:
+            answer.kind === 'answered' || answer.kind === 'refused' ? answer.deviceMs : null,
+          roundTripMs: answer.kind === 'timed_out' ? this.preTapLookTimeoutMs : answer.roundTripMs,
+        });
+      }
+      if (reading.kind === 'no_usable_answer') {
+        return {
+          verdict: 'fallback',
+          waitedForElement,
+          ...(answer.kind === 'timed_out' ? { deviceBusyUntil: answer.deviceBusyUntil } : {}),
+        };
+      }
+      if (reading.kind === 'resolved') {
+        return { verdict: reading.verdict, target: reading.target, waitedForElement };
+      }
+      // Nothing resolves and there is no wait to spend: the tap goes ahead and
+      // meets the click's own element-not-found handling, retries included.
+      if (!willWait) return { verdict: 'fallback', waitedForElement };
+      waitedForElement = true;
+      elementWaitBudget.remainingMs =
+        (elementWaitBudget.remainingMs ?? 0) - this.elementAppearWaitMs;
+      // The wait is on the SELECTOR as the plan wrote it, through the same
+      // visibility predicate the click's own wait uses.
+      const appeared = await this.waitForElement(
+        sessionId,
+        selector,
+        this.elementAppearWaitMs,
+        shouldContinue,
+        signal,
+      );
+      if (appeared === 'stopped') return { verdict: 'stopped' };
+      if (appeared === 'authority_lost') return { verdict: 'authority_lost' };
+      if (appeared === 'absent') {
+        recordPreTapLook(this.metrics, {
+          outcome: 'not_found',
+          deviceMs: answer.kind === 'answered' ? answer.deviceMs : null,
+          roundTripMs: answer.kind === 'answered' ? answer.roundTripMs : null,
+        });
+        return { verdict: 'not_found', waitedForElement };
+      }
+      // Appeared: look again, once — `waitedForElement` stops a second wait.
+    }
+  }
+
+  /**
+   * Sessions whose device answered a look with its page listing: it predates
+   * perceive-by-selector, and a device does not change under a live session.
+   * Bounded, oldest first, like {@link gateLabelsBySession}.
+   */
+  private readonly sessionsPredatingLook = new Set<string>();
+
+  private rememberPredatesLook(sessionId: string): void {
+    this.sessionsPredatingLook.delete(sessionId);
+    this.sessionsPredatingLook.add(sessionId);
+    while (this.sessionsPredatingLook.size > MAX_SESSIONS_WITH_GATE_LABELS) {
+      const oldest = this.sessionsPredatingLook.values().next();
+      if (oldest.done === true) break;
+      this.sessionsPredatingLook.delete(oldest.value);
+    }
+  }
+
+  /** One `perceive` for one selector, bounded by the look's deadline. */
+  private async perceiveOnce(
+    sessionId: string,
+    selector: string,
+    strategy: 'css' | 'xpath',
+    shouldContinue: ExecuteArgs['shouldContinue'],
+    signal: AbortSignal | undefined,
+  ): Promise<
+    | { kind: 'answered'; outputData: unknown; deviceMs: number; roundTripMs: number }
+    | { kind: 'refused'; deviceMs: number; roundTripMs: number }
+    /** `deviceBusyUntil`: the abandoned look, still on the device. */
+    | { kind: 'timed_out'; deviceBusyUntil: Promise<void> }
+    | { kind: 'unsendable'; roundTripMs: number }
+    | { kind: 'stopped' }
+    | { kind: 'authority_lost' }
+  > {
+    if (stopRequested(signal)) return { kind: 'stopped' };
+    if (!(await executionMayContinue(shouldContinue))) return { kind: 'authority_lost' };
+    if (stopRequested(signal)) return { kind: 'stopped' };
+    let dispatch: IntentDispatch;
+    try {
+      // ⛔ THE VERB ON THE WIRE IS A LITERAL — see waitForElement. The params
+      // are the tap's locator, in perceive's own strategy vocabulary.
+      // `max_elements: 1` is ignored by a device that resolves the selector, and
+      // caps the page listing an OLDER device answers with instead — the one
+      // look it gets before it is remembered (see sessionsPredatingLook).
+      dispatch = serializeIntentDispatch({
+        sessionId,
+        intentId: this.genIntentId(),
+        intentName: 'perceive',
+        params: { selector, strategy, max_elements: 1 },
+      });
+    } catch {
+      return { kind: 'unsendable', roundTripMs: 0 };
+    }
+    const started = this.now();
+    const timer = this.deadline(this.preTapLookTimeoutMs);
+    const answered = this.dispatcher.dispatch(dispatch).then(
+      (parsed) => ({ parsed }),
+      () => null,
+    );
+    // B2 — the look only reads, so Stop may abandon it at once.
+    const raced = await raceAbort(
+      Promise.race([answered, timer.elapsed.then(() => 'timed_out' as const)]),
+      signal,
+    );
+    timer.cancel();
+    const roundTripMs = Math.max(0, this.now() - started);
+    if (raced.aborted) return { kind: 'stopped' };
+    if (!(await executionMayContinue(shouldContinue))) return { kind: 'authority_lost' };
+    const value = raced.value;
+    if (value === 'timed_out') {
+      // `answered` never rejects, and the dispatcher settles every dispatch by
+      // its own per-intent timeout, so this settles too.
+      return { kind: 'timed_out', deviceBusyUntil: answered.then(() => undefined) };
+    }
+    if (value === null) return { kind: 'unsendable', roundTripMs };
+    if (!value.parsed.success) {
+      return { kind: 'refused', deviceMs: value.parsed.durationMs, roundTripMs };
+    }
+    return {
+      kind: 'answered',
+      outputData: value.parsed.outputData,
+      deviceMs: value.parsed.durationMs,
+      roundTripMs,
+    };
+  }
+
+  /**
    * B2 — send one attempt and return its result, honouring a Stop that arrives
    * while it is on its way.
    *
@@ -575,6 +1255,8 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     shouldContinue: ExecuteArgs['shouldContinue'],
     elementWaitBudget: ElementWaitBudget = { remainingMs: 0 },
     signal?: AbortSignal,
+    /** The look before a tap already spent (or did not need) this step's wait. */
+    elementWaitAlreadyUsed = false,
   ): Promise<RunIntentOutcome> {
     let result: IntentResult | null = null;
     // Two independent budgets: the short general retryable-failure budget, and a
@@ -583,7 +1265,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     let establishAttempt = 0;
     // P3 — at most ONE element wait per step. A second would be re-asking a
     // question the first already answered with the page's own timeout.
-    let elementWaitUsed = false;
+    let elementWaitUsed = elementWaitAlreadyUsed;
     for (;;) {
       // Re-check on EVERY attempt, including after either retry sleep. A close
       // that wins while the box is cold or a retry backs off stops the suffix

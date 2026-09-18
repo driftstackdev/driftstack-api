@@ -55,6 +55,25 @@ export class StepMarkTracker {
 
   private pending: { planIndex: number; mark: number } | null = null;
 
+  /**
+   * Where the look before a tap began, when one is in flight for a step not yet
+   * announced.
+   *
+   * ⛔ THE LOOK BELONGS TO THE STEP AFTER IT. The executor looks at a tap's
+   * target BEFORE the confirmation gate — the gate reads what the look says —
+   * and announces the step only AFTER the gate, so the look's dispatches land
+   * before the step's start. Marked from the step's announce, they would belong
+   * to no step: a tap the look refused would read as "nothing dispatched" and
+   * die unclassified. So the first look after a result opens the step's span.
+   */
+  private lookMark: number | null = null;
+
+  /** A look before a tap is about to be dispatched (log length BEFORE it). */
+  lookStarted(dispatchLogLength: number): void {
+    if (this.pending !== null) return; // inside an announced step: already its span
+    this.lookMark ??= dispatchLogLength;
+  }
+
   /** The executor announced a step, keyed on the PLAN index. */
   stepStarted(planIndex: number, dispatchLogLength: number): void {
     if (this.pending !== null) {
@@ -62,7 +81,8 @@ export class StepMarkTracker {
         `plan index ${String(planIndex)} started while plan index ${String(this.pending.planIndex)} had produced no result — a step vanished and its dispatches would be attributed to the next one`,
       );
     }
-    this.pending = { planIndex, mark: dispatchLogLength };
+    this.pending = { planIndex, mark: this.lookMark ?? dispatchLogLength };
+    this.lookMark = null;
   }
 
   /** The executor produced a result, keyed on the RESULTS index. */
@@ -72,7 +92,10 @@ export class StepMarkTracker {
       // Recorded FIRST, so the absence is a fact in the report rather than an
       // inference a reader has to make from a zero.
       this.noStartAnnounced.add(resultIndex);
-      this.startMarks.set(resultIndex, dispatchLogLength);
+      // A halt the look's own reading raised DID dispatch something — the look —
+      // and the span says so rather than reading as zero.
+      this.startMarks.set(resultIndex, this.lookMark ?? dispatchLogLength);
+      this.lookMark = null;
       this.planIndexForResult.set(resultIndex, null);
       if (kind !== 'confirmation_required') {
         this.anomalies.push(

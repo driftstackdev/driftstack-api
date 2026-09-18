@@ -358,6 +358,7 @@ export interface AgentFailureDiagnosis {
     | 'session_error'
     | 'invalid_request'
     | 'result_too_large'
+    | 'element_covered'
     | 'unknown';
   retryable: boolean;
 }

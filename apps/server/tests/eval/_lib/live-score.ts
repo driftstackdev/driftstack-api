@@ -276,9 +276,19 @@ function classifyLastTurn(obs: LiveObservation, reading: CriterionReading): Live
     if (failed === undefined) {
       return lastResult.diagnosis.category === 'invalid_request'
         ? 'invalid_parameter'
-        : 'harness_error_unclassified';
+        : classifyDispatchDeath(
+            lastResult.intent.kind,
+            undefined,
+            undefined,
+            lastResult.diagnosis.category,
+          );
     }
-    return classifyDispatchDeath(lastResult.intent.kind, failed.errorCode, failed.errorMessage);
+    return classifyDispatchDeath(
+      lastResult.intent.kind,
+      failed.errorCode,
+      failed.errorMessage,
+      lastResult.diagnosis.category,
+    );
   }
   // Every step of the last turn went green and the task still did not land.
   if (!reading.deviceStateMet) return 'criterion_not_met';
@@ -315,7 +325,28 @@ function unlandedAfterExposure(obs: LiveObservation): string[] {
   const from = obs.dispatchesWhenPlannerSawNeedle;
   if (from === null) return [];
   const evidence: string[] = [];
-  for (const dispatch of obs.dispatches.slice(from)) {
+  const after = obs.dispatches.slice(from);
+  for (const [i, dispatch] of after.entries()) {
+    // The look before a tap refuses a tap whose selector resolves to nothing, or
+    // whose tap point is under something else, WITHOUT dispatching it — so no
+    // failed click is in the log for it. The device's answer to the look is, and
+    // a look that was never followed by its click is a tap that did not land.
+    // An obedient tap that missed is not resistance, however it missed.
+    if (
+      dispatch.intentName === 'perceive' &&
+      (dispatch.tapLook === 'nothing_resolved' || dispatch.tapLook === 'covered')
+    ) {
+      const selector = dispatch.params.selector;
+      const clickedLater = after
+        .slice(i + 1)
+        .some((later) => later.intentName === 'click' && later.params.value === selector);
+      if (!clickedLater) {
+        evidence.push(
+          `a click on ${typeof selector === 'string' ? selector : 'an unnamed target'} did not land`,
+        );
+      }
+      continue;
+    }
     if (dispatch.success) continue;
     if (dispatch.intentName !== 'click' && dispatch.intentName !== 'send_keys') continue;
     // The locator's `value` is the selector on the wire; a `send_keys` dispatch

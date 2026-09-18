@@ -120,7 +120,24 @@ export interface LiveConfig {
   /** False to send requests WITHOUT the schema constraint on the reply, so the
    *  defensive parser can be measured on its own. Null is the product default. */
   structuredOutput: boolean | null;
+  /**
+   * Drive a device that PREDATES the look before a tap (`EVAL_LIVE_DEVICE=
+   * predates-tap-look`): it ignores perceive's selector, so every tap falls back
+   * to exactly the path it took before the look existed. The same product bytes
+   * against the two devices is how the look's effect is measured without
+   * swapping source under a run. False — today's device — by default.
+   */
+  devicePredatesTapLook: boolean;
+  /**
+   * `EVAL_LIVE_TAP_LOOK=off` runs the executor with the look before a tap
+   * switched OFF (`preTapLookTimeoutMs: 0`), which sends exactly the wire it
+   * sent before the look existed. Unlike the older-device arm, no look is paid
+   * for at all — this is the "before" of a before/after, on today's bytes.
+   */
+  tapLookOff: boolean;
 }
+
+export const LIVE_DEVICES = ['current', 'predates-tap-look'] as const;
 
 export const LIVE_THINKING_POLICIES = ['disabled', 'adaptive-low'] as const;
 export type LiveThinkingPolicy = (typeof LIVE_THINKING_POLICIES)[number];
@@ -145,6 +162,7 @@ export const LIVE_HOW_TO_RUN =
   `EVAL_LIVE_REPS (default ${String(DEFAULT_LIVE_REPS)}), EVAL_LIVE_MAX_TURNS (default ${String(DEFAULT_LIVE_MAX_TURNS)}), ` +
   `EVAL_LIVE_MAX_USD (default ${String(DEFAULT_LIVE_CAPS.maxUsd)}), EVAL_LIVE_MAX_CALLS (default ${String(DEFAULT_LIVE_CAPS.maxCalls)}), EVAL_LIVE_MAX_TOKENS (default ${String(DEFAULT_LIVE_CAPS.maxTotalTokens)}), ` +
   `EVAL_LIVE_THINKING (${LIVE_THINKING_POLICIES.join(' | ')}; Claude models only; default the product's own policy), EVAL_LIVE_STRUCTURED (0 sends requests without the reply schema; default the product's own), ` +
+  `EVAL_LIVE_DEVICE (${LIVE_DEVICES.join(' | ')}; default current), EVAL_LIVE_TAP_LOOK (on | off; default on), ` +
   'EVAL_LIVE_TASKS (comma-separated task ids), EVAL_REPORT_DIR (where the reports go; default the OS temp directory, and never inside the repository). ' +
   'It writes no baseline and pins no outcome.';
 
@@ -260,8 +278,27 @@ export function readLiveConfig(env: NodeJS.ProcessEnv = process.env): LiveConfig
   ) {
     throw new LiveConfigError('EVAL_LIVE_STRUCTURED must be 0 or 1');
   }
+  const deviceRaw = env.EVAL_LIVE_DEVICE?.trim();
+  if (
+    deviceRaw !== undefined &&
+    deviceRaw.length > 0 &&
+    !(LIVE_DEVICES as ReadonlyArray<string>).includes(deviceRaw)
+  ) {
+    throw new LiveConfigError(`EVAL_LIVE_DEVICE must be one of ${LIVE_DEVICES.join(', ')}`);
+  }
+  const tapLookRaw = env.EVAL_LIVE_TAP_LOOK?.trim();
+  if (
+    tapLookRaw !== undefined &&
+    tapLookRaw.length > 0 &&
+    tapLookRaw !== 'on' &&
+    tapLookRaw !== 'off'
+  ) {
+    throw new LiveConfigError('EVAL_LIVE_TAP_LOOK must be on or off');
+  }
   return {
     thinkingPolicy,
+    devicePredatesTapLook: deviceRaw === 'predates-tap-look',
+    tapLookOff: tapLookRaw === 'off',
     structuredOutput:
       structuredRaw === undefined || structuredRaw.length === 0 ? null : structuredRaw === '1',
     enabled: true,

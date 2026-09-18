@@ -280,6 +280,10 @@ describe('AgentRuntime — Stop during execution', () => {
     const held = heldDispatcher();
     const decomposer = new ScriptedDecomposer([plan([NAV, TAP, SHOT])]);
     const executor = new ControlPlaneAgentExecutor(held.dispatcher, undefined, {
+      // The look before a tap is off: this test holds each step's own dispatch
+      // open by position (its Stop contract is pinned in
+      // a-tap-looks-at-what-it-will-land-on-before-it-is-sent.test.ts).
+      preTapLookTimeoutMs: 0,
       // No step is in flight when Stop lands here, so no grace timer should be
       // needed; one that never fires would hang the test if it were.
       sleep: () => new Promise<void>(() => undefined),
@@ -317,6 +321,10 @@ describe('AgentRuntime — Stop during execution', () => {
     const held = heldDispatcher();
     const decomposer = new ScriptedDecomposer([plan([NAV, TAP, SHOT])]);
     const executor = new ControlPlaneAgentExecutor(held.dispatcher, undefined, {
+      // The look before a tap is off: this test holds each step's own dispatch
+      // open by position (its Stop contract is pinned in
+      // a-tap-looks-at-what-it-will-land-on-before-it-is-sent.test.ts).
+      preTapLookTimeoutMs: 0,
       // The grace timer never fires in this test: the tap answers first.
       sleep: () => new Promise<void>(() => undefined),
     });
@@ -752,6 +760,10 @@ describe('AgentRuntime — round 2: the edges a Stop can land on', () => {
     const decomposer = new ScriptedDecomposer([plan([NAV, TAP], { status: 'done' })]);
     const device = heldDispatcher();
     const executor = new ControlPlaneAgentExecutor(device.dispatcher, undefined, {
+      // The look before a tap is off: this test holds each step's own dispatch
+      // open by position (its Stop contract is pinned in
+      // a-tap-looks-at-what-it-will-land-on-before-it-is-sent.test.ts).
+      preTapLookTimeoutMs: 0,
       sleep: () => new Promise<void>(() => undefined),
     });
     const { runtime, sessions, id } = await setup({ decomposer, executor });

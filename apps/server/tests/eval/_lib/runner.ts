@@ -69,8 +69,16 @@ export async function runEvalTask(task: EvalTask): Promise<TaskReport> {
     () => `cap_eval_${task.id}_${(captureSeq += 1).toString()}`,
   );
   let intentSeq = 0;
+  // Declared before the executor so its dispatcher can open a step's span when
+  // the look before a tap is sent — see `StepMarkTracker.lookStarted`.
+  const marks = new StepMarkTracker();
   const executor = new ControlPlaneAgentExecutor(
-    device.dispatcher,
+    {
+      dispatch: (dispatch) => {
+        if (dispatch.intentName === 'perceive') marks.lookStarted(device.dispatches().length);
+        return device.dispatcher.dispatch(dispatch);
+      },
+    },
     () => `int_eval_${(intentSeq += 1).toString()}`,
     {
       maxRetries: EVAL_MAX_RETRIES,
@@ -78,6 +86,7 @@ export async function runEvalTask(task: EvalTask): Promise<TaskReport> {
       sessionEstablishRetryDelayMs: EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
       observeTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
       sleep: clock.sleep,
+      deadline: clock.deadline,
     },
     captureStore,
   );
@@ -106,8 +115,8 @@ export async function runEvalTask(task: EvalTask): Promise<TaskReport> {
   // step RESULTS on `results.length - 1` — and every attempt count in this
   // report is a difference between marks taken in them. `StepMarkTracker` does
   // the join in one place, in ONE space, and names anything that does not fit
-  // instead of absorbing it into a fallback. See `step-marks.ts`.
-  const marks = new StepMarkTracker();
+  // instead of absorbing it into a fallback. See `step-marks.ts`. (`marks` is
+  // declared above, with the executor that feeds it.)
 
   const startedAt = performance.now();
   let turn: RunTurnResult | null = null;

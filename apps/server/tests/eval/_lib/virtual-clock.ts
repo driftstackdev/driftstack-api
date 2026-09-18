@@ -71,6 +71,31 @@ export class VirtualClock {
     });
   };
 
+  /**
+   * A CANCELLABLE sleep — the executor's `deadline` seam. A race timer that
+   * loses its race (the look before a tap answered first) must leave the queue,
+   * or it would later be pumped and drag the page's clock forward by the whole
+   * timeout once per tap: a late render would appear "sooner" for a reason that
+   * is not a fact about the page. Never counted — a deadline is how long we are
+   * willing to wait, not time anything spent.
+   */
+  readonly deadline = (ms: number): { elapsed: Promise<void>; cancel: () => void } => {
+    this.seq += 1;
+    const seq = this.seq;
+    let sleeper: Sleeper | undefined;
+    const elapsed = new Promise<void>((resolve) => {
+      sleeper = { deadline: this.nowMs + Math.max(0, ms), seq, resolve };
+      this.pending.push(sleeper);
+      this.schedulePump();
+    });
+    return {
+      elapsed,
+      cancel: () => {
+        this.pending = this.pending.filter((pending) => pending !== sleeper);
+      },
+    };
+  };
+
   private schedulePump(): void {
     if (this.pumpScheduled) return;
     this.pumpScheduled = true;
