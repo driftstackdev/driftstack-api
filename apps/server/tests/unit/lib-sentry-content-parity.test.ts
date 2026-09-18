@@ -158,12 +158,13 @@ describe('W391.B apps/server/src/lib/sentry.ts content parity', () => {
     expect(body).toMatch(/level\?: 'debug' \| 'info' \| 'warning' \| 'error' \| 'fatal';/);
   });
 
-  it('SentryClient interface: captureException + addBreadcrumb + flush + close + readonly isInitialized', () => {
+  it('SentryClient interface: captureException + captureMessage + addBreadcrumb + flush + close + readonly isInitialized', () => {
     expect(body).toMatch(/export interface SentryClient \{/);
     expect(body).toMatch(
       /captureException\(err: unknown, context\?: Record<string, unknown>\): void;/,
     );
     expect(body).toMatch(/addBreadcrumb\(crumb: SentryBreadcrumb\): void;/);
+    expect(body).toMatch(/captureMessage\(msg: SentryMessage\): void;/);
     expect(body).toMatch(/flush\(timeoutMs\?: number\): Promise<boolean>;/);
     expect(body).toMatch(/close\(timeoutMs\?: number\): Promise<boolean>;/);
     expect(body).toMatch(/readonly isInitialized: boolean;/);
@@ -174,7 +175,7 @@ describe('W391.B apps/server/src/lib/sentry.ts content parity', () => {
       /if \(config === null\) \{\s*logger\.warn\(\s*\{ component: 'sentry' \},\s*'Sentry not configured — exception capture disabled\. Set SENTRY_DSN \+ SENTRY_ENVIRONMENT to enable\.',\s*\);/,
     );
     expect(body).toMatch(
-      /return \{\s*isInitialized: false,\s*captureException: \(\) => \{\},\s*addBreadcrumb: \(\) => \{\},\s*flush: \(\) => Promise\.resolve\(true\),\s*close: \(\) => Promise\.resolve\(true\),\s*\};/,
+      /return \{\s*isInitialized: false,\s*captureException: \(\) => \{\},\s*addBreadcrumb: \(\) => \{\},\s*captureMessage: \(\) => \{\},\s*flush: \(\) => Promise\.resolve\(true\),\s*close: \(\) => Promise\.resolve\(true\),\s*\};/,
     );
   });
 

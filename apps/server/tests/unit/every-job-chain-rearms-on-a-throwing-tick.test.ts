@@ -149,10 +149,12 @@ describe('a recurring sweep re-arms even when its tick throws', () => {
     // after the one Test that first measured it).
     // 15 → 16 with registerAgentTurnTelemetryPruneJob (the 90-day retention of
     // the per-request AI diagnostics rows).
+    // 16 → 17 with registerAgentTurnHealthWatchdogJob (the AI turn health
+    // conditions evaluated from the diagnostics table and sent to Sentry).
     expect(
       helpers.map((h) => h.name).sort(),
       'the register*Job scan came back short — the checks below cover only what it found',
-    ).toHaveLength(16);
+    ).toHaveLength(17);
   });
 
   it('the detector detects — it must flag the broken shape and clear both working ones', () => {

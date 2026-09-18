@@ -61,6 +61,12 @@ export interface AgentTurnTelemetryAggregates {
     cacheWriteTokens: number;
     costMillicents: number;
   };
+  /** Streaming requests that reached a first progress event: the sample count
+   *  behind `percentilesMs.firstProgressStream`. A p95 over three requests is
+   *  not a p95, and the health watchdog's volume floor needs this number to say
+   *  so (the Prometheus rule reads the histogram's `_count` for the same
+   *  reason). */
+  firstProgressStreamSamples: number;
   percentilesMs: {
     turn: Percentiles;
     /** Streaming requests only: the transport on which a customer sees it. */
@@ -78,8 +84,21 @@ export interface AgentTurnTelemetryAggregates {
   };
 }
 
+export interface AgentTurnTelemetryAggregateArgs {
+  since: Date;
+  until: Date;
+  /**
+   * Cancel the aggregate in Postgres after this long. For a background caller
+   * (the health watchdog) that gives up on a slow window: without it, giving up
+   * only stops WAITING, and the abandoned queries keep their pool connections
+   * into the next tick while request-path queries queue behind them. Unset, the
+   * pool's own setting (DB_STATEMENT_TIMEOUT_MS, off by default) applies.
+   */
+  statementTimeoutMs?: number;
+}
+
 export interface AgentTurnTelemetryRepo extends AgentTurnTelemetryWriter {
-  aggregate(args: { since: Date; until: Date }): Promise<AgentTurnTelemetryAggregates>;
+  aggregate(args: AgentTurnTelemetryAggregateArgs): Promise<AgentTurnTelemetryAggregates>;
   /** Delete rows older than `cutoff`, at most `limit` of them. Returns the count. */
   pruneOlderThan(cutoff: Date, limit: number): Promise<number>;
 }
@@ -131,7 +150,7 @@ export class InMemoryAgentTurnTelemetryRepo implements AgentTurnTelemetryRepo {
     return this.rows;
   }
 
-  aggregate(args: { since: Date; until: Date }): Promise<AgentTurnTelemetryAggregates> {
+  aggregate(args: AgentTurnTelemetryAggregateArgs): Promise<AgentTurnTelemetryAggregates> {
     const inWindow = this.rows.filter(
       (r) => r.occurredAt >= args.since && r.occurredAt <= args.until,
     );
@@ -166,6 +185,7 @@ export class InMemoryAgentTurnTelemetryRepo implements AgentTurnTelemetryRepo {
     const firstProgress = (rows: AgentTurnTelemetryRow[]): number[] =>
       rows.flatMap((r) => (r.timeToFirstProgressMs === null ? [] : [r.timeToFirstProgressMs]));
 
+    const firstProgressStream = firstProgress(inWindow.filter((r) => r.transport === 'stream'));
     return Promise.resolve({
       byOutcome,
       deaths: groupByReason(DEATH),
@@ -187,11 +207,10 @@ export class InMemoryAgentTurnTelemetryRepo implements AgentTurnTelemetryRepo {
         cacheWriteTokens: sum((r) => r.cacheWriteTokens),
         costMillicents: sum((r) => r.estimatedCostMillicents),
       },
+      firstProgressStreamSamples: firstProgressStream.length,
       percentilesMs: {
         turn: percentilesOf(ran.map((r) => r.durationMs)),
-        firstProgressStream: percentilesOf(
-          firstProgress(inWindow.filter((r) => r.transport === 'stream')),
-        ),
+        firstProgressStream: percentilesOf(firstProgressStream),
         firstProgressAll: percentilesOf(firstProgress(inWindow)),
         planning: percentilesOf(positive((r) => r.planningMs)),
         startingBrowser: percentilesOf(positive((r) => r.startingBrowserMs)),
@@ -301,10 +320,27 @@ export class DrizzleAgentTurnTelemetryRepo implements AgentTurnTelemetryRepo {
     });
   }
 
-  async aggregate(args: { since: Date; until: Date }): Promise<AgentTurnTelemetryAggregates> {
+  async aggregate(args: AgentTurnTelemetryAggregateArgs): Promise<AgentTurnTelemetryAggregates> {
+    const timeoutMs = args.statementTimeoutMs;
+    if (timeoutMs === undefined) return this.aggregateWith(this.database.db, args);
+    // One transaction, so the timeout is LOCAL to it (set_config(..., true) is
+    // `SET LOCAL` with a bound parameter) and never leaks onto a pooled
+    // connection another caller reuses. It also keeps the five queries on ONE
+    // connection instead of five, which is what a background caller wants.
+    return this.database.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT set_config('statement_timeout', ${String(Math.max(1, Math.round(timeoutMs)))}, true)`,
+      );
+      return this.aggregateWith(tx, args);
+    });
+  }
+
+  private async aggregateWith(
+    db: Pick<Database['db'], 'execute'>,
+    args: AgentTurnTelemetryAggregateArgs,
+  ): Promise<AgentTurnTelemetryAggregates> {
     const since = args.since.toISOString();
     const until = args.until.toISOString();
-    const db = this.database.db;
     // INCLUSIVE at `until`. The caller passes "now", and a request that ended in
     // this same millisecond is part of "up to now"; excluding it made the row a
     // summary was asked about the one row it could not see.
@@ -351,6 +387,7 @@ export class DrizzleAgentTurnTelemetryRepo implements AgentTurnTelemetryRepo {
           sum("cache_read_tokens") FILTER (WHERE ${RAN_SQL}) AS cache_read_tokens,
           sum("cache_write_tokens") FILTER (WHERE ${RAN_SQL}) AS cache_write_tokens,
           sum("estimated_cost_millicents") FILTER (WHERE ${RAN_SQL}) AS cost_millicents,
+          count("time_to_first_progress_ms") FILTER (WHERE "transport" = 'stream') AS first_stream_n,
           percentile_cont(0.5) WITHIN GROUP (ORDER BY "duration_ms")
             FILTER (WHERE ${RAN_SQL}) AS turn_p50,
           percentile_cont(0.95) WITHIN GROUP (ORDER BY "duration_ms")
@@ -429,6 +466,7 @@ export class DrizzleAgentTurnTelemetryRepo implements AgentTurnTelemetryRepo {
         cacheWriteTokens: int(t['cache_write_tokens']),
         costMillicents: int(t['cost_millicents']),
       },
+      firstProgressStreamSamples: int(t['first_stream_n']),
       percentilesMs: {
         turn: pair('turn'),
         firstProgressStream: pair('first_stream'),

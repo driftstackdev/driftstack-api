@@ -115,7 +115,9 @@ the one on the admin page.
 
 ## The four alerts
 
-Defined in `ops/alerts/driftstack.yml`, group `driftstack-agent-turns`. Every
+Defined in `ops/alerts/driftstack.yml`, group `driftstack-agent-turns`. Nothing
+scrapes them in production today; alerts 1–3 are evaluated there by the health
+watchdog instead — see "In production today: the health watchdog" at the end. Every
 ratio carries a volume floor (`and … >= 10`): at tens of turns a day, one failed
 turn in a quiet hour is a 100% failure rate, and a rule without a floor teaches
 everyone to ignore it. Revisit the floors and thresholds once there is a real
@@ -228,3 +230,139 @@ sum(rate(driftstack_agent_turn_tokens_total{token_type=~"input|cache_read|cache_
 
 Labels are closed enums only. Never a session id, account id, URL, selector,
 task text or anything a model wrote; an unknown model id is reported as `other`.
+
+## In production today: the health watchdog
+
+Production has no scraper (no `METRICS_SCRAPE_TOKEN`, `/metrics` answers 404,
+and there is no Prometheus or Alertmanager on the box), so none of the PromQL
+above runs there. Alerts 1–3 are instead evaluated **inside the API** by the
+`agent_turn.health_watchdog` job, every **5 minutes**, from the
+`agent_turn_telemetry` table — the same rows the admin page reads, through the
+same summary code — and delivered through **Sentry**.
+
+**One set of numbers.** The watchdog's windows, thresholds, volume floors and
+`for:` durations are `AGENT_TURN_ALERT_RULES` in
+`apps/server/src/services/agent-turn-health-watchdog.ts`. A unit test
+(`agent-turn-health-watchdog-runbook-parity`) reads each number out of the
+PromQL blocks above and the `for:` lines in `ops/alerts/driftstack.yml` and
+fails if the constant disagrees, so change a threshold in all three places or
+the build stops you. They are deliberately not settable from the environment.
+
+**What each condition does.** The numbers are not repeated here: each floor is
+the `>= N` line of the condition's PromQL block above, each hold is the alert's
+`for:` in `ops/alerts/driftstack.yml`, and the parity test holds both to the
+constant.
+
+- **Below the volume floor** the answer is _not enough data_: nothing new ever
+  fires. At today's volume this is the usual state, and it is logged once when
+  it starts (`event: agent_turn_health_status`, `to: insufficient_data`), not
+  every tick.
+- **Crossing the threshold** starts the rule's `for:` clock. Once it has held
+  that long, **one** Sentry event is sent — on the transition, not every tick.
+- **Still breaching:** a reminder event every **6 hours**, into the same issue.
+- **Stopping crossing** — back under the threshold, _or_ traffic falling below
+  the floor — starts a recovery clock. Once that has held for the same `for:`,
+  one `recovered` event is sent; its `cleared_by` says which (`ok` or
+  `insufficient_data`). A crossing tick while it runs stops it. So a breach
+  never stays open for days because traffic went quiet, and a later crossing
+  goes through the `for:` hold again as a new breach.
+- **The watchdog itself cannot read the table** for 3 ticks in a row: it
+  reports `AgentTurnHealthWatchdogBlind`, so a silent watchdog is not mistaken
+  for a healthy product. A tick that fails for any other reason counts the same.
+
+**Recognising its issues in Sentry.** Titles read
+`AI turns: AgentTurnCompletionRateLow breach` (or `still_breaching`,
+`recovered`); tags are `component: agent-turn-health`, `condition` and
+`transition`. Breaches and reminders of one condition share the fingerprint
+`agent-turn-health / <condition>` and so form **one issue**; recoveries go to a
+separate `agent-turn-health / <condition> / recovered` issue, so a recovery
+never reopens a breach issue someone resolved. The event's extra data is the
+whole payload: condition, the rule (window, floor, threshold, `for:`), the exact
+span evaluated (`window_since` / `window_until`), sample count, value, and for
+first progress the p50/p95 in ms. Nothing else — no account, session, task,
+URL or model output.
+
+To look closer, open the admin page (**AI turns**). It is not an exact replay:
+its window is whole hours (1 h at the least) and ends when the page is opened,
+so for first progress (the narrowest window) it shows a wider span, and for any
+rule it drifts from `window_since` / `window_until` as time passes. Expect the
+figures to be close, not identical.
+
+**Getting notified — a Sentry alert rule is REQUIRED.** An event reaching Sentry
+tells no one by itself. Because a condition's breaches share one issue, and a
+`recovered` event goes to a different issue and does not resolve the breach
+issue, the usual rules ("a new issue is created", "an issue changes state from
+resolved to unresolved") fire on the **first** breach only: a second incident
+and every reminder land in an issue that is already open and notify nobody. The
+project needs an issue alert that fires **per event**:
+
+- when: the number of events in an issue is more than 0 in 1 minute (or any
+  equivalent per-event trigger);
+- if: the event's tag `component` equals `agent-turn-health`, and tag
+  `transition` is `breach` or `still_breaching` (add `recovered` to be told of
+  recoveries too);
+- then: notify the owner (email or the paging channel).
+
+Sentry's per-issue action interval (5 minutes at the least) cannot swallow
+these: a condition sends at most one breach and one reminder every 6 hours, and
+a recovery needs its own `for:` first. Optionally, resolve the breach issue by
+hand when its `recovered` event arrives; that keeps the issue list honest, and
+the next breach then also counts as a regression.
+
+**Silencing.** One condition: in Sentry, **Archive** (ignore) **both** its
+breach issue and its `… / recovered` issue — "until escalating" or forever;
+archiving only the first still lets its recoveries through. Everything: set
+`DRIFTSTACK_DISABLE_AGENT_TURN_HEALTH_WATCHDOG=true` and restart; the
+`bootstrap complete` log line then shows `agentTurnHealthWatchdog: false`.
+With Sentry unconfigured (dev, tests), the same events are still written as
+structured log lines (`event: agent_turn_health_breach`, `…_still_breaching`,
+`…_recovered`).
+
+**Restarts, deploys, more processes.** The watchdog's state (what is breaching,
+since when, last reminder, both clocks) travels in its own pending job row, so
+a deploy or restart does **not** re-fire a condition that is still breaching,
+and with more than one API process only the process that claims the row runs
+the tick — they act as one watchdog (production runs one process today). A
+still-breaching condition fires again after a restart only if the pending row
+was lost.
+
+**Delivery is at most once.** The new state is saved before an event is sent,
+so nothing is ever sent twice — and an event that is lost is not retried. The
+Sentry SDK drops events quietly while Sentry is down or rate-limiting, and a
+process that dies between saving and sending sends nothing. Either way the
+next word from that condition is its reminder, up to 6 hours later, or its
+`recovered`. The structured log line is written before the send and is the
+record of what was meant to go out.
+
+**Its own health.** Failure counts are per process since boot and are not a
+metric (there is no scraper): every failure, status and notice line it logs
+carries `ticks_total`, `failed_ticks_total`, `delivery_failures_total` and
+`notices_sent_total`. Nothing watches the job chain itself in production
+today — the liveness gauge also needs the metrics registry — so after a deploy,
+check that an `agent_turn.health_watchdog` row is pending.
+
+**Where it differs from the PromQL:**
+
+- **Alert 4 (telemetry writes failing) is NOT evaluated.** A failed write leaves
+  no row, so the table cannot see it, and the only count is an in-process
+  metrics counter that does not exist without `METRICS_SCRAPE_TOKEN`. Until a
+  scraper exists, look for the warn line
+  `agent turn telemetry failed; the turn was not affected`.
+- **Recovery waits for the rule's `for:`**; Prometheus resolves as soon as the
+  expression stops matching. At tens of requests one request moves a rate
+  across the threshold, and resolving on one tick would send a breach and a
+  recovery every twenty minutes for a rate sitting on the line.
+- **Falling below the floor clears a breach** after the same wait. Prometheus
+  resolves at once when the floor's `and` empties the vector; the watchdog
+  reports it with `cleared_by: insufficient_data`.
+- Percentiles are exact over the rows (`percentile_cont`), where the PromQL
+  interpolates histogram buckets; near the threshold the two can disagree
+  slightly.
+- The 409 rate can under-read during a retry storm: turned-away requests past
+  60 a minute per process are shed rather than written (see "The per-request
+  record"). The PromQL counts every one.
+- It reports up to one tick after the `for:` is met.
+
+**The PromQL above stays valid** and is the better instrument once a scraper
+exists. At that point either keep both (expect duplicate notifications) or
+switch the watchdog off.

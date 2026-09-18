@@ -62,6 +62,12 @@ const NOT_A_RETENTION_JOB: Record<string, string> = {
   CostNightlyJob:
     'Cost-threshold evaluation and notification. Reads usage and dispatches alerts; ' +
     'deletes, expires and anonymises nothing, so no retention promise depends on it.',
+  AgentTurnHealthWatchdogJob:
+    'AI turn health evaluation. Reads aggregates of agent_turn_telemetry and sends ' +
+    'Sentry events; deletes, expires and anonymises nothing (the 90-day prune of that ' +
+    'table is agent_turn_telemetry.prune, which stays unconditional). Gated on ' +
+    'DRIFTSTACK_DISABLE_AGENT_TURN_HEALTH_WATCHDOG by design: it is an alert source an ' +
+    'operator must be able to silence.',
 };
 
 /**

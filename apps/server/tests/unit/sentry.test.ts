@@ -192,6 +192,7 @@ describe('wireSentryErrorHandler', () => {
         captured.push([err, ctx]);
       },
       addBreadcrumb: () => {},
+      captureMessage: () => {},
       flush: () => Promise.resolve(true),
       close: () => Promise.resolve(true),
     };
@@ -308,6 +309,7 @@ describe('wireSentryRequestBreadcrumbs', () => {
       isInitialized: true,
       captureException: () => {},
       addBreadcrumb: (c) => crumbs.push(c),
+      captureMessage: () => {},
       flush: () => Promise.resolve(true),
       close: () => Promise.resolve(true),
     };

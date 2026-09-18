@@ -138,6 +138,12 @@ import {
   enqueueNextAgentTurnTelemetryPrune,
   registerAgentTurnTelemetryPruneJob,
 } from '../services/agent-turn-telemetry-prune-job.js';
+import {
+  AGENT_TURN_HEALTH_WATCHDOG_JOB_TYPE,
+  endAgentTurnHealthWatchdogChain,
+  enqueueNextAgentTurnHealthWatchdog,
+  registerAgentTurnHealthWatchdogJob,
+} from '../services/agent-turn-health-watchdog.js';
 import { AgentRuntime } from '../services/agent-runtime.js';
 import { resolveTaskRefusalConfig, type RefusalPattern } from '../services/task-refusal.js';
 import { StubAgentExecutor, type AgentExecutor } from '../services/agent-executor.js';
@@ -1802,6 +1808,25 @@ export async function createProductionDeps(
     logger,
   });
   await enqueueNextAgentTurnTelemetryPrune({ scheduledJobs: scheduledJobsService });
+  // AI turn health, evaluated from the diagnostics table every 5 minutes and
+  // reported through Sentry. Production has no metrics scraper, so the
+  // runbook's PromQL alerts are inert there; this is what actually watches the
+  // AI automation. On by default; DRIFTSTACK_DISABLE_AGENT_TURN_HEALTH_WATCHDOG
+  // switches it off (and ends the chain rather than orphaning its row).
+  const agentTurnHealthWatchdogDisabled = envFlag(
+    process.env.DRIFTSTACK_DISABLE_AGENT_TURN_HEALTH_WATCHDOG,
+  );
+  if (agentTurnHealthWatchdogDisabled) {
+    endAgentTurnHealthWatchdogChain({ scheduledJobs: scheduledJobsService, logger });
+  } else {
+    registerAgentTurnHealthWatchdogJob({
+      scheduledJobs: scheduledJobsService,
+      summary: agentTurnSummaryService,
+      sentry,
+      logger,
+    });
+    await enqueueNextAgentTurnHealthWatchdog({ scheduledJobs: scheduledJobsService });
+  }
 
   // V-266: browser-OAuth-style CLI / GUI activation flow. The bind step
   // temporarily stores a freshly minted API key in Redis, so the feature
@@ -3209,8 +3234,15 @@ export async function createProductionDeps(
             refreshJobChainLiveness({
               repo: scheduledJobsRepo,
               metrics: metricsRegistry,
-              ...(rotationRemindersDisabled
-                ? { notRunHere: new Set(ROTATION_REMINDER_JOB_TYPES) }
+              ...(rotationRemindersDisabled || agentTurnHealthWatchdogDisabled
+                ? {
+                    notRunHere: new Set([
+                      ...(rotationRemindersDisabled ? ROTATION_REMINDER_JOB_TYPES : []),
+                      ...(agentTurnHealthWatchdogDisabled
+                        ? [AGENT_TURN_HEALTH_WATCHDOG_JOB_TYPE]
+                        : []),
+                    ]),
+                  }
                 : {}),
             }),
         }
@@ -3721,6 +3753,9 @@ export async function createProductionDeps(
       // production. `true` when neither timer was opt-out-disabled
       // via DRIFTSTACK_DISABLE_KEY_ROTATION_REMINDERS=1.
       rotationReminders: !rotationRemindersDisabled,
+      // `true` unless DRIFTSTACK_DISABLE_AGENT_TURN_HEALTH_WATCHDOG is set: the
+      // line to check when no AI turn health issue has ever reached Sentry.
+      agentTurnHealthWatchdog: !agentTurnHealthWatchdogDisabled,
       driver: config.driver,
       env: config.nodeEnv,
     },

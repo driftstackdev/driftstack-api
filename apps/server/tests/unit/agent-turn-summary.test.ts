@@ -225,6 +225,8 @@ describe('agent turn summary', () => {
     ]);
     expect(s.durations_ms.time_to_first_progress.stream).toEqual({ p50: 300, p95: 390 });
     expect(s.durations_ms.time_to_first_progress.all.p50).toBe(400);
+    // Its denominator: the two streaming requests, not the json one or the 409.
+    expect(s.durations_ms.time_to_first_progress.stream_samples).toBe(2);
   });
 
   it('tokens, cache share, re-plans and cost are per turn that RAN', async () => {
@@ -311,6 +313,7 @@ describe('agent turn summary', () => {
         cacheWriteTokens: 0,
         costMillicents: 0,
       },
+      firstProgressStreamSamples: 0,
       percentilesMs: {
         turn: { p50: null, p95: null },
         firstProgressStream: { p50: null, p95: null },

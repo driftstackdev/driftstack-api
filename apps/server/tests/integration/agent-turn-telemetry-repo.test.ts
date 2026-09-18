@@ -350,10 +350,25 @@ describe.skipIf(!RUN_DB_TESTS)('agent_turn_telemetry on real Postgres', () => {
     const fromSql = await sqlRepo.aggregate(WINDOW);
     const fromMemory = await memory.aggregate(WINDOW);
     expect(fromSql).toEqual(fromMemory);
+    // The health watchdog's path (one transaction, a local statement timeout)
+    // reads the same numbers as the admin page's.
+    expect(await sqlRepo.aggregate({ ...WINDOW, statementTimeoutMs: 30_000 })).toEqual(fromSql);
     // Not vacuous: the answer has content, and the out-of-window rows are out.
     // 7 ran outcomes + the error that had called the model; NOT the error that
     // had not, the 409 or the 404.
     expect(fromSql.ran.count).toBe(8);
+    // The streaming first-progress SAMPLE COUNT (the health watchdog's volume
+    // floor) counts streaming rows that reached progress — not json ones, not
+    // a request that never showed progress.
+    const inWindow = rows.filter(
+      (r) => r.occurredAt >= WINDOW.since && r.occurredAt <= WINDOW.until,
+    );
+    const streamed = inWindow.filter(
+      (r) => r.transport === 'stream' && r.timeToFirstProgressMs !== null,
+    ).length;
+    expect(streamed).toBeGreaterThan(0);
+    expect(streamed).toBeLessThan(inWindow.length);
+    expect(fromSql.firstProgressStreamSamples).toBe(streamed);
     expect(fromSql.ran.costMillicents).toBeGreaterThanOrEqual(7777);
     expect(fromSql.byOutcome).toEqual({
       completed: 2,
@@ -388,6 +403,54 @@ describe.skipIf(!RUN_DB_TESTS)('agent_turn_telemetry on real Postgres', () => {
     expect(empty).toEqual(await new InMemoryAgentTurnTelemetryRepo().aggregate(WINDOW));
     expect(empty.ran.count).toBe(0);
     expect(empty.percentilesMs.turn).toEqual({ p50: null, p95: null });
+  });
+
+  it('CRITICAL a statement timeout CANCELS the aggregate in Postgres, and stays local to its transaction', async () => {
+    // A held ACCESS EXCLUSIVE lock makes every read of the table wait, which
+    // is the "slow database" a background caller gives up on. The lock wait
+    // counts against statement_timeout, so the read must be cancelled by
+    // Postgres — not merely abandoned by the caller while it keeps its
+    // connection.
+    const holder = await client!.reserve();
+    try {
+      await holder`BEGIN`;
+      await holder`LOCK TABLE agent_turn_telemetry IN ACCESS EXCLUSIVE MODE`;
+      const started = Date.now();
+      // Bounded here too, so a regression fails this assertion and the lock is
+      // released below, rather than hanging the test with the lock held into
+      // the next one.
+      const err: unknown = await Promise.race([
+        repo()
+          .aggregate({ ...WINDOW, statementTimeoutMs: 200 })
+          .then(
+            () => null,
+            (e: unknown) => e,
+          ),
+        new Promise((done) => setTimeout(() => done('still waiting after 3 s'), 3_000)),
+      ]);
+      // Drizzle wraps the driver error; the cause is Postgres's own
+      // query_canceled (57014), raised by the statement timeout.
+      const cause = (err as { cause?: { code?: string; message?: string } } | null)?.cause;
+      expect(cause?.code).toBe('57014');
+      expect(cause?.message).toMatch(/statement timeout/);
+      expect(Date.now() - started).toBeLessThan(5_000);
+    } finally {
+      await holder`ROLLBACK`.catch(() => undefined);
+      holder.release();
+    }
+    // A timed read that COMMITS (a cancelled one rolls back, which would undo
+    // even a session-wide setting and prove nothing).
+    expect((await repo().aggregate({ ...WINDOW, statementTimeoutMs: 200 })).ran.count).toBe(0);
+    // SET LOCAL semantics: the connection went back to the pool without it.
+    // Asked on every pooled connection at once (the pool holds 3), so the one
+    // the transaction used is among them.
+    const settings = await Promise.all(
+      [0, 1, 2].map(
+        () => client!`SELECT current_setting('statement_timeout') AS v, pg_sleep(0.05)`,
+      ),
+    );
+    expect(settings.map((r) => String(r[0]?.['v']))).toEqual(['0', '0', '0']);
+    expect((await repo().aggregate(WINDOW)).ran.count).toBe(0);
   });
 
   it('the prune deletes only rows older than the cutoff, the OLDEST first, and never more than the limit', async () => {

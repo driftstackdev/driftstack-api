@@ -129,6 +129,13 @@ const REVIEWED_RAW: Array<{ match: string; why: string }> = [
       'the lifecycle CTE inside dailyBucketsForRange — its rows are merged into a Map keyed by ' +
       'day and the method sorts by date before returning, so no arbitrary order escapes',
   },
+  {
+    match: "SELECT set_config('statement_timeout'",
+    why:
+      'agent-turn-telemetry-repo aggregate: sets a transaction-local statement timeout for the ' +
+      'health watchdog. One row, one column, and its result is never read — there is no row set ' +
+      'whose order could matter',
+  },
 ];
 
 describe('V-1201 an unordered read is reviewed, not accidental', () => {

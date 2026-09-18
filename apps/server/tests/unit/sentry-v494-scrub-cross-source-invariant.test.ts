@@ -257,12 +257,13 @@ describe('W969 V-494 sentry scrub mirror cross-source invariant', () => {
 
   // ─── initSentry no-op when config is null ────────────────────
 
-  it('CRITICAL initSentry returns isInitialized:false no-op stub when config === null — 4 arrow no-ops (captureException + addBreadcrumb + flush returning Promise.resolve(true) + close returning Promise.resolve(true)). The null-config null-object pattern keeps callers polymorphic.', () => {
+  it('CRITICAL initSentry returns isInitialized:false no-op stub when config === null — 5 arrow no-ops (captureException + addBreadcrumb + captureMessage + flush returning Promise.resolve(true) + close returning Promise.resolve(true)). The null-config null-object pattern keeps callers polymorphic.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/sentry.ts'));
     expect(p).toMatch(/if \(config === null\) \{/);
     expect(p).toMatch(/isInitialized: false,/);
     expect(p).toMatch(/captureException: \(\) => \{\},/);
     expect(p).toMatch(/addBreadcrumb: \(\) => \{\},/);
+    expect(p).toMatch(/captureMessage: \(\) => \{\},/);
     expect(p).toMatch(/flush: \(\) => Promise\.resolve\(true\),/);
     expect(p).toMatch(/close: \(\) => Promise\.resolve\(true\),/);
   });

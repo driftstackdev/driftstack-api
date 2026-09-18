@@ -227,8 +227,33 @@ export interface SentryBreadcrumb {
   level?: 'debug' | 'info' | 'warning' | 'error' | 'fatal';
 }
 
+/**
+ * An operational signal that is not an exception: a health condition entering
+ * or leaving breach. Grouped by `fingerprint` rather than by message or stack,
+ * so every repeat of one condition lands in ONE Sentry issue however its
+ * numbers change between events.
+ */
+export interface SentryMessage {
+  message: string;
+  level: 'info' | 'warning' | 'error';
+  /** Stable per condition. Sentry groups events with an equal fingerprint. */
+  fingerprint: readonly string[];
+  /** Searchable in the Sentry UI. Closed vocabularies only. */
+  tags?: Readonly<Record<string, string>>;
+  extra?: Readonly<Record<string, unknown>>;
+}
+
 export interface SentryClient {
   captureException(err: unknown, context?: Record<string, unknown>): void;
+  /**
+   * Send a message event carrying ONLY what the caller passed: the ambient
+   * breadcrumb trail, request and user are stripped from this event, because
+   * a background job's event would otherwise inherit whatever URLs the last
+   * requests on this process left in scope. Fire-and-forget, never throws.
+   *
+   * No-op when Sentry is not initialized.
+   */
+  captureMessage(msg: SentryMessage): void;
   /**
    * Append a breadcrumb to the current Sentry scope. When the next
    * exception fires (whether via captureException or an unhandled
@@ -258,6 +283,7 @@ export function initSentry({ config, logger }: InitSentryArgs): SentryClient {
       isInitialized: false,
       captureException: () => {},
       addBreadcrumb: () => {},
+      captureMessage: () => {},
       flush: () => Promise.resolve(true),
       close: () => Promise.resolve(true),
     };
@@ -305,6 +331,37 @@ export function initSentry({ config, logger }: InitSentryArgs): SentryClient {
                 : { value: sentryErr },
           },
           'Sentry captureException failed (fire-and-forget)',
+        );
+      }
+    },
+    captureMessage(msg) {
+      try {
+        Sentry.withScope((scope) => {
+          // Runs after the global, isolation and current scopes are merged
+          // into the event, so it removes what they contributed — which is the
+          // point: the caller's payload is the whole event.
+          scope.addEventProcessor((event) => {
+            delete event.breadcrumbs;
+            delete event.request;
+            delete event.user;
+            return event;
+          });
+          scope.setFingerprint([...msg.fingerprint]);
+          scope.setLevel(msg.level);
+          if (msg.tags !== undefined) scope.setTags({ ...msg.tags });
+          if (msg.extra !== undefined) scope.setExtras({ ...msg.extra });
+          Sentry.captureMessage(msg.message);
+        });
+      } catch (sentryErr) {
+        logger.warn(
+          {
+            component: 'sentry',
+            err:
+              sentryErr instanceof Error
+                ? { name: sentryErr.name, message: sentryErr.message }
+                : { value: sentryErr },
+          },
+          'Sentry captureMessage failed (fire-and-forget)',
         );
       }
     },

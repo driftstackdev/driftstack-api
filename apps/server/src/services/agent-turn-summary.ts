@@ -70,7 +70,12 @@ export interface AgentTurnSummary {
   turned_away: Array<{ reason: string; count: number; share: number }>;
   durations_ms: {
     turn: Percentiles;
-    time_to_first_progress: { stream: Percentiles; all: Percentiles };
+    time_to_first_progress: {
+      stream: Percentiles;
+      all: Percentiles;
+      /** Streaming requests behind `stream`: its denominator. */
+      stream_samples: number;
+    };
     phases: {
       planning: Percentiles;
       starting_browser: Percentiles;
@@ -177,7 +182,11 @@ export function buildAgentTurnSummary(
     })),
     durations_ms: {
       turn: p.turn,
-      time_to_first_progress: { stream: p.firstProgressStream, all: p.firstProgressAll },
+      time_to_first_progress: {
+        stream: p.firstProgressStream,
+        all: p.firstProgressAll,
+        stream_samples: aggregates.firstProgressStreamSamples,
+      },
       phases: {
         planning: p.planning,
         starting_browser: p.startingBrowser,
@@ -214,10 +223,22 @@ export function buildAgentTurnSummary(
 export class AgentTurnSummaryService {
   constructor(private readonly deps: { repo: AgentTurnTelemetryRepo; nowFn?: () => number }) {}
 
-  async summarize(windowHours: number): Promise<AgentTurnSummary> {
+  /** `statementTimeoutMs` cancels the window's queries in the database after
+   *  that long (see AgentTurnTelemetryAggregateArgs); the admin route leaves it
+   *  unset, a background caller that gives up on a slow window sets it. */
+  async summarize(
+    windowHours: number,
+    opts: { statementTimeoutMs?: number } = {},
+  ): Promise<AgentTurnSummary> {
     const until = new Date((this.deps.nowFn ?? Date.now)());
     const since = new Date(until.getTime() - windowHours * 60 * 60 * 1000);
-    const aggregates = await this.deps.repo.aggregate({ since, until });
+    const aggregates = await this.deps.repo.aggregate({
+      since,
+      until,
+      ...(opts.statementTimeoutMs !== undefined
+        ? { statementTimeoutMs: opts.statementTimeoutMs }
+        : {}),
+    });
     return buildAgentTurnSummary(aggregates, { hours: windowHours, since, until });
   }
 }

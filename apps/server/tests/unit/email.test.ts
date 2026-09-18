@@ -772,6 +772,7 @@ describe('createEmailService — security-critical retry + per-account tracking 
     return {
       captureException: vi.fn(),
       addBreadcrumb: vi.fn(),
+      captureMessage: vi.fn(),
       flush: vi.fn(() => Promise.resolve(true)),
       close: vi.fn(() => Promise.resolve(true)),
       isInitialized: true,
