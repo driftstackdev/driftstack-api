@@ -63,9 +63,20 @@ import { AccountTierSchema, type AccountTier } from '@driftstack/api-types';
 import { DrizzleAdminBillingRepo } from '../../src/db/admin-billing-repo.js';
 import * as schema from '../../src/db/schema.js';
 import { cleanDelta } from './_helpers/counter-delta.js';
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 
-const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
-const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+/**
+ * ⛔ THIS FILE GETS ITS OWN DATABASE. Every arm reads `countActiveSubscriptionsByTier`,
+ * a TABLE-WIDE count with no account scope, and asserts exact deltas. On the shared
+ * database every other file that seeds an account or a subscription writes inside the
+ * measurement window — and the file's first defence, a NOISY_TIERS exemption list plus a
+ * five-attempt retry, is only as good as its knowledge of who else writes. On
+ * 2026-09-18 a file it did not know about seeded `solo_manual` subscriptions inside all
+ * five windows and the pre-push gate went red on a docs-only commit, with the test
+ * passing 7/7 alone. An exemption list has to be updated for every new writer; an
+ * isolated database does not. The list and the retry stay as a second line only.
+ */
+const ISOLATED_DB_NAME = 'driftstack_iso_admin_billing_repo';
 
 /** The one tier no other test file writes — see the isolation note above. */
 const TIER: AccountTier = 'agency_manual';
@@ -111,7 +122,9 @@ async function counts(): Promise<Record<AccountTier, number>> {
 }
 
 beforeAll(async () => {
-  const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return; // no reachable Postgres: the reachability arm reports it
+  const probe = postgres(isolated, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1`;
     dbReachable = true;
@@ -120,7 +133,7 @@ beforeAll(async () => {
     await probe.end({ timeout: 1 }).catch(() => {});
     return;
   }
-  client = postgres(DB_URL, { max: 1 });
+  client = postgres(isolated, { max: 1 });
   try {
     await client`SELECT 1 FROM subscriptions LIMIT 0`;
   } catch {
