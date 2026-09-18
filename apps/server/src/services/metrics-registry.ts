@@ -15,6 +15,15 @@
 // label use — but high-cardinality labels (account_id, session_id) WILL
 // blow up the scrape size. Convention: only enum-shaped labels (state
 // names, action kinds, success/error) appear in counter labels here.
+//
+// Histograms DID land, and the paragraph above is kept because it is the record
+// of why they were deferred: the first signal that called for them was the
+// agent turn. "Far too slow" is a complaint about a DISTRIBUTION — a mean turn
+// time hides the one customer in five who waits a minute for the first sign of
+// life — and a counter cannot carry a distribution. They are cumulative
+// `_bucket{le=…}` / `_sum` / `_count` series, the shape `histogram_quantile`
+// reads, with FIXED bucket bounds declared at registration so the series count
+// is a property of the code and never of the traffic.
 
 const METRIC_NAME_RE = /^[a-zA-Z_:][a-zA-Z0-9_:]*$/;
 const LABEL_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
@@ -35,7 +44,33 @@ interface GaugeDef {
   readonly labelKeys: readonly string[];
 }
 
-type MetricDef = CounterDef | GaugeDef;
+interface HistogramSeries {
+  /** Per-bound counts, NOT cumulative; render() accumulates. One per bucket. */
+  readonly counts: number[];
+  sum: number;
+  count: number;
+}
+
+interface HistogramDef {
+  readonly kind: 'histogram';
+  readonly help: string;
+  /** Unused for a histogram; present so every MetricDef has a `values` map. */
+  readonly values: Map<string, number>;
+  readonly labelKeys: readonly string[];
+  /** Upper bounds, strictly ascending; `+Inf` is implied. */
+  readonly buckets: readonly number[];
+  readonly series: Map<string, HistogramSeries>;
+}
+
+/** Test-only view of one histogram series. */
+export interface HistogramSnapshot {
+  readonly count: number;
+  readonly sum: number;
+  /** Cumulative count per declared upper bound, in bucket order. */
+  readonly cumulative: readonly number[];
+}
+
+type MetricDef = CounterDef | GaugeDef | HistogramDef;
 
 function validateMetricName(name: string): void {
   if (!METRIC_NAME_RE.test(name)) {
@@ -102,6 +137,84 @@ export class MetricsRegistry {
     });
   }
 
+  /**
+   * `labelKeys` is LAST on purpose. The label-cardinality guard reads the
+   * trailing array literal of every registration as its label keys; with the
+   * buckets last, every histogram would read as label-less and the guard that
+   * stops a `session_id` label would never see one.
+   */
+  registerHistogram(
+    name: string,
+    help: string,
+    buckets: readonly number[],
+    labelKeys: readonly string[] = [],
+  ): void {
+    validateMetricName(name);
+    validateLabelNames(labelKeys);
+    if (labelKeys.includes('le')) {
+      throw new Error(`Histogram label "le" is reserved for the bucket bound: ${name}`);
+    }
+    if (this.metrics.has(name)) {
+      throw new Error(`Metric already registered: ${name}`);
+    }
+    if (buckets.length === 0) throw new Error(`Histogram needs at least one bucket: ${name}`);
+    for (let i = 0; i < buckets.length; i += 1) {
+      const bound = buckets[i] ?? Number.NaN;
+      const previous = i === 0 ? Number.NEGATIVE_INFINITY : (buckets[i - 1] ?? Number.NaN);
+      if (!Number.isFinite(bound) || !(bound > previous)) {
+        throw new Error(`Histogram buckets must be finite and strictly ascending: ${name}`);
+      }
+    }
+    this.metrics.set(name, {
+      kind: 'histogram',
+      help,
+      labelKeys,
+      values: new Map(),
+      buckets: [...buckets],
+      series: new Map(),
+    });
+  }
+
+  /**
+   * Record one observation. A non-finite or negative value is DROPPED rather
+   * than thrown: every histogram here measures a duration or a count, a
+   * negative one is a clock artefact, and a `NaN` in `_sum` would poison the
+   * series for the life of the process.
+   */
+  observe(name: string, value: number, labels?: Labels): void {
+    const def = this.metrics.get(name);
+    if (!def || def.kind !== 'histogram') {
+      throw new Error(`Histogram not registered: ${name}`);
+    }
+    if (!Number.isFinite(value) || value < 0) return;
+    const key = labelKey(def.labelKeys, labels);
+    let series = def.series.get(key);
+    if (series === undefined) {
+      series = { counts: def.buckets.map(() => 0), sum: 0, count: 0 };
+      def.series.set(key, series);
+    }
+    series.sum += value;
+    series.count += 1;
+    const index = def.buckets.findIndex((bound) => value <= bound);
+    if (index >= 0) series.counts[index] = (series.counts[index] ?? 0) + 1;
+  }
+
+  /** Test-only: read one histogram series. */
+  getHistogram(name: string, labels?: Labels): HistogramSnapshot {
+    const def = this.metrics.get(name);
+    if (!def || def.kind !== 'histogram') return { count: 0, sum: 0, cumulative: [] };
+    const series = def.series.get(labelKey(def.labelKeys, labels));
+    if (series === undefined) {
+      return { count: 0, sum: 0, cumulative: def.buckets.map(() => 0) };
+    }
+    let running = 0;
+    const cumulative = series.counts.map((c) => {
+      running += c;
+      return running;
+    });
+    return { count: series.count, sum: series.sum, cumulative };
+  }
+
   inc(name: string, labels?: Labels, delta = 1): void {
     const def = this.metrics.get(name);
     if (!def || def.kind !== 'counter') {
@@ -137,6 +250,25 @@ export class MetricsRegistry {
       if (!def) continue;
       lines.push(`# HELP ${name} ${def.help}`);
       lines.push(`# TYPE ${name} ${def.kind}`);
+      if (def.kind === 'histogram') {
+        for (const k of Array.from(def.series.keys()).sort()) {
+          const series = def.series.get(k);
+          if (series === undefined) continue;
+          const base = renderLabels(def.labelKeys, k);
+          // `le` joins the series' own labels inside one brace pair.
+          const withLe = (le: string): string =>
+            base === '' ? `{le="${le}"}` : `${base.slice(0, -1)},le="${le}"}`;
+          let running = 0;
+          def.buckets.forEach((bound, i) => {
+            running += series.counts[i] ?? 0;
+            lines.push(`${name}_bucket${withLe(String(bound))} ${running}`);
+          });
+          lines.push(`${name}_bucket${withLe('+Inf')} ${series.count}`);
+          lines.push(`${name}_sum${base} ${series.sum}`);
+          lines.push(`${name}_count${base} ${series.count}`);
+        }
+        continue;
+      }
       const sortedKeys = Array.from(def.values.keys()).sort();
       for (const k of sortedKeys) {
         const labelStr = renderLabels(def.labelKeys, k);
@@ -311,4 +443,47 @@ export const METRIC_NAMES = {
   // the cluster is running on coarse per-instance limiting, not the
   // shared Redis buckets. Bounded cardinality.
   rateLimitStoreFallbackTotal: 'driftstack_rate_limit_store_fallback_total',
+  // ── AI agent turns ────────────────────────────────────────────────────
+  //
+  // Until these existed the only evidence of how the AI automation behaved in
+  // production was a grep over proxy access logs. Everything below is emitted
+  // from ONE place — services/agent-turn-telemetry.ts, at the message route's
+  // seam — so a request that reaches the handler is counted exactly once
+  // whatever path it took out. A request refused by a preHandler (401/403, the
+  // per-caller rate limit's 429) never gets there: see httpRequestTotal and
+  // rateLimitTotal for those.
+  //
+  // Every label is a closed enum declared in that file. None is ever a session
+  // id, account id, URL, selector, task text or anything a model wrote.
+  //
+  // One request to POST /v1/agent-sessions/:id/message, by `outcome`. The 409s
+  // are outcomes on purpose: a quarter of production requests ended in one,
+  // and a counter that only saw turns that RAN could not have shown it.
+  agentTurnTotal: 'driftstack_agent_turn_total',
+  // Wall time of one request, by `outcome`.
+  agentTurnDurationSeconds: 'driftstack_agent_turn_duration_seconds',
+  // Time spent in each runtime phase, by `phase`, summed over a turn's repeats
+  // (a re-plan re-enters `planning`).
+  agentTurnPhaseDurationSeconds: 'driftstack_agent_turn_phase_duration_seconds',
+  // Seconds from the request arriving to the FIRST progress event of the turn,
+  // by `transport`. "It never shows thinking progress" is this number.
+  agentTurnTimeToFirstProgressSeconds: 'driftstack_agent_turn_time_to_first_progress_seconds',
+  // Settled model calls by `call_kind` (plan | re_plan | answer | unattributed)
+  // and `model` (the catalogue ids, or `other`).
+  agentTurnModelCallTotal: 'driftstack_agent_turn_model_call_total',
+  // Tokens by `token_type` (input | output | cache_read | cache_write),
+  // `call_kind` and `model`.
+  agentTurnTokensTotal: 'driftstack_agent_turn_tokens_total',
+  // Re-plan attempts in one turn, by `outcome`. A histogram with integer
+  // bounds: the share of turns that needed a second look is the signal.
+  agentTurnReplans: 'driftstack_agent_turn_replans',
+  // The step a turn died on, by `reason` (the death-reason class) and
+  // `step_kind` (the intent kind). Where real tasks die.
+  agentTurnStepFailureTotal: 'driftstack_agent_turn_step_failure_total',
+  // Per-turn diagnostics row writes, by `outcome` (ok | error | dropped | shed).
+  // The write is fire-and-forget by design, so this counter is the ONLY place
+  // its failure shows: `error` or `dropped` means the operator view is going
+  // blind. `shed` is the per-minute budget on rows for turned-away requests
+  // doing its job under a 409/429 storm, and is not a failure.
+  agentTurnTelemetryWriteTotal: 'driftstack_agent_turn_telemetry_write_total',
 } as const;

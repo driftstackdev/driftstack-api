@@ -339,6 +339,128 @@ groups:
             being lost silently. The log line for each rejection carries name,
             message and stack; find it and give that path its own .catch().
 
+  - name: driftstack-agent-turns
+    # The AI automation's health, from the per-request counters and histograms
+    # emitted at the agent message route (services/agent-turn-telemetry.ts).
+    # Runbook for all four: docs/runbooks/agent-turn-monitoring.md.
+    #
+    # Every ratio below carries a VOLUME FLOOR (`and … >= 10`). Production had
+    # served 27 AI turns in total when these were written; at that volume one
+    # failed turn is a 100% failure rate over a quiet hour, and a rule without a
+    # floor would page on a single unlucky customer and teach everyone to
+    # ignore it.
+    rules:
+      - alert: AgentTurnCompletionRateLow
+        # The headline: of the turns that reached a verdict, how many finished
+        # the task. `halted_for_confirmation` and `clarified` are in neither
+        # side of the ratio — both are the agent correctly handing a decision
+        # back to a human, and a run of careful pauses must not move it.
+        #
+        # `or vector(0)` on the numerator is load-bearing. With no completion in
+        # the window and no `completed` series, the numerator is an EMPTY vector,
+        # empty / x is empty, and this rule stayed silent at exactly 0% — the
+        # state it exists to catch. The server also creates every outcome series
+        # at zero when it starts; this keeps the rule right on its own.
+        expr: |
+          (
+            (sum(increase(driftstack_agent_turn_total{outcome="completed"}[6h])) or vector(0))
+            /
+            sum(increase(driftstack_agent_turn_total{outcome=~"completed|failed|refused|stopped|error"}[6h]))
+          ) < 0.5
+          and
+          sum(increase(driftstack_agent_turn_total{outcome=~"completed|failed|refused|stopped|error"}[6h])) >= 10
+        for: 30m
+        labels:
+          severity: warning
+          team: driftstack-runtime
+        annotations:
+          summary: 'Fewer than half of AI turns are completing'
+          description: |
+            Over the last 6 hours, under 50% of the AI turns that reached a
+            verdict completed their task (at least 10 such turns). Open the
+            admin panel's "AI turns" page for the death-reason breakdown —
+            it names the step kind and failure class tasks are dying on — and
+            chart driftstack_agent_turn_step_failure_total by reason.
+
+      - alert: AgentTurnConflictRateHigh
+        # A 409 is a request the customer made that did nothing. A quarter of
+        # production requests ended this way before anything counted them.
+        # `busy_409` is the big one: the previous turn is still running, which
+        # is what a customer who gave up on a slow turn and typed again sees.
+        # `replayed` and `manual_note` are left out of the denominator because
+        # they are never written as diagnostics rows: with them in, this rule and
+        # the admin page reported two different 409 rates for the same traffic.
+        expr: |
+          (
+            sum(increase(driftstack_agent_turn_total{outcome=~"busy_409|conflict_409"}[1h]))
+            /
+            sum(increase(driftstack_agent_turn_total{outcome!~"replayed|manual_note"}[1h]))
+          ) > 0.10
+          and
+          sum(increase(driftstack_agent_turn_total{outcome!~"replayed|manual_note"}[1h])) >= 10
+        for: 15m
+        labels:
+          severity: warning
+          team: driftstack-runtime
+        annotations:
+          summary: 'More than 10% of AI message requests are ending in 409'
+          description: |
+            Over the last hour more than one AI message request in ten was
+            rejected with a conflict (at least 10 requests). A high busy_409
+            share means customers are re-sending while a slow turn is still
+            running — read it together with turn duration and time to first
+            progress. A high conflict_409 share points at control hand-offs or
+            ended sessions instead.
+
+      - alert: AgentTurnFirstProgressSlow
+        # "It never shows thinking progress in realtime", as a number. Measured
+        # on the streaming transport only: that is the one on which a customer
+        # is watching for it. Floored like the ratios: without it ONE slow turn
+        # in a quiet half hour IS the p95 and holds it there for the whole window.
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(driftstack_agent_turn_time_to_first_progress_seconds_bucket{transport="stream"}[30m]))
+          ) > 5
+          and
+          sum(increase(driftstack_agent_turn_time_to_first_progress_seconds_count{transport="stream"}[30m])) >= 10
+        for: 15m
+        labels:
+          severity: warning
+          team: driftstack-runtime
+        annotations:
+          summary: 'AI turns take over 5s (p95) to show the first sign of progress'
+          description: |
+            The 95th-percentile time from a streamed AI message arriving to the
+            first progress event of its turn has been above 5 seconds for 15
+            minutes (at least 10 streamed turns in the window). Everything before that event happens before any model
+            call: session and ownership lookup, rate limiting, key resolution,
+            the spend preflight, publishing the message to the transcript.
+            Check database and Redis latency first.
+
+      - alert: AgentTurnTelemetryWriteFailing
+        # The per-turn diagnostics row is written fire-and-forget so that it can
+        # never fail or slow a customer's turn. The price of that is silence:
+        # this counter is the only place a failing write can show. `dropped`
+        # means the writer hit its in-flight cap, i.e. the database has stopped
+        # answering it. `shed` is deliberately NOT a failure: it is the writer
+        # declining to spend a database write on each request of a 409/429 storm.
+        expr: |
+          sum(increase(driftstack_agent_turn_telemetry_write_total{outcome=~"error|dropped"}[15m])) > 0
+        for: 10m
+        labels:
+          severity: warning
+          team: driftstack-runtime
+        annotations:
+          summary: 'AI turn diagnostics rows are not being written'
+          description: |
+            Writes to agent_turn_telemetry are failing or being dropped. AI
+            turns themselves are unaffected, but the admin panel's "AI turns"
+            page is going blind while this fires. The usual causes are a
+            migration that has not been applied (0125), or an outcome or death
+            reason added in source without widening the table's CHECK
+            constraints.
+
 # ────────────────────────────────────────────────────────────────────
 # Metric inventory — drift-guard satisfaction
 #
@@ -353,6 +475,12 @@ groups:
 #
 # Dashboard-only (drift-guard reference; no paging rule yet). Checked by
 #   - driftstack_agent_decompose_total
+#   - driftstack_agent_turn_duration_seconds
+#   - driftstack_agent_turn_model_call_total
+#   - driftstack_agent_turn_phase_duration_seconds
+#   - driftstack_agent_turn_replans
+#   - driftstack_agent_turn_step_failure_total
+#   - driftstack_agent_turn_tokens_total
 #   - driftstack_auth_total
 #   - driftstack_byok_anthropic_test_total
 #   - driftstack_http_request_total

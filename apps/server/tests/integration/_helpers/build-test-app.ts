@@ -21,7 +21,10 @@ import type { UsageInputs } from '../../../src/lib/cost-estimator.js';
 import { MemoryRateLimitStore } from '../../../src/lib/memory-rate-limit-store.js';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../../../src/lib/api-keys.js';
 import { MockDriver } from '../../../src/drivers/mock.js';
-import { AgentRuntime } from '../../../src/services/agent-runtime.js';
+import {
+  AgentRuntime,
+  type AgentDecomposerUsageRecorder,
+} from '../../../src/services/agent-runtime.js';
 import { DeterministicAgentDecomposer } from '../../../src/services/agent-decomposer-deterministic.js';
 import type { DecomposeUsage } from '../../../src/services/agent-decomposer.js';
 import { StubAgentExecutor } from '../../../src/services/agent-executor.js';
@@ -45,6 +48,15 @@ import {
 import { InMemoryFleetNonceCache } from '../../../src/services/fleet-nonce-cache.js';
 import { FleetControlRegistry } from '../../../src/services/fleet-control-registry.js';
 import { MetricsRegistry, METRIC_NAMES } from '../../../src/services/metrics-registry.js';
+import {
+  AGENT_TURN_DURATION_BUCKETS_SECONDS,
+  AGENT_TURN_FIRST_PROGRESS_BUCKETS_SECONDS,
+  AGENT_TURN_REPLAN_BUCKETS,
+  AgentTurnTelemetry,
+  type AgentTurnTelemetryWriter,
+} from '../../../src/services/agent-turn-telemetry.js';
+import { AgentTurnSummaryService } from '../../../src/services/agent-turn-summary.js';
+import { InMemoryAgentTurnTelemetryRepo } from '../../../src/db/agent-turn-telemetry-repo.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
@@ -464,6 +476,21 @@ export interface TestAppOptions {
    */
   captureAgentDecomposerUsage?: boolean;
   /**
+   * Replace the diagnostics-row writer — e.g. with one that throws, or never
+   * settles — to prove a telemetry failure cannot change a turn's response.
+   * The fixture's `agentTurnTelemetryRepo` stays empty when this is set.
+   */
+  agentTurnTelemetryWriter?: AgentTurnTelemetryWriter;
+  /** Build the app with NO turn telemetry, the pre-telemetry route AND runtime
+   *  exactly: no collector at the route, no wrapper on the usage recorder. */
+  disableAgentTurnTelemetry?: boolean;
+  /**
+   * Hand the message route a telemetry object of the test's choosing — e.g. one
+   * whose every method throws — in place of the fixture's. The runtime's usage
+   * recorder is still wrapped by the fixture's real one.
+   */
+  agentTurnTelemetryOverride?: Pick<AgentTurnTelemetry, 'begin'>;
+  /**
    * Arc 1 sub-slice 6.5 (v2-#6) — when set, the test fixture wires a
    * BundledLlmService backed by InMemoryBundledLlmRepo. The repo
    * starts populated with this account's consent + cap settings; the
@@ -588,6 +615,10 @@ export interface TestAppFixture {
   /** Arc 4 Wave 2.B 8.18/8.19 — exposed so tests can scrape /metrics
    *  + read counter values directly via registry.getValue(). */
   metricsRegistry: MetricsRegistry;
+  /** Per-request AI telemetry. `flush()` it before reading the repo: rows are
+   *  written after the response, off the request path. */
+  agentTurnTelemetry: AgentTurnTelemetry;
+  agentTurnTelemetryRepo: InMemoryAgentTurnTelemetryRepo;
   /** Arc 4 Wave 2.B sub-slice 8.13d — exposed so tests can assert
    *  the takeover route called recordHeartbeat and the handback
    *  route called forget. */
@@ -995,6 +1026,60 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'POST /v1/mac-nodes/register outcomes (ok | validation | encryption_error | not_found | unknown).',
     ['outcome'],
   );
+  // AI agent turns — the same nine registrations bootstrap makes.
+  metricsRegistry.registerCounter(METRIC_NAMES.agentTurnTotal, 'Agent message requests.', [
+    'outcome',
+  ]);
+  metricsRegistry.registerHistogram(
+    METRIC_NAMES.agentTurnDurationSeconds,
+    'Agent message request wall time.',
+    AGENT_TURN_DURATION_BUCKETS_SECONDS,
+    ['outcome'],
+  );
+  metricsRegistry.registerHistogram(
+    METRIC_NAMES.agentTurnPhaseDurationSeconds,
+    'Agent turn phase time.',
+    AGENT_TURN_DURATION_BUCKETS_SECONDS,
+    ['phase'],
+  );
+  metricsRegistry.registerHistogram(
+    METRIC_NAMES.agentTurnTimeToFirstProgressSeconds,
+    'Agent turn time to first progress.',
+    AGENT_TURN_FIRST_PROGRESS_BUCKETS_SECONDS,
+    ['transport'],
+  );
+  metricsRegistry.registerCounter(METRIC_NAMES.agentTurnModelCallTotal, 'Settled model calls.', [
+    'call_kind',
+    'model',
+  ]);
+  metricsRegistry.registerCounter(METRIC_NAMES.agentTurnTokensTotal, 'Model tokens.', [
+    'token_type',
+    'call_kind',
+    'model',
+  ]);
+  metricsRegistry.registerHistogram(
+    METRIC_NAMES.agentTurnReplans,
+    'Re-plan attempts per agent turn.',
+    AGENT_TURN_REPLAN_BUCKETS,
+    ['outcome'],
+  );
+  metricsRegistry.registerCounter(METRIC_NAMES.agentTurnStepFailureTotal, 'Failed agent steps.', [
+    'reason',
+    'step_kind',
+  ]);
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.agentTurnTelemetryWriteTotal,
+    'Per-turn diagnostics row writes.',
+    ['outcome'],
+  );
+  // Wired unconditionally, as bootstrap does: an in-memory writer, so a test
+  // can read back exactly the rows a turn left behind.
+  const agentTurnTelemetryRepo = new InMemoryAgentTurnTelemetryRepo();
+  const agentTurnTelemetry = new AgentTurnTelemetry({
+    writer: opts.agentTurnTelemetryWriter ?? agentTurnTelemetryRepo,
+    metrics: metricsRegistry,
+  });
+  const agentTurnSummaryService = new AgentTurnSummaryService({ repo: agentTurnTelemetryRepo });
 
   // V-216 — customer-facing audit; constructed early so all
   // emit-on-event services (webhooks, sessions, api-keys, profiles)
@@ -1720,6 +1805,12 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
           // end-to-end smoke test assert the decomposer→runtime→recorder
           // chain fires correctly through the HTTP layer without
           // needing the Drizzle path.
+          const capturingUsageRecorder: AgentDecomposerUsageRecorder = {
+            record: async (recordArgs) => {
+              agentDecomposerUsageRecords.push(recordArgs);
+              return Promise.resolve();
+            },
+          };
           const agentRuntime = new AgentRuntime({
             decomposer: new DeterministicAgentDecomposer(),
             executor: new StubAgentExecutor(),
@@ -1730,16 +1821,24 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
             // driftstack_agent_decompose_total counter ticks under
             // the integration smoke.
             metrics: metricsRegistry,
-            ...(opts.captureAgentDecomposerUsage === true
-              ? {
-                  usageRecorder: {
-                    record: async (recordArgs) => {
-                      agentDecomposerUsageRecords.push(recordArgs);
-                      return Promise.resolve();
-                    },
-                  },
-                }
-              : {}),
+            // Same shape as bootstrap: telemetry stands in front of whatever
+            // recorder there is, and observes alone when there is none.
+            //
+            // With telemetry DISABLED the recorder is exactly what it was before
+            // telemetry existed — absent unless a test captures usage. That
+            // build is the baseline the response-invariance test compares
+            // against, and a baseline that still carried the wrapper (which
+            // also switches the runtime onto its record-with-retry path) was
+            // not "no telemetry at all".
+            ...(opts.disableAgentTurnTelemetry === true
+              ? opts.captureAgentDecomposerUsage === true
+                ? { usageRecorder: capturingUsageRecorder }
+                : {}
+              : {
+                  usageRecorder: agentTurnTelemetry.wrapUsageRecorder(
+                    opts.captureAgentDecomposerUsage === true ? capturingUsageRecorder : undefined,
+                  ),
+                }),
           });
           return {
             agentRuntime,
@@ -1826,6 +1925,10 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       ? { agentDecomposerFallbackKey: 'sk-ant-test-deployment-fallback' }
       : {}),
     costMonitoringService,
+    ...(opts.disableAgentTurnTelemetry === true
+      ? {}
+      : { agentTurnTelemetry: opts.agentTurnTelemetryOverride ?? agentTurnTelemetry }),
+    agentTurnSummaryService,
     cryptoOrdersService,
     ...(opts.disableDriverSessionsRepo === true ? {} : { sessionRepo: sessionsRepo }),
     apiKeysRepo,
@@ -1901,6 +2004,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
 
   return {
     app,
+    agentTurnTelemetry,
+    agentTurnTelemetryRepo,
     /** V-730 — lets a test prove that clearing / rotating the stored key evicts
      *  the plaintext cached for open agent sessions. */
     byokKeyCache: testByokKeyCache,

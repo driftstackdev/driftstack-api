@@ -112,6 +112,7 @@ const EXPECTED_STAFF_ROUTES: readonly string[] = [
   'POST /v1/admin/accounts/:id/tier',
   'POST /v1/admin/accounts/:id/unsuspend',
   'GET /v1/admin/accounts/:id/usage',
+  'GET /v1/admin/agent-turns/summary',
   'GET /v1/admin/api-keys',
   'POST /v1/admin/api-keys/:id/revoke',
   'GET /v1/admin/atlas-priority/event/:id',

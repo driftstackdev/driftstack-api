@@ -190,24 +190,37 @@ describe('metric label cardinality', () => {
     const distinct = [...new Set(registrations.flatMap((r) => r.labelKeys))].sort();
     // Exact, not a superset: a new key should red this and be acknowledged. The
     // arm above decides whether it is ALLOWED; this one makes it noticed.
+    //
+    // `call_kind`, `model`, `phase`, `reason`, `step_kind`, `token_type` and
+    // `transport` arrived together with the agent-turn metrics. Each is a closed
+    // union declared in services/agent-turn-telemetry.ts; `model` is the one
+    // that LOOKS open, and is not — `modelLabel` maps anything outside the model
+    // catalogue to `other`, and `agent-turn-telemetry` (unit) pins that.
     expect(distinct).toEqual([
       'actor_type',
       'arm',
       'bucket',
+      'call_kind',
       'from',
       'job_type',
       'kind',
       'limiter',
       'method',
+      'model',
       'outcome',
+      'phase',
       'prefix',
+      'reason',
       'result_kind',
       'role',
       'route',
       'status_class',
+      'step_kind',
       'template',
       'terminal_state',
       'to',
+      'token_type',
+      'transport',
     ]);
   });
 });

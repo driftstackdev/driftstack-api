@@ -59,6 +59,14 @@ const EXEMPT: ReadonlyMap<string, string> = new Map([
   ['GET /v1/mac-nodes', 'fleet node registry (operator)'],
   ['POST /v1/mac-nodes', 'fleet node registry (operator)'],
   ['POST /v1/mac-nodes/{}/control', 'fleet node registry (operator)'],
+  // Staff-only, and withheld from the CUSTOMER-SHIPPED spec on purpose: the admin
+  // surface in that spec is held at a ceiling that may only fall (V-862), so
+  // publishing another staff endpoint is the owner's decision, not a side effect
+  // of adding one. Its one consumer is the staff panel, which binds directly.
+  [
+    'GET /v1/admin/agent-turns/summary',
+    'staff panel only; admin surface in the customer spec may not grow (V-862)',
+  ],
   // Inbound receivers — the provider calls us; signature-authenticated.
   ['POST /v1/webhooks/stripe', 'inbound provider webhook receiver'],
   ['POST /v1/webhooks/nowpayments', 'inbound provider webhook receiver'],

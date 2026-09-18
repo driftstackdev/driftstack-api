@@ -2996,3 +2996,79 @@ export const sessionOperations = pgTable(
       .where(sql`${t.resultExpiresAt} IS NOT NULL`),
   ],
 );
+
+// ───────────────────────────────────────────────────────────────────────────
+// agent_turn_telemetry — one content-free diagnostics row per AI message request
+// ───────────────────────────────────────────────────────────────────────────
+//
+// ⛔ NO IDENTIFIER AND NO FREE TEXT, ON PURPOSE. There is no account id, no
+// session id and no foreign key: a row cannot be joined back to a customer, so
+// the table is safe to aggregate and to show an operator. Every text column
+// holds a member of a closed union declared in
+// services/agent-turn-telemetry.ts, and migration 0125 repeats each union as a
+// CHECK constraint — a later edit that tries to store a URL or a task "for
+// debugging" fails the insert instead of leaking.
+export const agentTurnTelemetry = pgTable(
+  'agent_turn_telemetry',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    outcome: text('outcome').notNull(),
+    deathReason: text('death_reason').notNull(),
+    diedStepIndex: integer('died_step_index'),
+    diedStepKind: text('died_step_kind'),
+    httpStatus: integer('http_status').notNull(),
+    transport: text('transport').notNull(),
+    model: text('model').notNull(),
+    stepsPlanned: integer('steps_planned').notNull(),
+    stepsRun: integer('steps_run').notNull(),
+    stepsSucceeded: integer('steps_succeeded').notNull(),
+    replans: integer('replans').notNull(),
+    modelCalls: integer('model_calls').notNull(),
+    recoveredAfterReplan: boolean('recovered_after_replan').notNull(),
+    durationMs: integer('duration_ms').notNull(),
+    timeToFirstProgressMs: integer('time_to_first_progress_ms'),
+    planningMs: integer('planning_ms').notNull(),
+    startingBrowserMs: integer('starting_browser_ms').notNull(),
+    executingMs: integer('executing_ms').notNull(),
+    readingPageMs: integer('reading_page_ms').notNull(),
+    answeringMs: integer('answering_ms').notNull(),
+    inputTokens: integer('input_tokens').notNull(),
+    outputTokens: integer('output_tokens').notNull(),
+    cacheReadTokens: integer('cache_read_tokens').notNull(),
+    cacheWriteTokens: integer('cache_write_tokens').notNull(),
+    estimatedCostMillicents: bigint('estimated_cost_millicents', { mode: 'number' }).notNull(),
+    customerStopped: boolean('customer_stopped').notNull(),
+    viewerDisconnected: boolean('viewer_disconnected').notNull(),
+  },
+  (t) => [
+    // Every read is a window over time, and so is the retention prune.
+    index('agent_turn_telemetry_occurred_at_idx').on(t.occurredAt),
+    // The closed lists, restated from migration 0125 so the schema expresses the
+    // invariant it relies on. `agent-turn-telemetry-unions-match-the-migration`
+    // holds all three statements — source unions, migration, these — together.
+    check(
+      'agent_turn_telemetry_outcome',
+      sql`${t.outcome} IN ('completed', 'failed', 'halted_for_confirmation', 'clarified', 'refused', 'stopped', 'busy_409', 'conflict_409', 'rate_limited', 'rejected', 'error')`,
+    ),
+    check(
+      'agent_turn_telemetry_death_reason',
+      sql`${t.deathReason} IN ('none', 'halted_for_confirmation', 'element_never_appeared_in_retry_budget', 'element_click_intercepted', 'element_not_interactable', 'wait_condition_not_met', 'capture_failed', 'page_load_failed', 'invalid_parameter', 'result_too_large', 'readback_gate_blocked', 'answer_path_failed_after_being_reached', 'turn_errored', 'harness_error_unclassified', 'session_error', 'policy_refused', 'model_refused', 'model_unavailable', 'customer_closed_session', 'control_taken_mid_turn', 'budget_exhausted', 'transcript_limit', 'session_not_active', 'control_unavailable', 'turn_in_progress', 'idempotency_in_progress', 'idempotency_mismatch', 'account_turn_limit', 'rate_limited', 'request_rejected')`,
+    ),
+    check(
+      'agent_turn_telemetry_died_step_kind',
+      sql`${t.diedStepKind} IS NULL OR ${t.diedStepKind} IN ('navigate', 'interact', 'wait', 'capture', 'scroll', 'behavioral_pause')`,
+    ),
+    check('agent_turn_telemetry_transport', sql`${t.transport} IN ('stream', 'json')`),
+    check('agent_turn_telemetry_model', sql`${t.model} ~ '^[a-z0-9.-]{1,40}$'`),
+    check('agent_turn_telemetry_http_status', sql`${t.httpStatus} BETWEEN 100 AND 599`),
+    check(
+      'agent_turn_telemetry_counts_nonnegative',
+      sql`${t.stepsPlanned} >= 0 AND ${t.stepsRun} >= 0 AND ${t.stepsSucceeded} >= 0 AND ${t.replans} >= 0 AND ${t.modelCalls} >= 0 AND ${t.durationMs} >= 0 AND ${t.inputTokens} >= 0 AND ${t.outputTokens} >= 0 AND ${t.cacheReadTokens} >= 0 AND ${t.cacheWriteTokens} >= 0 AND ${t.estimatedCostMillicents} >= 0`,
+    ),
+  ],
+);

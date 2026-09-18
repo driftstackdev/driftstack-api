@@ -34,6 +34,8 @@ const SERVER_SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 
  * SDK — not a place to park an endpoint someone forgot to document.
  */
 const NOT_PUBLIC_API: Record<string, string> = {
+  '/v1/admin/agent-turns/summary':
+    'Staff panel only. Withheld from the customer-shipped spec because its admin surface may not grow (V-862); publishing it is the owner’s decision.',
   '/v1/internal/atlas-priority/event-status': 'Internal control-plane surface; not customer API.',
   '/v1/internal/atlas-priority/event/{id}': 'Internal control-plane surface; not customer API.',
   '/v1/internal/atlas-priority/probe-signature':

@@ -126,6 +126,18 @@ import {
   purgeTurnReceiptsForTerminatedAccountsBefore,
 } from '../db/agent-turn-receipts-repo.js';
 import { DrizzleAgentDecomposerUsageRecorder } from '../db/agent-decomposer-usage-recorder.js';
+import { DrizzleAgentTurnTelemetryRepo } from '../db/agent-turn-telemetry-repo.js';
+import {
+  AGENT_TURN_DURATION_BUCKETS_SECONDS,
+  AGENT_TURN_FIRST_PROGRESS_BUCKETS_SECONDS,
+  AGENT_TURN_REPLAN_BUCKETS,
+  AgentTurnTelemetry,
+} from '../services/agent-turn-telemetry.js';
+import { AgentTurnSummaryService } from '../services/agent-turn-summary.js';
+import {
+  enqueueNextAgentTurnTelemetryPrune,
+  registerAgentTurnTelemetryPruneJob,
+} from '../services/agent-turn-telemetry-prune-job.js';
 import { AgentRuntime } from '../services/agent-runtime.js';
 import { resolveTaskRefusalConfig, type RefusalPattern } from '../services/task-refusal.js';
 import { StubAgentExecutor, type AgentExecutor } from '../services/agent-executor.js';
@@ -310,6 +322,20 @@ export function shareFirstAsyncCall<TArgs extends unknown[]>(
  * inside the systemd stop window with the request drain ahead of it.
  */
 export const REDIS_QUIT_DEADLINE_MS = 2_000;
+
+/**
+ * Longest teardown waits for AI turn diagnostics rows that were decided but not
+ * yet written.
+ *
+ * The row is written off the response path on purpose, so at SIGTERM the last
+ * few turns' rows are still a deferred task or an open insert — and every deploy
+ * is a SIGTERM. Without this they were lost uncounted. It runs BEFORE the
+ * Postgres close (it needs the pool) and is short because it is the one step
+ * that is in series with the closes: a healthy insert takes milliseconds, and a
+ * sick database must not spend the stop window. `shutdown-budget-fits-systemd-
+ * stop-window` adds this to the worst case; at 1.5s it did not fit.
+ */
+export const AGENT_TURN_TELEMETRY_FLUSH_DEADLINE_MS = 750;
 
 /**
  * Run one teardown step with a deadline, resolving either way.
@@ -724,6 +750,57 @@ export async function createProductionDeps(
     metricsRegistry.registerCounter(
       METRIC_NAMES.macNodeLivekitRegisterTotal,
       'POST /v1/mac-nodes/register outcomes (ok | validation | encryption_error | not_found | unknown).',
+      ['outcome'],
+    );
+    // AI agent turns. All nine are emitted from services/agent-turn-telemetry.ts
+    // and every label value is a member of a closed union declared there.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.agentTurnTotal,
+      'Requests to the agent message route by outcome (completed | failed | halted_for_confirmation | clarified | refused | stopped | busy_409 | conflict_409 | rate_limited | rejected | error | manual_note | replayed).',
+      ['outcome'],
+    );
+    metricsRegistry.registerHistogram(
+      METRIC_NAMES.agentTurnDurationSeconds,
+      'Wall time of one agent message request, by outcome.',
+      AGENT_TURN_DURATION_BUCKETS_SECONDS,
+      ['outcome'],
+    );
+    metricsRegistry.registerHistogram(
+      METRIC_NAMES.agentTurnPhaseDurationSeconds,
+      'Time one agent turn spent in a phase (planning | starting_browser | executing | reading_page | answering), summed over repeats.',
+      AGENT_TURN_DURATION_BUCKETS_SECONDS,
+      ['phase'],
+    );
+    metricsRegistry.registerHistogram(
+      METRIC_NAMES.agentTurnTimeToFirstProgressSeconds,
+      'Seconds from an agent message request arriving to the first progress event of its turn, by transport (stream | json).',
+      AGENT_TURN_FIRST_PROGRESS_BUCKETS_SECONDS,
+      ['transport'],
+    );
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.agentTurnModelCallTotal,
+      'Settled model calls by call_kind (plan | re_plan | answer | unattributed) and model.',
+      ['call_kind', 'model'],
+    );
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.agentTurnTokensTotal,
+      'Model tokens by token_type (input | output | cache_read | cache_write), call_kind and model.',
+      ['token_type', 'call_kind', 'model'],
+    );
+    metricsRegistry.registerHistogram(
+      METRIC_NAMES.agentTurnReplans,
+      'Re-plan attempts in one agent turn, by outcome.',
+      AGENT_TURN_REPLAN_BUCKETS,
+      ['outcome'],
+    );
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.agentTurnStepFailureTotal,
+      'Failed agent steps by death-reason class and step_kind (the intent kind, or none).',
+      ['reason', 'step_kind'],
+    );
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.agentTurnTelemetryWriteTotal,
+      'Per-turn diagnostics row writes by outcome (ok | error | dropped | shed). The write is fire-and-forget, so error or dropped here is the only place its failure shows; shed is the row budget for turned-away requests under a storm.',
       ['outcome'],
     );
   }
@@ -1416,6 +1493,17 @@ export async function createProductionDeps(
     logger,
     accountAuditService,
   );
+  // Per-request AI telemetry. Constructed unconditionally — the diagnostics
+  // rows and the admin summary must work on a deployment with no metrics
+  // scraper, which is what production is today — and the metrics half switches
+  // on by itself when the registry exists.
+  const agentTurnTelemetryRepo = new DrizzleAgentTurnTelemetryRepo(dbHandle);
+  const agentTurnTelemetry = new AgentTurnTelemetry({
+    writer: agentTurnTelemetryRepo,
+    logger,
+    ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),
+  });
+  const agentTurnSummaryService = new AgentTurnSummaryService({ repo: agentTurnTelemetryRepo });
   // Arc 2 sub-slice 8.3 (v2-#8) — in-process transcript event bus.
   // Single-replica today; future redis-backed swap drops in here.
   const agentSessionEventBus = new AgentSessionEventBus();
@@ -1562,7 +1650,11 @@ export async function createProductionDeps(
       return undefined;
     },
     maxConcurrentTurnsPerAccount: config.agentTurnMaxAccountInFlight,
-    usageRecorder: agentDecomposerUsageRecorder,
+    // Observed on its way through: the usage recorder is the one seam that
+    // sees EVERY settled model call of a turn (the turn result carries only the
+    // plan's), so telemetry stands in front of it. The inner recorder is called
+    // exactly as before.
+    usageRecorder: agentTurnTelemetry.wrapUsageRecorder(agentDecomposerUsageRecorder),
     eventBus: agentSessionEventBus,
     ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),
     // W589 — task-refusal audit logger (which rule fired → audit trail).
@@ -1703,6 +1795,13 @@ export async function createProductionDeps(
     logger,
   });
   await enqueueNextScheduledJobsPrune({ scheduledJobs: scheduledJobsService });
+  // AI turn diagnostics retention (daily; deletes rows older than 90 days).
+  registerAgentTurnTelemetryPruneJob({
+    scheduledJobs: scheduledJobsService,
+    repo: agentTurnTelemetryRepo,
+    logger,
+  });
+  await enqueueNextAgentTurnTelemetryPrune({ scheduledJobs: scheduledJobsService });
 
   // V-266: browser-OAuth-style CLI / GUI activation flow. The bind step
   // temporarily stores a freshly minted API key in Redis, so the feature
@@ -3306,6 +3405,8 @@ export async function createProductionDeps(
       ? { nowpaymentsApiClient, nowpaymentsIpnCallbackUrl }
       : {}),
     costMonitoringService,
+    agentTurnTelemetry,
+    agentTurnSummaryService,
     readinessChecks,
     // 2026-05-20 — env-var-controlled escape hatch. Some webview
     // contexts (Tauri custom-scheme pages, certain mobile in-app
@@ -3580,6 +3681,9 @@ export async function createProductionDeps(
     // allSettled never rejects — because a failed close must not prevent
     // process.exit(0); a teardown that throws is a teardown that leaves the
     // deploy hanging.
+    await withTeardownDeadline(AGENT_TURN_TELEMETRY_FLUSH_DEADLINE_MS, () =>
+      agentTurnTelemetry.flush(),
+    );
     await Promise.allSettled([
       (async () => {
         await sentry.flush(2000);

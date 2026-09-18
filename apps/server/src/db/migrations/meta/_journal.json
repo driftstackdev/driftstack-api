@@ -876,6 +876,13 @@
       "when": 1786665600012,
       "tag": "0124_add_account_proxy_probe_readings",
       "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1786665600013,
+      "tag": "0125_add_agent_turn_telemetry",
+      "breakpoints": true
     }
   ]
 }

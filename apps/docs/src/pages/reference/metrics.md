@@ -77,6 +77,27 @@ The current counter catalogue (all `driftstack_*` namespaced):
 | `driftstack_retention_purge_total`       | `arm`, `outcome` | account-deletion data purge by `arm` (byok / proxy_secrets / profiles / snapshots) and `outcome` (purged / failed / skipped); `skipped` means that data type is not configured on this deployment |
 | `driftstack_scheduled_job_chain_pending` | `job_type`       | whether each recurring background job is still scheduled: 1 while its next run is pending, 0 when it has stopped and will not resume without a restart                                            |
 
+### AI agent turns
+
+One request to `POST /v1/agent-sessions/:id/message` is counted once,
+however it ended. The three `_seconds` metrics and
+`driftstack_agent_turn_replans` are histograms: each is exposed as
+`_bucket{le="…"}`, `_sum` and `_count` series, the shape
+`histogram_quantile` reads. No label on any of them ever carries a
+session, an account, a URL, the task or anything the model wrote.
+
+| Metric                                                 | Labels                             | What it tracks                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `driftstack_agent_turn_total`                          | `outcome`                          | requests by how they ended: completed / failed / halted_for_confirmation / clarified / refused / stopped / busy_409 (the previous turn is still running) / conflict_409 / rate_limited / rejected / error / manual_note / replayed (a retried request answered from its stored result)      |
+| `driftstack_agent_turn_duration_seconds`               | `outcome`                          | histogram — wall time of one request                                                                                                                                                                                                                                                        |
+| `driftstack_agent_turn_phase_duration_seconds`         | `phase`                            | histogram — time a turn spent in each phase (planning / starting_browser / executing / reading_page / answering), summed when a phase repeats                                                                                                                                               |
+| `driftstack_agent_turn_time_to_first_progress_seconds` | `transport`                        | histogram — seconds from the request arriving to the first progress event of its turn; `transport` is `stream` (the caller asked for `text/event-stream` and sees it live) or `json`                                                                                                        |
+| `driftstack_agent_turn_model_call_total`               | `call_kind`, `model`               | model calls that returned, by `call_kind` (plan / re_plan / answer / unattributed) and `model` (a model id from the published list, or `other`)                                                                                                                                             |
+| `driftstack_agent_turn_tokens_total`                   | `token_type`, `call_kind`, `model` | model tokens by `token_type` (input / output / cache_read / cache_write)                                                                                                                                                                                                                    |
+| `driftstack_agent_turn_replans`                        | `outcome`                          | histogram — how many times one turn went back to planning after a step failed                                                                                                                                                                                                               |
+| `driftstack_agent_turn_step_failure_total`             | `reason`, `step_kind`              | failed steps by a fixed failure class and the kind of step (navigate / interact / wait / capture / scroll / behavioral_pause, or `none` when the failure was not on a step)                                                                                                                 |
+| `driftstack_agent_turn_telemetry_write_total`          | `outcome`                          | writes of the per-turn diagnostics record (ok / error / dropped / shed). The write never delays or fails a turn, so this counter is the only place its failure shows: alert on `error` or `dropped`. `shed` is a per-minute budget on records for turned-away requests and is not a failure |
+
 ### Webhook ingress
 
 | Metric                                 | Labels    | What it tracks                                                                                                                                 |
@@ -146,6 +167,14 @@ language):
 - `sum by (prefix) (rate(driftstack_admin_audit_emit_total[1h])) > 10`
   — unusually high admin-action volume in any one prefix bucket;
   audit whether the activity is expected.
+- `(sum(increase(driftstack_agent_turn_total{outcome="completed"}[6h])) or vector(0)) / sum(increase(driftstack_agent_turn_total{outcome=~"completed|failed|refused|stopped|error"}[6h])) < 0.5`
+  — fewer than half of the AI turns that reached a verdict completed.
+- `histogram_quantile(0.95, sum by (le) (rate(driftstack_agent_turn_time_to_first_progress_seconds_bucket{transport="stream"}[30m]))) > 5`
+  — customers are waiting more than five seconds for the first sign
+  that the AI is working.
+- `sum(increase(driftstack_agent_turn_telemetry_write_total{outcome=~"error|dropped"}[15m])) > 0`
+  — per-turn diagnostics are being lost; the turns themselves are
+  unaffected.
 
 Set thresholds per your traffic baseline; the rates above are
 illustrative.

@@ -36,7 +36,14 @@ function pagedMetrics(): Set<string> {
   const out = new Set<string>();
   const text = alertsText();
   for (const block of text.matchAll(/expr: \|\n([\s\S]*?)\n\s*for:/g)) {
-    for (const m of block[1]!.matchAll(/driftstack_[a-z_]+/g)) out.add(m[0]);
+    for (const m of block[1]!.matchAll(/driftstack_[a-z_]+/g)) {
+      // A rule selects a histogram by an exposed series name, never by the
+      // registered one. Credit the registered name, or a histogram that pages
+      // would have to be listed as dashboard-only to satisfy the arm below —
+      // the exact false statement this file exists to prevent.
+      out.add(m[0].replace(/_(?:bucket|sum|count)$/, ''));
+      out.add(m[0]);
+    }
   }
   return out;
 }

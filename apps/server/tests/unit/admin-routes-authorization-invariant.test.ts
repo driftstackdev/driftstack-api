@@ -199,8 +199,9 @@ describe('/v1/admin route authorization invariant', () => {
     // Refreshed after confirming the gating invariant below is green (every
     // live /v1/admin route still carries internal-admin scope or requireOwner)
     // and that no admin route changed since `8dad6e4f6` — the count itself had
-    // gone stale earlier.
-    expect(routes).toHaveLength(68);
+    // gone stale earlier. 69 with GET /v1/admin/agent-turns/summary (AI turn
+    // health, aggregates only), which carries the same internal-admin scope.
+    expect(routes).toHaveLength(69);
     expect(routes.length).toBeGreaterThanOrEqual(60);
   });
 

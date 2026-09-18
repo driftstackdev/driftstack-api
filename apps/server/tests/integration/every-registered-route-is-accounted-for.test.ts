@@ -55,6 +55,12 @@ const NOT_IN_THE_CONTRACT: ReadonlyMap<string, string> = new Map([
   ['GET /docs/openapi.json', 'the docs page fetching the contract it renders'],
   ['GET /docs/openapi.yaml', 'YAML rendering of the same contract'],
 
+  // ── Staff-only, withheld from the customer-shipped spec. ──
+  [
+    'GET /v1/admin/agent-turns/summary',
+    'staff panel only; the admin surface in the customer spec may not grow (V-862)',
+  ],
+
   // ── Internal fleet plane. Called by the harvester and fleet scripts with a
   //    separate credential (lib/internal-fleet-auth.ts), never by customers. ──
   ['GET /v1/internal/atlas-priority/queue', 'internal fleet observability; not a customer surface'],
@@ -279,7 +285,9 @@ describe('every registered route is accounted for', () => {
 
   it('CRITICAL every REACHABLE exempt /v1 route answers exactly 401 or 403 anonymously. Stated as an allowlist, not as "never 2xx": the first version of this assertion only forbade 2xx, and a 503 from an unwired route satisfied that having proved nothing. Four of the ten probes were exactly that. These routes are also the ones security-declaration-matches-enforcement cannot reach, because it reads the contract — and one of them mints a session control token while another relays raw input into a live browser session.', () => {
     const reachable = [...anonymousStatus.entries()].filter(([op]) => !UNWIRED_HERE.has(op));
-    expect(reachable.length, 'exempt /v1 routes actually reachable in this fixture').toBe(7);
+    // 8 since GET /v1/admin/agent-turns/summary joined the exempt set: reachable
+    // here, and it answers 401 anonymously like the rest.
+    expect(reachable.length, 'exempt /v1 routes actually reachable in this fixture').toBe(8);
     expect(
       reachable
         .filter(([, status]) => status !== 401 && status !== 403)

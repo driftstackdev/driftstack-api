@@ -638,7 +638,10 @@ describe('all-route caller-authority invariant', () => {
     // 2026-09-14 — 314 since GET /v1/auth/oauth-client/callback (the v1 PKCE-cookie
     // XHR exchange) was retired with the cookie path; it was a public protocol route,
     // so the structurally-authorized count below does not move either.
-    expect(routes).toHaveLength(314);
+    // 2026-09-18 — 315 since GET /v1/admin/agent-turns/summary (the operator view
+    // of AI turn health). Staff-scope gated, so the structurally-authorized count
+    // below moves WITH it; had it shipped ungated only this number would have.
+    expect(routes).toHaveLength(315);
     // +1 (not +2): only the LIVE network route is structurally authorized; the
     // disabled twin is a stub in DISABLED_EXEMPTIONS. Had the live route shipped
     // ungated, this number would not have moved while the total moved by two.
@@ -650,7 +653,8 @@ describe('all-route caller-authority invariant', () => {
     // step with the total is the point of this arm — a route that shipped
     // ungated would move the total and leave this number where it was.
     // 221 since #7's captures read is structurally authorized (its disabled twin is a stub).
-    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(221);
+    // 222 since GET /v1/admin/agent-turns/summary (requireScope driftstack_internal_admin).
+    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(222);
   });
 
   it('every route has structural caller authority or one exact reviewed exemption', () => {

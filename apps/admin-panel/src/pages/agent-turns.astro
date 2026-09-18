@@ -1,0 +1,674 @@
+---
+import AdminLayout from '../layouts/AdminLayout.astro';
+import { resolveApiBaseUrl } from '../lib/api-base-url';
+
+// AI turns — how the AI automation is actually behaving, over a time window.
+//
+// Backed by GET /v1/admin/agent-turns/summary. Aggregates over the whole
+// deployment and nothing else: the table behind it holds no account, session,
+// task, URL or answer, so there is no per-customer drill-down here and no way
+// to build one from this data.
+//
+// Two rules shape every number on the page:
+//
+//   • A rate over nothing renders "—", never "0%". At low volume "no turns
+//     yet" and "none completed" are both likely and must not look the same.
+//   • Every rate shows its denominator. "50%" that means "one of two" has to be
+//     readable as exactly that.
+//
+// Progressive enhancement, same as every sibling page: SSG renders a neutral
+// shell that claims nothing; the inline script reads the staff bearer from
+// localStorage, fetches, fills the regions, and re-polls every 60s.
+
+const PAGE_TITLE = 'AI turns';
+const apiBaseUrl = resolveApiBaseUrl();
+
+const WINDOWS = [
+  { hours: 1, label: 'Last hour' },
+  { hours: 24, label: 'Last 24 hours' },
+  { hours: 168, label: 'Last 7 days' },
+  { hours: 720, label: 'Last 30 days' },
+  { hours: 2160, label: 'Last 90 days' },
+] as const;
+
+// Operator-facing copy for each closed value the API can return. An unknown
+// value renders as itself, so a class added server-side is visible here before
+// this table learns a sentence for it.
+const OUTCOME_LABELS: Record<string, string> = {
+  completed: 'Completed',
+  failed: 'Failed',
+  halted_for_confirmation: 'Paused to confirm a purchase, payment or deletion',
+  clarified: 'Asked the customer a question',
+  refused: 'Refused (no plan)',
+  stopped: 'Interrupted by the customer',
+  busy_409: '409 — previous turn still running',
+  conflict_409: '409 — other conflict',
+  rate_limited: '429 — rate limited',
+  rejected: 'Other 4xx',
+  error: '5xx',
+};
+
+const REASON_LABELS: Record<string, string> = {
+  halted_for_confirmation: 'Stopped before a consequential action and waited for a human',
+  element_never_appeared_in_retry_budget: 'The element was never found inside the retry budget',
+  element_click_intercepted: 'Something sat over the target; the outcome of the click is unknown',
+  element_not_interactable: 'The selector matched an element that is hidden or disabled',
+  wait_condition_not_met: 'The awaited condition never became true',
+  capture_failed: 'The page could not be captured',
+  page_load_failed: 'The page did not load',
+  invalid_parameter: 'The plan supplied a parameter or selector that was rejected',
+  result_too_large: 'The result exceeded the inline size cap',
+  readback_gate_blocked: 'Every step succeeded but the answer step was never reached',
+  answer_path_failed_after_being_reached: 'The answer step ran and produced no answer',
+  turn_errored: 'The request ended in a server error',
+  harness_error_unclassified: 'A device failure with no more specific class',
+  session_error: 'The browser session itself failed, not the step',
+  policy_refused: 'Refused by the task policy screen before any model call',
+  model_refused: 'The model declined the task',
+  model_unavailable: 'The model provider was unavailable after retries',
+  customer_closed_session: 'The customer closed the session mid-turn',
+  control_taken_mid_turn: 'A person took control while the turn was running',
+  budget_exhausted: 'The session ran out of AI budget mid-turn',
+  transcript_limit: 'The session reached its transcript limit',
+  session_not_active: 'The session was paused or already ended',
+  control_unavailable: 'A person had control, or control was changing hands',
+  turn_in_progress: 'The previous turn on this session was still running',
+  idempotency_in_progress: 'The same Idempotency-Key was still running',
+  idempotency_mismatch: 'An Idempotency-Key was reused for a different request',
+  account_turn_limit: 'The account already had its maximum turns in flight',
+  rate_limited: 'Rate limited',
+  request_rejected: 'Invalid request, unknown session, or no AI key configured',
+};
+
+const PHASE_LABELS: Record<string, string> = {
+  planning: 'Planning (model)',
+  starting_browser: 'Starting the browser',
+  executing: 'Running steps',
+  reading_page: 'Reading the page',
+  answering: 'Answering (model)',
+};
+---
+
+<AdminLayout title={PAGE_TITLE}>
+  <div class="px-6 py-6 max-w-7xl mx-auto">
+    <header class="mb-6">
+      <h1 class="text-2xl font-semibold text-tk-ink">{PAGE_TITLE}</h1>
+      <div class="mt-3 h-px w-16 bg-gradient-to-r from-oxblood-700 to-transparent" aria-hidden="true">
+      </div>
+      <p class="mt-1 text-sm text-tk-ink-2 max-w-3xl">
+        Where AI tasks complete and where they die, across the whole deployment. Aggregates only:
+        the records behind this page hold no account, session, task, URL or answer. Source:
+        <code class="text-xs bg-tk-hover px-1 rounded">GET /v1/admin/agent-turns/summary</code>.
+        Auto-refresh every 60 s.
+      </p>
+    </header>
+
+    <section class="mb-4 flex flex-wrap gap-3 items-end">
+      <div>
+        <label for="window-hours" class="block text-xs text-tk-ink-3 mb-1">Time window</label>
+        <select
+          id="window-hours"
+          disabled
+          aria-disabled="true"
+          title="Available after staff sign-in."
+          class="border border-tk-border rounded-md px-3 py-1.5 text-sm bg-tk-surface disabled:cursor-not-allowed disabled:bg-tk-hover disabled:text-tk-ink-3"
+        >
+          {WINDOWS.map((w) => <option value={w.hours} selected={w.hours === 24}>{w.label}</option>)}
+        </select>
+      </div>
+      <button
+        id="refresh-btn"
+        type="button"
+        disabled
+        aria-disabled="true"
+        title="Available after staff sign-in."
+        class="ml-auto px-3 py-1.5 text-sm rounded-md border border-tk-border bg-tk-surface hover:bg-tk-bg disabled:cursor-not-allowed disabled:text-tk-ink-3"
+      >
+        Refresh now
+      </button>
+    </section>
+
+    <!-- Headline numbers. Each card: the value, then what it is a share OF. -->
+    <section class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6" aria-live="polite">
+      <div class="bg-tk-surface rounded-md border border-tk-border px-4 py-3">
+        <div class="text-xs text-tk-ink-3 uppercase tracking-wide">Completion rate</div>
+        <div class="text-2xl font-semibold text-tk-ink mt-1" data-stat="completionRate">—</div>
+        <div class="text-xs text-tk-ink-3 mt-1" data-stat="completionBasis">No data loaded.</div>
+      </div>
+      <div class="bg-tk-surface rounded-md border border-tk-border px-4 py-3">
+        <div class="text-xs text-tk-ink-3 uppercase tracking-wide">409 rate</div>
+        <div class="text-2xl font-semibold text-tk-ink mt-1" data-stat="conflictRate">—</div>
+        <div class="text-xs text-tk-ink-3 mt-1" data-stat="conflictBasis">No data loaded.</div>
+      </div>
+      <div class="bg-tk-surface rounded-md border border-tk-border px-4 py-3">
+        <div class="text-xs text-tk-ink-3 uppercase tracking-wide">First progress p95</div>
+        <div class="text-2xl font-semibold text-tk-ink mt-1" data-stat="firstProgressP95">—</div>
+        <div class="text-xs text-tk-ink-3 mt-1" data-stat="firstProgressBasis">No data loaded.</div>
+      </div>
+      <div class="bg-tk-surface rounded-md border border-tk-border px-4 py-3">
+        <div class="text-xs text-tk-ink-3 uppercase tracking-wide">Turn time p50 / p95</div>
+        <div class="text-2xl font-semibold text-tk-ink mt-1" data-stat="turnTime">—</div>
+        <div class="text-xs text-tk-ink-3 mt-1" data-stat="turnBasis">No data loaded.</div>
+      </div>
+      <div class="bg-tk-surface rounded-md border border-tk-border px-4 py-3">
+        <div class="text-xs text-tk-ink-3 uppercase tracking-wide">Re-plan rate</div>
+        <div class="text-2xl font-semibold text-tk-ink mt-1" data-stat="replanRate">—</div>
+        <div class="text-xs text-tk-ink-3 mt-1" data-stat="replanBasis">No data loaded.</div>
+      </div>
+      <div class="bg-tk-surface rounded-md border border-tk-border px-4 py-3">
+        <div class="text-xs text-tk-ink-3 uppercase tracking-wide">Est. cost per turn</div>
+        <div class="text-2xl font-semibold text-tk-ink mt-1" data-stat="costPerTurn">—</div>
+        <div class="text-xs text-tk-ink-3 mt-1" data-stat="costBasis">No data loaded.</div>
+      </div>
+    </section>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <section class="bg-tk-surface rounded-md border border-tk-border overflow-hidden">
+        <h2 class="px-4 py-2 text-sm font-semibold text-tk-ink bg-tk-bg border-b border-tk-border">
+          Where tasks die
+        </h2>
+        <table class="min-w-full text-sm">
+          <thead class="text-xs uppercase tracking-wide text-tk-ink-2">
+            <tr>
+              <th scope="col" class="px-4 py-2 text-left">Reason</th>
+              <th scope="col" class="px-4 py-2 text-left">Step kind</th>
+              <th scope="col" class="px-4 py-2 text-right">Count</th>
+              <th scope="col" class="px-4 py-2 text-right">Share</th>
+            </tr>
+          </thead>
+          <tbody id="deaths-tbody" class="divide-y divide-slate-100">
+            <tr>
+              <td colspan="4" class="px-4 py-6 text-center text-tk-ink-3"
+                >Nothing is shown until the summary loads.</td
+              >
+            </tr>
+          </tbody>
+        </table>
+        <p class="px-4 py-2 text-xs text-tk-ink-3 border-t border-tk-border">
+          Turns that ended failed, refused, stopped or in a server error. Shares are of those turns
+          only; requests that were turned away before any task started are listed separately.
+        </p>
+      </section>
+
+      <section class="bg-tk-surface rounded-md border border-tk-border overflow-hidden">
+        <h2 class="px-4 py-2 text-sm font-semibold text-tk-ink bg-tk-bg border-b border-tk-border">
+          Requests turned away
+        </h2>
+        <table class="min-w-full text-sm">
+          <thead class="text-xs uppercase tracking-wide text-tk-ink-2">
+            <tr>
+              <th scope="col" class="px-4 py-2 text-left">Reason</th>
+              <th scope="col" class="px-4 py-2 text-right">Count</th>
+              <th scope="col" class="px-4 py-2 text-right">Share</th>
+            </tr>
+          </thead>
+          <tbody id="turned-away-tbody" class="divide-y divide-slate-100">
+            <tr>
+              <td colspan="3" class="px-4 py-6 text-center text-tk-ink-3"
+                >Nothing is shown until the summary loads.</td
+              >
+            </tr>
+          </tbody>
+        </table>
+        <p class="px-4 py-2 text-xs text-tk-ink-3 border-t border-tk-border">
+          Answered with a 409, a 429 or another 4xx before any task started. Under a burst of these
+          the records saturate at 60 a minute; the 409 rate above is exact only below that.
+        </p>
+      </section>
+
+      <section class="bg-tk-surface rounded-md border border-tk-border overflow-hidden">
+        <h2 class="px-4 py-2 text-sm font-semibold text-tk-ink bg-tk-bg border-b border-tk-border">
+          How requests ended
+        </h2>
+        <table class="min-w-full text-sm">
+          <thead class="text-xs uppercase tracking-wide text-tk-ink-2">
+            <tr>
+              <th scope="col" class="px-4 py-2 text-left">Outcome</th>
+              <th scope="col" class="px-4 py-2 text-right">Count</th>
+              <th scope="col" class="px-4 py-2 text-right">Share of requests</th>
+            </tr>
+          </thead>
+          <tbody id="outcomes-tbody" class="divide-y divide-slate-100">
+            <tr>
+              <td colspan="3" class="px-4 py-6 text-center text-tk-ink-3"
+                >Nothing is shown until the summary loads.</td
+              >
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="bg-tk-surface rounded-md border border-tk-border overflow-hidden">
+        <h2 class="px-4 py-2 text-sm font-semibold text-tk-ink bg-tk-bg border-b border-tk-border">
+          Where the time goes
+        </h2>
+        <table class="min-w-full text-sm">
+          <thead class="text-xs uppercase tracking-wide text-tk-ink-2">
+            <tr>
+              <th scope="col" class="px-4 py-2 text-left">Phase</th>
+              <th scope="col" class="px-4 py-2 text-right">p50</th>
+              <th scope="col" class="px-4 py-2 text-right">p95</th>
+            </tr>
+          </thead>
+          <tbody id="phases-tbody" class="divide-y divide-slate-100">
+            <tr>
+              <td colspan="3" class="px-4 py-6 text-center text-tk-ink-3"
+                >Nothing is shown until the summary loads.</td
+              >
+            </tr>
+          </tbody>
+        </table>
+        <p class="px-4 py-2 text-xs text-tk-ink-3 border-t border-tk-border">
+          Per turn that entered the phase; a repeated phase (a re-plan) is summed. A phase a turn
+          never entered is left out rather than counted as zero. "After the turn" is the time
+          between the AI finishing and the response being ready (saving the transcript, settling
+          the budget): when it is high the storage is slow, not the model.
+        </p>
+      </section>
+
+      <section class="bg-tk-surface rounded-md border border-tk-border overflow-hidden">
+        <h2 class="px-4 py-2 text-sm font-semibold text-tk-ink bg-tk-bg border-b border-tk-border">
+          Tokens and models
+        </h2>
+        <table class="min-w-full text-sm">
+          <thead class="text-xs uppercase tracking-wide text-tk-ink-2">
+            <tr>
+              <th scope="col" class="px-4 py-2 text-left">Measure</th>
+              <th scope="col" class="px-4 py-2 text-right">Per turn</th>
+              <th scope="col" class="px-4 py-2 text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody id="tokens-tbody" class="divide-y divide-slate-100">
+            <tr>
+              <td colspan="3" class="px-4 py-6 text-center text-tk-ink-3"
+                >Nothing is shown until the summary loads.</td
+              >
+            </tr>
+          </tbody>
+        </table>
+        <p class="px-4 py-2 text-xs text-tk-ink-3 border-t border-tk-border">
+          Cost is a list-price estimate from token counts. It is not what any customer was billed.
+        </p>
+      </section>
+    </div>
+
+    <p id="error-banner" class="mt-3 text-sm text-red-700 hidden" role="alert"></p>
+    <p id="status-line" class="mt-2 text-xs text-tk-ink-3"></p>
+  </div>
+
+  <script is:inline define:vars={{ apiBaseUrl, OUTCOME_LABELS, REASON_LABELS, PHASE_LABELS }}>
+    const POLL_INTERVAL_MS = 60000;
+    // Not a runtime phase: the route's own work once the AI has returned.
+    const AFTER_TURN_LABEL = 'After the turn (saving, settling)';
+    const SUMMARY_REQUEST_TIMEOUT_MS = 15000;
+    const errorBanner = document.getElementById('error-banner');
+    const statusLine = document.getElementById('status-line');
+    const refreshBtn = document.getElementById('refresh-btn');
+    const windowSelect = document.getElementById('window-hours');
+    const tbodies = {
+      deaths: { el: document.getElementById('deaths-tbody'), cols: 4 },
+      turnedAway: { el: document.getElementById('turned-away-tbody'), cols: 3 },
+      outcomes: { el: document.getElementById('outcomes-tbody'), cols: 3 },
+      phases: { el: document.getElementById('phases-tbody'), cols: 3 },
+      tokens: { el: document.getElementById('tokens-tbody'), cols: 3 },
+    };
+    const stats = Object.fromEntries(
+      Array.from(document.querySelectorAll('[data-stat]')).map((el) => [
+        el.getAttribute('data-stat'),
+        el,
+      ]),
+    );
+    let manualRefreshLoading = false;
+    let loadController = null;
+    // Stale-response guard: a slow earlier response must not overwrite a newer
+    // window's render. Each call takes a token and only writes if still current.
+    let inFlight = 0;
+
+    refreshBtn.addEventListener('click', () => fetchSummary(true));
+    windowSelect.addEventListener('change', () => fetchSummary());
+
+    function escapeHtml(s) {
+      return String(s).replace(
+        /[&<>"']/g,
+        (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+      );
+    }
+    // Every formatter answers "—" for anything that is not a finite number, so
+    // a malformed payload can neither render as a measured zero nor carry
+    // markup into a cell.
+    function isNumber(n) {
+      return typeof n === 'number' && Number.isFinite(n);
+    }
+    function fmtInt(n) {
+      return isNumber(n) ? Math.round(n).toLocaleString('en-US') : '—';
+    }
+    // A rate over nothing is null server-side and "—" here. Never "0%".
+    function fmtRate(rate) {
+      if (!isNumber(rate)) return '—';
+      return (rate * 100).toFixed(1) + '%';
+    }
+    function fmtMs(ms) {
+      if (!isNumber(ms)) return '—';
+      if (ms < 1000) return Math.round(ms) + ' ms';
+      if (ms < 60000) return (ms / 1000).toFixed(1) + ' s';
+      return (ms / 60000).toFixed(1) + ' min';
+    }
+    function fmtCents(cents) {
+      if (!isNumber(cents)) return '—';
+      return '$' + (cents / 100).toFixed(cents < 100 ? 4 : 2);
+    }
+    function fmtCount(n) {
+      return fmtInt(n);
+    }
+
+    function getToken() {
+      try {
+        return localStorage.getItem('ds_web_session_token') || '';
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function setControlAuthority(available, reason) {
+      const disabled = !available || manualRefreshLoading;
+      refreshBtn.disabled = disabled;
+      refreshBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      windowSelect.disabled = !available;
+      windowSelect.setAttribute('aria-disabled', available ? 'false' : 'true');
+      if (!available) {
+        refreshBtn.title = reason || 'Available after staff sign-in.';
+        windowSelect.title = reason || 'Available after staff sign-in.';
+      } else {
+        windowSelect.removeAttribute('title');
+        if (manualRefreshLoading) refreshBtn.title = 'Wait for the current refresh to finish.';
+        else refreshBtn.removeAttribute('title');
+      }
+    }
+
+    function emptyRow(cols, message) {
+      return (
+        '<tr><td colspan="' +
+        escapeHtml(cols) +
+        '" class="px-4 py-6 text-center text-tk-ink-3">' +
+        escapeHtml(message) +
+        '</td></tr>'
+      );
+    }
+
+    // On any failure EVERY region is cleared. A stale completion rate left on
+    // screen under an error banner would be read as current.
+    function renderUnavailable(message) {
+      Object.values(tbodies).forEach((t) => {
+        t.el.innerHTML = emptyRow(t.cols, message);
+      });
+      Object.entries(stats).forEach(([key, el]) => {
+        el.textContent = key.endsWith('Basis') ? message : '—';
+      });
+      statusLine.textContent = message;
+    }
+
+    function showError(msg) {
+      errorBanner.textContent = msg;
+      errorBanner.classList.remove('hidden');
+    }
+
+    function renderHeadline(data) {
+      const t = data.turns;
+      const c = data.conflicts;
+      const d = data.durations_ms;
+      stats.completionRate.textContent = fmtRate(t.completion_rate);
+      stats.completionBasis.textContent =
+        t.decided === 0
+          ? 'No turn reached a verdict in this window.'
+          : fmtInt(t.completed) + ' of ' + fmtInt(t.decided) + ' turns that reached a verdict';
+      stats.conflictRate.textContent = fmtRate(c.rate_409);
+      stats.conflictBasis.textContent =
+        data.requests.total === 0
+          ? 'No requests in this window.'
+          : fmtInt(c.busy_409) +
+            ' still-running + ' +
+            fmtInt(c.conflict_409) +
+            ' other, of ' +
+            fmtInt(data.requests.total) +
+            ' requests';
+      stats.firstProgressP95.textContent = fmtMs(d.time_to_first_progress.stream.p95);
+      stats.firstProgressBasis.textContent =
+        d.time_to_first_progress.stream.p95 === null
+          ? 'No streamed turn showed progress in this window.'
+          : 'Streamed requests; p50 ' + fmtMs(d.time_to_first_progress.stream.p50);
+      stats.turnTime.textContent =
+        d.turn.p50 === null ? '—' : fmtMs(d.turn.p50) + ' / ' + fmtMs(d.turn.p95);
+      stats.turnBasis.textContent =
+        t.ran === 0 ? 'No turn ran in this window.' : 'Across ' + fmtInt(t.ran) + ' turns that ran';
+      stats.replanRate.textContent = fmtRate(t.replan_rate);
+      stats.replanBasis.textContent =
+        t.ran === 0
+          ? 'No turn ran in this window.'
+          : fmtInt(t.recovered_after_replan) + ' recovered by re-planning';
+      stats.costPerTurn.textContent = fmtCents(data.cost.estimated_cents_per_turn);
+      stats.costBasis.textContent =
+        t.ran === 0
+          ? 'No turn ran in this window.'
+          : 'Total ' + fmtCents(data.cost.estimated_cents_total) + ' (list-price estimate)';
+    }
+
+    function renderDeaths(deaths) {
+      if (deaths.length === 0) {
+        tbodies.deaths.el.innerHTML = emptyRow(4, 'No turn died in this window.');
+        return;
+      }
+      tbodies.deaths.el.innerHTML = deaths
+        .map(
+          (d) =>
+            '<tr class="hover:bg-tk-bg">' +
+            '<td class="px-4 py-2 text-tk-ink-2"><div>' +
+            escapeHtml(REASON_LABELS[d.reason] || d.reason) +
+            '</div><div class="text-xs text-tk-ink-3 font-mono">' +
+            escapeHtml(d.reason) +
+            '</div></td>' +
+            '<td class="px-4 py-2 text-tk-ink-2 font-mono text-xs">' +
+            escapeHtml(d.step_kind || '—') +
+            '</td>' +
+            '<td class="px-4 py-2 text-right text-tk-ink tabular-nums">' +
+            fmtInt(d.count) +
+            '</td>' +
+            '<td class="px-4 py-2 text-right text-tk-ink-2 tabular-nums">' +
+            fmtRate(d.share) +
+            '</td></tr>',
+        )
+        .join('');
+    }
+
+    function renderTurnedAway(turnedAway) {
+      if (turnedAway.length === 0) {
+        tbodies.turnedAway.el.innerHTML = emptyRow(3, 'No request was turned away in this window.');
+        return;
+      }
+      tbodies.turnedAway.el.innerHTML = turnedAway
+        .map(
+          (d) =>
+            '<tr class="hover:bg-tk-bg">' +
+            '<td class="px-4 py-2 text-tk-ink-2"><div>' +
+            escapeHtml(REASON_LABELS[d.reason] || d.reason) +
+            '</div><div class="text-xs text-tk-ink-3 font-mono">' +
+            escapeHtml(d.reason) +
+            '</div></td>' +
+            '<td class="px-4 py-2 text-right text-tk-ink tabular-nums">' +
+            fmtInt(d.count) +
+            '</td>' +
+            '<td class="px-4 py-2 text-right text-tk-ink-2 tabular-nums">' +
+            fmtRate(d.share) +
+            '</td></tr>',
+        )
+        .join('');
+    }
+
+    function renderOutcomes(requests) {
+      if (requests.total === 0) {
+        tbodies.outcomes.el.innerHTML = emptyRow(3, 'No requests in this window.');
+        return;
+      }
+      tbodies.outcomes.el.innerHTML = Object.entries(requests.by_outcome)
+        .sort((a, b) => b[1] - a[1])
+        .map(
+          ([outcome, count]) =>
+            '<tr class="hover:bg-tk-bg">' +
+            '<td class="px-4 py-2 text-tk-ink-2">' +
+            escapeHtml(OUTCOME_LABELS[outcome] || outcome) +
+            '</td>' +
+            '<td class="px-4 py-2 text-right text-tk-ink tabular-nums">' +
+            fmtInt(count) +
+            '</td>' +
+            '<td class="px-4 py-2 text-right text-tk-ink-2 tabular-nums">' +
+            fmtRate(count / requests.total) +
+            '</td></tr>',
+        )
+        .join('');
+    }
+
+    function renderPhases(phases, afterTurn) {
+      const line = (label, percentiles) =>
+        '<tr class="hover:bg-tk-bg">' +
+        '<td class="px-4 py-2 text-tk-ink-2">' +
+        escapeHtml(label) +
+        '</td>' +
+        '<td class="px-4 py-2 text-right text-tk-ink tabular-nums">' +
+        fmtMs(percentiles ? percentiles.p50 : null) +
+        '</td>' +
+        '<td class="px-4 py-2 text-right text-tk-ink tabular-nums">' +
+        fmtMs(percentiles ? percentiles.p95 : null) +
+        '</td></tr>';
+      tbodies.phases.el.innerHTML =
+        Object.keys(PHASE_LABELS)
+          .map((phase) => line(PHASE_LABELS[phase], phases[phase]))
+          .join('') + line(AFTER_TURN_LABEL, afterTurn);
+    }
+
+    function renderTokens(data) {
+      const tk = data.tokens;
+      const line = (label, perTurn, total) =>
+        '<tr class="hover:bg-tk-bg"><td class="px-4 py-2 text-tk-ink-2">' +
+        escapeHtml(label) +
+        '</td><td class="px-4 py-2 text-right text-tk-ink tabular-nums">' +
+        escapeHtml(perTurn) +
+        '</td><td class="px-4 py-2 text-right text-tk-ink-2 tabular-nums">' +
+        escapeHtml(total) +
+        '</td></tr>';
+      const rows = [
+        line('Input tokens', fmtCount(tk.per_turn.input), fmtInt(tk.total.input)),
+        line('Output tokens', fmtCount(tk.per_turn.output), fmtInt(tk.total.output)),
+        line('Cache-read tokens', fmtCount(tk.per_turn.cache_read), fmtInt(tk.total.cache_read)),
+        line('Cache-write tokens', fmtCount(tk.per_turn.cache_write), fmtInt(tk.total.cache_write)),
+        line('Prompt served from cache', fmtRate(tk.cache_read_share), '—'),
+        line(
+          'Model calls per turn',
+          isNumber(data.turns.avg_model_calls) ? data.turns.avg_model_calls.toFixed(2) : '—',
+          '—',
+        ),
+        line('Step success rate', fmtRate(data.turns.step_success_rate), '—'),
+      ];
+      data.models.forEach((m) => {
+        rows.push(line('Turns on ' + m.model, '—', fmtInt(m.turns)));
+      });
+      tbodies.tokens.el.innerHTML = rows.join('');
+    }
+
+    async function fetchSummary(manual = false) {
+      if (manual && manualRefreshLoading) return;
+      const token = getToken();
+      if (!token) {
+        inFlight += 1;
+        if (loadController) loadController.abort();
+        loadController = null;
+        renderUnavailable('Sign in with a staff admin account to load AI turn health.');
+        setControlAuthority(false, 'Available after staff sign-in.');
+        errorBanner.classList.add('hidden');
+        if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+        return false;
+      }
+      setControlAuthority(true);
+      statusLine.textContent = 'Loading the current summary…';
+      errorBanner.classList.add('hidden');
+      if (manual) {
+        manualRefreshLoading = true;
+        setControlAuthority(true);
+        refreshBtn.setAttribute('aria-busy', 'true');
+        refreshBtn.textContent = 'Refreshing…';
+      }
+      const myReq = ++inFlight;
+      const params = new URLSearchParams();
+      params.set('window_hours', windowSelect.value || '24');
+      const url = apiBaseUrl + '/v1/admin/agent-turns/summary?' + params.toString();
+      if (loadController) loadController.abort();
+      const controller = new AbortController();
+      loadController = controller;
+      try {
+        const res = await window.driftstackFetchWithDeadline(
+          url,
+          { headers: { Authorization: 'Bearer ' + token }, credentials: 'include' },
+          SUMMARY_REQUEST_TIMEOUT_MS,
+          controller,
+        );
+        if (myReq !== inFlight) return; // superseded by a newer call
+        if (!res.ok) {
+          const message = window.driftstackRequestErrorMessage(
+            new Error('HTTP ' + res.status),
+            'Could not load AI turn health. Try again.',
+          );
+          renderUnavailable(message);
+          showError(message);
+          return false;
+        }
+        const data = await res.json();
+        if (myReq !== inFlight) return; // superseded by a newer call
+        renderHeadline(data);
+        renderDeaths(data.deaths || []);
+        renderOutcomes(data.requests);
+        renderTurnedAway(data.turned_away || []);
+        renderPhases(data.durations_ms.phases || {}, data.durations_ms.after_turn);
+        renderTokens(data);
+        errorBanner.classList.add('hidden');
+        statusLine.textContent =
+          fmtInt(data.requests.total) +
+          ' requests · window ' +
+          data.window.since +
+          ' → ' +
+          data.window.until +
+          ' · records are kept ' +
+          data.retention_days +
+          ' days';
+        return true;
+      } catch (err) {
+        if (myReq !== inFlight) return; // superseded by a newer call
+        const message =
+          err && err.name === 'AbortError'
+            ? 'Request timed out. Try again.'
+            : 'Could not load AI turn health. Check your connection and try again.';
+        renderUnavailable(message);
+        showError(message);
+        return false;
+      } finally {
+        if (manual) {
+          manualRefreshLoading = false;
+          setControlAuthority(Boolean(getToken()), 'Available after staff sign-in.');
+          refreshBtn.setAttribute('aria-busy', 'false');
+          refreshBtn.textContent = 'Refresh now';
+        }
+        if (myReq === inFlight) {
+          loadController = null;
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+        }
+      }
+    }
+
+    function start() {
+      fetchSummary();
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', start, { once: true });
+    } else {
+      start();
+    }
+    setInterval(fetchSummary, POLL_INTERVAL_MS);
+  </script>
+</AdminLayout>

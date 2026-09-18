@@ -213,6 +213,15 @@ const INTENTIONALLY_UNPUBLISHED_OPERATIONS = new Set([
   'GET /metrics',
   'GET /openapi.json',
   'GET /ready',
+  // The operator view of AI turn health. NOT published, against the rule above,
+  // because a newer guard outranks it: `the-customer-spec-ships-the-internal-
+  // admin-surface` holds the admin paths in the customer-shipped spec at a
+  // ceiling that may only fall, so that handing customers the shape of another
+  // staff endpoint is a decision and not a side effect of adding a route. Nobody
+  // made that decision here. The one consumer is the staff panel, which binds to
+  // the route directly; if the owner wants it in the spec, publish it and raise
+  // that ceiling in the same change.
+  'GET /v1/admin/agent-turns/summary',
   'GET /v1/agent-sessions/:p/gui-control-key',
   // #7 — raw screenshot bytes for the GUI; not an SDK JSON contract.
   'GET /v1/agent-sessions/:p/captures/:p',
@@ -233,6 +242,11 @@ const INTENTIONALLY_UNPUBLISHED_OPERATIONS = new Set([
   'POST /v1/webhooks/nowpayments',
   'POST /v1/webhooks/stripe',
 ]);
+
+/** Staff operations kept out of the customer-shipped spec. See the arm that reads it. */
+const ADMIN_OPERATIONS_WITHHELD_FROM_THE_CUSTOMER_SPEC: readonly string[] = [
+  'GET /v1/admin/agent-turns/summary',
+];
 
 describe('published OpenAPI operation ↔ Fastify registration coverage', () => {
   const spec = JSON.parse(readFileSync(PUBLISHED_SPEC, 'utf8')) as OpenApiSpec;
@@ -276,7 +290,9 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     // PKCE-cookie XHR exchange) with the cookie path; it was unpublished, so its
     // INTENTIONALLY_UNPUBLISHED_OPERATIONS entry left with it and the published
     // count above does not move.
-    expect(routeOperations.size).toBe(260);
+    // 261 since 2026-09-18 registered `GET /v1/admin/agent-turns/summary` —
+    // unpublished, see its INTENTIONALLY_UNPUBLISHED_OPERATIONS entry.
+    expect(routeOperations.size).toBe(261);
   });
 
   it('documents the method-specific customer-core contract', () => {
@@ -317,14 +333,27 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     expect(phantom, `Published phantom operation(s):\n${phantom.join('\n')}`).toEqual([]);
   });
 
-  it('publishes every registered staff and owner admin operation', () => {
+  it('publishes every registered staff and owner admin operation — except the ones recorded as deliberately withheld', () => {
+    // EXACT, like the list above, so an admin route still cannot go unpublished
+    // by omission: it is either in the spec or named here with its reason. The
+    // entry exists because two guards pull opposite ways on a NEW admin route —
+    // this arm wants it published, and `the-customer-spec-ships-the-internal-
+    // admin-surface` forbids the customer-shipped admin surface from growing.
+    // Withholding is the reversible side of that, so it is the default until
+    // the owner decides otherwise.
     const undocumentedAdmin = missingOperations(routeOperations, specOperations).filter(
       (operation) => operation.includes(' /v1/admin/'),
     );
     expect(
       undocumentedAdmin,
       `Undocumented admin operation(s):\n${undocumentedAdmin.join('\n')}`,
-    ).toEqual([]);
+    ).toEqual([...ADMIN_OPERATIONS_WITHHELD_FROM_THE_CUSTOMER_SPEC].sort());
+    for (const operation of ADMIN_OPERATIONS_WITHHELD_FROM_THE_CUSTOMER_SPEC) {
+      expect(
+        INTENTIONALLY_UNPUBLISHED_OPERATIONS.has(operation),
+        `${operation} must also be in INTENTIONALLY_UNPUBLISHED_OPERATIONS`,
+      ).toBe(true);
+    }
   });
 
   it('pins the exact non-admin operations intentionally omitted from OpenAPI', () => {

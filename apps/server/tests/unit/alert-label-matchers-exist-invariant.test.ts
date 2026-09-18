@@ -58,20 +58,37 @@ function registeredLabels(): Map<string, Set<string>> {
   const names = promNames();
   const out = new Map<string, Set<string>>();
   for (const m of src.matchAll(
-    /register(?:Counter|Gauge|Histogram)\(\s*METRIC_NAMES\.(\w+)((?:[^()]|\([^()]*\))*)\)/gs,
+    /register(Counter|Gauge|Histogram)\(\s*METRIC_NAMES\.(\w+)((?:[^()]|\([^()]*\))*)\)/gs,
   )) {
-    const prom = names.get(m[1]!);
+    const prom = names.get(m[2]!);
     if (prom === undefined) continue;
-    const arrays = [...m[2]!.matchAll(/\[([^\]]*)\]/g)];
+    const arrays = [...m[3]!.matchAll(/\[([^\]]*)\]/g)];
     const last = arrays.at(-1);
-    out.set(
-      prom,
+    const labels =
       last === undefined
         ? new Set<string>()
-        : new Set([...last[1]!.matchAll(/'([a-z_]+)'/g)].map((l) => l[1]!)),
-    );
+        : new Set([...last[1]!.matchAll(/'([a-z_]+)'/g)].map((l) => l[1]!));
+    if (m[1] === 'Histogram') {
+      // A histogram is never selected by its registered name. It is exposed as
+      // `<name>_bucket` (which also carries the bucket bound, `le`), `<name>_sum`
+      // and `<name>_count`, and those are the names a rule writes. Without this
+      // every histogram rule read as "a metric this server never registers" and
+      // every `sum by (le)` as grouping by a label nothing has — the guard
+      // would have forced the first latency alert to be written wrong.
+      out.set(`${prom}_bucket`, new Set([...labels, 'le']));
+      out.set(`${prom}_sum`, labels);
+      out.set(`${prom}_count`, labels);
+      continue;
+    }
+    out.set(prom, labels);
   }
   return out;
+}
+
+/** How many series names one registration contributes to `registeredLabels`. */
+function histogramCount(): number {
+  const src = readFileSync(BOOTSTRAP, 'utf8');
+  return [...src.matchAll(/registerHistogram\(\s*METRIC_NAMES\.\w+/g)].length;
 }
 
 interface Rule {
@@ -110,7 +127,12 @@ describe('every label an alert filters on exists on the metric it selects', () =
     const labels = registeredLabels();
     const matchers = selectorMatchers();
 
-    expect(labels.size, 'metrics whose label set was parsed from bootstrap').toBe(promNames().size);
+    // Each histogram contributes three exposed series names in place of its one
+    // registered name.
+    expect(labels.size, 'metrics whose label set was parsed from bootstrap').toBe(
+      promNames().size + 2 * histogramCount(),
+    );
+    expect(histogramCount(), 'histograms registered in bootstrap').toBeGreaterThan(0);
     expect(rules().length, 'alert rules parsed from the YAML').toBeGreaterThan(10);
     expect(matchers.length, 'label matchers found across all rules').toBeGreaterThan(5);
     expect(

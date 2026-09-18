@@ -91,6 +91,10 @@ import type { SentryClient } from '../lib/sentry.js';
 import type { AccountAuditService } from '../services/account-audit.js';
 import type { MetricsRegistry } from '../services/metrics-registry.js';
 import { METRIC_NAMES } from '../services/metrics-registry.js';
+import type {
+  AgentTurnTelemetry,
+  AgentTurnTelemetryCollector,
+} from '../services/agent-turn-telemetry.js';
 import type { PairModeHeartbeatTracker } from '../services/agent-pair-mode-heartbeat.js';
 import type { DrizzleFleetNodesRepo, FleetNodeDetail } from '../db/fleet-nodes-repo.js';
 import { mintLivekitToken, resolveSessionPublisherNode } from '../lib/livekit-token.js';
@@ -726,6 +730,14 @@ export interface AgentSessionsRoutesDeps {
    * transition).
    */
   metrics?: MetricsRegistry;
+  /**
+   * Per-request AI telemetry (metrics + one content-free diagnostics row),
+   * observed at the message route's seam. Omit and the route behaves exactly
+   * as it did before it existed: no progress sink is installed on the JSON
+   * lane and nothing is recorded. Nothing it does can change a response — see
+   * `agent-turn-telemetry-never-changes-the-response`.
+   */
+  turnTelemetry?: Pick<AgentTurnTelemetry, 'begin'>;
   /**
    * Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
    * tracker. When wired, takeover + handback handlers call
@@ -2194,6 +2206,7 @@ export function registerAgentSessionsRoutes(
     sentry,
     accountAudit,
     metrics,
+    turnTelemetry,
     pairModeHeartbeatTracker,
     fleetNodesRepo,
     livekitSecretEncryptionKey,
@@ -5445,6 +5458,11 @@ export function registerAgentSessionsRoutes(
     // streaming handler passes one that writes a same-named SSE frame; every
     // other caller leaves it undefined and the turn behaves exactly as before.
     onProgress?: (event: AgentTurnProgressEvent) => void,
+    // Telemetry only. It is handed the turn result because the public body
+    // below has already dropped what classification needs (which phase lost
+    // control, why a session closed, whether a read-back was blocked). It
+    // records and returns; it cannot throw and nothing here reads it back.
+    turnObserver?: AgentTurnTelemetryCollector,
   ) => {
     const parsed = RunTurnRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
@@ -5481,8 +5499,18 @@ export function registerAgentSessionsRoutes(
       if (!usage) return undefined;
       return {
         decomposer_kind: usage.decomposerKind,
-        ...(usage.anthropicInputTokens !== undefined
-          ? { anthropic_input_tokens: usage.anthropicInputTokens }
+        // ⛔ THE CUSTOMER'S NUMBER IS THE PROMPT SIZE, NOT THE UNCACHED REMAINDER.
+        // Since prompt caching landed, `anthropicInputTokens` is what the provider
+        // calls input_tokens: only the part of the prompt that missed the cache.
+        // This field is already documented, typed in both SDKs and shown in the
+        // chat as "how big was my prompt", and with a warm cache the remainder
+        // reads ~1.1k for a ~4.3k-token call — beside a cost and a budget debit
+        // that both include the cached part. A customer reconciling the three
+        // would conclude one of them is wrong. `anthropicPromptTokens` is the
+        // true size; the fallback keeps a usage object from before the split
+        // (a replayed receipt, the deterministic decomposer) reading as it did.
+        ...((usage.anthropicPromptTokens ?? usage.anthropicInputTokens) !== undefined
+          ? { anthropic_input_tokens: usage.anthropicPromptTokens ?? usage.anthropicInputTokens }
           : {}),
         ...(usage.anthropicOutputTokens !== undefined
           ? { anthropic_output_tokens: usage.anthropicOutputTokens }
@@ -5538,6 +5566,7 @@ export function registerAgentSessionsRoutes(
         ...(onStep !== undefined ? { onStep } : {}),
         ...(onProgress !== undefined ? { onProgress } : {}),
       });
+      turnObserver?.observeResult(result);
       if (result.kind === 'turn-in-progress') {
         throw new ConflictError(
           'This agent session is still working on a previous request. Wait for it to finish, then try again.',
@@ -5866,6 +5895,7 @@ export function registerAgentSessionsRoutes(
         ...(onProgress !== undefined ? { onProgress } : {}),
         keySource,
       });
+      turnObserver?.observeResult(result);
       if (result.kind === 'turn-in-progress') {
         throw new ConflictError(
           'This agent session is still working on a previous request. Wait for it to finish, then try again.',
@@ -6006,6 +6036,61 @@ export function registerAgentSessionsRoutes(
     error?: unknown;
   }
 
+  /**
+   * Start observing one message request, behind a guard.
+   *
+   * Telemetry OBSERVES this route; it must never be able to change it. The
+   * collector promises not to throw, and this does not take its word for it:
+   * every call the route makes goes through `safely`, so a fault in telemetry —
+   * today's or a later edit's — costs an observation and never a response.
+   * Undefined when telemetry is unwired, or when it could not even start.
+   */
+  const beginTurnObservation = (
+    agentSessionId: string,
+    transport: 'stream' | 'json',
+  ): AgentTurnTelemetryCollector | undefined => {
+    const safely = (observe: () => void): void => {
+      try {
+        observe();
+      } catch {
+        /* observation only */
+      }
+    };
+    let raw: AgentTurnTelemetryCollector | undefined;
+    safely(() => {
+      raw = turnTelemetry?.begin({ agentSessionId, transport });
+    });
+    const collector = raw;
+    if (collector === undefined) return undefined;
+    return {
+      recordProgress: (event) => {
+        safely(() => {
+          collector.recordProgress(event);
+        });
+      },
+      observeResult: (result) => {
+        safely(() => {
+          collector.observeResult(result);
+        });
+      },
+      markReplay: () => {
+        safely(() => {
+          collector.markReplay();
+        });
+      },
+      finish: (args) => {
+        safely(() => {
+          collector.finish(args);
+        });
+      },
+      finishWithError: (error) => {
+        safely(() => {
+          collector.finishWithError(error);
+        });
+      },
+    };
+  };
+
   const prepareAgentMessage = async (
     req: FastifyRequest<{ Params: { id: string } }>,
     reply: FastifyReply,
@@ -6033,6 +6118,8 @@ export function registerAgentSessionsRoutes(
     onStep?: (result: Parameters<typeof publicIntentResult>[0], index: number) => void,
     // Forwarded to executeAgentMessage alongside onStep; see its JSDoc.
     onProgress?: (event: AgentTurnProgressEvent) => void,
+    // Telemetry only; forwarded to executeAgentMessage. See its JSDoc.
+    turnObserver?: AgentTurnTelemetryCollector,
   ): Promise<AgentMessageTerminal> => {
     // Authenticate ownership and validate the exact canonical body before
     // reserving a key. Invalid/foreign requests must not poison the account's
@@ -6052,7 +6139,7 @@ export function registerAgentSessionsRoutes(
       const admission = await resolveAgentMessageAdmission(req.params.id, pre);
       return {
         status: 200,
-        body: await executeAgentMessage(req, pre, admission, onStep, onProgress),
+        body: await executeAgentMessage(req, pre, admission, onStep, onProgress, turnObserver),
       };
     }
     if (agentTurnReceipts === undefined) {
@@ -6088,6 +6175,9 @@ export function registerAgentSessionsRoutes(
       );
     }
     if (reservation.kind === 'replay') {
+      // The turn behind this receipt was counted when it ran. Without the mark
+      // a client retrying one slow turn would read as several turns.
+      turnObserver?.markReplay();
       return reservation.terminal;
     }
 
@@ -6097,7 +6187,7 @@ export function registerAgentSessionsRoutes(
       // spend, or provider access. Existing receipts replay first, independent
       // of current authority or a transient authority-store read failure.
       const admission = await resolveAgentMessageAdmission(req.params.id, pre);
-      const body = await executeAgentMessage(req, pre, admission, onStep, onProgress);
+      const body = await executeAgentMessage(req, pre, admission, onStep, onProgress, turnObserver);
       terminal = { status: 200, body };
     } catch (error) {
       // Persist typed failures too. If browser work finished and a later
@@ -6181,6 +6271,14 @@ export function registerAgentSessionsRoutes(
         .toLowerCase()
         .split(',')
         .some((value) => value.trim().split(';', 1)[0]?.trim() === 'text/event-stream');
+      // Telemetry, started here so the clock covers admission too. Every exit
+      // below reports to it exactly once and none of them reads it back: it
+      // observes the response this handler decided and can never change it.
+      // Undefined when unwired, and then every `turnObserver?.` is a no-op.
+      const turnObserver = beginTurnObservation(
+        req.params.id,
+        wantsEventStream ? 'stream' : 'json',
+      );
       // Resolve exact session ownership and the owner budget before either the
       // JSON lane starts receipt/provider work or the SSE lane commits a 200.
       let pre: AgentSessionRecord | undefined;
@@ -6188,6 +6286,9 @@ export function registerAgentSessionsRoutes(
       try {
         pre = await prepareAgentMessage(req, reply);
       } catch (err) {
+        if (err instanceof RateLimitedError || !wantsEventStream) {
+          turnObserver?.finishWithError(err);
+        }
         // A rate-limit denial never gets a representation: the actor bucket's
         // preHandler has always answered a hard 429 before any body exists, and
         // owner admission is that same decision one layer down. Every OTHER
@@ -6211,7 +6312,27 @@ export function registerAgentSessionsRoutes(
         if (pre === undefined) {
           throw new InternalError('Agent message admission did not resolve.');
         }
-        const terminal = await handleAgentMessage(req, pre);
+        let terminal: AgentMessageTerminal;
+        try {
+          // The progress sink exists on this lane only when telemetry is wired,
+          // and only records phase timestamps: nothing is written to the
+          // reply, which still carries no frames on the JSON lane.
+          terminal = await handleAgentMessage(
+            req,
+            pre,
+            undefined,
+            turnObserver === undefined
+              ? undefined
+              : (event: AgentTurnProgressEvent): void => {
+                  turnObserver.recordProgress(event);
+                },
+            turnObserver,
+          );
+        } catch (err) {
+          turnObserver?.finishWithError(err);
+          throw err;
+        }
+        turnObserver?.finish({ status: terminal.status, body: terminal.body });
         if (terminal.error !== undefined) {
           reportAgentMessageError(req, terminal.error, terminal.status, terminal.body);
         }
@@ -6372,7 +6493,21 @@ export function registerAgentSessionsRoutes(
         if (pre === undefined) {
           throw new InternalError('Agent message admission did not resolve.');
         }
-        const terminal = await handleAgentMessage(req, pre, onStep, onProgress);
+        const terminal = await handleAgentMessage(
+          req,
+          pre,
+          onStep,
+          // Same sink, observed first. The forwarding is written HERE rather
+          // than inside the collector so that no telemetry fault can stand
+          // between the runtime and the frames the customer is watching.
+          turnObserver === undefined
+            ? onProgress
+            : (event: AgentTurnProgressEvent): void => {
+                turnObserver.recordProgress(event);
+                onProgress(event);
+              },
+          turnObserver,
+        );
         status = terminal.status;
         body = terminal.body;
         if (terminal.error !== undefined) {
@@ -6396,6 +6531,9 @@ export function registerAgentSessionsRoutes(
         const terminal = JSON.stringify({ status, body });
         reply.raw.end(`event: response\ndata: ${terminal}\n\n`);
       }
+      // After the terminal frame, so not even the classification sits between
+      // the customer and their answer.
+      turnObserver?.finish({ status, body, viewerDisconnected: viewerClosed });
       return reply;
     },
   );

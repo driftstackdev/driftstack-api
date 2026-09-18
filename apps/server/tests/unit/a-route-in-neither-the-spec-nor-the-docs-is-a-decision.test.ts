@@ -135,6 +135,10 @@ const UNDOCUMENTED_ROUTES = new Map<string, string>([
     'GET /v1/agent-sessions/:p/gui-control-key',
     'CUSTOMER — mints a control+read credential for the desktop client. Requires write + read:sessions on an ordinary key',
   ],
+  [
+    'GET /v1/admin/agent-turns/summary',
+    'staff — driftstack_internal_admin; fleet-wide AI turn health, aggregates only. Withheld from the customer-shipped spec because the V-862 ceiling forbids its admin surface growing without a decision; publishing it is that decision, and is reversible from here',
+  ],
   ['GET /v1/internal/atlas-priority/event/:p', 'm2m — internal capture orchestration'],
   ['GET /v1/internal/atlas-priority/queue', 'm2m — internal capture orchestration'],
   ['GET /v1/mac-nodes', 'staff — driftstack_internal_admin, like every /v1/admin surface'],

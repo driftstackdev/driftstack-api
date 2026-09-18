@@ -144,9 +144,12 @@ import type { NowPaymentsApiClient } from './nowpayments-api.js';
 import { registerOAuthRoutes } from '../routes/oauth.js';
 import { OAuthService, type OAuthStore } from '../services/oauth.js';
 import { registerAdminCostRoutes } from '../routes/admin-cost.js';
+import { registerAdminAgentTurnsRoutes } from '../routes/admin-agent-turns.js';
 import { registerAdminUsageRoutes } from '../routes/admin-usage.js';
 import { registerAccountCostRoutes } from '../routes/account-cost.js';
 import type { CostMonitoringService } from '../services/cost-monitoring.js';
+import type { AgentTurnTelemetry } from '../services/agent-turn-telemetry.js';
+import type { AgentTurnSummaryService } from '../services/agent-turn-summary.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
 import { registerProfileSnapshotsRoutes } from '../routes/profile-snapshots.js';
 import { registerBillingDisabledRoutes, registerBillingRoutes } from '../routes/billing.js';
@@ -378,6 +381,15 @@ export interface AppDeps {
    * the service is internal-admin-only.
    */
   costMonitoringService?: CostMonitoringService;
+  /**
+   * Per-request AI telemetry, observed at the agent message route. When
+   * provided, every request to POST /v1/agent-sessions/:id/message is counted
+   * in the agent-turn metrics and leaves one content-free diagnostics row.
+   * Omit and the route behaves exactly as it did before telemetry existed.
+   */
+  agentTurnTelemetry?: Pick<AgentTurnTelemetry, 'begin'>;
+  /** When provided, GET /v1/admin/agent-turns/summary registers. */
+  agentTurnSummaryService?: AgentTurnSummaryService;
   /** V-081: profile CRUD service. Optional during scaffolding window. */
   profilesService?: ProfilesService;
   /**
@@ -1500,6 +1512,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     registerAdminCostRoutes(app, { service: deps.costMonitoringService });
     registerAccountCostRoutes(app, { service: deps.costMonitoringService });
   }
+  if (deps.agentTurnSummaryService !== undefined) {
+    registerAdminAgentTurnsRoutes(app, { summary: deps.agentTurnSummaryService });
+  }
   registerAdminUsageRoutes(app, {
     usageService: deps.usageService,
     accountsAdminService: deps.accountsAdminService,
@@ -1671,6 +1686,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
       // Arc 4 Wave 2.B sub-slice 8.18 (v2-#8) — Prometheus metrics.
       ...(deps.metricsRegistry !== undefined ? { metrics: deps.metricsRegistry } : {}),
+      ...(deps.agentTurnTelemetry !== undefined ? { turnTelemetry: deps.agentTurnTelemetry } : {}),
       // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — pair-mode heartbeat
       // tracker. Routes call recordHeartbeat on takeover / forget on
       // handback so the sweep doesn't auto-handback an active session.

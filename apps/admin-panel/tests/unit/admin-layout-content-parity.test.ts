@@ -90,7 +90,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
     expect(prompt).toContain("if (e.key === 'Escape') { done(null); return; }");
   });
 
-  it('12 live navItems in canonical order; absent surfaces stay out', () => {
+  it('13 live navItems in canonical order; absent surfaces stay out', () => {
     const block = body.match(/const navItems = \[([\s\S]+?)\];/);
     expect(block).not.toBeNull();
     const entries = Array.from(block![1]!.matchAll(/\{ href: '([^']+)', label: '([^']+)' \}/g)).map(
@@ -104,6 +104,7 @@ describe('W381.B admin-panel AdminLayout.astro content parity', () => {
       { href: '/incidents', label: 'Incidents' },
       { href: '/status-subscribers', label: 'Status subs' },
       { href: '/sessions', label: 'Sessions' },
+      { href: '/agent-turns', label: 'AI turns' },
       { href: '/fleet', label: 'Fleet' },
       { href: '/api-keys', label: 'API keys' },
       { href: '/webhook-dlq', label: 'Webhook DLQ' },

@@ -36,7 +36,7 @@ describe('W789 admin-panel AdminLayout content parity', () => {
     expect(p).toMatch(/const fullTitle = `\$\{title\} · Driftstack admin`;/);
   });
 
-  it('CRITICAL exact 12-row live nav catalog pins Cost/Fleet/Atlas priority and keeps the unwired Leads surface absent', () => {
+  it('CRITICAL exact 13-row live nav catalog pins Cost/AI turns/Fleet/Atlas priority and keeps the unwired Leads surface absent', () => {
     const p = read(LAYOUT);
 
     const expectedNav: Array<[string, string]> = [
@@ -47,6 +47,7 @@ describe('W789 admin-panel AdminLayout content parity', () => {
       ['/incidents', 'Incidents'],
       ['/status-subscribers', 'Status subs'],
       ['/sessions', 'Sessions'],
+      ['/agent-turns', 'AI turns'],
       ['/fleet', 'Fleet'],
       ['/api-keys', 'API keys'],
       ['/webhook-dlq', 'Webhook DLQ'],

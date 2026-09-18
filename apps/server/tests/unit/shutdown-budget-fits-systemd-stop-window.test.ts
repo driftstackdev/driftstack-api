@@ -71,7 +71,17 @@ function teardownWorstCaseMs(): number {
   const sentryArm = Number(flush[1]) + Number(close[1]);
   const redisArm = Number(redis[1]!.replace(/_/g, ''));
   const dbArm = Number(dbSeconds[1]) * 1000;
-  return Math.max(sentryArm, redisArm, dbArm);
+
+  // The AI turn diagnostics flush runs BEFORE the concurrent block — it needs
+  // the Postgres pool the block closes — so its bound ADDS to the longest arm
+  // rather than competing with it. Left out, this guard would keep reporting a
+  // comfortable margin for a teardown that had quietly grown a serial step.
+  const telemetryFlush = /const AGENT_TURN_TELEMETRY_FLUSH_DEADLINE_MS = ([\d_]+);/.exec(bootstrap);
+  if (telemetryFlush === null) {
+    throw new Error('AGENT_TURN_TELEMETRY_FLUSH_DEADLINE_MS not found in bootstrap.ts');
+  }
+  const serialBefore = Number(telemetryFlush[1]!.replace(/_/g, ''));
+  return serialBefore + Math.max(sentryArm, redisArm, dbArm);
 }
 
 /** Fraction of the stop window that must remain unspent. */

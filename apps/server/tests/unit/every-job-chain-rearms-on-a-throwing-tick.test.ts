@@ -147,10 +147,12 @@ describe('a recurring sweep re-arms even when its tick throws', () => {
     // 14 → 15 with registerProxyFreshnessJob (ITEM 4 — the background refresh of
     // a saved proxy's exit identity and OS fingerprint, which nothing re-took
     // after the one Test that first measured it).
+    // 15 → 16 with registerAgentTurnTelemetryPruneJob (the 90-day retention of
+    // the per-request AI diagnostics rows).
     expect(
       helpers.map((h) => h.name).sort(),
       'the register*Job scan came back short — the checks below cover only what it found',
-    ).toHaveLength(15);
+    ).toHaveLength(16);
   });
 
   it('the detector detects — it must flag the broken shape and clear both working ones', () => {

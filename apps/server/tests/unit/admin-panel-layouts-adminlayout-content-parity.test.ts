@@ -70,7 +70,7 @@ describe('admin-panel layouts/AdminLayout content parity', () => {
     expect(body).toMatch(/admin\s*<\/span>/);
   });
 
-  it("12-item admin nav pinned (Overview / Accounts / Cost / Audit log / Incidents / Status subs / Sessions / Fleet / API keys / Webhook DLQ / Rate limits / Atlas priority). Drift to dropping any would break admin's at-a-glance nav for an operational surface staff use daily", () => {
+  it("13-item admin nav pinned (Overview / Accounts / Cost / Audit log / Incidents / Status subs / Sessions / AI turns / Fleet / API keys / Webhook DLQ / Rate limits / Atlas priority). Drift to dropping any would break admin's at-a-glance nav for an operational surface staff use daily", () => {
     expect(body).toMatch(/\{ href: '\/', label: 'Overview' \}/);
     expect(body).toMatch(/\{ href: '\/accounts', label: 'Accounts' \}/);
     expect(body).toMatch(/\{ href: '\/cost', label: 'Cost' \}/);
@@ -78,6 +78,7 @@ describe('admin-panel layouts/AdminLayout content parity', () => {
     expect(body).toMatch(/\{ href: '\/incidents', label: 'Incidents' \}/);
     expect(body).toMatch(/\{ href: '\/status-subscribers', label: 'Status subs' \}/);
     expect(body).toMatch(/\{ href: '\/sessions', label: 'Sessions' \}/);
+    expect(body).toMatch(/\{ href: '\/agent-turns', label: 'AI turns' \}/);
     expect(body).toMatch(/\{ href: '\/fleet', label: 'Fleet' \}/);
     expect(body).toMatch(/\{ href: '\/api-keys', label: 'API keys' \}/);
     expect(body).toMatch(/\{ href: '\/webhook-dlq', label: 'Webhook DLQ' \}/);
