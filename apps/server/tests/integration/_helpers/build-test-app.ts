@@ -26,7 +26,7 @@ import {
   type AgentDecomposerUsageRecorder,
 } from '../../../src/services/agent-runtime.js';
 import { DeterministicAgentDecomposer } from '../../../src/services/agent-decomposer-deterministic.js';
-import type { DecomposeUsage } from '../../../src/services/agent-decomposer.js';
+import type { AgentDecomposer, DecomposeUsage } from '../../../src/services/agent-decomposer.js';
 import { StubAgentExecutor } from '../../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.js';
 import { InMemoryAgentTurnReceiptsRepo } from '../../../src/services/agent-turn-receipts.js';
@@ -397,6 +397,13 @@ export interface TestAppOptions {
    * (matches prod posture until founder flips the LLM key path on).
    */
   enableAgentRuntime?: boolean;
+  /**
+   * The planner the agent runtime is built with, in place of the deterministic
+   * one. For tests that need a turn the deterministic planner cannot produce —
+   * a multi-SEGMENT turn, where the planner answers `continue` and is asked
+   * again — driven through the real route. Ignored unless `enableAgentRuntime`.
+   */
+  agentDecomposer?: AgentDecomposer;
   /**
    * What the ROUTE believes the deployment's decomposer is. `buildApp` defaults
    * this to `'deterministic'`, and the route uses it to decide whether a missing
@@ -1812,7 +1819,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
             },
           };
           const agentRuntime = new AgentRuntime({
-            decomposer: new DeterministicAgentDecomposer(),
+            decomposer: opts.agentDecomposer ?? new DeterministicAgentDecomposer(),
             executor: new StubAgentExecutor(),
             sessions: agentSessionsRepo,
             archetype: 'iphone16pro_ios18_7_safari26_4',

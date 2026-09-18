@@ -157,3 +157,70 @@ export const CLAUDE_MODELS: Record<AgentModel, AgentModelInfo> = {
     minCacheablePromptTokens: 4096,
   },
 };
+
+/**
+ * What each model ACCEPTS on a request, beside what it costs.
+ *
+ * A separate map rather than new members of {@link AgentModelInfo}, so every
+ * existing reader and fixture of that interface is untouched.
+ *
+ * Sources, all read 2026-09-18:
+ *  · https://platform.claude.com/docs/en/build-with-claude/thinking-troubleshooting
+ *    (the per-model table): Opus 5 and Sonnet 5 think BY DEFAULT and accept
+ *    `adaptive` and `disabled` (Opus 5 only at effort `high` or below); Opus
+ *    4.8 / 4.7 and Sonnet 4.6 accept both and default to off; Haiku 4.5 is
+ *    extended-thinking only — `adaptive` is a 400 there — and defaults to off.
+ *  · https://platform.claude.com/docs/en/build-with-claude/effort — the
+ *    supported-model list has no Haiku 4.5, so `output_config.effort` must not be
+ *    sent to it.
+ *  · https://platform.claude.com/docs/en/build-with-claude/structured-outputs —
+ *    `output_config.format` is supported on every model in this registry.
+ *
+ * ⛔ WHY THIS IS DATA AND NOT A CONSTANT IN THE CALLER: a thinking configuration
+ * one model requires is a 400 on another, and a 400 is a failed turn for a
+ * customer who merely picked a different model in the picker.
+ */
+export interface AgentModelRequestCapabilities {
+  /** `adaptive`: accepts `thinking: {type: "adaptive"}` and `{type: "disabled"}`.
+   *  `budget`: extended thinking only — `adaptive` is rejected, `disabled` is
+   *  accepted and is also what omitting the parameter means. */
+  thinkingControl: 'adaptive' | 'budget';
+  /** Whether `output_config.effort` is accepted at all. */
+  supportsEffort: boolean;
+  /** Whether `output_config.format` (a JSON-schema-constrained reply) is accepted. */
+  supportsStructuredOutput: boolean;
+}
+
+export const CLAUDE_MODEL_REQUEST_CAPABILITIES: Record<AgentModel, AgentModelRequestCapabilities> =
+  {
+    'claude-opus-5': {
+      thinkingControl: 'adaptive',
+      supportsEffort: true,
+      supportsStructuredOutput: true,
+    },
+    'claude-sonnet-5': {
+      thinkingControl: 'adaptive',
+      supportsEffort: true,
+      supportsStructuredOutput: true,
+    },
+    'claude-opus-4-8': {
+      thinkingControl: 'adaptive',
+      supportsEffort: true,
+      supportsStructuredOutput: true,
+    },
+    'claude-opus-4-7': {
+      thinkingControl: 'adaptive',
+      supportsEffort: true,
+      supportsStructuredOutput: true,
+    },
+    'claude-sonnet-4-6': {
+      thinkingControl: 'adaptive',
+      supportsEffort: true,
+      supportsStructuredOutput: true,
+    },
+    'claude-haiku-4-5': {
+      thinkingControl: 'budget',
+      supportsEffort: false,
+      supportsStructuredOutput: true,
+    },
+  };

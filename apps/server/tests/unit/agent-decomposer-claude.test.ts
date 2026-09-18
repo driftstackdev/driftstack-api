@@ -1375,10 +1375,66 @@ describe('decomposer refusals for JSON that is not an object', () => {
     await expect(dec.decompose(defaultArgs())).rejects.toThrow(/was not a JSON object/i);
   });
 
-  it("CRITICAL answer path: non-JSON text is refused — its own copy of the guard, which the plan path's arm does not exercise", async () => {
+  // MOVED 2026-09-18 (B4). This arm used to assert that a PROSE reply to the
+  // read-back is refused as "not valid JSON". That refusal is the death the live
+  // eval measured three times in one run: every step succeeded, the model had
+  // written the answer, and the customer was told the read-back "did not
+  // complete" because its wrapping was wrong. An answer is WORDS; when the words
+  // arrived without the envelope they are still the answer, and the runtime
+  // sanitises and bounds them exactly as it does a well-formed one. What is
+  // STILL refused is pinned in the two arms below it: a reply that opens an
+  // object and carries no answer, and one cut off at the output limit.
+  it('answer path: a reply that is prose with NO envelope IS the answer — the words are kept, not thrown away over their wrapping', async () => {
     const { fetch } = sequenceFetch([
       jsonRaw({
-        content: [{ type: 'text', text: 'I will not output JSON.' }],
+        content: [{ type: 'text', text: 'Your IP address is 203.0.113.7.' }],
+        usage: { input_tokens: 120, output_tokens: 80 },
+      }),
+    ]);
+    const dec = new ClaudeAgentDecomposer({ fetch });
+    const result = await dec.answerFromObservation({
+      task: 'what is my IP address?',
+      observation: 'Your IP: 203.0.113.7',
+      budgetTokensRemaining: 100_000,
+      byokAnthropicApiKey: 'sk-ant-test-fake-key',
+    });
+    expect(result.answer).toBe('Your IP address is 203.0.113.7.');
+    // Still metered: a recovered answer is a paid call like any other.
+    expect(result.tokensConsumed).toBe(200);
+  });
+
+  it('⛔ answer path: an UNESCAPED QUOTE inside the answer string — the measured death — is recovered, not refused', async () => {
+    // An answer quotes the page, a page is full of double quotes, and a model
+    // writing JSON by hand leaves one unescaped. JSON.parse rejects the whole
+    // reply; the words between the member's opening quote and the closing brace
+    // are exactly what the model meant to say.
+    const broken =
+      '{"kind":"answer","answer":"The page links to an "Opening hours" page, but does not list the times."}';
+    expect(() => {
+      JSON.parse(broken);
+    }).toThrow();
+    const { fetch } = sequenceFetch([
+      jsonRaw({
+        content: [{ type: 'text', text: broken }],
+        usage: { input_tokens: 120, output_tokens: 80 },
+      }),
+    ]);
+    const dec = new ClaudeAgentDecomposer({ fetch });
+    const result = await dec.answerFromObservation({
+      task: 'when do they close?',
+      observation: 'Opening hours',
+      budgetTokensRemaining: 100_000,
+      byokAnthropicApiKey: 'sk-ant-test-fake-key',
+    });
+    expect(result.answer).toBe(
+      'The page links to an "Opening hours" page, but does not list the times.',
+    );
+  });
+
+  it("CRITICAL answer path: a reply that OPENS AN OBJECT and carries no answer is still refused — its own copy of the guard, which the plan path's arm does not exercise", async () => {
+    const { fetch } = sequenceFetch([
+      jsonRaw({
+        content: [{ type: 'text', text: '{"kind":"answer","text": broken' }],
         usage: { input_tokens: 120, output_tokens: 80 },
       }),
     ]);
@@ -1392,6 +1448,35 @@ describe('decomposer refusals for JSON that is not an object', () => {
       }),
     ).rejects.toThrow(/answer response was not valid JSON/i);
   });
+
+  it.each([
+    ['a cut-off envelope', '{"kind":"answer","answer":"The last ferry leaves at'],
+    // ⛔ THE SHAPE THE GUARD IS ACTUALLY FOR. A cut-off envelope has no closing
+    // brace, so the recovery cannot read it anyway; cut-off PROSE has nothing
+    // wrong with it except that it stops — and "The last ferry leaves at" would
+    // be delivered to the customer as the answer.
+    ['cut-off prose', 'The last ferry leaves at'],
+  ])(
+    '⛔ answer path: a reply CUT OFF at the output limit is never recovered — half an answer reads as a whole one (%s)',
+    async (_shape, text) => {
+      const { fetch } = sequenceFetch([
+        jsonRaw({
+          content: [{ type: 'text', text }],
+          stop_reason: 'max_tokens',
+          usage: { input_tokens: 120, output_tokens: 80 },
+        }),
+      ]);
+      const dec = new ClaudeAgentDecomposer({ fetch });
+      await expect(
+        dec.answerFromObservation({
+          task: 'when is the last ferry?',
+          observation: 'Last departure 21:40',
+          budgetTokensRemaining: 100_000,
+          byokAnthropicApiKey: 'sk-ant-test-fake-key',
+        }),
+      ).rejects.toThrow(/cut off at the output limit/i);
+    },
+  );
 
   it('CRITICAL answer path: a bare JSON string is refused as "not a JSON object", the sibling of the plan-path arm above', async () => {
     const { fetch } = sequenceFetch([

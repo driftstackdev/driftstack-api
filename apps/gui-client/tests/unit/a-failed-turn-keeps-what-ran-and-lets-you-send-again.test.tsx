@@ -423,6 +423,66 @@ describe('B2 — the hook reads the additive progress frames and ignores the res
     expect(result.current.liveStepIndex).toBeNull();
   });
 
+  it('⛔ a SECOND plan frame is folded into the turn’s one step list at its offset — it does not replace the first', async () => {
+    // A turn is a loop now: look, plan as far as it can see, act, look again, and
+    // each pass sends its own `plan` frame. Replacing the live plan with each one
+    // put the new captions at indices the view had already marked done (it hides
+    // `i < liveSteps.length`, in the TURN's index space), so every later
+    // segment's first steps vanished from the screen.
+    let emit: (e: { type: string; data: unknown }) => void = () => undefined;
+    let settle: (r: AgentMessageResponse) => void = () => undefined;
+    message.mockImplementationOnce(
+      (
+        _id: string,
+        _msg: string,
+        opts: { onEvent: (e: { type: string; data: unknown }) => void },
+      ) => {
+        emit = opts.onEvent;
+        return new Promise<AgentMessageResponse>((resolve) => {
+          settle = resolve;
+        });
+      },
+    );
+    const { result } = renderHook(() => useAgentChat());
+    let pending!: Promise<boolean>;
+    await act(async () => {
+      pending = result.current.send('search for a trail stove');
+      await Promise.resolve();
+    });
+
+    act(() => {
+      emit({ type: 'plan', data: { total: 2, labels: ['Opening the site', 'Waiting'] } });
+      emit({ type: 'phase', data: { phase: 'reading_page', segment: 2, cause: 'continue' } });
+    });
+    expect(result.current.livePhase).toBe('Looking at the page…');
+    act(() => {
+      emit({ type: 'phase', data: { phase: 'planning', segment: 2, cause: 'continue' } });
+    });
+    expect(result.current.livePhase).toBe('Continuing…');
+
+    act(() => {
+      emit({
+        type: 'plan',
+        data: { total: 4, offset: 2, segment: 2, labels: ['Typing the search', 'Pressing Enter'] },
+      });
+      emit({ type: 'step_start', data: { index: 2, total: 4, label: 'Typing the search' } });
+    });
+    expect(result.current.livePlan).toEqual({
+      total: 4,
+      labels: ['Opening the site', 'Waiting', 'Typing the search', 'Pressing Enter'],
+    });
+    // The running marker indexes the SAME list, so it lands on the right caption.
+    expect(result.current.livePlan?.labels[result.current.liveStepIndex ?? -1]).toBe(
+      'Typing the search',
+    );
+
+    await act(async () => {
+      settle(DONE);
+      await pending;
+    });
+    expect(result.current.livePlan).toBeNull();
+  });
+
   it('an event name this build has never heard of changes nothing and breaks nothing', async () => {
     // The set is open by design: the server adds progress events without a
     // version bump, so an unknown name must be a no-op, not an error and not a

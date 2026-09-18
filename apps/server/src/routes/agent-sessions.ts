@@ -5990,6 +5990,10 @@ export function registerAgentSessionsRoutes(
           // already computed, sanitized and billed; before this it stopped at
           // the transcript and the reply carried only the step list.
           ...(result.answer !== undefined ? { answer: result.answer } : {}),
+          // Why a turn whose steps all show as done is NOT done (it stopped at a
+          // bound), or what the agent asked part-way through. Additive; absent on
+          // every turn that simply finished or simply failed.
+          ...(result.notice !== undefined ? { notice: result.notice } : {}),
           ...(usage !== undefined ? { usage } : {}),
         };
       }
@@ -6442,22 +6446,40 @@ export function registerAgentSessionsRoutes(
       // The plan as the customer may see it, kept so a later `step_start` can be
       // captioned without the raw intent crossing this boundary a second time.
       let publicPlan: ReadonlyArray<AgentIntent> = [];
+      // Where, in the turn's one step list, the plan above starts. A turn is now
+      // several segments and `step_start.index` counts across all of them, so
+      // captioning with `publicPlan[event.index]` named the WRONG step for every
+      // segment after the first (and "Working" once the index ran off the end).
+      let publicPlanOffset = 0;
       const onProgress = (event: AgentTurnProgressEvent): void => {
         switch (event.kind) {
           case 'phase':
-            writeProgressFrame('phase', { phase: event.phase });
+            writeProgressFrame('phase', {
+              phase: event.phase,
+              // Additive: which pass of the turn this is and why it is going
+              // round again. Absent on a first pass, as before.
+              ...(event.segment !== undefined ? { segment: event.segment } : {}),
+              ...(event.cause !== undefined ? { cause: event.cause } : {}),
+            });
             return;
           case 'plan': {
             publicPlan = event.intents.map(publicAgentIntent);
+            publicPlanOffset = event.offset ?? 0;
             writeProgressFrame('plan', {
               total: event.total,
               intents: publicPlan,
               labels: publicPlan.map(progressStepLabel),
+              // Additive: a later segment's `labels[0]` is step `offset` of the
+              // turn, not step 0. A client that ignores this keeps today's
+              // single-plan rendering for single-plan turns.
+              ...(event.offset !== undefined ? { offset: event.offset } : {}),
+              ...(event.segment !== undefined ? { segment: event.segment } : {}),
+              ...(event.status !== undefined ? { status: event.status } : {}),
             });
             return;
           }
           case 'step_start': {
-            const intent = publicPlan[event.index];
+            const intent = publicPlan[event.index - publicPlanOffset];
             writeProgressFrame('step_start', {
               index: event.index,
               total: event.total,
@@ -6467,6 +6489,9 @@ export function registerAgentSessionsRoutes(
           }
           case 'answer':
             writeProgressFrame('answer', { answer: event.answer });
+            return;
+          case 'notice':
+            writeProgressFrame('notice', { notice: event.notice });
             return;
           default: {
             // A progress kind added to the union without a case here would be

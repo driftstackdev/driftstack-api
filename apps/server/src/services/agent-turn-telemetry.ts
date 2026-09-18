@@ -264,7 +264,17 @@ export type AgentTurnTransport = (typeof AGENT_TURN_TRANSPORTS)[number];
 export const AGENT_TURN_TELEMETRY_WRITE_OUTCOMES = ['ok', 'error', 'dropped', 'shed'] as const;
 export type AgentTurnTelemetryWriteOutcome = (typeof AGENT_TURN_TELEMETRY_WRITE_OUTCOMES)[number];
 
-export const AGENT_TURN_CALL_KINDS = ['plan', 're_plan', 'answer', 'unattributed'] as const;
+// `continue` — a planning call for a LATER segment of a turn whose previous
+// segment succeeded and asked to go on. Kept apart from `re_plan` because they
+// are opposite facts about a turn: one is the task progressing, the other is a
+// step having failed. A metric label only; no stored row carries it.
+export const AGENT_TURN_CALL_KINDS = [
+  'plan',
+  're_plan',
+  'continue',
+  'answer',
+  'unattributed',
+] as const;
 export type AgentTurnCallKind = (typeof AGENT_TURN_CALL_KINDS)[number];
 
 /** `other`: a model id outside the catalogue. `none`: no model call settled. */
@@ -475,6 +485,58 @@ export interface ClassifyTurnArgs {
   sawAnswering: boolean;
 }
 
+/**
+ * B1 — a turn whose every step is a tick, and which still told the customer "the
+ * task is not finished", is NOT `completed`.
+ *
+ * It was being filed as one: the loop's own bounds end a turn on a column of
+ * green steps, the classifier read `executor.ok`, and the completion rate — the
+ * number this work is judged by — counted a half-done task as done.
+ *
+ * ⛔ THE VOCABULARY IS THE TABLE'S. `outcome` and `death_reason` are CHECK-
+ * constrained columns, so until a migration adds a word for "stopped at a loop
+ * bound" each stop is filed under the existing word that is TRUE of it:
+ *  · the planner asked the customer something part-way   → `clarified`
+ *  · the planner declined part-way                       → `refused`
+ *  · the chat's AI budget could not cover another look   → `failed` / `budget_exhausted`
+ *  · the next plan could not be obtained                 → `failed` / `model_unavailable`
+ *  · out of planning calls or time, going in circles, or a refused repeat
+ *    → `clarified`: the turn handed the decision back to the customer with a
+ *    sentence saying what to do next, which is what that outcome means ("neither
+ *    a completion nor a death") — and, like every `clarified`, it is in neither
+ *    the numerator nor the denominator of the completion rate. WHICH bound it was
+ *    is on the turn result (`loop.stopped`) and in the `agent_turn_stopped_unfinished`
+ *    log line; a `death_reason` of its own needs the migration.
+ */
+function classifyUnfinishedLoop(
+  loop: Extract<RunTurnResult, { kind: 'plan-executed' }>['loop'],
+): Pick<TurnClassification, 'outcome' | 'deathReason'> | null {
+  if (loop === undefined) return null;
+  if (loop.handedBack === true) {
+    return loop.handedBackKind === 'refuse'
+      ? { outcome: 'refused', deathReason: 'model_refused' }
+      : { outcome: 'clarified', deathReason: 'none' };
+  }
+  switch (loop.stopped) {
+    case undefined:
+      return null;
+    case 'budget_floor':
+      return { outcome: 'failed', deathReason: 'budget_exhausted' };
+    case 'planner_unavailable':
+      return { outcome: 'failed', deathReason: 'model_unavailable' };
+    case 'planner_call_limit':
+    case 'wall_clock':
+    case 'no_progress':
+    case 'repeat_refused':
+      return { outcome: 'clarified', deathReason: 'none' };
+    default: {
+      const _exhaustive: never = loop.stopped;
+      void _exhaustive;
+      return null;
+    }
+  }
+}
+
 export function classifyTurn(args: ClassifyTurnArgs): TurnClassification {
   const { result, status } = args;
   const base = { diedStepIndex: null, diedStepKind: null, customerStopped: false };
@@ -512,6 +574,15 @@ export function classifyTurn(args: ClassifyTurnArgs): TurnClassification {
             died?.kind === 'failure' ? classifyStepFailure(died) : 'harness_error_unclassified',
           diedStepIndex: index >= 0 ? index : null,
           diedStepKind: stepKindOf(died),
+        };
+      }
+      const unfinished = classifyUnfinishedLoop(result.loop);
+      if (unfinished !== null) {
+        return {
+          ...base,
+          ...unfinished,
+          // A death has a place; a hand-back to the customer does not.
+          diedStepIndex: unfinished.outcome === 'failed' ? results.length : null,
         };
       }
       if (result.readbackUnavailable !== undefined) {
@@ -767,6 +838,10 @@ class Collector implements AgentTurnTelemetryCollector {
     answering: 0,
   };
   private planningEntered = 0;
+  /** `planning` phases the runtime marked as following a SUCCESSFUL segment that
+   *  asked to continue. They are model calls and are not re-plans. */
+  private continuesEntered = 0;
+  private lastPlanningCause: 'continue' | 'replan' | undefined;
   private answeringEntered = 0;
   /** A `plan` arrived before any `planning`: an approved plan being resumed, so
    *  no first model call happened and every `planning` is a re-plan. */
@@ -804,6 +879,7 @@ class Collector implements AgentTurnTelemetryCollector {
   callKindNow(): AgentTurnCallKind {
     if (this.currentPhase === 'answering') return 'answer';
     if (this.currentPhase === 'planning') {
+      if (this.lastPlanningCause === 'continue') return 'continue';
       return this.planningEntered > 1 || this.resumedWithoutPlanning ? 're_plan' : 'plan';
     }
     return 'unattributed';
@@ -827,7 +903,11 @@ class Collector implements AgentTurnTelemetryCollector {
         }
         this.currentPhase = event.phase;
         this.currentPhaseSince = now;
-        if (event.phase === 'planning') this.planningEntered += 1;
+        if (event.phase === 'planning') {
+          this.planningEntered += 1;
+          this.lastPlanningCause = event.cause;
+          if (event.cause === 'continue') this.continuesEntered += 1;
+        }
         if (event.phase === 'answering') this.answeringEntered += 1;
         return;
       }
@@ -841,6 +921,7 @@ class Collector implements AgentTurnTelemetryCollector {
         return;
       case 'step_start':
       case 'answer':
+      case 'notice':
         return;
       default: {
         const _exhaustive: never = event;
@@ -848,6 +929,11 @@ class Collector implements AgentTurnTelemetryCollector {
         return;
       }
     }
+  }
+
+  /** The loop bound that ended this turn short of its task, if one did. */
+  loopStoppedAt(): string | null {
+    return this.result?.kind === 'plan-executed' ? (this.result.loop?.stopped ?? null) : null;
   }
 
   observeResult(result: RunTurnResult): void {
@@ -942,7 +1028,13 @@ class Collector implements AgentTurnTelemetryCollector {
       stepsPlanned: Math.max(this.stepsPlanned, stepsRun),
       stepsRun,
       stepsSucceeded,
-      replans: Math.max(0, this.planningEntered - firstPlanCalls),
+      // ⛔ A `continue` IS NOT A RE-PLAN. Both return to `planning`, and until a
+      // turn could go round on SUCCESS every return was a recovery. Counting
+      // them alike would report a healthy four-page task as three recoveries,
+      // and the re-plan histogram — the one that says how often plans hit a
+      // wall — would become a histogram of task length. The continues stay in
+      // `modelCalls`, where a call is a call.
+      replans: Math.max(0, this.planningEntered - firstPlanCalls - this.continuesEntered),
       modelCalls: this.planningEntered + this.answeringEntered,
       recoveredAfterReplan: executor?.recoveredAfterReplan === true,
       durationMs: Math.max(0, Math.round(endedAt - this.startedAt)),
@@ -1229,6 +1321,23 @@ export class AgentTurnTelemetry {
 
   private async emitAndPersist(collector: Collector, row: AgentTurnTelemetryRow): Promise<void> {
     this.emitMetrics(collector, row);
+    const stoppedAt = collector.loopStoppedAt();
+    if (stoppedAt !== null) {
+      // The row's columns are a closed vocabulary with no word for WHICH bound
+      // ended the turn (see classifyUnfinishedLoop); this line is where an
+      // operator reads it until a migration gives it a column value. The reason
+      // is one of a fixed set of identifiers — never page or customer text.
+      this.deps.logger?.warn?.(
+        {
+          component: 'agent-turn-telemetry',
+          event: 'agent_turn_stopped_unfinished',
+          stopped: stoppedAt,
+          outcome: row.outcome,
+          model_calls: row.modelCalls,
+        },
+        'an agent turn stopped at a loop bound with its task unfinished',
+      );
+    }
     if (UNPERSISTED_OUTCOMES.has(row.outcome)) return;
     const writer = this.deps.writer;
     if (writer === undefined) return;

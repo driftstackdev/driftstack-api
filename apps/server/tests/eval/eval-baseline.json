@@ -14,7 +14,7 @@
     "answererDescription": "the product's own ClaudeAgentDecomposer.answerFromObservation, served by a stand-in provider whose reply text comes from a per-task page rule that has never seen the criterion; no model wrote the answers",
     "decomposeSystemPromptSha256": null,
     "decomposeSystemPromptNote": "under plannerMode=scripted the plan comes from tasks.ts and no decompose request is built, so there is no prompt for this run to be a statement about. Re-pin it the moment a recorded or live planner tier runs.",
-    "answerSystemPromptSha256": "8671455021249e6fc92c09dd7e5011a2c27ae7e0466ed3c09037308378de1cbf"
+    "answerSystemPromptSha256": "2ace12bcf4c5cef4b4c4401de75f4a7a533b03b4e20d502164be249957801361"
   },
   "plannerMode": "scripted",
   "scriptedPlanCompletionRate": {

@@ -71,6 +71,28 @@ export interface MeteredCall {
   cacheCreation5mInputTokens: number | null;
   cacheCreation1hInputTokens: number | null;
   requestBytes: number;
+  /**
+   * The longest the response went SILENT — the largest gap between two chunks
+   * of the body, or between the headers and the first chunk. The product bounds
+   * a streamed call by silence (an idle timer), so this is the number that says
+   * how close a healthy call came to being aborted as a hung one. Null until a
+   * body was read.
+   */
+  longestSilenceMs: number | null;
+  /** `usage.output_tokens_details.thinking_tokens`: how much of the billed
+   *  output was reasoning nobody saw. Null when the provider did not say. */
+  thinkingTokens: number | null;
+  /** The provider's `stop_reason`. `max_tokens` is a reply that was cut off. */
+  stopReason: string | null;
+  /** What the request told the provider about HOW to reply — read off the body
+   *  the product built, so the report states the configuration that actually
+   *  ran rather than the one somebody intended. */
+  thinking: string | null;
+  effort: string | null;
+  structuredOutput: boolean;
+  /** The provider's own error message on a non-2xx. It describes the request,
+   *  never a header, and is scrubbed with everything else before it is written. */
+  providerError: string | null;
   /** The model's reply text, for the report. Scrubbed before it is written. */
   replyText: string | null;
   /** A transport failure's message. Never a header, never a request body. */
@@ -245,6 +267,11 @@ export class LiveMeter {
       cacheCreation5mInputTokens: null,
       cacheCreation1hInputTokens: null,
       requestBytes: bodyText.length,
+      longestSilenceMs: null,
+      thinkingTokens: null,
+      stopReason: null,
+      ...readReplyControls(bodyText),
+      providerError: null,
       replyText: null,
       error: null,
     };
@@ -292,9 +319,13 @@ export class LiveMeter {
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let text = '';
+    let lastChunkAt = this.now();
     try {
       for (;;) {
         const { done, value } = await reader.read();
+        const at = this.now();
+        call.longestSilenceMs = Math.max(call.longestSilenceMs ?? 0, Math.round(at - lastChunkAt));
+        lastChunkAt = at;
         if (done) break;
         text += decoder.decode(value, { stream: true });
         if (call.firstTokenMs === null && (!streamed || text.includes('content_block_delta'))) {
@@ -310,6 +341,44 @@ export class LiveMeter {
     call.totalMs = Math.round(this.now() - startedAt);
     if (streamed) readStreamedUsage(text, call);
     else readBufferedUsage(text, call);
+    // ⛔ SCRUBBED AT THE POINT OF CAPTURE. A provider's 401 body can ECHO THE KEY
+    // it was sent, and this string goes straight into the report object — which
+    // is held in memory, printed and asserted on before the writer's own scrub
+    // ever runs. The writer's scrub is the last line of defence, not the first.
+    if (call.status !== null && call.status >= 400) {
+      call.providerError = scrubSecrets(readProviderError(text) ?? '', this.secrets);
+    }
+  }
+}
+
+/** The thinking, effort and reply-format members of the request the product
+ *  built. A body the meter cannot parse reports nothing rather than guessing. */
+function readReplyControls(
+  bodyText: string,
+): Pick<MeteredCall, 'thinking' | 'effort' | 'structuredOutput'> {
+  try {
+    const body = JSON.parse(bodyText) as {
+      thinking?: { type?: unknown };
+      output_config?: { effort?: unknown; format?: unknown };
+    };
+    return {
+      thinking: typeof body.thinking?.type === 'string' ? body.thinking.type : null,
+      effort: typeof body.output_config?.effort === 'string' ? body.output_config.effort : null,
+      structuredOutput: body.output_config?.format !== undefined,
+    };
+  } catch {
+    return { thinking: null, effort: null, structuredOutput: false };
+  }
+}
+
+function readProviderError(text: string): string | null {
+  try {
+    const body = JSON.parse(text) as { error?: { type?: unknown; message?: unknown } };
+    const type = typeof body.error?.type === 'string' ? body.error.type : 'error';
+    const message = typeof body.error?.message === 'string' ? body.error.message : '';
+    return `${type}: ${message}`.slice(0, 400);
+  } catch {
+    return text.slice(0, 200);
   }
 }
 
@@ -327,6 +396,11 @@ function readUsageInto(usage: unknown, call: MeteredCall): void {
   call.cacheCreationInputTokens =
     numberOrNull(u.cache_creation_input_tokens) ?? call.cacheCreationInputTokens;
   call.cacheReadInputTokens = numberOrNull(u.cache_read_input_tokens) ?? call.cacheReadInputTokens;
+  const details = u.output_tokens_details;
+  if (typeof details === 'object' && details !== null) {
+    call.thinkingTokens =
+      numberOrNull((details as Record<string, unknown>).thinking_tokens) ?? call.thinkingTokens;
+  }
   const breakdown = u.cache_creation;
   if (typeof breakdown === 'object' && breakdown !== null) {
     const b = breakdown as Record<string, unknown>;
@@ -356,6 +430,8 @@ function readStreamedUsage(text: string, call: MeteredCall): void {
       readUsageInto((frame.message as Record<string, unknown> | undefined)?.usage, call);
     } else if (frame.type === 'message_delta') {
       readUsageInto(frame.usage, call);
+      const stop = (frame.delta as Record<string, unknown> | undefined)?.stop_reason;
+      if (typeof stop === 'string') call.stopReason = stop;
     } else if (frame.type === 'content_block_delta') {
       const delta = frame.delta as Record<string, unknown> | undefined;
       if (typeof delta?.text === 'string') reply += delta.text;
@@ -372,6 +448,7 @@ function readBufferedUsage(text: string, call: MeteredCall): void {
     return;
   }
   readUsageInto(envelope.usage, call);
+  if (typeof envelope.stop_reason === 'string') call.stopReason = envelope.stop_reason;
   if (!Array.isArray(envelope.content)) return;
   const parts: string[] = [];
   for (const block of envelope.content) {

@@ -50,7 +50,11 @@ describe('v2-#37 AgentRuntime <-> SDK kind union parity', () => {
     // are gone by the time it settles, so the response union must NOT grow a
     // member for them. ('plan' is already excluded above for its own reason, and
     // 'step_start' carries an underscore the scan's pattern never matches.)
-    const PROGRESS_EVENT_KINDS = ['phase', 'answer'] as const;
+    // 'notice' (2026-09-18) is the same kind of thing: the frame that tells a
+    // watching client the turn stopped short of finished. The settled turn
+    // carries the same sentence as a FIELD of the plan-executed result
+    // (`notice`), so it is a member of an existing variant, not a new variant.
+    const PROGRESS_EVENT_KINDS = ['phase', 'answer', 'notice'] as const;
     const NON_SDK_KINDS = new Set([
       ...ROUTE_ERROR_KINDS,
       ...INTERNAL_CONTROL_KINDS,

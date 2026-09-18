@@ -180,8 +180,15 @@ export function observationIn(request: ProviderRequestView): string | null {
   return at === -1 ? null : last.text.slice(at + OBSERVATION_OPEN.length);
 }
 
-export function planReply(intents: ReadonlyArray<unknown>): StandInReply {
-  return { text: JSON.stringify({ kind: 'plan', intents }) };
+/** A plan reply. With no `status` it is the pre-loop envelope, byte for byte:
+ *  the runtime runs it once, exactly as it always did. */
+export function planReply(
+  intents: ReadonlyArray<unknown>,
+  status?: 'continue' | 'done',
+): StandInReply {
+  return {
+    text: JSON.stringify({ kind: 'plan', ...(status !== undefined ? { status } : {}), intents }),
+  };
 }
 
 export function answerReply(answer: string): StandInReply {

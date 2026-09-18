@@ -2029,6 +2029,23 @@ function InterruptedTurnBody({
   );
 }
 
+/**
+ * What a settled turn has to TELL the customer beyond its steps and its answer:
+ * that it stopped before the task was finished, or what the agent asked part-way
+ * through. Without it a turn that ran out of room shows a column of completed
+ * steps and reads as done.
+ *
+ * Read structurally because the field is newer than the SDK's response type; a
+ * server that does not send it yields null and nothing renders. It lives in this
+ * file, not beside the chat hook, because a dozen view tests replace that module
+ * wholesale and a pure function does not need to be part of what they fake.
+ */
+function turnNoticeOf(response: AgentMessageResponse): string | null {
+  if (response.kind !== 'plan-executed' || !('notice' in response)) return null;
+  const notice: unknown = response.notice;
+  return typeof notice === 'string' && notice.trim().length > 0 ? notice : null;
+}
+
 function AgentResponseBody({
   response,
   denied,
@@ -2055,6 +2072,15 @@ function AgentResponseBody({
               supporting detail for it rather than the whole reply. */}
           {response.answer !== undefined && response.answer.length > 0 && (
             <p className="whitespace-pre-wrap text-sm text-ink-primary">{response.answer}</p>
+          )}
+          {/* A turn can run every step and still not have finished the task: it
+              reached the limit of what it does in one message, or the agent asked
+              something part-way through. The steps below are all ticks either
+              way, so without this sentence an unfinished task reads as done. */}
+          {turnNoticeOf(response) !== null && (
+            <p className="whitespace-pre-wrap text-sm text-ink-primary" data-testid="turn-notice">
+              {turnNoticeOf(response)}
+            </p>
           )}
           {response.results.length === 0 ? (
             // A plan that executed ZERO steps — the decomposer produced no runnable

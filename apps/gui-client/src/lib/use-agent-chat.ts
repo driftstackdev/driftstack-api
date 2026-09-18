@@ -116,11 +116,65 @@ export function phaseCaption(phase: string): string | null {
     : null;
 }
 
+/**
+ * The caption for a phase, given WHY the turn entered it.
+ *
+ * A turn is a loop: it looks at the page, plans as far as it can see, acts, and
+ * looks again. From the second pass on the server says which kind of pass it is,
+ * and the two read differently to a customer — "Continuing…" is the task moving
+ * forward, where a bare "Planning…" on the fourth pass reads as starting over.
+ * An unknown cause, or none (an older server, or the first pass), falls back to
+ * the plain caption, so this can only ever add information.
+ */
+export function phaseCaptionFor(phase: string, cause: unknown): string | null {
+  if (cause === 'continue' || cause === 'replan') {
+    if (phase === 'reading_page') return 'Looking at the page…';
+    if (phase === 'planning') {
+      return cause === 'continue' ? 'Continuing…' : 'Working out another way…';
+    }
+  }
+  return phaseCaption(phase);
+}
+
 /** The plan a running turn is about to execute, as the customer sees it. */
 export interface LivePlan {
-  /** One customer-safe caption per planned step, server-authored. */
+  /** One customer-safe caption per planned step, server-authored. Indexed by
+   *  the step's position in the WHOLE TURN, across every segment of it. */
   labels: ReadonlyArray<string>;
   total: number;
+}
+
+/** Shown in a slot whose real caption never arrived. Such a slot is normally
+ *  behind a completed step and never rendered; this is what it says if it is. */
+const UNKNOWN_STEP_LABEL = 'Working';
+
+/**
+ * Fold one `plan` frame into the live plan.
+ *
+ * ⛔ A TURN SENDS MORE THAN ONE. Each segment of the loop announces its own
+ * steps, and `labels[0]` of the second frame is NOT step 0 of the turn — it is
+ * step `offset`. Replacing the plan with each frame (what this did when a turn
+ * was one plan) put the new captions at indices the view had already marked
+ * done, so every later segment rendered with its first steps MISSING and the
+ * "now running" marker pointing past the end of the list.
+ *
+ * `offset` is the server's statement of where the frame starts. A server that
+ * does not send it (older, or a first segment) is read the way its `total`
+ * implies: `total` has always been cumulative, so a frame that lists fewer
+ * captions than its total starts at the difference.
+ */
+export function mergeLivePlan(
+  previous: LivePlan | null,
+  frame: { labels: ReadonlyArray<string>; total: number; offset?: number },
+): LivePlan {
+  const implied = Math.max(0, frame.total - frame.labels.length);
+  const offset =
+    frame.offset !== undefined && Number.isInteger(frame.offset) && frame.offset >= 0
+      ? frame.offset
+      : implied;
+  const kept = Array.from({ length: offset }, (_, i) => previous?.labels[i] ?? UNKNOWN_STEP_LABEL);
+  const labels = [...kept, ...frame.labels];
+  return { labels, total: Math.max(frame.total, labels.length) };
 }
 
 /**
@@ -942,22 +996,37 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
           onEvent: (event) => {
             if (cancelGenRef.current !== gen) return;
             if (event.type === 'phase') {
-              const phase = (event.data as { phase?: unknown } | null)?.phase;
+              const data = event.data as { phase?: unknown; cause?: unknown } | null;
+              const phase = data?.phase;
               // An unrecognised phase leaves the caption as it was rather than
               // blanking a truthful one or showing a raw token.
               if (typeof phase === 'string') {
-                const caption = phaseCaption(phase);
+                const caption = phaseCaptionFor(phase, data?.cause);
                 if (caption !== null) setLivePhase(caption);
               }
               return;
             }
             if (event.type === 'plan') {
-              const data = event.data as { total?: unknown; labels?: unknown } | null;
+              const data = event.data as {
+                total?: unknown;
+                labels?: unknown;
+                offset?: unknown;
+              } | null;
               const labels = Array.isArray(data?.labels)
                 ? data.labels.filter((l): l is string => typeof l === 'string')
                 : [];
               const total = typeof data?.total === 'number' ? data.total : labels.length;
-              if (labels.length > 0) setLivePlan({ labels, total });
+              const offset = typeof data?.offset === 'number' ? data.offset : undefined;
+              // MERGED, not replaced: a turn announces one plan per segment.
+              if (labels.length > 0) {
+                setLivePlan((previous) =>
+                  mergeLivePlan(previous, {
+                    labels,
+                    total,
+                    ...(offset !== undefined ? { offset } : {}),
+                  }),
+                );
+              }
               return;
             }
             if (event.type === 'step_start') {

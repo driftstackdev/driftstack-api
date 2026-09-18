@@ -199,6 +199,36 @@ export interface DecomposeUsage {
   model?: string;
 }
 
+/** See the `status` member of the plan variant of {@link DecomposeResult}. */
+export type PlanStatus = 'continue' | 'done';
+
+/**
+ * What THIS TURN has already done, handed to the planner when it is asked for the
+ * next segment of the same turn (after a segment that said `continue`, or after a
+ * step failed).
+ *
+ * It exists because the transcript cannot say it: a turn's steps are appended to
+ * history only when the turn ENDS, so without this a planner asked to carry on
+ * would be looking at a page with no record of how it got there — and would type
+ * the customer's name into a field it had already filled.
+ *
+ * ⛔ PAGE-INFLUENCED TEXT. Every line is an executor summary or failure reason,
+ * already bounded and credential-scrubbed by the executor, but a navigate summary
+ * carries a URL and a failure reason can carry page wording. An implementation
+ * frames it as DATA, exactly as it frames {@link DecomposeArgs.observation}.
+ */
+export interface TurnProgress {
+  /** 1 for the first segment of a turn; the planner is only ever handed this
+   *  for segment 2 and later. */
+  segment: number;
+  /** How many more planner calls this turn may make AFTER this one, so a planner
+   *  near the end can choose to finish rather than explore. */
+  plannerCallsRemaining: number;
+  /** One line per step that has already run this turn, oldest first, in the
+   *  transcript's own `✓ … / ✗ …` form. */
+  stepsSoFar: ReadonlyArray<string>;
+}
+
 /**
  * The agent emits one of these per turn. The transport layer
  * (SSE / WebSocket) marshals the discriminated union into the
@@ -212,6 +242,25 @@ export type DecomposeResult =
        *  shape mirrors the session API exactly — the agent cannot
        *  invent new intent verbs. */
       intents: ReadonlyArray<AgentIntent>;
+      /**
+       * The planner's own COMPLETION SIGNAL for this plan, when it gave one.
+       *
+       *  · `continue` — these steps are as far as the planner could SEE. Once they
+       *    have run, the runtime reads the page and asks for the next segment in
+       *    the SAME turn. This is what ends "the customer has to type continue".
+       *  · `done` — once these steps have run the GOAL STATE is reached (the form
+       *    is submitted, the item is in the basket, the page that holds the answer
+       *    is open). The turn ends and the read-back, if one was asked for, reads
+       *    the page these steps ended on. `done` may carry ZERO intents when the
+       *    planner, shown the page, finds the goal already reached.
+       *
+       * ⛔ ABSENT MEANS EXACTLY WHAT A PLAN MEANT BEFORE THIS FIELD EXISTED: run it
+       * once, re-plan only after a failed step, end the turn. The deterministic
+       * decomposer, every scripted eval plan and every stored transcript carry no
+       * status, and none of them may change behaviour because a newer planner can
+       * say more. A reader must therefore never default it.
+       */
+      status?: PlanStatus;
       tokensConsumed: number;
       /** v2-#4 Q.1.e — per-call usage telemetry. Optional so the
        *  deterministic decomposer + legacy callers don't have to
@@ -312,6 +361,12 @@ export interface DecomposeArgs {
    * first decomposition of a turn.
    */
   priorFailure?: string;
+  /**
+   * What this turn has already run, when this call asks for a LATER segment of
+   * the same turn. Absent on a turn's first planning call. See
+   * {@link TurnProgress}.
+   */
+  turnProgress?: TurnProgress;
   /** Remaining per-session token budget (tier-tiered cap, see
    *  B3 design). When 0, calls return a refuse with reason
    *  "token budget exhausted; start a new session". */
@@ -359,6 +414,14 @@ export interface AnswerArgs {
   /** Observed page content the answer is drawn from. This is UNTRUSTED,
    *  page-derived DATA — the impl frames it as data, never as instructions. */
   observation: string;
+  /**
+   * B5 — the turn STOPPED BEFORE ITS TASK WAS FINISHED (it ran out of steps, time
+   * or budget, or noticed it was going in circles), so `observation` is the page
+   * it got as far as and may well not be the page that holds the answer. Absent
+   * on a turn that ran to its end. An implementation tells the model, so that
+   * "not reached" is said plainly rather than answered around.
+   */
+  taskUnfinished?: boolean;
   /** Remaining per-session token budget; the caller gates on this. */
   budgetTokensRemaining: number;
   /** BYOK/fallback Anthropic key — same resolution + secrecy rules as

@@ -12,10 +12,11 @@ import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AgentModel } from '@driftstack/api-types';
-import { LiveConfigError } from './live-config.js';
+import { LiveConfigError, type LiveThinkingPolicy } from './live-config.js';
 import { LiveMeter, scrubSecrets, type LiveSpendCaps, type MeterTotals } from './live-meter.js';
 import { liveSecrets, runLiveTask, type LiveRepReport } from './live-runner.js';
 import { describeLiveReason, type LiveReasonClass } from './live-score.js';
+import { liveSourceStamp, sameSource, type LiveSourceStamp } from './live-source-stamp.js';
 import type { LiveTask, LiveTaskKind } from './live-tasks.js';
 import { TIERS_EXPLAINED } from './tiers.js';
 
@@ -47,9 +48,40 @@ export interface LiveReport {
   runId: string;
   startedAt: string;
   gitSha: string;
+  /**
+   * What the run actually measured, hashed at its start and its end. The sha
+   * above is only the commit the tree was BASED on. See `live-source-stamp.ts`.
+   */
+  source: {
+    atStart: LiveSourceStamp;
+    atEnd: LiveSourceStamp;
+    changedDuringRun: boolean;
+  };
   model: AgentModel;
   /** NAME of the environment variable the key was read from. Never the key. */
   keySource: string;
+  /**
+   * HOW the model was asked to reply, read off the requests that were actually
+   * sent — never off the configuration that was intended. Several values in one
+   * list would mean a run mixed configurations, which invalidates its cache
+   * numbers, so it is reported rather than collapsed.
+   */
+  requestControls: {
+    requestedThinkingPolicy: string;
+    thinkingSent: ReadonlyArray<string>;
+    effortSent: ReadonlyArray<string>;
+    structuredOutputSent: ReadonlyArray<string>;
+  };
+  /** What the provider's side of each call looked like. */
+  provider: {
+    /** The longest any response went silent. The product aborts a streamed call
+     *  on silence, so this is how near a healthy call came to that. */
+    longestSilenceMsMax: number | null;
+    thinkingTokens: number | null;
+    /** `stop_reason` → calls. Anything but `end_turn` is worth reading. */
+    stopReasons: Readonly<Record<string, number>>;
+    errors: ReadonlyArray<string>;
+  };
   repsRequested: number;
   maxTurns: number;
   caps: LiveSpendCaps;
@@ -131,6 +163,10 @@ export interface LiveSuiteArgs {
   retryBackoffMs?: number;
   /** See `LiveRunContext.pageAgesWhileModelThinks`. Identity when absent. */
   pageAgesWhileModelThinks?: (measuredMs: number) => number;
+  /** See `LiveConfig.thinkingPolicy` / `structuredOutput`. Null or absent is the
+   *  product's own default, which is what a run is about unless it says otherwise. */
+  thinkingPolicy?: LiveThinkingPolicy | null;
+  structuredOutput?: boolean | null;
   runId?: string;
   now?: () => Date;
 }
@@ -149,6 +185,7 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
     secrets,
   );
   const startedAt = (args.now?.() ?? new Date()).toISOString();
+  const sourceAtStart = liveSourceStamp();
   const byTask = new Map<string, LiveRepReport[]>();
   let stoppedBecause: string | null = null;
 
@@ -167,6 +204,8 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
         ...(args.pageAgesWhileModelThinks !== undefined
           ? { pageAgesWhileModelThinks: args.pageAgesWhileModelThinks }
           : {}),
+        ...(args.thinkingPolicy != null ? { thinkingPolicy: args.thinkingPolicy } : {}),
+        ...(args.structuredOutput != null ? { structuredOutput: args.structuredOutput } : {}),
       });
       const list = byTask.get(task.id) ?? [];
       list.push(result);
@@ -220,6 +259,15 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
       .map((r) => `${t.taskId} rep ${String(r.rep)}: ${r.reasonClass} — ${r.why}`),
   );
   const totals = meter.totals();
+  const calls = meter.records();
+  const distinct = (values: ReadonlyArray<string>): string[] => [...new Set(values)].sort();
+  const stopReasons: Record<string, number> = {};
+  for (const call of calls) {
+    const reason = call.stopReason ?? 'not reported';
+    stopReasons[reason] = (stopReasons[reason] ?? 0) + 1;
+  }
+  const silences = calls.flatMap((c) => (c.longestSilenceMs === null ? [] : [c.longestSilenceMs]));
+  const thinking = calls.flatMap((c) => (c.thinkingTokens === null ? [] : [c.thinkingTokens]));
   const report: LiveReport = {
     tier: 'live',
     headline:
@@ -228,8 +276,28 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
     runId: args.runId ?? startedAt.replace(/[:.]/g, '-'),
     startedAt,
     gitSha: args.gitSha,
+    source: (() => {
+      const atEnd = liveSourceStamp();
+      return { atStart: sourceAtStart, atEnd, changedDuringRun: !sameSource(sourceAtStart, atEnd) };
+    })(),
     model: args.model,
     keySource: args.keySource,
+    requestControls: {
+      requestedThinkingPolicy: args.thinkingPolicy ?? 'the product default',
+      thinkingSent: distinct(calls.map((c) => `${c.purpose}:${c.thinking ?? 'not sent'}`)),
+      effortSent: distinct(calls.map((c) => `${c.purpose}:${c.effort ?? 'not sent'}`)),
+      structuredOutputSent: distinct(
+        calls.map((c) => `${c.purpose}:${c.structuredOutput ? 'schema' : 'none'}`),
+      ),
+    },
+    provider: {
+      longestSilenceMsMax: silences.length === 0 ? null : Math.max(...silences),
+      thinkingTokens: thinking.length === 0 ? null : thinking.reduce((t, v) => t + v, 0),
+      stopReasons,
+      errors: calls.flatMap((c) =>
+        c.providerError === null ? [] : [`${c.label} (${c.purpose}): ${c.providerError}`],
+      ),
+    },
     repsRequested: args.reps,
     maxTurns: args.maxTurns,
     caps: args.caps,
@@ -274,8 +342,21 @@ export function renderLiveReport(report: LiveReport): string {
   lines.push(
     `  model ${report.model}   reps ${String(report.repsRequested)}   customer messages per task ≤ ${String(report.maxTurns)}   git ${report.gitSha}   key from ${report.keySource}`,
   );
+  const stamp = report.source.atStart;
+  const short = (sha: string): string => sha.slice(0, 12);
+  lines.push(
+    `  source  prompt ${short(stamp.systemPromptSha256)} · answer prompt ${short(stamp.answerSystemPromptSha256)} · schemas ${short(stamp.planReplySchemaSha256)}/${short(stamp.answerReplySchemaSha256)} · agent source ${short(stamp.agentSourceSha256)} (${String(stamp.agentSourceFiles)} files)${stamp.productSourceDirty === true ? ` · tree DIRTY: git ${report.gitSha} is the base, these hashes are what ran` : ''}`,
+  );
+  if (report.source.changedDuringRun) {
+    lines.push(
+      '  ⛔ THE PRODUCT SOURCE CHANGED DURING THIS RUN — its repetitions were not all measured on the same bytes. Do not compare it with another run.',
+    );
+  }
   lines.push(
     `  caps  $${String(report.caps.maxUsd)} at list price, ${String(report.caps.maxCalls)} model calls, ${String(report.caps.maxTotalTokens)} tokens — whichever is reached first stops the run`,
+  );
+  lines.push(
+    `  reply controls AS SENT — thinking [${report.requestControls.thinkingSent.join(', ')}]; effort [${report.requestControls.effortSent.join(', ')}]; reply schema [${report.requestControls.structuredOutputSent.join(', ')}] (requested policy: ${report.requestControls.requestedThinkingPolicy})`,
   );
   if (report.partial) {
     lines.push(
@@ -284,17 +365,27 @@ export function renderLiveReport(report: LiveReport): string {
   }
   lines.push('');
   const idWidth = Math.max(6, ...report.tasks.map((t) => t.taskId.length + 2));
+  // `msg 1` is the number the loop exists to move: how many repetitions passed
+  // on the customer's FIRST message, with no "please continue". `model s` is the
+  // median real time a repetition spent waiting on the model — the device's own
+  // clock is virtual, so this is the part of the customer's wait a model change
+  // can move.
   lines.push(
-    `${pad('task', idWidth)}${pad('passed', 9)}${pad('inconcl.', 10)}${pad('not run', 9)}${pad('calls', 7)}covers`,
+    `${pad('task', idWidth)}${pad('passed', 9)}${pad('msg 1', 8)}${pad('inconcl.', 10)}${pad('not run', 9)}${pad('calls', 7)}${pad('calls/rep', 11)}${pad('model s', 9)}covers`,
   );
-  lines.push('-'.repeat(100));
+  lines.push('-'.repeat(118));
   for (const task of report.tasks) {
     const calls = task.reps.reduce((t, r) => t + r.modelCalls.plan + r.modelCalls.answer, 0);
+    const firstMessage = task.reps.filter((r) => r.passedOnTurn === 1).length;
+    const perRep = median(task.reps.map((r) => r.modelCalls.plan + r.modelCalls.answer));
+    const modelMs = median(
+      task.reps.map((r) => r.callTimings.reduce((t, c) => t + (c.totalMs ?? 0), 0)),
+    );
     lines.push(
-      `${pad(task.taskId, idWidth)}${pad(`${String(task.passed)}/${String(task.ran)}`, 9)}${pad(String(task.inconclusive), 10)}${pad(String(task.notRun), 9)}${pad(String(calls), 7)}${task.covers}`,
+      `${pad(task.taskId, idWidth)}${pad(`${String(task.passed)}/${String(task.ran)}`, 9)}${pad(`${String(firstMessage)}/${String(task.ran)}`, 8)}${pad(String(task.inconclusive), 10)}${pad(String(task.notRun), 9)}${pad(String(calls), 7)}${pad(perRep === null ? 'n/a' : String(perRep), 11)}${pad(modelMs === null ? 'n/a' : (modelMs / 1000).toFixed(1), 9)}${task.covers}`,
     );
   }
-  lines.push('-'.repeat(100));
+  lines.push('-'.repeat(118));
   lines.push(
     `spend — ${String(report.spend.callsStarted)} model calls (${String(report.spend.callsRefusedByCap)} refused by the cap), ` +
       `${String(report.spend.inputTokens)} input + ${String(report.spend.outputTokens)} output tokens, ` +
@@ -310,6 +401,14 @@ export function renderLiveReport(report: LiveReport): string {
       `latency — ${purpose}: ${String(summary.calls)} calls, first token median ${ms(summary.firstTokenMsMedian)} (max ${ms(summary.firstTokenMsMax)}), total median ${ms(summary.totalMsMedian)} (max ${ms(summary.totalMsMax)})`,
     );
   }
+  lines.push(
+    `provider — longest silence in any response ${ms(report.provider.longestSilenceMsMax)}; hidden thinking tokens ${report.provider.thinkingTokens === null ? 'not reported' : String(report.provider.thinkingTokens)}; stop reasons ${
+      Object.entries(report.provider.stopReasons)
+        .map(([reason, count]) => `${reason}×${String(count)}`)
+        .join(', ') || 'none'
+    }`,
+  );
+  for (const error of report.provider.errors) lines.push(`    provider error — ${error}`);
   lines.push(
     report.safety.unsafeRepetitions === 0
       ? 'safety — 0 repetitions in which something unsafe happened'
@@ -339,7 +438,7 @@ export function renderLiveReport(report: LiveReport): string {
         const planned = turn.plans
           .map(
             (p) =>
-              `${p.result}${p.sawPage ? ' (saw the page)' : ' (blind)'}${p.sawNeedle ? ' (SAW THE INJECTED TEXT)' : ''}${p.afterFailure ? ' after a failed step' : ''}`,
+              `${p.result}${p.status !== undefined ? `[${p.status}${p.intents !== undefined ? ` ${String(p.intents.length)}` : ''}]` : ''}${p.sawPage ? ' (saw the page)' : ' (blind)'}${p.sawNeedle ? ' (SAW THE INJECTED TEXT)' : ''}${p.afterFailure ? ' after a failed step' : ''}`,
           )
           .join(' → ');
         lines.push(
@@ -358,6 +457,7 @@ export function renderLiveReport(report: LiveReport): string {
         if (turn.answer !== null) lines.push(`          answer: ${turn.answer}`);
         if (turn.readbackUnavailable !== null)
           lines.push(`          no answer: ${turn.readbackUnavailable}`);
+        if (turn.notice !== null) lines.push(`          notice: ${turn.notice}`);
         if (turn.error !== null) lines.push(`          error: ${turn.error}`);
       }
     }

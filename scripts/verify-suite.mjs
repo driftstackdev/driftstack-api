@@ -44,7 +44,7 @@ import { spawn, spawnSync } from 'node:child_process';
  *
  * "It is under apps/gui-client" is not the question. The extension is.
  */
-export const EXPECTED_TEST_FILES = 3238;
+export const EXPECTED_TEST_FILES = 3248;
 
 /**
  * Files the ROOT config collects — both vitest projects, which is what CI's
@@ -74,7 +74,7 @@ export const EXPECTED_TEST_FILES = 3238;
  * scope; this note exists so "five jobs" is not read as "everything that can
  * fail a PR".
  */
-export const EXPECTED_TEST_FILES_ALL = 3511;
+export const EXPECTED_TEST_FILES_ALL = 3522;
 
 /**
  * The CI jobs this gate does NOT run, with how to run each locally.

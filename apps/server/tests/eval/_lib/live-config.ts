@@ -88,7 +88,19 @@ export interface LiveConfig {
   caps: LiveSpendCaps;
   /** Task ids to run, or null for the whole corpus. */
   onlyTasks: ReadonlyArray<string> | null;
+  /**
+   * The thinking policy to MEASURE, or null for the one the product ships. This
+   * is how one policy is compared with another through the product's own request
+   * assembly — the same knob the product exposes as a constructor dependency.
+   */
+  thinkingPolicy: LiveThinkingPolicy | null;
+  /** False to send requests WITHOUT the schema constraint on the reply, so the
+   *  defensive parser can be measured on its own. Null is the product default. */
+  structuredOutput: boolean | null;
 }
+
+export const LIVE_THINKING_POLICIES = ['disabled', 'adaptive-low'] as const;
+export type LiveThinkingPolicy = (typeof LIVE_THINKING_POLICIES)[number];
 
 export interface LiveDisabled {
   enabled: false;
@@ -108,6 +120,7 @@ export const LIVE_HOW_TO_RUN =
   `Optional: EVAL_LIVE_MODEL (default ${DEFAULT_AGENT_MODEL}; one of ${Object.keys(CLAUDE_MODELS).join(', ')}), ` +
   `EVAL_LIVE_REPS (default ${String(DEFAULT_LIVE_REPS)}), EVAL_LIVE_MAX_TURNS (default ${String(DEFAULT_LIVE_MAX_TURNS)}), ` +
   `EVAL_LIVE_MAX_USD (default ${String(DEFAULT_LIVE_CAPS.maxUsd)}), EVAL_LIVE_MAX_CALLS (default ${String(DEFAULT_LIVE_CAPS.maxCalls)}), EVAL_LIVE_MAX_TOKENS (default ${String(DEFAULT_LIVE_CAPS.maxTotalTokens)}), ` +
+  `EVAL_LIVE_THINKING (${LIVE_THINKING_POLICIES.join(' | ')}; default the product's own policy), EVAL_LIVE_STRUCTURED (0 sends requests without the reply schema; default the product's own), ` +
   'EVAL_LIVE_TASKS (comma-separated task ids), EVAL_REPORT_DIR (where the reports go; default the OS temp directory, and never inside the repository). ' +
   'It writes no baseline and pins no outcome.';
 
@@ -185,7 +198,30 @@ export function readLiveConfig(env: NodeJS.ProcessEnv = process.env): LiveConfig
     );
   }
   const onlyRaw = env.EVAL_LIVE_TASKS?.trim();
+  const thinkingRaw = env.EVAL_LIVE_THINKING?.trim();
+  const thinkingPolicy =
+    thinkingRaw === undefined || thinkingRaw.length === 0
+      ? null
+      : (LIVE_THINKING_POLICIES.find((policy) => policy === thinkingRaw) ?? undefined);
+  if (thinkingPolicy === undefined) {
+    // A typo must not quietly measure the default and label it as something else.
+    throw new LiveConfigError(
+      `EVAL_LIVE_THINKING must be one of: ${LIVE_THINKING_POLICIES.join(', ')}`,
+    );
+  }
+  const structuredRaw = env.EVAL_LIVE_STRUCTURED?.trim();
+  if (
+    structuredRaw !== undefined &&
+    structuredRaw.length > 0 &&
+    structuredRaw !== '0' &&
+    structuredRaw !== '1'
+  ) {
+    throw new LiveConfigError('EVAL_LIVE_STRUCTURED must be 0 or 1');
+  }
   return {
+    thinkingPolicy,
+    structuredOutput:
+      structuredRaw === undefined || structuredRaw.length === 0 ? null : structuredRaw === '1',
     enabled: true,
     apiKey,
     apiKeySource,

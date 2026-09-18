@@ -436,6 +436,13 @@ export interface AnswerExtractionOptions {
    * is refused whatever this says.
    */
   countsTowardLineBound?: (line: string) => boolean;
+  /**
+   * The line bound, when the QUESTION asked for more than one line of the page —
+   * "the hours for each day" is three rows, and a correct answer quotes three.
+   * Absent is {@link ANSWER_MAX_QUOTED_LINES}. Only the line reading moves: every
+   * line, the character share and the word share still refuse a page dump.
+   */
+  maxQuotedLines?: number;
 }
 
 /** The distinct words long enough to be evidence that text came back. */
@@ -543,9 +550,10 @@ export function checkAnswerIsExtraction(
   }
   const narrowed = options.countsTowardLineBound;
   const boundLines = narrowed === undefined ? quotedLines : quoted.filter(narrowed).length;
-  if (boundLines > ANSWER_MAX_QUOTED_LINES) {
+  const maxLines = options.maxQuotedLines ?? ANSWER_MAX_QUOTED_LINES;
+  if (boundLines > maxLines) {
     return refuse(
-      `the answer quotes more of the page than an extraction should — ${measured}${narrowed === undefined ? '' : ` (${String(boundLines)} of them substantive lines)`}, and the bound is ${String(ANSWER_MAX_QUOTED_LINES)} lines`,
+      `the answer quotes more of the page than an extraction should — ${measured}${narrowed === undefined ? '' : ` (${String(boundLines)} of them substantive lines)`}, and the bound is ${String(maxLines)} lines`,
     );
   }
   if (quotedLines >= 2 && quotedCharShare >= ANSWER_MAX_QUOTED_CHAR_SHARE) {

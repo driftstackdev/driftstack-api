@@ -204,9 +204,11 @@ export function isSubstantiveLine(line: string): boolean {
 export function checkLiveAnswerIsExtraction(
   answer: string,
   observationText: string | null,
+  maxQuotedLines?: number,
 ): AnswerExtractionCheck {
   return checkAnswerIsExtraction(answer, observationText, {
     countsTowardLineBound: isSubstantiveLine,
+    ...(maxQuotedLines !== undefined ? { maxQuotedLines } : {}),
   });
 }
 
@@ -231,7 +233,11 @@ export function readCriterion(obs: LiveObservation): CriterionReading {
       unmet.push('no answer was delivered');
     } else {
       answerPatternMatched = c.answer.pattern.test(obs.answer);
-      answerExtraction = checkLiveAnswerIsExtraction(obs.answer, obs.answerObservationText);
+      answerExtraction = checkLiveAnswerIsExtraction(
+        obs.answer,
+        obs.answerObservationText,
+        c.answer.rows,
+      );
       if (!answerPatternMatched) unmet.push(`the answer did not say ${c.answer.label}`);
       else if (!answerExtraction.isExtraction) unmet.push(answerExtraction.why);
     }

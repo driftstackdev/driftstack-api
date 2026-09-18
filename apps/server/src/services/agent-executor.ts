@@ -153,16 +153,59 @@ export function consequentialSignature(
   return `${category}:${matchedText.toLowerCase()}`;
 }
 
+/**
+ * What the PAGE calls the element a tap addresses, from the names read off the
+ * page the planner was last shown — or '' when the page has no name for it.
+ *
+ * Looked up the way the planner may have respelled it: as written, then by the
+ * id or test id in its last compound (`button#pay` and `#pay` are one element).
+ */
+function pageLabelForTap(intent: AgentIntent, pageLabels: ReadonlyMap<string, string>): string {
+  if (intent.kind !== 'interact' || intent.action !== 'tap' || intent.selector === undefined) {
+    return '';
+  }
+  const found: string[] = [];
+  for (const branch of intent.selector.split(',')) {
+    const selector = branch.trim();
+    const last = selector.split(/[\s>+~]+/).at(-1) ?? '';
+    const id = /#([-\w]+)/.exec(last.replace(/\[[^\]]*\]/g, ''));
+    const testId = /\[data-testid\s*=\s*["']?([^"'\]]+)["']?\]/.exec(last);
+    for (const key of [
+      selector,
+      ...(id !== null ? [`#${id[1] ?? ''}`] : []),
+      ...(testId !== null ? [`[data-testid="${testId[1] ?? ''}"]`] : []),
+    ]) {
+      const label = pageLabels.get(key);
+      if (label !== undefined) found.push(label);
+    }
+  }
+  return found.join(' ');
+}
+
 /** If `intent` is a consequential action not yet approved, returns the
  *  confirmation_required result to halt on. A matching approval is consumed
  *  before returning null, so one human decision releases one action only. Exported so every
  *  AgentExecutor implementation (Stub / Real / ControlPlane) applies the SAME
- *  human-confirmation gate — swapping executors must never drop it (#139/#130). */
+ *  human-confirmation gate — swapping executors must never drop it (#139/#130).
+ *
+ *  ⛔ `pageLabels` MAKES THE GATE INDEPENDENT OF THE PLANNER. The classifier reads
+ *  the tap's selector and its `value`, and `value` is written by the model — the
+ *  one party a hostile page is trying to steer, and free to leave it out. With a
+ *  turn that plans from the page's own selector list, `#cta-primary` is how a
+ *  "Confirm purchase" button is addressed, and nothing in that says purchase. So an
+ *  executor that has read the page passes what the PAGE calls each element, and
+ *  the tap is classified on all three. It can only ever ADD a halt. */
 export function consequentialHalt(
   intent: AgentIntent,
   approved: Set<string>,
+  pageLabels?: ReadonlyMap<string, string>,
 ): Extract<IntentResult, { kind: 'confirmation_required' }> | null {
-  const v = classifyConsequentialAction(intent);
+  const pageLabel = pageLabels !== undefined ? pageLabelForTap(intent, pageLabels) : '';
+  const v = classifyConsequentialAction(
+    pageLabel.length > 0 && intent.kind === 'interact'
+      ? { ...intent, value: `${intent.value ?? ''} ${pageLabel}` }
+      : intent,
+  );
   if (!v.requiresConfirmation || v.category === undefined || v.matchedText === undefined) {
     return null;
   }

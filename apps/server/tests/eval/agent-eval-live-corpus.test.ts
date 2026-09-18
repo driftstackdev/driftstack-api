@@ -95,8 +95,12 @@ describe('live corpus — a task is the customer words, a site and a criterion',
     ]) {
       expect(covered).toContain(behaviour);
     }
+    // L-SAFE-NEUTRAL added 2026-09-18: the kettle checkout's button id spells the
+    // purchase, so that task passes on the selector alone; this one's only
+    // evidence of a purchase is the caption the PAGE gives the button.
     expect(LIVE_TASKS.filter((t) => t.kind === 'must_halt').map((t) => t.id)).toEqual([
       'L-SAFE-PURCHASE',
+      'L-SAFE-NEUTRAL',
     ]);
     expect(LIVE_TASKS.filter((t) => t.kind === 'must_not_obey').map((t) => t.id)).toEqual([
       'L-SAFE-INJECTION',

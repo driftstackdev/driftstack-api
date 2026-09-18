@@ -19,7 +19,9 @@ import type {
   CredentialBag,
   DecomposeResult,
   DecomposeUsage,
+  PlanStatus,
   TranscriptEntry,
+  TurnProgress,
 } from './agent-decomposer.js';
 import {
   AgentDecomposerContinuationDeniedError,
@@ -140,10 +142,38 @@ export type AgentTurnProgressEvent =
   | {
       kind: 'phase';
       phase: 'planning' | 'starting_browser' | 'executing' | 'reading_page' | 'answering';
+      /**
+       * B6 — which SEGMENT of the turn this phase belongs to (1-based), and, on a
+       * `planning` or `reading_page` phase after the first segment, WHY the turn
+       * is going round again: the previous segment asked to `continue`, or a step
+       * failed and the rest is being re-planned. Both absent on a turn's first
+       * pass, so a single-segment turn emits exactly the events it always did.
+       *
+       * They exist because the two are different things to every reader: the
+       * customer ("Continuing…" is not "something went wrong"), and the telemetry,
+       * whose `replans` would otherwise count a healthy four-segment task as
+       * three recoveries.
+       */
+      segment?: number;
+      cause?: 'continue' | 'replan';
     }
-  | { kind: 'plan'; intents: ReadonlyArray<AgentIntent>; total: number }
+  | {
+      kind: 'plan';
+      intents: ReadonlyArray<AgentIntent>;
+      /** Steps run so far this turn PLUS this segment's — cumulative. */
+      total: number;
+      /** B6 — how many steps ran before this segment: the index, in the turn's
+       *  one step list, of this segment's first intent. `step_start.index` and
+       *  the `step` results are in that same space. Absent on a first segment. */
+      offset?: number;
+      segment?: number;
+      status?: PlanStatus;
+    }
   | { kind: 'step_start'; index: number; total: number }
-  | { kind: 'answer'; answer: string };
+  | { kind: 'answer'; answer: string }
+  /** B1 — the turn stopped short of finished, or the planner asked something
+   *  part-way through. See `notice` on the plan-executed turn result. */
+  | { kind: 'notice'; notice: string };
 
 /** Publish a progress event without ever letting a broken sink break the turn. */
 function emitProgress(sink: RunTurnArgs['onProgress'], event: AgentTurnProgressEvent): void {
@@ -258,6 +288,28 @@ export type RunTurnResult =
        * carries it to callers that read the turn result directly.
        */
       readbackUnavailable?: string;
+      /**
+       * B1 — what the customer must be TOLD about how this turn ended, when the
+       * step list alone would mislead them: the loop stopped at one of its bounds
+       * with the task unfinished (every step a tick, nothing done), or the
+       * planner, shown the page part-way through, asked a question or declined.
+       * Customer-visible copy. Absent on a turn that finished or failed on a
+       * step — a ✗ row is its own explanation.
+       */
+      notice?: string;
+      /** B1 — how the loop ran, for callers that classify turns rather than
+       *  render them. `stopped` is the bound that ended it, when one did. */
+      loop?: {
+        segments: number;
+        plannerCalls: number;
+        replans: number;
+        finalStatus?: PlanStatus;
+        stopped?: TurnLoopStopReason;
+        handedBack?: boolean;
+        /** Whether the planner handed back with a QUESTION or a REFUSAL — they
+         *  are different outcomes for a turn, and telemetry says which. */
+        handedBackKind?: 'clarify' | 'refuse';
+      };
     }
   | {
       kind: 'clarify';
@@ -427,6 +479,14 @@ export interface AgentRuntimeDeps {
   /** Per-owner-account AI turns allowed concurrently across distinct agent
    *  sessions. Manual transcript-only turns do not consume a slot. Default 3. */
   maxConcurrentTurnsPerAccount?: number;
+  /**
+   * Monotonic milliseconds, for the turn's wall-clock ceiling
+   * (MAX_TURN_WALL_CLOCK_MS). Defaults to `performance.now()`. Injected so a test
+   * can make a turn "take" four minutes without taking four minutes — and
+   * deliberately NOT `RunTurnArgs.now`, which is one fixed instant per turn (the
+   * transcript timestamp) and so cannot measure anything.
+   */
+  nowMs?: () => number;
   /** v2-#4 Q.1.e — optional usage recorder. When wired, AgentRuntime
    *  persists a usage_records row per decompose() call that returns
    *  a `usage` block. */
@@ -577,11 +637,45 @@ export const READBACK_MIN_BUDGET_TOKENS = 6_000;
 // model does not know how to do this task, and more attempts are the customer
 // paying to watch it fail more slowly.
 export const MAX_REPLANS_PER_TURN = 2;
-// FOUR MODEL CALLS: the initial decompose, at most two re-plans, and the
-// read-back. The loop stops one short of the ceiling so the LAST call is always
-// available to the read-back — a turn that spent every call re-planning and then
-// could not tell the customer what it found would have optimised the wrong half.
-export const MAX_MODEL_CALLS_PER_TURN = 4;
+// ── B1 — THE TURN IS A LOOP, AND THIS IS HOW LONG IT MAY RUN ────────────
+//
+// SIX PLANNER CALLS. A turn now looks, plans as far as it can see, acts and looks
+// again, so the number of planning calls is the number of PAGES a task crosses
+// plus one. The reference shape — search, result, detail, answer — is FOUR: a
+// blind first segment (go there), the search, the result, and the look that says
+// "done". A form is three, a sign-in is three or four. Six is those four plus the
+// two recoveries MAX_REPLANS_PER_TURN already allows (a consent banner that was
+// not there on the last look, a control that moved), because a task that needed
+// every recovery should still be able to finish. Beyond six the evidence is that
+// the task is either longer than one message should be or is not converging, and
+// the honest move is to hand the page back and say so — every extra segment is
+// seconds the customer waits and tokens they pay for.
+//
+// ⚠️ NOT A COMFORTABLE MARGIN, AND SAID SO. In two early live runs (2026-09-18,
+// before the prompt told the planner to judge the goal state from the steps
+// already run) an easy fixture task reached exactly six planning calls by
+// dithering over a page it had already finished. After that prompt change no
+// measured turn took more than five. Re-measure the maximum before calling six
+// comfortable, and read a turn that hits it as dithering until shown otherwise.
+//
+// It bounds `continue` segments and failure re-plans TOGETHER (they are the same
+// call), while MAX_REPLANS_PER_TURN keeps bounding the failures on their own: a
+// model that fails three times running is not rescued by having calls left.
+export const MAX_PLANNER_CALLS_PER_TURN = 6;
+// SEVEN MODEL CALLS: the planner calls above, and the read-back. The loop stops
+// one short of the ceiling so the LAST call is always available to the read-back
+// — a turn that spent every call planning and then could not tell the customer
+// what it found would have optimised the wrong half.
+export const MAX_MODEL_CALLS_PER_TURN = 7;
+// A WALL-CLOCK CEILING, because the call ceiling does not bound TIME: six
+// segments of eight steps, each with its human pacing and its element waits, is
+// minutes. After this long no NEW segment is asked for. The segment in flight is
+// never cut off — abandoning a plan halfway leaves dispatched actions in an
+// unknown state — so this bounds when the turn stops STARTING work, and the
+// read-back may still run after it. Three minutes: past that a customer watching
+// a chat has stopped believing it is working, and "here is what I did, say
+// continue" is a better message than another minute of steps.
+export const MAX_TURN_WALL_CLOCK_MS = 180_000;
 // Never START a plan call the remaining budget cannot cover. Same floor and same
 // reason as the read-back's: a coarse `> 0` check lets a near-empty balance run
 // a full call that the debit then floors at zero, which is a silent per-session
@@ -615,6 +709,185 @@ const REPLANNABLE_FAILURE_CATEGORIES: ReadonlySet<string> = new Set([
   'invalid_request',
   'result_too_large',
 ]);
+
+/**
+ * B1 — why a turn's loop stopped BEFORE the planner said `done`, when every step
+ * on the screen is a tick.
+ *
+ * That last clause is the reason this exists. A turn that stops on a failed step
+ * explains itself: the ✗ row is the message. A turn that stops because it ran out
+ * of calls, or time, or budget, or noticed it was going in circles, shows the
+ * customer a column of green ticks over a task that is NOT finished — exactly the
+ * "every step succeeded and nothing was done" failure the loop was built to end,
+ * re-created by the loop's own bounds. So each bound has its own sentence.
+ *
+ * ⛔ CUSTOMER-VISIBLE COPY. No internals: nothing here names a model, a call, a
+ * segment, a digest or a limit's number.
+ */
+export type TurnLoopStopReason =
+  | 'planner_call_limit'
+  | 'wall_clock'
+  | 'budget_floor'
+  | 'no_progress'
+  | 'repeat_refused'
+  | 'planner_unavailable';
+
+export const TURN_LOOP_STOP_SENTENCES: Readonly<Record<TurnLoopStopReason, string>> = {
+  planner_call_limit:
+    'I did the steps above, but this task needs more steps than I take in one message, so it is not finished yet. Send “continue” and I will carry on from this page.',
+  wall_clock:
+    'I did the steps above, but this was taking too long for one message, so I stopped before it was finished. Send “continue” and I will carry on from this page.',
+  budget_floor:
+    'I did the steps above, but there is not enough of this chat’s AI budget left to keep going, so the task is not finished. Start a new chat to carry on.',
+  no_progress:
+    'I did the steps above, but the page did not change and I was about to try the same thing again, so I stopped rather than go in circles. The task is not finished — tell me what to try differently.',
+  repeat_refused:
+    'I did the steps above, but my next steps would have repeated an action that already ran, which could do it twice, so I stopped. Check the page, and send “continue” if it is safe to carry on.',
+  planner_unavailable:
+    'I did the steps above, but could not work out the next ones just now, so the task is not finished. Send “continue” to try again.',
+};
+
+/**
+ * B1 — did this run get through its steps? A failed `wait` does not count
+ * against it: the executor treats a wait as a best-effort synchronisation hint
+ * and carries on past one, so a segment whose only ✗ is a wait DID run, and a
+ * planner that said `continue` should be shown the page it produced.
+ */
+export function segmentRanToItsEnd(run: ExecutorRunResult): boolean {
+  if (run.authorityLost === true || run.awaitingConfirmation === true) return false;
+  return run.results.every((r) => r.kind === 'success' || r.intent.kind === 'wait');
+}
+
+/**
+ * B1 — may repeating this intent do something to the SITE a second time?
+ *
+ * Narrower than {@link intentReplayMayDuplicateEffect}, on purpose, and only for
+ * the question the repeat guard asks. That predicate answers "may the EXECUTOR
+ * blindly re-send this after an ambiguous failure", where a second scroll or a
+ * second pause is a real distortion of what ran. The guard asks something else:
+ * "is this new plan about to SUBMIT, BUY or NAVIGATE again". A scroll and a pause
+ * cannot, and a loop whose segments each pace themselves like a person emits the
+ * same `behavioral_pause` in most of them — refusing a whole segment for that
+ * would stop healthy turns to prevent nothing. Navigation and every interaction
+ * that acts on an element stay guarded, which is where the duplicate order lives.
+ */
+function repeatMayDuplicateSiteEffect(intent: AgentIntent): boolean {
+  if (intent.kind === 'scroll' || intent.kind === 'behavioral_pause') return false;
+  // Scrolling TO an element moves the viewport and nothing else.
+  if (intent.kind === 'interact' && intent.action === 'scroll') return false;
+  return intentReplayMayDuplicateEffect(intent);
+}
+
+/** A navigation target, reduced to what decides where the browser ends up. */
+function navigationIdentity(url: string): string {
+  try {
+    const parsed = new URL(url.trim());
+    return `${parsed.host.toLowerCase()}${parsed.pathname.replace(/\/+$/, '')}${parsed.search}`;
+  } catch {
+    return url.trim().toLowerCase();
+  }
+}
+
+/**
+ * The elements a selector may address, reduced to what identifies them.
+ *
+ * ⛔ WHY NOT THE SELECTOR STRING. `#send`, `button#send` and `form #send.primary`
+ * are one button, and a guard that compares the strings lets the second spelling
+ * tap it again. An id is unique in a document, so a branch whose LAST compound
+ * carries one is that id and nothing else. Everything else is compared as
+ * written, whitespace and case folded — folding case can only make two selectors
+ * MORE alike, which is the safe direction for a guard against doing it twice.
+ * A comma list is every branch: the device takes whichever matches first, so two
+ * lists that share a branch may be the same element.
+ */
+function selectorTargets(selector: string | undefined): string[] {
+  if (selector === undefined) return [''];
+  const branches: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let current = '';
+  for (const ch of selector) {
+    if (quote !== null) {
+      if (ch === quote) quote = null;
+    } else if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === '[' || ch === '(') depth += 1;
+    else if (ch === ']' || ch === ')') depth = Math.max(0, depth - 1);
+    else if (ch === ',' && depth === 0) {
+      branches.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  branches.push(current);
+  return branches
+    .map((branch) => branch.replace(/\s+/g, ' ').trim().toLowerCase())
+    .filter((branch) => branch.length > 0)
+    .map((branch) => {
+      const withoutAttributes = branch.replace(/\[[^\]]*\]/g, '');
+      const lastCompound = withoutAttributes.split(/[\s>+~]+/).at(-1) ?? '';
+      const id = /#([-\w]+)/.exec(lastCompound);
+      return id !== null ? `#${id[1] ?? ''}` : branch;
+    });
+}
+
+/**
+ * B1 — would running `b` do to the site what `a` already did?
+ *
+ * ⛔ EFFECT IDENTITY, NOT DEEP EQUALITY — and the difference was a double submit.
+ * A tap's `value` is only the label the device uses to confirm it found the right
+ * element; it is optional and a planner words it differently from one segment to
+ * the next. Compared by deep equality, `tap #send "Send"` and `tap #send` were two
+ * different steps, so the guard below let the second one through and the form
+ * went twice in one customer message with no notice. So a tap is its TARGET. A
+ * `type` is its target AND its text (typing different text is a different act;
+ * typing the same text again doubles what is in the box), and a key press is its
+ * key and its target. A kind this does not know is compared whole.
+ */
+export function sameSiteEffect(a: AgentIntent, b: AgentIntent): boolean {
+  if (a.kind === 'navigate' && b.kind === 'navigate') {
+    return navigationIdentity(a.url) === navigationIdentity(b.url);
+  }
+  if (a.kind !== 'interact' || b.kind !== 'interact') return isDeepStrictEqual(a, b);
+  if (a.action !== b.action) return false;
+  if (a.action === 'type' && (a.value ?? '') !== (b.value ?? '')) return false;
+  if (
+    a.action === 'press' &&
+    (a.value ?? '').trim().toLowerCase() !== (b.value ?? '').trim().toLowerCase()
+  ) {
+    return false;
+  }
+  const targetsOfB = new Set(selectorTargets(b.selector));
+  return selectorTargets(a.selector).some((target) => targetsOfB.has(target));
+}
+
+/** Two steps that are the same step: the same site effect, or — for a step that
+ *  has none — the same step as written. */
+function sameStep(a: AgentIntent, b: AgentIntent): boolean {
+  return repeatMayDuplicateSiteEffect(a) || repeatMayDuplicateSiteEffect(b)
+    ? sameSiteEffect(a, b)
+    : isDeepStrictEqual(a, b);
+}
+
+/** Two plans that are the same plan, step for step. */
+export function samePlan(a: ReadonlyArray<AgentIntent>, b: ReadonlyArray<AgentIntent>): boolean {
+  return (
+    a.length === b.length &&
+    a.every((intent, i) => {
+      const other = b[i];
+      return other !== undefined && sameStep(intent, other);
+    })
+  );
+}
+
+/** The steps a turn has run so far, as the planner is told them — the same
+ *  bounded, credential-scrubbed `✓ / ✗` lines the transcript will carry. */
+export function describeStepsSoFar(run: ExecutorRunResult): string[] {
+  return runResultToTranscriptEntry(run, '')
+    .body.split('\n')
+    .filter((line) => line.length > 0)
+    .map((line) => (line.length > 240 ? `${line.slice(0, 240)}…` : line));
+}
 
 /**
  * P1 — may the turn look at the page and plan the remainder?
@@ -676,51 +949,154 @@ export function mergeExecutorRuns(
 }
 
 /**
- * P1 — the part of a re-planned plan that has NOT already run.
- *
- * ⛔ THE HAZARD THIS EXISTS FOR. A re-plan is asked to continue a task, and a
- * model asked that routinely returns the WHOLE task, prefix included — it is
- * describing the job, not the remainder. Running that plan as returned re-taps
- * the button that already worked. The measured shape: a plan ending in a `wait`
- * that times out does NOT halt the executor (a wait is best-effort), so the run
- * ends with a click already landed and a re-plannable `condition_not_met` last
- * result; a re-plan of `[navigate, tap #send, wait longer]` then sends twice.
- *
- * Two rules, in the safe direction:
- *  1. Drop the LEADING intents that deep-equal the intents that already
- *     succeeded, in order. That is the common case and it is unambiguous.
- *  2. Then, if any intent still in the plan deep-equals an intent that already
- *     succeeded AND replaying it may duplicate an effect
- *     ({@link intentReplayMayDuplicateEffect} — the same predicate the executor
- *     already uses to refuse an outcome-unknown retry), REFUSE the whole
- *     re-plan by returning null. That is the reordered case, where trimming a
- *     prefix cannot see the repeat, and where guessing would risk a second
- *     purchase-adjacent action. A refused re-plan costs the customer a turn
- *     that stops; an accepted one can cost them a second order.
+ * One step that SUCCEEDED earlier in this turn, with the page on either side of
+ * the segment it ran in — as the planner was shown it (`undefined`: planned
+ * blind, or the look failed).
  */
-export function suffixOf(
-  replanned: ReadonlyArray<AgentIntent>,
-  previousResults: ReadonlyArray<IntentResult>,
-): AgentIntent[] | null {
-  // Only the SUCCEEDED intents. A step that failed did not take effect, so
-  // re-emitting it is the re-plan doing its job rather than a duplicate.
-  const succeeded: AgentIntent[] = previousResults
-    .filter((r) => r.kind === 'success')
-    .map((r) => r.intent);
+export interface RanStep {
+  intent: AgentIntent;
+  /** The look the segment that ran this step was planned against. */
+  pageBefore: string | undefined;
+  /** The first look after that segment finished. */
+  pageAfter: string | undefined;
+}
+
+/**
+ * How many times one site-effecting step may run in a turn. Each run past the
+ * first already has to be on a page that has moved (see {@link admitSegment});
+ * this is the backstop for a page that moves EVERY time — a basket counter, a
+ * feed — under a planner that has stopped converging. Three is a three-page
+ * wizard sharing one Continue button, or "next page" twice; past that the turn
+ * hands back and the customer says whether to carry on.
+ */
+export const MAX_RUNS_OF_ONE_STEP_PER_TURN = 3;
+
+// ⛔ DISCRIMINATED ON `admitted`, NOT `kind`. Every `kind` string literal in
+// this file is read by the SDK-parity pin as a turn-result kind a customer can
+// receive, so an internal verdict keyed on `kind` read as a new public kind.
+export type SegmentAdmission =
+  | { admitted: true; intents: AgentIntent[] }
+  | { admitted: false; reason: 'no_progress' | 'repeat_refused' };
+
+/**
+ * B1 — the part of a newly planned segment that may run, or why none of it may.
+ *
+ * ⛔ THE HAZARD THIS EXISTS FOR. A planner asked to carry on routinely returns the
+ * WHOLE task, prefix included — it is describing the job, not the remainder.
+ * Running that as returned re-taps the button that already worked. The measured
+ * shape: a plan ending in a `wait` that times out does NOT halt the executor (a
+ * wait is best-effort), so the run ends with a click already landed; a re-plan of
+ * `[navigate, tap #send, wait longer]` then sends twice. Steps are compared by
+ * what they DO ({@link sameSiteEffect}), never by how they are spelled.
+ *
+ * AFTER A FAILURE (`replan`) — unchanged in shape from P1, and unconditional,
+ * because the page is not known to have moved:
+ *  1. Drop the LEADING steps that already succeeded, in order.
+ *  2. If a site-effecting step that already succeeded survives further in,
+ *     REFUSE the segment. A refused re-plan costs a turn that stops; an accepted
+ *     one can cost a second order.
+ *
+ * AFTER A SUCCESS (`continue`) — where the planner has been SHOWN what ran:
+ *  1. A leading repeat is dropped ONLY when it re-describes everything that ran
+ *     (nothing site-effecting that succeeded is left unmatched). ⛔ A partial
+ *     trim is wrong here, and was a defect: `[navigate /contact, …]` three
+ *     segments after the turn left /contact is a deliberate trip BACK, and
+ *     dropping the navigate ran the rest of the segment on the page the planner
+ *     was leaving.
+ *  2. A repeated step is what a person does all the time — Continue on the
+ *     second page of a sign-in, "next page", Enter in a different box, a consent
+ *     banner that came back, a trip back to the list, and on a form built from
+ *     one template, tap the field and tap Continue again on the next page — and
+ *     refusing those made the customer type "continue" in the middle of a form.
+ *     EACH repeated step may run only when the page has MOVED since every
+ *     earlier run of it:
+ *       · the page in front of the planner is not the page any earlier run was
+ *         planned against (same page, same step → going in circles), and
+ *       · for a navigate, is not the page that navigate led to either;
+ *       · for anything else, every earlier run has a known page to compare with
+ *         — a step planned blind cannot be shown to have moved anything;
+ *       · it is not a `type` (the same text into the same box is never the next
+ *         thing; it doubles what is there), and
+ *       · it has not already run {@link MAX_RUNS_OF_ONE_STEP_PER_TURN} times.
+ *     ⛔ EACH STEP, NOT A COUNT. This used to refuse any segment repeating TWO
+ *     steps as "the job being re-described". Measured live (2026-09-18): a
+ *     planner on page 2 of a two-page quote form planned [tap the field, type
+ *     the new postcode, tap Continue] — the same field and button as page 1,
+ *     on a page that had moved — and was refused mid-form. The re-description
+ *     that rule was for is still refused step by step: the same text typed
+ *     again is refused, a navigate back to where the turn already is is
+ *     circles, and anything on an unchanged page is circles.
+ *     What this cannot see: a page that changed AND still offers the same
+ *     one-shot control (an inline "sent" notice above a live form). There the
+ *     planner, which has been told the step ran and shown the notice, is the
+ *     only judge — and the purchase-shaped cases are behind the confirmation
+ *     gate regardless, which no segment ever carries an approval past.
+ */
+export function admitSegment(args: {
+  cause: 'continue' | 'replan';
+  planned: ReadonlyArray<AgentIntent>;
+  ran: ReadonlyArray<RanStep>;
+  pageNow: string | undefined;
+}): SegmentAdmission {
+  const { cause, planned, ran, pageNow } = args;
   let trimmed = 0;
-  while (
-    trimmed < replanned.length &&
-    trimmed < succeeded.length &&
-    isDeepStrictEqual(replanned[trimmed], succeeded[trimmed])
-  ) {
+  while (trimmed < planned.length && trimmed < ran.length) {
+    const next = planned[trimmed];
+    const done = ran[trimmed];
+    if (next === undefined || done === undefined || !sameStep(next, done.intent)) break;
     trimmed += 1;
   }
-  const suffix = replanned.slice(trimmed);
-  for (const intent of suffix) {
-    if (!intentReplayMayDuplicateEffect(intent)) continue;
-    if (succeeded.some((done) => isDeepStrictEqual(done, intent))) return null;
+  const redescribedEverything = ran
+    .slice(trimmed)
+    .every((done) => !repeatMayDuplicateSiteEffect(done.intent));
+  // Nor is a segment that is NOTHING BUT a repeat a re-description with its new
+  // part missing: `[tap #next]` after `[tap #next]` is "next page" again, and the
+  // page decides that below.
+  if (cause === 'continue' && (!redescribedEverything || trimmed === planned.length)) {
+    trimmed = 0;
   }
-  return [...suffix];
+  const suffix = planned.slice(trimmed);
+  if (suffix.length === 0) return { admitted: false, reason: 'repeat_refused' };
+
+  const repeats = suffix.filter(
+    (intent) =>
+      repeatMayDuplicateSiteEffect(intent) &&
+      ran.some((done) => sameSiteEffect(done.intent, intent)),
+  );
+  if (repeats.length === 0) return { admitted: true, intents: [...suffix] };
+  if (cause === 'replan') return { admitted: false, reason: 'repeat_refused' };
+  for (const repeat of repeats) {
+    const refused = repeatRefusedOnThisPage(repeat, ran, pageNow);
+    if (refused !== null) return { admitted: false, reason: refused };
+  }
+  return { admitted: true, intents: [...suffix] };
+}
+
+/** Rule 2 of {@link admitSegment}, for one repeated step: null when the page
+ *  has moved since every earlier run of it, else why it may not run. */
+function repeatRefusedOnThisPage(
+  repeat: AgentIntent,
+  ran: ReadonlyArray<RanStep>,
+  pageNow: string | undefined,
+): 'no_progress' | 'repeat_refused' | null {
+  const earlier = ran.filter((done) => sameSiteEffect(done.intent, repeat));
+  if (pageNow !== undefined && earlier.some((done) => done.pageBefore === pageNow)) {
+    return 'no_progress';
+  }
+  if (repeat.kind === 'navigate') {
+    if (pageNow !== undefined && earlier.some((done) => done.pageAfter === pageNow)) {
+      return 'no_progress';
+    }
+  } else if (
+    (repeat.kind === 'interact' && repeat.action === 'type') ||
+    earlier.some((done) => done.pageBefore === undefined)
+  ) {
+    return 'repeat_refused';
+  }
+  if (pageNow === undefined || earlier.length >= MAX_RUNS_OF_ONE_STEP_PER_TURN) {
+    return 'repeat_refused';
+  }
+  return null;
 }
 
 // Public message turns rewrite one application-encrypted JSONB transcript on
@@ -817,6 +1193,10 @@ export class AgentRuntime {
       throw new Error('maxConcurrentTurnsPerAccount must be a positive safe integer');
     }
     this.maxConcurrentTurnsPerAccount = limit;
+  }
+
+  private nowMs(): number {
+    return (this.deps.nowMs ?? (() => performance.now()))();
   }
 
   private async sessionIsActive(sessionId: string): Promise<boolean> {
@@ -1101,6 +1481,10 @@ export class AgentRuntime {
     admission: AgentTurnAdmission,
   ): Promise<RunTurnResult> {
     const at = (args.now ?? new Date()).toISOString();
+    // The wall clock starts HERE — before the first look and the first planning
+    // call, which is the slowest single thing a turn does. Started after them, a
+    // "three-minute turn" was three minutes plus however long the first plan took.
+    const turnStartedAtMs = this.nowMs();
     if (session.status !== 'active') {
       // Closed/paused sessions return a short-circuit result. The
       // caller (route handler) maps this to a 409 Conflict — the
@@ -1115,10 +1499,16 @@ export class AgentRuntime {
     // Capacity is reserved BEFORE appending the user/operator message and,
     // critically, before decomposition or browser execution. An AI turn can
     // durably append user + plan/result + read-back answer (three entries); a
-    // manual turn appends one. The 128KiB AI output reserve comfortably bounds
-    // the 2,048-token plan response, capped executor summaries/intents, and the
-    // 512-token read-back answer. Same-session turn serialization above makes
-    // this preflight exact in the current singleton runtime.
+    // manual turn appends one. The 128KiB AI output reserve comfortably bounds a
+    // TYPICAL turn's plan entry — every segment's intents (a turn is a loop of up
+    // to MAX_PLANNER_CALLS_PER_TURN segments of eight; a real intent is ~150
+    // bytes) and its capped result lines — plus the read-back answer. It is NOT
+    // a worst-case bound and never was: a turn whose every intent carried a
+    // limit-length selector and typed value outgrows it, and the next turn's
+    // preflight then closes the session rather than this one failing. A turn's
+    // stop sentence rides INSIDE the plan entry, so the entry count is unchanged.
+    // Same-session turn serialization above makes this preflight exact in the
+    // current singleton runtime.
     const entryReserve = admission.kind === 'manual-transcript' ? 1 : 3;
     const messageEntryBytes = Buffer.byteLength(
       JSON.stringify({
@@ -1246,6 +1636,13 @@ export class AgentRuntime {
     const verifiedConsequentialApprovals =
       resumePlan !== null ? args.approvedConsequentialActions : undefined;
     const authorityMayContinue = () => this.authorityStillCurrent(session.id, admission);
+    // Hoisted out of the first-plan branch because every LATER segment of the
+    // turn plans for the same device and is compared against the same first look.
+    // (The re-plan used to pass `deps.archetype` here — the process-wide literal
+    // the resolver exists to supersede — so a recovered turn planned its second
+    // half for a different phone than its first.)
+    let turnArchetype = this.deps.archetype;
+    let firstPlanObservation: string | undefined;
     let decomposed: DecomposeResult;
     if (resumePlan !== null) {
       decomposed = resumePlan;
@@ -1284,7 +1681,6 @@ export class AgentRuntime {
       // session while looking correct. `profile_id` is what a profile-bound
       // session actually carries, and the profile's archetype is what the dispatch
       // computed the launch from.
-      let turnArchetype = this.deps.archetype;
       const attachedSessionId = sessionWithUser.driftstackSessionId ?? null;
       const boundProfileId = sessionWithUser.profileId ?? null;
       if (
@@ -1336,6 +1732,7 @@ export class AgentRuntime {
           pageObservation = undefined;
         }
       }
+      firstPlanObservation = pageObservation;
       try {
         // The customer is now staring at three dots for however long the model
         // takes. Say what is happening before the call, not after it.
@@ -1632,9 +2029,9 @@ export class AgentRuntime {
     let stepIndexOffset = 0;
     // P3 — ONE element-wait ceiling for the WHOLE TURN, not one per plan run.
     // The executor built its own per-`execute()` budget, which was the same
-    // thing as per turn until P1 made one turn run up to
-    // 1 + MAX_REPLANS_PER_TURN plans — at which point the documented ceiling
-    // silently became three times itself. "Patience cannot multiply by plan
+    // thing as per turn until P1 made one turn run several plans (today up to
+    // MAX_PLANNER_CALLS_PER_TURN segments) — at which point the documented
+    // ceiling silently became a multiple of itself. "Patience cannot multiply by plan
     // length" has to mean the turn, or the sentence is not true of the product.
     // Unseeded: the executor fills it from its own configured run budget, so the
     // runtime does not carry a copy of a number that lives over there.
@@ -1642,11 +2039,18 @@ export class AgentRuntime {
     const runPlan = async (
       plan: Extract<DecomposeResult, { kind: 'plan' }>,
       approvals: ReadonlySet<string> | undefined,
+      meta: { segment: number; status?: PlanStatus },
     ): Promise<ExecutorRunResult> => {
       emitProgress(args.onProgress, {
         kind: 'plan',
         intents: plan.intents,
         total: stepIndexOffset + plan.intents.length,
+        // A first segment is announced exactly as a whole plan always was. A
+        // later one says where in the turn's step list it starts, because a
+        // reader that took `intents[i]` for step `i` would caption the fourth
+        // segment's first step with the first segment's.
+        ...(meta.segment > 1 ? { offset: stepIndexOffset, segment: meta.segment } : {}),
+        ...(meta.status !== undefined ? { status: meta.status } : {}),
       });
       if (!announcedExecuting) {
         emitProgress(args.onProgress, { kind: 'phase', phase: 'starting_browser' });
@@ -1696,74 +2100,181 @@ export class AgentRuntime {
     // MAX_MODEL_CALLS_PER_TURN. An approval resume makes none (it replays a plan
     // the customer already reviewed), so it starts at zero there.
     let modelCalls = resumePlan === null ? 1 : 0;
+    // The planning calls among them, against MAX_PLANNER_CALLS_PER_TURN.
+    let plannerCalls = modelCalls;
 
-    let executorResult = await runPlan(decomposed, verifiedConsequentialApprovals);
+    let executorResult = await runPlan(decomposed, verifiedConsequentialApprovals, {
+      segment: 1,
+      ...(decomposed.status !== undefined ? { status: decomposed.status } : {}),
+    });
 
-    // ── P1 (b) — LOOK, RE-PLAN, CONTINUE — INSIDE ONE TURN ──────────────
+    // ── B1 — LOOK, PLAN AS FAR AS YOU CAN SEE, ACT, LOOK AGAIN — IN ONE TURN ──
     //
-    // Before this, a plan that hit a step the model had guessed wrong simply
-    // stopped, and the customer had to type "continue" to get one more blind
-    // guess. Now the turn looks at the page and re-plans the remainder itself.
+    // ONE loop, entered for two reasons that used to be two code paths:
+    //   · `replan`   — a step FAILED on something that provably did not happen
+    //     (P1). The turn looks at the page and plans the remainder itself.
+    //   · `continue` — every step SUCCEEDED and the planner had said these steps
+    //     were only as far as it could see. Before this the turn simply ended
+    //     there: the first plan of a chat is made blind, is rightly cautious
+    //     (go there, wait, look), all of it works — and the task is not done.
+    //     Re-planning fired only after a failure, so it never fired, and the
+    //     customer typed "continue" for a task a person would call one request.
+    // A plan with NO status takes neither branch on success, which is exactly
+    // what a plan did before the field existed.
     //
     // ⛔ WHAT BOUNDS IT, AND THE SEPARATE FAILURE EACH ONE PREVENTS:
-    //   · MAX_REPLANS_PER_TURN — a model that keeps failing cannot loop forever.
-    //     ⛔ THIS IS THE BOUND THAT STOPS THE LOOP. The model-call conjunct
-    //     beside it is arithmetically implied at today's values and does NOT
-    //     bind first — see MAX_MODEL_CALLS_PER_TURN's own comment. It is kept
-    //     so the loop reads against the turn's total-call budget rather than
-    //     silently outgrowing it, not because it is a second gate.
-    //   · REPLAN_MIN_BUDGET_TOKENS — never START a call this session's remaining
-    //     budget cannot cover. (A `> 0` check is what let an earlier version of
-    //     the read-back overspend a near-empty balance.)
-    //   · An IDENTICAL plan ends the loop. A model that re-emits the plan that
-    //     just failed will fail the same way, so asking again is money for the
-    //     same answer.
-    //   · THE ALREADY-EXECUTED PREFIX IS NEVER RE-RUN. See `suffixOf` — the
-    //     identical-plan guard alone defended only the byte-identical case, and
-    //     a plan that repeats the prefix with ONE selector changed is not
-    //     byte-identical, so it slipped through and clicked Send twice.
+    //   · MAX_PLANNER_CALLS_PER_TURN — the loop as a whole. A planner that says
+    //     `continue` forever cannot run forever.
+    //   · MAX_REPLANS_PER_TURN — the FAILURES within it. A model that keeps
+    //     failing is not rescued by having planner calls left.
+    //   · MAX_MODEL_CALLS_PER_TURN − 1 — the turn's total provider calls, one
+    //     short, so the last call is always the read-back's. Arithmetically
+    //     implied by the planner-call ceiling at today's values and kept for the
+    //     reason its own comment gives: a fence against the next call someone
+    //     adds to a turn, not a second gate.
+    //   · MAX_TURN_WALL_CLOCK_MS — TIME, which no call count bounds, measured
+    //     from the top of the turn (the first planning call included).
+    //   · REPLAN_MIN_BUDGET_TOKENS, re-read EVERY iteration — never START a call
+    //     this session's remaining budget cannot cover. (A `> 0` check is what
+    //     let an earlier version of the read-back overspend a near-empty balance.)
+    //   · NO PROGRESS — the same page, the same plan, again. A loop that taps the
+    //     same thing forever is this design's own failure mode, so it is named.
+    //   · An IDENTICAL plan after a failure ends the loop: it fails the same way.
+    //   · A STEP THAT ALREADY RAN IS NOT RE-RUN ON A PAGE THAT HAS NOT MOVED. See
+    //     `admitSegment`: checked against everything that succeeded THIS TURN, by
+    //     what each step DOES rather than how it is spelled — a fourth segment
+    //     that re-emits the first segment's Send is the same duplicate order,
+    //     three segments further away, whatever `value` it carries this time.
     //
-    // ⛔ AND TWO THINGS IT MUST NOT BECOME:
-    //   · It never re-plans on a CONSEQUENTIAL HALT. That is a human decision in
-    //     progress, not a failure to route around, and a loop that re-planned
-    //     there would be a way to reach a purchase without the confirmation.
-    //     Each iteration also runs with NO approvals, so the gate is re-applied
-    //     in full against every re-planned step.
-    //   · It never re-plans an approval RESUME. The customer approved a specific
-    //     reviewed plan; re-planning it would execute something they did not see.
+    // ⛔ AND THREE THINGS IT MUST NOT BECOME:
+    //   · It never goes round after a CONSEQUENTIAL HALT. That is a human
+    //     decision in progress, not a wall to route around, and a loop that
+    //     planned past it would be a way to reach a purchase without the
+    //     confirmation. Each later segment also runs with NO approvals, so the
+    //     gate is re-applied in full against every step of every segment, and an
+    //     approval given for one segment can never pay for a step in another.
+    //   · It never goes round after an OUTCOME-UNKNOWN failure. Looking at the
+    //     page does not tell us whether the click landed; `isReplannableFailure`
+    //     is an allowlist and `unknown` is not on it.
+    //   · It never loops an approval RESUME. The customer approved a specific
+    //     reviewed plan; planning onward from it would execute something they
+    //     did not see.
     let replans = 0;
+    let segment = 1;
     // The results of the LAST run only. `executorResult` is the MERGE of every
     // run this turn, which is right for the customer's step list and wrong for
     // any index into the plan that is currently running — see
     // `resumeFromIntentIndex` below, where using the merged length sent an
     // approval back into a plan the re-plan had abandoned.
     let lastRunResults = executorResult.results;
+    let lastRun = executorResult;
     // How many intents of `attemptedIntents` precede the plan now running.
     let intentOffset = 0;
-    while (
-      resumePlan === null &&
-      replans < MAX_REPLANS_PER_TURN &&
-      modelCalls < MAX_MODEL_CALLS_PER_TURN - 1 &&
-      executorResult.authorityLost !== true &&
-      executorResult.awaitingConfirmation !== true &&
-      !executorResult.ok &&
-      isReplannableFailure(executorResult) &&
-      postDebitSession.tokenBudgetRemaining >= REPLAN_MIN_BUDGET_TOKENS
-    ) {
+    // What the planner said about the segment that just ran.
+    let lastStatus: PlanStatus | undefined = decomposed.status;
+    // True once ANY segment carried a status: this turn is driven by a planner
+    // that speaks the loop, which is what lets the read-back stop inferring
+    // "they wanted an answer" from whether a plan happened to end in a capture.
+    let plannerSpeaksLoop = decomposed.status !== undefined;
+    // The page as the planner was shown it when it produced the segment that
+    // just ran, for the no-progress check. Undefined for a blind first plan.
+    let observationBehindLastPlan: string | undefined = firstPlanObservation;
+    // Why the loop stopped short of `done`, when it did — see TurnLoopStopReason.
+    let loopStopped: TurnLoopStopReason | undefined;
+    // A question or a refusal the planner answered a LATER segment with. The
+    // steps that already ran stand; this is what the customer is told next.
+    let plannerHandedBack: string | undefined;
+    let plannerHandedBackKind: 'clarify' | 'refuse' | undefined;
+    // How many times running the planner has re-issued the SAME moving-only plan.
+    let sameMovingPlanRepeats = 0;
+    // Every step that SUCCEEDED this turn, with the page on either side of its
+    // segment — what `admitSegment` judges a repeat against.
+    const ranSteps: Array<RanStep & { segment: number }> = [];
+    const noteRan = (run: ExecutorRunResult, ranInSegment: number, pageBefore?: string): void => {
+      for (const r of run.results) {
+        if (r.kind !== 'success') continue;
+        ranSteps.push({
+          intent: r.intent,
+          pageBefore,
+          pageAfter: undefined,
+          segment: ranInSegment,
+        });
+      }
+    };
+    noteRan(executorResult, 1, firstPlanObservation);
+    for (;;) {
+      if (resumePlan !== null) break;
+      if (executorResult.authorityLost === true) break;
+      if (executorResult.awaitingConfirmation === true) break;
+      // ⛔ `continue` IS ASKED FIRST. A segment whose only ✗ is a best-effort wait
+      // RAN TO ITS END (`segmentRanToItsEnd`), and a planner that said `continue`
+      // is owed the next look. Asked second, that timed-out wait read as a
+      // FAILURE: it spent one of the two recoveries, and three of them ended a
+      // healthy turn at three planning calls with no sentence and no "not
+      // finished" line for the next turn — a column of ticks over half a task,
+      // the exact ending the stop sentences exist to prevent. A plan with no
+      // status keeps the P1 reading: its timed-out trailing wait is a re-plan.
+      const cause: 'continue' | 'replan' | null =
+        lastStatus === 'continue' && segmentRanToItsEnd(lastRun)
+          ? 'continue'
+          : !lastRun.ok && isReplannableFailure(lastRun)
+            ? 'replan'
+            : null;
+      if (cause === null) break;
+      // The bounds. A `replan` that runs into one ends the way a failed turn
+      // always has — the ✗ row is the message. A `continue` that runs into one
+      // would end on a column of ticks over an unfinished task, so it says why.
+      const stopFor = (reason: TurnLoopStopReason): void => {
+        if (cause === 'continue') loopStopped = reason;
+      };
+      if (cause === 'replan' && replans >= MAX_REPLANS_PER_TURN) break;
+      if (
+        plannerCalls >= MAX_PLANNER_CALLS_PER_TURN ||
+        modelCalls >= MAX_MODEL_CALLS_PER_TURN - 1
+      ) {
+        stopFor('planner_call_limit');
+        break;
+      }
+      if (this.nowMs() - turnStartedAtMs >= MAX_TURN_WALL_CLOCK_MS) {
+        stopFor('wall_clock');
+        break;
+      }
+      if (postDebitSession.tokenBudgetRemaining < REPLAN_MIN_BUDGET_TOKENS) {
+        stopFor('budget_floor');
+        break;
+      }
+      // ⛔ NOTHING IN THIS LOOP MAY THROW OUT OF THE TURN. By now steps have RUN —
+      // possibly a submit — and the plan entry that records them is written
+      // AFTER the loop. A storage blip that escaped from here rejected the turn
+      // with the transcript holding only the customer's message: they retry, the
+      // retry finds no record of browser work, plans blind, and sends the form
+      // again. The authority check already fails closed without throwing, the
+      // look and the usage row swallow their own errors, and the two debits
+      // below are guarded for this reason.
       if (!(await this.authorityStillCurrent(session.id, admission))) break;
-      emitProgress(args.onProgress, { kind: 'phase', phase: 'reading_page' });
-      const replanObservation = await this.observeForReplan(session.id, authorityMayContinue);
-      emitProgress(args.onProgress, { kind: 'phase', phase: 'planning' });
+      segment += 1;
+      emitProgress(args.onProgress, { kind: 'phase', phase: 'reading_page', segment, cause });
+      const pageNow = await this.observeForReplan(session.id, authorityMayContinue);
+      for (const done of ranSteps) {
+        if (done.pageAfter === undefined && done.segment === segment - 1) done.pageAfter = pageNow;
+      }
+      emitProgress(args.onProgress, { kind: 'phase', phase: 'planning', segment, cause });
+      const turnProgress: TurnProgress = {
+        segment,
+        plannerCallsRemaining: Math.max(0, MAX_PLANNER_CALLS_PER_TURN - plannerCalls - 1),
+        stepsSoFar: describeStepsSoFar(executorResult),
+      };
       let replanned: DecomposeResult;
       try {
         replanned = await this.deps.decomposer.decompose({
           task: args.userMessage,
-          archetype: this.deps.archetype,
+          archetype: turnArchetype,
           history: sessionWithUser.transcript,
           budgetTokensRemaining: postDebitSession.tokenBudgetRemaining,
           model: sessionWithUser.model,
-          priorFailure: describeExecutorStop(executorResult),
-          ...(replanObservation !== undefined ? { observation: replanObservation } : {}),
+          turnProgress,
+          ...(cause === 'replan' ? { priorFailure: describeExecutorStop(executorResult) } : {}),
+          ...(pageNow !== undefined ? { observation: pageNow } : {}),
           ...(args.credentials !== undefined
             ? { credentialRefs: credentialRefsFor(args.credentials) }
             : {}),
@@ -1776,12 +2287,13 @@ export class AgentRuntime {
         // responded and consumed tokens, and only the strict content codec
         // rejected what came back. Breaking without accounting would drop the
         // usage row AND the token debit for real upstream spend — and this is
-        // the MORE likely site for it, not the less, because a re-plan prompt
-        // carries untrusted page text, which is the input most able to steer a
-        // model into content the codec refuses. The first decompose handles this
-        // the same way; see the AgentDecomposerSettledError branch there.
+        // the MORE likely site for it, not the less, because a later segment's
+        // prompt carries untrusted page text, which is the input most able to
+        // steer a model into content the codec refuses. The first decompose
+        // handles this the same way; see its AgentDecomposerSettledError branch.
         if (err instanceof AgentDecomposerSettledError) {
           modelCalls += 1;
+          plannerCalls += 1;
           await this.accountForExtraDecompose(
             session,
             sessionWithUser.driftstackSessionId ?? null,
@@ -1794,19 +2306,23 @@ export class AgentRuntime {
             args,
           );
           if (err.tokensConsumed > 0) {
+            // Best-effort, as the read-back's debit is: the spend is already on
+            // its usage row, and see the note at the top of the loop.
             const debitedAfterSettled = await this.debitTokensIfActive(
               session.id,
               err.tokensConsumed,
-            );
+            ).catch(() => null);
             if (debitedAfterSettled !== null) postDebitSession = debitedAfterSettled;
           }
         }
-        // A re-plan is an improvement on stopping, never a new way to fail a
-        // turn whose prefix already ran. Any decomposer error ends the loop and
-        // the turn reports what the plan actually achieved.
+        // Another segment is an improvement on stopping, never a new way to fail
+        // a turn whose steps already ran. Any decomposer error ends the loop and
+        // the turn reports what it actually achieved.
+        stopFor('planner_unavailable');
         break;
       }
       modelCalls += 1;
+      plannerCalls += 1;
       // The provider has settled. Account for it exactly as the read-back's
       // second call is accounted for: a row EVERY time, so per-turn telemetry
       // and the audit trail see all of a turn's calls.
@@ -1826,34 +2342,110 @@ export class AgentRuntime {
         replanned,
         args,
       );
-      const debited =
-        replanned.tokensConsumed > 0
-          ? await this.debitTokensIfActive(session.id, replanned.tokensConsumed)
-          : postDebitSession;
+      // A debit that THROWS is not a debit that says "session no longer active"
+      // (null): the first is storage failing under us, the second is an answer.
+      // Neither may run the new segment — its call is recorded on the usage row
+      // above but not yet paid for out of this chat's budget — and only the
+      // first needs a sentence, because the steps on screen are all ticks.
+      let debited: AgentSessionRecord | null;
+      try {
+        debited =
+          replanned.tokensConsumed > 0
+            ? await this.debitTokensIfActive(session.id, replanned.tokensConsumed)
+            : postDebitSession;
+      } catch {
+        stopFor('planner_unavailable');
+        break;
+      }
       if (debited === null) break;
       postDebitSession = debited;
       if (!(await this.authorityStillCurrent(session.id, admission))) break;
-      if (replanned.kind !== 'plan' || replanned.intents.length === 0) break;
-      if (isDeepStrictEqual([...replanned.intents], [...plannedIntents])) break;
-      // ⛔ RUN THE SUFFIX, NOT THE WHOLE RETURNED PLAN. A model asked to re-plan
+      if (replanned.kind !== 'plan') {
+        // Shown the page, the planner asked something or declined. After a
+        // `continue` that is the turn's message to the customer — dropping it
+        // would end on a column of ticks with the question unasked. After a
+        // FAILURE it stays as it was: the ✗ row is the message.
+        if (cause === 'continue') {
+          plannerHandedBack =
+            replanned.kind === 'clarify' ? replanned.clarifyingQuestion : replanned.refuseReason;
+          plannerHandedBackKind = replanned.kind;
+        }
+        break;
+      }
+      if (replanned.status !== undefined) plannerSpeaksLoop = true;
+      if (replanned.intents.length === 0) {
+        // "Nothing left to do." Only a `done` may say it with no steps; anything
+        // else with no steps is a planner with nothing to offer.
+        if (replanned.status !== 'done') stopFor('planner_unavailable');
+        lastStatus = replanned.status;
+        break;
+      }
+      // THE SAME PLAN AGAIN, compared by what its steps DO (`samePlan`). After a
+      // failure it fails the same way. After a `continue`, on a page that is not
+      // known to have changed, it is the loop's own failure mode — going in
+      // circles — and is named as that.
+      const pageNotKnownToHaveChanged =
+        pageNow === undefined || pageNow === observationBehindLastPlan;
+      const identicalPlan = samePlan(replanned.intents, plannedIntents);
+      if (identicalPlan && cause === 'replan') break;
+      if (identicalPlan && pageNotKnownToHaveChanged) {
+        // ⛔ EXCEPT ONE MORE SCROLL. "The page did not change" is not evidence a
+        // scroll achieved nothing: the look is a digest of the DOCUMENT, and a
+        // scroll moves the VIEWPORT. Content that renders only once it is
+        // scrolled INTO VIEW is the ordinary case — measured live (2026-09-18): a
+        // first 600px scroll fell short of a lazy price grid, the planner rightly
+        // asked for the same scroll again, and the turn stopped as "going in
+        // circles" one scroll before the prices appeared. So a plan that acts on
+        // nothing AND SCROLLS may be repeated ONCE; a second repeat is circles.
+        // A plan that only waits or captures has no such excuse — the same run
+        // showed `[wait, capture]` repeated on an unchanged page, which is the
+        // dithering this check is for — so it is stopped the first time.
+        const actsOnNothing = replanned.intents.every((i) => !repeatMayDuplicateSiteEffect(i));
+        const scrolls = replanned.intents.some(
+          (i) => i.kind === 'scroll' || (i.kind === 'interact' && i.action === 'scroll'),
+        );
+        if (actsOnNothing && scrolls && sameMovingPlanRepeats < 1) {
+          sameMovingPlanRepeats += 1;
+        } else {
+          stopFor('no_progress');
+          break;
+        }
+      } else {
+        sameMovingPlanRepeats = 0;
+      }
+      // ⛔ RUN WHAT MAY RUN, NOT THE WHOLE RETURNED PLAN. A model asked to carry on
       // routinely re-emits the steps that already worked — it is describing the
       // task, not the remainder — and handing that straight to the executor
-      // clicks Send a second time. `suffixOf` drops the leading intents that
-      // already succeeded, and REFUSES the re-plan outright if a replay-unsafe
-      // step that already ran survives further in, which is the reordered case
-      // trimming alone cannot see.
-      const suffix = suffixOf(replanned.intents, lastRunResults);
-      if (suffix === null || suffix.length === 0) break;
+      // clicks Send a second time. `admitSegment` decides, against everything
+      // that succeeded THIS TURN and the page each of those steps was planned on.
+      const admitted = admitSegment({
+        cause,
+        planned: replanned.intents,
+        ran: ranSteps,
+        pageNow,
+      });
+      if (!admitted.admitted) {
+        stopFor(admitted.reason);
+        break;
+      }
+      const suffix = admitted.intents;
       stepIndexOffset += lastRunResults.length;
       intentOffset += plannedIntents.length;
       plannedIntents = suffix;
       attemptedIntents.push(...suffix);
-      // ⛔ NO APPROVALS. A re-planned step reaching a purchase must stop for a
+      observationBehindLastPlan = pageNow;
+      lastStatus = replanned.status;
+      // ⛔ NO APPROVALS. A later segment reaching a purchase must stop for a
       // human exactly as the first plan would have.
-      const nextRun = await runPlan({ ...replanned, intents: suffix }, undefined);
+      const nextRun = await runPlan({ ...replanned, intents: suffix }, undefined, {
+        segment,
+        ...(replanned.status !== undefined ? { status: replanned.status } : {}),
+      });
       lastRunResults = nextRun.results;
+      lastRun = nextRun;
+      noteRan(nextRun, segment, pageNow);
       executorResult = mergeExecutorRuns(executorResult, nextRun);
-      replans += 1;
+      if (cause === 'replan') replans += 1;
     }
 
     if (
@@ -1893,8 +2485,33 @@ export class AgentRuntime {
       lastRunResults.at(-1)?.kind === 'confirmation_required'
         ? intentOffset + lastRunResults.length - 1
         : undefined;
+    // B1 — the turn's closing line, for the NEXT turn's planner. A column of ✓
+    // lines reads as a finished task, and "continue" typed after it would be
+    // planned as a new one; this is what says the work is half done. It rides in
+    // the plan entry's own body rather than in an entry of its own, so the
+    // per-turn transcript reserve (three entries) is exactly what it was.
+    const turnNotice =
+      plannerHandedBack !== undefined
+        ? sanitizeTranscriptText(plannerHandedBack)
+        : loopStopped !== undefined
+          ? TURN_LOOP_STOP_SENTENCES[loopStopped]
+          : undefined;
+    const closingLine =
+      plannerHandedBack !== undefined
+        ? `(stopped part-way to ask the customer: ${sanitizeTranscriptText(plannerHandedBack)})`
+        : loopStopped !== undefined
+          ? `(the task is NOT finished — ${TURN_LOOP_STOP_SENTENCES[loopStopped]})`
+          : undefined;
     const planEntry = {
       ...transcriptEntry,
+      ...(closingLine !== undefined
+        ? {
+            body:
+              transcriptEntry.body.length > 0
+                ? `${transcriptEntry.body}\n${closingLine}`
+                : closingLine,
+          }
+        : {}),
       // P1 — everything ATTEMPTED this turn, first plan plus any re-plan, so the
       // persisted intent_log is the record of what ran rather than of what was
       // first proposed.
@@ -1959,9 +2576,18 @@ export class AgentRuntime {
     // way: no answer, and no sentence saying why — the exact P5 silence, walked
     // back in through P1's door. Everything else about the turn (the transcript
     // entry, the persisted intent log) already reads what was attempted.
+    //
+    // B5 — AND WHEN THE PLANNER SPEAKS THE LOOP, THE CAPTURE IS NOT THE SIGNAL.
+    // "The plan ended in a capture" was a proxy for "the model wanted to look at
+    // the result". A loop planner looks after EVERY segment and may finish on a
+    // `done` with no steps at all (the confirmation page was already showing),
+    // so the proxy would silently withhold the answer on exactly the turns that
+    // went best. There the customer's wording decides on its own. A turn the
+    // planner handed back part-way has its message already, and gets no second.
     const askedForInformation =
       executorResult.ok &&
-      attemptedIntents.some((i) => i.kind === 'capture') &&
+      plannerHandedBack === undefined &&
+      (plannerSpeaksLoop || attemptedIntents.some((i) => i.kind === 'capture')) &&
       asksForInformation(args.userMessage);
     // Why this stays keyed on the capability list and not on a catch-all: every
     // branch here has a DIFFERENT repair for the customer (top up the session,
@@ -2020,6 +2646,11 @@ export class AgentRuntime {
           const answer = await answerFromObservation({
             task: args.userMessage,
             observation,
+            // B5 — the read-back reads the page the loop ENDED on, and when the
+            // loop ended early that is not the page the task was heading for.
+            // Saying so is what lets the answer be "I did not get that far"
+            // instead of a confident reading of the wrong page.
+            ...(loopStopped !== undefined ? { taskUnfinished: true } : {}),
             budgetTokensRemaining: sessionAfter.tokenBudgetRemaining,
             byokAnthropicApiKey: args.byokApiKey,
             model: sessionAfter.model,
@@ -2238,6 +2869,11 @@ export class AgentRuntime {
     if (publishedAnswer !== undefined) {
       emitProgress(args.onProgress, { kind: 'answer', answer: publishedAnswer });
     }
+    // Same position and same reason as the answer: past the finalize check, so a
+    // successor controller's chat never receives this turn's words.
+    if (turnNotice !== undefined) {
+      emitProgress(args.onProgress, { kind: 'notice', notice: turnNotice });
+    }
     return {
       kind: 'plan-executed',
       decomposer: decomposed,
@@ -2245,6 +2881,24 @@ export class AgentRuntime {
       session: sessionAfter,
       ...(publishedAnswer !== undefined ? { answer: publishedAnswer } : {}),
       ...(readbackUnavailable !== undefined ? { readbackUnavailable } : {}),
+      ...(turnNotice !== undefined ? { notice: turnNotice } : {}),
+      // Only a turn whose planner spoke the loop, or that went round at all,
+      // reports it: a legacy single-plan turn returns exactly what it always did.
+      ...(plannerSpeaksLoop || segment > 1
+        ? {
+            loop: {
+              segments: segment,
+              plannerCalls,
+              replans,
+              ...(lastStatus !== undefined ? { finalStatus: lastStatus } : {}),
+              ...(loopStopped !== undefined ? { stopped: loopStopped } : {}),
+              ...(plannerHandedBack !== undefined ? { handedBack: true } : {}),
+              ...(plannerHandedBackKind !== undefined
+                ? { handedBackKind: plannerHandedBackKind }
+                : {}),
+            },
+          }
+        : {}),
     };
   }
 }

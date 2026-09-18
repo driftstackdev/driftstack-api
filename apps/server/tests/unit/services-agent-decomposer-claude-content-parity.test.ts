@@ -226,7 +226,17 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(
       /'OUTPUT FORMAT: respond with EXACTLY ONE JSON object, no prose, no',\s*'markdown fences\. The object MUST be one of these three shapes:',/,
     );
-    expect(body).toMatch(/' {2}\{ "kind": "plan", "intents": \[ \.\.\. \] \}',/);
+    // MOVED 2026-09-18 (B1/B2): the plan shape now carries the planner's own
+    // COMPLETION SIGNAL. A turn is a loop — look, plan as far as you can see,
+    // act, look again — and `status` is how the planner says whether the steps
+    // it just listed finish the task or only get as far as it could see. The
+    // old shape is pinned ABSENT: a prompt that still showed a status-less plan
+    // would teach the model to omit the one field the loop runs on, and a plan
+    // with no status ends the turn after one segment, which is the defect.
+    expect(body).toMatch(
+      /' {2}\{ "kind": "plan", "status": "continue" \| "done", "intents": \[ \.\.\. \] \}',/,
+    );
+    expect(body).not.toMatch(/' {2}\{ "kind": "plan", "intents": \[ \.\.\. \] \}',/);
     expect(body).toMatch(/' {2}\{ "kind": "clarify", "clarifyingQuestion": "\.\.\." \}',/);
     expect(body).toMatch(/' {2}\{ "kind": "refuse", "refuseReason": "\.\.\." \}',/);
   });
@@ -347,14 +357,39 @@ describe('services/agent-decomposer-claude content parity', () => {
       (body.match(/requireAgentDecomposerContinuation\(shouldContinue\)/g) ?? []).length,
     ).toBeGreaterThanOrEqual(3);
     // BOTH call sites — the plan and the read-back — hand over the caller's
-    // authority check. (Both are streamed now, hence the trailing options.)
+    // authority check.
+    //
+    // MOVED 2026-09-18 (B4): the two sites no longer call `callWithRetry`
+    // directly. Each goes through `callConstrained`, which sends the request
+    // with the reply constrained to its JSON schema and, if the provider rejects
+    // the constraint, once more without it. What this pin protects is unchanged
+    // and is now checked at BOTH levels: the two call sites hand
+    // `args.shouldContinue` to `callConstrained`, and BOTH of its provider
+    // attempts hand that same check on to `callWithRetry` — a fallback attempt
+    // that skipped the fence would be a provider call made without authority.
     expect(
       (
         body.match(
-          /this\.callWithRetry\(body, args\.byokAnthropicApiKey, args\.shouldContinue, \{/g,
+          /await this\.callConstrained\(\s*model,\s*buildBody,\s*args\.byokAnthropicApiKey,\s*args\.shouldContinue,\s*\)/g,
         ) ?? []
       ).length,
     ).toBe(2);
+    // MOVED AGAIN 2026-09-18 (repair round): `callConstrained` no longer has two
+    // hand-written attempts (constrained, then plain). It is a bounded loop that
+    // drops whichever reply control — the schema, or the thinking/effort members —
+    // a provider 400 names, so there is ONE provider-call site inside it and
+    // every attempt, first or fallback, goes through it. What is protected is the
+    // same: no attempt reaches the provider without the caller's authority check.
+    // So the pin is now "exactly one site, it passes `shouldContinue`, and no
+    // other `callWithRetry(buildBody(…))` exists that could skip it".
+    expect(
+      (
+        body.match(
+          /await this\.callWithRetry\(buildBody\(allowed\), apiKey, shouldContinue, \{/g,
+        ) ?? []
+      ).length,
+    ).toBe(1);
+    expect((body.match(/this\.callWithRetry\(buildBody\(/g) ?? []).length).toBe(1);
   });
 
   it('validated usage survives strict plan and answer codec failures without raw content', () => {

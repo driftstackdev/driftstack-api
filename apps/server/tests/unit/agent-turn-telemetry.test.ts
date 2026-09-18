@@ -1451,3 +1451,80 @@ describe('agent turn telemetry — the write path is bounded in every direction'
     expect(h.telemetry.activeCount()).toBe(2);
   });
 });
+
+describe('agent turn telemetry — a turn the LOOP stopped short is not a completion', () => {
+  const classify = (result: RunTurnResult): ReturnType<typeof classifyTurn> =>
+    classifyTurn({ result, status: 200, body: {}, sawPlanning: true, sawAnswering: false });
+  const allGreen = [ok(NAVIGATE), ok(INTERACT)];
+
+  it('a loop that finished (`done`) with every step green is `completed`', () => {
+    expect(
+      classify(
+        planExecuted(allGreen, {
+          loop: { segments: 3, plannerCalls: 3, replans: 0, finalStatus: 'done' },
+        }),
+      ),
+    ).toMatchObject({ outcome: 'completed', deathReason: 'none' });
+  });
+
+  it.each([
+    ['planner_call_limit', 'clarified', 'none'],
+    ['wall_clock', 'clarified', 'none'],
+    ['no_progress', 'clarified', 'none'],
+    ['repeat_refused', 'clarified', 'none'],
+    ['budget_floor', 'failed', 'budget_exhausted'],
+    ['planner_unavailable', 'failed', 'model_unavailable'],
+  ] as const)(
+    '⛔ every step green but stopped at %s — filed as %s/%s, never `completed`',
+    (stopped, outcome, deathReason) => {
+      const verdict = classify(
+        planExecuted(allGreen, {
+          loop: { segments: 2, plannerCalls: 2, replans: 0, finalStatus: 'continue', stopped },
+        }),
+      );
+      expect(verdict).toMatchObject({ outcome, deathReason });
+      expect(verdict.diedStepIndex).toBe(outcome === 'failed' ? allGreen.length : null);
+    },
+  );
+
+  it('a planner that asked a question part-way is `clarified`; one that declined part-way is `refused`', () => {
+    const loop = { segments: 2, plannerCalls: 2, replans: 0, handedBack: true } as const;
+    expect(
+      classify(planExecuted(allGreen, { loop: { ...loop, handedBackKind: 'clarify' } })),
+    ).toMatchObject({ outcome: 'clarified', deathReason: 'none' });
+    expect(
+      classify(planExecuted(allGreen, { loop: { ...loop, handedBackKind: 'refuse' } })),
+    ).toMatchObject({ outcome: 'refused', deathReason: 'model_refused' });
+  });
+
+  it('a step that FAILED still decides the verdict — a loop stop never hides a real death', () => {
+    expect(
+      classify(
+        planExecuted([ok(NAVIGATE), failed(INTERACT, 'element_not_found')], {
+          loop: { segments: 2, plannerCalls: 2, replans: 0, stopped: 'no_progress' },
+        }),
+      ),
+    ).toMatchObject({ outcome: 'failed', diedStepIndex: 1, diedStepKind: 'interact' });
+  });
+
+  it('the bound that stopped it is logged by name, content-free, beside the row', async () => {
+    const warnings: Array<Record<string, unknown>> = [];
+    const telemetry = new AgentTurnTelemetry({
+      writer: new CapturingWriter(),
+      metrics: newRegistry(),
+      nowMs: () => 0,
+      wallClock: () => new Date('2026-09-18T00:00:00Z'),
+      logger: { warn: (obj) => warnings.push(obj) },
+    });
+    const c = telemetry.begin({ agentSessionId: 'ags_1', transport: 'stream' });
+    c.observeResult(
+      planExecuted(allGreen, {
+        loop: { segments: 6, plannerCalls: 6, replans: 0, stopped: 'planner_call_limit' },
+      }),
+    );
+    c.finish({ status: 200, body: { kind: 'plan-executed' } });
+    await telemetry.flush();
+    const line = warnings.find((w) => w.event === 'agent_turn_stopped_unfinished');
+    expect(line).toMatchObject({ stopped: 'planner_call_limit', outcome: 'clarified' });
+  });
+});

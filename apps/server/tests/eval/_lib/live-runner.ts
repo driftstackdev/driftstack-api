@@ -10,13 +10,15 @@
 // stand-in that speaks the provider's wire format. Nothing else differs, which
 // is what makes the plumbing test evidence about the live path.
 //
-// WHY MORE THAN ONE MESSAGE. On a fresh chat the first plan is made BLIND — the
-// runtime only reads the page before planning once the session has driven the
-// browser. A customer whose task did not finish says "continue", and that
-// second message is the first time the planner sees the page before it plans.
-// Stopping at one message would measure half the product, so the runner sends
-// the follow-up a customer would, and the report says which message the task
-// passed on.
+// WHY MORE THAN ONE MESSAGE. On a fresh chat the first plan is made BLIND — no
+// page is open yet. Before the turn became a loop that was the whole first
+// message, so a customer whose task did not finish said "continue", and that
+// second message was the first time the planner saw the page. A turn now looks
+// and plans again by itself, so a task SHOULD finish on the first message — and
+// the report's `msg 1` column is the count of repetitions that did. The runner
+// still sends the follow-up a customer would when one did not, because a task
+// that needs it is a finding, and stopping at one message would hide whether the
+// second one rescues it.
 
 import type { AgentIntent, AgentModel } from '@driftstack/api-types';
 import { AgentRuntime } from '../../../src/services/agent-runtime.js';
@@ -67,6 +69,10 @@ export interface LivePlanRecord {
    *  planning call can act on the device, so only this counts as exposure. */
   sawNeedle: boolean;
   result: 'plan' | 'clarify' | 'refuse' | 'threw';
+  /** The planner's completion signal for this segment, when it gave one. */
+  status?: 'continue' | 'done';
+  /** Which segment of its turn this call planned (1 = the first). */
+  segment: number;
   /** The plan, in the PLACEHOLDER form the model wrote — never a substituted
    *  credential, which only ever exists in the dispatch to the device. */
   intents?: ReadonlyArray<AgentIntent>;
@@ -138,6 +144,7 @@ export class LiveRecordingDecomposer implements AgentDecomposer {
       afterFailure: args.priorFailure !== undefined,
       sawNeedle: args.observation?.includes(this.needle) === true,
       result: 'threw',
+      segment: args.turnProgress?.segment ?? 1,
     };
     this.plans.push(record);
     if (record.sawNeedle) this.plannerSawNeedleAt ??= this.dispatchCount();
@@ -157,8 +164,10 @@ export class LiveRecordingDecomposer implements AgentDecomposer {
       this.onPlanningLatency(performance.now() - startedAt);
     }
     record.result = result.kind;
-    if (result.kind === 'plan') record.intents = result.intents;
-    else if (result.kind === 'clarify') record.text = result.clarifyingQuestion;
+    if (result.kind === 'plan') {
+      record.intents = result.intents;
+      if (result.status !== undefined) record.status = result.status;
+    } else if (result.kind === 'clarify') record.text = result.clarifyingQuestion;
     else record.text = result.refuseReason;
     return result;
   }
@@ -188,6 +197,10 @@ export interface LiveTurnReport {
   haltedForConfirmation: boolean;
   answer: string | null;
   readbackUnavailable: string | null;
+  /** What the turn told the customer about stopping short, when it did. */
+  notice: string | null;
+  /** How the turn's loop ran: segments, and the bound that stopped it, if any. */
+  loop: { segments: number; stopped: string | null; finalStatus: string | null } | null;
   /** Why a read-back call threw, when one did. */
   answerErrors: ReadonlyArray<string>;
 }
@@ -211,6 +224,11 @@ export interface LiveRepReport {
     cacheRead: number | null;
   };
   /** Wall-clock per provider call. */
+  /** What the model actually wrote, call by call (the first 600 characters). A
+   *  PASSING repetition is otherwise opaque: the plan is kept, the `thought` the
+   *  planner gave for it is not, and "why did it take six segments" is only
+   *  answerable from the reply. Scrubbed with the rest of the report. */
+  replies: ReadonlyArray<{ purpose: 'plan' | 'answer'; text: string }>;
   callTimings: ReadonlyArray<{
     purpose: 'plan' | 'answer';
     headersMs: number | null;
@@ -250,6 +268,11 @@ export interface LiveRunContext {
   /** Backoff between the product's provider retries. Real by default; the
    *  keyless test sets 0 because there is no network to be polite to. */
   retryBackoffMs?: number;
+  /** The thinking policy to measure, for BOTH call kinds. Absent is the
+   *  product's own default — which is what production runs. */
+  thinkingPolicy?: 'disabled' | 'adaptive-low';
+  /** False sends requests without the reply schema. Absent is the default. */
+  structuredOutput?: boolean;
   /**
    * How much the PAGE ages while the model thinks: measured wall-clock ms of a
    * planning call → virtual ms credited to the device's clock. Identity when
@@ -356,6 +379,10 @@ export async function runLiveTask(
     new ClaudeAgentDecomposer({
       fetch: ctx.meter.fetch,
       ...(ctx.retryBackoffMs !== undefined ? { retryBackoffMs: ctx.retryBackoffMs } : {}),
+      ...(ctx.thinkingPolicy !== undefined
+        ? { thinkingPolicy: { plan: ctx.thinkingPolicy, answer: ctx.thinkingPolicy } }
+        : {}),
+      ...(ctx.structuredOutput !== undefined ? { structuredOutput: ctx.structuredOutput } : {}),
     }),
     INJECTION_NEEDLE,
     (text) => scrubSecrets(text, ctx.secrets),
@@ -454,6 +481,15 @@ export async function runLiveTask(
       haltedForConfirmation: executed?.executor.awaitingConfirmation === true,
       answer: executed?.answer ?? null,
       readbackUnavailable: executed?.readbackUnavailable ?? null,
+      notice: executed?.notice ?? null,
+      loop:
+        executed?.loop === undefined
+          ? null
+          : {
+              segments: executed.loop.segments,
+              stopped: executed.loop.stopped ?? null,
+              finalStatus: executed.loop.finalStatus ?? null,
+            },
       answerErrors: decomposer.answerErrors.splice(0),
     });
 
@@ -528,6 +564,10 @@ export async function runLiveTask(
       cacheCreation: sumOrNull((c) => c.cacheCreationInputTokens),
       cacheRead: sumOrNull((c) => c.cacheReadInputTokens),
     },
+    replies: calls.map((c) => ({
+      purpose: c.purpose,
+      text: scrubSecrets((c.replyText ?? '').slice(0, 600), ctx.secrets),
+    })),
     callTimings: calls.map((c) => ({
       purpose: c.purpose,
       headersMs: c.headersMs,

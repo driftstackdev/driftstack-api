@@ -33,6 +33,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AgentRuntime,
   MAX_MODEL_CALLS_PER_TURN,
+  MAX_PLANNER_CALLS_PER_TURN,
   MAX_REPLANS_PER_TURN,
   isReplannableFailure,
 } from '../../src/services/agent-runtime.js';
@@ -235,10 +236,13 @@ describe('P1 — a plan that hits a wall looks at the page and re-plans the rema
     });
 
     await runtime.runTurn({ agentSessionId: seedId, userMessage: 'do the thing' });
-    // MAX_REPLANS_PER_TURN = 2 → the first plan plus two re-plans, and no more.
-    expect(runs).toHaveLength(3);
-    // And the model-call ceiling holds with it: 1 decompose + 2 re-plans.
-    expect(seen).toHaveLength(3);
+    // The first plan plus MAX_REPLANS_PER_TURN re-plans, and no more — read off
+    // the constant, so the arm states the rule rather than today's number. The
+    // planner-call ceiling is higher and is NOT what stops this: a model that
+    // keeps FAILING is not rescued by having calls left.
+    expect(runs).toHaveLength(1 + MAX_REPLANS_PER_TURN);
+    expect(seen).toHaveLength(1 + MAX_REPLANS_PER_TURN);
+    expect(1 + MAX_REPLANS_PER_TURN).toBeLessThan(MAX_PLANNER_CALLS_PER_TURN);
   });
 
   it('⛔ AN IDENTICAL PLAN ENDS THE LOOP — re-running it would repeat the prefix that already worked', async () => {
@@ -517,20 +521,36 @@ describe('P1 — the observation handed to the model is a bounded digest, not th
     ).join('\n');
     const digest = summarizePageForPlanning(huge);
     expect(digest.length).toBeLessThanOrEqual(4_000);
-    expect(digest.split('\n').length).toBeLessThanOrEqual(60);
+    // MOVED 2026-09-18, 60 → 61: sixty ELEMENT rows, as before, plus the one
+    // `text:` row saying what the page says. The character ceiling above is the
+    // same number it was — the text is paid for out of it, not on top of it.
+    const rows = digest.split('\n');
+    expect(rows.filter((row) => !row.startsWith('text: ')).length).toBeLessThanOrEqual(60);
+    expect(rows.length).toBeLessThanOrEqual(61);
     // The bound is not a character cut mid-way through the first element.
     expect(digest).toContain('#b0');
   });
 
   it('a tiny explicit budget is honoured, so the caller can always make it smaller', () => {
     expect(summarizePageForPlanning(PAGE, 40).length).toBeLessThanOrEqual(40);
-    expect(summarizePageForPlanning(PAGE, 4_000, 1).split('\n')).toHaveLength(2);
+    // Title + what the page says + ONE element (it was title + one element
+    // before the digest carried the page's text).
+    expect(summarizePageForPlanning(PAGE, 4_000, 1).split('\n')).toHaveLength(3);
+    expect(
+      summarizePageForPlanning(PAGE, 4_000, 1)
+        .split('\n')
+        .filter((row) => row.includes(' · ')),
+    ).toHaveLength(1);
   });
 
   it('an element with nothing stable to address it by is dropped — a selector nothing can target is worse than no row', () => {
     const digest = summarizePageForPlanning('<button>Click me</button><button id="ok">Ok</button>');
     expect(digest).toContain('#ok');
-    expect(digest).not.toContain('Click me');
+    // No ROW for it. (Its words are still part of what the page SAYS, which the
+    // digest now carries — the rule is about selectors, and it never offers one.)
+    const elementRows = digest.split('\n').filter((row) => row.includes(' · '));
+    expect(elementRows).toHaveLength(1);
+    expect(elementRows.join('\n')).not.toContain('Click me');
   });
 
   it('⛔ DEGRADES RATHER THAN DISAPPEARS: a text-only page returns its text, never a false "the page is empty"', () => {
@@ -879,14 +899,25 @@ describe('P1 — the turn-wide ceilings are ceilings over the TURN', () => {
     // the arm exists to catch. Instead: fail for exactly as many calls as the
     // re-plan ceiling allows, then succeed WITH a capture, so the turn makes the
     // most calls it is capable of making and then still reaches the read-back.
+    //
+    // MOVED 2026-09-18 (B1): the turn is a loop now, and the most calls a turn
+    // can make is no longer "every re-plan" but "every SEGMENT": a planner that
+    // keeps saying `continue`. So the maximal turn is driven that way — a
+    // different, succeeding step per segment until the planner-call ceiling —
+    // and the relation pinned is planner ceiling + read-back = model-call
+    // ceiling. The re-plan ceiling keeps its own arm above.
     const planner = {
       decompose: (a: DecomposeArgs): Promise<DecomposeResult> => {
         seen.push(a);
-        return Promise.resolve(
-          seen.length <= MAX_REPLANS_PER_TURN
-            ? plan([{ ...TAP_GUESSED, selector: `#guess${String(seen.length)}` }])
-            : plan([SHOT]),
-        );
+        return Promise.resolve<DecomposeResult>({
+          kind: 'plan',
+          intents: [
+            { kind: 'scroll', direction: 'down', amount_px: 100 * seen.length },
+            ...(seen.length >= MAX_PLANNER_CALLS_PER_TURN ? [SHOT] : []),
+          ],
+          status: 'continue',
+          tokensConsumed: 100,
+        });
       },
     };
     const runtime = new AgentRuntime({
@@ -898,11 +929,7 @@ describe('P1 — the turn-wide ceilings are ceilings over the TURN', () => {
         },
       },
       executor: {
-        ...scriptedExecutor({
-          fails: (i) => (selectorOf(i)?.startsWith('#') === true ? notFound(i) : null),
-          digest: 'x',
-          runs,
-        }),
+        ...scriptedExecutor({ fails: () => null, digest: 'x', runs }),
         observe: () => Promise.resolve('Price: 12'),
       },
       sessions,
@@ -916,7 +943,8 @@ describe('P1 — the turn-wide ceilings are ceilings over the TURN', () => {
     });
 
     if (result.kind !== 'plan-executed') throw new Error('type narrow');
-    // (1 + MAX_REPLANS_PER_TURN) plan calls + 1 read-back = MAX_MODEL_CALLS_PER_TURN.
+    // MAX_PLANNER_CALLS_PER_TURN plan calls + 1 read-back = MAX_MODEL_CALLS_PER_TURN.
+    expect(seen).toHaveLength(MAX_PLANNER_CALLS_PER_TURN);
     // ⛔ THIS IS A FENCE, NOT A GATE. The call ceiling never binds first at
     // today's values, so there is no mutation of the conjunct that fails a test
     // — and saying it is a separately-enforced bound would be false. What this

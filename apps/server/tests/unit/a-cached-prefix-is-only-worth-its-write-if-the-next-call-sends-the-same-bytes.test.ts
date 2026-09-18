@@ -290,7 +290,11 @@ describe('C1 — the request carries cache breakpoints, and nothing volatile sit
       'claude-opus-5': 'clear',
       'claude-sonnet-5': 'clear',
       'claude-opus-4-8': 'clear',
-      'claude-opus-4-7': 'marginal',
+      // MOVED 2026-09-18, marginal → clear. The prompt grew by the section that
+      // teaches the look-plan-act-look loop (~2,150 → ~2,800 estimated tokens),
+      // which takes it from 5% over this model's 2,048 minimum to a third over.
+      // The 1-hour system marker is now expected to take effect here on its own.
+      'claude-opus-4-7': 'clear',
       'claude-sonnet-4-6': 'clear',
       'claude-haiku-4-5': 'below',
     };
