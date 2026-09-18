@@ -233,9 +233,14 @@ task text or anything a model wrote; an unknown model id is reported as `other`.
 
 ## In production today: the health watchdog
 
-Production has no scraper (no `METRICS_SCRAPE_TOKEN`, `/metrics` answers 404,
-and there is no Prometheus or Alertmanager on the box), so none of the PromQL
-above runs there. Alerts 1–3 are instead evaluated **inside the API** by the
+Production has no scraper and no Prometheus or Alertmanager on the box, so none
+of the PromQL above runs there. Since 2026-09-18 production DOES set
+`METRICS_SCRAPE_TOKEN`, so the metrics registry exists and every
+`driftstack_agent_*` series is live in the process — read them on the box with
+`curl -H "Authorization: Bearer $METRICS_SCRAPE_TOKEN" http://127.0.0.1:7780/metrics`
+(the value is in `/opt/driftstack/api/.env`; never paste it anywhere). `/metrics`
+is still private: it answers 401 without the token, at the edge as well. Nothing
+scrapes it yet, so nothing alerts from it. Alerts 1–3 are instead evaluated **inside the API** by the
 `agent_turn.health_watchdog` job, every **5 minutes**, from the
 `agent_turn_telemetry` table — the same rows the admin page reads, through the
 same summary code — and delivered through **Sentry**.
@@ -344,9 +349,10 @@ check that an `agent_turn.health_watchdog` row is pending.
 **Where it differs from the PromQL:**
 
 - **Alert 4 (telemetry writes failing) is NOT evaluated.** A failed write leaves
-  no row, so the table cannot see it, and the only count is an in-process
-  metrics counter that does not exist without `METRICS_SCRAPE_TOKEN`. Until a
-  scraper exists, look for the warn line
+  no row, so the table cannot see it, and the only count is the in-process
+  `driftstack_agent_turn_telemetry_write_total` counter (live in production since
+  2026-09-18, but per-process and reset on every deploy). Until a scraper exists,
+  read that counter on the box or look for the warn line
   `agent turn telemetry failed; the turn was not affected`.
 - **Recovery waits for the rule's `for:`**; Prometheus resolves as soon as the
   expression stops matching. At tens of requests one request moves a rate
