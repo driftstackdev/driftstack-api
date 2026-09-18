@@ -139,6 +139,27 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toContain('https://driftstack.io/legal/aup/');
   });
 
+  it('a site the customer NAMED is navigated to, never questioned for looking unfamiliar', () => {
+    const body = read(CONTRACT);
+    // Measured 2026-09-18 on the live planner eval: on 2 of 28 first messages the
+    // planner answered "that isn't a real, resolvable website — could you confirm
+    // the actual URL?" about an address the customer had typed. Customers name
+    // staging, intranet, local and brand-new domains every day, and whether an
+    // address exists is a question the browser answers in one step — a failed
+    // load comes back as a step the loop re-plans from. Asking first costs a whole
+    // round-trip with the customer and gains nothing.
+    expect(body).toMatch(/A NAMED ADDRESS IS NEVER A REASON TO CLARIFY/);
+    expect(body).toMatch(/Whether an address exists is settled by navigating to it/);
+    // It sits beside the clarify rule it qualifies, not somewhere a later edit
+    // could separate it from.
+    expect(body.indexOf('A NAMED ADDRESS IS NEVER A REASON TO CLARIFY')).toBeGreaterThan(
+      body.indexOf('WHEN TO CLARIFY:'),
+    );
+    expect(body.indexOf('A NAMED ADDRESS IS NEVER A REASON TO CLARIFY')).toBeLessThan(
+      body.indexOf('WHEN TO REFUSE:'),
+    );
+  });
+
   it('runtime-enforces downstream field limits and keeps the Anthropic body below the transcript turn reserve', () => {
     expect(body).toContain('const MAX_ANTHROPIC_RESPONSE_BYTES = 64 * 1024;');
     expect(body).toContain('const MAX_AGENT_URL_CHARS = 8192;');
