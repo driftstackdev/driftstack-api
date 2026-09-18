@@ -202,6 +202,10 @@ describe('metric label cardinality', () => {
     // services/agent-turn-telemetry.ts (TAP_UNOCCLUDED_CHECK_WHYS / _RESULTS);
     // a refusal reason the build does not know is `unrecognised_reason`, never
     // the device's own text.
+    //
+    // `verb` arrived when typed steps began carrying the same check on their
+    // focus tap (A3 V-3360): click | send_keys, closed as
+    // TAP_UNOCCLUDED_CHECK_VERBS. A typed step's text never reaches a label.
     expect(distinct).toEqual([
       'actor_type',
       'arm',
@@ -228,6 +232,7 @@ describe('metric label cardinality', () => {
       'to',
       'token_type',
       'transport',
+      'verb',
       'why',
     ]);
   });

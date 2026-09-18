@@ -143,6 +143,49 @@ const TERMS: FixturePage = {
 /** The same page with a banner over everything outside it. */
 const CAUSES_WITH_BANNER: FixturePage = { ...CAUSES, overlays: ['#banner'] };
 
+/** A styled checkbox below the fold whose label has a "terms" LINK written into
+ *  it — and the click's tap point lands on the link. HTML gives that tap to the
+ *  link, not the checkbox: an unchecked tap opens the terms page. */
+const TERMS_LINK: FixturePage = {
+  url: 'https://till.test/accept',
+  title: 'Accept',
+  loadMs: 50,
+  settleMs: 50,
+  body:
+    '<main><h1>Accept</h1><label><input id="accept" type="checkbox">' +
+    '<span id="accept-text">I accept the </span><a id="terms-link" href="https://till.test/terms-doc">terms</a>' +
+    '</label><label><input id="promo" type="checkbox"><span id="promo-text">Send me offers</span></label></main>',
+  offViewport: ['#accept'],
+  tapPointInsideOwnLabel: [
+    { target: '#accept', hit: '#terms-link' },
+    { target: '#promo', hit: '#promo-text' },
+  ],
+  onClick: [
+    { target: '#accept', effects: [{ kind: 'set_flag', flag: 'terms:accepted' }] },
+    { target: '#terms-link', effects: [{ kind: 'set_flag', flag: 'terms:opened' }] },
+    { target: '#promo', effects: [{ kind: 'set_flag', flag: 'promo:ticked' }] },
+  ],
+};
+
+/** A sign-up form whose email field is below the fold, under a floating chat
+ *  button once the focus tap's scroll brings it up. */
+const SIGNUP: FixturePage = {
+  url: 'https://till.test/signup',
+  title: 'Sign up',
+  loadMs: 50,
+  settleMs: 50,
+  body:
+    '<main><h1>Sign up</h1><form><input id="email" name="email" type="email"></form>' +
+    '<div id="chat"><button id="open-chat" type="button">Chat with us</button>' +
+    '<button id="hide-chat" type="button" aria-label="Hide chat">–</button></div></main>',
+  offViewport: ['#email'],
+  coveredAfterScroll: [{ target: '#email', cover: '#open-chat' }],
+  onClick: [
+    { target: '#open-chat', effects: [{ kind: 'set_flag', flag: 'chat:opened' }] },
+    { target: '#hide-chat', effects: [{ kind: 'remove', target: '#chat' }] },
+  ],
+};
+
 // ── the device, asked directly ────────────────────────────────────────
 
 let seq = 0;
@@ -159,6 +202,40 @@ function click(device: FakeDevice, selector: string, requireUnoccluded?: boolean
       ...(requireUnoccluded === undefined ? {} : { require_unoccluded: requireUnoccluded }),
     }),
   });
+}
+
+function typeInto(device: FakeDevice, selector: string, text: string, requireUnoccluded?: boolean) {
+  seq += 1;
+  return device.dispatcher.dispatch({
+    type: 'intentDispatch',
+    sessionId: 's',
+    intentId: `i_${String(seq)}`,
+    intentName: 'send_keys',
+    inputParams: encodeWireData({
+      strategy: 'css selector',
+      value: selector,
+      text,
+      ...(requireUnoccluded === undefined ? {} : { require_unoccluded: requireUnoccluded }),
+    }),
+  });
+}
+
+async function perceiveOne(device: FakeDevice, selector: string) {
+  seq += 1;
+  const answer = await device.dispatcher.dispatch({
+    type: 'intentDispatch',
+    sessionId: 's',
+    intentId: `i_${String(seq)}`,
+    intentName: 'perceive',
+    inputParams: encodeWireData({ selector }),
+  });
+  const value = (answer.outputData as { value: { elements: Array<Record<string, unknown>> } })
+    .value;
+  return value.elements[0];
+}
+
+function typedFields(device: FakeDevice): Array<string | null> {
+  return device.events().flatMap((e) => (e.kind === 'typed' ? [e.field] : []));
 }
 
 function deviceOn(page: FixturePage, opts: Partial<FakeDeviceOptions> = {}): FakeDevice {
@@ -284,9 +361,17 @@ describe('the fake device models click require_unoccluded as A3 describes it', (
     );
   });
 
-  it('a tap point on the control’s OWN LABEL: the device’s check has no own-label rule, so it refuses — unchecked, the label toggles it', async () => {
+  it('a tap point on the control’s OWN LABEL: a device with the own-label verdict taps it checked, and the label toggles it', async () => {
     for (const selector of ['#agree', '#news']) {
       const device = deviceOn(TERMS);
+      expect((await click(device, selector, true)).success).toBe(true);
+      expect(clickedIds(device)).toEqual([selector.slice(1)]);
+    }
+  });
+
+  it('…a device that PREDATES the own-label verdict has no such rule, so it refuses — unchecked, the label toggles it', async () => {
+    for (const selector of ['#agree', '#news']) {
+      const device = deviceOn(TERMS, { predatesOwnLabelVerdict: true });
       const checked = await click(device, selector, true);
       expect(checked.errorMessage).toBe(
         'element occluded at the tap point: hit_is_not_target_or_descendant',
@@ -297,8 +382,28 @@ describe('the fake device models click require_unoccluded as A3 describes it', (
     }
   });
 
-  it('…and perceive reports the label as the hit, carrying the control’s own name', async () => {
-    const device = deviceOn(TERMS);
+  it('…and perceive on the own-label build reports the label as a CLEAR hit, by its own label', async () => {
+    expect(await perceiveOne(deviceOn(TERMS), '#news')).toMatchObject({
+      type: 'checkbox',
+      label: 'Send me offers',
+      occluded: false,
+      occlusion_reason: null,
+      hit_via_own_label: true,
+      hit: { type: 'other', label: 'Send me offers' },
+    });
+    // Every element from that build carries the field — it is the build's tell.
+    expect(await perceiveOne(deviceOn(CAUSES), '#clear')).toMatchObject({
+      hit_via_own_label: false,
+    });
+    expect(await perceiveOne(deviceOn(CAUSES), '#far')).toMatchObject({
+      occlusion_reason: 'tap_point_outside_viewport',
+      hit_via_own_label: false,
+    });
+  });
+
+  it('…while perceive on an older build reports the label as the hit, occluded, with no field', async () => {
+    const device = deviceOn(TERMS, { predatesOwnLabelVerdict: true });
+    expect(await perceiveOne(device, '#news')).not.toHaveProperty('hit_via_own_label');
     const answer = await device.dispatcher.dispatch({
       type: 'intentDispatch',
       sessionId: 's',
@@ -319,6 +424,43 @@ describe('the fake device models click require_unoccluded as A3 describes it', (
         ],
       },
     });
+  });
+
+  it('a LINK inside the own label is interactive content: covered to perceive and to the check, and an unchecked tap opens it', async () => {
+    const device = deviceOn({ ...TERMS_LINK, offViewport: [] });
+    expect(await perceiveOne(device, '#accept')).toMatchObject({
+      occluded: true,
+      occlusion_reason: 'hit_is_not_target_or_descendant',
+      hit_via_own_label: false,
+      hit: { type: 'link', selector: '#terms-link' },
+    });
+    const checked = await click(device, '#accept', true);
+    expect(checked.errorMessage).toBe(
+      'element occluded at the tap point: hit_is_not_target_or_descendant',
+    );
+    expect(device.events()).toEqual([]);
+    expect((await click(device, '#accept')).success).toBe(true);
+    expect(device.hasFlag('terms:opened')).toBe(true);
+    expect(device.hasFlag('terms:accepted')).toBe(false);
+  });
+
+  it('a NON-interactive span inside the own label forwards the tap like the label: clear, and it toggles', async () => {
+    const device = deviceOn(TERMS_LINK);
+    expect(await perceiveOne(device, '#promo')).toMatchObject({
+      occluded: false,
+      hit_via_own_label: true,
+      hit: { label: 'Send me offers' },
+    });
+    expect((await click(device, '#promo', true)).success).toBe(true);
+    expect(device.hasFlag('promo:ticked')).toBe(true);
+  });
+
+  it('a hit declared inside a label that is NOT the control’s own is a fixture bug, and throws', async () => {
+    const device = deviceOn({
+      ...TERMS_LINK,
+      tapPointInsideOwnLabel: [{ target: '#accept', hit: '#promo-text' }],
+    });
+    await expect(click(device, '#accept', true)).rejects.toThrow(/not/);
   });
 
   it('a refusal costs the device a lookup and a check, never a tap', async () => {
@@ -539,8 +681,8 @@ describe('an ordinary off-screen tap covered once scrolled to', () => {
   });
 });
 
-describe('⛔ a styled checkbox — operated through its own label — still toggles', () => {
-  // The device's check refuses a hit on the control's own label, which is
+describe('⛔ on a device that predates the own-label verdict, a styled checkbox still toggles', () => {
+  // That device's check refuses a hit on the control's own label, which is
   // where every tap on a styled checkbox lands. Sent the check, this step
   // would be refused as "covered" and the identical re-plan would end the turn.
   const script: Segment[] = [
@@ -551,7 +693,9 @@ describe('⛔ a styled checkbox — operated through its own label — still tog
   ];
 
   it('below the fold AND on-screen, it is tapped unchecked and toggles, first time, with no re-plan', async () => {
-    const { device, turn, decomposeCalls } = harness(TERMS, script);
+    const { device, turn, decomposeCalls } = harness(TERMS, script, {
+      predatesOwnLabelVerdict: true,
+    });
     const done = await turn('accept the terms and sign up for offers');
     expect(done.executor.ok).toBe(true);
     expect(device.hasFlag('terms:agreed')).toBe(true);
@@ -561,6 +705,177 @@ describe('⛔ a styled checkbox — operated through its own label — still tog
       { strategy: 'css selector', value: '#agree' },
       { strategy: 'css selector', value: '#news' },
     ]);
+  });
+});
+
+describe('the fake device models send_keys require_unoccluded as A3 V-3360 describes it', () => {
+  it('a field covered once its focus tap scrolls to it: refused word for word, and NOTHING is typed', async () => {
+    const device = deviceOn(SIGNUP);
+    const refused = await typeInto(device, '#email', 'me@example.test', true);
+    expect(refused.success).toBe(false);
+    expect(refused.errorCode).toBe('intent_webdriver_failed');
+    expect(refused.errorMessage).toBe(
+      'element occluded at the tap point: hit_is_not_target_or_descendant',
+    );
+    expect(device.events()).toEqual([]);
+    expect(device.flags().size).toBe(0);
+  });
+
+  it('a clear field with the check is typed into, and the result says the focus tap was checked', async () => {
+    const device = deviceOn({ ...SIGNUP, coveredAfterScroll: [] });
+    const typed = await typeInto(device, '#email', 'me@example.test', true);
+    expect(typed.outputData).toMatchObject({ focus_tap_unoccluded_checked: true, length: 15 });
+    expect(typedFields(device)).toEqual(['email']);
+  });
+
+  it('WITHOUT the check the result says so — false — and types as before', async () => {
+    const device = deviceOn(SIGNUP);
+    const typed = await typeInto(device, '#email', 'me@example.test');
+    expect(typed.outputData).toMatchObject({ focus_tap_unoccluded_checked: false });
+    expect(typedFields(device)).toEqual(['email']);
+  });
+
+  it('the native no-persona path focuses by script: NO TAP, so nothing is checked — false, and typed', async () => {
+    const device = deviceOn(SIGNUP, { sendKeysFocusesByScript: true });
+    const typed = await typeInto(device, '#email', 'me@example.test', true);
+    expect(typed.success).toBe(true);
+    expect(typed.outputData).toMatchObject({ focus_tap_unoccluded_checked: false });
+    expect(typedFields(device)).toEqual(['email']);
+  });
+
+  it('a device that PREDATES the build ignores the parameter, types, and never sends the field', async () => {
+    const device = deviceOn(SIGNUP, { predatesOwnLabelVerdict: true });
+    const typed = await typeInto(device, '#email', 'me@example.test', true);
+    expect(typed.success).toBe(true);
+    expect(typed.outputData).not.toHaveProperty('focus_tap_unoccluded_checked');
+    expect(typedFields(device)).toEqual(['email']);
+  });
+
+  it('each older option implies the older build: no field from a device that predates the look or the click check', async () => {
+    for (const older of [{ predatesTapLook: true }, { predatesRequireUnoccluded: true }]) {
+      const typed = await typeInto(deviceOn(SIGNUP, older), '#email', 'x', true);
+      expect(typed.outputData).not.toHaveProperty('focus_tap_unoccluded_checked');
+    }
+  });
+});
+
+describe('the loop, on the own-label build', () => {
+  it('a styled checkbox OFF-SCREEN now carries the check and toggles; the on-screen one, clear through its label, taps as before', async () => {
+    const { device, turn, decomposeCalls } = harness(TERMS, [
+      {
+        intents: [{ kind: 'navigate', url: TERMS.url }, SETTLE, tap('#agree'), tap('#news')],
+        status: 'done',
+      },
+    ]);
+    const done = await turn('accept the terms and sign up for offers');
+    expect(done.executor.ok).toBe(true);
+    expect(device.hasFlag('terms:agreed')).toBe(true);
+    expect(device.hasFlag('news:ticked')).toBe(true);
+    expect(decomposeCalls()).toBe(1);
+    expect(clickDispatches(device).map((d) => d.params)).toEqual([
+      { strategy: 'css selector', value: '#agree', require_unoccluded: true },
+      { strategy: 'css selector', value: '#news' },
+    ]);
+  });
+
+  it('⛔ a "terms" LINK inside the checkbox’s label, where the tap would land: refused as covered — the terms page is not opened, the box not ticked', async () => {
+    const { device, turn } = harness(TERMS_LINK, [
+      {
+        intents: [{ kind: 'navigate', url: TERMS_LINK.url }, SETTLE, tap('#accept')],
+        status: 'done',
+      },
+    ]);
+    const done = await turn('accept the terms');
+    expect(device.hasFlag('terms:opened')).toBe(false);
+    expect(device.hasFlag('terms:accepted')).toBe(false);
+    expect(device.url()).toBe(TERMS_LINK.url);
+    const [sent] = clickDispatches(device);
+    expect(sent?.params).toEqual({
+      strategy: 'css selector',
+      value: '#accept',
+      require_unoccluded: true,
+    });
+    const step = done.executor.results.find((r) => r.kind === 'failure');
+    if (step?.kind !== 'failure') throw new Error('expected the tap to fail');
+    expect(step.diagnosis).toEqual({ category: 'element_covered', retryable: false });
+    expect(step.reason).toContain('nothing was tapped');
+  });
+
+  it('CONTROL — on a device that predates the build the checkbox is exempt, tapped unchecked, and the tap OPENS THE TERMS PAGE', async () => {
+    const { device, turn } = harness(
+      TERMS_LINK,
+      [
+        {
+          intents: [{ kind: 'navigate', url: TERMS_LINK.url }, SETTLE, tap('#accept')],
+          status: 'done',
+        },
+      ],
+      { predatesOwnLabelVerdict: true },
+    );
+    await turn('accept the terms');
+    expect(clickDispatches(device).map((d) => d.params)).toEqual([
+      { strategy: 'css selector', value: '#accept' },
+    ]);
+    expect(device.hasFlag('terms:opened')).toBe(true);
+    expect(device.hasFlag('terms:accepted')).toBe(false);
+  });
+
+  const TYPE_EMAIL: Segment = {
+    intents: [
+      { kind: 'navigate', url: SIGNUP.url },
+      SETTLE,
+      { kind: 'interact', action: 'type', selector: '#email', value: 'me@example.test' },
+    ],
+    status: 'done',
+  };
+
+  it('⛔ an off-screen field covered after the scroll: the typed step is refused and NOTHING is typed', async () => {
+    const { device, turn } = harness(SIGNUP, [TYPE_EMAIL]);
+    const done = await turn('sign me up with me@example.test');
+    expect(typedFields(device)).toEqual([]);
+    expect(device.hasFlag('chat:opened')).toBe(false);
+    const typed = device.dispatches().filter((d) => d.intentName === 'send_keys');
+    expect(typed).toHaveLength(1);
+    expect(typed[0]?.params).toMatchObject({ value: '#email', require_unoccluded: true });
+    const step = done.executor.results.find((r) => r.kind === 'failure');
+    if (step?.kind !== 'failure') throw new Error('expected the typed step to fail');
+    expect(step.diagnosis).toEqual({ category: 'element_covered', retryable: false });
+    expect(step.reason).toContain('nothing was typed');
+  });
+
+  it('…and once the re-plan hides the cover, the same checked typing goes through', async () => {
+    const { device, turn } = harness(SIGNUP, [
+      TYPE_EMAIL,
+      {
+        intents: [
+          tap('#hide-chat'),
+          { kind: 'interact', action: 'type', selector: '#email', value: 'me@example.test' },
+        ],
+        status: 'done',
+      },
+    ]);
+    const done = await turn('sign me up with me@example.test');
+    expect(done.executor.ok).toBe(true);
+    expect(typedFields(device)).toEqual(['email']);
+    expect(device.hasFlag('chat:opened')).toBe(false);
+  });
+
+  it('CONTROL — the older device behaves exactly as before: no parameter, and the field is typed into', async () => {
+    const { device, turn } = harness(SIGNUP, [TYPE_EMAIL], { predatesOwnLabelVerdict: true });
+    const done = await turn('sign me up with me@example.test');
+    expect(done.executor.ok).toBe(true);
+    const typed = device.dispatches().filter((d) => d.intentName === 'send_keys');
+    expect(typed.map((d) => d.params)).toEqual([
+      { strategy: 'css selector', value: '#email', text: 'me@example.test' },
+    ]);
+    expect(typedFields(device)).toEqual(['email']);
+  });
+
+  it('the native no-tap path with the check asked for: typed, and nothing claims it was verified', async () => {
+    const { device, turn } = harness(SIGNUP, [TYPE_EMAIL], { sendKeysFocusesByScript: true });
+    const done = await turn('sign me up with me@example.test');
+    expect(done.executor.ok).toBe(true);
+    expect(typedFields(device)).toEqual(['email']);
   });
 });
 

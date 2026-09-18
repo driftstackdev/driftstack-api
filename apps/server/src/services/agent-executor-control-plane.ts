@@ -63,6 +63,7 @@ import {
   recordTapUnoccludedCheck,
   type PreTapLookOutcome,
   type TapUnoccludedCheckResult,
+  type TapUnoccludedCheckVerb,
   type TapUnoccludedCheckWhy,
 } from './agent-turn-telemetry.js';
 import type { MetricsRegistry } from './metrics-registry.js';
@@ -215,8 +216,10 @@ interface TapTarget {
   selector: string;
   /** The element the hit test returns at the tap point, or null. */
   hit: { type: string; label: string; selector: string } | null;
-  /** Set when the look read the tap as clear only because the hit is the
-   *  control's own label — a rule the device's click check does not have. */
+  /** Set when the tap is clear because the hit is the control's own label.
+   *  From the device's own `hit_via_own_label` where it sends one; inferred
+   *  from the label text only on a device without the rule (see
+   *  `readPerceiveAnswer`). */
   hitIsOwnLabel?: true;
 }
 
@@ -280,6 +283,10 @@ type PerceiveReading =
       kind: 'resolved';
       verdict: 'clear' | 'covered' | 'outside_viewport' | 'unverified';
       target: TapTarget;
+      /** The element carried `hit_via_own_label` (either value): the device's
+       *  single tap verdict has the own-label rule, and its send_keys takes
+       *  `require_unoccluded` — both shipped in one deploy (A3 V-3360). */
+      ownLabelVerdict: boolean;
     };
 
 function recordOf(value: unknown): Record<string, unknown> | null {
@@ -315,6 +322,11 @@ function readPerceiveAnswer(outputData: unknown): PerceiveReading {
     return { kind: 'no_usable_answer' };
   }
   const hitRecord = recordOf(el.hit);
+  // Present, either value, only from a device whose verdict has the own-label
+  // rule. The schema has already refused a non-boolean, so anything else here
+  // is absent.
+  const hitViaOwnLabel = typeof el.hit_via_own_label === 'boolean' ? el.hit_via_own_label : null;
+  const ownLabelVerdict = hitViaOwnLabel !== null;
   const target: TapTarget = {
     type: typeof el.type === 'string' ? el.type : 'other',
     label: typeof el.label === 'string' ? el.label : '',
@@ -328,7 +340,17 @@ function readPerceiveAnswer(outputData: unknown): PerceiveReading {
           }
         : null,
   };
-  if (!el.occluded) return { kind: 'resolved', verdict: 'clear', target };
+  if (!el.occluded) {
+    // The device's own word that the tap is clear THROUGH the control's own
+    // label. Recorded because it is evidence of a different kind from a hit
+    // on the control itself: the label forwards the tap.
+    return {
+      kind: 'resolved',
+      verdict: 'clear',
+      target: hitViaOwnLabel === true ? { ...target, hitIsOwnLabel: true } : target,
+      ownLabelVerdict,
+    };
+  }
   // ⛔ A HIT ON THE CONTROL'S OWN LABEL IS THE CONTROL. A styled checkbox or
   // radio is commonly a visually hidden input inside (or pointed at by) its
   // `<label>`; the tap point then lands on the label or the span drawn inside
@@ -337,13 +359,27 @@ function readPerceiveAnswer(outputData: unknown): PerceiveReading {
   // label (or anything inside it) by the same text, so "the hit is not a control
   // and carries exactly the target's name" is that case. Anything else wearing
   // the target's name is at worst tapped exactly as before the look existed.
+  //
+  // ⛔ ONLY FOR A DEVICE WITHOUT THE RULE. A device that sends
+  // `hit_via_own_label` has already applied the exact rule — the element's
+  // real `labels`, and HTML's interactive-content set for what sits inside
+  // one — and said `occluded` anyway. Its answer is better evidence than a
+  // name match, which cannot tell the label from a heading that repeats it,
+  // or a span from a "terms" link inside the label. This inference is the
+  // fallback for a device that predates that build, and nothing more.
   if (
+    !ownLabelVerdict &&
     target.hit !== null &&
     !CONTROL_TYPES.has(target.hit.type) &&
     target.label.length > 0 &&
     target.hit.label === target.label
   ) {
-    return { kind: 'resolved', verdict: 'clear', target: { ...target, hitIsOwnLabel: true } };
+    return {
+      kind: 'resolved',
+      verdict: 'clear',
+      target: { ...target, hitIsOwnLabel: true },
+      ownLabelVerdict,
+    };
   }
   // ⛔ A CONTROL THAT IS NOT RENDERED IS NOT COVERED. Its rect is empty, so its
   // "tap point" is the page's origin and the hit test finds whatever sits there
@@ -358,22 +394,22 @@ function readPerceiveAnswer(outputData: unknown): PerceiveReading {
     (!(typeof bounds.width === 'number' && bounds.width > 0) ||
       !(typeof bounds.height === 'number' && bounds.height > 0));
   if (state?.visible === false || emptyRect) {
-    return { kind: 'resolved', verdict: 'unverified', target };
+    return { kind: 'resolved', verdict: 'unverified', target, ownLabelVerdict };
   }
   const reason = el.occlusion_reason;
   switch (reason) {
     case 'tap_point_outside_viewport':
-      return { kind: 'resolved', verdict: 'outside_viewport', target };
+      return { kind: 'resolved', verdict: 'outside_viewport', target, ownLabelVerdict };
     case 'nothing_hit':
-      return { kind: 'resolved', verdict: 'unverified', target };
+      return { kind: 'resolved', verdict: 'unverified', target, ownLabelVerdict };
     case 'hit_is_not_target_or_descendant':
     case 'covered_at_enclosing_shadow_level':
-      return { kind: 'resolved', verdict: 'covered', target };
+      return { kind: 'resolved', verdict: 'covered', target, ownLabelVerdict };
     default:
       // The device said OCCLUDED and gave no reason this build knows. That is
       // still its statement that the tap point is not on the target, so it is
       // read as covered: the direction in which nothing gets tapped by mistake.
-      return { kind: 'resolved', verdict: 'covered', target };
+      return { kind: 'resolved', verdict: 'covered', target, ownLabelVerdict };
   }
 }
 
@@ -426,8 +462,14 @@ function coverNameOf(target: TapTarget): string | undefined {
   return isAncestor ? undefined : hit.label;
 }
 
+/** Which verb carries the device's check at the tap point, and why. */
+interface UnoccludedCheck {
+  verb: TapUnoccludedCheckVerb;
+  why: TapUnoccludedCheckWhy;
+}
+
 /**
- * Whether a tap is sent with click `require_unoccluded: true` — the device's own
+ * Whether a tap is sent with `require_unoccluded: true` — the device's own
  * occlusion test at the ACTUAL tap point, after the click's scroll, the persona
  * jitter and its clamp to the element, with the same verdict function the look
  * uses. A covered point is refused before any touch is posted.
@@ -439,13 +481,18 @@ function coverNameOf(target: TapTarget): string | undefined {
  *  outside_viewport  the look could not see the tap point at all (perceive
  *                    never scrolls), so until now this tap went ahead unchecked
  *
- * ⛔ TAPS ONLY. Typing also begins with a tap on the field, but `send_keys` does
- * not take the parameter (A3's contract names click alone), and a parameter a
- * verb does not support is not sent to it. The look before typing still refuses
- * a covered field; an off-screen one is typed into as before.
+ * TYPING TOO, on a device that has shown it takes the parameter on send_keys
+ * (`ownLabelVerdict`, A3 V-3360): typing begins with a tap that focuses the
+ * field, and a cover the click's scroll puts over it takes that tap exactly as
+ * it would a button's. Only where the look said `outside_viewport` — the one
+ * case the look cannot vouch for; a covered field was already refused by the
+ * look, and the gate releases taps, not typing. ⛔ NEVER to a device without
+ * it: that device has not been shown to ignore an unknown send_keys key
+ * rather than refuse the step, so the fallback there is the typing it always
+ * had.
  *
- * ⛔ NOT A CONTROL OPERATED THROUGH ITS LABEL, approved or not: the device's
- * check would refuse the very tap that works (`deviceCheckCanVouchFor`).
+ * ⛔ NOT A CONTROL OPERATED THROUGH ITS LABEL, on a device WITHOUT the own-label
+ * rule: its check would refuse the very tap that works (`deviceCheckCanVouchFor`).
  *
  * ⛔ NOT YET EVERY TAP. The check FAILS CLOSED — a device that cannot run it
  * refuses the tap — so on every tap it would cost the customer each tap the
@@ -455,28 +502,60 @@ function coverNameOf(target: TapTarget): string | undefined {
  *
  * An OLDER device reads click params by key and never looks for this one, so it
  * taps exactly as it did before the parameter existed. There is no capability
- * tell to gate on — the look's `resolved_by` predates the parameter — and none is
- * needed: the fallback is today's behaviour, not a failure.
+ * tell to gate a CLICK on — the look's `resolved_by` predates the parameter —
+ * and none is needed: the fallback is today's behaviour, not a failure.
  */
 function unoccludedCheckFor(
   intentName: HarnessIntentName,
   look: PreTapLook | null,
   releasedApproval: boolean,
-): TapUnoccludedCheckWhy | null {
-  // The verb on the wire decides, not the plan's action: only `click` takes
-  // the parameter (a typed step is `send_keys`), and a raw-coordinate click is
-  // refused with it — the mapper never emits one, and the params schema refuses
-  // it before a frame is built.
-  if (intentName !== 'click') return null;
-  if (!deviceCheckCanVouchFor(look)) return null;
-  if (releasedApproval) return 'consequential';
-  if (look?.verdict === 'outside_viewport') return 'outside_viewport';
-  return null;
+  ownLabelVerdict: boolean,
+): UnoccludedCheck | null {
+  // The verb on the wire decides, not the plan's action, and a raw-coordinate
+  // click is refused with the parameter — the mapper never emits one, and the
+  // params schema refuses it before a frame is built.
+  switch (intentName) {
+    case 'click':
+      if (!deviceCheckCanVouchFor(look, ownLabelVerdict)) return null;
+      if (releasedApproval) return { verb: 'click', why: 'consequential' };
+      if (look?.verdict === 'outside_viewport') return { verb: 'click', why: 'outside_viewport' };
+      return null;
+    case 'send_keys':
+      if (!ownLabelVerdict) return null;
+      if (look?.verdict === 'outside_viewport') {
+        return { verb: 'send_keys', why: 'outside_viewport' };
+      }
+      return null;
+    default:
+      return null;
+  }
 }
 
-/** What one click sent with the check came back as, for the tap-check counter. */
-function unoccludedCheckResultOf(parsed: ParsedIntentResult): TapUnoccludedCheckResult {
-  if (parsed.success) return 'tapped';
+/** What one dispatch sent with the check came back as, for the tap-check counter. */
+function unoccludedCheckResultOf(
+  verb: TapUnoccludedCheckVerb,
+  parsed: ParsedIntentResult,
+): TapUnoccludedCheckResult {
+  if (parsed.success) {
+    switch (verb) {
+      case 'click':
+        return 'tapped';
+      case 'send_keys': {
+        // ⛔ FALSE IS NOT A PASS. The device's native path without a persona
+        // focuses the field by script and makes no tap: there was nothing to
+        // check, and it says so with false. Only true is a checked tap.
+        const checked = recordOf(parsed.outputData)?.focus_tap_unoccluded_checked;
+        if (checked === true) return 'checked';
+        if (checked === false) return 'no_tap';
+        return 'unconfirmed';
+      }
+      default: {
+        const _exhaustive: never = verb;
+        void _exhaustive;
+        return 'failed_otherwise';
+      }
+    }
+  }
   const refusal = tapRefusalOf(parsed);
   if (refusal === null) return 'failed_otherwise';
   return refusal.reason ?? 'unrecognised_reason';
@@ -491,21 +570,39 @@ const LABEL_OPERATED_TYPES: ReadonlySet<string> = new Set(['checkbox', 'radio'])
 /**
  * Whether the device's click check can vouch for this target at all.
  *
- * ⛔ THE DEVICE'S CHECK HAS NO OWN-LABEL RULE. The look reads a hit on the
- * control's own label as the control (see `readPerceiveAnswer`), because a tap
- * there toggles it; click's `require_unoccluded` runs the device's bare verdict,
- * where that same hit is `hit_is_not_target_or_descendant`. Sent for such a
+ * A device whose verdict has the OWN-LABEL RULE (it said so with
+ * `hit_via_own_label`) can vouch for every target: its check reads a hit on
+ * the control's own label as clear — and a hit on a link INSIDE that label as
+ * covered, which is exactly the case a label-text guess gets wrong. So a
+ * checkbox, a radio and a tap the look saw clear through its label get the
+ * check under the same rules as every other tap.
+ *
+ * ⛔ A DEVICE WITHOUT THE RULE: its check runs the bare verdict, where a hit on
+ * the control's own label is `hit_is_not_target_or_descendant`. Sent for such a
  * control, the check refuses a tap that works, the customer is told something
- * covers it, and the re-plan — the same tap — ends the turn. So it is not sent
- * where the look already saw the label at the tap point, nor for a checkbox or
- * radio whose tap point the look could not see (off-screen, it may well land on
- * the label). Those taps go ahead exactly as before the check existed. The fix
- * that closes this is the same exemption in the device's check (asked of A3).
+ * covers it, and the re-plan — the same tap — ends the turn. So on that device
+ * it is not sent where the look already saw the label at the tap point, nor for
+ * a checkbox or radio whose tap point the look could not see (off-screen, it
+ * may well land on the label). Those taps go ahead exactly as before the check
+ * existed.
  */
-function deviceCheckCanVouchFor(look: PreTapLook | null): boolean {
+function deviceCheckCanVouchFor(look: PreTapLook | null, ownLabelVerdict: boolean): boolean {
+  if (ownLabelVerdict) return true;
   if (look === null || !('target' in look)) return true;
   if (look.target.hitIsOwnLabel === true) return false;
   return !LABEL_OPERATED_TYPES.has(look.target.type);
+}
+
+/** Add `key` as the newest member of a per-session memo, evicting the oldest
+ *  past the bound a process serving many chats needs. */
+function rememberBounded(memo: Set<string>, key: string): void {
+  memo.delete(key);
+  memo.add(key);
+  while (memo.size > MAX_SESSIONS_WITH_GATE_LABELS) {
+    const oldest = memo.values().next();
+    if (oldest.done === true) break;
+    memo.delete(oldest.value);
+  }
 }
 
 /** click's W3C locator strategy, as perceive's own vocabulary names it. Null:
@@ -855,9 +952,16 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // 1.8. THE DEVICE CHECKS THE REAL TAP POINT where the look could not
       //      vouch for it, or where being wrong costs the most. See
       //      `unoccludedCheckFor` for which taps and why not all of them.
-      const unoccludedWhy = unoccludedCheckFor(mapped.intentName, look, releasedApproval);
+      //      The look above has already recorded what this session's device
+      //      is, so its own answer counts here.
+      const unoccludedCheck = unoccludedCheckFor(
+        mapped.intentName,
+        look,
+        releasedApproval,
+        this.sessionsWithOwnLabelVerdict.has(dispatchSessionId),
+      );
       const dispatchParams =
-        unoccludedWhy !== null ? { ...mapped.params, require_unoccluded: true } : mapped.params;
+        unoccludedCheck !== null ? { ...mapped.params, require_unoccluded: true } : mapped.params;
 
       // 2-4. Dispatch (with bounded auto-retry) + map the result back.
       const result = await this.runIntent(
@@ -871,7 +975,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         // The look already spent this step's element wait (or found the element
         // without one); a second would re-ask what the first just answered.
         look !== null && 'waitedForElement' in look && look.waitedForElement,
-        unoccludedWhy ?? undefined,
+        unoccludedCheck ?? undefined,
       );
       if (result.result !== null) {
         emitStep(result.result);
@@ -1139,6 +1243,9 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       if (reading.kind === 'no_usable_answer' && reading.predatesLook === true) {
         this.rememberPredatesLook(sessionId);
       }
+      if (reading.kind === 'resolved' && reading.ownLabelVerdict) {
+        this.rememberOwnLabelVerdict(sessionId);
+      }
       const outcome: PreTapLookOutcome =
         reading.kind === 'no_usable_answer'
           ? 'fallback'
@@ -1208,13 +1315,22 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   private readonly sessionsPredatingLook = new Set<string>();
 
   private rememberPredatesLook(sessionId: string): void {
-    this.sessionsPredatingLook.delete(sessionId);
-    this.sessionsPredatingLook.add(sessionId);
-    while (this.sessionsPredatingLook.size > MAX_SESSIONS_WITH_GATE_LABELS) {
-      const oldest = this.sessionsPredatingLook.values().next();
-      if (oldest.done === true) break;
-      this.sessionsPredatingLook.delete(oldest.value);
-    }
+    rememberBounded(this.sessionsPredatingLook, sessionId);
+  }
+
+  /**
+   * Sessions whose device has shown, on a look, the build with the own-label
+   * verdict and send_keys `require_unoccluded` (A3 V-3360): a perceive element
+   * carrying `hit_via_own_label`. The mirror of {@link sessionsPredatingLook},
+   * for the same reason — a device does not change under a live session — so a
+   * later step whose own look told nothing (it timed out) still knows. Absent
+   * means "not shown", never "shown not to": the exemptions and the old typing
+   * stay until the device says otherwise. Bounded, oldest first.
+   */
+  private readonly sessionsWithOwnLabelVerdict = new Set<string>();
+
+  private rememberOwnLabelVerdict(sessionId: string): void {
+    rememberBounded(this.sessionsWithOwnLabelVerdict, sessionId);
   }
 
   /** One `perceive` for one selector, bounded by the look's deadline. */
@@ -1364,8 +1480,9 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     signal?: AbortSignal,
     /** The look before a tap already spent (or did not need) this step's wait. */
     elementWaitAlreadyUsed = false,
-    /** Set when `params` carry `require_unoccluded`: why, for the counter. */
-    unoccludedWhy?: TapUnoccludedCheckWhy,
+    /** Set when `params` carry `require_unoccluded`: which verb and why, for
+     *  the counter. */
+    unoccludedCheck?: UnoccludedCheck,
   ): Promise<RunIntentOutcome> {
     let result: IntentResult | null = null;
     // Two independent budgets: the short general retryable-failure budget, and a
@@ -1414,12 +1531,17 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // Dispatch over the control plane; the dispatcher never rejects (failure
       // → a failure ParsedIntentResult).
       const sent = await this.dispatchHonouringStop(dispatch, intent, signal);
-      // One count per click that carried the check, retries included: each is
-      // one more tap the device was asked to vouch for.
-      if (unoccludedWhy !== undefined) {
+      // One count per dispatch that carried the check, retries included: each
+      // is one more tap the device was asked to vouch for. Closed labels only —
+      // a typed step's text (a saved credential, perhaps) never reaches one.
+      if (unoccludedCheck !== undefined) {
         recordTapUnoccludedCheck(this.metrics, {
-          why: unoccludedWhy,
-          result: sent.kind === 'abandoned' ? 'no_answer' : unoccludedCheckResultOf(sent.parsed),
+          verb: unoccludedCheck.verb,
+          why: unoccludedCheck.why,
+          result:
+            sent.kind === 'abandoned'
+              ? 'no_answer'
+              : unoccludedCheckResultOf(unoccludedCheck.verb, sent.parsed),
         });
       }
       if (sent.kind === 'abandoned') {

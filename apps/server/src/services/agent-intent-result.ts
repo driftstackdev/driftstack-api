@@ -372,7 +372,8 @@ export function elementCoveredResult(
 
 /**
  * A tap the device REFUSED before touching the page (click `require_unoccluded`,
- * A3 V-3358), and why.
+ * A3 V-3358; and send_keys' focus tap, V-3360, where it also typed nothing),
+ * and why.
  *
  *  covered     something else is at the tap point — every occlusion reason,
  *              and a reason this build does not know: the device still said
@@ -478,15 +479,27 @@ function tapRefusalResult(
 export const TARGET_UNVERIFIED_REASON =
   'nothing was tapped, because it could not be confirmed that the tap would land on this control — the page may need to be looked at again first';
 
+/**
+ * The same, for a typed step: the device checks the tap that focuses the field
+ * (send_keys `require_unoccluded`), and a refused focus tap types NOTHING. It is
+ * the typing the customer asked for, so that is what it says did not happen.
+ */
+export const TARGET_UNVERIFIED_TYPING_REASON =
+  'nothing was typed, because it could not be confirmed that the typing would reach this field — the page may need to be looked at again first';
+
 /** Not retryable as the same step: the same check on the same page is the
- *  same answer. Re-plannable: nothing was tapped, so a fresh look is safe. */
+ *  same answer. Re-plannable: nothing was tapped or typed, so a fresh look is
+ *  safe. */
 export function targetUnverifiedResult(
   intent: AgentIntent,
 ): Extract<IntentResult, { kind: 'failure' }> {
   return {
     kind: 'failure',
     intent,
-    reason: TARGET_UNVERIFIED_REASON,
+    reason:
+      intent.kind === 'interact' && intent.action === 'type'
+        ? TARGET_UNVERIFIED_TYPING_REASON
+        : TARGET_UNVERIFIED_REASON,
     diagnosis: { category: 'target_unverified', retryable: false },
   };
 }

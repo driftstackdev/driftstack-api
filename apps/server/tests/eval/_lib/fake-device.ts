@@ -210,6 +210,23 @@ export interface FakeDeviceOptions {
    *  carries `intent_element_occluded`. Absent — as on the production box
    *  today — it carries `intent_webdriver_failed` with the same message. */
   elementOccludedCode?: boolean;
+  /**
+   * A device from before A3 V-3360 (harness 7795de230): its single tap verdict
+   * has NO own-label rule, so a hit on a control's own label is
+   * `hit_is_not_target_or_descendant` to perceive and to click's check alike;
+   * perceive's element carries no `hit_via_own_label`; send_keys never reads
+   * `require_unoccluded` and its result carries no
+   * `focus_tap_unoccluded_checked`. Implied by either older option above — a
+   * device that predates an earlier build predates this one.
+   */
+  predatesOwnLabelVerdict?: boolean;
+  /**
+   * send_keys takes the device's native path with no persona: the field is
+   * focused BY SCRIPT and no tap is made, so there is nothing for
+   * `require_unoccluded` to check — typing goes ahead and the result says
+   * `focus_tap_unoccluded_checked: false`.
+   */
+  sendKeysFocusesByScript?: boolean;
 }
 
 /**
@@ -288,6 +305,8 @@ export class FakeDevice {
   private readonly predatesRequireUnoccluded: boolean;
   private readonly occlusionCheckUnavailable: boolean;
   private readonly elementOccludedCode: boolean;
+  private readonly predatesOwnLabelVerdict: boolean;
+  private readonly sendKeysFocusesByScript: boolean;
 
   private currentUrl: string;
   private currentPage: FixturePage;
@@ -318,6 +337,11 @@ export class FakeDevice {
     this.predatesRequireUnoccluded = opts.predatesRequireUnoccluded === true;
     this.occlusionCheckUnavailable = opts.occlusionCheckUnavailable === true;
     this.elementOccludedCode = opts.elementOccludedCode === true;
+    this.predatesOwnLabelVerdict =
+      opts.predatesOwnLabelVerdict === true ||
+      this.predatesTapLook ||
+      this.predatesRequireUnoccluded;
+    this.sendKeysFocusesByScript = opts.sendKeysFocusesByScript === true;
     this.currentUrl = opts.startUrl;
     // A device that starts ON a fixture page shows that page; one that starts
     // anywhere else (about:blank) shows an empty document.
@@ -444,7 +468,11 @@ export class FakeDevice {
       case 'click':
         return this.doClick(readString(params, 'value'), params.require_unoccluded === true);
       case 'send_keys':
-        return this.doSendKeys(readString(params, 'value'), readString(params, 'text'));
+        return this.doSendKeys(
+          readString(params, 'value'),
+          readString(params, 'text'),
+          params.require_unoccluded === true,
+        );
       case 'press_key':
         return this.doPressKey(readString(params, 'key'));
       case 'wait_for':
@@ -540,6 +568,14 @@ export class FakeDevice {
       this.activate(lateCover, selector);
       return { ok: true, output: { clicked: selector, behavioral: true, activated: true } };
     }
+    // A tap point on a link (any interactive content) written INSIDE the
+    // control's own label activates the link, not the control — whatever the
+    // device's build: this is the page, not the verdict.
+    const labelHit = this.ownLabelHitAt(found.element);
+    if (labelHit !== null && labelHit.interactive !== null) {
+      this.activate(labelHit.interactive, selector);
+      return { ok: true, output: { clicked: selector, behavioral: true, activated: true } };
+    }
     // Replaced between the look and the tap: the tap lands where it was.
     if (this.declares(this.currentPage.detachedAtTap, found.element)) {
       return { ok: true, output: { clicked: selector, behavioral: true, activated: false } };
@@ -561,8 +597,11 @@ export class FakeDevice {
    *   the element is gone at the tap  → target_not_resolved
    *   a cover arrived with the scroll → hit_is_not_target_or_descendant
    *   a declared overlay is on top    → hit_is_not_target_or_descendant
-   *   the point is on its own label   → hit_is_not_target_or_descendant (the
-   *                                     device's check has no own-label rule)
+   *   the point is on interactive     → hit_is_not_target_or_descendant (it
+   *     content inside its own label    takes the tap itself, on every build)
+   *   the point is on its own label   → CLEAR on a device with the own-label
+   *     or a non-interactive part of it verdict; hit_is_not_target_or_descendant
+   *                                     on one that predates it
    *   nothing at the tap point        → nothing_hit
    * Off-screen alone is NOT a refusal: the click scrolled it into view.
    */
@@ -586,21 +625,54 @@ export class FakeDevice {
     }
     if (this.coverAfterScroll(element) !== null) return refuse('hit_is_not_target_or_descendant');
     if (this.coveringOverlay(element) !== null) return refuse('hit_is_not_target_or_descendant');
-    if (this.ownLabelAtTapPoint(element) !== null) {
+    const labelHit = this.ownLabelHitAt(element);
+    if (labelHit !== null && (labelHit.interactive !== null || this.predatesOwnLabelVerdict)) {
       return refuse('hit_is_not_target_or_descendant');
     }
     if (this.declares(this.currentPage.nothingAtTapPoint, element)) return refuse('nothing_hit');
     return null;
   }
 
-  /** The label a declared hidden input's tap point lands on, or null. */
-  private ownLabelAtTapPoint(element: DomElement): DomElement | null {
-    if (!this.declares(this.currentPage.tapPointOnOwnLabel, element)) return null;
+  /**
+   * What `element`'s tap point hits when the page declares it lands in the
+   * control's OWN label: the hit, and the interactive content that takes the
+   * tap instead of the control (null when the label forwards it). Null when
+   * the page declares nothing of the kind.
+   */
+  private ownLabelHitAt(
+    element: DomElement,
+  ): { hit: DomElement; interactive: DomElement | null } | null {
+    if (this.declares(this.currentPage.tapPointOnOwnLabel, element)) {
+      const label = this.ownLabelsOf(element)[0];
+      return label === undefined ? null : { hit: label, interactive: null };
+    }
+    for (const entry of this.currentPage.tapPointInsideOwnLabel ?? []) {
+      if (!this.declares([entry.target], element)) continue;
+      const hit = queryFirst(this.dom.document, entry.hit);
+      if (hit === null || !isRendered(hit)) continue;
+      const label = this.ownLabelsOf(element).find((candidate) => candidate.contains(hit));
+      if (label === undefined) {
+        throw new FixtureError(
+          `${this.currentPage.url} declares ${entry.hit} inside ${entry.target}'s own label, and it is not`,
+        );
+      }
+      return { hit, interactive: interactiveContentBetween(hit, label) };
+    }
+    return null;
+  }
+
+  /** `element.labels`: the label wrapping it, and every label naming its id. */
+  private ownLabelsOf(element: DomElement): DomElement[] {
+    const labels: DomElement[] = [];
     const wrapping = element.closest('label');
-    if (wrapping !== null) return wrapping;
+    if (wrapping !== null) labels.push(wrapping);
     const id = element.id;
-    if (id.length === 0 || !/^[A-Za-z_][-\w]*$/.test(id)) return null;
-    return this.dom.document.querySelector(`label[for="${id}"]`);
+    if (id.length > 0 && /^[A-Za-z_][-\w]*$/.test(id)) {
+      for (const pointing of Array.from(this.dom.document.querySelectorAll(`label[for="${id}"]`))) {
+        if (!labels.includes(pointing)) labels.push(pointing);
+      }
+    }
+    return labels;
   }
 
   /** The rendered cover the click's scroll puts over `element`'s tap point. */
@@ -653,7 +725,27 @@ export class FakeDevice {
     if (form !== null) this.submitForm(form);
   }
 
-  private doSendKeys(selector: string, text: string): DeviceOutcome {
+  /**
+   * send_keys: a tap focuses the field, then the text is typed.
+   *
+   * With `require_unoccluded` on a device of the V-3360 build, that FOCUS TAP
+   * is checked exactly as click's tap is (the same verdict, the same refusal
+   * message), and a refused tap types NOTHING. The result then always says
+   * whether a tap was made and checked — false on the native no-persona path,
+   * which focuses by script and has no tap to check. A device that predates
+   * the build never reads the parameter and never sends the field.
+   */
+  private doSendKeys(selector: string, text: string, requireUnoccluded: boolean): DeviceOutcome {
+    const focusTapChecked =
+      requireUnoccluded && !this.predatesOwnLabelVerdict && !this.sendKeysFocusesByScript;
+    if (focusTapChecked) {
+      const refused = this.refusalAtTapPoint(selector);
+      if (refused !== null) {
+        // Located and checked, never touched: nothing typed, nothing focused.
+        this.cost(2 * TRIVIAL_MS);
+        return refused;
+      }
+    }
     const found = this.locate(selector, TRIVIAL_MS);
     if (!found.ok) {
       this.cost(found.costMs);
@@ -682,7 +774,13 @@ export class FakeDevice {
     });
     return {
       ok: true,
-      output: { typed_into: selector, length: text.length, truncated: false, behavioral: true },
+      output: {
+        typed_into: selector,
+        length: text.length,
+        truncated: false,
+        behavioral: true,
+        ...(this.predatesOwnLabelVerdict ? {} : { focus_tap_unoccluded_checked: focusTapChecked }),
+      },
     };
   }
 
@@ -888,6 +986,7 @@ export class FakeDevice {
     };
     let hit: DomElement | null;
     let occlusionReason: string | null;
+    let hitViaOwnLabel = false;
     if (!rendered) {
       hit = this.dom.document.body;
       occlusionReason = 'hit_is_not_target_or_descendant';
@@ -898,9 +997,21 @@ export class FakeDevice {
       hit = null;
       occlusionReason = 'nothing_hit';
     } else {
-      const cover = this.coveringOverlay(element) ?? this.ownLabelAtTapPoint(element);
-      hit = cover ?? element;
-      occlusionReason = cover !== null ? 'hit_is_not_target_or_descendant' : null;
+      const overlay = this.coveringOverlay(element);
+      const labelHit = overlay === null ? this.ownLabelHitAt(element) : null;
+      if (overlay !== null) {
+        hit = overlay;
+        occlusionReason = 'hit_is_not_target_or_descendant';
+      } else if (labelHit !== null) {
+        // The hit test returns what is AT the point; whether that is clear is
+        // the verdict's own-label rule, which an older build does not have.
+        hit = labelHit.hit;
+        hitViaOwnLabel = !this.predatesOwnLabelVerdict && labelHit.interactive === null;
+        occlusionReason = hitViaOwnLabel ? null : 'hit_is_not_target_or_descendant';
+      } else {
+        hit = element;
+        occlusionReason = null;
+      }
     }
     return {
       ok: true,
@@ -932,6 +1043,9 @@ export class FakeDevice {
                     },
               occluded: occlusionReason !== null,
               occlusion_reason: occlusionReason,
+              // On EVERY element from the V-3360 build, and on none before it:
+              // its presence is the build's tell.
+              ...(this.predatesOwnLabelVerdict ? {} : { hit_via_own_label: hitViaOwnLabel }),
             },
           ],
           total_matched: 1,
@@ -1472,6 +1586,48 @@ function accepts(behaviour: FormBehaviour, values: Readonly<Record<string, strin
     if (typeof rule === 'string' ? value !== rule : !rule.test(value)) return false;
   }
   return true;
+}
+
+/**
+ * The innermost INTERACTIVE CONTENT from `hit` up to (not including) `label`,
+ * or null — HTML's set exactly, as the device's own-label rule reads it:
+ * a[href], button, input (not hidden), select, textarea, details, iframe,
+ * embed, label, audio/video[controls], img[usemap]. NOT tabindex and NOT
+ * contenteditable: neither makes an element take a label's activation.
+ */
+function interactiveContentBetween(hit: DomElement, label: DomElement): DomElement | null {
+  for (
+    let node: DomElement | null = hit;
+    node !== null && node !== label;
+    node = node.parentElement
+  ) {
+    if (isInteractiveContent(node)) return node;
+  }
+  return null;
+}
+
+function isInteractiveContent(element: DomElement): boolean {
+  switch (element.tagName) {
+    case 'A':
+      return element.hasAttribute('href');
+    case 'BUTTON':
+    case 'SELECT':
+    case 'TEXTAREA':
+    case 'DETAILS':
+    case 'IFRAME':
+    case 'EMBED':
+    case 'LABEL':
+      return true;
+    case 'INPUT':
+      return (element.getAttribute('type') ?? '').toLowerCase() !== 'hidden';
+    case 'AUDIO':
+    case 'VIDEO':
+      return element.hasAttribute('controls');
+    case 'IMG':
+      return element.hasAttribute('usemap');
+    default:
+      return false;
+  }
 }
 
 function isTypable(element: DomElement): boolean {

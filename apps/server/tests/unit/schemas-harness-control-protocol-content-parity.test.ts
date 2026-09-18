@@ -180,10 +180,12 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     );
   });
 
-  it('send_keys params pinned: strategy + value + text required, sensitive optional (strict)', () => {
+  it('send_keys params pinned: strategy + value + text required, sensitive and require_unoccluded optional (strict)', () => {
     expect(body).toContain('export const SendKeysParamsSchema = z');
     expect(body).toContain('text: z.string().max(HARNESS_SEND_KEYS_MAX_CHARS),');
     expect(body).toContain('sensitive: z.boolean().optional(),');
+    // A3 V-3360: the focus tap's check, the same optional boolean as click's.
+    expect(body).toContain('require_unoccluded: RequireUnoccludedSchema,');
   });
 
   it('press_key params pinned: key string 1..20 (strict) — A3 W1221, one DOM KeyboardEvent.key on the focused element', () => {
@@ -1883,7 +1885,19 @@ describe('harness-control-protocol behavioral contract', () => {
     expect(ClickParamsSchema.safeParse({ strategy: 'css', value: '.btn' }).success).toBe(false);
   });
 
-  it('send_keys requires locator/text and accepts optional sensitive only', () => {
+  it('send_keys requires locator/text and accepts optional sensitive and require_unoccluded only', () => {
+    expect(
+      SendKeysParamsSchema.safeParse({
+        strategy: 'css selector',
+        value: '#in',
+        text: 'hi',
+        require_unoccluded: true,
+      }).success,
+    ).toBe(true);
+    expect(
+      SendKeysParamsSchema.safeParse({ strategy: 'css selector', value: '#in', text: 'hi', x: 1 })
+        .success,
+    ).toBe(false);
     expect(
       SendKeysParamsSchema.safeParse({ strategy: 'css selector', value: '#in', text: 'hi' })
         .success,

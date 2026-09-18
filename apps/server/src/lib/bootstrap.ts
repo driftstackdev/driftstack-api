@@ -837,8 +837,8 @@ export async function createProductionDeps(
     // recordTapUnoccludedCheck in services/agent-turn-telemetry.ts.
     metricsRegistry.registerCounter(
       METRIC_NAMES.agentTapUnoccludedCheckTotal,
-      'Agent clicks sent with the device check at the real tap point, by why (outside_viewport | consequential) and result (tapped, a refusal reason, unrecognised_reason, failed_otherwise, no_answer). A refusal is a tap that was not made; occlusion_check_unavailable is the fail-closed rate.',
-      ['why', 'result'],
+      'Agent taps sent with the device check at the real tap point, by verb (click | send_keys, whose check is on the tap that focuses the field), why (outside_viewport | consequential) and result (tapped, checked, no_tap, unconfirmed, a refusal reason, unrecognised_reason, failed_otherwise, no_answer). A refusal is a tap that was not made; occlusion_check_unavailable is the fail-closed rate; no_tap is typing with no tap to verify, not a pass.',
+      ['verb', 'why', 'result'],
     );
   }
 

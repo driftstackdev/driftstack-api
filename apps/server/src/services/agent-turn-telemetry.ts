@@ -370,27 +370,47 @@ export function recordPreTapLook(
 
 /**
  * Why a tap was sent with the device's own check at the real tap point
- * (click `require_unoccluded`, agent-executor-control-plane.ts).
+ * (click / send_keys `require_unoccluded`, agent-executor-control-plane.ts).
  *
  *   outside_viewport  the look before the tap could not see the tap point: the
- *                     control was below the fold, and the click scrolls first
+ *                     control was below the fold, and the click scrolls first.
+ *                     The only reason a TYPED step carries the check
  *   consequential     the tap is one the customer approved (a purchase, a
  *                     payment, a deletion) — where tapping the wrong thing costs
  *                     the most. Wins over outside_viewport when both hold, so a
- *                     tap is one count
+ *                     tap is one count. Taps only
  */
 export const TAP_UNOCCLUDED_CHECK_WHYS = ['outside_viewport', 'consequential'] as const;
 export type TapUnoccludedCheckWhy = (typeof TAP_UNOCCLUDED_CHECK_WHYS)[number];
 
 /**
- * What came back from one click sent with that check.
+ * Which verb carried the check. A typed step's check is on the tap that
+ * focuses the field, and its "no tap to verify" answer has no click
+ * equivalent, so the two are told apart rather than summed.
+ */
+export const TAP_UNOCCLUDED_CHECK_VERBS = ['click', 'send_keys'] as const;
+export type TapUnoccludedCheckVerb = (typeof TAP_UNOCCLUDED_CHECK_VERBS)[number];
+
+/**
+ * What came back from one dispatch sent with that check.
  *
- *   tapped              the device tapped. ⚠️ Includes a device that predates
- *                       the check and ignored it: the two answer identically
+ *   tapped              click: the device tapped. ⚠️ Includes a device that
+ *                       predates the check and ignored it: the two answer
+ *                       identically
+ *   checked             send_keys: the focus tap was made AND checked, then
+ *                       the text was typed (`focus_tap_unoccluded_checked: true`)
+ *   no_tap              send_keys: typed with NO tap to check — the device
+ *                       focused the field by script (its native path without a
+ *                       persona). Not a pass: nothing was verified
+ *   unconfirmed         send_keys: typed, and the answer did not say whether
+ *                       the focus tap was checked at all. The check is only
+ *                       sent to a device that says it, so this counts a device
+ *                       that broke that promise
  *   <refusal reason>    refused BEFORE any touch, by the device's own reason
- *                       (HARNESS_TAP_REFUSAL_REASONS) — nothing was tapped
+ *                       (HARNESS_TAP_REFUSAL_REASONS) — nothing was tapped, and
+ *                       for send_keys nothing was typed
  *   unrecognised_reason refused with a reason this build does not know
- *   failed_otherwise    the click failed for a reason that is not a refusal
+ *   failed_otherwise    it failed for a reason that is not a refusal
  *   no_answer           Stop abandoned the dispatch before it answered
  *
  * `occlusion_check_unavailable` over the total is the fail-closed rate: taps a
@@ -399,6 +419,9 @@ export type TapUnoccludedCheckWhy = (typeof TAP_UNOCCLUDED_CHECK_WHYS)[number];
  */
 export const TAP_UNOCCLUDED_CHECK_RESULTS = [
   'tapped',
+  'checked',
+  'no_tap',
+  'unconfirmed',
   'hit_is_not_target_or_descendant',
   'covered_at_enclosing_shadow_level',
   'nothing_hit',
@@ -417,15 +440,21 @@ const REFUSAL_REASONS_ARE_RESULTS: ReadonlyArray<TapUnoccludedCheckResult> =
   HARNESS_TAP_REFUSAL_REASONS;
 void REFUSAL_REASONS_ARE_RESULTS;
 
-/** Count one click sent with the device's check at the tap point. Best-effort
- *  exactly as {@link recordPreTapLook}: a broken registry costs the tap nothing. */
+/** Count one dispatch sent with the device's check at the tap point.
+ *  Best-effort exactly as {@link recordPreTapLook}: a broken registry costs the
+ *  tap nothing. Labels are closed unions only — never a selector, never text. */
 export function recordTapUnoccludedCheck(
   metrics: MetricsRegistry | undefined,
-  check: { why: TapUnoccludedCheckWhy; result: TapUnoccludedCheckResult },
+  check: {
+    verb: TapUnoccludedCheckVerb;
+    why: TapUnoccludedCheckWhy;
+    result: TapUnoccludedCheckResult;
+  },
 ): void {
   if (metrics === undefined) return;
   try {
     metrics.inc(METRIC_NAMES.agentTapUnoccludedCheckTotal, {
+      verb: check.verb,
       why: check.why,
       result: check.result,
     });

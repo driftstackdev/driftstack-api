@@ -506,52 +506,68 @@ verdict function as `perceive { selector }`, and refuses a covered tap before an
 The message is always `element occluded at the tap point: <reason>`, and the control
 plane maps it by `<reason>` (`tapRefusalOf`, agent-intent-result.ts):
 
-| Reason                                                                                                                                               | Control-plane meaning                                                                                      |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `hit_is_not_target_or_descendant`, `covered_at_enclosing_shadow_level`, `nothing_hit`, `tap_point_outside_viewport`, or any reason not in this table | `element_covered`: not retryable as the same step, re-plannable                                            |
-| `target_not_resolved`                                                                                                                                | the element-not-found path: `element_not_found`, waited for and retried like a lookup that matched nothing |
-| `occlusion_check_unavailable`                                                                                                                        | `target_unverified` (the harness FAILED CLOSED): its own customer sentence, not retryable, re-plannable    |
+| Reason                                                                                                  | Control-plane meaning                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `hit_is_not_target_or_descendant`, `covered_at_enclosing_shadow_level`, or any reason not in this table | `element_covered`: not retryable as the same step, re-plannable                                                                         |
+| `target_not_resolved`                                                                                   | the element-not-found path: `element_not_found`, waited for and retried like a lookup that matched nothing                              |
+| `occlusion_check_unavailable`, `tap_point_outside_viewport`, `nothing_hit`                              | `target_unverified` (the harness could not VERIFY the point, and failed closed): its own customer sentence, not retryable, re-plannable |
+
+A typed step's refusal is mapped the same way, in typing words ("…so nothing was typed").
 
 The control plane sends the parameter on a tap whose pre-tap look answered
 `tap_point_outside_viewport`, and on every tap the consequential gate releases on the
-customer's approval — never on `send_keys`, which does not take it, and never on a raw
-`{x, y}` click, which the control plane's own params schema refuses with it. A harness
-that predates V-3358 reads click params by key and ignores the field, tapping as before.
-An approved tap the harness refuses does nothing, and its approval is not carried
-forward: the approval resume ends there, and any new plan is put to the customer again.
+customer's approval — never on an ordinary clear tap, and never on a raw `{x, y}` click,
+which the control plane's own params schema refuses with it. A harness that predates
+V-3358 reads click params by key and ignores the field, tapping as before. An approved
+tap the harness refuses does nothing, and its approval is not carried forward: the
+approval resume ends there, and any new plan is put to the customer again.
 
-⛔ **Never on a control operated through its own `<label>`.** The look reads a hit on the
-target's own label (a non-control hit carrying exactly the target's name) as clear,
-because a tap there toggles a styled checkbox or radio. `dsTapVerdict` has no such rule,
-so the click check would refuse that tap as `hit_is_not_target_or_descendant` and the
-customer would be told it is covered. The control plane therefore omits the parameter
-when the look saw the own-label hit, and for every `checkbox`/`radio` target (off-screen,
-its tap point may land on the label) — those taps go ahead unchecked, as before.
+**The own-label verdict and `send_keys` (A3 V-3360, harness `7795de230`, deployed
+2026-09-18).** `dsTapVerdict` now clears a hit on the target's own `labels` or on a
+NON-interactive descendant of one (innermost shadow level), and still refuses a hit on
+interactive content inside the label (HTML's set: `a[href]`, `button`, `input` not
+hidden, `select`, `textarea`, `details`, `iframe`, `embed`, `label`,
+`audio`/`video[controls]`, `img[usemap]`). `perceive { selector }` puts
+`hit_via_own_label: boolean` on EVERY element from that build; `send_keys` honours
+`require_unoccluded` on its focus tap and always answers `focus_tap_unoccluded_checked`.
+The control plane treats the field's PRESENCE as the build's tell and remembers it per
+session (`sessionsWithOwnLabelVerdict`, beside the older-device memo). On such a device:
+
+- The look uses the device's verdict and does NOT apply its label-text inference, which
+  remains only as the fallback for a device without the field.
+- Checkbox/radio targets and taps the look saw clear through the own label get the check
+  under the same rules as every other tap (off-screen, or released by an approval).
+- A typed step whose look said `tap_point_outside_viewport` is sent with
+  `require_unoccluded`; a refusal types nothing. `focus_tap_unoccluded_checked: false`
+  with the flag set is the native no-persona path, which focuses by script and makes no
+  tap: counted `no_tap`, never as verified.
+
+⛔ **A device WITHOUT the field keeps the old behaviour.** Its check has no own-label
+rule, so the parameter is omitted when the look saw the own-label hit and for every
+`checkbox`/`radio` target (off-screen, its tap point may land on the label), and
+`send_keys` is never sent it — that build was not shown to ignore an unknown key.
 
 **Open asks of A3 (V-3358 follow-ups):**
 
-1. Give click's check the look's own-label exemption (a hit that is, or is inside, a
-   `<label>` associated with the target). Then the exclusion above can be dropped.
+1. ~~Give click's check the look's own-label exemption.~~ Done in V-3360.
 2. `behavioralTapElement` (the native element path) runs the check BEFORE the WebDriver
    action's own scroll, so an off-screen element is refused `tap_point_outside_viewport`,
-   which the control plane files as covered. Unreachable today (the fork's `findElement`
+   which the control plane files as unverified. Unreachable today (the fork's `findElement`
    fails, so the script path scrolls first), but it turns every off-screen checked tap
-   into "covered" the day `findElement` works. Scroll first on that path too.
-3. `send_keys` taps its field to focus it after its own scroll, unchecked. A typed step
-   whose look said `tap_point_outside_viewport` can land that focus tap on a cover that
-   arrives with the scroll. The control plane does not send `require_unoccluded` to a verb
-   that does not take it; honouring it on `send_keys`' focus tap would close this.
-   Counted in
-   `driftstack_agent_tap_unoccluded_check_total{why, result}`. The pre-tap
-   look that shipped on 2026-09-18 uses `perceive { selector }` instead: before every tap
-   and every typed step, the executor asks the harness what the selector resolves to and
-   what is under its tap point, never dispatches the click onto a covered control, gates
-   purchases on the hit element's own label as well as the planner's words, and keys the
-   repeat guard on the harness's canonical selector. Occlusion there is A3's definition:
-   covered unless the hit is the element or a descendant (an ancestor hit is covered).
-   A tap whose point is outside the viewport cannot be checked by the look, because the
-   click scrolls to a randomised band the control plane cannot reproduce;
-   `require_unoccluded` checks it where it lands.
+   into a refusal the day `findElement` works. Scroll first on that path too.
+3. ~~Honour `require_unoccluded` on `send_keys`' focus tap.~~ Done in V-3360.
+
+Every dispatch sent with the check is counted in
+`driftstack_agent_tap_unoccluded_check_total{verb, why, result}`. The pre-tap look that
+shipped on 2026-09-18 uses `perceive { selector }` instead: before every tap and every
+typed step, the executor asks the harness what the selector resolves to and what is
+under its tap point, never dispatches the click onto a covered control, gates purchases
+on the hit element's own label as well as the planner's words, and keys the repeat guard
+on the harness's canonical selector. Occlusion there is A3's definition: covered unless
+the hit is the element or a descendant (an ancestor hit is covered). A tap whose point
+is outside the viewport cannot be checked by the look, because the click scrolls to a
+randomised band the control plane cannot reproduce; `require_unoccluded` checks it where
+it lands.
 
 ### 2026-07-15 protocol-truth correction (supersedes every older roster/count above)
 

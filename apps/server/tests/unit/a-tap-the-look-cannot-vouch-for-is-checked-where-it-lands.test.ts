@@ -10,8 +10,11 @@
 //
 //   · what is sent   → the check rides on a tap whose look said outside the
 //                      viewport, and on every tap the gate releases on an
-//                      approval. Never on typing (send_keys does not take it),
-//                      never on an ordinary clear tap
+//                      approval. Never on an ordinary clear tap. The device
+//                      here answers WITHOUT `hit_via_own_label` — a build
+//                      before A3 V-3360 — so typing is never sent it and the
+//                      own-label exemptions hold (the capable device is
+//                      a-device-with-the-own-label-rule-is-trusted-…test.ts)
 //   · what comes back → every refusal reason is a cover, EXCEPT an element that
 //                      went away (the element-not-found path) and a check that
 //                      could not run (its own sentence, re-plannable)
@@ -52,6 +55,7 @@ import { MetricsRegistry, METRIC_NAMES } from '../../src/services/metrics-regist
 import {
   classifyStepFailure,
   TAP_UNOCCLUDED_CHECK_RESULTS,
+  TAP_UNOCCLUDED_CHECK_VERBS,
   TAP_UNOCCLUDED_CHECK_WHYS,
 } from '../../src/services/agent-turn-telemetry.js';
 import { isReplannableFailure } from '../../src/services/agent-runtime.js';
@@ -217,7 +221,11 @@ function device(opts: {
 function registry(): MetricsRegistry {
   const metrics = new MetricsRegistry();
   metrics.registerCounter(METRIC_NAMES.agentPreTapLookTotal, 'looks', ['outcome']);
-  metrics.registerCounter(METRIC_NAMES.agentTapUnoccludedCheckTotal, 'checks', ['why', 'result']);
+  metrics.registerCounter(METRIC_NAMES.agentTapUnoccludedCheckTotal, 'checks', [
+    'verb',
+    'why',
+    'result',
+  ]);
   return metrics;
 }
 
@@ -245,13 +253,22 @@ function clicksOf(sent: Array<{ name: string; params: Record<string, unknown> }>
   return sent.filter((s) => s.name === 'click').map((s) => s.params);
 }
 
-/** The count of every result for one `why`, so a test can say "exactly one". */
+/** The count of every result for one `why`, so a test can say "exactly one".
+ *  A click's key is `why/result`; any other verb is named in front of it, so a
+ *  click counted under the wrong verb shows up as a key nobody expects. */
 function checksCounted(metrics: MetricsRegistry): Record<string, number> {
   const counted: Record<string, number> = {};
-  for (const why of TAP_UNOCCLUDED_CHECK_WHYS) {
-    for (const result of TAP_UNOCCLUDED_CHECK_RESULTS) {
-      const value = metrics.getValue(METRIC_NAMES.agentTapUnoccludedCheckTotal, { why, result });
-      if (value > 0) counted[`${why}/${result}`] = value;
+  for (const verb of TAP_UNOCCLUDED_CHECK_VERBS) {
+    for (const why of TAP_UNOCCLUDED_CHECK_WHYS) {
+      for (const result of TAP_UNOCCLUDED_CHECK_RESULTS) {
+        const value = metrics.getValue(METRIC_NAMES.agentTapUnoccludedCheckTotal, {
+          verb,
+          why,
+          result,
+        });
+        const key = verb === 'click' ? `${why}/${result}` : `${verb}:${why}/${result}`;
+        if (value > 0) counted[key] = value;
+      }
     }
   }
   return counted;
@@ -341,14 +358,16 @@ describe('which taps carry the device’s check at the real tap point', () => {
     expect(clicksOf(d.sent)).toEqual([]);
   });
 
-  it('TYPING is never sent it: send_keys does not take the parameter, even for an off-screen field', async () => {
+  it('TYPING on a device without the own-label build is never sent it, even for an off-screen field — it is not known to ignore the key', async () => {
     const d = device({ look: 'outside_viewport' });
-    const res = await run(executor(d.dispatcher), [
+    const metrics = registry();
+    const res = await run(executor(d.dispatcher, { metrics }), [
       { kind: 'interact', action: 'type', selector: '#go', value: 'hello' },
     ]);
     expect(res.ok).toBe(true);
     const typed = d.sent.find((s) => s.name === 'send_keys');
     expect(typed?.params).toEqual({ strategy: 'css selector', value: '#go', text: 'hello' });
+    expect(checksCounted(metrics)).toEqual({});
   });
 
   it('a device that PREDATES the look still gets it on an approved tap — an older device ignores it', async () => {
@@ -366,11 +385,12 @@ describe('which taps carry the device’s check at the real tap point', () => {
   });
 });
 
-describe('⛔ a control operated through its own label is never sent the check', () => {
-  // The device's check has no own-label rule: a hit on a styled checkbox's
+describe('⛔ on a device WITHOUT the own-label rule, a control operated through its label is never sent the check', () => {
+  // That device's check has no own-label rule: a hit on a styled checkbox's
   // label is `hit_is_not_target_or_descendant` there, so the check would refuse
   // the very tap that toggles it, the customer would be told it is covered, and
-  // the identical re-plan would end the turn.
+  // the identical re-plan would end the turn. (Its answers carry no
+  // `hit_via_own_label`; a device that sends one gets the check.)
   for (const type of ['checkbox', 'radio']) {
     it(`an OFF-SCREEN ${type} is tapped exactly as before — its tap point may land on its label`, async () => {
       const d = device({ look: 'outside_viewport', label: 'I agree to the terms', type });

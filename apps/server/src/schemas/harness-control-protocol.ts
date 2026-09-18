@@ -309,6 +309,16 @@ export const SendKeysParamsSchema = z
     value: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS),
     text: z.string().max(HARNESS_SEND_KEYS_MAX_CHARS),
     sensitive: z.boolean().optional(),
+    /**
+     * A3 V-3360 (harness 7795de230, 2026-09-18): typing begins with a tap on
+     * the field to focus it, and this runs click's own check on THAT tap — the
+     * same refusal message and reasons, and a refused focus tap types nothing.
+     * Optional because it is opt-in per step: absent, the dispatch is
+     * byte-identical to before. The executor sends it only to a device whose
+     * look has shown it has this build (`hit_via_own_label` on its perceive
+     * element — the same deploy), so an older device is never asked to parse it.
+     */
+    require_unoccluded: RequireUnoccludedSchema,
   })
   .strict();
 
@@ -579,6 +589,16 @@ const SendKeysResultSchema = z
     length: z.number().int().nonnegative(),
     truncated: z.boolean(),
     behavioral: z.boolean(),
+    /**
+     * A3 V-3360 — true ONLY when a focus tap was made AND checked. The device
+     * of that build always sends it; an older one never does, so it is
+     * optional. ⚠️ FALSE IS NOT "VERIFIED": the native path with no persona
+     * focuses the field by script and makes no tap at all, so there it is
+     * false with the check asked for — nothing to verify, reported rather
+     * than implied. Without this key in a STRICT schema, every typed result
+     * from that build would fail the contract and the step with it.
+     */
+    focus_tap_unoccluded_checked: z.boolean().optional(),
   })
   .strict();
 
@@ -710,6 +730,16 @@ const PerceiveElementSchema = z
     /** True unless the hit is the element itself or a descendant of it. */
     occluded: z.boolean().optional(),
     occlusion_reason: z.enum(HARNESS_PERCEIVE_OCCLUSION_REASONS).nullable().optional(),
+    /**
+     * A3 V-3360 (harness 7795de230) — the device's single tap verdict now has
+     * an OWN-LABEL rule: a hit on one of the target's own `<label>`s, or on a
+     * non-interactive descendant of it, is clear (HTML forwards that tap to the
+     * control), with `occluded: false` and this true. Always present from that
+     * build, on every perceive-by-selector element; its PRESENCE is how the
+     * executor knows the device has the rule — and send_keys'
+     * `require_unoccluded`, which shipped in the same deploy.
+     */
+    hit_via_own_label: z.boolean().optional(),
     state: z
       .object({
         visible: z.boolean(),
