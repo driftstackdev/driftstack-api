@@ -258,7 +258,11 @@ describe('B4 — the reply is constrained to a JSON schema, and the schema uses 
     expect(bodies[1]?.thinking).toEqual({ type: 'adaptive' });
     expect(bodies[1]?.output_config).toEqual({ effort: 'low' });
     // Not silent: the fallback is visible to whoever asks.
-    expect(dec.structuredOutputRejected).toEqual(['claude-opus-5']);
+    // The model REMEMBERED is the one the request went out for — read off the
+    // wire rather than written as a literal, so this says what it tests (which
+    // model is refused) and not which model happens to be the default today.
+    expect(bodies[0]?.model).toMatch(/^claude-/);
+    expect(dec.structuredOutputRejected).toEqual([bodies[0]?.model]);
 
     // And the doomed request is not paid for again.
     await dec.decompose(planArgs());
@@ -597,7 +601,8 @@ describe('repair round — a capability is not a measurement, and a rejected con
     expect(bodies[1]?.thinking).toBeUndefined();
     expect(bodies[1]?.output_config?.effort).toBeUndefined();
     expect(bodies[1]?.output_config?.format?.type).toBe('json_schema');
-    expect(dec.thinkingControlRejected).toEqual(['claude-opus-5']);
+    expect(bodies[0]?.model).toMatch(/^claude-/);
+    expect(dec.thinkingControlRejected).toEqual([bodies[0]?.model]);
     expect(dec.structuredOutputRejected).toEqual([]);
     // Remembered: the doomed request is not sent again.
     await dec.decompose(planArgs());
@@ -614,7 +619,8 @@ describe('repair round — a capability is not a measurement, and a rejected con
     await dec.decompose(planArgs());
     expect(bodies[1]?.output_config?.format?.type).toBe('json_schema');
     expect(dec.structuredOutputRejected).toEqual([]);
-    expect(dec.thinkingControlRejected).toEqual(['claude-opus-5']);
+    expect(bodies[0]?.model).toMatch(/^claude-/);
+    expect(dec.thinkingControlRejected).toEqual([bodies[0]?.model]);
   });
 
   it('⛔ BOUNDED — each control is dropped at most once, so a call makes at most three attempts and then fails loudly', async () => {
