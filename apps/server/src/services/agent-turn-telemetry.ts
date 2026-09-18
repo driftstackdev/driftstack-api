@@ -39,6 +39,7 @@ import type { AgentTurnProgressEvent } from './agent-runtime.js';
 import type { IntentResult } from './agent-executor.js';
 import { ApiError } from '../lib/errors.js';
 import { METRIC_NAMES, type MetricsRegistry } from './metrics-registry.js';
+import { HARNESS_TAP_REFUSAL_REASONS } from '../schemas/harness-control-protocol.js';
 
 // ── closed unions ─────────────────────────────────────────────────────────
 
@@ -303,7 +304,9 @@ export const AGENT_TURN_REPLAN_BUCKETS = [0, 1, 2, 3] as const;
  *   not_found         the selector resolves to nothing. NOT sent when the
  *                     element wait gave up on it; sent when no wait was left to
  *                     spend, so the click's own retries still apply
- *   outside_viewport  not scrolled into view; the tap was sent (it scrolls first)
+ *   outside_viewport  not scrolled into view; the tap was sent (it scrolls first),
+ *                     with the device checking the real tap point — see
+ *                     TAP_UNOCCLUDED_CHECK_RESULTS for what that check said
  *   unverified        a PAGE fact: the control resolved but the hit test says
  *                     nothing about it (nothing at the tap point, or the control
  *                     is not rendered); the tap was sent as before
@@ -360,6 +363,72 @@ export function recordPreTapLook(
         outcome: look.outcome,
       });
     }
+  } catch {
+    /* metrics are best-effort */
+  }
+}
+
+/**
+ * Why a tap was sent with the device's own check at the real tap point
+ * (click `require_unoccluded`, agent-executor-control-plane.ts).
+ *
+ *   outside_viewport  the look before the tap could not see the tap point: the
+ *                     control was below the fold, and the click scrolls first
+ *   consequential     the tap is one the customer approved (a purchase, a
+ *                     payment, a deletion) — where tapping the wrong thing costs
+ *                     the most. Wins over outside_viewport when both hold, so a
+ *                     tap is one count
+ */
+export const TAP_UNOCCLUDED_CHECK_WHYS = ['outside_viewport', 'consequential'] as const;
+export type TapUnoccludedCheckWhy = (typeof TAP_UNOCCLUDED_CHECK_WHYS)[number];
+
+/**
+ * What came back from one click sent with that check.
+ *
+ *   tapped              the device tapped. ⚠️ Includes a device that predates
+ *                       the check and ignored it: the two answer identically
+ *   <refusal reason>    refused BEFORE any touch, by the device's own reason
+ *                       (HARNESS_TAP_REFUSAL_REASONS) — nothing was tapped
+ *   unrecognised_reason refused with a reason this build does not know
+ *   failed_otherwise    the click failed for a reason that is not a refusal
+ *   no_answer           Stop abandoned the dispatch before it answered
+ *
+ * `occlusion_check_unavailable` over the total is the fail-closed rate: taps a
+ * healthy page did not get because the device could not check. It is the
+ * number that decides whether the check can be sent on EVERY tap.
+ */
+export const TAP_UNOCCLUDED_CHECK_RESULTS = [
+  'tapped',
+  'hit_is_not_target_or_descendant',
+  'covered_at_enclosing_shadow_level',
+  'nothing_hit',
+  'tap_point_outside_viewport',
+  'target_not_resolved',
+  'occlusion_check_unavailable',
+  'unrecognised_reason',
+  'failed_otherwise',
+  'no_answer',
+] as const;
+export type TapUnoccludedCheckResult = (typeof TAP_UNOCCLUDED_CHECK_RESULTS)[number];
+// Every refusal reason the device can name is a result label of its own: a
+// reason added to the protocol's closed set and not here is a build error, not
+// a refusal counted as `unrecognised_reason` for ever.
+const REFUSAL_REASONS_ARE_RESULTS: ReadonlyArray<TapUnoccludedCheckResult> =
+  HARNESS_TAP_REFUSAL_REASONS;
+void REFUSAL_REASONS_ARE_RESULTS;
+
+/** Count one click sent with the device's check at the tap point. Best-effort
+ *  exactly as {@link recordPreTapLook}: a broken registry costs the tap nothing. */
+export function recordTapUnoccludedCheck(
+  metrics: MetricsRegistry | undefined,
+  check: { why: TapUnoccludedCheckWhy; result: TapUnoccludedCheckResult },
+): void {
+  if (metrics === undefined) return;
+  try {
+    metrics.inc(METRIC_NAMES.agentTapUnoccludedCheckTotal, {
+      why: check.why,
+      result: check.result,
+    });
   } catch {
     /* metrics are best-effort */
   }
@@ -472,6 +541,14 @@ export function classifyStepFailure(
       // "the tap hit the cover"; `driftstack_agent_pre_tap_look_total{outcome=
       // "covered"}` counts the first alone.
       return 'element_click_intercepted';
+    case 'target_unverified':
+      // The device could not run its check at the tap point and refused the
+      // tap rather than guess. Nothing on the PAGE is known to be wrong, so it
+      // is not "intercepted"; it is the device's own inability, which is what
+      // this class means. No new stored value: the tap-check counter
+      // (`driftstack_agent_tap_unoccluded_check_total{result=
+      // "occlusion_check_unavailable"}`) is where it is told apart.
+      return 'harness_error_unclassified';
     case 'unknown':
     case undefined: {
       if (typeof result.reason === 'string' && result.reason.includes(NEVER_BECAME_VISIBLE)) {

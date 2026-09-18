@@ -493,23 +493,65 @@ the dispatch hangs to its timeout. So the decode entry always ships first, and t
 harness keeps the legacy code with a byte-stable message prefix until A2 says the entry
 is LIVE IN PRODUCTION, not merely committed.
 
-| Code                       | Harness switch                               | Legacy form until armed                                                          | Control-plane meaning                                                               |
-| -------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `intent_element_not_found` | `DRIFTSTACK_INTENT_ELEMENT_NOT_FOUND_CODE=1` | `intent_invalid_parameter`, same prefix                                          | `element_not_found`, retryable                                                      |
-| `intent_page_load_failed`  | `DRIFTSTACK_INTENT_PAGE_LOAD_FAILED_CODE=1`  | `intent_webdriver_failed`, same prefix                                           | `page_load_failed`, retryable                                                       |
-| `intent_element_occluded`  | `DRIFTSTACK_INTENT_ELEMENT_OCCLUDED_CODE=1`  | `intent_webdriver_failed`, message starting `element occluded at the tap point:` | `element_covered`: nothing was tapped; not retryable as the same step, re-plannable |
+| Code                       | Harness switch                               | Legacy form until armed                                                          | Control-plane meaning                                                        |
+| -------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `intent_element_not_found` | `DRIFTSTACK_INTENT_ELEMENT_NOT_FOUND_CODE=1` | `intent_invalid_parameter`, same prefix                                          | `element_not_found`, retryable                                               |
+| `intent_page_load_failed`  | `DRIFTSTACK_INTENT_PAGE_LOAD_FAILED_CODE=1`  | `intent_webdriver_failed`, same prefix                                           | `page_load_failed`, retryable                                                |
+| `intent_element_occluded`  | `DRIFTSTACK_INTENT_ELEMENT_OCCLUDED_CODE=1`  | `intent_webdriver_failed`, message starting `element occluded at the tap point:` | by the reason after the prefix — see below; nothing was tapped in every case |
 
-`intent_element_occluded` belongs to click `{ require_unoccluded: true }` (A3, not yet
-deployed), which runs the occlusion test at the ACTUAL jittered tap point. The pre-tap
-look that shipped on 2026-09-18 uses `perceive { selector }` instead: before every tap
-and every typed step, the executor asks the harness what the selector resolves to and
-what is under its tap point, never dispatches the click onto a covered control, gates
-purchases on the hit element's own label as well as the planner's words, and keys the
-repeat guard on the harness's canonical selector. Occlusion there is A3's definition:
-covered unless the hit is the element or a descendant (an ancestor hit is covered).
-A tap whose point is outside the viewport still goes ahead unchecked, because the click
-scrolls to a randomised band the control plane cannot reproduce. `require_unoccluded`
-closes that gap.
+`intent_element_occluded` belongs to click `{ require_unoccluded: true }` (A3 V-3358,
+deployed 2026-09-18), which runs the occlusion test at the ACTUAL tap point — after the
+click's own scroll, the persona jitter and its clamp to the element — with the same
+verdict function as `perceive { selector }`, and refuses a covered tap before any touch.
+The message is always `element occluded at the tap point: <reason>`, and the control
+plane maps it by `<reason>` (`tapRefusalOf`, agent-intent-result.ts):
+
+| Reason                                                                                                                                               | Control-plane meaning                                                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `hit_is_not_target_or_descendant`, `covered_at_enclosing_shadow_level`, `nothing_hit`, `tap_point_outside_viewport`, or any reason not in this table | `element_covered`: not retryable as the same step, re-plannable                                            |
+| `target_not_resolved`                                                                                                                                | the element-not-found path: `element_not_found`, waited for and retried like a lookup that matched nothing |
+| `occlusion_check_unavailable`                                                                                                                        | `target_unverified` (the harness FAILED CLOSED): its own customer sentence, not retryable, re-plannable    |
+
+The control plane sends the parameter on a tap whose pre-tap look answered
+`tap_point_outside_viewport`, and on every tap the consequential gate releases on the
+customer's approval — never on `send_keys`, which does not take it, and never on a raw
+`{x, y}` click, which the control plane's own params schema refuses with it. A harness
+that predates V-3358 reads click params by key and ignores the field, tapping as before.
+An approved tap the harness refuses does nothing, and its approval is not carried
+forward: the approval resume ends there, and any new plan is put to the customer again.
+
+⛔ **Never on a control operated through its own `<label>`.** The look reads a hit on the
+target's own label (a non-control hit carrying exactly the target's name) as clear,
+because a tap there toggles a styled checkbox or radio. `dsTapVerdict` has no such rule,
+so the click check would refuse that tap as `hit_is_not_target_or_descendant` and the
+customer would be told it is covered. The control plane therefore omits the parameter
+when the look saw the own-label hit, and for every `checkbox`/`radio` target (off-screen,
+its tap point may land on the label) — those taps go ahead unchecked, as before.
+
+**Open asks of A3 (V-3358 follow-ups):**
+
+1. Give click's check the look's own-label exemption (a hit that is, or is inside, a
+   `<label>` associated with the target). Then the exclusion above can be dropped.
+2. `behavioralTapElement` (the native element path) runs the check BEFORE the WebDriver
+   action's own scroll, so an off-screen element is refused `tap_point_outside_viewport`,
+   which the control plane files as covered. Unreachable today (the fork's `findElement`
+   fails, so the script path scrolls first), but it turns every off-screen checked tap
+   into "covered" the day `findElement` works. Scroll first on that path too.
+3. `send_keys` taps its field to focus it after its own scroll, unchecked. A typed step
+   whose look said `tap_point_outside_viewport` can land that focus tap on a cover that
+   arrives with the scroll. The control plane does not send `require_unoccluded` to a verb
+   that does not take it; honouring it on `send_keys`' focus tap would close this.
+   Counted in
+   `driftstack_agent_tap_unoccluded_check_total{why, result}`. The pre-tap
+   look that shipped on 2026-09-18 uses `perceive { selector }` instead: before every tap
+   and every typed step, the executor asks the harness what the selector resolves to and
+   what is under its tap point, never dispatches the click onto a covered control, gates
+   purchases on the hit element's own label as well as the planner's words, and keys the
+   repeat guard on the harness's canonical selector. Occlusion there is A3's definition:
+   covered unless the hit is the element or a descendant (an ancestor hit is covered).
+   A tap whose point is outside the viewport cannot be checked by the look, because the
+   click scrolls to a randomised band the control plane cannot reproduce;
+   `require_unoccluded` checks it where it lands.
 
 ### 2026-07-15 protocol-truth correction (supersedes every older roster/count above)
 

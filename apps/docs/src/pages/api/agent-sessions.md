@@ -317,11 +317,15 @@ string-matching the prose:
 
 `diagnosis.category` is one of `element_not_found`, `page_load_failed`,
 `condition_not_met`, `capture_failed`, `scroll_failed`, `session_error`,
-`invalid_request`, `result_too_large`, `element_covered`, `unknown`.
+`invalid_request`, `result_too_large`, `element_covered`, `target_unverified`,
+`unknown`.
 `element_covered` means something on the page — a cookie banner, a dialog, a
 sticky bar — was on top of the control, so nothing was tapped or typed; it is not
 retryable as the same step, but the agent may look at the page again and close
-what is covering it. `retryable: true`
+what is covering it. `target_unverified` means the tap was not made because it
+could not be confirmed, just before tapping, that it would land on the control;
+nothing was tapped, it is not retryable as the same step, and the agent may look
+at the page again and plan the step afresh. `retryable: true`
 means automatic replay of the same step is considered safe. `false` means
 never replay automatically: an invalid request must change, while an
 outcome-unknown action or pacing may already have taken effect and requires state

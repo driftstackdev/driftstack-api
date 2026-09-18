@@ -496,4 +496,10 @@ export const METRIC_NAMES = {
   agentPreTapLookDeviceSeconds: 'driftstack_agent_pre_tap_look_device_seconds',
   // What the turn waited for the look, by `outcome` — the per-tap latency cost.
   agentPreTapLookRoundTripSeconds: 'driftstack_agent_pre_tap_look_round_trip_seconds',
+  // Clicks sent with the device's own check at the real tap point (click
+  // `require_unoccluded`), by `why` (TAP_UNOCCLUDED_CHECK_WHYS) and `result`
+  // (TAP_UNOCCLUDED_CHECK_RESULTS) — emitted from recordTapUnoccludedCheck in
+  // services/agent-turn-telemetry.ts. Every result but `tapped`, `failed_otherwise`
+  // and `no_answer` is a tap the device refused before touching the page.
+  agentTapUnoccludedCheckTotal: 'driftstack_agent_tap_unoccluded_check_total',
 } as const;

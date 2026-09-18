@@ -359,6 +359,7 @@ export interface AgentFailureDiagnosis {
     | 'invalid_request'
     | 'result_too_large'
     | 'element_covered'
+    | 'target_unverified'
     | 'unknown';
   retryable: boolean;
 }

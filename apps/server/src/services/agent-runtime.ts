@@ -790,6 +790,11 @@ export const REPLAN_MIN_BUDGET_TOKENS = 6_000;
  * refused the tap — so the page is as the step found it, and a new look is how
  * the plan finds the banner and closes it. It is not RETRYABLE (the cover is
  * still there), which is a different question from re-plannable.
+ *
+ * `target_unverified` qualifies on the same ground: the device refused the tap
+ * BEFORE touching the page because it could not confirm the tap point, so the
+ * page is as the step found it and a new look is safe. Not retryable — the same
+ * check on the same page gives the same answer.
  */
 const REPLANNABLE_FAILURE_CATEGORIES: ReadonlySet<string> = new Set([
   'element_not_found',
@@ -800,6 +805,7 @@ const REPLANNABLE_FAILURE_CATEGORIES: ReadonlySet<string> = new Set([
   'invalid_request',
   'result_too_large',
   'element_covered',
+  'target_unverified',
 ]);
 
 /**

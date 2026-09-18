@@ -833,6 +833,13 @@ export async function createProductionDeps(
       PRE_TAP_LOOK_DURATION_BUCKETS_SECONDS,
       ['outcome'],
     );
+    // The device's own check at the real tap point, emitted from
+    // recordTapUnoccludedCheck in services/agent-turn-telemetry.ts.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.agentTapUnoccludedCheckTotal,
+      'Agent clicks sent with the device check at the real tap point, by why (outside_viewport | consequential) and result (tapped, a refusal reason, unrecognised_reason, failed_otherwise, no_answer). A refusal is a tap that was not made; occlusion_check_unavailable is the fail-closed rate.',
+      ['why', 'result'],
+    );
   }
 
   // Arc 7 obs.13 — construct the email service after the metrics

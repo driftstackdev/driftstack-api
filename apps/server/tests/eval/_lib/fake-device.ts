@@ -200,7 +200,24 @@ export interface FakeDeviceOptions {
    *  `selector` and answers with its page listing, carrying none of the new
    *  fields — the older device the look before a tap must fall back on. */
   predatesTapLook?: boolean;
+  /** A device from before click `require_unoccluded` (A3 V-3358): it reads its
+   *  click params by key and never looks for that one, so it taps unchecked. */
+  predatesRequireUnoccluded?: boolean;
+  /** Every click sent with `require_unoccluded` finds the check unable to run,
+   *  and the device FAILS CLOSED: refused `occlusion_check_unavailable`. */
+  occlusionCheckUnavailable?: boolean;
+  /** The node sets DRIFTSTACK_INTENT_ELEMENT_OCCLUDED_CODE=1, so a refusal
+   *  carries `intent_element_occluded`. Absent — as on the production box
+   *  today — it carries `intent_webdriver_failed` with the same message. */
+  elementOccludedCode?: boolean;
 }
+
+/**
+ * The device's refusal message, word for word (IntentExecutor's
+ * `elementOccluded`). Written out here rather than imported from the product,
+ * so a product that drifted from the device's wording fails against this.
+ */
+export const TAP_REFUSAL_MESSAGE_PREFIX = 'element occluded at the tap point: ';
 
 /** The fixture asked the device to do something its page cannot support. A bug
  *  in the FIXTURE, never a finding about the agent — so it is loud. */
@@ -268,6 +285,9 @@ export class FakeDevice {
   private readonly authenticatedHosts: Set<string>;
   private readonly notFound: NotFoundBehaviour;
   private readonly predatesTapLook: boolean;
+  private readonly predatesRequireUnoccluded: boolean;
+  private readonly occlusionCheckUnavailable: boolean;
+  private readonly elementOccludedCode: boolean;
 
   private currentUrl: string;
   private currentPage: FixturePage;
@@ -295,6 +315,9 @@ export class FakeDevice {
     this.authenticatedHosts = new Set(opts.authenticatedHosts ?? []);
     this.notFound = opts.notFound ?? {};
     this.predatesTapLook = opts.predatesTapLook === true;
+    this.predatesRequireUnoccluded = opts.predatesRequireUnoccluded === true;
+    this.occlusionCheckUnavailable = opts.occlusionCheckUnavailable === true;
+    this.elementOccludedCode = opts.elementOccludedCode === true;
     this.currentUrl = opts.startUrl;
     // A device that starts ON a fixture page shows that page; one that starts
     // anywhere else (about:blank) shows an empty document.
@@ -419,7 +442,7 @@ export class FakeDevice {
       case 'navigate':
         return this.doNavigate(readString(params, 'url'));
       case 'click':
-        return this.doClick(readString(params, 'value'));
+        return this.doClick(readString(params, 'value'), params.require_unoccluded === true);
       case 'send_keys':
         return this.doSendKeys(readString(params, 'value'), readString(params, 'text'));
       case 'press_key':
@@ -493,15 +516,101 @@ export class FakeDevice {
     };
   }
 
-  private doClick(selector: string): DeviceOutcome {
+  private doClick(selector: string, requireUnoccluded: boolean): DeviceOutcome {
+    // An older device never reads the parameter: exactly the unchecked tap.
+    const checked = requireUnoccluded && !this.predatesRequireUnoccluded;
+    if (checked) {
+      const refused = this.refusalAtTapPoint(selector);
+      if (refused !== null) {
+        // Located and checked, never touched: a lookup and the check's script.
+        this.cost(2 * TRIVIAL_MS);
+        return refused;
+      }
+    }
     const found = this.locate(selector, CLICK_MS);
     if (!found.ok) {
       this.cost(found.costMs);
       return found.outcome;
     }
     this.cost(CLICK_MS);
+    // Where the click's own scroll put the tap point under something else,
+    // the coordinate tap activates THAT — and reports a tap, as the device does.
+    const lateCover = this.coverAfterScroll(found.element);
+    if (lateCover !== null) {
+      this.activate(lateCover, selector);
+      return { ok: true, output: { clicked: selector, behavioral: true, activated: true } };
+    }
+    // Replaced between the look and the tap: the tap lands where it was.
+    if (this.declares(this.currentPage.detachedAtTap, found.element)) {
+      return { ok: true, output: { clicked: selector, behavioral: true, activated: false } };
+    }
     this.activate(found.element, selector);
     return { ok: true, output: { clicked: selector, behavioral: true, activated: true } };
+  }
+
+  /**
+   * click `require_unoccluded` (A3 V-3358): the occlusion verdict at the tap
+   * point the click would actually use — after its own scroll — or null when
+   * the tap may go ahead.
+   *
+   * ⛔ ONLY FOR AN ELEMENT THE CLICK RESOLVES AND CAN TAP. A selector that
+   * matches nothing, cannot be parsed, or names an unrendered element is
+   * answered by the click's own lookup (null here), exactly as the device's
+   * locate runs before its check. Then, in the device's order:
+   *   the check cannot run            → occlusion_check_unavailable (FAILS CLOSED)
+   *   the element is gone at the tap  → target_not_resolved
+   *   a cover arrived with the scroll → hit_is_not_target_or_descendant
+   *   a declared overlay is on top    → hit_is_not_target_or_descendant
+   *   the point is on its own label   → hit_is_not_target_or_descendant (the
+   *                                     device's check has no own-label rule)
+   *   nothing at the tap point        → nothing_hit
+   * Off-screen alone is NOT a refusal: the click scrolled it into view.
+   */
+  private refusalAtTapPoint(selector: string): Extract<DeviceOutcome, { ok: false }> | null {
+    let element: DomElement | null;
+    try {
+      element = queryFirst(this.dom.document, selector);
+    } catch (err) {
+      if (!(err instanceof InvalidSelectorError)) throw err;
+      return null;
+    }
+    if (element === null || !isInteractable(element)) return null;
+    const refuse = (reason: string): Extract<DeviceOutcome, { ok: false }> => ({
+      ok: false,
+      errorCode: this.elementOccludedCode ? 'intent_element_occluded' : 'intent_webdriver_failed',
+      message: `${TAP_REFUSAL_MESSAGE_PREFIX}${reason}`,
+    });
+    if (this.occlusionCheckUnavailable) return refuse('occlusion_check_unavailable');
+    if (this.declares(this.currentPage.detachedAtTap, element)) {
+      return refuse('target_not_resolved');
+    }
+    if (this.coverAfterScroll(element) !== null) return refuse('hit_is_not_target_or_descendant');
+    if (this.coveringOverlay(element) !== null) return refuse('hit_is_not_target_or_descendant');
+    if (this.ownLabelAtTapPoint(element) !== null) {
+      return refuse('hit_is_not_target_or_descendant');
+    }
+    if (this.declares(this.currentPage.nothingAtTapPoint, element)) return refuse('nothing_hit');
+    return null;
+  }
+
+  /** The label a declared hidden input's tap point lands on, or null. */
+  private ownLabelAtTapPoint(element: DomElement): DomElement | null {
+    if (!this.declares(this.currentPage.tapPointOnOwnLabel, element)) return null;
+    const wrapping = element.closest('label');
+    if (wrapping !== null) return wrapping;
+    const id = element.id;
+    if (id.length === 0 || !/^[A-Za-z_][-\w]*$/.test(id)) return null;
+    return this.dom.document.querySelector(`label[for="${id}"]`);
+  }
+
+  /** The rendered cover the click's scroll puts over `element`'s tap point. */
+  private coverAfterScroll(element: DomElement): DomElement | null {
+    for (const entry of this.currentPage.coveredAfterScroll ?? []) {
+      if (!this.declares([entry.target], element)) continue;
+      const cover = queryFirst(this.dom.document, entry.cover);
+      if (cover !== null && isRendered(cover) && !cover.contains(element)) return cover;
+    }
+    return null;
   }
 
   /** What a click DOES once it has landed on `element` — shared with the Enter
@@ -789,7 +898,7 @@ export class FakeDevice {
       hit = null;
       occlusionReason = 'nothing_hit';
     } else {
-      const cover = this.coveringOverlay(element);
+      const cover = this.coveringOverlay(element) ?? this.ownLabelAtTapPoint(element);
       hit = cover ?? element;
       occlusionReason = cover !== null ? 'hit_is_not_target_or_descendant' : null;
     }

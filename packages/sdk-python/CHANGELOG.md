@@ -8,6 +8,16 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`target_unverified` step diagnosis** — a failed agent step's
+  `Diagnosis.category` can now be `"target_unverified"`: the tap was not
+  made because its target could not be checked first. Not retryable as
+  the same step; the agent re-plans. ⚠️ `Diagnosis.category` is a closed
+  `Literal`, so an SDK installed **before** this release raises a
+  pydantic `ValidationError` when it parses a response carrying the new
+  value — upgrade before relying on step diagnoses.
+
+### Added
+
 - **Durable agent-turn idempotency** — sync and async
   `client.agent_sessions.message(..., idempotency_key="…")` forward one
   caller-reusable `Idempotency-Key` beside SSE/BYOK headers so an ambiguous

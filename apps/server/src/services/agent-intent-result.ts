@@ -23,7 +23,11 @@ import type {
   IntentResult,
 } from '@driftstack/api-types';
 import type { ParsedIntentResult } from './harness-control-codec.js';
-import type { HarnessErrorCode } from '../schemas/harness-control-protocol.js';
+import {
+  HARNESS_TAP_REFUSAL_REASONS,
+  type HarnessErrorCode,
+  type HarnessTapRefusalReason,
+} from '../schemas/harness-control-protocol.js';
 import { redactText } from '../lib/redact-url.js';
 import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
 
@@ -121,7 +125,8 @@ export function intentResultToCustomer(
   // outcome-unknown class — and a refusal the device made before tapping is
   // the opposite of outcome-unknown. The device's message is not appended: it
   // describes the refusal in the device's terms, not the customer's.
-  if (isCoveredRefusal(parsed)) return elementCoveredResult(intent);
+  const refusal = tapRefusalOf(parsed);
+  if (refusal !== null) return tapRefusalResult(intent, refusal);
   return {
     kind: 'failure',
     intent,
@@ -365,14 +370,125 @@ export function elementCoveredResult(
   };
 }
 
-/** The device refused the tap because its tap point is covered — the dedicated
- *  code, or the legacy code with its fixed message prefix. */
-function isCoveredRefusal(parsed: ParsedIntentResult): boolean {
-  if (parsed.errorCode === 'intent_element_occluded') return true;
-  return (
-    parsed.errorCode === 'intent_webdriver_failed' &&
-    (parsed.errorMessage ?? '').trimStart().startsWith(LEGACY_ELEMENT_COVERED_MESSAGE_PREFIX)
-  );
+/**
+ * A tap the device REFUSED before touching the page (click `require_unoccluded`,
+ * A3 V-3358), and why.
+ *
+ *  covered     something else is at the tap point — every occlusion reason,
+ *              and a reason this build does not know: the device still said
+ *              the point is not on the target, and reading it as covered is
+ *              the direction in which nothing is tapped by mistake
+ *  target_gone `target_not_resolved` — the element went away between the look
+ *              and the tap. Not a cover: this is the element-not-found path
+ *  unverified  `occlusion_check_unavailable` — the check could not run and the
+ *              device failed closed. Not a cover either: nothing is known to
+ *              be on top, only that nothing could be confirmed
+ *
+ * `reason` is the device's own word when it is one of the closed set, and
+ * null otherwise, so a counter keyed on it stays a closed label set.
+ */
+export type TapRefusal = {
+  kind: 'covered' | 'target_gone' | 'unverified';
+  reason: HarnessTapRefusalReason | null;
+};
+
+const TAP_REFUSAL_REASONS: ReadonlySet<string> = new Set(HARNESS_TAP_REFUSAL_REASONS);
+
+function isTapRefusalReason(said: string): said is HarnessTapRefusalReason {
+  return TAP_REFUSAL_REASONS.has(said);
+}
+
+/**
+ * Read a refused tap off a result — the dedicated code, or the legacy code
+ * with its fixed message prefix — or null when the result is anything else.
+ *
+ * ⛔ THE REASON IS READ BEFORE THE REFUSAL IS CALLED A COVER. A bare prefix
+ * match used to answer "covered" for every refusal, and two of them are not
+ * covers: an element that went away, and a check that could not run. Filing
+ * those as "something is covering this button" would send the customer — and
+ * the next plan — looking for a banner that is not there.
+ */
+export function tapRefusalOf(parsed: ParsedIntentResult): TapRefusal | null {
+  const message = (parsed.errorMessage ?? '').trim();
+  const prefixed = message.startsWith(LEGACY_ELEMENT_COVERED_MESSAGE_PREFIX);
+  const refused =
+    parsed.errorCode === 'intent_element_occluded' ||
+    (parsed.errorCode === 'intent_webdriver_failed' && prefixed);
+  if (!refused) return null;
+  const said = prefixed ? message.slice(LEGACY_ELEMENT_COVERED_MESSAGE_PREFIX.length).trim() : '';
+  const reason = isTapRefusalReason(said) ? said : null;
+  switch (reason) {
+    case 'target_not_resolved':
+      return { kind: 'target_gone', reason };
+    // ⛔ "COULD NOT CHECK" IS NOT "COVERED". A tap point outside the viewport, or
+    // one where nothing at all was hit, is a refusal because the device could not
+    // VERIFY the tap — not evidence that something sits on top of the control.
+    // Filing them as covered would tell the customer (and the next plan) to look
+    // for a banner that is not there. The native element path checks BEFORE its
+    // own scroll, so an off-screen control is refused there as outside-viewport;
+    // that is a verification gap, reported as one.
+    case 'occlusion_check_unavailable':
+    case 'tap_point_outside_viewport':
+    case 'nothing_hit':
+      return { kind: 'unverified', reason };
+    case 'hit_is_not_target_or_descendant':
+    case 'covered_at_enclosing_shadow_level':
+    case null:
+      return { kind: 'covered', reason };
+    default: {
+      // A reason added to the closed set without a decision here is a build
+      // error, not a refusal read as whatever the fall-through says.
+      const _exhaustive: never = reason;
+      void _exhaustive;
+      return { kind: 'covered', reason: null };
+    }
+  }
+}
+
+/** The customer's result for a refused tap. Nothing was tapped in any case. */
+function tapRefusalResult(
+  intent: AgentIntent,
+  refusal: TapRefusal,
+): Extract<IntentResult, { kind: 'failure' }> {
+  switch (refusal.kind) {
+    case 'covered':
+      return elementCoveredResult(intent);
+    case 'target_gone':
+      // Word for word what a tap on a selector that matches nothing gets: the
+      // element is not there now, and the step is handled as exactly that.
+      return elementNotFoundResult(intent);
+    case 'unverified':
+      return targetUnverifiedResult(intent);
+    default: {
+      const _exhaustive: never = refusal.kind;
+      void _exhaustive;
+      return elementCoveredResult(intent);
+    }
+  }
+}
+
+/**
+ * The sentence for a tap that was not made because the device could not
+ * confirm, at the moment of tapping, that it would land on the control.
+ *
+ * ⛔ CUSTOMER COPY: it says nothing was tapped and that the page can be looked
+ * at again. It never says how the tap was checked, and it does not claim a
+ * cover it has no evidence of.
+ */
+export const TARGET_UNVERIFIED_REASON =
+  'nothing was tapped, because it could not be confirmed that the tap would land on this control — the page may need to be looked at again first';
+
+/** Not retryable as the same step: the same check on the same page is the
+ *  same answer. Re-plannable: nothing was tapped, so a fresh look is safe. */
+export function targetUnverifiedResult(
+  intent: AgentIntent,
+): Extract<IntentResult, { kind: 'failure' }> {
+  return {
+    kind: 'failure',
+    intent,
+    reason: TARGET_UNVERIFIED_REASON,
+    diagnosis: { category: 'target_unverified', retryable: false },
+  };
 }
 
 // ── failure reason ────────────────────────────────────────────────────

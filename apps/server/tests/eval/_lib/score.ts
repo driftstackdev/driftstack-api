@@ -863,10 +863,19 @@ export function classifyDispatchDeath(
   // The element is there and something is over it — the same finding as the
   // device's own "click intercepted", seen before the tap instead of after.
   if (diagnosisCategory === 'element_covered') return 'element_click_intercepted';
-  if (code === 'intent_element_occluded') return 'element_click_intercepted';
-  if (code === undefined && diagnosisCategory === 'element_not_found') {
+  // The device could not check the tap point and refused rather than guess —
+  // its own inability, the class production files it under too.
+  if (diagnosisCategory === 'target_unverified') return 'harness_error_unclassified';
+  // Nothing resolved: before the tap (no failing dispatch), or at it — the
+  // device's check refusing a target that went away arrives under the
+  // refusal's code, which on its own would read as a cover.
+  if (
+    diagnosisCategory === 'element_not_found' &&
+    (code === undefined || code === 'intent_element_occluded' || code === 'intent_webdriver_failed')
+  ) {
     return 'element_never_appeared_in_retry_budget';
   }
+  if (code === 'intent_element_occluded') return 'element_click_intercepted';
   if (code === 'intent_element_not_found') return 'element_never_appeared_in_retry_budget';
   if (code === 'intent_page_load_failed') return 'page_load_failed';
   if (code === 'intent_invalid_parameter' || code === 'intent_missing_parameter') {

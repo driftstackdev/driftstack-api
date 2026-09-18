@@ -1095,6 +1095,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     PRE_TAP_LOOK_DURATION_BUCKETS_SECONDS,
     ['outcome'],
   );
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.agentTapUnoccludedCheckTotal,
+    'Clicks sent with the device check at the tap point.',
+    ['why', 'result'],
+  );
   // Wired unconditionally, as bootstrap does: an in-memory writer, so a test
   // can read back exactly the rows a turn left behind.
   const agentTurnTelemetryRepo = new InMemoryAgentTurnTelemetryRepo();

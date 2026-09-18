@@ -56,8 +56,15 @@ import {
   elementNotFoundResult,
   intentReplayMayDuplicateEffect,
   intentResultToCustomer,
+  tapRefusalOf,
 } from './agent-intent-result.js';
-import { recordPreTapLook, type PreTapLookOutcome } from './agent-turn-telemetry.js';
+import {
+  recordPreTapLook,
+  recordTapUnoccludedCheck,
+  type PreTapLookOutcome,
+  type TapUnoccludedCheckResult,
+  type TapUnoccludedCheckWhy,
+} from './agent-turn-telemetry.js';
 import type { MetricsRegistry } from './metrics-registry.js';
 import type { SessionCaptureStore } from './session-capture-store.js';
 
@@ -208,6 +215,9 @@ interface TapTarget {
   selector: string;
   /** The element the hit test returns at the tap point, or null. */
   hit: { type: string; label: string; selector: string } | null;
+  /** Set when the look read the tap as clear only because the hit is the
+   *  control's own label — a rule the device's click check does not have. */
+  hitIsOwnLabel?: true;
 }
 
 /** perceive element types a tap ACTIVATES as a control of its own. A hit of
@@ -228,7 +238,8 @@ const CONTROL_TYPES: ReadonlySet<string> = new Set([
  *  clear             the tap point lands on the target (or inside it)
  *  covered           something else is on top — the tap is NOT made
  *  outside_viewport  not scrolled into view; the click scrolls first, so the tap
- *                    goes ahead as it always has (see `lookBeforeTap`)
+ *                    goes ahead — with the device checking the real tap point
+ *                    after its scroll (see `unoccludedCheckFor`)
  *  unverified        the device resolved the element but its hit test says
  *                    nothing about it (nothing hit, or the control is not
  *                    rendered) — no evidence either way, so the tap goes ahead
@@ -332,7 +343,7 @@ function readPerceiveAnswer(outputData: unknown): PerceiveReading {
     target.label.length > 0 &&
     target.hit.label === target.label
   ) {
-    return { kind: 'resolved', verdict: 'clear', target };
+    return { kind: 'resolved', verdict: 'clear', target: { ...target, hitIsOwnLabel: true } };
   }
   // ⛔ A CONTROL THAT IS NOT RENDERED IS NOT COVERED. Its rect is empty, so its
   // "tap point" is the page's origin and the hit test finds whatever sits there
@@ -413,6 +424,88 @@ function coverNameOf(target: TapTarget): string | undefined {
     target.selector.startsWith(`${hit.selector}${combinator}`),
   );
   return isAncestor ? undefined : hit.label;
+}
+
+/**
+ * Whether a tap is sent with click `require_unoccluded: true` — the device's own
+ * occlusion test at the ACTUAL tap point, after the click's scroll, the persona
+ * jitter and its clamp to the element, with the same verdict function the look
+ * uses. A covered point is refused before any touch is posted.
+ *
+ *  consequential     the gate just released this tap on the customer's
+ *                    approval: a purchase, a payment, a deletion. The look saw
+ *                    the UNJITTERED centre before any scroll; the tap that spends
+ *                    the approval is checked where it actually lands
+ *  outside_viewport  the look could not see the tap point at all (perceive
+ *                    never scrolls), so until now this tap went ahead unchecked
+ *
+ * ⛔ TAPS ONLY. Typing also begins with a tap on the field, but `send_keys` does
+ * not take the parameter (A3's contract names click alone), and a parameter a
+ * verb does not support is not sent to it. The look before typing still refuses
+ * a covered field; an off-screen one is typed into as before.
+ *
+ * ⛔ NOT A CONTROL OPERATED THROUGH ITS LABEL, approved or not: the device's
+ * check would refuse the very tap that works (`deviceCheckCanVouchFor`).
+ *
+ * ⛔ NOT YET EVERY TAP. The check FAILS CLOSED — a device that cannot run it
+ * refuses the tap — so on every tap it would cost the customer each tap the
+ * check cannot run on, clear or not. That rate is unmeasured; the tap-check
+ * counter's `occlusion_check_unavailable` share on these taps is the
+ * measurement, and it has to be near zero before a clear tap pays for it.
+ *
+ * An OLDER device reads click params by key and never looks for this one, so it
+ * taps exactly as it did before the parameter existed. There is no capability
+ * tell to gate on — the look's `resolved_by` predates the parameter — and none is
+ * needed: the fallback is today's behaviour, not a failure.
+ */
+function unoccludedCheckFor(
+  intentName: HarnessIntentName,
+  look: PreTapLook | null,
+  releasedApproval: boolean,
+): TapUnoccludedCheckWhy | null {
+  // The verb on the wire decides, not the plan's action: only `click` takes
+  // the parameter (a typed step is `send_keys`), and a raw-coordinate click is
+  // refused with it — the mapper never emits one, and the params schema refuses
+  // it before a frame is built.
+  if (intentName !== 'click') return null;
+  if (!deviceCheckCanVouchFor(look)) return null;
+  if (releasedApproval) return 'consequential';
+  if (look?.verdict === 'outside_viewport') return 'outside_viewport';
+  return null;
+}
+
+/** What one click sent with the check came back as, for the tap-check counter. */
+function unoccludedCheckResultOf(parsed: ParsedIntentResult): TapUnoccludedCheckResult {
+  if (parsed.success) return 'tapped';
+  const refusal = tapRefusalOf(parsed);
+  if (refusal === null) return 'failed_otherwise';
+  return refusal.reason ?? 'unrecognised_reason';
+}
+
+/**
+ * Controls commonly operated THROUGH their `<label>`: a styled checkbox or radio
+ * is a visually hidden input, and the tap lands on the label drawn for it.
+ */
+const LABEL_OPERATED_TYPES: ReadonlySet<string> = new Set(['checkbox', 'radio']);
+
+/**
+ * Whether the device's click check can vouch for this target at all.
+ *
+ * ⛔ THE DEVICE'S CHECK HAS NO OWN-LABEL RULE. The look reads a hit on the
+ * control's own label as the control (see `readPerceiveAnswer`), because a tap
+ * there toggles it; click's `require_unoccluded` runs the device's bare verdict,
+ * where that same hit is `hit_is_not_target_or_descendant`. Sent for such a
+ * control, the check refuses a tap that works, the customer is told something
+ * covers it, and the re-plan — the same tap — ends the turn. So it is not sent
+ * where the look already saw the label at the tap point, nor for a checkbox or
+ * radio whose tap point the look could not see (off-screen, it may well land on
+ * the label). Those taps go ahead exactly as before the check existed. The fix
+ * that closes this is the same exemption in the device's check (asked of A3).
+ */
+function deviceCheckCanVouchFor(look: PreTapLook | null): boolean {
+  if (look === null || !('target' in look)) return true;
+  if (look.target.hitIsOwnLabel === true) return false;
+  return !LABEL_OPERATED_TYPES.has(look.target.type);
 }
 
 /** click's W3C locator strategy, as perceive's own vocabulary names it. Null:
@@ -613,6 +706,10 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       //    Before a covered/not-found check on purpose: those only fail the step,
       //    and a covered purchase button must still be put to the customer — the
       //    look can only ADD halts, never trade one for a failure.
+      //    The gate RELEASES an approved tap by spending its approval, so a
+      //    smaller approval set afterwards is exactly "this tap is one the
+      //    customer approved" — the tap below where being wrong costs most.
+      const approvalsBeforeGate = approved.size;
       const halt = consequentialHalt(
         intent,
         approved,
@@ -623,6 +720,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         emitStep(halt);
         return { results, ok: false, awaitingConfirmation: true };
       }
+      const releasedApproval = approved.size < approvalsBeforeGate;
       // Announce the step BEFORE it runs — but AFTER the safety gate above.
       // ⛔ Announcing first told the customer the agent was doing the very thing
       // the gate was blocking ("Tapping Buy now…" beside an unanswered Approve),
@@ -754,18 +852,26 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         }
       }
 
+      // 1.8. THE DEVICE CHECKS THE REAL TAP POINT where the look could not
+      //      vouch for it, or where being wrong costs the most. See
+      //      `unoccludedCheckFor` for which taps and why not all of them.
+      const unoccludedWhy = unoccludedCheckFor(mapped.intentName, look, releasedApproval);
+      const dispatchParams =
+        unoccludedWhy !== null ? { ...mapped.params, require_unoccluded: true } : mapped.params;
+
       // 2-4. Dispatch (with bounded auto-retry) + map the result back.
       const result = await this.runIntent(
         dispatchSessionId,
         intent,
         mapped.intentName,
-        mapped.params,
+        dispatchParams,
         args.shouldContinue,
         elementWaitBudget,
         args.signal,
         // The look already spent this step's element wait (or found the element
         // without one); a second would re-ask what the first just answered.
         look !== null && 'waitedForElement' in look && look.waitedForElement,
+        unoccludedWhy ?? undefined,
       );
       if (result.result !== null) {
         emitStep(result.result);
@@ -993,10 +1099,11 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
    * taps must not cluster at one height) — a scroll sent from here either
    * duplicates that scroll or parks every such tap at one fixed height, and the
    * second look would then vouch for a tap point this scroll created rather than
-   * the one the click would have used. The check that closes this is the
-   * device's own occlusion test at the real (scrolled, jittered) tap point;
-   * until it is deployed the tap goes ahead exactly as it always has, and the
-   * outcome is counted so the share of taps the look cannot vouch for is visible.
+   * the one the click would have used. What closes it is the device's own
+   * occlusion test at the real (scrolled, jittered) tap point: such a tap is sent
+   * with click `require_unoccluded` (see `unoccludedCheckFor`), and a covered
+   * point is refused there, before any touch. The look's outcome is still
+   * counted, so the share of taps it could not vouch for itself stays visible.
    */
   private async lookBeforeTap(
     sessionId: string,
@@ -1257,6 +1364,8 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     signal?: AbortSignal,
     /** The look before a tap already spent (or did not need) this step's wait. */
     elementWaitAlreadyUsed = false,
+    /** Set when `params` carry `require_unoccluded`: why, for the counter. */
+    unoccludedWhy?: TapUnoccludedCheckWhy,
   ): Promise<RunIntentOutcome> {
     let result: IntentResult | null = null;
     // Two independent budgets: the short general retryable-failure budget, and a
@@ -1305,11 +1414,22 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // Dispatch over the control plane; the dispatcher never rejects (failure
       // → a failure ParsedIntentResult).
       const sent = await this.dispatchHonouringStop(dispatch, intent, signal);
+      // One count per click that carried the check, retries included: each is
+      // one more tap the device was asked to vouch for.
+      if (unoccludedWhy !== undefined) {
+        recordTapUnoccludedCheck(this.metrics, {
+          why: unoccludedWhy,
+          result: sent.kind === 'abandoned' ? 'no_answer' : unoccludedCheckResultOf(sent.parsed),
+        });
+      }
       if (sent.kind === 'abandoned') {
         return { result: sent.result, authorityLost: false, stopped: true };
       }
       const parsed = sent.parsed;
       result = intentResultToCustomer(intent, parsed);
+      // A tap the device REFUSED before touching the page: provably nothing
+      // was done, whatever code it arrived under.
+      const refusal = tapRefusalOf(parsed);
       // #7 — a successful screenshot returns its bytes inline in parsed.outputData.
       // Stash them in the capture store (kept OUT of the encrypted transcript) and
       // put only the minted captureId on the result, so the GUI can fetch + show the
@@ -1373,9 +1493,13 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // actually wrong (the selector matched nothing) instead of renaming it as
       // a wait timeout, and it stops the step from spending the general retry
       // budget re-confirming an answer the wait just gave.
+      //
+      // A tap refused because its target went away between the look and the
+      // tap (`target_not_resolved`) is this same fact about the page, reported
+      // by the device's check rather than its lookup, and is handled as it.
       const waitSelector = selectorOf(intent);
       if (
-        parsed.errorCode === 'intent_element_not_found' &&
+        (parsed.errorCode === 'intent_element_not_found' || refusal?.kind === 'target_gone') &&
         waitSelector !== null &&
         !elementWaitUsed &&
         this.elementAppearWaitMs > 0 &&
@@ -1406,7 +1530,11 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // executor behavior agree. Proven pre-execution refusal codes remain
       // retryable and do not enter this fence.
       // (session_not_established is handled ABOVE — it's the not-executed subset.)
+      // A refusal arrives under that coarse code while the device's dedicated
+      // one is not armed — and a refusal is the one failure known NOT to have
+      // applied, so it never enters the fence.
       const maybeAlreadyApplied =
+        refusal === null &&
         intentReplayMayDuplicateEffect(intent) &&
         (parsed.errorCode === 'intent_webdriver_failed' ||
           parsed.errorCode === 'intent_dispatch_error');

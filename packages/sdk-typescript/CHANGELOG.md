@@ -6,6 +6,13 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`target_unverified` step diagnosis** — `AgentFailureDiagnosis.category`
+  gains `'target_unverified'`: the tap was not made because its target
+  could not be checked first. Not retryable as the same step; the agent
+  re-plans. An exhaustive `switch` over the category needs the new case.
+
 ### Fixed
 
 - **Retry policy** (`shouldRetry`) no longer auto-retries the terminal

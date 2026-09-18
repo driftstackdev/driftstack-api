@@ -246,12 +246,30 @@ export const HarnessLocatorStrategySchema = z.enum([
 
 const WaitAfterSchema = z.number().nonnegative().optional();
 
+/**
+ * `require_unoccluded` — A3 V-3358, 2026-09-18. The device runs its occlusion
+ * test at the ACTUAL tap point (after the click's own scroll, the persona
+ * jitter and its clamp to the element) and REFUSES a covered tap before any
+ * touch is posted — "element occluded at the tap point: <reason>". Optional
+ * because it is opt-in per tap: absent, the click is byte-identical to before.
+ * Only on the two ELEMENT forms: the device answers it on a raw `{x, y}` with
+ * `intent_invalid_parameter` (a coordinate has no element to be covered), so
+ * the strict coordinate form below refuses it here first, before a frame is
+ * built.
+ *
+ * An older device reads its params by key from a free dictionary and never
+ * looks for this one, so it taps exactly as it did before the field existed —
+ * checked against the device's click before V-3358, which validates no key set.
+ */
+const RequireUnoccludedSchema = z.boolean().optional();
+
 // click: target by element_id, a W3C locator, or viewport coordinates.
 export const ClickParamsSchema = z.union([
   z
     .object({
       element_id: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS),
       wait_after: WaitAfterSchema,
+      require_unoccluded: RequireUnoccludedSchema,
     })
     .strict(),
   z
@@ -259,10 +277,31 @@ export const ClickParamsSchema = z.union([
       strategy: HarnessLocatorStrategySchema,
       value: z.string().min(1).max(HARNESS_SCRIPT_MAX_CHARS),
       wait_after: WaitAfterSchema,
+      require_unoccluded: RequireUnoccludedSchema,
     })
     .strict(),
   z.object({ x: z.number(), y: z.number(), wait_after: WaitAfterSchema }).strict(),
 ]);
+
+/**
+ * Why a click sent with `require_unoccluded: true` was refused — the text after
+ * the device's fixed message prefix (A3 V-3358). A CLOSED set, so the handling
+ * of each is a switch the compiler checks. The first four are perceive's own
+ * occlusion reasons (one shared verdict function on the device); two are new:
+ *   target_not_resolved          the element went away between the look and
+ *                                the tap — nothing was tapped
+ *   occlusion_check_unavailable  the check could not run, and the device FAILS
+ *                                CLOSED: nothing was tapped
+ */
+export const HARNESS_TAP_REFUSAL_REASONS = [
+  'hit_is_not_target_or_descendant',
+  'covered_at_enclosing_shadow_level',
+  'nothing_hit',
+  'tap_point_outside_viewport',
+  'target_not_resolved',
+  'occlusion_check_unavailable',
+] as const;
+export type HarnessTapRefusalReason = (typeof HARNESS_TAP_REFUSAL_REASONS)[number];
 
 export const SendKeysParamsSchema = z
   .object({

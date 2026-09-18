@@ -103,6 +103,10 @@ export const FailureDiagnosisCategorySchema = z.enum([
    *  cover is still there — but the page can be looked at again and the cover
    *  closed. */
   'element_covered',
+  /** a tap was NOT made because it could not be confirmed, just before tapping,
+   *  that it would land on the intended control. Not worth repeating as is,
+   *  but the page can be looked at again and the step planned afresh. */
+  'target_unverified',
   /** no more-specific category applies. */
   'unknown',
 ]);

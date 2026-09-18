@@ -131,6 +131,32 @@ export interface FixturePage {
   /** Elements whose tap point the hit test finds NOTHING at. A click is
    *  unaffected: the device gives no evidence either way. */
   nothingAtTapPoint?: ReadonlyArray<string>;
+  /**
+   * Once a click has scrolled `target` into view, `cover` — a sticky bar, a
+   * floating button — sits over its tap point. perceive never scrolls, so a
+   * look sees only that the target is off-screen (declare it in `offViewport`
+   * too); the cover is found only where the tap actually lands. An unchecked
+   * tap there ACTIVATES THE COVER, which is what a coordinate tap does on the
+   * real device; a click sent with `require_unoccluded` is refused instead.
+   */
+  coveredAfterScroll?: ReadonlyArray<{ target: string; cover: string }>;
+  /**
+   * Elements that are REPLACED between the look and the tap (a list that
+   * re-renders). A checked click is refused `target_not_resolved`; an unchecked
+   * one lands where the element was and activates nothing.
+   */
+  detachedAtTap?: ReadonlyArray<string>;
+  /**
+   * Visually hidden inputs — a styled checkbox or radio — whose tap point lands
+   * on their OWN `<label>` (wrapping them, or pointing at them with `for`). A tap
+   * there toggles the input, as a browser forwards a label's click. perceive
+   * reports the label as the hit (occluded, `hit_is_not_target_or_descendant`);
+   * the control plane's look reads that as clear. The device's click check has
+   * no such rule, so a click sent with `require_unoccluded` is REFUSED with that
+   * same reason — wherever the tap lands on the label, on-screen or after the
+   * click's scroll (declare `offViewport` too for the latter).
+   */
+  tapPointOnOwnLabel?: ReadonlyArray<string>;
   onClick?: ReadonlyArray<ClickBehaviour>;
   forms?: ReadonlyArray<FormBehaviour>;
 }

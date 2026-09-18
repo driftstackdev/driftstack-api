@@ -196,6 +196,12 @@ describe('metric label cardinality', () => {
     // union declared in services/agent-turn-telemetry.ts; `model` is the one
     // that LOOKS open, and is not — `modelLabel` maps anything outside the model
     // catalogue to `other`, and `agent-turn-telemetry` (unit) pins that.
+    //
+    // `why` and `result` arrived with the tap-check counter
+    // (driftstack_agent_tap_unoccluded_check_total). Both are closed unions in
+    // services/agent-turn-telemetry.ts (TAP_UNOCCLUDED_CHECK_WHYS / _RESULTS);
+    // a refusal reason the build does not know is `unrecognised_reason`, never
+    // the device's own text.
     expect(distinct).toEqual([
       'actor_type',
       'arm',
@@ -211,6 +217,7 @@ describe('metric label cardinality', () => {
       'phase',
       'prefix',
       'reason',
+      'result',
       'result_kind',
       'role',
       'route',
@@ -221,6 +228,7 @@ describe('metric label cardinality', () => {
       'to',
       'token_type',
       'transport',
+      'why',
     ]);
   });
 });
