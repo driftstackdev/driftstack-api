@@ -5399,6 +5399,809 @@
             "properties": {
               "kind": {
                 "type": "string",
+                "enum": ["stopped"]
+              },
+              "session": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "account_id": {
+                    "type": "string"
+                  },
+                  "driftstack_session_id": {
+                    "type": ["string", "null"]
+                  },
+                  "status": {
+                    "type": "string"
+                  },
+                  "closed_reason": {
+                    "type": ["string", "null"]
+                  },
+                  "provisioning_detail": {
+                    "type": ["string", "null"]
+                  },
+                  "token_budget_total": {
+                    "type": "integer"
+                  },
+                  "token_budget_remaining": {
+                    "type": "integer"
+                  },
+                  "transcript_length": {
+                    "type": "integer"
+                  },
+                  "closed_at": {
+                    "type": ["string", "null"]
+                  },
+                  "created_by_user_id": {
+                    "type": ["string", "null"]
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["manual", "ai", "pair"]
+                  },
+                  "model": {
+                    "type": "string",
+                    "enum": [
+                      "claude-opus-5",
+                      "claude-sonnet-5",
+                      "claude-opus-4-8",
+                      "claude-opus-4-7",
+                      "claude-sonnet-4-6",
+                      "claude-haiku-4-5"
+                    ]
+                  },
+                  "stop_on_exit_ip_change": {
+                    "type": "boolean"
+                  },
+                  "pair_mode_state": {
+                    "type": ["object", "null"],
+                    "properties": {
+                      "kind": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["kind"]
+                  },
+                  "created_at": {
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "type": "string"
+                  },
+                  "livekit": {
+                    "type": "object",
+                    "properties": {
+                      "ws_url": {
+                        "type": "string",
+                        "format": "uri"
+                      },
+                      "room": {
+                        "type": "string"
+                      },
+                      "token": {
+                        "type": "string"
+                      },
+                      "participant_identity": {
+                        "type": "string"
+                      },
+                      "expires_at": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["ws_url", "room", "token", "participant_identity", "expires_at"]
+                  },
+                  "liveness": {
+                    "type": "object",
+                    "properties": {
+                      "state": {
+                        "type": ["string", "null"],
+                        "enum": ["active", "provisioning", "idle", "terminating", null]
+                      },
+                      "fresh": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": ["state", "fresh"]
+                  },
+                  "capability_report": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "string"
+                      },
+                      "manual_input_available": {
+                        "type": ["boolean", "null"]
+                      },
+                      "streaming_state": {
+                        "type": ["string", "null"],
+                        "enum": [
+                          "provisioning",
+                          "live",
+                          "blank",
+                          "failed",
+                          "permission_denied",
+                          null
+                        ]
+                      },
+                      "egress_state": {
+                        "type": ["string", "null"],
+                        "enum": ["live", "dead_proxy", null]
+                      },
+                      "proxy_kind": {
+                        "type": "string",
+                        "enum": ["socks5", "openvpn", "wireguard"]
+                      },
+                      "proxy_udp_supported": {
+                        "type": "boolean"
+                      },
+                      "transport_mode_requested": {
+                        "type": "string",
+                        "enum": ["h2-only", "h2-and-h3"]
+                      },
+                      "transport_mode_active": {
+                        "type": "string",
+                        "enum": ["h2-only", "h2-and-h3"]
+                      },
+                      "safeguards_passed": {
+                        "type": "boolean"
+                      },
+                      "h3_connection_observed": {
+                        "type": ["boolean", "null"]
+                      },
+                      "h3_connection_count": {
+                        "type": ["integer", "null"],
+                        "minimum": 0
+                      },
+                      "exit_ip": {
+                        "type": ["string", "null"]
+                      },
+                      "exit_country": {
+                        "type": ["string", "null"]
+                      },
+                      "exit_timezone": {
+                        "type": ["string", "null"]
+                      },
+                      "webrtc_candidate_ips": {
+                        "type": ["array", "null"],
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "observed_at": {
+                        "type": ["string", "null"]
+                      }
+                    },
+                    "required": [
+                      "timestamp",
+                      "manual_input_available",
+                      "streaming_state",
+                      "egress_state",
+                      "proxy_kind",
+                      "proxy_udp_supported",
+                      "transport_mode_requested",
+                      "transport_mode_active",
+                      "safeguards_passed",
+                      "h3_connection_observed",
+                      "exit_ip",
+                      "exit_country",
+                      "exit_timezone",
+                      "webrtc_candidate_ips",
+                      "observed_at"
+                    ]
+                  },
+                  "error_event": {
+                    "type": ["object", "null"],
+                    "properties": {
+                      "timestamp": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "code": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{0,127}$"
+                      },
+                      "severity": {
+                        "type": "string",
+                        "enum": ["info", "warn", "error", "fatal"]
+                      },
+                      "summary": {
+                        "type": "string",
+                        "maxLength": 4096
+                      },
+                      "detail": {
+                        "type": ["string", "null"],
+                        "maxLength": 16384,
+                        "description": "Null when the server has nothing to add beyond `summary`."
+                      },
+                      "customer_actionable": {
+                        "type": "boolean",
+                        "description": "Whether a human can do anything about this failure."
+                      },
+                      "retryable": {
+                        "type": "boolean",
+                        "description": "Whether repeating the same call is worth trying."
+                      }
+                    },
+                    "required": [
+                      "timestamp",
+                      "code",
+                      "severity",
+                      "summary",
+                      "detail",
+                      "customer_actionable",
+                      "retryable"
+                    ],
+                    "description": "The most recent failure recorded for this session, at launch or while running. Null when none has been reported."
+                  }
+                },
+                "required": [
+                  "id",
+                  "account_id",
+                  "driftstack_session_id",
+                  "status",
+                  "closed_reason",
+                  "token_budget_total",
+                  "token_budget_remaining",
+                  "transcript_length",
+                  "closed_at",
+                  "created_by_user_id",
+                  "mode",
+                  "model",
+                  "stop_on_exit_ip_change",
+                  "pair_mode_state",
+                  "created_at",
+                  "updated_at"
+                ]
+              },
+              "intents": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["navigate"]
+                        },
+                        "url": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["kind", "url"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["interact"]
+                        },
+                        "action": {
+                          "type": "string",
+                          "enum": ["tap", "type", "scroll", "swipe", "press"]
+                        },
+                        "selector": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        },
+                        "sensitive": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["kind", "action"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["wait"]
+                        },
+                        "condition": {
+                          "type": "string",
+                          "enum": ["idle", "selector_visible"]
+                        },
+                        "selector": {
+                          "type": "string"
+                        },
+                        "timeoutMs": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["kind", "condition"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["capture"]
+                        },
+                        "capture": {
+                          "type": "string",
+                          "enum": ["screenshot", "dom_snapshot", "pdf"]
+                        }
+                      },
+                      "required": ["kind", "capture"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["scroll"]
+                        },
+                        "direction": {
+                          "type": "string",
+                          "enum": ["up", "down"]
+                        },
+                        "amount_px": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0
+                        }
+                      },
+                      "required": ["kind", "direction"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["behavioral_pause"]
+                        },
+                        "duration_ms": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "reading_word_count": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      },
+                      "required": ["kind"]
+                    }
+                  ]
+                }
+              },
+              "results": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["success"]
+                        },
+                        "intent": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["navigate"]
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind", "url"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["interact"]
+                                },
+                                "action": {
+                                  "type": "string",
+                                  "enum": ["tap", "type", "scroll", "swipe", "press"]
+                                },
+                                "selector": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                },
+                                "sensitive": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": ["kind", "action"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["wait"]
+                                },
+                                "condition": {
+                                  "type": "string",
+                                  "enum": ["idle", "selector_visible"]
+                                },
+                                "selector": {
+                                  "type": "string"
+                                },
+                                "timeoutMs": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["kind", "condition"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["capture"]
+                                },
+                                "capture": {
+                                  "type": "string",
+                                  "enum": ["screenshot", "dom_snapshot", "pdf"]
+                                }
+                              },
+                              "required": ["kind", "capture"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["scroll"]
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": ["up", "down"]
+                                },
+                                "amount_px": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                }
+                              },
+                              "required": ["kind", "direction"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["behavioral_pause"]
+                                },
+                                "duration_ms": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "reading_word_count": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["kind"]
+                            }
+                          ]
+                        },
+                        "summary": {
+                          "type": "string"
+                        },
+                        "captureId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["kind", "intent", "summary"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["failure"]
+                        },
+                        "intent": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["navigate"]
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind", "url"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["interact"]
+                                },
+                                "action": {
+                                  "type": "string",
+                                  "enum": ["tap", "type", "scroll", "swipe", "press"]
+                                },
+                                "selector": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                },
+                                "sensitive": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": ["kind", "action"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["wait"]
+                                },
+                                "condition": {
+                                  "type": "string",
+                                  "enum": ["idle", "selector_visible"]
+                                },
+                                "selector": {
+                                  "type": "string"
+                                },
+                                "timeoutMs": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["kind", "condition"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["capture"]
+                                },
+                                "capture": {
+                                  "type": "string",
+                                  "enum": ["screenshot", "dom_snapshot", "pdf"]
+                                }
+                              },
+                              "required": ["kind", "capture"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["scroll"]
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": ["up", "down"]
+                                },
+                                "amount_px": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                }
+                              },
+                              "required": ["kind", "direction"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["behavioral_pause"]
+                                },
+                                "duration_ms": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "reading_word_count": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["kind"]
+                            }
+                          ]
+                        },
+                        "reason": {
+                          "type": "string"
+                        },
+                        "diagnosis": {
+                          "type": "object",
+                          "properties": {
+                            "category": {
+                              "type": "string",
+                              "enum": [
+                                "element_not_found",
+                                "page_load_failed",
+                                "condition_not_met",
+                                "capture_failed",
+                                "scroll_failed",
+                                "session_error",
+                                "invalid_request",
+                                "result_too_large",
+                                "unknown"
+                              ]
+                            },
+                            "retryable": {
+                              "type": "boolean",
+                              "description": "True only when replaying the same step automatically is safe. False means do not auto-replay: the request may need correcting, or the prior action may have succeeded without reporting it."
+                            }
+                          },
+                          "required": ["category", "retryable"]
+                        }
+                      },
+                      "required": ["kind", "intent", "reason"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": ["confirmation_required"]
+                        },
+                        "intent": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["navigate"]
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": ["kind", "url"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["interact"]
+                                },
+                                "action": {
+                                  "type": "string",
+                                  "enum": ["tap", "type", "scroll", "swipe", "press"]
+                                },
+                                "selector": {
+                                  "type": "string"
+                                },
+                                "value": {
+                                  "type": "string"
+                                },
+                                "sensitive": {
+                                  "type": "boolean"
+                                }
+                              },
+                              "required": ["kind", "action"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["wait"]
+                                },
+                                "condition": {
+                                  "type": "string",
+                                  "enum": ["idle", "selector_visible"]
+                                },
+                                "selector": {
+                                  "type": "string"
+                                },
+                                "timeoutMs": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["kind", "condition"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["capture"]
+                                },
+                                "capture": {
+                                  "type": "string",
+                                  "enum": ["screenshot", "dom_snapshot", "pdf"]
+                                }
+                              },
+                              "required": ["kind", "capture"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["scroll"]
+                                },
+                                "direction": {
+                                  "type": "string",
+                                  "enum": ["up", "down"]
+                                },
+                                "amount_px": {
+                                  "type": "integer",
+                                  "exclusiveMinimum": 0
+                                }
+                              },
+                              "required": ["kind", "direction"]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": ["behavioral_pause"]
+                                },
+                                "duration_ms": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                },
+                                "reading_word_count": {
+                                  "type": "integer",
+                                  "minimum": 0
+                                }
+                              },
+                              "required": ["kind"]
+                            }
+                          ]
+                        },
+                        "category": {
+                          "type": "string",
+                          "enum": ["purchase", "payment", "account_deletion"]
+                        },
+                        "matchedText": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["kind", "intent", "category", "matchedText"]
+                    }
+                  ]
+                }
+              },
+              "ok": {
+                "type": "boolean",
+                "enum": [false]
+              },
+              "notice": {
+                "type": "string"
+              },
+              "stopped_during": {
+                "type": "string",
+                "enum": ["planning", "executing", "reading_page", "answering"]
+              },
+              "usage": {
+                "$ref": "#/components/schemas/AgentMessageUsage"
+              }
+            },
+            "required": ["kind", "session", "intents", "results", "ok", "notice", "stopped_during"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
                 "enum": ["logged-manual"]
               },
               "session": {
@@ -37430,7 +38233,7 @@
         },
         "responses": {
           "200": {
-            "description": "Turn result — discriminated by `kind`: plan-executed (intents + results + ok, plus `answer` when the turn read the page back to answer the question) / clarify (clarifying_question) / refuse (refuse_reason) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.",
+            "description": "Turn result — discriminated by `kind`: plan-executed (intents + results + ok, plus `answer` when the turn read the page back to answer the question) / clarify (clarifying_question) / refuse (refuse_reason) / stopped (the turn was stopped with POST /v1/agent-sessions/{id}/stop: the steps that ran, including one that was already running when the stop arrived, and a `notice` saying how far it got) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.",
             "content": {
               "application/json": {
                 "schema": {
@@ -38089,6 +38892,246 @@
           },
           "503": {
             "description": "AI chat is not activated on this deployment. The response carries the activation message (bring your own Anthropic key, or use the bundled AI budget).",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent-sessions/{id}/stop": {
+      "post": {
+        "summary": "Stop the agent session’s running turn (requires `write` or `account_owner`)",
+        "tags": ["agent-chat"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "No turn was running, so there was nothing to stop. Stopping is idempotent: calling it again is always safe.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["stop_requested", "no_turn_running"]
+                    },
+                    "session_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["status", "session_id"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "A turn was running and has been asked to stop. This returns at once and does not wait for the turn to wind down: the turn ends on its own POST /message response, which comes back as `kind: stopped` (or, if it was already finishing, as its ordinary result). A step that was already running when the stop arrived is given a short, bounded time to finish so its result is known; nothing is started after it. Once that response arrives the session accepts the next message.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["stop_requested", "no_turn_running"]
+                    },
+                    "session_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["status", "session_id"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent session not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Limit": {
+                "description": "Request capacity of the bucket this call was charged to.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in that bucket.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until that bucket refills.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Bucket": {
+                "description": "Which bucket was charged, e.g. `global` or `sessions:create`. Sent alongside the X-RateLimit-* aliases of the three headers above, kept for existing clients.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Legacy alias of `RateLimit-Limit`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Legacy alias of `RateLimit-Remaining`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Legacy alias of `RateLimit-Reset`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI chat is not activated on this deployment (the response carries the activation message), or the stop could not be confirmed just now — try again in a moment.",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",

@@ -186,6 +186,11 @@ export const DOC_NAV: DocNavSection[] = [
           { href: '/api/agent-sessions/#message', label: 'Message', method: 'POST' },
           { href: '/api/agent-sessions/#close', label: 'Close', method: 'DELETE' },
           {
+            href: '/api/agent-sessions/#stop-the-running-turn',
+            label: 'Stop the running turn',
+            method: 'POST',
+          },
+          {
             href: '/api/agent-sessions/#live-video-livekit',
             label: 'Live video (LiveKit)',
             method: 'POST',

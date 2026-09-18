@@ -232,6 +232,15 @@ const AGENT_MAIN_ROUTES: readonly ExpectedRoute[] = [
     '/v1/agent-sessions/:id/resume',
     'global',
   ),
+  // B2 — Stop charges the owner's `global` bucket, like resume; not the message
+  // bucket, which a customer may have spent on the very turn they want to stop.
+  route(
+    'agent-sessions.ts',
+    'registerAgentSessionsRoutes',
+    'post',
+    '/v1/agent-sessions/:id/stop',
+    'global',
+  ),
 ];
 
 const AGENT_SPLIT_ROUTES: readonly ExpectedRoute[] = [
@@ -345,6 +354,10 @@ const EXPECTED_OWNER_AUTHORITY = new Map<string, string>([
   ['agent-sessions.ts#registerAgentSessionsRoutes DELETE /v1/agent-sessions/:id', 'pre.accountId'],
   [
     'agent-sessions.ts#registerAgentSessionsRoutes POST /v1/agent-sessions/:id/resume',
+    'rec.accountId',
+  ],
+  [
+    'agent-sessions.ts#registerAgentSessionsRoutes POST /v1/agent-sessions/:id/stop',
     'rec.accountId',
   ],
   [
@@ -898,13 +911,14 @@ describe('session-route effective-owner rate-limit coverage invariant', () => {
 
   // 22 main since #7's `GET /v1/agent-sessions/:id/captures/:captureId`, which consumes
   // the effective-owner limiter against `rec.accountId` exactly as its siblings do.
-  it('pins exactly 14 direct routes and 24 live agent routes (22 main + 2 split)', () => {
+  // 23 since B2's `POST /v1/agent-sessions/:id/stop` (owner authority `rec.accountId`).
+  it('pins exactly 14 direct routes and 25 live agent routes (23 main + 2 split)', () => {
     expect(DIRECT_ROUTES).toHaveLength(14);
-    expect(AGENT_MAIN_ROUTES).toHaveLength(22);
+    expect(AGENT_MAIN_ROUTES).toHaveLength(23);
     expect(AGENT_SPLIT_ROUTES).toHaveLength(2);
-    expect(EXPECTED_ROUTES).toHaveLength(38);
-    // 38 with #7's captures route, whose owner authority is `rec.accountId`.
-    expect(EXPECTED_OWNER_AUTHORITY).toHaveLength(38);
+    expect(EXPECTED_ROUTES).toHaveLength(39);
+    // 39 with B2's stop route, whose owner authority is `rec.accountId`.
+    expect(EXPECTED_OWNER_AUTHORITY).toHaveLength(39);
     expect(audit(sources)).toEqual([]);
   });
 

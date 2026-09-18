@@ -5,7 +5,9 @@ Unsupported deployments return typed ``FeatureUnavailable`` errors.
 
 Discriminated message response: branch on ``["kind"]`` —
 ``plan-executed`` (carries ``intents`` + ``results`` + ``ok``),
-``clarify`` (``clarifying_question``), or ``refuse`` (``refuse_reason``).
+``clarify`` (``clarifying_question``), ``refuse`` (``refuse_reason``), or
+``stopped`` (the turn was stopped with ``stop()``: ``results`` are the steps
+that ran and ``notice`` says how far it got).
 """
 
 from __future__ import annotations
@@ -428,6 +430,28 @@ class AgentSessionsResource:
             json_body=coerce_body(body),
         )
 
+    def stop(self, agent_session_id: str) -> dict[str, Any]:
+        """Stop the session's running turn.
+
+        Returns as soon as the stop is requested; it does not wait for the turn
+        to wind down. The turn ends on its own ``message()`` call, which returns
+        ``{"kind": "stopped", ...}`` (or, if it was already finishing, its
+        ordinary result) — that response is the signal that the session will
+        accept the next message. A step that was already running when the stop
+        arrived is given a short, bounded time to finish so its result is known;
+        nothing is started after it.
+
+        Returns 202 ``{"status": "stop_requested", "session_id": ...}`` when a
+        turn was running, 200 ``{"status": "no_turn_running", ...}`` when none
+        was. Safe to call again. Raises ``NotFoundError`` (404) for an unknown
+        session (or one owned by another account).
+        """
+        return self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/stop",
+            json_body={},
+        )
+
 
 class AsyncAgentSessionsResource:
     """Async AI-chat agent-sessions resource."""
@@ -610,4 +634,16 @@ class AsyncAgentSessionsResource:
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/resume",
             json_body=coerce_body(body),
+        )
+
+    async def stop(self, agent_session_id: str) -> dict[str, Any]:
+        """Async mirror of :meth:`AgentSessionsResource.stop` — same semantics.
+
+        Returns 202 ``{"status": "stop_requested", ...}`` or 200
+        ``{"status": "no_turn_running", ...}``.
+        """
+        return await self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/stop",
+            json_body={},
         )

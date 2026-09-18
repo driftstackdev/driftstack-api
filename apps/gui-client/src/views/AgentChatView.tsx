@@ -48,6 +48,14 @@ export const REATTACHING_NOTICE = 'Reattaching to the previous session…';
  * this is implemented.
  */
 export const STILL_FINISHING_NOTICE = 'Still finishing the previous task…';
+/**
+ * B2 — between pressing Stop and the server ending the turn. The steps that ran
+ * stay on screen; the composer comes back the moment the turn's own response
+ * says it is over (or, bounded, when that cannot be confirmed).
+ */
+export const STOPPING_NOTICE = 'Stopping…';
+/** B2 — offered beside the still-finishing notice when a Stop could not be confirmed. */
+export const STOP_AGAIN_LABEL = 'Try stopping again';
 /** (l) #8 — appended when Enter was pressed during the reattach. */
 export const SEND_HELD_SUFFIX = 'Your message is kept; Send unlocks when it settles.';
 import { DEFAULT_ASSISTANT_TEMPLATES } from '../lib/assistant-templates';
@@ -59,6 +67,7 @@ import {
   chatTurnCount,
   summariseTurn,
   type StoredChat,
+  type TurnSummary,
 } from '../lib/chat-history';
 import { RelativeTime } from '../components/RelativeTime';
 import { listProxies, type ProxyConfig } from '../lib/proxies';
@@ -78,6 +87,33 @@ const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
 /** #31 — map a usage model id (e.g. `claude-opus-4-8`) to its human label
  *  ("Opus 4.8") for the per-turn usage badge; falls back to the raw id for a
  *  model not in the picker (older transcript / server-chosen model). */
+/**
+ * B2 — one history-rail line for a stored turn, with the stopped turn answered
+ * HERE before the shared summariser sees it.
+ *
+ * `summariseTurn` switches over the response kinds it knows and has no arm for
+ * `stopped`, so for a stopped turn it returns nothing at runtime and the rail's
+ * `summary.role` throws — taking the chat view down the moment a saved chat that
+ * holds a Stop is expanded. Answering it first keeps the rail up whatever that
+ * switch knows. Exported for its test.
+ */
+export function summariseChatTurn(turn: ChatTurn): TurnSummary {
+  const r = turn.role === 'agent' && turn.interrupted === undefined ? turn.response : undefined;
+  if (r?.kind === 'stopped') {
+    const n = r.results.length;
+    const ran = n === 0 ? 'nothing ran' : `${String(n)} step${n === 1 ? '' : 's'} ran`;
+    const flat = r.notice.replace(/\s+/g, ' ').trim();
+    const notice = flat.length > 60 ? `${flat.slice(0, 60)}\u2026` : flat;
+    return {
+      role: 'agent',
+      headline: `stopped \u2014 ${ran}: ${notice}`,
+      intentCount: n,
+      ok: false,
+    };
+  }
+  return summariseTurn(turn);
+}
+
 function modelLabel(id: string): string {
   return MODELS.find((m) => m.id === id)?.label ?? id;
 }
@@ -1188,22 +1224,18 @@ export function AgentChatView({
               <button
                 type="button"
                 onClick={() => {
+                  // B2 — Stop reaches the server: the task stops, the steps that
+                  // ran stay in the chat, and the composer returns when the
+                  // server says the turn is over. No toast — the button and the
+                  // caption below say "Stopping…" where the customer is looking.
                   chat.cancel();
-                  // P6 — Stop is a UI-only stop: the task keeps running and keeps
-                  // the chat busy, so the toast now says what that means for the
-                  // customer's NEXT action rather than only what happened to this
-                  // one. A customer told "stopped" and then refused on their next
-                  // send has been misled by the word.
-                  toasts.push({
-                    title: 'Stopped waiting',
-                    body: 'The task is still finishing. You can send the next one as soon as it does.',
-                    tone: 'info',
-                  });
                 }}
-                title="Stop waiting for this reply"
-                className="shrink-0 rounded border border-surface-divider px-3 py-2 text-sm hover:bg-surface-elevated"
+                // Pressing it again changes nothing, so it does not pretend it could.
+                disabled={chat.stopping === true}
+                title={chat.stopping === true ? STOPPING_NOTICE : 'Stop this task'}
+                className="shrink-0 rounded border border-surface-divider px-3 py-2 text-sm hover:bg-surface-elevated disabled:opacity-50"
               >
-                Stop
+                {chat.stopping === true ? STOPPING_NOTICE : 'Stop'}
               </button>
             ) : (
               <button
@@ -1240,12 +1272,33 @@ export function AgentChatView({
             )}
           </div>
           <p className="mx-auto mt-1 flex max-w-3xl items-center gap-2 text-2xs text-ink-muted">
-            {chat.stoppedTurnStillRunning ? (
+            {chat.sending && chat.stopping === true ? (
+              <span role="status" data-component="chat-stopping-notice">
+                {STOPPING_NOTICE}
+              </span>
+            ) : chat.stoppedTurnStillRunning ? (
               // P6 — said in the composer, not only in a hover title. The customer
               // who pressed Stop is looking right here when they decide whether to
               // type the next thing.
-              <span role="status" data-component="chat-still-finishing-notice">
-                {STILL_FINISHING_NOTICE}
+              <span
+                role="status"
+                data-component="chat-still-finishing-notice"
+                className="flex flex-wrap items-center gap-2"
+              >
+                <span>{STILL_FINISHING_NOTICE}</span>
+                {/* B2 — a Stop that could not be confirmed is not the last chance
+                    to stop the agent: the customer can ask again from here. */}
+                {chat.stopAgain !== undefined && (
+                  <button
+                    type="button"
+                    onClick={chat.stopAgain}
+                    disabled={chat.stopping === true}
+                    data-component="chat-stop-again"
+                    className="btn-secondary px-2 py-0.5 text-2xs disabled:opacity-50"
+                  >
+                    {chat.stopping === true ? STOPPING_NOTICE : STOP_AGAIN_LABEL}
+                  </button>
+                )}
               </span>
             ) : aiReady && chat.adopting ? (
               // (l) #8 / #12 — the held send says why, here, not only in a hover
@@ -1875,7 +1928,7 @@ function ChatRail({
                 {expanded.has(c.id) && (
                   <ol id={`chat-turns-${c.id}`} className="flex flex-col gap-1 py-1 pl-3 pr-1">
                     {c.turns.map((t) => {
-                      const summary = summariseTurn(t);
+                      const summary = summariseChatTurn(t);
                       return (
                         <li key={t.id} className="flex gap-1.5 text-2xs leading-snug">
                           <span
@@ -2129,6 +2182,36 @@ function AgentResponseBody({
       return (
         <div className="flex flex-col gap-1.5">
           <p className="text-sm text-status-error">{response.refuse_reason}</p>
+          {response.usage !== undefined && <UsageBadge usage={response.usage} />}
+        </div>
+      );
+    case 'stopped':
+      // B2 — the customer pressed Stop. The server's sentence says how far the
+      // turn got (and names a step whose outcome it could not confirm); the
+      // steps below are exactly what ran — nothing planned-but-not-run is shown.
+      return (
+        <div className="flex flex-col gap-1.5" data-component="stopped-turn">
+          <p className="whitespace-pre-wrap text-sm text-ink-primary" data-testid="turn-notice">
+            {response.notice}
+          </p>
+          {response.results.length > 0 && (
+            <>
+              <p className="section-label">Steps that ran</p>
+              <ol className="flex flex-col gap-1">
+                {response.results.map((r, i) => (
+                  <PlanStep
+                    key={i}
+                    result={r}
+                    denied={denied}
+                    approved={approved}
+                    sessionId={sessionId}
+                    baseUrl={baseUrl}
+                    apiKey={apiKey}
+                  />
+                ))}
+              </ol>
+            </>
+          )}
           {response.usage !== undefined && <UsageBadge usage={response.usage} />}
         </div>
       );

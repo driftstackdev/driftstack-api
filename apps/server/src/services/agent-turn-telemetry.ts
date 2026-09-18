@@ -470,6 +470,11 @@ function classifyFromResponse(status: number, body: unknown): TurnClassification
   if (kind === 'logged-manual') return { ...base, outcome: 'manual_note', deathReason: 'none' };
   if (kind === 'clarify') return { ...base, outcome: 'clarified', deathReason: 'none' };
   if (kind === 'refuse') return { ...base, outcome: 'refused', deathReason: 'model_refused' };
+  // B2 — a stopped turn answers 200 like a completed one; without this a
+  // stopped body reached here would be counted as a completion.
+  if (kind === 'stopped') {
+    return { ...base, outcome: 'stopped', deathReason: 'none', customerStopped: true };
+  }
   if (kind === 'plan-executed' && flag(body, 'ok') !== true) {
     return { ...base, outcome: 'failed', deathReason: 'harness_error_unclassified' };
   }
@@ -648,6 +653,15 @@ export function classifyTurn(args: ClassifyTurnArgs): TurnClassification {
             deathReason: 'control_taken_mid_turn',
             customerStopped: true,
           };
+    case 'stopped':
+      // B2 — the customer pressed Stop and the turn honoured it. `stopped` is the
+      // outcome that means exactly that ("the customer interrupted it
+      // mid-turn"), and `customer_stopped` is the column that says a person did
+      // it. The death reason is `none` because nothing killed the task: the
+      // customer chose to end it. That keeps a Stop apart from a takeover
+      // (`control_taken_mid_turn`) without widening the table's CHECK list,
+      // which would need a migration for a word this pair already expresses.
+      return { ...base, outcome: 'stopped', deathReason: 'none', customerStopped: true };
     case 'logged-manual':
       return { ...base, outcome: 'manual_note', deathReason: 'none' };
     default: {

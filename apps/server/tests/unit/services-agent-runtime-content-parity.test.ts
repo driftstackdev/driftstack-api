@@ -75,7 +75,11 @@ describe('services/agent-runtime content parity', () => {
     expect(body).toMatch(/const consumesAccountSlot = admission\.kind === 'ai-control';/);
     expect(body).toMatch(/currentForAccount >= this\.maxConcurrentTurnsPerAccount/);
     expect(body).toMatch(/this\.activeTurnAccountCounts\.delete\(session\.accountId\)/);
-    expect(body).toMatch(/return await this\.runExclusiveTurn\(args, session, admission\);/);
+    // The SAME snapshot that decided slot ownership is what the turn runs on; the
+    // B2 stop signal rides alongside it and changes nothing about which snapshot.
+    expect(body).toMatch(
+      /return await this\.runExclusiveTurn\(args, session, admission, controller\.signal\);/,
+    );
   });
 
   it("v2-#4 Q.1.e AgentDecomposerUsageRecorder framing pinned: 'per-turn usage recorder. AgentRuntime calls this after every decomposer.decompose() that returns a usage block. Bootstrap wires this to a usage_records writer when the Drizzle dependency direction is permitted. When unwired, AgentRuntime silently skips recording — the dashboard usage page only reflects what we successfully persisted, so a missing wire shows as missing cost data rather than a synthesized zero.' — pinned so the optional-recorder + silent-skip-when-unwired + no-synthesized-zero contract all stay documented", () => {

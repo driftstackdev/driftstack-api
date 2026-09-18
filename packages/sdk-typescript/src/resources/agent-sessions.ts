@@ -408,6 +408,28 @@ export type AgentMessageResponse =
     }
   | {
       /**
+       * The turn was stopped with {@link AgentSessionsResource.stop} and ended
+       * where it was asked to. `results` are the steps that ran, in order —
+       * including one that was already running when the stop arrived, with its
+       * real result, or a failure saying its outcome could not be confirmed
+       * (check the page before repeating it). `intents` are the steps that ran,
+       * never the ones that were still to come. `notice` is one sentence saying
+       * how far the turn got. The session accepts the next message as soon as
+       * this response arrives.
+       */
+      kind: 'stopped';
+      session: AgentSession;
+      intents: ReadonlyArray<AgentIntent>;
+      results: ReadonlyArray<AgentIntentResult>;
+      /** Always false: a stopped turn did not finish its task. */
+      ok: false;
+      notice: string;
+      /** What the turn was doing when it noticed the stop. */
+      stopped_during: 'planning' | 'executing' | 'reading_page' | 'answering';
+      usage?: AgentUsage;
+    }
+  | {
+      /**
        * Arc 2 sub-slice 8.6 (v2-#8) — manual-mode pass-through. The
        * runtime did NOT call the decomposer; the customer's
        * user_message was recorded as a role='operator' transcript
@@ -796,6 +818,29 @@ export class AgentSessionsResource {
       method: 'POST',
       path: `/v1/agent-sessions/${encodeURIComponent(id)}/resume`,
       body,
+    });
+  }
+
+  /**
+   * Stop the session's running turn. Returns as soon as the stop is requested;
+   * it does not wait for the turn to wind down. The turn ends on its own
+   * `message()` call, which resolves with `kind: 'stopped'` (or, if it was
+   * already finishing, its ordinary result) — that response, not this one, is
+   * the signal that the session will accept the next message.
+   *
+   * A step that was already running when the stop arrived is allowed to finish
+   * (for a short, bounded time) so its result is known; nothing is started after it.
+   *
+   * Returns 202 `{ status: 'stop_requested', session_id }` when a turn was
+   * running, 200 `{ status: 'no_turn_running', session_id }` when none was.
+   * Safe to call again.
+   *   - 404 — session unknown (or cross-account; existence not leaked)
+   */
+  stop(id: string): Promise<{ status: 'stop_requested' | 'no_turn_running'; session_id: string }> {
+    return this.http.request({
+      method: 'POST',
+      path: `/v1/agent-sessions/${encodeURIComponent(id)}/stop`,
+      body: {},
     });
   }
 }

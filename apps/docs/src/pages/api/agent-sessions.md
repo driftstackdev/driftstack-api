@@ -347,7 +347,21 @@ Read-only `capture` remains eligible for bounded automatic replay.
   "kind": "logged-manual",
   "session": { ...AgentSession }
 }
+
+// "stopped" — the turn was stopped with POST /v1/agent-sessions/{id}/stop
+{
+  "kind": "stopped",
+  "session": { ...AgentSession },
+  "intents": [ { "kind": "navigate", "url": "https://example.com" } ],
+  "results": [ { "kind": "success", "intent": { ... }, "summary": "navigated" } ],
+  "ok": false,
+  "notice": "Stopped after step 1 of 3, as you asked. The steps above are what ran; nothing after them was sent, and the task is not finished.",
+  "stopped_during": "executing"
+}
 ```
+
+A `stopped` turn lists only the steps that **ran** — `intents` never includes a
+step that was still to come. See [Stop the running turn](#stop-the-running-turn).
 
 Paused and closed sessions return `409 Conflict`; resume a paused session, but
 replace a closed one. If close or pause wins after model or
@@ -370,6 +384,59 @@ refused and the session is auto-closed with
 `DELETE /v1/agent-sessions/{id}`
 
 Sets `status='closed'` with `closed_at` stamped. Idempotent.
+
+## Stop the running turn
+
+`POST /v1/agent-sessions/{id}/stop`
+
+Stops the turn a `POST /message` started, without closing the session. Anyone
+who may send a message to the session may stop its turn; a session you cannot
+access answers `404`, as it does everywhere else. The request body is empty
+(`{}`).
+
+It **requests** the stop and returns at once — it does not wait for the turn to
+wind down:
+
+```json
+// 202 — a turn was running and has been asked to stop
+{ "status": "stop_requested", "session_id": "<id>" }
+
+// 200 — nothing was running, so there was nothing to stop
+{ "status": "no_turn_running", "session_id": "<id>" }
+```
+
+Stopping is idempotent: calling it again, or calling it when nothing is
+running, is always safe.
+
+A stop sent right after the message is covered too: the turn counts as running
+from the moment the message is accepted, before any planning starts. If you get
+`200 no_turn_running` while your own `POST /message` is still waiting for its
+answer, either the turn has just finished (its response is on its way) or the
+message has not reached the turn yet; asking again a second later is safe and
+settles which. A `503` means we could not confirm the stop; try again.
+
+The turn itself ends on **its own** `POST /message` response, which comes back
+as `kind: "stopped"` with the steps that ran and a `notice` saying how far it
+got (or, if the turn was already finishing, as its ordinary result). That
+response — not the `202` — is your signal that the session will accept the next
+message; send it after the response arrives. On the streaming lane the terminal
+`response` frame carries the `stopped` body, preceded by a `notice` frame with
+the same sentence.
+
+What happens to the work in progress:
+
+- **Nothing new starts.** No further step is sent to the browser and no further
+  planning call is made once the stop is observed.
+- **A step already running is not abandoned blind.** If a tap, a typed value or
+  a navigation was already on its way to the browser, the turn waits a short,
+  bounded time (about fifteen seconds) for its result and reports it. If it does
+  not answer in time, the step is reported as a failure with
+  `diagnosis.category: "unknown"`: it may have happened. Check the page before
+  doing it again. A step that only reads or waits is cut short at once.
+- **A model call in progress is ended**, and what it used is still counted in
+  `usage` and against the session's token budget.
+- **The read-back is skipped.** If every step had already run, the turn ends
+  without answering the question; the `notice` says so.
 
 ## Live video (LiveKit)
 
@@ -994,7 +1061,7 @@ Filter via
 |    402 | bundled-llm-budget-exhausted | bundled-LLM monthly cap reached                                                                                                                                                                                                                                          |
 |    402 | bundled-llm-consent-required | deployment has bundled-LLM but customer hasn't opted in                                                                                                                                                                                                                  |
 |    502 | byok-anthropic-required      | no BYOK + no consent + no fallback                                                                                                                                                                                                                                       |
-|    503 | feature-unavailable          | no BYOK or bundled-LLM provider is available in the deployment                                                                                                                                                                                                           |
+|    503 | feature-unavailable          | no BYOK or bundled-LLM provider is available in the deployment; on Stop, also when the stop could not be confirmed just now (try again)                                                                                                                                  |
 
 The pair-mode transition errors are typed in all
 three SDKs: `PairModeStateInvalidTransitionError`. Branch on

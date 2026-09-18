@@ -165,6 +165,36 @@ describe('summariseTurn', () => {
     expect(summariseTurn(t).headline).toBe('declined: asks for a password');
   });
 
+  it('says how far a STOPPED turn got — the steps that ran, not "no response recorded"', () => {
+    // The stopped kind shipped once with no case here; the view then read
+    // `summary.role` of undefined and the history rail crashed. The case now
+    // exists and the switch is exhaustive, and this arm fails if either goes.
+    const t: ChatTurn = {
+      id: 6,
+      role: 'agent',
+      response: {
+        kind: 'stopped',
+        session: session(),
+        intents: [{ kind: 'navigate', url: 'https://example.com/' }],
+        results: [
+          {
+            kind: 'success',
+            intent: { kind: 'navigate', url: 'https://example.com/' },
+            summary: 'navigated to https://example.com/',
+          },
+        ],
+        ok: false,
+        notice: 'Stopped, as you asked, after the step that was running.',
+        stopped_during: 'executing',
+      },
+    };
+    const s = summariseTurn(t);
+    expect(s.role).toBe('agent');
+    expect(s.headline).toMatch(/^stopped \u2014 1 step ran: Stopped, as you asked/);
+    expect(s.intentCount).toBe(1);
+    expect(s.ok).toBe(false);
+  });
+
   it('says who was driving on a manual turn', () => {
     const t: ChatTurn = {
       id: 5,

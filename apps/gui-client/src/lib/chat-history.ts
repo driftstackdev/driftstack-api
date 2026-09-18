@@ -86,8 +86,31 @@ export function summariseTurn(turn: ChatTurn): TurnSummary {
       return { role: 'agent', headline: `asked: ${oneLine(r.clarifying_question, 70)}` };
     case 'refuse':
       return { role: 'agent', headline: `declined: ${oneLine(r.refuse_reason, 70)}` };
+    case 'stopped': {
+      // The customer pressed Stop and the server ended the turn. Its body carries
+      // the steps that really ran, so the row says how far it got — the thing a
+      // customer scanning the history for "what did the agent do before I
+      // stopped it?" needs — rather than the "no response recorded" a missing
+      // case would have fallen to.
+      const n = r.results.length;
+      const ran = n === 0 ? 'nothing ran' : `${String(n)} step${n === 1 ? '' : 's'} ran`;
+      return {
+        role: 'agent',
+        headline: `stopped \u2014 ${ran}: ${oneLine(r.notice, 60)}`,
+        intentCount: n,
+        ok: false,
+      };
+    }
     case 'logged-manual':
       return { role: 'agent', headline: 'manual mode \u2014 you drove this turn' };
+    default: {
+      // A response kind this rail does not know yet must fail the BUILD, not
+      // render as undefined: the stopped kind shipped once without a case here,
+      // and the view crashed reading `summary.role` of nothing.
+      const _exhaustive: never = r;
+      void _exhaustive;
+      return { role: 'agent', headline: 'response recorded' };
+    }
   }
 }
 

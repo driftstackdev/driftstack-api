@@ -246,6 +246,7 @@ const EXPECTED_SCOPED_ROUTES: readonly string[] = [
   'POST /v1/agent-sessions/:id/message [write]',
   'POST /v1/agent-sessions/:id/mode [write]',
   'POST /v1/agent-sessions/:id/resume [write]',
+  'POST /v1/agent-sessions/:id/stop [write]',
   'POST /v1/agent-sessions/:id/takeover [write]',
   'POST /v1/billing/checkout-session [admin:billing]',
   'POST /v1/billing/crypto-checkout [admin:billing]',

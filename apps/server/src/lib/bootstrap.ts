@@ -102,6 +102,10 @@ import { BundledLlmService } from '../services/bundled-llm.js';
 import { DrizzleBundledLlmRepo } from '../db/bundled-llm-repo.js';
 import { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
 import { RedisPairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
+import {
+  agentTurnStopRedisAdapter,
+  RedisAgentTurnStopChannel,
+} from '../services/agent-turn-stop-channel.js';
 import { InMemoryPairModeHeartbeatTracker } from '../services/agent-pair-mode-heartbeat.js';
 import { PairModeHeartbeatSweep } from '../services/agent-pair-mode-heartbeat-sweep.js';
 import { MetricsRegistry, METRIC_NAMES } from '../services/metrics-registry.js';
@@ -1667,6 +1671,11 @@ export async function createProductionDeps(
     logger,
     // W592 — the curated pattern list (founder/AUP via env). Empty ⇒ no-op.
     ...(refusalPatterns.length > 0 ? { refusalPatterns } : {}),
+    // B2 — Stop across processes, on the same Redis client as the pair-mode
+    // lock. One API process today, so every Stop is answered from memory; this
+    // is what keeps a second process from answering "nothing is running" for a
+    // turn that is running next door.
+    turnStopChannel: new RedisAgentTurnStopChannel(agentTurnStopRedisAdapter(redis)),
   });
   // Q.1.c — per-session BYOK key cache. Pure in-memory; wired
   // unconditionally so the route can stash decrypted plaintexts

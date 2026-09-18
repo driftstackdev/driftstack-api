@@ -140,6 +140,8 @@ import {
   AgentSessionSchema,
   ResumeSessionRequestSchema,
   ResumeSessionResponseSchema,
+  StopAgentTurnRequestSchema,
+  StopAgentTurnResponseSchema,
   AgentIntentSchema,
   IntentResultSchema,
   RecipeSchema,
@@ -5372,6 +5374,18 @@ function buildRegistry(): OpenAPIRegistry {
         refuse_reason: z.string(),
         usage: AgentMessageUsageOpenApi.optional(),
       }),
+      // B2 — the turn was stopped (POST /v1/agent-sessions/{id}/stop) and ended
+      // where it was asked to. `intents` and `results` are the steps that RAN.
+      z.object({
+        kind: z.literal('stopped'),
+        session: AgentSessionSchema,
+        intents: z.array(AgentIntentSchema),
+        results: z.array(IntentResultSchema),
+        ok: z.literal(false),
+        notice: z.string(),
+        stopped_during: z.enum(['planning', 'executing', 'reading_page', 'answering']),
+        usage: AgentMessageUsageOpenApi.optional(),
+      }),
       z.object({
         kind: z.literal('logged-manual'),
         session: AgentSessionSchema,
@@ -5464,7 +5478,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       200: {
         description:
-          'Turn result — discriminated by `kind`: plan-executed (intents + results + ok, plus `answer` when the turn read the page back to answer the question) / clarify (clarifying_question) / refuse (refuse_reason) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.',
+          'Turn result — discriminated by `kind`: plan-executed (intents + results + ok, plus `answer` when the turn read the page back to answer the question) / clarify (clarifying_question) / refuse (refuse_reason) / stopped (the turn was stopped with POST /v1/agent-sessions/{id}/stop: the steps that ran, including one that was already running when the stop arrived, and a `notice` saying how far it got) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.',
         content: {
           'application/json': {
             schema: AgentMessageResponseOpenApi,
@@ -5614,6 +5628,42 @@ function buildRegistry(): OpenAPIRegistry {
       503: {
         description:
           'AI chat is not activated on this deployment. The response carries the activation message (bring your own Anthropic key, or use the bundled AI budget).',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
+    },
+  });
+  // B2 — stop the running turn.
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/agent-sessions/{id}/stop',
+    summary: 'Stop the agent session’s running turn (requires `write` or `account_owner`)',
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      body: {
+        required: false,
+        content: {
+          'application/json': { schema: StopAgentTurnRequestSchema },
+        },
+      },
+    },
+    responses: {
+      202: {
+        description:
+          'A turn was running and has been asked to stop. This returns at once and does not wait for the turn to wind down: the turn ends on its own POST /message response, which comes back as `kind: stopped` (or, if it was already finishing, as its ordinary result). A step that was already running when the stop arrived is given a short, bounded time to finish so its result is known; nothing is started after it. Once that response arrives the session accepts the next message.',
+        content: { 'application/json': { schema: StopAgentTurnResponseSchema } },
+      },
+      200: {
+        description:
+          'No turn was running, so there was nothing to stop. Stopping is idempotent: calling it again is always safe.',
+        content: { 'application/json': { schema: StopAgentTurnResponseSchema } },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
+      503: {
+        description:
+          'AI chat is not activated on this deployment (the response carries the activation message), or the stop could not be confirmed just now — try again in a moment.',
         content: problemContent,
         headers: requestIdHeader,
       },

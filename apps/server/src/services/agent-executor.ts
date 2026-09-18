@@ -131,6 +131,18 @@ export interface ExecutorRunResult {
    * transcript publication and returns an honest authority conflict. */
   authorityLost?: boolean;
   /**
+   * B2 — the customer pressed Stop and this run honoured it: nothing was
+   * dispatched after the stop was observed. Every listed result settled — a step
+   * that was already on its way to the device when Stop arrived is waited for
+   * and recorded (see {@link STOP_IN_FLIGHT_GRACE_MS}), because a click whose
+   * outcome is unknown must never be reported as a click that did not happen.
+   *
+   * Distinct from `authorityLost`: that is control changing hands and the turn's
+   * words must not be published; this is the owner of the turn asking it to
+   * stop, and the turn reports exactly what ran.
+   */
+  stopped?: boolean;
+  /**
    * P1 — this result is the MERGE of a run that failed and a re-planned run that
    * then finished the job. No single `execute()` ever sets it; only
    * `mergeExecutorRuns` does.
@@ -265,6 +277,23 @@ export interface ExecuteArgs {
   /** Internal terminal fence. Executors await it immediately before each
    * intent dispatch; false/throw stops the undispatched suffix fail-closed. */
   shouldContinue?: () => boolean | Promise<boolean>;
+  /**
+   * B2 — aborts when the customer presses Stop.
+   *
+   * Checked before every dispatch, so nothing new reaches the device once the
+   * stop is observed. It does NOT abandon a dispatch already in flight when the
+   * step can change the page: that step's result is awaited, bounded by
+   * {@link STOP_IN_FLIGHT_GRACE_MS}, and recorded — outcome-unknown if the bound
+   * runs out. A read-only step (a wait, a capture, an element wait) is cut short
+   * at once, since abandoning it cannot leave the page in a state nobody knows.
+   * The result then carries `stopped: true`.
+   *
+   * Kept apart from `shouldContinue` on purpose: a false `shouldContinue` means
+   * control changed hands and ends the run as `authorityLost`, which the runtime
+   * publishes nothing for. A stop is the turn's owner asking, and the turn must
+   * say what ran.
+   */
+  signal?: AbortSignal;
   /**
    * P2 — the session's credential bag, for resolving the plan's
    * `{{credential:name}}` placeholders at dispatch time.
@@ -403,6 +432,80 @@ export function substituteCredentials(
   };
 }
 
+/**
+ * B2 — how long, AFTER the customer presses Stop, a step that was already on its
+ * way to the device is waited for before it is recorded as outcome-unknown.
+ *
+ * WHY WAIT AT ALL. A tap, a typed value or a navigation that has left the server
+ * may already have happened on the page. Abandoning it would report "stopped
+ * before step 4" over a form that was in fact submitted, and the customer — told
+ * it did not happen — would send it again.
+ *
+ * WHY FIFTEEN SECONDS. A healthy gesture answers in one to three seconds and a
+ * navigation inside the page-load threshold the element wait already uses (see
+ * the control-plane executor's DEFAULT_ELEMENT_APPEAR_WAIT_MS: "poor" starts at
+ * 4s) plus the round trip, so fifteen seconds covers a slow-but-alive step with
+ * room to spare. Past it the step is not answering, and the customer watching
+ * "Stopping…" is better served by an honest "I could not confirm whether this
+ * happened — check the page" than by waiting out the dispatch's own ceiling,
+ * which for a navigation is over a minute.
+ */
+export const STOP_IN_FLIGHT_GRACE_MS = 15_000;
+
+/**
+ * B2 — the sentence a step carries when Stop arrived while it was running and its
+ * result did not come back within {@link STOP_IN_FLIGHT_GRACE_MS}. Customer-visible:
+ * it says what is known (the step was sent) and what is not (whether it landed),
+ * and the one thing to do about it.
+ */
+export const STOPPED_OUTCOME_UNKNOWN_REASON =
+  'this step was already running when the task was stopped, and I could not confirm whether it happened — check the page before doing it again';
+
+/**
+ * B2 — the sentence a READ-ONLY step carries when Stop cut it short. Reading the
+ * page or waiting for something to appear changes nothing on the site, so "it did
+ * not finish" is the whole truth.
+ */
+export const STOPPED_BEFORE_FINISHING_REASON = 'the task was stopped before this step finished';
+
+/**
+ * Whether the customer has pressed Stop. A function rather than an inline
+ * `signal?.aborted` because the answer changes across every `await`, and an
+ * inline read after an earlier one is narrowed by the compiler to its old value.
+ */
+export function stopRequested(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
+}
+
+/**
+ * `work`, or the abort of `signal` if that comes first. The work itself is NOT
+ * cancelled — the caller decides whether abandoning it is safe — and the abort
+ * listener is removed as soon as either settles, so a long turn that races many
+ * dispatches against one signal does not accumulate listeners on it.
+ */
+export async function raceAbort<T>(
+  work: Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<{ aborted: false; value: T } | { aborted: true }> {
+  if (signal === undefined) return { aborted: false, value: await work };
+  if (signal.aborted) return { aborted: true };
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<{ aborted: true }>((resolve) => {
+    onAbort = () => {
+      resolve({ aborted: true });
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([
+      work.then((value) => ({ aborted: false as const, value })),
+      aborted,
+    ]);
+  } finally {
+    if (onAbort !== undefined) signal.removeEventListener('abort', onAbort);
+  }
+}
+
 export async function executionMayContinue(check: ExecuteArgs['shouldContinue']): Promise<boolean> {
   if (check === undefined) return true;
   try {
@@ -437,6 +540,9 @@ export interface AgentExecutor {
   observe?(
     sessionId: string,
     shouldContinue?: ExecuteArgs['shouldContinue'],
+    /** B2 — Stop cuts the read short: it changes nothing on the page, so
+     *  abandoning it is safe, and it resolves null like any other failed read. */
+    signal?: AbortSignal,
   ): Promise<string | null>;
 
   /**
@@ -453,6 +559,8 @@ export interface AgentExecutor {
   observeDigest?(
     sessionId: string,
     shouldContinue?: ExecuteArgs['shouldContinue'],
+    /** B2 — same as {@link observe}'s. */
+    signal?: AbortSignal,
   ): Promise<string | null>;
 }
 
@@ -479,6 +587,9 @@ export class StubAgentExecutor implements AgentExecutor {
     // local grant without mutating the caller-owned set.
     const approved = new Set(args.approvedConsequentialActions ?? []);
     for (const [planIndex, intent] of args.plan.intents.entries()) {
+      // B2 — the same stop contract as the control-plane executor: nothing is
+      // started once Stop has been observed.
+      if (args.signal?.aborted === true) return { results, ok: false, stopped: true };
       if (!(await executionMayContinue(args.shouldContinue))) {
         return { results, ok: false, authorityLost: true };
       }
@@ -597,6 +708,9 @@ export class RealAgentExecutor implements AgentExecutor {
     const results: IntentResult[] = [];
     const approved = new Set(args.approvedConsequentialActions ?? []);
     for (const intent of args.plan.intents) {
+      // B2 — never dispatch after Stop. (Not wired in production; kept honest so a
+      // re-wire does not quietly ignore the customer's Stop.)
+      if (args.signal?.aborted === true) return { results, ok: false, stopped: true };
       if (!(await executionMayContinue(args.shouldContinue))) {
         return { results, ok: false, authorityLost: true };
       }
@@ -873,7 +987,15 @@ export function runResultToTranscriptEntry(
       lines.push(`✗ ${r.intent.kind} — ${sanitizeTranscriptText(r.reason)}`);
     }
   }
-  if (runResult.awaitingConfirmation) {
+  if (runResult.stopped === true) {
+    // B2 — FIRST, because a stop can leave a ✗ row behind (a step Stop cut short)
+    // and "(plan halted on failure)" would tell the next turn's planner a step
+    // FAILED when the customer asked it to stop. The next planner reads this line
+    // as history: the task is unfinished, and nothing past these steps ran.
+    lines.push(
+      '(stopped by the customer — nothing after the steps above was sent to the page; the task is NOT finished)',
+    );
+  } else if (runResult.awaitingConfirmation) {
     lines.push('(plan paused — awaiting your confirmation of a consequential action)');
   } else if (runResult.recoveredAfterReplan === true && runResult.ok) {
     // P1 — a failure row is present and the turn still finished, because the

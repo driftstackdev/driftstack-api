@@ -34,7 +34,12 @@ import type {
   ExecutorRunResult,
   IntentResult,
 } from './agent-executor.js';
-import { runResultToTranscriptEntry, sanitizeTranscriptText } from './agent-executor.js';
+import {
+  runResultToTranscriptEntry,
+  sanitizeTranscriptText,
+  STOPPED_OUTCOME_UNKNOWN_REASON,
+  stopRequested,
+} from './agent-executor.js';
 import { intentReplayMayDuplicateEffect } from './agent-intent-result.js';
 import type {
   AgentSessionAuthoritySnapshot,
@@ -42,6 +47,7 @@ import type {
   AgentSessionsRepo,
 } from './agent-sessions.js';
 import type { AgentSessionEventBus } from './agent-session-event-bus.js';
+import type { AgentTurnStopChannel } from './agent-turn-stop-channel.js';
 import { METRIC_NAMES } from './metrics-registry.js';
 import { screenTaskForRefusal, type RefusalPattern } from './task-refusal.js';
 
@@ -123,6 +129,28 @@ export interface RunTurnArgs {
    * the same request. Direct/test callers may omit it; the runtime then admits
    * exactly the current durable lane itself. */
   admission?: AgentTurnAdmission;
+  /**
+   * B2 — the window the route opened for this request when it admitted it (see
+   * {@link AgentRuntime.openTurnStopWindow}). A Stop that arrived during the
+   * route's own preflight has already aborted it, and the turn then ends
+   * `stopped` at its first check. Omitted, the turn makes its own controller.
+   */
+  stopWindow?: AgentTurnStopWindow;
+}
+
+/**
+ * B2 — a request that has been admitted but whose turn may not have started
+ * yet. Between the route admitting a message and the runtime taking the
+ * session's turn slot there are several awaits (the idempotency receipt, key and
+ * spend checks, runTurn's own reads); a Stop pressed right after Send lands
+ * there. Without a window it would find no running turn, answer "nothing to
+ * stop", and the turn would then run to completion.
+ */
+export interface AgentTurnStopWindow {
+  /** Aborted by a Stop for this session while the window is open. */
+  readonly signal: AbortSignal;
+  /** Forget the window. Call once the request has finished, in a `finally`. */
+  close(): void;
 }
 
 /**
@@ -366,6 +394,34 @@ export type RunTurnResult =
       executor?: ExecutorRunResult;
     }
   | {
+      /**
+       * B2 — the customer pressed Stop and the turn honoured it.
+       *
+       * A NORMAL ENDING, not an error: the customer asked for it, and what they
+       * need back is exactly what ran — the steps, including one that was already
+       * running when Stop arrived (recorded with its real result, or as
+       * outcome-unknown; never as "not done"). The transcript carries the same
+       * account, so the next turn's planner knows the task was left unfinished.
+       * The session's turn slot is released as this returns, so the customer's
+       * next message is accepted.
+       */
+      kind: 'stopped';
+      session: AgentSessionRecord;
+      /** What the turn was doing when the stop was observed. */
+      stoppedDuring: AgentTurnStopPhase;
+      /** Every step that ran, in order. Absent when the turn stopped before any
+       *  plan was run. */
+      executor?: ExecutorRunResult;
+      /** The steps planned so far this turn, counting the ones that ran. */
+      stepsPlanned: number;
+      /** Customer-visible: how far the turn got, and what to check. */
+      notice: string;
+      /** The turn's first model call's usage, as on every other result kind;
+       *  every call's own row was recorded as it settled or was cut short. */
+      usage?: DecomposeUsage;
+      tokensConsumed?: number;
+    }
+  | {
       // Arc 2 sub-slice 8.6 (v2-#8) — manual mode pass-through.
       // The user_message was recorded as an actor='operator' transcript
       // entry; no decompose / executor ran. Customer's gui-client is
@@ -531,7 +587,35 @@ export interface AgentRuntimeDeps {
     warn?: (obj: Record<string, unknown>, msg: string) => void;
     error?: (obj: Record<string, unknown>, msg: string) => void;
   };
+  /**
+   * B2 — the cross-process half of Stop (see agent-turn-stop-channel.ts). When
+   * wired, every AI turn claims itself there and polls it for a stop recorded
+   * by another process; `requestTurnStop` asks it when this process does not
+   * hold the turn. Unwired (tests, a single dev process), Stop is answered from
+   * this process's own registry, which is the whole truth when it is the only
+   * process there is.
+   */
+  turnStopChannel?: AgentTurnStopChannel;
+  /** B2 — how often a running turn polls `turnStopChannel`. Default 1000ms. */
+  turnStopPollMs?: number;
 }
+
+/** B2 — see {@link AgentRuntimeDeps.turnStopPollMs}. One second is the delay a
+ *  customer can wait after pressing Stop without wondering whether it worked; the
+ *  cost is one key read per second per running turn. */
+export const TURN_STOP_POLL_MS = 1_000;
+
+/** B2 — the most a turn's start waits on its cross-process claim. The claim is a
+ *  convenience for a second process; a slow store must not delay the turn. */
+const TURN_STOP_CLAIM_DEADLINE_MS = 500;
+
+/** B2 — the most a Stop waits on the cross-process store before answering 503.
+ *  The route must answer quickly; a store that has not answered by now is
+ *  treated as one that could not be asked, never as "nothing is running". */
+export const TURN_STOP_REQUEST_DEADLINE_MS = 1_500;
+
+/** B2 — what {@link AgentRuntime.requestTurnStop} found. */
+export type TurnStopRequestOutcome = 'stop_requested' | 'no_turn_running';
 
 /**
  * Billing-integrity hardening — bounded retry for the bundled-LLM cost
@@ -748,6 +832,75 @@ export const TURN_LOOP_STOP_SENTENCES: Readonly<Record<TurnLoopStopReason, strin
 };
 
 /**
+ * B2 — what a turn was doing when it observed the customer's Stop. `planning`
+ * covers the look before a plan and the plan call itself; `reading_page` and
+ * `answering` are the read-back, which only runs after every step has.
+ */
+export type AgentTurnStopPhase = 'planning' | 'executing' | 'reading_page' | 'answering';
+
+/**
+ * B2 — the sentence a stopped turn tells the customer.
+ *
+ * ⛔ CUSTOMER-VISIBLE COPY, and it has one job: say exactly how far the turn got,
+ * so the customer can decide what to do next without guessing. A step that was
+ * already running when Stop arrived and did not answer in time is named as
+ * UNCONFIRMED — telling someone a submit did not happen when it may have is how
+ * it gets submitted twice.
+ */
+export function stoppedTurnNotice(args: {
+  stoppedDuring: AgentTurnStopPhase;
+  results: ReadonlyArray<IntentResult>;
+  stepsPlanned: number;
+}): string {
+  const ran = args.results.length;
+  if (args.stoppedDuring === 'reading_page' || args.stoppedDuring === 'answering') {
+    return 'Stopped before reading the page back, as you asked. The steps above all ran, but I did not answer your question.';
+  }
+  if (ran === 0) {
+    return 'Stopped before any step ran, as you asked. Nothing was done on the page.';
+  }
+  const total = Math.max(ran, args.stepsPlanned);
+  const which = total > ran ? `step ${String(ran)} of ${String(total)}` : `step ${String(ran)}`;
+  const last = args.results.at(-1);
+  if (last?.kind === 'failure' && last.reason === STOPPED_OUTCOME_UNKNOWN_REASON) {
+    return `Stopped during ${which}, as you asked. That step was already running, and I could not confirm whether it happened — check the page before doing it again. Nothing after it was sent, and the task is not finished.`;
+  }
+  return `Stopped after ${which}, as you asked. The steps above are what ran; nothing after them was sent, and the task is not finished.`;
+}
+
+/**
+ * B2 — what a model call cut short by Stop is known to have cost.
+ *
+ * The provider lane reports what the provider counted on the error when it can
+ * (`usage`, `tokensConsumed`); this reads it DEFENSIVELY, because an aborted
+ * request is the one case where a well-formed accounting block is least
+ * guaranteed. ⛔ THE ROW IS NEVER SKIPPED. A call that started may have been
+ * billed upstream, and the usage row is the only input to the bundled monthly
+ * cap: a customer who could start a turn and stop it for free would be spending
+ * Driftstack's key at no cost to themselves. With nothing observable, the row
+ * still lands — zero tokens, the session's model — so the turn is counted.
+ */
+export function abortedCallEvidence(
+  err: unknown,
+  model: string | undefined,
+): { usage: DecomposeUsage; tokensConsumed: number } {
+  const record =
+    typeof err === 'object' && err !== null ? (err as Record<string, unknown>) : undefined;
+  const reported = record?.['usage'];
+  const usage: DecomposeUsage =
+    typeof reported === 'object' &&
+    reported !== null &&
+    ((reported as { decomposerKind?: unknown }).decomposerKind === 'claude' ||
+      (reported as { decomposerKind?: unknown }).decomposerKind === 'deterministic')
+      ? (reported as DecomposeUsage)
+      : { decomposerKind: 'claude', ...(model !== undefined ? { model } : {}) };
+  const tokens = record?.['tokensConsumed'];
+  const tokensConsumed =
+    typeof tokens === 'number' && Number.isFinite(tokens) && tokens > 0 ? Math.floor(tokens) : 0;
+  return { usage, tokensConsumed };
+}
+
+/**
  * B1 — did this run get through its steps? A failed `wait` does not count
  * against it: the executor treats a wait as a best-effort synchronisation hint
  * and carries on past one, so a segment whose only ✗ is a wait DID run, and a
@@ -945,6 +1098,8 @@ export function mergeExecutorRuns(
       : {}),
     ...(second.awaitingConfirmation === true ? { awaitingConfirmation: true } : {}),
     ...(second.authorityLost === true ? { authorityLost: true } : {}),
+    // B2 — the run that honoured Stop is always the LAST one: nothing runs after it.
+    ...(second.stopped === true ? { stopped: true } : {}),
   };
 }
 
@@ -1186,6 +1341,21 @@ export class AgentRuntime {
   private readonly activeTurnSessionIds = new Set<string>();
   private readonly activeTurnAccountCounts = new Map<string, number>();
   private readonly maxConcurrentTurnsPerAccount: number;
+  // B2 — the running AI turn of each session, and the controller that stops it.
+  // Entered in the same synchronous block that takes the session's turn slot and
+  // removed in the same `finally` that frees it, so "is a turn running here" and
+  // "can Stop reach it" can never disagree. Manual-mode notes are not entered:
+  // they only append a line, and there is nothing in them to stop.
+  private readonly runningTurns = new Map<
+    string,
+    { turnId: string; controller: AbortController }
+  >();
+  // B2 — requests admitted for each session whose turn may not have registered
+  // above yet (see AgentTurnStopWindow). A Set per session because two requests
+  // for one session can both be in their preflight; the one that loses the slot
+  // ends `turn-in-progress` whatever its window says.
+  private readonly openStopWindows = new Map<string, Set<AbortController>>();
+  private readonly stopWindowControllers = new WeakMap<AgentTurnStopWindow, AbortController>();
 
   constructor(private readonly deps: AgentRuntimeDeps) {
     const limit = deps.maxConcurrentTurnsPerAccount ?? 3;
@@ -1197,6 +1367,171 @@ export class AgentRuntime {
 
   private nowMs(): number {
     return (this.deps.nowMs ?? (() => performance.now()))();
+  }
+
+  /**
+   * B2 — ask the running turn of `agentSessionId` to stop. Returns at once; it
+   * REQUESTS the stop and does not wait for the turn to wind down (the turn
+   * reports how it ended on its own response, which is what frees the chat).
+   *
+   * Idempotent: asking twice aborts an already-aborted controller, and asking
+   * when nothing is running says so. The caller has already decided the asker
+   * may stop this session — this method only finds the turn.
+   *
+   * Throws when this process does not hold the turn AND the cross-process store
+   * cannot be asked: "I could not find out" must not be reported as "nothing is
+   * running", which is the silent ignore this exists to prevent.
+   */
+  async requestTurnStop(agentSessionId: string): Promise<TurnStopRequestOutcome> {
+    let found = false;
+    const local = this.runningTurns.get(agentSessionId);
+    if (local !== undefined) {
+      local.controller.abort();
+      found = true;
+    }
+    // A request admitted before this Stop whose turn has not registered yet.
+    // Aborting its window is what makes Stop-right-after-Send stop the turn.
+    const pending = this.openStopWindows.get(agentSessionId);
+    if (pending !== undefined && pending.size > 0) {
+      for (const controller of pending) controller.abort();
+      found = true;
+    }
+    if (found) return 'stop_requested';
+    const channel = this.deps.turnStopChannel;
+    if (channel === undefined) return 'no_turn_running';
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const requested = await Promise.race([
+        channel.requestStop(agentSessionId),
+        new Promise<never>((_, reject) => {
+          deadline = setTimeout(() => {
+            reject(new Error('the shared turn store did not answer in time'));
+          }, TURN_STOP_REQUEST_DEADLINE_MS);
+        }),
+      ]);
+      return requested ? 'stop_requested' : 'no_turn_running';
+    } finally {
+      if (deadline !== undefined) clearTimeout(deadline);
+    }
+  }
+
+  /**
+   * B2 — open the stop window for a request the route has just admitted for
+   * `agentSessionId` (see {@link AgentTurnStopWindow}). Synchronous, so there is
+   * no await between admission and the window. Pass it to `runTurn` as
+   * `stopWindow`, and close it in a `finally` once the request is answered.
+   *
+   * Local to this process: a Stop that lands on another process while this
+   * request is still in its preflight finds no claim there yet. The desktop app
+   * covers that by asking again while its own request is still unanswered.
+   */
+  openTurnStopWindow(agentSessionId: string): AgentTurnStopWindow {
+    const controller = new AbortController();
+    let set = this.openStopWindows.get(agentSessionId);
+    if (set === undefined) {
+      set = new Set();
+      this.openStopWindows.set(agentSessionId, set);
+    }
+    set.add(controller);
+    const window: AgentTurnStopWindow = {
+      signal: controller.signal,
+      close: () => {
+        const current = this.openStopWindows.get(agentSessionId);
+        if (current === undefined) return;
+        current.delete(controller);
+        if (current.size === 0) this.openStopWindows.delete(agentSessionId);
+      },
+    };
+    this.stopWindowControllers.set(window, controller);
+    return window;
+  }
+
+  /**
+   * B2 — make this turn reachable from other processes: claim it in the shared
+   * store, and poll that store for a stop recorded against it. Returns the undo.
+   * Best-effort throughout — a store that is slow or down costs cross-process
+   * Stop, never the turn, and a Stop on this process still works.
+   */
+  private async watchForRemoteStop(
+    agentSessionId: string,
+    turnId: string,
+    controller: AbortController,
+  ): Promise<() => Promise<void>> {
+    const channel = this.deps.turnStopChannel;
+    if (channel === undefined) return () => Promise.resolve();
+    const warn = (event: string, err: unknown): void => {
+      try {
+        this.deps.logger?.warn?.(
+          {
+            component: 'agent-runtime',
+            event,
+            agent_session_id: agentSessionId,
+            err: err instanceof Error ? err.message : String(err),
+          },
+          'cross-process stop is unavailable for this turn; a stop on this process still works',
+        );
+      } catch {
+        /* logging is best-effort */
+      }
+    };
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    // Kept, so the release below runs only once the claim has settled: a claim
+    // that lands after its deadline would otherwise outlive a release sent
+    // before it, and answer "a turn is running" for fifteen minutes.
+    const claimed = channel.claim(agentSessionId, turnId).then(
+      () => undefined,
+      (err: unknown) => {
+        warn('turn_stop_claim_failed', err);
+      },
+    );
+    try {
+      await Promise.race([
+        claimed,
+        new Promise<void>((resolve) => {
+          deadline = setTimeout(resolve, TURN_STOP_CLAIM_DEADLINE_MS);
+        }),
+      ]);
+    } finally {
+      if (deadline !== undefined) clearTimeout(deadline);
+    }
+    let polling = false;
+    const poll = setInterval(() => {
+      if (polling || controller.signal.aborted) return;
+      polling = true;
+      channel
+        .stopRequested(agentSessionId, turnId)
+        .then((requested) => {
+          if (requested) controller.abort();
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          polling = false;
+        });
+    }, this.deps.turnStopPollMs ?? TURN_STOP_POLL_MS);
+    poll.unref();
+    return async () => {
+      clearInterval(poll);
+      const released = claimed
+        .then(() => channel.release(agentSessionId, turnId))
+        .catch((err: unknown) => {
+          warn('turn_stop_release_failed', err);
+        });
+      // Awaited, bounded, while the turn still holds its slot: a Stop that
+      // arrives after the turn has answered must find no claim and be told
+      // nothing is running. A store slower than the bound costs only that —
+      // the release still lands, and the turn's answer is not held for it.
+      let bound: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          released,
+          new Promise<void>((resolve) => {
+            bound = setTimeout(resolve, TURN_STOP_CLAIM_DEADLINE_MS);
+          }),
+        ]);
+      } finally {
+        if (bound !== undefined) clearTimeout(bound);
+      }
+    };
   }
 
   private async sessionIsActive(sessionId: string): Promise<boolean> {
@@ -1280,11 +1615,12 @@ export class AgentRuntime {
   private async observeForReplan(
     sessionId: string,
     shouldContinue: () => Promise<boolean>,
+    signal: AbortSignal,
   ): Promise<string | undefined> {
     const observeDigest = this.deps.executor.observeDigest?.bind(this.deps.executor);
     if (observeDigest === undefined) return undefined;
     try {
-      return (await observeDigest(sessionId, shouldContinue)) ?? undefined;
+      return (await observeDigest(sessionId, shouldContinue, signal)) ?? undefined;
     } catch {
       return undefined;
     }
@@ -1328,6 +1664,136 @@ export class AgentRuntime {
       },
       { accountId: session.accountId, agentSessionId: session.id, label: 'replan' },
     );
+  }
+
+  /**
+   * B2 — account for a model call the customer's Stop cut short: its usage row
+   * (never skipped — see {@link abortedCallEvidence}) and its token debit.
+   * Returns the debited session, or null when there was nothing to debit or the
+   * debit could not land. Never throws: by the time a stop is being wound down
+   * the customer is owed the stopped ending, not a storage error.
+   *
+   * `flatChargeAlreadyPosted` is false only for a turn's FIRST call, whose row
+   * carries the bundled per-turn price exactly as a completed first call's does.
+   */
+  private async accountForAbortedCall(a: {
+    session: AgentSessionRecord;
+    driftstackSessionId: string | null;
+    evidence: { usage: DecomposeUsage; tokensConsumed: number };
+    args: RunTurnArgs;
+    label: 'decompose' | 'replan' | 'readback';
+    flatChargeAlreadyPosted: boolean;
+  }): Promise<AgentSessionRecord | null> {
+    if (this.deps.usageRecorder !== undefined) {
+      await this.recordUsageRowWithRetry(
+        this.deps.usageRecorder,
+        {
+          accountId: a.session.accountId,
+          driftstackSessionId: a.driftstackSessionId,
+          agentSessionId: a.session.id,
+          // What the settled-error path records for a call no plan came out of;
+          // the read-back row keeps the kind its completed twin writes.
+          decomposeResultKind: a.label === 'readback' ? 'plan' : 'refuse',
+          usage: a.evidence.usage,
+          tokensConsumed: a.evidence.tokensConsumed,
+          now: a.args.now ?? new Date(),
+          ...(a.args.keySource !== undefined ? { keySource: a.args.keySource } : {}),
+          ...(a.flatChargeAlreadyPosted ? { bundledFlatCostAlreadyPosted: true } : {}),
+        },
+        { accountId: a.session.accountId, agentSessionId: a.session.id, label: a.label },
+      );
+    }
+    if (a.evidence.tokensConsumed <= 0) return null;
+    try {
+      return await this.debitTokensIfActive(a.session.id, a.evidence.tokensConsumed);
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * B2 — end a turn the customer stopped.
+   *
+   * ONE agent transcript entry, published under the same authority fence as
+   * every other entry this turn writes, saying what ran — so the next turn's
+   * planner reads an unfinished task, not a finished one, and never a step that
+   * did not happen. The steps come from the executor as they SETTLED, including
+   * a step that was running when Stop arrived. `intents` on the entry are the
+   * steps that ran, not the ones that were planned: a recipe built from this turn
+   * must not replay steps the customer stopped before they happened.
+   *
+   * Authority loss still wins: a stop that races a takeover publishes nothing
+   * under the successor controller and returns the same interrupted result any
+   * other ending would.
+   */
+  private async finishStoppedTurn(stop: {
+    stoppedDuring: AgentTurnStopPhase;
+    executor: ExecutorRunResult | undefined;
+    stepsPlanned: number;
+    latest: AgentSessionRecord;
+    planAlreadyPublished: boolean;
+    evidence: { usage?: DecomposeUsage; tokensConsumed?: number };
+    at: string;
+    admission: AgentTurnAdmission;
+    onProgress: RunTurnArgs['onProgress'];
+  }): Promise<RunTurnResult> {
+    const sessionId = stop.latest.id;
+    const executor =
+      stop.executor === undefined ? undefined : { ...stop.executor, ok: false, stopped: true };
+    const results = executor?.results ?? [];
+    const notice = stoppedTurnNotice({
+      stoppedDuring: stop.stoppedDuring,
+      results,
+      stepsPlanned: stop.stepsPlanned,
+    });
+    const evidence = { ...stop.evidence, ...(executor !== undefined ? { executor } : {}) };
+    const phase = stop.planAlreadyPublished ? 'finalize' : 'plan-publication';
+    const entry: TranscriptEntry = stop.planAlreadyPublished
+      ? {
+          at: stop.at,
+          role: 'agent',
+          body: '(stopped by the customer before the page was read back — the steps above ran; the question was not answered)',
+        }
+      : executor !== undefined && results.length > 0
+        ? {
+            ...runResultToTranscriptEntry(executor, stop.at),
+            intents: results.map((r) => r.intent),
+          }
+        : {
+            at: stop.at,
+            role: 'agent',
+            body: '(stopped by the customer before any step ran — nothing was done on the page; the task is NOT finished)',
+          };
+    if (!(await this.authorityStillCurrent(sessionId, stop.admission))) {
+      return this.interruptedTurnResult(sessionId, stop.latest, phase, evidence);
+    }
+    const updated = await this.appendTranscriptIfAuthorityRevision(
+      sessionId,
+      stop.admission,
+      entry,
+    );
+    if (updated === null) {
+      return this.interruptedTurnResult(sessionId, stop.latest, phase, evidence);
+    }
+    if (!(await this.authorityStillCurrent(sessionId, stop.admission))) {
+      return this.interruptedTurnResult(sessionId, updated, phase, evidence);
+    }
+    this.deps.eventBus?.publish({
+      agentSessionId: sessionId,
+      index: updated.transcript.length - 1,
+      entry,
+    });
+    // Past the fence, like every other sentence this turn streams.
+    emitProgress(stop.onProgress, { kind: 'notice', notice });
+    return {
+      kind: 'stopped',
+      session: updated,
+      stoppedDuring: stop.stoppedDuring,
+      ...(executor !== undefined ? { executor } : {}),
+      stepsPlanned: Math.max(stop.stepsPlanned, results.length),
+      notice,
+      ...stop.evidence,
+    };
   }
 
   /**
@@ -1458,12 +1924,43 @@ export class AgentRuntime {
     if (consumesAccountSlot) {
       this.activeTurnAccountCounts.set(session.accountId, currentForAccount + 1);
     }
+    // B2 — registered in the SAME synchronous block as the slot above, so there
+    // is no instant at which the session is busy and Stop cannot reach the turn.
+    // The route's window when it opened one, so a Stop pressed before this point
+    // has already aborted the controller this turn runs under.
+    const controller =
+      (args.stopWindow !== undefined
+        ? this.stopWindowControllers.get(args.stopWindow)
+        : undefined) ?? new AbortController();
+    const turnId = randomUUID();
+    if (consumesAccountSlot) {
+      this.runningTurns.set(args.agentSessionId, { turnId, controller });
+    }
+    let stopWatching: () => Promise<void> = () => Promise.resolve();
     try {
+      if (consumesAccountSlot) {
+        stopWatching = await this.watchForRemoteStop(args.agentSessionId, turnId, controller);
+      }
       // Use the SAME session snapshot that decided slot ownership. Re-fetching
       // here would let a concurrent manual→AI mode change bypass the account
       // slot after the earlier manual-mode check.
-      return await this.runExclusiveTurn(args, session, admission);
+      return await this.runExclusiveTurn(args, session, admission, controller.signal);
     } finally {
+      // B2 — the cross-process claim goes first, while the turn is still
+      // registered here, so that by the time the turn answers no process can
+      // still see it as running. Bounded, and it never throws — but guarded
+      // anyway, because nothing may stand between a turn and freeing its slot.
+      try {
+        await stopWatching();
+      } catch {
+        /* the release is best-effort; its key expires on its own */
+      }
+      // Out of the registry in the same `finally` that frees the slot, so a
+      // Stop that arrives after the turn ended is told so rather than aborting
+      // a controller nothing reads.
+      if (this.runningTurns.get(args.agentSessionId)?.turnId === turnId) {
+        this.runningTurns.delete(args.agentSessionId);
+      }
       // Covers success, controlled result variants, decomposer failures, and
       // executor/repository throws. A failed turn can never strand the session.
       this.activeTurnSessionIds.delete(args.agentSessionId);
@@ -1479,6 +1976,8 @@ export class AgentRuntime {
     args: RunTurnArgs,
     session: AgentSessionRecord,
     admission: AgentTurnAdmission,
+    // B2 — aborts when the customer presses Stop. Never aborted for a manual note.
+    signal: AbortSignal,
   ): Promise<RunTurnResult> {
     const at = (args.now ?? new Date()).toISOString();
     // The wall clock starts HERE — before the first look and the first planning
@@ -1606,6 +2105,31 @@ export class AgentRuntime {
       entry: userEntry,
     });
 
+    // B2 — every stopped ending below goes through here, so each one publishes
+    // exactly one agent entry, under the same fence, with the same sentence.
+    // Hoisted as closures over this turn's own facts; the few that change as the
+    // turn runs are passed in.
+    const endStopped = (stop: {
+      stoppedDuring: AgentTurnStopPhase;
+      executor: ExecutorRunResult | undefined;
+      stepsPlanned: number;
+      latest: AgentSessionRecord;
+      planAlreadyPublished: boolean;
+      evidence: { usage?: DecomposeUsage; tokensConsumed?: number };
+    }): Promise<RunTurnResult> =>
+      this.finishStoppedTurn({ ...stop, at, admission, onProgress: args.onProgress });
+    // Pressed before anything was asked of the model: nothing ran, nothing was spent.
+    if (stopRequested(signal)) {
+      return endStopped({
+        stoppedDuring: 'planning',
+        executor: undefined,
+        stepsPlanned: 0,
+        latest: sessionWithUser,
+        planAlreadyPublished: false,
+        evidence: {},
+      });
+    }
+
     // Q.1.b — hybrid error classification per founder verdict
     // 2026-05-17. Transient operational failures (5xx after the
     // decomposer's internal retry, network errors) return a
@@ -1727,12 +2251,25 @@ export class AgentRuntime {
         // improvement to planning, never a precondition for it, so a failure
         // here plans blind rather than failing the turn.
         try {
-          pageObservation = (await observeDigest(session.id, authorityMayContinue)) ?? undefined;
+          pageObservation =
+            (await observeDigest(session.id, authorityMayContinue, signal)) ?? undefined;
         } catch {
           pageObservation = undefined;
         }
       }
       firstPlanObservation = pageObservation;
+      // B2 — never START a model call after Stop: the look above may have been
+      // what the customer was watching when they pressed it.
+      if (stopRequested(signal)) {
+        return endStopped({
+          stoppedDuring: 'planning',
+          executor: undefined,
+          stepsPlanned: 0,
+          latest: sessionWithUser,
+          planAlreadyPublished: false,
+          evidence: {},
+        });
+      }
       try {
         // The customer is now staring at three dots for however long the model
         // takes. Say what is happening before the call, not after it.
@@ -1752,10 +2289,37 @@ export class AgentRuntime {
           model: sessionWithUser.model,
           ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
           shouldContinue: authorityMayContinue,
+          // B2 — the provider lane ends the request when this aborts.
+          signal,
         });
       } catch (err) {
         if (err instanceof AgentDecomposerContinuationDeniedError) {
           return this.interruptedTurnResult(session.id, sessionWithUser, 'decompose');
+        }
+        if (stopRequested(signal)) {
+          // B2 — the customer stopped the turn while its first plan was being
+          // made. Whatever the provider counted is this turn's first (and, for
+          // the bundled price, charging) row — see abortedCallEvidence.
+          const aborted = abortedCallEvidence(err, sessionWithUser.model);
+          const latest = await this.accountForAbortedCall({
+            session,
+            driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
+            evidence: aborted,
+            args,
+            label: 'decompose',
+            flatChargeAlreadyPosted: false,
+          });
+          return endStopped({
+            stoppedDuring: 'planning',
+            executor: undefined,
+            stepsPlanned: 0,
+            latest: latest ?? sessionWithUser,
+            planAlreadyPublished: false,
+            evidence: {
+              usage: aborted.usage,
+              ...(aborted.tokensConsumed > 0 ? { tokensConsumed: aborted.tokensConsumed } : {}),
+            },
+          });
         }
         if (err instanceof AgentDecomposerSettledError) {
           // The strict result codec rejected the provider content, but the
@@ -2080,6 +2644,9 @@ export class AgentRuntime {
         agentSessionId: session.id,
         plan,
         shouldContinue: authorityMayContinue,
+        // B2 — the executor checks it before every dispatch and waits out a step
+        // already in flight rather than abandoning it blind.
+        signal,
         // P3 — the TURN's element-wait ceiling, shared across every run below.
         elementWaitBudget,
         // P2 — the VALUES, to the executor only. Resolved into the dispatch and
@@ -2103,6 +2670,22 @@ export class AgentRuntime {
     // The planning calls among them, against MAX_PLANNER_CALLS_PER_TURN.
     let plannerCalls = modelCalls;
 
+    // B2 — the plan call has settled and been paid for, but nothing has touched
+    // the page yet. A Stop that arrived while it was being made ends the turn
+    // here, before the first dispatch.
+    if (stopRequested(signal)) {
+      return endStopped({
+        stoppedDuring: 'planning',
+        executor: undefined,
+        stepsPlanned: plannedIntents.length,
+        latest: postDebitSession,
+        planAlreadyPublished: false,
+        evidence: {
+          ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+          ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+        },
+      });
+    }
     let executorResult = await runPlan(decomposed, verifiedConsequentialApprovals, {
       segment: 1,
       ...(decomposed.status !== undefined ? { status: decomposed.status } : {}),
@@ -2202,9 +2785,14 @@ export class AgentRuntime {
       }
     };
     noteRan(executorResult, 1, firstPlanObservation);
+    // B2 — set when the loop ended because the customer pressed Stop, to what the
+    // turn was doing when it noticed.
+    let stoppedDuring: AgentTurnStopPhase | undefined =
+      executorResult.stopped === true ? 'executing' : undefined;
     for (;;) {
       if (resumePlan !== null) break;
       if (executorResult.authorityLost === true) break;
+      if (stoppedDuring !== undefined) break;
       if (executorResult.awaitingConfirmation === true) break;
       // ⛔ `continue` IS ASKED FIRST. A segment whose only ✗ is a best-effort wait
       // RAN TO ITS END (`segmentRanToItsEnd`), and a planner that said `continue`
@@ -2221,6 +2809,15 @@ export class AgentRuntime {
             ? 'replan'
             : null;
       if (cause === null) break;
+      // B2 — the turn was about to go round again; a Stop that landed after the
+      // last step of the segment prevents the next look and the next plan call.
+      // Checked only AFTER `cause`: a turn whose work was already finished is
+      // not "stopped" by a Stop that arrived as it finished — the read-back
+      // check after the loop decides whether anything is left to cut short.
+      if (stopRequested(signal)) {
+        stoppedDuring = 'planning';
+        break;
+      }
       // The bounds. A `replan` that runs into one ends the way a failed turn
       // always has — the ✗ row is the message. A `continue` that runs into one
       // would end on a column of ticks over an unfinished task, so it says why.
@@ -2254,7 +2851,12 @@ export class AgentRuntime {
       if (!(await this.authorityStillCurrent(session.id, admission))) break;
       segment += 1;
       emitProgress(args.onProgress, { kind: 'phase', phase: 'reading_page', segment, cause });
-      const pageNow = await this.observeForReplan(session.id, authorityMayContinue);
+      const pageNow = await this.observeForReplan(session.id, authorityMayContinue, signal);
+      // B2 — the look is cut short by Stop; the plan call after it must not start.
+      if (stopRequested(signal)) {
+        stoppedDuring = 'planning';
+        break;
+      }
       for (const done of ranSteps) {
         if (done.pageAfter === undefined && done.segment === segment - 1) done.pageAfter = pageNow;
       }
@@ -2280,8 +2882,27 @@ export class AgentRuntime {
             : {}),
           ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
           shouldContinue: authorityMayContinue,
+          signal,
         });
       } catch (err) {
+        if (stopRequested(signal)) {
+          // B2 — a later segment's plan call cut short by Stop. Its row is kept
+          // like every other call's (the turn's flat price is already on the
+          // first), and the steps that ran stand.
+          modelCalls += 1;
+          plannerCalls += 1;
+          const debitedAfterAbort = await this.accountForAbortedCall({
+            session,
+            driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
+            evidence: abortedCallEvidence(err, sessionWithUser.model),
+            args,
+            label: 'replan',
+            flatChargeAlreadyPosted: true,
+          });
+          if (debitedAfterAbort !== null) postDebitSession = debitedAfterAbort;
+          stoppedDuring = 'planning';
+          break;
+        }
         // ⛔ A SETTLED CALL IS BILLABLE WHETHER OR NOT WE COULD USE IT.
         // AgentDecomposerSettledError exists to say exactly that: the provider
         // responded and consumed tokens, and only the strict content codec
@@ -2360,6 +2981,12 @@ export class AgentRuntime {
       if (debited === null) break;
       postDebitSession = debited;
       if (!(await this.authorityStillCurrent(session.id, admission))) break;
+      // B2 — paid for, and not run: the customer stopped the turn while this
+      // segment was being planned.
+      if (stopRequested(signal)) {
+        stoppedDuring = 'planning';
+        break;
+      }
       if (replanned.kind !== 'plan') {
         // Shown the page, the planner asked something or declined. After a
         // `continue` that is the turn's message to the customer — dropping it
@@ -2446,6 +3073,7 @@ export class AgentRuntime {
       noteRan(nextRun, segment, pageNow);
       executorResult = mergeExecutorRuns(executorResult, nextRun);
       if (cause === 'replan') replans += 1;
+      if (nextRun.stopped === true) stoppedDuring = 'executing';
     }
 
     if (
@@ -2456,6 +3084,22 @@ export class AgentRuntime {
         ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
         ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
         executor: executorResult,
+      });
+    }
+
+    // B2 — the customer stopped the turn. The steps that ran are its record; no
+    // read-back follows, because the customer asked for the work to stop.
+    if (stoppedDuring !== undefined) {
+      return endStopped({
+        stoppedDuring,
+        executor: executorResult,
+        stepsPlanned: stepIndexOffset + plannedIntents.length,
+        latest: postDebitSession,
+        planAlreadyPublished: false,
+        evidence: {
+          ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+          ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+        },
       });
     }
 
@@ -2621,12 +3265,38 @@ export class AgentRuntime {
       updated.tokenBudgetRemaining >= READBACK_MIN_BUDGET_TOKENS &&
       !modelCallsExhausted
     ) {
+      // B2 — the steps have all run and been published; what a Stop can still
+      // cut short is the read-back. The plan entry already says what ran, so the
+      // stopped ending adds only the line that says the question went unanswered.
+      const stopBeforeAnswer = (
+        during: AgentTurnStopPhase,
+        latest: AgentSessionRecord,
+      ): Promise<RunTurnResult> =>
+        endStopped({
+          stoppedDuring: during,
+          executor: executorResult,
+          stepsPlanned: stepIndexOffset + plannedIntents.length,
+          latest,
+          planAlreadyPublished: true,
+          evidence: {
+            ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
+            ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
+          },
+        });
+      if (stopRequested(signal)) return stopBeforeAnswer('reading_page', sessionAfter);
       // Counted here rather than only checked, so the ceiling keeps meaning
       // "calls this turn has made" for whatever is added below it next.
       modelCalls += 1;
+      // B2 — true only while the answer call itself is outstanding. A throw
+      // from anything else in this block (the page read, a publication after the
+      // answer settled and was already accounted) is not a model call cut short,
+      // and must not get a usage row of its own.
+      let answerInFlight = false;
+      // What the stopped ending names as interrupted: the answer, once asked for.
+      let readbackStopPhase: AgentTurnStopPhase = 'reading_page';
       try {
         emitProgress(args.onProgress, { kind: 'phase', phase: 'reading_page' });
-        const observation = await observe(session.id, authorityMayContinue);
+        const observation = await observe(session.id, authorityMayContinue, signal);
         if (!(await this.authorityStillCurrent(session.id, admission))) {
           return this.interruptedTurnResult(session.id, sessionAfter, 'observation', {
             ...(decomposed.usage !== undefined ? { usage: decomposed.usage } : {}),
@@ -2634,6 +3304,9 @@ export class AgentRuntime {
             executor: executorResult,
           });
         }
+        // B2 — a read cut short by Stop returns null like a failed one; it must
+        // not be reported as "could not read the page".
+        if (stopRequested(signal)) return await stopBeforeAnswer('reading_page', sessionAfter);
         if (observation === null || observation.trim().length === 0) {
           // P5 — the one gate that is not knowable in advance. The plan ran and
           // the page gave us nothing readable back, so the customer's question
@@ -2643,6 +3316,8 @@ export class AgentRuntime {
             'I finished the steps above, but could not read the page back afterwards, so I cannot answer from it.';
         } else {
           emitProgress(args.onProgress, { kind: 'phase', phase: 'answering' });
+          answerInFlight = true;
+          readbackStopPhase = 'answering';
           const answer = await answerFromObservation({
             task: args.userMessage,
             observation,
@@ -2655,7 +3330,9 @@ export class AgentRuntime {
             byokAnthropicApiKey: args.byokApiKey,
             model: sessionAfter.model,
             shouldContinue: authorityMayContinue,
+            signal,
           });
+          answerInFlight = false;
           latestReadbackEvidence = {
             ...(answer.usage !== undefined ? { usage: answer.usage } : {}),
             ...(answer.tokensConsumed > 0 ? { tokensConsumed: answer.tokensConsumed } : {}),
@@ -2762,6 +3439,24 @@ export class AgentRuntime {
             ...(decomposed.tokensConsumed > 0 ? { tokensConsumed: decomposed.tokensConsumed } : {}),
             executor: executorResult,
           });
+        }
+        if (stopRequested(signal) && !answerInFlight) {
+          // B2 — Stop was pending when something other than the answer call
+          // threw: no model call was cut short here, so there is no row to add.
+          return await stopBeforeAnswer(readbackStopPhase, sessionAfter);
+        }
+        if (stopRequested(signal)) {
+          // B2 — the answer call cut short by Stop: its row and debit, like any
+          // other call that started, then the stopped ending.
+          const debitedAfterAbort = await this.accountForAbortedCall({
+            session,
+            driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
+            evidence: abortedCallEvidence(error, sessionAfter.model),
+            args,
+            label: 'readback',
+            flatChargeAlreadyPosted: true,
+          });
+          return await stopBeforeAnswer('answering', debitedAfterAbort ?? sessionAfter);
         }
         if (error instanceof AgentDecomposerSettledError) {
           latestReadbackEvidence = {

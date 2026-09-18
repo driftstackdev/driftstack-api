@@ -103,6 +103,8 @@ const AGENT_ROUTES: ReadonlyArray<{
   { method: 'POST', suffix: '/takeover', payload: { client_id: 'b-client' } },
   { method: 'POST', suffix: '/handback', payload: {} },
   { method: 'POST', suffix: '/resume', payload: {} },
+  // B2 — Stop must not reach (or reveal) another account's running turn.
+  { method: 'POST', suffix: '/stop', payload: {} },
   // Added 2026-08-15 — see the header for how these five were found.
   { method: 'POST', suffix: '/cookies/set', payload: { cookies: [] } },
   {

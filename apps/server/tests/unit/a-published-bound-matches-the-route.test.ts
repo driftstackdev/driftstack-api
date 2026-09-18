@@ -664,6 +664,7 @@ describe('V-927 a published bound matches the route', () => {
     'POST /v1/agent-sessions/{id}/message': 'sessions.get(id) — as above',
     'POST /v1/agent-sessions/{id}/mode': 'sessions.get(id) — as above',
     'POST /v1/agent-sessions/{id}/resume': 'sessions.get(id) — as above',
+    'POST /v1/agent-sessions/{id}/stop': 'sessions.get(id) — as above',
     'POST /v1/agent-sessions/{id}/takeover': 'sessions.get(id) — as above',
   };
 

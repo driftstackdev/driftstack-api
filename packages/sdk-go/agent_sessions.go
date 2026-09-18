@@ -212,8 +212,10 @@ type AgentUsage struct {
 
 // AgentMessageResponse is the discriminated turn-result. Branch on
 // Kind: "plan-executed" (Intents + Results + OK populated),
-// "clarify" (ClarifyingQuestion populated), or "refuse"
-// (RefuseReason populated).
+// "clarify" (ClarifyingQuestion populated), "refuse"
+// (RefuseReason populated), or "stopped" (the turn was stopped with
+// Stop: Intents + Results are the steps that ran, Notice says how far it
+// got, StoppedDuring what it was doing).
 type AgentMessageResponse struct {
 	Kind               string            `json:"kind"`
 	Session            AgentSession      `json:"session"`
@@ -222,6 +224,11 @@ type AgentMessageResponse struct {
 	OK                 bool              `json:"ok,omitempty"`
 	ClarifyingQuestion string            `json:"clarifying_question,omitempty"`
 	RefuseReason       string            `json:"refuse_reason,omitempty"`
+	// Notice is one sentence saying how far a "stopped" turn got.
+	Notice string `json:"notice,omitempty"`
+	// StoppedDuring is what a "stopped" turn was doing when it noticed the
+	// stop: "planning", "executing", "reading_page" or "answering".
+	StoppedDuring string `json:"stopped_during,omitempty"`
 	// Usage is the per-turn usage/cost block (nil on older servers or
 	// turns that omit it).
 	Usage *AgentUsage `json:"usage,omitempty"`
@@ -698,6 +705,38 @@ func (r *AgentSessionsResource) Resume(ctx context.Context, agentSessionID strin
 		method: "POST",
 		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/resume",
 		body:   body,
+		out:    &out,
+	}
+	if err := r.client.do(ctx, req); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// StopAgentTurnResponse is returned by Stop. Status is "stop_requested"
+// (202: a turn was running and has been asked to stop) or "no_turn_running"
+// (200: there was nothing to stop).
+type StopAgentTurnResponse struct {
+	Status    string `json:"status"`
+	SessionID string `json:"session_id"`
+}
+
+// Stop stops the session's running turn. It returns as soon as the stop is
+// requested and does not wait for the turn to wind down: the turn ends on its
+// own Message call, which returns Kind "stopped" (or, if it was already
+// finishing, its ordinary result) — that response is the signal that the
+// session will accept the next message. A step that was already running when
+// the stop arrived is given a short, bounded time to finish so its result is
+// known; nothing is started after it. Safe to call again.
+//
+// Errors (mapped to typed Driftstack errors):
+//   - 404 — session unknown (or cross-account; existence not leaked)
+func (r *AgentSessionsResource) Stop(ctx context.Context, agentSessionID string) (*StopAgentTurnResponse, error) {
+	var out StopAgentTurnResponse
+	req := requestOptions{
+		method: "POST",
+		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/stop",
+		body:   struct{}{},
 		out:    &out,
 	}
 	if err := r.client.do(ctx, req); err != nil {

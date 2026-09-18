@@ -144,6 +144,8 @@ const STUB_EXEMPTIONS: readonly StubExemption[] = [
     ['post', '/v1/agent-sessions/:id/mode'],
     ['post', '/v1/agent-sessions/:id/input-event'],
     ['post', '/v1/agent-sessions/:id/resume'],
+    // B2 — Stop's disabled twin. The live route carries the `global` limiter.
+    ['post', '/v1/agent-sessions/:id/stop'],
   ].map(([method, path]) => ({
     file: 'agent-sessions.ts',
     method: method!,
@@ -369,7 +371,9 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // 176 since the OAuth v2 hand-off: `POST /v1/auth/oauth-client/redeem` is a
     // mutation registration (it burns a single-use code and mints a session), gated
     // by its own IP limiter. Refreshed with violations() proven empty first.
-    expect(routes).toHaveLength(176);
+    // 178 since B2: POST /v1/agent-sessions/:id/stop (live, `global` limiter) and
+    // its disabled twin are both mutation registrations.
+    expect(routes).toHaveLength(178);
     // +1: `app.patch<{ Params: { id: string } }>('/v1/teams/:id', ...)` is the only
     // one of the two new routes carrying type arguments.
     // T-1 — 77 since `POST /v1/account/me/proxies/:id/test` gained a
@@ -379,7 +383,9 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // 78 since P-17: the live egress route carries a `<{ Params: { id: string } }>`
     // type argument like its siblings (the disabled twin does not, which is why
     // this moves by one where the surface above moved by two).
-    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(78);
+    // 79 since B2: the live stop route carries `<{ Params: { id: string }; Body: unknown }>`
+    // (its disabled twin does not).
+    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(79);
   });
 
   it('every mutation route has a limiter, privileged gate, or exact exemption', () => {

@@ -155,7 +155,7 @@ describe('agent-session response schema parity', () => {
     expect(oapi).toMatch(/data: z\.array\(AgentSessionSchema\)/);
   });
 
-  it('OpenAPI types the `session` envelope on the POST /:id/message turn-result union — every member (plan-executed/clarify/refuse/logged-manual) carries session: AgentSessionSchema (was z.object({}))', () => {
+  it('OpenAPI types the `session` envelope on the POST /:id/message turn-result union — every member (plan-executed/clarify/refuse/stopped/logged-manual) carries session: AgentSessionSchema (was z.object({}))', () => {
     const oapi = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
     // Scoped to the turn-result union itself: a `session:` field added
     // anywhere else in openapi.ts must not be able to satisfy this guard.
@@ -169,7 +169,8 @@ describe('agent-session response schema parity', () => {
     const sessionFields = union.match(/session: AgentSessionSchema,/g) ?? [];
     // d5e30ea9c published the 4th runtime variant: logged-manual, the
     // transcript-only operator turn agent-runtime.ts returns with a session.
-    expect(members.length).toBe(4);
+    // B2 published the 5th: stopped, the turn the customer stopped mid-way.
+    expect(members.length).toBe(5);
     // EVERY member carries the updated session envelope — a variant that
     // ships without one fails here instead of silently passing a recount.
     expect(sessionFields.length).toBe(members.length);

@@ -313,6 +313,8 @@ describe('OpenAPI spec generation', () => {
         '/v1/agent-sessions/{id}/mode',
         '/v1/agent-sessions/{id}/recipe-suggestion',
         '/v1/agent-sessions/{id}/resume',
+        // B2 — stop the running turn.
+        '/v1/agent-sessions/{id}/stop',
         '/v1/agent-sessions/{id}/takeover',
         // S33 2026-07-07 (fable-truth-audit) — live-session control surface
         // (page-state poll / cookies read+import / history step / file

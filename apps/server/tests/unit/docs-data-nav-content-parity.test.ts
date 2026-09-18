@@ -328,14 +328,16 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     // numbers, and the header above records that exact trap biting V-846: a nav
     // child was added, that file's count was raised, and this one kept the old
     // number. Raise BOTH.
-    expect(anchors).toHaveLength(148);
+    // 149 since B2 gave POST /v1/agent-sessions/{id}/stop its nav child (raised in
+    // both files).
+    expect(anchors).toHaveLength(149);
     // No duplicate hrefs at either level (the apps/docs
     // doc-nav-section-label-baseline suite enforces the top-level rule at
     // runtime too; mirrored here so a server-only run still catches it).
     expect(new Set(topLevel).size).toBe(61);
     // Set size must track the count — equality here is what proves NO duplicate
     // anchor was introduced along with the new child.
-    expect(new Set(anchors).size).toBe(148);
+    expect(new Set(anchors).size).toBe(149);
   });
 
   it('the 22 previously-orphaned routes are all present (6 reference + 5 sdk/api spillover checks kept explicit for the highest-traffic ones)', () => {

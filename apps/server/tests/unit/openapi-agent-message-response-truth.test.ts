@@ -37,7 +37,7 @@ describe('agent-message OpenAPI response truth', () => {
   const responses = object(operation.responses, 'message responses');
   const schemas = object(object(spec.components, 'components').schemas, 'component schemas');
 
-  it('publishes all four successful variants and optional provider usage', () => {
+  it('publishes all five successful variants and optional provider usage', () => {
     const response = object(responses['200'], '200 response');
     expect(response.description).toMatch(/logged-manual/);
     expect(response.description).toMatch(/usage/);
@@ -62,9 +62,30 @@ describe('agent-message OpenAPI response truth', () => {
       'logged-manual',
       'plan-executed',
       'refuse',
+      'stopped',
     ]);
 
-    for (const kind of ['plan-executed', 'clarify', 'refuse'] as const) {
+    // B2 — a stopped turn carries what RAN, the sentence that says how far it got,
+    // and where it was; `ok` can only be false, because the task did not finish.
+    const stopped = byKind.get('stopped');
+    expect(stopped).toBeDefined();
+    expect(array(stopped?.variant.required, 'stopped required').sort()).toEqual([
+      'intents',
+      'kind',
+      'notice',
+      'ok',
+      'results',
+      'session',
+      'stopped_during',
+    ]);
+    expect(array(object(stopped?.properties.ok, 'stopped ok').enum, 'stopped ok enum')).toEqual([
+      false,
+    ]);
+    expect(
+      array(object(stopped?.properties.stopped_during, 'stopped_during').enum, 'during').sort(),
+    ).toEqual(['answering', 'executing', 'planning', 'reading_page']);
+
+    for (const kind of ['plan-executed', 'clarify', 'refuse', 'stopped'] as const) {
       const branch = byKind.get(kind);
       expect(branch, kind).toBeDefined();
       expect(refName(branch?.properties.usage, `${kind} usage`)).toBe('AgentMessageUsage');

@@ -435,18 +435,44 @@ export interface UseAgentChatResult {
   approve: () => Promise<void>;
   deny: () => void;
   reset: () => void;
-  /** Soft-cancel an in-flight turn — un-blocks the composer immediately and
-   *  discards the turn's result when it eventually resolves (the server may
-   *  still finish it; this is a UI stop, not a network/turn abort). */
-  cancel: () => void;
   /**
-   * P6 — a turn the customer pressed Stop on is STILL RUNNING on the server.
+   * B2 — Stop the in-flight turn ON THE SERVER.
    *
-   * Stop is a UI stop: it frees the composer, but the server finishes the plan
-   * it already started. Sending again in that window hits a busy session and is
-   * refused — measured at 26% of every AI turn ever sent. While this is true the
-   * composer must say the previous task is still finishing rather than offering
-   * a Send that cannot land. Clears when that turn's own request settles.
+   * Asks the server to stop the running turn and keeps the turn's own request
+   * attached, so the steps that ran keep arriving and the turn ends on the
+   * server's own `stopped` response — which is what frees the composer, because
+   * that response is what proves the session will accept the next message.
+   * `stopping` is true in between.
+   *
+   * Bounded: if the stop request itself fails, or the server has not ended the
+   * turn within {@link STOP_CONFIRM_DEADLINE_MS}, the chat stops waiting — the
+   * steps that ran so far stay in the chat beside a sentence saying the stop
+   * could not be confirmed — and `stoppedTurnStillRunning` holds Send until the
+   * detached request settles. With no session yet (the first send is still
+   * creating one) there is nothing on the server to stop, and the chat simply
+   * stops waiting.
+   */
+  cancel: () => void;
+  /** B2 — Stop was pressed and the server has not yet ended the turn. Optional
+   *  only so hand-built test doubles of this interface stay complete. */
+  stopping?: boolean;
+  /**
+   * B2 — ask the server again to stop a turn the chat already stopped waiting
+   * for (`stoppedTurnStillRunning`). Present only in that state and only when
+   * there is a server session to ask, so a Stop that could not be confirmed is
+   * never the customer's last chance to stop the agent. `stopping` is true while
+   * the request is out. Optional for the same reason as `stopping`.
+   */
+  stopAgain?: () => void;
+  /**
+   * P6 — a turn the chat STOPPED WAITING FOR is still running on the server.
+   *
+   * With the server-side Stop this is the fallback state, not the normal one: it
+   * is raised only when the stop could not be confirmed (see `cancel`). Sending
+   * in that window would hit a busy session and be refused — measured at 26% of
+   * every AI turn before Stop reached the server — so while it is true the
+   * composer says the previous task is still finishing. Clears when that turn's
+   * own request settles.
    */
   stoppedTurnStillRunning: boolean;
   /** Load a saved transcript into the view (reopening a past chat). The live
@@ -517,6 +543,48 @@ export function adoptionOutcome(
   if (generationMoved) return 'stale';
   return status === 'active' ? 'adopt' : 'not-active';
 }
+
+/**
+ * B2 — how long after Stop the chat waits for the server to END the turn before
+ * it stops waiting. The server waits up to fifteen seconds for a step that was
+ * already running when Stop arrived (so its result is known), and then writes
+ * the turn's record; thirty seconds is that plus a generous margin for a slow
+ * network. Past it something is wrong, and a composer held any longer would be
+ * the locked chat this bound exists to prevent.
+ */
+export const STOP_CONFIRM_DEADLINE_MS = 30_000;
+
+/**
+ * B2 — the pause before the stop request is sent again, after it failed or after
+ * the server said no turn was running while this chat's own message was still
+ * unanswered. Long enough that a network blip has usually passed (retrying at
+ * once mostly fails the same way twice); short enough that three of them fit
+ * well inside {@link STOP_CONFIRM_DEADLINE_MS}.
+ */
+export const STOP_RETRY_DELAY_MS = 1_000;
+
+/**
+ * B2 — how many times a `no_turn_running` answer is followed by another ask
+ * while this chat's message is still unanswered. That answer is normally the
+ * truth — the turn has just ended and its response is on its way — but it is
+ * also what a server that has not yet reached the turn says, and asking again
+ * costs nothing: stopping is idempotent and nothing can be sent in between.
+ */
+export const STOP_REASK_LIMIT = 3;
+
+// The pause between asks. Nothing needs cancelling it: every ask after it first
+// checks that its Stop is still the one on screen, and does nothing otherwise.
+const stopRetryPause = (ms: number): Promise<void> =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+/** B2 — the stop request itself failed (offline, server error). */
+export const STOP_FAILED_REASON =
+  'Couldn’t reach the server to stop this task, so it may still be running. The steps above are what had finished; you can send your next message once it ends.';
+/** B2 — the stop was requested but the task did not end in time. */
+export const STOP_UNCONFIRMED_REASON =
+  'Stop was requested, but the task hasn’t confirmed it ended yet. The steps above are what had finished; you can send your next message once it does.';
 
 /** (l) #12 — the reattach notice the view shows beside a held Send. */
 export const ADOPT_FAILED_NOTICE =
@@ -663,6 +731,9 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   // persisted to chat history by the view's turns-change effect. Set when a user
   // bubble is appended, cleared when the turn completes/rolls back.
   const inFlightUserTurnIdRef = useRef<number | null>(null);
+  // B2 — user bubbles a detached Stop KEPT on screen (beside the interrupted turn
+  // that explains them). A late settle of their post must not roll them back.
+  const keptUserTurnIdsRef = useRef<Set<number>>(new Set());
   // One durable server receipt key per exact logical turn. The SSE connection can
   // disappear while the server deliberately finishes browser work, so a retry of
   // the same session/message/approval body MUST reuse this key. A changed body or
@@ -697,43 +768,174 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   // P6 — true while a STOPPED turn's server request has not settled yet. The
   // composer reads it to stay honest about the session still being busy.
   const [stoppedTurnStillRunning, setStoppedTurnStillRunning] = useState(false);
-  const [adopting, setAdopting] = useState(false);
-  const cancel = useCallback(() => {
-    cancelGenRef.current += 1;
-    // P6 — STOP FREES THE COMPOSER, BUT THE TURN IS STILL RUNNING, AND THE UI NOW
-    // SAYS SO. This is a UI stop: the server keeps driving the browser to the end
-    // of the plan. Before this, the composer went straight back to "Send" — and
-    // the next Send hit a session that was still busy and came back 409, which is
-    // 26% of every AI turn this product has ever served. Holding a flag until the
-    // stopped turn's own request SETTLES is the honest signal: while it is set,
-    // the composer says the previous task is still finishing instead of inviting
-    // a send that cannot succeed.
-    //
-    // ⛔ IT IS TIED TO THE REQUEST PROMISE, NOT TO A TIMER. A timer would guess,
-    // and it would guess wrong in the direction that hurts: expiring early puts
-    // the customer back in front of the same 409.
-    const stopped = activePostRef.current;
-    if (stopped !== null) {
-      setStoppedTurnStillRunning(true);
-      void stopped.promise.finally(() => {
-        setStoppedTurnStillRunning(false);
-      });
+  // B2 — the post whose Stop is in progress, and the timer that bounds it. The
+  // flag belongs to ONE post: a new turn never inherits a previous turn's Stop.
+  const [stopping, setStopping] = useState(false);
+  const stoppingPostRef = useRef<symbol | null>(null);
+  const stopDeadlineRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // B2 — the server session of a turn the chat stopped WAITING for, while that
+  // turn's request is still unsettled: what `stopAgain` asks the server about.
+  const [detachedStopSessionId, setDetachedStopSessionId] = useState<string | null>(null);
+  const clearStopping = useCallback((): void => {
+    stoppingPostRef.current = null;
+    if (stopDeadlineRef.current !== null) {
+      clearTimeout(stopDeadlineRef.current);
+      stopDeadlineRef.current = null;
     }
-    activePostRef.current = null;
-    setSending(false);
-    // Drop live progress now: cancel short-circuits the in-flight post()'s finally
-    // (it nulls activePostRef), so the settle-clear there won't run for this turn.
-    clearLiveProgress();
-    // P2 #9 — finalize the dangling user bubble NOW (don't wait for a possibly-
-    // never-resolving post): remove the orphan so it isn't left on screen and isn't
-    // persisted as an unanswered "complete" turn. A post that DOES later resolve
-    // sees the bumped generation and no-ops its own rollback.
-    const orphan = inFlightUserTurnIdRef.current;
-    if (orphan !== null) {
-      inFlightUserTurnIdRef.current = null;
-      setTurns((t) => t.filter((x) => x.id !== orphan));
-    }
+    setStopping(false);
   }, []);
+  const [adopting, setAdopting] = useState(false);
+  // B2 — stop WAITING for the in-flight turn: the pre-B2 soft stop, now the
+  // bounded fallback of a server Stop that could not be confirmed. `keep` names
+  // why, when the steps that ran must stay visible as an interrupted turn; with
+  // no reason the orphan bubble is removed exactly as before.
+  const detach = useCallback(
+    (keep?: { reason: string }) => {
+      cancelGenRef.current += 1;
+      // P6 — THE CHAT STOPS WAITING, BUT THE TURN MAY STILL BE RUNNING, AND THE UI
+      // SAYS SO. Since B2 this is the fallback — the server did not confirm the
+      // stop, or there was no server session to stop — and the server may still be
+      // driving the browser. Before P6 the composer went straight back to "Send" — and
+      // the next Send hit a session that was still busy and came back 409, which is
+      // 26% of every AI turn this product has ever served. Holding a flag until the
+      // stopped turn's own request SETTLES is the honest signal: while it is set,
+      // the composer says the previous task is still finishing instead of inviting
+      // a send that cannot succeed.
+      //
+      // ⛔ IT IS TIED TO THE REQUEST PROMISE, NOT TO A TIMER. A timer would guess,
+      // and it would guess wrong in the direction that hurts: expiring early puts
+      // the customer back in front of the same 409.
+      const stopped = activePostRef.current;
+      if (stopped !== null) {
+        setStoppedTurnStillRunning(true);
+        // Kept so the customer can ask the server again (`stopAgain`); a Stop
+        // that could not be confirmed must not be the last chance to stop it.
+        const stoppedSid = sessionIdRef.current;
+        setDetachedStopSessionId(stoppedSid);
+        void stopped.promise.finally(() => {
+          setStoppedTurnStillRunning(false);
+          setDetachedStopSessionId((current) => (current === stoppedSid ? null : current));
+        });
+      }
+      activePostRef.current = null;
+      setSending(false);
+      clearStopping();
+      // B2 — the steps that already ran are real work on the customer's page; a
+      // Stop that could not be confirmed must not wipe them. They stay, as an
+      // interrupted turn saying why the chat stopped waiting, beside the message.
+      const ranSteps = liveStepsRef.current;
+      // Drop live progress now: cancel short-circuits the in-flight post()'s finally
+      // (it nulls activePostRef), so the settle-clear there won't run for this turn.
+      clearLiveProgress();
+      if (keep !== undefined) {
+        // The late settle of the detached post must not roll this bubble back:
+        // it now stands beside the interrupted turn that explains it.
+        const kept = inFlightUserTurnIdRef.current;
+        if (kept !== null) keptUserTurnIdsRef.current.add(kept);
+        inFlightUserTurnIdRef.current = null;
+        setTurns((t) => [
+          ...t,
+          { id: nextId(), role: 'agent', interrupted: { reason: keep.reason, steps: ranSteps } },
+        ]);
+        return;
+      }
+      // P2 #9 — finalize the dangling user bubble NOW (don't wait for a possibly-
+      // never-resolving post): remove the orphan so it isn't left on screen and isn't
+      // persisted as an unanswered "complete" turn. A post that DOES later resolve
+      // sees the bumped generation and no-ops its own rollback.
+      const orphan = inFlightUserTurnIdRef.current;
+      if (orphan !== null) {
+        inFlightUserTurnIdRef.current = null;
+        setTurns((t) => t.filter((x) => x.id !== orphan));
+      }
+    },
+    [clearLiveProgress, clearStopping, nextId],
+  );
+  const cancel = useCallback(() => {
+    const active = activePostRef.current;
+    if (active === null) return;
+    const sid = sessionIdRef.current;
+    const c = clientRef.current;
+    // No server session yet (the first send is still creating it), or a client
+    // without the stop call: there is nothing on the server to stop, so the
+    // chat stops waiting, exactly as Stop always did before B2.
+    if (sid === null || c === null || typeof c.agentSessions?.stop !== 'function') {
+      detach();
+      return;
+    }
+    // Idempotent: a second press while stopping changes nothing.
+    if (stoppingPostRef.current === active.token) return;
+    stoppingPostRef.current = active.token;
+    setStopping(true);
+    // ⛔ THE BOUND. Freed by the turn's own response in the normal case (see
+    // post()'s finally); this only fires when that response has not come.
+    stopDeadlineRef.current = setTimeout(() => {
+      stopDeadlineRef.current = null;
+      if (activePostRef.current === active && stoppingPostRef.current === active.token) {
+        detach({ reason: STOP_UNCONFIRMED_REASON });
+      }
+    }, STOP_CONFIRM_DEADLINE_MS);
+    // Whether this Stop is still the one on screen: the turn has not answered
+    // and nothing else has taken the composer.
+    const stillStopping = (): boolean =>
+      activePostRef.current === active && stoppingPostRef.current === active.token;
+    // Tried twice, a pause apart: one network blip must not turn a Stop into a
+    // wait, and retrying at once mostly fails the same way twice.
+    //
+    // `stop_requested` settles it: the turn ends on its own response. So does
+    // `no_turn_running`, usually — the turn has just ended and its response is
+    // on its way. But that is also what a server that has not reached this
+    // chat's turn yet says, so while our own message is still unanswered the
+    // chat asks again, a pause apart, a bounded number of times. The deadline
+    // above still bounds the whole thing.
+    const ask = (retriesLeft: number, reasksLeft: number): Promise<void> =>
+      Promise.resolve()
+        .then(() => c.agentSessions.stop(sid))
+        .then(
+          async (answer) => {
+            if (answer.status !== 'no_turn_running' || reasksLeft <= 0) return;
+            await stopRetryPause(STOP_RETRY_DELAY_MS);
+            if (stillStopping()) await ask(retriesLeft, reasksLeft - 1);
+          },
+          async (err: unknown) => {
+            if (retriesLeft <= 0) throw err;
+            await stopRetryPause(STOP_RETRY_DELAY_MS);
+            if (stillStopping()) await ask(retriesLeft - 1, reasksLeft);
+          },
+        );
+    void ask(1, STOP_REASK_LIMIT).catch(() => {
+      if (stillStopping()) detach({ reason: STOP_FAILED_REASON });
+    });
+  }, [detach]);
+  // B2 — see UseAgentChatResult.stopAgain. One ask, retried once a pause later;
+  // what ends the held state is still the detached request settling.
+  const stopAgain = useCallback(() => {
+    const sid = detachedStopSessionId;
+    const c = clientRef.current;
+    if (sid === null || c === null || typeof c.agentSessions?.stop !== 'function') return;
+    setStopping(true);
+    const ask = (retriesLeft: number): Promise<unknown> =>
+      Promise.resolve()
+        .then(() => c.agentSessions.stop(sid))
+        .catch(async (err: unknown) => {
+          if (retriesLeft <= 0) throw err;
+          await stopRetryPause(STOP_RETRY_DELAY_MS);
+          return ask(retriesLeft - 1);
+        });
+    void ask(1)
+      .catch(() => undefined)
+      .finally(() => {
+        // Only the flag this call raised: a new turn's own Stop owns it otherwise.
+        if (stoppingPostRef.current === null) setStopping(false);
+      });
+  }, [detachedStopSessionId]);
+  // Unmount: never leave the bound's timer behind.
+  useEffect(
+    () => () => {
+      if (stopDeadlineRef.current !== null) clearTimeout(stopDeadlineRef.current);
+    },
+    [],
+  );
   // Invalidate the in-flight generation on unmount so a reply that resolves after
   // the view is gone (App.tsx remounts CurrentView per view.kind, unmounting this
   // hook on a sidebar switch) discards instead of setState-ing a dead component —
@@ -891,6 +1093,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       const rollbackUserTurn = (): void => {
         if (appendedUserTurnId === null) return;
         const uid = appendedUserTurnId;
+        if (keptUserTurnIdsRef.current.delete(uid)) return;
         // P2 #9 — clear the in-flight marker (Stop already handled it if it fired
         // first; this no-ops then).
         if (inFlightUserTurnIdRef.current === uid) inFlightUserTurnIdRef.current = null;
@@ -1116,6 +1319,12 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         return false;
       } finally {
         settleJoined(outcome);
+        // B2 — THIS is what ends "Stopping…": the turn's own response (a
+        // `stopped` result, an ordinary one if it was already finishing, or an
+        // error) is the server's word that the turn is over and the session will
+        // take the next message. The stop request's answer only says the stop
+        // was asked for.
+        if (stoppingPostRef.current === ownerToken) clearStopping();
         if (activePostRef.current?.token === ownerToken) {
           activePostRef.current = null;
           if (cancelGenRef.current === gen) {
@@ -1138,6 +1347,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       opts.proxyId,
       nextId,
       closeServerSession,
+      clearStopping,
     ],
   );
 
@@ -1252,6 +1462,8 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     // fresh chat's transcript + session (audit wja3dfl5t P0). Same for restore().
     cancelGenRef.current += 1;
     activePostRef.current = null;
+    // B2 — a Stop in progress belonged to the chat being left.
+    clearStopping();
     // Bumping the cancel generation invalidates any in-flight adopt(), so its
     // `adopting` flag no longer describes anything — clear it here (a following
     // synchronous adopt() re-sets it true). Otherwise a stale-generation adopt
@@ -1273,7 +1485,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     setRestoredHistoryCount(0);
     setRestoredGateFloor(0);
     setRestoredSessionId(null);
-  }, [clearLiveProgress]);
+  }, [clearLiveProgress, clearStopping]);
 
   const reset = useCallback((): void => {
     // Best-effort close the chat we're leaving so its server session + any
@@ -1322,6 +1534,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       // its late response can't attach to (and persist onto) the restored chat.
       cancelGenRef.current += 1;
       activePostRef.current = null;
+      clearStopping();
       // The generation bump invalidates any in-flight adopt() (for the chat we're
       // leaving), so its `adopting` flag is stale — clear it. handleSelectChat calls
       // restore() then a synchronous adopt(), which re-sets it true, preserving order.
@@ -1376,7 +1589,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       // confirmation lookup stay correct when the customer continues the chat.
       idRef.current = restoredTurns.reduce((m, t) => Math.max(m, t.id), 0);
     },
-    [closeServerSession, clearProfileBinding],
+    [closeServerSession, clearProfileBinding, clearStopping],
   );
 
   return {
@@ -1402,6 +1615,8 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     adopting,
     adoptError,
     cancel,
+    stopping,
+    ...(stoppedTurnStillRunning && detachedStopSessionId !== null ? { stopAgain } : {}),
     stoppedTurnStillRunning,
     restoredHistoryCount,
     restoredSessionId,

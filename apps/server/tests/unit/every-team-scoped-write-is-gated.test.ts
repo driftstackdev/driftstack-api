@@ -125,6 +125,7 @@ const ROSTER: Readonly<Record<string, readonly string[]>> = {
   'POST /v1/agent-sessions/:id/livekit-token': ['callerCanAccessAgentSession'],
   'POST /v1/agent-sessions/:id/mode': ['callerCanAccessAgentSession'],
   'POST /v1/agent-sessions/:id/resume': ['callerCanAccessAgentSession'],
+  'POST /v1/agent-sessions/:id/stop': ['callerCanAccessAgentSession'],
   'POST /v1/agent-sessions/:id/takeover': ['callerCanAccessAgentSession'],
   'POST /v1/agent-sessions/:id/transport-report': ['callerCanAccessAgentSession'],
   'POST /v1/api-keys': ['effectiveAccountIdForKeyWrite'],

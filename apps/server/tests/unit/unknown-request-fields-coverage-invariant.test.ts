@@ -45,7 +45,11 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { LaunchProfileRequestSchema, ResumeSessionRequestSchema } from '@driftstack/api-types';
+import {
+  LaunchProfileRequestSchema,
+  ResumeSessionRequestSchema,
+  StopAgentTurnRequestSchema,
+} from '@driftstack/api-types';
 import { transportReportBodySchema } from '../../src/routes/agent-sessions-transport-report.js';
 import { TrimScopeBodySchema } from '../../src/routes/profiles.js';
 
@@ -108,6 +112,10 @@ const EXEMPT_SCHEMAS: ReadonlyArray<readonly [string, unknown]> = [
   // that says "I ignored `scopes` and cleared your cache instead" is a worse
   // answer than a refusal on an op that deletes cookies.
   ['TrimScopeBodySchema', TrimScopeBodySchema],
+  // B2 — the Stop body is `{}` and `.strict()`: the route takes no options, and a
+  // caller who sends one (a turn id, a "force") must be told it was not honoured
+  // by a 400, not by a 202 that stopped the turn anyway.
+  ['StopAgentTurnRequestSchema', StopAgentTurnRequestSchema],
 ];
 const EXEMPT_SCHEMA_NAMES = EXEMPT_SCHEMAS.map(([name]) => name);
 

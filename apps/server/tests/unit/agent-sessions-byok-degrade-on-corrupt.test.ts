@@ -102,6 +102,13 @@ describe('agent-sessions create — BYOK hydration degrade-on-corrupt', () => {
   });
 });
 
+// The route opens a stop window for every admitted message (B2); a hand-built
+// runtime has to answer that call too, or the request dies before runTurn.
+const stopWindowStub = (): { signal: AbortSignal; close: () => void } => ({
+  signal: new AbortController().signal,
+  close: () => undefined,
+});
+
 describe('agent-sessions message — terminal BYOK cache ownership', () => {
   it('evicts cached plaintext before an evidence-bearing closed terminal and replays only redacted evidence', async () => {
     const cache = new InMemoryByokKeyCache();
@@ -110,7 +117,7 @@ describe('agent-sessions message — terminal BYOK cache ownership', () => {
     const { app, sessions } = await buildApp({
       getPlaintext: () => Promise.resolve('sk-ant-stored-terminal-secret'),
       cache,
-      runtime: { runTurn } as unknown as AgentRuntime,
+      runtime: { runTurn, openTurnStopWindow: stopWindowStub } as unknown as AgentRuntime,
       receipts,
     });
     const create = await app.inject({ method: 'POST', url: '/v1/agent-sessions', payload: {} });
@@ -193,7 +200,7 @@ describe('agent-sessions message — terminal BYOK cache ownership', () => {
     const { app, sessions } = await buildApp({
       getPlaintext: () => Promise.resolve('sk-ant-stored-resumable'),
       cache,
-      runtime: { runTurn } as unknown as AgentRuntime,
+      runtime: { runTurn, openTurnStopWindow: stopWindowStub } as unknown as AgentRuntime,
     });
     const create = await app.inject({ method: 'POST', url: '/v1/agent-sessions', payload: {} });
     const id = create.json<{ id: string }>().id;

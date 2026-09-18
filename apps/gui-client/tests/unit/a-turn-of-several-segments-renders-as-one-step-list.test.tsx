@@ -280,7 +280,9 @@ describe('the view renders a second segment without dropping or duplicating a st
  */
 function withNotice(notice: unknown): AgentMessageResponse {
   const base = planTurn().response;
-  if (base === undefined) throw new Error('planTurn() built no response');
+  // Narrowed to the variant the notice is added to: a `stopped` turn already
+  // carries a `notice` of its own, typed as a string.
+  if (base?.kind !== 'plan-executed') throw new Error('planTurn() built no plan response');
   const response: AgentMessageResponse & { notice?: unknown } = { ...base, notice };
   return response;
 }

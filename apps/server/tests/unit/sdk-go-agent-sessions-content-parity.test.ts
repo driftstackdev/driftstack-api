@@ -78,10 +78,13 @@ describe('sdk-go agent_sessions content parity', () => {
     expect(body).toMatch(/ProfileID string `json:"profile_id,omitempty"`/);
   });
 
-  it('AgentMessageResponse discriminated union: \'Branch on Kind: "plan-executed" (Intents + Results + OK populated), "clarify" (ClarifyingQuestion populated), or "refuse" (RefuseReason populated).\' — pinned so the 3-variant discriminator framing stays documented (note: logged-manual is implicit via Kind="logged-manual" + only Session populated; drift to dropping discriminator framing would force Go callers to guess which fields to read)', () => {
+  it('AgentMessageResponse discriminated union: \'Branch on Kind: "plan-executed" (Intents + Results + OK populated), "clarify" (ClarifyingQuestion populated), "refuse" (RefuseReason populated), or "stopped" (…Notice…StoppedDuring).\' — pinned so the discriminator framing stays documented (note: logged-manual is implicit via Kind="logged-manual" + only Session populated; drift to dropping discriminator framing would force Go callers to guess which fields to read)', () => {
     expect(body).toMatch(
-      /\/\/ AgentMessageResponse is the discriminated turn-result\. Branch on\s*\/\/ Kind: "plan-executed" \(Intents \+ Results \+ OK populated\),\s*\/\/ "clarify" \(ClarifyingQuestion populated\), or "refuse"\s*\/\/ \(RefuseReason populated\)\./,
+      /\/\/ AgentMessageResponse is the discriminated turn-result\. Branch on\s*\/\/ Kind: "plan-executed" \(Intents \+ Results \+ OK populated\),\s*\/\/ "clarify" \(ClarifyingQuestion populated\), "refuse"\s*\/\/ \(RefuseReason populated\), or "stopped"/,
     );
+    // B2 — a Go caller can read how far a stopped turn got only if the fields exist.
+    expect(body).toMatch(/Notice string `json:"notice,omitempty"`/);
+    expect(body).toMatch(/StoppedDuring string `json:"stopped_during,omitempty"`/);
   });
 
   it("CreateOptions Stripe-pattern Idempotency-Key framing pinned: 'IdempotencyKey is the v2-#19 Stripe-pattern idempotency token. Forwarded as the Idempotency-Key request header so retries collapse onto the same server-side row. Server enforces (account_id, idempotency_key) uniqueness via a partial unique index; SDK just plumbs the header.' — pinned so the partial-unique-index contract + the SDK-just-plumbs framing survive", () => {

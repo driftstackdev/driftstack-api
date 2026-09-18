@@ -211,3 +211,30 @@ export const ResumeSessionResponseSchema = z
   })
   .strict();
 export type ResumeSessionResponse = z.infer<typeof ResumeSessionResponseSchema>;
+
+/**
+ * B2 — POST /v1/agent-sessions/:id/stop body. Empty: the route stops whatever
+ * turn is running for the session, and there is only ever one. Strict, so a
+ * field a client expects to mean something is refused rather than ignored.
+ */
+export const StopAgentTurnRequestSchema = z.strictObject({});
+export type StopAgentTurnRequest = z.infer<typeof StopAgentTurnRequestSchema>;
+
+/**
+ * B2 — POST /v1/agent-sessions/:id/stop response. The route REQUESTS the stop and
+ * returns at once; it does not wait for the turn to wind down.
+ *
+ *   · `stop_requested` (202) — a turn was running and has been asked to stop. It
+ *     ends on its own response: the message request that started it returns a
+ *     `kind: 'stopped'` result (or, if it was already finishing, its ordinary
+ *     result), and the session then accepts the next message.
+ *   · `no_turn_running` (200) — nothing was running, so there was nothing to
+ *     stop. Stopping is idempotent: asking again is always safe.
+ */
+export const StopAgentTurnResponseSchema = z
+  .object({
+    status: z.enum(['stop_requested', 'no_turn_running']),
+    session_id: z.string(),
+  })
+  .strict();
+export type StopAgentTurnResponse = z.infer<typeof StopAgentTurnResponseSchema>;

@@ -34,6 +34,7 @@ import {
   ConsequentialActionCategorySchema,
   SendInputEventRequestSchema,
   ResumeSessionRequestSchema,
+  StopAgentTurnRequestSchema,
   PaginationQuerySchema,
   type AgentModel,
   type ApiKeyScope,
@@ -46,6 +47,7 @@ import {
   type AgentTurnAdmission,
   type AgentRuntime,
   type AgentTurnProgressEvent,
+  type AgentTurnStopWindow,
 } from '../services/agent-runtime.js';
 import { consequentialSignature } from '../services/agent-executor.js';
 import type { AgentIntent, DecomposeUsage, TranscriptEntry } from '../services/agent-decomposer.js';
@@ -5463,6 +5465,10 @@ export function registerAgentSessionsRoutes(
     // control, why a session closed, whether a read-back was blocked). It
     // records and returns; it cannot throw and nothing here reads it back.
     turnObserver?: AgentTurnTelemetryCollector,
+    // B2 — opened by the route when it admitted this request, so a Stop pressed
+    // during everything below (receipt, key and spend checks) still stops the
+    // turn. Handed to the AI turn only: a manual note has nothing to stop.
+    stopWindow?: AgentTurnStopWindow,
   ) => {
     const parsed = RunTurnRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
@@ -5893,6 +5899,7 @@ export function registerAgentSessionsRoutes(
         ...(approvedConsequentialActions !== undefined ? { approvedConsequentialActions } : {}),
         ...(onStep !== undefined ? { onStep } : {}),
         ...(onProgress !== undefined ? { onProgress } : {}),
+        ...(stopWindow !== undefined ? { stopWindow } : {}),
         keySource,
       });
       turnObserver?.observeResult(result);
@@ -5965,6 +5972,30 @@ export function registerAgentSessionsRoutes(
             sessionLivenessStore,
             sessionCapabilityReportStore,
           ),
+        };
+      }
+      if (result.kind === 'stopped') {
+        // B2 — the customer pressed Stop. A 200 with its own kind, not an error:
+        // the turn ended the way it was asked to, and the body carries exactly
+        // what ran (a step that was running when Stop arrived included, with its
+        // real result or as outcome-unknown). `intents` are the steps that RAN,
+        // so a client can never mistake a planned step for a performed one.
+        const usage = publicUsage(result.usage, keySource);
+        const ran = result.executor?.results ?? [];
+        return {
+          kind: result.kind,
+          session: publicAgentSession(
+            result.session,
+            undefined,
+            sessionLivenessStore,
+            sessionCapabilityReportStore,
+          ),
+          intents: ran.map((r) => publicAgentIntent(r.intent)),
+          results: ran.map(publicIntentResult),
+          ok: false,
+          notice: result.notice,
+          stopped_during: result.stoppedDuring,
+          ...(usage !== undefined ? { usage } : {}),
         };
       }
       if (result.kind === 'plan-executed') {
@@ -6124,6 +6155,8 @@ export function registerAgentSessionsRoutes(
     onProgress?: (event: AgentTurnProgressEvent) => void,
     // Telemetry only; forwarded to executeAgentMessage. See its JSDoc.
     turnObserver?: AgentTurnTelemetryCollector,
+    // B2 — forwarded to executeAgentMessage. See its JSDoc.
+    stopWindow?: AgentTurnStopWindow,
   ): Promise<AgentMessageTerminal> => {
     // Authenticate ownership and validate the exact canonical body before
     // reserving a key. Invalid/foreign requests must not poison the account's
@@ -6143,7 +6176,15 @@ export function registerAgentSessionsRoutes(
       const admission = await resolveAgentMessageAdmission(req.params.id, pre);
       return {
         status: 200,
-        body: await executeAgentMessage(req, pre, admission, onStep, onProgress, turnObserver),
+        body: await executeAgentMessage(
+          req,
+          pre,
+          admission,
+          onStep,
+          onProgress,
+          turnObserver,
+          stopWindow,
+        ),
       };
     }
     if (agentTurnReceipts === undefined) {
@@ -6191,7 +6232,15 @@ export function registerAgentSessionsRoutes(
       // spend, or provider access. Existing receipts replay first, independent
       // of current authority or a transient authority-store read failure.
       const admission = await resolveAgentMessageAdmission(req.params.id, pre);
-      const body = await executeAgentMessage(req, pre, admission, onStep, onProgress, turnObserver);
+      const body = await executeAgentMessage(
+        req,
+        pre,
+        admission,
+        onStep,
+        onProgress,
+        turnObserver,
+        stopWindow,
+      );
       terminal = { status: 200, body };
     } catch (error) {
       // Persist typed failures too. If browser work finished and a later
@@ -6317,6 +6366,9 @@ export function registerAgentSessionsRoutes(
           throw new InternalError('Agent message admission did not resolve.');
         }
         let terminal: AgentMessageTerminal;
+        // B2 — opened the moment ownership is proven, with no await before it,
+        // so Stop reaches this request for its whole life (see AgentTurnStopWindow).
+        const stopWindow = runtime.openTurnStopWindow(req.params.id);
         try {
           // The progress sink exists on this lane only when telemetry is wired,
           // and only records phase timestamps: nothing is written to the
@@ -6331,10 +6383,13 @@ export function registerAgentSessionsRoutes(
                   turnObserver.recordProgress(event);
                 },
             turnObserver,
+            stopWindow,
           );
         } catch (err) {
           turnObserver?.finishWithError(err);
           throw err;
+        } finally {
+          stopWindow.close();
         }
         turnObserver?.finish({ status: terminal.status, body: terminal.body });
         if (terminal.error !== undefined) {
@@ -6507,6 +6562,10 @@ export function registerAgentSessionsRoutes(
 
       let status = 200;
       let body: unknown;
+      // B2 — as on the JSON lane: open before the first await of the turn's own
+      // work, closed once the terminal is decided. Not opened for a request whose
+      // admission failed — there is no turn behind it to stop.
+      const stopWindow = pre !== undefined ? runtime.openTurnStopWindow(req.params.id) : undefined;
       try {
         // Replay a deferred admission problem through the same terminal
         // envelope the rest of this lane uses. Rethrown verbatim rather than
@@ -6532,6 +6591,7 @@ export function registerAgentSessionsRoutes(
                 onProgress(event);
               },
           turnObserver,
+          stopWindow,
         );
         status = terminal.status;
         body = terminal.body;
@@ -6547,6 +6607,7 @@ export function registerAgentSessionsRoutes(
         // so preserve its observability without exposing internals on the wire.
         reportAgentMessageError(req, err, status, body);
       } finally {
+        stopWindow?.close();
         clearInterval(heartbeat);
         reply.raw.off('close', stopWriting);
         reply.raw.off('error', stopWriting);
@@ -6560,6 +6621,73 @@ export function registerAgentSessionsRoutes(
       // the customer and their answer.
       turnObserver?.finish({ status, body, viewerDisconnected: viewerClosed });
       return reply;
+    },
+  );
+
+  // B2 — POST /v1/agent-sessions/:id/stop. Stop the session's running turn.
+  //
+  // WHO MAY STOP: exactly who may send the turn. Same preHandler as POST
+  // /message (the account key with `write`, or the per-session control key,
+  // which is cryptographically bound to THIS :id), the same ownership check,
+  // and the same 404 for a session the caller cannot see — so a stop can neither
+  // reach nor reveal another account's session.
+  //
+  // WHAT IT DOES NOT CHECK, ON PURPOSE: the control lane. Sending needs the AI to
+  // hold control, because it starts work; stopping only ever takes work AWAY, and
+  // a Stop refused because control was changing hands would fail at the one
+  // moment the customer most wants the agent to stop touching the page. The
+  // turn's own fences still decide what it may publish on the way out.
+  //
+  // RETURNS AT ONCE. It requests the stop and answers; the turn ends on its own
+  // response, which is what the desktop app waits for. 202 `stop_requested` when
+  // a turn was running (here, or — through the shared store — on another API
+  // process), 200 `no_turn_running` when none was. Idempotent either way.
+  //
+  // "A turn was running" starts when POST /message proved ownership, not when
+  // the runtime took the slot: the message route opens a stop window first, so a
+  // Stop pressed right after Send (during the receipt, key and spend checks)
+  // still stops the turn. That window is this process's; on a second process a
+  // Stop in that instant finds no claim yet and answers 200, which is why the
+  // desktop app asks again while its own message is still unanswered. A store
+  // that does not answer within TURN_STOP_REQUEST_DEADLINE_MS is a 503, never a 200.
+  //
+  // Rate-limited on the `global` bucket, not the message bucket: a customer who
+  // has spent their message budget must still be able to stop the turn it paid for.
+  app.post<{ Params: { id: string }; Body: unknown }>(
+    '/v1/agent-sessions/:id/stop',
+    { preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')] },
+    async (req, reply) => {
+      const parsed = StopAgentTurnRequestSchema.safeParse(req.body ?? {});
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      const rec = await sessions.get(req.params.id);
+      if (rec === null) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+      }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
+      let outcome: Awaited<ReturnType<AgentRuntime['requestTurnStop']>>;
+      try {
+        outcome = await runtime.requestTurnStop(req.params.id);
+      } catch (err) {
+        // Only reachable when this process does not hold the turn AND the shared
+        // store could not be asked. "Nothing is running" would be a guess that
+        // could leave the agent working after the customer was told it stopped.
+        req.log.warn(
+          { component: 'agent-session-stop', sessionId: req.params.id, err },
+          'could not determine whether another process is running this turn',
+        );
+        throw new FeatureUnavailableError(
+          'We could not confirm the stop just now. Try again in a moment.',
+        );
+      }
+      return reply
+        .code(outcome === 'stop_requested' ? 202 : 200)
+        .send({ status: outcome, session_id: req.params.id });
     },
   );
 
@@ -6750,6 +6878,9 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   app.get('/v1/agent-sessions/:id/downloads', stub);
   app.get('/v1/agent-sessions/:id/downloads/content', stub);
   app.post('/v1/agent-sessions/:id/message', stub);
+  // B2 — Stop's disabled twin, so a gated deployment answers the documented
+  // activation state rather than a bare 404.
+  app.post('/v1/agent-sessions/:id/stop', stub);
   app.delete('/v1/agent-sessions/:id', stub);
   // Arc 2 sub-slice 8.9 (v2-#8) — pair-mode routes must also return
   // 503 FeatureUnavailable when the activation gate is off. Without

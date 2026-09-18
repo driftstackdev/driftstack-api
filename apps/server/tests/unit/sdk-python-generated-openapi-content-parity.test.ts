@@ -121,7 +121,9 @@ describe('W622 sdk-python generated + openapi content parity', () => {
     // d5e30ea9c regenerated all twelve timeout-bearing intent variants from
     // the current OpenAPI authority; the prior five-count described an older
     // partial intent roster.
-    expect(body.match(/timeoutMs: conint\(ge=0\) \| None = None/g)).toHaveLength(12);
+    // B2 — 16 since the `stopped` message variant publishes its own intents and
+    // results arrays (one wait variant in `intents`, one per result kind).
+    expect(body.match(/timeoutMs: conint\(ge=0\) \| None = None/g)).toHaveLength(16);
     expect(body).toMatch(/mfa_enrolled: bool/);
     expect(body).toMatch(/concurrent_session_cap: conint\(ge=0\)/);
     expect(body).toMatch(/profile_count: conint\(ge=0\)/);

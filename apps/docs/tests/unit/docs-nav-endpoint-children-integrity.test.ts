@@ -200,7 +200,9 @@ describe('S22.4/S27 DOC_NAV endpoint children ↔ api/*.md + webhooks/*.md integ
     // a nav child that matches a real h2 rather than a drifting count.
     // 139 since P-23 (2026-09-05) added `/api/profiles/#recent-activity` (GET activity).
     // 140 since P-17 documented POST /v1/agent-sessions/{id}/egress.
-    expect(apiTotal).toBe(140);
+    // 141 since B2 documented POST /v1/agent-sessions/{id}/stop (the exactness
+    // arm above passed first, so the +1 matches a real h2).
+    expect(apiTotal).toBe(141);
     expect(webhooksTotal).toBe(8);
   });
 });

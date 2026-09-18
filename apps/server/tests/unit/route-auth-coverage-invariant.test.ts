@@ -302,6 +302,8 @@ const DISABLED_EXEMPTIONS: readonly RouteExemption[] = [
       ['post', '/v1/agent-sessions/:id/mode'],
       ['post', '/v1/agent-sessions/:id/input-event'],
       ['post', '/v1/agent-sessions/:id/resume'],
+      // B2 — Stop's disabled twin (503 activation message, not a bare 404).
+      ['post', '/v1/agent-sessions/:id/stop'],
       // V-1491 — the two routes the live registrar had without a disabled twin.
       // Off, they were unregistered and answered a bare 404 while every sibling
       // answered the activation 503.
@@ -641,7 +643,10 @@ describe('all-route caller-authority invariant', () => {
     // 2026-09-18 — 315 since GET /v1/admin/agent-turns/summary (the operator view
     // of AI turn health). Staff-scope gated, so the structurally-authorized count
     // below moves WITH it; had it shipped ungated only this number would have.
-    expect(routes).toHaveLength(315);
+    // B2 — 317 since POST /v1/agent-sessions/:id/stop: the live route (the same
+    // controlKeyOrAccountAuth('write') + owner gate as /message) and its disabled
+    // 503 twin. Refreshed with violations() proven empty first.
+    expect(routes).toHaveLength(317);
     // +1 (not +2): only the LIVE network route is structurally authorized; the
     // disabled twin is a stub in DISABLED_EXEMPTIONS. Had the live route shipped
     // ungated, this number would not have moved while the total moved by two.
@@ -654,7 +659,8 @@ describe('all-route caller-authority invariant', () => {
     // ungated would move the total and leave this number where it was.
     // 221 since #7's captures read is structurally authorized (its disabled twin is a stub).
     // 222 since GET /v1/admin/agent-turns/summary (requireScope driftstack_internal_admin).
-    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(222);
+    // 223 since B2's stop route (its disabled twin is a stub, so +1 not +2).
+    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(223);
   });
 
   it('every route has structural caller authority or one exact reviewed exemption', () => {
@@ -680,7 +686,8 @@ describe('all-route caller-authority invariant', () => {
     // network-log read's twin.
     // 56 since P-17's egress twin joined the disabled surface.
     // 57 since #7's captures-read twin joined it.
-    expect(DISABLED_EXEMPTIONS).toHaveLength(57);
+    // 58 since B2's stop twin joined it.
+    expect(DISABLED_EXEMPTIONS).toHaveLength(58);
     const exemptionKeys = EXEMPTIONS.map((exemption) =>
       [
         exemption.file,

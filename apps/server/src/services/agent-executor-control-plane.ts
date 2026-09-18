@@ -43,6 +43,11 @@ import type {
 import {
   consequentialHalt,
   executionMayContinue,
+  raceAbort,
+  STOP_IN_FLIGHT_GRACE_MS,
+  STOPPED_BEFORE_FINISHING_REASON,
+  STOPPED_OUTCOME_UNKNOWN_REASON,
+  stopRequested,
   substituteCredentials,
 } from './agent-executor.js';
 import { agentIntentToDispatch } from './agent-intent-to-dispatch.js';
@@ -74,6 +79,10 @@ interface RunIntentOutcome {
    * as redacted partial evidence, but never publish it as a normal turn. */
   result: IntentResult | null;
   authorityLost: boolean;
+  /** B2 — the customer pressed Stop while this step was being worked on. No
+   *  further attempt, retry or element wait was started; `result` is what the
+   *  step actually did (or null when it was never sent). */
+  stopped?: boolean;
 }
 
 /** doc-132 §5.3 slice 3 — bounded auto-retry of transient failures. */
@@ -104,6 +113,9 @@ export interface AutoRetryOptions {
   elementWaitRunBudgetMs?: number;
   /** Injectable sleep so tests run instantly. Default: real setTimeout. */
   sleep?: (ms: number) => Promise<void>;
+  /** B2 — how long a step already in flight when Stop arrives is waited for.
+   *  Default {@link STOP_IN_FLIGHT_GRACE_MS}; measured with `sleep`. */
+  stopInFlightGraceMs?: number;
 }
 
 const DEFAULT_MAX_RETRIES = 2;
@@ -156,6 +168,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   private readonly elementAppearWaitMs: number;
   private readonly elementWaitRunBudgetMs: number;
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly stopInFlightGraceMs: number;
 
   constructor(
     private readonly dispatcher: IntentDispatcher,
@@ -196,6 +209,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       opts.elementWaitRunBudgetMs ?? DEFAULT_ELEMENT_WAIT_RUN_BUDGET_MS,
     );
     this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+    this.stopInFlightGraceMs = Math.max(0, opts.stopInFlightGraceMs ?? STOP_IN_FLIGHT_GRACE_MS);
   }
 
   async execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
@@ -226,9 +240,15 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     // (legacy callers) — never dispatch on the `unattached` sentinel.
     const dispatchSessionId = args.agentSessionId ?? args.sessionId;
     for (const [planIndex, intent] of args.plan.intents.entries()) {
+      // B2 — Stop is checked before anything else about the next step, so once
+      // it is observed nothing further is announced, gated or dispatched.
+      if (stopRequested(args.signal)) return { results, ok: false, stopped: true };
       if (!(await executionMayContinue(args.shouldContinue))) {
         return { results, ok: false, authorityLost: true };
       }
+      // Again after that await: a Stop that landed during the authority read must
+      // not see the step announced as starting when it will never be sent.
+      if (stopRequested(args.signal)) return { results, ok: false, stopped: true };
       // 0. W443/W445 consequential-action gate — halt (WITHOUT dispatching) on a
       //    purchase / payment / account-deletion the customer hasn't approved this
       //    run. Identical gate to Stub/RealAgentExecutor: the go-live swap must NOT
@@ -297,9 +317,25 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         mapped.params,
         args.shouldContinue,
         elementWaitBudget,
+        args.signal,
       );
       if (result.result !== null) emitStep(result.result);
       if (result.authorityLost) return { results, ok: false, authorityLost: true };
+      // B2 — after the result is recorded, never before: a step that was running
+      // when Stop arrived is part of what ran.
+      //
+      // ⛔ EXCEPT WHEN NOTHING WAS CUT SHORT. A Stop that arrives while the plan's
+      // LAST step is in flight, and that step then comes back done, stopped
+      // nothing: every planned step ran. Reporting it as stopped would tell the
+      // customer — and the next turn's planner — that a finished task is
+      // unfinished, and invite it to be done twice. The runtime still sees the
+      // stop and decides whether anything after the plan (another segment, the
+      // read-back) is left to cut short.
+      if (result.stopped === true) {
+        const finishedLastStep =
+          planIndex === args.plan.intents.length - 1 && result.result?.kind === 'success';
+        if (!finishedLastStep) return { results, ok: false, stopped: true };
+      }
       if (result.result === null) return { results, ok: false };
       // #139 — halt-on-first-failure, EXCEPT a `wait`: a wait is a best-effort
       // synchronization hint (the decomposer inserts idle-settles that a navigate
@@ -323,7 +359,9 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   async observe(
     sessionId: string,
     shouldContinue?: ExecuteArgs['shouldContinue'],
+    signal?: AbortSignal,
   ): Promise<string | null> {
+    if (stopRequested(signal)) return null;
     if (!(await executionMayContinue(shouldContinue))) return null;
     let dispatch: IntentDispatch;
     try {
@@ -336,6 +374,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     } catch {
       return null;
     }
+    if (stopRequested(signal)) return null;
     if (!(await executionMayContinue(shouldContinue))) return null;
     // Bound the read-back latency: the plan already succeeded + was recorded, so
     // a hung box must not stretch the turn to the full 30s dispatch budget. Race
@@ -347,9 +386,12 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       .then((parsed) => (parsed.success ? extractPageText(parsed.outputData) : null))
       .catch(() => null);
     const timedOut = this.sleep(this.observeTimeoutMs).then((): string | null => null);
-    const result = await Promise.race([observed, timedOut]);
+    // B2 — Stop cuts the read short for the same reason the deadline may: the
+    // page is only being read, so a late answer is harmlessly dropped.
+    const raced = await raceAbort(Promise.race([observed, timedOut]), signal);
+    if (raced.aborted) return null;
     if (!(await executionMayContinue(shouldContinue))) return null;
-    return result;
+    return raced.value;
   }
 
   /**
@@ -361,8 +403,9 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   async observeDigest(
     sessionId: string,
     shouldContinue?: ExecuteArgs['shouldContinue'],
+    signal?: AbortSignal,
   ): Promise<string | null> {
-    const source = await this.observe(sessionId, shouldContinue);
+    const source = await this.observe(sessionId, shouldContinue, signal);
     if (source === null) return null;
     const digest = digestPage(source);
     this.rememberGateLabels(sessionId, digest.gateLabels);
@@ -413,7 +456,9 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     selector: string,
     timeoutMs: number,
     shouldContinue: ExecuteArgs['shouldContinue'],
-  ): Promise<'appeared' | 'absent' | 'authority_lost'> {
+    signal?: AbortSignal,
+  ): Promise<'appeared' | 'absent' | 'authority_lost' | 'stopped'> {
+    if (stopRequested(signal)) return 'stopped';
     if (!(await executionMayContinue(shouldContinue))) return 'authority_lost';
     const mapped = agentIntentToDispatch({
       kind: 'wait',
@@ -443,9 +488,62 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     } catch {
       return 'absent';
     }
-    const parsed = await this.dispatcher.dispatch(dispatch);
+    if (stopRequested(signal)) return 'stopped';
+    // B2 — a `wait_for` only watches the page, so Stop may abandon it at once:
+    // the element either appears or it does not, and nothing on the site changes
+    // either way. This is what "cuts a pending element wait short" means.
+    const raced = await raceAbort(this.dispatcher.dispatch(dispatch), signal);
+    if (raced.aborted) return 'stopped';
     if (!(await executionMayContinue(shouldContinue))) return 'authority_lost';
-    return parsed.success ? 'appeared' : 'absent';
+    return raced.value.success ? 'appeared' : 'absent';
+  }
+
+  /**
+   * B2 — send one attempt and return its result, honouring a Stop that arrives
+   * while it is on its way.
+   *
+   * ⛔ THE DIRECTION IS THE SAFETY PROPERTY, exactly as in the retry fence below.
+   * A step that only reads or waits is abandoned the moment Stop arrives —
+   * nothing on the page depends on its answer. A step that may change the page
+   * (`intentReplayMayDuplicateEffect`: navigate, every interact, a relative
+   * scroll, a pacing dwell) may ALREADY HAVE HAPPENED, so its result is awaited
+   * for up to `stopInFlightGraceMs` and recorded. If that runs out the step is
+   * recorded as outcome-unknown — never as "not done", because telling the
+   * customer a submit did not happen when it may have is how it gets sent twice.
+   */
+  private async dispatchHonouringStop(
+    dispatch: IntentDispatch,
+    intent: ExecuteArgs['plan']['intents'][number],
+    signal: AbortSignal | undefined,
+  ): Promise<
+    | { kind: 'settled'; parsed: ParsedIntentResult; stopped: boolean }
+    | { kind: 'abandoned'; result: IntentResult }
+  > {
+    const inFlight = this.dispatcher.dispatch(dispatch);
+    const raced = await raceAbort(inFlight, signal);
+    if (!raced.aborted) return { kind: 'settled', parsed: raced.value, stopped: false };
+    if (!intentReplayMayDuplicateEffect(intent)) {
+      return {
+        kind: 'abandoned',
+        result: { kind: 'failure', intent, reason: STOPPED_BEFORE_FINISHING_REASON },
+      };
+    }
+    const graceOver = this.sleep(this.stopInFlightGraceMs).then(() => null);
+    const settled = await Promise.race([inFlight, graceOver]);
+    if (settled === null) {
+      return {
+        kind: 'abandoned',
+        result: {
+          kind: 'failure',
+          intent,
+          reason: STOPPED_OUTCOME_UNKNOWN_REASON,
+          // `unknown` + not retryable is this codebase's existing statement of
+          // "may have applied": no re-plan follows it and no retry replays it.
+          diagnosis: { category: 'unknown', retryable: false },
+        },
+      };
+    }
+    return { kind: 'settled', parsed: settled, stopped: true };
   }
 
   /**
@@ -476,6 +574,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     params: Record<string, unknown>,
     shouldContinue: ExecuteArgs['shouldContinue'],
     elementWaitBudget: ElementWaitBudget = { remainingMs: 0 },
+    signal?: AbortSignal,
   ): Promise<RunIntentOutcome> {
     let result: IntentResult | null = null;
     // Two independent budgets: the short general retryable-failure budget, and a
@@ -489,9 +588,15 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // Re-check on EVERY attempt, including after either retry sleep. A close
       // that wins while the box is cold or a retry backs off stops the suffix
       // before a fresh intentId is minted or another external dispatch starts.
+      // B2 — Stop is checked on both sides of the authority read, which is an
+      // await: a stop that lands during it must still prevent the dispatch.
+      // `result` is the previous attempt's, when there was one — what the step
+      // actually did — and null when it was never sent at all.
+      if (stopRequested(signal)) return { result, authorityLost: false, stopped: true };
       if (!(await executionMayContinue(shouldContinue))) {
         return { result, authorityLost: true };
       }
+      if (stopRequested(signal)) return { result, authorityLost: false, stopped: true };
       // Serialize to the base64 wire envelope (fresh intentId per attempt).
       // Re-validates params; should not fail (agentIntentToDispatch already
       // validated), but the executor must never throw — a guard converts any
@@ -517,7 +622,11 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
 
       // Dispatch over the control plane; the dispatcher never rejects (failure
       // → a failure ParsedIntentResult).
-      const parsed = await this.dispatcher.dispatch(dispatch);
+      const sent = await this.dispatchHonouringStop(dispatch, intent, signal);
+      if (sent.kind === 'abandoned') {
+        return { result: sent.result, authorityLost: false, stopped: true };
+      }
+      const parsed = sent.parsed;
       result = intentResultToCustomer(intent, parsed);
       // #7 — a successful screenshot returns its bytes inline in parsed.outputData.
       // Stash them in the capture store (kept OUT of the encrypted transcript) and
@@ -540,6 +649,11 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       if (!(await executionMayContinue(shouldContinue))) {
         return { result, authorityLost: true };
       }
+      // B2 — a step that settled after Stop is recorded as it came back, and
+      // nothing more is attempted for it: no retry, no element wait.
+      if (sent.stopped || stopRequested(signal)) {
+        return { result, authorityLost: false, stopped: true };
+      }
       if (result.kind !== 'failure') return { result, authorityLost: false };
 
       // BROWSER COLD-START — `intent_session_not_established` means the box fork's
@@ -557,7 +671,8 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         establishAttempt < this.sessionEstablishMaxRetries
       ) {
         establishAttempt++;
-        await this.sleep(this.sessionEstablishRetryDelayMs);
+        // B2 — a backoff Stop may cut short; the loop top then returns.
+        await raceAbort(this.sleep(this.sessionEstablishRetryDelayMs), signal);
         continue;
       }
 
@@ -592,8 +707,12 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
           waitSelector,
           this.elementAppearWaitMs,
           shouldContinue,
+          signal,
         );
         if (appeared === 'authority_lost') return { result, authorityLost: true };
+        // The element-not-found above PROVED the step did not execute, so it is
+        // reported as exactly that — the customer stopped the wait for it.
+        if (appeared === 'stopped') return { result, authorityLost: false, stopped: true };
         if (appeared === 'appeared') continue;
         return { result, authorityLost: false };
       }
@@ -623,7 +742,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         retryAttempt < this.maxRetries;
       if (!shouldRetry) return { result, authorityLost: false };
       retryAttempt++;
-      await this.sleep(this.retryDelayMs);
+      await raceAbort(this.sleep(this.retryDelayMs), signal);
     }
   }
 }

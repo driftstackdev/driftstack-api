@@ -92,6 +92,11 @@ const ALLOWED_NON_SESSION_STATUS = new Set([
   // acknowledgement field ({"status":"resume_requested"}); an ack value,
   // NOT a session lifecycle status (SessionStatusSchema).
   'resume_requested',
+  // B2 — POST /v1/agent-sessions/:id/stop's acknowledgement
+  // ({"status":"stop_requested"} / {"status":"no_turn_running"}); ack values
+  // about the session's running TURN, not session lifecycle statuses.
+  'stop_requested',
+  'no_turn_running',
 ]);
 
 describe('W279.B workspace-wide session-status sweep', () => {
