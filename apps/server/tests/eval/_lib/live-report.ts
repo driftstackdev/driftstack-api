@@ -11,7 +11,10 @@ import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { AgentModel } from '@driftstack/api-types';
+import {
+  chatPricesOn,
+  resolvePlannerModel,
+} from '../../../src/services/agent-planner-providers.js';
 import { LiveConfigError, type LiveThinkingPolicy } from './live-config.js';
 import { LiveMeter, scrubSecrets, type LiveSpendCaps, type MeterTotals } from './live-meter.js';
 import { liveSecrets, runLiveTask, type LiveRepReport } from './live-runner.js';
@@ -57,7 +60,12 @@ export interface LiveReport {
     atEnd: LiveSourceStamp;
     changedDuringRun: boolean;
   };
-  model: AgentModel;
+  /** The planner model as the run named it (a Claude id, or provider-qualified). */
+  model: string;
+  /** Who served it: `anthropic`, or the chat provider's id from the table. */
+  providerId: string;
+  /** How each call was priced for the dollar cap and the spend estimate. */
+  pricedAt: string;
   /** NAME of the environment variable the key was read from. Never the key. */
   keySource: string;
   /**
@@ -77,7 +85,13 @@ export interface LiveReport {
     /** The longest any response went silent. The product aborts a streamed call
      *  on silence, so this is how near a healthy call came to that. */
     longestSilenceMsMax: number | null;
+    /** Hidden reasoning, as the provider reported it (Anthropic thinking
+     *  tokens, chat-completions reasoning tokens). Null: never reported. */
     thinkingTokens: number | null;
+    /** Prompt tokens served from the provider's cache, and written to it. Null
+     *  means the provider never reported the field, which is not zero. */
+    cachedPromptTokens: number | null;
+    cacheWrittenTokens: number | null;
     /** `stop_reason` → calls. Anything but `end_turn` is worth reading. */
     stopReasons: Readonly<Record<string, number>>;
     errors: ReadonlyArray<string>;
@@ -152,7 +166,12 @@ export interface LiveSuiteArgs {
   tasks: ReadonlyArray<LiveTask>;
   apiKey: string;
   keySource: string;
-  model: AgentModel;
+  /** The planner model id: a Claude id, or provider-qualified. */
+  model: string;
+  /** name → value of every provider key present in the environment, the one in
+   *  use included: every one is scrubbed from, and must be absent from, every
+   *  output. */
+  providerKeys?: ReadonlyMap<string, string>;
   reps: number;
   maxTurns: number;
   caps: LiveSpendCaps;
@@ -178,11 +197,17 @@ export interface LiveSuiteResult {
 }
 
 export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult> {
-  const secrets = liveSecrets(args.apiKey, args.tasks);
+  const secrets = liveSecrets(args.apiKey, args.tasks, args.providerKeys);
+  // A chat row is priced from the provider table at the rate in force today; a
+  // Claude model from the api-types registry, per request.
+  const selection = resolvePlannerModel(args.model);
+  const pricing = selection.kind === 'chat' ? chatPricesOn(selection.row, new Date()) : null;
   const meter = new LiveMeter(
     args.providerFetch ?? globalThis.fetch.bind(globalThis),
     args.caps,
     secrets,
+    undefined,
+    pricing,
   );
   const startedAt = (args.now?.() ?? new Date()).toISOString();
   const sourceAtStart = liveSourceStamp();
@@ -268,6 +293,13 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
   }
   const silences = calls.flatMap((c) => (c.longestSilenceMs === null ? [] : [c.longestSilenceMs]));
   const thinking = calls.flatMap((c) => (c.thinkingTokens === null ? [] : [c.thinkingTokens]));
+  const reported = (pick: (c: (typeof calls)[number]) => number | null): number | null => {
+    const values = calls.flatMap((c) => {
+      const value = pick(c);
+      return value === null ? [] : [value];
+    });
+    return values.length === 0 ? null : values.reduce((t, v) => t + v, 0);
+  };
   const report: LiveReport = {
     tier: 'live',
     headline:
@@ -281,6 +313,11 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
       return { atStart: sourceAtStart, atEnd, changedDuringRun: !sameSource(sourceAtStart, atEnd) };
     })(),
     model: args.model,
+    providerId: selection.kind === 'claude' ? 'anthropic' : selection.row.provider.id,
+    pricedAt:
+      selection.kind === 'claude'
+        ? 'the api-types model registry (Anthropic list price, per request)'
+        : `the provider table row ${selection.row.qualifiedId}: $${String(pricing?.inputUsdPerMTok)} in / $${String(pricing?.cachedInputUsdPerMTok)} cached / $${String(pricing?.outputUsdPerMTok)} out per million (${selection.row.priceSource})`,
     keySource: args.keySource,
     requestControls: {
       requestedThinkingPolicy: args.thinkingPolicy ?? 'the product default',
@@ -293,6 +330,8 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
     provider: {
       longestSilenceMsMax: silences.length === 0 ? null : Math.max(...silences),
       thinkingTokens: thinking.length === 0 ? null : thinking.reduce((t, v) => t + v, 0),
+      cachedPromptTokens: reported((c) => c.cacheReadInputTokens),
+      cacheWrittenTokens: reported((c) => c.cacheCreationInputTokens),
       stopReasons,
       errors: calls.flatMap((c) =>
         c.providerError === null ? [] : [`${c.label} (${c.purpose}): ${c.providerError}`],
@@ -308,7 +347,9 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
       // To the cent, for reading. The cap was enforced on the unrounded figure.
       estimatedUsd: Math.round(totals.estimatedUsd * 100) / 100,
       estimateNote:
-        'an ESTIMATE at the model registry list price, per call: uncached input and output at their own rates, cache reads and writes at their multipliers. The same figure the dollar cap is enforced on. Not an invoice',
+        selection.kind === 'claude'
+          ? 'an ESTIMATE at the model registry list price, per call: uncached input and output at their own rates, cache reads and writes at their multipliers. The same figure the dollar cap is enforced on. Not an invoice'
+          : 'an ESTIMATE at the provider table list price, per call: uncached prompt, cached prompt, cache writes and output (reasoning included) at their own rates. The same figure the dollar cap is enforced on. Not an invoice',
     },
     latency: {
       plan: summariseLatency(allReps, 'plan'),
@@ -340,7 +381,7 @@ export function renderLiveReport(report: LiveReport): string {
   for (const tier of report.tiers) lines.push(`  ${tier}`);
   lines.push(rule);
   lines.push(
-    `  model ${report.model}   reps ${String(report.repsRequested)}   customer messages per task ≤ ${String(report.maxTurns)}   git ${report.gitSha}   key from ${report.keySource}`,
+    `  provider ${report.providerId}   model ${report.model}   reps ${String(report.repsRequested)}   customer messages per task ≤ ${String(report.maxTurns)}   git ${report.gitSha}   key from ${report.keySource}`,
   );
   const stamp = report.source.atStart;
   const short = (sha: string): string => sha.slice(0, 12);
@@ -352,6 +393,7 @@ export function renderLiveReport(report: LiveReport): string {
       '  ⛔ THE PRODUCT SOURCE CHANGED DURING THIS RUN — its repetitions were not all measured on the same bytes. Do not compare it with another run.',
     );
   }
+  lines.push(`  priced at ${report.pricedAt}`);
   lines.push(
     `  caps  $${String(report.caps.maxUsd)} at list price, ${String(report.caps.maxCalls)} model calls, ${String(report.caps.maxTotalTokens)} tokens — whichever is reached first stops the run`,
   );
@@ -390,7 +432,12 @@ export function renderLiveReport(report: LiveReport): string {
     `spend — ${String(report.spend.callsStarted)} model calls (${String(report.spend.callsRefusedByCap)} refused by the cap), ` +
       `${String(report.spend.inputTokens)} input + ${String(report.spend.outputTokens)} output tokens, ` +
       `cache written ${String(report.spend.cacheCreationInputTokens)}, cache read ${String(report.spend.cacheReadInputTokens)}; ` +
-      `≈ $${report.spend.estimatedUsd.toFixed(2)} (${report.spend.estimateNote})`,
+      `≈ $${report.spend.estimatedUsd.toFixed(2)} (${report.spend.estimateNote})` +
+      // Said out loud, because these tokens were never reported by anyone: the
+      // figure above is an upper bound for them, not a reading.
+      (report.spend.callsPricedAtCeiling > 0
+        ? `; ${String(report.spend.callsPricedAtCeiling)} call(s) ended before the provider reported usage and are counted at a CEILING (the whole request, one token per character, plus the whole reply allowance)`
+        : ''),
   );
   for (const [purpose, summary] of [
     ['plan', report.latency.plan],
@@ -402,7 +449,7 @@ export function renderLiveReport(report: LiveReport): string {
     );
   }
   lines.push(
-    `provider — longest silence in any response ${ms(report.provider.longestSilenceMsMax)}; hidden thinking tokens ${report.provider.thinkingTokens === null ? 'not reported' : String(report.provider.thinkingTokens)}; stop reasons ${
+    `provider — longest silence in any response ${ms(report.provider.longestSilenceMsMax)}; hidden thinking/reasoning tokens ${report.provider.thinkingTokens === null ? 'not reported' : String(report.provider.thinkingTokens)}; cached prompt tokens ${report.provider.cachedPromptTokens === null ? 'not reported' : String(report.provider.cachedPromptTokens)}; cache written ${report.provider.cacheWrittenTokens === null ? 'not reported' : String(report.provider.cacheWrittenTokens)}; stop reasons ${
       Object.entries(report.provider.stopReasons)
         .map(([reason, count]) => `${reason}×${String(count)}`)
         .join(', ') || 'none'

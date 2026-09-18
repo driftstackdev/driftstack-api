@@ -9,8 +9,8 @@
 // provider calls.
 //
 // Started through that config, it still runs only with `EVAL_LIVE=1` AND a key
-// in the variable the product reads for its deployment key, and never with `CI`
-// set. Otherwise its one test is SKIPPED, and its name says exactly how to run
+// in the variable the chosen model's provider reads (for a Claude model, the one
+// the product reads for its deployment key), and never with `CI` set. Otherwise its one test is SKIPPED, and its name says exactly how to run
 // it. See `_lib/live-config.ts`.
 //
 // ⛔ AND IT PINS NOTHING. No outcome below is asserted, no baseline is written,
@@ -52,6 +52,9 @@ describe('agent eval — LIVE tier (real planner, real model; never gates)', () 
         apiKey: config.apiKey,
         keySource: config.apiKeySource,
         model: config.model,
+        // Every provider key in the environment, not only this run's: all of
+        // them are scrubbed, and all of them are asserted absent below.
+        providerKeys: config.providerKeys,
         reps: config.reps,
         maxTurns: config.maxTurns,
         caps: config.caps,
@@ -79,6 +82,11 @@ describe('agent eval — LIVE tier (real planner, real model; never gates)', () 
         for (const [name, value] of secrets) {
           expect(output.includes(value), `${name} is in the report`).toBe(false);
         }
+      }
+      // Positive control on the loop above: every provider key the environment
+      // holds is among the secrets it checked.
+      for (const name of config.providerKeys.keys()) {
+        expect(secrets.has(name), `${name} was not checked`).toBe(true);
       }
       // A run in which the provider never once answered measured nothing, and
       // that is a fault in the setup (a bad key, no network) rather than a

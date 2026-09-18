@@ -5,14 +5,14 @@ Two tiers drive **whole turns** through the real `AgentRuntime` and the real
 `IntentDispatcher` seam. They answer different questions, and a number from one
 must never be quoted as a number from the other.
 
-|               | **Scripted tier**                                                                                                                                                 | **Live tier**                                                                                                    |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Planner       | a hand-written plan per task (`_lib/tasks.ts`)                                                                                                                    | the real `ClaudeAgentDecomposer`: real system prompt, real request assembly, real streaming parser, a real model |
-| Proves        | the **executor and the answer path** — retry and patience fences, verb mapping and selector refusal, wire codec, result mapper, confirmation gate, read-back gate | **planning quality** — given only the customer's words                                                           |
-| Deterministic | yes (virtual clock, stand-in answerer)                                                                                                                            | **no**                                                                                                           |
-| Gates         | **yes** — pins an outcome and a death reason per task in `eval-baseline.json`                                                                                     | **never** — writes no baseline, pins no outcome                                                                  |
-| Reports       | a rate over a fixed corpus, labelled as an executor number                                                                                                        | pass **counts** over repetitions ("2/3"), never a single-run rate                                                |
-| Runs          | in the default suite                                                                                                                                              | only when explicitly asked (below)                                                                               |
+|               | **Scripted tier**                                                                                                                                                 | **Live tier**                                                                                                                                                                                             |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Planner       | a hand-written plan per task (`_lib/tasks.ts`)                                                                                                                    | the real planner the model id names — `ClaudeAgentDecomposer`, or for the provider bake-off the chat-completions adapter — real system prompt, real request assembly, real streaming parser, a real model |
+| Proves        | the **executor and the answer path** — retry and patience fences, verb mapping and selector refusal, wire codec, result mapper, confirmation gate, read-back gate | **planning quality** — given only the customer's words                                                                                                                                                    |
+| Deterministic | yes (virtual clock, stand-in answerer)                                                                                                                            | **no**                                                                                                                                                                                                    |
+| Gates         | **yes** — pins an outcome and a death reason per task in `eval-baseline.json`                                                                                     | **never** — writes no baseline, pins no outcome                                                                                                                                                           |
+| Reports       | a rate over a fixed corpus, labelled as an executor number                                                                                                        | pass **counts** over repetitions ("2/3"), never a single-run rate                                                                                                                                         |
+| Runs          | in the default suite                                                                                                                                              | only when explicitly asked (below)                                                                                                                                                                        |
 
 The same sentences are printed at the top of both reports (`_lib/tiers.ts`).
 
@@ -142,8 +142,10 @@ a silent fall back to the expensive default. A model id the registry cannot pric
 is priced at the dearest rate it knows, never at zero.
 
 **Secrets.** The meter forwards request headers untouched and never reads them.
-Every report and every captured error is scrubbed of the provider key and of any
-saved-credential value, and the writer **refuses to write** if one survives.
+Every report and every captured error is scrubbed of **every provider key present
+in the environment** — the one in use and every other provider's, since a shell
+set up for a bake-off holds several — and of any saved-credential value, and the
+writer **refuses to write** if one survives.
 
 **Page time.** The device's clock is virtual, so a page would otherwise stand
 still through a planning call that really takes eight seconds or more. The live
@@ -256,3 +258,118 @@ format (`_lib/stand-in-planner-provider.ts`). Every live task is driven once by 
 plan written with the page in view (must pass) and once by a model that does
 nothing (must not). The "models" are functions we wrote: a green run proves the
 **instrument**, and says nothing about how well a real model plans.
+
+### The provider bake-off
+
+`EVAL_LIVE_MODEL` also takes a **provider-qualified** id from the provider table
+(`apps/server/src/services/agent-planner-providers.ts`). The runner builds the
+planner through the product's own factory: a Claude id gets exactly the
+`ClaudeAgentDecomposer` production builds; a qualified id gets the
+chat-completions adapter (`agent-decomposer-openai-compatible.ts`) aimed at that
+row — same prompts, same conversation and fences, same parser, via
+`agent-planner-contract.ts` — with its key read from **that provider's**
+variable. An Anthropic key is never a key for another provider, and a chat run
+never puts its key in the runtime's Anthropic slot.
+
+⛔ **Eval-only.** No non-Claude id is in `AgentModelSchema` or any public enum; a
+customer cannot pick one, and bootstrap does not call the factory.
+
+Every safety property above holds unchanged: the same three-way opt-in, the same
+refusal under `CI`, caps checked **before** each call — the dollar cap priced from
+the row's list price (on the day of the run: Gemini's doubles on 2027-01-01, and
+Mercury is priced at list, not at its promotion, so the cap fails towards
+stopping) — and the scrub-and-refuse on every provider key. `EVAL_LIVE_THINKING`
+is refused for a chat row (its reasoning is fixed per row); `EVAL_LIVE_STRUCTURED=0`
+works for both, and sends no `response_format`.
+
+The header of each report names the provider and model and the price list it
+was costed at; the provider line reports cached prompt tokens, cache writes and
+reasoning tokens as the provider stated them ("not reported" is never zero).
+
+⛔ **A chat call whose usage never arrived counts against the caps at a CEILING.**
+Chat completions state usage only in their final chunk, so a call cut off before
+it — a timeout, a torn stream, a Stop, a provider that ignores
+`stream_options.include_usage` — reports nothing, and may still have been billed.
+The record keeps "not reported"; the token and dollar caps count the whole
+request at one token per character plus the whole reply allowance it asked for,
+and the spend line says how many calls were counted that way. An over-count, so
+the cap fails towards stopping. A call answered with an error status is not
+charged. An endpoint that answers unstreamed is metered from its chat usage.
+
+**Running one arm.** With that provider's key ALREADY EXPORTED under the variable
+named in the table — never typed on the command line:
+
+| Row                             | Key variable        | Reply constraint       | Reasoning sent           | Unverified until the first run                         |
+| ------------------------------- | ------------------- | ---------------------- | ------------------------ | ------------------------------------------------------ |
+| `openai:gpt-5.6-luna`           | `OPENAI_API_KEY`    | strict json_schema     | `reasoning_effort: none` | cache-write field name on chat completions             |
+| `google:gemini-3.8-flash`       | `GEMINI_API_KEY`    | json_schema            | `low` (cannot be off)    | json_schema via the compatibility endpoint             |
+| `google:gemini-3.6-flash`       | `GEMINI_API_KEY`    | json_schema            | `minimal`                | `minimal` on this model; json_schema via compatibility |
+| `baseten:deepseek-v4.1-flash`   | `BASETEN_API_KEY`   | json_schema            | `none`                   | whether json_schema is enforced                        |
+| `fireworks:deepseek-v4.1-flash` | `FIREWORKS_API_KEY` | json_schema (enforced) | `none`                   | `none` for V4.1 specifically                           |
+| `cerebras:qwen-3.8-27b`         | `CEREBRAS_API_KEY`  | strict json_schema     | `none`                   | streaming with strict                                  |
+| `mistral:mistral-small-2603`    | `MISTRAL_API_KEY`   | json_schema            | `none`                   | price; model served on the EU host                     |
+| `inception:mercury-2.5`         | `INCEPTION_API_KEY` | json_schema            | `instant`                | response_format shape; reasoning fully off             |
+
+A control a provider rejects with a 400 is dropped for the rest of the run and
+the request re-sent once without it — the report's `reply controls AS SENT` line
+then shows what actually went out, so a wrong guess costs one request and is
+visible, never silent.
+
+```
+EVAL_LIVE=1 EVAL_LIVE_MODEL=openai:gpt-5.6-luna EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+EVAL_LIVE=1 EVAL_LIVE_MODEL=google:gemini-3.8-flash EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+EVAL_LIVE=1 EVAL_LIVE_MODEL=google:gemini-3.6-flash EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+EVAL_LIVE=1 EVAL_LIVE_MODEL=baseten:deepseek-v4.1-flash EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+EVAL_LIVE=1 EVAL_LIVE_MODEL=fireworks:deepseek-v4.1-flash EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+EVAL_LIVE=1 EVAL_LIVE_MODEL=cerebras:qwen-3.8-27b EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+EVAL_LIVE=1 EVAL_LIVE_MODEL=mistral:mistral-small-2603 EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+EVAL_LIVE=1 EVAL_LIVE_MODEL=inception:mercury-2.5 EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+```
+
+The Claude arms are the same command with `EVAL_LIVE_MODEL=claude-sonnet-5` (or
+`claude-opus-5`, `claude-haiku-4-5`, …), keyed as before; add
+`EVAL_LIVE_THINKING=disabled` or `adaptive-low` to compare policies. Run the
+arms from the same machine, interleaved, at the same time of day; latency is one
+of the two things being chosen on.
+
+**What one full run should cost — ARITHMETIC, not a measurement.** Assumed shape
+for one repetition of the whole corpus: about 40 model calls, 32 planning and 8
+read-back (the measured default runs made ~3.5 calls per task-repetition). A
+planning call is 3,000 prefix tokens (cached where the provider caches) + 1,200
+fresh input + 300 output; a read-back is 5,000 input + 100 output. The 300 is
+conservative: a measured Claude planning reply averages ~110 output tokens.
+Always-thinking models are assumed to bill 300 reasoning tokens a call. The
+Claude token counts are the newer tokenizer's; other tokenizers may count the
+same text 25–30% lower, so the non-Claude figures are, if anything, high.
+
+| Model                                                | $/M in / cached / out | One repetition              | `EVAL_LIVE_REPS=3` |
+| ---------------------------------------------------- | --------------------- | --------------------------- | ------------------ |
+| `claude-opus-5` (reference)                          | 5.00 / 0.50 / 25.00   | ≈ $0.70                     | ≈ $2.10            |
+| `claude-sonnet-5` (reference)                        | 2.00 / 0.20 / 10.00   | ≈ $0.28                     | ≈ $0.84            |
+| `openai:gpt-5.6-luna`                                | 0.20 / 0.02 / 1.20    | ≈ $0.030                    | ≈ $0.09            |
+| `google:gemini-3.8-flash` (+300 reasoning, no cache) | 0.75 / 0.075 / 3.75   | ≈ $0.22 (≈ $0.43 from 2027) | ≈ $0.64            |
+| `google:gemini-3.6-flash` (minimal, no cache)        | 0.75 / 0.075 / 3.75   | ≈ $0.17                     | ≈ $0.51            |
+| `baseten:deepseek-v4.1-flash`                        | 0.30 / 0.03 / 1.20    | ≈ $0.039                    | ≈ $0.12            |
+| `fireworks:deepseek-v4.1-flash`                      | 0.22 / 0.007 / 0.66   | ≈ $0.025                    | ≈ $0.07            |
+| `cerebras:qwen-3.8-27b` (no cache discount)          | 0.99 / 0.99 / 1.49    | ≈ $0.19                     | ≈ $0.56            |
+| `mistral:mistral-small-2603` (EU)                    | 0.165 / 0.0165 / 0.66 | ≈ $0.021                    | ≈ $0.06            |
+| `inception:mercury-2.5` (list price)                 | 0.20 / 0.02 / 0.75    | ≈ $0.025                    | ≈ $0.08            |
+
+The default `$3` cap covers any single arm above at three repetitions. A model
+that needs more re-plans moves towards the planner-call ceiling and costs more:
+the report's measured `≈ $` line is the number to compare, not this table.
+
+**Proving it without a key.** `agent-eval-live-provider-bake-off.test.ts` drives
+the chat path end to end against `_lib/stand-in-chat-provider.ts`, which speaks
+the OpenAI streaming wire: a strict-schema reply, a refusal, a malformed reply, a
+cached-token usage block, and a Stop mid-stream; the dollar cap priced from the
+table; and a sentinel for EVERY provider key variable asserted absent from every
+output, with the provider echoing all of them in an error body.

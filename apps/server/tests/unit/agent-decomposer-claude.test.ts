@@ -219,7 +219,9 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       const src = readFileSync(
         resolve(
           dirname(fileURLToPath(import.meta.url)),
-          '../../src/services/agent-decomposer-claude.ts',
+          // MOVED 2026-09-18: the intent parser lives in the planner contract,
+          // which every provider's adapter shares.
+          '../../src/services/agent-planner-contract.ts',
         ),
         'utf8',
       );
@@ -248,7 +250,9 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       const src = readFileSync(
         resolve(
           dirname(fileURLToPath(import.meta.url)),
-          '../../src/services/agent-decomposer-claude.ts',
+          // MOVED 2026-09-18: the intent parser lives in the planner contract,
+          // which every provider's adapter shares.
+          '../../src/services/agent-planner-contract.ts',
         ),
         'utf8',
       );

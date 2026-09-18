@@ -41,6 +41,10 @@ const OUTBOUND_CALLERS: ReadonlyMap<string, string> = new Map([
     'local readBoundedResponseBody copy, MAX_OAUTH_RESPONSE_BODY_BYTES 256 KiB',
   ],
   ['services/agent-decomposer-claude.ts', 'own streaming cap, MAX_ANTHROPIC_RESPONSE_BYTES 64 KiB'],
+  [
+    'services/agent-decomposer-openai-compatible.ts',
+    'own streaming cap on the assembled reply, MAX_REPLY_TEXT_BYTES 64 KiB (4 MiB transport backstop); error bodies read to 16 KiB',
+  ],
   ['services/webhook-worker.ts', 'own readExcerpt streaming cap, MAX_RESPONSE_READ_BYTES 64 KiB'],
   ['services/durable-webhook-delivery.ts', 'own streaming cap, RESPONSE_READ_MAX_BYTES 64 KiB'],
   ['services/anthropic-key-tester.ts', 'body cancelled, only status read'],

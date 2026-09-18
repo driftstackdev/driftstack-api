@@ -90,7 +90,9 @@ describe('a tap selector must be valid CSS', () => {
 
 describe('the decomposer knows it is driving a phone', () => {
   const prompt = readFileSync(
-    resolve(__dirname, '../../src/services/agent-decomposer-claude.ts'),
+    // MOVED 2026-09-18: the planner's system prompt lives in the planner
+    // contract, shared by every provider's adapter.
+    resolve(__dirname, '../../src/services/agent-planner-contract.ts'),
     'utf8',
   );
 

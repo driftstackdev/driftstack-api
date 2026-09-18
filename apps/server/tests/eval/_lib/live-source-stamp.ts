@@ -26,6 +26,9 @@ const TURN_ENTRY_POINTS = [
   'services/agent-runtime.ts',
   'services/agent-decomposer-claude.ts',
   'services/agent-executor-control-plane.ts',
+  // A bake-off arm plans through the factory and, for a non-Claude row, the
+  // chat-completions adapter: those bytes are what such a run measured.
+  'services/agent-planner-providers.ts',
 ];
 
 /**

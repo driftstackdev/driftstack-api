@@ -62,6 +62,20 @@ describe('AUP-refusal corpus cross-decomposer invariant (claude ↔ deterministi
     );
   });
 
+  it('agent-planner-contract.ts — where the pre-filter every provider adapter runs now lives (moved out of the Claude adapter 2026-09-18) — IMPORTS the same corpus and screens both the raw and the normalized task against it', () => {
+    const contractSrc = read('agent-planner-contract.ts');
+    expect(contractSrc).toContain(
+      "import { AUP_REFUSAL_PATTERNS } from './agent-decomposer-deterministic.js';",
+    );
+    expect(contractSrc).not.toMatch(
+      /const AUP_REFUSAL_PATTERNS: ReadonlyArray<\{ pattern: RegExp; reason: string \}> = \[/,
+    );
+    expect(contractSrc).toMatch(/pattern\.test\(task\) \|\| pattern\.test\(normalized\)/);
+    // And the Claude adapter reaches it through the shared preflight rather than
+    // a filter of its own.
+    expect(read('agent-decomposer-claude.ts')).toMatch(/plannerPreflight\(args\)/);
+  });
+
   it('agent-decomposer-deterministic.ts is the single source of truth: AUP_REFUSAL_PATTERNS is exported (not just a local const)', () => {
     const deterministicSrc = read('agent-decomposer-deterministic.ts');
     expect(deterministicSrc).toMatch(

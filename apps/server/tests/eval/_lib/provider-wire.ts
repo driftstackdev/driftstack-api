@@ -69,17 +69,27 @@ export function readProviderRequest(bodyText: string): ProviderRequestView {
     messages?: unknown;
   };
   const messages: Array<{ role: string; text: string }> = [];
+  // ⛔ TWO WIRES SPELL THE SYSTEM PROMPT DIFFERENTLY. The Messages API has a
+  // top-level `system`; chat completions put it in the conversation as a
+  // `system` message. Both are read, and a `system` message is kept OUT of
+  // `messages`, so a stand-in's "the last user message" means the same thing on
+  // either wire and a meter files the call under the right purpose.
+  const systemMessages: string[] = [];
   if (Array.isArray(parsed.messages)) {
     for (const message of parsed.messages) {
       if (typeof message !== 'object' || message === null) continue;
       const m = message as { role?: unknown; content?: unknown };
+      if (m.role === 'system') {
+        systemMessages.push(messageText(m.content));
+        continue;
+      }
       messages.push({
         role: typeof m.role === 'string' ? m.role : 'unknown',
         text: messageText(m.content),
       });
     }
   }
-  const system = systemPromptText(parsed.system);
+  const system = systemPromptText(parsed.system) ?? systemPromptText(systemMessages.join('\n'));
   return {
     model: typeof parsed.model === 'string' ? parsed.model : 'unknown',
     system,

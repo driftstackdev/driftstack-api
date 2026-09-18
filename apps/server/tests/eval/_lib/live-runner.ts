@@ -1,6 +1,8 @@
 // Drives ONE live task — up to a few customer messages — through the real
-// `AgentRuntime`, the real `ControlPlaneAgentExecutor` and the REAL
-// `ClaudeAgentDecomposer`, against the DOM-backed device.
+// `AgentRuntime`, the real `ControlPlaneAgentExecutor` and the REAL planner the
+// model id names — `ClaudeAgentDecomposer` for a Claude id, the chat-completions
+// adapter for a provider-qualified one, built by the product's own factory —
+// against the DOM-backed device.
 //
 // WHAT IS REAL HERE THAT THE SCRIPTED TIER SUBSTITUTES: the planner. The
 // decomposer below is the product's own class — its SYSTEM_PROMPT, its request
@@ -20,11 +22,11 @@
 // that needs it is a finding, and stopping at one message would hide whether the
 // second one rescues it.
 
-import type { AgentIntent, AgentModel } from '@driftstack/api-types';
+import { DEFAULT_AGENT_MODEL, type AgentIntent } from '@driftstack/api-types';
 import { AgentRuntime } from '../../../src/services/agent-runtime.js';
 import type { RunTurnResult } from '../../../src/services/agent-runtime.js';
 import { ControlPlaneAgentExecutor } from '../../../src/services/agent-executor-control-plane.js';
-import { ClaudeAgentDecomposer } from '../../../src/services/agent-decomposer-claude.js';
+import { createPlannerDecomposer } from '../../../src/services/agent-planner-providers.js';
 import type {
   AgentDecomposer,
   AnswerArgs,
@@ -122,7 +124,21 @@ export class LiveRecordingDecomposer implements AgentDecomposer {
     private readonly dispatchCount: () => number = () => 0,
     /** Told how long each planning call took, in wall-clock ms. */
     private readonly onPlanningLatency: (ms: number) => void = () => undefined,
+    /**
+     * A value that must NEVER arrive in a call's Anthropic-key slot — on a chat
+     * run, that provider's key. The chat adapter never reads the slot, so a key
+     * put there by mistake would be harmless to the call and invisible to every
+     * other check; it would also be one careless adapter away from being sent
+     * to the wrong company. The harness refuses it outright.
+     */
+    private readonly forbiddenInAnthropicSlot: string | null = null,
   ) {}
+
+  private refuseMisplacedKey(slot: string | undefined): void {
+    if (this.forbiddenInAnthropicSlot !== null && slot === this.forbiddenInAnthropicSlot) {
+      throw new Error('a chat provider key reached the Anthropic key slot of a planner call');
+    }
+  }
 
   private describe(err: unknown): string {
     return this.scrub(
@@ -139,6 +155,7 @@ export class LiveRecordingDecomposer implements AgentDecomposer {
   }
 
   async decompose(args: DecomposeArgs): Promise<DecomposeResult> {
+    this.refuseMisplacedKey(args.byokAnthropicApiKey);
     const record: LivePlanRecord = {
       sawPage: args.observation !== undefined && args.observation.trim().length > 0,
       afterFailure: args.priorFailure !== undefined,
@@ -173,6 +190,7 @@ export class LiveRecordingDecomposer implements AgentDecomposer {
   }
 
   async answerFromObservation(args: AnswerArgs): Promise<AnswerResult> {
+    this.refuseMisplacedKey(args.byokAnthropicApiKey);
     this.answerCalls += 1;
     this.answerObservations.push(args.observation);
     if (args.observation.includes(this.needle)) this.readBackSawNeedleFlag = true;
@@ -261,15 +279,17 @@ export interface LiveRepReport {
 export interface LiveRunContext {
   meter: LiveMeter;
   apiKey: string;
-  model: AgentModel;
+  /** The planner model id: a Claude id, or a provider-qualified one. */
+  model: string;
   maxTurns: number;
   /** name → value, for the scrubber and the leak checks. */
   secrets: ReadonlyMap<string, string>;
   /** Backoff between the product's provider retries. Real by default; the
    *  keyless test sets 0 because there is no network to be polite to. */
   retryBackoffMs?: number;
-  /** The thinking policy to measure, for BOTH call kinds. Absent is the
-   *  product's own default — which is what production runs. */
+  /** The thinking policy to measure, for BOTH call kinds — Claude only; a chat
+   *  row's reasoning is fixed in the provider table. Absent is the product's own
+   *  default, which is what production runs. */
   thinkingPolicy?: 'disabled' | 'adaptive-low';
   /** False sends requests without the reply schema. Absent is the default. */
   structuredOutput?: boolean;
@@ -297,6 +317,10 @@ export function followUpMessage(task: LiveTask): string {
 }
 
 const LIVE_FIXED_NOW = new Date('2026-09-17T00:00:00.000Z');
+
+/** What a chat run hands the runtime's Anthropic-key slot: not a key. See the
+ *  `runTurn` call below. */
+export const CHAT_ADAPTER_HOLDS_ITS_OWN_KEY = 'not-a-key:the-chat-adapter-holds-its-own';
 
 type RunStep = Extract<RunTurnResult, { kind: 'plan-executed' }>['executor']['results'][number];
 
@@ -369,27 +393,46 @@ export async function runLiveTask(
     },
     captureStore,
   );
-  const sessions = new InMemoryAgentSessionsRepo(() => LIVE_FIXED_NOW);
-  const seed = await sessions.create({
-    accountId: 'acc_eval_live',
-    tokenBudgetTotal: EVAL_TOKEN_BUDGET,
-    model: ctx.model,
-  });
-  const decomposer = new LiveRecordingDecomposer(
-    new ClaudeAgentDecomposer({
+  // ⛔ THE PRODUCT'S OWN FACTORY, handed the METER's fetch and nothing else, so
+  // whichever adapter the id picks, every call it makes passes the spend cap.
+  // A Claude id builds exactly what production builds; a chat id builds the
+  // chat-completions adapter for that row, keyed from ITS provider's variable.
+  const { decomposer: planner, selection } = createPlannerDecomposer(ctx.model, {
+    claude: {
       fetch: ctx.meter.fetch,
       ...(ctx.retryBackoffMs !== undefined ? { retryBackoffMs: ctx.retryBackoffMs } : {}),
       ...(ctx.thinkingPolicy !== undefined
         ? { thinkingPolicy: { plan: ctx.thinkingPolicy, answer: ctx.thinkingPolicy } }
         : {}),
       ...(ctx.structuredOutput !== undefined ? { structuredOutput: ctx.structuredOutput } : {}),
-    }),
+    },
+    chat: {
+      apiKey: ctx.apiKey,
+      fetch: ctx.meter.fetch,
+      ...(ctx.retryBackoffMs !== undefined ? { retryBackoffMs: ctx.retryBackoffMs } : {}),
+      ...(ctx.structuredOutput !== undefined ? { structuredOutput: ctx.structuredOutput } : {}),
+    },
+    // Priced on the day the run happens, not the fixture's frozen clock: a
+    // scheduled list-price change must reach the budget debit.
+    day: new Date(),
+  });
+  const sessions = new InMemoryAgentSessionsRepo(() => LIVE_FIXED_NOW);
+  const seed = await sessions.create({
+    accountId: 'acc_eval_live',
+    tokenBudgetTotal: EVAL_TOKEN_BUDGET,
+    // A chat adapter is bound to its row and ignores the session's model; the
+    // session still needs a valid one.
+    model: selection.kind === 'claude' ? selection.model : DEFAULT_AGENT_MODEL,
+  });
+  const decomposer = new LiveRecordingDecomposer(
+    planner,
     INJECTION_NEEDLE,
     (text) => scrubSecrets(text, ctx.secrets),
     () => device.dispatches().length,
     (measuredMs) => {
       clock.advance(Math.round((ctx.pageAgesWhileModelThinks ?? ((ms) => ms))(measuredMs)));
     },
+    selection.kind === 'claude' ? null : ctx.apiKey,
   );
   const runtime = new AgentRuntime({
     decomposer,
@@ -438,7 +481,12 @@ export async function runLiveTask(
       result = await runtime.runTurn({
         agentSessionId: seed.id,
         userMessage: message,
-        byokApiKey: ctx.apiKey,
+        // ⛔ The runtime threads this into the ANTHROPIC key slot, and also
+        // reads it as "this chat has an AI key" before it will read a page back.
+        // A chat provider's key never goes there — its adapter holds its own key
+        // and never reads the slot — so a chat run satisfies the runtime's gate
+        // with a marker that is not a secret of any kind.
+        byokApiKey: selection.kind === 'claude' ? ctx.apiKey : CHAT_ADAPTER_HOLDS_ITS_OWN_KEY,
         now: LIVE_FIXED_NOW,
         ...(task.credentials !== undefined ? { credentials: task.credentials } : {}),
       });
@@ -600,8 +648,12 @@ export async function runLiveTask(
 export function liveSecrets(
   apiKey: string,
   tasks: ReadonlyArray<LiveTask>,
+  /** name → value of every OTHER provider key present (see
+   *  ALL_PROVIDER_KEY_ENV_NAMES): all of them are kept out of every output. */
+  providerKeys: ReadonlyMap<string, string> = new Map(),
 ): ReadonlyMap<string, string> {
   const secrets = new Map<string, string>([['provider-key', apiKey]]);
+  for (const [name, value] of providerKeys) secrets.set(name, value);
   for (const task of tasks) {
     for (const [name, value] of credentialSecrets(task.credentials)) secrets.set(name, value);
   }

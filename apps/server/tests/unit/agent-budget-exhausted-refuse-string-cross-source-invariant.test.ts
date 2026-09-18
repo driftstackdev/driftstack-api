@@ -51,7 +51,12 @@ const MATCH_RE = /refuseReason === '([^']*budget[^']*)'/;
 
 describe('budget-exhausted refuse-reason cross-source invariant (decomposers ↔ runtime close trigger)', () => {
   const det = read('agent-decomposer-deterministic.ts').match(EMIT_RE)?.[1];
-  const claude = read('agent-decomposer-claude.ts').match(EMIT_RE)?.[1];
+  // MOVED 2026-09-18: the budget pre-check every provider adapter runs is the
+  // planner contract's `plannerPreflight`; the Claude (production) decomposer
+  // returns its refusal verbatim, so the literal it emits is the one here. The
+  // arm below also holds the adapter to calling it.
+  const claude = read('agent-planner-contract.ts').match(EMIT_RE)?.[1];
+  const claudeCallsPreflight = /plannerPreflight\(args\)/.test(read('agent-decomposer-claude.ts'));
   const runtime = read('agent-runtime.ts').match(MATCH_RE)?.[1];
 
   it('the deterministic decomposer emits the canonical budget-exhausted refuse reason', () => {
@@ -60,6 +65,9 @@ describe('budget-exhausted refuse-reason cross-source invariant (decomposers ↔
 
   it('the Claude (production) decomposer emits the canonical budget-exhausted refuse reason', () => {
     expect(claude).toBe(CANONICAL);
+    expect(claudeCallsPreflight, 'the Claude adapter no longer runs the shared preflight').toBe(
+      true,
+    );
   });
 
   it('the runtime close trigger matches the SAME literal (else the Q.3 atomic close silently stops firing on a pre-call budget refusal — which charges 0 tokens, so debit-to-zero cannot save it)', () => {

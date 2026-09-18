@@ -18,12 +18,13 @@
 // in a message, and never part of the returned `why`. Everything that prints is
 // built from names.
 
+import { CLAUDE_MODELS, DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
 import {
-  AgentModelSchema,
-  CLAUDE_MODELS,
-  DEFAULT_AGENT_MODEL,
-  type AgentModel,
-} from '@driftstack/api-types';
+  CHAT_PLANNER_MODELS,
+  UnknownPlannerModelError,
+  resolvePlannerModel,
+  type PlannerModelSelection,
+} from '../../../src/services/agent-planner-providers.js';
 import type { LiveSpendCaps } from './live-meter.js';
 
 /**
@@ -46,6 +47,21 @@ export const LIVE_KEY_ENV_NAMES = [
   'BYOK_ANTHROPIC_FALLBACK_KEY',
   'DRIFTSTACK_ANTHROPIC_FALLBACK_API_KEY',
 ] as const;
+
+/**
+ * EVERY variable a live run could read a provider key from: the product's two
+ * Anthropic names and each chat provider's own (from the provider table).
+ *
+ * ⛔ ALL OF THEM ARE SECRETS IN EVERY RUN, NOT ONLY THE ONE IN USE. A developer
+ * shell that has exported three providers' keys to run three bake-off arms holds
+ * all three while each arm runs, and an error body or a stray log line does not
+ * know which arm it belongs to. So every value present in any of these is
+ * scrubbed from, and asserted absent from, everything a run writes.
+ */
+export const ALL_PROVIDER_KEY_ENV_NAMES: ReadonlyArray<string> = [
+  ...LIVE_KEY_ENV_NAMES,
+  ...new Set(CHAT_PLANNER_MODELS.map((m) => m.provider.keyEnvVar)),
+];
 
 /**
  * Default caps, sized for roughly three US dollars at the default model's list
@@ -81,8 +97,15 @@ export interface LiveConfig {
   enabled: true;
   apiKey: string;
   /** NAME of the variable the key came from. Safe to print. */
-  apiKeySource: (typeof LIVE_KEY_ENV_NAMES)[number];
-  model: AgentModel;
+  apiKeySource: string;
+  /** The planner model as EVAL_LIVE_MODEL named it: a Claude id, or a
+   *  provider-qualified one (`openai:gpt-5.6-luna`). */
+  model: string;
+  /** Which adapter family and provider row that id resolved to. */
+  selection: PlannerModelSelection;
+  /** name → value of every provider key present in the environment — the one
+   *  in use and every other — for scrubbing. See ALL_PROVIDER_KEY_ENV_NAMES. */
+  providerKeys: ReadonlyMap<string, string>;
   reps: number;
   maxTurns: number;
   caps: LiveSpendCaps;
@@ -117,10 +140,11 @@ export const LIVE_HOW_TO_RUN =
   'The LIVE tier calls a real model, costs money and is nondeterministic, so it never runs by default and no default suite collects it. ' +
   `To run it, with the key ALREADY EXPORTED in ${LIVE_KEY_ENV_NAMES.join(' or ')} (never typed on the command line, where it would land in shell history):\n` +
   `  EVAL_LIVE=1 TMPDIR=/private/tmp/ds-gate npx vitest run --config ${LIVE_CONFIG_PATH}\n` +
-  `Optional: EVAL_LIVE_MODEL (default ${DEFAULT_AGENT_MODEL}; one of ${Object.keys(CLAUDE_MODELS).join(', ')}), ` +
+  `Optional: EVAL_LIVE_MODEL (default ${DEFAULT_AGENT_MODEL}; one of ${Object.keys(CLAUDE_MODELS).join(', ')}; ` +
+  `or, for the provider bake-off, one of ${CHAT_PLANNER_MODELS.map((m) => `${m.qualifiedId} (key in ${m.provider.keyEnvVar})`).join(', ')}), ` +
   `EVAL_LIVE_REPS (default ${String(DEFAULT_LIVE_REPS)}), EVAL_LIVE_MAX_TURNS (default ${String(DEFAULT_LIVE_MAX_TURNS)}), ` +
   `EVAL_LIVE_MAX_USD (default ${String(DEFAULT_LIVE_CAPS.maxUsd)}), EVAL_LIVE_MAX_CALLS (default ${String(DEFAULT_LIVE_CAPS.maxCalls)}), EVAL_LIVE_MAX_TOKENS (default ${String(DEFAULT_LIVE_CAPS.maxTotalTokens)}), ` +
-  `EVAL_LIVE_THINKING (${LIVE_THINKING_POLICIES.join(' | ')}; default the product's own policy), EVAL_LIVE_STRUCTURED (0 sends requests without the reply schema; default the product's own), ` +
+  `EVAL_LIVE_THINKING (${LIVE_THINKING_POLICIES.join(' | ')}; Claude models only; default the product's own policy), EVAL_LIVE_STRUCTURED (0 sends requests without the reply schema; default the product's own), ` +
   'EVAL_LIVE_TASKS (comma-separated task ids), EVAL_REPORT_DIR (where the reports go; default the OS temp directory, and never inside the repository). ' +
   'It writes no baseline and pins no outcome.';
 
@@ -172,9 +196,23 @@ export function readLiveConfig(env: NodeJS.ProcessEnv = process.env): LiveConfig
       why: `EVAL_LIVE=1, but this was not started through the live tier's own config (--config ${LIVE_CONFIG_PATH}). ${LIVE_HOW_TO_RUN}`,
     };
   }
+  // The model decides WHICH key: resolved before the key is looked for.
+  const modelRaw = env.EVAL_LIVE_MODEL?.trim();
+  const model = modelRaw === undefined || modelRaw.length === 0 ? DEFAULT_AGENT_MODEL : modelRaw;
+  let selection: PlannerModelSelection;
+  try {
+    selection = resolvePlannerModel(model);
+  } catch (err) {
+    if (!(err instanceof UnknownPlannerModelError)) throw err;
+    throw new LiveConfigError(
+      `EVAL_LIVE_MODEL is not a model the live tier can run. Use one of: ${Object.keys(CLAUDE_MODELS).join(', ')}, ${CHAT_PLANNER_MODELS.map((m) => m.qualifiedId).join(', ')}`,
+    );
+  }
+  const keyNames: ReadonlyArray<string> =
+    selection.kind === 'claude' ? LIVE_KEY_ENV_NAMES : [selection.row.provider.keyEnvVar];
   let apiKey: string | null = null;
-  let apiKeySource: (typeof LIVE_KEY_ENV_NAMES)[number] | null = null;
-  for (const name of LIVE_KEY_ENV_NAMES) {
+  let apiKeySource: string | null = null;
+  for (const name of keyNames) {
     const value = env[name]?.trim();
     if (value !== undefined && value.length > 0) {
       apiKey = value;
@@ -185,17 +223,13 @@ export function readLiveConfig(env: NodeJS.ProcessEnv = process.env): LiveConfig
   if (apiKey === null || apiKeySource === null) {
     return {
       enabled: false,
-      why: `EVAL_LIVE=1 but no key is present in ${LIVE_KEY_ENV_NAMES.join(' or ')}. ${LIVE_HOW_TO_RUN}`,
+      why: `EVAL_LIVE=1 but no key is present in ${keyNames.join(' or ')}. ${LIVE_HOW_TO_RUN}`,
     };
   }
-  const modelRaw = env.EVAL_LIVE_MODEL?.trim();
-  const parsedModel = AgentModelSchema.safeParse(
-    modelRaw === undefined || modelRaw.length === 0 ? DEFAULT_AGENT_MODEL : modelRaw,
-  );
-  if (!parsedModel.success) {
-    throw new LiveConfigError(
-      `EVAL_LIVE_MODEL is not a model the product can run. Use one of: ${Object.keys(CLAUDE_MODELS).join(', ')}`,
-    );
+  const providerKeys = new Map<string, string>();
+  for (const name of ALL_PROVIDER_KEY_ENV_NAMES) {
+    const value = env[name]?.trim();
+    if (value !== undefined && value.length > 0) providerKeys.set(name, value);
   }
   const onlyRaw = env.EVAL_LIVE_TASKS?.trim();
   const thinkingRaw = env.EVAL_LIVE_THINKING?.trim();
@@ -207,6 +241,14 @@ export function readLiveConfig(env: NodeJS.ProcessEnv = process.env): LiveConfig
     // A typo must not quietly measure the default and label it as something else.
     throw new LiveConfigError(
       `EVAL_LIVE_THINKING must be one of: ${LIVE_THINKING_POLICIES.join(', ')}`,
+    );
+  }
+  if (thinkingPolicy !== null && selection.kind !== 'claude') {
+    // Nor may a knob that does nothing for this provider be printed on its
+    // report as if it had been applied: reasoning for a chat provider is the
+    // row's `reasoningEffort`, fixed in the provider table.
+    throw new LiveConfigError(
+      `EVAL_LIVE_THINKING applies to Claude models only; ${selection.row.qualifiedId} sends reasoning_effort ${String(selection.row.reasoningEffort)} from the provider table`,
     );
   }
   const structuredRaw = env.EVAL_LIVE_STRUCTURED?.trim();
@@ -225,7 +267,9 @@ export function readLiveConfig(env: NodeJS.ProcessEnv = process.env): LiveConfig
     enabled: true,
     apiKey,
     apiKeySource,
-    model: parsedModel.data,
+    model: selection.kind === 'claude' ? selection.model : selection.row.qualifiedId,
+    selection,
+    providerKeys,
     reps: positiveInt(env, 'EVAL_LIVE_REPS', DEFAULT_LIVE_REPS),
     maxTurns: positiveInt(env, 'EVAL_LIVE_MAX_TURNS', DEFAULT_LIVE_MAX_TURNS),
     caps: {

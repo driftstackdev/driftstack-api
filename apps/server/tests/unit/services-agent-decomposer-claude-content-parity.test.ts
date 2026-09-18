@@ -13,13 +13,24 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/server/src/services/agent-decomposer-claude.ts');
+// MOVED 2026-09-18 (provider lane): the provider-neutral half of the planner —
+// both prompts, both reply schemas, the reply's meaning and its field limits,
+// the AUP pre-filter, the budget pre-check, the transcript window and the
+// conversation assembly — lives in the planner contract, which the Claude
+// adapter imports and a second provider's adapter shares. The Claude planner is
+// now these two files together, so the pins below read both: a pin on prompt
+// text passes wherever in the pair that text lives, and every negative pin still
+// forbids its text in EITHER file. That the move changed nothing on the wire is
+// proved separately, byte for byte, by
+// the-claude-wire-does-not-move-when-the-planner-contract-moves.test.ts.
+const CONTRACT = resolve(REPO_ROOT, 'apps/server/src/services/agent-planner-contract.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
 describe('services/agent-decomposer-claude content parity', () => {
-  const body = read(LIB);
+  const body = `${read(LIB)}\n${read(CONTRACT)}`;
 
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
@@ -135,7 +146,12 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toContain('const MAX_AGENT_TYPED_TEXT_CHARS = 10_000;');
     expect(body).toContain('const MAX_AGENT_TAP_LABEL_CHARS = 512;');
     expect(body).toContain('const MAX_AGENT_CUSTOMER_COPY_CHARS = 4096;');
-    expect(body).toContain('Anthropic response field ${field} exceeded ${maxChars} characters');
+    // The provider's name in the message is the contract's `label` parameter
+    // since the extraction; the Claude adapter passes 'Anthropic', so the text a
+    // Claude reply raises is unchanged (the wire golden asserts it verbatim:
+    // "Anthropic response field clarifyingQuestion exceeded 4096 characters").
+    expect(body).toContain('${label} response field ${field} exceeded ${maxChars} characters');
+    expect(read(LIB)).toContain("label: 'Anthropic'");
   });
 
   it("6.c / #15 per-model rate sourcing pinned: imports CLAUDE_MODELS + DEFAULT_AGENT_MODEL from @driftstack/api-types; makeClaudeUsage looks up CLAUDE_MODELS[model] for the per-call cost (replacing the hardcoded Opus PER_MTOK consts). + 'If a rate is wrong, historical rows keep their recorded cost (we don't recompute), so the audit trail stays internally consistent even when the rate-table drifts.' framing — pinned so the registry-sourced-rate + no-recompute-on-drift contract stay documented", () => {
@@ -296,7 +312,9 @@ describe('services/agent-decomposer-claude content parity', () => {
   it('Anthropic call pinned (discrete pins — the prior single long-chain regex backtracked ~17s): POST to ANTHROPIC_API_URL + 3 headers + body + the per-request-timeout AbortSignal. Drift to a different header set diverges from the Anthropic Messages API contract; dropping the signal/AbortController removes the timeout so a hung upstream would hang the chat turn indefinitely.', () => {
     // Discrete pins per the no-long-chain-parity-regex lesson (>5 chained
     // \s* groups → catastrophic backtracking).
-    expect(body).toMatch(/res = await this\.fetchImpl\(ANTHROPIC_API_URL, \{/);
+    // MOVED 2026-09-18 (B2): the fetch is RACED against the caller's Stop signal,
+    // so a transport that ignores its signal cannot hold a cancelled turn open.
+    expect(body).toMatch(/res = await raceAbort\(\s*this\.fetchImpl\(ANTHROPIC_API_URL, \{/);
     expect(body).toMatch(/method: 'POST',/);
     expect(body).toMatch(/'content-type': 'application\/json',/);
     expect(body).toMatch(/'x-api-key': apiKey,/);
@@ -325,13 +343,18 @@ describe('services/agent-decomposer-claude content parity', () => {
     // classification below provably shared rather than duplicated.
     expect(body).toMatch(/stream: true,/);
     expect(body).toMatch(/accept: 'text\/event-stream'/);
-    expect(body).toMatch(/streamedEnvelope = await readAnthropicStream\(res, rearmIdle\);/);
+    // MOVED 2026-09-18 (B2): the reader also receives the usage sink a cancelled
+    // call reports from, and the caller's Stop signal each read is raced against.
+    expect(body).toMatch(
+      /streamedEnvelope = await readAnthropicStream\(res, rearmIdle, observedUsage, signal\);/,
+    );
     expect(body).toMatch(/if \(streamedEnvelope !== undefined\) return streamedEnvelope;/);
     // Body read INSIDE the try (bug-class fix bc72ff48 — reading after the
     // clearTimeout left res.json() unbounded); the reader itself is byte-bounded
     // and its errors propagate into retry. Parse stays OUTSIDE so a malformed
     // success body still throws (not retried).
-    expect(body).toMatch(/bodyText = await readBoundedBody\(res\);/);
+    // MOVED 2026-09-18 (B2): the buffered read is raced against the Stop signal too.
+    expect(body).toMatch(/bodyText = await raceAbort\(readBoundedBody\(res\), signal\);/);
     expect(body).toMatch(/const MAX_ANTHROPIC_RESPONSE_BYTES = 64 \* 1024;/);
     expect(body).toMatch(/const reader = res\.body\.getReader\(\);/);
     expect(body).toMatch(/bytesRead \+= value\.byteLength;/);
@@ -370,7 +393,8 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(
       (
         body.match(
-          /await this\.callConstrained\(\s*model,\s*buildBody,\s*args\.byokAnthropicApiKey,\s*args\.shouldContinue,\s*\)/g,
+          // MOVED 2026-09-18 (B2): the caller's Stop signal is the fifth argument.
+          /await this\.callConstrained\(\s*model,\s*buildBody,\s*args\.byokAnthropicApiKey,\s*args\.shouldContinue,\s*args\.signal,\s*\)/g,
         ) ?? []
       ).length,
     ).toBe(2);
