@@ -97,8 +97,18 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     // join, and the registry sat 24 entries behind while both sides looked green.
     // It SKIPS (exit 0, loudly) when the sibling repo is not checked out, which
     // is the CI case; the pre-push gate runs locally where it can actually see.
+    // 2026-09-18 — eslint runs through node with an explicit heap, exactly as the
+    // two format scripts below do and for the same reason. Bare `eslint .` died
+    // on CI with exit 134 — a V8 heap abort, NOT a lint finding — the first push
+    // after the repo grew by ~11k lines. Measured on that tree: 3.82 GB peak
+    // resident against Node's ~4 GB default ceiling, so it had been passing on
+    // margin and nothing said so. The local pre-push gate stayed green only
+    // because one developer's shell happened to export NODE_OPTIONS, which is
+    // how a gate and CI come to disagree. The ceiling lives in the SCRIPT so
+    // every invoker gets the same one. ⚠️ Exit 134 from this step means "could
+    // not run"; read it as a memory problem before reading it as a lint problem.
     expect(pkg.scripts.lint).toBe(
-      'eslint . && node scripts/check-subprocessor-mirror.mjs && node scripts/gen-archetype-registry.mjs --check',
+      'node --max-old-space-size=8192 ./node_modules/eslint/bin/eslint.js . && node scripts/check-subprocessor-mirror.mjs && node scripts/gen-archetype-registry.mjs --check',
     );
     // Both format scripts invoke prettier's CJS entry through node with an
     // explicit --max-old-space-size. Bare `prettier --check .` ABORTS with a
