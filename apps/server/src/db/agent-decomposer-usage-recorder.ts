@@ -57,6 +57,39 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
     if (args.usage.anthropicOutputTokens !== undefined) {
       metadata.anthropic_output_tokens = args.usage.anthropicOutputTokens;
     }
+    // Prompt-cache accounting. ⛔ With caching on, `anthropic_input_tokens` is
+    // only the UNCACHED remainder of the prompt, so a row that stored it alone
+    // would make a 9k-token cached call look like a 40-token one — and could
+    // never be re-priced, because the three parts bill at three different rates.
+    // Stored under the provider's own field names so a row reads against the
+    // provider's console without a translation table.
+    //
+    // Written on bundled rows too. They hide the upstream COST (Q5=A), not the
+    // token counts — `anthropic_input_tokens` is already on them — and the cache
+    // counts are what say whether the flat per-turn price still covers a turn.
+    if (args.usage.anthropicCacheCreationInputTokens !== undefined) {
+      metadata.anthropic_cache_creation_input_tokens = args.usage.anthropicCacheCreationInputTokens;
+    }
+    if (args.usage.anthropicCacheReadInputTokens !== undefined) {
+      metadata.anthropic_cache_read_input_tokens = args.usage.anthropicCacheReadInputTokens;
+    }
+    if (args.usage.anthropicCacheCreation5mInputTokens !== undefined) {
+      metadata.anthropic_cache_creation_5m_input_tokens =
+        args.usage.anthropicCacheCreation5mInputTokens;
+    }
+    if (args.usage.anthropicCacheCreation1hInputTokens !== undefined) {
+      metadata.anthropic_cache_creation_1h_input_tokens =
+        args.usage.anthropicCacheCreation1hInputTokens;
+    }
+    if (args.usage.anthropicPromptTokens !== undefined) {
+      metadata.anthropic_prompt_tokens = args.usage.anthropicPromptTokens;
+    }
+    if (args.usage.anthropicThinkingTokens !== undefined) {
+      metadata.anthropic_thinking_tokens = args.usage.anthropicThinkingTokens;
+    }
+    if (args.usage.anthropicStopReason !== undefined) {
+      metadata.anthropic_stop_reason = args.usage.anthropicStopReason;
+    }
     if (isBundled) {
       // Q5=A — surface the POSTED flat cost; the upstream Anthropic-
       // derived cost in args.usage.costUsdCents is intentionally NOT

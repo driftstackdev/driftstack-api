@@ -42,7 +42,13 @@ function args(overrides: Partial<DecomposeArgs> = {}): DecomposeArgs {
 /** The ordinary buffered envelope — the shape every pre-existing test uses. */
 function bufferedResponse(): Response {
   return new Response(
-    JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(PLAN) }], usage: USAGE }),
+    // `stop_reason` is on every real envelope, streamed or not; it is carried
+    // onto the usage object, so a fixture without it is not "the same reply".
+    JSON.stringify({
+      content: [{ type: 'text', text: JSON.stringify(PLAN) }],
+      stop_reason: 'end_turn',
+      usage: USAGE,
+    }),
     { status: 200, headers: { 'content-type': 'application/json' } },
   );
 }
@@ -235,6 +241,139 @@ describe('a streamed plan is the same plan, bounded by silence', () => {
     });
     const result = await dec.decompose(args());
     expect(result.kind).toBe('plan');
+  });
+
+  // ⛔ SILENCE BEFORE THE FIRST TEXT IS NOT SILENCE AFTER IT. On the models that
+  // think by default the reasoning is not streamed, so a healthy call sends
+  // `message_start` and then nothing until it has finished thinking. The short
+  // idle bound would abort that, pay for the whole call again, abort that too
+  // and fail the turn. Both halves are pinned: the quiet phase is allowed, and
+  // it does not loosen the bound anywhere else.
+  function phasedFetch(
+    quietAfter: 'nothing' | 'ping' | 'message_start' | 'first_text',
+    quietMs: number,
+  ) {
+    const encoder = new TextEncoder();
+    const text = JSON.stringify(PLAN);
+    const cut = Math.floor(text.length / 2);
+    const frame = (payload: Record<string, unknown>): Uint8Array =>
+      encoder.encode(`event: ${String(payload.type)}\ndata: ${JSON.stringify(payload)}\n\n`);
+    let attempts = 0;
+    const fetchImpl = ((_url: string | URL, init?: RequestInit) => {
+      attempts += 1;
+      let quiet: ReturnType<typeof setTimeout> | undefined;
+      const body = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          let aborted = false;
+          init?.signal?.addEventListener('abort', () => {
+            aborted = true;
+            if (quiet !== undefined) clearTimeout(quiet);
+            controller.error(
+              Object.assign(new Error('The operation was aborted'), { name: 'AbortError' }),
+            );
+          });
+          const pause = (): Promise<void> =>
+            new Promise((resolve) => {
+              quiet = setTimeout(resolve, quietMs);
+            });
+          if (quietAfter === 'nothing') await pause();
+          if (aborted) return;
+          if (quietAfter === 'ping') {
+            // Bytes, but not a message: the upstream has not started answering.
+            controller.enqueue(frame({ type: 'ping' }));
+            await pause();
+          }
+          if (aborted) return;
+          controller.enqueue(
+            frame({
+              type: 'message_start',
+              message: { usage: { input_tokens: USAGE.input_tokens, output_tokens: 1 } },
+            }),
+          );
+          if (quietAfter === 'message_start') await pause();
+          if (aborted) return;
+          controller.enqueue(
+            frame({
+              type: 'content_block_delta',
+              delta: { type: 'text_delta', text: text.slice(0, cut) },
+            }),
+          );
+          if (quietAfter === 'first_text') await pause();
+          if (aborted) return;
+          controller.enqueue(
+            frame({
+              type: 'content_block_delta',
+              delta: { type: 'text_delta', text: text.slice(cut) },
+            }),
+          );
+          controller.enqueue(
+            frame({
+              type: 'message_delta',
+              delta: { stop_reason: 'end_turn' },
+              usage: { output_tokens: USAGE.output_tokens },
+            }),
+          );
+          controller.enqueue(frame({ type: 'message_stop' }));
+          controller.close();
+        },
+      });
+      return Promise.resolve(
+        new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } }),
+      );
+    }) as unknown as typeof globalThis.fetch;
+    return { fetchImpl, attempts: () => attempts };
+  }
+
+  it('⛔ does NOT abort a call that is quiet between message_start and its first text — that is a model thinking, and aborting it pays twice', async () => {
+    const { fetchImpl, attempts } = phasedFetch('message_start', 120);
+    const dec = new ClaudeAgentDecomposer({
+      fetch: fetchImpl,
+      retryBackoffMs: 0,
+      streamIdleTimeoutMs: 30,
+      streamThinkingIdleTimeoutMs: 2_000,
+    });
+    const result = await dec.decompose(args());
+    expect(result.kind).toBe('plan');
+    // ONE request. A second one is the defect: the same call, paid for again.
+    expect(attempts()).toBe(1);
+  });
+
+  it.each(['nothing', 'ping', 'first_text'] as const)(
+    'still aborts on the SHORT bound when the quiet falls after %s — the thinking allowance is one phase, not a looser timer',
+    async (quietAfter) => {
+      const { fetchImpl, attempts } = phasedFetch(quietAfter, 120);
+      const dec = new ClaudeAgentDecomposer({
+        fetch: fetchImpl,
+        retryBackoffMs: 0,
+        streamIdleTimeoutMs: 30,
+        streamThinkingIdleTimeoutMs: 2_000,
+      });
+      await expect(dec.decompose(args())).rejects.toThrow(/abort/i);
+      expect(attempts()).toBe(2);
+    },
+  );
+
+  it('a caller that only tightened the idle bound gets it in the thinking phase too', async () => {
+    const { fetchImpl, attempts } = phasedFetch('message_start', 120);
+    const dec = new ClaudeAgentDecomposer({
+      fetch: fetchImpl,
+      retryBackoffMs: 0,
+      streamIdleTimeoutMs: 30,
+    });
+    await expect(dec.decompose(args())).rejects.toThrow(/abort/i);
+    expect(attempts()).toBe(2);
+  });
+
+  it('the thinking allowance is itself a bound: a call that never starts writing is still aborted', async () => {
+    const { fetchImpl, attempts } = phasedFetch('message_start', 400);
+    const dec = new ClaudeAgentDecomposer({
+      fetch: fetchImpl,
+      retryBackoffMs: 0,
+      streamIdleTimeoutMs: 30,
+      streamThinkingIdleTimeoutMs: 60,
+    });
+    await expect(dec.decompose(args())).rejects.toThrow(/abort/i);
+    expect(attempts()).toBe(2);
   });
 
   it('classifies a mid-stream provider error exactly as the buffered status would — including how many times it is sent', async () => {

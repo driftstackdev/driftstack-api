@@ -149,6 +149,47 @@ export interface DecomposeUsage {
   /** Anthropic output tokens reported by the API `usage.output_tokens`
    *  field. Undefined for deterministic. */
   anthropicOutputTokens?: number;
+  /**
+   * Prompt-cache accounting, straight off the provider's `usage` block.
+   *
+   * ⛔ ONCE CACHING IS ON, `anthropicInputTokens` IS NOT THE PROMPT SIZE. The
+   * provider reports `input_tokens` as the UNCACHED REMAINDER — only what came
+   * after the last cache breakpoint — so a 9,000-token prompt served from cache
+   * reads as `input_tokens: 40`. The prompt that was actually processed is
+   * {@link anthropicPromptTokens}. The three parts are kept separately, and
+   * named for the wire fields they mirror, because they are billed at three
+   * different rates and a row that stored only their sum could never be
+   * re-priced.
+   *
+   * All undefined for deterministic. Zero (not undefined) on a Claude call the
+   * cache did not touch, so "the cache missed" and "this row predates cache
+   * accounting" stay distinguishable in stored history.
+   */
+  /** `usage.cache_creation_input_tokens` — tokens WRITTEN to the cache by this
+   *  call. Billed above the base input rate. */
+  anthropicCacheCreationInputTokens?: number;
+  /** `usage.cache_read_input_tokens` — tokens SERVED from the cache. Billed at a
+   *  fraction of the base input rate. A run of zeros here across calls that
+   *  share a prefix means the cache is not hitting. */
+  anthropicCacheReadInputTokens?: number;
+  /** `usage.cache_creation.ephemeral_5m_input_tokens`, when the provider broke
+   *  the write down by lifetime. The two lifetimes are priced differently. */
+  anthropicCacheCreation5mInputTokens?: number;
+  /** `usage.cache_creation.ephemeral_1h_input_tokens`. */
+  anthropicCacheCreation1hInputTokens?: number;
+  /** The whole prompt the provider processed: uncached + cache-written +
+   *  cache-read. This is the SIZE of the request — what occupied the context
+   *  window — and is deliberately not what the session budget is debited (see
+   *  `tokensConsumed` on the result, which is weighted by price). */
+  anthropicPromptTokens?: number;
+  /** `usage.output_tokens_details.thinking_tokens`, when reported: how much of
+   *  the (billed) output was reasoning rather than the reply. Observability
+   *  only — it is already inside `anthropicOutputTokens`. */
+  anthropicThinkingTokens?: number;
+  /** The provider's `stop_reason`. `max_tokens` means the reply was CUT OFF at
+   *  the output ceiling — which otherwise surfaces as unparseable JSON and
+   *  reads as a model fault when it is a sizing fault. */
+  anthropicStopReason?: string;
   /** Cost in USD cents (integer; rounded up to the nearest cent so
    *  short rows don't undercount). Computed from the per-model rate
    *  table in ClaudeAgentDecomposer. Undefined for deterministic. */

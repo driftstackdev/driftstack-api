@@ -1169,14 +1169,22 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
         defaultArgs({ task: 'ambiguous', archetype: 'iphone16pro_ios18_7_safari26_4' }),
       );
       const body = JSON.parse(calls[0]!.init.body as string) as {
-        system: string;
-        messages: ReadonlyArray<{ role: string; content: string }>;
+        system: ReadonlyArray<{ type: string; text: string }>;
+        messages: ReadonlyArray<{
+          role: string;
+          content: ReadonlyArray<{ type: string; text: string }>;
+        }>;
       };
-      expect(body.system).toContain('Driftstack agent layer');
+      expect(body.system).toHaveLength(1);
+      expect(body.system[0]?.text).toContain('Driftstack agent layer');
       expect(body.messages).toHaveLength(1);
       expect(body.messages[0]?.role).toBe('user');
-      expect(body.messages[0]?.content).toContain('[archetype: iphone16pro_ios18_7_safari26_4]');
-      expect(body.messages[0]?.content).toContain('ambiguous');
+      // The task is its own block, byte-for-byte, and the archetype rides in the
+      // block AFTER it — see a-cached-prefix-… for why the order matters.
+      expect(body.messages[0]?.content.map((block) => block.text)).toEqual([
+        'ambiguous',
+        '[archetype: iphone16pro_ios18_7_safari26_4]',
+      ]);
     });
 
     it('preserves human authorship when threading prior transcript history', async () => {
@@ -1200,15 +1208,20 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
         }),
       );
       const body = JSON.parse(calls[0]!.init.body as string) as {
-        messages: ReadonlyArray<{ role: string; content: string }>;
+        messages: ReadonlyArray<{
+          role: string;
+          content: ReadonlyArray<{ type: string; text: string }>;
+        }>;
       };
       // History contains the current task as its last user entry; we
       // don't re-append it.
       expect(body.messages).toHaveLength(4);
       expect(body.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'user']);
-      expect(body.messages[2]?.content).toBe('continue manually from this page');
-      expect(body.messages[3]?.content).toContain('[archetype:');
-      expect(body.messages[3]?.content).toContain('follow-up');
+      expect(body.messages[2]?.content.map((block) => block.text)).toEqual([
+        'continue manually from this page',
+      ]);
+      expect(body.messages[3]?.content[0]?.text).toBe('follow-up');
+      expect(body.messages[3]?.content[1]?.text).toContain('[archetype:');
     });
 
     it('AUP pre-filter corpus mirrors the deterministic decomposer (same five patterns)', () => {

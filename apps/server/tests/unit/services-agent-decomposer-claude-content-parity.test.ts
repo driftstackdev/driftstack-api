@@ -57,12 +57,16 @@ describe('services/agent-decomposer-claude content parity', () => {
     );
   });
 
-  it('5-constant catalog pinned: ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages" + ANTHROPIC_VERSION_HEADER = "2023-06-01" + MAX_OUTPUT_TOKENS = 2048 + MAX_RETRIES_5XX = 1 + DEFAULT_RETRY_BACKOFF_MS = 1000. Drift to the wrong API URL would call Anthropic legacy endpoints; drift to a different version header would silently break on wire-format changes. (The model id is no longer a constant — it is the session-picked model per 6.c, defaulting to DEFAULT_AGENT_MODEL.)', () => {
+  it('5-constant catalog pinned: ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages" + ANTHROPIC_VERSION_HEADER = "2023-06-01" + MAX_OUTPUT_TOKENS = 8192 + MAX_RETRIES_5XX = 1 + DEFAULT_RETRY_BACKOFF_MS = 1000. Drift to the wrong API URL would call Anthropic legacy endpoints; drift to a different version header would silently break on wire-format changes. (The model id is no longer a constant — it is the session-picked model per 6.c, defaulting to DEFAULT_AGENT_MODEL.)', () => {
     expect(body).toMatch(
       /const ANTHROPIC_API_URL = 'https:\/\/api\.anthropic\.com\/v1\/messages';/,
     );
     expect(body).toMatch(/const ANTHROPIC_VERSION_HEADER = '2023-06-01';/);
-    expect(body).toMatch(/const MAX_OUTPUT_TOKENS = 2048;/);
+    // 8192, not the 2048 this pinned before: the ceiling covers THINKING as well
+    // as the plan, and the default model thinks by default. 2048 was sized for a
+    // reply with no reasoning in front of it (see the constant's own comment).
+    expect(body).toMatch(/const MAX_OUTPUT_TOKENS = 8192;/);
+    expect(body).toMatch(/const ANSWER_MAX_OUTPUT_TOKENS = 4096;/);
     expect(body).toMatch(/const MAX_RETRIES_5XX = 1;/);
     expect(body).toMatch(/const DEFAULT_RETRY_BACKOFF_MS = 1000;/);
     // The hardcoded MODEL const was retired with the per-session picker.
@@ -88,9 +92,19 @@ describe('services/agent-decomposer-claude content parity', () => {
     );
     expect(body).not.toMatch(/Anthropic plan\.intents exceeded/);
     expect(body).not.toMatch(/if \(raw\.length > MAX_PLAN_INTENTS\)/);
-    expect(body).toMatch(/Number\.isSafeInteger\(inputTokens\)/);
-    expect(body).toMatch(/Number\.isSafeInteger\(outputTokens\)/);
-    expect(body).toMatch(/Number\.isSafeInteger\(inputTokens \+ outputTokens\)/);
+    // One validator for every counter — required and cache alike — so a cache
+    // field cannot be held to a laxer rule than the two it sits beside.
+    expect(body).toMatch(
+      /return typeof value === 'number' && Number\.isSafeInteger\(value\) && value >= 0;/,
+    );
+    expect(body).toMatch(/if \(!isTokenCount\(inputTokens\) \|\| !isTokenCount\(outputTokens\)\)/);
+    // The SUM is checked too, and now over all four parts of the prompt.
+    expect(body).toMatch(
+      /inputTokens \+ outputTokens \+ cacheCreationInputTokens \+ cacheReadInputTokens,/,
+    );
+    // Present-but-wrong throws; only ABSENT (or the provider's null) is zero.
+    expect(body).toMatch(/if \(value === undefined \|\| value === null\) return undefined;/);
+    expect(body).toMatch(/if \(!isTokenCount\(value\)\) throw new Error\(USAGE_INVALID\);/);
     expect(body).toContain('Anthropic response usage was missing or invalid');
   });
 
@@ -332,9 +346,15 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(
       (body.match(/requireAgentDecomposerContinuation\(shouldContinue\)/g) ?? []).length,
     ).toBeGreaterThanOrEqual(3);
-    expect(body).toMatch(
-      /this\.callWithRetry\(body, args\.byokAnthropicApiKey, args\.shouldContinue\)/,
-    );
+    // BOTH call sites — the plan and the read-back — hand over the caller's
+    // authority check. (Both are streamed now, hence the trailing options.)
+    expect(
+      (
+        body.match(
+          /this\.callWithRetry\(body, args\.byokAnthropicApiKey, args\.shouldContinue, \{/g,
+        ) ?? []
+      ).length,
+    ).toBe(2);
   });
 
   it('validated usage survives strict plan and answer codec failures without raw content', () => {
@@ -342,9 +362,12 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(
       (body.match(/throw new AgentDecomposerSettledError\(/g) ?? []).length,
     ).toBeGreaterThanOrEqual(2);
-    expect(body).toMatch(
-      /const \{ inputTokens, outputTokens, tokensConsumed \} = parseAnthropicUsage/,
-    );
+    // Usage is parsed BEFORE the content try-block in both parsers, so a reply
+    // we cannot use is still a reply we account for.
+    expect((body.match(/const parts = parseAnthropicUsage\(envelope\);/g) ?? []).length).toBe(2);
+    expect(
+      (body.match(/const tokensConsumed = billableTokens\(parts, model\);/g) ?? []).length,
+    ).toBe(2);
     expect(body).toMatch(/error instanceof Error \? error\.message/);
   });
 });
