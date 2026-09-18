@@ -23,7 +23,9 @@
 // never checked would make a mangled prompt look healthy.
 
 import { answerFromPage, type AnswerRule } from './answer-rule.js';
+import { visibleTextOf } from './dom.js';
 import { sha256Hex } from './hash.js';
+import { readProviderRequest } from './provider-wire.js';
 
 /** Fixed accounting so token figures stay diffable between runs. */
 export const ANSWER_INPUT_TOKENS = 1_140;
@@ -67,12 +69,11 @@ export function standInAnswerProvider(args: {
 }): typeof globalThis.fetch {
   const impl = (_url: string | URL, init?: RequestInit): Promise<Response> => {
     const bodyText = typeof init?.body === 'string' ? init.body : '';
-    const parsed = JSON.parse(bodyText) as {
-      model?: unknown;
-      system?: unknown;
-      messages?: unknown;
-    };
-    if (typeof parsed.system !== 'string' || parsed.system.trim().length === 0) {
+    // Read through the shared view, so a system prompt sent as cacheable text
+    // blocks is recognised as the same prompt a plain string was.
+    const request = readProviderRequest(bodyText);
+    const system = request.system;
+    if (system === null) {
       return Promise.reject(
         new StandInAnswerProviderError(
           'the real answer path sent no system prompt — the read-back would be unframed, and the observation is untrusted page text',
@@ -104,9 +105,9 @@ export function standInAnswerProvider(args: {
         ),
       );
     }
-    const model = typeof parsed.model === 'string' ? parsed.model : 'unknown';
+    const model = request.model;
     args.onRequest({
-      systemPromptSha256: sha256Hex(parsed.system),
+      systemPromptSha256: sha256Hex(system),
       model,
       bodyBytes: bodyText.length,
       observationChars: call.observation.length,
@@ -114,7 +115,13 @@ export function standInAnswerProvider(args: {
     // The answer is derived from the PAGE, by a rule that has never seen the
     // criterion. Everything else on this envelope exists so the product's real
     // parser has something contract-shaped to refuse or accept.
-    const answer = answerFromPage(args.rule, call.observation);
+    //
+    // ⛔ THE RULE READS THE PAGE'S WORDS, NOT ITS MARKUP. The device returns real
+    // HTML now, and the request above was checked against that HTML verbatim —
+    // but "the line that starts with …" is a statement about what a reader sees.
+    // Rendering the observation to visible text here is the stand-in doing the
+    // one thing a model does before answering: reading the page.
+    const answer = answerFromPage(args.rule, visibleTextOf(call.observation));
     return Promise.resolve(
       new Response(
         JSON.stringify({

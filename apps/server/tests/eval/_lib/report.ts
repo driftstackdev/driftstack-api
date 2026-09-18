@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { EVAL_RATE_LABEL } from './provenance.js';
+import { TIERS_EXPLAINED } from './tiers.js';
 import {
   describeReasonClass,
   misbehavingControls,
@@ -66,6 +67,10 @@ export function renderTable(report: EvalReport): string {
   const lines: string[] = [];
   lines.push('');
   lines.push(...renderProvenance(report.provenance, report.gitSha));
+  // Which tier this is, beside the other one — so a scripted number is never
+  // read as a planning number because the live tier now exists next to it.
+  lines.push('  THIS IS THE SCRIPTED TIER. The two tiers, and what each one proves:');
+  for (const tier of TIERS_EXPLAINED) lines.push(`    ${tier}`);
   lines.push('');
   // ⚠️ Wide enough for the longest task id in the corpus. `pad` TRUNCATES, and a
   // truncated id ("C-NEG-", "F4-SIG") is a view of the artefact that silently

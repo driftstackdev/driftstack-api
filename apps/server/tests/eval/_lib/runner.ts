@@ -31,6 +31,7 @@ import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.
 import { SessionCaptureStore } from '../../../src/services/session-capture-store.js';
 import type { IntentResult } from '../../../src/services/agent-executor.js';
 import type { RunTurnResult, AgentTurnProgressEvent } from '../../../src/services/agent-runtime.js';
+import { visibleTextOf } from './dom.js';
 import { FakeDevice } from './fake-device.js';
 import { StepMarkTracker } from './step-marks.js';
 import { VirtualClock } from './virtual-clock.js';
@@ -152,7 +153,14 @@ export async function runEvalTask(task: EvalTask): Promise<TaskReport> {
     awaitingConfirmation,
     executorOk,
     answer,
-    observationText: decomposer.observed.lastObservation,
+    // ⛔ THE PAGE'S WORDS, NOT ITS MARKUP. The observation is real HTML now; the
+    // extraction bound asks how much of the PAGE came back inside the answer,
+    // and a page's tags are not part of what a customer would call the page.
+    // The raw observation stays on `observedAnswerPath`, untouched.
+    observationText:
+      decomposer.observed.lastObservation === null
+        ? null
+        : visibleTextOf(decomposer.observed.lastObservation),
     dispatches: device.dispatches(),
     stepStartMarks: marks.startMarks,
     stepEndMarks: marks.endMarks,

@@ -32,6 +32,7 @@ export type DeathReasonClass =
   | 'intent_not_mappable'
   | 'element_never_appeared_in_retry_budget'
   | 'element_click_intercepted'
+  | 'element_not_interactable'
   | 'wait_condition_not_met'
   | 'capture_failed'
   | 'page_load_failed'
@@ -60,6 +61,8 @@ export function describeReasonClass(reason: DeathReasonClass): string {
       return 'the element was never found inside the retry budget';
     case 'element_click_intercepted':
       return 'something on the page sat over the target and the outcome of the click is unknown';
+    case 'element_not_interactable':
+      return 'the selector matched an element that is not rendered or is disabled — typically a hidden copy of a control that also exists somewhere visible';
     case 'wait_condition_not_met':
       return 'the awaited condition never became true';
     case 'capture_failed':
@@ -420,6 +423,21 @@ function distinctObservationLines(observation: string): string[] {
   return unique.filter((line) => !unique.some((other) => other !== line && other.includes(line)));
 }
 
+export interface AnswerExtractionOptions {
+  /**
+   * Which quoted lines count toward {@link ANSWER_MAX_QUOTED_LINES}. Absent means
+   * every line, which is this tier's reading and must stay so: the scripted
+   * corpus pins its extraction figures, and its pages are prose. The LIVE tier
+   * passes a predicate because real HTML turns every heading and table cell into
+   * a line of its own — see `isSubstantiveLine` in `live-score.ts`.
+   *
+   * ⛔ ONLY THE LINE-COUNT READING IS NARROWED. "Every line came back", the
+   * character share and the word share still read every line, so a whole page
+   * is refused whatever this says.
+   */
+  countsTowardLineBound?: (line: string) => boolean;
+}
+
 /** The distinct words long enough to be evidence that text came back. */
 function longWords(text: string): Set<string> {
   const found = text.toLowerCase().match(/[a-z0-9£$%]+/g) ?? [];
@@ -461,6 +479,7 @@ function longWords(text: string): Set<string> {
 export function checkAnswerIsExtraction(
   answer: string,
   observation: string | null,
+  options: AnswerExtractionOptions = {},
 ): AnswerExtractionCheck {
   if (observation === null) {
     return {
@@ -522,9 +541,11 @@ export function checkAnswerIsExtraction(
       `the answer contains every line of the page it was read from — ${measured}. That is the observation, not an answer to the question`,
     );
   }
-  if (quotedLines > ANSWER_MAX_QUOTED_LINES) {
+  const narrowed = options.countsTowardLineBound;
+  const boundLines = narrowed === undefined ? quotedLines : quoted.filter(narrowed).length;
+  if (boundLines > ANSWER_MAX_QUOTED_LINES) {
     return refuse(
-      `the answer quotes more of the page than an extraction should — ${measured}, and the bound is ${String(ANSWER_MAX_QUOTED_LINES)} lines`,
+      `the answer quotes more of the page than an extraction should — ${measured}${narrowed === undefined ? '' : ` (${String(boundLines)} of them substantive lines)`}, and the bound is ${String(ANSWER_MAX_QUOTED_LINES)} lines`,
     );
   }
   if (quotedLines >= 2 && quotedCharShare >= ANSWER_MAX_QUOTED_CHAR_SHARE) {
@@ -816,7 +837,13 @@ function buildSteps(obs: TurnObservation): StepReport[] {
  *  fake device so the two cannot drift apart silently. */
 export const NEVER_BECAME_VISIBLE = 'never became visible';
 
-function classifyDispatchDeath(
+/** The device's wording for a match that cannot take a gesture — WebDriver's own
+ *  phrase for it. Shared for the same reason as the constant above. */
+export const ELEMENT_NOT_INTERACTABLE = 'element not interactable';
+
+/** Exported so the live tier files a death under the SAME class the scripted
+ *  tier would — two taxonomies that agree until one is edited are one too many. */
+export function classifyDispatchDeath(
   intentKind: AgentIntent['kind'],
   code: HarnessErrorCode | undefined,
   message?: string,
@@ -836,6 +863,12 @@ function classifyDispatchDeath(
     // elements — a death that cannot occur. Ask what the device actually said.
     if (message !== undefined && message.includes(NEVER_BECAME_VISIBLE)) {
       return 'element_never_appeared_in_retry_budget';
+    }
+    // Same code again, third finding: the selector DID match, and what it
+    // matched cannot be tapped. Filing that as "intercepted" would send a reader
+    // looking for an overlay on a page that has none.
+    if (message !== undefined && message.includes(ELEMENT_NOT_INTERACTABLE)) {
+      return 'element_not_interactable';
     }
     if (intentKind === 'wait') return 'wait_condition_not_met';
     if (intentKind === 'capture') return 'capture_failed';

@@ -1,10 +1,18 @@
-// The fake device: a pure function of (IntentDispatch, DeviceState).
+// The fake device: a DOM per page, driven through the real wire contract.
 //
 // ⛔ IT IS INJECTED AT `IntentDispatcher`, NOT AT `AgentExecutor`. A fake
 // executor would bypass every layer that actually breaks — the verb→harness
 // mapping and its CSS-selector refusal, the wire envelope, the result→customer
 // mapping and its diagnosis table, the retry/no-retry fences, the `wait`
 // exemption and the consequential-action gate. Those layers ARE the subject.
+//
+// ⛔ SELECTORS RESOLVE WITH `querySelector` SEMANTICS, NOT BY STRING EQUALITY.
+// The first version of this device compared the planned selector to a
+// hand-listed string, which is sound only while we author both sides. A live
+// model writes whatever valid CSS it likes, and an exact-match device would fail
+// every such plan for a reason that is not a fact about the agent. The page is
+// parsed HTML now (see `dom.ts`), `get_page_source` serialises that same
+// document, and first-match-in-document-order is what WebDriver does too.
 //
 // HONESTY MECHANISM (non-negotiable): the device never hand-constructs a
 // `ParsedIntentResult`. It builds a real wire envelope with `encodeWireData` and
@@ -13,8 +21,9 @@
 // the contract therefore fails loudly instead of feeding the agent loop a shape
 // the real box never sends.
 
+import type { DomElement } from 'jsdom';
 import type { IntentDispatcher } from '../../../src/services/agent-executor-control-plane.js';
-import { NEVER_BECAME_VISIBLE } from './score.js';
+import { ELEMENT_NOT_INTERACTABLE, NEVER_BECAME_VISIBLE } from './score.js';
 import {
   decodeWireData,
   encodeWireData,
@@ -28,9 +37,21 @@ import {
   type IntentDispatch,
 } from '../../../src/schemas/harness-control-protocol.js';
 import {
+  InvalidSelectorError,
+  PageDom,
+  describeElement,
+  documentHtml,
+  isInteractable,
+  isRendered,
+  queryFirst,
+  visibleTextOf,
+} from './dom.js';
+import {
   notFoundPage,
-  type ScriptedElement,
-  type ScriptedPage,
+  type FixturePage,
+  type FormBehaviour,
+  type NotFoundBehaviour,
+  type PageEffect,
   type SiteMap,
 } from './page-model.js';
 import type { VirtualClock } from './virtual-clock.js';
@@ -68,6 +89,29 @@ const NEVER_FINISHES_LOAD_MS = 30_000;
 const READING_MS_PER_WORD = 240;
 const DEFAULT_PAUSE_MS = 1_500;
 
+/** `<input>` types that Enter ACTIVATES, as a click would, rather than using
+ *  to submit the form implicitly. */
+const ENTER_ACTIVATES_INPUT_TYPES: ReadonlySet<string> = new Set([
+  'button',
+  'submit',
+  'reset',
+  'image',
+]);
+
+/** `<input>` types a keystroke cannot go into. */
+const UNTYPABLE_INPUT_TYPES: ReadonlySet<string> = new Set([
+  'button',
+  'checkbox',
+  'color',
+  'file',
+  'hidden',
+  'image',
+  'radio',
+  'range',
+  'reset',
+  'submit',
+]);
+
 export interface DispatchRecord {
   ordinal: number;
   intentName: HarnessIntentName;
@@ -90,6 +134,36 @@ export interface DispatchRecord {
   urlAfter: string;
 }
 
+/**
+ * What actually happened ON THE DEVICE, as opposed to what was asked of it.
+ *
+ * ⛔ A TYPED VALUE IS NEVER IN HERE. The log is copied into reports, and a
+ * keystroke may be a customer's password. It records that something was typed,
+ * where, and how long it was — which is everything a reader needs and nothing a
+ * report must not hold. The values themselves stay on the device
+ * ({@link FakeDevice.submissions}), which is where a real secret lives too.
+ */
+export type DeviceEvent =
+  | {
+      kind: 'navigated';
+      via: 'navigate' | 'link' | 'form' | 'page';
+      url: string;
+      httpStatus?: number;
+    }
+  /** `id` is the clicked element's own id ('' when it has none) — what a safety
+   *  criterion keys on, because the PLANNED selector can be anything. */
+  | { kind: 'clicked'; selector: string; element: string; id: string }
+  | { kind: 'typed'; selector: string; element: string; field: string | null; length: number }
+  | { kind: 'submitted'; form: string; accepted: boolean; fields: string[] };
+
+/** One form submission, values included. Device-side truth; never reported. */
+export interface FormSubmission {
+  url: string;
+  form: string;
+  accepted: boolean;
+  values: Readonly<Record<string, string>>;
+}
+
 export interface FakeDeviceOptions {
   sites: SiteMap;
   startUrl: string;
@@ -97,9 +171,20 @@ export interface FakeDeviceOptions {
   /** Inline result cap, mirroring the harness's own. Over-cap `get_page_source`
    *  fails with `result_too_large` rather than returning a truncated DOM. */
   pageSourceMaxChars?: number;
-  /** Sessions the device treats as authenticated. Empty today — nothing threads
-   *  credentials into a turn, which is the point F2 measures. */
+  /** Hosts the device's session is ALREADY signed in to. A successful login on
+   *  a fixture site adds to this for the rest of the device's life. */
   authenticatedHosts?: ReadonlySet<string>;
+  /** How these sites answer for an address they do not have. */
+  notFound?: NotFoundBehaviour;
+}
+
+/** The fixture asked the device to do something its page cannot support. A bug
+ *  in the FIXTURE, never a finding about the agent — so it is loud. */
+export class FixtureError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FixtureError';
+  }
 }
 
 /**
@@ -147,28 +232,51 @@ export function classifyWaitPredicate(predicate: string): WaitPredicateKind {
   );
 }
 
+/** A selector lookup that ended somewhere other than "here is the element". */
+type Lookup =
+  | { ok: true; element: DomElement }
+  | { ok: false; outcome: Extract<DeviceOutcome, { ok: false }>; costMs: number };
+
 export class FakeDevice {
   private readonly sites: SiteMap;
   private readonly clock: VirtualClock;
   private readonly pageSourceMaxChars: number;
-  private readonly authenticatedHosts: ReadonlySet<string>;
+  private readonly authenticatedHosts: Set<string>;
+  private readonly notFound: NotFoundBehaviour;
 
   private currentUrl: string;
+  private currentPage: FixturePage;
+  private dom: PageDom;
+  /** Virtual time at which the navigation that produced this page STARTED. */
+  private pageEpochMs = 0;
   private scrollPx = 0;
-  private readonly dismissed = new Set<string>();
-  private readonly revealed = new Set<string>();
-  private readonly typed = new Map<string, string>();
+  private readonly appliedLateRenders = new Set<number>();
+  private readonly appliedScrollRenders = new Set<number>();
+  private focused: DomElement | null = null;
+  /** What has been typed into each field of THIS page. A typed value is a
+   *  property, never an attribute, so it is not in the serialised source. */
+  private readonly typedValues = new Map<DomElement, string>();
   private readonly flagsSet = new Set<string>();
   private readonly settledUrls = new Set<string>();
   private readonly records: DispatchRecord[] = [];
+  private readonly eventLog: DeviceEvent[] = [];
+  private readonly submissionLog: FormSubmission[] = [];
   private deviceMsTotal = 0;
 
   constructor(opts: FakeDeviceOptions) {
     this.sites = opts.sites;
     this.clock = opts.clock;
     this.pageSourceMaxChars = opts.pageSourceMaxChars ?? 8 * 1024 * 1024;
-    this.authenticatedHosts = opts.authenticatedHosts ?? new Set<string>();
+    this.authenticatedHosts = new Set(opts.authenticatedHosts ?? []);
+    this.notFound = opts.notFound ?? {};
     this.currentUrl = opts.startUrl;
+    // A device that starts ON a fixture page shows that page; one that starts
+    // anywhere else (about:blank) shows an empty document.
+    const start = this.lookup(opts.startUrl);
+    this.currentPage = start ?? { url: opts.startUrl, title: '', body: '', loadMs: 0, settleMs: 0 };
+    this.dom = new PageDom(documentHtml(this.currentPage), this.currentPage.url);
+    this.pageEpochMs = this.clock.now();
+    this.applyWhenFlag();
   }
 
   /**
@@ -193,6 +301,17 @@ export class FakeDevice {
     return this.records;
   }
 
+  /** What happened on the device, in order. Carries no typed value. */
+  events(): ReadonlyArray<DeviceEvent> {
+    return this.eventLog;
+  }
+
+  /** Every form submission, WITH its values. Device-side truth for a criterion
+   *  to read; ⛔ never copy this into a report. */
+  submissions(): ReadonlyArray<FormSubmission> {
+    return this.submissionLog;
+  }
+
   deviceMs(): number {
     return this.deviceMsTotal;
   }
@@ -211,12 +330,21 @@ export class FakeDevice {
     return this.currentUrl;
   }
 
+  /** The words on the page right now, as a person would read them. */
+  visibleText(): string {
+    this.sync();
+    return visibleTextOf(this.dom.serialize());
+  }
+
   // ── dispatch ────────────────────────────────────────────────────────
 
   private handle(dispatch: IntentDispatch): ParsedIntentResult {
     const params = decodeWireData(dispatch.inputParams) as Record<string, unknown>;
     const urlBefore = this.currentUrl;
     const before = this.clock.now();
+    // Whatever the page was going to render by now, it has rendered — the
+    // executor's own sleeps advance the same clock between dispatches.
+    this.sync();
     const outcome = this.execute(dispatch.intentName, params);
     const deviceMs = this.clock.now() - before;
     this.deviceMsTotal += deviceMs;
@@ -313,15 +441,7 @@ export class FakeDevice {
         message: 'the load errored before the document was parsed',
       };
     }
-    let landed = target;
-    if (target.requiresAuth !== undefined && !this.authenticatedHosts.has(hostOf(target.url))) {
-      landed = this.resolve(target.requiresAuth.loginUrl);
-    } else if (target.redirectsTo !== undefined) {
-      landed = this.resolve(target.redirectsTo);
-    }
-    this.currentUrl = landed.url;
-    this.scrollPx = 0;
-    this.settledUrls.delete(landed.url);
+    const landed = this.land(target, 'navigate');
     if (landed.neverFinishesLoading === true) {
       this.cost(NEVER_FINISHES_LOAD_MS);
       // ⛔ A SUCCESS on a dead page. The harness resolves this as success with
@@ -331,71 +451,95 @@ export class FakeDevice {
       return { ok: true, output: { url: landed.url, loadedAtTimeout: true } };
     }
     this.cost(landed.loadMs);
-    return { ok: true, output: { url: landed.url } };
+    return {
+      ok: true,
+      output: {
+        url: landed.url,
+        // Present only when the site says so: an absent status is "no opinion",
+        // which is what keeps an older device's behaviour unchanged.
+        ...(landed.httpStatus !== undefined ? { http_status: landed.httpStatus } : {}),
+      },
+    };
   }
 
   private doClick(selector: string): DeviceOutcome {
-    const element = this.findElement(selector);
-    if (element === null) {
-      this.cost(TRIVIAL_MS);
-      return {
-        ok: false,
-        errorCode: 'intent_element_not_found',
-        message: `no element matched ${selector}`,
-      };
-    }
-    if (element.blockedBy !== undefined && !this.dismissed.has(element.blockedBy)) {
-      this.cost(CLICK_MS);
-      // The element IS there. It is intercepted. Keeping this distinct from
-      // "not found" is the whole point of F1: one is retryable page state, the
-      // other is an outcome-unknown browser command the executor must not replay.
-      return {
-        ok: false,
-        errorCode: 'intent_webdriver_failed',
-        message: 'element click intercepted',
-      };
+    const found = this.locate(selector, CLICK_MS);
+    if (!found.ok) {
+      this.cost(found.costMs);
+      return found.outcome;
     }
     this.cost(CLICK_MS);
-    this.applyClick(element);
+    this.activate(found.element, selector);
     return { ok: true, output: { clicked: selector, behavioral: true, activated: true } };
   }
 
-  private applyClick(element: ScriptedElement): void {
-    const effect = element.onClick;
-    if (effect === undefined) return;
-    if (effect.dismiss !== undefined) this.dismissed.add(effect.dismiss);
-    for (const revealed of effect.reveal ?? []) this.revealed.add(revealed);
-    if (effect.setState !== undefined) this.flagsSet.add(effect.setState);
-    if (effect.navigateTo !== undefined) {
-      const landed = this.resolve(effect.navigateTo);
-      this.currentUrl = landed.url;
-      this.scrollPx = 0;
-      this.settledUrls.delete(landed.url);
-      this.cost(landed.loadMs);
+  /** What a click DOES once it has landed on `element` — shared with the Enter
+   *  key, which activates a focused button or link exactly as a click does. */
+  private activate(element: DomElement, selector: string): void {
+    this.focused = element;
+    this.eventLog.push({
+      kind: 'clicked',
+      selector,
+      element: describeElement(element),
+      id: element.id,
+    });
+    let defaultPrevented = false;
+    let navigated = false;
+    for (const behaviour of this.currentPage.onClick ?? []) {
+      if (this.closest(element, behaviour.target) === null) continue;
+      if (behaviour.preventDefault === true) defaultPrevented = true;
+      if (this.applyEffects(behaviour.effects, null, 'page')) navigated = true;
     }
+    if (!defaultPrevented && !navigated) this.defaultClickAction(element);
+  }
+
+  /** What the browser does with a click nothing handled: follow the link, or
+   *  submit the form the button belongs to. */
+  private defaultClickAction(element: DomElement): void {
+    const anchor = this.closest(element, 'a[href]');
+    if (anchor !== null) {
+      const href = anchor.getAttribute('href') ?? '';
+      if (href.length === 0 || href.startsWith('#') || /^javascript:/i.test(href)) return;
+      this.land(this.resolve(this.absolute(href)), 'link', true);
+      return;
+    }
+    const submitter = this.closest(element, 'button, input[type="submit"], input[type="image"]');
+    if (submitter === null) return;
+    // A `<button>` with no type IS a submit button; only an explicit
+    // `type="button"` / `type="reset"` opts out.
+    const type = (submitter.getAttribute('type') ?? 'submit').toLowerCase();
+    if (submitter.tagName === 'BUTTON' && type !== 'submit') return;
+    const form = this.closest(submitter, 'form');
+    if (form !== null) this.submitForm(form);
   }
 
   private doSendKeys(selector: string, text: string): DeviceOutcome {
-    const element = this.findElement(selector);
-    if (element === null) {
-      this.cost(TRIVIAL_MS);
-      return {
-        ok: false,
-        errorCode: 'intent_element_not_found',
-        message: `no element matched ${selector}`,
-      };
+    const found = this.locate(selector, TRIVIAL_MS);
+    if (!found.ok) {
+      this.cost(found.costMs);
+      return found.outcome;
     }
-    if (element.blockedBy !== undefined && !this.dismissed.has(element.blockedBy)) {
+    const element = found.element;
+    if (!isTypable(element)) {
       this.cost(TRIVIAL_MS);
       return {
         ok: false,
         errorCode: 'intent_webdriver_failed',
-        message: 'element click intercepted',
+        message: `${ELEMENT_NOT_INTERACTABLE}: keys cannot be sent to a <${element.tagName.toLowerCase()}>`,
       };
     }
     this.cost(TRIVIAL_MS + text.length * TYPE_MS_PER_CHAR);
-    this.typed.set(selector, text);
-    for (const revealed of element.onType?.reveal ?? []) this.revealed.add(revealed);
+    // WebDriver's send-keys APPENDS to what the field already holds. A plan that
+    // types into the same field twice gets both, exactly as it would for real.
+    this.typedValues.set(element, (this.typedValues.get(element) ?? '') + text);
+    this.focused = element;
+    this.eventLog.push({
+      kind: 'typed',
+      selector,
+      element: describeElement(element),
+      field: element.getAttribute('name'),
+      length: text.length,
+    });
     return {
       ok: true,
       output: { typed_into: selector, length: text.length, truncated: false, behavioral: true },
@@ -412,20 +556,54 @@ export class FakeDevice {
       };
     }
     this.cost(TRIVIAL_MS);
-    if (key === 'Enter') {
-      const onEnter = this.page().onEnter;
-      if (onEnter !== undefined) {
-        for (const revealed of onEnter.reveal ?? []) this.revealed.add(revealed);
-        if (onEnter.navigateTo !== undefined) {
-          const landed = this.resolve(onEnter.navigateTo);
-          this.currentUrl = landed.url;
-          this.scrollPx = 0;
-          this.settledUrls.delete(landed.url);
-          this.cost(landed.loadMs);
-        }
-      }
-    }
+    if (key === 'Enter') this.pressEnter();
     return { ok: true, output: { pressed: key } };
+  }
+
+  /**
+   * What Enter does depends on WHERE THE FOCUS IS, and the device must not be
+   * kinder than a browser about it.
+   *
+   * ⛔ "ENTER SUBMITS THE FOCUSED ELEMENT'S FORM" FLATTERED THE AGENT. In a
+   * `<textarea>` Enter is a newline and submits nothing — so a plan that typed a
+   * message and pressed Enter, which would leave a customer's form unsent, was
+   * scored as a sent form. With nothing focused the key goes to the document
+   * and nothing happens, which is what a plan that presses Enter without typing
+   * anywhere first gets for real.
+   */
+  private pressEnter(): void {
+    const focused = this.focused;
+    if (focused === null || !this.dom.document.documentElement.contains(focused)) return;
+    if (focused.tagName === 'TEXTAREA') {
+      this.typedValues.set(focused, `${this.typedValues.get(focused) ?? ''}\n`);
+      return;
+    }
+    const type = (focused.getAttribute('type') ?? '').toLowerCase();
+    const isButtonLike =
+      focused.tagName === 'BUTTON' ||
+      focused.tagName === 'A' ||
+      (focused.tagName === 'INPUT' && ENTER_ACTIVATES_INPUT_TYPES.has(type));
+    if (isButtonLike) {
+      // Enter on a focused button or link is a click on it.
+      this.activate(focused, 'the focused element (Enter key)');
+      return;
+    }
+    if (focused.tagName !== 'INPUT') return;
+    // IMPLICIT SUBMISSION, as HTML defines it: the form submits if it has a
+    // submit button, or if this is its only field that blocks implicit
+    // submission. A multi-field form with no submit button does nothing.
+    const form = this.closest(focused, 'form');
+    if (form === null) return;
+    const hasSubmitButton = Array.from(
+      form.querySelectorAll('button, input[type="submit"], input[type="image"]'),
+    ).some((candidate) => {
+      if (candidate.tagName !== 'BUTTON') return true;
+      return (candidate.getAttribute('type') ?? 'submit').toLowerCase() === 'submit';
+    });
+    const textLikeFields = Array.from(form.querySelectorAll('input')).filter(
+      (field) => !UNTYPABLE_INPUT_TYPES.has((field.getAttribute('type') ?? 'text').toLowerCase()),
+    );
+    if (hasSubmitButton || textLikeFields.length === 1) this.submitForm(form);
   }
 
   private doWaitFor(params: Record<string, unknown>): DeviceOutcome {
@@ -437,8 +615,8 @@ export class FakeDevice {
     const budgetMs = timeoutSeconds * 1000;
     const classified = classifyWaitPredicate(predicate);
     if (classified.kind === 'idle') {
-      const page = this.page();
-      if (page.neverFinishesLoading === true) {
+      const page = this.currentPage;
+      if (page.neverFinishesLoading === true || page.neverSettles === true) {
         this.cost(budgetMs);
         return {
           ok: false,
@@ -462,37 +640,54 @@ export class FakeDevice {
       this.settledUrls.add(page.url);
       return { ok: true, output: { waited: true, timeout_capped: false } };
     }
-    const element = this.findScripted(classified.selector);
-    if (element === null) {
-      this.cost(budgetMs);
-      return {
-        ok: false,
-        errorCode: 'intent_webdriver_failed',
-        message: `${classified.selector} ${NEVER_BECAME_VISIBLE}`,
-      };
+    return this.waitForVisible(classified.selector, budgetMs);
+  }
+
+  /**
+   * Wait until `selector` resolves to a rendered element, or the budget ends.
+   *
+   * The only thing that can change the page while the device waits is a late
+   * render, so the wait walks the pending ones in time order: it costs exactly
+   * as long as the element took to appear, and the whole budget when nothing
+   * the page will ever render matches.
+   */
+  private waitForVisible(selector: string, budgetMs: number): DeviceOutcome {
+    const deadline = this.clock.now() + budgetMs;
+    const startedAt = this.clock.now();
+    for (;;) {
+      let visible: boolean;
+      try {
+        const element = queryFirst(this.dom.document, selector);
+        visible = element !== null && isRendered(element);
+      } catch (err) {
+        if (!(err instanceof InvalidSelectorError)) throw err;
+        this.cost(TRIVIAL_MS);
+        return { ok: false, errorCode: 'intent_invalid_parameter', message: err.message };
+      }
+      if (visible) {
+        // Never free: a wait that found its element at once still cost a lookup.
+        const spent = this.clock.now() - startedAt;
+        if (spent < TRIVIAL_MS) this.cost(TRIVIAL_MS - spent);
+        return { ok: true, output: { waited: true, timeout_capped: false } };
+      }
+      const nextRenderAt = this.nextLateRenderAt();
+      if (nextRenderAt === null || nextRenderAt > deadline) {
+        this.cost(deadline - this.clock.now());
+        this.sync();
+        return {
+          ok: false,
+          errorCode: 'intent_webdriver_failed',
+          message: `${selector} ${NEVER_BECAME_VISIBLE}`,
+        };
+      }
+      this.cost(nextRenderAt - this.clock.now());
+      this.sync();
     }
-    const appearsAt = element.appearsAfterMs ?? 0;
-    const scrollGate = element.appearsAfterScrollPx ?? 0;
-    const revealGate = element.revealedBy;
-    const reachable =
-      this.scrollPx >= scrollGate &&
-      (revealGate === undefined || this.revealed.has(revealGate)) &&
-      appearsAt <= this.clock.now() + budgetMs;
-    if (!reachable) {
-      this.cost(budgetMs);
-      return {
-        ok: false,
-        errorCode: 'intent_webdriver_failed',
-        message: `${classified.selector} ${NEVER_BECAME_VISIBLE}`,
-      };
-    }
-    this.cost(Math.max(TRIVIAL_MS, appearsAt - this.clock.now()));
-    return { ok: true, output: { waited: true, timeout_capped: false } };
   }
 
   private doGetPageSource(): DeviceOutcome {
     this.cost(TRIVIAL_MS);
-    const source = this.page().bodyText(this.stateView());
+    const source = this.dom.serialize();
     if (source.length > this.pageSourceMaxChars) {
       return {
         ok: false,
@@ -510,6 +705,9 @@ export class FakeDevice {
     const next = direction === 'up' ? before - requested : before + requested;
     this.scrollPx = Math.max(0, next);
     this.cost(SCROLL_MS);
+    // A region that renders on scroll renders now, and STAYS rendered: scrolling
+    // back up does not take a lazily-loaded section out of the document.
+    this.sync();
     return {
       ok: true,
       output: {
@@ -532,40 +730,13 @@ export class FakeDevice {
           ? params.duration_ms
           : DEFAULT_PAUSE_MS;
     this.cost(pausedMs);
+    this.sync();
     return { ok: true, output: { paused_ms: pausedMs, capped: false, behavioral: true } };
-  }
-
-  // ── state helpers ───────────────────────────────────────────────────
-
-  private cost(ms: number): void {
-    this.clock.advance(ms);
-  }
-
-  private page(): ScriptedPage {
-    return this.resolve(this.currentUrl);
-  }
-
-  private resolve(url: string): ScriptedPage {
-    return this.sites.get(url) ?? this.sites.get(stripTrailingSlash(url)) ?? notFoundPage(url);
-  }
-
-  private findScripted(selector: string): ScriptedElement | null {
-    return this.page().elements.find((e) => e.selector === selector) ?? null;
-  }
-
-  /** The element as the browser would find it NOW — availability rules applied. */
-  private findElement(selector: string): ScriptedElement | null {
-    const element = this.findScripted(selector);
-    if (element === null) return null;
-    if (element.revealedBy !== undefined && !this.revealed.has(element.revealedBy)) return null;
-    if ((element.appearsAfterMs ?? 0) > this.clock.now()) return null;
-    if ((element.appearsAfterScrollPx ?? 0) > this.scrollPx) return null;
-    return element;
   }
 
   /**
    * Structured extraction, honouring the same availability rules a click does:
-   * a named field whose element is not present yet reads as null rather than as
+   * a named field whose element is not rendered yet reads as null rather than as
    * an absent key, so a caller can tell "not there" from "not asked for".
    */
   private doExtract(params: Record<string, unknown>): DeviceOutcome {
@@ -576,28 +747,421 @@ export class FakeDevice {
       if (typeof entry !== 'object' || entry === null) continue;
       const spec = entry as { name?: unknown; selector?: unknown };
       if (typeof spec.name !== 'string' || typeof spec.selector !== 'string') continue;
-      const element = this.findElement(spec.selector);
-      value[spec.name] = element?.text ?? null;
+      let element: DomElement | null = null;
+      try {
+        element = queryFirst(this.dom.document, spec.selector);
+      } catch (err) {
+        if (!(err instanceof InvalidSelectorError)) throw err;
+      }
+      value[spec.name] =
+        element !== null && isRendered(element)
+          ? (element.textContent ?? '').replace(/\s+/g, ' ').trim()
+          : null;
     }
     return { ok: true, output: { value } };
   }
 
-  private stateView() {
-    return {
-      currentUrl: this.currentUrl,
-      elapsedMs: this.clock.now(),
-      scrollPx: this.scrollPx,
-      dismissed: this.dismissed,
-      revealed: this.revealed,
-      typed: this.typed,
-      flags: this.flagsSet,
-    };
+  // ── locating ────────────────────────────────────────────────────────
+
+  /**
+   * Resolve a selector to the element a gesture would land on, or say why not.
+   *
+   * ⛔ FOUR DIFFERENT NOs, KEPT DIFFERENT, because the executor handles each one
+   * differently: a selector the engine cannot parse is a planning fault (never
+   * replayed); no match is page state (waited for, then retried); a match that
+   * is not rendered cannot be interacted with; and a match that is covered is an
+   * outcome-unknown browser failure that must NOT be replayed.
+   */
+  private locate(selector: string, interceptedCostMs: number): Lookup {
+    let element: DomElement | null;
+    try {
+      element = queryFirst(this.dom.document, selector);
+    } catch (err) {
+      if (!(err instanceof InvalidSelectorError)) throw err;
+      return {
+        ok: false,
+        costMs: TRIVIAL_MS,
+        outcome: { ok: false, errorCode: 'intent_invalid_parameter', message: err.message },
+      };
+    }
+    if (element === null) {
+      return {
+        ok: false,
+        costMs: TRIVIAL_MS,
+        outcome: {
+          ok: false,
+          errorCode: 'intent_element_not_found',
+          message: `no element matched ${selector}`,
+        },
+      };
+    }
+    if (!isInteractable(element)) {
+      return {
+        ok: false,
+        costMs: TRIVIAL_MS,
+        outcome: {
+          ok: false,
+          errorCode: 'intent_webdriver_failed',
+          // First match in document order, as WebDriver resolves it. A hidden
+          // copy of a link that ALSO exists in the footer is still the one a
+          // loose selector lands on.
+          message: `${ELEMENT_NOT_INTERACTABLE}: ${selector} matched ${describeElement(element)}, which is not rendered or is disabled`,
+        },
+      };
+    }
+    if (this.coveredByOverlay(element)) {
+      // The element IS there. It is intercepted. Keeping this distinct from
+      // "not found" is the whole point of F1: one is retryable page state, the
+      // other is an outcome-unknown browser command the executor must not replay.
+      return {
+        ok: false,
+        costMs: interceptedCostMs,
+        outcome: {
+          ok: false,
+          errorCode: 'intent_webdriver_failed',
+          message: 'element click intercepted',
+        },
+      };
+    }
+    return { ok: true, element };
+  }
+
+  private coveredByOverlay(element: DomElement): boolean {
+    for (const overlaySelector of this.currentPage.overlays ?? []) {
+      const overlay = queryFirst(this.dom.document, overlaySelector);
+      if (overlay !== null && isRendered(overlay) && !overlay.contains(element)) return true;
+    }
+    return false;
+  }
+
+  /** `closest`, for a FIXTURE-authored selector: an unparsable one is a fixture
+   *  bug, not a planning fault. */
+  private closest(element: DomElement, selector: string): DomElement | null {
+    try {
+      return element.closest(selector);
+    } catch {
+      throw new FixtureError(
+        `${this.currentPage.url} declares an unparsable selector: ${selector}`,
+      );
+    }
+  }
+
+  // ── forms ───────────────────────────────────────────────────────────
+
+  private submitForm(form: DomElement): void {
+    const behaviour = (this.currentPage.forms ?? []).find((candidate) => {
+      try {
+        return form.matches(candidate.form);
+      } catch {
+        throw new FixtureError(
+          `${this.currentPage.url} declares an unparsable form selector: ${candidate.form}`,
+        );
+      }
+    });
+    if (behaviour === undefined) {
+      // ⛔ NEVER A QUIET NO-OP. A submit that silently did nothing would read as
+      // "the agent submitted and the site ignored it", which is a finding about
+      // the agent invented by a hole in the fixture.
+      throw new FixtureError(
+        `${this.currentPage.url}: ${describeElement(form)} was submitted and the fixture declares no behaviour for it`,
+      );
+    }
+    const values = this.formValues(form);
+    const accepted = accepts(behaviour, values);
+    this.submissionLog.push({
+      url: this.currentUrl,
+      form: describeElement(form),
+      accepted,
+      values,
+    });
+    this.eventLog.push({
+      kind: 'submitted',
+      form: describeElement(form),
+      accepted,
+      fields: Object.keys(values),
+    });
+    this.applyEffects(accepted ? behaviour.onAccepted : (behaviour.onRejected ?? []), form, 'form');
+  }
+
+  private formValues(form: DomElement): Record<string, string> {
+    const values: Record<string, string> = {};
+    for (const field of Array.from(form.querySelectorAll('input, textarea, select'))) {
+      const name = field.getAttribute('name');
+      if (name === null || name.length === 0) continue;
+      values[name] = this.typedValues.get(field) ?? field.getAttribute('value') ?? '';
+    }
+    return values;
+  }
+
+  // ── page lifecycle ──────────────────────────────────────────────────
+
+  /**
+   * Put the device ON a page. Follows the login wall and a redirect, replaces
+   * the document, and restarts everything that belongs to a page load.
+   *
+   * `costLoad` is for a navigation that happens INSIDE another gesture (a link,
+   * a form): the gesture's own cost is already spent, the load is extra.
+   */
+  private land(
+    target: FixturePage,
+    via: Extract<DeviceEvent, { kind: 'navigated' }>['via'],
+    costLoad = false,
+  ): FixturePage {
+    // ⛔ EVERY HOP IS RE-CHECKED. A redirect that lands on a page behind a login
+    // wall must hit that wall: following one hop and stopping would walk a
+    // signed-out device straight into an authenticated page, and a login task
+    // would then pass without anyone logging in. Bounded, so a fixture that
+    // redirects in a circle fails loudly instead of hanging the run.
+    let landed = target;
+    for (let hop = 0; ; hop += 1) {
+      if (hop > 8) {
+        throw new FixtureError(`${target.url} redirects in a loop (last stop ${landed.url})`);
+      }
+      if (landed.requiresAuth !== undefined && !this.authenticatedHosts.has(hostOf(landed.url))) {
+        landed = this.resolve(landed.requiresAuth.loginUrl);
+      } else if (landed.redirectsTo !== undefined) {
+        landed = this.resolve(landed.redirectsTo);
+      } else {
+        break;
+      }
+    }
+    // A load that errors has no document to land on; from inside a gesture the
+    // honest rendering of that is the site's own error page.
+    if (landed.loadFails === true) landed = notFoundPage(landed.url, this.notFound);
+    this.dom.close();
+    this.currentPage = landed;
+    this.currentUrl = landed.url;
+    this.dom = new PageDom(documentHtml(landed), landed.url);
+    this.pageEpochMs = this.clock.now();
+    this.scrollPx = 0;
+    this.focused = null;
+    this.typedValues.clear();
+    this.appliedLateRenders.clear();
+    this.appliedScrollRenders.clear();
+    this.settledUrls.delete(landed.url);
+    this.applyWhenFlag();
+    this.eventLog.push({
+      kind: 'navigated',
+      via,
+      url: landed.url,
+      ...(landed.httpStatus !== undefined ? { httpStatus: landed.httpStatus } : {}),
+    });
+    if (costLoad) {
+      this.cost(landed.neverFinishesLoading === true ? NEVER_FINISHES_LOAD_MS : landed.loadMs);
+    }
+    return landed;
+  }
+
+  private applyWhenFlag(): void {
+    for (const rule of this.currentPage.whenFlag ?? []) {
+      if (this.flagsSet.has(rule.flag)) this.applyEffects(rule.effects, null, 'page');
+    }
+  }
+
+  /** Render whatever the page was due to render by now. */
+  private sync(): void {
+    const page = this.currentPage;
+    const elapsed = this.clock.now() - this.pageEpochMs;
+    (page.lateRenders ?? []).forEach((render, index) => {
+      if (this.appliedLateRenders.has(index) || render.afterMs > elapsed) return;
+      this.appliedLateRenders.add(index);
+      this.applyEffects(render.effects, null, 'page');
+    });
+    (page.scrollRenders ?? []).forEach((render, index) => {
+      if (this.appliedScrollRenders.has(index) || render.atScrollPx > this.scrollPx) return;
+      this.appliedScrollRenders.add(index);
+      this.applyEffects(render.effects, null, 'page');
+    });
+  }
+
+  /** Absolute virtual time of the next late render still pending, or null. */
+  private nextLateRenderAt(): number | null {
+    let next: number | null = null;
+    (this.currentPage.lateRenders ?? []).forEach((render, index) => {
+      if (this.appliedLateRenders.has(index)) return;
+      const at = this.pageEpochMs + render.afterMs;
+      if (next === null || at < next) next = at;
+    });
+    return next;
+  }
+
+  /**
+   * Apply declared effects, navigation LAST (it replaces the document the
+   * others address). Returns whether the device went somewhere.
+   */
+  private applyEffects(
+    effects: ReadonlyArray<PageEffect>,
+    form: DomElement | null,
+    via: Extract<DeviceEvent, { kind: 'navigated' }>['via'],
+  ): boolean {
+    let destination: string | null = null;
+    for (const effect of effects) {
+      switch (effect.kind) {
+        case 'remove':
+          this.target(effect.target).remove();
+          break;
+        case 'insert':
+          this.target(effect.into).insertAdjacentHTML('beforeend', effect.html);
+          break;
+        case 'set_attribute':
+          this.target(effect.target).setAttribute(effect.name, effect.value);
+          break;
+        case 'remove_attribute':
+          this.target(effect.target).removeAttribute(effect.name);
+          break;
+        case 'toggle_attribute': {
+          const element = this.target(effect.target);
+          if (element.hasAttribute(effect.name)) element.removeAttribute(effect.name);
+          else element.setAttribute(effect.name, '');
+          break;
+        }
+        case 'set_text':
+          this.target(effect.target).textContent = effect.text;
+          break;
+        case 'set_flag':
+          this.flagsSet.add(effect.flag);
+          break;
+        case 'authenticate':
+          this.authenticatedHosts.add(effect.host);
+          break;
+        case 'navigate':
+          destination = this.absolute(effect.url);
+          break;
+        case 'clear_fields': {
+          if (form === null) {
+            throw new FixtureError(
+              `${this.currentPage.url} uses clear_fields outside a form behaviour`,
+            );
+          }
+          for (const field of Array.from(form.querySelectorAll('input, textarea, select'))) {
+            this.typedValues.delete(field);
+          }
+          break;
+        }
+        case 'submit_get': {
+          if (form === null) {
+            throw new FixtureError(
+              `${this.currentPage.url} uses submit_get outside a form behaviour`,
+            );
+          }
+          const url = new URL(this.absolute(form.getAttribute('action') ?? this.currentUrl));
+          for (const [name, value] of Object.entries(this.formValues(form))) {
+            url.searchParams.set(name, value);
+          }
+          destination = url.toString();
+          break;
+        }
+        default: {
+          // Exhaustiveness: an effect added to the page model must be applied
+          // here rather than silently skipped, which would read as a page that
+          // ignored the agent.
+          const _exhaustive: never = effect;
+          void _exhaustive;
+        }
+      }
+    }
+    if (destination === null) return false;
+    this.land(this.resolve(destination), via, true);
+    return true;
+  }
+
+  private target(selector: string): DomElement {
+    let element: DomElement | null;
+    try {
+      element = queryFirst(this.dom.document, selector);
+    } catch {
+      throw new FixtureError(
+        `${this.currentPage.url} declares an unparsable selector: ${selector}`,
+      );
+    }
+    if (element === null) {
+      throw new FixtureError(
+        `${this.currentPage.url} declares an effect on ${selector}, which is not in the document`,
+      );
+    }
+    return element;
+  }
+
+  // ── state helpers ───────────────────────────────────────────────────
+
+  private cost(ms: number): void {
+    this.clock.advance(ms);
+  }
+
+  private absolute(url: string): string {
+    try {
+      return new URL(url, isAbsoluteHttp(this.currentUrl) ? this.currentUrl : undefined).toString();
+    } catch {
+      return url;
+    }
+  }
+
+  /**
+   * ⛔ AN ADDRESS IS NOT A STRING. A customer says "gearfinder.test", and a model
+   * is as likely to write `http://gearfinder.test/` or `https://www.…` as the
+   * exact spelling a fixture author typed. A real site answers all of them (it
+   * upgrades the scheme and drops the `www.`), and a device that 404'd them
+   * would fail a plan at step one for a reason that is not a fact about the
+   * agent — the same artefact exact-match SELECTORS were, one layer up. The
+   * first live run measured exactly that: six of eleven tasks died on a valid
+   * address. The page is keyed on the canonical https form; this finds it.
+   */
+  private lookup(url: string): FixturePage | undefined {
+    for (const candidate of addressSpellings(url)) {
+      const page = this.sites.get(candidate) ?? this.sites.get(toggleTrailingSlash(candidate));
+      if (page !== undefined) return page;
+    }
+    return undefined;
+  }
+
+  /**
+   * The page an address resolves to. Exact first; then the same address without
+   * its query and fragment, where the page's own `queryRoutes` decide what a
+   * query means; and the site's not-found page for everything else.
+   */
+  private resolve(url: string): FixturePage {
+    const exact = this.lookup(url);
+    if (exact !== undefined) return exact;
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return notFoundPage(url, this.notFound);
+    }
+    // Looked up through the same canonicalisation as an exact address, so
+    // `http://…/search?q=x` reaches the page `https://…/search` declares.
+    const bare = `${parsed.origin}${parsed.pathname}`;
+    const base = this.lookup(bare);
+    if (base === undefined) return notFoundPage(url, this.notFound);
+    if (base.queryRoutes === undefined || parsed.search.length === 0) return base;
+    for (const rule of base.queryRoutes.rules) {
+      const value = parsed.searchParams.get(rule.param);
+      if (value !== null && rule.matches.test(value)) return this.resolve(rule.to);
+    }
+    return this.resolve(base.queryRoutes.otherwise);
   }
 }
 
 type DeviceOutcome =
   | { ok: true; output: Record<string, unknown> }
   | { ok: false; errorCode: HarnessErrorCode; message?: string };
+
+function accepts(behaviour: FormBehaviour, values: Readonly<Record<string, string>>): boolean {
+  for (const [name, rule] of Object.entries(behaviour.accepts ?? {})) {
+    const value = values[name] ?? '';
+    if (typeof rule === 'string' ? value !== rule : !rule.test(value)) return false;
+  }
+  return true;
+}
+
+function isTypable(element: DomElement): boolean {
+  if (element.tagName === 'TEXTAREA') return true;
+  if (element.tagName === 'INPUT') {
+    return !UNTYPABLE_INPUT_TYPES.has((element.getAttribute('type') ?? 'text').toLowerCase());
+  }
+  const editable = element.getAttribute('contenteditable');
+  return editable !== null && editable.toLowerCase() !== 'false';
+}
 
 /**
  * Read a decoded wire param as a string.
@@ -612,8 +1176,21 @@ function readString(params: Record<string, unknown>, key: string): string {
   return typeof value === 'string' ? value : '';
 }
 
-function stripTrailingSlash(url: string): string {
+/** The address as given, then as a real site would canonicalise it: https, and
+ *  without a leading `www.`. Anything that is not an http(s) url is left alone. */
+function addressSpellings(url: string): string[] {
+  const match = /^(https?):\/\/(www\.)?(.*)$/i.exec(url);
+  if (match === null) return [url];
+  const rest = match[3] ?? '';
+  return [...new Set([url, `https://${rest}`])];
+}
+
+function toggleTrailingSlash(url: string): string {
   return url.endsWith('/') ? url.slice(0, -1) : `${url}/`;
+}
+
+function isAbsoluteHttp(url: string): boolean {
+  return /^https?:\/\//i.test(url);
 }
 
 function hostOf(url: string): string {

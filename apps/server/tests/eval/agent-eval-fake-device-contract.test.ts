@@ -19,7 +19,7 @@ import {
 } from '../../src/schemas/harness-control-protocol.js';
 import { serializeIntentDispatch } from '../../src/services/harness-control-codec.js';
 import { FakeDevice, ONE_PIXEL_PNG_B64 } from './_lib/fake-device.js';
-import { EVAL_SITES, type ScriptedPage, type SiteMap } from './_lib/page-model.js';
+import { EVAL_SITES, type FixturePage, type SiteMap } from './_lib/page-model.js';
 import { VirtualClock } from './_lib/virtual-clock.js';
 
 function makeDevice(startUrl = 'about:blank', sites: SiteMap = EVAL_SITES) {
@@ -211,14 +211,13 @@ describe('agent eval — the fake device answers the harness contract', () => {
     });
 
     it('a page that never finishes loading SUCCEEDS carrying loadedAtTimeout', async () => {
-      const dead: ScriptedPage = {
+      const dead: FixturePage = {
         url: 'https://hang.test/',
         title: 'hang',
         loadMs: 500,
         settleMs: 500,
         neverFinishesLoading: true,
-        elements: [],
-        bodyText: () => '',
+        body: '',
       };
       const { send } = makeDevice('about:blank', new Map([[dead.url, dead]]));
       const navigated = await send('navigate', { url: dead.url });
@@ -232,14 +231,13 @@ describe('agent eval — the fake device answers the harness contract', () => {
     });
 
     it('a load that errors reports page_load_failed rather than a success on nothing', async () => {
-      const broken: ScriptedPage = {
+      const broken: FixturePage = {
         url: 'https://broken.test/',
         title: 'broken',
         loadMs: 200,
         settleMs: 100,
         loadFails: true,
-        elements: [],
-        bodyText: () => '',
+        body: '',
       };
       const { send } = makeDevice('about:blank', new Map([[broken.url, broken]]));
       const navigated = await send('navigate', { url: broken.url });
@@ -248,13 +246,12 @@ describe('agent eval — the fake device answers the harness contract', () => {
     });
 
     it('an over-cap page source fails with result_too_large instead of returning a truncated DOM', async () => {
-      const huge: ScriptedPage = {
+      const huge: FixturePage = {
         url: 'https://huge.test/',
         title: 'huge',
         loadMs: 10,
         settleMs: 10,
-        elements: [],
-        bodyText: () => 'x'.repeat(5_000),
+        body: `<p>${'x'.repeat(5_000)}</p>`,
       };
       const clock = new VirtualClock();
       const device = new FakeDevice({

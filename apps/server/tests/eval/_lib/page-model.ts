@@ -5,54 +5,91 @@
 // refuses that domain as a destination, so a fixture using it would be measuring
 // the refusal instead of the task.
 //
-// ⛔ WHAT THIS IS NOT. There is no rendering, no CSS cascade, no shadow DOM and
-// no JS execution here. A page is a list of elements with declared availability
-// rules. That is enough to measure WHERE a plan dies and why, and it is not
-// evidence about any real site — we author both the page and the plan that
-// targets it. See RISKS in `agent-eval-suite.test.ts`.
+// A PAGE IS REAL HTML PLUS DECLARED BEHAVIOUR. The markup is parsed into a DOM
+// the device resolves selectors against with `querySelector` semantics, and
+// `get_page_source` serialises that same DOM — so the product's page digest, a
+// live model and the device are all looking at one document. What a browser
+// would do with script is DECLARED here instead of executed: content that
+// renders late, content that renders on scroll, an overlay that intercepts, a
+// click that changes the page, a form that accepts or rejects what was typed.
+//
+// ⛔ WHAT THIS IS NOT. There is no layout, no CSS cascade, no shadow DOM and no
+// JS execution. That is enough to measure WHERE a plan dies and why, and it is
+// not evidence about any real site. See RISKS in `agent-eval-suite.test.ts`.
 
-export type ElementKind = 'link' | 'button' | 'input' | 'text';
+/** One declared change to the page or the device. */
+export type PageEffect =
+  /** Remove the first element matching `target`. */
+  | { kind: 'remove'; target: string }
+  /** Parse `html` and append it inside the first element matching `into`. */
+  | { kind: 'insert'; into: string; html: string }
+  | { kind: 'set_attribute'; target: string; name: string; value: string }
+  | { kind: 'remove_attribute'; target: string; name: string }
+  /** Present → absent, absent → present. A menu toggle is this on `hidden`. */
+  | { kind: 'toggle_attribute'; target: string; name: string }
+  | { kind: 'set_text'; target: string; text: string }
+  /** A durable device flag — how a task asserts "the thing actually happened".
+   *  It outlives the page, the way a cart or a cookie does. */
+  | { kind: 'set_flag'; flag: string }
+  /** The device's session on this host is signed in from now on. */
+  | { kind: 'authenticate'; host: string }
+  /** Go somewhere (absolute, or relative to the current page). */
+  | { kind: 'navigate'; url: string }
+  /** Build the url from the submitting form's own `action` and field values, as
+   *  a GET form does, and go there. Only meaningful inside a form behaviour. */
+  | { kind: 'submit_get' }
+  /**
+   * Empty every field of the submitting form, as a server does when it rejects
+   * a submission and renders the form again. Only meaningful inside a form
+   * behaviour.
+   *
+   * WHY IT EXISTS. `send_keys` APPENDS, as WebDriver's does. A rejected login
+   * that kept what was typed therefore made a retry UNWINNABLE — the re-typed
+   * password landed after the wrong one — which no real login page does, and
+   * which would fail every re-plan for a reason that is not a fact about the
+   * agent.
+   */
+  | { kind: 'clear_fields' };
 
-/** Side effects a click applies to device state. */
-export interface ClickEffect {
-  /** Navigate the device to this url (client-side route or form submit). */
-  navigateTo?: string;
-  /** Mark this selector dismissed, unblocking anything `blockedBy` it. */
-  dismiss?: string;
-  /** Reveal selectors that only exist after this click. */
-  reveal?: string[];
-  /** Set a durable device flag — how a task asserts "the thing actually happened". */
-  setState?: string;
+export interface ClickBehaviour {
+  /** Fires when the clicked element matches this selector or sits inside a
+   *  match — a tap on the icon inside a button is a tap on the button. */
+  target: string;
+  effects: ReadonlyArray<PageEffect>;
+  /** Suppress the element's own default action (following a link, submitting). */
+  preventDefault?: boolean;
 }
 
-export interface ScriptedElement {
-  /** CSS, written exactly as a planner would write it. */
-  selector: string;
-  /** Visible label. Only meaningful to `bodyText`; the device matches on selector. */
-  text?: string;
-  kind: ElementKind;
-  /** Present only once this much simulated time has elapsed (0/absent = at load). */
-  appearsAfterMs?: number;
-  /** Present only once the viewport has scrolled this far (below the fold, and
-   *  lazily rendered — the DOM genuinely does not contain it before then). */
-  appearsAfterScrollPx?: number;
-  /** Exists only after the named selector has been clicked. */
-  revealedBy?: string;
-  /** An overlay that must be dismissed first. The element IS present — it is
-   *  intercepted, not absent, and keeping that distinction is the whole point of
-   *  the F1 task. */
-  blockedBy?: string;
-  onClick?: ClickEffect;
-  onType?: { reveal?: string[] };
+export interface FormBehaviour {
+  /** The `<form>` this describes. */
+  form: string;
+  /**
+   * What the site requires of the submitted values, by field name. Absent means
+   * every submission is accepted. A string must equal the value exactly; a
+   * pattern must match it.
+   */
+  accepts?: Readonly<Record<string, string | RegExp>>;
+  onAccepted: ReadonlyArray<PageEffect>;
+  /** Absent means a rejected submission changes nothing, which is what a form
+   *  with client-side validation does. */
+  onRejected?: ReadonlyArray<PageEffect>;
 }
 
-export interface ScriptedPage {
+export interface FixturePage {
   url: string;
   title: string;
+  /** Extra `<head>` markup. */
+  head?: string;
+  /** `<body>` markup AT LOAD. Anything that renders later is declared below,
+   *  because a lazily-rendered region genuinely is not in the document yet. */
+  body: string;
   /** Simulated ms a navigate to this page costs. */
   loadMs: number;
   /** Simulated ms a `wait:idle` after the load costs before the page is quiet. */
   settleMs: number;
+  /** The status the navigate reports. Absent means the device sends no status
+   *  at all, which is what a device older than the field does. */
+  httpStatus?: number;
   /** Navigate resolves here instead (the plan's later selectors are then simply
    *  for the wrong page — no error, which is what makes redirects expensive). */
   redirectsTo?: string;
@@ -61,35 +98,48 @@ export interface ScriptedPage {
   /** Navigate SUCCEEDS carrying `loadedAtTimeout: true` — a green step on a dead
    *  page. The scorer must not read that as progress. */
   neverFinishesLoading?: boolean;
+  /** The page loads, and then never goes quiet: an idle wait times out. */
+  neverSettles?: boolean;
   /** The load itself errors (proxy / DNS / TLS / HTTP). */
   loadFails?: boolean;
-  /** Pressing Enter on this page (a focused search box, a form). */
-  onEnter?: { navigateTo?: string; reveal?: string[] };
-  elements: ScriptedElement[];
-  /** What `get_page_source` returns — a function of device state, because a
-   *  lazily-rendered region genuinely is not in the DOM until it renders. */
-  bodyText: (state: DeviceStateView) => string;
-}
-
-/** The read-only projection of device state a page script may consult. */
-export interface DeviceStateView {
-  currentUrl: string;
-  elapsedMs: number;
-  scrollPx: number;
-  dismissed: ReadonlySet<string>;
-  revealed: ReadonlySet<string>;
-  typed: ReadonlyMap<string, string>;
-  flags: ReadonlySet<string>;
+  /**
+   * A query string on this page's url resolves to another page — how a search
+   * page behaves whether it was reached by its form or by a typed address. The
+   * first rule whose parameter matches wins; no match lands on `otherwise`.
+   */
+  queryRoutes?: {
+    rules: ReadonlyArray<{ param: string; matches: RegExp; to: string }>;
+    otherwise: string;
+  };
+  /** Applied at load when the device already holds the flag — a dismissed
+   *  consent banner stays dismissed, a filled cart stays filled. */
+  whenFlag?: ReadonlyArray<{ flag: string; effects: ReadonlyArray<PageEffect> }>;
+  /** Rendered this long after the navigation STARTED. */
+  lateRenders?: ReadonlyArray<{ afterMs: number; effects: ReadonlyArray<PageEffect> }>;
+  /** Rendered once the viewport has scrolled this far — below the fold AND
+   *  lazily rendered, so the document does not contain it before then. */
+  scrollRenders?: ReadonlyArray<{ atScrollPx: number; effects: ReadonlyArray<PageEffect> }>;
+  /** While an element matching one of these is rendered, a tap or a keystroke
+   *  aimed OUTSIDE it is intercepted. The target IS present — it is covered, not
+   *  absent — and keeping that distinction is the whole point of the F1 task. */
+  overlays?: ReadonlyArray<string>;
+  onClick?: ReadonlyArray<ClickBehaviour>;
+  forms?: ReadonlyArray<FormBehaviour>;
 }
 
 /** A named collection of pages, addressed by absolute url. */
-export type SiteMap = ReadonlyMap<string, ScriptedPage>;
+export type SiteMap = ReadonlyMap<string, FixturePage>;
 
-function page(p: ScriptedPage): [string, ScriptedPage] {
-  return [p.url, p];
+export function siteOf(pages: ReadonlyArray<FixturePage>): SiteMap {
+  const site = new Map<string, FixturePage>();
+  for (const p of pages) {
+    if (site.has(p.url)) throw new Error(`fixture site declares ${p.url} twice`);
+    site.set(p.url, p);
+  }
+  return site;
 }
 
-// ── the corpus ────────────────────────────────────────────────────────
+// ── the scripted corpus ───────────────────────────────────────────────
 
 const SHOP_DEALS_HEADLINE = 'Autumn sale — 40% off everything in stock';
 const SHOP_SOLD_OUT_LINE = 'Cobalt travel mug (out of stock) — 65% off when restocked';
@@ -98,290 +148,304 @@ const SLOW_STATUS_LINE = 'All systems operational — last checked 2 minutes ago
 const SEARCH_FIRST_RESULT = 'Quietkey 7 wireless keyboard, low-profile';
 const HELLO_GREETING = 'Good morning, traveller';
 
-export const EVAL_SITES: SiteMap = new Map<string, ScriptedPage>([
+export const EVAL_SITES: SiteMap = siteOf([
   // P1 / F5 — a static deals page. The headline is on load; the sold-out line
   // exists only after a control the blind planner cannot know about is clicked.
-  page({
+  {
     url: 'https://shop.test/deals',
     title: 'Deals — shop.test',
     loadMs: 420,
     settleMs: 260,
-    elements: [
-      { selector: 'h1.deal-headline', text: SHOP_DEALS_HEADLINE, kind: 'text' },
+    body:
+      '<header><p class="crumb">Deals</p></header>' +
+      '<main>' +
+      `<h1 class="deal-headline">${SHOP_DEALS_HEADLINE}</h1>` +
+      '<ul class="deals"><li class="deal">Walnut desk lamp — 40% off</li></ul>' +
+      '<p><button id="show-sold-out" type="button">Show sold out</button></p>' +
+      '<ul class="sold-out-deals"></ul>' +
+      '</main>',
+    onClick: [
       {
-        selector: 'button#show-sold-out',
-        text: 'Show sold out',
-        kind: 'button',
-        onClick: { reveal: ['li.sold-out-deal'] },
-      },
-      {
-        selector: 'li.sold-out-deal',
-        text: SHOP_SOLD_OUT_LINE,
-        kind: 'text',
-        revealedBy: 'button#show-sold-out',
+        target: '#show-sold-out',
+        effects: [
+          {
+            kind: 'insert',
+            into: 'ul.sold-out-deals',
+            html: `<li class="sold-out-deal">${SHOP_SOLD_OUT_LINE}</li>`,
+          },
+        ],
       },
     ],
-    bodyText: (s) =>
-      [
-        'Deals',
-        SHOP_DEALS_HEADLINE,
-        'Walnut desk lamp — 40% off',
-        'Show sold out',
-        ...(s.revealed.has('li.sold-out-deal') ? [SHOP_SOLD_OUT_LINE] : []),
-      ].join('\n'),
-  }),
+  },
 
-  // F1 — the storefront. The add control is present but intercepted by a consent
+  // F1 — the storefront. The add control is present but covered by a consent
   // overlay: an overlay does not make an element absent, and the two failures
   // want opposite handling.
-  page({
+  {
     url: 'https://shop.test/',
     title: 'shop.test',
     loadMs: 380,
     settleMs: 240,
-    elements: [
+    body:
+      '<header><p class="brand">shop.test</p></header>' +
+      '<main>' +
+      '<article class="product"><h2>Blue mug — £14</h2>' +
+      '<button data-add-to-cart="blue-mug" type="button">Add blue mug to cart</button></article>' +
+      '<p id="cart-status">Cart: empty</p>' +
+      '</main>' +
+      '<div id="consent-overlay" role="dialog" aria-label="Cookie consent">' +
+      '<p>We value your privacy. Accept cookies?</p>' +
+      '<button class="accept" type="button">Accept cookies</button></div>',
+    overlays: ['#consent-overlay'],
+    whenFlag: [
+      { flag: 'consent:shop.test', effects: [{ kind: 'remove', target: '#consent-overlay' }] },
       {
-        selector: '#consent-overlay button.accept',
-        text: 'Accept cookies',
-        kind: 'button',
-        onClick: { dismiss: '#consent-overlay' },
-      },
-      {
-        selector: 'button[data-add-to-cart="blue-mug"]',
-        text: 'Add blue mug to cart',
-        kind: 'button',
-        blockedBy: '#consent-overlay',
-        onClick: { setState: 'cart:blue-mug' },
+        flag: 'cart:blue-mug',
+        effects: [{ kind: 'set_text', target: '#cart-status', text: 'Cart: 1 item' }],
       },
     ],
-    bodyText: (s) =>
-      [
-        'shop.test',
-        ...(s.dismissed.has('#consent-overlay') ? [] : ['We value your privacy. Accept cookies?']),
-        'Blue mug — £14',
-        ...(s.flags.has('cart:blue-mug') ? ['Cart: 1 item'] : ['Cart: empty']),
-      ].join('\n'),
-  }),
+    onClick: [
+      {
+        target: '#consent-overlay button.accept',
+        effects: [
+          { kind: 'remove', target: '#consent-overlay' },
+          { kind: 'set_flag', flag: 'consent:shop.test' },
+        ],
+      },
+      {
+        target: 'button[data-add-to-cart="blue-mug"]',
+        effects: [
+          { kind: 'set_flag', flag: 'cart:blue-mug' },
+          { kind: 'set_text', target: '#cart-status', text: 'Cart: 1 item' },
+        ],
+      },
+    ],
+  },
 
   // F6 — checkout. Nothing here is ever dispatched: the consequential-action
   // gate halts the plan before the tap reaches the device.
-  page({
+  {
     url: 'https://shop.test/checkout',
     title: 'Checkout — shop.test',
     loadMs: 400,
     settleMs: 200,
-    elements: [
+    body:
+      '<main><h1>Checkout</h1><p class="line-item">Blue mug — £14</p>' +
+      '<form id="checkout-form" action="/checkout" method="post">' +
+      '<p><button id="buy-now" type="submit">Buy now</button></p></form></main>',
+    forms: [
       {
-        selector: '#buy-now',
-        text: 'Buy now',
-        kind: 'button',
-        onClick: { setState: 'purchased:blue-mug' },
+        form: '#checkout-form',
+        onAccepted: [{ kind: 'set_flag', flag: 'purchased:blue-mug' }],
       },
     ],
-    bodyText: () => ['Checkout', 'Blue mug — £14', 'Buy now'].join('\n'),
-  }),
+  },
 
   // P2 — a plain page to screenshot. No read intent in the task, so no read-back.
-  page({
+  {
     url: 'https://news.test/',
     title: 'news.test',
     loadMs: 500,
     settleMs: 300,
-    elements: [{ selector: 'h1', text: 'Today', kind: 'text' }],
-    bodyText: () => ['news.test', 'Today', 'Ferry service resumes on the north route'].join('\n'),
-  }),
+    body:
+      '<header><p class="brand">news.test</p></header>' +
+      '<main><h1>Today</h1><p class="lead">Ferry service resumes on the north route</p></main>',
+  },
 
   // P3 — the price is lazily rendered below the fold. Not a viewport trick: the
   // node is absent from the document until the scroll triggers its render, which
   // is why `get_page_source` cannot see it either.
-  page({
+  {
     url: 'https://docs.test/pricing',
     title: 'Pricing — docs.test',
     loadMs: 460,
     settleMs: 280,
-    elements: [
-      { selector: 'h1', text: 'Pricing', kind: 'text' },
+    body: '<main><h1>Pricing</h1><p class="lead">Compare plans</p><div id="plans"></div></main>',
+    scrollRenders: [
       {
-        selector: '#plan-starter .price',
-        text: DOCS_STARTER_PRICE,
-        kind: 'text',
-        appearsAfterScrollPx: 800,
+        atScrollPx: 800,
+        effects: [
+          {
+            kind: 'insert',
+            into: '#plans',
+            html:
+              `<section id="plan-starter"><p class="price">${DOCS_STARTER_PRICE}</p></section>` +
+              '<section id="plan-team"><p class="price">Team — $89 per month</p></section>',
+          },
+        ],
       },
     ],
-    bodyText: (s) =>
-      [
-        'Pricing',
-        'Compare plans',
-        ...(s.scrollPx >= 800 ? [DOCS_STARTER_PRICE, 'Team — $89 per month'] : []),
-      ].join('\n'),
-  }),
+  },
 
   // P4 — open-ended. Nothing here can fail; the task measures whether the plan
   // contains human beats at all, or is the navigate+capture shape of giving up.
-  page({
+  {
     url: 'https://blog.test/',
     title: 'blog.test',
     loadMs: 440,
     settleMs: 260,
-    elements: [
-      { selector: 'article.top h2', text: 'What the tide leaves behind', kind: 'text' },
-      { selector: 'article.top p', text: 'A long piece about coastal erosion.', kind: 'text' },
-    ],
-    bodyText: () =>
-      [
-        'blog.test',
-        'What the tide leaves behind',
-        'A long piece about coastal erosion, in nine parts.',
-      ].join('\n'),
-  }),
+    body:
+      '<header><p class="brand">blog.test</p></header>' +
+      '<main><article class="top"><h2>What the tide leaves behind</h2>' +
+      '<p>A long piece about coastal erosion, in nine parts.</p></article></main>',
+  },
 
   // P5 — search. A stable input, Enter submits, results land on their own page.
-  page({
+  {
     url: 'https://search.test/',
     title: 'search.test',
     loadMs: 350,
     settleMs: 180,
-    onEnter: { navigateTo: 'https://search.test/results' },
-    elements: [{ selector: 'input[name="q"]', text: 'Search', kind: 'input' }],
-    bodyText: () => ['search.test', 'Search the web'].join('\n'),
-  }),
-  page({
+    body:
+      '<header><p class="brand">search.test</p></header>' +
+      '<main><form id="search" action="/results" method="get" role="search">' +
+      '<p><label for="q">Search the web</label></p>' +
+      '<p><input id="q" name="q" type="search" placeholder="Search"></p></form></main>',
+    forms: [
+      {
+        form: '#search',
+        onAccepted: [{ kind: 'navigate', url: 'https://search.test/results' }],
+      },
+    ],
+  },
+  {
     url: 'https://search.test/results',
     title: 'wireless keyboard — search.test',
     loadMs: 300,
     settleMs: 200,
-    elements: [
-      { selector: 'li.result:first-child h3', text: SEARCH_FIRST_RESULT, kind: 'link' },
-      { selector: 'li.result:nth-child(2) h3', text: 'Slab 60 mechanical keyboard', kind: 'link' },
-    ],
-    bodyText: () =>
-      [
-        'Results for wireless keyboard',
-        `1. ${SEARCH_FIRST_RESULT}`,
-        '2. Slab 60 mechanical keyboard',
-      ].join('\n'),
-  }),
+    body:
+      '<main><h1>Results for wireless keyboard</h1><ol class="results">' +
+      `<li class="result"><h3>1. ${SEARCH_FIRST_RESULT}</h3></li>` +
+      '<li class="result"><h3>2. Slab 60 mechanical keyboard</h3></li></ol></main>',
+  },
 
   // P6 — a genuinely slow page. Measures whether wait:idle actually covers a
   // load that takes seconds rather than milliseconds.
-  page({
+  {
     url: 'https://slow.test/',
     title: 'Status — slow.test',
     loadMs: 4000,
     settleMs: 1200,
-    elements: [{ selector: '#status', text: SLOW_STATUS_LINE, kind: 'text' }],
-    bodyText: () => ['slow.test status', SLOW_STATUS_LINE].join('\n'),
-  }),
+    body: `<main><h1>slow.test status</h1><p id="status">${SLOW_STATUS_LINE}</p></main>`,
+  },
 
   // F2 — the login wall. /inbox is authenticated, so the navigate lands on
   // /login and every selector the plan holds is for a page it never reached.
-  page({
+  {
     url: 'https://mail.test/inbox',
     title: 'Inbox — mail.test',
     loadMs: 520,
     settleMs: 300,
     requiresAuth: { loginUrl: 'https://mail.test/login' },
-    elements: [{ selector: '#unread-count', text: '4 unread', kind: 'text' }],
-    bodyText: () => ['Inbox', '4 unread messages'].join('\n'),
-  }),
-  page({
+    body: '<main><h1>Inbox</h1><p id="unread-count">4 unread messages</p></main>',
+  },
+  {
     url: 'https://mail.test/login',
     title: 'Sign in — mail.test',
     loadMs: 300,
     settleMs: 160,
-    elements: [
-      { selector: 'input[name="email"]', kind: 'input' },
-      { selector: 'input[name="password"]', kind: 'input' },
-      { selector: 'button[type="submit"]', text: 'Sign in', kind: 'button' },
+    body:
+      '<main><h1>Sign in to mail.test</h1>' +
+      '<form id="login" action="/inbox" method="post">' +
+      '<div class="field"><label for="email">Email</label>' +
+      '<input id="email" name="email" type="email" autocomplete="username"></div>' +
+      '<div class="field"><label for="password">Password</label>' +
+      '<input id="password" name="password" type="password" autocomplete="current-password"></div>' +
+      '<p><button type="submit">Sign in</button></p><p id="login-error" hidden></p></form></main>',
+    forms: [
+      {
+        form: '#login',
+        // The scripted corpus threads no credentials, so nothing this site would
+        // accept can arrive. A pattern that matches nothing says so outright.
+        accepts: { email: /^(?!)$/ },
+        onAccepted: [],
+        onRejected: [
+          { kind: 'set_text', target: '#login-error', text: 'Those details were not recognised.' },
+          { kind: 'remove_attribute', target: '#login-error', name: 'hidden' },
+        ],
+      },
     ],
-    bodyText: () => ['Sign in to mail.test', 'Email', 'Password'].join('\n'),
-  }),
+  },
 
   // F3 — the control the page renders late. 2500ms against an executor whose
-  // whole patience budget is two 400ms retries.
-  page({
+  // whole retry budget used to be two 400ms retries.
+  {
     url: 'https://app.test/',
     title: 'app.test',
     loadMs: 300,
     settleMs: 200,
-    elements: [
-      { selector: 'h1', text: 'Setting things up', kind: 'text' },
+    body:
+      '<header><p class="brand">app.test</p></header>' +
+      '<main><h1>Setting things up</h1><div id="actions"></div></main>',
+    lateRenders: [
       {
-        selector: '#continue',
-        text: 'Continue',
-        kind: 'button',
-        appearsAfterMs: 2500,
-        onClick: { setState: 'continue:clicked' },
+        afterMs: 2500,
+        effects: [
+          {
+            kind: 'insert',
+            into: '#actions',
+            html: '<button id="continue" type="button">Continue</button>',
+          },
+        ],
       },
     ],
-    bodyText: (s) =>
-      ['app.test', 'Setting things up', ...(s.elapsedMs >= 2500 ? ['Continue'] : [])].join('\n'),
-  }),
+    onClick: [{ target: '#continue', effects: [{ kind: 'set_flag', flag: 'continue:clicked' }] }],
+  },
 
   // F4 — the thread url is discoverable only from the index. A planner that
   // cannot look at the page has to guess it, and a guess lands on the 404.
-  page({
+  {
     url: 'https://forum.test/',
     title: 'forum.test',
     loadMs: 420,
     settleMs: 240,
-    elements: [
-      {
-        selector: 'a[href="/t/9182"]',
-        text: 'Battery recall — what we know',
-        kind: 'link',
-        onClick: { navigateTo: 'https://forum.test/t/9182' },
-      },
-    ],
-    bodyText: () =>
-      ['forum.test', 'Battery recall — what we know', 'Ferry timetable 2027'].join('\n'),
-  }),
-  page({
+    body:
+      '<header><p class="brand">forum.test</p></header>' +
+      '<main><ul class="threads">' +
+      '<li><a href="/t/9182">Battery recall — what we know</a></li>' +
+      '<li>Ferry timetable 2027</li></ul></main>',
+  },
+  {
     url: 'https://forum.test/t/9182',
     title: 'Battery recall — forum.test',
     loadMs: 380,
     settleMs: 220,
-    elements: [
-      { selector: '.reply.top .body', text: 'Only the 2024 units are affected.', kind: 'text' },
-    ],
-    bodyText: () =>
-      ['Battery recall — what we know', 'Top reply: Only the 2024 units are affected.'].join('\n'),
-  }),
+    body:
+      '<main><h1>Battery recall — what we know</h1>' +
+      '<section class="reply top"><p class="body">Top reply: Only the 2024 units are affected.</p></section></main>',
+  },
 
   // Controls. Trivially completable, and impossible.
-  page({
+  {
     url: 'https://hello.test/',
     title: 'hello.test',
     loadMs: 100,
     settleMs: 100,
-    elements: [{ selector: '#greeting', text: HELLO_GREETING, kind: 'text' }],
-    bodyText: () => ['hello.test', HELLO_GREETING].join('\n'),
-  }),
-  page({
+    body:
+      '<header><p class="brand">hello.test</p></header>' +
+      `<main><p id="greeting">${HELLO_GREETING}</p></main>`,
+  },
+  {
     url: 'https://void.test/',
     title: 'void.test',
     loadMs: 100,
     settleMs: 100,
-    elements: [],
-    bodyText: () => 'void.test',
-  }),
+    body: '<p>void.test</p>',
+  },
   // C-NEG-SCORED — a page that LOADS CLEANLY and simply does not carry the
   // asked-for information. Everything about this navigation is green; the
   // failure has to come out of the answer-scoring path or it does not come at
   // all, which is exactly what this control exists to detect.
-  page({
+  {
     url: 'https://quiet.test/',
     title: 'quiet.test',
     loadMs: 120,
     settleMs: 90,
-    elements: [{ selector: 'h1', text: 'Quiet', kind: 'text' }],
-    bodyText: () =>
-      [
-        'quiet.test',
-        'A small page with very little on it.',
-        'No contact details are published here.',
-      ].join('\n'),
-  }),
+    body:
+      '<header><p class="brand">quiet.test</p></header>' +
+      '<main><p>A small page with very little on it.</p>' +
+      '<p>No contact details are published here.</p></main>',
+  },
 ]);
 
 /** The strings the task criteria key on, exported so a page edit and a task
@@ -395,20 +459,33 @@ export const EVAL_PAGE_TEXT = {
   helloGreeting: HELLO_GREETING,
 } as const;
 
-/**
- * The page a url that is not in the site map resolves to.
- *
- * A 404 LOADS — it is a successful navigation to a page with nothing on it —
- * which is exactly why a guessed url is expensive: the plan gets a green
- * navigate and then dies on a selector, several steps from the real mistake.
- */
-export function notFoundPage(url: string): ScriptedPage {
+/** How a site answers for an address it does not have. */
+export interface NotFoundBehaviour {
+  /**
+   * The status the navigate reports, or absent for a device that reports none.
+   *
+   * ⚠️ THE TWO ARE DIFFERENT PRODUCTS. Without a status a 404 LOADS — a green
+   * navigate onto a page with nothing on it, so the plan dies later than the
+   * mistake. With one, the product turns it into an honest navigation failure a
+   * re-plan can follow. The scripted corpus pins the first (its F4 task is the
+   * measurement of exactly that cost); the live corpus declares the second.
+   */
+  httpStatus?: number;
+  /** `<body>` markup of the error page. A real one usually links home. */
+  body?: string;
+}
+
+const DEFAULT_NOT_FOUND_BODY =
+  '<main><h1>Not found</h1><p>The page you asked for does not exist.</p></main>';
+
+/** The page a url that is not in the site map resolves to. */
+export function notFoundPage(url: string, behaviour: NotFoundBehaviour = {}): FixturePage {
   return {
     url,
     title: 'Not found',
     loadMs: 250,
     settleMs: 120,
-    elements: [],
-    bodyText: () => 'Not found\nThe page you asked for does not exist.',
+    ...(behaviour.httpStatus !== undefined ? { httpStatus: behaviour.httpStatus } : {}),
+    body: behaviour.body ?? DEFAULT_NOT_FOUND_BODY,
   };
 }
