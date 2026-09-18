@@ -883,6 +883,13 @@
       "when": 1786665600013,
       "tag": "0125_add_agent_turn_telemetry",
       "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1786665600014,
+      "tag": "0126_agent_sessions_model_default_sonnet_5",
+      "breakpoints": true
     }
   ]
 }

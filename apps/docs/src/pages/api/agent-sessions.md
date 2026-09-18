@@ -150,7 +150,7 @@ Response `201 Created` returns the resource above.
 > the account the session runs and bills against.
 
 If `mode` is omitted the server defaults to `ai`. If `model` is
-omitted it defaults to `claude-opus-5` (every earlier id stays
+omitted it defaults to `claude-sonnet-5` (every earlier id stays
 accepted for back-compat) — the `model` selects which
 Claude model the AI agent runs, and applies in `ai` and `pair`
 mode. `token_budget` defaults to the deployment-configured value

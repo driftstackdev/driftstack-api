@@ -30,6 +30,7 @@ import {
   type AgentIntent,
   type DecomposeArgs,
 } from '../../src/services/agent-decomposer.js';
+import { DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
 
 function fixedNow(iso: string): Date {
   return new Date(iso);
@@ -964,13 +965,14 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
       userMessage: 'a sufficiently long task description for clarity',
     });
     expect(seenModels[0]).toBe('claude-haiku-4-5');
-    // Default (no model picked) → Opus 5 (migration 0115 bumped it).
+    // Default (no model picked) → DEFAULT_AGENT_MODEL (Sonnet 5 since 0126; which
+    // model it is, is pinned in api-types-agent-models-parity).
     const def = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
     await runtime.runTurn({
       agentSessionId: def.id,
       userMessage: 'a sufficiently long task description for clarity',
     });
-    expect(seenModels[1]).toBe('claude-opus-5');
+    expect(seenModels[1]).toBe(DEFAULT_AGENT_MODEL);
   });
 
   it('Q.3 token budget exhausted before turn: atomically closes and returns the terminal signal without a post-close refusal append', async () => {

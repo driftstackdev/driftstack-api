@@ -1,0 +1,17 @@
+-- 0126 — the agent-session model default becomes Claude Sonnet 5.
+--
+-- ONE STATEMENT, AND IT REWRITES NOTHING. A column default is catalog metadata:
+-- it applies only to rows inserted after this runs. Every existing session keeps
+-- the model it was created with, and the allowed SET (the CHECK constraint from
+-- 0115) is unchanged, so Opus 5 and every earlier id stay selectable.
+--
+-- Why the default moved off the most capable model: on the live planner eval the
+-- looping turn completed every conclusive task on Sonnet 5, on the customer's
+-- first message, with faster planning calls than Opus 5 at about a third of the
+-- cost per task. The owner chose it as the default on that evidence. The code
+-- default (DEFAULT_AGENT_MODEL in api-types) moves in the same change, so a
+-- session created through the service and one inserted with the column default
+-- agree.
+--
+-- Idempotent: SET DEFAULT to the same value is a no-op on a re-run.
+ALTER TABLE "agent_sessions" ALTER COLUMN "model" SET DEFAULT 'claude-sonnet-5';

@@ -2854,7 +2854,7 @@ export function registerAgentSessionsRoutes(
             // otherwise repo applies the default ('ai').
             ...(parsed.data.mode !== undefined ? { mode: parsed.data.mode } : {}),
             // 6.c / #15 — forward the picked model when supplied; otherwise
-            // repo applies the default ('claude-opus-5').
+            // repo applies the default (DEFAULT_AGENT_MODEL, 'claude-sonnet-5').
             ...(parsed.data.model !== undefined ? { model: parsed.data.model } : {}),
             // #14 (migration 0089) — record the profile this session runs so the
             // out-of-session trim can refuse a trim against a profile bound to a

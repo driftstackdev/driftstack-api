@@ -25,8 +25,12 @@ describe('agent-models registry parity', () => {
     ]);
   });
 
-  it('DEFAULT_AGENT_MODEL is Opus 5 (current-generation, highest-capability default)', () => {
-    expect(DEFAULT_AGENT_MODEL).toBe('claude-opus-5');
+  it('DEFAULT_AGENT_MODEL is Sonnet 5 — chosen on measured completion, speed and cost, not on capability', () => {
+    // The owner's decision of 2026-09-18, on the live planner eval: Sonnet 5
+    // completed every conclusive task on the first message, faster than Opus 5 and
+    // at about a third of the cost per task. Changing this is a product decision;
+    // the migration that moves the COLUMN default (0126) must move with it.
+    expect(DEFAULT_AGENT_MODEL).toBe('claude-sonnet-5');
   });
 
   it('CLAUDE_MODELS covers every AgentModel with a label + rates', () => {
@@ -67,7 +71,25 @@ describe('agent-models registry parity', () => {
     );
     const block = /const MODELS:[^[]*\[([\s\S]*?)\];/.exec(view)?.[1] ?? '';
     const pickerIds = [...block.matchAll(/id:\s*'([a-z0-9-]+)'/g)].map((m) => m[1]);
-    expect(pickerIds).toEqual([...AgentModelSchema.options]);
+    // EXACTLY the registry, compared as a SET: the picker's order is a product
+    // choice, the enum's order is not, and pinning one to the other made a
+    // default change impossible without reordering a public enum (and with it the
+    // OpenAPI spec and every generated SDK).
+    expect([...pickerIds].sort()).toEqual([...AgentModelSchema.options].sort());
+    expect(pickerIds.length, 'no model listed twice').toBe(AgentModelSchema.options.length);
+    // …and what the order IS pinned to: the default leads the list, because an
+    // untouched picker sends its first entry's id. Before 2026-09-18 the app's
+    // initial pick was a literal 'claude-opus-5' that no test related to the
+    // server default, so moving DEFAULT_AGENT_MODEL alone would have changed
+    // nothing any desktop customer sees.
+    expect(pickerIds[0], 'the default model leads the picker').toBe(DEFAULT_AGENT_MODEL);
+    const provider = readFileSync(
+      resolve(REPO_ROOT, 'apps/gui-client/src/lib/AgentChatProvider.tsx'),
+      'utf8',
+    );
+    expect(provider, 'the app starts on the shared default, not a literal').toMatch(
+      /useState<ChatModel>\(DEFAULT_AGENT_MODEL\)/,
+    );
 
     const chat = readFileSync(
       resolve(REPO_ROOT, 'apps/gui-client/src/lib/use-agent-chat.ts'),

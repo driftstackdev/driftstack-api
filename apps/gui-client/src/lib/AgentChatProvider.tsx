@@ -25,6 +25,7 @@ import {
   type MutableRefObject,
   type ReactNode,
 } from 'react';
+import { DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
 import {
   useAgentChat,
   type ChatModel,
@@ -79,7 +80,11 @@ function sameOptions(a: UseAgentChatOpts, b: UseAgentChatOpts): boolean {
 
 export function AgentChatProvider({ children }: { children: ReactNode }): JSX.Element {
   const [resolved, setResolved] = useState<UseAgentChatOpts>({});
-  const [model, setModel] = useState<ChatModel>('claude-opus-5');
+  // ⛔ FROM THE SHARED CONSTANT, NOT A LITERAL. The app sends its pick on every
+  // session it creates, so a literal here overrode the server's default for every
+  // desktop customer — moving DEFAULT_AGENT_MODEL alone would have changed nothing
+  // anyone using the app sees. One constant, one default, wherever it is read.
+  const [model, setModel] = useState<ChatModel>(DEFAULT_AGENT_MODEL);
   const [profileId, setProfileId] = useState<string>('');
   const [chatId, setChatId] = useState<string>(() => crypto.randomUUID());
   const createdAtRef = useRef<Record<string, number>>({});

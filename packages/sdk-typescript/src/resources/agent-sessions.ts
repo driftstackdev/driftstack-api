@@ -135,7 +135,7 @@ export interface AgentSession {
   mode: 'manual' | 'ai' | 'pair';
   /**
    * 6.c — the Claude model the AI agent runs for this session
-   * (set at create-time; defaults to 'claude-opus-5'). Every earlier id
+   * (set at create-time; defaults to 'claude-sonnet-5'). Every earlier id
    * stays accepted for back-compat with sessions created before the bump.
    */
   model:
@@ -251,9 +251,9 @@ export interface CreateAgentSessionRequest {
   mode?: 'manual' | 'ai' | 'pair';
   /**
    * 6.c — the Claude model the AI agent runs for this session.
-   * Defaults server-side to 'claude-opus-5' when omitted (the current
-   * generation). Picking a cheaper model (Sonnet 5 / Haiku 4.5) lowers
-   * cost-to-serve. Every 4.x id stays accepted for back-compat.
+   * Defaults server-side to 'claude-sonnet-5' when omitted. Pick
+   * 'claude-opus-5' for the most capable planner or 'claude-haiku-4-5' for the
+   * cheapest and fastest. Every 4.x id stays accepted for back-compat.
    */
   model?:
     | 'claude-opus-5'

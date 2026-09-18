@@ -219,7 +219,7 @@ export interface CreateAgentSessionArgs {
   mode?: AgentSessionMode;
   /**
    * 6.c / #15 — Claude 4.x model the AI agent runs for this session.
-   * Defaults to DEFAULT_AGENT_MODEL (Opus 4.7) when omitted. SDK +
+   * Defaults to DEFAULT_AGENT_MODEL (Sonnet 5) when omitted. SDK +
    * dashboard surface the picker at create-time.
    */
   model?: AgentModel;

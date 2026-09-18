@@ -68,7 +68,10 @@ describe('v2-#4 Q.1.e cost-tracking', () => {
           ),
         ),
       });
-      const res = await dec.decompose(defaultArgs());
+      // The rate arithmetic below is Opus 5's, so the model is PICKED, not left to
+      // the default — the default moved to Sonnet 5, and this test is about the
+      // cost a usage block reports, not about which model a session starts on.
+      const res = await dec.decompose(defaultArgs({ model: 'claude-opus-5' }));
       expect(res.kind).toBe('plan');
       expect(res.usage).toBeDefined();
       expect(res.usage?.decomposerKind).toBe('claude');

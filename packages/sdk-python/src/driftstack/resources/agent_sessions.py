@@ -92,7 +92,7 @@ class AgentSessionsResource:
         "geolocation"?: {"latitude": float, "longitude": float,
         "accuracy"?: float}}``.
         ``model`` (6.c) picks the Claude model the AI agent runs;
-        defaults server-side to ``"claude-opus-5"`` ("claude-opus-4-7" stays
+        defaults server-side to ``"claude-sonnet-5"`` ("claude-opus-4-7" stays
         accepted for back-compat). ``profile_id`` attaches a
         saved profile (persistent browser identity) so the session resumes its
         stored state + saves back on end; must be an owned profile id (unknown

@@ -65,9 +65,10 @@ import { listProxies, type ProxyConfig } from '../lib/proxies';
 import { listBindings } from '../lib/profile-bindings';
 import { ensureAccountProxyRow } from '../lib/proxy-server-test';
 
+// The default leads the list — it is what an untouched picker sends.
 const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
-  { id: 'claude-opus-5', label: 'Opus 5' },
   { id: 'claude-sonnet-5', label: 'Sonnet 5' },
+  { id: 'claude-opus-5', label: 'Opus 5' },
   { id: 'claude-opus-4-8', label: 'Opus 4.8' },
   { id: 'claude-opus-4-7', label: 'Opus 4.7' },
   { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },

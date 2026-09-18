@@ -16,7 +16,6 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
 import type { HarnessIntentName } from '../../src/schemas/harness-control-protocol.js';
 import { serializeIntentDispatch } from '../../src/services/harness-control-codec.js';
 import { visibleTextOf } from './_lib/dom.js';
@@ -69,6 +68,16 @@ import { siteOf } from './_lib/page-model.js';
 import { planReply, standInProvider, type StandInModel } from './_lib/stand-in-planner-provider.js';
 import { VirtualClock } from './_lib/virtual-clock.js';
 import { liveSourceStamp, sameSource, turnSourceFiles } from './_lib/live-source-stamp.js';
+import { DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
+
+/**
+ * The model these tests PRICE — named, not the product default. The arithmetic
+ * below (a dollar cap tripping on the third call, $5 per million input tokens) is
+ * a statement about the meter at one price list. Reading the default instead made
+ * the meter's tests fail the day the default moved to a cheaper model, which says
+ * nothing about the meter.
+ */
+const PRICED_MODEL = 'claude-opus-5';
 
 /** ⛔ NOT A KEY. A sentinel shaped like one, so a leak is findable by search. */
 const SENTINEL_KEY = 'sk-ant-SENTINEL-not-a-real-key-5f2a9c71d0e44b';
@@ -95,7 +104,7 @@ function suiteArgs(
     tasks,
     apiKey: SENTINEL_KEY,
     keySource: LIVE_KEY_ENV_NAMES[0],
-    model: DEFAULT_AGENT_MODEL,
+    model: PRICED_MODEL,
     reps: 1,
     maxTurns: 2,
     caps: DEFAULT_LIVE_CAPS,
@@ -178,7 +187,8 @@ describe('live tier — the path runs end to end through the real planner class'
     // split across chunks and all — is what reassembled the plan that ran.
     expect(provider.log.requests[0]?.stream).toBe(true);
     expect(provider.log.keyHeaderMatched).toEqual([true, true]);
-    expect(provider.log.requests[0]?.model).toBe(DEFAULT_AGENT_MODEL);
+    // The model the suite was CONFIGURED with reaches the wire — whichever it is.
+    expect(provider.log.requests[0]?.model).toBe(PRICED_MODEL);
     expect(rep?.modelCalls).toEqual({ plan: 1, answer: 1 });
     expect(rep?.turns[0]?.answer).toContain('312 g');
   });
@@ -305,7 +315,7 @@ describe('live tier — the spend cap is enforced in code', () => {
   });
 
   it('stops at the DOLLAR cap, which prices output as output — the one cap that is about dollars', async () => {
-    // 1,000 input + 8,000 output a call on the default model: $0.005 + $0.20.
+    // 1,000 input + 8,000 output a call on PRICED_MODEL: $0.005 + $0.20.
     // A token cap read that as 9,000 tokens; the money is almost all output.
     const outputHeavy: StandInModel = (request, index) => ({
       ...referenceModel('L-READ')(request, index),
@@ -329,7 +339,7 @@ describe('live tier — the spend cap is enforced in code', () => {
 
   it('prices each class of token at its own rate, and an unknown model at the dearest', () => {
     const call = {
-      model: DEFAULT_AGENT_MODEL,
+      model: PRICED_MODEL,
       inputTokens: 1_000_000,
       outputTokens: 0,
       cacheCreationInputTokens: null,
@@ -457,6 +467,8 @@ describe('live tier — opt-in, and it says exactly how', () => {
         enabled: true,
         apiKey: SENTINEL_KEY,
         apiKeySource: name,
+        // No EVAL_LIVE_MODEL set → the PRODUCT default, whichever it is: the live
+        // tier measures what a customer who picks nothing gets.
         model: DEFAULT_AGENT_MODEL,
         reps: 1,
         caps: DEFAULT_LIVE_CAPS,

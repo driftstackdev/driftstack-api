@@ -31,10 +31,22 @@ export const AgentModelSchema = z.enum([
 ]);
 export type AgentModel = z.infer<typeof AgentModelSchema>;
 
-/** The default agent model when a session doesn't pick one (highest-capability).
- *  Bumped to Opus 5, the current-generation Opus; every earlier id stays accepted
- *  so sessions created before the bump still read back. */
-export const DEFAULT_AGENT_MODEL: AgentModel = 'claude-opus-5';
+/**
+ * The default agent model when a session doesn't pick one.
+ *
+ * ⛔ NOT THE MOST CAPABLE MODEL, ON PURPOSE. It was Opus 5 on the reasoning that
+ * the strongest planner is the safest default. Measured on the live eval
+ * (2026-09-18, the looping turn, the same tasks, the scorer reading the device's
+ * final state): Sonnet 5 completed every conclusive repetition, all on the
+ * customer's first message, with a median planning call of 2.3 s against Opus 5's
+ * 3.3 s, at roughly a third of the cost per task (~$0.01 vs ~$0.03). Planning a
+ * handful of taps from a page digest does not need the largest model, and a
+ * customer waiting in a chat pays for its latency on every step. The owner chose
+ * Sonnet 5 as the default on that evidence, with cheaper models from other
+ * providers to be evaluated once keys exist. Opus 5 stays selectable, and every
+ * earlier id stays accepted so stored sessions still read back.
+ */
+export const DEFAULT_AGENT_MODEL: AgentModel = 'claude-sonnet-5';
 
 export interface AgentModelInfo {
   /** Customer-facing label for the picker. */

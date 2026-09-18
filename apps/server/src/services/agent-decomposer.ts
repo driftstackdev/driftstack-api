@@ -392,7 +392,7 @@ export interface DecomposeArgs {
    * 6.c / #15 — Claude 4.x model the AI agent runs this turn, sourced
    * from the session's `agent_sessions.model`. The ClaudeAgentDecomposer
    * looks up its per-model cost-to-serve rate in the api-types
-   * CLAUDE_MODELS registry; defaults to DEFAULT_AGENT_MODEL (Opus 4.7)
+   * CLAUDE_MODELS registry; defaults to DEFAULT_AGENT_MODEL (Sonnet 5)
    * when unset. The DeterministicAgentDecomposer ignores it (no LLM call).
    */
   model?: AgentModel;
