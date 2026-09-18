@@ -22,6 +22,8 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_TURN_DEATH_REASONS,
   AGENT_TURN_OUTCOMES,
+  AGENT_TURN_PERSISTED_OUTCOMES,
+  AGENT_TURN_PERSISTED_STEP_KINDS,
   AGENT_TURN_STEP_KINDS,
   AGENT_TURN_TRANSPORTS,
   AGENT_TURN_MODEL_LABELS,
@@ -48,8 +50,15 @@ function checkList(constraint: string): string[] {
 
 describe('agent_turn_telemetry unions ↔ migration 0125', () => {
   it('outcome: every PERSISTED outcome is allowed, and the two metrics-only ones are not', () => {
-    const persisted = AGENT_TURN_OUTCOMES.filter((o) => o !== 'manual_note' && o !== 'replayed');
-    expect(checkList('agent_turn_telemetry_outcome').sort()).toEqual([...persisted].sort());
+    expect(checkList('agent_turn_telemetry_outcome').sort()).toEqual(
+      [...AGENT_TURN_PERSISTED_OUTCOMES].sort(),
+    );
+    // The named set is DERIVED, so pin what it is derived to: a third
+    // metrics-only outcome must be a decision somebody made here, not a side
+    // effect of adding a member to a private set.
+    expect(
+      AGENT_TURN_OUTCOMES.filter((o) => !AGENT_TURN_PERSISTED_OUTCOMES.includes(o)).sort(),
+    ).toEqual(['manual_note', 'replayed']);
   });
 
   it('death_reason: the constraint lists exactly the source union', () => {
@@ -60,8 +69,11 @@ describe('agent_turn_telemetry unions ↔ migration 0125', () => {
 
   it('died_step_kind: exactly the step kinds, with `none` expressed as NULL', () => {
     expect(checkList('agent_turn_telemetry_died_step_kind').sort()).toEqual(
-      AGENT_TURN_STEP_KINDS.filter((k) => k !== 'none').sort(),
+      [...AGENT_TURN_PERSISTED_STEP_KINDS].sort(),
     );
+    expect(
+      AGENT_TURN_STEP_KINDS.filter((k) => !AGENT_TURN_PERSISTED_STEP_KINDS.includes(k)),
+    ).toEqual(['none']);
     expect(sql).toMatch(/"died_step_kind" IS NULL\s+OR "died_step_kind" IN/);
   });
 

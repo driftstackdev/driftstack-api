@@ -152,6 +152,20 @@ const UNPERSISTED_OUTCOMES: ReadonlySet<AgentTurnOutcome> = new Set<AgentTurnOut
 ]);
 
 /**
+ * The outcomes a ROW may carry — exactly what the table's CHECK constraint
+ * allows. Derived from the two sets above rather than listed, so it cannot drift
+ * from either.
+ *
+ * It exists as a named export because the rule "metrics count every outcome, the
+ * table holds all but two" was being re-stated as an inline filter wherever
+ * something compared the code to the database. A guard that re-derives the
+ * exception is a guard that can re-derive it wrongly, and the day a third
+ * metrics-only outcome is added, every such filter is silently one short.
+ */
+export const AGENT_TURN_PERSISTED_OUTCOMES: readonly AgentTurnOutcome[] =
+  AGENT_TURN_OUTCOMES.filter((outcome) => !UNPERSISTED_OUTCOMES.has(outcome));
+
+/**
  * Why a request did not reach its goal.
  *
  * The first block MIRRORS the eval's `DeathReasonClass`
@@ -225,6 +239,15 @@ export const AGENT_TURN_STEP_KINDS = [
   'none',
 ] as const;
 export type AgentTurnStepKind = (typeof AGENT_TURN_STEP_KINDS)[number];
+
+/**
+ * The step kinds a ROW may carry. `none` is a metric LABEL for a death that is
+ * not on a step; the table says the same thing with NULL, so its constraint
+ * lists only the real kinds. Named for the same reason as
+ * AGENT_TURN_PERSISTED_OUTCOMES.
+ */
+export const AGENT_TURN_PERSISTED_STEP_KINDS: readonly AgentTurnStepKind[] =
+  AGENT_TURN_STEP_KINDS.filter((kind) => kind !== 'none');
 
 export const AGENT_TURN_TRANSPORTS = ['stream', 'json'] as const;
 export type AgentTurnTransport = (typeof AGENT_TURN_TRANSPORTS)[number];

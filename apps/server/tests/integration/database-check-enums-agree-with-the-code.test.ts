@@ -40,6 +40,12 @@
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as apiTypes from '@driftstack/api-types';
+import {
+  AGENT_TURN_DEATH_REASONS,
+  AGENT_TURN_PERSISTED_OUTCOMES,
+  AGENT_TURN_PERSISTED_STEP_KINDS,
+  AGENT_TURN_TRANSPORTS,
+} from '../../src/services/agent-turn-telemetry.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
@@ -141,9 +147,43 @@ afterAll(async () => {
   if (client) await client.end({ timeout: 1 }).catch(() => {});
 });
 
-/** Every exported zod enum in `api-types`, by its runtime `.options`. */
+/**
+ * Server-side constants that a CHECK constraint mirrors but that are NOT part of
+ * the public api-types surface, so the `.options` sweep below cannot see them.
+ *
+ * ⛔ THIS IS THE STRONG REGISTRATION, AND IT IS THE ONE TO PREFER. The telemetry
+ * table's four enumerations arrived with exported constants, so they are compared
+ * here — live constraint against live constant, both directions, plus the
+ * near-match arm — rather than being added to NO_EXPORTED_CONSTANT, which would
+ * have recorded "nothing to compare" about values that have something. A unit
+ * test already compares these constants to the migration's TEXT; this compares
+ * them to what the database actually enforces, which is the copy that refuses a
+ * row in production when the two drift.
+ */
+//
+// ⚠️ THE PERSISTED SUBSETS, NOT THE FULL UNIONS. Two outcomes (`manual_note`,
+// `replayed`) are counted in metrics and never written as a row, and the step
+// kind `none` is a metric label the table spells NULL. Registering the full
+// unions made this file's own near-match arm fire — correctly: "only in code
+// [manual_note, replayed]" is exactly what a drifted pair looks like. The
+// exception is real, so it is NAMED in src and compared here by name, instead
+// of being re-derived as a filter in each place that needs it.
+const SERVER_SIDE_ENUMS: { name: string; values: readonly string[] }[] = [
+  { name: 'AGENT_TURN_PERSISTED_OUTCOMES', values: AGENT_TURN_PERSISTED_OUTCOMES },
+  { name: 'AGENT_TURN_DEATH_REASONS', values: AGENT_TURN_DEATH_REASONS },
+  { name: 'AGENT_TURN_PERSISTED_STEP_KINDS', values: AGENT_TURN_PERSISTED_STEP_KINDS },
+  { name: 'AGENT_TURN_TRANSPORTS', values: AGENT_TURN_TRANSPORTS },
+];
+
+/**
+ * Every exported zod enum in `api-types`, by its runtime `.options`, plus the
+ * server-side constants named above.
+ */
 function exportedEnums(): { name: string; values: string[] }[] {
-  const out: { name: string; values: string[] }[] = [];
+  const out: { name: string; values: string[] }[] = SERVER_SIDE_ENUMS.map((e) => ({
+    name: e.name,
+    values: [...new Set(e.values)].sort(),
+  }));
   for (const [name, value] of Object.entries(apiTypes)) {
     const options = (value as { options?: unknown } | null)?.options;
     if (!Array.isArray(options)) continue;
@@ -300,6 +340,10 @@ describe('the database CHECK enumerations agree with the code', () => {
     // or dropping the constraint — fails here rather than quietly reducing this
     // arm to comparing nothing, which is indistinguishable from success.
     expect(pairs.sort(), 'the enumerations compared on both sides:').toEqual([
+      'AGENT_TURN_DEATH_REASONS=agent_turn_telemetry_death_reason',
+      'AGENT_TURN_PERSISTED_OUTCOMES=agent_turn_telemetry_outcome',
+      'AGENT_TURN_PERSISTED_STEP_KINDS=agent_turn_telemetry_died_step_kind',
+      'AGENT_TURN_TRANSPORTS=agent_turn_telemetry_transport',
       'AgentModelSchema=agent_sessions_model_check',
       'CryptoOrderStatusSchema=crypto_orders_status_check',
     ]);
