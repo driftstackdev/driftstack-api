@@ -1366,6 +1366,23 @@ describe('(h) SimulatorWindow — Tauri-only: the in-place session swap and the 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5100);
     });
+    // ⛔ ADVANCING THE CLOCK IS NOT THE SAME AS THE WORK HAVING HAPPENED. The
+    // thing under test sits at the END of a chain — tick → poll promise → state
+    // update → effect → invoke — and the timers flushing only starts it. Reading
+    // the recorded tiles on the next line raced that chain: it lost twice in one
+    // full-suite run on a loaded machine, failing in ~10ms (a race, not a
+    // timeout) while passing 3/3 alone. So wait for the EVIDENCE instead of the
+    // clock: the second poll really went out (the mount's first one is reset by
+    // the mount itself, which is why the 5s tick matters at all), and then let
+    // what it set off settle under act before anything reads a tile.
+    await vi.waitFor(() => expect(getAgentSession.mock.calls.length).toBeGreaterThanOrEqual(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    return dockTiles();
+  }
+
+  function dockTiles(): Array<{ countryCode: string }> {
     return invoke.mock.calls
       .filter((c) => c[0] === 'set_dock_tile')
       .map((c) => c[1] as { countryCode: string });
@@ -1378,9 +1395,14 @@ describe('(h) SimulatorWindow — Tauri-only: the in-place session swap and the 
         exit_ip: '203.0.113.7',
         exit_country: 'NL',
       });
-      const tiles = await renderWithCcAndPoll();
-      expect(tiles.length).toBeGreaterThan(0);
-      expect(tiles[tiles.length - 1]).toMatchObject({ countryCode: 'NL' });
+      await renderWithCcAndPoll();
+      // NL can only ever come from the report, so converging on it IS the
+      // assertion — poll for it rather than sampling once.
+      await vi.waitFor(() => {
+        const tiles = dockTiles();
+        expect(tiles.length).toBeGreaterThan(0);
+        expect(tiles[tiles.length - 1]).toMatchObject({ countryCode: 'NL' });
+      });
     } finally {
       vi.useRealTimers();
     }
