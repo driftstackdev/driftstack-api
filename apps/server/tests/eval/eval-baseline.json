@@ -1,0 +1,138 @@
+{
+  "headline": "AN EXECUTOR EVAL, NOT A PLANNER EVAL. The plans are hand-written in tasks.ts and the scripted decomposer discards its arguments, so no decompose request is built and no model chooses a plan: the EXECUTED PLAN IS FIXED and no rate below is evidence about planning quality. ⚠️ That is NOT invariance — a commit that changes planning also lands in the runtime and the executor around decompose, and those DO move every rate below.",
+  "note": "Per-task expectations, NOT a rate threshold — a rate lets a fix and a regression cancel out. A flip fails the suite until someone edits this file deliberately, in its own commit, with a one-line reason on the task that moved.",
+  "provenance": {
+    "headline": "AN EXECUTOR EVAL, NOT A PLANNER EVAL. The plans are hand-written in tasks.ts and the scripted decomposer discards its arguments, so no decompose request is built and no model chooses a plan: the EXECUTED PLAN IS FIXED and no rate below is evidence about planning quality. ⚠️ That is NOT invariance — a commit that changes planning also lands in the runtime and the executor around decompose, and those DO move every rate below.",
+    "measures": "the executor and its retry/no-retry fences, the intent→harness verb mapping and its CSS-selector refusal, the wire codec, the result→customer mapper, the consequential-action safety gate, the read-back gate, and the product's own answer request/parse path — which runs the real ClaudeAgentDecomposer, the SAME class the planner uses, so its request assembly, envelope parsing, retry backoff and usage accounting are in scope here too",
+    "cannotMeasure": "planning quality — the executed plan is fixed, so a rate that MOVES is not evidence that planning improved, and a rate that does NOT move is not evidence that it did not; answer QUALITY, because the answers come from page rules we wrote; a page-dump answer that was REWORDED rather than quoted, which the extraction bound cannot see; and anything about a real browser, a real site or anything physical",
+    "executedPlanIsFixed": "ScriptedAgentDecomposer.decompose ignores its arguments and returns the plan written in tasks.ts, so the plan these numbers were produced under cannot vary with what a planner would have chosen. Asserted, not assumed: see \"the executed plan cannot vary with what a planner would have produced\". ⚠️ It does NOT follow that a planner commit cannot move these numbers — such a commit also changes the runtime and the executor, which this suite runs for real.",
+    "answererCircularity": "the answer rule is authored on the same object literal as the criterion it will be scored against, by the same hand, so a passing answer task shows the answer PATH works — never that a model would have picked that line. Answer quality is unmeasured here; the overlap is counted in totals.answerRuleSelectsCriterionText rather than left as prose.",
+    "answerQualityMeasured": false,
+    "plannerMode": "scripted",
+    "plannerDescription": "plans hand-written in tasks.ts and executed through the real AgentRuntime; no model chose them",
+    "answererMode": "page_rule_via_product_answer_path",
+    "answererDescription": "the product's own ClaudeAgentDecomposer.answerFromObservation, served by a stand-in provider whose reply text comes from a per-task page rule that has never seen the criterion; no model wrote the answers",
+    "decomposeSystemPromptSha256": null,
+    "decomposeSystemPromptNote": "under plannerMode=scripted the plan comes from tasks.ts and no decompose request is built, so there is no prompt for this run to be a statement about. Re-pin it the moment a recorded or live planner tier runs.",
+    "answerSystemPromptSha256": "8671455021249e6fc92c09dd7e5011a2c27ae7e0466ed3c09037308378de1cbf"
+  },
+  "plannerMode": "scripted",
+  "scriptedPlanCompletionRate": {
+    "value": 0.636,
+    "label": "share of the hand-written scripted plans that met their criterion — an EXECUTOR-and-answer-path number, produced under a FIXED plan and therefore not evidence about planning quality in either direction",
+    "producedBy": "plannerMode=scripted (plans hand-written in tasks.ts and executed through the real AgentRuntime; no model chose them); answerer=page_rule_via_product_answer_path (the product's own ClaudeAgentDecomposer.answerFromObservation, served by a stand-in provider whose reply text comes from a per-task page rule that has never seen the criterion; no model wrote the answers)",
+    "measures": "the executor and its retry/no-retry fences, the intent→harness verb mapping and its CSS-selector refusal, the wire codec, the result→customer mapper, the consequential-action safety gate, the read-back gate, and the product's own answer request/parse path — which runs the real ClaudeAgentDecomposer, the SAME class the planner uses, so its request assembly, envelope parsing, retry backoff and usage accounting are in scope here too",
+    "cannotMeasure": "planning quality — the executed plan is fixed, so a rate that MOVES is not evidence that planning improved, and a rate that does NOT move is not evidence that it did not; answer QUALITY, because the answers come from page rules we wrote; a page-dump answer that was REWORDED rather than quoted, which the extraction bound cannot see; and anything about a real browser, a real site or anything physical",
+    "executedPlanIsFixed": true
+  },
+  "tasks": {
+    "P1": {
+      "expected": "pass",
+      "outcome": "pass",
+      "reasonClass": "none",
+      "why": "Static page, target present at load, and the task wording trips every read-back gate. This is the happy path; if it fails, the harness is wrong before the agent is."
+    },
+    "P2": {
+      "expected": "pass",
+      "outcome": "pass",
+      "reasonClass": "none",
+      "why": "Pure action. Also asserts the read-back does NOT fire: \"take a screenshot\" matches no token in the read-intent pattern, and a pure-action task must not pay for a second model call."
+    },
+    "P3": {
+      "expected": "pass",
+      "outcome": "pass",
+      "reasonClass": "none",
+      "why": "The price is lazily rendered below the fold, so the plan only sees it if it scrolls. Flagged as the most likely task to flip: a plan that drops the scroll step passes nothing, and the flip would otherwise look like a page change."
+    },
+    "P4": {
+      "expected": "pass",
+      "outcome": "pass",
+      "reasonClass": "none",
+      "why": "Open-ended, so the pauses and the scrolling ARE the task. Passes only with at least one pause and one scroll — this detects the navigate-then-capture shape of giving up, which the prompt names in its own words."
+    },
+    "P5": {
+      "expected": "pass",
+      "outcome": "pass",
+      "reasonClass": "none",
+      "why": "Type then submit then read back. Every browser step here is expected to succeed; whether the customer gets an ANSWER is a separate question the read-back gate decides."
+    },
+    "P6": {
+      "expected": "pass",
+      "outcome": "pass",
+      "reasonClass": "none",
+      "why": "A four-second load and a 1.2s settle. Measures whether the idle wait actually covers a slow page rather than timing out under it."
+    },
+    "F1": {
+      "expected": "fail",
+      "outcome": "fail",
+      "reasonClass": "element_click_intercepted",
+      "why": "A consent overlay intercepts the add control. A planner that cannot look at the page cannot know to dismiss it first. The click comes back as a browser failure whose outcome is UNKNOWN for an interact, so it is not retried and the plan halts with the capture never taken."
+    },
+    "F2": {
+      "expected": "fail",
+      "outcome": "fail",
+      "reasonClass": "selector_rejected_before_dispatch",
+      "why": "Two independent reasons this cannot pass. (1) The selector is Playwright syntax and is refused before any dispatch. (2) Even with a valid selector, /inbox is behind a login wall the navigate silently lands away from, and NOTHING THREADS CREDENTIALS INTO A TURN — the decomposer declares a credential bag the runtime never populates. So this is a PLUMBING metric, not a planner metric, and a future 'log-in completion rate' must not be read as one."
+    },
+    "F3": {
+      "expected": "fail",
+      "outcome": "pass",
+      "reasonClass": "none",
+      "why": "The control renders 2500ms after load. A not-found element is retryable, so the executor spends its whole budget — two retries at 400ms — and gives up 1700ms early. The number is the finding: 800ms of patience against 2500ms needed."
+    },
+    "F4": {
+      "expected": "fail",
+      "outcome": "fail",
+      "reasonClass": "answer_not_grounded",
+      "why": "The cleanest single measurement of the perceive gap, and REBUILT to actually be one. The previous version also tapped '.reply.top' — a selector NO page in this corpus carries (the thread page has '.reply.top .body', and the device matches by exact string equality). So it died of a fixture typo rather than of blindness, and it could never have flipped when perceive lands: the tap would still have missed. Now the ONLY reason it fails is that the plan is on a page the planner guessed, every step is green, and the read-back honestly reports the reply as absent. ⛔ THE PAIRED CONTROL IS LOAD-BEARING: F4-SIGHTED runs this same task with a plan written as if the planner had seen the index, and PASSES today. Without that control this task cannot tell blindness from a broken fixture."
+    },
+    "F5": {
+      "expected": "fail",
+      "outcome": "fail",
+      "reasonClass": "answer_not_grounded",
+      "why": "Every browser step succeeds and the read-back runs. The answer is honestly absent, because the text only exists after a control the planner cannot know about is clicked. THE HONEST ABSENCE IS THE OUTCOME TO PRESERVE: if this task ever starts \"passing\" without the page changing, the read-back has started inventing values."
+    },
+    "F6": {
+      "expected": "halt",
+      "outcome": "halt",
+      "reasonClass": "halted_for_confirmation",
+      "why": "⛔ A THIRD OUTCOME, NOT A FAILURE. The consequential-action gate stops the plan BEFORE dispatch and the device must record zero dispatches for the purchase step. Scoring this as a completion failure would create pressure to \"fix\" a safety gate, so the scorer carries halted_for_confirmation as first-class."
+    },
+    "C-POS": {
+      "expected": "pass",
+      "outcome": "pass",
+      "reasonClass": "none",
+      "why": "Trivially completable. If this fails the harness is broken and no number from this run means anything."
+    },
+    "C-NEG": {
+      "expected": "fail",
+      "outcome": "fail",
+      "reasonClass": "element_never_appeared_in_retry_budget",
+      "why": "Impossible by construction — the page has no elements at all. If this PASSES the scorer is inventing success and no number from this run means anything. ⚠️ IT DIES AT STEP 2, so it exercises NONE of the read-back or answer-scoring path — C-NEG-SCORED is the control for that half."
+    },
+    "C-NEG-SCORED": {
+      "expected": "fail",
+      "outcome": "fail",
+      "reasonClass": "answer_not_grounded",
+      "why": "⛔ THE NEGATIVE CONTROL THAT REACHES THE SCORER. C-NEG dies on a missing element, so it proves nothing about the path where the one real scorer bug actually lived: an answer that satisfied the criterion it was refusing. Here every browser step is green, the read-back gate opens, the product's own answer path runs, and the answer is HONESTLY ABSENT — the page carries no contact details. If this ever scores PASS, the scorer or the answerer is inventing success on the answer-scoring path and no number from this run means anything."
+    },
+    "F4-SIGHTED": {
+      "expected": "pass",
+      "outcome": "pass",
+      "reasonClass": "none",
+      "why": "⛔ THE CONTROL THAT MAKES F4 A MEASUREMENT. F4 is pinned as the cleanest reading of the perceive gap, and an expected-FAIL task cannot tell \"the planner is blind\" from \"the fixture is broken\" on its own — the previous F4 failed on a selector typo and would have kept failing after perceive landed. This runs the identical task with a sighted plan and MUST PASS TODAY. If it ever stops passing, F4 is no longer measuring blindness and its number must not be quoted."
+    },
+    "C-PAGE-DUMP": {
+      "expected": "fail",
+      "outcome": "fail",
+      "reasonClass": "answer_was_not_an_extraction",
+      "why": "⛔ THE CONTROL FOR UNBOUNDED CONTAINMENT. The answer criterion is `pattern.test(answer)`, so ANY superset passes — an extractor that returned the whole page verbatim scored as a success, which is exactly the failure the read-back exists to prevent: the customer asks a question and gets the page back. Every browser step here is green, the read-back gate opens, the product's own answer path runs, and the answer CONTAINS the wanted \"40% off\" — it is the page. It must still FAIL, on the extraction bound, with reasonClass answer_was_not_an_extraction. If this ever passes, the criterion is unbounded again and no answer-shaped number in the run means what it says."
+    },
+    "C-PAGE-DUMP-2LINE": {
+      "expected": "fail",
+      "outcome": "fail",
+      "reasonClass": "answer_was_not_an_extraction",
+      "why": "⛔ THE EXTRACTION BOUND ON ITS WEAKEST BRANCH. C-PAGE-DUMP runs on a four-line page, where the line count, the character share and the word share all refuse it independently — so it says nothing about the branch that actually carries most of this corpus. hello.test observes TWO lines, where the character-share reading collapses into the line reading (quoting two of two IS the page), so the bound there rests on exact lines or on vocabulary — and SIX of the answering tasks observe two or three lines (P6, F4, C-POS and F4-SIGHTED see two; P5 and C-NEG-SCORED see three), against four that see four. This control answers with both lines and must FAIL for the same reason the four-line one does. Without it the bound had been tested by exactly the one input it was written for."
+    }
+  }
+}
