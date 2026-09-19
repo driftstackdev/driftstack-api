@@ -24,6 +24,7 @@ import { describe, expect, it } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { BUNDLED_CAP_MAX_NEW_WRITE_CENTS } from '../../src/services/bundled-llm.js';
 import { codeOnly } from './_helpers/code-only.js';
+import { markupOnly } from './_helpers/markup-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -44,9 +45,9 @@ function pageScript(page: string): string {
   return codeOnly(match[1]);
 }
 
-/** The page's markup with HTML and JSX-expression comments removed. */
+/** The page's markup with its HTML and expression comments removed. */
 function pageMarkup(page: string): string {
-  return page.replace(/<!--[\s\S]*?-->/g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+  return markupOnly(page);
 }
 
 describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity', () => {
