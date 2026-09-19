@@ -11,14 +11,26 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DrizzlePricingRepo } from '../../src/db/pricing-repo.js';
 import { TIER_MONTHLY_PRICE_CENTS } from '../../src/lib/cost-defaults.js';
 import * as schema from '../../src/db/schema.js';
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 
-const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
-const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+/**
+ * ⛔ THIS FILE GETS ITS OWN DATABASE. It asserts the SEEDED price of every tier and
+ * then deliberately rewrites `api_scale` (199900, 209900) before restoring it — on a
+ * shared database that is two hazards at once: this file can read another writer's
+ * value (admin-owner-pricing-edit rewrites the same row), and every other reader of
+ * `pricing` can read this file's temporary prices. On 2026-09-18 the pre-push gate
+ * failed here reading `api_scale` = 209900 in the seed arm, a value only this file
+ * writes and only in a LATER arm, while the file passed 3/3 alone. A fresh migrated
+ * database carries migration 0067's seed, which is exactly what the seed arm checks.
+ */
+const ISOLATED_DB_NAME = 'driftstack_iso_pricing_repo';
 
 let client: ReturnType<typeof postgres> | null = null;
 
 beforeAll(async () => {
-  const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return; // no reachable Postgres: the reachability arm reports it
+  const probe = postgres(isolated, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1`;
     await probe.end({ timeout: 1 });
@@ -26,7 +38,7 @@ beforeAll(async () => {
     await probe.end({ timeout: 1 }).catch(() => {});
     return;
   }
-  client = postgres(DB_URL, { max: 1 });
+  client = postgres(isolated, { max: 1 });
   // Schema-presence probe: skip rather than fail if migrations aren't applied.
   try {
     await client`SELECT 1 FROM pricing LIMIT 0`;
