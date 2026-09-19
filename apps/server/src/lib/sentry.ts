@@ -247,9 +247,11 @@ export interface SentryClient {
   captureException(err: unknown, context?: Record<string, unknown>): void;
   /**
    * Send a message event carrying ONLY what the caller passed: the ambient
-   * breadcrumb trail, request and user are stripped from this event, because
-   * a background job's event would otherwise inherit whatever URLs the last
-   * requests on this process left in scope. Fire-and-forget, never throws.
+   * breadcrumb trail, request, user and transaction name are stripped from this
+   * event, because a background job's event would otherwise inherit whatever
+   * URLs the last requests on this process left in scope, and an event sent
+   * while serving a request would carry that request's path. Fire-and-forget,
+   * never throws.
    *
    * No-op when Sentry is not initialized.
    */
@@ -344,6 +346,10 @@ export function initSentry({ config, logger }: InitSentryArgs): SentryClient {
             delete event.breadcrumbs;
             delete event.request;
             delete event.user;
+            // The http integration names each request's isolation scope after
+            // its CONCRETE path ("POST /v1/agent-sessions/<id>/message"), and a
+            // message sent while serving a request inherits it as `transaction`.
+            delete event.transaction;
             return event;
           });
           scope.setFingerprint([...msg.fingerprint]);

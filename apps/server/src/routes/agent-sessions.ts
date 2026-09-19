@@ -92,6 +92,7 @@ import {
 } from '../services/agent-pair-mode-state.js';
 import type { PairModeTakeoverLock } from '../services/agent-pair-mode-lock.js';
 import type { SentryClient } from '../lib/sentry.js';
+import { reportUnpricedModel, type UnpricedModelRoute } from '../lib/report-unpriced-model.js';
 import type { AccountAuditService } from '../services/account-audit.js';
 import type { MetricsRegistry } from '../services/metrics-registry.js';
 import { METRIC_NAMES } from '../services/metrics-registry.js';
@@ -2270,6 +2271,48 @@ export function registerAgentSessionsRoutes(
   };
 
   /**
+   * The deployment's key refuses `model`: count the refusal, report it when it is
+   * our fault, and build the 403 the caller throws. The ONE place both refusals
+   * (create and every turn, bundled leg and fallback leg) go through, so none of
+   * them can be refused uncounted.
+   *
+   * Two kinds, because they mean different things to whoever reads the counter:
+   *  · `model_requires_own_key` — the customer picked an Opus-class model, which
+   *    runs on their own key only. Expected; the answer tells them what works.
+   *  · `model_unpriced` — the registry has no price for the model. Never the
+   *    customer's doing: OUR configuration fault. Also reported to Sentry (at most
+   *    once per model per process, model id and route only), because no scraper
+   *    reads production's counters and a metric alone would reach nobody.
+   */
+  const refuseModelOnTheDeploymentKey = (a: {
+    req: FastifyRequest;
+    model: string;
+    refusal: NonNullable<ReturnType<typeof deploymentKeyModelRefusalFor>>;
+    route: UnpricedModelRoute;
+  }): ApiError => {
+    const unpriced = a.refusal.reason === 'unpriced';
+    try {
+      metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, {
+        kind: unpriced ? 'model_unpriced' : 'model_requires_own_key',
+      });
+    } catch {
+      /* swallow */
+    }
+    if (unpriced) {
+      try {
+        a.req.log.error(
+          { component: 'agent-sessions', kind: 'model_unpriced', model: a.model, route: a.route },
+          'a model with no price was refused on the deployment key; add its price to the model registry',
+        );
+      } catch {
+        /* swallow */
+      }
+      reportUnpricedModel(sentry, { model: a.model, route: a.route });
+    }
+    return deploymentKeyModelRefusedError(a.model, a.refusal.detail);
+  };
+
+  /**
    * Refuse, at CREATE, a session whose model the account could only ever run on
    * the deployment's key, when the deployment's key refuses that model (Opus, or
    * a model with no list price — see deploymentKeyModelRefusal).
@@ -2280,11 +2323,14 @@ export function registerAgentSessionsRoutes(
    * this is the early, honest answer.
    *
    * "Could only ever run on the deployment's key" means the turn-time resolution
-   * would choose the bundled leg: no own key on this request and none stored,
-   * consent given, and a plan that includes it. An account with a stored key, or
-   * one that sends its key per request, keeps every model. An account with no key
-   * and no consent is not refused here: its turns are refused for that, with a
-   * message that says so.
+   * would land on it: no own key on this request and none stored, AND either the
+   * bundled leg would serve (consent given, a plan that includes it) or the
+   * deployment serves unconfigured accounts from its own key
+   * (`allowFallbackForUnconfiguredCustomers`, staging only — production refuses
+   * to boot with it). An account with a stored key, or one that sends its key per
+   * request, keeps every model. On a deployment with no such fallback, an account
+   * with no key and no consent is not refused here: its turns are refused for
+   * that, with a message that says so.
    */
   const refuseModelTheAccountCanOnlyRunOnTheDeploymentKey = async (a: {
     req: FastifyRequest;
@@ -2293,18 +2339,23 @@ export function registerAgentSessionsRoutes(
     model: string;
   }): Promise<void> => {
     if (agentDecomposerKind !== 'claude') return;
-    if (bundledLlmService === undefined || deploymentFallbackKey === undefined) return;
+    if (deploymentFallbackKey === undefined) return;
     const refusal = deploymentKeyModelRefusalFor(a.model);
     if (refusal === null) return;
     const header = a.req.headers['x-byok-anthropic-api-key'];
     if (typeof header === 'string' && header.length > 0) return;
-    try {
-      requireBundledLlmTier(a.ownerTier);
-    } catch {
-      return;
+    // The fallback serves every account the earlier legs did not, so when it is
+    // on, the bundled leg's consent and plan do not decide which key is used.
+    if (allowFallbackForUnconfiguredCustomers !== true) {
+      if (bundledLlmService === undefined) return;
+      try {
+        requireBundledLlmTier(a.ownerTier);
+      } catch {
+        return;
+      }
+      const settings = await bundledLlmService.findSettings(a.ownerAccountId);
+      if (settings === null || !settings.consent) return;
     }
-    const settings = await bundledLlmService.findSettings(a.ownerAccountId);
-    if (settings === null || !settings.consent) return;
     if (byokService !== undefined) {
       try {
         const stored = await byokService.getPlaintext({
@@ -2323,7 +2374,12 @@ export function registerAgentSessionsRoutes(
         return;
       }
     }
-    throw deploymentKeyModelRefusedError(a.model, refusal.detail);
+    throw refuseModelOnTheDeploymentKey({
+      req: a.req,
+      model: a.model,
+      refusal,
+      route: '/v1/agent-sessions',
+    });
   };
 
   /** LK.4 — auto-mint a LiveKit token for the just-created (or
@@ -5838,12 +5894,12 @@ export function registerAgentSessionsRoutes(
           agentDecomposerKind === 'claude' ? deploymentKeyModelRefusalFor(pre.model) : null;
         if (modelRefusal !== null) {
           await assertAgentMessageAdmissionCurrent(req.params.id, admission);
-          try {
-            metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, { kind: 'model_requires_own_key' });
-          } catch {
-            /* swallow */
-          }
-          throw deploymentKeyModelRefusedError(pre.model, modelRefusal.detail);
+          throw refuseModelOnTheDeploymentKey({
+            req,
+            model: pre.model,
+            refusal: modelRefusal,
+            route: '/v1/agent-sessions/:id/message',
+          });
         }
         // Arc 1 sub-slice 6.5 (v2-#6) — soft-cap pre-turn check.
         // Sum bundled-LLM spend in the current calendar month and
@@ -5932,6 +5988,24 @@ export function registerAgentSessionsRoutes(
               : resolvedByokKey !== undefined
                 ? 'fallback'
                 : 'none';
+      // The fallback leg is Driftstack's key too, so it refuses exactly what the
+      // bundled leg refuses. It is staging-only (production refuses to boot with
+      // it), but on staging an account with no key and no consent would otherwise
+      // run Opus, or a model nobody can meter, on the deployment's key: the bundled
+      // leg's check above never ran for it. Deterministic calls no model, so it
+      // has nothing to refuse.
+      if (keySource === 'fallback' && agentDecomposerKind === 'claude') {
+        const fallbackRefusal = deploymentKeyModelRefusalFor(pre.model);
+        if (fallbackRefusal !== null) {
+          await assertAgentMessageAdmissionCurrent(req.params.id, admission);
+          throw refuseModelOnTheDeploymentKey({
+            req,
+            model: pre.model,
+            refusal: fallbackRefusal,
+            route: '/v1/agent-sessions/:id/message',
+          });
+        }
+      }
       // Q.1 — the ByokAnthropicRequired 502 only fires when the
       // deployment is wired for Claude. Deterministic ignores keys
       // entirely (the decomposer never reads byokAnthropicApiKey)

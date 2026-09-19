@@ -7,6 +7,7 @@
 // Returns the app, plain-text key, and helpers for direct repo manipulation.
 
 import { buildApp, type ReadinessCheck } from '../../../src/lib/app.js';
+import type { SentryClient } from '../../../src/lib/sentry.js';
 import { InMemoryOAuthStore } from '../../../src/services/oauth.js';
 import type { NowPaymentsApiClient } from '../../../src/lib/nowpayments-api.js';
 import type { R2 } from '../../../src/lib/r2.js';
@@ -526,6 +527,21 @@ export interface TestAppOptions {
    * the live-key /test endpoint.
    */
   enableByokAnthropic?: boolean;
+  /**
+   * Q.1.d — the STAGING posture: an account with no key of its own (and no
+   * bundled-LLM consent) is served on the deployment's key instead of being
+   * refused. Wires the stub deployment key and `agentDecomposerAllowFallback`.
+   * Production refuses to boot with it (lib/config.ts), which is why no fixture
+   * reached this leg before — and why nothing noticed that it ran any model on
+   * the deployment's key. Pair with `agentDecomposerKind: 'claude'` to reach it.
+   */
+  allowDeploymentKeyFallback?: boolean;
+  /**
+   * Hand the app a Sentry client of the test's choosing — typically a recording
+   * fake — so a test can assert what is reported. Omitted → no Sentry client is
+   * wired, as before.
+   */
+  sentry?: SentryClient;
   /**
    * V-820 — when `true`, wires the fleet control-plane deps
    * (FleetNodeAuthImpl over an InMemoryFleetNodesRepo + an
@@ -1954,9 +1970,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // opts.enableBundledLlm with consent=true so the bundled-LLM leg
     // can actually resolve. Otherwise harmless; default-fallback
     // posture stays gated by allowFallbackForUnconfiguredCustomers.
-    ...(opts.enableBundledLlm !== undefined
+    ...(opts.enableBundledLlm !== undefined || opts.allowDeploymentKeyFallback === true
       ? { agentDecomposerFallbackKey: 'sk-ant-test-deployment-fallback' }
       : {}),
+    ...(opts.allowDeploymentKeyFallback === true ? { agentDecomposerAllowFallback: true } : {}),
+    ...(opts.sentry !== undefined ? { sentry: opts.sentry } : {}),
     costMonitoringService,
     ...(opts.disableAgentTurnTelemetry === true
       ? {}

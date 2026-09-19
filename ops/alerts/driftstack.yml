@@ -278,6 +278,36 @@ groups:
             on the customer dashboard — the consent flow may be
             broken.
 
+      - alert: BundledLlmModelUnpriced
+        # model_unpriced fires when a session's model has no list price
+        # in the model registry, so the deployment key refuses it (a call
+        # there would be unmetered). Never the customer's doing — unlike
+        # model_requires_own_key, which is a customer choosing Opus — so
+        # ANY occurrence is our configuration fault, and every message in
+        # such a session is refused until the price is added.
+        #
+        # The raw counter, not increase(): a labelled series is born at
+        # its first increment, and increase() cannot see a series going
+        # from absent to 1 — the one event this rule exists for. The
+        # counter resets on restart, i.e. on the deploy that fixes it.
+        #
+        # Production /metrics is not scraped, so this rule alone reaches
+        # nobody there: the server also reports the first refusal per
+        # model per process to Sentry (lib/report-unpriced-model.ts).
+        expr: |
+          sum(driftstack_bundled_llm_error_total{kind="model_unpriced"}) > 0
+        for: 1m
+        labels:
+          severity: warning
+          team: driftstack-billing
+        annotations:
+          summary: 'A model with no price was refused on the deployment key'
+          description: |
+            A session's model has no list price in the model registry
+            (packages/api-types/src/agent-models.ts), so every message
+            in it is refused. Add the model's price, or retire the id.
+            The Sentry event for the model names it.
+
       - alert: BundledLlmRequestRateZero
         # If consent + cap are wired but bundled_llm_request_total
         # has been zero for 30 minutes, something is breaking the

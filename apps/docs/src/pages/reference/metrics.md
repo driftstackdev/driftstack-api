@@ -71,11 +71,26 @@ The current counter catalogue (all `driftstack_*` namespaced):
 | `driftstack_agent_decompose_total`       | `result_kind`    | AI agent planning calls by result (plan / clarify / refuse)                                                                                                                                       |
 | `driftstack_pair_mode_transition_total`  | `from`, `to`     | pair-mode (AI / human control) transitions                                                                                                                                                        |
 | `driftstack_bundled_llm_request_total`   | `outcome`        | bundled-AI planning requests by outcome                                                                                                                                                           |
-| `driftstack_bundled_llm_error_total`     | `kind`           | bundled-AI planning errors (consent_missing / budget_exhausted)                                                                                                                                   |
+| `driftstack_bundled_llm_error_total`     | `kind`           | bundled-AI refusals and errors, one `kind` per reason (see the table below)                                                                                                                       |
 | `driftstack_byok_anthropic_test_total`   | `outcome`        | BYOK Anthropic /test endpoint outcomes (ok / invalid / quota_exceeded / not_set / unknown; `not_wired` is a legacy label)                                                                         |
 | `driftstack_unhandled_rejection_total`   | —                | unhandled errors caught by the process-level safety net; the service stays up by design, so a rising rate is the only sign that errors are being lost                                             |
 | `driftstack_retention_purge_total`       | `arm`, `outcome` | account-deletion data purge by `arm` (byok / proxy_secrets / profiles / snapshots) and `outcome` (purged / failed / skipped); `skipped` means that data type is not configured on this deployment |
 | `driftstack_scheduled_job_chain_pending` | `job_type`       | whether each recurring background job is still scheduled: 1 while its next run is pending, 0 when it has stopped and will not resume without a restart                                            |
+
+Every value `driftstack_bundled_llm_error_total` carries in `kind`. Each is
+one reason a request to run AI on Driftstack's key was refused, or its cost
+could not be recorded. Refusals are counted wherever they happen: when a
+session is created and on every message.
+
+| `kind`                        | What it means                                                                                                                                                                                                                                 |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `consent_missing`             | the account has not turned bundled AI on, and sent no key of its own                                                                                                                                                                          |
+| `tier_ineligible`             | bundled AI is turned on, but the account's current plan no longer includes it                                                                                                                                                                 |
+| `model_requires_own_key`      | the customer chose a model that runs only on their own key (the Opus models). Expected: the answer tells them what works                                                                                                                      |
+| `model_unpriced`              | the session's model has no price, so it cannot run on Driftstack's key. Never the customer's doing: the model's price is missing on our side, and every message in such a session is refused until it is added. Alert on any value above zero |
+| `budget_exhausted`            | the account reached its monthly bundled-AI cap                                                                                                                                                                                                |
+| `concurrency_limit`           | the account already has the most bundled-AI messages in progress at once                                                                                                                                                                      |
+| `usage_record_persist_failed` | a finished message's cost could not be recorded after retries, so the monthly cap under-counts it                                                                                                                                             |
 
 ### AI agent turns
 
@@ -154,6 +169,9 @@ language):
 - `rate(driftstack_bundled_llm_error_total{kind="budget_exhausted"}[1h]) > 1`
   — multiple customers hitting the bundled-AI cap means demand is
   outgrowing the deployment's shared budget.
+- `sum(driftstack_bundled_llm_error_total{kind="model_unpriced"}) > 0`
+  — a session's model has no price, so every message in it is refused.
+  It is never the customer's doing; add the model's price.
 - `rate(driftstack_byok_anthropic_test_total{outcome="quota_exceeded"}[1h]) > 5`
   — multiple customers' Anthropic accounts are throttling; an
   upstream Anthropic-side incident.

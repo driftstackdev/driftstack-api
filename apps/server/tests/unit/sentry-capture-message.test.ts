@@ -108,7 +108,7 @@ describe('SentryClient.captureMessage', () => {
     expect(event.extra).toEqual(MESSAGE.extra);
   });
 
-  it('CRITICAL strips the ambient breadcrumb trail, request and user: a background alert must not inherit the URL of whatever request ran last', async () => {
+  it('CRITICAL strips the ambient breadcrumb trail, request, user and transaction name: a message must not inherit the URL of the request it was sent from, or of whatever request ran last', async () => {
     // What the request hooks leave in scope on a live server.
     Sentry.addBreadcrumb({
       category: 'http.request',
@@ -124,6 +124,12 @@ describe('SentryClient.captureMessage', () => {
         url: 'https://api.example/v1/agent-sessions/as_SENTINEL_REQUEST/message',
       },
     });
+    // …and the transaction name it gives the request: the concrete path, ids
+    // and all (@sentry/core http server-subscription). A message sent from
+    // INSIDE a request (an unpriced model refused on a turn) would carry it.
+    Sentry.getIsolationScope().setTransactionName(
+      'POST /v1/agent-sessions/as_SENTINEL_TRANSACTION/message',
+    );
     try {
       // Positive control: an ordinary exception DOES carry them, so their
       // absence below is the processor's doing, not an empty scope.
@@ -131,6 +137,7 @@ describe('SentryClient.captureMessage', () => {
       const control = await nextEvent();
       expect(JSON.stringify(control)).toContain('SENTINEL');
       expect(control.request?.url).toContain('as_SENTINEL_REQUEST');
+      expect(control.transaction).toContain('as_SENTINEL_TRANSACTION');
 
       sentry.captureMessage(MESSAGE);
       const event = await nextEvent();
@@ -143,6 +150,7 @@ describe('SentryClient.captureMessage', () => {
       expect(event.breadcrumbs ?? []).toEqual([]);
       expect(event.user).toBeUndefined();
       expect(event.request).toBeUndefined();
+      expect(event.transaction).toBeUndefined();
     } finally {
       Sentry.getIsolationScope().clear();
       Sentry.getCurrentScope().clear();
