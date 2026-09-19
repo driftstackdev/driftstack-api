@@ -30,8 +30,10 @@ import {
   type AgentSession,
   type ConsequentialActionCategory,
 } from '@driftstack/sdk';
+import { DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
 import { useSettings } from './SettingsContext';
 import type { DriftstackClient } from './client';
+import { chatModelLabel } from './chat-models';
 import { clearSession as clearProfileSession, markLaunched } from './profile-bindings';
 
 /** Founder report (2026-07-01): the bundled-LLM error landed in the chat
@@ -290,6 +292,43 @@ export function errorSessionStatus(err: unknown): 'closed' | 'paused' | null {
 }
 
 /**
+ * The refused model when `err` is the "this model runs only on your own key"
+ * refusal, `{ model: null }` when it is that refusal without a usable model id,
+ * or null when it is some other problem.
+ *
+ * ⛔ Read off the declared extension, never the sentence. The server refuses
+ * an own-key-only model (Opus) on the deployment's key with a 403 carrying
+ * `requires_own_key: true` and the `model` it refused — and a 403 on this route
+ * is ALSO "you do not own this session" and "your plan does not include this".
+ * Matching the wording would either miss a reworded refusal or send those other
+ * customers off to add a key they do not need.
+ */
+export function ownKeyModelRefusal(err: unknown): { model: string | null } | null {
+  if (!(err instanceof DriftstackError)) return null;
+  if (err.extensions['requires_own_key'] !== true) return null;
+  const model = err.extensions['model'];
+  return { model: typeof model === 'string' && model.length > 0 ? model : null };
+}
+
+/**
+ * The sentence for an own-key-only model refused on the deployment's key.
+ *
+ * Nothing ran — the refusal comes before the planner — so it says nothing about
+ * "the steps above". It names the model and the two things that work: the
+ * customer's own key, or a new chat on the default model (the model is fixed for
+ * a chat once it has started, so "switch" means a new chat).
+ */
+function ownKeyModelReason(model: string | null): string {
+  const label = model !== null ? chatModelLabel(model) : null;
+  const subject = label ?? 'The model this chat uses';
+  const addKey = `${subject} runs only on your own Anthropic key. Add your key in Settings → AI & billing, then send the message again`;
+  // Never suggest the model that was just refused.
+  if (model === DEFAULT_AGENT_MODEL) return `${addKey}.`;
+  const fallback = chatModelLabel(DEFAULT_AGENT_MODEL) ?? 'the default model';
+  return `${addKey}, or start a new chat with ${fallback}.`;
+}
+
+/**
  * The one sentence an interrupted turn shows.
  *
  * ⛔ Branches on the typed problem — the error class, the HTTP status and the
@@ -307,6 +346,8 @@ export function interruptedTurnReason(err: unknown): string {
   if (err instanceof ByokAnthropicRequiredError) {
     return 'This turn stopped because your Anthropic API key was missing or rejected. Add or replace it in Settings → AI & billing, then send the message again.';
   }
+  const ownKeyRefusal = ownKeyModelRefusal(err);
+  if (ownKeyRefusal !== null) return ownKeyModelReason(ownKeyRefusal.model);
   if (err instanceof DriftstackError && err.kind === 'transport') {
     return 'The connection dropped while this turn was running. The steps above are what finished before it stopped.';
   }

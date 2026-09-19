@@ -33,6 +33,8 @@ import { useFocusTrap } from '../lib/use-focus-trap';
 import { humanizeError } from '../lib/humanize-error';
 import { useToasts } from '../lib/toasts';
 import { type ChatModel, type ChatTurn, type InterruptedTurn } from '../lib/use-agent-chat';
+import { CHAT_MODELS, NEEDS_OWN_KEY_SUFFIX, modelNeedsOwnKey } from '../lib/chat-models';
+import { DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
 import { useAgentChatSession } from '../lib/AgentChatProvider';
 import { CONNECT_API_KEY_IN_SETTINGS } from '../lib/proxy-check-copy';
 
@@ -74,16 +76,6 @@ import { listProxies, type ProxyConfig } from '../lib/proxies';
 import { listBindings } from '../lib/profile-bindings';
 import { ensureAccountProxyRow } from '../lib/proxy-server-test';
 
-// The default leads the list — it is what an untouched picker sends.
-const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
-  { id: 'claude-sonnet-5', label: 'Sonnet 5' },
-  { id: 'claude-opus-5', label: 'Opus 5' },
-  { id: 'claude-opus-4-8', label: 'Opus 4.8' },
-  { id: 'claude-opus-4-7', label: 'Opus 4.7' },
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
-  { id: 'claude-haiku-4-5', label: 'Haiku 4.5' },
-];
-
 /** #31 — map a usage model id (e.g. `claude-opus-4-8`) to its human label
  *  ("Opus 4.8") for the per-turn usage badge; falls back to the raw id for a
  *  model not in the picker (older transcript / server-chosen model). */
@@ -115,7 +107,7 @@ export function summariseChatTurn(turn: ChatTurn): TurnSummary {
 }
 
 function modelLabel(id: string): string {
-  return MODELS.find((m) => m.id === id)?.label ?? id;
+  return CHAT_MODELS.find((m) => m.id === id)?.label ?? id;
 }
 
 // ─── egress: resolve a profile's bound proxy → server proxy_id ─────
@@ -304,6 +296,8 @@ export function AgentChatView({
    */
   const [liveSession, setLiveSession] = useState<AgentSession | null>(null);
   const [profiles, setProfiles] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
+  // null = unknown; see the effect that reads it.
+  const [hasOwnKey, setHasOwnKey] = useState<boolean | null>(null);
   const [draft, setDraft] = useState('');
   // (l) #8 — the customer pressed Enter while a reopened chat was still
   // reattaching: the send is held, and the caption says so until it settles.
@@ -540,6 +534,11 @@ export function AgentChatView({
     chat.reset();
     setActiveChatId(crypto.randomUUID());
     setProfileId(initialProfileId ?? '');
+    // A new chat never starts on a model this account cannot run. Reopening an
+    // Opus chat puts Opus in the picker (it has to show what that chat ran on),
+    // and a New chat from there would otherwise sit on a disabled option and
+    // send straight into the own-key refusal. Only a KNOWN "no key" moves it.
+    if (hasOwnKey === false && modelNeedsOwnKey(model)) setModel(DEFAULT_AGENT_MODEL);
   }
   function handleSelectChat(c: StoredChat): void {
     if (chat.sending || c.id === activeChatId) return;
@@ -666,6 +665,37 @@ export function AgentChatView({
       }
       if (!cancelled) setProfiles(acc);
     })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  // Whether the account has its own Anthropic key, read once per mount of this
+  // view (it re-mounts on every visit, so coming back from Settings refreshes
+  // it) — never polled. Only a KNOWN `false` marks the own-key-only models in
+  // the picker: unknown (no answer yet, an older client with no account API, a
+  // member who may not read it, any failure) leaves every model selectable, and
+  // the turn's own refusal explains itself if the key is missing after all. A
+  // stored key can also have expired while still reading `has_key: true`, which
+  // is the same refusal path.
+  useEffect(() => {
+    setHasOwnKey(null);
+    if (client === null || typeof client.account?.getByokAnthropicKey !== 'function') {
+      return undefined;
+    }
+    let cancelled = false;
+    let pending: Promise<{ has_key: boolean }>;
+    try {
+      pending = client.account.getByokAnthropicKey();
+    } catch {
+      return undefined;
+    }
+    void pending.then(
+      (k) => {
+        if (!cancelled) setHasOwnKey(typeof k?.has_key === 'boolean' ? k.has_key : null);
+      },
+      () => undefined,
+    );
     return () => {
       cancelled = true;
     };
@@ -855,14 +885,23 @@ export function AgentChatView({
               title={
                 started || chat.sending
                   ? 'Model is locked for the current chat — start a new chat to change it'
-                  : 'Model'
+                  : hasOwnKey === false
+                    ? 'Some models run only on your own Anthropic key. Add one in Settings → AI & billing.'
+                    : 'Model'
               }
             >
-              {MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.label}
-                </option>
-              ))}
+              {/* An own-key-only model stays IN the list when the account has no
+                  key, only disabled: a reopened chat stored on it must still match
+                  an option, or the select would silently show a different model
+                  from the one the chat ran on. */}
+              {CHAT_MODELS.map((m) => {
+                const needsKey = hasOwnKey === false && modelNeedsOwnKey(m.id);
+                return (
+                  <option key={m.id} value={m.id} disabled={needsKey}>
+                    {needsKey ? `${m.label} ${NEEDS_OWN_KEY_SUFFIX}` : m.label}
+                  </option>
+                );
+              })}
             </select>
             <button
               type="button"

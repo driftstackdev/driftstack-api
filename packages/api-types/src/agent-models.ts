@@ -253,8 +253,9 @@ export const CLAUDE_MODEL_REQUEST_CAPABILITIES: Record<AgentModel, AgentModelReq
  * ⛔ A TOTAL MAP OVER THE ENUM, ON PURPOSE. Adding a model to
  * {@link AgentModelSchema} without deciding its key policy is a type error here,
  * rather than a model that silently inherits `any_key` and runs on the
- * deployment's key. The desktop and dashboard pickers read this too, so they can
- * hide or mark a model the account cannot run without a key of its own.
+ * deployment's key. The desktop app's model picker reads this too, and marks
+ * such a model "(needs your own key)" when the account is known to have no key.
+ * The customer dashboard has no model picker.
  */
 export type AgentModelKeyPolicy = 'any_key' | 'own_key_only';
 

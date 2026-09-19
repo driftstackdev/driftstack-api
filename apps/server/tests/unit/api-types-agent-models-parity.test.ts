@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { AgentModelSchema, CLAUDE_MODELS, DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
+import { codeOnly } from './_helpers/code-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -60,16 +61,18 @@ describe('agent-models registry parity', () => {
   });
 
   it('⛔ V-2168: the GUI picker lists EXACTLY the registry models — owner "no Opus 5" was GUI/registry drift', () => {
-    // The GUI keeps a hand-written MODELS array + a ChatModel union (it cannot
-    // import the api-types RUNTIME registry — it depends on the SDK, which
-    // exports the ids as a TYPE only). So a model added to the registry does not
-    // reach the picker until someone edits the GUI too; the owner reported
-    // exactly that gap. Pin both GUI copies to the registry as source of truth.
-    const view = readFileSync(
-      resolve(REPO_ROOT, 'apps/gui-client/src/views/AgentChatView.tsx'),
-      'utf8',
+    // The GUI keeps a hand-written model list + a ChatModel union (its labels are
+    // the short picker names, not the registry's). So a model added to the
+    // registry does not reach the picker until someone edits the GUI too; the
+    // owner reported exactly that gap. Pin both GUI copies to the registry as
+    // source of truth. The list lives in `chat-models.ts` — shared by the picker
+    // and the chat's refusal sentence — not in the view.
+    // Comments stripped: a commented-out option is not in the picker, and must
+    // not count as listed.
+    const list = codeOnly(
+      readFileSync(resolve(REPO_ROOT, 'apps/gui-client/src/lib/chat-models.ts'), 'utf8'),
     );
-    const block = /const MODELS:[^[]*\[([\s\S]*?)\];/.exec(view)?.[1] ?? '';
+    const block = /const CHAT_MODELS:[^[]*\[([\s\S]*?)\];/.exec(list)?.[1] ?? '';
     const pickerIds = [...block.matchAll(/id:\s*'([a-z0-9-]+)'/g)].map((m) => m[1]);
     // EXACTLY the registry, compared as a SET: the picker's order is a product
     // choice, the enum's order is not, and pinning one to the other made a
