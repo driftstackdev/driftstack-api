@@ -6,11 +6,12 @@ non-obvious.
 ## TL;DR — cutting a release
 
 ```sh
-# 1. Bump the version. FOUR files carry it and they are guarded to agree:
+# 1. Bump the version. FIVE files carry it and they are guarded to agree:
 #      apps/gui-client/package.json               "version"
 #      apps/gui-client/src-tauri/tauri.conf.json  "version"  <- names the assets + latest.json
 #      apps/gui-client/src-tauri/Cargo.toml       [package] version
 #      apps/gui-client/src-tauri/Cargo.lock       the driftstack-gui [[package]] entry
+#      package-lock.json (repo root)              the apps/gui-client workspace entry
 #    Use the script. It edits each one by FIELD and validates the lock; see
 #    "Why the bump is a script" below for the release this cost.
 node scripts/bump-gui-version.mjs 0.1.1

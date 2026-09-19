@@ -63,10 +63,13 @@ describe('the release runbook pushes the tag before creating the release', () =>
     expect(HOOK).toMatch(/gh release create/);
   });
 
-  it('CRITICAL the bump step names the SCRIPT and all FOUR version carriers, including Cargo.lock. The runbook used to say "ALL THREE places" and omit the lock, which is how 0.1.45 shipped a release whose builds all failed at dependency resolution — and an asset-less release becomes the "latest" one the desktop updater reads its manifest from, so every installed client 404s until it is deleted. A runbook that lists three files trains the next person to do the blanket replace again', () => {
+  it('CRITICAL the bump step names the SCRIPT and every version carrier, including Cargo.lock and the root package-lock.json. The runbook used to say "ALL THREE places" and omit the lock, which is how 0.1.45 shipped a release whose builds all failed at dependency resolution — and an asset-less release becomes the "latest" one the desktop updater reads its manifest from, so every installed client 404s until it is deleted. A runbook that lists three files trains the next person to do the blanket replace again', () => {
     expect(RUNBOOK).toContain('node scripts/bump-gui-version.mjs');
     expect(RUNBOOK).toContain('apps/gui-client/src-tauri/Cargo.lock');
-    expect(RUNBOOK).toMatch(/FOUR files carry it/);
+    // FIVE since 2026-09-19: the root package-lock.json's workspace entry joined, after
+    // the 0.1.66 bump left it behind.
+    expect(RUNBOOK).toMatch(/FIVE files carry it/);
+    expect(RUNBOOK).toContain('package-lock.json (repo root)');
     // The instruction it replaced must not come back.
     expect(RUNBOOK).not.toMatch(/ALL THREE places/);
     // Recovery order: the release comes down FIRST, because that is what restores a

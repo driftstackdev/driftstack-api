@@ -70,7 +70,16 @@ function declaredVersions(): { source: string; version: string | undefined }[] {
   const lock = /^\[\[package\]\]\nname = "driftstack-gui"\nversion = "([^"\n]+)"$/m.exec(
     read(resolve(GUI, 'src-tauri/Cargo.lock')),
   )?.[1];
+  // The root lockfile records each workspace's version; `npm install` rewrites a stale
+  // one silently, so the next unrelated install would carry the bump. Added 2026-09-19,
+  // when the 0.1.66 bump left it behind and it was caught by hand.
+  const rootLock = JSON.parse(read(resolve(REPO, 'package-lock.json'))) as {
+    packages?: Record<string, { name?: string; version?: string }>;
+  };
+  const lockEntry = rootLock.packages?.['apps/gui-client'];
+  const npmLock = lockEntry?.name === '@driftstack/gui-client' ? lockEntry.version : undefined;
   return [
+    { source: 'package-lock.json (apps/gui-client)', version: npmLock },
     { source: 'apps/gui-client/package.json', version: pkg.version },
     { source: 'apps/gui-client/src-tauri/tauri.conf.json', version: conf.version },
     { source: 'apps/gui-client/src-tauri/Cargo.toml', version: cargo },
@@ -79,9 +88,9 @@ function declaredVersions(): { source: string; version: string | undefined }[] {
 }
 
 describe('three copies of the app version must agree', () => {
-  it('CRITICAL all four declarations were actually FOUND. Every assertion below compares them, so a parse that silently returned undefined for two of the four would agree trivially and prove nothing — which is exactly how a fact stated in three places rots.', () => {
+  it('CRITICAL all five declarations were actually FOUND. Every assertion below compares them, so a parse that silently returned undefined for two of the four would agree trivially and prove nothing — which is exactly how a fact stated in three places rots.', () => {
     const found = declaredVersions();
-    expect(found.length).toBe(4);
+    expect(found.length).toBe(5);
     const missing = found.filter((d) => d.version === undefined).map((d) => d.source);
     expect(missing, `version could not be read from:\n  ${missing.join('\n  ')}`).toEqual([]);
     for (const d of found) {
@@ -91,7 +100,7 @@ describe('three copies of the app version must agree', () => {
     }
   });
 
-  it('CRITICAL the four agree. tauri.conf.json is the one that names the installer and fills latest.json, so a drift between it and the others means the artifact a customer downloads is labelled differently from the app that built it.', () => {
+  it('CRITICAL the five agree. tauri.conf.json is the one that names the installer and fills latest.json, so a drift between it and the others means the artifact a customer downloads is labelled differently from the app that built it.', () => {
     const found = declaredVersions();
     const distinct = [...new Set(found.map((d) => d.version))];
     expect(

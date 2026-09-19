@@ -10,8 +10,10 @@
 // fetches its manifest from. A scoped edit cannot do either.
 //
 // Usage: node scripts/bump-gui-version.mjs <x.y.z> [--root <repo>] [--no-validate]
-//   Writes package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml and
-//   src-tauri/Cargo.lock, then validates the lock with
+//   Writes package.json, src-tauri/tauri.conf.json, src-tauri/Cargo.toml,
+//   src-tauri/Cargo.lock and the app's workspace entry in the ROOT package-lock.json
+//   (the 0.1.66 bump missed that one and it was fixed by hand), then validates the
+//   lock with
 //   `cargo update -w --locked --offline` (falling back to the network when the
 //   offline index cannot answer). Exit 1 on any refusal; nothing is written unless
 //   every edit resolves.
@@ -29,6 +31,11 @@ export const GUI_VERSION_FILES = Object.freeze([
   'src-tauri/Cargo.toml',
   'src-tauri/Cargo.lock',
 ]);
+
+/** Files (relative to the REPO ROOT) that also carry it: npm records each workspace's
+ *  version in the root lockfile, and `npm install` rewrites it silently if it drifts,
+ *  so a bump that skips it leaves the next unrelated install to change it. */
+export const ROOT_VERSION_FILES = Object.freeze(['package-lock.json']);
 
 function replaceExactlyOnce(text, re, replacement, what) {
   const matches = text.match(
@@ -99,10 +106,39 @@ export function bumpCargoLock(text, version, crate = 'driftstack-gui') {
   return `${text.slice(0, at)}version = "${version}"\n${text.slice(at + m[0].length)}`;
 }
 
-/** Every edit, computed before anything is written — one refusal writes nothing. */
+/** The app's workspace entry in the root package-lock.json — addressed by its path
+ *  AND its package name, never the first `"version"` in a file that holds hundreds. */
+export function bumpPackageLockWorkspace(
+  text,
+  version,
+  workspace = 'apps/gui-client',
+  name = '@driftstack/gui-client',
+) {
+  const header = `    "${workspace}": {\n      "name": "${name}",\n      "version": "`;
+  const count = text.split(header).length - 1;
+  if (count !== 1) {
+    throw new Error(
+      `package-lock.json "${workspace}": expected exactly one match, found ${String(count)} — refusing to edit`,
+    );
+  }
+  const at = text.indexOf(header) + header.length;
+  const end = text.indexOf('"', at);
+  if (!SEMVER_RE.test(text.slice(at, end))) {
+    throw new Error(
+      `package-lock.json "${workspace}": no version after the name — refusing to edit`,
+    );
+  }
+  return `${text.slice(0, at)}${version}${text.slice(end)}`;
+}
+
+/** Every edit, computed before anything is written — one refusal writes nothing. The
+ *  root lockfile is bumped when it is passed (the CLI always passes it). */
 export function planBump(files, version) {
   if (!SEMVER_RE.test(version)) throw new Error(`not a version: ${JSON.stringify(version)}`);
   return {
+    ...(files['package-lock.json'] !== undefined
+      ? { 'package-lock.json': bumpPackageLockWorkspace(files['package-lock.json'], version) }
+      : {}),
     'package.json': bumpJsonVersion(files['package.json'], version, 'package.json'),
     'src-tauri/tauri.conf.json': bumpJsonVersion(
       files['src-tauri/tauri.conf.json'],
@@ -144,9 +180,12 @@ export function main(argv) {
     return 2;
   }
   const gui = resolve(root, 'apps', 'gui-client');
-  const files = Object.fromEntries(
-    GUI_VERSION_FILES.map((f) => [f, readFileSync(resolve(gui, f), 'utf8')]),
-  );
+  const files = {
+    ...Object.fromEntries(GUI_VERSION_FILES.map((f) => [f, readFileSync(resolve(gui, f), 'utf8')])),
+    ...Object.fromEntries(
+      ROOT_VERSION_FILES.map((f) => [f, readFileSync(resolve(root, f), 'utf8')]),
+    ),
+  };
   let plan;
   try {
     plan = planBump(files, version);
@@ -155,7 +194,10 @@ export function main(argv) {
     return 1;
   }
   for (const f of GUI_VERSION_FILES) writeFileSync(resolve(gui, f), plan[f]);
-  process.stdout.write(`→ gui-client version → ${version} (${GUI_VERSION_FILES.join(', ')})\n`);
+  for (const f of ROOT_VERSION_FILES) writeFileSync(resolve(root, f), plan[f]);
+  process.stdout.write(
+    `→ gui-client version → ${version} (${[...GUI_VERSION_FILES, ...ROOT_VERSION_FILES].join(', ')})\n`,
+  );
   if (noValidate) return 0;
   const v = validateCargoLock(resolve(gui, 'src-tauri'));
   if (!v.ok) {

@@ -66,6 +66,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
 `;
 
+// The root lockfile's workspace entry, beside a dependency that happens to sit at the
+// outgoing number — the same trap as the Cargo.lock one, in npm's file.
+const PACKAGE_LOCK = `{
+  "name": "driftstack-api",
+  "lockfileVersion": 3,
+  "packages": {
+    "apps/gui-client": {
+      "name": "@driftstack/gui-client",
+      "version": "0.1.44",
+      "dependencies": {}
+    },
+    "node_modules/some-dep": {
+      "version": "0.1.44"
+    }
+  }
+}
+`;
+
 let root: string | null = null;
 
 function fixture(overrides: Partial<Record<string, string>> = {}): string {
@@ -79,7 +97,9 @@ function fixture(overrides: Partial<Record<string, string>> = {}): string {
     'src-tauri/Cargo.lock': CARGO_LOCK,
     ...overrides,
   };
-  for (const [rel, text] of Object.entries(files)) writeFileSync(join(gui, rel), text);
+  const { 'package-lock.json': rootLock, ...guiFiles } = files;
+  for (const [rel, text] of Object.entries(guiFiles)) writeFileSync(join(gui, rel), text ?? '');
+  writeFileSync(join(root, 'package-lock.json'), rootLock ?? PACKAGE_LOCK);
   return root;
 }
 
@@ -99,6 +119,11 @@ function run(args: string[]): { status: number; stdout: string; stderr: string }
 function read(rel: string): string {
   if (root === null) throw new Error('no fixture');
   return readFileSync(join(root, 'apps', 'gui-client', rel), 'utf8');
+}
+
+function readRoot(rel: string): string {
+  if (root === null) throw new Error('no fixture');
+  return readFileSync(join(root, rel), 'utf8');
 }
 
 afterEach(() => {
@@ -125,6 +150,35 @@ describe('scripts/bump-gui-version.mjs — a by-field desktop-client version bum
     expect(lock).toContain('[[package]]\nname = "tracing"\nversion = "0.1.44"\n');
     expect(lock).not.toContain('0.1.36');
     expect(lock.match(/0\.1\.45/g)?.length).toBe(1);
+  });
+
+  it('bumps the app entry in the root package-lock.json too, and only that entry', () => {
+    const r = run(['0.1.45', '--root', fixture(), '--no-validate']);
+    expect(r.status, r.stderr).toBe(0);
+    const lock = readRoot('package-lock.json');
+    expect(lock).toContain(
+      '"apps/gui-client": {\n      "name": "@driftstack/gui-client",\n      "version": "0.1.45",',
+    );
+    // The dependency at the outgoing number is not the app.
+    expect(lock).toContain('"node_modules/some-dep": {\n      "version": "0.1.44"');
+    expect(lock.match(/0\.1\.45/g)?.length).toBe(1);
+  });
+
+  it('refuses a root lockfile without the app entry and writes none of the five', () => {
+    const lockWithoutApp = PACKAGE_LOCK.replace('"apps/gui-client"', '"apps/other"');
+    const r = run([
+      '0.1.45',
+      '--root',
+      fixture({ 'package-lock.json': lockWithoutApp }),
+      '--no-validate',
+    ]);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(
+      /package-lock\.json "apps\/gui-client": expected exactly one match, found 0/,
+    );
+    expect(readRoot('package-lock.json')).toBe(lockWithoutApp);
+    expect(read('package.json')).toBe(PACKAGE_JSON);
+    expect(read('src-tauri/Cargo.lock')).toBe(CARGO_LOCK);
   });
 
   it('refuses a non-version argument and writes nothing', () => {
