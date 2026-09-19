@@ -326,7 +326,8 @@ string-matching the prose:
 `diagnosis.category` is one of `element_not_found`, `page_load_failed`,
 `condition_not_met`, `capture_failed`, `scroll_failed`, `session_error`,
 `invalid_request`, `result_too_large`, `element_covered`, `target_unverified`,
-`unknown`.
+`unknown`. New categories are added over time, so treat a value you do not
+recognise as `unknown` and go by `retryable`.
 `element_covered` means something on the page — a cookie banner, a dialog, a
 sticky bar — was on top of the control, so nothing was tapped or typed; it is not
 retryable as the same step, but the agent may look at the page again and close

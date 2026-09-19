@@ -349,6 +349,10 @@ export interface AgentUsage {
  *  action's outcome is unknown and current state must be inspected. Optional:
  *  older servers omit it. */
 export interface AgentFailureDiagnosis {
+  /** What kind of failure this was. The values listed are the ones this SDK
+   *  version knows; new categories are added over time, so the type also admits
+   *  any other string. Treat a value you do not recognise as `'unknown'`, and
+   *  give an exhaustive `switch` a `default` branch. */
   category:
     | 'element_not_found'
     | 'page_load_failed'
@@ -360,7 +364,10 @@ export interface AgentFailureDiagnosis {
     | 'result_too_large'
     | 'element_covered'
     | 'target_unverified'
-    | 'unknown';
+    | 'unknown'
+    // `string & {}` rather than `string`: a bare `string` would absorb the
+    // literals above and editors would stop suggesting them.
+    | (string & {});
   retryable: boolean;
 }
 

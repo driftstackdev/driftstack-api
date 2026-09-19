@@ -20,8 +20,14 @@ import type {
   AgentIntent,
   FailureDiagnosis,
   FailureDiagnosisCategory,
-  IntentResult,
 } from '@driftstack/api-types';
+// The executor's IntentResult, NOT the api-types one. The published api-types
+// IntentResult admits ANY category string, because a reader must accept one
+// newer than itself. What this server BUILDS is only ever a listed category, so
+// the builders below are typed against the closed FailureDiagnosis: a category
+// missing from FailureDiagnosisCategorySchema is a compile error here, and every
+// result still fits the published type (closed is a subset of open).
+import type { IntentResult } from './agent-executor.js';
 import type { ParsedIntentResult } from './harness-control-codec.js';
 import {
   HARNESS_TAP_REFUSAL_REASONS,

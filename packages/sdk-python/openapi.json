@@ -1013,20 +1013,28 @@
                 "type": "object",
                 "properties": {
                   "category": {
-                    "type": "string",
-                    "enum": [
-                      "element_not_found",
-                      "page_load_failed",
-                      "condition_not_met",
-                      "capture_failed",
-                      "scroll_failed",
-                      "session_error",
-                      "invalid_request",
-                      "result_too_large",
-                      "element_covered",
-                      "target_unverified",
-                      "unknown"
-                    ]
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "element_not_found",
+                          "page_load_failed",
+                          "condition_not_met",
+                          "capture_failed",
+                          "scroll_failed",
+                          "session_error",
+                          "invalid_request",
+                          "result_too_large",
+                          "element_covered",
+                          "target_unverified",
+                          "unknown"
+                        ]
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ],
+                    "description": "What kind of failure this was. New categories are added over time, so treat a value you do not recognise as \"unknown\"."
                   },
                   "retryable": {
                     "type": "boolean",
@@ -3204,8 +3212,8 @@
           "monthly_cap_usd_cents": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 10000,
-            "description": "Monthly limit in US cents, at most 10000 ($100). A limit already above that, set before the maximum was lowered, is kept and may be sent back unchanged."
+            "maximum": 1000000,
+            "description": "Monthly limit in US cents. A new limit is at most 10000 ($100). A limit already above that, set before the maximum was lowered, is kept: it may be sent back unchanged or lowered to any value, but never raised. A value the account may not set is refused with 400."
           }
         },
         "description": "At least one of consent / monthly_cap_usd_cents must be present.",
@@ -4689,20 +4697,28 @@
                           "type": "object",
                           "properties": {
                             "category": {
-                              "type": "string",
-                              "enum": [
-                                "element_not_found",
-                                "page_load_failed",
-                                "condition_not_met",
-                                "capture_failed",
-                                "scroll_failed",
-                                "session_error",
-                                "invalid_request",
-                                "result_too_large",
-                                "element_covered",
-                                "target_unverified",
-                                "unknown"
-                              ]
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "element_not_found",
+                                    "page_load_failed",
+                                    "condition_not_met",
+                                    "capture_failed",
+                                    "scroll_failed",
+                                    "session_error",
+                                    "invalid_request",
+                                    "result_too_large",
+                                    "element_covered",
+                                    "target_unverified",
+                                    "unknown"
+                                  ]
+                                },
+                                {
+                                  "type": "string"
+                                }
+                              ],
+                              "description": "What kind of failure this was. New categories are added over time, so treat a value you do not recognise as \"unknown\"."
                             },
                             "retryable": {
                               "type": "boolean",
@@ -6031,20 +6047,28 @@
                           "type": "object",
                           "properties": {
                             "category": {
-                              "type": "string",
-                              "enum": [
-                                "element_not_found",
-                                "page_load_failed",
-                                "condition_not_met",
-                                "capture_failed",
-                                "scroll_failed",
-                                "session_error",
-                                "invalid_request",
-                                "result_too_large",
-                                "element_covered",
-                                "target_unverified",
-                                "unknown"
-                              ]
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "element_not_found",
+                                    "page_load_failed",
+                                    "condition_not_met",
+                                    "capture_failed",
+                                    "scroll_failed",
+                                    "session_error",
+                                    "invalid_request",
+                                    "result_too_large",
+                                    "element_covered",
+                                    "target_unverified",
+                                    "unknown"
+                                  ]
+                                },
+                                {
+                                  "type": "string"
+                                }
+                              ],
+                              "description": "What kind of failure this was. New categories are added over time, so treat a value you do not recognise as \"unknown\"."
                             },
                             "retryable": {
                               "type": "boolean",
@@ -6781,20 +6805,28 @@
                       "type": "object",
                       "properties": {
                         "category": {
-                          "type": "string",
-                          "enum": [
-                            "element_not_found",
-                            "page_load_failed",
-                            "condition_not_met",
-                            "capture_failed",
-                            "scroll_failed",
-                            "session_error",
-                            "invalid_request",
-                            "result_too_large",
-                            "element_covered",
-                            "target_unverified",
-                            "unknown"
-                          ]
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "element_not_found",
+                                "page_load_failed",
+                                "condition_not_met",
+                                "capture_failed",
+                                "scroll_failed",
+                                "session_error",
+                                "invalid_request",
+                                "result_too_large",
+                                "element_covered",
+                                "target_unverified",
+                                "unknown"
+                              ]
+                            },
+                            {
+                              "type": "string"
+                            }
+                          ],
+                          "description": "What kind of failure this was. New categories are added over time, so treat a value you do not recognise as \"unknown\"."
                         },
                         "retryable": {
                           "type": "boolean",

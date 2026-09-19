@@ -11,10 +11,22 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 - **`target_unverified` step diagnosis** — a failed agent step's
   `Diagnosis.category` can now be `"target_unverified"`: the tap was not
   made because its target could not be checked first. Not retryable as
-  the same step; the agent re-plans. ⚠️ `Diagnosis.category` is a closed
-  `Literal`, so an SDK installed **before** this release raises a
-  pydantic `ValidationError` when it parses a response carrying the new
-  value — upgrade before relying on step diagnoses.
+  the same step; the agent re-plans. ⚠️ In an SDK installed **before**
+  this release `Diagnosis.category` is a closed `Literal`, so that SDK
+  raises a pydantic `ValidationError` when it parses a response carrying
+  the new value — upgrade before relying on step diagnoses. From this
+  release on, a newer category no longer needs an upgrade (see Fixed).
+
+### Fixed
+
+- **A failure category newer than the SDK no longer breaks parsing** —
+  `Diagnosis.category` is now `Literal[...] | str`. The known categories
+  are still listed for type checkers and editors, and a category the
+  server adds after this SDK was released is kept as a plain string
+  instead of raising a pydantic `ValidationError` on the whole response
+  (`AgentMessageResponse`, `AgentMessageConflictProblem`, `IntentResult`).
+  Treat a value you do not recognise as `"unknown"`. Code that compares
+  `category` against known strings needs no change.
 
 ### Added
 

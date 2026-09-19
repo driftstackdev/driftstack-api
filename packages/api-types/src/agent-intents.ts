@@ -79,8 +79,21 @@ export type ConsequentialActionCategory = z.infer<typeof ConsequentialActionCate
 // the human-facing copy; `diagnosis` is the structured companion an automation
 // (or the GUI) can branch on without string-matching the prose. Derived
 // DETERMINISTICALLY control-plane-side from the harness error code + intent
-// kind — never from parsing the harness message text. Optional + additive so
-// older SDK consumers and stored rows are unaffected.
+// kind — never from parsing the harness message text. The `diagnosis` FIELD is
+// optional, so a result without one (an older server, a stored row) still
+// parses.
+//
+// The CATEGORY is a different matter, and this comment used to claim otherwise.
+// The enum below is the set THIS server emits — closed, so the server's own code
+// is type-checked against it. It is NOT the set a reader may assume: categories
+// are added over time (element_covered, target_unverified), and while the
+// published contract was this closed enum, every SDK generated from it rejected
+// a category newer than itself. The Python SDK's generated `Diagnosis.category`
+// was a closed Literal, so a new category raised a pydantic ValidationError on
+// the WHOLE turn response — for every customer who had not upgraded. So the
+// published schema (`PublishedFailureDiagnosisSchema`, which `IntentResultSchema`
+// and the OpenAPI spec use) says "one of these, or any other string": generated
+// SDKs keep the known values for autocomplete and accept the rest.
 export const FailureDiagnosisCategorySchema = z.enum([
   /** interact failed — target element missing/hidden/not yet loaded. */
   'element_not_found',
@@ -125,6 +138,25 @@ export const FailureDiagnosisSchema = z.object({
 });
 export type FailureDiagnosis = z.infer<typeof FailureDiagnosisSchema>;
 
+/** A category as a reader receives it: a known one, or one newer than the reader. */
+export type PublishedFailureDiagnosisCategory = FailureDiagnosisCategory | (string & {});
+
+/** Open on purpose — see the comment above FailureDiagnosisCategorySchema. The
+ *  `z.string()` arm is what lets a reader built before a category existed still
+ *  parse a response carrying it; the enum arm keeps the known values in the
+ *  published spec, so generated SDKs still list them. */
+export const PublishedFailureDiagnosisCategorySchema: z.ZodType<PublishedFailureDiagnosisCategory> =
+  z
+    .union([FailureDiagnosisCategorySchema, z.string()])
+    .describe(
+      'What kind of failure this was. New categories are added over time, so treat a value you do not recognise as "unknown".',
+    );
+
+export const PublishedFailureDiagnosisSchema = FailureDiagnosisSchema.extend({
+  category: PublishedFailureDiagnosisCategorySchema,
+});
+export type PublishedFailureDiagnosis = z.infer<typeof PublishedFailureDiagnosisSchema>;
+
 export const IntentResultSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('success'),
@@ -136,7 +168,7 @@ export const IntentResultSchema = z.discriminatedUnion('kind', [
     kind: z.literal('failure'),
     intent: AgentIntentSchema,
     reason: z.string(),
-    diagnosis: FailureDiagnosisSchema.optional(),
+    diagnosis: PublishedFailureDiagnosisSchema.optional(),
   }),
   // W443/W445 — the executor halted before dispatching a consequential action
   // (purchase / payment / account-deletion) that needs human confirmation.

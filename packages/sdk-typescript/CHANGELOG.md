@@ -11,7 +11,18 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 - **`target_unverified` step diagnosis** — `AgentFailureDiagnosis.category`
   gains `'target_unverified'`: the tap was not made because its target
   could not be checked first. Not retryable as the same step; the agent
-  re-plans. An exhaustive `switch` over the category needs the new case.
+  re-plans. A `switch` over the category should handle the new case (and,
+  see Changed, now needs a `default` branch).
+
+### Changed
+
+- **`AgentFailureDiagnosis.category` admits categories newer than the
+  SDK** — the type is now the known categories `| (string & {})`. Editors
+  still suggest the known values, and a category the server adds after
+  this SDK was released type-checks instead of needing a cast. Treat a
+  value you do not recognise as `'unknown'`. ⚠️ A `switch` that relied on
+  the closed union for exhaustiveness (`const _: never = category`) now
+  needs a `default` branch.
 
 ### Fixed
 
