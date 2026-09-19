@@ -569,6 +569,34 @@ is outside the viewport cannot be checked by the look, because the click scrolls
 randomised band the control plane cannot reproduce; `require_unoccluded` checks it where
 it lands.
 
+**What `perceive { selector }` is, from the harness source (A3, 2026-09-19; keep these as
+the control plane's premises, not the doc's):**
+
+- **Resolution is first match in DOCUMENT ORDER, visible or not.** `dsResolve` is CSS
+  through the shadow-piercing `deepQuerySelector` (open shadow roots) or XPath's first
+  ordered node; there is no visibility filter, so a zero-size or `display:none` element
+  resolves. It never crosses an iframe boundary: the current browsing context only. A
+  resolved element is therefore NOT "the one a user could see"; only the occlusion
+  verdict says that, which is why the gate keys on `occluded`, never on resolution.
+- **The verdict is shared with click's `require_unoccluded`, the tap point is not.** One
+  function (`dsTapVerdict`) decides both, and the look's point is the rect centre rounded
+  as click rounds it — but WITHOUT click's per-tap jitter. A partly covered control can
+  read clear at the centre and still take a jittered tap on the cover. That residual is
+  why the tap that spends an approval, and any tap the look could not see, carries
+  `require_unoccluded` where it lands, and why a green look never stands in for a safe
+  tap on its own (`unoccludedCheckFor`).
+- **`resolved_by` is `'native'` or `'script'`**, and the two paths can disagree about
+  which element was got. The control plane reads it only as the capability tell today;
+  keying the repeat guard on it as well is open.
+- **`label` is accessible-name-LIKE, not the accessible name.** Selector path order:
+  `aria-labelledby` → `aria-label` → (only with neither ARIA attribute) the native
+  `<label for>` / wrapping `<label>` → `alt` → `placeholder` → button-input `value` →
+  `textContent` → `title`; sanitized and capped at 200 chars. Two deliberate deviations:
+  it is privacy-constrained (a data input's `value`, a textarea's or contenteditable's
+  text, and a select's options are never used — user data), and the native-label
+  resolution exists only on the selector path. Feed it to the gate as the harness's
+  canonical label; never assert it equals an accname implementation's answer.
+
 ### 2026-09-18 — an unknown RESULT key is stripped and counted, not fatal
 
 **Why.** On 2026-09-18 the harness shipped two result keys it considered additive
