@@ -504,4 +504,13 @@ export const METRIC_NAMES = {
   // `failed_otherwise` and `no_answer` is a tap the device refused before
   // touching the page.
   agentTapUnoccludedCheckTotal: 'driftstack_agent_tap_unoccluded_check_total',
+  // Keys on an ACCEPTED harness intent result that the control plane does not
+  // model, by `intent` (HARNESS_INTENT_NAMES, taken from the pending dispatch,
+  // never from the frame). Incremented by the number of distinct key paths
+  // stripped from one result. The keys were removed before the executor saw the
+  // result, and the result was accepted — before 2026-09-18 every one of these
+  // was a failed step. Non-zero means the device ships a field this build
+  // ignores; the `intent_result_unknown_keys` log line names it. Emitted from
+  // services/harness-result-unknown-keys.ts. Key names are NEVER a label.
+  harnessIntentResultUnknownKeyTotal: 'driftstack_harness_intent_result_unknown_key_total',
 } as const;

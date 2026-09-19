@@ -103,6 +103,7 @@ import {
   frameTypeLabel,
   shouldLogRejection,
 } from './harness-frame-rejection.js';
+import type { UnknownResultKeysObserver } from './harness-result-unknown-keys.js';
 import {
   FLEET_INBOUND_LARGE_FRAME_THRESHOLD_BYTES,
   FleetInboundFrameBudget,
@@ -263,6 +264,10 @@ export class FleetControlConnection {
     onNetworkRequests?: (frame: NetworkRequestsFrame, reportingNodeId: string) => void,
     // (c) — appended for positional back-compat.
     onSessionProvisioning?: (frame: SessionStatus, reportingNodeId: string) => void,
+    // Keys stripped from an accepted intent result (harness-result-unknown-keys.ts)
+    // → counted + logged. Appended for positional back-compat; absent, the keys
+    // are still stripped, only the count and the log line are lost.
+    onUnknownResultKeys?: UnknownResultKeysObserver,
   ) {
     this.send = send;
     this.terminate = terminate;
@@ -280,7 +285,7 @@ export class FleetControlConnection {
     const log = logger ?? null;
     this.logger = log;
     const transport: DispatchTransport = { send: (d) => send(JSON.stringify(d)) };
-    this.correlator = new IntentDispatchCorrelator(transport);
+    this.correlator = new IntentDispatchCorrelator(transport, onUnknownResultKeys);
     this.sessionReadinessCorrelator = new SessionReadinessCorrelator();
     const cookiesTransport: CookiesTransport = { send: (r) => send(JSON.stringify(r)) };
     this.cookiesCorrelator = new CookiesRequestCorrelator(cookiesTransport, log);
@@ -1193,6 +1198,10 @@ export class FleetControlRegistry {
       frame: SessionStatus,
       reportingNodeId: string,
     ) => void,
+    // Appended for positional back-compat: ONE process-wide observer for keys
+    // stripped from accepted intent results, threaded into every connection's
+    // dispatch correlator so the log throttle is shared across reconnects.
+    private readonly onUnknownResultKeys?: UnknownResultKeysObserver,
   ) {}
 
   register(
@@ -1226,6 +1235,7 @@ export class FleetControlRegistry {
         this.inboundFrameBudget.admit(nodeId, byteLength, largeFrameCandidate),
       this.onNetworkRequests,
       this.onSessionProvisioning,
+      this.onUnknownResultKeys,
     );
     this.connections.set(nodeId, conn);
     // Worker-disconnect fix — a (re)connect CANCELS any pending grace timer for

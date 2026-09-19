@@ -41,6 +41,7 @@ import {
   type HarnessIntentName,
 } from '../schemas/harness-control-protocol.js';
 import { parseIntentResult, type ParsedIntentResult } from './harness-control-codec.js';
+import type { UnknownResultKeysObserver } from './harness-result-unknown-keys.js';
 
 /** The (gated) WS socket binding implements this; tests pass a recording stub. */
 export interface DispatchTransport {
@@ -113,7 +114,15 @@ function synthFailure(
 export class IntentDispatchCorrelator {
   private readonly pending = new Map<string, PendingDispatch>();
 
-  constructor(private readonly transport: DispatchTransport) {}
+  constructor(
+    private readonly transport: DispatchTransport,
+    // Told about keys stripped from an accepted result (see
+    // harness-result-unknown-keys.ts). Optional so direct unit constructors keep
+    // their meaning; production threads the process-wide reporter in through
+    // FleetControlRegistry. Absent, the keys are still STRIPPED — only the
+    // count and the log line are lost.
+    private readonly onUnknownResultKeys?: UnknownResultKeysObserver,
+  ) {}
 
   /** Send a dispatch and resolve when its IntentResult arrives, the session
    *  fast-fails, or the per-intent timeout elapses. Never rejects. */
@@ -183,7 +192,7 @@ export class IntentDispatchCorrelator {
 
     let parsed: ParsedIntentResult;
     try {
-      parsed = parseIntentResult(frame, target.intentName);
+      parsed = parseIntentResult(frame, target.intentName, this.onUnknownResultKeys);
     } catch {
       // Once the id/session pair is authenticated by pending state, malformed
       // envelope/base64/JSON or a wrong-intent success is terminal for this

@@ -1100,6 +1100,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'Taps sent with the device check at the tap point.',
     ['verb', 'why', 'result'],
   );
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.harnessIntentResultUnknownKeyTotal,
+    'Keys stripped from accepted harness intent results, by intent.',
+    ['intent'],
+  );
   // Wired unconditionally, as bootstrap does: an in-memory writer, so a test
   // can read back exactly the rows a turn left behind.
   const agentTurnTelemetryRepo = new InMemoryAgentTurnTelemetryRepo();

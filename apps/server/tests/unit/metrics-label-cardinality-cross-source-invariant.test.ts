@@ -206,12 +206,18 @@ describe('metric label cardinality', () => {
     // `verb` arrived when typed steps began carrying the same check on their
     // focus tap (A3 V-3360): click | send_keys, closed as
     // TAP_UNOCCLUDED_CHECK_VERBS. A typed step's text never reaches a label.
+    //
+    // `intent` arrived with driftstack_harness_intent_result_unknown_key_total:
+    // HARNESS_INTENT_NAMES, a closed enum taken from the PENDING DISPATCH, never
+    // from the device's frame. The unknown key NAMES it counts are device text
+    // and deliberately live in the log line, not in a label.
     expect(distinct).toEqual([
       'actor_type',
       'arm',
       'bucket',
       'call_kind',
       'from',
+      'intent',
       'job_type',
       'kind',
       'limiter',

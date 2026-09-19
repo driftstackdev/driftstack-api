@@ -33,6 +33,7 @@ import {
   ListDownloadsRequestSchema,
   FetchDownloadRequestSchema,
   TrimProfileRequestSchema,
+  HARNESS_INTENT_NAMES,
   HARNESS_INTENT_PARAM_SCHEMAS,
   HARNESS_INTENT_RESULT_SCHEMAS,
   type IntentDispatch,
@@ -66,6 +67,7 @@ import {
   type InlineVpnProxyWire,
 } from '@driftstack/api-types';
 import { z } from 'zod';
+import { pruneUnknownKeys, type UnknownResultKeysObserver } from './harness-result-unknown-keys.js';
 
 /** Proxy UDP pre-detection (A3 W2756) — the dispatch WIRE carries a verified
  *  per-proxy `udp_capable` that the harness maps to env DRIFTSTACK_PROXY_UDP_CAPABLE.
@@ -590,10 +592,102 @@ export interface ParsedIntentResult {
 }
 
 /**
+ * Top-level result keys that stay FATAL even though no result schema declares
+ * them. Each is the name of a request parameter that carries customer secrets or
+ * customer text (see the matching *ParamsSchema). Before 2026-09-18 the strict
+ * result schemas refused them, and harness-control-codec.test.ts pinned that as
+ * a tripwire; stripping would turn a device regression that echoes credentials
+ * back over the wire into a rate-limited warn line. Closed and hand-kept: a name
+ * here must never also be a declared result key (pinned by a test), or a valid
+ * result would fail.
+ */
+export const RESULT_ECHO_TRIPWIRE_KEYS: Readonly<
+  Partial<Record<HarnessIntentName, readonly string[]>>
+> = {
+  login: ['username', 'password'],
+  search: ['query'],
+  send_keys: ['text'],
+  fill_form: ['fields'],
+};
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function echoedSecretKeys(intent: HarnessIntentName, decoded: unknown): string[] {
+  const tripwire = RESULT_ECHO_TRIPWIRE_KEYS[intent];
+  if (tripwire === undefined || !isPlainObject(decoded)) return [];
+  return tripwire.filter((key) => Object.prototype.hasOwnProperty.call(decoded, key));
+}
+
+/** Raw top-level keys the strip removed. Nested strips are not a cross-intent
+ *  signal: two intents' results always differ at the top level. */
+function strippedTopLevelKeys(decoded: unknown, pruned: unknown): Set<string> {
+  if (!isPlainObject(decoded) || !isPlainObject(pruned) || decoded === pruned) return new Set();
+  return new Set(
+    Object.keys(decoded).filter((key) => !Object.prototype.hasOwnProperty.call(pruned, key)),
+  );
+}
+
+/**
+ * Another intent whose schema accepts this payload after stripping FEWER
+ * top-level keys (a strict subset of the ones `expected` stripped), or null.
+ * Such a payload is better explained as that intent's result than as ours with
+ * new keys — e.g. back `{url, action:'back'}` for a navigate dispatch — and the
+ * strict schemas refused it before stripping existed. A tie (same stripped set)
+ * is not a better fit, so a genuinely new key that two intents both lack does
+ * not fail. Runs only when top-level keys were stripped, which is rare.
+ */
+function findBetterFittingIntent(
+  expected: HarnessIntentName,
+  decoded: unknown,
+  strippedByExpected: ReadonlySet<string>,
+): HarnessIntentName | null {
+  for (const other of HARNESS_INTENT_NAMES) {
+    if (other === expected) continue;
+    const otherSchema = HARNESS_INTENT_RESULT_SCHEMAS[other];
+    const prunedForOther = pruneUnknownKeys(otherSchema, decoded);
+    if (!otherSchema.safeParse(prunedForOther.value).success) continue;
+    const strippedByOther = strippedTopLevelKeys(decoded, prunedForOther.value);
+    if (
+      strippedByOther.size < strippedByExpected.size &&
+      [...strippedByOther].every((key) => strippedByExpected.has(key))
+    ) {
+      return other;
+    }
+  }
+  return null;
+}
+
+/**
  * Validate + decode an inbound IntentResult frame. The envelope is validated
- * against IntentResultEnvelopeSchema first; a successful `outputData` is then
- * base64-decoded and validated against the exact originating intent's result
- * schema. A cross-intent or drifted success must never enter the agent loop.
+ * against IntentResultEnvelopeSchema first (STRICT — an unknown envelope key is
+ * still refused; see the contract doc for why the envelope differs). A
+ * successful `outputData` is then base64-decoded and validated against the exact
+ * originating intent's result schema. A cross-intent or drifted success must
+ * never enter the agent loop.
+ *
+ * Keys the intent's result schema does not declare are STRIPPED before that
+ * validation and reported to `onUnknownKeys` (see
+ * services/harness-result-unknown-keys.ts): an additive device field must not
+ * fail a step, and nothing downstream may act on a field it does not know.
+ * Every declared key is validated exactly as before. Reported only for a result
+ * that is then ACCEPTED — a rejected one (e.g. another intent's payload) would
+ * name every key of the wrong shape and send an operator after a device that
+ * sent nothing new.
+ *
+ * Stripping must not turn another intent's payload into this one's, so two
+ * guards run around it (both only ever REJECT; neither can accept anything the
+ * strip alone would refuse):
+ *  · RESULT_ECHO_TRIPWIRE_KEYS — a top-level key named after a secret-bearing
+ *    request parameter (login `password`, search `query`, …) stays fatal: the
+ *    device echoing customer secrets or query text back is a regression that
+ *    must fail loudly, not read as a harmless new field on a dashboard metric.
+ *  · findBetterFittingIntent — when top-level keys were stripped, a payload that
+ *    some OTHER intent explains with strictly fewer stripped keys is a
+ *    cross-intent (misrouted) result, and is refused as the strict schema used
+ *    to. Without it, back/forward `{url, action}` sent for a navigate dispatch
+ *    lost `action` and was accepted as navigate `{url}`.
  *
  * @throws ZodError if the frame is not a valid IntentResultEnvelope.
  * @throws HarnessWireCodecError if `outputData` is malformed base64/JSON.
@@ -601,15 +695,46 @@ export interface ParsedIntentResult {
 export function parseIntentResult(
   frame: unknown,
   expectedIntentName: HarnessIntentName,
+  onUnknownKeys?: UnknownResultKeysObserver,
 ): ParsedIntentResult {
   const env: IntentResultEnvelope = IntentResultEnvelopeSchema.parse(frame);
   if (env.success) {
     const decoded = decodeWireData(env.outputData);
-    const result = HARNESS_INTENT_RESULT_SCHEMAS[expectedIntentName].safeParse(decoded);
+    const schema = HARNESS_INTENT_RESULT_SCHEMAS[expectedIntentName];
+    const echoed = echoedSecretKeys(expectedIntentName, decoded);
+    if (echoed.length > 0) {
+      // Key NAMES only (they come from the closed tripwire list) — never a value.
+      throw new HarnessWireCodecError(
+        `${expectedIntentName} result failed the harness contract: it echoes request key(s) ${echoed.join(', ')}, which must never come back from the device`,
+      );
+    }
+    const pruned = pruneUnknownKeys(schema, decoded);
+    const result = schema.safeParse(pruned.value);
     if (!result.success) {
       throw new HarnessWireCodecError(
         `${expectedIntentName} result failed the harness contract: ${result.error.message}`,
       );
+    }
+    const strippedTop = strippedTopLevelKeys(decoded, pruned.value);
+    if (strippedTop.size > 0) {
+      const other = findBetterFittingIntent(expectedIntentName, decoded, strippedTop);
+      if (other !== null) {
+        throw new HarnessWireCodecError(
+          `${expectedIntentName} result failed the harness contract: the payload is a ${other} result (it fits ${other} with fewer undeclared keys), not a ${expectedIntentName} result carrying new keys`,
+        );
+      }
+    }
+    if (pruned.unknownKeyPaths.length > 0 && onUnknownKeys !== undefined) {
+      try {
+        onUnknownKeys({
+          intent: expectedIntentName,
+          keyPaths: pruned.unknownKeyPaths,
+          truncated: pruned.truncated,
+        });
+      } catch {
+        // Counting is observability. An observer that throws must not turn a
+        // valid result into a failed step — that is the outage this prevents.
+      }
     }
     return {
       sessionId: env.sessionId,

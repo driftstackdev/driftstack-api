@@ -124,11 +124,18 @@ describe('P4 — an error page is not a successful navigation', () => {
     expect(intentResultToCustomer(click, parsed).kind).toBe('success');
   });
 
-  it('⛔ AND NO OTHER VERB CAN CARRY A STATUS AT ALL — the result schemas are strict', () => {
+  it('⛔ AND NO OTHER VERB CAN CARRY A STATUS AT ALL — it is stripped before the executor sees it', () => {
     // The moment a second result schema accepts `http_status`, a status starts
     // reaching a code path that was never asked to interpret one, and this arm
     // fails to say so. That is the point: the field's meaning is scoped to a
     // navigation, and the scope is enforced by the wire contract, not by hope.
+    //
+    // ⚠️ CHANGED DELIBERATELY 2026-09-18. This arm used to expect a THROW,
+    // because the result schemas rejected any undeclared key. That rule turned
+    // every additive device field into a failed step, so an undeclared key is
+    // now STRIPPED and counted (services/harness-result-unknown-keys.ts). The
+    // property this arm exists for survives, and is asserted more directly: the
+    // click result that reaches the executor has NO `http_status` in it.
     const withStatus = {
       type: 'intentResult' as const,
       sessionId: 'ses_1',
@@ -136,30 +143,35 @@ describe('P4 — an error page is not a successful navigation', () => {
       success: true as const,
       durationMs: 3,
     };
-    expect(() =>
-      parseIntentResult(
-        {
-          ...withStatus,
-          outputData: encodeWireData({
-            clicked: '#go',
-            behavioral: true,
-            activated: true,
-            http_status: 404,
-          }),
-        },
-        'click',
-      ),
-    ).toThrow();
-    // And the navigate schema is the one that does accept it, so the assertion
-    // above is about strictness rather than about an unrelated parse failure.
-    expect(() =>
-      parseIntentResult(
-        {
-          ...withStatus,
-          outputData: encodeWireData({ url: 'https://example.test/', http_status: 404 }),
-        },
-        'navigate',
-      ),
-    ).not.toThrow();
+    const unknown: string[][] = [];
+    const click = parseIntentResult(
+      {
+        ...withStatus,
+        outputData: encodeWireData({
+          clicked: '#go',
+          behavioral: true,
+          activated: true,
+          http_status: 404,
+        }),
+      },
+      'click',
+      (report) => unknown.push([...report.keyPaths]),
+    );
+    expect(click.outputData).toEqual({ clicked: '#go', behavioral: true, activated: true });
+    expect(Object.prototype.hasOwnProperty.call(click.outputData, 'http_status')).toBe(false);
+    expect(unknown).toEqual([['http_status']]);
+    // And the navigate schema is the one that does accept it — and KEEPS it —
+    // so the strip above is about which verb declares the key, not about the
+    // key being dropped everywhere.
+    const navigate = parseIntentResult(
+      {
+        ...withStatus,
+        outputData: encodeWireData({ url: 'https://example.test/', http_status: 404 }),
+      },
+      'navigate',
+      (report) => unknown.push([...report.keyPaths]),
+    );
+    expect(navigate.outputData).toEqual({ url: 'https://example.test/', http_status: 404 });
+    expect(unknown).toEqual([['http_status']]);
   });
 });

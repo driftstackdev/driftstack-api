@@ -542,6 +542,16 @@ export const HARNESS_INTENT_PARAM_SCHEMAS: Record<HarnessIntentName, z.ZodTypeAn
 // dispatched operation: every decoded payload is checked against the expected
 // intent below. Keep these exact mirrors of IntentExecutor.swift so a wrong or
 // drifted result fails closed as intent_dispatch_error at the correlator.
+//
+// ⛔ `.strict()` HERE IS THE KNOWN-KEY CONTRACT, NOT THE UNKNOWN-KEY POLICY
+// (2026-09-18). parseIntentResult first strips every key that no schema at that
+// position declares (services/harness-result-unknown-keys.ts), counts it, and
+// only then runs these schemas. So an additive device key no longer fails a
+// step — it never reaches the executor at all — while a wrong type or value on
+// a DECLARED key still fails exactly as before. The consequence for a new field:
+// declare it here before the executor reads it, because until then it is
+// stripped. Parsing one of these schemas directly (not through the codec) still
+// rejects unknown keys; that is only ever a test's view of the contract.
 // P4 — `http_status` is ADDITIVE AND OPTIONAL, and that is the whole contract.
 // A navigate result used to be {url} | {url, loadedAtTimeout}, with NO failure
 // variant: a 404 or a 500 LOADED, the step went green, and the plan then died
@@ -595,8 +605,10 @@ const SendKeysResultSchema = z
      * optional. ⚠️ FALSE IS NOT "VERIFIED": the native path with no persona
      * focuses the field by script and makes no tap at all, so there it is
      * false with the check asked for — nothing to verify, reported rather
-     * than implied. Without this key in a STRICT schema, every typed result
-     * from that build would fail the contract and the step with it.
+     * than implied. Before 2026-09-18 a strict schema WITHOUT this key failed
+     * every typed result from that build, and the step with it; an undeclared
+     * key is now stripped and counted instead, so declaring it is what lets the
+     * executor read it, no longer what keeps the step alive.
      */
     focus_tap_unoccluded_checked: z.boolean().optional(),
   })

@@ -31,6 +31,7 @@ import { DrizzleAccountAuthRepo } from '../db/auth-repo.js';
 import { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { FleetNodeAuthImpl } from '../services/fleet-node-auth.js';
 import { FleetControlRegistry } from '../services/fleet-control-registry.js';
+import { UnknownResultKeyReporter } from '../services/harness-result-unknown-keys.js';
 import { SessionPageStateStore } from '../services/session-page-state-store.js';
 import { SessionLivenessStore } from '../services/session-liveness-store.js';
 import { SessionCapabilityReportStore } from '../services/session-capability-report-store.js';
@@ -832,6 +833,14 @@ export async function createProductionDeps(
       'What an agent turn waited for the look before a tap, by outcome: the per-tap latency cost of the look.',
       PRE_TAP_LOOK_DURATION_BUCKETS_SECONDS,
       ['outcome'],
+    );
+    // Keys stripped from accepted harness intent results, emitted from
+    // services/harness-result-unknown-keys.ts. `intent` is the closed intent
+    // enum; the key NAMES are unbounded device text and live in the log line.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.harnessIntentResultUnknownKeyTotal,
+      'Keys on accepted harness intent results that this build does not model, by intent. They were stripped before the executor saw the result, and the result was accepted. Non-zero means the device ships a field this build ignores; the intent_result_unknown_keys log line names it.',
+      ['intent'],
     );
     // The device's own check at the real tap point, emitted from
     // recordTapUnoccludedCheck in services/agent-turn-telemetry.ts.
@@ -3012,6 +3021,14 @@ export async function createProductionDeps(
             // tunnel up, browser not attached yet) → agent_sessions.provisioning_detail,
             // cleared by `active`. Ownership-gated like the terminal-close relay.
             makeSessionProvisioningDetailRelay(agentSessionsRepo, logger),
+            // Keys a device adds to an intent result that this build does not
+            // model are stripped (not fatal); this counts them by intent and
+            // logs their names, rate-limited, so an operator sees what the
+            // device started sending. See services/harness-result-unknown-keys.ts.
+            new UnknownResultKeyReporter({
+              ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),
+              logger,
+            }).observe,
           )),
           // The config a dispatched session browses with when it names no
           // proxy_id.

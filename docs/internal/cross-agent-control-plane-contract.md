@@ -569,6 +569,92 @@ is outside the viewport cannot be checked by the look, because the click scrolls
 randomised band the control plane cannot reproduce; `require_unoccluded` checks it where
 it lands.
 
+### 2026-09-18 — an unknown RESULT key is stripped and counted, not fatal
+
+**Why.** On 2026-09-18 the harness shipped two result keys it considered additive
+(`focus_tap_unoccluded_checked` on `send_keys`, `hit_via_own_label` on `perceive`
+elements). Every per-intent result schema was `.strict()`, so until the control plane
+declared them every such result failed its contract: typed steps would have failed and
+pre-tap looks fell back to unchecked taps. No customer was affected (no AI turn ran in
+the window), but an additive key breaking a dispatch is an outage waiting to happen.
+
+**The rule (agreed with A3).** Inside a decoded `outputData`:
+
+- A key the control plane DECODES is validated exactly as before. A wrong type or value
+  on a known key is still a contract failure → `intent_dispatch_error`.
+- A key nothing declares is REMOVED from the result before the executor sees it (never
+  passed through — nothing downstream may act on a field it does not know) and COUNTED.
+  The step carries on.
+
+This applies at every nesting level the result schema describes (e.g. `perceive`
+`value`, `elements[]`, `hit`, `hit.bounds`, `tap_point`, `state`). "Declared" means
+declared by ANY variant at that position, so a key one variant owns arriving on a
+variant that forbids it (navigate `loadedAtTimeout: false`, `results_visible` on a
+truncated search) is a known key with a wrong value and still fails — it is never
+stripped into a different variant. Positions whose keys are data (`extract.value`,
+`execute_script.value`) are untouched, as before. Implementation:
+`apps/server/src/services/harness-result-unknown-keys.ts`, called from
+`parseIntentResult`; the strict schemas themselves are unchanged and remain the
+known-key contract.
+
+**Two guards keep the strip from accepting what the strict schemas refused.** Both only
+ever reject:
+
+- **Echoed secrets stay fatal.** A top-level `password` or `username` on `login`, `query`
+  on `search`, `text` on `send_keys` or `fields` on `fill_form` fails the step
+  (`RESULT_ECHO_TRIPWIRE_KEYS` in `harness-control-codec.ts`). These are the names of
+  request parameters that carry customer secrets or text; a device echoing them back is a
+  regression that must fail loudly, not read as a new field on a dashboard metric. The
+  error names the key, never the value.
+- **A cross-intent payload is still refused.** When top-level keys were stripped, the
+  codec checks whether another intent's schema accepts the payload after stripping a
+  STRICT SUBSET of those keys. If so, the payload is that intent's result (misrouted),
+  not ours with new keys, and it fails as before. Without this, back/forward
+  `{url, action}` sent for a `navigate` dispatch lost `action` and was accepted as
+  navigate `{url}`. A tie (a new key both intents lack) is not a better fit, so an
+  additive key never trips it. Pinned exhaustively: every sample of every intent, parsed
+  as every other intent, is accepted only where the strict schema alone accepted it.
+
+**The ordering rule still applies to any key whose VALUE the control plane needs.**
+Decode first, arm by switch: the harness must not start relying on the control plane
+reading a new key until A2 says the declaration is LIVE IN PRODUCTION. What changed is
+only the failure mode of getting it wrong: an undeclared key used to fail the step; now
+it is silently absent from the executor's view. So a new key that CHANGES MEANING —
+anything the control plane must act on to stay correct — still needs the declaration
+first, or a switch on the harness side, exactly as before. An unknown key no longer
+breaks a dispatch.
+
+**What stays strict, and why.**
+
+| Surface                                                                                                     | Unknown key                  | Why                                                                                                                                                                                                                       |
+| ----------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Decoded per-intent result (`outputData`)                                                                    | stripped + counted           | an additive fact about a step that otherwise validated. Two exceptions stay fatal (below): an echoed secret-bearing request key, and a payload another intent explains better                                             |
+| `intentResult` envelope (`IntentResultEnvelopeSchema`)                                                      | REJECTED (unchanged)         | envelope keys qualify the whole frame — correlation, success, how `outputData` is encoded. A future `outputEncoding` or `partial` stripped away would make us act on a misread frame. Pinned per frame by the parity test |
+| `errorCode`                                                                                                 | REJECTED (unchanged)         | an unknown code changes meaning; the decode-first table above still governs new codes                                                                                                                                     |
+| Everything the server SENDS (params, `sessionAssign`, `controlCommand`, `probeEgress`, …)                   | REJECTED (unchanged)         | our own output: a stray key is our bug, and several of these carry authority (secrets, node-scoped ops)                                                                                                                   |
+| Other harness→server frames (`sessionStatus`, `heartbeat`, `pageState`, the correlated `*Result` frames, …) | already stripped (unchanged) | these were never strict; unknown keys there are dropped silently, not counted                                                                                                                                             |
+
+⚠️ An unknown key on the ENVELOPE still makes the whole outbound union refuse the
+frame; the correlator never sees it and that dispatch waits out its timeout. The refusal
+is logged (`inbound_frame_rejected`, structure only), so it is visible, but envelope
+additions must still ship decode-first.
+
+**What the operator sees.**
+
+- `driftstack_harness_intent_result_unknown_key_total{intent}` — incremented by the
+  number of distinct unknown key paths on each ACCEPTED result. `intent` is the closed
+  intent enum from the pending dispatch; a key name is never a label. Dashboard-only (no
+  paging rule). Non-zero means the device ships a field this build ignores.
+- A `warn` log line, `event: "intent_result_unknown_keys"`, `component:
+"harness-intent-result"`, with `intent`, `unknownKeys` (at most 8 dotted paths, array
+  indices collapsed to `[]`, each name sanitised to `[A-Za-z0-9_-]` and capped at 64
+  characters), `unknownKeyCount`, `truncated` (more than 256 distinct paths on one
+  result) and `occurrences`. Rate-limited per (intent, key set): the first is logged,
+  then every 100th with the running count; a NEW key set is logged at once. Key names
+  only — never a value.
+- A result that FAILS validation is not counted: another intent's payload would read as
+  a device full of "new" keys.
+
 ### 2026-07-15 protocol-truth correction (supersedes every older roster/count above)
 
 The live Swift `IntentExecutor` routes exactly 18 names, all of which are valid
@@ -596,7 +682,9 @@ wins but bounded SIGKILL exit confirmation fails. It is likewise non-retryable
 and requires a new session; the old exact id remains fail-closed on that node.
 
 Every logical parameter object and every successful decoded result now has an
-intent-specific strict schema. A success envelope must carry only `outputData`;
+intent-specific strict schema (for results: the KNOWN-key contract — since
+2026-09-18 an undeclared result key is stripped and counted instead of failing, see
+above). A success envelope must carry only `outputData`;
 a failure envelope must carry `errorCode` and may carry `errorMessage`, but must
 not carry `outputData`. The correlator stores the originating `intentName` and
 validates a success against that exact result schema. It first reads only the

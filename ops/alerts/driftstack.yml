@@ -487,6 +487,7 @@ groups:
 #   - driftstack_agent_turn_tokens_total
 #   - driftstack_auth_total
 #   - driftstack_byok_anthropic_test_total
+#   - driftstack_harness_intent_result_unknown_key_total
 #   - driftstack_http_request_total
 #   - driftstack_livekit_token_mint_total
 #   - driftstack_mac_node_livekit_register_total
