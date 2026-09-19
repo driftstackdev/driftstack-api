@@ -32,6 +32,31 @@ export interface CompleteAgentTurnReceiptArgs extends ReserveAgentTurnReceiptArg
 export interface AgentTurnReceiptsRepo {
   reserve(args: ReserveAgentTurnReceiptArgs): Promise<AgentTurnReceiptReservation>;
   complete(args: CompleteAgentTurnReceiptArgs): Promise<void>;
+  /**
+   * Give a reservation back, as if the key had never been used: the next request
+   * with the same key reserves it afresh and runs.
+   *
+   * For ONE case only — a request that was refused before its turn did any work
+   * (the message route decides which; see agentMessageRefusalDidNoWork). Storing
+   * such a refusal as the key's final result would replay "wait and try again"
+   * at a customer who waited and tried again.
+   *
+   * ⛔ IT NEVER UNDOES A RESULT. Only a reservation still IN PROGRESS, for this
+   * exact session and request, is removed. A completed receipt is left exactly as
+   * it is (and this resolves without error), because a completed receipt is the
+   * record that a task ran, and removing it is how a task runs twice.
+   *
+   * ⛔ A REJECTED RELEASE MAY STILL HAVE LANDED (the write committed, its
+   * acknowledgement was lost), after which the key can already belong to the
+   * customer's retry. `complete` cannot tell that retry's reservation from the
+   * caller's — they share every identifying field — so a caller that attempted a
+   * release must NEVER go on to `complete` the same key, whether the release
+   * resolved or rejected. The message route answers the refusal and stops.
+   *
+   * Optional, so a store that cannot release still satisfies the interface; the
+   * route then completes the receipt with the refusal, as it always did.
+   */
+  release?(args: ReserveAgentTurnReceiptArgs): Promise<void>;
 }
 
 export function hashAgentTurnRequest(args: {
@@ -113,6 +138,23 @@ export class InMemoryAgentTurnReceiptsRepo implements AgentTurnReceiptsRepo {
       kind: 'replay',
       terminal: canonicalAgentTurnTerminal(existing.terminal),
     };
+  }
+
+  // Repository parity: production release is asynchronous database I/O.
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async release(args: ReserveAgentTurnReceiptArgs): Promise<void> {
+    const mapKey = receiptMapKey(args.accountId, args.idempotencyKey);
+    const existing = this.receipts.get(mapKey);
+    if (
+      existing === undefined ||
+      existing.agentSessionId !== args.agentSessionId ||
+      existing.requestHash !== args.requestHash ||
+      // A completed receipt is a result. It is never released.
+      existing.terminal !== undefined
+    ) {
+      return;
+    }
+    this.receipts.delete(mapKey);
   }
 
   // Repository parity: production complete is asynchronous database I/O.

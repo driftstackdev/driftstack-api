@@ -122,4 +122,41 @@ describe('agent-turn idempotency receipts', () => {
       }),
     ).rejects.toThrow('exceeds');
   });
+  it('releasing a reservation that is still in progress gives the key back: the next request with it reserves afresh, and can then complete and replay as usual', async () => {
+    const repo = new InMemoryAgentTurnReceiptsRepo();
+    await expect(repo.reserve(base)).resolves.toEqual({ kind: 'reserved' });
+    await expect(repo.reserve(base)).resolves.toEqual({ kind: 'in-progress' });
+
+    await repo.release(base);
+
+    await expect(repo.reserve(base)).resolves.toEqual({ kind: 'reserved' });
+    const terminal = { status: 200, body: { kind: 'plan-executed' } };
+    await repo.complete({ ...base, terminal });
+    await expect(repo.reserve(base)).resolves.toEqual({ kind: 'replay', terminal });
+  });
+
+  it('CRITICAL release never undoes a RESULT: a completed receipt is left exactly as it is and still replays, because removing it is how a task runs twice', async () => {
+    const repo = new InMemoryAgentTurnReceiptsRepo();
+    await repo.reserve(base);
+    const terminal = { status: 200, body: { kind: 'plan-executed' } };
+    await repo.complete({ ...base, terminal });
+
+    await expect(repo.release(base)).resolves.toBeUndefined();
+
+    await expect(repo.reserve(base)).resolves.toEqual({ kind: 'replay', terminal });
+  });
+
+  it('release touches only the exact reservation it names: another request body, another session, another account, or a key never reserved are all left alone', async () => {
+    const repo = new InMemoryAgentTurnReceiptsRepo();
+    await repo.reserve(base);
+
+    await repo.release({ ...base, requestHash: 'b'.repeat(64) });
+    await repo.release({ ...base, agentSessionId: `${base.agentSessionId}-other` });
+    await repo.release({ ...base, accountId: '00000000-0000-4000-8000-000000000009' });
+    await expect(
+      repo.release({ ...base, idempotencyKey: 'never-reserved' }),
+    ).resolves.toBeUndefined();
+
+    await expect(repo.reserve(base)).resolves.toEqual({ kind: 'in-progress' });
+  });
 });

@@ -44,8 +44,9 @@ function read(rel: string): string {
 }
 
 // Capture the refuseReason string that mentions "budget" (uniquely the
-// budget-exhausted literal — the runtime's only other refuseReason,
-// 'agent layer temporarily unavailable; please retry', has no "budget").
+// budget-exhausted literal — the runtime's only other refuseReason, the
+// exported AI_BRIEFLY_UNAVAILABLE_REFUSE_REASON sentence, is not an inline
+// literal and has no "budget").
 const EMIT_RE = /refuseReason: '([^']*budget[^']*)'/;
 const MATCH_RE = /refuseReason === '([^']*budget[^']*)'/;
 

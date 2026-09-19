@@ -145,16 +145,22 @@ describe('services/agent-runtime content parity', () => {
     );
   });
 
-  it("Q.1.b hybrid-error-classification framing pinned: 'hybrid error classification per founder verdict 2026-05-17. Transient operational failures (5xx after the decomposer's internal retry, network errors) return a synthesized refuse so the customer's session stays active and they can retry the same turn after upstream recovery. Fatal failures (credential errors / malformed responses / missing-key configuration) re-throw — the route layer maps them to 502 + Sentry alert.' — pinned so the Q.1.b verdict + 2026-05-17 lock-date + transient-as-refuse + fatal-as-throw-502 + Sentry-alert contract all stay documented", () => {
+  it("Q.1.b hybrid-error-classification framing pinned: 'hybrid error classification per founder verdict 2026-05-17. Transient operational failures (5xx after the decomposer's internal retry, network errors) return a synthesized refuse so the customer's session stays active and they can retry the same turn after upstream recovery. Fatal failures (malformed responses / missing-key configuration / a request the provider rejects) re-throw — the route layer answers 500 internal + Sentry alert; a provider that refuses the KEY leaves as AgentProviderKeyRejectedError.' — pinned so the Q.1.b verdict + 2026-05-17 lock-date + transient-as-refuse + fatal-as-throw-500 + key-rejection-is-its-own-error + Sentry-alert contract all stay documented. The refuse sentence is the exported customer copy, never an inline literal", () => {
     expect(body).toMatch(
       /\/\/ Q\.1\.b — hybrid error classification per founder verdict\s*\/\/ 2026-05-17\. Transient operational failures \(5xx after the\s*\/\/ decomposer's internal retry, network errors\) return a\s*\/\/ synthesized refuse so the customer's session stays active\s*\/\/ and they can retry the same turn after upstream recovery\./,
     );
     expect(body).toMatch(
-      /\/\/ Fatal failures \(credential errors \/ malformed responses \/\s*\/\/ missing-key configuration\) re-throw — the route layer maps\s*\/\/ them to 502 \+ Sentry alert\./,
+      /\/\/ Fatal failures \(malformed responses \/ missing-key\s*\/\/ configuration \/ a request the provider rejects\) re-throw — the\s*\/\/ route layer answers 500 `internal` \+ Sentry alert\. A provider\s*\/\/ that refuses the KEY \(401 \/ 402 \/ 403\) is not one of them: it\s*\/\/ leaves as AgentProviderKeyRejectedError/,
     );
     expect(body).toMatch(
-      /decomposed = \{\s*kind: 'refuse',\s*refuseReason: 'agent layer temporarily unavailable; please retry',\s*tokensConsumed: 0,\s*\};/,
+      /decomposed = \{\s*kind: 'refuse',\s*refuseReason: AI_BRIEFLY_UNAVAILABLE_REFUSE_REASON,\s*tokensConsumed: 0,\s*\};/,
     );
+    // The sentence the customer reads, and the phrase it replaced: 'agent layer'
+    // names a part of how the product is built.
+    expect(body).toMatch(
+      /export const AI_BRIEFLY_UNAVAILABLE_REFUSE_REASON =\s*'The AI is briefly unavailable, so nothing was done with this message\. Send it again in a moment\.';/,
+    );
+    expect(body).not.toMatch(/refuseReason: '[^']*agent layer/);
   });
 
   it('completed upstream usage is recorded before the durable active fence; every later mutation and executor suffix is lifecycle-gated', () => {

@@ -100,7 +100,10 @@ describe('v2-#37 AgentRuntime <-> SDK kind union parity', () => {
       const at = route.indexOf(`result.kind === '${kind}'`);
       expect(at, `the route still branches on kind:'${kind}'`).toBeGreaterThan(-1);
       const branch = route.slice(at, at + 400);
-      const thrown = /throw new (\w+Error)\(/.exec(branch);
+      // The throw may pass through `refusedBeforeAnyWork(…)`, the marker that
+      // releases an Idempotency-Key for a refusal that did no work. It returns the
+      // error it is given, so the class thrown is the one constructed inside it.
+      const thrown = /throw (?:refusedBeforeAnyWork\(\s*)?new (\w+Error)\(/.exec(branch);
       expect(thrown?.[1], `kind:'${kind}' must be answered with ${errorClass}`).toBe(errorClass);
     }
 

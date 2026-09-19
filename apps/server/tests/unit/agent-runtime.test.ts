@@ -1291,7 +1291,12 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
       });
       expect(result.kind).toBe('refuse');
       if (result.kind !== 'refuse') throw new Error('type narrow');
-      expect(result.decomposer.refuseReason).toMatch(/temporarily unavailable/);
+      // The customer's sentence: what happened, and what to do. It used to read
+      // 'agent layer temporarily unavailable; please retry'.
+      expect(result.decomposer.refuseReason).toBe(
+        'The AI is briefly unavailable, so nothing was done with this message. Send it again in a moment.',
+      );
+      expect(result.decomposer.refuseReason).not.toMatch(/agent layer/i);
       expect(result.decomposer.tokensConsumed).toBe(0);
       // Session stays active per Q.1.b open-answer verdict.
       const final = await sessions.get(seed.id);
@@ -1319,10 +1324,12 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
       expect(final?.status).toBe('active');
     });
 
-    it('fatal error (Anthropic 4xx) → re-throw, no transcript-side effects', async () => {
+    it('fatal error (Anthropic 4xx that is not about the key) → re-throw, no transcript-side effects', async () => {
+      // A 401 / 402 / 403 is the provider refusing the KEY and leaves as its own
+      // error: tests/unit/a-provider-that-refuses-the-key-is-told-apart-from-every-other-failure.
       const throwingDecomposer = {
         decompose: (_args: DecomposeArgs) =>
-          Promise.reject(new Error('Anthropic API 401: invalid api key')),
+          Promise.reject(new Error('Anthropic API 400: malformed request')),
       };
       const sessions = new InMemoryAgentSessionsRepo();
       const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
@@ -1337,7 +1344,7 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
           agentSessionId: seed.id,
           userMessage: 'open https://example.com',
         }),
-      ).rejects.toThrow(/Anthropic API 401/);
+      ).rejects.toThrow(/Anthropic API 400/);
       const final = await sessions.get(seed.id);
       expect(final?.status).toBe('active');
       // Only the user turn made it into the transcript; no agent turn.

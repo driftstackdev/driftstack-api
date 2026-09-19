@@ -275,6 +275,29 @@ export function agentTurnAdmissionForSession(
   };
 }
 
+/**
+ * Whether `runTurn` answered BEFORE the turn started.
+ *
+ * `turn-in-progress` and `account-turn-limit` are returned from the top of
+ * `runTurn`, ahead of the line that takes the session's turn slot: nothing has
+ * been written to the transcript, no planning call has been made, nothing has
+ * been sent to the page, and no budget has been spent. The same request can
+ * therefore be sent again, unchanged, with no risk of doing anything twice —
+ * which is what lets the message route release an Idempotency-Key for them
+ * instead of storing the refusal as the key's final result.
+ *
+ * ⛔ EVERY OTHER KIND IS "STARTED", including the ones that often did nothing
+ * (`session-closed`, `ai-control-unavailable`): they are also returned from
+ * inside the running turn, after work, and this predicate is about what is
+ * ALWAYS true of a kind. A kind added to the early returns of `runTurn` joins
+ * this list only by being added here, deliberately.
+ */
+export function turnWasDeclinedBeforeItStarted(
+  result: RunTurnResult,
+): result is Extract<RunTurnResult, { kind: 'turn-in-progress' | 'account-turn-limit' }> {
+  return result.kind === 'turn-in-progress' || result.kind === 'account-turn-limit';
+}
+
 export function agentTurnAdmissionMatchesSnapshot(
   admission: AgentTurnAdmission,
   session: AgentSessionAuthoritySnapshot,
@@ -302,6 +325,23 @@ export type RunTurnResult =
        * absent otherwise, which renders exactly as before.
        */
       answer?: string;
+      /**
+       * Every step ATTEMPTED this turn, in order: the first plan's, then each
+       * later plan's as the turn looked at the page and planned again. It is the
+       * same list the turn's transcript entry records. `decomposer.intents` is the
+       * FIRST plan only, so a caller that reports the turn's steps from it reports
+       * a truncated list beside `executor.results`, which covers every plan.
+       *
+       * One for one with `executor.results` when every plan ran to its end. When a
+       * plan was abandoned part-way (a step failed and the turn planned again) the
+       * abandoned plan's unrun steps are here and have no result, so this is the
+       * longer list; `results[i].intent` is always the step a result is for.
+       *
+       * `runTurn` always sets it. Optional only so a result assembled by hand (a
+       * test double, a stored fixture from before the field existed) still types;
+       * a caller reads `attemptedIntents ?? decomposer.intents`.
+       */
+      attemptedIntents?: ReadonlyArray<AgentIntent>;
       /**
        * P5 — why the customer is NOT getting an answer, when they asked for one
        * and the read-back could not produce it. Mutually exclusive with
@@ -904,6 +944,74 @@ export const TURN_LOOP_STOP_SENTENCES: Readonly<Record<TurnLoopStopReason, strin
   planner_unavailable:
     'I did the steps above, but could not work out the next ones just now, so the task is not finished. Send “continue” to try again.',
 };
+
+/**
+ * What a turn whose planning call failed for a passing reason tells the
+ * customer, as the `refuse_reason` of a 200 `refuse`. The session stays active.
+ *
+ * ⛔ CUSTOMER-VISIBLE COPY. It says what happened in the customer's terms (the
+ * AI could not be reached for a moment) and what to do (send it again). It used
+ * to read 'agent layer temporarily unavailable; please retry', which names a
+ * part of how the product is built.
+ */
+export const AI_BRIEFLY_UNAVAILABLE_REFUSE_REASON =
+  'The AI is briefly unavailable, so nothing was done with this message. Send it again in a moment.';
+
+/**
+ * The model provider refused the API key a turn ran on.
+ *
+ * 401 and 403 are the provider's answers for a key that is invalid, revoked or
+ * not permitted; 402 is its answer for an account that cannot pay. None of them
+ * is about the request, none clears by retrying, and whose fault it is depends
+ * on whose key it was — which the route decides from {@link keySource}.
+ *
+ * ⛔ THE MESSAGE IS FIXED TEXT. The error this replaces carries the first 300
+ * characters of the provider's response body. This one carries a status and a
+ * key SOURCE, never a key and never the provider's words, so it is safe to log
+ * and to report to error tracking as it stands.
+ */
+export class AgentProviderKeyRejectedError extends Error {
+  readonly providerStatus: 401 | 402 | 403;
+  readonly reason: 'invalid_or_unauthorized' | 'billing';
+  readonly keySource: NonNullable<RunTurnArgs['keySource']> | undefined;
+
+  constructor(args: {
+    providerStatus: 401 | 402 | 403;
+    reason: 'invalid_or_unauthorized' | 'billing';
+    keySource?: NonNullable<RunTurnArgs['keySource']>;
+  }) {
+    super(
+      `the model provider rejected the API key this turn ran on ` +
+        `(provider status ${args.providerStatus.toString()}, ${args.reason}, key source: ${args.keySource ?? 'unknown'})`,
+    );
+    this.name = 'AgentProviderKeyRejectedError';
+    this.providerStatus = args.providerStatus;
+    this.reason = args.reason;
+    this.keySource = args.keySource;
+  }
+}
+
+/**
+ * Whether a thrown planner error is the provider refusing the KEY, and why.
+ * Reads the status the provider lane puts at the head of its message
+ * (`Anthropic API <status>: …`); null for every other error.
+ *
+ * ⛔ ANCHORED AT THE HEAD, unlike {@link classifyDecomposerError}. What follows
+ * the status is the first 300 characters of the provider's response body, which
+ * are not ours: an outage page or a 400 that merely QUOTES "Anthropic API 401"
+ * is not a rejected key. This reading runs FIRST and tells a customer to replace
+ * a key that works, so it must only ever be made from the status the lane wrote.
+ */
+export function providerKeyRejection(
+  err: unknown,
+): { providerStatus: 401 | 402 | 403; reason: 'invalid_or_unauthorized' | 'billing' } | null {
+  if (!(err instanceof Error)) return null;
+  const status = /^Anthropic API (401|402|403)\b/.exec(err.message)?.[1];
+  if (status === '401') return { providerStatus: 401, reason: 'invalid_or_unauthorized' };
+  if (status === '403') return { providerStatus: 403, reason: 'invalid_or_unauthorized' };
+  if (status === '402') return { providerStatus: 402, reason: 'billing' };
+  return null;
+}
 
 /**
  * B2 — what a turn was doing when it observed the customer's Stop. `planning`
@@ -2286,9 +2394,12 @@ export class AgentRuntime {
     // decomposer's internal retry, network errors) return a
     // synthesized refuse so the customer's session stays active
     // and they can retry the same turn after upstream recovery.
-    // Fatal failures (credential errors / malformed responses /
-    // missing-key configuration) re-throw — the route layer maps
-    // them to 502 + Sentry alert.
+    // Fatal failures (malformed responses / missing-key
+    // configuration / a request the provider rejects) re-throw — the
+    // route layer answers 500 `internal` + Sentry alert. A provider
+    // that refuses the KEY (401 / 402 / 403) is not one of them: it
+    // leaves as AgentProviderKeyRejectedError, and the route answers
+    // by whose key it was (see providerKeyRejection).
     // W589 — file-06 guardrail #3: deterministic task-refusal start-gate,
     // screened BEFORE the LLM decompose. An obvious-abuse match short-circuits
     // to a refuse outcome (no LLM call, no token charge) — reusing the
@@ -2515,13 +2626,35 @@ export class AgentRuntime {
         if (!(await this.authorityStillCurrent(session.id, admission))) {
           return this.interruptedTurnResult(session.id, sessionWithUser, 'decompose');
         }
+        // The provider refused the KEY, not the request. Whose key it was decides
+        // what the customer is told, and only the route knows how to say either
+        // answer — so this leaves as its own error, stripped of the provider's
+        // words (which the raw error carries) before anything can log or report it.
+        const keyRejection = providerKeyRejection(err);
+        if (keyRejection !== null) {
+          this.deps.logger?.warn?.(
+            {
+              component: 'agent-runtime',
+              event: 'provider_rejected_key',
+              agent_session_id: session.id,
+              provider_status: keyRejection.providerStatus,
+              reason: keyRejection.reason,
+              key_source: args.keySource ?? 'none',
+            },
+            'the model provider rejected the API key this turn ran on',
+          );
+          throw new AgentProviderKeyRejectedError({
+            ...keyRejection,
+            ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+          });
+        }
         if (classifyDecomposerError(err) === 'fatal') {
           throw err;
         }
         // Transient — synthesize a refuse, session stays active.
         decomposed = {
           kind: 'refuse',
-          refuseReason: 'agent layer temporarily unavailable; please retry',
+          refuseReason: AI_BRIEFLY_UNAVAILABLE_REFUSE_REASON,
           tokensConsumed: 0,
         };
       }
@@ -3760,6 +3893,7 @@ export class AgentRuntime {
       decomposer: decomposed,
       executor: executorResult,
       session: sessionAfter,
+      attemptedIntents,
       ...(publishedAnswer !== undefined ? { answer: publishedAnswer } : {}),
       ...(readbackUnavailable !== undefined ? { readbackUnavailable } : {}),
       ...(turnNotice !== undefined ? { notice: turnNotice } : {}),
@@ -3792,7 +3926,8 @@ export class AgentRuntime {
  *     pattern `Anthropic API 5\d\d`)
  *   - Network errors after retry (e.g. ECONNRESET, fetch failed)
  *
- * Fatal (re-throw → route 502):
+ * Fatal (re-throw → the route answers 500 `internal`; a rejected KEY never gets
+ * this far — see providerKeyRejection, which the turn checks first):
  *   - Anthropic 4xx (credential / quota / validation)
  *   - Malformed response (missing text content / non-JSON body /
  *     unknown discriminator kind / missing required fields)

@@ -90,7 +90,8 @@ differently.
 `message()` is never retried for you, whatever the retry predicate says, and
 with an `Idempotency-Key` an error response is final for that key. See
 [Run AI tasks from your code](/guides/run-ai-tasks-from-code/#errors-and-safe-retries)
-for what to do about each one.
+for what to do about each one, and [Idempotency keys](/reference/idempotency/)
+for the requests that accept a key.
 
 ## TypeScript
 

@@ -54,9 +54,14 @@ describe('bundled-LLM concurrent-turn cap (soft-cap TOCTOU bound)', () => {
 
     const res = await sendTurn(id);
     expect(res.statusCode).toBe(429);
-    const body = res.json<{ type: string; limit: number; current_sessions: number }>();
-    expect(body.type).toBe(PROBLEM_TYPES.ConcurrencyLimit);
-    expect(body.limit).toBe(1);
+    // A rate-limit refusal, not the session-slot one: this limit clears by itself
+    // when a running turn finishes, so it carries a Retry-After and is worth
+    // retrying. The shape and the copy are pinned in
+    // too-many-ai-turns-running-is-a-refusal-worth-retrying.test.ts.
+    const body = res.json<{ type: string; retry_after_seconds: number; detail: string }>();
+    expect(body.type).toBe(PROBLEM_TYPES.RateLimited);
+    expect(body.retry_after_seconds).toBe(1);
+    expect(body.detail).toContain('(limit 1)');
   });
 
   it('releases the slot after a NORMAL turn completes (no leak) so the next turn is admitted', async () => {

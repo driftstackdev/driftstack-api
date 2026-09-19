@@ -44,8 +44,10 @@ import {
 import {
   agentTurnAdmissionForSession,
   agentTurnAdmissionMatchesSnapshot,
+  AgentProviderKeyRejectedError,
   AGENT_SEED_MAX_ENTRIES,
   AGENT_SEED_MAX_SERIALIZED_BYTES,
+  turnWasDeclinedBeforeItStarted,
   type AgentTurnAdmission,
   type AgentRuntime,
   type AgentTurnProgressEvent,
@@ -5532,6 +5534,21 @@ export function registerAgentSessionsRoutes(
     );
   }
 
+  /**
+   * The typed lifecycle fields of a 409 that refuses a message because its
+   * session is not active. `session_status` always; `closed_reason` beside it
+   * when the session records one — the same value GET /v1/agent-sessions/{id}
+   * returns as `closed_reason`, so a program need not make that second call to
+   * learn why ("customer-closed", "budget-exhausted", "transcript-limit", …).
+   * Additive: every 409 that carries them keeps its type, title and detail.
+   */
+  const sessionLifecycleExtensions = (
+    session: Pick<AgentSessionRecord, 'status' | 'closedReason'>,
+  ): { session_status: AgentSessionRecord['status']; closed_reason?: string } => ({
+    session_status: session.status,
+    ...(session.closedReason !== null ? { closed_reason: session.closedReason } : {}),
+  });
+
   const resolveAgentMessageAdmission = async (
     agentSessionId: string,
     pre: AgentSessionRecord,
@@ -5545,6 +5562,12 @@ export function registerAgentSessionsRoutes(
         latest.status === 'paused'
           ? 'Agent session is paused. Resume this agent session before sending another message.'
           : `Agent session is ${latest.status}. Start a new agent session.`,
+        // The same typed fields a session that ends DURING a turn answers with
+        // (see sessionLifecycleExtensions). This refusal is raised before the
+        // turn starts and used to carry the sentence alone, so a program could
+        // tell "this session is over" from "this session is busy" only by
+        // reading prose.
+        sessionLifecycleExtensions(latest),
       );
     }
     throw new ConflictError(
@@ -5590,9 +5613,27 @@ export function registerAgentSessionsRoutes(
     // during everything below (receipt, key and spend checks) still stops the
     // turn. Handed to the AI turn only: a manual note has nothing to stop.
     stopWindow?: AgentTurnStopWindow,
+    // How far this request got, for the Idempotency-Key decision the caller
+    // makes about a refusal (see agentMessageRefusalDidNoWork). Written here,
+    // read only there; absent when the request carries no key.
+    attempt?: AgentMessageAttempt,
   ) => {
     const parsed = RunTurnRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+    // Hand the turn to the runtime and record, for the Idempotency-Key decision,
+    // whether it STARTED. Marked `started` BEFORE the call, so a throw from
+    // inside the turn can only ever read as started; it goes back to "declined"
+    // for exactly the answers the runtime gives before it begins.
+    const runTurnRecordingWhetherItStarted = async (
+      args: Parameters<AgentRuntime['runTurn']>[0],
+    ): Promise<Awaited<ReturnType<AgentRuntime['runTurn']>>> => {
+      if (attempt !== undefined) attempt.turn = 'started';
+      const turnResult = await runtime.runTurn(args);
+      if (attempt !== undefined && turnWasDeclinedBeforeItStarted(turnResult)) {
+        attempt.turn = 'declined-before-it-started';
+      }
+      return turnResult;
+    };
     // The handler captured this exact monotonic authority epoch before receipt
     // hashing. Reconfirm after the receipt/storage await and before touching
     // any credential, spend, concurrency, or provider dependency.
@@ -5686,7 +5727,7 @@ export function registerAgentSessionsRoutes(
     // reading BYOK headers/cache, bundled settings/spend, concurrency slots, or
     // provider configuration: none of those resources authorize a human log.
     if (admission.kind === 'manual-transcript') {
-      const result = await runtime.runTurn({
+      const result = await runTurnRecordingWhetherItStarted({
         agentSessionId: req.params.id,
         userMessage: parsed.data.user_message,
         admission,
@@ -5695,11 +5736,13 @@ export function registerAgentSessionsRoutes(
       });
       turnObserver?.observeResult(result);
       if (result.kind === 'turn-in-progress') {
-        throw new ConflictError(
-          'This agent session is still working on a previous request. Wait for it to finish, then try again.',
-          // Typed, so a client can say "still working" rather than guessing from
-          // the sentence which kind of conflict this is.
-          { turn_in_progress: true },
+        throw refusedBeforeAnyWork(
+          new ConflictError(
+            'This agent session is still working on a previous request. Wait for it to finish, then try again.',
+            // Typed, so a client can say "still working" rather than guessing from
+            // the sentence which kind of conflict this is.
+            { turn_in_progress: true },
+          ),
         );
       }
       if (result.kind === 'session-closed') {
@@ -5710,7 +5753,7 @@ export function registerAgentSessionsRoutes(
           result.executor !== undefined;
         throw new ConflictError(terminalConflictMessage(result, hasSettledWork), {
           ...settledWorkExtensions(result),
-          session_status: result.session.status,
+          ...sessionLifecycleExtensions(result.session),
         });
       }
       if (result.kind === 'ai-control-unavailable') {
@@ -5834,7 +5877,30 @@ export function registerAgentSessionsRoutes(
       const settings = await settleProviderPreflight(() =>
         bundledLlmService.findSettings(turnAccountId),
       );
-      if (settings !== null && !settings.consent) {
+      // Whether the session owner's CURRENT plan includes Driftstack's AI. The
+      // exact predicate the consent PATCH gates on (requireBundledLlmTier), so
+      // the two cannot drift apart. A vanished owner is not entitled. With no
+      // account store wired there is nothing to read the plan from, and the
+      // stored settings stand, as they always have.
+      const ownerPlanIncludesBundledLlm = async (): Promise<boolean> => {
+        if (authRepo === undefined) return true;
+        const owner = await settleProviderPreflight(() => authRepo.getAccount(turnAccountId));
+        if (owner === null) return false;
+        try {
+          requireBundledLlmTier(owner.tier);
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      // ⛔ "OPT IN" IS ONLY AN ANSWER ON A PLAN THAT MAY OPT IN. Team, Agency and
+      // API Starter can only ever run AI on the customer's own key: the consent
+      // PATCH refuses them with a 403. Flagging consent as missing for them sent
+      // the customer, by a typed 402, to a switch their plan is refused — so on
+      // those plans nothing is flagged, and the keyless turn falls through to
+      // the own-key-required answer below, which names the fix that works. Plans
+      // that may use Driftstack's AI are flagged exactly as before.
+      if (settings !== null && !settings.consent && (await ownerPlanIncludesBundledLlm())) {
         // Arc 1 sub-slice 6.8 (v2-#6) — flag for the post-resolution
         // gate. Deployment HAS bundled-LLM, customer just hasn't
         // ticked consent yet. The route surfaces a typed 402 below
@@ -5859,19 +5925,8 @@ export function registerAgentSessionsRoutes(
       // customer's permission; the tier is the entitlement, and only the live
       // tier can say whether it still holds.
       let bundledTierEntitled = true;
-      if (settings !== null && settings.consent && authRepo !== undefined) {
-        const owner = await settleProviderPreflight(() => authRepo.getAccount(turnAccountId));
-        // Reuse the exact predicate the consent PATCH gates on, so the two
-        // cannot drift apart. A vanished owner is not entitled.
-        bundledTierEntitled = false;
-        if (owner !== null) {
-          try {
-            requireBundledLlmTier(owner.tier);
-            bundledTierEntitled = true;
-          } catch {
-            bundledTierEntitled = false;
-          }
-        }
+      if (settings !== null && settings.consent) {
+        bundledTierEntitled = await ownerPlanIncludesBundledLlm();
         if (!bundledTierEntitled) {
           bundledLlmTierIneligible = true;
           try {
@@ -5894,12 +5949,14 @@ export function registerAgentSessionsRoutes(
           agentDecomposerKind === 'claude' ? deploymentKeyModelRefusalFor(pre.model) : null;
         if (modelRefusal !== null) {
           await assertAgentMessageAdmissionCurrent(req.params.id, admission);
-          throw refuseModelOnTheDeploymentKey({
-            req,
-            model: pre.model,
-            refusal: modelRefusal,
-            route: '/v1/agent-sessions/:id/message',
-          });
+          throw refusedBeforeAnyWork(
+            refuseModelOnTheDeploymentKey({
+              req,
+              model: pre.model,
+              refusal: modelRefusal,
+              route: '/v1/agent-sessions/:id/message',
+            }),
+          );
         }
         // Arc 1 sub-slice 6.5 (v2-#6) — soft-cap pre-turn check.
         // Sum bundled-LLM spend in the current calendar month and
@@ -5922,10 +5979,12 @@ export function registerAgentSessionsRoutes(
           } catch {
             /* swallow */
           }
-          throw new BundledLlmBudgetExhaustedError({
-            spentCents: spent,
-            capCents: settings.monthlyCapUsdCents,
-          });
+          throw refusedBeforeAnyWork(
+            new BundledLlmBudgetExhaustedError({
+              spentCents: spent,
+              capCents: settings.monthlyCapUsdCents,
+            }),
+          );
         }
         // Billing-integrity hardening — reserve a per-account concurrency
         // slot BEFORE handing out the bundled key. The soft-cap gate above
@@ -5935,6 +5994,15 @@ export function registerAgentSessionsRoutes(
         // limiter caps in-flight bundled turns per account; over the
         // ceiling we 429 (retry once an in-flight turn finishes) so the
         // overshoot past the cap is bounded by `limit`, not unbounded.
+        //
+        // ⛔ A RATE-LIMIT REFUSAL, NOT THE SESSION-SLOT ONE. This used to throw
+        // ConcurrencyLimitError, whose type means "every session slot your plan
+        // allows is in use": it clears only when the customer ends a session,
+        // so it carries no Retry-After and every SDK treats it as not worth
+        // retrying — and its copy talks about active sessions and the plan. This
+        // limit is about AI TURNS and clears BY ITSELF the moment a running turn
+        // finishes, which is what `rate-limited` with a Retry-After says. Same
+        // family and shape as the account-wide running-turns limit below.
         if (bundledTurnConcurrency !== undefined) {
           if (!bundledTurnConcurrency.tryAcquire(turnAccountId)) {
             await assertAgentMessageAdmissionCurrent(req.params.id, admission);
@@ -5945,9 +6013,11 @@ export function registerAgentSessionsRoutes(
             } catch {
               /* swallow */
             }
-            throw new ConcurrencyLimitError(
-              bundledTurnConcurrency.current(turnAccountId),
-              bundledTurnConcurrency.limit,
+            throw refusedBeforeAnyWork(
+              new RateLimitedError(
+                1,
+                `Your account already has ${bundledTurnConcurrency.current(turnAccountId).toString()} AI turns running on Driftstack\u2019s included AI (limit ${bundledTurnConcurrency.limit.toString()}). Wait for one to finish, then try again.`,
+              ),
             );
           }
           bundledSlotAcquired = true;
@@ -5998,12 +6068,14 @@ export function registerAgentSessionsRoutes(
         const fallbackRefusal = deploymentKeyModelRefusalFor(pre.model);
         if (fallbackRefusal !== null) {
           await assertAgentMessageAdmissionCurrent(req.params.id, admission);
-          throw refuseModelOnTheDeploymentKey({
-            req,
-            model: pre.model,
-            refusal: fallbackRefusal,
-            route: '/v1/agent-sessions/:id/message',
-          });
+          throw refusedBeforeAnyWork(
+            refuseModelOnTheDeploymentKey({
+              req,
+              model: pre.model,
+              refusal: fallbackRefusal,
+              route: '/v1/agent-sessions/:id/message',
+            }),
+          );
         }
       }
       // Q.1 — the ByokAnthropicRequired 502 only fires when the
@@ -6022,19 +6094,23 @@ export function registerAgentSessionsRoutes(
           // Deliberately NOT the consent error: consent is on. The blocker is
           // the plan, so say so rather than sending them to a toggle that is
           // already ticked.
-          throw new ForbiddenError(
-            'Bundled-LLM billing is not available on this account\u2019s current plan. ' +
-              'Upgrade to a tier that includes it, or supply your own Anthropic key ' +
-              '(PUT /v1/account/me/byok-anthropic-key, or the x-byok-anthropic-api-key header).',
+          throw refusedBeforeAnyWork(
+            new ForbiddenError(
+              'Bundled-LLM billing is not available on this account\u2019s current plan. ' +
+                'Upgrade to a tier that includes it, or supply your own Anthropic key ' +
+                '(PUT /v1/account/me/byok-anthropic-key, or the x-byok-anthropic-api-key header).',
+            ),
           );
         }
         if (bundledLlmConsentMissing) {
-          throw new BundledLlmConsentRequiredError();
+          throw refusedBeforeAnyWork(new BundledLlmConsentRequiredError());
         }
-        throw new ByokAnthropicRequiredError(
-          'No Anthropic API key configured for this account. ' +
-            'PUT /v1/account/me/byok-anthropic-key to set a stored key, ' +
-            'or supply x-byok-anthropic-api-key on the request header.',
+        throw refusedBeforeAnyWork(
+          new ByokAnthropicRequiredError(
+            'No Anthropic API key configured for this account. ' +
+              'PUT /v1/account/me/byok-anthropic-key to set a stored key, ' +
+              'or supply x-byok-anthropic-api-key on the request header.',
+          ),
         );
       }
       // W443/W445 — map approved {category, matched_text} pairs to executor
@@ -6049,30 +6125,44 @@ export function registerAgentSessionsRoutes(
             )
           : undefined;
       await assertAgentMessageAdmissionCurrent(req.params.id, admission);
-      const result = await runtime.runTurn({
-        agentSessionId: req.params.id,
-        userMessage: parsed.data.user_message,
-        admission,
-        ...(resolvedByokKey !== undefined ? { byokApiKey: resolvedByokKey } : {}),
-        ...(approvedConsequentialActions !== undefined ? { approvedConsequentialActions } : {}),
-        ...(onStep !== undefined ? { onStep } : {}),
-        ...(onProgress !== undefined ? { onProgress } : {}),
-        ...(stopWindow !== undefined ? { stopWindow } : {}),
-        keySource,
-      });
+      let result: Awaited<ReturnType<AgentRuntime['runTurn']>>;
+      try {
+        result = await runTurnRecordingWhetherItStarted({
+          agentSessionId: req.params.id,
+          userMessage: parsed.data.user_message,
+          admission,
+          ...(resolvedByokKey !== undefined ? { byokApiKey: resolvedByokKey } : {}),
+          ...(approvedConsequentialActions !== undefined ? { approvedConsequentialActions } : {}),
+          ...(onStep !== undefined ? { onStep } : {}),
+          ...(onProgress !== undefined ? { onProgress } : {}),
+          ...(stopWindow !== undefined ? { stopWindow } : {}),
+          keySource,
+        });
+      } catch (err) {
+        // The model provider refused the KEY the turn ran on. Whose key it was
+        // decides the answer; everything else the turn can throw is unchanged.
+        if (err instanceof AgentProviderKeyRejectedError) {
+          throw aiKeyRejectedProblem(err, keySource);
+        }
+        throw err;
+      }
       turnObserver?.observeResult(result);
       if (result.kind === 'turn-in-progress') {
-        throw new ConflictError(
-          'This agent session is still working on a previous request. Wait for it to finish, then try again.',
-          // Typed, so a client can say "still working" rather than guessing from
-          // the sentence which kind of conflict this is.
-          { turn_in_progress: true },
+        throw refusedBeforeAnyWork(
+          new ConflictError(
+            'This agent session is still working on a previous request. Wait for it to finish, then try again.',
+            // Typed, so a client can say "still working" rather than guessing from
+            // the sentence which kind of conflict this is.
+            { turn_in_progress: true },
+          ),
         );
       }
       if (result.kind === 'account-turn-limit') {
-        throw new RateLimitedError(
-          1,
-          `Your account already has ${result.current.toString()} agent turns running (limit ${result.limit.toString()}). Wait for one to finish, then try again.`,
+        throw refusedBeforeAnyWork(
+          new RateLimitedError(
+            1,
+            `Your account already has ${result.current.toString()} agent turns running (limit ${result.limit.toString()}). Wait for one to finish, then try again.`,
+          ),
         );
       }
       if (result.kind === 'ai-control-unavailable') {
@@ -6105,7 +6195,7 @@ export function registerAgentSessionsRoutes(
           // collapsed into one unhelpful "changed or is busy" sentence — and a
           // customer whose session had simply ended was never offered the one
           // thing that would help (continue in a fresh session).
-          session_status: result.session.status,
+          ...sessionLifecycleExtensions(result.session),
         });
       }
       // Q.1.c — if this turn closed the session (e.g. the runtime's
@@ -6172,13 +6262,28 @@ export function registerAgentSessionsRoutes(
             sessionLivenessStore,
             sessionCapabilityReportStore,
           ),
-          intents: plan.intents.map(publicAgentIntent),
+          // EVERY step the turn attempted, across every plan it made — the list
+          // its transcript entry records. `plan.intents` is the FIRST plan only,
+          // and returning it left `intents` truncated beside `results`, which has
+          // always covered every plan. Same field, same shape; a single-plan turn
+          // returns exactly what it did. (The streamed `plan` frames are not this:
+          // each still announces its own plan, with `offset`.)
+          intents: (result.attemptedIntents ?? plan.intents).map(publicAgentIntent),
           results: result.executor.results.map(publicIntentResult),
           ok: result.executor.ok,
           // The read-back answer — the thing the customer asked for. It was
           // already computed, sanitized and billed; before this it stopped at
           // the transcript and the reply carried only the step list.
           ...(result.answer !== undefined ? { answer: result.answer } : {}),
+          // Why there is NO answer, when the message asked for one and the
+          // read-back could not produce it. The runtime already worked the
+          // sentence out and put it in the transcript; dropped here, a program
+          // saw completed steps, no `answer`, and no reason. Additive and
+          // optional: never present alongside `answer`, and absent on a turn
+          // that only acted.
+          ...(result.readbackUnavailable !== undefined
+            ? { answer_unavailable: result.readbackUnavailable }
+            : {}),
           // Why a turn whose steps all show as done is NOT done (it stopped at a
           // bound), or what the agent asked part-way through. Additive; absent on
           // every turn that simply finished or simply failed.
@@ -6385,6 +6490,7 @@ export function registerAgentSessionsRoutes(
     }
 
     let terminal: AgentMessageTerminal;
+    const attempt: AgentMessageAttempt = { turn: 'not-handed-to-the-runtime' };
     try {
       // New reservations resolve the exact active epoch before any credential,
       // spend, or provider access. Existing receipts replay first, independent
@@ -6398,6 +6504,7 @@ export function registerAgentSessionsRoutes(
         onProgress,
         turnObserver,
         stopWindow,
+        attempt,
       );
       terminal = { status: 200, body };
     } catch (error) {
@@ -6409,6 +6516,37 @@ export function registerAgentSessionsRoutes(
           ? error
           : new InternalError('An unexpected error occurred.', error);
       terminal = { status: apiError.status, body: apiError.toProblem(req.id), error };
+      // …EXCEPT a refusal that did no work. Nothing ran, so there is nothing a
+      // retry could repeat, and storing it would answer "wait and try again"
+      // with the same refusal for ever. Release the key instead: the customer
+      // gets this refusal now, and the same key runs the turn once the cause is
+      // gone. A store that cannot release completes the receipt below, which is
+      // what every refusal did before.
+      //
+      // ⛔ A RELEASE, ONCE ATTEMPTED, IS THE LAST THING THIS REQUEST DOES TO THE
+      // RECEIPT — even when it fails. A rejected release is AMBIGUOUS: the write
+      // may have landed and only its acknowledgement been lost. From that instant
+      // the key is free, and the customer's retry (same key, same request) may
+      // already have reserved it and be mid-turn. `complete` finds a reservation
+      // by account, key, session and request — every one of which that retry
+      // shares — so completing "instead" would stamp THIS refusal onto the
+      // retry's running turn: its own result could then not be stored, the key
+      // would replay "nothing ran, try again" for a task that RAN, and the
+      // customer's next move would run it a second time. So a failed release is
+      // logged and the refusal is answered. If the release did not land, the key
+      // stays reserved and answers `idempotency_status: in_progress` ("check the
+      // transcript before using a new key"), which is true and safe: nothing ran.
+      if (agentMessageRefusalDidNoWork(error, attempt) && agentTurnReceipts.release !== undefined) {
+        try {
+          await agentTurnReceipts.release(receiptArgs);
+        } catch (releaseError) {
+          req.log.warn(
+            { component: 'agent-session-message', sessionId: req.params.id, err: releaseError },
+            'could not confirm the release of the Idempotency-Key of a refusal that did no work; nothing is stored under the key, which stays unresolved if the release did not land',
+          );
+        }
+        return terminal;
+      }
     }
     // Complete exactly once. If storage rejects or its acknowledgement is
     // lost, propagate that persistence failure and leave the reservation
@@ -6839,8 +6977,13 @@ export function registerAgentSessionsRoutes(
           { component: 'agent-session-stop', sessionId: req.params.id, err },
           'could not determine whether another process is running this turn',
         );
+        // `stop_unconfirmed` is what tells THIS 503 from the one the same route
+        // answers when AI is not enabled at all (same status, same type): only
+        // this one is worth calling again, and a program should, because the
+        // agent may still be working on the page. Additive; the type is unchanged.
         throw new FeatureUnavailableError(
           'We could not confirm the stop just now. Try again in a moment.',
+          { stop_unconfirmed: true },
         );
       }
       return reply
@@ -7081,5 +7224,124 @@ function deploymentKeyModelRefusedError(model: string, detail: string): ApiError
     status: 403,
     detail,
     extensions: { requires_own_key: true, model },
+  });
+}
+
+// ── Which refusals leave an Idempotency-Key free to be used again ─────────────
+//
+// With an Idempotency-Key, the first definite result of a message is stored and
+// every later request with that key replays it. That is what makes a retry safe:
+// a task can never run twice. It must NOT apply to a refusal raised before the
+// turn did anything — "another turn is still running", "too many turns running",
+// "opt in first", "add a key first" — because the customer's next move is to
+// wait or fix the cause and send the SAME request again, and a stored refusal
+// would answer that with itself for ever.
+//
+// "Did no work" is decided by ONE predicate, agentMessageRefusalDidNoWork, from
+// two facts that each have one writer:
+//
+//   1. WHICH refusal it is. A refusal joins the set only by being wrapped in
+//      refusedBeforeAnyWork() at its throw site in executeAgentMessage, and the
+//      sites that are wrapped are exactly these:
+//        · 409 turn_in_progress — another turn is running on the session
+//        · 429 rate-limited — the account's running-turns limit
+//        · 429 rate-limited — the ceiling on turns running on the included AI
+//        · 402 the included AI's monthly budget is used up
+//        · 402 the account has not opted in to the included AI
+//        · 502 there is no AI key to run on
+//        · 403 the plan does not include the included AI
+//        · 403 the session's model runs only on the customer's own key
+//      Every one of them is raised while the route is still deciding whether the
+//      turn may run, or is the runtime saying it did not start.
+//   2. HOW FAR the request got (AgentMessageAttempt): whether the turn was handed
+//      to the runtime, and if so whether the runtime declined before starting.
+//      This is the interlock. A wrapped refusal raised after the turn STARTED — a
+//      planning call made, a step sent to the page — is final regardless of the
+//      wrapper, so a mistaken wrap can cost a customer a retry but can never run
+//      a task twice.
+//
+// Everything else stays final exactly as before: every success, every failure
+// after work started (a rejected own key included — the planning call was made),
+// and the refusals about the SESSION's state (closed, paused, a person has
+// control), which no amount of resending the same request changes.
+
+/** How far one message request got, as far as retrying it is concerned. */
+export interface AgentMessageAttempt {
+  turn: 'not-handed-to-the-runtime' | 'declined-before-it-started' | 'started';
+}
+
+const REFUSALS_RAISED_BEFORE_ANY_WORK = new WeakSet<ApiError>();
+
+/** Mark a refusal, at its throw site, as raised before the turn did any work. */
+function refusedBeforeAnyWork<E extends ApiError>(refusal: E): E {
+  REFUSALS_RAISED_BEFORE_ANY_WORK.add(refusal);
+  return refusal;
+}
+
+/**
+ * THE definition of "this refusal did no work", and the only place it is decided.
+ * True only for a refusal marked at its throw site AND a request whose turn never
+ * started. See the block comment above for what is in the set and why.
+ */
+export function agentMessageRefusalDidNoWork(
+  error: unknown,
+  attempt: AgentMessageAttempt,
+): boolean {
+  if (attempt.turn === 'started') return false;
+  return error instanceof ApiError && REFUSALS_RAISED_BEFORE_ANY_WORK.has(error);
+}
+
+/** Test seam: mark an error the way a throw site does. Not used by the route. */
+export const markRefusedBeforeAnyWorkForTest = refusedBeforeAnyWork;
+
+/**
+ * The answer when the model provider refused the AI key a turn ran on.
+ *
+ * THE CUSTOMER'S OWN KEY (sent with the request, or stored on the account): a
+ * typed, NON-retryable problem every released SDK already knows. It used to be a
+ * 500 `internal`, which SDKs treat as worth retrying, for a turn that can never
+ * succeed until the key is fixed. `byok-anthropic-required` is the right existing
+ * type: its meaning is "this turn has no key of yours it can run on", its fix is
+ * "give us a working key", and the desktop app already tells the customer their
+ * key was "missing or rejected" for it. (`unauthorized`/`invalid-key` would read
+ * as the DRIFTSTACK API key being bad and sign clients out; `forbidden` reads as
+ * a permission on the account.) `key_rejected` tells the two cases of the type
+ * apart; `key_source` says which key; `key_rejected_reason` says whether to
+ * replace the key or fix billing at the provider.
+ *
+ * DRIFTSTACK'S KEY (the included AI, or the staging fallback): our fault. It
+ * stays a 5xx, and it never mentions a key, because the customer has none to fix.
+ *
+ * ⛔ Neither answer carries the key or the provider's words. The `cause` kept for
+ * error tracking is the runtime's own fixed-text error, never the provider's.
+ */
+function aiKeyRejectedProblem(
+  rejection: AgentProviderKeyRejectedError,
+  keySource: 'header' | 'cached' | 'bundled' | 'fallback' | 'none',
+): ApiError {
+  if (keySource !== 'header' && keySource !== 'cached') {
+    return new InternalError(
+      'The AI could not run this message because of a problem on our side, not with your account or your request. No step was run. Try again later, and contact support if it keeps happening.',
+      rejection,
+    );
+  }
+  const which =
+    keySource === 'header'
+      ? 'the API key sent with this request (the x-byok-anthropic-api-key header)'
+      : 'the API key stored on your account';
+  const detail =
+    rejection.reason === 'billing'
+      ? `Anthropic refused ${which} because the Anthropic account behind it cannot pay for the call (a billing or credit problem). No step was run. ` +
+        (keySource === 'header'
+          ? 'Fix billing in your Anthropic Console or send a different key, then send the message again.'
+          : 'Fix billing in your Anthropic Console, or replace the key with PUT /v1/account/me/byok-anthropic-key, then send the message again.')
+      : `Anthropic rejected ${which}: it is invalid, revoked, or not permitted to run this model. No step was run. ` +
+        (keySource === 'header'
+          ? 'Send the message again with a working key. To check a key, store it with PUT /v1/account/me/byok-anthropic-key and call POST /v1/account/me/byok-anthropic-key/test.'
+          : 'Check it with POST /v1/account/me/byok-anthropic-key/test, replace it with PUT /v1/account/me/byok-anthropic-key if the test fails, then send the message again.');
+  return new ByokAnthropicRequiredError(detail, {
+    key_rejected: true,
+    key_source: keySource === 'header' ? 'header' : 'stored',
+    key_rejected_reason: rejection.reason,
   });
 }

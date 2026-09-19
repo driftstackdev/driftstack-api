@@ -406,13 +406,20 @@ export class DriverNotIntegratedError extends ApiError {
 
 // V-352b — 503 when an optional feature is disabled at deploy-time
 // (e.g. avatar upload when the public R2 bucket isn't configured).
+//
+// `extensions` is optional and additive, for the one case where the same 503
+// means two different things to a program: the AI Stop route answers it both
+// when AI is not enabled at all and when a stop could not be CONFIRMED, and only
+// the second is worth calling again (`stop_unconfirmed: true`). Every existing
+// caller passes a detail alone and is unaffected.
 export class FeatureUnavailableError extends ApiError {
-  constructor(detail: string) {
+  constructor(detail: string, extensions?: Record<string, unknown>) {
     super({
       type: PROBLEM_TYPES.FeatureUnavailable,
       title: 'Feature unavailable',
       status: 503,
       detail,
+      ...(extensions !== undefined ? { extensions } : {}),
     });
     this.name = 'FeatureUnavailableError';
   }
@@ -427,13 +434,23 @@ export class FeatureUnavailableError extends ApiError {
 // THIS customer's turn without a key. The customer fixes this by
 // PUTting their key via /v1/account/me/byok-anthropic-key or by
 // sending the header per request.
+//
+// Also the answer when the customer's OWN key was found and the model provider
+// then refused it (invalid, revoked, or an account that cannot pay): the turn
+// still has no key it can run on, the fix is still "give us a working key of
+// yours", and every released SDK already maps this type to a NON-retryable
+// error. That case carries `key_rejected: true` (with `key_source` and
+// `key_rejected_reason`) through the optional, additive `extensions`; the
+// no-key case passes a detail alone, exactly as before. Never used for a
+// rejection of Driftstack's own key, which is not the customer's to fix.
 export class ByokAnthropicRequiredError extends ApiError {
-  constructor(detail: string) {
+  constructor(detail: string, extensions?: Record<string, unknown>) {
     super({
       type: PROBLEM_TYPES.ByokAnthropicRequired,
       title: 'BYOK Anthropic key required',
       status: 502,
       detail,
+      ...(extensions !== undefined ? { extensions } : {}),
     });
     this.name = 'ByokAnthropicRequiredError';
   }

@@ -143,11 +143,64 @@ export class DrizzleAgentTurnReceiptsRepo implements AgentTurnReceiptsRepo {
     // A database client can retry an UPDATE after its commit acknowledgement is
     // lost. Treat an already-completed identical receipt as success, but never
     // overwrite a different terminal result.
-    const replay = await this.reserve(args);
-    if (replay.kind === 'replay' && JSON.stringify(replay.terminal) === JSON.stringify(terminal)) {
+    //
+    // ⛔ A READ, NEVER `reserve()`. `reserve()` INSERTS a fresh in-progress row
+    // when the key has no row — and once `release()` exists a key can have no row
+    // again. A retried completion after a release would then plant a phantom
+    // reservation that answers `in_progress` to every later request for ever.
+    const existing = await this.lookup(args);
+    if (
+      existing !== undefined &&
+      existing.state === 'completed' &&
+      existing.agentSessionId === args.agentSessionId &&
+      existing.requestHash === args.requestHash &&
+      JSON.stringify(readTerminal(existing, this.encryptionKeyBase64)) === JSON.stringify(terminal)
+    ) {
       return;
     }
     throw new Error('agent-turn receipt could not be completed atomically');
+  }
+
+  /** The one row a key can have on an account, or undefined. Reads only. */
+  private async lookup(
+    args: Pick<ReserveAgentTurnReceiptArgs, 'accountId' | 'idempotencyKey'>,
+  ): Promise<typeof agentTurnReceipts.$inferSelect | undefined> {
+    const [row] = await this.database.db
+      .select()
+      .from(agentTurnReceipts)
+      .where(
+        and(
+          eq(agentTurnReceipts.accountId, args.accountId),
+          eq(agentTurnReceipts.idempotencyKey, args.idempotencyKey),
+        ),
+      )
+      .limit(1);
+    return row;
+  }
+
+  /**
+   * Give an IN-PROGRESS reservation back, as if the key had never been used (see
+   * AgentTurnReceiptsRepo.release): the next request with the key reserves it
+   * afresh. Used for a refusal raised before the turn did any work.
+   *
+   * ⛔ THE `state = 'in_progress'` PREDICATE IS THE WHOLE SAFETY PROPERTY. A
+   * completed receipt never matches, so a stored RESULT can never be deleted by
+   * this — which is what would let a task run twice. Every identity column is in
+   * the predicate too, so a release can only ever remove the exact reservation
+   * this request made. Deleting nothing is success: there is nothing to give back.
+   */
+  async release(args: ReserveAgentTurnReceiptArgs): Promise<void> {
+    await this.database.db
+      .delete(agentTurnReceipts)
+      .where(
+        and(
+          eq(agentTurnReceipts.accountId, args.accountId),
+          eq(agentTurnReceipts.idempotencyKey, args.idempotencyKey),
+          eq(agentTurnReceipts.agentSessionId, args.agentSessionId),
+          eq(agentTurnReceipts.requestHash, args.requestHash),
+          eq(agentTurnReceipts.state, 'in_progress'),
+        ),
+      );
   }
 
   /**

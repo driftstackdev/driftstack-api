@@ -243,7 +243,12 @@ describe('W383 agent-session transcript SSE backpressure guard content parity', 
   });
 
   it('projects both plan and nested result intents in the message response', () => {
-    expect(body).toMatch(/intents: plan\.intents\.map\(publicAgentIntent\)/);
+    // Every step the turn attempted, across every plan it made (the first plan
+    // alone for a result assembled without the field), through the same projection.
+    expect(body).toMatch(
+      /intents: \(result\.attemptedIntents \?\? plan\.intents\)\.map\(publicAgentIntent\)/,
+    );
+    expect(body).not.toMatch(/intents: plan\.intents\.map\(publicAgentIntent\)/);
     expect(body).toMatch(/results: result\.executor\.results\.map\(publicIntentResult\)/);
   });
 });

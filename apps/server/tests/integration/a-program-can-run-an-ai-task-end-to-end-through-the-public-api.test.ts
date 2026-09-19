@@ -568,10 +568,13 @@ describe('a program can run an AI task end to end through the public API', () =>
     const refusal = lastCall('POST', `/v1/agent-sessions/${id}/message`);
     expect(refusal.status).toBe(200);
     expect(refusal.contentType).toContain('text/event-stream');
-    // Deliberately NOT pinned: the typed `session_status` extension. It is set
-    // when a session ends DURING a turn, but a session that was already closed
-    // is refused before the turn starts, by a 409 that does not carry it. That
-    // gap is reported rather than frozen here, so adding the field stays free.
+    // The refusal says which conflict it is in fields, not only in its sentence:
+    // a program tells "this session is over" from "this session is busy" by
+    // `session_status`, and reads why it ended without a second call.
+    expect((refused as ConflictError).extensions).toMatchObject({
+      session_status: 'closed',
+      closed_reason: 'customer-closed',
+    });
 
     // Closing twice is safe, so a program can close in `finally` unconditionally.
     await expect(sdk.agentSessions.close(id)).resolves.toBeUndefined();

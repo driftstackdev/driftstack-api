@@ -93,6 +93,83 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       ).resolves.toEqual({ kind: 'mismatch' });
     });
 
+    it('CRITICAL release gives back a reservation that is still in progress, and NEVER a completed one: the row of a result stays, and still replays', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const handle = { client, db, close: async () => {} };
+      const sessions = new DrizzleAgentSessionsRepo(handle, {
+        transcriptEncryptionKeyBase64: ENCRYPTION_KEY,
+      });
+      const receipts = new DrizzleAgentTurnReceiptsRepo(handle, ENCRYPTION_KEY);
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`turn-receipt-release-${accountId}@test.local`})`;
+      const session = await sessions.create({ accountId, tokenBudgetTotal: 1000 });
+      const other = await sessions.create({ accountId, tokenBudgetTotal: 1000 });
+      const args = {
+        accountId,
+        agentSessionId: session.id,
+        idempotencyKey: 'drizzle-turn-release',
+        requestHash: 'c'.repeat(64),
+      };
+      const rows = async (): Promise<number> => {
+        const [row] = await client!<Array<{ n: number }>>`
+          SELECT count(*)::int AS n FROM agent_turn_receipts
+          WHERE account_id = ${accountId} AND idempotency_key = ${args.idempotencyKey}`;
+        return row?.n ?? -1;
+      };
+
+      await expect(receipts.reserve(args)).resolves.toEqual({ kind: 'reserved' });
+      // A release that names a different request or session removes nothing.
+      await receipts.release({ ...args, requestHash: 'd'.repeat(64) });
+      await receipts.release({ ...args, agentSessionId: other.id });
+      expect(await rows()).toBe(1);
+
+      await receipts.release(args);
+      expect(await rows()).toBe(0);
+      // The key is free: it reserves afresh, completes, and replays.
+      await expect(receipts.reserve(args)).resolves.toEqual({ kind: 'reserved' });
+      const terminal = { status: 200, body: { kind: 'plan-executed' } };
+      await receipts.complete({ ...args, terminal });
+
+      await expect(receipts.release(args)).resolves.toBeUndefined();
+      expect(await rows(), 'a completed receipt is never released').toBe(1);
+      await expect(receipts.reserve(args)).resolves.toEqual({ kind: 'replay', terminal });
+    });
+
+    it('CRITICAL a completion retried after a release plants NO phantom reservation: it fails, and the key stays free', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const handle = { client, db, close: async () => {} };
+      const sessions = new DrizzleAgentSessionsRepo(handle, {
+        transcriptEncryptionKeyBase64: ENCRYPTION_KEY,
+      });
+      const receipts = new DrizzleAgentTurnReceiptsRepo(handle, ENCRYPTION_KEY);
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`turn-receipt-phantom-${accountId}@test.local`})`;
+      const session = await sessions.create({ accountId, tokenBudgetTotal: 1000 });
+      const args = {
+        accountId,
+        agentSessionId: session.id,
+        idempotencyKey: 'drizzle-turn-phantom',
+        requestHash: 'e'.repeat(64),
+      };
+      await expect(receipts.reserve(args)).resolves.toEqual({ kind: 'reserved' });
+      await receipts.release(args);
+      // A database driver may retry a completion after a lost acknowledgement.
+      // With the row gone, the completion has nothing to complete: it must fail
+      // rather than reserve the key afresh on the caller's behalf.
+      await expect(
+        receipts.complete({ ...args, terminal: { status: 200, body: { kind: 'plan-executed' } } }),
+      ).rejects.toThrow(/could not be completed/);
+      const [row] = await client<Array<{ n: number }>>`
+        SELECT count(*)::int AS n FROM agent_turn_receipts
+        WHERE account_id = ${accountId} AND idempotency_key = ${args.idempotencyKey}`;
+      expect(row?.n, 'no row may be left behind by a failed completion').toBe(0);
+      await expect(receipts.reserve(args)).resolves.toEqual({ kind: 'reserved' });
+    });
+
     it('binds ciphertext to every replay identity field and rejects tamper or a wrong key', async () => {
       if (!dbReachable || !client) return;
       const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;

@@ -50,6 +50,17 @@ function normalizePath(path: string): string {
   return path.replace(/:([A-Za-z_][A-Za-z0-9_]*)/g, '{$1}');
 }
 
+/**
+ * `throw new X(` — or the same throw passed through the message route's
+ * `refusedBeforeAnyWork(…)` marker, which returns the error it is given. The
+ * marker records that the refusal was raised before the turn did any work (so
+ * its Idempotency-Key is released rather than stored); it does not change what
+ * is thrown, so a marked throw is still a throw of X for every arm here.
+ */
+function thrownInRoute(errorClass: string): RegExp {
+  return new RegExp(`throw (?:refusedBeforeAnyWork\\(\\s*)?new ${errorClass}\\b`);
+}
+
 function declaredCodes(): Map<string, ReadonlySet<string>> {
   const spec = JSON.parse(readFileSync(SPEC, 'utf8')) as OpenApiSpec;
   const out = new Map<string, ReadonlySet<string>>();
@@ -260,8 +271,8 @@ describe('a returned status code is a declared one', () => {
 
     const route = codeOf(resolve(ROUTES_DIR, 'agent-sessions.ts'));
     for (const name of ['BundledLlmBudgetExhaustedError', 'BundledLlmConsentRequiredError']) {
-      expect(route, `${name} is still thrown by the agent-sessions routes`).toContain(
-        `throw new ${name}`,
+      expect(route, `${name} is still thrown by the agent-sessions routes`).toMatch(
+        thrownInRoute(name),
       );
     }
 
@@ -330,7 +341,7 @@ describe('a returned status code is a declared one', () => {
       expect(
         codeOf(resolve(ROUTES_DIR, entry.routeFile)),
         `${entry.errorClass} is still thrown in ${entry.routeFile}`,
-      ).toContain(`throw new ${entry.errorClass}`);
+      ).toMatch(thrownInRoute(entry.errorClass));
       const codes = declared.get(entry.operation);
       expect(codes, `${entry.operation} is still published`).not.toBeUndefined();
       if (codes !== undefined && !codes.has(entry.code)) {
