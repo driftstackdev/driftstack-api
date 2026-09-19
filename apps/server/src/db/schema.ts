@@ -11,6 +11,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   unique,
@@ -3075,3 +3076,430 @@ export const agentTurnTelemetry = pgTable(
     ),
   ],
 );
+
+// ───────────────────────────────────────────────────────────────────────────
+// credit_rate_cards / credit_rate_card_models — the AI credits rate card (0127)
+// ───────────────────────────────────────────────────────────────────────────
+//
+// What a customer pays per token, per model, in microcredits
+// (1 credit = 1,000,000 µcr = US$0.01), by numbered card version. A task pins
+// the card in force when it starts. Read through `credit-rate-card-repo.ts`;
+// nothing in the product reads it until AI credits are switched on.
+//
+// ⛔ TRIGGERS DRIZZLE CANNOT EXPRESS — migration 0127 installs them, and
+// `a-published-credit-rate-card-can-only-be-withdrawn-before-it-takes-effect`
+// (integration) proves each one against a real database:
+//
+//   credit_rate_cards_guard_trigger        BEFORE INSERT OR UPDATE OR DELETE
+//     · INSERT forces `announced_at = now()` and `withdrawn_at = NULL`, so a
+//       card can be neither backdated nor born withdrawn.
+//     · UPDATE is refused unless it is the one permitted change: withdrawing a
+//       card before its `effective_at` (on the clock at that statement),
+//       touching no other column. `withdrawn_at` is then set to now() whatever
+//       the caller wrote.
+//     · DELETE is refused.
+//   credit_rate_cards_notice_at_commit     CONSTRAINT TRIGGER AFTER INSERT,
+//                                          DEFERRABLE INITIALLY DEFERRED,
+//                                          WHEN (NEW.version <> 1)
+//     · At COMMIT, refuses a card after version 1 that takes effect less than
+//       720 hours after the clock at commit. announced_at is the transaction's
+//       START; customers see the card only once it commits, so a transaction
+//       held open would otherwise eat into the notice. Publish with a margin.
+//     · Not queued at all for version 1, so the migration's launch card leaves
+//       no deferred event pending. While one is pending Postgres refuses ALTER
+//       TABLE and CREATE INDEX on this table, and the migrator runs a whole
+//       batch (every migration, on a database built from zero) in one
+//       transaction — `a-later-migration-can-still-alter-the-rate-card-table`
+//       (integration) proves a later migration can.
+//   credit_rate_cards_withdrawal_at_commit CONSTRAINT TRIGGER AFTER UPDATE,
+//                                          DEFERRABLE INITIALLY DEFERRED
+//     · At COMMIT, refuses a withdrawal committed at or after `effective_at`:
+//       until it commits, readers still see the card in force and a task can
+//       be priced on it.
+//   credit_rate_card_models_guard_trigger  BEFORE INSERT OR UPDATE OR DELETE
+//     · INSERT only when the card's `announced_at` equals now() — i.e. in the
+//       transaction that created the card. Prices are never added later.
+//     · UPDATE and DELETE are refused.
+//
+// The guards raise SQLSTATE 55000; the notice refusal at commit raises 23514,
+// as the notice CHECK does. The CHECKs below are restated from 0127 so the
+// schema expresses what it relies on; the notice CHECK is in hours on purpose
+// (a '30 days' interval is added in the session time zone).
+export const creditRateCards = pgTable(
+  'credit_rate_cards',
+  {
+    version: integer('version').primaryKey(),
+    /** Markup over list price in basis points (20,000 = 2.0 ×). */
+    markupBp: integer('markup_bp').notNull(),
+    /** Forced to now() by trigger on insert. */
+    announcedAt: timestamp('announced_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    effectiveAt: timestamp('effective_at', { withTimezone: true }).notNull(),
+    /** Set only by a withdrawal before `effective_at`; a withdrawn card is never in force. */
+    withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),
+    createdByKeyId: uuid('created_by_key_id'),
+    note: text('note').notNull().default(''),
+  },
+  (t) => [
+    // One live card per instant, so "the card in force" is always one row.
+    uniqueIndex('credit_rate_cards_live_effective_unique')
+      .on(t.effectiveAt)
+      .where(sql`${t.withdrawnAt} IS NULL`),
+    check('credit_rate_cards_version_positive', sql`${t.version} >= 1`),
+    check('credit_rate_cards_markup_range', sql`${t.markupBp} BETWEEN 10000 AND 100000`),
+    check(
+      'credit_rate_cards_thirty_days_notice',
+      sql`${t.version} = 1 OR ${t.effectiveAt} >= ${t.announcedAt} + interval '720 hours'`,
+    ),
+    check(
+      'credit_rate_cards_withdraw_before_effective',
+      sql`${t.withdrawnAt} IS NULL OR ${t.withdrawnAt} < ${t.effectiveAt}`,
+    ),
+  ],
+);
+
+export type CreditRateCardRow = typeof creditRateCards.$inferSelect;
+
+export const creditRateCardModels = pgTable(
+  'credit_rate_card_models',
+  {
+    version: integer('version')
+      .notNull()
+      .references(() => creditRateCards.version, { onDelete: 'restrict' }),
+    model: text('model').notNull(),
+    inputMicroPerToken: bigint('input_micro_per_token', { mode: 'number' }).notNull(),
+    outputMicroPerToken: bigint('output_micro_per_token', { mode: 'number' }).notNull(),
+    cacheReadMicroPerToken: bigint('cache_read_micro_per_token', { mode: 'number' }).notNull(),
+    cacheWrite5mMicroPerToken: bigint('cache_write_5m_micro_per_token', {
+      mode: 'number',
+    }).notNull(),
+    cacheWrite1hMicroPerToken: bigint('cache_write_1h_micro_per_token', {
+      mode: 'number',
+    }).notNull(),
+    minStartMicro: bigint('min_start_micro', { mode: 'number' }).notNull(),
+    maxReserveMicro: bigint('max_reserve_micro', { mode: 'number' }).notNull(),
+    listInputMicrocentsPerToken: bigint('list_input_microcents_per_token', {
+      mode: 'number',
+    }).notNull(),
+    listOutputMicrocentsPerToken: bigint('list_output_microcents_per_token', {
+      mode: 'number',
+    }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.version, t.model] }),
+    check(
+      'credit_rate_card_models_positive',
+      sql`${t.inputMicroPerToken} > 0 AND ${t.outputMicroPerToken} > 0 AND ${t.cacheReadMicroPerToken} >= 0`,
+    ),
+    check(
+      'credit_rate_card_models_cache_order',
+      sql`${t.cacheReadMicroPerToken} <= ${t.inputMicroPerToken} AND ${t.inputMicroPerToken} <= ${t.cacheWrite5mMicroPerToken} AND ${t.cacheWrite5mMicroPerToken} <= ${t.cacheWrite1hMicroPerToken}`,
+    ),
+    check(
+      'credit_rate_card_models_reserve',
+      sql`${t.minStartMicro} > 0 AND ${t.maxReserveMicro} >= ${t.minStartMicro}`,
+    ),
+    // Opus runs only on the customer's own key; any id containing "opus" is refused.
+    check('credit_rate_card_models_never_opus', sql`${t.model} !~* 'opus'`),
+  ],
+);
+
+export type CreditRateCardModelDbRow = typeof creditRateCardModels.$inferSelect;
+
+// ───────────────────────────────────────────────────────────────────────────
+// credit_accounts / credit_plan_overrides / credit_lots / credit_ledger — the
+// AI credits ledger core (0128)
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Amounts are microcredits (1 credit = 1,000,000 µcr = US$0.01). A LOT is one
+// grant of credits with a term; the LEDGER is one row per movement, and it is
+// the only way a lot's `remaining_micro` or an account's `debt_micro` changes.
+// Read and written through `credit-ledger-repo.ts`; nothing in the product
+// reads these tables until AI credits are switched on.
+//
+// ⛔ TRIGGERS DRIZZLE CANNOT EXPRESS — migration 0128 installs them, and the
+// integration tests named beside each prove them against a real database with
+// raw SQL:
+//
+//   (Every function below pins `search_path = public, pg_temp`, so a
+//   session's temporary table named like a credit table cannot stand in for
+//   it inside a guard: pg_temp is otherwise searched first.)
+//
+//   credit_ledger_apply_trigger        AFTER INSERT ON credit_ledger
+//     · First locks the account's credit_accounts row — FOR NO KEY UPDATE for
+//       a debt movement, FOR SHARE otherwise — and refuses (23503) a row whose
+//       account has none. That lock, held to the end of the transaction, is
+//       what makes the COMMIT-time debt check below hold when two connections
+//       write at once.
+//     · Applies the row: `lot_delta_micro` to its lot's remaining, and
+//       `debt_delta_micro` to the account's debt. Refuses (23503) a row naming
+//       another account's lot, and (23505) a second funding row — grant,
+//       proration grant or top-up — for a lot already funded: a lot is funded
+//       once, even when spending has left room under its ceiling. AFTER, so an
+//       ON CONFLICT DO NOTHING that inserts nothing applies nothing.
+//   credit_ledger_append_only_trigger  BEFORE UPDATE OR DELETE ON credit_ledger
+//     · Refuses both (55000), except a DELETE whose account row is already gone
+//       — the cascade of a deleted account.
+//   credit_lots_guard_trigger          BEFORE INSERT OR UPDATE OR DELETE
+//     · INSERT forces `remaining_micro = 0` and `held_micro = 0`: a lot is
+//       funded only by its grant row.
+//     · UPDATE refuses any change to the terms (id, account, kind, rank, window,
+//       grant key, granted, starts, expires, created), a change to
+//       `remaining_micro` that is not made by the ledger's apply trigger, a
+//       change to `held_micro` that is not made by the holds' apply trigger (a
+//       later migration), and un-revoking or re-revoking a revoked lot. "Made by
+//       the apply trigger" is two facts: the transaction-local flag it raises
+//       AND pg_trigger_depth() >= 2, so a session cannot raise the flag itself
+//       and write a balance.
+//     · DELETE only when the account row is gone.
+//   credit_accounts_guard_trigger      BEFORE INSERT OR UPDATE OR DELETE
+//     · INSERT forces `debt_micro = 0`. UPDATE refuses a new `account_id` and
+//       a debt change not made by the ledger's apply trigger. DELETE only when
+//       the account row is gone (removing the row would forgive its debt).
+//   credit_ledger_debt_vs_free         CONSTRAINT TRIGGER AFTER INSERT ON
+//                                      credit_ledger, DEFERRABLE INITIALLY
+//                                      DEFERRED
+//     · At COMMIT, refuses (23514) an account holding debt beside spendable
+//       credit (started, unexpired, unrevoked, remaining − held > 0). The
+//       reservation holds add a second trigger on the same function. It reads
+//       the debt holding the credit row FOR SHARE, so a caller that frees
+//       credit without a ledger row (a released hold) waits for a concurrent
+//       debt writer instead of reading around it.
+//
+// Proved by (integration): `a-lot-balance-and-debt-move-only-through-ledger-rows`,
+// `the-credit-ledger-is-append-only-and-dies-only-with-its-account`,
+// `the-database-refuses-a-malformed-credit-lot-or-ledger-row`,
+// `a-ledger-row-applied-twice-changes-the-balance-once-even-when-two-connections-race`,
+// `a-charge-beyond-what-a-lot-holds-is-refused-and-the-whole-transaction-rolls-back`,
+// `debt-cannot-commit-beside-spendable-credit`.
+//
+// The CHECKs below are restated from 0128 so the schema expresses what it
+// relies on. Two are stated on a neighbouring column rather than the kind, and
+// mean the same thing because another CHECK ties the two: a lot's window
+// follows `spend_rank = 0` (the monthly and proration kinds), and a debt reason
+// follows `debt_delta_micro > 0` (only `debt_incurred`). The top-up term is
+// counted in UTC: `timestamptz + interval` counts months and days in the
+// session time zone.
+export const creditAccounts = pgTable(
+  'credit_accounts',
+  {
+    accountId: uuid('account_id')
+      .primaryKey()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    /** 'legacy' | 'credits' — how this account's AI is funded. */
+    billingMode: text('billing_mode').notNull().default('legacy'),
+    /** 'credits' | 'own_key'; null = automatic (own key when usable, else credits). */
+    aiSource: text('ai_source'),
+    /** 'cutover' | 'customer' | 'admin'; set together with `aiSourceSetAt`. */
+    aiSourceSetBy: text('ai_source_set_by'),
+    aiSourceSetAt: timestamp('ai_source_set_at', { withTimezone: true }),
+    /** Moves only through credit_ledger; forced to 0 on insert. */
+    debtMicro: bigint('debt_micro', { mode: 'number' }).notNull().default(0),
+    autoTopUpEnabled: boolean('auto_top_up_enabled').notNull().default(false),
+    legacyConsentAtMove: boolean('legacy_consent_at_move'),
+    legacyCapCentsAtMove: integer('legacy_cap_cents_at_move'),
+    hadStoredKeyAtMove: boolean('had_stored_key_at_move'),
+    movedToCreditsAt: timestamp('moved_to_credits_at', { withTimezone: true }),
+    movedBackAt: timestamp('moved_back_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index('credit_accounts_credits_mode_idx')
+      .on(t.accountId)
+      .where(sql`${t.billingMode} = 'credits'`),
+    check('credit_accounts_billing_mode', sql`${t.billingMode} IN ('legacy', 'credits')`),
+    check(
+      'credit_accounts_ai_source',
+      sql`${t.aiSource} IS NULL OR ${t.aiSource} IN ('credits', 'own_key')`,
+    ),
+    check(
+      'credit_accounts_ai_source_set_by',
+      sql`(${t.aiSourceSetBy} IS NULL) = (${t.aiSourceSetAt} IS NULL) AND (${t.aiSourceSetBy} IS NULL OR ${t.aiSourceSetBy} IN ('cutover', 'customer', 'admin'))`,
+    ),
+    check('credit_accounts_debt_nonnegative', sql`${t.debtMicro} >= 0`),
+    check(
+      'credit_accounts_move_snapshot',
+      sql`${t.movedToCreditsAt} IS NULL OR (${t.legacyConsentAtMove} IS NOT NULL AND ${t.legacyCapCentsAtMove} IS NOT NULL AND ${t.hadStoredKeyAtMove} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export type CreditAccountRow = typeof creditAccounts.$inferSelect;
+
+// Contract and admin-assigned plans. Never created automatically: an admin sets
+// each one. No writer exists yet.
+export const creditPlanOverrides = pgTable(
+  'credit_plan_overrides',
+  {
+    accountId: uuid('account_id')
+      .primaryKey()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    monthlyCredits: integer('monthly_credits').notNull(),
+    ownKeyAllowed: boolean('own_key_allowed').notNull().default(true),
+    anchorAt: timestamp('anchor_at', { withTimezone: true }).notNull(),
+    endsAt: timestamp('ends_at', { withTimezone: true }),
+    effectiveSince: timestamp('effective_since', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    /** 'contract' | 'admin_tier'. */
+    reason: text('reason').notNull(),
+    setByKeyId: uuid('set_by_key_id'),
+    note: text('note').notNull().default(''),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    check('credit_plan_overrides_credits_range', sql`${t.monthlyCredits} BETWEEN 0 AND 10000000`),
+    check('credit_plan_overrides_reason', sql`${t.reason} IN ('contract', 'admin_tier')`),
+    check(
+      'credit_plan_overrides_ends_after_anchor',
+      sql`${t.endsAt} IS NULL OR ${t.endsAt} > ${t.anchorAt}`,
+    ),
+  ],
+);
+
+export type CreditPlanOverrideRow = typeof creditPlanOverrides.$inferSelect;
+
+export const creditLots = pgTable(
+  'credit_lots',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    /** 'monthly' | 'proration' | 'adjustment' | 'top_up' (CREDIT_LOT_KINDS). */
+    kind: text('kind').notNull(),
+    /** 0 included, 1 goodwill, 2 bought — lower is spent first. */
+    spendRank: smallint('spend_rank').notNull(),
+    /** The month window of an included lot; its foreign key arrives with that table. */
+    windowId: uuid('window_id'),
+    grantKey: text('grant_key').notNull(),
+    grantedMicro: bigint('granted_micro', { mode: 'number' }).notNull(),
+    /** Moves only through credit_ledger; forced to 0 on insert. */
+    remainingMicro: bigint('remaining_micro', { mode: 'number' }).notNull().default(0),
+    /** Moves only through the reservation holds; forced to 0 on insert. */
+    heldMicro: bigint('held_micro', { mode: 'number' }).notNull().default(0),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('credit_lots_grant_key_unique').on(t.grantKey),
+    index('credit_lots_spendable_idx')
+      .on(t.accountId, t.spendRank, t.expiresAt, t.startsAt)
+      .where(sql`${t.remainingMicro} > ${t.heldMicro}`),
+    index('credit_lots_expiry_idx')
+      .on(t.expiresAt)
+      .where(sql`${t.remainingMicro} > ${t.heldMicro}`),
+    check('credit_lots_kind', sql`${t.kind} IN ('monthly', 'proration', 'adjustment', 'top_up')`),
+    check(
+      'credit_lots_rank_matches_kind',
+      sql`(${t.kind} IN ('monthly', 'proration') AND ${t.spendRank} = 0) OR (${t.kind} = 'adjustment' AND ${t.spendRank} = 1) OR (${t.kind} = 'top_up' AND ${t.spendRank} = 2)`,
+    ),
+    check(
+      'credit_lots_window_iff_included',
+      sql`(${t.spendRank} = 0) = (${t.windowId} IS NOT NULL)`,
+    ),
+    check(
+      'credit_lots_granted_whole_credits',
+      sql`${t.grantedMicro} > 0 AND ${t.grantedMicro} % 1000000 = 0`,
+    ),
+    check(
+      'credit_lots_remaining_bounds',
+      sql`${t.remainingMicro} >= 0 AND ${t.remainingMicro} <= ${t.grantedMicro}`,
+    ),
+    check(
+      'credit_lots_held_bounds',
+      sql`${t.heldMicro} >= 0 AND ${t.heldMicro} <= ${t.remainingMicro}`,
+    ),
+    check('credit_lots_term', sql`${t.startsAt} < ${t.expiresAt}`),
+    check(
+      'credit_lots_top_up_twelve_months',
+      sql`${t.kind} <> 'top_up' OR ${t.expiresAt} <= ((${t.startsAt} AT TIME ZONE 'UTC') + interval '12 months 1 day') AT TIME ZONE 'UTC'`,
+    ),
+  ],
+);
+
+export type CreditLotRow = typeof creditLots.$inferSelect;
+
+export const creditLedger = pgTable(
+  'credit_ledger',
+  {
+    /** Append-only, so the identity orders the ledger; the API's entry id. */
+    id: bigint('id', { mode: 'bigint' }).primaryKey().generatedAlwaysAsIdentity(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    lotId: uuid('lot_id').references(() => creditLots.id, { onDelete: 'cascade' }),
+    lotDeltaMicro: bigint('lot_delta_micro', { mode: 'number' }).notNull().default(0),
+    debtDeltaMicro: bigint('debt_delta_micro', { mode: 'number' }).notNull().default(0),
+    idempotencyKey: text('idempotency_key').notNull(),
+    /** The task a charge belongs to; its foreign key arrives with the reservations table. */
+    reservationId: uuid('reservation_id'),
+    agentSessionId: text('agent_session_id'),
+    model: text('model'),
+    rateCardVersion: integer('rate_card_version').references(() => creditRateCards.version),
+    reason: text('reason'),
+    actor: text('actor').notNull().default('system'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    // Idempotency: one row per (account, key). Writers ON CONFLICT DO NOTHING.
+    uniqueIndex('credit_ledger_idempotency_unique').on(t.accountId, t.idempotencyKey),
+    // Newest first. The migration says `"id" DESC`, which Postgres reads as DESC
+    // NULLS FIRST; drizzle's `.desc()` alone renders DESC NULLS LAST, a different
+    // index, so the nulls order is stated to match the migration.
+    index('credit_ledger_account_idx').on(t.accountId, t.id.desc().nullsFirst()),
+    index('credit_ledger_reservation_idx')
+      .on(t.reservationId)
+      .where(sql`${t.reservationId} IS NOT NULL`),
+    index('credit_ledger_lot_idx')
+      .on(t.lotId, t.kind)
+      .where(sql`${t.lotId} IS NOT NULL`),
+    check(
+      'credit_ledger_kind',
+      sql`${t.kind} IN ('grant', 'proration_grant', 'proration_clawback', 'task_charge', 'expiry', 'refund_clawback', 'debt_incurred', 'debt_repayment', 'adjustment', 'top_up')`,
+    ),
+    check(
+      'credit_ledger_actor',
+      sql`${t.actor} IN ('system', 'customer', 'admin', 'stripe', 'crypto')`,
+    ),
+    check('credit_ledger_lot_presence', sql`(${t.lotId} IS NULL) = (${t.lotDeltaMicro} = 0)`),
+    check(
+      'credit_ledger_shape',
+      sql`(${t.kind} IN ('grant', 'proration_grant', 'top_up') AND ${t.lotDeltaMicro} > 0 AND ${t.debtDeltaMicro} = 0) OR (${t.kind} IN ('task_charge', 'expiry', 'proration_clawback', 'refund_clawback') AND ${t.lotDeltaMicro} < 0 AND ${t.debtDeltaMicro} = 0) OR (${t.kind} = 'debt_incurred' AND ${t.lotDeltaMicro} = 0 AND ${t.debtDeltaMicro} > 0) OR (${t.kind} = 'debt_repayment' AND ${t.lotDeltaMicro} < 0 AND ${t.debtDeltaMicro} = ${t.lotDeltaMicro}) OR (${t.kind} = 'adjustment' AND ${t.debtDeltaMicro} <= 0 AND ((${t.lotDeltaMicro} = 0) <> (${t.debtDeltaMicro} = 0)))`,
+    ),
+    check(
+      'credit_ledger_debt_reason',
+      sql`${t.debtDeltaMicro} <= 0 OR (${t.reason} IS NOT NULL AND ${t.reason} IN ('payment_reversed', 'plan_change'))`,
+    ),
+    check(
+      'credit_ledger_task_charge_context',
+      sql`${t.kind} <> 'task_charge' OR (${t.reservationId} IS NOT NULL AND ${t.rateCardVersion} IS NOT NULL AND ${t.model} IS NOT NULL)`,
+    ),
+    check(
+      'credit_ledger_idempotency_key_length',
+      sql`length(${t.idempotencyKey}) BETWEEN 1 AND 200`,
+    ),
+  ],
+);
+
+export type CreditLedgerRow = typeof creditLedger.$inferSelect;

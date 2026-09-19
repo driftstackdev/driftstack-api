@@ -83,6 +83,16 @@ const CASCADE_ONLY_TABLES = new Map<string, string>([
     'billing_email_sends',
     'PER-EVENT — one row per billing email; also the (event, kind) dedup key',
   ],
+  ['credit_accounts', 'entity — one row per account (its primary key)'],
+  [
+    'credit_ledger',
+    'PER-EVENT — one row per balance movement: every grant, task charge, expiry, repayment and adjustment. Append-only by trigger, so nothing but the account cascade can ever remove a row',
+  ],
+  [
+    'credit_lots',
+    'PER-EVENT — one row per grant: each month of included credits, each plan change, goodwill grant and top-up. Removed only with the account, by trigger',
+  ],
+  ['credit_plan_overrides', 'entity — at most one per account (its primary key), set by an admin'],
   [
     'crypto_entitlements',
     'PER-EVENT — one row per crypto ORDER (unique on order_id), not one per account. I recorded it as per-account when this roster landed; the schema says otherwise, and a customer who buys fifty times has fifty rows',
@@ -130,6 +140,10 @@ const UNIQUENESS_KEY = new Map<string, string>([
   ['account_oauth_links', 'provider,providerSub'],
   ['api_keys', 'keyPrefix'],
   ['billing_email_sends', '(pk only)'],
+  ['credit_accounts', '(pk only)'],
+  ['credit_ledger', 'accountId,idempotencyKey'],
+  ['credit_lots', 'grantKey'],
+  ['credit_plan_overrides', '(pk only)'],
   ['crypto_entitlements', 'orderId'],
   ['incident_update_notifications', 'subscriberId,incidentId'],
   ['incident_updates', '(pk only)'],
@@ -335,7 +349,7 @@ describe('a cascade from a row nobody deletes is not a retention policy', () => 
     ).toEqual([...CASCADE_ONLY_TABLES.keys()].sort());
   });
 
-  it('CRITICAL the per-event set is still exactly these eight. The entity-bounded majority is the boring part of the roster; this is the list that says whether the situation is getting worse, and an eighth would otherwise arrive as one more line in a table of fifteen.', () => {
+  it('CRITICAL the per-event set is still exactly these ten. The entity-bounded majority is the boring part of the roster; this is the list that says whether the situation is getting worse, and an eleventh would otherwise arrive as one more line in a table of twenty.', () => {
     const perEvent = [...CASCADE_ONLY_TABLES.entries()]
       .filter(([, why]) => why.startsWith('PER-EVENT'))
       .map(([t]) => t)
@@ -343,6 +357,12 @@ describe('a cascade from a row nobody deletes is not a retention policy', () => 
     expect(perEvent, 'tables that append a row per event and are never removed:').toEqual([
       'account_audit_log',
       'billing_email_sends',
+      // The AI credits ledger and its lots (0128). A financial record, append-only
+      // BY TRIGGER: no sweeper may remove a row without breaking the rule that a
+      // balance is the sum of its rows. Retention here is a policy decision with
+      // an accounting answer, not something a drift guard picks.
+      'credit_ledger',
+      'credit_lots',
       'crypto_entitlements',
       'incident_update_notifications',
       'oauth_pending_links',

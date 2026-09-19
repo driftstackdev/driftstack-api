@@ -24,6 +24,7 @@
 // misleading ones.
 
 import postgres from 'postgres';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,20 +36,41 @@ const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftsta
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 
 interface Journal {
-  entries: Array<{ tag: string }>;
+  entries: Array<{ tag: string; when: number }>;
+}
+
+function journalEntries(): Journal['entries'] {
+  return (JSON.parse(readFileSync(resolve(MIGRATIONS, 'meta', '_journal.json'), 'utf8')) as Journal)
+    .entries;
 }
 
 /** Migrations this checkout expects, from drizzle's own journal. */
 function expectedMigrations(): string[] {
-  const journal = JSON.parse(
-    readFileSync(resolve(MIGRATIONS, 'meta', '_journal.json'), 'utf8'),
-  ) as Journal;
-  return journal.entries.map((e) => e.tag);
+  return journalEntries().map((e) => e.tag);
+}
+
+/**
+ * What the migrator records for each file it applies: its `when`, as the row's
+ * `created_at`, and the sha256 of the file's whole text, as the row's `hash`.
+ */
+function expectedHashes(): Map<string, { tag: string; hash: string }> {
+  return new Map(
+    journalEntries().map((e) => [
+      String(e.when),
+      {
+        tag: e.tag,
+        hash: createHash('sha256')
+          .update(readFileSync(resolve(MIGRATIONS, `${e.tag}.sql`), 'utf8'))
+          .digest('hex'),
+      },
+    ]),
+  );
 }
 
 let client: ReturnType<typeof postgres> | null = null;
 let dbReachable = false;
 let applied = -1;
+let appliedHashes: Array<{ created_at: string; hash: string }> = [];
 
 beforeAll(async () => {
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
@@ -59,6 +81,8 @@ beforeAll(async () => {
     const rows = await client<Array<{ n: string }>>`
       SELECT count(*)::text AS n FROM drizzle.__drizzle_migrations`;
     applied = Number(rows[0]?.n ?? '-1');
+    appliedHashes = await client<Array<{ created_at: string; hash: string }>>`
+      SELECT created_at::text AS created_at, hash FROM drizzle.__drizzle_migrations`;
   } catch {
     dbReachable = false;
   } finally {
@@ -98,6 +122,28 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
           `Run \`npm run db:migrate\` — until then, failures in other db-* integration ` +
           `files are this, not the code under test.`,
       ).toBeGreaterThanOrEqual(expected.length);
+    });
+
+    it('CRITICAL no migration the shared database applied has been edited since. The migrator never re-applies a file it has recorded, so an edited migration leaves this database on the OLD text while the count above stays green. That happened during the rate-card migration review: a repaired trigger reached the file and not the shared databases, and this file stayed green.', () => {
+      const expected = expectedHashes();
+      // A row this checkout does not know is a database AHEAD of it, which the
+      // count above allows; only rows for this checkout's own files are compared.
+      const compared = appliedHashes.filter((row) => expected.has(row.created_at));
+      expect(
+        compared.length,
+        'applied migrations matched to this checkout by their `when` — if this collapses, the ' +
+          'comparison below is against nothing',
+      ).toBeGreaterThan(100);
+      const edited = compared
+        .filter((row) => expected.get(row.created_at)?.hash !== row.hash)
+        .map((row) => expected.get(row.created_at)?.tag ?? row.created_at);
+      expect(
+        edited,
+        `the shared database at ${DB_URL} applied a different text of these migrations. Drop ` +
+          `the objects each one created, delete its row from drizzle.__drizzle_migrations ` +
+          `(created_at = its journal \`when\`), then run \`npm run db:migrate\` — or rebuild ` +
+          `the database. Until then, failures here are this, not the code under test.`,
+      ).toEqual([]);
     });
   },
 );

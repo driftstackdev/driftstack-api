@@ -41,6 +41,11 @@ import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as apiTypes from '@driftstack/api-types';
 import {
+  CREDIT_LEDGER_ACTORS,
+  CREDIT_LEDGER_KINDS,
+  CREDIT_PLAN_OVERRIDE_REASONS,
+} from '../../src/db/credit-ledger-repo.js';
+import {
   AGENT_TURN_DEATH_REASONS,
   AGENT_TURN_PERSISTED_OUTCOMES,
   AGENT_TURN_PERSISTED_STEP_KINDS,
@@ -173,6 +178,15 @@ const SERVER_SIDE_ENUMS: { name: string; values: readonly string[] }[] = [
   { name: 'AGENT_TURN_DEATH_REASONS', values: AGENT_TURN_DEATH_REASONS },
   { name: 'AGENT_TURN_PERSISTED_STEP_KINDS', values: AGENT_TURN_PERSISTED_STEP_KINDS },
   { name: 'AGENT_TURN_TRANSPORTS', values: AGENT_TURN_TRANSPORTS },
+  // The AI credits ledger core (0128). CREDIT_LOT_KINDS is an api-types TUPLE,
+  // not a zod enum, so the `.options` sweep below cannot see it and it is named
+  // here. The kind lists pair twice each: the plain kind CHECK, and the shape
+  // CHECK that names every kind in its branches (for lots, the spend rank per
+  // kind; for ledger rows, the sign of each delta per kind).
+  { name: 'CREDIT_LOT_KINDS', values: apiTypes.CREDIT_LOT_KINDS },
+  { name: 'CREDIT_LEDGER_KINDS', values: CREDIT_LEDGER_KINDS },
+  { name: 'CREDIT_LEDGER_ACTORS', values: CREDIT_LEDGER_ACTORS },
+  { name: 'CREDIT_PLAN_OVERRIDE_REASONS', values: CREDIT_PLAN_OVERRIDE_REASONS },
 ];
 
 /**
@@ -345,6 +359,16 @@ describe('the database CHECK enumerations agree with the code', () => {
       'AGENT_TURN_PERSISTED_STEP_KINDS=agent_turn_telemetry_died_step_kind',
       'AGENT_TURN_TRANSPORTS=agent_turn_telemetry_transport',
       'AgentModelSchema=agent_sessions_model_check',
+      'AiBillingSchema=credit_accounts_billing_mode',
+      'AiDebtReasonSchema=credit_ledger_debt_reason',
+      'AiSourceSchema=credit_accounts_ai_source',
+      'AiSourceSetBySchema=credit_accounts_ai_source_set_by',
+      'CREDIT_LEDGER_ACTORS=credit_ledger_actor',
+      'CREDIT_LEDGER_KINDS=credit_ledger_kind',
+      'CREDIT_LEDGER_KINDS=credit_ledger_shape',
+      'CREDIT_LOT_KINDS=credit_lots_kind',
+      'CREDIT_LOT_KINDS=credit_lots_rank_matches_kind',
+      'CREDIT_PLAN_OVERRIDE_REASONS=credit_plan_overrides_reason',
       'CryptoOrderStatusSchema=crypto_orders_status_check',
     ]);
   });

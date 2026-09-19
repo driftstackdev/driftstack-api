@@ -890,6 +890,20 @@
       "when": 1786665600014,
       "tag": "0126_agent_sessions_model_default_sonnet_5",
       "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1786665600015,
+      "tag": "0127_credit_rate_cards",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1786665600016,
+      "tag": "0128_credit_ledger",
+      "breakpoints": true
     }
   ]
 }

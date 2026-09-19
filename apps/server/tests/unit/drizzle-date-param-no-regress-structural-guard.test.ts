@@ -133,6 +133,26 @@ const ALLOW_LIST: Record<string, string[]> = {
     // template, precisely so the Date never reaches a raw interpolation. This
     // guard caught a real instance of that during slice 1.
     't.resultExpiresAt',
+    // credit_rate_cards (migration 0127): the live-card partial unique index
+    // predicate `withdrawn_at IS NULL`, the notice CHECK `effective_at >=
+    // announced_at + interval '720 hours'` and the withdrawal CHECK
+    // `withdrawn_at < effective_at`. All three are column REFERENCES rendering as
+    // identifiers; the repo compares a Date only through the typed `lte(...)`.
+    't.withdrawnAt',
+    't.effectiveAt',
+    't.announcedAt',
+    // credit ledger core (migration 0128): CHECK constraints over timestamp
+    // COLUMNS — `ai_source_set_by`/`ai_source_set_at` set together, the move
+    // snapshot keyed on `moved_to_credits_at`, an override ending after its
+    // anchor, a lot's term and the top-up's twelve months. Column REFERENCES
+    // rendering as identifiers; the repo compares time only with the database's
+    // own now() through typed operators, never a bound Date in a raw template.
+    't.aiSourceSetAt',
+    't.movedToCreditsAt',
+    't.endsAt',
+    't.anchorAt',
+    't.startsAt',
+    't.expiresAt',
   ],
   // MFA monotonic timestamp expressions bind pre-serialized nowIso strings.
   // The remaining Date-looking expressions are Drizzle COLUMN references,
