@@ -1,6 +1,7 @@
 package driftstack
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -109,9 +110,28 @@ type RevokedKeyError struct{ apiError }
 
 func (e *RevokedKeyError) Is(target error) bool { return target == ErrRevokedKey || target == ErrAuth }
 
+// ForbiddenError — 403: the key is valid but may not do this. Usually a
+// missing scope or a plan without the feature; on an agent session it can
+// also mean the chosen model needs your own Anthropic key (RequiresOwnKey).
 type ForbiddenError struct{ apiError }
 
 func (e *ForbiddenError) Is(target error) bool { return target == ErrForbidden || target == ErrAuth }
+
+// RequiresOwnKey reports whether an Opus-class model was refused because it
+// runs only on your own Anthropic key and the session or turn would have run
+// on Driftstack's included AI. Add a key (stored, or ByokAPIKey on the call)
+// or pick another model. False for every other 403.
+func (e *ForbiddenError) RequiresOwnKey() bool {
+	v, _ := e.Problem["requires_own_key"].(bool)
+	return v
+}
+
+// Model returns the model that was refused when RequiresOwnKey is true, and
+// "" otherwise.
+func (e *ForbiddenError) Model() string {
+	v, _ := e.Problem["model"].(string)
+	return v
+}
 
 // BadRequestError — 400 with the generic bad-request problem type (no
 // field-level issues breakdown). Distinguished from ValidationError (the
@@ -133,10 +153,93 @@ type NotFoundError struct{ apiError }
 
 func (e *NotFoundError) Is(target error) bool { return target == ErrNotFound }
 
-// ConflictError — 409.
+// ConflictError — 409: the request conflicts with the current state. On an
+// agent-session message the accessors below say which conflict it is; each
+// returns its zero value when the server did not send the field.
 type ConflictError struct{ apiError }
 
 func (e *ConflictError) Is(target error) bool { return target == ErrConflict }
+
+// TurnInProgress reports that another message is still running on this agent
+// session. Wait for it to finish (or Stop it), then send again.
+func (e *ConflictError) TurnInProgress() bool {
+	v, _ := e.Problem["turn_in_progress"].(bool)
+	return v
+}
+
+// SessionStatus is set when the agent session is no longer active ("closed"
+// or "paused"), including when this turn ended it — for example its token
+// budget ran out. Read ClosedReason with Get. An open string.
+func (e *ConflictError) SessionStatus() string {
+	v, _ := e.Problem["session_status"].(string)
+	return v
+}
+
+// IdempotencyStatus is set when the conflict is about the Idempotency-Key:
+// "in_progress" (the first request with this key is still running — retry
+// the SAME key later and it replays the result) or "mismatch" (the key was
+// already used for a different request). An open string.
+func (e *ConflictError) IdempotencyStatus() string {
+	v, _ := e.Problem["idempotency_status"].(string)
+	return v
+}
+
+// AIControlUnavailable reports that AI control of the session changed while
+// the turn was running, so it stopped early. Check PartialResults first.
+func (e *ConflictError) AIControlUnavailable() bool {
+	v, _ := e.Problem["ai_control_unavailable"].(bool)
+	return v
+}
+
+// Phase is where the turn was when AI control changed. An open string.
+func (e *ConflictError) Phase() string {
+	v, _ := e.Problem["phase"].(string)
+	return v
+}
+
+// TokensConsumed is the tokens the turn spent before it ended; ok is false
+// when the server did not say.
+func (e *ConflictError) TokensConsumed() (tokens int, ok bool) {
+	v, isNumber := e.Problem["tokens_consumed"].(float64)
+	if !isNumber {
+		return 0, false
+	}
+	return int(v), true
+}
+
+// Usage is the turn's usage block when it did any work; nil otherwise.
+func (e *ConflictError) Usage() *AgentUsage {
+	var usage AgentUsage
+	if !reDecodeProblemField(e.Problem, "usage", &usage) {
+		return nil
+	}
+	return &usage
+}
+
+// PartialResults are the steps that ran before the turn ended; nil when
+// none did (or the field could not be read). Do not repeat them without
+// checking the page.
+func (e *ConflictError) PartialResults() []AgentIntentResult {
+	var results []AgentIntentResult
+	if !reDecodeProblemField(e.Problem, "partial_results", &results) {
+		return nil
+	}
+	return results
+}
+
+// reDecodeProblemField decodes one problem member into out via a JSON round
+// trip. False when the member is absent, null, or does not fit out.
+func reDecodeProblemField(problem map[string]any, key string, out any) bool {
+	raw, present := problem[key]
+	if !present || raw == nil {
+		return false
+	}
+	buf, err := json.Marshal(raw)
+	if err != nil {
+		return false
+	}
+	return json.Unmarshal(buf, out) == nil
+}
 
 // RateLimitError — 429 token-bucket. RetryAfterSeconds is the server's
 // hint; the SDK's retry policy already honours it automatically, so most
@@ -338,21 +441,21 @@ type InternalError struct{ apiError }
 
 func (e *InternalError) Is(target error) bool { return target == ErrInternal }
 
-// v2-#24 — ByokAnthropicRequiredError — Q.1.d (2026-05-17) — the
-// agent-sessions message turn cannot resolve an Anthropic API key for
-// this customer. BYOK-for-v1.0 Tier-3 verdict: customers MUST supply
-// their own key via stored /v1/account/me/byok-anthropic-key OR the
-// per-request x-byok-anthropic-api-key header. HTTP 502 — the agent
-// layer is operational but cannot serve this customer's turn without
-// a key.
+// ByokAnthropicRequiredError — 502: the turn has no AI key to run on: no key
+// on the request, none stored, and Driftstack's included AI is not available
+// to the account. Store your Anthropic key (PUT
+// /v1/account/me/byok-anthropic-key) or send it with the call
+// (MessageOptions.ByokAPIKey).
 type ByokAnthropicRequiredError struct{ apiError }
 
 func (e *ByokAnthropicRequiredError) Is(target error) bool {
 	return target == ErrByokAnthropicRequired
 }
 
-// Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM monthly cap reached.
-// Extensions carry spent_cents + cap_cents for dashboard rendering.
+// BundledLlmBudgetExhaustedError — 402: the account's monthly budget for
+// Driftstack's included AI is used up. SpentCents / CapCents say how far.
+// Raise the cap (PATCH /v1/account/me/bundled-llm-settings), use your own
+// Anthropic key, or wait for the next calendar month.
 type BundledLlmBudgetExhaustedError struct {
 	apiError
 	SpentCents int
@@ -363,8 +466,10 @@ func (e *BundledLlmBudgetExhaustedError) Is(target error) bool {
 	return target == ErrBundledLlmBudgetExhausted
 }
 
-// Arc 1 sub-slice 6.8 (v2-#6) — deployment offers bundled-LLM but the
-// customer's account hasn't opted in yet.
+// BundledLlmConsentRequiredError — 402: the turn would run on Driftstack's
+// included AI, but the account has not opted in to it. Opt in (PATCH
+// /v1/account/me/bundled-llm-settings with {"consent": true}) or use your own
+// Anthropic key.
 type BundledLlmConsentRequiredError struct{ apiError }
 
 func (e *BundledLlmConsentRequiredError) Is(target error) bool {

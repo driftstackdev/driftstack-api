@@ -36,6 +36,7 @@
 // `DriftstackError` with `kind: 'transport'` set on the instance.
 
 import type { Problem } from '@driftstack/api-types';
+import type { AgentIntentResult, AgentUsage } from './resources/agent-sessions.js';
 
 export type DriftstackErrorKind =
   | 'bad_request'
@@ -145,10 +146,27 @@ export class ExpiredKeyError extends DriftstackError {
   }
 }
 
+/**
+ * 403 — the key is valid but may not do this: a missing scope, a plan without
+ * the feature, or (on an agent session) a model that needs your own Anthropic
+ * key.
+ */
 export class ForbiddenError extends DriftstackError {
+  /**
+   * True when the refusal is about the AI model: an Opus-class model runs only
+   * on your own Anthropic key, and this session or turn would have run on
+   * Driftstack's included AI. Add a key (stored, or `byokApiKey` on the call)
+   * or pick another model. False for every other 403.
+   */
+  readonly requiresOwnKey: boolean;
+  /** The model that was refused, when `requiresOwnKey` is true. */
+  readonly model: string | undefined;
   constructor(p: Problem) {
     super(toOpts('forbidden', p));
     this.name = 'ForbiddenError';
+    const ext = p as { requires_own_key?: unknown; model?: unknown };
+    this.requiresOwnKey = ext.requires_own_key === true;
+    this.model = typeof ext.model === 'string' ? ext.model : undefined;
   }
 }
 
@@ -159,10 +177,66 @@ export class NotFoundError extends DriftstackError {
   }
 }
 
+/**
+ * 409 — the request conflicts with the current state. On an agent-session
+ * message the typed fields below say which conflict it is; each is
+ * `undefined` (or false) when the server did not send it.
+ */
 export class ConflictError extends DriftstackError {
+  /** True when another message is still running on this agent session. Wait
+   *  for it to finish (or stop it), then send again. */
+  readonly turnInProgress: boolean;
+  /** Set when the agent session is no longer active (`'closed'` or `'paused'`),
+   *  including when this turn ended it — for example its token budget ran out.
+   *  Read `closed_reason` with `agentSessions.get(id)`. An open string. */
+  readonly sessionStatus: string | undefined;
+  /** Set when the conflict is about the Idempotency-Key: `'in_progress'` (the
+   *  first request with this key is still running — retry the SAME key later
+   *  and it replays the result) or `'mismatch'` (the key was already used for
+   *  a different request). An open string. */
+  readonly idempotencyStatus: string | undefined;
+  /** True when AI control of the session changed while the turn was running,
+   *  so it stopped early. Check `partialResults` before starting a new turn. */
+  readonly aiControlUnavailable: boolean;
+  /** Where the turn was when AI control changed. An open string. */
+  readonly phase: string | undefined;
+  /** Tokens the turn spent before it ended, when it did any work. */
+  readonly tokensConsumed: number | undefined;
+  /** The turn's usage block, when it did any work. */
+  readonly usage: AgentUsage | undefined;
+  /** Steps that ran before the turn ended, when any did. Do not repeat them
+   *  without checking the page. */
+  readonly partialResults: ReadonlyArray<AgentIntentResult> | undefined;
   constructor(p: Problem) {
     super(toOpts('conflict', p));
     this.name = 'ConflictError';
+    const ext = p as {
+      turn_in_progress?: unknown;
+      session_status?: unknown;
+      idempotency_status?: unknown;
+      ai_control_unavailable?: unknown;
+      phase?: unknown;
+      tokens_consumed?: unknown;
+      usage?: unknown;
+      partial_results?: unknown;
+    };
+    this.turnInProgress = ext.turn_in_progress === true;
+    this.sessionStatus = typeof ext.session_status === 'string' ? ext.session_status : undefined;
+    this.idempotencyStatus =
+      typeof ext.idempotency_status === 'string' ? ext.idempotency_status : undefined;
+    this.aiControlUnavailable = ext.ai_control_unavailable === true;
+    this.phase = typeof ext.phase === 'string' ? ext.phase : undefined;
+    this.tokensConsumed =
+      typeof ext.tokens_consumed === 'number' && Number.isFinite(ext.tokens_consumed)
+        ? ext.tokens_consumed
+        : undefined;
+    this.usage =
+      typeof ext.usage === 'object' && ext.usage !== null && !Array.isArray(ext.usage)
+        ? (ext.usage as AgentUsage)
+        : undefined;
+    this.partialResults = Array.isArray(ext.partial_results)
+      ? (ext.partial_results as AgentIntentResult[])
+      : undefined;
   }
 }
 
@@ -411,14 +485,12 @@ export class FeatureUnavailableError extends DriftstackError {
   }
 }
 
-/** Q.1.d (2026-05-17) — agent-sessions message turn cannot resolve
- *  an Anthropic API key. BYOK-for-v1.0 means the customer must
- *  supply their own key. HTTP 502. */
-// Arc 1 sub-slice 6.8 (v2-#6) — 402 Payment Required when the
-// customer's bundled-LLM monthly spend has reached their per-account
-// cap. Recovery paths: PATCH /v1/account/me/bundled-llm-settings to
-// raise the cap, supply a BYOK key (header or stored), or wait for
-// the next calendar month.
+/**
+ * 402 — the account's monthly budget for Driftstack's included AI is used up.
+ * `spentCents` / `capCents` say how far. Raise the cap
+ * (PATCH /v1/account/me/bundled-llm-settings), use your own Anthropic key
+ * (stored, or `byokApiKey` on the call), or wait for the next calendar month.
+ */
 export class BundledLlmBudgetExhaustedError extends DriftstackError {
   readonly spentCents: number;
   readonly capCents: number;
@@ -430,9 +502,11 @@ export class BundledLlmBudgetExhaustedError extends DriftstackError {
   }
 }
 
-// Arc 1 sub-slice 6.8 (v2-#6) — 402 Payment Required when the
-// deployment offers bundled-LLM but the customer hasn't ticked
-// consent yet. Dashboard surfaces a one-click enable CTA.
+/**
+ * 402 — the turn would run on Driftstack's included AI, but the account has not
+ * opted in to it. Opt in (PATCH /v1/account/me/bundled-llm-settings with
+ * `{"consent": true}`) or use your own Anthropic key.
+ */
 export class BundledLlmConsentRequiredError extends DriftstackError {
   constructor(p: Problem) {
     super(toOpts('payment_required', p));
@@ -465,6 +539,12 @@ export class PairModeStateInvalidTransitionError extends DriftstackError {
   }
 }
 
+/**
+ * 502 — the turn has no AI key to run on: no key on the request, none stored,
+ * and Driftstack's included AI is not available to the account. Store your
+ * Anthropic key (PUT /v1/account/me/byok-anthropic-key) or send it with the
+ * call (`byokApiKey`).
+ */
 export class ByokAnthropicRequiredError extends DriftstackError {
   constructor(p: Problem) {
     super(toOpts('byok_anthropic_required', p));

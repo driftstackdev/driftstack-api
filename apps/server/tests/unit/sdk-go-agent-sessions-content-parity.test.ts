@@ -33,9 +33,9 @@ describe('sdk-go agent_sessions content parity', () => {
     expect(body).not.toMatch(/\bAI-D\b|planning 132|stubs until|compile ahead/i);
   });
 
-  it("LK.5 LiveKitInfo framing pinned: 'LiveKitInfo is the per-Mac LiveKit join info returned on session-create (when a Mac is available) and by the dedicated POST /v1/agent-sessions/:id/livekit-token endpoint.' + 'Token TTL is 24h. Room name is always the agent_session id.' + 'Use with the official livekit-server-sdk-go consumer side.' — pinned so the 24h-TTL + room-name-is-session-id + canonical-livekit-go-sdk reference all stay documented (drift would silently break Go consumers expecting these stable contracts)", () => {
+  it("LiveKitInfo framing pinned: 'LiveKitInfo is the live-video join info returned on session-create (when live video is available) and by the dedicated POST /v1/agent-sessions/:id/livekit-token endpoint.' + 'Token TTL is 24h. Room name is always the agent_session id.' + 'Use with the official livekit-server-sdk-go consumer side.' — pinned so the 24h-TTL + room-name-is-session-id + canonical-livekit-go-sdk reference all stay documented (drift would silently break Go consumers expecting these stable contracts). The doc says what the customer gets (live video), not which machine serves it.", () => {
     expect(body).toMatch(
-      /\/\/ LK\.5 — LiveKitInfo is the per-Mac LiveKit join info returned on\s*\/\/ session-create \(when a Mac is available\) and by the dedicated\s*\/\/ POST \/v1\/agent-sessions\/:id\/livekit-token endpoint\. Use with\s*\/\/ the official livekit-server-sdk-go consumer side\./,
+      /\/\/ LiveKitInfo is the live-video join info returned on session-create\s*\/\/ \(when live video is available\) and by the dedicated\s*\/\/ POST \/v1\/agent-sessions\/:id\/livekit-token endpoint\. Use with\s*\/\/ the official livekit-server-sdk-go consumer side\./,
     );
     expect(body).toMatch(/\/\/ Token TTL is 24h\. Room name is always the agent_session id\./);
   });
@@ -67,7 +67,7 @@ describe('sdk-go agent_sessions content parity', () => {
 
   it("CreateAgentSessionRequest Mode-omitempty framing pinned: 'Empty string omits the field on the wire so the server applies its default (ai).' — pinned so the empty-string-as-omit pattern + the 'ai' server default survive (drift to a different default OR to sending the empty string literal would silently break server's default-mode behavior)", () => {
     expect(body).toMatch(
-      /\/\/ Arc 2 sub-slice 8\.5 \(v2-#8\) — operational mode\. Empty string\s*\/\/ omits the field on the wire so the server applies its default\s*\/\/ \('ai'\)\./,
+      /\/\/ Mode is how the session is driven\. Empty string\s*\/\/ omits the field on the wire so the server applies its default\s*\/\/ \('ai': the AI plans and runs each message\)\./,
     );
     expect(body).toMatch(/Mode string `json:"mode,omitempty"`/);
     // 6.c — model picker field on the request shape (omitempty → server default).
@@ -89,13 +89,13 @@ describe('sdk-go agent_sessions content parity', () => {
 
   it("CreateOptions Stripe-pattern Idempotency-Key framing pinned: 'IdempotencyKey is the v2-#19 Stripe-pattern idempotency token. Forwarded as the Idempotency-Key request header so retries collapse onto the same server-side row. Server enforces (account_id, idempotency_key) uniqueness via a partial unique index; SDK just plumbs the header.' — pinned so the partial-unique-index contract + the SDK-just-plumbs framing survive", () => {
     expect(body).toMatch(
-      /\/\/ IdempotencyKey is the v2-#19 Stripe-pattern idempotency token\.\s*\/\/ Forwarded as the Idempotency-Key request header so retries collapse\s*\/\/ onto the same server-side row\. Server enforces \(account_id,\s*\/\/ idempotency_key\) uniqueness via a partial unique index; SDK just\s*\/\/ plumbs the header\./,
+      /\/\/ IdempotencyKey is the Stripe-pattern idempotency token\.\s*\/\/ Forwarded as the Idempotency-Key request header so retries collapse\s*\/\/ onto the same server-side row\. Server enforces \(account_id,\s*\/\/ idempotency_key\) uniqueness via a partial unique index; SDK just\s*\/\/ plumbs the header\./,
     );
   });
 
   it("MessageOptions ByokAPIKey 'NEVER logged' framing pinned: 'ByokAPIKey is the customer-supplied Anthropic API key (BYOK Tier-3 LOCKED 2026-05-16). Forwarded as the x-byok-anthropic-api-key request header so callers don't construct it by hand. NEVER logged.' — pinned so the NEVER-logged guarantee + the BYOK Tier-3 lock-date stay documented (drift to logging the key would leak customer Anthropic credentials)", () => {
     expect(body).toMatch(
-      /\/\/ ByokAPIKey is the customer-supplied Anthropic API key \(BYOK Tier-3\s*\/\/ LOCKED 2026-05-16\)\. Forwarded as the x-byok-anthropic-api-key\s*\/\/ request header so callers don't construct it by hand\. NEVER logged\./,
+      /\/\/ ByokAPIKey is your own Anthropic API key\. Forwarded as the\s*\/\/ x-byok-anthropic-api-key request header so callers don't construct it by\s*\/\/ hand\. It takes precedence over a stored key and over Driftstack's included\s*\/\/ AI\. NEVER logged\./,
     );
   });
 
@@ -168,11 +168,14 @@ describe('sdk-go agent_sessions content parity', () => {
 
   it('LivekitToken LK.3 framing + 3-error catalog pinned: 403 closed + 404 unknown/cross-account + 503 no Mac. Same as TS + Python; cross-SDK parity is the load-bearing test here (drift on one SDK silently diverges the documented error contract from its peers)', () => {
     expect(body).toMatch(
-      /\/\/ LivekitToken mints a fresh LiveKit JWT for the agent session's\s*\/\/ video room\./,
+      /\/\/ LivekitToken mints a fresh live-video token for the agent session's\s*\/\/ video room\./,
     );
+    // The 503 says what the customer can do about it; it no longer names the
+    // machines behind live video or an operator-only registration endpoint.
     expect(body).toMatch(
-      /\/\/ Errors \(mapped to typed Driftstack errors\):\s*\/\/ {3}- 403 — session is closed; cannot mint\s*\/\/ {3}- 404 — session unknown \(or cross-account; existence not leaked\)\s*\/\/ {3}- 503 — no Mac registered LiveKit yet, OR the stored Mac secret\s*\/\/ {5}can't be decrypted \(operator action: re-run\s*\/\/ {5}POST \/v1\/mac-nodes\/register\)/,
+      /\/\/ Errors \(mapped to typed Driftstack errors\):\s*\/\/ {3}- 403 — session is closed; cannot mint\s*\/\/ {3}- 404 — session unknown \(or cross-account; existence not leaked\)\s*\/\/ {3}- 503 — live video is not available for this session right now; try\s*\/\/ {5}again later, or contact support if it persists/,
     );
+    expect(body).not.toMatch(/mac-nodes\/register/);
   });
 
   it('url.PathEscape on all id-bearing routes pinned (Get/Message/Close/SetMode/SendInputEvent/Takeover/Handback/LivekitToken). Drift to dropping url.PathEscape would break Go consumers whose session ids contain reserved URI chars + diverge from TS encodeURIComponent + Python quote(...,safe="") parity', () => {

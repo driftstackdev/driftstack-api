@@ -232,22 +232,41 @@ describe('W620 sdk-python/examples content parity', () => {
     expect(existsSync(E('crypto_checkout.py'))).toBe(true);
   });
 
-  it("agent_chat.py: python invocation + DRIFTSTACK_API_KEY env-gate + DRIFTSTACK_BYOK_ANTHROPIC_API_KEY optional env demo + agent_sessions.create + message multi-turn (plan-executed/clarify/refuse) + FeatureUnavailableError activation-gate exit-code-2 + `os.environ.get(...) or None` empty-string falsy-coalesce — pinned so slice 139's BYOK demo survives + so a future refactor that drops the `or None` collapse (which Python SDK's `if byok_api_key` guard relies on for the cross-SDK empty-string-skip contract from slices 126-128) trips the test", () => {
+  it('agent_chat.py runs one AI task end to end — create with an idempotency key and your own key, wait until ready, a FRESH idempotency key per turn, live progress callbacks, every result kind handled (answer, notice, approvals passed straight back), typed AI refusals, and the session closed in finally', () => {
     const body = read(E('agent_chat.py'));
     expect(body).toMatch(/DRIFTSTACK_API_KEY=ds_live_… python examples\/agent_chat\.py/);
     expect(body).toMatch(/DRIFTSTACK_BYOK_ANTHROPIC_API_KEY=sk-ant-…/);
+    // `or None` collapses an empty variable; the SDK also skips an empty key.
     expect(body).toMatch(
       /byok_key = os\.environ\.get\("DRIFTSTACK_BYOK_ANTHROPIC_API_KEY"\) or None/,
     );
+    expect(body).toMatch(/\{"mode": "ai", "token_budget": 100_000\}/);
+    expect(body).toMatch(/idempotency_key=str\(uuid\.uuid4\(\)\),\s*\n\s*byok_api_key=byok_key,/);
+    expect(body).toMatch(/while session\["status"\] == "provisioning"/);
+    // One fresh key per turn, live progress, approvals passed straight back.
+    expect(body).toMatch(/def send\(text: str, approvals:/);
+    // A FRESH key for every turn — the create call's key is not reused.
     expect(body).toMatch(
-      /resp = client\.agent_sessions\.message\(session\["id"\], prompt, byok_api_key=byok_key\)/,
+      /idempotency_key=str\(uuid\.uuid4\(\)\),\s*\n\s*approve_consequential_actions=approvals,/,
     );
-    expect(body).toMatch(/kind == "plan-executed"/);
-    expect(body).toMatch(/kind == "clarify"/);
-    expect(body).toMatch(/kind == "refuse"/);
-    expect(body).toMatch(/except FeatureUnavailableError as e:/);
+    expect(body).toMatch(/on_step=on_step,\s*\n\s*on_event=on_event,/);
+    expect(body).toMatch(/r\["kind"\] == "confirmation_required"/);
+    expect(body).toMatch(/resp = send\(task, approvals=pending\)/);
+    for (const kind of ['plan-executed', 'clarify', 'refuse', 'stopped', 'logged-manual']) {
+      expect(body).toContain(`kind == "${kind}"`);
+    }
+    expect(body).toMatch(/resp\['answer'\]/);
+    expect(body).toMatch(/resp\['notice'\]/);
+    // Typed AI refusals and the activation gate (exit code 2).
+    expect(body).toMatch(/isinstance\(e, FeatureUnavailableError\)/);
     expect(body).toMatch(/return 2/);
-    expect(body).toMatch(/client\.agent_sessions\.close\(session\["id"\]\)/);
+    expect(body).toMatch(/isinstance\(e, ForbiddenError\) and e\.requires_own_key/);
+    expect(body).toMatch(/isinstance\(e, ConflictError\) and e\.turn_in_progress/);
+    // The session is closed in `finally`, so a failed turn never leaves it open.
+    expect(body).toMatch(
+      /finally:\s*\n\s*stop_timer\.cancel\(\)[\s\S]*?client\.agent_sessions\.close\(session\["id"\]\)/,
+    );
+    expect(body).toMatch(/threading\.Timer\(600, client\.agent_sessions\.stop/);
     expect(existsSync(E('agent_chat.py'))).toBe(true);
   });
 });

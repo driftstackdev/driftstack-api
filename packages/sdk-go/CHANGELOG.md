@@ -8,6 +8,42 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`AgentMessageResponse.Answer`** — the answer to the question a turn
+  asked. It was dropped when the response was decoded, so Go callers could
+  not read it at all. `Notice` is now documented for `plan-executed` turns
+  too (why the task is not finished yet).
+- **Typed steps** — `AgentIntent`, `AgentIntentResult`,
+  `AgentFailureDiagnosis`, `ParsedResults()`, `ParsedIntents()` and
+  `ApprovalFor(result)`, which turns a `confirmation_required` result into the
+  approval that releases it. `Results` / `Intents` stay `[]json.RawMessage`.
+- **Live progress** — `MessageOptions.OnStep(AgentStepEvent)` and
+  `MessageOptions.OnEvent(name, data)` receive each progress event as the turn
+  streams (`phase`, `plan`, `step_start`, `step`, `answer`, `notice`, and any
+  added later), under the same byte ceiling, single-terminal rule and
+  deadline as before.
+- **`CreateOptions.ByokAPIKey`** sends your own Anthropic key at create;
+  **`CreateAgentSessionRequest.SkipProxyProbe`** and
+  **`ContinueFromAgentSessionID`** reach the create fields the API accepts.
+- **Typed AI refusals** — `(*ForbiddenError).RequiresOwnKey()` / `Model()` and
+  `(*ConflictError).TurnInProgress()`, `SessionStatus()`,
+  `IdempotencyStatus()`, `AIControlUnavailable()`, `Phase()`,
+  `TokensConsumed()`, `Usage()` and `PartialResults()`.
+- **`examples/agent_chat`** rewritten as the complete flow: create, wait until
+  ready, send a task with a fresh idempotency key and live progress, handle
+  every result kind (answer, notice, approvals), close with `defer`.
+
+### Fixed
+
+- The docs on `AgentSession.Model` and `CreateAgentSessionRequest.Model` named
+  the wrong default model; the default is `"claude-sonnet-5"`.
+
+### Changed
+
+- **Agent-session docs** describe what the API does and no longer mention how
+  the service is built.
+
+### Added
+
 - **Durable agent-turn idempotency** — `MessageOptions.IdempotencyKey`
   forwards one caller-reusable `Idempotency-Key` beside SSE/BYOK headers so an
   ambiguous retry cannot execute browser actions twice.

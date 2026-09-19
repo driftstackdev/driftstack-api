@@ -16,9 +16,11 @@ server's error envelope updates both paths in one place.
 
 from __future__ import annotations
 
+import codecs
+import inspect
 import json
 import time
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from typing import Any, TypeVar
 
 import httpx
@@ -58,10 +60,11 @@ _BODY_TIMEOUT_HEADROOM_S = 15.0
 
 # Absolute wall-clock backstop for one heartbeat-backed SSE turn, mirroring the
 # TypeScript SDK's AGENT_MESSAGE_STREAM_TIMEOUT_MS and the Go SDK's
-# AgentMessageStreamTimeout. Eight legal five-minute harness intents consume
-# ~42 minutes; this leaves headroom for decomposition + optional read-back while
-# preventing a permanently-heartbeating but never-terminal stream from hanging
-# forever.
+# AgentMessageStreamTimeout. A turn stops planning new steps after about three
+# minutes, but the steps it has already planned run to the end (a single step can
+# wait several minutes) and the answer may still be read back after them; this
+# leaves room for that while preventing a permanently-heartbeating but
+# never-terminal stream from hanging forever.
 #
 # httpx's timeout is a per-READ idle deadline, not a wall-clock one, and the
 # server sends keep-alive comments every 15s — so the idle deadline is reset
@@ -70,6 +73,13 @@ _BODY_TIMEOUT_HEADROOM_S = 15.0
 # them is effectively unreachable. Without this backstop a Python caller could
 # block indefinitely where the other two SDKs give up at 50 minutes.
 AGENT_MESSAGE_STREAM_TIMEOUT_S = 50 * 60.0
+
+# Live-progress callbacks for one agent turn. ``StepCallback`` receives each
+# ``event: step`` payload (``{"index": int, "result": {...}}``); ``EventCallback``
+# receives every OTHER non-terminal frame as ``(event_name, data)``. On the async
+# client either may return an awaitable, which is awaited before reading on.
+StepCallback = Callable[[dict[str, Any]], Any]
+EventCallback = Callable[[str, Any], Any]
 
 
 def _body_operation_timeout_s(json_body: Any) -> float | None:
@@ -455,12 +465,19 @@ class HttpClient:
         json_body: Any | None = None,
         extra_headers: dict[str, str] | None = None,
         stream_timeout_s: float | None = None,
+        on_step: StepCallback | None = None,
+        on_event: EventCallback | None = None,
     ) -> Any:
         """Read one heartbeat-backed SSE response through the shared byte cap.
 
         The stream must end with exactly one ``event: response`` envelope. It is
         deliberately never auto-retried: a lost non-idempotent agent-turn stream
         may have already dispatched browser actions.
+
+        With ``on_step`` or ``on_event`` set, the stream is parsed as it arrives
+        and each progress frame is handed to its callback before the terminal
+        response is returned. An exception raised by a callback propagates and
+        closes the stream; the turn itself keeps running on the server.
         """
         url = self._base_url + path
         headers = _build_headers(
@@ -486,6 +503,10 @@ class HttpClient:
                 json=json_body,
                 headers=headers,
             ) as response:
+                if (on_step is not None or on_event is not None) and _is_event_stream_success(
+                    response
+                ):
+                    return _read_live_turn_stream(response, deadline, on_step, on_event)
                 content = _read_bounded_response(response, deadline)
                 return _decode_event_stream_or_raise(response, content)
         except httpx.TimeoutException as err:
@@ -591,8 +612,14 @@ class AsyncHttpClient:
         json_body: Any | None = None,
         extra_headers: dict[str, str] | None = None,
         stream_timeout_s: float | None = None,
+        on_step: StepCallback | None = None,
+        on_event: EventCallback | None = None,
     ) -> Any:
-        """Async mirror of :meth:`HttpClient.request_event_stream`."""
+        """Async mirror of :meth:`HttpClient.request_event_stream`.
+
+        A callback may be a plain function or return an awaitable (an ``async
+        def``); an awaitable is awaited before the next frame is read.
+        """
         url = self._base_url + path
         headers = _build_headers(
             self._api_key,
@@ -613,6 +640,10 @@ class AsyncHttpClient:
                 json=json_body,
                 headers=headers,
             ) as response:
+                if (on_step is not None or on_event is not None) and _is_event_stream_success(
+                    response
+                ):
+                    return await _read_live_turn_stream_async(response, deadline, on_step, on_event)
                 content = await _read_bounded_response_async(response, deadline)
                 return _decode_event_stream_or_raise(response, content)
         except httpx.TimeoutException as err:
@@ -811,3 +842,185 @@ def _decode_event_stream_or_raise(response: httpx.Response, content: bytes) -> A
         text=json.dumps(body, separators=(",", ":")),
         retry_after_header=None,
     )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Live agent-turn stream (progress callbacks)
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def _is_event_stream_success(response: httpx.Response) -> bool:
+    """A 2xx ``text/event-stream`` response — the only shape parsed live."""
+    content_type = response.headers.get("content-type", "").lower()
+    media_type = content_type.split(";", 1)[0].strip()
+    return 200 <= response.status_code < 300 and media_type == "text/event-stream"
+
+
+class _TurnStreamParser:
+    """Incremental parser for one agent-turn SSE body.
+
+    Same rules as :func:`_decode_event_stream_or_raise`: comments are skipped,
+    exactly one ``event: response`` envelope is allowed, and the whole stream is
+    held to ``MAX_RESPONSE_BODY_BYTES``. Every other frame is decoded as JSON and
+    handed back to the caller in arrival order; a frame that is not valid JSON is
+    skipped, because progress is best-effort and the terminal response is the
+    contract.
+    """
+
+    def __init__(self, status: int) -> None:
+        self._status = status
+        self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        self._buffer = ""
+        self._bytes_read = 0
+        self._terminal: dict[str, Any] | None = None
+
+    def feed(self, chunk: bytes) -> list[tuple[str, Any]]:
+        self._bytes_read += len(chunk)
+        if self._bytes_read > MAX_RESPONSE_BODY_BYTES:
+            raise _body_too_large(self._status)
+        self._buffer = (self._buffer + self._decoder.decode(chunk)).replace("\r\n", "\n")
+        frames: list[tuple[str, Any]] = []
+        while True:
+            end = self._buffer.find("\n\n")
+            if end == -1:
+                return frames
+            block, self._buffer = self._buffer[:end], self._buffer[end + 2 :]
+            frame = self._consume(block)
+            if frame is not None:
+                frames.append(frame)
+
+    def finish(self) -> list[tuple[str, Any]]:
+        rest = (self._buffer + self._decoder.decode(b"", final=True)).replace("\r\n", "\n")
+        self._buffer = ""
+        frames: list[tuple[str, Any]] = []
+        for block in rest.split("\n\n"):
+            frame = self._consume(block)
+            if frame is not None:
+                frames.append(frame)
+        return frames
+
+    def result(self) -> Any:
+        if self._terminal is None:
+            raise TransportError(
+                "agent turn stream ended without a terminal response",
+                status=self._status,
+            )
+        status = self._terminal["status"]
+        body = self._terminal["body"]
+        if 200 <= status < 300:
+            return body
+        raise _error_from_response_data(
+            status=status,
+            text=json.dumps(body, separators=(",", ":")),
+            retry_after_header=None,
+        )
+
+    def _consume(self, block: str) -> tuple[str, Any] | None:
+        event = "message"
+        data: list[str] = []
+        for line in block.split("\n"):
+            if line.startswith(":"):
+                continue
+            if line.startswith("event:"):
+                event = line[len("event:") :].strip()
+            elif line.startswith("data:"):
+                data.append(line[len("data:") :].lstrip())
+        if event == "response":
+            self._set_terminal("\n".join(data))
+            return None
+        if not data:
+            return None
+        try:
+            return event, json.loads("\n".join(data))
+        except (json.JSONDecodeError, ValueError):
+            return None
+
+    def _set_terminal(self, payload: str) -> None:
+        if self._terminal is not None:
+            raise TransportError(
+                "agent turn stream contained multiple terminal responses",
+                status=self._status,
+            )
+        try:
+            decoded = json.loads(payload)
+        except (json.JSONDecodeError, ValueError) as err:
+            raise TransportError(
+                "failed to parse terminal agent turn event",
+                status=self._status,
+            ) from err
+        if not isinstance(decoded, dict):
+            raise TransportError(
+                "terminal agent turn event was not an object",
+                status=self._status,
+            )
+        status = decoded.get("status")
+        if (
+            isinstance(status, bool)
+            or not isinstance(status, int)
+            or not 100 <= status <= 599
+            or "body" not in decoded
+        ):
+            raise TransportError(
+                "terminal agent turn event had an invalid response envelope",
+                status=self._status,
+            )
+        self._terminal = decoded
+
+
+def _dispatch_frame(
+    name: str,
+    data: Any,
+    on_step: StepCallback | None,
+    on_event: EventCallback | None,
+) -> Any:
+    """Hand one progress frame to its callback; return what the callback returned."""
+    if name == "step":
+        # A step payload is an object; anything else is a malformed frame.
+        if on_step is not None and isinstance(data, dict):
+            return on_step(data)
+        return None
+    if on_event is not None:
+        return on_event(name, data)
+    return None
+
+
+def _read_live_turn_stream(
+    response: httpx.Response,
+    deadline: float | None,
+    on_step: StepCallback | None,
+    on_event: EventCallback | None,
+) -> Any:
+    """Parse an agent-turn stream as it arrives, calling back per progress frame."""
+    if _declares_oversized_body(response):
+        raise _body_too_large(response.status_code)
+    parser = _TurnStreamParser(response.status_code)
+    for chunk in _iter_chunks(response, deadline):
+        _check_stream_deadline(deadline)
+        for name, data in parser.feed(chunk):
+            _dispatch_frame(name, data, on_step, on_event)
+    for name, data in parser.finish():
+        _dispatch_frame(name, data, on_step, on_event)
+    return parser.result()
+
+
+async def _read_live_turn_stream_async(
+    response: httpx.Response,
+    deadline: float | None,
+    on_step: StepCallback | None,
+    on_event: EventCallback | None,
+) -> Any:
+    """Async mirror of :func:`_read_live_turn_stream`; awaits awaitable callbacks."""
+    if _declares_oversized_body(response):
+        raise _body_too_large(response.status_code)
+    parser = _TurnStreamParser(response.status_code)
+    async for chunk in _aiter_chunks(response, deadline):
+        _check_stream_deadline(deadline)
+        for name, data in parser.feed(chunk):
+            outcome = _dispatch_frame(name, data, on_step, on_event)
+            if inspect.isawaitable(outcome):
+                await outcome
+    for name, data in parser.finish():
+        outcome = _dispatch_frame(name, data, on_step, on_event)
+        if inspect.isawaitable(outcome):
+            await outcome
+    return parser.result()

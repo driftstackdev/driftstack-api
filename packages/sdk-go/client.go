@@ -26,10 +26,12 @@ const DefaultTimeout = 30 * time.Second
 // request the server would still honour. Mirrors the TS/Python SDKs.
 const bodyTimeoutHeadroom = 15 * time.Second
 
-// AgentMessageStreamTimeout is the absolute backstop for one heartbeat-backed
-// agent turn. Eight legal five-minute harness intents consume ~42 minutes; this
-// leaves headroom for decomposition + optional read-back while preventing a
-// permanently heartbeating but never-terminal stream from hanging forever.
+// AgentMessageStreamTimeout is the absolute backstop for one agent turn's
+// stream: 50 minutes. A turn stops planning new steps after about three
+// minutes, but the steps it has already planned run to the end (a single step
+// can wait several minutes) and the answer may still be read back after them.
+// The stream's keep-alives hold the connection open meanwhile; this bound only
+// stops a stream that keeps alive but never finishes from hanging forever.
 const AgentMessageStreamTimeout = 50 * time.Minute
 
 // bodyOperationTimeout extracts a long-running-operation deadline from a
@@ -247,6 +249,10 @@ type requestOptions struct {
 	// representation. streamTimeout is its absolute SDK backstop.
 	eventStream   bool
 	streamTimeout time.Duration
+	// onFrame, when set on an eventStream request, receives every progress
+	// frame (event name + raw JSON data) as it arrives; the stream is then
+	// parsed incrementally instead of being read whole first.
+	onFrame func(event string, data []byte)
 }
 
 // do executes a request with retry. Returns nil on success (with out
@@ -407,6 +413,15 @@ func (c *Client) doOnce(ctx context.Context, opts requestOptions) error {
 	// returns no error on truncation, so a >cap valid JSON body would otherwise
 	// masquerade as a misleading "failed to parse JSON response body" below.
 	const maxBodyBytes = 8 * 1024 * 1024
+	if opts.eventStream && opts.onFrame != nil && isEventStreamSuccess(resp) {
+		// Live path: hand each progress frame to the caller as it lands, under
+		// the same byte ceiling and single-terminal rule as the buffered path.
+		liveStatus, liveBody, err := readLiveEventStream(resp.Body, maxBodyBytes, opts.onFrame)
+		if err != nil {
+			return err
+		}
+		return decodeTerminalResult(liveStatus, liveBody, opts.out)
+	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes+1))
 	if err != nil {
 		return transportErrorFromHTTP("failed to read response body", err)
@@ -448,40 +463,154 @@ func parseTerminalEventStream(body []byte) (int, []byte, error) {
 	var terminalBody []byte
 	found := false
 	for _, block := range strings.Split(normalized, "\n\n") {
-		event := "message"
-		data := make([]string, 0, 1)
-		for _, line := range strings.Split(block, "\n") {
-			if strings.HasPrefix(line, ":") {
-				continue
-			}
-			if strings.HasPrefix(line, "event:") {
-				event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
-			} else if strings.HasPrefix(line, "data:") {
-				data = append(data, strings.TrimLeft(strings.TrimPrefix(line, "data:"), " \t"))
-			}
-		}
+		event, data, _ := parseEventBlock(block)
 		if event != "response" {
 			continue
 		}
 		if found {
 			return 0, nil, transportErrorFromHTTP("agent turn stream contained multiple terminal responses", nil)
 		}
-		var envelope struct {
-			Status int             `json:"status"`
-			Body   json.RawMessage `json:"body"`
-		}
-		if err := json.Unmarshal([]byte(strings.Join(data, "\n")), &envelope); err != nil {
-			return 0, nil, transportErrorFromHTTP("failed to parse terminal agent turn event", err)
-		}
-		if envelope.Status < 100 || envelope.Status > 599 || envelope.Body == nil {
-			return 0, nil, transportErrorFromHTTP("terminal agent turn event had an invalid response envelope", nil)
+		s, b, err := decodeTerminalEnvelope(data)
+		if err != nil {
+			return 0, nil, err
 		}
 		found = true
-		status = envelope.Status
-		terminalBody = append([]byte(nil), envelope.Body...)
+		status = s
+		terminalBody = b
 	}
 	if !found {
 		return 0, nil, transportErrorFromHTTP("agent turn stream ended without a terminal response", nil)
 	}
 	return status, terminalBody, nil
+}
+
+// parseEventBlock reads one SSE block: its event name ("message" when none is
+// given), its joined data lines, and whether it had any data. Comment lines
+// (starting ":") are skipped.
+func parseEventBlock(block string) (string, string, bool) {
+	event := "message"
+	data := make([]string, 0, 1)
+	for _, line := range strings.Split(block, "\n") {
+		if strings.HasPrefix(line, ":") {
+			continue
+		}
+		if strings.HasPrefix(line, "event:") {
+			event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+		} else if strings.HasPrefix(line, "data:") {
+			data = append(data, strings.TrimLeft(strings.TrimPrefix(line, "data:"), " \t"))
+		}
+	}
+	return event, strings.Join(data, "\n"), len(data) > 0
+}
+
+// decodeTerminalEnvelope validates the one `event: response` payload,
+// {status, body}, and returns its status and raw body.
+func decodeTerminalEnvelope(data string) (int, []byte, error) {
+	var envelope struct {
+		Status int             `json:"status"`
+		Body   json.RawMessage `json:"body"`
+	}
+	if err := json.Unmarshal([]byte(data), &envelope); err != nil {
+		return 0, nil, transportErrorFromHTTP("failed to parse terminal agent turn event", err)
+	}
+	if envelope.Status < 100 || envelope.Status > 599 || envelope.Body == nil {
+		return 0, nil, transportErrorFromHTTP("terminal agent turn event had an invalid response envelope", nil)
+	}
+	return envelope.Status, append([]byte(nil), envelope.Body...), nil
+}
+
+// isEventStreamSuccess reports a 2xx text/event-stream response — the only
+// shape read live.
+func isEventStreamSuccess(resp *http.Response) bool {
+	mediaType := strings.TrimSpace(strings.SplitN(resp.Header.Get("Content-Type"), ";", 2)[0])
+	return resp.StatusCode >= 200 && resp.StatusCode < 300 && strings.EqualFold(mediaType, "text/event-stream")
+}
+
+// readLiveEventStream parses an agent-turn stream as it arrives. Every
+// non-terminal frame with data goes to onFrame in arrival order; the one
+// terminal `event: response` is returned. The whole stream is held to limit
+// bytes, and a second terminal is refused, exactly as parseTerminalEventStream
+// does for a stream read whole.
+func readLiveEventStream(r io.Reader, limit int, onFrame func(string, []byte)) (int, []byte, error) {
+	status := 0
+	var terminalBody []byte
+	found := false
+	handle := func(block string) error {
+		event, data, hasData := parseEventBlock(block)
+		if event == "response" {
+			if found {
+				return transportErrorFromHTTP("agent turn stream contained multiple terminal responses", nil)
+			}
+			s, b, err := decodeTerminalEnvelope(data)
+			if err != nil {
+				return err
+			}
+			found = true
+			status = s
+			terminalBody = b
+			return nil
+		}
+		if hasData {
+			onFrame(event, []byte(data))
+		}
+		return nil
+	}
+
+	buf := make([]byte, 32*1024)
+	pending := ""
+	total := 0
+	for {
+		n, readErr := r.Read(buf)
+		if n > 0 {
+			total += n
+			if total > limit {
+				return 0, nil, transportErrorFromHTTP(
+					fmt.Sprintf("response body exceeds %d-byte limit", limit),
+					nil,
+				)
+			}
+			pending = strings.ReplaceAll(pending+string(buf[:n]), "\r\n", "\n")
+			for {
+				end := strings.Index(pending, "\n\n")
+				if end < 0 {
+					break
+				}
+				block := pending[:end]
+				pending = pending[end+2:]
+				if err := handle(block); err != nil {
+					return 0, nil, err
+				}
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return 0, nil, transportErrorFromHTTP("failed to read response body", readErr)
+		}
+	}
+	for _, block := range strings.Split(pending, "\n\n") {
+		if err := handle(block); err != nil {
+			return 0, nil, err
+		}
+	}
+	if !found {
+		return 0, nil, transportErrorFromHTTP("agent turn stream ended without a terminal response", nil)
+	}
+	return status, terminalBody, nil
+}
+
+// decodeTerminalResult is the success/problem tail for a live-read stream:
+// a 2xx body is decoded into out, anything else maps to a typed error.
+func decodeTerminalResult(statusCode int, body []byte, out any) error {
+	if statusCode >= 200 && statusCode < 300 {
+		if statusCode == http.StatusNoContent || len(body) == 0 || out == nil {
+			return nil
+		}
+		if err := json.Unmarshal(body, out); err != nil {
+			return transportErrorFromHTTP("failed to parse JSON response body", err)
+		}
+		return nil
+	}
+	return errorFromResponse(statusCode, body, "")
 }

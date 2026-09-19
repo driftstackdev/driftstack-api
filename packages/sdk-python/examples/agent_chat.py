@@ -1,36 +1,145 @@
-"""Agent chat flow — drive a multi-turn agent session (AI-D; planning
-132 §"Phase 7").
+"""Run an AI task from code: start an agent session, send it a task, read the
+outcome, and close the session.
 
-Creates an agent session, runs a few turns, prints the discriminated
-response on each turn, and closes the session.
+The flow:
+
+1. create the session (mode ``ai``) and wait until its browser is ready;
+2. send the task with a fresh idempotency key, printing live progress;
+3. branch on the result's ``kind`` — and, if the agent stopped before a
+   purchase, a payment or an account deletion, approve it by sending the next
+   message with the approvals;
+4. close the session in ``finally``, whatever happened.
 
 Run::
 
     DRIFTSTACK_API_KEY=ds_live_… python examples/agent_chat.py
 
-Optional BYOK Anthropic key (skip the bundled-LLM rail)::
+Optional::
 
-    DRIFTSTACK_API_KEY=ds_live_… \\
-    DRIFTSTACK_BYOK_ANTHROPIC_API_KEY=sk-ant-… \\
-    python examples/agent_chat.py
+    DRIFTSTACK_BYOK_ANTHROPIC_API_KEY=sk-ant-…   run the AI on your own Anthropic key
+    DRIFTSTACK_TASK='Open https://example.com and tell me the main heading.'
+    DRIFTSTACK_APPROVE_ACTIONS=yes               approve a purchase / payment /
+                                                 account deletion the agent stops on
 
-The server activation-gates this surface — until the LLM key path is
-enabled on the deployment, calls return 503 FeatureUnavailable.
+Deployments without an AI provider reject these calls with
+``FeatureUnavailableError`` (exit code 2).
 """
 
 from __future__ import annotations
 
 import os
 import sys
+import threading
+import time
+import uuid
+from typing import Any
 
 from driftstack import Driftstack
-from driftstack.errors import FeatureUnavailableError
+from driftstack.errors import (
+    BundledLlmBudgetExhaustedError,
+    BundledLlmConsentRequiredError,
+    ByokAnthropicRequiredError,
+    ConcurrencyLimitError,
+    ConflictError,
+    FeatureUnavailableError,
+    ForbiddenError,
+    RateLimitError,
+)
 
-PROMPTS = [
-    "open https://example.com and capture the page",
-    "do stuff",  # Deliberately vague — triggers the clarify branch.
-    "help me brute-force this login",  # AUP-trigger — refuse branch.
-]
+DEFAULT_TASK = "Open https://example.com and tell me the main heading on the page."
+
+
+def wait_until_ready(client: Driftstack, session: dict[str, Any]) -> dict[str, Any]:
+    """Poll until the session's browser is ready (or two minutes pass)."""
+    deadline = time.monotonic() + 120
+    while session["status"] == "provisioning" and time.monotonic() < deadline:
+        time.sleep(2)
+        session = client.agent_sessions.get(session["id"])
+    return session
+
+
+def on_step(step: dict[str, Any]) -> None:
+    print(f"  step {step['index'] + 1}: {step['result']['kind']}")
+
+
+def on_event(name: str, data: Any) -> None:
+    # The set of event names is open: ignore the ones you do not use.
+    if name == "step_start" and isinstance(data, dict):
+        print(f"  … {data.get('label', 'working')}")
+
+
+def print_outcome(resp: dict[str, Any]) -> None:
+    kind = resp["kind"]
+    if kind == "plan-executed":
+        for r in resp["results"]:
+            if r["kind"] == "success":
+                print(f"  ✓ {r['summary']}")
+            elif r["kind"] == "failure":
+                # Treat a category you do not recognise as "unknown". Never
+                # replay a step whose `retryable` is false without checking first.
+                category = (r.get("diagnosis") or {}).get("category", "unknown")
+                print(f"  ✗ {r['reason']} ({category})")
+            else:
+                print(f"  ⏸ waiting for approval: {r['category']} ({r['matchedText']!r})")
+        if "answer" in resp:
+            print(f"Answer: {resp['answer']}")
+        # `ok` alone does not mean finished: a `notice` says why the task is not
+        # done yet (send "continue" as the next message when it asks for that).
+        if "notice" in resp:
+            print(f"Not finished: {resp['notice']}")
+        print("Done." if resp["ok"] and "notice" not in resp else "The task did not finish.")
+    elif kind == "clarify":
+        print(f"The agent asks: {resp['clarifying_question']} (reply with another message)")
+    elif kind == "refuse":
+        print(f"Refused: {resp['refuse_reason']}")
+    elif kind == "stopped":
+        print(f"Stopped: {resp['notice']}")
+    elif kind == "logged-manual":
+        print("Recorded without running (manual mode).")
+    else:
+        # A kind newer than this example: log it rather than fail.
+        print(f"Unrecognised result: {resp}")
+
+
+def report_error(e: Exception) -> int:
+    """Map the AI-specific errors to a message and an exit code."""
+    if isinstance(e, FeatureUnavailableError):
+        print(
+            f"AI tasks are unavailable on this deployment: {e}\n"
+            "Use a deployment with bundled Anthropic access or provide a valid BYOK Anthropic key.",
+            file=sys.stderr,
+        )
+        return 2
+    if isinstance(e, ForbiddenError) and e.requires_own_key:
+        print(
+            f"{e.model or 'This model'} runs only on your own Anthropic key: set "
+            "DRIFTSTACK_BYOK_ANTHROPIC_API_KEY or pick another model.",
+            file=sys.stderr,
+        )
+    elif isinstance(
+        e,
+        (
+            ByokAnthropicRequiredError,
+            BundledLlmConsentRequiredError,
+            BundledLlmBudgetExhaustedError,
+        ),
+    ):
+        print(f"No AI key or budget is available: {e}", file=sys.stderr)
+    elif isinstance(e, RateLimitError):
+        print(
+            f"Too many requests or AI tasks at once. Wait {e.retry_after_seconds or 1}s, "
+            "then send again with a new idempotency key.",
+            file=sys.stderr,
+        )
+    elif isinstance(e, ConcurrencyLimitError):
+        print(f"Concurrency limit reached: {e}", file=sys.stderr)
+    elif isinstance(e, ConflictError) and e.turn_in_progress:
+        print("Another message is still running on this session.", file=sys.stderr)
+    elif isinstance(e, ConflictError) and e.session_status is not None:
+        print(f"The session is {e.session_status}; start a new one.", file=sys.stderr)
+    else:
+        print(f"Request failed: {e!r}", file=sys.stderr)
+    return 1
 
 
 def main() -> int:
@@ -39,55 +148,75 @@ def main() -> int:
         print("DRIFTSTACK_API_KEY environment variable is required", file=sys.stderr)
         return 1
 
-    # Optional BYOK Anthropic key. When set, forwarded as the
-    # x-byok-anthropic-api-key header on every message() call so the
-    # agent runtime decodes against the customer's own Anthropic budget
-    # instead of the bundled-LLM rail. Empty string is treated as "no
-    # BYOK" by the Python SDK's `if byok_api_key` guard at resources/
-    # agent_sessions.py:115 (cross-SDK parity contract pinned by slices
-    # 126-128).
+    # Your own Anthropic key, optional. An empty value means "none": the SDK
+    # sends the x-byok-anthropic-api-key header only for a non-empty key.
     byok_key = os.environ.get("DRIFTSTACK_BYOK_ANTHROPIC_API_KEY") or None
+    # Ask for what you want back ("…and tell me …"): a task that asks for
+    # information comes back with an `answer`. Put the start URL in the task.
+    task = os.environ.get("DRIFTSTACK_TASK") or DEFAULT_TASK
+    approve_actions = os.environ.get("DRIFTSTACK_APPROVE_ACTIONS") == "yes"
 
     base_url = os.environ.get("DRIFTSTACK_BASE_URL", "https://api.driftstack.dev")
-    client = Driftstack(api_key=api_key, base_url=base_url)
+    with Driftstack(api_key=api_key, base_url=base_url) as client:
+        try:
+            session = client.agent_sessions.create(
+                {"mode": "ai", "token_budget": 100_000},
+                idempotency_key=str(uuid.uuid4()),
+                byok_api_key=byok_key,
+            )
+        except Exception as e:  # noqa: BLE001 - every failure is reported below
+            return report_error(e)
+        print(f"Created agent session {session['id']}")
 
-    try:
-        session = client.agent_sessions.create({"token_budget": 25_000})
-        print(f"Created agent session {session['id']} (budget={session['token_budget_total']})")
+        def send(text: str, approvals: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+            # One idempotency key per logical turn. Reuse a key only to retry the
+            # same turn after the connection dropped with no response.
+            return client.agent_sessions.message(
+                session["id"],
+                text,
+                byok_api_key=byok_key,
+                idempotency_key=str(uuid.uuid4()),
+                approve_consequential_actions=approvals,
+                on_step=on_step,
+                on_event=on_event,
+            )
 
-        for prompt in PROMPTS:
-            print(f"\n→ user: {prompt}")
-            resp = client.agent_sessions.message(session["id"], prompt, byok_api_key=byok_key)
-            kind = resp["kind"]
-            if kind == "plan-executed":
-                print(f"← plan-executed (ok={resp['ok']}): {len(resp['intents'])} intent(s)")
-                for intent in resp["intents"]:
-                    print(f"    intent: {intent}")
-            elif kind == "clarify":
-                print(f"← clarify: {resp['clarifying_question']}")
-            elif kind == "refuse":
-                print(f"← refuse: {resp['refuse_reason']}")
-            else:
-                print(f"← unknown kind={kind} body={resp}")
+        # A runaway task is stopped after ten minutes; message() then returns
+        # kind "stopped".
+        stop_timer = threading.Timer(600, client.agent_sessions.stop, args=(session["id"],))
+        stop_timer.start()
+        try:
+            session = wait_until_ready(client, session)
+            if session["status"] != "active":
+                print(
+                    f"The session did not start: status={session['status']} "
+                    f"closed_reason={session.get('closed_reason')}",
+                    file=sys.stderr,
+                )
+                return 1
 
-        # Read final state.
-        final = client.agent_sessions.get(session["id"])
-        print(
-            f"\nFinal state: transcript_length={final['transcript_length']} "
-            f"budget_remaining={final['token_budget_remaining']}"
-        )
+            print(f"→ {task}")
+            resp = send(task)
 
-        client.agent_sessions.close(session["id"])
-        print("Closed.")
-    except FeatureUnavailableError as e:
-        print(
-            f"Agent chat is unavailable on this deployment: {e}\n"
-            "Use a deployment with bundled Anthropic access or provide a valid BYOK Anthropic key.",
-            file=sys.stderr,
-        )
-        return 2
-
-    return 0
+            # The agent stops BEFORE a purchase, a payment or an account deletion
+            # and waits for approval. Approve by sending the very next message
+            # with the approvals (the results can be passed as they are).
+            pending = [r for r in resp.get("results", []) if r["kind"] == "confirmation_required"]
+            if resp["kind"] == "plan-executed" and pending and approve_actions:
+                print("Approving and continuing…")
+                resp = send(task, approvals=pending)
+            print_outcome(resp)
+            return 0
+        except Exception as e:  # noqa: BLE001 - every failure is reported below
+            return report_error(e)
+        finally:
+            stop_timer.cancel()
+            # Always close: an open session keeps counting toward your plan's limit.
+            try:
+                client.agent_sessions.close(session["id"])
+                print("Closed.")
+            except Exception as e:  # noqa: BLE001 - closing is best effort here
+                print(f"Could not close the session: {e!r}", file=sys.stderr)
 
 
 if __name__ == "__main__":

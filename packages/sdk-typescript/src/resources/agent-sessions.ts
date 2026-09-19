@@ -1,11 +1,14 @@
 // AgentSessionsResource — typed methods for /v1/agent-sessions/*.
 //
-// Four methods mirror the route handlers:
-//   create({ token_budget?, driftstack_session_id? })
-//   get(id)
-//   message(id, user_message)
-//   close(id)
-//   setEgress(id, proxyId, applyPoint?)
+// An agent session is a browser that the AI drives for you. The methods mirror
+// the API routes:
+//   create(body?, opts?)                  start a session
+//   get(id) / list(query?) / iterate()    read sessions
+//   message(id, userMessage, opts?)       send one task and wait for its outcome
+//   stop(id)                              stop the task that is running
+//   close(id)                             end the session
+//   setMode / setEgress / sendInputEvent / takeover / handback /
+//   livekitToken / resume                 live control of a running session
 //
 // AI-backed operations depend on the deployment's configured BYOK or
 // bundled-LLM provider. Deployments without one return the stable
@@ -16,9 +19,9 @@ import type { HttpClient } from '../http.js';
 import { iteratePaginated } from '../pagination.js';
 
 /**
- * Slice 4 (Wave 29-NNN ARC 3) — LK.6 InputEvent wire shape mirrored
- * from `@driftstack/api-types` InputEventSchema. The 7 variants map
- * 1:1 onto the Mac harness's CGEvent dispatch.
+ * One input event for {@link AgentSessionsResource.sendInputEvent}. Mirrors the
+ * API's `InputEvent` schema: pointer, keyboard, wheel and touch events, plus a
+ * `ping` for measuring latency.
  */
 export type InputEvent =
   | { type: 'mouseMove'; x: number; y: number }
@@ -27,8 +30,7 @@ export type InputEvent =
   | { type: 'keyDown'; key: string; modifiers?: readonly string[] }
   | { type: 'keyUp'; key: string; modifiers?: readonly string[] }
   | { type: 'wheel'; x: number; y: number; deltaX: number; deltaY: number }
-  // Touch vocab (2026-06-08 product directive; device-CSS px; harness owns dynamics).
-  // Lock-step with packages/api-types InputEventSchema + the gui-client copy.
+  // Touch events, in the device's CSS pixels.
   | { type: 'tap'; x: number; y: number }
   | { type: 'touchStart'; x: number; y: number; touchId: number }
   | { type: 'touchMove'; x: number; y: number; touchId: number }
@@ -37,10 +39,10 @@ export type InputEvent =
   | { type: 'ping'; timestamp: number };
 
 /**
- * P-17 — the discriminated result of an egress swap. Only `'ok'` means the
- * egress changed; every other status leaves the session exactly as it was, with
- * `reason` saying why. `apply_point` is present on success and is `null` when
- * the device accepted the swap without confirming when it takes effect.
+ * The result of an egress swap. Only `'ok'` means the egress changed; every
+ * other status leaves the session exactly as it was, with `reason` saying why.
+ * `apply_point` is present on success and is `null` when the device accepted
+ * the swap without confirming when it takes effect.
  */
 export interface AgentSessionEgressResult {
   status: 'ok' | 'unavailable' | 'timeout' | 'error';
@@ -48,20 +50,15 @@ export interface AgentSessionEgressResult {
   reason?: string;
 }
 
-/** Slice 4 + Slice 5 response envelope for POST /v1/agent-sessions/
- *  :id/input-event. Discriminated union — callers MUST branch on
- *  `kind`:
+/** Response of POST /v1/agent-sessions/:id/input-event. A discriminated union —
+ *  callers MUST branch on `kind`:
  *
- *  - `'pair-mode-takeover-fired'` — first input-event in a pair-mode
- *    `ai-driving` session triggered the takeover-request transition.
- *    `pair_mode_state` carries the new state machine kind (typically
- *    `takeover-pending` or `takeover-queued`).
- *  - `'forwarded'` — reserved for direct harness dispatch, carrying
- *    the measured `duration_ms`. No deployment forwards input events,
- *    for two separate reasons: the harness-forward path throws
- *    unconditionally, and the one code path that does build this reply
- *    sits behind a pair-mode state nothing can reach. So the variant is
- *    UNREACHABLE and `if (res.kind === 'forwarded')` is dead code.
+ *  - `'pair-mode-takeover-fired'` — the first input event in a pair-mode
+ *    session whose AI is driving asked for a takeover. `pair_mode_state`
+ *    carries the new state (typically `takeover-pending` or `takeover-queued`).
+ *  - `'forwarded'` — reserved for an event sent straight to the browser, with
+ *    the measured `duration_ms`. No deployment forwards input events, so this
+ *    variant never arrives and `if (res.kind === 'forwarded')` is dead code.
  */
 export type SendInputEventResponse =
   | {
@@ -70,12 +67,12 @@ export type SendInputEventResponse =
     }
   | {
       kind: 'forwarded';
-      /** Server-side dispatch latency in ms (NOT round-trip). */
+      /** Time the API spent delivering the event, in ms (NOT round-trip). */
       duration_ms: number;
     };
 
 /**
- * LK.5 — LiveKit join info, optionally returned on session-create
+ * Live-video join info, optionally returned on session-create
  * + always returned by POST /v1/agent-sessions/:id/livekit-token.
  * Use these fields with `livekit-client`'s `Room.connect(ws_url,
  * token)`. Token TTL is 24h; re-mint via the dedicated /livekit-
@@ -96,19 +93,25 @@ export interface AgentSession {
   /**
    * Lifecycle state as the API reports it.
    *
-   * `'provisioning'` means the session exists and its node has begun bringing it
-   * up — a VPN tunnel connecting, an egress resolving — but no browser is
-   * serving yet. It is a READ-SHAPE value: storage only ever holds active,
-   * paused or closed, and the concurrency cap counts the stored value, so a
-   * provisioning session IS occupying one of your slots. Treat it as "running,
-   * not ready": do not start work against it, and do not treat it as finished.
+   * `'provisioning'` means the session exists and its browser is still starting
+   * (for example a VPN tunnel is connecting or an egress is resolving), so it
+   * cannot run anything yet. It already counts toward your plan's concurrent-
+   * session limit. Treat it as "running, not ready": poll `get(id)` until it
+   * reads `'active'` before sending a message, and do not treat it as finished.
    * `provisioning_detail` below says which step it is on.
    *
-   * ⚠️ It was absent from this union until 2026-09-14 while the API could
-   * already return it, so `status === 'active'` was silently false during
-   * bring-up and an exhaustive switch fell through its default.
+   * `'paused'` is reserved. A session held up by a bot check still reads
+   * `'active'`; see {@link AgentSessionsResource.resume}.
    */
   status: 'provisioning' | 'active' | 'paused' | 'closed';
+  /**
+   * Why the session ended, once it has. Examples: `'customer-closed'` (you
+   * closed it), `'budget-exhausted'` (its token budget ran out),
+   * `'transcript-limit'` (its conversation history is full) and
+   * `'exit_ip_changed'` (see `stop_on_exit_ip_change`). Other values mean it
+   * could not start or was ended by Driftstack. An open set: new values can
+   * appear, so treat one you do not recognise as "ended".
+   */
   closed_reason: string | null;
   /** Why the session is still provisioning (e.g. 'vpn_egress_active'); null once active; absent on older servers. */
   provisioning_detail?: string | null;
@@ -116,27 +119,21 @@ export interface AgentSession {
   token_budget_remaining: number;
   transcript_length: number;
   /**
-   * v2-#19 — wall-clock ISO-8601 timestamp the session transitioned out
-   * of `active` status. Distinct from `updated_at`, which moves on every
-   * transcript append. `null` while the session is active.
+   * ISO-8601 time the session left `active`. Distinct from `updated_at`, which
+   * moves on every message. `null` while the session is active.
    */
   closed_at: string | null;
-  /**
-   * v2-#35 — team-RBAC attribution. `null` when the auth context is
-   * account-scoped (no specific team-member id resolvable). Populated
-   * once V-298 team-membership auth threads a resolved user id through.
-   */
+  /** The team member who created the session; `null` when the API key is not tied to one. */
   created_by_user_id: string | null;
   /**
-   * Arc 2 sub-slice 8.5 (v2-#8) — operational mode chosen at create-
-   * time. Server-side default is 'ai' for backward compat. Updated
-   * by POST /v1/agent-sessions/:id/mode (Slice 3, Wave 29-NNN ARC 3).
+   * How the session is driven, chosen at create: `'ai'` (the default), `'manual'`
+   * or `'pair'`. Change it with {@link AgentSessionsResource.setMode}.
    */
   mode: 'manual' | 'ai' | 'pair';
   /**
-   * 6.c — the Claude model the AI agent runs for this session
-   * (set at create-time; defaults to 'claude-sonnet-5'). Every earlier id
-   * stays accepted for back-compat with sessions created before the bump.
+   * The Claude model the AI runs for this session (set at create; defaults to
+   * 'claude-sonnet-5'). Every earlier id stays accepted so older sessions still
+   * read back.
    */
   model:
     | 'claude-opus-5'
@@ -145,47 +142,37 @@ export interface AgentSession {
     | 'claude-opus-4-7'
     | 'claude-sonnet-4-6'
     | 'claude-haiku-4-5';
-  /**
-   * T-26 — the per-session "stop the session if its exit IP changes" policy,
-   * set at create-time. Always a real boolean (server default false).
-   */
+  /** Whether the session stops when its exit IP changes (set at create; default false). */
   stop_on_exit_ip_change: boolean;
   /**
-   * Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
-   * discriminator. `null` when mode != 'pair'; carries the
-   * `{kind: 'ai-driving' | 'takeover-pending' | ...}` shape (see
-   * services/agent-pair-mode-state.ts for the full state union)
-   * when mode='pair'. Dashboard reads this to decide whether the
-   * customer is mid-takeover.
+   * Pair-mode state. `null` when mode != 'pair'; otherwise
+   * `{kind: 'ai-driving' | 'takeover-pending' | ...}`, which says whether a
+   * person is mid-takeover.
    */
   pair_mode_state: { kind: string; [k: string]: unknown } | null;
   created_at: string;
   updated_at: string;
   /**
-   * LK.4 — auto-populated on POST /v1/agent-sessions response when a
-   * Mac with LiveKit credentials is available + the deployment has
-   * LiveKit wiring on (encryption key + fleet repo). Absent on older
-   * deployments + on the GET shape. Clients that need a token on
-   * pre-LK deployments fall back to POST
-   * /v1/agent-sessions/:id/livekit-token (LK.3).
+   * Live-video join info. Returned on create when live video is available for
+   * the session; absent on the GET shape. Mint one at any time with
+   * {@link AgentSessionsResource.livekitToken}.
    */
   livekit?: LiveKitInfo;
   /**
-   * W2679 — worker-reported per-session liveness, re-based onto the fleet
-   * heartbeat. Distinct from `status`, which stays `'active'` until the session
-   * is closed even if the worker crashed — it reports `'provisioning'` only
-   * before a browser first serves, never again afterwards. `state` is the latest
-   * worker state (or `null` = "seen but no live state"); `fresh` is whether the
-   * owning node's beat is recent enough to trust. Absent (field omitted) when
-   * the deployment has no fleet control plane OR no beat has reported the
-   * session — treat absent as "unknown, trust the binding", never as "dead".
+   * Whether the browser behind this session is still reporting in. Distinct
+   * from `status`, which stays `'active'` until the session is closed even if
+   * its browser has stopped — it reports `'provisioning'` only before a browser
+   * first serves, never again afterwards. `state` is the browser's latest state
+   * (or `null` = "seen but no live state"); `fresh` is whether that report is
+   * recent enough to trust. Absent when nothing has been reported — treat
+   * absent as "unknown", never as "dead".
    */
   liveness?: { state: 'active' | 'provisioning' | 'idle' | 'terminating' | null; fresh: boolean };
   /**
-   * Latest ownership-validated worker capabilities for this live session.
-   * Absent until reported (and on closed sessions). A false
-   * `manual_input_available` means the video is view-only; blank/failed and
-   * dead_proxy are explicit degraded states, not successful input/video.
+   * Latest report of what this live session can do. Absent until reported (and
+   * on closed sessions). A false `manual_input_available` means the video is
+   * view-only; blank/failed and dead_proxy are explicit degraded states, not
+   * successful input/video.
    */
   capability_report?: {
     timestamp: string;
@@ -198,9 +185,9 @@ export interface AgentSession {
     transport_mode_active: 'h2-only' | 'h2-and-h3';
     safeguards_passed: boolean;
     /**
-     * T-26 — the live exit identity this session's traffic leaves through, and
-     * the IPs its WebRTC candidates surface. Each is `null` until the box
-     * reports it (NOT OBSERVED), never read as "no exit".
+     * The live exit identity this session's traffic leaves through, and the IPs
+     * its WebRTC candidates surface. Each is `null` until reported (NOT
+     * OBSERVED), never read as "no exit".
      */
     exit_ip: string | null;
     exit_country: string | null;
@@ -208,7 +195,7 @@ export interface AgentSession {
     webrtc_candidate_ips: string[] | null;
     observed_at: string | null;
   };
-  /** Latest ownership-validated harness launch/runtime failure. */
+  /** Latest launch or runtime failure reported for this session. */
   error_event?: {
     timestamp: string;
     code: string;
@@ -221,10 +208,9 @@ export interface AgentSession {
 }
 
 /**
- * GET /v1/agent-sessions envelope — newest-first, cursor-paginated. Mirrors
- * the standard `{ data, has_more, next_cursor }` shape shared by sessions /
- * recipes / crypto-orders (was a non-paginated `{ data }` hard-capped at 100,
- * so older sessions were unreachable).
+ * GET /v1/agent-sessions envelope — newest-first, cursor-paginated. The standard
+ * `{ data, has_more, next_cursor }` shape shared by sessions / recipes /
+ * crypto-orders.
  */
 export interface AgentSessionsListPage {
   data: AgentSession[];
@@ -241,19 +227,26 @@ export interface CreateAgentSessionRequest {
    * Omit for an ordinary session with no history.
    */
   continue_from_agent_session_id?: string;
+  /**
+   * Tokens the AI may spend over the whole session. Defaults to 100,000; at
+   * most 10,000,000. When it runs out the session closes with `closed_reason`
+   * `'budget-exhausted'` and the message that ran it out returns a 409
+   * `ConflictError` whose `sessionStatus` is `'closed'`.
+   */
   token_budget?: number;
   /**
-   * Arc 2 sub-slice 8.5 (v2-#8 AI chat + manual). Defaults to 'ai'
-   * (legacy decompose-driven runtime). 'manual' makes runTurn a
-   * pass-through so the customer drives intents directly. 'pair'
-   * enables the takeover state-machine (sub-slice 8.7).
+   * How the session is driven. Defaults to 'ai': the AI plans and runs each
+   * message you send. 'manual' records each message without running it, for a
+   * person driving the browser. 'pair' lets a person take over from the AI.
    */
   mode?: 'manual' | 'ai' | 'pair';
   /**
-   * 6.c — the Claude model the AI agent runs for this session.
-   * Defaults server-side to 'claude-sonnet-5' when omitted. Pick
-   * 'claude-opus-5' for the most capable planner or 'claude-haiku-4-5' for the
-   * cheapest and fastest. Every 4.x id stays accepted for back-compat.
+   * The Claude model the AI runs for this session. Defaults to 'claude-sonnet-5'
+   * when omitted; 'claude-haiku-4-5' is the cheapest and fastest. Opus models
+   * ('claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7') run only on your own
+   * Anthropic key: when the session would run on Driftstack's included AI, the
+   * API refuses them with a 403 `ForbiddenError` whose `requiresOwnKey`
+   * is true. Every 4.x id stays accepted for back-compat.
    */
   model?:
     | 'claude-opus-5'
@@ -266,20 +259,29 @@ export interface CreateAgentSessionRequest {
    * Attach a saved profile (a persistent browser identity — cookies,
    * localStorage, etc.) so the session resumes that profile's stored state and
    * saves changes back when it ends. Must reference a profile your account owns
-   * (an unknown or not-owned id returns 404). Omit for a stateless session.
+   * (an unknown or not-owned id returns 404). A profile can have one live
+   * session at a time: a second create returns a 409 ProfileInUseError naming
+   * the live one. Omit for a stateless session.
    */
   profile_id?: string;
   /**
    * Route the session through one of your account proxies (manage them at
    * `/v1/account/me/proxies`). Must reference a proxy your account owns (an
-   * unknown or not-owned id returns 404). Omit for the default egress.
+   * unknown or not-owned id returns 404). The proxy is tested before launch; a
+   * failed test returns a 422 ProxyValidationFailedError. Omit for the default
+   * egress.
    */
   proxy_id?: string;
   /**
-   * Start URL the remote browser opens on session launch. When supplied,
-   * overrides the operator-default start URL. Must be an absolute http(s) URL;
-   * `file:`, `javascript:`, `data:` schemes are rejected (400). Omit to use the
-   * operator default.
+   * Skip the pre-launch proxy test for this launch only — for a proxy you know
+   * works but the test reports as unreachable. Omit to run the test.
+   */
+  skip_proxy_probe?: boolean;
+  /**
+   * A start page for the browser. Must be an absolute http(s) URL; `file:`,
+   * `javascript:`, `data:` schemes are rejected (400). For an AI task, also put
+   * the URL in your message: the agent navigates from what you ask, so the task
+   * does not depend on the start page.
    */
   initial_url?: string;
   /**
@@ -295,11 +297,11 @@ export interface CreateAgentSessionRequest {
    */
   geolocation?: { latitude: number; longitude: number; accuracy?: number };
   /**
-   * End the session if its exit IP changes mid-run. When true, the control
-   * plane remembers the first exit IP observed for the session and stops it the
-   * moment a later report shows a different one — a proxy that silently rotates
-   * its exit under a running session stops it rather than carrying on from a new
-   * apparent location. Omit → false.
+   * End the session if its exit IP changes mid-run. When true, the first exit IP
+   * seen for the session is remembered and the session stops the moment a later
+   * report shows a different one (`closed_reason` `'exit_ip_changed'`) — a proxy
+   * that silently rotates its exit under a running session stops it rather than
+   * carrying on from a new apparent location. Omit → false.
    */
   stop_on_exit_ip_change?: boolean;
 }
@@ -311,21 +313,29 @@ export type AgentIntent =
       action: 'tap' | 'type' | 'scroll' | 'swipe' | 'press';
       selector?: string;
       value?: string;
+      /** True on a `type` step whose value is sensitive (a card number, a
+       *  one-time code, a PIN); such values are withheld from the response. */
+      sensitive?: boolean;
     }
   | { kind: 'wait'; condition: 'idle' | 'selector_visible'; selector?: string; timeoutMs?: number }
   | { kind: 'capture'; capture: 'screenshot' | 'dom_snapshot' | 'pdf' }
-  // Behavioural intents (W140) — map server-side onto the harness scroll /
-  // behavioral_pause control-plane intents.
   | { kind: 'scroll'; direction: 'up' | 'down'; amount_px?: number }
   | { kind: 'behavioral_pause'; duration_ms?: number; reading_word_count?: number };
 
 /**
- * Consequential-action category for the human-confirmation safety gate
- * (W443/W445). A `confirmation_required` intent result echoes the matched
- * category + phrase back so the caller can approve the action by re-sending the
- * turn via `message(id, msg, { approveConsequentialActions: [...] })`.
+ * What kind of consequential action a step was about to take when the agent
+ * stopped to ask for your approval. A `confirmation_required` result names it;
+ * approve by sending the next message with `approveConsequentialActions` (see
+ * {@link AgentSessionsResource.message}). The values listed are the ones this
+ * SDK version knows; the type also admits any other string, so a category newer
+ * than this SDK still type-checks and can be passed straight back.
  */
-export type ConsequentialActionCategory = 'purchase' | 'payment' | 'account_deletion';
+export type ConsequentialActionCategory =
+  | 'purchase'
+  | 'payment'
+  | 'account_deletion'
+  // `string & {}` rather than `string`, so editors still suggest the values above.
+  | (string & {});
 
 /**
  * Per-turn usage/cost block. Attached by the server on every Claude-backed
@@ -341,7 +351,7 @@ export interface AgentUsage {
   model?: string;
 }
 
-/** doc-132 §5.3 — machine-readable failure diagnosis. `reason` is the
+/** Machine-readable failure diagnosis. `reason` is the
  *  human-facing copy; `diagnosis` is the structured companion an automation can
  *  branch on without string-matching prose. `retryable: true` means automatic
  *  replay of the same step is considered safe; false means never auto-replay.
@@ -374,10 +384,10 @@ export interface AgentFailureDiagnosis {
 export type AgentIntentResult =
   | { kind: 'success'; intent: AgentIntent; summary: string; captureId?: string }
   | { kind: 'failure'; intent: AgentIntent; reason: string; diagnosis?: AgentFailureDiagnosis }
-  // The executor halted BEFORE dispatching a consequential action (purchase /
-  // payment / account-deletion) that needs human confirmation. The plan is
-  // paused; approve by re-sending the turn with this {category, matchedText}
-  // in `message(id, msg, { approveConsequentialActions: [...] })`.
+  // The agent stopped BEFORE a consequential action (a purchase, a payment, an
+  // account deletion) and is waiting for your approval; the step did not run.
+  // Approve by sending the next message with this result's {category,
+  // matchedText} in `message(id, msg, { approveConsequentialActions: [...] })`.
   | {
       kind: 'confirmation_required';
       intent: AgentIntent;
@@ -389,10 +399,19 @@ export type AgentMessageResponse =
   | {
       kind: 'plan-executed';
       session: AgentSession;
+      /** The steps the agent planned. Read each step's outcome from `results`,
+       *  which carries the step it ran as `results[i].intent`; the two arrays
+       *  need not line up by index. */
       intents: ReadonlyArray<AgentIntent>;
+      /** Every step that ran, in order. */
       results: ReadonlyArray<AgentIntentResult>;
-      /** True iff every intent succeeded. False if any failed OR the plan
-       *  halted on a `confirmation_required` result (check `results`). */
+      /**
+       * True when the last planned steps ran without a failure and without
+       * stopping for approval. False if a step failed OR the turn stopped on a
+       * `confirmation_required` result (check `results`). It does not by itself
+       * mean the task is finished — check `notice` — and a turn that recovered
+       * from a failed step can be true with that failure still in `results`.
+       */
       ok: boolean;
       /**
        * The agent's answer to the question the turn asked ("what is my IP?"),
@@ -401,6 +420,15 @@ export type AgentMessageResponse =
        * screenshot) has no answer and omits the field.
        */
       answer?: string;
+      /**
+       * Present when the turn ended before the task was finished — it reached a
+       * limit on steps, time or budget, or stopped rather than repeat itself —
+       * or when the agent asked you something part-way through. One or two
+       * sentences saying what to do next; when it asks for "continue", send that
+       * as the next message to carry on from the current page. Absent when the
+       * task finished or a step failed.
+       */
+      notice?: string;
       usage?: AgentUsage;
     }
   | {
@@ -410,6 +438,9 @@ export type AgentMessageResponse =
       usage?: AgentUsage;
     }
   | {
+      /** The agent will not do this. A refuse can also mean the AI was briefly
+       *  unavailable; the session stays active and you can send the message
+       *  again. */
       kind: 'refuse';
       session: AgentSession;
       refuse_reason: string;
@@ -439,41 +470,76 @@ export type AgentMessageResponse =
     }
   | {
       /**
-       * Arc 2 sub-slice 8.6 (v2-#8) — manual-mode pass-through. The
-       * runtime did NOT call the decomposer; the customer's
-       * user_message was recorded as a role='operator' transcript
-       * entry. No intents, no executor results. Customer's gui-client
-       * drives the real actions via the gui_control plane (sub-slice
-       * 8.4 mints the per-session key).
+       * A `'manual'`-mode session recorded the message without running it: no
+       * plan, no steps. A person drives the browser in this mode.
        */
       kind: 'logged-manual';
       session: AgentSession;
     };
 
-/** Agent turns may legally contain eight sequential five-minute harness intents.
- * SSE heartbeats keep edge/read-idle timers alive; this absolute client backstop
- * leaves headroom for decompose + optional read-back around that 42-minute plan. */
+/**
+ * How long one `message()` call waits by default: 50 minutes. A turn stops
+ * planning new steps after about three minutes, but the steps it has already
+ * planned run to the end and the answer may still be read back after them, so a
+ * rare turn runs far longer. The stream's keep-alives hold the connection open
+ * meanwhile; this is the absolute limit, not an idle timeout.
+ */
 export const AGENT_MESSAGE_STREAM_TIMEOUT_MS = 50 * 60_000;
+
+/**
+ * Payload of each `step` event on a turn's stream: the step's 0-based position
+ * in the final `results`, and its result.
+ */
+export interface AgentStepEvent {
+  index: number;
+  result: AgentIntentResult;
+}
 
 export class AgentSessionsResource {
   constructor(private readonly http: HttpClient) {}
 
+  /**
+   * Start an agent session. Returns it as soon as it exists; while `status` is
+   * `'provisioning'` its browser is still starting, so poll `get(id)` until it
+   * reads `'active'` before sending a message (a `'closed'` status means it
+   * could not start — read `closed_reason`).
+   *
+   * `idempotencyKey` (recommended) makes a retried create return the first
+   * session instead of starting a second one.
+   *
+   * `byokApiKey` is your own Anthropic API key, sent as the
+   * `x-byok-anthropic-api-key` header. Create only uses it to decide whether an
+   * Opus model is allowed (Opus runs only on your own key); send it on every
+   * `message()` too. The SDK never logs it.
+   *
+   * Errors: 429 ConcurrencyLimitError (your plan's concurrent-session limit is
+   * reached), 409 ProfileInUseError (the profile already has a live session),
+   * 409 StorageQuotaExceededError, 422 ProxyValidationFailedError, 403
+   * ForbiddenError (the plan has no AI, or an Opus model without your own key —
+   * `requiresOwnKey`), 404 NotFoundError (unknown profile, proxy or session to
+   * continue from).
+   */
   create(
     body: CreateAgentSessionRequest = {},
-    opts?: { idempotencyKey?: string },
+    opts?: { idempotencyKey?: string; byokApiKey?: string },
   ): Promise<AgentSession> {
-    // v2-#19 — Stripe-pattern idempotency. Forward as the
+    // Stripe-pattern idempotency. Forward as the
     // `Idempotency-Key` request header so retries collapse onto the
     // server's first 201 response. The server-side partial unique
     // index on (account_id, idempotency_key) is what guarantees the
     // dedupe end-to-end; SDK just plumbs the header.
+    const headers: Record<string, string> = {
+      ...(opts?.idempotencyKey !== undefined ? { 'Idempotency-Key': opts.idempotencyKey } : {}),
+      // Skipped when undefined OR empty, like message() below.
+      ...(opts?.byokApiKey !== undefined && opts.byokApiKey.length > 0
+        ? { 'x-byok-anthropic-api-key': opts.byokApiKey }
+        : {}),
+    };
     return this.http.request<AgentSession>({
       method: 'POST',
       path: '/v1/agent-sessions',
       body,
-      ...(opts?.idempotencyKey !== undefined
-        ? { headers: { 'Idempotency-Key': opts.idempotencyKey } }
-        : {}),
+      ...(Object.keys(headers).length > 0 ? { headers } : {}),
     });
   }
 
@@ -487,10 +553,8 @@ export class AgentSessionsResource {
   /**
    * List the account's agent sessions, newest first. Cursor-paginated —
    * mirrors the GET /v1/agent-sessions envelope `{ data, has_more, next_cursor }`.
-   * Used by the dashboard's recent-sessions list + the desktop GUI's live
-   * "running for" timer (it reads each session's `created_at`). Pass a
-   * `cursor` (the prior page's `next_cursor`) to page; or use `iterate()` to
-   * walk every page automatically.
+   * Pass a `cursor` (the prior page's `next_cursor`) to page; or use
+   * `iterate()` to walk every page automatically.
    */
   list(query: PaginationQueryInput = {}): Promise<AgentSessionsListPage> {
     return this.http.request<AgentSessionsListPage>({
@@ -506,8 +570,7 @@ export class AgentSessionsResource {
   /**
    * Lazily iterate every agent session for the EFFECTIVE account, walking
    * cursor pages automatically (newest first). See `iteratePaginated` for
-   * semantics. Replaces the old hard 100-cap — a busy account can now reach
-   * its full AI-session history.
+   * semantics.
    */
   iterate(opts: { limit?: number } = {}): AsyncGenerator<AgentSession, void, void> {
     return iteratePaginated<AgentSession>((cursor) =>
@@ -519,30 +582,59 @@ export class AgentSessionsResource {
   }
 
   /**
-   * Run one decompose→execute turn against the agent session.
-   * Returns a discriminated union — callers MUST branch on
-   * `kind` before reading the variant-specific fields.
+   * Send one message — a task or a question — and wait for the outcome. The
+   * call streams, so it can take several minutes; it resolves when the turn
+   * ends. Returns a discriminated union — callers MUST branch on
+   * `kind` before reading the variant-specific fields:
    *
-   * `byokApiKey` (optional) is the customer-supplied Anthropic API
-   * key (BYOK Tier-3 LOCKED 2026-05-16). Forwarded via the
+   * - `'plan-executed'` — the steps ran. `answer` is what you asked for, when
+   *   you asked for information; `results` has each step's outcome; `notice`,
+   *   when present, says why the task is not finished yet. A result of kind
+   *   `'confirmation_required'` means the agent stopped before a purchase, a
+   *   payment or an account deletion and is waiting for your approval.
+   * - `'clarify'` — the agent needs more detail; reply with another message.
+   * - `'refuse'` — the agent will not do this, or the AI was briefly
+   *   unavailable (the session stays active; send it again).
+   * - `'stopped'` — you called `stop()`.
+   * - `'logged-manual'` — a `'manual'`-mode session recorded the message.
+   *
+   * `byokApiKey` (optional) is your own Anthropic API
+   * key. Forwarded via the
    * `x-byok-anthropic-api-key` request header so callers don't have
-   * to construct it by hand. NEVER logged by the SDK; the key
-   * arrives over TLS to the control plane.
+   * to construct it by hand. It takes precedence over a stored key and over
+   * Driftstack's included AI. NEVER logged by the SDK.
    *
-   * `approveConsequentialActions` (optional) approves consequential actions
-   * the executor previously halted on (W443/W445). When a prior turn returned a
-   * `confirmation_required` intent result, echo its {category, matchedText} back
-   * here so the re-planned action dispatches instead of halting again. The SDK
-   * maps each entry to the wire's snake_case `{category, matched_text}`.
+   * `approveConsequentialActions` (optional) approves the actions the previous
+   * turn stopped on. Pass the `{ category, matchedText }` of each
+   * `confirmation_required` result (the result objects themselves work); the
+   * SDK maps each entry to the wire's snake_case `{category, matched_text}`.
+   * Send it as the very next message on the session — the stopped steps then
+   * continue from where they paused, without planning again. Any other message
+   * in between discards the paused steps, and the agent plans afresh.
    *
    * `idempotencyKey` (strongly recommended) identifies this logical turn.
    * Reuse it when retrying after a lost/ambiguous stream so the server replays
    * the durable terminal result instead of executing browser actions twice.
-   * Use a new key whenever the message, session, approvals, or explicit BYOK
-   * key changes.
+   * Once the server has accepted a key, the response it gives for that key is
+   * final, errors included: reuse the same key only when you got no response at
+   * all, or a ConflictError whose `idempotencyStatus` is `'in_progress'` (the
+   * first attempt is still running; it replays the result once it finishes).
+   * After any other error, fix the cause or wait, then send with a NEW key. Use
+   * a new key too whenever the message, session or approvals change.
    *
-   * A closed session returns a 409 ConflictError; the chat UI
-   * should prompt the customer to start a new agent session.
+   * Errors you should expect:
+   * - 409 ConflictError — `turnInProgress`: another message is still running
+   *   on this session (wait, or `stop()` it); `sessionStatus`: the session
+   *   has ended (read `closed_reason` with `get()` and start a new one,
+   *   optionally with `continue_from_agent_session_id`).
+   * - 429 RateLimitError — the account's message rate, or too many AI turns
+   *   running at once across your sessions; wait `retryAfterSeconds`.
+   * - 429 ConcurrencyLimitError — too many turns on Driftstack's included AI
+   *   are running at once; retry when one finishes.
+   * - 403 ForbiddenError — the plan has no AI, the included AI is not on your
+   *   plan, or an Opus model needs your own key (`requiresOwnKey`).
+   * - 402 BundledLlmBudgetExhaustedError / BundledLlmConsentRequiredError and
+   *   502 ByokAnthropicRequiredError — no AI key or budget is available.
    */
   message(
     id: string,
@@ -566,11 +658,16 @@ export class AgentSessionsResource {
        * complete result; an older server that does not stream steps simply never
        * calls it.
        */
-      onStep?: (step: { index: number; result: AgentIntentResult }) => void;
+      onStep?: (step: AgentStepEvent) => void;
       /**
-       * Every OTHER live frame on the turn's stream, by event name — today
-       * `phase`, `plan`, `step_start` and `answer`, which together cover the
-       * long silence between sending a turn and its first completed step.
+       * Every OTHER live frame on the turn's stream, by event name. Today:
+       * - `phase` `{ phase, segment?, cause? }` — what the turn is doing now;
+       * - `plan` `{ total, intents, labels, offset?, segment?, status? }` — the
+       *   steps it is about to run (`offset` is the turn-wide index of the first);
+       * - `step_start` `{ index, total, label }` — a step is starting;
+       * - `answer` `{ answer }` — the answer, before the turn's final result;
+       * - `notice` `{ notice }` — why the turn is ending before the task is done.
+       * The final result is always the resolved value, never one of these.
        *
        * ⛔ Treat an unrecognised `type` as nothing at all. The set is open: the
        * server adds progress events without a version bump, and a consumer that
@@ -590,10 +687,10 @@ export class AgentSessionsResource {
         timeoutMs: opts?.timeoutMs ?? AGENT_MESSAGE_STREAM_TIMEOUT_MS,
         body: {
           user_message: userMessage,
-          // W443/W445 — re-send approved consequential actions in the wire's
-          // snake_case shape so the executor skips the confirmation halt. Omit
-          // the field entirely when there are none (matches the route's optional
-          // schema; avoids sending an empty array).
+          // Re-send approved consequential actions in the wire's snake_case
+          // shape so the paused steps continue. Omit the field entirely when
+          // there are none (matches the route's optional schema; avoids sending
+          // an empty array).
           ...(approvals !== undefined && approvals.length > 0
             ? {
                 approve_consequential_actions: approvals.map((a) => ({
@@ -605,8 +702,8 @@ export class AgentSessionsResource {
         },
         // Skip the header when byokApiKey is undefined OR empty string.
         // Empty would send `x-byok-anthropic-api-key:` on the wire — the
-        // server normalises that to absent (slice 105 fix), but skipping
-        // client-side saves the round-trip header and matches the Go SDK's
+        // server normalises that to absent, but skipping client-side saves
+        // the round-trip header and matches the Go SDK's
         // `opts != nil && opts.ByokAPIKey != ""` shape.
         headers: {
           accept: 'text/event-stream',
@@ -619,16 +716,14 @@ export class AgentSessionsResource {
       onStep === undefined
         ? undefined
         : (event) => {
-            onStep(event as { index: number; result: AgentIntentResult });
+            onStep(event as AgentStepEvent);
           },
       onEvent,
     );
   }
 
   /**
-   * Slice 3 (Wave 29-NNN ARC 3) — set the session's operational
-   * mode. Atomic dual-column write of `mode` + `pair_mode_state`
-   * on the server side; transitioning INTO 'pair' initializes
+   * Set the session's mode. Transitioning INTO 'pair' initializes
    * pair_mode_state to `{kind: 'ai-driving'}`, transitioning OUT
    * clears it to null. Idempotent — a no-op transition returns the
    * existing row (pair_mode_state preserved).
@@ -644,7 +739,7 @@ export class AgentSessionsResource {
   }
 
   /**
-   * P-17 — move a RUNNING session onto a different egress without
+   * Move a RUNNING session onto a different egress without
    * restarting it. The page keeps its tabs, cookies and scroll
    * position; only the exit changes.
    *
@@ -687,38 +782,28 @@ export class AgentSessionsResource {
   }
 
   /**
-   * Slice 4 (Wave 29-NNN ARC 3) — forward a raw LK.6 InputEvent to
-   * the harness. ManualControlOverlay in the customer dashboard
-   * uses this to stream mouse + keyboard + wheel events from a
-   * customer's live-preview interaction.
+   * Send one raw input event (pointer, keyboard, wheel or touch) to a manual or
+   * pair-mode session.
    *
-   * Modifier vocabulary (Slice 6 cross-SDK lock 2026-05-20):
-   * `keyDown` / `keyUp` `modifiers` arrays MUST use the 4-name set
-   * `'cmd' | 'ctrl' | 'shift' | 'option'` (1:1 Quartz CGEventFlags).
-   * DOM-standard names (`Shift / Control / Alt / Meta`) round-trip
-   * through the schema unchanged but the harness decoder drops them.
+   * Modifier vocabulary: `keyDown` / `keyUp` `modifiers` arrays MUST use the
+   * 4-name set `'cmd' | 'ctrl' | 'shift' | 'option'`. DOM-standard names
+   * (`Shift / Control / Alt / Meta`) pass validation but are ignored.
    *
-   * No deployment forwards input events — the harness transport has no
-   * control-plane surface. ⚠️ That does NOT make every call a 503, which
-   * is what this comment claimed until V-1987. The response is a
-   * discriminated union and one arm is live today:
+   * No deployment forwards input events to the browser. That does NOT make
+   * every call a 503. The response is a discriminated union and one arm is
+   * live today:
    *
    * - `'pair-mode-takeover-fired'` (200) — the FIRST input-event in a
    *   mode='pair' session whose `pair_mode_state.kind` is `ai-driving`
-   *   fires the takeover-request transition and returns the new state.
-   *   It forwards nothing, which is why "no deployment forwards input
-   *   events" stays true. Reachable on any normally-booted deployment:
-   *   the Redis pair-mode lock it needs is wired unconditionally.
-   *   `client_id` is REQUIRED on this path.
-   * - `'forwarded'` — genuinely unreachable, for a reason one level
-   *   deeper than "no transport": it sits behind the `human-driving`
-   *   state, which only a `takeover-grant` transition produces, and
-   *   nothing emits that. Branching on it is dead code. See the module
-   *   comment above.
+   *   asks for a takeover and returns the new state. It forwards
+   *   nothing, which is why "no deployment forwards input events" stays
+   *   true. `client_id` is REQUIRED on this path.
+   * - `'forwarded'` — unreachable: it sits behind the `human-driving`
+   *   state, which no request can reach today. Branching on it is dead
+   *   code.
    *
-   * Everything else reaches the harness-forward path and throws
-   * `FeatureUnavailableError` (503): mode='manual' always, and
-   * mode='pair' once the state has left `ai-driving`.
+   * Everything else throws `FeatureUnavailableError` (503): mode='manual'
+   * always, and mode='pair' once the state has left `ai-driving`.
    *
    * Throws `ConflictError` (409) if the session is not 'active', OR is
    * in mode='ai' (input-event requires manual or pair mode), OR the
@@ -738,7 +823,11 @@ export class AgentSessionsResource {
     });
   }
 
-  /** Close the agent session (sets status=closed; idempotent). */
+  /**
+   * End the agent session and its browser (sets status=closed; idempotent).
+   * Close every session you start — an open session keeps counting toward your
+   * plan's concurrent-session limit.
+   */
   close(id: string): Promise<void> {
     return this.http.request<void>({
       method: 'DELETE',
@@ -747,8 +836,8 @@ export class AgentSessionsResource {
   }
 
   /**
-   * Arc 2 sub-slice 8.9 (v2-#8) — request a human takeover on a
-   * pair-mode agent session. The state machine transitions
+   * Request a human takeover on a pair-mode agent session. The state machine
+   * transitions
    * `ai-driving → takeover-pending` (or `takeover-queued` if the
    * runtime is mid-decompose). Returns the new `pair_mode_state`
    * discriminant so the caller can branch on whether the takeover
@@ -770,10 +859,13 @@ export class AgentSessionsResource {
   }
 
   /**
-   * Arc 2 sub-slice 8.9 (v2-#8) — request a handback from human
-   * back to AI on a pair-mode agent session. The state machine
+   * Request a handback from human back to AI on a pair-mode agent session.
+   * The state machine
    * transitions `human-driving → handback-pending` (or
    * `handback-queued` if the runtime is mid-decompose).
+   *
+   * Today no request can move a session into `human-driving`, so this
+   * returns the 409 below.
    *
    * Throws `PairModeStateInvalidTransitionError` (409) if the
    * session is not in `human-driving`.
@@ -787,18 +879,16 @@ export class AgentSessionsResource {
   }
 
   /**
-   * LK.3 — mint a fresh LiveKit JWT for the agent session's video
-   * room. Use this when the auto-populated `livekit` field on
-   * session-create is absent (pre-LK deployment, OR the token TTL
-   * has expired — tokens are 24h). The same `LiveKitInfo` shape
-   * is returned either way; one type, two paths.
+   * Mint a fresh live-video token for the agent session's video
+   * room. Use this when the `livekit` field on the created session is
+   * absent, OR the token has expired — tokens last 24h. The same
+   * `LiveKitInfo` shape is returned either way; one type, two paths.
    *
    * Errors (raised as DriftstackError with HTTP-mapped kind):
    *   - 403 — session is closed; can't mint
    *   - 404 — session unknown (or cross-account; existence not leaked)
-   *   - 503 — no Mac registered LiveKit yet, OR the stored Mac
-   *           secret can't be decrypted (operator action — re-run
-   *           POST /v1/mac-nodes/register)
+   *   - 503 — live video is not available for this session right now;
+   *           try again later, or contact support if it persists
    */
   livekitToken(id: string): Promise<LiveKitInfo> {
     return this.http.request<LiveKitInfo>({
@@ -808,12 +898,12 @@ export class AgentSessionsResource {
   }
 
   /**
-   * W474 — resume an agent session the harness auto-paused on a detected
-   * bot-challenge (DataDome / Arkose / PerimeterX / …), once you've resolved
-   * the challenge (e.g. in the live view). Best-effort dispatch to the node
-   * running the session. Pass `challenge_id` (from the
-   * `session.challenge_detected` webhook) to target a specific challenge;
-   * omit it for a manual override resume.
+   * Resume an agent session that paused on a detected bot check (a CAPTCHA
+   * or challenge page), once you've resolved it (e.g. in the live view). The
+   * session's `status` stays `'active'` while it is paused; the
+   * `session.challenge_detected` webhook tells you it happened. Pass
+   * `challenge_id` (from that webhook) to target a specific challenge; omit it
+   * for a manual override resume.
    *
    * Returns 202 `{ status: 'resume_requested', session_id }`.
    *   - 404 — session unknown (or cross-account; existence not leaked)
@@ -835,7 +925,8 @@ export class AgentSessionsResource {
    * it does not wait for the turn to wind down. The turn ends on its own
    * `message()` call, which resolves with `kind: 'stopped'` (or, if it was
    * already finishing, its ordinary result) — that response, not this one, is
-   * the signal that the session will accept the next message.
+   * the signal that the session will accept the next message. Because
+   * `message()` waits, call this from a timer or another task.
    *
    * A step that was already running when the stop arrived is allowed to finish
    * (for a short, bounded time) so its result is known; nothing is started after it.
@@ -844,6 +935,8 @@ export class AgentSessionsResource {
    * running, 200 `{ status: 'no_turn_running', session_id }` when none was.
    * Safe to call again.
    *   - 404 — session unknown (or cross-account; existence not leaked)
+   *   - 503 FeatureUnavailableError — the stop could not be confirmed just
+   *     now; call `stop()` again
    */
   stop(id: string): Promise<{ status: 'stop_requested' | 'no_turn_running'; session_id: string }> {
     return this.http.request({

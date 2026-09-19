@@ -274,17 +274,18 @@ describe('the view renders a second segment without dropping or duplicating a st
 });
 
 /**
- * A settled turn carrying the `notice` field the server now sends. The field is
- * newer than the SDK's response type, so it is added through a type that says
- * so, rather than asserted onto one that does not have it.
+ * A settled turn carrying the `notice` field the server sends. The SDK types it
+ * as a string; this helper also builds responses whose notice is NOT one (the
+ * arms below feed the view what a misbehaving server could send), so the value
+ * is widened on purpose, in this one place.
  */
 function withNotice(notice: unknown): AgentMessageResponse {
   const base = planTurn().response;
   // Narrowed to the variant the notice is added to: a `stopped` turn already
   // carries a `notice` of its own, typed as a string.
   if (base?.kind !== 'plan-executed') throw new Error('planTurn() built no plan response');
-  const response: AgentMessageResponse & { notice?: unknown } = { ...base, notice };
-  return response;
+  const response: Omit<typeof base, 'notice'> & { notice: unknown } = { ...base, notice };
+  return response as AgentMessageResponse;
 }
 
 describe('a turn that stopped short SAYS so', () => {

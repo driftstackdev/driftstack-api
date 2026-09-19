@@ -74,9 +74,12 @@ describe('W585.B packages/sdk-python/src/driftstack/errors.py content parity', (
     expect(body).toMatch(
       /^class RevokedKeyError\(AuthError\):\s*\n\s*"""The API key was revoked \(DELETE \/v1\/api-keys\/:id\)\."""/m,
     );
+    // ForbiddenError's docstring now also covers the own-key model refusal
+    // (`requires_own_key`) and warns that it is caught by `except AuthError`.
     expect(body).toMatch(
-      /^class ForbiddenError\(AuthError\):\s*\n\s*"""The caller is authenticated but lacks the required scope\."""/m,
+      /^class ForbiddenError\(AuthError\):\s*\n\s*"""403 — the key is valid but may not do this\.\s*\n\s*\n\s*Usually a missing scope or a plan without the feature\./m,
     );
+    expect(body).toMatch(/Subclasses :class:`AuthError`, so ``except AuthError`` catches it too/);
   });
 
   it('Domain pass-through classes: BadRequestError + ValidationError + NotFoundError + ConflictError + SessionNotFoundError (inherits NotFoundError) + SessionDestroyedError. BadRequestError subclasses DriftstackError directly (NOT ValidationError) so `except DriftstackError` handlers are unaffected; the generic-400 `bad-request` problem-type maps to it, distinct from `validation-failed` → ValidationError. Custom subclass-of-subclass: SessionNotFoundError(NotFoundError) so `except NotFoundError` also catches session-specific 404s — drift to inheriting from DriftstackError directly would break the catch hierarchy.', () => {

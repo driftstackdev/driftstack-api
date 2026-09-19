@@ -34,7 +34,7 @@ describe('sdk-python resources/agent_sessions content parity', () => {
 
   it('Discriminated message-response framing pinned: branch on `["kind"]` — plan-executed (intents + results + ok) / clarify (clarifying_question) / refuse (refuse_reason) / stopped (results + notice). Drift would force Python callers to introspect undocumented response shapes', () => {
     expect(body).toMatch(
-      /Discriminated message response: branch on ``\["kind"\]`` —\s*``plan-executed`` \(carries ``intents`` \+ ``results`` \+ ``ok``\),\s*``clarify`` \(``clarifying_question``\), ``refuse`` \(``refuse_reason``\), or\s*``stopped``/,
+      /Discriminated message response: branch on ``\["kind"\]`` —\s*``plan-executed`` \(carries ``intents`` \+ ``results`` \+ ``ok``, and ``answer`` \/\s*``notice`` when present\), ``clarify`` \(``clarifying_question``\), ``refuse``\s*\(``refuse_reason``\), or ``stopped``/,
     );
   });
 
@@ -56,7 +56,7 @@ describe('sdk-python resources/agent_sessions content parity', () => {
   it('Sync AgentSessionsResource 10-method surface: create + get + message + close + set_mode + send_input_event + takeover + handback + livekit_token + resume (W474). Drift would diverge from the TS + Go SDK surfaces', () => {
     expect(body).toMatch(/class AgentSessionsResource:/);
     expect(body).toMatch(
-      /def create\(\s*self,\s*body: dict\[str, Any\] \| None = None,\s*\*,\s*idempotency_key: str \| None = None,\s*\) -> dict\[str, Any\]:/,
+      /def create\(\s*self,\s*body: dict\[str, Any\] \| None = None,\s*\*,\s*idempotency_key: str \| None = None,\s*byok_api_key: str \| None = None,\s*\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(/def get\(self, agent_session_id: str\) -> dict\[str, Any\]:/);
     // sweep-3 — cursor pagination + iterate (was a non-paginated def list(self)).
@@ -67,7 +67,10 @@ describe('sdk-python resources/agent_sessions content parity', () => {
       /def iterate\(self, \*, limit: int \| None = None\) -> Iterator\[dict\[str, Any\]\]:/,
     );
     expect(body).toMatch(
-      /def message\(\s*self,\s*agent_session_id: str,\s*user_message: str,\s*\*,\s*byok_api_key: str \| None = None,\s*idempotency_key: str \| None = None,\s*approve_consequential_actions: builtins\.list\[dict\[str, str\]\] \| None = None,\s*\) -> dict\[str, Any\]:/,
+      // Approvals take Mappings (a confirmation_required result can be passed
+      // straight back); on_step / on_event / timeout_s are the live-progress
+      // and absolute-deadline options.
+      /def message\(\s*self,\s*agent_session_id: str,\s*user_message: str,\s*\*,\s*byok_api_key: str \| None = None,\s*idempotency_key: str \| None = None,\s*approve_consequential_actions: Sequence\[Mapping\[str, Any\]\] \| None = None,\s*on_step: StepCallback \| None = None,\s*on_event: EventCallback \| None = None,\s*timeout_s: float \| None = None,\s*\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(/def close\(self, agent_session_id: str\) -> None:/);
     expect(body).toMatch(
@@ -116,16 +119,16 @@ describe('sdk-python resources/agent_sessions content parity', () => {
 
   it("Idempotency-Key Stripe-pattern framing on create() pinned: 'Stripe-pattern dedupe. The server enforces (account_id, idempotency_key) uniqueness via a partial unique index; retries with the same key replay the original 201 response instead of minting a duplicate row.' — pinned so the partial-unique-index + 201-replay contract stays explicit (matches TS + Go framing)", () => {
     expect(body).toMatch(
-      /``idempotency_key`` \(optional, v2-#19\) is forwarded as the\s*``Idempotency-Key`` request header — Stripe-pattern dedupe\. The\s*server enforces ``\(account_id, idempotency_key\)`` uniqueness via\s*a partial unique index; retries with the same key replay the\s*original 201 response instead of minting a duplicate row\./,
+      /``idempotency_key`` \(optional\) is forwarded as the\s*``Idempotency-Key`` request header — Stripe-pattern dedupe\. The\s*server enforces ``\(account_id, idempotency_key\)`` uniqueness via\s*a partial unique index; retries with the same key replay the\s*original 201 response instead of minting a duplicate row\./,
     );
   });
 
   it("BYOK Anthropic key threading + 'NEVER logged' framing pinned: byok_api_key forwarded ONLY when non-None AND non-empty + 'NEVER logged by the SDK; arrives over TLS to the control plane.' + the empty-string-skip + slice-105-server-normalises-empty rationale. Drift would leak customer Anthropic credentials OR diverge from the cross-SDK empty-string-skip pattern (matches Go SDK's `opts.ByokAPIKey != \"\"` shape)", () => {
     expect(body).toMatch(
-      /``byok_api_key`` \(optional, BYOK Tier-3 LOCKED 2026-05-16\) is\s*forwarded as the ``x-byok-anthropic-api-key`` request header so\s*callers don't have to construct it by hand\. NEVER logged by\s*the SDK; arrives over TLS to the control plane\./,
+      /``byok_api_key`` \(optional\) is your own Anthropic API key, forwarded as\s*the ``x-byok-anthropic-api-key`` request header so callers don't have to\s*construct it by hand\. It takes precedence over a stored key and over\s*Driftstack's included AI\. NEVER logged by the SDK\./,
     );
     expect(body).toMatch(
-      /# Skip the header when byok_api_key is None OR empty\. Empty\s*# would send `x-byok-anthropic-api-key:` on the wire — the\s*# server normalises that to absent \(slice 105 fix\), but skipping\s*# client-side saves the round-trip header and matches the Go\s*# SDK's `opts\.ByokAPIKey != ""` shape\./,
+      /# Skip the header when byok_api_key is None OR empty\. Empty\s*# would send `x-byok-anthropic-api-key:` on the wire — the\s*# server normalises that to absent, but skipping\s*# client-side saves the round-trip header and matches the Go\s*# SDK's `opts\.ByokAPIKey != ""` shape\./,
     );
     expect(body).toMatch(
       /if byok_api_key:\s*extra_headers\["x-byok-anthropic-api-key"\] = byok_api_key/,
@@ -135,8 +138,12 @@ describe('sdk-python resources/agent_sessions content parity', () => {
   it('sync + async message expose one durable idempotency_key and merge it with BYOK headers', () => {
     expect(body.match(/idempotency_key: str \| None = None,/g)).toHaveLength(4);
     expect(body).toMatch(/Reuse it after a lost\/ambiguous stream/);
-    expect(body.match(/extra_headers\["Idempotency-Key"\] = idempotency_key/g)).toHaveLength(2);
-    expect(body.match(/extra_headers=extra_headers or None,/g)).toHaveLength(2);
+    // Sync and async message() share one request builder, so the header merge
+    // is written once and used twice.
+    expect(body.match(/extra_headers\["Idempotency-Key"\] = idempotency_key/g)).toHaveLength(1);
+    expect(body).toMatch(/return body, extra_headers or None/);
+    expect(body.match(/body, extra_headers = _message_request\(/g)).toHaveLength(2);
+    expect(body.match(/extra_headers=extra_headers,/g)).toHaveLength(2);
   });
 
   it("takeover/handback pair-mode state-machine framing pinned: 'ai-driving → takeover-pending (or takeover-queued if mid-decompose)' + 'human-driving → handback-pending (or handback-queued if mid-decompose)' + PairModeStateInvalidTransitionError (409) catalog + ConflictError (409) for non-pair mode. Drift would diverge from the cross-SDK state-machine contract", () => {
@@ -152,15 +159,18 @@ describe('sdk-python resources/agent_sessions content parity', () => {
   });
 
   it('LK.3 livekit_token() 5-field worked example + 3-error catalog pinned: 403 closed + 404 unknown/cross-account + 503 no Mac. Drift would diverge from the cross-SDK (TS + Go) error catalog and break Python customers who depend on the documented JSON shape', () => {
-    expect(body).toMatch(/LK\.3 — mint a fresh LiveKit JWT for the session's video room\./);
+    expect(body).toMatch(/Mint a fresh live-video token for the session's video room\./);
     expect(body).toMatch(
-      /\{\s*"ws_url": "wss:\/\/mac-NNN\.driftstack\.dev:8443",\s*"room": "agt_<uuid>",\s*"token": "<HS256 JWT>",\s*"participant_identity": "customer-<account-uuid>",\s*"expires_at": "<RFC 3339>"\s*\}/,
+      /\{\s*"ws_url": "wss:\/\/…",\s*"room": "agt_<uuid>",\s*"token": "<JWT>",\s*"participant_identity": "customer-<account-uuid>",\s*"expires_at": "<RFC 3339>"\s*\}/,
     );
     expect(body).toMatch(/- 403 — session is closed; cannot mint/);
     expect(body).toMatch(/- 404 — session unknown \(or cross-account; existence not leaked\)/);
+    // The 503 says what the customer can do; it no longer names the machines
+    // behind live video or an operator-only registration endpoint.
     expect(body).toMatch(
-      /- 503 — no Mac in the fleet has registered LiveKit yet, OR the\s*stored Mac secret can't be decrypted \(operator action: re-run\s*POST \/v1\/mac-nodes\/register\)/,
+      /- 503 — live video is not available for this session right now; try\s*again later, or contact support if it persists/,
     );
+    expect(body).not.toMatch(/mac-nodes\/register/);
   });
 
   it("quote(agent_session_id, safe='') on all id-bearing paths (get/message/close/set_mode/send_input_event/takeover/handback/livekit_token) for BOTH sync + async. Parity with TS encodeURIComponent + Go url.PathEscape. Drift would break Python consumers whose session ids contain reserved URI chars", () => {
@@ -190,7 +200,9 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     // approve_consequential_actions) then coerce_body(body) — sync + async.
     expect(body).toMatch(/json_body=coerce_body\(body\),/);
     expect(body).toMatch(/body: dict\[str, Any\] = \{"user_message": user_message\}/);
-    expect(body).toContain('body["approve_consequential_actions"] = [');
+    expect(body).toContain(
+      'body["approve_consequential_actions"] = _approval_payload(approve_consequential_actions)',
+    );
     expect(body).toMatch(/json_body=coerce_body\(\{"client_id": client_id\}\),/);
     expect(body).toMatch(/json_body=coerce_body\(\{\}\),/);
   });

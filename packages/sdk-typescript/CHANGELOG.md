@@ -8,6 +8,32 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Run an AI task end to end** — `agentSessions.create(body, { byokApiKey })`
+  sends your own Anthropic key at create, so an Opus session can be started
+  without a stored key. `CreateAgentSessionRequest` gains `skip_proxy_probe`.
+  The `plan-executed` result gains `notice` (why the task is not finished
+  yet), and interact steps gain `sensitive`. `AgentStepEvent` is exported for
+  `onStep`.
+- **Typed AI refusals** — `ForbiddenError.requiresOwnKey` / `.model` (an Opus
+  model needs your own Anthropic key) and `ConflictError.turnInProgress`,
+  `.sessionStatus`, `.idempotencyStatus`, `.aiControlUnavailable`, `.phase`,
+  `.tokensConsumed`, `.usage` and `.partialResults`, read defensively from the
+  problem body.
+- **`examples/agent-chat.ts`** rewritten as the complete flow: create, wait
+  until ready, send a task with a fresh idempotency key and live progress,
+  handle every result kind (answer, notice, approvals), close in `finally`.
+
+### Changed
+
+- **`ConsequentialActionCategory` admits categories newer than the SDK** — the
+  known values `| (string & {})`, so a `confirmation_required` result from a
+  newer server can be passed straight back as an approval.
+- **Agent-session docs** describe what the API does — result kinds, how an
+  approval resumes the paused steps, when an idempotency key may be reused,
+  the progress event names — and no longer mention how the service is built.
+
+### Added
+
 - **`target_unverified` step diagnosis** — `AgentFailureDiagnosis.category`
   gains `'target_unverified'`: the tap was not made because its target
   could not be checked first. Not retryable as the same step; the agent

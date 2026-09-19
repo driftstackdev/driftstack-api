@@ -54,7 +54,7 @@ Every public API endpoint is a typed method on a resource accessor. All take `co
 | Accessor                  | Methods                                                                                                                                                                                                                    |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `client.Sessions`         | `Create`, `List`, `Get`, `Navigate`, `Interact`, `Wait`, `GetState`, `Capture`, `Extract`, `Search`, `Login`, `Destroy`                                                                                                    |
-| `client.AgentSessions`    | `Create`, `Get`, `Message`, `Close`, `SetMode`, `SendInputEvent`, `Takeover`, `Handback`, `LivekitToken`, `Resume` (AI chat — decompose + execute)                                                                         |
+| `client.AgentSessions`    | `Create`, `Get`, `List`, `Iterate`, `Message`, `Stop`, `Close`, `SetMode`, `SetEgress`, `SendInputEvent`, `Takeover`, `Handback`, `LivekitToken`, `Resume` (run AI tasks in a browser — see "Run an AI task" below)        |
 | `client.Egress`           | `AttachToSession`, `GetSessionProxy` (**capability-gated — 503/404 on every deployment today; no egress backend is wired**), `ListProxies`, `CreateProxy`, `UpdateProxy`, `DeleteProxy`, `TestProxy` (reusable proxy CRUD) |
 | `client.Profiles`         | `Create`, `List`, `Iterate`, `Get`, `Update`, `Delete`, `Clone` (V-313)                                                                                                                                                    |
 | `client.ProfileSnapshots` | `Capture`, `ListForProfile`, `List`, `Iterate`, `Get`, `Restore`, `Delete` (V-312)                                                                                                                                         |
@@ -131,6 +131,56 @@ an ambiguous retry of the exact same session/message/approvals/BYOK request. A
 completed turn replays without executing its browser actions again; changed or
 still-running turns fail closed.
 
+A turn is never retried automatically, and once the server has accepted a key
+the response it gives for that key is final — errors included. Reuse the same
+key only when you got no response at all, or a `*ConflictError` whose
+`IdempotencyStatus()` is `"in_progress"`. After any other error (a 409
+`TurnInProgress()`, a 429, a 402, a 502, a 403 `RequiresOwnKey()`), fix the
+cause or wait, then send the turn with a **new** key.
+
+## Run an AI task
+
+```go
+session, err := client.AgentSessions.Create(ctx,
+    &driftstack.CreateAgentSessionRequest{Mode: "ai"},
+    &driftstack.CreateOptions{IdempotencyKey: newKey()})
+if err != nil {
+    return err
+}
+defer client.AgentSessions.Close(ctx, session.ID)
+// Poll Get while session.Status is "provisioning" before sending.
+
+resp, err := client.AgentSessions.Message(ctx, session.ID,
+    "Open https://example.com and tell me the main heading.",
+    &driftstack.MessageOptions{
+        IdempotencyKey: newKey(),
+        OnStep: func(step driftstack.AgentStepEvent) { // live progress
+            fmt.Println(step.Index, step.Result.Kind)
+        },
+    })
+if err != nil {
+    return err
+}
+if resp.Kind == "plan-executed" {
+    fmt.Println(resp.Answer, resp.Notice) // Notice set = the task is not finished yet
+    results, _ := resp.ParsedResults()
+    for _, r := range results {
+        if r.Kind == "confirmation_required" {
+            // To approve it, send the next message with
+            // ApproveConsequentialActions: []driftstack.ConsequentialActionApproval{driftstack.ApprovalFor(r)}.
+        }
+    }
+}
+```
+
+`OnEvent` receives the other progress events (`phase`, `plan`, `step_start`,
+`answer`, `notice`; ignore names you do not recognise). AI refusals are typed:
+`*ForbiddenError` with `RequiresOwnKey()` (an Opus model needs your own
+Anthropic key), `*ConflictError` with `TurnInProgress()` / `SessionStatus()`,
+`*RateLimitError`, and the `ErrBundledLlmBudgetExhausted`,
+`ErrBundledLlmConsentRequired` and `ErrByokAnthropicRequired` sentinels. See
+[`examples/agent_chat`](examples/agent_chat/main.go) for the complete flow.
+
 ## Webhook signature verification
 
 Stripe-style HMAC-SHA256 over `<unix_seconds>.<raw_body>`. Constant-time comparison via `hmac.Equal`. 5-minute default tolerance.
@@ -152,7 +202,7 @@ A complete stdlib-only receiver lives in [`examples/webhook_receiver`](examples/
 ## Examples
 
 - [`quickstart`](examples/quickstart/main.go) — minimal create/navigate/capture/destroy.
-- [`agent_chat`](examples/agent_chat/main.go) — AI agent session: create, send a task message, poll status, close.
+- [`agent_chat`](examples/agent_chat/main.go) — run an AI task: create, wait until ready, send a task with live progress, handle each result kind (answer, notice, approvals), close.
 - [`profile_management`](examples/profile_management/main.go) — persistent profiles: create, update, clone, iterate, delete.
 - [`pagination`](examples/pagination/main.go) — cursor pagination over list endpoints.
 - [`billing_flow`](examples/billing_flow/main.go) — billing state, checkout session, portal session.

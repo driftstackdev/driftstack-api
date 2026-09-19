@@ -8,6 +8,40 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Live progress for AI tasks** — sync and async
+  `agent_sessions.message(..., on_step=..., on_event=...)` parse the turn's
+  stream as it arrives: `on_step(step)` gets each step
+  (`{"index", "result"}`), `on_event(name, data)` every other progress event
+  (`phase`, `plan`, `step_start`, `answer`, `notice`, and any added later). On
+  the async client a callback may be `async def`. The byte ceiling, the
+  single-terminal rule and the absolute deadline still apply.
+- **`timeout_s=`** on both `message()` methods bounds the whole call
+  (default 50 minutes).
+- **`byok_api_key=`** on both `create()` methods sends your own Anthropic key
+  at create, so an Opus session can be started without a stored key.
+- **Approvals accept the result itself** — `approve_consequential_actions`
+  takes `confirmation_required` step results as returned (`matchedText`) as
+  well as `{"category", "matched_text"}` dicts; an entry with neither raises
+  `ValueError` before anything is sent.
+- **Typed AI refusals** — `ForbiddenError.requires_own_key` / `.model` and
+  `ConflictError.turn_in_progress`, `.session_status`, `.idempotency_status`,
+  `.ai_control_unavailable`, `.phase`, `.tokens_consumed`, `.usage` and
+  `.partial_results`, read defensively from the problem body.
+- **`examples/agent_chat.py`** rewritten as the complete flow: create, wait
+  until ready, send a task with a fresh idempotency key and live progress,
+  handle every result kind (answer, notice, approvals), close in `finally`.
+
+### Changed
+
+- **Agent-session docstrings** describe what the API does — result kinds, how
+  an approval resumes the paused steps, when an idempotency key may be
+  reused — and no longer mention how the service is built. The README no
+  longer says every resource returns Pydantic models (`agent_sessions`
+  returns dicts), and notes that `ForbiddenError` is a subclass of
+  `AuthError`.
+
+### Added
+
 - **`target_unverified` step diagnosis** — a failed agent step's
   `Diagnosis.category` can now be `"target_unverified"`: the tap was not
   made because its target could not be checked first. Not retryable as

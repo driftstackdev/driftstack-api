@@ -45,36 +45,39 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
     expect(body).toMatch(/DOM-standard variants/);
   });
 
-  it('TypeScript SDK agent-sessions.ts sendInputEvent JSDoc pins the 4-name vocabulary + the harness-drops-DOM-names warning', () => {
+  it('TypeScript SDK agent-sessions.ts sendInputEvent JSDoc pins the 4-name vocabulary + the DOM-names-are-ignored warning', () => {
     const lib = resolve(REPO_ROOT, 'packages/sdk-typescript/src/resources/agent-sessions.ts');
     const body = read(lib);
-    expect(body).toMatch(/Modifier vocabulary \(Slice 6 cross-SDK lock 2026-05-20\):/);
-    expect(body).toMatch(/`'cmd' \| 'ctrl' \| 'shift' \| 'option'` \(1:1 Quartz CGEventFlags\)/);
-    expect(body).toMatch(/DOM-standard names \(`Shift \/ Control \/ Alt \/ Meta`\)/);
-    expect(body).toMatch(/harness decoder drops them/);
+    expect(body).toMatch(
+      /Modifier vocabulary: `keyDown` \/ `keyUp` `modifiers` arrays MUST use the/,
+    );
+    expect(body).toMatch(/4-name set `'cmd' \| 'ctrl' \| 'shift' \| 'option'`/);
+    expect(body).toMatch(
+      /DOM-standard names\s*\*\s*\(`Shift \/ Control \/ Alt \/ Meta`\) pass validation but are ignored/,
+    );
   });
 
-  it('Python SDK agent_sessions.py send_input_event docstring pins the 4-name vocabulary + the harness-drops-DOM-names warning', () => {
+  it('Python SDK agent_sessions.py send_input_event docstring pins the 4-name vocabulary + the DOM-names-are-ignored warning', () => {
     const lib = resolve(
       REPO_ROOT,
       'packages/sdk-python/src/driftstack/resources/agent_sessions.py',
     );
     const body = read(lib);
-    expect(body).toMatch(/Modifier vocabulary \(Slice 6 cross-SDK lock 2026-05-20\):/);
-    expect(body).toMatch(/``"cmd" \| "ctrl" \| "shift" \| "option"`` \(1:1 Quartz/);
-    expect(body).toMatch(/DOM-standard names \(``Shift \/ Control \/\s*Alt \/ Meta``\)/);
-    expect(body).toMatch(/harness decoder drops them/);
+    expect(body).toMatch(/Modifier vocabulary: ``keyDown`` \/ ``keyUp`` ``modifiers`` arrays MUST/);
+    expect(body).toMatch(/``"cmd" \| "ctrl" \| "shift" \| "option"``/);
+    expect(body).toMatch(
+      /DOM-standard names \(``Shift \/ Control \/\s*Alt \/ Meta``\) pass validation\s*but are ignored/,
+    );
   });
 
-  it('Go SDK agent_sessions.go SendInputEvent comment pins the 4-name vocabulary + the harness-drops-DOM-names warning', () => {
+  it('Go SDK agent_sessions.go SendInputEvent comment pins the 4-name vocabulary + the DOM-names-are-ignored warning', () => {
     const lib = resolve(REPO_ROOT, 'packages/sdk-go/agent_sessions.go');
     const body = read(lib);
-    expect(body).toMatch(/Modifier vocabulary \(Slice 6 cross-SDK lock 2026-05-20\): keyDown/);
+    expect(body).toMatch(/Modifier vocabulary: keyDown \/ keyUp `modifiers` arrays MUST use the/);
+    expect(body).toMatch(/4-name set "cmd" \/ "ctrl" \/ "shift" \/ "option"/);
     expect(body).toMatch(
-      /"cmd" \/ "ctrl"\s*\/\/ \/ "shift" \/ "option" \(1:1 Quartz CGEventFlags\)/,
+      /DOM-standard names\s*\/\/ \(Shift \/ Control \/ Alt \/ Meta\) pass validation but are ignored/,
     );
-    expect(body).toMatch(/DOM-standard\s*\/\/ names \(Shift \/ Control \/ Alt \/ Meta\)/);
-    expect(body).toMatch(/harness decoder drops them/);
   });
 
   it('Python SDK agent_sessions.py exports CANONICAL_MODIFIER_NAMES tuple + CanonicalModifier Literal type matching api-types', () => {

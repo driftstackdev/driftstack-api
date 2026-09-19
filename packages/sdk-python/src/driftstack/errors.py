@@ -80,7 +80,29 @@ class RevokedKeyError(AuthError):
 
 
 class ForbiddenError(AuthError):
-    """The caller is authenticated but lacks the required scope."""
+    """403 — the key is valid but may not do this.
+
+    Usually a missing scope or a plan without the feature. On an agent session
+    it can also mean the chosen model needs your own Anthropic key: check
+    :attr:`requires_own_key`.
+
+    Subclasses :class:`AuthError`, so ``except AuthError`` catches it too — put
+    ``except ForbiddenError`` first when you handle it differently.
+    """
+
+    @property
+    def requires_own_key(self) -> bool:
+        """True when an Opus-class model was refused because it runs only on your
+        own Anthropic key and the session or turn would have run on Driftstack's
+        included AI. Add a key (stored, or ``byok_api_key=`` on the call) or pick
+        another model. False for every other 403."""
+        return self.problem.get("requires_own_key") is True
+
+    @property
+    def model(self) -> str | None:
+        """The model that was refused, when :attr:`requires_own_key` is true."""
+        value = self.problem.get("model")
+        return value if isinstance(value, str) else None
 
 
 # ── Validation / domain (400, 404, 409, 410) ──────────────────────────────
@@ -114,7 +136,70 @@ class NotFoundError(DriftstackError):
 
 
 class ConflictError(DriftstackError):
-    """The request would violate an invariant (duplicate, capacity, etc.)."""
+    """409 — the request conflicts with the current state.
+
+    On an agent-session message the properties below say which conflict it is;
+    each is ``None`` (or ``False``) when the server did not send it.
+    """
+
+    @property
+    def turn_in_progress(self) -> bool:
+        """True when another message is still running on this agent session.
+        Wait for it to finish (or stop it), then send again."""
+        return self.problem.get("turn_in_progress") is True
+
+    @property
+    def session_status(self) -> str | None:
+        """Set when the agent session is no longer active (``"closed"`` or
+        ``"paused"``), including when this turn ended it — for example its token
+        budget ran out. Read ``closed_reason`` with ``agent_sessions.get(id)``.
+        An open string."""
+        value = self.problem.get("session_status")
+        return value if isinstance(value, str) else None
+
+    @property
+    def idempotency_status(self) -> str | None:
+        """Set when the conflict is about the Idempotency-Key: ``"in_progress"``
+        (the first request with this key is still running — retry the SAME key
+        later and it replays the result) or ``"mismatch"`` (the key was already
+        used for a different request). An open string."""
+        value = self.problem.get("idempotency_status")
+        return value if isinstance(value, str) else None
+
+    @property
+    def ai_control_unavailable(self) -> bool:
+        """True when AI control of the session changed while the turn was
+        running, so it stopped early. Check :attr:`partial_results` first."""
+        return self.problem.get("ai_control_unavailable") is True
+
+    @property
+    def phase(self) -> str | None:
+        """Where the turn was when AI control changed. An open string."""
+        value = self.problem.get("phase")
+        return value if isinstance(value, str) else None
+
+    @property
+    def tokens_consumed(self) -> int | None:
+        """Tokens the turn spent before it ended, when it did any work."""
+        value = self.problem.get("tokens_consumed")
+        if isinstance(value, bool) or not isinstance(value, int):
+            return None
+        return value
+
+    @property
+    def usage(self) -> dict[str, Any] | None:
+        """The turn's usage block, when it did any work."""
+        value = self.problem.get("usage")
+        return value if isinstance(value, dict) else None
+
+    @property
+    def partial_results(self) -> list[dict[str, Any]] | None:
+        """Steps that ran before the turn ended, when any did. Do not repeat
+        them without checking the page."""
+        value = self.problem.get("partial_results")
+        if not isinstance(value, list):
+            return None
+        return [r for r in value if isinstance(r, dict)]
 
 
 class SessionNotFoundError(NotFoundError):
@@ -363,10 +448,10 @@ class InternalError(DriftstackError):
 
 
 class BundledLlmBudgetExhaustedError(DriftstackError):
-    """Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM monthly cap reached
-    (HTTP 402). Customer recovery paths in the problem-detail string:
-    raise cap via PATCH /v1/account/me/bundled-llm-settings, supply a
-    BYOK key (header or stored), or wait for next calendar month.
+    """402 — the account's monthly budget for Driftstack's included AI is used
+    up. Raise the cap (PATCH /v1/account/me/bundled-llm-settings), use your own
+    Anthropic key (stored, or ``byok_api_key=`` on the call), or wait for the
+    next calendar month.
 
     Cross-SDK parity: TS exposes ``err.spentCents`` + ``err.capCents``;
     Go exposes ``err.SpentCents`` + ``err.CapCents``; Python exposes
@@ -388,9 +473,9 @@ class BundledLlmBudgetExhaustedError(DriftstackError):
 
 
 class BundledLlmConsentRequiredError(DriftstackError):
-    """Arc 1 sub-slice 6.8 (v2-#6) — deployment offers bundled-LLM but
-    the customer hasn't opted in (HTTP 402). Recovery: PATCH /v1/account/
-    me/bundled-llm-settings with {"consent": true} OR PUT a BYOK key."""
+    """402 — the turn would run on Driftstack's included AI, but the account
+    has not opted in to it. Opt in (PATCH /v1/account/me/bundled-llm-settings
+    with ``{"consent": true}``) or use your own Anthropic key."""
 
 
 class PairModeConflictError(DriftstackError):
@@ -444,12 +529,10 @@ class PairModeStateInvalidTransitionError(DriftstackError):
 
 
 class ByokAnthropicRequiredError(DriftstackError):
-    """v2-#24 — Q.1.d (2026-05-17) — agent-sessions message turn cannot
-    resolve an Anthropic API key. BYOK-for-v1.0 Tier-3 verdict means
-    the customer MUST supply their own key (via stored
-    /v1/account/me/byok-anthropic-key OR per-request
-    ``x-byok-anthropic-api-key`` header). HTTP 502 — the agent layer is
-    operational but cannot serve this customer's turn without a key."""
+    """502 — the turn has no AI key to run on: no key on the request, none
+    stored, and Driftstack's included AI is not available to the account. Store
+    your Anthropic key (PUT /v1/account/me/byok-anthropic-key) or send it with
+    the call (``byok_api_key=``)."""
 
 
 # ── Mapping problem-type URI → subclass ──────────────────────────────────

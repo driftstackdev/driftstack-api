@@ -258,24 +258,51 @@ describe('W621 sdk-go/examples content parity', () => {
     expect(existsSync(E('crypto_checkout/main.go'))).toBe(true);
   });
 
-  it('agent_chat/main.go: AgentSessions.Create + Message multi-turn (plan-executed/clarify/refuse switch) + DRIFTSTACK_BYOK_ANTHROPIC_API_KEY env-gate building MessageOptions{ByokAPIKey: byokKey} only when non-empty + ErrFeatureUnavailable activation-gate exit code 2 + Get final state + Close idempotent — pinned so slice 138\'s BYOK demo survives + so a future refactor that drops the `if byokKey != ""` guard (which would send an empty x-byok-anthropic-api-key header) trips the test (cross-SDK parity contract from slices 126-128)', () => {
+  it('agent_chat/main.go runs one AI task end to end — create with an idempotency key and your own key, a `defer` that closes the session registered before anything else can fail, wait until ready, a FRESH idempotency key per turn, live progress, every result kind handled (answer, notice, approvals via ApprovalFor), typed AI refusals, and exit codes returned through run() so that `defer` always runs', () => {
     const body = read(E('agent_chat/main.go'));
     expect(body).toMatch(/DRIFTSTACK_API_KEY=ds_live_\.\.\. go run \.\/examples\/agent_chat/);
     expect(body).toMatch(/DRIFTSTACK_BYOK_ANTHROPIC_API_KEY=sk-ant-\.\.\./);
     expect(body).toMatch(/byokKey := os\.Getenv\("DRIFTSTACK_BYOK_ANTHROPIC_API_KEY"\)/);
-    expect(body).toMatch(/var msgOpts \*driftstack\.MessageOptions/);
-    expect(body).toMatch(/if byokKey != "" \{/);
-    expect(body).toMatch(/msgOpts = &driftstack\.MessageOptions\{ByokAPIKey: byokKey\}/);
+    // Create: mode ai, an idempotency key, and the caller's own key (the SDK
+    // omits the header when it is empty).
+    expect(body).toMatch(/Mode:\s+"ai",/);
     expect(body).toMatch(
-      /resp, err := client\.AgentSessions\.Message\(ctx, session\.ID, prompt, msgOpts\)/,
+      /&driftstack\.CreateOptions\{IdempotencyKey: newKey\(\), ByokAPIKey: byokKey\}/,
     );
-    expect(body).toMatch(/case "plan-executed":/);
-    expect(body).toMatch(/case "clarify":/);
-    expect(body).toMatch(/case "refuse":/);
+    // Close is registered with `defer` straight after create, before the first call that can
+    // fail — so a failed turn never leaves the session holding a slot.
+    const deferAt = body.indexOf('defer func() {');
+    expect(deferAt).toBeGreaterThan(-1);
+    expect(body.slice(deferAt, deferAt + 200)).toMatch(
+      /client\.AgentSessions\.Close\(ctx, sessionID\)/,
+    );
+    expect(deferAt).toBeLessThan(body.indexOf('waitUntilReady(ctx, client, session)'));
+    expect(deferAt).toBeLessThan(body.indexOf('client.AgentSessions.Message('));
+    // No log.Fatal / os.Exit inside run(): either would skip the `defer` that closes the session.
+    expect(body).not.toMatch(/log\.Fatal/);
+    expect(body).toMatch(/func main\(\) \{\s*os\.Exit\(run\(\)\)\s*\}/);
+    // Wait until the browser is ready.
+    expect(body).toMatch(/for session\.Status == "provisioning"/);
+    // One fresh idempotency key per logical turn, live progress, approvals.
+    expect(body).toMatch(/IdempotencyKey:\s+newKey\(\),/);
+    expect(body).toMatch(/OnStep: func\(step driftstack\.AgentStepEvent\)/);
+    expect(body).toMatch(/OnEvent: func\(name string, data json\.RawMessage\)/);
+    expect(body).toMatch(/results, err := resp\.ParsedResults\(\)/);
+    expect(body).toMatch(/pending = append\(pending, driftstack\.ApprovalFor\(r\)\)/);
+    expect(body).toMatch(/ApproveConsequentialActions: approvals,/);
+    // Every result kind, plus the answer and the notice.
+    for (const kind of ['plan-executed', 'clarify', 'refuse', 'stopped', 'logged-manual']) {
+      expect(body).toContain(`case "${kind}":`);
+    }
+    expect(body).toMatch(/resp\.Answer/);
+    expect(body).toMatch(/resp\.Notice/);
+    // Typed AI refusals and the activation gate.
     expect(body).toMatch(/errors\.Is\(err, driftstack\.ErrFeatureUnavailable\)/);
-    expect(body).toMatch(/os\.Exit\(2\)/);
-    expect(body).toMatch(/client\.AgentSessions\.Get\(ctx, session\.ID\)/);
-    expect(body).toMatch(/client\.AgentSessions\.Close\(ctx, session\.ID\)/);
+    expect(body).toMatch(/return 2/);
+    expect(body).toMatch(/forbidden\.RequiresOwnKey\(\)/);
+    expect(body).toMatch(/conflict\.TurnInProgress\(\)/);
+    // A runaway task is stopped from a timer.
+    expect(body).toMatch(/time\.AfterFunc\([\s\S]*?client\.AgentSessions\.Stop\(ctx, sessionID\)/);
     expect(existsSync(E('agent_chat/main.go'))).toBe(true);
   });
 });

@@ -57,6 +57,7 @@ export type {
   AgentUsage,
   AgentMessageResponse,
   AgentSessionEgressResult,
+  AgentStepEvent,
   LiveKitInfo,
 } from './resources/agent-sessions.js';
 // Slice 6 cross-SDK lock 2026-05-20 — re-export the canonical

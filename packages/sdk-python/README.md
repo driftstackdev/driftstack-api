@@ -49,7 +49,7 @@ Every public API endpoint is a typed method on a resource accessor:
 | Accessor                   | Methods                                                                                                                                                                                                                             |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `client.sessions`          | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `extract`, `search`, `login`, `destroy`                                                                                                            |
-| `client.agent_sessions`    | `create`, `get`, `message`, `close`, `set_mode`, `send_input_event`, `takeover`, `handback`, `livekit_token`, `resume` (AI chat — decompose + execute a task)                                                                       |
+| `client.agent_sessions`    | `create`, `get`, `list`, `iterate`, `message`, `stop`, `close`, `set_mode`, `set_egress`, `send_input_event`, `takeover`, `handback`, `livekit_token`, `resume` (run AI tasks in a browser — see "Run an AI task" below)            |
 | `client.egress`            | `attach_to_session`, `get_session_proxy` (**capability-gated — 503/404 on every deployment today; no egress backend is wired**), `list_proxies`, `create_proxy`, `update_proxy`, `delete_proxy`, `test_proxy` (reusable proxy CRUD) |
 | `client.profiles`          | `create`, `list`, `iterate`, `get`, `update`, `delete`, `clone` (V-313)                                                                                                                                                             |
 | `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete` (V-312 — immutable point-in-time copies)                                                                                                               |
@@ -67,7 +67,7 @@ Every public API endpoint is a typed method on a resource accessor:
 | `client.audit_log`         | `list`, `iterate`, `export` (V-216 — append-only account event ledger; V-462 export)                                                                                                                                                |
 | `client.email_preferences` | `list`, `set`, `opt_out`, `opt_in` (V-204 — non-critical email opt-out toggles)                                                                                                                                                     |
 
-Inputs accept either a Pydantic model OR a plain `dict` (both serialize identically on the wire). Outputs are typed Pydantic models — IDEs autocomplete every field.
+Inputs accept either a Pydantic model OR a plain `dict` (both serialize identically on the wire). `sessions`, `api_keys`, `usage`, `webhooks`, `team` and `archetypes` return typed Pydantic models; the other resources — `agent_sessions` included — return plain dicts that mirror the API's JSON.
 
 ```python
 # Either of these works:
@@ -93,7 +93,7 @@ from driftstack import (
 try:
     session = client.sessions.create()
 except AuthError:
-    ...                                    # invalid / expired / revoked key
+    ...                                    # 401 key problems (and 403 ForbiddenError, a subclass — catch it first)
 except ConcurrencyLimitError as e:
     ...                                    # e.current_sessions / e.limit
 except QuotaExceededError as e:
@@ -135,6 +135,46 @@ key only for an ambiguous retry of the exact same
 session/message/approvals/BYOK request. A completed turn replays without
 executing its browser actions again; changed or still-running turns fail closed.
 
+A turn is never retried automatically, and once the server has accepted a key
+the response it gives for that key is final — errors included. Reuse the same
+key only when you got no response at all, or a `ConflictError` whose
+`idempotency_status` is `"in_progress"`. After any other error (a 409
+`turn_in_progress`, a 429, a 402, a 502, a 403 `requires_own_key`), fix the
+cause or wait, then send the turn with a **new** key.
+
+## Run an AI task
+
+```python
+import uuid
+
+session = client.agent_sessions.create({"mode": "ai"}, idempotency_key=str(uuid.uuid4()))
+try:
+    # Poll get(id) while session["status"] is "provisioning" before sending.
+    resp = client.agent_sessions.message(
+        session["id"],
+        "Open https://example.com and tell me the main heading.",
+        idempotency_key=str(uuid.uuid4()),
+        on_step=lambda step: print(step["index"], step["result"]["kind"]),  # live progress
+    )
+    if resp["kind"] == "plan-executed":
+        print(resp.get("answer"), resp.get("notice"))  # notice set = not finished yet
+        paused = [r for r in resp["results"] if r["kind"] == "confirmation_required"]
+        # To approve a purchase / payment / account deletion the agent stopped on,
+        # send the next message with approve_consequential_actions=paused.
+finally:
+    client.agent_sessions.close(session["id"])
+```
+
+`on_event(name, data)` receives the other progress events (`phase`, `plan`,
+`step_start`, `answer`, `notice`; ignore names you do not recognise); on
+`AsyncDriftstack` both callbacks may be `async def`. `timeout_s=` bounds the
+whole call (default 50 minutes). AI refusals are typed:
+`ForbiddenError.requires_own_key` (an Opus model needs your own Anthropic key),
+`ConflictError.turn_in_progress` / `.session_status`, `RateLimitError`,
+`BundledLlmBudgetExhaustedError`, `BundledLlmConsentRequiredError` and
+`ByokAnthropicRequiredError`. See [`examples/agent_chat.py`](examples/agent_chat.py)
+for the complete flow.
+
 ## Webhook signature verification
 
 Stripe-style HMAC-SHA256 over `<unix_seconds>.<raw_body>`. Constant-time comparison via `hmac.compare_digest`. 5-minute default tolerance.
@@ -161,7 +201,7 @@ A complete stdlib-only receiver lives in [`examples/webhook_receiver.py`](exampl
 ## Examples
 
 - [`quickstart.py`](examples/quickstart.py) — minimal create/navigate/capture/destroy.
-- [`agent_chat.py`](examples/agent_chat.py) — AI agent session: create, send a task message, poll status, close.
+- [`agent_chat.py`](examples/agent_chat.py) — run an AI task: create, wait until ready, send a task with live progress, handle each result kind (answer, notice, approvals), close.
 - [`profile_management.py`](examples/profile_management.py) — persistent profiles: create, update, clone, iterate, delete.
 - [`pagination.py`](examples/pagination.py) — cursor pagination over list endpoints.
 - [`billing_flow.py`](examples/billing_flow.py) — billing state, checkout session, portal session.

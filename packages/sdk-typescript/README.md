@@ -68,16 +68,20 @@ client.egress.updateProxy(id, body)
 client.egress.deleteProxy(id)
 client.egress.testProxy(id)             // server-side reachability probe (SSRF-guarded)
 
-client.agentSessions.create(body?)      // AI chat: decompose a task → plan → execute
+client.agentSessions.create(body?, opts?)  // start an AI session; opts: idempotencyKey, byokApiKey
 client.agentSessions.get(id)
-client.agentSessions.message(id, userMessage, opts?)  // send a turn (userMessage: string); returns the executed plan
+client.agentSessions.list(query?)       // cursor-paginated, newest first
+client.agentSessions.iterate(opts?)
+client.agentSessions.message(id, userMessage, opts?)  // send a task; returns plan-executed | clarify | refuse | stopped | logged-manual — branch on kind
+client.agentSessions.stop(id)           // stop the running task; its message() returns kind 'stopped'
+client.agentSessions.close(id)
 client.agentSessions.setMode(id, mode)  // 'manual' | 'ai' | 'pair'
+client.agentSessions.setEgress(id, proxyId, applyPoint?)  // returns status 'unavailable' today
 client.agentSessions.sendInputEvent(id, event, opts?)
 client.agentSessions.takeover(id, clientId)           // clientId: string
 client.agentSessions.handback(id)
 client.agentSessions.livekitToken(id)   // subscriber token for the live view
 client.agentSessions.resume(id, body?)  // resume after a resolved bot-challenge
-client.agentSessions.close(id)
 
 client.profiles.create(body)
 client.profiles.list(query?)
@@ -220,6 +224,48 @@ only for an ambiguous retry of the exact same session/message/approvals/BYOK
 request. A completed turn is replayed without executing its browser actions
 again; changed or still-running turns fail closed.
 
+A turn is never retried automatically, and once the server has accepted a key
+the response it gives for that key is final — errors included. Reuse the same
+key only when you got no response at all, or a `ConflictError` whose
+`idempotencyStatus` is `'in_progress'`. After any other error (a 409
+`turnInProgress`, a 429, a 402, a 502, a 403 `requiresOwnKey`), fix the cause
+or wait, then send the turn with a **new** key.
+
+## Run an AI task
+
+```ts
+import { randomUUID } from 'node:crypto';
+
+const session = await client.agentSessions.create({ mode: 'ai' }, { idempotencyKey: randomUUID() });
+try {
+  // Poll get(id) while session.status is 'provisioning' before sending.
+  const resp = await client.agentSessions.message(
+    session.id,
+    'Open https://example.com and tell me the main heading.',
+    {
+      idempotencyKey: randomUUID(),
+      onStep: ({ index, result }) => console.log(index, result.kind), // live progress
+    },
+  );
+  if (resp.kind === 'plan-executed') {
+    console.log(resp.answer, resp.notice); // notice set = the task is not finished yet
+    const paused = resp.results.filter((r) => r.kind === 'confirmation_required');
+    // To approve a purchase / payment / account deletion the agent stopped on,
+    // send the next message with { approveConsequentialActions: paused }.
+  }
+} finally {
+  await client.agentSessions.close(session.id);
+}
+```
+
+`onEvent` receives the other progress events (`phase`, `plan`, `step_start`,
+`answer`, `notice`; ignore names you do not recognise). AI refusals are typed:
+`ForbiddenError.requiresOwnKey` (an Opus model needs your own Anthropic key),
+`ConflictError.turnInProgress` / `.sessionStatus`, `RateLimitError`,
+`BundledLlmBudgetExhaustedError`, `BundledLlmConsentRequiredError` and
+`ByokAnthropicRequiredError`. See [`examples/agent-chat.ts`](./examples/agent-chat.ts)
+for the complete flow.
+
 ## Webhook signature verification
 
 When you wire up Driftstack webhooks, verify each delivery before processing:
@@ -246,7 +292,7 @@ The verifier uses HMAC-SHA256 with constant-time comparison and rejects timestam
 See [`examples/`](./examples/) for complete runnable demos:
 
 - `quickstart.ts` — happiest path, end-to-end
-- `agent-chat.ts` — AI agent session: create, send a task message, poll status, close
+- `agent-chat.ts` — run an AI task: create, wait until ready, send a task with live progress, handle each result kind (answer, notice, approvals), close
 - `profile-management.ts` — persistent profiles: create, update, clone, iterate, delete
 - `pagination.ts` — cursor pagination over list endpoints
 - `billing-flow.ts` — billing state, checkout session, portal session

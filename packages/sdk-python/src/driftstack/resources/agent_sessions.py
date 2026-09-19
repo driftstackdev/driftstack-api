@@ -1,23 +1,27 @@
 """Typed access to /v1/agent-sessions and its control subresources.
 
+An agent session is a browser that the AI drives for you: create one, send it a
+task with :meth:`AgentSessionsResource.message`, read the outcome, and close it.
+
 Availability depends on the deployment's agent-runtime configuration.
 Unsupported deployments return typed ``FeatureUnavailable`` errors.
 
 Discriminated message response: branch on ``["kind"]`` —
-``plan-executed`` (carries ``intents`` + ``results`` + ``ok``),
-``clarify`` (``clarifying_question``), ``refuse`` (``refuse_reason``), or
-``stopped`` (the turn was stopped with ``stop()``: ``results`` are the steps
-that ran and ``notice`` says how far it got).
+``plan-executed`` (carries ``intents`` + ``results`` + ``ok``, and ``answer`` /
+``notice`` when present), ``clarify`` (``clarifying_question``), ``refuse``
+(``refuse_reason``), or ``stopped`` (the turn was stopped with ``stop()``:
+``results`` are the steps that ran and ``notice`` says how far it got). A
+``manual``-mode session answers ``logged-manual``.
 """
 
 from __future__ import annotations
 
 import builtins
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from typing import Any, Literal, TypedDict
 from urllib.parse import quote, urlencode
 
-from driftstack.http import AsyncHttpClient, HttpClient
+from driftstack.http import AsyncHttpClient, EventCallback, HttpClient, StepCallback
 from driftstack.pagination import aiterate_paginated, iterate_paginated
 from driftstack.resources._common import coerce_body
 
@@ -31,22 +35,76 @@ def _encode_query(query: dict[str, Any]) -> str:
     return urlencode(items)
 
 
-# Slice 6 cross-SDK lock 2026-05-20 — canonical modifier vocabulary
-# mirrored from packages/api-types/src/agent-input-event.ts:
-# CANONICAL_MODIFIER_NAMES. The 4 names map 1:1 onto Quartz
-# CGEventFlags on the macOS harness side. Customers building their
-# own input-event producer should reference these constants instead
-# of hard-coding string literals.
+def _approval_payload(
+    approvals: Sequence[Mapping[str, Any]],
+) -> builtins.list[dict[str, Any]]:
+    """Map approvals to the wire's ``{"category", "matched_text"}`` shape.
+
+    Each entry may be ``{"category": ..., "matched_text": ...}`` or a
+    ``confirmation_required`` step result as the API returned it (which spells
+    the text ``matchedText``), so a result can be passed straight back.
+    """
+    payload: builtins.list[dict[str, Any]] = []
+    for approval in approvals:
+        category = approval.get("category")
+        matched = approval.get("matched_text", approval.get("matchedText"))
+        if not isinstance(category, str) or not isinstance(matched, str):
+            raise ValueError(
+                "each approval needs a 'category' and a 'matched_text' "
+                "(or the 'matchedText' of a confirmation_required result)"
+            )
+        payload.append({"category": category, "matched_text": matched})
+    return payload
+
+
+def _message_request(
+    user_message: str,
+    byok_api_key: str | None,
+    idempotency_key: str | None,
+    approve_consequential_actions: Sequence[Mapping[str, Any]] | None,
+) -> tuple[dict[str, Any], dict[str, str] | None]:
+    """Body and extra headers for one message turn (shared by sync and async)."""
+    # Skip the header when byok_api_key is None OR empty. Empty
+    # would send `x-byok-anthropic-api-key:` on the wire — the
+    # server normalises that to absent, but skipping
+    # client-side saves the round-trip header and matches the Go
+    # SDK's `opts.ByokAPIKey != ""` shape.
+    extra_headers: dict[str, str] = {}
+    if byok_api_key:
+        extra_headers["x-byok-anthropic-api-key"] = byok_api_key
+    if idempotency_key is not None:
+        extra_headers["Idempotency-Key"] = idempotency_key
+    body: dict[str, Any] = {"user_message": user_message}
+    # Re-send approved consequential actions so the steps the previous turn
+    # paused on can continue. Omitted when empty (matches the route's optional
+    # schema).
+    if approve_consequential_actions:
+        body["approve_consequential_actions"] = _approval_payload(approve_consequential_actions)
+    return body, extra_headers or None
+
+
+def _create_headers(idempotency_key: str | None, byok_api_key: str | None) -> dict[str, str] | None:
+    headers: dict[str, str] = {}
+    if idempotency_key is not None:
+        headers["Idempotency-Key"] = idempotency_key
+    if byok_api_key:
+        headers["x-byok-anthropic-api-key"] = byok_api_key
+    return headers or None
+
+
+# Canonical modifier vocabulary for input events, mirrored from the API's
+# CANONICAL_MODIFIER_NAMES. Customers building their own input-event producer
+# should reference these constants instead of hard-coding string literals.
 CANONICAL_MODIFIER_NAMES: tuple[str, ...] = ("cmd", "ctrl", "shift", "option")
 CanonicalModifier = Literal["cmd", "ctrl", "shift", "option"]
 
 
 class LiveKitInfo(TypedDict):
-    """LK.3/LK.5 — 5-field LiveKit join info.
+    """Live-video join info (5 fields).
 
     Returned by :meth:`AgentSessionsResource.livekit_token` and also
     auto-populated on the ``livekit`` field of an agent-session create
-    response when a Mac is available at create time. The 5 fields match
+    response when live video is available at create time. The 5 fields match
     the named ``LiveKitInfo`` component schema in openapi.json.
 
     Hand-defined here (not generated) because the same 5-field shape is
@@ -57,13 +115,13 @@ class LiveKitInfo(TypedDict):
     """
 
     ws_url: str
-    """WebSocket URL the client connects to (per-Mac unique hostname)."""
+    """WebSocket URL the client connects to."""
 
     room: str
-    """LiveKit room name — always the agent_session id."""
+    """Room name — always the agent_session id."""
 
     token: str
-    """Short-lived HS256 JWT signed with the per-Mac api_secret."""
+    """Short-lived JWT that admits this viewer to the room."""
 
     participant_identity: str
     """Identity claim baked into the JWT — ``customer-<account-uuid>``."""
@@ -83,48 +141,78 @@ class AgentSessionsResource:
         body: dict[str, Any] | None = None,
         *,
         idempotency_key: str | None = None,
+        byok_api_key: str | None = None,
     ) -> dict[str, Any]:
-        """Create a new agent chat session.
+        """Create a new agent session.
 
-        Body shape (all fields optional): ``{"driftstack_session_id"?: ...,
-        "token_budget"?: int, "mode"?: "manual"|"ai"|"pair",
+        Body shape (all fields optional): ``{"mode"?: "ai"|"manual"|"pair",
         "model"?: "claude-opus-5"|"claude-sonnet-5"|"claude-opus-4-8"
         |"claude-opus-4-7"|"claude-sonnet-4-6"|"claude-haiku-4-5",
-        "profile_id"?: str, "proxy_id"?: str, "initial_url"?: str,
+        "token_budget"?: int, "profile_id"?: str, "proxy_id"?: str,
+        "skip_proxy_probe"?: bool, "stop_on_exit_ip_change"?: bool,
+        "continue_from_agent_session_id"?: str, "initial_url"?: str,
         "geolocation"?: {"latitude": float, "longitude": float,
-        "accuracy"?: float}}``.
-        ``model`` (6.c) picks the Claude model the AI agent runs;
-        defaults server-side to ``"claude-sonnet-5"`` ("claude-opus-4-7" stays
-        accepted for back-compat). ``profile_id`` attaches a
-        saved profile (persistent browser identity) so the session resumes its
-        stored state + saves back on end; must be an owned profile id (unknown
-        or not-owned → 404). ``proxy_id`` routes the session through one of your
-        account proxies (manage them at ``/v1/account/me/proxies``); must be an
-        owned proxy id (unknown or not-owned → 404). ``initial_url`` sets the
-        start URL the remote browser opens on launch (overrides the operator
-        default); must be an absolute http(s) URL — ``file:``, ``javascript:``,
-        ``data:`` schemes are rejected (400). ``geolocation`` explicitly
-        overrides the device's reported location; by default it derives from
-        the proxy exit IP (coherent with the session's apparent network
-        location), so omit it for most sessions — coordinates diverging from
-        the exit country make the fingerprint internally inconsistent.
-        Latitude -90..90, longitude -180..180, ``accuracy`` in meters (omit
-        for the device default).
+        "accuracy"?: float}, "driftstack_session_id"?: str}``.
 
-        ``idempotency_key`` (optional, v2-#19) is forwarded as the
+        ``mode`` defaults to ``"ai"`` (the AI plans and runs each message);
+        ``"manual"`` records messages for a person driving the browser;
+        ``"pair"`` lets a person take over from the AI.
+        ``model`` picks the Claude model the AI runs; defaults server-side to
+        ``"claude-sonnet-5"`` (every earlier id stays accepted). Opus models run
+        only on your own Anthropic key: when the session would run on
+        Driftstack's included AI they are refused with a 403
+        :class:`~driftstack.errors.ForbiddenError` whose ``requires_own_key`` is
+        true. ``token_budget`` is the tokens the AI may spend over the whole
+        session (default 100,000; at most 10,000,000); when it runs out the
+        session closes with ``closed_reason`` ``"budget-exhausted"``.
+        ``profile_id`` attaches a saved profile (persistent browser identity) so
+        the session resumes its stored state + saves back on end; must be an
+        owned profile id (unknown or not-owned → 404), and a profile can have
+        one live session at a time (409 ``ProfileInUseError`` otherwise).
+        ``proxy_id`` routes the session through one of your account proxies
+        (manage them at ``/v1/account/me/proxies``); must be an owned proxy id
+        (unknown or not-owned → 404). The proxy is tested before launch (422
+        ``ProxyValidationFailedError`` when it fails); ``skip_proxy_probe``
+        skips that test for this launch only. ``stop_on_exit_ip_change`` ends
+        the session if its exit IP changes mid-run (``closed_reason``
+        ``"exit_ip_changed"``). ``continue_from_agent_session_id`` carries a
+        CLOSED session's conversation into the new one (unknown or not owned →
+        404; not closed yet → 409). ``initial_url`` sets a start page (an
+        absolute http(s) URL — ``file:``, ``javascript:``, ``data:`` schemes are
+        rejected with 400); for an AI task, also put the URL in your message.
+        ``geolocation`` explicitly overrides the device's reported location; by
+        default it derives from the proxy exit IP (coherent with the session's
+        apparent network location), so omit it for most sessions — coordinates
+        diverging from the exit country make the fingerprint internally
+        inconsistent. Latitude -90..90, longitude -180..180, ``accuracy`` in
+        meters (omit for the device default).
+
+        While the returned session's ``status`` is ``"provisioning"`` its
+        browser is still starting: poll :meth:`get` until it reads ``"active"``
+        before sending a message (``"closed"`` means it could not start — read
+        ``closed_reason``).
+
+        ``idempotency_key`` (optional) is forwarded as the
         ``Idempotency-Key`` request header — Stripe-pattern dedupe. The
         server enforces ``(account_id, idempotency_key)`` uniqueness via
         a partial unique index; retries with the same key replay the
         original 201 response instead of minting a duplicate row.
+
+        ``byok_api_key`` (optional) is your own Anthropic API key, sent as the
+        ``x-byok-anthropic-api-key`` header. Create uses it only to decide
+        whether an Opus model is allowed; send it on every :meth:`message` too.
+        NEVER logged by the SDK.
+
+        Errors: 429 ``ConcurrencyLimitError`` (your plan's concurrent-session
+        limit), 409 ``ProfileInUseError`` / ``StorageQuotaExceededError``, 422
+        ``ProxyValidationFailedError``, 403 ``ForbiddenError`` (no AI on the
+        plan, or an Opus model without your own key), 404 ``NotFoundError``.
         """
-        extra_headers = (
-            {"Idempotency-Key": idempotency_key} if idempotency_key is not None else None
-        )
         return self._http.request(
             "POST",
             "/v1/agent-sessions",
             json_body=coerce_body(body or {}),
-            extra_headers=extra_headers,
+            extra_headers=_create_headers(idempotency_key, byok_api_key),
         )
 
     def get(self, agent_session_id: str) -> dict[str, Any]:
@@ -135,21 +223,16 @@ class AgentSessionsResource:
         """List the account's agent sessions, newest first. Cursor-paginated.
 
         Returns the standard ``{"data": [...], "has_more": bool,
-        "next_cursor": str | None}`` envelope (was a non-paginated ``{"data"}``
-        hard-capped at 100, leaving older sessions unreachable). Pass ``cursor``
-        (the prior page's ``next_cursor``) to page, or use :meth:`iterate` to
-        walk every page. Mirrors the TS + Go SDK list().
+        "next_cursor": str | None}`` envelope. Pass ``cursor`` (the prior page's
+        ``next_cursor``) to page, or use :meth:`iterate` to walk every page.
+        Mirrors the TS + Go SDK list().
         """
         qs = _encode_query({"limit": limit, "cursor": cursor})
         path = "/v1/agent-sessions" + (f"?{qs}" if qs else "")
         return self._http.request("GET", path)
 
     def iterate(self, *, limit: int | None = None) -> Iterator[dict[str, Any]]:
-        """Lazily walk every agent session across cursor pages (newest first).
-
-        Replaces the old hard 100-cap — a busy account can now reach its full
-        AI-session history.
-        """
+        """Lazily walk every agent session across cursor pages (newest first)."""
 
         def fetch_page(cursor: str | None) -> dict[str, Any]:
             return self.list(limit=limit, cursor=cursor)
@@ -163,62 +246,106 @@ class AgentSessionsResource:
         *,
         byok_api_key: str | None = None,
         idempotency_key: str | None = None,
-        approve_consequential_actions: builtins.list[dict[str, str]] | None = None,
+        approve_consequential_actions: Sequence[Mapping[str, Any]] | None = None,
+        on_step: StepCallback | None = None,
+        on_event: EventCallback | None = None,
+        timeout_s: float | None = None,
     ) -> dict[str, Any]:
-        """Run one decompose→execute turn against the agent session.
+        """Send one message — a task or a question — and wait for the outcome.
 
-        Returns a discriminated body keyed by ``kind``. Closed sessions
-        return 409 Conflict — start a new session.
+        The call streams, so it can take several minutes; it returns when the
+        turn ends. The result is a dict keyed by ``kind``:
 
-        ``byok_api_key`` (optional, BYOK Tier-3 LOCKED 2026-05-16) is
-        forwarded as the ``x-byok-anthropic-api-key`` request header so
-        callers don't have to construct it by hand. NEVER logged by
-        the SDK; arrives over TLS to the control plane.
+        - ``plan-executed`` — the steps ran. ``answer`` is what you asked for,
+          when you asked for information; ``results`` has each step's outcome
+          (``success``, ``failure`` with a ``diagnosis``, or
+          ``confirmation_required``); ``notice``, when present, says why the task
+          is not finished yet (send ``"continue"`` when it asks for that). ``ok``
+          is true when the last planned steps ran cleanly — it does not by
+          itself mean the task is finished.
+        - ``clarify`` — the agent needs more detail; reply with another message.
+        - ``refuse`` — the agent will not do this, or the AI was briefly
+          unavailable (the session stays active; send it again).
+        - ``stopped`` — you called :meth:`stop`.
+        - ``logged-manual`` — a ``manual``-mode session recorded the message.
+
+        ``byok_api_key`` (optional) is your own Anthropic API key, forwarded as
+        the ``x-byok-anthropic-api-key`` request header so callers don't have to
+        construct it by hand. It takes precedence over a stored key and over
+        Driftstack's included AI. NEVER logged by the SDK.
+
+        ``approve_consequential_actions`` (optional) approves the actions the
+        previous turn stopped on (a ``confirmation_required`` step result: the
+        agent paused before a purchase, a payment or an account deletion). Pass
+        the ``confirmation_required`` results themselves, or
+        ``{"category": ..., "matched_text": ...}`` dicts. Send it as the very
+        next message on the session: the paused steps then continue from where
+        they stopped, without planning again. Any other message in between
+        discards the paused steps, and the agent plans afresh.
 
         ``idempotency_key`` (strongly recommended) identifies this logical
         turn. Reuse it after a lost/ambiguous stream so the server replays the
         durable terminal response instead of executing browser actions twice.
-        Use a new key when the session, message, approvals, or BYOK key changes.
+        Once the server has accepted a key, the response it gives for that key
+        is final, errors included: reuse the same key only when you got no
+        response at all, or a ``ConflictError`` whose ``idempotency_status`` is
+        ``"in_progress"`` (the first attempt is still running; it replays the
+        result once it finishes). After any other error, fix the cause or wait,
+        then send with a NEW key. Use a new key too when the session, message
+        or approvals change.
+
+        ``on_step`` (optional) is called with each step as it lands:
+        ``{"index": int, "result": {...}}``, where ``index`` is the step's
+        position in the final ``results``. ``on_event`` (optional) is called as
+        ``on_event(name, data)`` for every other progress event — today
+        ``phase``, ``plan``, ``step_start``, ``answer`` and ``notice``. The set of
+        names is open: ignore the ones you do not recognise. The final result is
+        always the return value. If a callback raises, the exception propagates
+        and the stream is closed; the turn keeps running on the server (send the
+        same message with the same ``idempotency_key`` to get its result).
+
+        ``timeout_s`` (optional) is the absolute limit for the whole call;
+        defaults to 50 minutes. It is not an idle timeout — the stream's
+        keep-alives hold the connection open while a long step runs.
+
+        Errors you should expect: 409 ``ConflictError`` (``turn_in_progress``:
+        another message is still running; ``session_status``: the session has
+        ended — start a new one), 429 ``RateLimitError`` (the message rate, or
+        too many AI turns running at once on your account), 429
+        ``ConcurrencyLimitError`` (too many turns on the included AI at once),
+        403 ``ForbiddenError`` (no AI on the plan, or ``requires_own_key``), and
+        402 ``BundledLlmBudgetExhaustedError`` /
+        ``BundledLlmConsentRequiredError`` or 502 ``ByokAnthropicRequiredError``
+        when no AI key or budget is available.
         """
-        # Skip the header when byok_api_key is None OR empty. Empty
-        # would send `x-byok-anthropic-api-key:` on the wire — the
-        # server normalises that to absent (slice 105 fix), but skipping
-        # client-side saves the round-trip header and matches the Go
-        # SDK's `opts.ByokAPIKey != ""` shape.
-        extra_headers: dict[str, str] = {}
-        if byok_api_key:
-            extra_headers["x-byok-anthropic-api-key"] = byok_api_key
-        if idempotency_key is not None:
-            extra_headers["Idempotency-Key"] = idempotency_key
-        body: dict[str, Any] = {"user_message": user_message}
-        # W443/W445 — re-send approved consequential actions (each
-        # {"category", "matched_text"}) so the executor skips the confirmation
-        # halt. Omitted when empty (matches the route's optional schema). Without
-        # this, Python callers were permanently stuck on a confirmation turn.
-        if approve_consequential_actions:
-            body["approve_consequential_actions"] = [
-                {"category": a["category"], "matched_text": a["matched_text"]}
-                for a in approve_consequential_actions
-            ]
+        body, extra_headers = _message_request(
+            user_message, byok_api_key, idempotency_key, approve_consequential_actions
+        )
         return self._http.request_event_stream(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/message",
             json_body=coerce_body(body),
-            extra_headers=extra_headers or None,
+            extra_headers=extra_headers,
+            stream_timeout_s=timeout_s,
+            on_step=on_step,
+            on_event=on_event,
         )
 
     def close(self, agent_session_id: str) -> None:
-        """Close the agent session (idempotent)."""
+        """End the agent session and its browser (idempotent).
+
+        Close every session you start — an open session keeps counting toward
+        your plan's concurrent-session limit.
+        """
         self._http.request("DELETE", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}")
 
     def set_mode(self, agent_session_id: str, mode: str) -> dict[str, Any]:
-        """Slice 3 (Wave 29-NNN ARC 3) — set the session's operational mode.
+        """Set the session's mode.
 
-        Atomic dual-column write of ``mode`` + ``pair_mode_state`` on
-        the server. Transitioning INTO ``'pair'`` initializes
-        ``pair_mode_state`` to ``{"kind": "ai-driving"}``; transitioning
-        OUT clears it to ``None``. Idempotent — a no-op transition
-        returns the existing row with ``pair_mode_state`` preserved.
+        Transitioning INTO ``'pair'`` initializes ``pair_mode_state`` to
+        ``{"kind": "ai-driving"}``; transitioning OUT clears it to ``None``.
+        Idempotent — a no-op transition returns the existing row with
+        ``pair_mode_state`` preserved.
 
         ``mode`` must be one of ``"manual"``, ``"ai"``, ``"pair"``.
 
@@ -237,7 +364,7 @@ class AgentSessionsResource:
         proxy_id: str,
         apply_point: str | None = None,
     ) -> dict[str, Any]:
-        """P-17 — move a RUNNING session onto a different egress.
+        """Move a RUNNING session onto a different egress.
 
         NOT AVAILABLE YET: no device can change egress on a running
         session, so this currently returns ``{"status": "unavailable"}``
@@ -282,9 +409,9 @@ class AgentSessionsResource:
         *,
         client_id: str | None = None,
     ) -> dict[str, Any]:
-        """Slice 4 + Slice 5 (Wave 29-NNN ARC 3) — forward raw LK.6 InputEvent.
+        """Send one raw input event to a manual or pair-mode session.
 
-        ``event`` must be one of the 7 discriminated variants:
+        ``event`` is one of the input-event variants, for example:
 
         - ``{"type": "mouseMove", "x": int, "y": int}``
         - ``{"type": "mouseDown", "x": int, "y": int, "button": 0|1|2}``
@@ -294,43 +421,37 @@ class AgentSessionsResource:
         - ``{"type": "wheel", "x": int, "y": int, "deltaX": int, "deltaY": int}``
         - ``{"type": "ping", "timestamp": int}``
 
-        Modifier vocabulary (Slice 6 cross-SDK lock 2026-05-20):
-        ``keyDown`` / ``keyUp`` ``modifiers`` arrays MUST use the
-        4-name set ``"cmd" | "ctrl" | "shift" | "option"`` (1:1 Quartz
-        ``CGEventFlags``). DOM-standard names (``Shift / Control /
-        Alt / Meta``) round-trip through the schema unchanged but the
-        harness decoder drops them.
+        Modifier vocabulary: ``keyDown`` / ``keyUp`` ``modifiers`` arrays MUST
+        use the 4-name set ``"cmd" | "ctrl" | "shift" | "option"``.
+        DOM-standard names (``Shift / Control / Alt / Meta``) pass validation
+        but are ignored.
 
         ``client_id`` is REQUIRED when the session is in mode='pair'
         AND the current pair_mode_state.kind is ``ai-driving`` — the
-        first input-event in this configuration fires the
-        takeover-request transition (Slice 5); ``client_id``
-        identifies which browser tab / window initiated. Optional
-        in all other shapes.
+        first input-event in this configuration asks for a takeover;
+        ``client_id`` identifies which browser tab / window initiated.
+        Optional in all other shapes.
 
         Response is a discriminated union — branch on ``["kind"]``:
 
-        - ``pair-mode-takeover-fired`` (200, Slice 5 takeover-trigger) —
-          ``pair_mode_state`` populated with the new state kind. LIVE
-          today: reachable on any normally-booted deployment, because the
-          Redis pair-mode lock it needs is wired unconditionally. It
-          forwards nothing, which is why "no deployment forwards input
-          events" stays true alongside it.
-        - ``forwarded`` (Slice 4 forward-to-harness) — ``duration_ms``
-          populated. No deployment forwards input events, and this variant
-          is UNREACHABLE for a reason one level deeper: it sits behind the
-          ``human-driving`` state, which only a ``takeover-grant``
-          transition produces, and nothing emits that. Branching on it is
-          dead code.
+        - ``pair-mode-takeover-fired`` (200) — ``pair_mode_state`` populated
+          with the new state kind. LIVE today on any deployment. It forwards
+          nothing, which is why "no deployment forwards input events" stays
+          true alongside it.
+        - ``forwarded`` — ``duration_ms`` populated.
+          No deployment forwards input events, and this variant is
+          UNREACHABLE: it sits behind the ``human-driving`` state, which no
+          request can reach today.
+          Branching on it is dead code.
 
         Raises ``ConflictError`` (409) if the session is not active OR
         is in mode='ai' (input-event requires manual or pair mode), OR
         the pair_mode_state is mid-transition.
         Raises ``ValidationError`` (400) when pair-mode ai-driving
         path is taken without ``client_id``.
-        Raises ``FeatureUnavailableError`` (503) on the harness-forward
-        path — mode='manual' always, and mode='pair' once the state has
-        left ``ai-driving``. It is not a blanket 503 — the takeover-fired
+        Raises ``FeatureUnavailableError`` (503) for everything else —
+        mode='manual' always, and mode='pair' once the state has left
+        ``ai-driving``. It is not a blanket 503 — the takeover-fired
         arm above returns 200.
         """
         body: dict[str, Any] = {"event": event}
@@ -343,7 +464,7 @@ class AgentSessionsResource:
         )
 
     def takeover(self, agent_session_id: str, client_id: str) -> dict[str, Any]:
-        """Arc 2 sub-slice 8.9 (v2-#8) — request human takeover on a pair-mode session.
+        """Request a human takeover on a pair-mode session.
 
         State machine: ``ai-driving → takeover-pending`` (or
         ``takeover-queued`` if the runtime is mid-decompose). Returns
@@ -361,10 +482,11 @@ class AgentSessionsResource:
         )
 
     def handback(self, agent_session_id: str) -> dict[str, Any]:
-        """Arc 2 sub-slice 8.9 (v2-#8) — request handback to AI on a pair-mode session.
+        """Request a handback to the AI on a pair-mode session.
 
         State machine: ``human-driving → handback-pending`` (or
-        ``handback-queued`` if the runtime is mid-decompose).
+        ``handback-queued`` if the runtime is mid-decompose). Today no request
+        can move a session into ``human-driving``, so this raises the 409 below.
 
         Raises ``PairModeStateInvalidTransitionError`` (409) if the
         session is not in ``human-driving``.
@@ -376,17 +498,16 @@ class AgentSessionsResource:
         )
 
     def livekit_token(self, agent_session_id: str) -> LiveKitInfo:
-        """LK.3 — mint a fresh LiveKit JWT for the session's video room.
+        """Mint a fresh live-video token for the session's video room.
 
-        Use this when the auto-populated ``livekit`` field on
-        session-create is absent (pre-LK deployment) OR after the 24-hour
-        token TTL expires. Returns the same 5-field shape that
-        ``AgentSession.livekit`` carries:
+        Use this when the ``livekit`` field on the created session is absent,
+        OR after the 24-hour token TTL expires. Returns the same 5-field shape
+        that ``AgentSession.livekit`` carries:
 
             {
-              "ws_url": "wss://mac-NNN.driftstack.dev:8443",
+              "ws_url": "wss://…",
               "room": "agt_<uuid>",
-              "token": "<HS256 JWT>",
+              "token": "<JWT>",
               "participant_identity": "customer-<account-uuid>",
               "expires_at": "<RFC 3339>"
             }
@@ -395,9 +516,8 @@ class AgentSessionsResource:
 
         - 403 — session is closed; cannot mint
         - 404 — session unknown (or cross-account; existence not leaked)
-        - 503 — no Mac in the fleet has registered LiveKit yet, OR the
-          stored Mac secret can't be decrypted (operator action: re-run
-          POST /v1/mac-nodes/register)
+        - 503 — live video is not available for this session right now; try
+          again later, or contact support if it persists
         """
         return self._http.request(
             "POST",
@@ -410,13 +530,14 @@ class AgentSessionsResource:
         *,
         challenge_id: str | None = None,
     ) -> dict[str, Any]:
-        """W474 — resume a session the harness auto-paused on a bot-challenge.
+        """Resume a session that paused on a detected bot check.
 
-        Call after you've resolved the challenge (e.g. in the live view).
-        Best-effort dispatch to the node running the session. Pass
-        ``challenge_id`` (from the ``session.challenge_detected`` webhook) to
-        target a specific active challenge; omit it for a manual override
-        resume. Returns 202 ``{"status": "resume_requested", "session_id": ...}``.
+        Call after you've resolved the challenge (e.g. in the live view). The
+        session's ``status`` stays ``"active"`` while it is paused; the
+        ``session.challenge_detected`` webhook tells you it happened. Pass
+        ``challenge_id`` (from that webhook) to target a specific challenge;
+        omit it for a manual override resume. Returns 202
+        ``{"status": "resume_requested", "session_id": ...}``.
 
         Raises ``NotFoundError`` (404) or ``ConflictError`` (409, session not
         active — terminal sessions can't be resumed).
@@ -437,14 +558,17 @@ class AgentSessionsResource:
         to wind down. The turn ends on its own ``message()`` call, which returns
         ``{"kind": "stopped", ...}`` (or, if it was already finishing, its
         ordinary result) — that response is the signal that the session will
-        accept the next message. A step that was already running when the stop
+        accept the next message. Because ``message()`` blocks, call this from
+        another thread or task. A step that was already running when the stop
         arrived is given a short, bounded time to finish so its result is known;
         nothing is started after it.
 
         Returns 202 ``{"status": "stop_requested", "session_id": ...}`` when a
         turn was running, 200 ``{"status": "no_turn_running", ...}`` when none
         was. Safe to call again. Raises ``NotFoundError`` (404) for an unknown
-        session (or one owned by another account).
+        session (or one owned by another account), and
+        ``FeatureUnavailableError`` (503) when the stop could not be confirmed
+        just now — call ``stop()`` again.
         """
         return self._http.request(
             "POST",
@@ -464,16 +588,14 @@ class AsyncAgentSessionsResource:
         body: dict[str, Any] | None = None,
         *,
         idempotency_key: str | None = None,
+        byok_api_key: str | None = None,
     ) -> dict[str, Any]:
-        """Async mirror — same v2-#19 idempotency_key semantics as sync."""
-        extra_headers = (
-            {"Idempotency-Key": idempotency_key} if idempotency_key is not None else None
-        )
+        """Async mirror — same body, idempotency_key and byok_api_key semantics as sync."""
         return await self._http.request(
             "POST",
             "/v1/agent-sessions",
             json_body=coerce_body(body or {}),
-            extra_headers=extra_headers,
+            extra_headers=_create_headers(idempotency_key, byok_api_key),
         )
 
     async def get(self, agent_session_id: str) -> dict[str, Any]:
@@ -502,52 +624,37 @@ class AsyncAgentSessionsResource:
         *,
         byok_api_key: str | None = None,
         idempotency_key: str | None = None,
-        approve_consequential_actions: builtins.list[dict[str, str]] | None = None,
+        approve_consequential_actions: Sequence[Mapping[str, Any]] | None = None,
+        on_step: StepCallback | None = None,
+        on_event: EventCallback | None = None,
+        timeout_s: float | None = None,
     ) -> dict[str, Any]:
         """Async counterpart to AgentSessionsResource.message.
 
-        Returns a discriminated body keyed by ``kind``. Closed sessions
-        return 409 Conflict — start a new session.
-
-        ``byok_api_key`` (optional, BYOK Tier-3 LOCKED 2026-05-16) is
-        forwarded as the ``x-byok-anthropic-api-key`` request header so
-        callers don't have to construct it by hand. NEVER logged by
-        the SDK; arrives over TLS to the control plane.
-
-        ``idempotency_key`` has the same durable logical-turn retry semantics
-        as the synchronous resource.
+        Same result, approvals, idempotency and error semantics as the sync
+        method. ``on_step`` and ``on_event`` may be plain functions or ``async``
+        functions; an awaitable they return is awaited before the next event is
+        read. ``byok_api_key`` is forwarded as the ``x-byok-anthropic-api-key``
+        header and NEVER logged by the SDK.
         """
-        # Skip the header when byok_api_key is None OR empty. Empty
-        # would send `x-byok-anthropic-api-key:` on the wire — the
-        # server normalises that to absent (slice 105 fix), but skipping
-        # client-side saves the round-trip header and matches the Go
-        # SDK's `opts.ByokAPIKey != ""` shape.
-        extra_headers: dict[str, str] = {}
-        if byok_api_key:
-            extra_headers["x-byok-anthropic-api-key"] = byok_api_key
-        if idempotency_key is not None:
-            extra_headers["Idempotency-Key"] = idempotency_key
-        body: dict[str, Any] = {"user_message": user_message}
-        # W443/W445 — re-send approved consequential actions (each
-        # {"category", "matched_text"}) so the executor skips the confirmation
-        # halt. Omitted when empty (matches the route's optional schema).
-        if approve_consequential_actions:
-            body["approve_consequential_actions"] = [
-                {"category": a["category"], "matched_text": a["matched_text"]}
-                for a in approve_consequential_actions
-            ]
+        body, extra_headers = _message_request(
+            user_message, byok_api_key, idempotency_key, approve_consequential_actions
+        )
         return await self._http.request_event_stream(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/message",
             json_body=coerce_body(body),
-            extra_headers=extra_headers or None,
+            extra_headers=extra_headers,
+            stream_timeout_s=timeout_s,
+            on_step=on_step,
+            on_event=on_event,
         )
 
     async def close(self, agent_session_id: str) -> None:
         await self._http.request("DELETE", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}")
 
     async def set_mode(self, agent_session_id: str, mode: str) -> dict[str, Any]:
-        """Async mirror — same Slice 3 set-mode semantics as sync."""
+        """Async mirror — same set-mode semantics as sync."""
         return await self._http.request(
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/mode",
@@ -560,7 +667,7 @@ class AsyncAgentSessionsResource:
         proxy_id: str,
         apply_point: str | None = None,
     ) -> dict[str, Any]:
-        """Async mirror — same P-17 egress-swap semantics as sync."""
+        """Async mirror — same egress-swap semantics as sync."""
         body: dict[str, Any] = {"proxy_id": proxy_id}
         if apply_point is not None:
             body["apply_point"] = apply_point
@@ -577,7 +684,7 @@ class AsyncAgentSessionsResource:
         *,
         client_id: str | None = None,
     ) -> dict[str, Any]:
-        """Async mirror — same Slice 4 + Slice 5 input-event semantics as sync."""
+        """Async mirror — same input-event semantics as sync."""
         body: dict[str, Any] = {"event": event}
         if client_id is not None:
             body["client_id"] = client_id
@@ -604,7 +711,7 @@ class AsyncAgentSessionsResource:
         )
 
     async def livekit_token(self, agent_session_id: str) -> LiveKitInfo:
-        """Async mirror — same LK.3 semantics as sync.
+        """Async mirror — same semantics as sync.
 
         Returns the 5-field :class:`LiveKitInfo` dict (ws_url + room +
         token + participant_identity + expires_at). See the sync
@@ -622,7 +729,7 @@ class AsyncAgentSessionsResource:
         *,
         challenge_id: str | None = None,
     ) -> dict[str, Any]:
-        """Async mirror — same W474 resume semantics as sync.
+        """Async mirror — same resume semantics as sync.
 
         See :meth:`AgentSessionsResource.resume` for full semantics. Returns
         202 ``{"status": "resume_requested", "session_id": ...}``.

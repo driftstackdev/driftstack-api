@@ -39,9 +39,9 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     );
   });
 
-  it("LK.5 framing on LiveKitInfo pinned: 'optionally returned on session-create + always returned by POST /v1/agent-sessions/:id/livekit-token. Use these fields with livekit-client's Room.connect(ws_url, token). Token TTL is 24h; re-mint via the dedicated /livekit-token endpoint after expiry.' — pinned so the dual-path delivery (auto-populate on create OR explicit mint) + the 24h TTL + the re-mint flow all stay documented", () => {
+  it("LiveKitInfo framing pinned: 'optionally returned on session-create + always returned by POST /v1/agent-sessions/:id/livekit-token. Use these fields with livekit-client's Room.connect(ws_url, token). Token TTL is 24h; re-mint via the dedicated /livekit-token endpoint after expiry.' — pinned so the dual-path delivery (auto-populate on create OR explicit mint) + the 24h TTL + the re-mint flow all stay documented", () => {
     expect(body).toMatch(
-      /LK\.5 — LiveKit join info, optionally returned on session-create\s*\*\s+\+ always returned by POST \/v1\/agent-sessions\/:id\/livekit-token\./,
+      /Live-video join info, optionally returned on session-create\s*\*\s+\+ always returned by POST \/v1\/agent-sessions\/:id\/livekit-token\./,
     );
     expect(body).toMatch(
       /Token TTL is 24h; re-mint via the dedicated \/livekit-\s*\*\s+token endpoint after expiry\./,
@@ -83,9 +83,9 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     );
   });
 
-  it('Arc 2 v2-#8 mode framing on CreateAgentSessionRequest pinned: \'Defaults to "ai" (legacy decompose-driven runtime). "manual" makes runTurn a pass-through so the customer drives intents directly. "pair" enables the takeover state-machine (sub-slice 8.7).\' — pinned so the 3-mode semantics + default + pair-mode anchor stay documented (drift to a different default would silently change behavior for callers omitting mode)', () => {
+  it('mode framing on CreateAgentSessionRequest pinned: \'Defaults to "ai": the AI plans and runs each message you send. "manual" records each message without running it, for a person driving the browser. "pair" lets a person take over from the AI.\' — pinned so the 3-mode semantics + default stay documented in what-it-does terms (drift to a different default would silently change behavior for callers omitting mode)', () => {
     expect(body).toMatch(
-      /Arc 2 sub-slice 8\.5 \(v2-#8 AI chat \+ manual\)\. Defaults to 'ai'\s*\*\s+\(legacy decompose-driven runtime\)\. 'manual' makes runTurn a\s*\*\s+pass-through so the customer drives intents directly\. 'pair'\s*\*\s+enables the takeover state-machine \(sub-slice 8\.7\)\./,
+      /How the session is driven\. Defaults to 'ai': the AI plans and runs each\s*\*\s+message you send\. 'manual' records each message without running it, for a\s*\*\s+person driving the browser\. 'pair' lets a person take over from the AI\./,
     );
   });
 
@@ -122,8 +122,10 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
   });
 
   it("AI-chat confirmation + usage surface pinned: ConsequentialActionCategory + AgentUsage types, the confirmation_required AgentIntentResult variant ({category, matchedText} echoed for approval), usage? on plan-executed/clarify/refuse, and message()'s approveConsequentialActions opt mapped to the wire snake_case approve_consequential_actions. Drift would break the AI-chat Approve/Deny safety-gate round-trip + the per-turn cost badge", () => {
+    // Open, like AgentFailureDiagnosis.category: the known values plus any
+    // other string, so a category newer than the SDK can be passed back.
     expect(body).toMatch(
-      /export type ConsequentialActionCategory = 'purchase' \| 'payment' \| 'account_deletion';/,
+      /export type ConsequentialActionCategory =\s*\|\s*'purchase'\s*\|\s*'payment'\s*\|\s*'account_deletion'[\s\S]{0,120}?\|\s*\(string & \{\}\);/,
     );
     expect(body).toMatch(/export interface AgentUsage \{/);
     expect(body).toMatch(/decomposer_kind: 'claude' \| 'deterministic';/);
@@ -163,20 +165,21 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
 
   it("Stripe-pattern Idempotency-Key framing on create() pinned: 'Forward as the Idempotency-Key request header so retries collapse onto the server's first 201 response. The server-side partial unique index on (account_id, idempotency_key) is what guarantees the dedupe end-to-end; SDK just plumbs the header.' — pinned so the SDK-plumbs-only-not-the-source-of-dedupe rationale survives (drift to client-side dedupe would mask the load-bearing partial-unique-index contract)", () => {
     expect(body).toMatch(
-      /v2-#19 — Stripe-pattern idempotency\. Forward as the\s*\/\/ `Idempotency-Key` request header so retries collapse onto the\s*\/\/ server's first 201 response\./,
+      /Stripe-pattern idempotency\. Forward as the\s*\/\/ `Idempotency-Key` request header so retries collapse onto the\s*\/\/ server's first 201 response\./,
     );
+    // create() now builds one header map (Idempotency-Key + the optional own
+    // Anthropic key) and sends `headers` only when it is non-empty.
     expect(body).toMatch(
-      /\.\.\.\(opts\?\.idempotencyKey !== undefined\s*\? \{ headers: \{ 'Idempotency-Key': opts\.idempotencyKey \} \}\s*: \{\}\),/,
+      /\.\.\.\(opts\?\.idempotencyKey !== undefined \? \{ 'Idempotency-Key': opts\.idempotencyKey \} : \{\}\),/,
     );
+    expect(body).toMatch(/\.\.\.\(Object\.keys\(headers\)\.length > 0 \? \{ headers \} : \{\}\),/);
   });
 
   it("BYOK Anthropic key threading on message() pinned: x-byok-anthropic-api-key header forwarded ONLY when byokApiKey is defined AND non-empty + 'NEVER logged by the SDK; the key arrives over TLS to the control plane.' — pinned so the empty-string skip + the never-logged guarantee survive (drift to logging the key would leak customer Anthropic keys into observability tooling; drift to forwarding empty strings would send a literal `x-byok-anthropic-api-key:` on the wire)", () => {
     expect(body).toMatch(
-      /`byokApiKey` \(optional\) is the customer-supplied Anthropic API\s*\*\s+key \(BYOK Tier-3 LOCKED 2026-05-16\)\. Forwarded via the\s*\*\s+`x-byok-anthropic-api-key` request header/,
+      /`byokApiKey` \(optional\) is your own Anthropic API\s*\*\s+key\. Forwarded via the\s*\*\s+`x-byok-anthropic-api-key` request header/,
     );
-    expect(body).toMatch(
-      /NEVER logged by the SDK; the key\s*\*\s+arrives over TLS to the control plane\./,
-    );
+    expect(body).toMatch(/Driftstack's included AI\. NEVER logged by the SDK\./);
     expect(body).toMatch(
       /\.\.\.\(opts\?\.byokApiKey !== undefined && opts\.byokApiKey\.length > 0\s*\? \{ 'x-byok-anthropic-api-key': opts\.byokApiKey \}\s*: \{\}\),/,
     );
@@ -202,13 +205,16 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
 
   it("livekitToken() LK.3 framing + 3-error catalog pinned: 403 (closed) + 404 (unknown / cross-account) + 503 (no Mac registered OR can't decrypt). Drift to dropping the 404-also-covers-cross-account framing would leak existence; drift to dropping the 503 operator-action hint would leave operators guessing why no token is being minted", () => {
     expect(body).toMatch(
-      /LK\.3 — mint a fresh LiveKit JWT for the agent session's video\s*\*\s+room\./,
+      /Mint a fresh live-video token for the agent session's video\s*\*\s+room\./,
     );
     expect(body).toMatch(/- 403 — session is closed; can't mint/);
     expect(body).toMatch(/- 404 — session unknown \(or cross-account; existence not leaked\)/);
+    // The 503 says what the customer can do; it no longer names the machines
+    // behind live video or an operator-only registration endpoint.
     expect(body).toMatch(
-      /- 503 — no Mac registered LiveKit yet, OR the stored Mac\s*\*\s+secret can't be decrypted \(operator action — re-run\s*\*\s+POST \/v1\/mac-nodes\/register\)/,
+      /- 503 — live video is not available for this session right now;\s*\*\s+try again later, or contact support if it persists/,
     );
+    expect(body).not.toMatch(/mac-nodes\/register/);
   });
 
   it('HTTP path-segment encodeURIComponent pinned on all id-bearing routes (get/message/close/setMode/sendInputEvent/takeover/handback/livekitToken). Drift to dropping encodeURIComponent would break customers whose session ids contain reserved URI chars (rare but real — esp. on legacy ids before the prefix-normalization)', () => {

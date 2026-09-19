@@ -149,12 +149,16 @@ describe('LK.5 — LiveKitInfo cross-SDK parity', () => {
       resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources/agent_sessions.py'),
       'utf8',
     );
-    // The 5 sample values must match the canonical form used in
+    // The sample values follow the canonical form used in
     // packages/api-types/src/livekit.ts (header comment lines 11-15)
-    // + apps/docs/src/pages/api/agent-sessions.md (lines 46-50 + 191-194).
-    expect(pyResource).toMatch(/"ws_url": "wss:\/\/mac-NNN\.driftstack\.dev:8443",/);
+    // + apps/docs/src/pages/api/agent-sessions.md — except `ws_url`, which the
+    // SDK docstring shows as an opaque wss:// URL: a customer-facing docstring
+    // must not name an internal host or port, and the client connects to
+    // whatever URL the response carries.
+    expect(pyResource).toMatch(/"ws_url": "wss:\/\/…",/);
+    expect(pyResource).not.toMatch(/mac-NNN|:8443/);
     expect(pyResource).toMatch(/"room": "agt_<uuid>",/);
-    expect(pyResource).toMatch(/"token": "<HS256 JWT>",/);
+    expect(pyResource).toMatch(/"token": "<JWT>",/);
     expect(pyResource).toMatch(/"participant_identity": "customer-<account-uuid>",/);
     expect(pyResource).toMatch(/"expires_at": "<RFC 3339>"/);
     // Drift-guards on the legacy fictional forms.

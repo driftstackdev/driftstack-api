@@ -126,10 +126,14 @@ describe('Slice 4 — InputEvent cross-surface parity', () => {
     expect(body).toMatch(/DurationMS\s+int\s+`json:"duration_ms,omitempty"`/);
   });
 
-  it('all 4 surfaces include the LK.6 wire-contract reference comment', () => {
+  it('the internal surfaces carry the LK.6 wire-contract reference, and the customer SDKs name the same contract in words — an SDK doc comment ships to customers (IDE hover, godoc), so it names the API schema, not an internal work item', () => {
     expect(read(API_TYPES)).toContain('LK.6');
     expect(read(GUI_CLIENT)).toContain('LK.6');
-    expect(read(SDK_TS)).toContain('LK.6');
-    expect(read(SDK_GO)).toContain('LK.6');
+    expect(read(SDK_TS)).toContain("Mirrors the\n * API's `InputEvent` schema");
+    expect(read(SDK_GO)).toMatch(
+      /SendInputEvent sends one raw input event[\s\S]*?input-event variants/,
+    );
+    expect(read(SDK_TS)).not.toContain('LK.6');
+    expect(read(SDK_GO)).not.toContain('LK.6');
   });
 });

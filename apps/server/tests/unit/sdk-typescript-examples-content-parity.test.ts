@@ -205,25 +205,43 @@ describe('W619 sdk-typescript/examples content parity', () => {
     expect(existsSync(E('crypto-checkout.ts'))).toBe(true);
   });
 
-  it("agent-chat.ts: tsx invocation + DRIFTSTACK_API_KEY env-gate + DRIFTSTACK_BYOK_ANTHROPIC_API_KEY optional env demo + agentSessions.create + message multi-turn (plan-executed/clarify/refuse) + FeatureUnavailableError activation-gate exit-code-2 + byokApiKey.length > 0 guard building opts only when non-empty + close — pinned so slice 139's BYOK demo survives + so a future refactor that drops the empty-string skip-guard trips the test (cross-SDK parity contract from slices 126-128)", () => {
+  it('agent-chat.ts runs one AI task end to end — create with an idempotency key and your own key, wait until ready, a FRESH idempotency key per turn, onStep/onEvent progress, every result kind handled (answer, notice, approvals passed straight back), typed AI refusals, and the session closed in finally', () => {
     const body = read(E('agent-chat.ts'));
     expect(body).toMatch(/DRIFTSTACK_API_KEY=ds_live_\.\.\. npx tsx examples\/agent-chat\.ts/);
     expect(body).toMatch(/DRIFTSTACK_BYOK_ANTHROPIC_API_KEY=sk-ant-\.\.\./);
     expect(body).toMatch(
       /const byokKey = process\.env\.DRIFTSTACK_BYOK_ANTHROPIC_API_KEY \?\? '';/,
     );
+    // Opts carry the key only when it is non-empty.
     expect(body).toMatch(
-      /const msgOpts = byokKey\.length > 0 \? \{ byokApiKey: byokKey \} : undefined;/,
+      /const keyOpts = byokKey\.length > 0 \? \{ byokApiKey: byokKey \} : \{\};/,
     );
+    expect(body).toMatch(/\{ mode: 'ai', token_budget: 100_000 \}/);
+    expect(body).toMatch(/\{ idempotencyKey: randomUUID\(\), \.\.\.keyOpts \}/);
+    expect(body).toMatch(/while \(current\.status === 'provisioning'/);
+    // One fresh key per turn, live progress, approvals passed straight back.
     expect(body).toMatch(
-      /const resp = await client\.agentSessions\.message\(session\.id, prompt, msgOpts\);/,
+      /idempotencyKey: randomUUID\(\),\s*\n\s*approveConsequentialActions: approvals,/,
     );
-    expect(body).toMatch(/case 'plan-executed':/);
-    expect(body).toMatch(/case 'clarify':/);
-    expect(body).toMatch(/case 'refuse':/);
+    expect(body).toMatch(/onStep: \(\{ index, result \}\) =>/);
+    expect(body).toMatch(/onEvent: \(\{ type, data \}\) =>/);
+    expect(body).toMatch(/r\.kind === 'confirmation_required'/);
+    expect(body).toMatch(/resp = await sendTurn\(session\.id, task, pending\);/);
+    for (const kind of ['plan-executed', 'clarify', 'refuse', 'stopped', 'logged-manual']) {
+      expect(body).toContain(`case '${kind}':`);
+    }
+    expect(body).toMatch(/resp\.answer/);
+    expect(body).toMatch(/resp\.notice/);
+    // Typed AI refusals and the activation gate (exit code 2).
     expect(body).toMatch(/err instanceof FeatureUnavailableError/);
-    expect(body).toMatch(/process\.exit\(2\)/);
-    expect(body).toMatch(/await client\.agentSessions\.close\(session\.id\)/);
+    expect(body).toMatch(/return 2;/);
+    expect(body).toMatch(/err instanceof ForbiddenError && err\.requiresOwnKey/);
+    expect(body).toMatch(/err instanceof ConflictError && err\.turnInProgress/);
+    // The session is closed in `finally`, so a failed turn never leaves it open.
+    expect(body).toMatch(
+      /\} finally \{\s*\n\s*clearTimeout\(stopTimer\);[\s\S]*?await client\.agentSessions\.close\(session\.id\)/,
+    );
+    expect(body).toMatch(/client\.agentSessions\.stop\(session\.id\)/);
     expect(existsSync(E('agent-chat.ts'))).toBe(true);
   });
 });

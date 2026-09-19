@@ -84,14 +84,20 @@ describe('cross-SDK BYOK Anthropic header invariant', () => {
     const go = read(GO);
     // TS: `opts?.byokApiKey !== undefined && opts.byokApiKey.length > 0`
     expect(ts).toMatch(/opts\?\.byokApiKey !== undefined && opts\.byokApiKey\.length > 0/);
-    // Python: sync + async each use a truthy check (None + '' both skip
-    // insertion) while sharing one map with the optional idempotency header.
+    // Python: sync + async message() share ONE request builder, which uses a
+    // truthy check (None + '' both skip insertion) on the map it also puts the
+    // optional idempotency header in — so the two methods cannot diverge. The
+    // create() header builder uses the same truthy check.
     expect(
       py.match(
         /if byok_api_key:\s*\n\s*extra_headers\["x-byok-anthropic-api-key"\] = byok_api_key/g,
       ),
-    ).toHaveLength(2);
-    expect(py.match(/extra_headers=extra_headers or None/g)).toHaveLength(2);
+    ).toHaveLength(1);
+    expect(py).toMatch(/return body, extra_headers or None/);
+    expect(py.match(/= _message_request\(/g), 'sync + async message() both use it').toHaveLength(2);
+    expect(py).toMatch(
+      /if byok_api_key:\s*\n\s*headers\["x-byok-anthropic-api-key"\] = byok_api_key/,
+    );
     // Go: the option envelope is checked once, then the shared header map
     // receives BYOK only when nonempty (alongside optional idempotency).
     expect(go).toMatch(
