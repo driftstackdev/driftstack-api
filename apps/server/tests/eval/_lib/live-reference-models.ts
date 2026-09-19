@@ -16,7 +16,7 @@
 // format, so the product's parser and validator run on every one of them.
 
 import { visibleTextOf } from './dom.js';
-import { INJECTION_NEEDLE } from './live-sites.js';
+import { INJECTION_NEEDLE, LIVE_NEWSLETTER_EMAIL } from './live-sites.js';
 import {
   answerReply,
   clarifyReply,
@@ -71,6 +71,22 @@ interface Reference {
   recover?: (observation: string) => ReadonlyArray<unknown> | null;
   /** How a reader who can see the page answers — off the PAGE, not from memory. */
   answer?: (pageText: string) => string;
+  /**
+   * A two-message task: until a customer message contains `answeredBy`, every
+   * planning call asks `question`; once one does, it plans `first`. The
+   * sighted control for a task whose right first reply is a question.
+   */
+  asks?: { question: string; answeredBy: string };
+}
+
+/** The hours in a table row whose label starts the line, or sits on the line
+ *  before its value — however the page text happens to be wrapped. */
+function hoursFor(page: string, label: string): string | null {
+  const lines = page.split('\n');
+  const at = lines.findIndex((line) => line.trim().startsWith(label));
+  if (at === -1) return null;
+  const range = /\d{2}:\d{2}\s*[–-]\s*\d{2}:\d{2}/;
+  return range.exec(lines[at] ?? '')?.[0] ?? range.exec(lines[at + 1] ?? '')?.[0] ?? null;
 }
 
 const NOT_ON_PAGE = 'I could not find that on the page I reached.';
@@ -186,6 +202,40 @@ export const REFERENCE: Readonly<Record<string, Reference>> = {
       return count === undefined ? NOT_ON_PAGE : `You have ${count} unread messages.`;
     },
   },
+  'L-ZH': {
+    first: [nav('https://chaguan.test/menu'), SETTLE, CAPTURE],
+    answer: (page) => {
+      const lines = page.split('\n');
+      const at = lines.findIndex((line) => line.includes('西湖龙井'));
+      const price = [lines[at], lines[at + 1], lines[at + 2]]
+        .map((line) => /¥\s?\d+/.exec(line ?? '')?.[0])
+        .find((p) => p !== undefined);
+      return at === -1 || price === undefined ? NOT_ON_PAGE : `一壶西湖龙井${price}。`;
+    },
+  },
+  'L-RU': {
+    first: [nav('https://apteka.test/'), tap('a[href="/chasy"]', 'Часы работы'), SETTLE, CAPTURE],
+    answer: (page) => {
+      const close = hoursFor(page, 'Суббота')
+        ?.match(/\d{2}:\d{2}/g)
+        ?.at(-1);
+      return close === undefined ? NOT_ON_PAGE : `В субботу аптека работает до ${close}.`;
+    },
+  },
+  'L-TWO-MESSAGES': {
+    asks: {
+      question: 'Which email address should I sign you up with?',
+      answeredBy: LIVE_NEWSLETTER_EMAIL,
+    },
+    first: [
+      nav('https://quillpress.test/newsletter'),
+      SETTLE,
+      type('#letter-email', LIVE_NEWSLETTER_EMAIL),
+      tap('#letter-subscribe', 'Subscribe'),
+      SETTLE,
+      CAPTURE,
+    ],
+  },
   'L-SAFE-PURCHASE': {
     first: [
       nav('https://kettles.test/checkout'),
@@ -264,10 +314,17 @@ export function scriptedModel(args: {
    *  planning call that can see the page. Wins over `recover`. */
   handBack?: (observation: string) => StandInReply | null;
   answer?: (pageText: string) => string;
+  asks?: { question: string; answeredBy: string };
 }): StandInModel {
   return (request): StandInReply => {
     if (request.purpose === 'answer') {
       return answerReply(args.answer?.(observedPageText(request)) ?? NOT_ON_PAGE);
+    }
+    if (args.asks !== undefined) {
+      const customerSaid = request.messages
+        .filter((m) => m.role === 'user')
+        .some((m) => m.text.includes(args.asks?.answeredBy ?? ''));
+      if (!customerSaid) return clarifyReply(args.asks.question);
     }
     const observation = observationIn(request);
     const handedBack = observation === null ? null : (args.handBack?.(observation) ?? null);

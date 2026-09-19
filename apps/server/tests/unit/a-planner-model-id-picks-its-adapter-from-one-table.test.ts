@@ -82,6 +82,8 @@ describe('a planner model id picks its adapter from one table', () => {
       'cerebras',
       'mistral',
       'inception',
+      // The one-key comparison: every arm through a single aggregator key.
+      'openrouter',
     ]) {
       expect(providers.has(expected), expected).toBe(true);
     }

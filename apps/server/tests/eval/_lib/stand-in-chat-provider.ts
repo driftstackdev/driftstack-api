@@ -29,6 +29,12 @@ export type ChatStandInReply =
       usageOnChoiceChunk?: boolean;
       /** End the body without `[DONE]` or a finish reason. */
       truncate?: boolean;
+      /** Members added to EVERY chunk — how OpenRouter stamps each one with the
+       *  upstream that served it (`provider`) and the model slug. */
+      chunkExtras?: Record<string, unknown>;
+      /** Open with an SSE comment (`: OPENROUTER PROCESSING`), the keepalive
+       *  OpenRouter sends while a model works. A reader must skip it. */
+      keepAliveFirst?: boolean;
     }
   | { kind: 'status'; status: number; body: string }
   | { kind: 'stream-error'; error: Record<string, unknown> }
@@ -230,21 +236,26 @@ export function chatStandInProvider(args: { model: ChatStandInModel; expectedKey
       reply.text.slice(third, 2 * third),
       reply.text.slice(2 * third),
     ].filter((t) => t.length > 0);
+    const extras = reply.chunkExtras ?? {};
     const parts: string[] = [
-      chunk({ choices: [{ index: 0, delta: { role: 'assistant', content: '' } }] }),
+      ...(reply.keepAliveFirst === true ? [': OPENROUTER PROCESSING\n\n'] : []),
+      chunk({ ...extras, choices: [{ index: 0, delta: { role: 'assistant', content: '' } }] }),
       ...(reply.refusal !== undefined
-        ? [chunk({ choices: [{ index: 0, delta: { refusal: reply.refusal } }] })]
-        : deltas.map((content) => chunk({ choices: [{ index: 0, delta: { content } }] }))),
+        ? [chunk({ ...extras, choices: [{ index: 0, delta: { refusal: reply.refusal } }] })]
+        : deltas.map((content) =>
+            chunk({ ...extras, choices: [{ index: 0, delta: { content } }] }),
+          )),
     ];
     if (reply.truncate !== true) {
       const usage = reply.usage === undefined ? standInChatUsage() : reply.usage;
       const finish = {
+        ...extras,
         choices: [{ index: 0, delta: {}, finish_reason: reply.finishReason ?? 'stop' }],
         ...(reply.usageOnChoiceChunk === true && usage !== null ? { usage } : {}),
       };
       parts.push(chunk(finish));
       if (reply.usageOnChoiceChunk !== true && usage !== null) {
-        parts.push(chunk({ choices: [], usage }));
+        parts.push(chunk({ ...extras, choices: [], usage }));
       }
       parts.push(chunk('[DONE]'));
     }
@@ -256,4 +267,103 @@ export function chatStandInProvider(args: { model: ChatStandInModel; expectedKey
     return Promise.resolve(new Response(streamOf(split.filter((p) => p.length > 0)), sse));
   };
   return { fetch: impl, log };
+}
+
+// ── OpenRouter ────────────────────────────────────────────────────────────
+
+/** One upstream the stand-in aggregator can route a model to. */
+export interface OpenRouterStandInHost {
+  /** OpenRouter's slug, what `provider.only` names (`anthropic`). */
+  slug: string;
+  /** The name OpenRouter stamps on each chunk (`Anthropic`). */
+  name: string;
+  /** Whether this endpoint lists `structured_outputs` / `response_format`. */
+  structuredOutputs: boolean;
+}
+
+export interface OpenRouterStandInLog {
+  /** The `provider` routing object each request carried, as sent. */
+  routing: Array<Record<string, unknown> | null>;
+  /** The host each request was served by, or null when it was refused. */
+  servedBy: Array<string | null>;
+}
+
+/**
+ * A stand-in that answers the way OPENROUTER does, wrapped around a reply
+ * model: it routes each request by its `provider` object, stamps every chunk
+ * with the upstream that served it, reports usage WITH `cost` (credits, in US
+ * dollars), refuses a pin it cannot honour with the documented 503, and answers
+ * 402 once the account's credit is spent.
+ *
+ * ⛔ WHAT IT PROVES AND WHAT IT CANNOT. That the product's request is one this
+ * wire would route to the named host and no other, and that each of these
+ * answers is read honestly. It is our reading of OpenRouter's docs
+ * (provider-routing, usage-accounting, errors, streaming — fetched 2026-09-19),
+ * not OpenRouter.
+ *
+ * Routing, as documented: with `only` set, only those hosts; a host that lacks
+ * a parameter the request sends is excluded when `require_parameters` is true;
+ * with `allow_fallbacks` not false, a request whose pinned host cannot serve it
+ * goes to ANOTHER host — which is exactly what the pin exists to prevent, and
+ * why the stand-in does it: a request without the pin must be caught serving
+ * the wrong model's host.
+ */
+export function openRouterStandIn(args: {
+  /** model slug → the hosts that serve it, cheapest first. */
+  hosts: Readonly<Record<string, ReadonlyArray<OpenRouterStandInHost>>>;
+  /** The account's credit in US dollars; each call spends its `cost`. */
+  creditUsd: number;
+  /** Cost per call, in credits (US dollars). */
+  costPerCallUsd: number;
+  /** The replies, as for any chat stand-in. */
+  inner: ChatStandInModel;
+}): { model: ChatStandInModel; log: OpenRouterStandInLog } {
+  const log: OpenRouterStandInLog = { routing: [], servedBy: [] };
+  let credit = args.creditUsd;
+  const refuse = (status: number, message: string): ChatStandInReply => ({
+    kind: 'status',
+    status,
+    body: JSON.stringify({ error: { code: status, message } }),
+  });
+  const model: ChatStandInModel = (request, index) => {
+    const routing =
+      typeof request.body.provider === 'object' && request.body.provider !== null
+        ? (request.body.provider as Record<string, unknown>)
+        : null;
+    log.routing.push(routing);
+    log.servedBy.push(null);
+    if (credit <= 0) {
+      return refuse(402, 'Insufficient credits. Add more using https://openrouter.ai/credits');
+    }
+    const all = args.hosts[request.model] ?? [];
+    const only = Array.isArray(routing?.only) ? routing.only : null;
+    const wantsSchema = request.body.response_format !== undefined;
+    const pinned = all.filter(
+      (host) =>
+        (only === null || only.includes(host.slug)) &&
+        !(routing?.require_parameters === true && wantsSchema && !host.structuredOutputs),
+    );
+    const fallbacksAllowed = routing?.allow_fallbacks !== false;
+    const host = pinned[0] ?? (fallbacksAllowed ? all[0] : undefined);
+    if (host === undefined) {
+      return refuse(503, 'No available model provider meets your routing requirements');
+    }
+    log.servedBy[log.servedBy.length - 1] = host.slug;
+    const reply = args.inner(request, index);
+    if (reply.kind !== 'reply') return reply;
+    credit -= args.costPerCallUsd;
+    const usage =
+      reply.usage === undefined
+        ? standInChatUsage({ cost: args.costPerCallUsd })
+        : reply.usage === null
+          ? null
+          : { ...reply.usage, cost: args.costPerCallUsd };
+    return {
+      ...reply,
+      usage,
+      keepAliveFirst: true,
+      chunkExtras: { provider: host.name, model: request.model, object: 'chat.completion.chunk' },
+    };
+  };
+  return { model, log };
 }

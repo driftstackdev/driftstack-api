@@ -393,3 +393,166 @@ the OpenAI streaming wire: a strict-schema reply, a refusal, a malformed reply, 
 cached-token usage block, and a Stop mid-stream; the dollar cap priced from the
 table; and a sentinel for EVERY provider key variable asserted absent from every
 output, with the provider echoing all of them in an error body.
+
+### The comparison through ONE OpenRouter key
+
+One key, `OPENROUTER_API_KEY`, reaches every arm of the comparison. The rows are
+`openrouter:<slug>` in the provider table, each **pinned to one upstream** —
+`provider: {only: [that host], allow_fallbacks: false, require_parameters: true}`
+— so a run measures the model it names on the host it names. Without the pin
+OpenRouter routes by price and uptime, and a run could be served by a different
+host from one call to the next, or by one that ignores `response_format`. With
+it, a host that cannot serve the request is an **error**, worded as one ("the
+pinned upstream … could not serve this request … fallbacks are off"), never a
+quiet substitute. Every call's upstream is read off the stream and printed as
+`served by […]`; more than one host on a pinned run is flagged.
+
+| Row                                     | Pinned upstream (`provider.only`) | Reply constraint   | Reasoning sent             | Upstream $/M in / cached / out, **+5.5% fee** |
+| --------------------------------------- | --------------------------------- | ------------------ | -------------------------- | --------------------------------------------- |
+| `openrouter:anthropic/claude-sonnet-5`  | `anthropic` (first-party)         | json_schema        | `reasoning.effort: low`    | 2.00 / 0.20 / 10.00                           |
+| `openrouter:openai/gpt-5.6-luna`        | `openai` (standard tier)          | strict json_schema | `reasoning.effort: none`   | 0.20 / 0.02 / 1.20                            |
+| `openrouter:google/gemini-3.8-flash`    | `google-vertex/global`            | json_schema        | `reasoning.effort: low`    | 0.75 / 0.075 / 3.75 (doubles 2027-01-01)      |
+| `openrouter:z-ai/glm-5.3-flash`         | `together`                        | json_schema        | `reasoning.effort: low`    | 0.15 / 0.03 / 0.50                            |
+| `openrouter:anthropic/claude-haiku-4.5` | `anthropic` (first-party)         | json_schema        | none (Anthropic's default) | 1.00 / 0.10 / 5.00                            |
+| `openrouter:anthropic/claude-opus-5`    | `anthropic` (first-party)         | json_schema        | `reasoning.effort: low`    | 5.00 / 0.50 / 25.00                           |
+
+What each fact was checked against (fetched 2026-09-19): the endpoint and
+auth — `https://openrouter.ai/docs/quickstart`; pinning —
+`https://openrouter.ai/docs/features/provider-routing` (a base slug does not
+match `openai/flex` or `/fast` service tiers); structured outputs, supported
+per endpoint — `https://openrouter.ai/docs/features/structured-outputs` and each
+model's `https://openrouter.ai/api/v1/models/<slug>/endpoints`; reasoning —
+`https://openrouter.ai/docs/use-cases/reasoning-tokens`; caching —
+`https://openrouter.ai/docs/features/prompt-caching`; usage and `cost`, always in
+the last SSE message — `https://openrouter.ai/docs/use-cases/usage-accounting`;
+402 and 503 — `https://openrouter.ai/docs/api-reference/errors`; the 5.5% fee —
+`https://openrouter.ai/pricing`; zero data retention —
+`https://openrouter.ai/api/v1/endpoints/zdr`. What is still unverified is listed
+in each row's `unverified`.
+
+**The key lives in the macOS keychain.** Store it once — `-w` with no value
+makes `security` PROMPT for it, so it is never typed on a command line:
+
+```
+security add-generic-password -a "$USER" -s OPENROUTER_API_KEY -w
+```
+
+Each run reads it inside a command substitution, which hands the value to that
+one process's environment and nothing else — shell history records the text
+`$(security …)`, never the key. ⛔ Never run `security find-generic-password … -w`
+on its own, and never `echo` it: that prints the key to the terminal.
+
+**The full comparison** — the Sonnet 5 row first, as the like-for-like CONTROL
+(the product's default model through the same hop as every challenger, so its
+gap to a direct `claude-sonnet-5` run is the aggregator's own cost in latency
+and caching, not the model's), then the challengers, three repetitions each:
+
+```
+OPENROUTER_API_KEY="$(security find-generic-password -s OPENROUTER_API_KEY -w)" \
+  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:anthropic/claude-sonnet-5 EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+OPENROUTER_API_KEY="$(security find-generic-password -s OPENROUTER_API_KEY -w)" \
+  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:openai/gpt-5.6-luna EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+OPENROUTER_API_KEY="$(security find-generic-password -s OPENROUTER_API_KEY -w)" \
+  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:google/gemini-3.8-flash EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+OPENROUTER_API_KEY="$(security find-generic-password -s OPENROUTER_API_KEY -w)" \
+  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:z-ai/glm-5.3-flash EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+OPENROUTER_API_KEY="$(security find-generic-password -s OPENROUTER_API_KEY -w)" \
+  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:anthropic/claude-haiku-4.5 EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+```
+
+Optional, and dearer — raise the dollar cap for it:
+
+```
+OPENROUTER_API_KEY="$(security find-generic-password -s OPENROUTER_API_KEY -w)" \
+  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:anthropic/claude-opus-5 EVAL_LIVE_REPS=3 EVAL_LIVE_MAX_USD=5 TMPDIR=/private/tmp/ds-gate \
+  npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
+```
+
+Every safety property of the live tier holds for this key exactly as for any
+other: the three-way opt-in and the refusal under `CI`; the caps checked
+**before** each call, priced at the upstream list price **plus the 5.5% fee**
+on every token class (the fee is on the credit, so it is on every token);
+`OPENROUTER_API_KEY` is one of the provider keys scrubbed from, and asserted
+absent from, everything a run writes, whichever arm is running.
+
+**What a full run should cost — ARITHMETIC, not a measurement.** The shape
+above, scaled to today's 17-task corpus: about 48 calls a repetition (38
+planning, 10 read-back), fee included. Anthropic arms cache the static prefix
+(the row sends `cache_control`); Haiku 4.5's 4,096-token cache minimum is above
+that prefix, so it does not; Luna caches automatically; Gemini's 4,096-token
+minimum and Together's lack of implicit caching mean those two do not.
+
+| Row                        | One repetition | `EVAL_LIVE_REPS=3` |
+| -------------------------- | -------------- | ------------------ |
+| Sonnet 5 (control)         | ≈ $0.36        | ≈ $1.09            |
+| GPT-5.6 Luna               | ≈ $0.04        | ≈ $0.12            |
+| Gemini 3.8 Flash           | ≈ $0.27        | ≈ $0.82            |
+| GLM 5.3 Flash              | ≈ $0.05        | ≈ $0.14            |
+| Haiku 4.5                  | ≈ $0.29        | ≈ $0.86            |
+| **the five arms together** | **≈ $1.01**    | **≈ $3.03**        |
+| Opus 5 (optional)          | ≈ $0.91        | ≈ $2.73            |
+
+So about $5 of OpenRouter credit covers the five-arm comparison at three
+repetitions with room for re-plans; add about $3 for Opus. Every arm fits the
+default $3 cap on its own. The report's measured `≈ $` line and OpenRouter's own
+`provider-reported cost` line are the numbers to compare, not this table. An
+account that runs dry mid-run gets a 402, which the report words as "the
+OpenRouter account is out of credits" — a top-up, not a model failure.
+
+**Caveats — read before quoting a number.**
+
+- **Latency is not production latency.** Every call takes an extra hop through
+  OpenRouter, and it sends keepalive comments while a model works. Compare arms
+  with each other and with the Sonnet 5 control; take final latency numbers
+  from direct keys.
+- **Caching differs from production.** The Claude rows use OpenRouter's
+  top-level automatic `cache_control`, not the product's own breakpoints, and
+  OpenRouter uses sticky routing to keep a cache warm. Cached cost and cached
+  latency here will not match a direct run.
+- **Claude through a translation layer.** The product speaks Anthropic's own
+  Messages API; these rows speak chat completions. Whether `reasoning.effort:
+low` reaches Claude as the product's adaptive-thinking-at-low is UNVERIFIED —
+  the report's `reply controls AS SENT` line shows what went out.
+- ⛔ **No zero data retention for first-party Anthropic or OpenAI through
+  OpenRouter** — its ZDR list has no endpoint for either. **Synthetic fixture
+  pages only.** Never send a real customer's page, a real account's text or a
+  real credential through this key. The live corpus is fixtures by
+  construction; keep it that way.
+
+**Proving it without a key.** `agent-eval-live-provider-bake-off.test.ts` drives
+the OpenRouter rows end to end against `openRouterStandIn` in
+`_lib/stand-in-chat-provider.ts`, which answers the way OpenRouter's docs say it
+does: it routes by the request's `provider` object (serving an unpinned request
+from the wrong host, as the real router may), stamps each chunk with the host
+that served it, opens with a keepalive comment, reports usage with `cost`,
+refuses a pin it cannot honour with the documented 503, and answers 402 once the
+credit is spent. `the-direct-chat-wire-does-not-move-when-openrouter-is-added`
+pins every DIRECT provider's request byte for byte, so the routing object,
+`reasoning` and `cache_control` are proved to reach OpenRouter rows only.
+
+### The Phase 0 tasks: other scripts, and two messages by design
+
+`L-ZH` (a tea-house menu in Chinese, asked about in Chinese) and `L-RU` (a
+pharmacy's hours in Russian, asked about in Russian) exist so that what a page
+in a non-Latin script costs is **measured, not assumed**: the report's `spend by
+task` table gives each task's input, cache-read, cache-write and output tokens
+and its dollar cost — the meter's estimate and, where the provider says, its own
+figure — beside the English tasks. Both ask for a number, so the criterion does
+not depend on phrasing. Both prompts end in an ASCII `?` on purpose: the
+runtime's read-back gate recognises an ASCII question mark and English
+interrogatives only, so a full-width `？` or a bare `多少钱` gets no answer
+today. That is a product finding, reported; these tasks do not measure it.
+
+`L-TWO-MESSAGES` takes two customer messages **by design**. The customer asks
+to be signed up for a newsletter and does not say which address; nothing on the
+page or in the chat holds one, so the right first reply is a question, and the
+task's `followUp` — the customer's answer — is sent as the second message. A
+question on the first message is therefore not a hand-back that ends the run.
+The form turns away any other address and records it, so a model that invents
+one fails visibly rather than passing by luck. The report records, per
+repetition, whether the first reply asked (`firstReplyAsked`).

@@ -42,8 +42,10 @@ import {
 import { LIVE_TASKS, type LiveTask } from './_lib/live-tasks.js';
 import {
   chatStandInProvider,
+  openRouterStandIn,
   standInChatUsage,
   type ChatStandInModel,
+  type OpenRouterStandInHost,
 } from './_lib/stand-in-chat-provider.js';
 
 const OPTED_IN = { EVAL_LIVE: '1', [LIVE_ENTRY_ENV_NAME]: LIVE_ENTRY_MARKER };
@@ -171,10 +173,19 @@ describe('live tier — EVAL_LIVE_MODEL takes a provider-qualified id, and the k
       expect(LIVE_HOW_TO_RUN).toContain(row.provider.keyEnvVar);
     }
     const readme = readFileSync(new URL('./README.md', import.meta.url), 'utf8');
+    // ⛔ ONE assignment is allowed, and only in the README: the value read from
+    // the macOS keychain INSIDE a command substitution. History records the
+    // text `$(security …)`, never the key, and the value reaches only that one
+    // process's environment. Anything else after `NAME=` is a key on a line.
+    const fromKeychain = (name: string): string =>
+      `${name}="$(security find-generic-password -s ${name} -w)"`;
     for (const name of ALL_PROVIDER_KEY_ENV_NAMES) {
       expect(LIVE_HOW_TO_RUN).not.toMatch(new RegExp(`${name}\\s*=`));
-      expect(readme).not.toMatch(new RegExp(`${name}\\s*=`));
+      expect(readme.split(fromKeychain(name)).join('')).not.toMatch(new RegExp(`${name}\\s*=`));
     }
+    // Positive control on that exemption: the README does document the keychain
+    // form for the one-key comparison, so the split above removed something real.
+    expect(readme).toContain(fromKeychain('OPENROUTER_API_KEY'));
     // The README carries the bake-off command for every row.
     for (const row of CHAT_PLANNER_MODELS) {
       expect(readme).toContain(`EVAL_LIVE_MODEL=${row.qualifiedId}`);
@@ -389,6 +400,242 @@ describe('live tier — ⛔ no provider key, for ANY provider, reaches any outpu
         JSON.stringify(report),
         renderLiveReport(report),
       ]) {
+        for (const [name, value] of SENTINELS) expect(output.includes(value), name).toBe(false);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── ONE OPENROUTER KEY ────────────────────────────────────────────────────
+
+const OR_LUNA = 'openrouter:openai/gpt-5.6-luna';
+const OR_LUNA_ROW = CHAT_PLANNER_MODELS.find((m) => m.qualifiedId === OR_LUNA)!;
+const OR_SONNET = 'openrouter:anthropic/claude-sonnet-5';
+const OR_KEY = SENTINELS.get('OPENROUTER_API_KEY')!;
+
+/** What OpenRouter's catalogue lists for the two models these tests route,
+ *  CHEAPEST FIRST — so an unpinned request lands on a host the row never named. */
+const HOSTS: Readonly<Record<string, ReadonlyArray<OpenRouterStandInHost>>> = {
+  'openai/gpt-5.6-luna': [
+    { slug: 'azure', name: 'Azure', structuredOutputs: true },
+    { slug: 'openai', name: 'OpenAI', structuredOutputs: true },
+  ],
+  'anthropic/claude-sonnet-5': [
+    { slug: 'amazon-bedrock', name: 'Amazon Bedrock', structuredOutputs: false },
+    { slug: 'anthropic', name: 'Anthropic', structuredOutputs: true },
+  ],
+};
+
+function openRouterSuite(
+  model: string,
+  tasks: ReadonlyArray<LiveTask>,
+  standIn: ReturnType<typeof openRouterStandIn>,
+  overrides: Partial<LiveSuiteArgs> = {},
+) {
+  const provider = chatStandInProvider({ model: standIn.model, expectedKey: OR_KEY });
+  const args: LiveSuiteArgs = {
+    tasks,
+    apiKey: OR_KEY,
+    keySource: 'OPENROUTER_API_KEY',
+    model,
+    providerKeys: SENTINELS,
+    reps: 1,
+    maxTurns: 2,
+    caps: DEFAULT_LIVE_CAPS,
+    gitSha: 'test',
+    providerFetch: provider.fetch,
+    retryBackoffMs: 0,
+    pageAgesWhileModelThinks: () => 0,
+    runId: 'openrouter-plumbing',
+    ...overrides,
+  };
+  return { args, provider };
+}
+
+describe('live tier — ONE OpenRouter key runs the comparison, pinned, capped and scrubbed', () => {
+  it('OPENROUTER_API_KEY enables every openrouter: row, and is the ONLY key that does — an OpenAI or Anthropic key never stands in for it', () => {
+    expect(ALL_PROVIDER_KEY_ENV_NAMES).toContain('OPENROUTER_API_KEY');
+    const rows = CHAT_PLANNER_MODELS.filter((m) => m.provider.id === 'openrouter');
+    expect(rows.length).toBeGreaterThanOrEqual(5);
+    for (const row of rows) {
+      const config = readLiveConfig({
+        ...OPTED_IN,
+        ...SENTINEL_ENV,
+        EVAL_LIVE_MODEL: row.qualifiedId,
+      });
+      expect(config, row.qualifiedId).toMatchObject({
+        enabled: true,
+        model: row.qualifiedId,
+        apiKey: OR_KEY,
+        apiKeySource: 'OPENROUTER_API_KEY',
+      });
+    }
+    const withoutIt = { ...SENTINEL_ENV };
+    delete withoutIt.OPENROUTER_API_KEY;
+    const config = readLiveConfig({ ...OPTED_IN, ...withoutIt, EVAL_LIVE_MODEL: OR_LUNA });
+    expect(config.enabled).toBe(false);
+    if (config.enabled) return;
+    expect(config.why).toContain('OPENROUTER_API_KEY');
+    for (const value of SENTINELS.values()) expect(config.why).not.toContain(value);
+  });
+
+  it('the README runs every openrouter: row with the key read from the keychain, and names the control and the caveats', () => {
+    const readme = readFileSync(new URL('./README.md', import.meta.url), 'utf8');
+    for (const row of CHAT_PLANNER_MODELS.filter((m) => m.provider.id === 'openrouter')) {
+      expect(readme).toMatch(
+        new RegExp(
+          `OPENROUTER_API_KEY="\\$\\(security find-generic-password -s OPENROUTER_API_KEY -w\\)" \\\\\\n\\s*EVAL_LIVE=1 EVAL_LIVE_MODEL=${row.qualifiedId.replace(/[./]/g, (c) => `\\${c}`)} `,
+        ),
+      );
+    }
+    for (const phrase of [
+      'like-for-like CONTROL',
+      'extra hop',
+      'Caching differs',
+      'Synthetic fixture',
+      'zero data retention',
+    ]) {
+      expect(readme, phrase).toContain(phrase);
+    }
+  });
+
+  it('the sighted reference passes through the stand-in router; EVERY call is pinned, served by the named host, and priced at list + the 5.5% fee — with OpenRouter’s own cost beside it', async () => {
+    const standIn = openRouterStandIn({
+      hosts: HOSTS,
+      creditUsd: 10,
+      costPerCallUsd: 0.0005,
+      inner: chatReference('L-READ'),
+    });
+    const { args, provider } = openRouterSuite(OR_LUNA, [task('L-READ')], standIn);
+    const { report } = await runLiveSuite(args);
+    expect(report.tasks[0]?.reps[0]).toMatchObject({ outcome: 'pass', passedOnTurn: 1 });
+    expect(report).toMatchObject({ providerId: 'openrouter', keySource: 'OPENROUTER_API_KEY' });
+    expect(
+      provider.log.urls.every((u) => u === 'https://openrouter.ai/api/v1/chat/completions'),
+    ).toBe(true);
+    expect(provider.log.bearerMatched.every(Boolean)).toBe(true);
+    // The pin, on every request, and where each one landed.
+    expect(standIn.log.routing).toEqual(
+      standIn.log.routing.map(() => ({
+        only: ['openai'],
+        allow_fallbacks: false,
+        require_parameters: true,
+      })),
+    );
+    expect(standIn.log.servedBy.every((s) => s === 'openai')).toBe(true);
+    expect(report.provider.servedBy).toEqual(['OpenAI']);
+    expect(report.routing).toContain(
+      'provider.only ["openai"], allow_fallbacks false, require_parameters true',
+    );
+    expect(report.requestControls.effortSent).toEqual([
+      'answer:reasoning.effort none',
+      'plan:reasoning.effort none',
+    ]);
+    // Priced at the fee-inclusive table price, not the upstream's bare list.
+    expect(OR_LUNA_ROW.prices.inputUsdPerMTok).toBeCloseTo(0.2 * 1.055, 9);
+    const expectedUsd =
+      (3952 * OR_LUNA_ROW.prices.inputUsdPerMTok +
+        2048 * OR_LUNA_ROW.prices.cachedInputUsdPerMTok +
+        400 * OR_LUNA_ROW.prices.outputUsdPerMTok) /
+      1_000_000;
+    expect(report.spend.estimatedUsd).toBe(Math.round(expectedUsd * 100) / 100);
+    expect(report.spend.providerReportedUsd).toBeCloseTo(0.001, 12);
+    // …and per TASK, which is where a non-Latin page's cost is read.
+    expect(report.tasks[0]?.spend).toMatchObject({
+      inputTokens: 3952,
+      outputTokens: 400,
+      cacheReadTokens: 2048,
+    });
+    expect(report.tasks[0]?.spend.estimatedUsd).toBeCloseTo(expectedUsd, 12);
+    expect(report.tasks[0]?.spend.providerReportedUsd).toBeCloseTo(0.001, 12);
+    const text = renderLiveReport(report);
+    expect(text).toContain('served by [OpenAI]');
+    expect(text).toContain('provider-reported cost — $0.0010');
+    expect(text).toContain('spend by task');
+  });
+
+  it('positive control on the router: a request WITHOUT the pin is served by whatever host is cheapest — which is what the pin exists to stop', () => {
+    const standIn = openRouterStandIn({
+      hosts: HOSTS,
+      creditUsd: 10,
+      costPerCallUsd: 0.0005,
+      inner: () => ({ kind: 'reply', text: '{}' }),
+    });
+    standIn.model(
+      {
+        model: 'openai/gpt-5.6-luna',
+        system: null,
+        stream: true,
+        purpose: 'plan',
+        messages: [],
+        body: { model: 'openai/gpt-5.6-luna', response_format: { type: 'json_schema' } },
+      },
+      0,
+    );
+    expect(standIn.log.servedBy).toEqual(['azure']);
+  });
+
+  it('⛔ a pinned host that cannot serve the request is REFUSED, never substituted: no call lands elsewhere, and the report says the pin held and no other host was tried', async () => {
+    // The pinned host lacks structured outputs here; Bedrock is available and
+    // cheaper — and must not be used.
+    const hosts = {
+      'anthropic/claude-sonnet-5': [
+        { slug: 'amazon-bedrock', name: 'Amazon Bedrock', structuredOutputs: true },
+        { slug: 'anthropic', name: 'Anthropic', structuredOutputs: false },
+      ],
+    };
+    const standIn = openRouterStandIn({
+      hosts,
+      creditUsd: 10,
+      costPerCallUsd: 0.0005,
+      inner: chatReference('L-READ'),
+    });
+    const { args } = openRouterSuite(OR_SONNET, [task('L-READ')], standIn, { maxTurns: 1 });
+    const { report } = await runLiveSuite(args);
+    expect(standIn.log.servedBy.every((s) => s === null)).toBe(true);
+    expect(report.tasks[0]?.passed).toBe(0);
+    expect(report.provider.servedBy).toEqual([]);
+    const plan = report.tasks[0]?.reps[0]?.turns[0]?.plans[0];
+    expect(plan?.result).toBe('threw');
+    expect(plan?.error).toContain('the pinned upstream "anthropic" could not serve this request');
+    expect(plan?.error).toContain('no other host was tried');
+    expect(report.provider.errors.join(' ')).toContain('No available model provider');
+    // A refused call was not charged.
+    expect(report.spend.estimatedUsd).toBe(0);
+  });
+
+  it('⛔ an account out of credit (402) is worded as a top-up, not a model failure; it is not retried; and no key reaches any output', async () => {
+    const standIn = openRouterStandIn({
+      hosts: HOSTS,
+      creditUsd: 0.0005,
+      costPerCallUsd: 0.0005,
+      inner: chatReference('L-READ'),
+    });
+    const { args } = openRouterSuite(OR_LUNA, [task('L-READ'), task('L-FLOW')], standIn);
+    const { report, secrets } = await runLiveSuite(args);
+    const errors = report.tasks.flatMap((t) =>
+      t.reps.flatMap((r) =>
+        r.turns.flatMap((turn) => [
+          ...turn.plans.flatMap((p) => (p.error === undefined ? [] : [p.error])),
+          ...turn.answerErrors,
+        ]),
+      ),
+    );
+    const outOfCredit = errors.filter((e) =>
+      e.includes('the OpenRouter account is out of credits'),
+    );
+    expect(outOfCredit.length).toBeGreaterThan(0);
+    // Each CALL that met the 402 made exactly ONE request: a top-up is not a
+    // transient, and retrying it would only spend another round trip.
+    const refusedRequests = standIn.log.servedBy.filter((s) => s === null).length;
+    expect(refusedRequests).toBe(outOfCredit.length);
+    expect(report.tasks[0]?.passed).toBe(0);
+    const dir = resolve(tmpdir(), `driftstack-agent-eval-openrouter-${String(process.pid)}`);
+    try {
+      const written = writeLiveReport(report, secrets, dir);
+      for (const output of [written.json, written.text, JSON.stringify(report)]) {
         for (const [name, value] of SENTINELS) expect(output.includes(value), name).toBe(false);
       }
     } finally {

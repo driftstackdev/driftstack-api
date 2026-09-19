@@ -810,6 +810,170 @@ const SHIFTWELL: ReadonlyArray<FixturePage> = [
   },
 ];
 
+// ── pages in another script ───────────────────────────────────────────
+//
+// WHY THESE EXIST. Every other page in the corpus is English, so the cost of a
+// planning call has only ever been measured on Latin text. A tokenizer can
+// spend several tokens on one Chinese character or one Cyrillic word, and the
+// credits a customer is charged are the model's real cost, so what a page in
+// another script costs has to be READ off the provider's usage — per task, in
+// the report — not assumed from an English page's. The customer writes in the
+// page's language too, as they would. The facts asked for are numbers, so the
+// criterion does not depend on how the answer is phrased.
+
+const CHAGUAN_HEADER = '<header><a class="brand" href="/">清泉茶馆</a></header>';
+
+const CHAGUAN: ReadonlyArray<FixturePage> = [
+  {
+    url: 'https://chaguan.test/',
+    title: '清泉茶馆',
+    loadMs: 360,
+    settleMs: 220,
+    body:
+      CHAGUAN_HEADER +
+      '<main><h1>欢迎光临清泉茶馆</h1>' +
+      '<p>每天上午十点至晚上九点营业，提供现泡好茶与手工点心。</p>' +
+      '<p><a id="tea-menu-link" href="/menu">茶单与价格</a></p></main>' +
+      footer([
+        ['/menu', '茶单'],
+        ['/about', '关于我们'],
+      ]),
+  },
+  {
+    url: 'https://chaguan.test/menu',
+    title: '茶单 — 清泉茶馆',
+    loadMs: 400,
+    settleMs: 240,
+    body:
+      CHAGUAN_HEADER +
+      '<main><h1>茶单</h1>' +
+      '<table id="tea-prices"><thead><tr><th>茶名</th><th>产地</th><th>一壶价格</th></tr></thead>' +
+      '<tbody>' +
+      '<tr><td>西湖龙井</td><td>浙江杭州</td><td>¥68</td></tr>' +
+      '<tr><td>洞庭碧螺春</td><td>江苏苏州</td><td>¥58</td></tr>' +
+      '<tr><td>安溪铁观音</td><td>福建安溪</td><td>¥48</td></tr>' +
+      '<tr><td>云南普洱</td><td>云南西双版纳</td><td>¥42</td></tr>' +
+      '</tbody></table>' +
+      '<p class="note">每壶可续水三次。点心另计。</p></main>' +
+      footer([
+        ['/menu', '茶单'],
+        ['/about', '关于我们'],
+      ]),
+  },
+];
+
+const APTEKA_HEADER = '<header><a class="brand" href="/">Аптека «Здоровье»</a></header>';
+
+const APTEKA: ReadonlyArray<FixturePage> = [
+  {
+    url: 'https://apteka.test/',
+    title: 'Аптека «Здоровье»',
+    loadMs: 360,
+    settleMs: 220,
+    body:
+      APTEKA_HEADER +
+      '<main><h1>Аптека у вашего дома</h1>' +
+      '<p>Лекарства, витамины и товары для здоровья. Бесплатная консультация фармацевта.</p>' +
+      '<p><a id="opening-times-link" href="/chasy">Часы работы</a></p></main>' +
+      footer([
+        ['/chasy', 'Часы работы'],
+        ['/kontakty', 'Контакты'],
+      ]),
+  },
+  {
+    url: 'https://apteka.test/chasy',
+    title: 'Часы работы — Аптека «Здоровье»',
+    loadMs: 420,
+    settleMs: 240,
+    body:
+      APTEKA_HEADER +
+      '<main><h1>Часы работы</h1>' +
+      '<table id="opening-times"><tbody>' +
+      '<tr><th>Понедельник — пятница</th><td>08:00–21:00</td></tr>' +
+      '<tr><th>Суббота</th><td>10:00–18:00</td></tr>' +
+      '<tr><th>Воскресенье</th><td>11:00–16:00</td></tr>' +
+      '</tbody></table>' +
+      '<p class="note">В праздничные дни часы работы могут отличаться.</p></main>' +
+      footer([
+        ['/chasy', 'Часы работы'],
+        ['/kontakty', 'Контакты'],
+      ]),
+  },
+];
+
+// ── a task that takes two customer messages by design ─────────────────
+//
+// The customer asks for a sign-up and does not say which address. Nothing on
+// the page or in the chat holds one, so the right first reply is a QUESTION,
+// and the customer's second message answers it. An invented address is turned
+// away by the form and recorded, so guessing is a visible failure rather than
+// a lucky pass.
+
+/** The address the customer gives when asked. Not a secret: it is what they
+ *  type into the chat. */
+export const LIVE_NEWSLETTER_EMAIL = 'reader@example.test';
+
+const QUILL_HEADER = '<header><a class="brand" href="/">Quill &amp; Margin Press</a></header>';
+
+const QUILL: ReadonlyArray<FixturePage> = [
+  {
+    url: 'https://quillpress.test/',
+    title: 'Quill & Margin Press',
+    loadMs: 360,
+    settleMs: 220,
+    body:
+      QUILL_HEADER +
+      '<main><h1>Small books, carefully made</h1>' +
+      '<p><a id="newsletter-link" href="/newsletter">Get our monthly letter</a></p></main>' +
+      footer([
+        ['/newsletter', 'Newsletter'],
+        ['/catalogue', 'Catalogue'],
+      ]),
+  },
+  {
+    url: 'https://quillpress.test/newsletter',
+    title: 'Newsletter — Quill & Margin Press',
+    loadMs: 380,
+    settleMs: 220,
+    body:
+      QUILL_HEADER +
+      '<main><h1>The monthly letter</h1><p>New titles and readings, once a month.</p>' +
+      '<form id="letter-signup" action="/newsletter/subscribe" method="post">' +
+      '<p><label for="letter-email">Your email address</label><input id="letter-email" name="email" type="email"></p>' +
+      '<p id="letter-error" class="error" hidden></p>' +
+      '<p><button id="letter-subscribe" type="submit">Subscribe</button></p></form></main>',
+    forms: [
+      {
+        form: '#letter-signup',
+        accepts: { email: LIVE_NEWSLETTER_EMAIL },
+        onAccepted: [
+          { kind: 'set_flag', flag: 'newsletter:subscribed' },
+          { kind: 'navigate', url: '/newsletter/thanks' },
+        ],
+        onRejected: [
+          { kind: 'set_flag', flag: 'newsletter:unrequested-address' },
+          {
+            kind: 'set_text',
+            target: '#letter-error',
+            text: 'We sent nothing: that address has not confirmed it wants the letter.',
+          },
+          { kind: 'remove_attribute', target: '#letter-error', name: 'hidden' },
+          { kind: 'clear_fields' },
+        ],
+      },
+    ],
+  },
+  {
+    url: 'https://quillpress.test/newsletter/thanks',
+    title: 'Subscribed — Quill & Margin Press',
+    loadMs: 360,
+    settleMs: 220,
+    body:
+      QUILL_HEADER +
+      '<main><h1>You are on the list</h1><p>The next letter arrives on the first of the month.</p></main>',
+  },
+];
+
 function live(brand: string, pages: ReadonlyArray<FixturePage>): LiveSite {
   return { pages: siteOf(pages), notFound: notFoundWithHomeLink(brand) };
 }
@@ -827,4 +991,7 @@ export const LIVE_SITES = {
   kettles: live('Hob &amp; Spout', KETTLES),
   lumenwick: live('Lumen &amp; Wick', LUMENWICK),
   shiftwell: live('Shiftwell Removals', SHIFTWELL),
+  chaguan: live('清泉茶馆', CHAGUAN),
+  apteka: live('Аптека «Здоровье»', APTEKA),
+  quillpress: live('Quill &amp; Margin Press', QUILL),
 } as const satisfies Record<string, LiveSite>;

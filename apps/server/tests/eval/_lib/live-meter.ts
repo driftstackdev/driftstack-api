@@ -103,6 +103,17 @@ export interface MeteredCall {
   replyText: string | null;
   /** A transport failure's message. Never a header, never a request body. */
   error: string | null;
+  /**
+   * What the provider SAID the call cost, in US dollars — OpenRouter's
+   * `usage.cost` (its credits). Null when not reported. Kept beside the
+   * meter's own estimate, never instead of it: the caps are enforced on the
+   * estimate, so a provider that stops reporting cost cannot switch them off.
+   */
+  providerReportedUsd: number | null;
+  /** The upstream that served the call, as an aggregator stamps it on each
+   *  chunk (OpenRouter's `provider`). Null when the wire does not say. How a
+   *  report shows that a pinned run was served where it was pinned. */
+  servedBy: string | null;
 }
 
 export interface MeterTotals {
@@ -118,6 +129,9 @@ export interface MeterTotals {
   /** Chat calls whose usage never arrived, counted in `totalTokens` and
    *  `estimatedUsd` at a CEILING — see `unreportedUsageCeiling`. */
   callsPricedAtCeiling: number;
+  /** The sum of what the provider said the calls cost, over the calls it said
+   *  it for; null when it never said. Informational — see `MeteredCall`. */
+  providerReportedUsd: number | null;
 }
 
 /** The reply ceiling assumed for a chat call whose request named none. The
@@ -339,7 +353,16 @@ export class LiveMeter {
       callsPricedAtCeiling: this.calls.filter(
         (call) => unreportedUsageCeiling(call, this.pricing) !== null,
       ).length,
+      providerReportedUsd: this.calls.some((call) => call.providerReportedUsd !== null)
+        ? this.calls.reduce((total, call) => total + (call.providerReportedUsd ?? 0), 0)
+        : null,
     };
+  }
+
+  /** One recorded call at this run's prices, as REPORTED — a call with no
+   *  usage is $0 here; only the caps count it at its ceiling. */
+  priceOf(call: MeteredCall): number {
+    return priceCallUsd(call, this.pricing);
   }
 
   /** The fetch the product's decomposer is constructed with. */
@@ -389,6 +412,8 @@ export class LiveMeter {
       providerError: null,
       replyText: null,
       error: null,
+      providerReportedUsd: null,
+      servedBy: null,
     };
     this.calls.push(call);
     const startedAt = this.now();
@@ -480,6 +505,8 @@ function readReplyControls(
       output_config?: { effort?: unknown; format?: unknown };
       // Chat completions: the reasoning knob and the reply constraint.
       reasoning_effort?: unknown;
+      // OpenRouter's unified spelling of the same knob.
+      reasoning?: { effort?: unknown };
       response_format?: unknown;
     };
     return {
@@ -489,7 +516,9 @@ function readReplyControls(
           ? body.output_config.effort
           : typeof body.reasoning_effort === 'string'
             ? `reasoning_effort ${body.reasoning_effort}`
-            : null,
+            : typeof body.reasoning?.effort === 'string'
+              ? `reasoning.effort ${body.reasoning.effort}`
+              : null,
       structuredOutput:
         body.output_config?.format !== undefined || body.response_format !== undefined,
     };
@@ -576,6 +605,10 @@ function readChatUsageInto(usage: unknown, call: MeteredCall): void {
     call.thinkingTokens =
       numberOrNull((completion as Record<string, unknown>).reasoning_tokens) ?? call.thinkingTokens;
   }
+  // OpenRouter's own figure for the call. A negative or non-numeric one is not
+  // a cost, and is left unreported rather than summed.
+  const cost = numberOrNull(u.cost);
+  if (cost !== null && cost >= 0) call.providerReportedUsd = cost;
 }
 
 function readStreamedUsage(text: string, call: MeteredCall): void {
@@ -606,6 +639,7 @@ function readStreamedUsage(text: string, call: MeteredCall): void {
       // A chat-completions chunk: `choices[0].delta`, and usage on the chunk
       // that carries it (usually the last, with no choices).
       readChatUsageInto(frame.usage, call);
+      if (typeof frame.provider === 'string') call.servedBy = frame.provider;
       const choice = Array.isArray(frame.choices)
         ? (frame.choices[0] as Record<string, unknown> | undefined)
         : undefined;
@@ -630,6 +664,7 @@ function readBufferedUsage(text: string, call: MeteredCall): void {
     // chat-completions classes; read with the Messages API's field names it
     // would be zero, and a zero turns both spend caps off for that provider.
     readChatUsageInto(envelope.usage, call);
+    if (typeof envelope.provider === 'string') call.servedBy = envelope.provider;
     const choice = envelope.choices[0] as Record<string, unknown> | undefined;
     if (typeof choice?.finish_reason === 'string') call.stopReason = choice.finish_reason;
     const message = choice?.message as Record<string, unknown> | undefined;

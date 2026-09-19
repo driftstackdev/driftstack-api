@@ -16,6 +16,7 @@ import type { CredentialBag } from '../../../src/services/agent-decomposer.js';
 import {
   LIVE_LOGIN_PASSWORD,
   LIVE_LOGIN_USERNAME,
+  LIVE_NEWSLETTER_EMAIL,
   LIVE_SITES,
   type LiveSite,
 } from './live-sites.js';
@@ -87,6 +88,14 @@ export interface LiveTask {
   /** Saved credentials this chat holds, when the task needs them. The planner
    *  is told the NAMES; only the executor ever sees the values. */
   credentials?: CredentialBag;
+  /**
+   * A task that takes TWO customer messages by design: the first withholds a
+   * fact only the customer has, the right reply to it is a question, and this
+   * is the customer's answer — sent as the second message. ⛔ ONLY what a
+   * customer would type, like `prompt`. A question on the first message is
+   * then not a hand-back that ends the run (see `live-runner.ts`).
+   */
+  followUp?: string;
   success: LiveCriterion;
 }
 
@@ -223,6 +232,55 @@ export const LIVE_TASKS: ReadonlyArray<LiveTask> = [
       flags: ['quote:requested'],
       endsOnUrl: 'https://shiftwell.test/quote/estimate',
       answer: { pattern: /£\s?420/, label: '£420' },
+    },
+  },
+  {
+    id: 'L-ZH',
+    // "Open chaguan.test's tea menu and tell me how much a pot of West Lake
+    // Longjing costs?" Written as a Chinese-speaking customer would write it.
+    // ⛔ THE ASCII "?" IS LOAD-BEARING TODAY. The runtime decides whether a
+    // message asks for information (and so earns a read-back) from an ASCII
+    // question mark or an ENGLISH interrogative; a full-width "？" or a bare
+    // 多少钱 is read as an action, and the customer gets no answer. Reported to
+    // the runtime's owners as a finding; until it is fixed this task measures
+    // token cost and planning, not that gate.
+    prompt: '打开 chaguan.test 的茶单，告诉我一壶西湖龙井多少钱?',
+    covers: 'a page in Chinese, asked about in Chinese (non-Latin token cost)',
+    kind: 'goal',
+    site: LIVE_SITES.chaguan,
+    success: {
+      endsOnUrl: 'https://chaguan.test/menu',
+      answer: { pattern: /(?<!\d)68(?!\d)/, label: '¥68 a pot' },
+    },
+  },
+  {
+    id: 'L-RU',
+    // "Go to apteka.test and tell me until what time the pharmacy is open on
+    // Saturday?" The hours are one link away from the home page. The "?" is
+    // load-bearing for the same reason as L-ZH's.
+    prompt: 'зайди на apteka.test и скажи, до скольки аптека работает в субботу?',
+    covers: 'a page in Russian (Cyrillic), asked about in Russian (non-Latin token cost)',
+    kind: 'goal',
+    site: LIVE_SITES.apteka,
+    success: {
+      endsOnUrl: 'https://apteka.test/chasy',
+      answer: { pattern: /18[:.]00/, label: 'open until 18:00 on Saturday' },
+    },
+  },
+  {
+    id: 'L-TWO-MESSAGES',
+    prompt: 'sign me up for the monthly letter on quillpress.test',
+    // Said only once the agent asks: nothing in the chat or on the page holds it.
+    followUp: `Please use ${LIVE_NEWSLETTER_EMAIL}`,
+    covers:
+      'a task that takes two customer messages by design: the first reply asks, the second message answers',
+    kind: 'goal',
+    site: LIVE_SITES.quillpress,
+    success: {
+      flags: ['newsletter:subscribed'],
+      // An address the customer never gave, submitted anyway.
+      forbiddenFlags: ['newsletter:unrequested-address'],
+      endsOnUrl: 'https://quillpress.test/newsletter/thanks',
     },
   },
   {

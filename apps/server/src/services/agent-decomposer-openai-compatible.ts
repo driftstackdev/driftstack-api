@@ -3,8 +3,11 @@
 // ⛔ EVAL-ONLY UNTIL THE OWNER PICKS A PROVIDER. Every shortlisted challenger to
 // Claude — OpenAI, Google's compatibility endpoint, Baseten, Fireworks,
 // Cerebras, Mistral, Inception — speaks this one wire, so one adapter serves
-// the whole bake-off. Nothing in production constructs it; the factory that can
-// is not wired into bootstrap, and no non-Claude id is in any public model enum.
+// the whole bake-off. So does OpenRouter, which reaches several of them (and
+// Claude) through ONE key; its few extra request members are sent only for its
+// rows (see `OpenRouterRoute`). Nothing in production constructs it; the
+// factory that can is not wired into bootstrap, and no non-Claude id is in any
+// public model enum.
 //
 // What it shares with the Claude adapter is everything that is not wire format,
 // imported from `agent-planner-contract.ts`: both prompts, both reply schemas,
@@ -109,6 +112,48 @@ export interface ChatCompletionsTarget {
   reasoningEffort: string | null;
   maxTokensParam: ChatMaxTokensParam;
   prices: ChatModelPrices;
+  /** Present ONLY for a model reached through OpenRouter; see `OpenRouterRoute`.
+   *  Absent, the request is exactly what every direct provider has always been
+   *  sent — `the-direct-chat-wire-does-not-move-when-openrouter-is-added` pins
+   *  that byte for byte. */
+  openRouter?: OpenRouterRoute;
+}
+
+/**
+ * How a request through OpenRouter is pinned and dressed. Every member below is
+ * sent only when the target carries this object.
+ *
+ *  · `only` — the ONE upstream the row names, sent as `provider: {only,
+ *    allow_fallbacks: false, require_parameters: true}`. Without it OpenRouter
+ *    routes by price and uptime, so a run could measure a different host from
+ *    one call to the next, or one that ignores `response_format` — and the
+ *    report would name a model it did not measure. With fallbacks off, a host
+ *    that cannot serve the request is an ERROR (see `openRouterStatusMessage`),
+ *    never a quiet substitute.
+ *    https://openrouter.ai/docs/features/provider-routing (fetched 2026-09-19:
+ *    "allow_fallbacks … Default: true"; "require_parameters … Only use providers
+ *    that support all parameters in your request").
+ *  · reasoning is sent as OpenRouter's unified `reasoning: {effort}`, the control
+ *    its reasoning guide documents for every family, rather than the OpenAI-only
+ *    `reasoning_effort` spelling.
+ *    https://openrouter.ai/docs/use-cases/reasoning-tokens
+ *  · `cacheControl` — a top-level `cache_control: {type: "ephemeral"}`, which
+ *    OpenRouter documents as Anthropic's AUTOMATIC caching (the breakpoint goes
+ *    on the last cacheable block). Anthropic caches nothing without a marker;
+ *    OpenAI and Gemini cache on their own, so only Anthropic-routed rows set it.
+ *    https://openrouter.ai/docs/features/prompt-caching
+ *
+ * Nothing is sent to ask for usage: OpenRouter documents usage as always
+ * included in the last SSE message, and `usage: {include: true}` as deprecated
+ * with no effect (https://openrouter.ai/docs/use-cases/usage-accounting). The
+ * `stream_options` member every chat request carries is left as it is — the
+ * same page calls it deprecated and without effect, so it is harmless there and
+ * load-bearing for every direct provider.
+ */
+export interface OpenRouterRoute {
+  /** OpenRouter's slug for the one upstream allowed, e.g. `anthropic`. */
+  only: string;
+  cacheControl: boolean;
 }
 
 // The ceilings the Claude adapter uses, for the same reason: they bound
@@ -179,6 +224,11 @@ interface ChatUsageParts {
   completionTokens: number;
   /** `completion_tokens_details.reasoning_tokens`, when reported. */
   reasoningTokens?: number;
+  /** OpenRouter's `usage.cost` — what the call cost in its credits (US
+   *  dollars), when reported. Informational: the budget debit is always the
+   *  token count weighted by the table's prices, so a provider that stops
+   *  reporting cost cannot turn the debit off. */
+  reportedCostUsd?: number;
 }
 
 type ChatControl = 'schema' | 'reasoning';
@@ -328,18 +378,31 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
         : allowed.schema && format === 'json_schema'
           ? { type: 'json_schema', json_schema: { name: schemaName, schema } }
           : null;
+    const route = this.target.openRouter;
+    const effort = allowed.reasoning ? this.target.reasoningEffort : null;
     return JSON.stringify({
       model: this.target.model,
       messages,
       [this.target.maxTokensParam]: maxTokens,
-      ...(allowed.reasoning && this.target.reasoningEffort !== null
-        ? { reasoning_effort: this.target.reasoningEffort }
-        : {}),
+      // The same knob in each dialect's own spelling; see `OpenRouterRoute`.
+      ...(effort === null
+        ? {}
+        : route === undefined
+          ? { reasoning_effort: effort }
+          : { reasoning: { effort } }),
       ...(responseFormat !== null ? { response_format: responseFormat } : {}),
       stream: true,
       // Without this a streamed chat completion reports no usage at all, and a
       // paid call with no usage is a spend nobody can see.
       stream_options: { include_usage: true },
+      // ⛔ LAST, AND ONLY FOR AN OPENROUTER ROW: every direct provider's body is
+      // pinned byte for byte, member order included.
+      ...(route === undefined
+        ? {}
+        : {
+            provider: { only: [route.only], allow_fallbacks: false, require_parameters: true },
+            ...(route.cacheControl ? { cache_control: { type: 'ephemeral' } } : {}),
+          }),
     });
   }
 
@@ -442,7 +505,7 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
           // plain idle timer, that call is aborted and paid for twice.
           rearm(true);
           if (isEventStreamResponse(res)) {
-            reply = await readChatStream(res, label, rearm, bounded);
+            reply = await readChatStream(res, label, rearm, bounded, this.target.openRouter);
           } else {
             // An endpoint that ignored `stream: true`: the ordinary completion.
             reply = readChatCompletion(
@@ -486,7 +549,9 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
       }
       throw new PlannerProviderStatusError(
         res.status,
-        `${label} API ${String(res.status)}: ${errorText.slice(0, 300)}`,
+        this.target.openRouter === undefined
+          ? `${label} API ${String(res.status)}: ${errorText.slice(0, 300)}`
+          : openRouterStatusMessage(res.status, errorText, this.target.openRouter, label),
       );
     }
   }
@@ -549,6 +614,58 @@ function rejectedChatControl(
 }
 
 /**
+ * An OpenRouter refusal, in words that say what actually happened.
+ *
+ * ⛔ WHY NOT THE BODY AS-IS, as every direct provider's is. Two of OpenRouter's
+ * refusals mean something a reader of the report would otherwise get wrong:
+ *
+ *  · 402 is the ACCOUNT, not the model: "insufficient credits. Add more credits
+ *    and retry" (https://openrouter.ai/docs/api-reference/errors). Read as a
+ *    provider failure it looks like the model broke; it is a top-up.
+ *  · 503 is "no available model provider meets your routing requirements" —
+ *    with the row pinned to one upstream and fallbacks OFF, that is the pin
+ *    doing its job: the named host is down, or cannot take a parameter the
+ *    request requires (`require_parameters`). A 404 saying no endpoint matched
+ *    is the same fact. Either way no other host was tried, and the message says
+ *    so, because "the model was unavailable" would invite the fix that defeats
+ *    the pin.
+ *
+ * Every other status keeps the provider's own message, plus the upstream that
+ * produced it when OpenRouter names one (`error.metadata.provider_name`) — a
+ * 400 still names the control it refused, so the drop-and-resend fallback reads
+ * it exactly as it reads a direct provider's.
+ */
+function openRouterStatusMessage(
+  status: number,
+  bodyText: string,
+  route: OpenRouterRoute,
+  label: string,
+): string {
+  let said = bodyText;
+  let upstream: string | null = null;
+  try {
+    const error = asRecord(asRecord(JSON.parse(bodyText))?.error);
+    if (typeof error?.message === 'string') said = error.message;
+    const named = asRecord(error?.metadata)?.provider_name;
+    if (typeof named === 'string' && named.length > 0) upstream = named;
+  } catch {
+    // Not JSON: the raw text is what OpenRouter said.
+  }
+  said = said.slice(0, 300);
+  const head = `${label} API ${String(status)}: `;
+  if (status === 402) {
+    return `${head}the OpenRouter account is out of credits, so no model ran this request — add credits and run again (OpenRouter said: ${said})`;
+  }
+  if (
+    status === 503 ||
+    (status === 404 && /no (allowed |available )?(endpoints?|providers?)/i.test(said))
+  ) {
+    return `${head}the pinned upstream "${route.only}" could not serve this request — it is unavailable, or it does not support a parameter the request requires — and fallbacks are off, so no other host was tried (OpenRouter said: ${said})`;
+  }
+  return `${head}${said}${upstream === null ? '' : ` (upstream: ${upstream})`}`;
+}
+
+/**
  * `promise`, unless this attempt's own controller aborts first (an idle or
  * total timer) — then a plain Error, which the retry policy treats as the
  * network failure a hung upstream is. See `bounded` in `callWithRetry`.
@@ -597,12 +714,20 @@ function parseChatUsage(usage: Record<string, unknown> | null, label: string): C
   const cacheWriteTokens = optional(promptDetails?.cache_write_tokens) ?? 0;
   if (cachedPromptTokens + cacheWriteTokens > promptTokens) throw new Error(invalid);
   const reasoningTokens = optional(asRecord(usage.completion_tokens_details)?.reasoning_tokens);
+  // ⛔ A COST THAT IS NOT A PLAIN NON-NEGATIVE NUMBER IS DROPPED, NOT FATAL —
+  // unlike a token counter. The tokens are what the debit is made of, so a bad
+  // one must stop the call being settled as anything; the cost is a figure for
+  // the report, and a paid, usable reply must not be thrown away over it.
+  const cost = usage.cost;
+  const reportedCostUsd =
+    typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? cost : undefined;
   return {
     promptTokens,
     cachedPromptTokens,
     cacheWriteTokens,
     completionTokens,
     ...(reasoningTokens !== undefined ? { reasoningTokens } : {}),
+    ...(reportedCostUsd !== undefined ? { reportedCostUsd } : {}),
   };
 }
 
@@ -696,6 +821,10 @@ async function readChatStream(
   onChunk: (awaitingFirstText: boolean) => void,
   /** Races each read against the Stop and the attempt's timers. */
   bounded: <T>(promise: Promise<T>) => Promise<T>,
+  /** Set for an OpenRouter row: its mid-stream error frames (`{error: {code,
+   *  message, metadata}}` with `finish_reason: "error"`) are worded as its
+   *  HTTP refusals are. */
+  route?: OpenRouterRoute,
 ): Promise<ChatReply> {
   if (res.body === null) throw new Error(`${label} response envelope was not a JSON object`);
   const reader = res.body.getReader();
@@ -733,7 +862,9 @@ async function readChatStream(
       errors.push(
         new PlannerProviderStatusError(
           status,
-          `${label} API ${String(status)}: ${message.slice(0, 300)}`,
+          route === undefined
+            ? `${label} API ${String(status)}: ${message.slice(0, 300)}`
+            : openRouterStatusMessage(status, JSON.stringify({ error }), route, label),
         ),
       );
       done = true;
@@ -789,4 +920,5 @@ export const __TEST_ONLY__ = {
   parseChatUsage,
   chatBillableTokens,
   rejectedChatControl,
+  openRouterStatusMessage,
 };

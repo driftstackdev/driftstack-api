@@ -15,7 +15,8 @@
 // confirms it (a rejected control is dropped and REMEMBERED by the adapter, and
 // the report says so, so a wrong guess costs one request, not the run).
 //
-// Verified 2026-09-18 by fetching each URL cited, unless a field says otherwise.
+// Verified 2026-09-18 by fetching each URL cited, unless a field says otherwise;
+// the OpenRouter rows on 2026-09-19.
 // Prices are list prices in US dollars per million tokens.
 
 import { CLAUDE_MODELS, AgentModelSchema, type AgentModel } from '@driftstack/api-types';
@@ -29,6 +30,7 @@ import {
   type ChatCompletionsTarget,
   type ChatModelPrices,
   type OpenAICompatibleAgentDecomposerDeps,
+  type OpenRouterRoute,
 } from './agent-decomposer-openai-compatible.js';
 
 /** A provider reached over OpenAI-style chat completions. */
@@ -63,6 +65,18 @@ export interface ChatPlannerModel {
   priceSource: string;
   /** What in this row is NOT confirmed from the provider's current docs. */
   unverified: ReadonlyArray<string>;
+  /**
+   * OpenRouter rows only: the ONE upstream the model is pinned to, and whether
+   * Anthropic's automatic cache marker is sent. See `OpenRouterRoute` for what
+   * reaches the wire, and why a pin with fallbacks off is what makes a run
+   * measure the model it names.
+   */
+  openRouter?: OpenRouterRoute & {
+    /** The upstream as a person names it, for the README and the report. */
+    upstreamLabel: string;
+    /** Where the pinned endpoint's slug, prices and parameters were read. */
+    endpointsSource: string;
+  };
 }
 
 const OPENAI: ChatProvider = {
@@ -120,6 +134,57 @@ const INCEPTION: ChatProvider = {
   keyEnvVar: 'INCEPTION_API_KEY',
   docsUrl: 'https://docs.inceptionlabs.ai/get-started/models',
 };
+
+/**
+ * ONE key for the cross-provider comparison: OpenRouter speaks chat
+ * completions (verified 2026-09-19: "pointing its baseURL to
+ * https://openrouter.ai/api/v1") and reaches Claude, OpenAI, Gemini and the
+ * open-weights hosts behind a single `Authorization: Bearer` key.
+ *
+ * ⛔ FOR THE COMPARISON, NOT FOR PRODUCTION, AND ON SYNTHETIC PAGES ONLY. It is
+ * an extra network hop (latency is one of the two things being chosen on, so
+ * final latency numbers come from direct keys), and OpenRouter's zero-data-
+ * retention list has NO endpoint for first-party Anthropic or first-party
+ * OpenAI (https://openrouter.ai/api/v1/endpoints/zdr, fetched 2026-09-19) — so
+ * nothing but the eval's fixture pages may be sent through it.
+ */
+const OPENROUTER: ChatProvider = {
+  id: 'openrouter',
+  label: 'OpenRouter',
+  baseUrl: 'https://openrouter.ai/api/v1',
+  keyEnvVar: 'OPENROUTER_API_KEY',
+  docsUrl: 'https://openrouter.ai/docs/quickstart',
+};
+
+/**
+ * OpenRouter's platform fee on pay-as-you-go ("Standard") credit: 5.5%
+ * (https://openrouter.ai/pricing, fetched 2026-09-19). Token prices themselves
+ * are the upstream's list price, passed through (each row's endpoints page).
+ *
+ * ⛔ THE FEE IS ON THE CREDIT, SO IT IS ON EVERY TOKEN. A dollar of credit buys
+ * a dollar of list-price tokens and costs $1.055; pricing the cap at list alone
+ * would under-count every call by 5.5%, and the cap must fail towards stopping.
+ */
+export const OPENROUTER_FEE_RATE = 0.055;
+
+/** Upstream list prices with OpenRouter's fee on every token class. Rounded to
+ *  the micro-dollar so the table reads as prices, not float noise. */
+export function withOpenRouterFee(upstream: ChatModelPrices): ChatModelPrices {
+  const fee = (usd: number): number => Math.round(usd * (1 + OPENROUTER_FEE_RATE) * 1e6) / 1e6;
+  return {
+    inputUsdPerMTok: fee(upstream.inputUsdPerMTok),
+    cachedInputUsdPerMTok: fee(upstream.cachedInputUsdPerMTok),
+    cacheWriteUsdPerMTok:
+      upstream.cacheWriteUsdPerMTok === null ? null : fee(upstream.cacheWriteUsdPerMTok),
+    outputUsdPerMTok: fee(upstream.outputUsdPerMTok),
+  };
+}
+
+const OPENROUTER_FEE_SOURCE = '+5.5% OpenRouter fee (https://openrouter.ai/pricing)';
+const OPENROUTER_REASONING_SOURCE = 'https://openrouter.ai/docs/use-cases/reasoning-tokens';
+const OPENROUTER_STRUCTURED_SOURCE = 'https://openrouter.ai/docs/features/structured-outputs';
+const openRouterEndpoints = (slug: string): string =>
+  `https://openrouter.ai/api/v1/models/${slug}/endpoints`;
 
 const GEMINI_PROMO_PRICES: ChatModelPrices = {
   inputUsdPerMTok: 0.75,
@@ -314,6 +379,197 @@ export const CHAT_PLANNER_MODELS: ReadonlyArray<ChatPlannerModel> = [
       'whether reasoning can be switched fully off',
     ],
   },
+
+  // ── THE SAME MODELS THROUGH ONE OPENROUTER KEY ─────────────────────────
+  //
+  // Verified 2026-09-19 against OpenRouter's current docs and each model's
+  // endpoints list (every slug below resolved there). Each row is PINNED to one
+  // upstream — `provider: {only: [that one], allow_fallbacks: false,
+  // require_parameters: true}` — chosen as the first-party host where one
+  // serves structured outputs, so a run measures the model it names on the host
+  // it names, and a host without json_schema is refused rather than routed to.
+  // `max_tokens` everywhere: it is the member every pinned endpoint lists in
+  // its supported parameters, and `require_parameters` routes only to
+  // endpoints that support every parameter sent.
+  {
+    // The like-for-like CONTROL: the product's default model, through the same
+    // hop the challengers take. Its gap to a direct `claude-sonnet-5` run is the
+    // aggregator's own cost in latency and caching, not the model's.
+    qualifiedId: 'openrouter:anthropic/claude-sonnet-5',
+    provider: OPENROUTER,
+    model: 'anthropic/claude-sonnet-5',
+    // The schema as the Claude adapter writes it, no `strict` member: Anthropic
+    // constrains decoding to the schema either way, and this is the schema the
+    // product sends Claude today.
+    replyFormat: 'json_schema',
+    replyFormatSource: OPENROUTER_STRUCTURED_SOURCE,
+    // The product's policy for this model is adaptive thinking at effort low.
+    reasoningEffort: 'low',
+    reasoningSource: OPENROUTER_REASONING_SOURCE,
+    maxTokensParam: 'max_tokens',
+    prices: withOpenRouterFee({
+      inputUsdPerMTok: 2,
+      cachedInputUsdPerMTok: 0.2,
+      cacheWriteUsdPerMTok: 2.5,
+      outputUsdPerMTok: 10,
+    }),
+    priceSource: `${openRouterEndpoints('anthropic/claude-sonnet-5')} (upstream "anthropic") ${OPENROUTER_FEE_SOURCE}`,
+    unverified: [
+      'that reasoning.effort "low" reaches Claude as adaptive thinking at effort low, as the product sends it (OpenRouter\'s reasoning guide describes a thinking-budget mapping for Anthropic models)',
+      'that prompt_tokens includes the cached part for an Anthropic-routed call, as it does for OpenAI',
+    ],
+    openRouter: {
+      only: 'anthropic',
+      cacheControl: true,
+      upstreamLabel: 'Anthropic (first-party)',
+      endpointsSource: openRouterEndpoints('anthropic/claude-sonnet-5'),
+    },
+  },
+  {
+    qualifiedId: 'openrouter:anthropic/claude-opus-5',
+    provider: OPENROUTER,
+    model: 'anthropic/claude-opus-5',
+    replyFormat: 'json_schema',
+    replyFormatSource: OPENROUTER_STRUCTURED_SOURCE,
+    reasoningEffort: 'low',
+    reasoningSource: OPENROUTER_REASONING_SOURCE,
+    maxTokensParam: 'max_tokens',
+    prices: withOpenRouterFee({
+      inputUsdPerMTok: 5,
+      cachedInputUsdPerMTok: 0.5,
+      cacheWriteUsdPerMTok: 6.25,
+      outputUsdPerMTok: 25,
+    }),
+    priceSource: `${openRouterEndpoints('anthropic/claude-opus-5')} (upstream "anthropic") ${OPENROUTER_FEE_SOURCE}`,
+    unverified: [
+      'that reasoning.effort "low" reaches Claude as adaptive thinking at effort low',
+      'that prompt_tokens includes the cached part for an Anthropic-routed call',
+    ],
+    openRouter: {
+      only: 'anthropic',
+      cacheControl: true,
+      upstreamLabel: 'Anthropic (first-party)',
+      endpointsSource: openRouterEndpoints('anthropic/claude-opus-5'),
+    },
+  },
+  {
+    qualifiedId: 'openrouter:anthropic/claude-haiku-4.5',
+    provider: OPENROUTER,
+    model: 'anthropic/claude-haiku-4.5',
+    replyFormat: 'json_schema',
+    replyFormatSource: OPENROUTER_STRUCTURED_SOURCE,
+    // A budget-thinking model, which the product runs with thinking OFF; off is
+    // Anthropic's default, so nothing is sent.
+    reasoningEffort: null,
+    reasoningSource: OPENROUTER_REASONING_SOURCE,
+    maxTokensParam: 'max_tokens',
+    prices: withOpenRouterFee({
+      inputUsdPerMTok: 1,
+      cachedInputUsdPerMTok: 0.1,
+      cacheWriteUsdPerMTok: 1.25,
+      outputUsdPerMTok: 5,
+    }),
+    priceSource: `${openRouterEndpoints('anthropic/claude-haiku-4.5')} (upstream "anthropic") ${OPENROUTER_FEE_SOURCE}`,
+    // Verified, and it decides the cost: OpenRouter's caching guide gives Haiku
+    // 4.5 a 4,096-token cache minimum, above the ~3k-token static prefix, so
+    // its calls will usually pay full input.
+    unverified: ['that prompt_tokens includes the cached part for an Anthropic-routed call'],
+    openRouter: {
+      only: 'anthropic',
+      cacheControl: true,
+      upstreamLabel: 'Anthropic (first-party)',
+      endpointsSource: openRouterEndpoints('anthropic/claude-haiku-4.5'),
+    },
+  },
+  {
+    qualifiedId: 'openrouter:openai/gpt-5.6-luna',
+    provider: OPENROUTER,
+    model: 'openai/gpt-5.6-luna',
+    replyFormat: 'json_schema_strict',
+    replyFormatSource: OPENROUTER_STRUCTURED_SOURCE,
+    reasoningEffort: 'none',
+    reasoningSource: OPENROUTER_REASONING_SOURCE,
+    maxTokensParam: 'max_tokens',
+    // The STANDARD tier: the base slug "openai" does not match openai/flex or
+    // openai/fast ("service tier endpoints … are not matched by base slugs").
+    prices: withOpenRouterFee({
+      inputUsdPerMTok: 0.2,
+      cachedInputUsdPerMTok: 0.02,
+      cacheWriteUsdPerMTok: 0.25,
+      outputUsdPerMTok: 1.2,
+    }),
+    priceSource: `${openRouterEndpoints('openai/gpt-5.6-luna')} (upstream "openai", standard tier) ${OPENROUTER_FEE_SOURCE}`,
+    unverified: [
+      'that reasoning.effort "none" is accepted for this model (the reasoning guide lists "none"; the model\'s own supported efforts were not readable from the catalogue)',
+    ],
+    openRouter: {
+      only: 'openai',
+      cacheControl: false,
+      upstreamLabel: 'OpenAI (first-party, standard tier)',
+      endpointsSource: openRouterEndpoints('openai/gpt-5.6-luna'),
+    },
+  },
+  {
+    qualifiedId: 'openrouter:google/gemini-3.8-flash',
+    provider: OPENROUTER,
+    model: 'google/gemini-3.8-flash',
+    replyFormat: 'json_schema',
+    replyFormatSource: OPENROUTER_STRUCTURED_SOURCE,
+    // Reasoning cannot be off on Gemini 3 Flash; OpenRouter maps effort
+    // straight onto thinkingLevel ("low" → "low").
+    reasoningEffort: 'low',
+    reasoningSource: OPENROUTER_REASONING_SOURCE,
+    maxTokensParam: 'max_tokens',
+    // Vertex, not AI Studio: the same list price, and it is the upstream on
+    // OpenRouter's zero-retention list for this model. The storage-priced cache
+    // write is priced at the input rate here (null), the dearer reading.
+    prices: withOpenRouterFee(GEMINI_PROMO_PRICES),
+    priceChange: { from: '2027-01-01', prices: withOpenRouterFee(GEMINI_2027_PRICES) },
+    priceSource: `${openRouterEndpoints('google/gemini-3.8-flash')} (upstream "google-vertex/global") ${OPENROUTER_FEE_SOURCE}`,
+    unverified: [
+      'the cache minimum: Google documents 4,096 tokens for 3.x Flash, so the static prefix will usually not cache',
+    ],
+    openRouter: {
+      only: 'google-vertex/global',
+      cacheControl: false,
+      upstreamLabel: 'Google Vertex AI (global)',
+      endpointsSource: openRouterEndpoints('google/gemini-3.8-flash'),
+    },
+  },
+  {
+    qualifiedId: 'openrouter:z-ai/glm-5.3-flash',
+    provider: OPENROUTER,
+    model: 'z-ai/glm-5.3-flash',
+    replyFormat: 'json_schema',
+    replyFormatSource: OPENROUTER_STRUCTURED_SOURCE,
+    // Not "none": the research rows record reasoning as MANDATORY for this
+    // model, and a mandatory-reasoning model rejects effort "none".
+    reasoningEffort: 'low',
+    reasoningSource: OPENROUTER_REASONING_SOURCE,
+    maxTokensParam: 'max_tokens',
+    // Together: a US host, unquantised as listed ("unknown", not fp4/fp8),
+    // structured_outputs in its supported parameters, and 99% uptime over a
+    // day when checked. The Z.AI first-party endpoint does not list
+    // structured outputs. No cache write price is listed (null → input rate).
+    prices: withOpenRouterFee({
+      inputUsdPerMTok: 0.15,
+      cachedInputUsdPerMTok: 0.03,
+      cacheWriteUsdPerMTok: null,
+      outputUsdPerMTok: 0.5,
+    }),
+    priceSource: `${openRouterEndpoints('z-ai/glm-5.3-flash')} (upstream "together") ${OPENROUTER_FEE_SOURCE}`,
+    unverified: [
+      'that reasoning is mandatory and accepts "low" (from the research rows; the catalogue did not show the reasoning config when re-checked)',
+      'whether Together enforces json_schema during generation or treats it as guidance',
+      "Together is not on OpenRouter's zero-retention list for this model",
+    ],
+    openRouter: {
+      only: 'together',
+      cacheControl: false,
+      upstreamLabel: 'Together',
+      endpointsSource: openRouterEndpoints('z-ai/glm-5.3-flash'),
+    },
+  },
 ];
 
 /** The prices in force on `day` (UTC). */
@@ -365,6 +621,11 @@ export function chatTarget(row: ChatPlannerModel, day: Date = new Date()): ChatC
     reasoningEffort: row.reasoningEffort,
     maxTokensParam: row.maxTokensParam,
     prices: chatPricesOn(row, day),
+    // Only the two members the wire needs; a direct row gets no key at all, so
+    // its target — and its request — is what it always was.
+    ...(row.openRouter !== undefined
+      ? { openRouter: { only: row.openRouter.only, cacheControl: row.openRouter.cacheControl } }
+      : {}),
   };
 }
 

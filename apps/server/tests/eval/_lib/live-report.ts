@@ -42,6 +42,22 @@ export interface LiveTaskSummary {
   notRun: number;
   reasons: Partial<Record<LiveReasonClass, number>>;
   reps: ReadonlyArray<LiveRepReport>;
+  /**
+   * What this task cost, over every repetition that ran: tokens by class and
+   * dollars. ⛔ MEASURED PER TASK because a page in another script is not the
+   * same page in more words — a tokenizer can spend several tokens on one
+   * Chinese or Cyrillic word — and the only honest way to price that is to read
+   * it off the provider's own usage beside a Latin task. Cache figures are null
+   * when the provider never reported them, which is not zero.
+   */
+  spend: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number | null;
+    cacheWriteTokens: number | null;
+    estimatedUsd: number;
+    providerReportedUsd: number | null;
+  };
 }
 
 export interface LiveReport {
@@ -72,6 +88,10 @@ export interface LiveReport {
   providerId: string;
   /** How each call was priced for the dollar cap and the spend estimate. */
   pricedAt: string;
+  /** An aggregator row's pin — the one upstream it allows, with fallbacks off
+   *  — or null for a direct provider. The `servedBy` line says where calls
+   *  actually landed. */
+  routing: string | null;
   /** NAME of the environment variable the key was read from. Never the key. */
   keySource: string;
   /**
@@ -101,6 +121,10 @@ export interface LiveReport {
     /** `stop_reason` → calls. Anything but `end_turn` is worth reading. */
     stopReasons: Readonly<Record<string, number>>;
     errors: ReadonlyArray<string>;
+    /** The upstreams that served calls, as the aggregator stamped them. Empty
+     *  for a wire that does not say. More than one on a pinned run is a
+     *  finding: the pin did not hold. */
+    servedBy: ReadonlyArray<string>;
   };
   repsRequested: number;
   maxTurns: number;
@@ -271,6 +295,8 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
     const ran = reps.filter(
       (r) => r.outcome !== 'incomplete' && r.outcome !== 'inconclusive',
     ).length;
+    const orNull = (values: ReadonlyArray<number | null>): number | null =>
+      values.some((v) => v !== null) ? values.reduce<number>((t, v) => t + (v ?? 0), 0) : null;
     return {
       taskId: task.id,
       prompt: task.prompt,
@@ -282,6 +308,14 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
       notRun: args.reps - ran - inconclusive,
       reasons,
       reps,
+      spend: {
+        inputTokens: reps.reduce((t, r) => t + r.tokens.input, 0),
+        outputTokens: reps.reduce((t, r) => t + r.tokens.output, 0),
+        cacheReadTokens: orNull(reps.map((r) => r.tokens.cacheRead)),
+        cacheWriteTokens: orNull(reps.map((r) => r.tokens.cacheCreation)),
+        estimatedUsd: reps.reduce((t, r) => t + r.spend.estimatedUsd, 0),
+        providerReportedUsd: orNull(reps.map((r) => r.spend.providerReportedUsd)),
+      },
     };
   });
   const allReps = tasks.flatMap((t) => t.reps);
@@ -332,6 +366,10 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
       selection.kind === 'claude'
         ? 'the api-types model registry (Anthropic list price, per request)'
         : `the provider table row ${selection.row.qualifiedId}: $${String(pricing?.inputUsdPerMTok)} in / $${String(pricing?.cachedInputUsdPerMTok)} cached / $${String(pricing?.outputUsdPerMTok)} out per million (${selection.row.priceSource})`,
+    routing:
+      selection.kind === 'chat' && selection.row.openRouter !== undefined
+        ? `pinned to ${selection.row.openRouter.upstreamLabel} (provider.only ["${selection.row.openRouter.only}"], allow_fallbacks false, require_parameters true)`
+        : null,
     keySource: args.keySource,
     requestControls: {
       requestedThinkingPolicy: args.thinkingPolicy ?? 'the product default',
@@ -350,6 +388,7 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
       errors: calls.flatMap((c) =>
         c.providerError === null ? [] : [`${c.label} (${c.purpose}): ${c.providerError}`],
       ),
+      servedBy: distinct(calls.flatMap((c) => (c.servedBy === null ? [] : [c.servedBy]))),
     },
     repsRequested: args.reps,
     maxTurns: args.maxTurns,
@@ -412,6 +451,11 @@ export function renderLiveReport(report: LiveReport): string {
     `  look before a tap ${report.tapLook === 'on' ? 'on' : 'OFF (the executor sends the wire it sent before the look existed)'}`,
   );
   lines.push(`  priced at ${report.pricedAt}`);
+  if (report.routing !== null) {
+    lines.push(
+      `  routing ${report.routing}; served by [${report.provider.servedBy.join(', ') || 'not stated'}]${report.provider.servedBy.length > 1 ? ' — ⛔ MORE THAN ONE HOST: the pin did not hold' : ''}`,
+    );
+  }
   lines.push(
     `  caps  $${String(report.caps.maxUsd)} at list price, ${String(report.caps.maxCalls)} model calls, ${String(report.caps.maxTotalTokens)} tokens — whichever is reached first stops the run`,
   );
@@ -457,6 +501,21 @@ export function renderLiveReport(report: LiveReport): string {
         ? `; ${String(report.spend.callsPricedAtCeiling)} call(s) ended before the provider reported usage and are counted at a CEILING (the whole request, one token per character, plus the whole reply allowance)`
         : ''),
   );
+  if (report.spend.providerReportedUsd !== null) {
+    lines.push(
+      `provider-reported cost — $${report.spend.providerReportedUsd.toFixed(4)} (what the provider said it charged; the caps are enforced on the estimate above)`,
+    );
+  }
+  lines.push('spend by task (all repetitions; tokens as the provider reported them):');
+  lines.push(
+    `  ${pad('task', idWidth)}${pad('input', 10)}${pad('cache rd', 10)}${pad('cache wr', 10)}${pad('output', 9)}${pad('≈ $', 10)}provider $`,
+  );
+  for (const task of report.tasks) {
+    const cache = (v: number | null): string => (v === null ? 'n/r' : String(v));
+    lines.push(
+      `  ${pad(task.taskId, idWidth)}${pad(String(task.spend.inputTokens), 10)}${pad(cache(task.spend.cacheReadTokens), 10)}${pad(cache(task.spend.cacheWriteTokens), 10)}${pad(String(task.spend.outputTokens), 9)}${pad(task.spend.estimatedUsd.toFixed(4), 10)}${task.spend.providerReportedUsd === null ? 'not reported' : task.spend.providerReportedUsd.toFixed(4)}`,
+    );
+  }
   for (const [purpose, summary] of [
     ['plan', report.latency.plan],
     ['answer', report.latency.answer],

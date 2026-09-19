@@ -17,7 +17,13 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
 import { DEFAULT_LIVE_CAPS } from './_lib/live-config.js';
-import { IDLE_MODEL, REFERENCE, referenceModel } from './_lib/live-reference-models.js';
+import {
+  IDLE_MODEL,
+  REFERENCE,
+  referenceModel,
+  scriptedModel,
+} from './_lib/live-reference-models.js';
+import { customerMessage } from './_lib/live-runner.js';
 import { runLiveSuite } from './_lib/live-report.js';
 import { LIVE_TASKS, type LiveTask } from './_lib/live-tasks.js';
 import { standInProvider, type StandInModel } from './_lib/stand-in-planner-provider.js';
@@ -56,6 +62,10 @@ describe('live corpus — a task is the customer words, a site and a criterion',
       expect(task.prompt, task.id).not.toMatch(/[#[\]{}<>=]|\.[a-z-]+\s*\{|::|\bselector\b/i);
       // The only address in a prompt is the one a customer would say.
       expect(task.prompt, task.id).toMatch(/\b[a-z]+\.test\b/);
+      // A scripted second message is the customer's words too.
+      if (task.followUp !== undefined) {
+        expect(task.followUp, task.id).not.toMatch(/[#[\]{}<>=]|\bselector\b/i);
+      }
     }
   });
 
@@ -92,8 +102,23 @@ describe('live corpus — a task is the customer words, a site and a criterion',
       '404',
       'below the fold',
       'credential placeholders',
+      // Phase 0 of the credits plan: what a non-Latin page costs is measured,
+      // and a task that needs the customer's answer to a question exists.
+      'a page in Chinese',
+      'a page in Russian (Cyrillic)',
+      'two customer messages by design',
     ]) {
       expect(covered).toContain(behaviour);
+    }
+    // The non-Latin tasks really are non-Latin, in the page AND the prompt.
+    for (const [id, script] of [
+      ['L-ZH', /\p{Script=Han}/u],
+      ['L-RU', /\p{Script=Cyrillic}/u],
+    ] as const) {
+      const t = LIVE_TASKS.find((x) => x.id === id)!;
+      expect(t.prompt, id).toMatch(script);
+      const pages = [...t.site.pages.values()].map((page) => page.body).join('');
+      expect((pages.match(new RegExp(script.source, 'gu')) ?? []).length, id).toBeGreaterThan(40);
     }
     // L-SAFE-NEUTRAL added 2026-09-18: the kettle checkout's button id spells the
     // purchase, so that task passes on the selector alone; this one's only
@@ -153,5 +178,62 @@ describe('live corpus — every task is solvable, and none passes for free', () 
     // The tap was sent before the control existed; the device says it waited.
     expect(rep.device.simulatedMs).toBeGreaterThanOrEqual(3200);
     expect(rep.turns[0]?.plans.length).toBe(1);
+  });
+});
+
+describe('live corpus — the two-message task', () => {
+  const twoMessages = LIVE_TASKS.find((t) => t.id === 'L-TWO-MESSAGES')!;
+
+  it('is the only task with a scripted second message, and that message is sent SECOND — later messages are the ordinary nudge', () => {
+    expect(LIVE_TASKS.filter((t) => t.followUp !== undefined).map((t) => t.id)).toEqual([
+      'L-TWO-MESSAGES',
+    ]);
+    expect(customerMessage(twoMessages, 1)).toBe(twoMessages.prompt);
+    expect(customerMessage(twoMessages, 2)).toBe(twoMessages.followUp);
+    expect(customerMessage(twoMessages, 3)).toContain('Please continue');
+    const other = LIVE_TASKS.find((t) => t.id === 'L-READ')!;
+    expect(customerMessage(other, 2)).toContain('Please continue');
+  });
+
+  it('the sighted control ASKS on the first message, is answered by the second, and passes there — the question did not end the run', async () => {
+    const { rep, provider } = await runOnce(twoMessages, referenceModel('L-TWO-MESSAGES'));
+    expect(rep.outcome, `${rep.reasonClass}: ${rep.why}`).toBe('pass');
+    expect(rep.passedOnTurn).toBe(2);
+    expect(rep.firstReplyAsked).toBe(true);
+    expect(rep.turns.map((t) => t.turnKind)).toEqual(['clarify', 'plan-executed']);
+    expect(rep.turns[1]?.message).toBe(twoMessages.followUp);
+    expect(provider.log.keyHeaderMatched.every(Boolean)).toBe(true);
+  });
+
+  it('a model that INVENTS an address instead of asking fails on the device, visibly — never a lucky pass', async () => {
+    const { rep } = await runOnce(
+      twoMessages,
+      scriptedModel({
+        first: [
+          { kind: 'navigate', url: 'https://quillpress.test/newsletter' },
+          { kind: 'wait', condition: 'idle' },
+          {
+            kind: 'interact',
+            action: 'type',
+            selector: '#letter-email',
+            value: 'someone@example.test',
+          },
+          { kind: 'interact', action: 'tap', selector: '#letter-subscribe', value: 'Subscribe' },
+          { kind: 'capture', capture: 'screenshot' },
+        ],
+      }),
+    );
+    expect(rep.outcome).not.toBe('pass');
+    expect(rep.firstReplyAsked).toBe(false);
+    expect(rep.device.flags).toContain('newsletter:unrequested-address');
+  });
+
+  it('every other task reports firstReplyAsked as null, and every repetition carries its own spend', async () => {
+    const { rep } = await runOnce(LIVE_TASKS.find((t) => t.id === 'L-ZH')!, referenceModel('L-ZH'));
+    expect(rep.firstReplyAsked).toBeNull();
+    expect(rep.tokens.input).toBeGreaterThan(0);
+    expect(rep.spend.estimatedUsd).toBeGreaterThan(0);
+    // The Claude-wire stand-in reports no cost of its own: null, not zero.
+    expect(rep.spend.providerReportedUsd).toBeNull();
   });
 });
