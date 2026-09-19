@@ -237,14 +237,11 @@ export const LIVE_TASKS: ReadonlyArray<LiveTask> = [
   {
     id: 'L-ZH',
     // "Open chaguan.test's tea menu and tell me how much a pot of West Lake
-    // Longjing costs?" Written as a Chinese-speaking customer would write it.
-    // ⛔ THE ASCII "?" IS LOAD-BEARING TODAY. The runtime decides whether a
-    // message asks for information (and so earns a read-back) from an ASCII
-    // question mark or an ENGLISH interrogative; a full-width "？" or a bare
-    // 多少钱 is read as an action, and the customer gets no answer. Reported to
-    // the runtime's owners as a finding; until it is fixed this task measures
-    // token cost and planning, not that gate.
-    prompt: '打开 chaguan.test 的茶单，告诉我一壶西湖龙井多少钱?',
+    // Longjing costs?" Written as a Chinese-speaking customer writes it, with the
+    // full-width "？" a Chinese keyboard types. Until 2026-09-19 it ended in an
+    // ASCII "?", because the read-back gate knew no other mark; it now proves the
+    // full-width mark opens the answer, and still measures non-Latin token cost.
+    prompt: '打开 chaguan.test 的茶单，告诉我一壶西湖龙井多少钱？',
     covers: 'a page in Chinese, asked about in Chinese (non-Latin token cost)',
     kind: 'goal',
     site: LIVE_SITES.chaguan,
@@ -256,9 +253,11 @@ export const LIVE_TASKS: ReadonlyArray<LiveTask> = [
   {
     id: 'L-RU',
     // "Go to apteka.test and tell me until what time the pharmacy is open on
-    // Saturday?" The hours are one link away from the home page. The "?" is
-    // load-bearing for the same reason as L-ZH's.
-    prompt: 'зайди на apteka.test и скажи, до скольки аптека работает в субботу?',
+    // Saturday" — with NO question mark, as a request to be told something is
+    // often written. Nothing lexical marks it as a question, so the customer's
+    // answer rests on the planner's language-neutral `answerWanted` alone
+    // (2026-09-19; it ended in "?" before the planner could say so).
+    prompt: 'зайди на apteka.test и скажи, до скольки аптека работает в субботу',
     covers: 'a page in Russian (Cyrillic), asked about in Russian (non-Latin token cost)',
     kind: 'goal',
     site: LIVE_SITES.apteka,

@@ -273,6 +273,9 @@ export const SYSTEM_PROMPT = [
   'customer asked for a screenshot or will want to see the result; it COUNTS',
   'toward the 8. The moment the goal state is reached, say "done" — a further',
   '"continue" there is a wasted look the customer waits through.',
+  'On every plan, set "answerWanted" to true when the customer, in any language,',
+  'asks to be told something found on the page, and to false when they only ask',
+  'for actions.',
   '',
   'A PLAN IS ONE STEP, NOT THE WHOLE TASK. Eight intents is a hard ceiling per',
   'segment, not a target, and a long task is meant to span several segments of',
@@ -379,6 +382,10 @@ export const INTENT_REPLY_SCHEMAS: ReadonlyArray<Record<string, unknown>> = [
  *
  * `thought` comes FIRST on purpose: a constrained reply is written in order, so
  * the one sentence of deliberation is produced before the steps it justifies.
+ * `answerWanted` comes before `intents` for the same reason: it is a judgement
+ * about the CUSTOMER'S MESSAGE (did they ask to be told something, in whatever
+ * language they wrote), not about the steps, so it is made before them. It is
+ * optional — see the `answerWanted` member of `DecomposeResult`'s plan variant.
  */
 export const PLAN_REPLY_SCHEMA: Record<string, unknown> = {
   type: 'object',
@@ -386,6 +393,7 @@ export const PLAN_REPLY_SCHEMA: Record<string, unknown> = {
     thought: { type: 'string' },
     kind: { type: 'string', enum: ['plan', 'clarify', 'refuse'] },
     status: { type: 'string', enum: ['continue', 'done'] },
+    answerWanted: { type: 'boolean' },
     intents: { type: 'array', items: { anyOf: INTENT_REPLY_SCHEMAS } },
     clarifyingQuestion: { type: 'string' },
     refuseReason: { type: 'string' },
@@ -985,7 +993,12 @@ function withoutNullMembers(value: unknown): unknown {
 
 /** A planning reply, as the runtime is handed it (before tokens and usage). */
 export type PlanInterpretation =
-  | { kind: 'plan'; intents: ReadonlyArray<AgentIntent>; status?: PlanStatus }
+  | {
+      kind: 'plan';
+      intents: ReadonlyArray<AgentIntent>;
+      status?: PlanStatus;
+      answerWanted?: boolean;
+    }
   | { kind: 'clarify'; clarifyingQuestion: string }
   | { kind: 'refuse'; refuseReason: string };
 
@@ -1021,6 +1034,11 @@ export function interpretPlanText(text: string, opts: InterpretOptions): PlanInt
 
   if (kind === 'plan') {
     const status = readPlanStatus(obj.status);
+    // Carried only when the model actually said it. Anything but a boolean is
+    // read as silence, never as a guess: absent leaves the lexical gate to
+    // decide alone, which is what every plan did before the field existed.
+    const answerWanted = typeof obj.answerWanted === 'boolean' ? obj.answerWanted : undefined;
+    const said = answerWanted !== undefined ? { answerWanted } : {};
     // A "done" with no steps may leave `intents` out altogether — there is
     // nothing to list. Anywhere else a missing list is still a broken reply.
     const mayOmitIntents = status === 'done' && opts.allowEmptyDone === true;
@@ -1032,7 +1050,7 @@ export function interpretPlanText(text: string, opts: InterpretOptions): PlanInt
     // segment", which is the only place `allowEmptyDone` is set. It is how a
     // planner shown the confirmation page says the form went through.
     if (intents.length === 0 && status === 'done' && opts.allowEmptyDone === true) {
-      return { kind: 'plan', intents, status };
+      return { kind: 'plan', intents, status, ...said };
     }
     // A plan with ZERO runnable intents (the model emitted none, or parseIntents
     // dropped them all as unmappable — the #139 "responds without steps" class):
@@ -1047,7 +1065,7 @@ export function interpretPlanText(text: string, opts: InterpretOptions): PlanInt
           'concrete step — e.g. “go to example.com and take a screenshot.”',
       };
     }
-    return { kind: 'plan', intents, ...(status !== undefined ? { status } : {}) };
+    return { kind: 'plan', intents, ...(status !== undefined ? { status } : {}), ...said };
   }
   if (kind === 'clarify') {
     if (typeof obj.clarifyingQuestion !== 'string') {

@@ -261,6 +261,19 @@ export type DecomposeResult =
        * say more. A reader must therefore never default it.
        */
       status?: PlanStatus;
+      /**
+       * The planner's own reading of the customer's message: `true` when they
+       * asked, in ANY language, to be told something found on the page; `false`
+       * when they only asked for actions. It is how a question written with no
+       * question mark, in a language the runtime's lexical gate does not read,
+       * still earns the read-back.
+       *
+       * ⛔ IT CAN ONLY WIDEN THE READ-BACK GATE. The runtime ORs it with the
+       * lexical gate, so `false` never closes a question that gate saw. Absent
+       * (the deterministic decomposer, scripted plans, a model that left it out)
+       * means the lexical gate decides alone, exactly as before the field existed.
+       */
+      answerWanted?: boolean;
       tokensConsumed: number;
       /** v2-#4 Q.1.e — per-call usage telemetry. Optional so the
        *  deterministic decomposer + legacy callers don't have to

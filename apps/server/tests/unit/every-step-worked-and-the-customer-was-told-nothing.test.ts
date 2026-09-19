@@ -79,6 +79,110 @@ describe('P5 — the read-back gate reads the question the customer actually ask
   });
 });
 
+// ── I18N — A QUESTION IS READ IN THE SCRIPT IT WAS WRITTEN IN ─────────────
+//
+// The gate knew ONE question mark, the ASCII one. A customer who wrote
+// "多少钱？" with the full-width mark their keyboard gives them, or "؟" in
+// Arabic, watched every step succeed and was told nothing — P5 again, for every
+// customer who does not write English punctuation.
+//
+// ⛔ WHAT THE LEXICAL GATE DELIBERATELY DOES NOT DO: read a question with no mark
+// at all. Russian and Chinese customers routinely ask with none, and the common
+// question words in those languages double as ordinary words, so the planner's
+// `answerWanted` reads those (see
+// the-planner-can-open-the-read-back-for-a-question-with-no-mark-and-never-close-one).
+// The arms below pin that they are NOT caught here, so that nobody mistakes this
+// gate for the whole answer.
+describe('I18N — the read-back gate reads a question mark in every script a customer writes', () => {
+  it.each([
+    // Chinese and Japanese write the FULL-WIDTH mark (U+FF1F). NFKC folds it.
+    ['full-width ？ (Chinese)', '打开 chaguan.test 的茶单，告诉我一壶西湖龙井多少钱？'],
+    ['full-width ？ (Japanese)', 'shop.test を開いて、青いマグの値段はいくらですか？'],
+    ['Arabic ؟', 'افتح shop.test وأخبرني كم سعر الكوب؟'],
+    ['Persian ؟', 'سایت shop.test را باز کن، قیمت لیوان آبی چقدر است؟'],
+    // Spanish may OPEN a question and never close it in a chat message.
+    ['Spanish ¿ alone', 'abre plans.test ¿cuánto cuesta el plan Team'],
+    // Armenian writes its mark over a vowel INSIDE the questioned word.
+    ['Armenian ՞', 'Բացիր shop.test-ը, ո՞րն է գինը'],
+    ['Ethiopic ፧', 'shop.test ክፈት፣ ዋጋው ስንት ነው፧'],
+    ['the interrobang ‽', 'open shop.test — the plan doubled‽'],
+    ['a Russian question WITH its mark', 'зайди на apteka.test, до скольки работает аптека?'],
+  ])('asks for information — %s', (_label, message) => {
+    expect(asksForInformation(message)).toBe(true);
+  });
+
+  it.each([
+    // ⛔ THE STRIP USED TO EAT THE QUESTION. A URL ran to the next space, and
+    // Chinese puts no space after one: the address, the question, its mark and
+    // the "thanks" after it were one "URL". (The mark is NOT last on purpose:
+    // a mark at the very end is handed back by the trailing-punctuation rule
+    // whatever the URL pattern does, so only a mark mid-run tests the pattern.)
+    [
+      'a Chinese question run straight on from an address',
+      'https://chaguan.test/menu上的龙井多少钱？谢谢',
+    ],
+    // A mark glued to the END of an address is the customer's, not the URL's.
+    ['a mark glued to the end of a full URL', 'is the Team plan on https://plans.test/pricing?'],
+    ['a mark glued to the end of a bare address', 'is it cheaper on shop.test/pricing?'],
+    ['a full-width mark glued to an address', '价格在 https://chaguan.test/menu？'],
+    // The query run is stripped on its own, and only the query: a question
+    // written after it is still the customer's. (Mark mid-run again, so a query
+    // rule that ran on to the next space would fail here.)
+    [
+      'a question after the query of an address with a non-ASCII path',
+      '打开 https://baike.test/item/龙井?fromModule=search，一壶多少钱？谢谢',
+    ],
+  ])('a question beside an address is still a question — %s', (_label, message) => {
+    expect(asksForInformation(message)).toBe(true);
+  });
+
+  it('an English word a customer drops between Chinese characters is still read — the boundary is Latin letters, not ASCII', () => {
+    expect(asksForInformation('帮我check一下 shop.test 的价格')).toBe(true);
+  });
+
+  it.each([
+    // ⛔ THE COST GATE, IN OTHER SCRIPTS. A pure instruction in Chinese is still
+    // an instruction, and must not buy a second model call.
+    ['a Chinese screenshot-only instruction', '打开 news.test 并截图'],
+    ['the same, with a Chinese full stop and comma', '打开 news.test，截个图。'],
+    ['a Japanese screenshot-only instruction', 'news.test を開いてスクリーンショットを撮って'],
+    // A query string with no path is a URL too; its `?` used to read as a question.
+    ['a query with no path', 'go to example.com?ref=mail and take a screenshot'],
+    // ⛔ THE ASCII-ONLY URL STOPS AT THE FIRST NON-ASCII LETTER, and the query
+    // after it used to be left behind as prose, its `?` read as a question.
+    [
+      'a query after an address with a non-ASCII path',
+      '打开 https://baike.test/item/龙井?fromModule=search 并截图',
+    ],
+    ['a query after an address with a non-ASCII host', '打开 https://例子.测试/?q=1 并截图'],
+    // ⛔ A SEMICOLON IS A CLAUSE BREAK. The Greek question mark folds into one
+    // under NFKC, and reading it would spend a read-back on every "X; Y".
+    ['an ordinary semicolon', 'open news.test; take a screenshot'],
+    // `\b` read "listés" as the token "list" (é is not an ASCII word character).
+    [
+      'a French word that merely STARTS with an English token',
+      'ouvre shop.test, les produits listés, et fais une capture',
+    ],
+  ])('does NOT ask for information — %s', (_label, message) => {
+    expect(asksForInformation(message)).toBe(false);
+  });
+
+  it.each([
+    // "Go to apteka.test and tell me until what time the pharmacy is open on
+    // Saturday" — an imperative, and Russian writes it with no mark.
+    ['Russian', 'зайди на apteka.test и скажи, до скольки аптека работает в субботу'],
+    // "Open chaguan.test's tea menu and tell me how much a pot of Longjing costs"
+    ['Chinese', '打开 chaguan.test 的茶单，告诉我一壶西湖龙井多少钱'],
+    // The Greek question mark (U+037E) is deliberately not read — see above.
+    ['Greek, with its own question mark', 'άνοιξε το news.test, πόση είναι η τιμή\u037E'],
+  ])(
+    '⛔ a %s question with no mark the gate reads is NOT caught lexically — that is the planner signal’s job',
+    (_label, message) => {
+      expect(asksForInformation(message)).toBe(false);
+    },
+  );
+});
+
 describe('P5 — when there is no answer, the customer is told why', () => {
   async function runWith(opts: {
     observe?: () => Promise<string | null>;

@@ -543,10 +543,13 @@ in a non-Latin script costs is **measured, not assumed**: the report's `spend by
 task` table gives each task's input, cache-read, cache-write and output tokens
 and its dollar cost — the meter's estimate and, where the provider says, its own
 figure — beside the English tasks. Both ask for a number, so the criterion does
-not depend on phrasing. Both prompts end in an ASCII `?` on purpose: the
-runtime's read-back gate recognises an ASCII question mark and English
-interrogatives only, so a full-width `？` or a bare `多少钱` gets no answer
-today. That is a product finding, reported; these tasks do not measure it.
+not depend on phrasing. They also prove, each on a different layer, that a
+question in another language gets its answer. `L-ZH` ends in the full-width `？`
+a Chinese keyboard types, which the read-back gate reads as a question mark.
+`L-RU` has no question mark at all, as a request to be told something is often
+written, so its answer rests on the planner's language-neutral `answerWanted`
+alone. Until 2026-09-19 both ended in an ASCII `?`, because the gate knew no
+other mark and the planner could not yet say an answer was wanted.
 
 `L-TWO-MESSAGES` takes two customer messages **by design**. The customer asks
 to be signed up for a newsletter and does not say which address; nothing on the

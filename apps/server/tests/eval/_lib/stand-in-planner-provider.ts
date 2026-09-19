@@ -185,9 +185,15 @@ export function observationIn(request: ProviderRequestView): string | null {
 export function planReply(
   intents: ReadonlyArray<unknown>,
   status?: 'continue' | 'done',
+  answerWanted?: boolean,
 ): StandInReply {
   return {
-    text: JSON.stringify({ kind: 'plan', ...(status !== undefined ? { status } : {}), intents }),
+    text: JSON.stringify({
+      kind: 'plan',
+      ...(status !== undefined ? { status } : {}),
+      ...(answerWanted !== undefined ? { answerWanted } : {}),
+      intents,
+    }),
   };
 }
 

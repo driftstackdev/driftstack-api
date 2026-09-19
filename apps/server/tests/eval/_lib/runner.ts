@@ -24,7 +24,7 @@ import { execFileSync } from 'node:child_process';
 import {
   AgentRuntime,
   READBACK_MIN_BUDGET_TOKENS,
-  READ_INTENT_RE,
+  asksForInformation,
 } from '../../../src/services/agent-runtime.js';
 import { ControlPlaneAgentExecutor } from '../../../src/services/agent-executor-control-plane.js';
 import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.js';
@@ -146,6 +146,10 @@ export async function runEvalTask(task: EvalTask): Promise<TaskReport> {
   const executorOk = executorResult?.ok === true;
   const awaitingConfirmation = executorResult?.awaitingConfirmation === true;
   const answer = turn !== null && turn.kind === 'plan-executed' ? (turn.answer ?? null) : null;
+  const firstPlan =
+    turn !== null && turn.kind === 'plan-executed' && turn.decomposer.kind === 'plan'
+      ? turn.decomposer
+      : null;
 
   return scoreTurn({
     task,
@@ -184,6 +188,11 @@ export async function runEvalTask(task: EvalTask): Promise<TaskReport> {
     readbackGatesFailed: predictReadbackGates({
       task,
       executorOk,
+      // Read off the plan the runtime was actually handed, never assumed. The
+      // scripted planner returns the same plan on every call, so the first
+      // plan's word stands for every segment of the turn.
+      plannerSpeaksLoop: firstPlan?.status !== undefined,
+      plannerWantsAnswer: firstPlan?.answerWanted === true,
       observation: decomposer.observed.lastObservation,
       // These three conjuncts are CHECKED, not assumed. They are properties of
       // how this harness wired the runtime, and a wiring change that silently
@@ -225,6 +234,8 @@ export async function runEvalTask(task: EvalTask): Promise<TaskReport> {
 function predictReadbackGates(args: {
   task: EvalTask;
   executorOk: boolean;
+  plannerSpeaksLoop: boolean;
+  plannerWantsAnswer: boolean;
   observation: string | null;
   canObserve: boolean;
   canAnswer: boolean;
@@ -238,8 +249,18 @@ function predictReadbackGates(args: {
   if (EVAL_TOKEN_BUDGET - SCRIPTED_DECOMPOSE_TOKENS < READBACK_MIN_BUDGET_TOKENS) {
     gates.push('budget');
   }
-  if (!args.task.plan.some((intent) => intent.kind === 'capture')) gates.push('no_capture_in_plan');
-  if (!READ_INTENT_RE.test(args.task.prompt)) gates.push('not_read_intent');
+  // The runtime asks for a capture only of a planner that does not speak the
+  // loop; one that does looks after every segment anyway.
+  if (!args.plannerSpeaksLoop && !args.task.plan.some((intent) => intent.kind === 'capture')) {
+    gates.push('no_capture_in_plan');
+  }
+  // ⛔ THE RUNTIME'S OWN FUNCTION, NOT ITS PATTERN. Testing `READ_INTENT_RE` on
+  // the raw prompt skipped the NFKC fold and the URL strip the runtime applies
+  // first, so a query-string `?` read as a question here and not there. And the
+  // planner's `answerWanted` widens the gate exactly as the runtime ORs it.
+  if (!args.plannerWantsAnswer && !asksForInformation(args.task.prompt)) {
+    gates.push('not_read_intent');
+  }
   // The empty-observation check sits INSIDE the runtime's `if`, so it can only
   // be the cause when every conjunct above passed.
   if (gates.length === 0 && (args.observation === null || args.observation.trim().length === 0)) {

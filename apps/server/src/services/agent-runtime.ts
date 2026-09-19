@@ -643,8 +643,11 @@ const SPEND_RECORD_RETRY_BASE_MS = 50;
 // #140 read-and-report — only read BACK for information-SEEKING tasks. A read-back
 // is a 2nd LLM call (+ a bundled cost row), so gate it to tasks that actually want
 // an answer ("get the IP", "what's the price"), not pure action/screenshot tasks.
-// Conservative keyword match; the decomposer-signalled variant is the robust
-// follow-up (a `wantsAnswer` flag on the plan, prompt-eval-gated).
+// This lexical match is ONE of two signals. The other — the follow-up this
+// comment used to promise — is the planner's own `answerWanted` on the plan (see
+// PLAN_REPLY_SCHEMA), which reads a question in ANY language, including the ones
+// written with no mark at all. The runtime ORs the two at `askedForInformation`:
+// the planner can only WIDEN this gate, never close a question it matched.
 // Exported (additively, no behaviour change) so the agent eval harness can
 // report WHICH of the read-back gate's conjuncts blocked an answer. A harness
 // that copied this pattern instead would keep naming the old gate after the real
@@ -667,8 +670,35 @@ const SPEND_RECORD_RETRY_BASE_MS = 50;
 // ⛔ `confirm` excludes the PURCHASE sense for the same reason `check` excludes
 // "check out": "confirm the order" is the customer describing an action, not
 // asking to be told something.
+//
+// I18N — THE MARKS ARE EVERY SCRIPT'S; THE WORDS STAY ENGLISH.
+// The pattern used to know one question mark, the ASCII one, so "多少钱？" and
+// "كم السعر؟" ran every step and were told nothing. It now reads (after NFKC, see
+// `asksForInformation`):
+//   ?  ASCII — and, because NFKC folds them into it, the full-width ？ (U+FF1F)
+//      Chinese and Japanese write, the small ﹖, and ⁇ ⁈ ⁉
+//   ¿  U+00BF, Spanish, which may open a question and never close it
+//   ؟  U+061F, Arabic, Persian and Urdu
+//   ՞  U+055E, Armenian, written over a vowel INSIDE the questioned word
+//   ፧  U+1367, Ethiopic
+//   ‽  U+203D, the interrobang
+// ⛔ NOT the Greek question mark (U+037E). NFKC folds it into an ordinary
+// semicolon, and a semicolon everywhere else is a clause break: reading it would
+// make "open news.test; take a screenshot" pay for a read-back. A Greek question
+// is the planner's to recognise.
+// ⛔ AND NO NON-ENGLISH QUESTION WORDS. The common ones double as ordinary
+// words — Russian что is also "that", Spanish que is "that", 什么 turns up in
+// statements — so a word list would spend read-backs on instructions. A
+// question written with no mark ("скажи, во сколько закрывается магазин") is what
+// the planner's `answerWanted` is for, and the tests pin that it is NOT caught
+// here.
+// The English words are bounded by LATIN letters, not by ASCII `\b`. `\b` treats
+// every non-ASCII letter as a gap, so it read the French "listés" as "list" and
+// a read-back was bought for an instruction; a Latin boundary refuses that and
+// still reads the English word a customer drops between Chinese characters
+// ("帮我check一下价格").
 export const READ_INTENT_RE =
-  /\?|\b(get|give|find|read|extract|scrape|fetch|show|tell|say|list|report|summar\w*|describe|quote|compare|count|verify|confirm(?!\s+(?:the\s+)?(?:purchase|order|payment|checkout|booking|subscription))|check(?!\s*-?\s*out)|look\s?up|lookup|what|whats|which|when|where|who|whether|why|does|do\s+(?:i|we|they|you)|is\s+there|are\s+there|how\s+(?:many|much|long|old|far|big))\b/i;
+  /[?\u00BF\u061F\u055E\u1367\u203D]|(?<![\p{Script=Latin}\p{M}\p{N}_])(?:get|give|find|read|extract|scrape|fetch|show|tell|say|list|report|summar\p{Script=Latin}*|describe|quote|compare|count|verify|confirm(?!\s+(?:the\s+)?(?:purchase|order|payment|checkout|booking|subscription))|check(?!\s*-?\s*out)|look\s?up|lookup|what|whats|which|when|where|who|whether|why|does|do\s+(?:i|we|they|you)|is\s+there|are\s+there|how\s+(?:many|much|long|old|far|big))(?![\p{Script=Latin}\p{M}\p{N}_])/iu;
 
 /**
  * P5 — a URL is not prose, and its punctuation is not the customer's.
@@ -681,13 +711,37 @@ export const READ_INTENT_RE =
  * pattern's own comment says it must refuse. Every URL-ish token is removed
  * before the test, so the pattern judges what the person WROTE.
  *
- * `READ_INTENT_RE` stays exported unchanged — the eval harness reports the gate
- * by name and must read the live pattern rather than a copy.
+ * ⛔ BUT ONLY THE URL. Two ways the strip used to eat the question with it:
+ *  · A token ran to the next SPACE (`\S+`), and Chinese, Japanese and Thai put
+ *    no space after an address — "https://example.com/menu上的价格是多少？谢谢"
+ *    was one "URL", mark and all. A URL here is made of the ASCII characters a
+ *    URL is written in, so it stops where the prose starts.
+ *  · A mark glued to the END of an address ("is it on shop.test/pricing?") was
+ *    swallowed as part of it. A query separator is followed by a query; one
+ *    with nothing after it is the customer's punctuation, so trailing
+ *    punctuation is handed back to the sentence.
+ * And an address with a query and no path ("example.com?ref=mail") is now
+ * stripped whole; its `?` used to be read as a question.
+ *
+ * ⛔ THE ASCII RULE HAS ONE HOLE, AND THE LAST ALTERNATIVE CLOSES IT. An address
+ * whose path or host is NOT ASCII ("https://example.com/wiki/北京?action=edit",
+ * "https://例子.测试/?q=1") stops at its first non-ASCII letter, which leaves its
+ * query behind as prose, and the old `\S+` strip used to take it all. A `?`
+ * followed straight by `key=` is a query separator wherever it stands (nobody
+ * asks "?q=1"), so that run is stripped on its own.
+ *
+ * `READ_INTENT_RE` stays exported — the eval harness reports the gate by name;
+ * it predicts the gate through {@link asksForInformation}, never a copy.
  */
-const URLISH_RE = /\b(?:https?:\/\/|www\.)\S+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/\S*)?/gi;
+const URLISH_RE =
+  /\b(?:https?:\/\/|www\.)[\w\-.~:/?#[\]@!$&'()*+,;=%]+|\b[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:[/?#][\w\-.~:/?#[\]@!$&'()*+,;=%]*)?|\?[\w.~%-]+=[\w\-.~:/?#[\]@!$&'()*+,;=%]*/gi;
+const URL_TRAILING_PUNCTUATION_RE = /[?!.,;:)\]'"]+$/;
 
 export function asksForInformation(message: string): boolean {
-  return READ_INTENT_RE.test(message.replace(URLISH_RE, ' '));
+  const prose = message
+    .normalize('NFKC')
+    .replace(URLISH_RE, (url) => ` ${URL_TRAILING_PUNCTUATION_RE.exec(url)?.[0] ?? ''} `);
+  return READ_INTENT_RE.test(prose);
 }
 
 // #140 — only fire the read-back when the session has enough budget to cover a
@@ -2861,6 +2915,13 @@ export class AgentRuntime {
     // that speaks the loop, which is what lets the read-back stop inferring
     // "they wanted an answer" from whether a plan happened to end in a capture.
     let plannerSpeaksLoop = decomposed.status !== undefined;
+    // True once ANY segment's planner said the customer asked to be TOLD
+    // something (`answerWanted`). The planner reads the customer's words in
+    // every language they write in, including a question with no mark at all,
+    // which the lexical gate cannot; it is ORed into `askedForInformation` and
+    // can only widen it. A later segment saying `false` never takes back an
+    // earlier `true`: the customer's message did not change between segments.
+    let plannerWantsAnswer = decomposed.answerWanted === true;
     // The page as the planner was shown it when it produced the segment that
     // just ran, for the no-progress check. Undefined for a blind first plan.
     let observationBehindLastPlan: string | undefined = firstPlanObservation;
@@ -3104,6 +3165,7 @@ export class AgentRuntime {
         break;
       }
       if (replanned.status !== undefined) plannerSpeaksLoop = true;
+      if (replanned.answerWanted === true) plannerWantsAnswer = true;
       if (replanned.intents.length === 0) {
         // "Nothing left to do." Only a `done` may say it with no steps; anything
         // else with no steps is a planner with nothing to offer.
@@ -3345,11 +3407,18 @@ export class AgentRuntime {
     // so the proxy would silently withhold the answer on exactly the turns that
     // went best. There the customer's wording decides on its own. A turn the
     // planner handed back part-way has its message already, and gets no second.
+    //
+    // I18N — "the customer's wording" is read two ways, and EITHER opens it: the
+    // lexical gate (question marks in every script, English words), and the
+    // planner's `answerWanted`, which is how a question in Russian or Chinese
+    // written with no mark gets its answer. ⛔ The planner's word only WIDENS:
+    // `answerWanted: false` never closes a question the lexical gate saw, and
+    // every other conjunct above still binds.
     const askedForInformation =
       executorResult.ok &&
       plannerHandedBack === undefined &&
       (plannerSpeaksLoop || attemptedIntents.some((i) => i.kind === 'capture')) &&
-      asksForInformation(args.userMessage);
+      (asksForInformation(args.userMessage) || plannerWantsAnswer);
     // Why this stays keyed on the capability list and not on a catch-all: every
     // branch here has a DIFFERENT repair for the customer (top up the session,
     // add a key, try again), so a single "could not read the page" would be

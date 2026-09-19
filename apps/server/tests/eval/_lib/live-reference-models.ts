@@ -68,6 +68,11 @@ interface Reference {
    *  envelope; `continue` asks to be shown the page and planned again, which is
    *  how `recover` then gets a page to plan from. */
   firstStatus?: 'continue' | 'done';
+  /** The planner's language-neutral "the customer asked to be told something".
+   *  Only L-RU sets it: its prompt has no question mark, so the read-back rests
+   *  on this flag alone, and the task proves that path end to end. The other
+   *  question tasks leave it out, so they keep exercising the lexical gate. */
+  firstAnswerWanted?: true;
   recover?: (observation: string) => ReadonlyArray<unknown> | null;
   /** How a reader who can see the page answers — off the PAGE, not from memory. */
   answer?: (pageText: string) => string;
@@ -215,6 +220,7 @@ export const REFERENCE: Readonly<Record<string, Reference>> = {
   },
   'L-RU': {
     first: [nav('https://apteka.test/'), tap('a[href="/chasy"]', 'Часы работы'), SETTLE, CAPTURE],
+    firstAnswerWanted: true,
     answer: (page) => {
       const close = hoursFor(page, 'Суббота')
         ?.match(/\d{2}:\d{2}/g)
@@ -309,6 +315,7 @@ export const REFERENCE: Readonly<Record<string, Reference>> = {
 export function scriptedModel(args: {
   first: ReadonlyArray<unknown>;
   firstStatus?: 'continue' | 'done';
+  firstAnswerWanted?: true;
   recover?: (observation: string) => ReadonlyArray<unknown> | null;
   /** A reply that is not a plan at all — a question or a refusal — for a
    *  planning call that can see the page. Wins over `recover`. */
@@ -330,7 +337,9 @@ export function scriptedModel(args: {
     const handedBack = observation === null ? null : (args.handBack?.(observation) ?? null);
     if (handedBack !== null) return handedBack;
     const recovered = observation === null ? null : (args.recover?.(observation) ?? null);
-    return recovered !== null ? planReply(recovered) : planReply(args.first, args.firstStatus);
+    return recovered !== null
+      ? planReply(recovered)
+      : planReply(args.first, args.firstStatus, args.firstAnswerWanted);
   };
 }
 
