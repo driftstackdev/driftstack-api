@@ -45,6 +45,7 @@ import type { Logger } from '../../src/lib/logger.js';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { codeOnly } from './_helpers/code-only.js';
 
 const ENVELOPE = {
   type: 'intentResult' as const,
@@ -810,11 +811,10 @@ function topLevelArgs(text: string, open: number): string[] {
       start = i + 1;
     }
   }
-  const uncomment = (a: string): string =>
-    a
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/\/\/.*$/gm, '')
-      .trim();
+  // The repo's comment model, not a hand-rolled pair of regexes: a `/*` inside a
+  // line comment (a route path like `/v1/x/*`) opens a block comment for the
+  // naive version and swallows real code. See _helpers/code-only.ts.
+  const uncomment = (a: string): string => codeOnly(a).trim();
   return args.map(uncomment).filter((a) => a !== '');
 }
 
