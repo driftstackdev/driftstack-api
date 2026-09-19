@@ -29,7 +29,7 @@ describe('docs/api/bundled-llm content parity', () => {
       /without their own Anthropic\s*API key\. Each agent turn counts a fixed amount against a monthly cap\s*the customer controls \(default \$20\)\./,
     );
     expect(body).toMatch(
-      /Opt-in is explicit \(`consent: true`\) and revocable; the soft cap is\s*customer-configurable up to a \$10,000\/month ceiling\./,
+      /Opt-in is explicit \(`consent: true`\) and revocable; the soft cap is\s*customer-configurable up to a \$100\/month ceiling\./,
     );
     expect(body).toMatch(
       /If the customer\s*has a \[BYOK\]\(\/api\/byok-anthropic\/\) key \(per-request header or stored\),\s*it is used instead of the bundled LLM\./,
@@ -51,7 +51,7 @@ describe('docs/api/bundled-llm content parity', () => {
     expect(body).toMatch(/Enterprise can\s*use a contracted custom budget/);
     expect(body).toMatch(/not a separately itemized charge on your Stripe invoice today/);
     expect(body).toMatch(
-      /The amount recorded\s*per turn is this flat value, not Driftstack's actual provider cost\./,
+      /The amount counted\s*against the budget per turn is this flat value, not Driftstack's actual provider cost\./,
     );
     expect(body).not.toMatch(/cost_basis|upstream provider cost/);
     expect(body).not.toMatch(/Cost-per-turn varies with the underlying model/);
@@ -74,10 +74,10 @@ describe('docs/api/bundled-llm content parity', () => {
     );
   });
 
-  it("PATCH validation framing pinned: 'consent — boolean.' + 'monthly_cap_usd_cents — integer; 0 to 1,000,000 ($10,000 ceiling). Negative values rejected with 400.' + 'Partial update — either field may be omitted, but at least one must be present; an empty body is rejected with 400.' — pinned so the integer/0-to-1M range + $10k ceiling + empty-body-400 contract (PatchBodySchema.refine) all stay documented", () => {
+  it("PATCH validation framing pinned: 'consent — boolean.' + 'monthly_cap_usd_cents — integer; 0 to 10,000 ($100 ceiling). Negative values rejected with 400.' + 'Partial update — either field may be omitted, but at least one must be present; an empty body is rejected with 400.' — pinned so the integer/0-to-1M range + $10k ceiling + empty-body-400 contract (PatchBodySchema.refine) all stay documented", () => {
     expect(body).toMatch(/- `consent` — boolean\./);
     expect(body).toMatch(
-      /- `monthly_cap_usd_cents` — integer; 0 to 1,000,000 \(\$10,000 ceiling\)\.\s*Negative values rejected with `400`\./,
+      /- `monthly_cap_usd_cents` — integer; 0 to 10,000 \(\$100 ceiling\)\.\s*Negative values rejected with `400`\./,
     );
     expect(body).toMatch(
       /Partial update — either field may be omitted, but at least one of\s*`consent` \/ `monthly_cap_usd_cents` must be present\. An empty body\s*is rejected with `400`/,

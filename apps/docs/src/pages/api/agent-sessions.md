@@ -158,6 +158,14 @@ mode. `token_budget` defaults to the deployment-configured value
 agent session to an existing browser session; without it, one is started
 automatically on the first executed intent.
 
+Claude Opus models (`claude-opus-5`, `claude-opus-4-8`, `claude-opus-4-7`)
+are available with your own Anthropic key only. On an account that would run
+the session on [bundled billing](/api/bundled-llm/#models-on-bundled-billing)
+— no key of its own, sent on this request or stored — creating an `ai` or
+`pair` session with an Opus model returns `403` with `requires_own_key: true`
+and the refused `model`. The same check runs on every message, because a
+session moves to bundled billing if its key is removed or expires.
+
 The optional `profile_id` attaches one of your saved **profiles** (a
 persistent browser identity — cookies, localStorage, etc.) to the session,
 so the run resumes that profile's stored state and saves changes back when it
@@ -1061,6 +1069,7 @@ Filter via
 | -----: | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 |    400 | validation-failed            | body fails schema (missing `user_message`, etc.)                                                                                                                                                                                                                         |
 |    403 | forbidden                    | create with — or mode-flip into — `mode: ai`/`pair` on a tier without the AI-agent feature (Free / Personal)                                                                                                                                                             |
+|    403 | forbidden                    | an Opus model on bundled billing, at create or on a message (`requires_own_key: true`)                                                                                                                                                                                   |
 |    404 | not-found                    | session id you cannot access (not your own, and not a team you hold admin on)                                                                                                                                                                                            |
 |    409 | conflict                     | mode mismatch, or `ai_control_unavailable: true` when control of the session changes while a message is running; the latter includes `phase` and can include consumed `tokens_consumed`, `usage`, and redacted `partial_results` that must not be replayed automatically |
 |    409 | profile-in-use               | create's `profile_id` already has a live session (carries `active_session_id`)                                                                                                                                                                                           |

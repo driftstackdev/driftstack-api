@@ -2140,10 +2140,21 @@ function buildRegistry(): OpenAPIRegistry {
       monthly_cap_usd_cents: z.number().int().min(0).max(1_000_000),
     })
     .openapi('BundledLlmSettings');
+  // The response above keeps the storage bound: a cap stored before the
+  // 2026-09-19 limit is grandfathered and is returned as it is. A NEW value is
+  // limited to 10,000 ($100) — the bound published here is the enforced one.
   const PatchBundledLlmRequestOpenApi = z
     .object({
       consent: z.boolean().optional(),
-      monthly_cap_usd_cents: z.number().int().min(0).max(1_000_000).optional(),
+      monthly_cap_usd_cents: z
+        .number()
+        .int()
+        .min(0)
+        .max(10_000)
+        .optional()
+        .describe(
+          'Monthly limit in US cents, at most 10000 ($100). A limit already above that, set before the maximum was lowered, is kept and may be sent back unchanged.',
+        ),
     })
     .describe('At least one of consent / monthly_cap_usd_cents must be present.')
     // V-929 — `minProperties: 1` states that rule in JSON Schema instead of only

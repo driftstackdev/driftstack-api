@@ -120,6 +120,8 @@ export interface BundledLlmStatus {
 
 export interface UpdateBundledLlmSettingsRequest {
   consent?: boolean;
+  /** At most 10000 ($100). A cap already above that, set before the maximum was
+   *  lowered, is kept and may be sent back unchanged. */
   monthly_cap_usd_cents?: number;
 }
 

@@ -15,6 +15,82 @@
 // bound up in the same interface. Those follow-ups extend this
 // service with additional methods.
 
+import {
+  agentModelListPrice,
+  deploymentKeyModelRefusal,
+  DEFAULT_AGENT_MODEL,
+  CLAUDE_MODELS,
+  type DeploymentKeyModelRefusal,
+} from '@driftstack/api-types';
+
+/**
+ * The most a customer may SET as their bundled monthly soft cap: $100.
+ *
+ * It was $10,000 — the storage bound (migration 0050's CHECK), exposed as the
+ * write bound, which let one PATCH authorise Driftstack's key to spend $10,000 a
+ * month for a single account. Lowered 2026-09-19 as groundwork for monthly
+ * credits, whose largest allowance is $300 and whose top-ups are bought, not
+ * typed in.
+ *
+ * ⛔ NEW WRITES ONLY. A cap already stored above this is GRANDFATHERED: it is
+ * read, enforced and returned exactly as before, and re-sending that same value
+ * is accepted, because both clients save the whole settings object — a customer
+ * with a $500 cap who only flips consent re-sends 50,000, and refusing that would
+ * lock them out of their own consent toggle. The storage bound stays where it
+ * was, so no stored row violates anything.
+ */
+export const BUNDLED_CAP_MAX_NEW_WRITE_CENTS = 10_000;
+/** Migration 0050's CHECK constraint: the most the column can hold. */
+export const BUNDLED_CAP_STORAGE_MAX_CENTS = 1_000_000;
+
+/**
+ * Whether a PATCH may write `requestedCents` over a stored `currentCents`.
+ * Null when it may; otherwise the customer-facing reason.
+ */
+export function bundledCapWriteRefusal(args: {
+  requestedCents: number;
+  currentCents: number | null;
+}): string | null {
+  if (args.requestedCents <= BUNDLED_CAP_MAX_NEW_WRITE_CENTS) return null;
+  // A grandfathered cap above the new maximum may be kept as it is OR LOWERED to
+  // any value above the maximum, never raised. Lowering only shrinks exposure,
+  // and refusing it would push a customer who wants to spend less to either keep
+  // the higher cap or jump all the way down — the owner's decision, 2026-09-19.
+  if (args.currentCents !== null && args.requestedCents <= args.currentCents) return null;
+  return (
+    `monthly_cap_usd_cents can be set to at most ${BUNDLED_CAP_MAX_NEW_WRITE_CENTS.toString()} ` +
+    `($${(BUNDLED_CAP_MAX_NEW_WRITE_CENTS / 100).toFixed(2)}).`
+  );
+}
+
+/**
+ * Why a session's model cannot run on the deployment's key, as the customer
+ * reads it — or null when it can. See `deploymentKeyModelRefusal` for the rule.
+ *
+ * The message names the model by its label, says the one thing that WILL work
+ * (their own key), and offers the default model as the alternative. It says
+ * nothing about pricing or metering: those are internals.
+ */
+export function deploymentKeyModelRefusalFor(model: string): {
+  reason: DeploymentKeyModelRefusal;
+  detail: string;
+} | null {
+  const reason = deploymentKeyModelRefusal(model);
+  if (reason === null) return null;
+  const alternative = CLAUDE_MODELS[DEFAULT_AGENT_MODEL].label;
+  const addKey =
+    'Add your key (PUT /v1/account/me/byok-anthropic-key, or the x-byok-anthropic-api-key header), ';
+  // The reason travels separately for a client to branch on; the sentence differs
+  // only because an unpriced id has no label and need not be an Anthropic model
+  // (older stored ids, other providers' ids), so it must not promise one.
+  const detail =
+    reason === 'own_key_only'
+      ? `${agentModelListPrice(model)?.label ?? model} is available with your own Anthropic key. ` +
+        `${addKey}or start a session with ${alternative}.`
+      : `This model is available with your own key. ${addKey}or start a session with ${alternative}.`;
+  return { reason, detail };
+}
+
 export interface BundledLlmSettings {
   /** Migration 0050 `bundled_llm_consent` column. */
   consent: boolean;
@@ -27,6 +103,10 @@ export interface BundledLlmSettings {
 export interface BundledLlmRepo {
   findSettings(accountId: string): Promise<BundledLlmSettings | null>;
   /**
+   * ⛔ Sums the POSTED flat price (`cost_usd_cents`), never the list-price cost
+   * (`list_price_cost_millicents`) that the same rows also carry — see
+   * POSTED_COST_FIELD in db/agent-decomposer-usage-recorder.ts.
+   *
    * Arc 1 sub-slice 6.5 (v2-#6) — sum `usage_records.cost_usd_cents`
    * over rows where account_id = ? AND record_type =
    * 'agent_decomposer_bundled' AND recorded_at >= start_of_calendar_month

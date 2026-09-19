@@ -12,7 +12,7 @@ API key. Each agent turn counts a fixed amount against a monthly cap
 the customer controls (default $20).
 
 Opt-in is explicit (`consent: true`) and revocable; the soft cap is
-customer-configurable up to a $10,000/month ceiling. If the customer
+customer-configurable up to a $100/month ceiling. If the customer
 has a [BYOK](/api/byok-anthropic/) key (per-request header or stored),
 it is used instead of the bundled LLM.
 
@@ -107,8 +107,12 @@ Request body:
 Constraints:
 
 - `consent` — boolean.
-- `monthly_cap_usd_cents` — integer; 0 to 1,000,000 ($10,000 ceiling).
-  Negative values rejected with `400`.
+- `monthly_cap_usd_cents` — integer; 0 to 10,000 ($100 ceiling).
+  Negative values rejected with `400`. A cap set above $100 before
+  2026-09-19 (the earlier ceiling was 1,000,000 cents, $10,000) is kept:
+  it is still enforced and returned, and sending that same value back
+  (for example when saving the whole settings form) is accepted. Any
+  other value above 10,000 is rejected with `400`.
 
 > **Tier availability.** Opting **in** (`consent: true`) requires a
 > tier that offers bundled-LLM access: API Builder, API Scale, or
@@ -180,13 +184,41 @@ Content-Type: application/problem+json
 The SDK exposes the typed `BundledLlmConsentRequiredError` (no
 extension fields).
 
+## Models on bundled billing
+
+Bundled billing runs the default model, Claude Sonnet 5, and the other
+non-Opus models in the picker. **Claude Opus models are available with
+your own Anthropic key only.** When a session would run an Opus model on
+bundled billing — because the account has no key of its own — the
+request is refused with a `403`:
+
+```http
+HTTP/1.1 403 Forbidden
+Content-Type: application/problem+json
+
+{
+  "type": "https://errors.driftstack.dev/forbidden",
+  "title": "Forbidden",
+  "status": 403,
+  "detail": "Claude Opus 5 is available with your own Anthropic key. Add your key (PUT /v1/account/me/byok-anthropic-key, or the x-byok-anthropic-api-key header), or start a session with Claude Sonnet 5.",
+  "requires_own_key": true,
+  "model": "claude-opus-5"
+}
+```
+
+This is checked when the session is created (for an account with no key
+of its own and bundled billing on) and again on every turn, because a
+session created with your own key moves to bundled billing if that key is
+removed or expires. A session using your own key keeps every model.
+
 ## Errors
 
 | Status | Type                         | When                                                                     |
 | -----: | ---------------------------- | ------------------------------------------------------------------------ |
-|    400 | validation-failed            | body fails schema (negative cap, > 1_000_000 cap)                        |
+|    400 | validation-failed            | body fails schema (negative cap, a new cap above 10,000)                 |
 |    401 | unauthorized                 | missing or invalid bearer token                                          |
 |    403 | forbidden                    | `consent: true` on a tier without bundled-LLM access (below API Builder) |
+|    403 | forbidden                    | an Opus model on bundled billing (agent-session create or turn)          |
 |    402 | bundled-llm-budget-exhausted | spend reached the cap; recover via PATCH / BYOK / next month             |
 |    402 | bundled-llm-consent-required | deployment has bundled-LLM but the customer hasn't opted in              |
 
@@ -200,8 +232,8 @@ on the **agent-session turn** route, not on these reads.
   **$0.10** against the customer-controlled monthly budget, whatever
   the model or token count. This budget is enforced by Driftstack but
   is not a separately itemized charge on your Stripe invoice today;
-  Enterprise can use a contracted custom budget. The amount recorded
-  per turn is this flat value, not Driftstack's actual provider cost.
+  Enterprise can use a contracted custom budget. The amount counted
+  against the budget per turn is this flat value, not Driftstack's actual provider cost.
 - No prompt content is logged on Driftstack's side beyond what
   customers can read in their own session transcripts.
 - Bundled-LLM consent does NOT grant Driftstack any rights to

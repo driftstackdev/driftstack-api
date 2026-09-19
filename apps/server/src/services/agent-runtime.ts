@@ -475,6 +475,12 @@ export interface AgentDecomposerUsageRecorder {
      * else → 'agent_decomposer'. Bundled rows post a flat $0.10/turn
      * cost (Q5=A hide actual upstream); non-bundled rows keep the
      * v2-#4 metadata.cost_usd_cents Anthropic-derived value.
+     *
+     * Every row, bundled or not, ALSO carries the call's true list-price cost
+     * as `metadata.list_price_cost_millicents`, which the recorder derives from
+     * `usage` (model + the token counts, each part at its own rate). That is a
+     * second field, not a replacement: the soft cap keeps summing the posted
+     * `cost_usd_cents`, and nothing sums the list price yet.
      */
     keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none';
     /**

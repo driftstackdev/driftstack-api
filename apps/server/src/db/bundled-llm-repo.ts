@@ -61,6 +61,10 @@ export class DrizzleBundledLlmRepo implements BundledLlmRepo {
     // SUM is over JSONB metadata.cost_usd_cents — the recorder writes
     // a numeric value there for every bundled row (sub-slice 6.4).
     // COALESCE so an empty match returns 0 instead of NULL.
+    // ⛔ The same rows also carry `list_price_cost_millicents`, the true cost of
+    // the call. It is NOT summed here: the cap is denominated in what the
+    // customer was sold (a flat price per turn), and switching the sum would
+    // change what every existing cap means without anyone deciding it.
     const rows = await this.database.db
       .select({
         total: sql<string>`coalesce(sum(

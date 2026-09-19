@@ -42,7 +42,7 @@ describe('Arc 1 v2-#6 sub-slice 6.6 GET + PATCH /v1/account/me/bundled-llm-setti
     expect(get.json()).toEqual({ consent: true, monthly_cap_usd_cents: 2000 });
   });
 
-  it('PATCH raises the cap up to $10,000 (1_000_000 cents) — accepted at upper bound', async () => {
+  it('PATCH raises the cap up to $100 (10_000 cents) — accepted at the upper bound for a new value', async () => {
     fx = await buildTestApp({
       enableBundledLlm: { consent: true, monthlyCapUsdCents: 2000 },
     });
@@ -50,10 +50,10 @@ describe('Arc 1 v2-#6 sub-slice 6.6 GET + PATCH /v1/account/me/bundled-llm-setti
       method: 'PATCH',
       url: '/v1/account/me/bundled-llm-settings',
       headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: { monthly_cap_usd_cents: 1_000_000 },
+      payload: { monthly_cap_usd_cents: 10_000 },
     });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ consent: true, monthly_cap_usd_cents: 1_000_000 });
+    expect(res.json()).toEqual({ consent: true, monthly_cap_usd_cents: 10_000 });
   });
 
   it('PATCH rejects monthly_cap_usd_cents > 1_000_000 ($10,000 cap) with 400', async () => {

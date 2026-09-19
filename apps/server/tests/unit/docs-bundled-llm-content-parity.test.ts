@@ -37,8 +37,9 @@ describe('Arc 6 docs.bundled-llm content parity', () => {
     expect(body).toMatch(/PATCH \/v1\/account\/me\/bundled-llm-settings/);
   });
 
-  it('cap ceiling pinned at $10,000 (1_000_000 cents) — matches schema constraint', () => {
-    expect(body).toMatch(/1,000,000.*\$10,000/);
+  it('cap ceiling pinned at $100 (10,000 cents) for new values, with the earlier $10,000 caps grandfathered — matches the route', () => {
+    expect(body).toMatch(/0 to 10,000 \(\$100 ceiling\)/);
+    expect(body).toMatch(/earlier ceiling was 1,000,000 cents, \$10,000\) is kept/);
   });
 
   it('default cap pinned at $20 (2000 cents)', () => {

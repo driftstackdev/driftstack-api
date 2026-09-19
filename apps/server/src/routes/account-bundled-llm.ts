@@ -10,6 +10,11 @@
 // server rejects out-of-range inputs with 400; the CHECK is a
 // defence-in-depth backstop if the route validation is ever skipped.
 //
+// 2026-09-19 — a NEW value is further bounded to BUNDLED_CAP_MAX_NEW_WRITE_CENTS
+// ($100). The schema below keeps the storage bound because a stored cap above
+// $100 is grandfathered and may be re-sent unchanged; the tighter bound is applied
+// against the stored value (bundledCapWriteRefusal), not by the schema alone.
+//
 // Q4=A locked: BYOK always wins. Flipping consent=true does NOT
 // silently bill customers — bundled-LLM only resolves at turn time
 // when no BYOK key (header or stored) is available AND the soft-cap
@@ -23,7 +28,7 @@
 import type { FastifyInstance } from 'fastify';
 import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { z } from 'zod';
-import type { BundledLlmService } from '../services/bundled-llm.js';
+import { bundledCapWriteRefusal, type BundledLlmService } from '../services/bundled-llm.js';
 import type { AccountAuditService } from '../services/account-audit.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
 // S42 2026-07-07 (founder-approved) — bundled-LLM consent tier gate.
@@ -144,6 +149,20 @@ export function registerAccountBundledLlmRoutes(
       // Capture prior consent state so we can detect a true toggle
       // (not just a no-op re-write) before emitting the audit row.
       const prior = await service.findSettings(ctx.account.id);
+      if (parsed.data.monthly_cap_usd_cents !== undefined) {
+        const refusal = bundledCapWriteRefusal({
+          requestedCents: parsed.data.monthly_cap_usd_cents,
+          currentCents: prior?.monthlyCapUsdCents ?? null,
+        });
+        // The same problem type and field-error shape as a schema failure, so a
+        // client that already renders "fails schema" renders this one too.
+        if (refusal !== null) {
+          throw new ValidationError({
+            formErrors: [],
+            fieldErrors: { monthly_cap_usd_cents: [refusal] },
+          });
+        }
+      }
       const next = await service.updateSettings({
         accountId: ctx.account.id,
         ...(parsed.data.consent !== undefined ? { consent: parsed.data.consent } : {}),

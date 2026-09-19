@@ -31,6 +31,8 @@ import { z } from 'zod';
 import { hijackedReplyHeaders } from '../lib/hijacked-reply.js';
 import {
   AgentModelSchema,
+  DEFAULT_AGENT_MODEL,
+  PROBLEM_TYPES,
   ConsequentialActionCategorySchema,
   SendInputEventRequestSchema,
   ResumeSessionRequestSchema,
@@ -79,7 +81,7 @@ import { parseSessionId } from '../lib/session-id.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
 import type { ExitIdentityStore } from '../services/exit-identity-cache.js';
-import type { BundledLlmService } from '../services/bundled-llm.js';
+import { deploymentKeyModelRefusalFor, type BundledLlmService } from '../services/bundled-llm.js';
 import type { BundledTurnConcurrencyLimiter } from '../services/bundled-turn-concurrency.js';
 import type { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
 import {
@@ -2267,6 +2269,63 @@ export function registerAgentSessionsRoutes(
     return { os: fp.os, confidence: fp.confidence, at: new Date(atMs).toISOString() };
   };
 
+  /**
+   * Refuse, at CREATE, a session whose model the account could only ever run on
+   * the deployment's key, when the deployment's key refuses that model (Opus, or
+   * a model with no list price — see deploymentKeyModelRefusal).
+   *
+   * Why here as well as per turn: without it the customer gets a session that
+   * fails on its first message, after picking a model and launching a browser.
+   * Per turn remains the enforcement (an own key can disappear mid-session);
+   * this is the early, honest answer.
+   *
+   * "Could only ever run on the deployment's key" means the turn-time resolution
+   * would choose the bundled leg: no own key on this request and none stored,
+   * consent given, and a plan that includes it. An account with a stored key, or
+   * one that sends its key per request, keeps every model. An account with no key
+   * and no consent is not refused here: its turns are refused for that, with a
+   * message that says so.
+   */
+  const refuseModelTheAccountCanOnlyRunOnTheDeploymentKey = async (a: {
+    req: FastifyRequest;
+    ownerAccountId: string;
+    ownerTier: AccountTier;
+    model: string;
+  }): Promise<void> => {
+    if (agentDecomposerKind !== 'claude') return;
+    if (bundledLlmService === undefined || deploymentFallbackKey === undefined) return;
+    const refusal = deploymentKeyModelRefusalFor(a.model);
+    if (refusal === null) return;
+    const header = a.req.headers['x-byok-anthropic-api-key'];
+    if (typeof header === 'string' && header.length > 0) return;
+    try {
+      requireBundledLlmTier(a.ownerTier);
+    } catch {
+      return;
+    }
+    const settings = await bundledLlmService.findSettings(a.ownerAccountId);
+    if (settings === null || !settings.consent) return;
+    if (byokService !== undefined) {
+      try {
+        const stored = await byokService.getPlaintext({
+          accountId: a.ownerAccountId,
+          now: new Date(),
+        });
+        if (stored !== null) return;
+      } catch (err) {
+        // A stored key that cannot be read is not proof there is none. Let the
+        // create through; the per-turn check still refuses if the turn would
+        // land on the deployment's key.
+        a.req.log.warn(
+          { component: 'agent-session-create', err },
+          'BYOK read failed during the model check at create; deferring to the per-turn check',
+        );
+        return;
+      }
+    }
+    throw deploymentKeyModelRefusedError(a.model, refusal.detail);
+  };
+
   /** LK.4 — auto-mint a LiveKit token for the just-created (or
    *  replayed) agent session. Returns undefined when:
    *   - the fleet repo or encryption key isn't wired
@@ -2753,6 +2812,12 @@ export function registerAgentSessionsRoutes(
       // uses the live tier resolved by the effective-owner limiter above.
       if ((parsed.data.mode ?? 'ai') !== 'manual') {
         requireTierFeature(ownerTier, 'aiAgent');
+        await refuseModelTheAccountCanOnlyRunOnTheDeploymentKey({
+          req,
+          ownerAccountId,
+          ownerTier,
+          model: parsed.data.model ?? DEFAULT_AGENT_MODEL,
+        });
       }
 
       // Founder directive #63 — TEST THE PROXY LIVE before we create a session row
@@ -5761,6 +5826,25 @@ export function registerAgentSessionsRoutes(
         }
       }
       if (settings !== null && settings.consent && bundledTierEntitled) {
+        // The deployment's key runs only priced, non-Opus models (see
+        // deploymentKeyModelRefusal). Checked on EVERY turn, not only at create:
+        // a session created with the customer's own key falls through to this leg
+        // the turn after that key is cleared or expires, and would otherwise go on
+        // running Opus — or a model nobody can meter — on Driftstack's key.
+        // Before the cap read and the concurrency slot, so a refused turn spends
+        // neither. A deterministic deployment calls no model, so it has nothing
+        // to refuse (the same reasoning as the no-key 502 below).
+        const modelRefusal =
+          agentDecomposerKind === 'claude' ? deploymentKeyModelRefusalFor(pre.model) : null;
+        if (modelRefusal !== null) {
+          await assertAgentMessageAdmissionCurrent(req.params.id, admission);
+          try {
+            metrics?.inc(METRIC_NAMES.bundledLlmErrorTotal, { kind: 'model_requires_own_key' });
+          } catch {
+            /* swallow */
+          }
+          throw deploymentKeyModelRefusedError(pre.model, modelRefusal.detail);
+        }
         // Arc 1 sub-slice 6.5 (v2-#6) — soft-cap pre-turn check.
         // Sum bundled-LLM spend in the current calendar month and
         // refuse the turn when it has reached the cap. The customer
@@ -6906,4 +6990,22 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   app.post('/v1/agent-sessions/:id/input-event', stub);
   // W393 — POST /:id/resume also gated (same activation message).
   app.post('/v1/agent-sessions/:id/resume', stub);
+}
+
+/**
+ * 403 for a session whose model the deployment's key does not run.
+ *
+ * Forbidden, like the plan-ineligible refusal on the same leg: the request is
+ * well-formed and the account is fine; this account may not run this model on
+ * this key. `requires_own_key` lets a client offer "add your key" without
+ * parsing the sentence, and `model` names what was refused.
+ */
+function deploymentKeyModelRefusedError(model: string, detail: string): ApiError {
+  return new ApiError({
+    type: PROBLEM_TYPES.Forbidden,
+    title: 'Forbidden',
+    status: 403,
+    detail,
+    extensions: { requires_own_key: true, model },
+  });
 }

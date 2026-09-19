@@ -7,19 +7,89 @@
 // documented in that migration's header.
 //
 // quantity = 1 (one decompose call). Aggregations over multiple
-// turns sum quantity for "calls made" or sum metadata.cost_usd_cents
-// for "dollars spent" — both queryable from the same row set.
+// turns sum quantity for "calls made", metadata.cost_usd_cents for
+// what was POSTED (the bundled soft cap), or
+// metadata.list_price_cost_millicents for what the calls COST — never
+// one added to another (see POSTED_COST_FIELD below).
 //
 // Best-effort recording: AgentRuntime swallows exceptions thrown
 // here so a meter-side outage doesn't break the customer's chat
 // turn. We still log the original error before re-throwing so
 // the Sentry trail captures the failure.
 
+import { listPriceCostMillicents, type ModelCallTokens } from '@driftstack/api-types';
 import type { Database } from './client.js';
 import { usageRecords } from './schema.js';
 import type { AgentDecomposerUsageRecorder } from '../services/agent-runtime.js';
+import type { DecomposeUsage } from '../services/agent-decomposer.js';
 import type { AccountAuditService } from '../services/account-audit.js';
 import type { Logger } from 'pino';
+
+/**
+ * THE TWO COST FIELDS ON A USAGE ROW, and why they must never be confused.
+ *
+ *  · `cost_usd_cents` — what was POSTED, in whole cents. On a bundled row it is
+ *    the flat per-turn price (10 on a turn's first row, 0 on the rest), and it is
+ *    the ONLY field the bundled monthly soft cap sums (db/bundled-llm-repo.ts).
+ *    On an own-key row it is the provider cost rounded UP to a whole cent per
+ *    call. It is not the true cost of anything.
+ *  · `list_price_cost_millicents` — what the call COST at the provider's list
+ *    price, in thousandths of a cent, every token at its own rate and nothing
+ *    rounded up (see `listPriceCostMillicents`). Written on bundled AND own-key
+ *    rows. Nothing sums it yet: it is the groundwork the credit ledger is built
+ *    on, recorded now so that ledger starts from true numbers.
+ *
+ * Different units in the NAMES, so a query that adds one to the other reads as
+ * wrong on sight. Summing the list price into the soft cap would change what a
+ * customer's cap means overnight; summing the flat price into the ledger would
+ * bill a 40-call turn like a 1-call turn.
+ */
+export const POSTED_COST_FIELD = 'cost_usd_cents' as const;
+export const LIST_PRICE_COST_FIELD = 'list_price_cost_millicents' as const;
+
+/**
+ * One call's token counts, split the way the provider bills them.
+ *
+ * A cache write the provider did not break down by lifetime is priced at the
+ * 1-hour rate — the dearer one, and the one the planner's largest prefix uses —
+ * so an unattributed write can overstate a call's cost but never understate it.
+ * The Claude adapter splits its own per-call estimate the same way.
+ */
+export function modelCallTokens(usage: DecomposeUsage): ModelCallTokens {
+  const reported5m = usage.anthropicCacheCreation5mInputTokens ?? 0;
+  const reported1h = usage.anthropicCacheCreation1hInputTokens ?? 0;
+  const writeTotal = Math.max(
+    usage.anthropicCacheCreationInputTokens ?? 0,
+    reported5m + reported1h,
+  );
+  return {
+    uncachedInput: usage.anthropicInputTokens ?? 0,
+    output: usage.anthropicOutputTokens ?? 0,
+    cacheRead: usage.anthropicCacheReadInputTokens ?? 0,
+    cacheWrite5m: reported5m,
+    cacheWrite1h: writeTotal - reported5m,
+  };
+}
+
+/**
+ * The list-price cost of the call this usage block describes: 0 when no model
+ * was called (the deterministic decomposer), null when a model was called that
+ * the registry cannot price — "unknown" must never be written as "free".
+ *
+ * Also null when the provider never reported the call's input or output count:
+ * a call the customer's Stop cut off before usage came back (the runtime's
+ * `abortedCallEvidence`) was still billed by the provider, so filling the gaps
+ * with 0 would store a paid call as free. The cache counts may be absent on a
+ * complete report (no caching that call), so only these two decide.
+ */
+export function listPriceOfCall(usage: DecomposeUsage): number | null {
+  if (usage.decomposerKind === 'deterministic') return 0;
+  if (usage.model === undefined) return null;
+  if (usage.anthropicInputTokens === undefined || usage.anthropicOutputTokens === undefined) {
+    return null;
+  }
+  return listPriceCostMillicents(usage.model, modelCallTokens(usage));
+}
 
 export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsageRecorder {
   constructor(
@@ -94,6 +164,11 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
       // Q5=A — surface the POSTED flat cost; the upstream Anthropic-
       // derived cost in args.usage.costUsdCents is intentionally NOT
       // written to metadata so a leaked DB snapshot can't reveal it.
+      // (The list-price cost IS written, as its own field, below: it is the
+      // provider's PUBLIC price times the token counts this row already
+      // carries, so it discloses nothing a snapshot did not already hold, and
+      // the credit ledger cannot be built on a flat number. It is kept out of
+      // the customer's audit payload, which is what a customer can read.)
       // Flat charge is per TURN, not per ROW. A read-intent turn posts two
       // rows (decompose + #140 read-back); only the first carries the turn's
       // $0.10 so the monthly cap totals what the customer was sold and what the
@@ -110,6 +185,15 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
     // reports can group without an extra column; the usage_records
     // schema only carries the driftstack-session reference natively.
     metadata.agent_session_id = args.agentSessionId;
+
+    // The row carries the list-price cost; the audit payload below does not.
+    // That payload lands on the customer's own audit log, and Phase 0 changes
+    // nothing a customer can see — on a bundled row it would also show them the
+    // cost behind the flat price they were sold.
+    const rowMetadata: Record<string, unknown> = {
+      ...metadata,
+      [LIST_PRICE_COST_FIELD]: listPriceOfCall(args.usage),
+    };
 
     try {
       // Idempotent on the caller-supplied row id. `recordUsageRowWithRetry`
@@ -129,7 +213,7 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
         ...(args.driftstackSessionId !== null ? { sessionId: args.driftstackSessionId } : {}),
         recordType,
         quantity: 1,
-        metadata,
+        metadata: rowMetadata,
         recordedAt: args.now,
       });
       await (args.recordId !== undefined ? insert.onConflictDoNothing() : insert);

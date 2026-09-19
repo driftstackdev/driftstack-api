@@ -236,3 +236,122 @@ export const CLAUDE_MODEL_REQUEST_CAPABILITIES: Record<AgentModel, AgentModelReq
       supportsStructuredOutput: true,
     },
   };
+
+// ───────────────────────────────────────────────────────────────────────────
+// Which key may run a model, and what a call on it costs at list price
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * Which key a model may run on.
+ *
+ *  · `any_key` — the customer's own key, or the deployment's key when the
+ *    account's plan includes AI (the "bundled" leg).
+ *  · `own_key_only` — the customer's own key only. The owner's decision of
+ *    2026-09-19: Opus-class models never run on included credits, because at
+ *    2.5x Sonnet's rate a handful of Opus turns would spend a month's allowance.
+ *
+ * ⛔ A TOTAL MAP OVER THE ENUM, ON PURPOSE. Adding a model to
+ * {@link AgentModelSchema} without deciding its key policy is a type error here,
+ * rather than a model that silently inherits `any_key` and runs on the
+ * deployment's key. The desktop and dashboard pickers read this too, so they can
+ * hide or mark a model the account cannot run without a key of its own.
+ */
+export type AgentModelKeyPolicy = 'any_key' | 'own_key_only';
+
+export const CLAUDE_MODEL_KEY_POLICY: Record<AgentModel, AgentModelKeyPolicy> = {
+  'claude-opus-5': 'own_key_only',
+  'claude-sonnet-5': 'any_key',
+  'claude-opus-4-8': 'own_key_only',
+  'claude-opus-4-7': 'own_key_only',
+  'claude-sonnet-4-6': 'any_key',
+  'claude-haiku-4-5': 'any_key',
+};
+
+/**
+ * The registry row for a model id, or null when the registry has no price for it.
+ *
+ * ⛔ AN OWN-PROPERTY LOOKUP, NOT `CLAUDE_MODELS[id]`. A stored id is typed
+ * `AgentModel` but read from a database column by a cast, so the type proves
+ * nothing about the value; and a plain index would answer `toString` or
+ * `__proto__` with something that is not a price. Unknown means null — never a
+ * default rate — because a model with no price is a model nobody can meter.
+ */
+export function agentModelListPrice(model: string): AgentModelInfo | null {
+  const parsed = AgentModelSchema.safeParse(model);
+  if (!parsed.success) return null;
+  return Object.prototype.hasOwnProperty.call(CLAUDE_MODELS, parsed.data)
+    ? CLAUDE_MODELS[parsed.data]
+    : null;
+}
+
+/**
+ * Why the deployment's key refuses a model, or null when it may run it.
+ *
+ *  · `unpriced` — no list price in the registry. A call on the deployment's key
+ *    would be unmetered, so it must not happen. The customer's own key still
+ *    runs it: the provider bills them directly.
+ *  · `own_key_only` — see {@link CLAUDE_MODEL_KEY_POLICY}.
+ *
+ * An unknown `claude-opus-*` id is `unpriced` first: both are refusals, and
+ * "we cannot price this" is the more fundamental of the two.
+ */
+export type DeploymentKeyModelRefusal = 'unpriced' | 'own_key_only';
+
+export function deploymentKeyModelRefusal(model: string): DeploymentKeyModelRefusal | null {
+  if (agentModelListPrice(model) === null) return 'unpriced';
+  const parsed = AgentModelSchema.parse(model);
+  return CLAUDE_MODEL_KEY_POLICY[parsed] === 'own_key_only' ? 'own_key_only' : null;
+}
+
+/**
+ * The token counts of ONE model call, split the way the provider bills them.
+ * `uncachedInput` is the provider's `input_tokens`, which — once caching is on —
+ * is only the part of the prompt after the last cache breakpoint.
+ */
+export interface ModelCallTokens {
+  uncachedInput: number;
+  output: number;
+  cacheRead: number;
+  /** Tokens written to the 5-minute cache. */
+  cacheWrite5m: number;
+  /** Tokens written to the 1-hour cache. */
+  cacheWrite1h: number;
+}
+
+/**
+ * The list-price cost of one model call, in MILLICENTS (thousandths of a US cent),
+ * or null when the model has no price in the registry or a count is not a
+ * non-negative finite number. Null is "cannot say", never zero: a row that read 0
+ * would claim a paid call was free.
+ *
+ * Every part at its own rate: uncached input at the input rate, output at the
+ * output rate, a cache read at `cacheReadMultiplier` of the input rate, and each
+ * cache write at its lifetime's multiplier.
+ *
+ * ⛔ NO ROUNDING UP. The per-call figure elsewhere (`costUsdCents`) is ceilinged to
+ * a whole cent, which is right for a conservative per-row estimate and wrong for
+ * a ledger: a session of two hundred small calls would be overstated by up to two
+ * dollars. The arithmetic is done in microcents (tokens × cents-per-1k × 1000),
+ * which is an integer for every rate in the registry, and the result is only
+ * rounded to the nearest microcent to shed floating-point noise — so the value
+ * is exact to 0.001 millicent, and never biased up or down.
+ */
+export function listPriceCostMillicents(model: string, tokens: ModelCallTokens): number | null {
+  const rate = agentModelListPrice(model);
+  if (rate === null) return null;
+  const counts = [
+    tokens.uncachedInput,
+    tokens.output,
+    tokens.cacheRead,
+    tokens.cacheWrite5m,
+    tokens.cacheWrite1h,
+  ];
+  if (!counts.every((n) => Number.isFinite(n) && n >= 0)) return null;
+  const microcents =
+    tokens.uncachedInput * rate.inputCentsPer1k * 1000 +
+    tokens.output * rate.outputCentsPer1k * 1000 +
+    tokens.cacheRead * rate.inputCentsPer1k * rate.cacheReadMultiplier * 1000 +
+    tokens.cacheWrite5m * rate.inputCentsPer1k * rate.cacheWrite5mMultiplier * 1000 +
+    tokens.cacheWrite1h * rate.inputCentsPer1k * rate.cacheWrite1hMultiplier * 1000;
+  return Math.round(microcents) / 1000;
+}

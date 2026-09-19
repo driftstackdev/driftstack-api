@@ -3204,7 +3204,8 @@
           "monthly_cap_usd_cents": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 1000000
+            "maximum": 10000,
+            "description": "Monthly limit in US cents, at most 10000 ($100). A limit already above that, set before the maximum was lowered, is kept and may be sent back unchanged."
           }
         },
         "description": "At least one of consent / monthly_cap_usd_cents must be present.",
