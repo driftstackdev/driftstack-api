@@ -7,13 +7,13 @@
 //
 //   • Zod-source-of-truth + breaking-change framing in module
 //     comment.
-//   • 24 sub-module re-exports in canonical order: common /
+//   • 25 sub-module re-exports in canonical order: common /
 //     problem / sessions / api-keys / accounts / usage / webhooks
 //     / admin / auth / cli-authorize / incidents / profiles /
 //     billing / crypto-orders / egress / livekit / agent-input-event
 //     / agent-tab-ops / agent-models / agent-sessions / agent-intents /
-//     recipes / archetypes / openvpn-directives.
-//   • All 24 source files exist on disk (no dangling re-exports).
+//     recipes / archetypes / openvpn-directives / ai-credits.
+//   • All 25 source files exist on disk (no dangling re-exports).
 //   • The roster is complete — index.ts re-exports EXACTLY these
 //     modules and no unpinned extras (count-parity guard).
 //   • Server-internal-shapes-live-elsewhere framing pinned (load-
@@ -58,6 +58,7 @@ const EXPECTED_REEXPORTS = [
   'recipes',
   'archetypes',
   'openvpn-directives',
+  'ai-credits',
 ] as const;
 
 describe('W384.C packages/api-types/src/index.ts public-surface content parity', () => {
@@ -80,7 +81,7 @@ describe('W384.C packages/api-types/src/index.ts public-surface content parity',
     );
   });
 
-  it('24 sub-module re-exports pinned in canonical order', () => {
+  it('25 sub-module re-exports pinned in canonical order', () => {
     let lastIdx = -1;
     for (const m of EXPECTED_REEXPORTS) {
       const expected = `export * from './${m}.js';`;
@@ -99,7 +100,7 @@ describe('W384.C packages/api-types/src/index.ts public-surface content parity',
     expect(actual).toEqual([...EXPECTED_REEXPORTS]);
   });
 
-  it('24 source files exist on disk (no dangling re-exports)', () => {
+  it('25 source files exist on disk (no dangling re-exports)', () => {
     for (const m of EXPECTED_REEXPORTS) {
       const file = resolve(REPO_ROOT, `packages/api-types/src/${m}.ts`);
       expect(existsSync(file), `re-exported source file missing: ${m}.ts`).toBe(true);
