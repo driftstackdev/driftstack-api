@@ -188,6 +188,46 @@ in that header, so the call above keeps verifying through a rotation
 without setting any option while you roll the new secret across your
 verifier infra.
 
+## Run an AI task
+
+Hand a task to the AI agent in plain words and read its answer. The
+agent plans the taps and page loads itself:
+
+```go
+func runAITask(ctx context.Context, client *driftstack.Client) error {
+    agent, err := client.AgentSessions.Create(ctx, &driftstack.CreateAgentSessionRequest{Mode: "ai"}, nil)
+    if err != nil {
+        return err
+    }
+    defer client.AgentSessions.Close(context.Background(), agent.ID)
+
+    // A new session is `provisioning` until its browser is ready.
+    for {
+        s, err := client.AgentSessions.Get(ctx, agent.ID)
+        if err != nil {
+            return err
+        }
+        if s.Status != "provisioning" {
+            break
+        }
+        time.Sleep(2 * time.Second)
+    }
+    reply, err := client.AgentSessions.Message(ctx, agent.ID,
+        "Open https://example.com and tell me the page title.",
+        &driftstack.MessageOptions{IdempotencyKey: "task-" + time.Now().Format(time.RFC3339Nano)})
+    if err != nil {
+        return err
+    }
+    fmt.Println(reply.Kind, reply.Answer)
+    return nil
+}
+```
+
+The guide [Run AI tasks from your code](/guides/run-ai-tasks-from-code/)
+covers the rest a program needs: who pays for the AI, answering the
+agent's questions, approving a payment it held, stopping a task that
+runs too long, safe retries, and limits.
+
 ## Pair-mode takeover (interactive AI sessions)
 
 For sessions where a human needs to step in mid-flight:
@@ -265,6 +305,9 @@ ignored.
 
 ## Next steps
 
+- [Run AI tasks from your code](/guides/run-ai-tasks-from-code/) — give
+  the AI agent a task, read its answer, and handle questions, approvals,
+  stops, errors and retries.
 - [Session lifecycle reference](/guides/session-lifecycle/) —
   states, the free-tier 20-minute duration cap, reconnect semantics.
 - [Profile management](/guides/profile-management/) — persistent

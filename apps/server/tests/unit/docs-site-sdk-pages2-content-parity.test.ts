@@ -52,9 +52,13 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
       /The distribution name is `driftstack-sdk`; the import name is `driftstack`\./,
     );
     expect(body).toMatch(/\*\*Requirements:\*\* Python 3\.10\+/);
-    expect(body).toMatch(
-      /Inputs accept either a Pydantic model OR a plain `dict`\. Outputs are typed Pydantic models\./,
-    );
+    // Corrected 2026-09-19: only six Python resources return Pydantic models —
+    // `agent_sessions`, the one the AI task guide teaches, returns plain dicts.
+    // docs-pages-sdk-installation-content-parity derives that list from the SDK
+    // source; this sweep only checks the sentence is the corrected one.
+    expect(body).toMatch(/Inputs accept either a Pydantic model OR a plain `dict`\./);
+    expect(body).toMatch(/returns plain dicts that mirror the API's JSON/);
+    expect(body).not.toMatch(/Outputs are typed Pydantic models\./);
     expect(body).toMatch(/^## Go$/m);
     expect(body).toMatch(
       /\*\*Requirements:\*\* Go 1\.22\+ \(the toolchain floor declared in `go\.mod`\)\./,

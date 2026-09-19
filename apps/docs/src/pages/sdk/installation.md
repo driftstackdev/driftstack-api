@@ -54,10 +54,18 @@ client.sessions.getState(id);
 client.sessions.capture(id, body);
 client.sessions.destroy(id);
 
-client.agentSessions.create(body?);
+client.agentSessions.create(body?, opts?);
+client.agentSessions.list(query?);
+client.agentSessions.iterate(opts?);
 client.agentSessions.get(id);
-client.agentSessions.message(id, userMessage, opts?); // BYOK header opt-in
+// Send a task; returns plan-executed | clarify | refuse | stopped | logged-manual — branch on kind.
+client.agentSessions.message(id, userMessage, opts?);
+client.agentSessions.stop(id); // stop the running task; its message() returns kind 'stopped'
 client.agentSessions.close(id);
+client.agentSessions.setMode(id, mode);
+client.agentSessions.resume(id, body?);
+client.agentSessions.setEgress(id, proxyId, applyPoint?);
+client.agentSessions.sendInputEvent(id, event, opts?);
 client.agentSessions.takeover(id, clientId); // pair-mode
 client.agentSessions.handback(id);
 client.agentSessions.livekitToken(id); // fresh live-video token after 24h
@@ -199,29 +207,29 @@ asyncio.run(main())
 
 **Resources:**
 
-| Accessor                   | Methods                                                                                                                                       |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `client.sessions`          | `create`, `list`, `iterate`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `extract`, `search`, `login`, `destroy`           |
-| `client.agent_sessions`    | `create`, `get`, `message`, `close`, `takeover`, `handback`, `livekit_token` (sync + async)                                                   |
-| `client.recipes`           | `create`, `list`, `iterate`, `get`, `delete` (recipe management only; no execute method)                                                      |
-| `client.profiles`          | `create`, `list`, `get`, `delete`                                                                                                             |
-| `client.api_keys`          | `create`, `list`, `rotate` , `revoke`                                                                                                         |
-| `client.usage`             | `current_period`                                                                                                                              |
-| `client.webhooks`          | `create`, `list`, `get`, `update` , `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` , `rotate_secret` , `send_test`      |
-| `client.team`              | `invite`, `list_members`, `list_invites`, `accept_invite`, `remove_member`                                                                    |
-| `client.account`           | `me`, `update_me`, `upload_avatar`, `clear_avatar`, `list_web_sessions`, `revoke_web_session`, `revoke_all_other_web_sessions`, `rate_limits` |
-| `client.auth`              | `cli_authorize_initiate / bind / exchange` , `mfa_challenge` , `mfa_step_up` , plus signup / login / logout / refresh / magic-link / reset    |
-| `client.audit_log`         | `list`, `iterate`, `export`                                                                                                                   |
-| `client.mfa`               | `status`, `enroll`, `verify`, `disable`, `regenerate_recovery_codes`                                                                          |
-| `client.email_preferences` | `list`, `set`, `opt_in`, `opt_out`                                                                                                            |
-| `client.legal`             | `documents`, `required`, `accept`                                                                                                             |
-| `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete`                                                                  |
-| `client.archetypes`        | `list`                                                                                                                                        |
-| `client.billing`           | `get_state`, `create_checkout_session`, `create_portal_session`                                                                               |
-| `client.crypto_orders`     | `quote`, `create_checkout`, `list`, `iterate`, `get`, `update_note`, `cancel`, `receipt`                                                      |
-| `client.egress`            | `attach_to_session`, `get_session_proxy`, `list_proxies`, `create_proxy`, `update_proxy`, `delete_proxy`, `test_proxy`                        |
+| Accessor                   | Methods                                                                                                                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `client.sessions`          | `create`, `list`, `iterate`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `extract`, `search`, `login`, `destroy`                                            |
+| `client.agent_sessions`    | `create`, `list`, `iterate`, `get`, `message`, `stop`, `close`, `set_mode`, `resume`, `set_egress`, `send_input_event`, `takeover`, `handback`, `livekit_token` (sync + async) |
+| `client.recipes`           | `create`, `list`, `iterate`, `get`, `delete` (recipe management only; no execute method)                                                                                       |
+| `client.profiles`          | `create`, `list`, `get`, `delete`                                                                                                                                              |
+| `client.api_keys`          | `create`, `list`, `rotate` , `revoke`                                                                                                                                          |
+| `client.usage`             | `current_period`                                                                                                                                                               |
+| `client.webhooks`          | `create`, `list`, `get`, `update` , `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` , `rotate_secret` , `send_test`                                       |
+| `client.team`              | `invite`, `list_members`, `list_invites`, `accept_invite`, `remove_member`                                                                                                     |
+| `client.account`           | `me`, `update_me`, `upload_avatar`, `clear_avatar`, `list_web_sessions`, `revoke_web_session`, `revoke_all_other_web_sessions`, `rate_limits`                                  |
+| `client.auth`              | `cli_authorize_initiate / bind / exchange` , `mfa_challenge` , `mfa_step_up` , plus signup / login / logout / refresh / magic-link / reset                                     |
+| `client.audit_log`         | `list`, `iterate`, `export`                                                                                                                                                    |
+| `client.mfa`               | `status`, `enroll`, `verify`, `disable`, `regenerate_recovery_codes`                                                                                                           |
+| `client.email_preferences` | `list`, `set`, `opt_in`, `opt_out`                                                                                                                                             |
+| `client.legal`             | `documents`, `required`, `accept`                                                                                                                                              |
+| `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete`                                                                                                   |
+| `client.archetypes`        | `list`                                                                                                                                                                         |
+| `client.billing`           | `get_state`, `create_checkout_session`, `create_portal_session`                                                                                                                |
+| `client.crypto_orders`     | `quote`, `create_checkout`, `list`, `iterate`, `get`, `update_note`, `cancel`, `receipt`                                                                                       |
+| `client.egress`            | `attach_to_session`, `get_session_proxy`, `list_proxies`, `create_proxy`, `update_proxy`, `delete_proxy`, `test_proxy`                                                         |
 
-Inputs accept either a Pydantic model OR a plain `dict`. Outputs are typed Pydantic models.
+Inputs accept either a Pydantic model OR a plain `dict`. `sessions`, `api_keys`, `usage`, `webhooks`, `team` and `archetypes` return typed Pydantic models; every other resource — `agent_sessions` included — returns plain dicts that mirror the API's JSON, so read them with `result["field"]`.
 
 `sessions.search` and `sessions.login` are typed in every SDK, but they
 return `503` on deployments where search and login are not enabled. See

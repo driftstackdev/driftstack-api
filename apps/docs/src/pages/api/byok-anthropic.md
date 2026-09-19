@@ -12,7 +12,13 @@ Anthropic API key against their Driftstack account so
 Anthropic account instead of Driftstack's
 [bundled-LLM](/api/bundled-llm/). A stored key is always used instead
 of the bundled LLM; the bundled LLM is used only when no key is set
-(and the customer has opted in to it).
+(and the customer has opted in to it). Model usage on your key is billed
+by Anthropic to your Anthropic account.
+
+You can also set, test and clear the key in the dashboard's Settings page, or
+skip storing it and send it with each message in the
+`x-byok-anthropic-api-key` header (see
+[Run AI tasks from your code](/guides/run-ai-tasks-from-code/#who-pays-for-the-ai)).
 
 ## Resource shape
 
@@ -24,8 +30,11 @@ of the bundled LLM; the bundled LLM is used only when no key is set
 }
 ```
 
-`has_key` is the only stable signal. `set_at` and `last_used_at`
-are convenience timestamps; the actual API key plaintext is
+`has_key` says a key is stored. A stored key is used only while `set_at`
+is less than 90 days old: past that, turns treat it as absent even though
+`has_key` stays `true` (see [TTL + rotation reminders](#ttl--rotation-reminders)),
+so check `set_at` too. PUT the key again to renew it. `last_used_at` is a
+convenience timestamp; the actual API key plaintext is
 NEVER returned in any response — even after a successful PUT.
 
 ## Get metadata
@@ -127,6 +136,15 @@ log records only the outcome, never Anthropic's response. The
 customer can review `set_at` / `last_used_at`, the test result, and the
 corresponding account-audit event.
 
+## When Anthropic rejects the key
+
+If Anthropic rejects the key during a turn — it is invalid or revoked, or the
+Anthropic account cannot pay — the message returns `500 internal`. Retrying
+the same turn fails the same way, so run the connection test above first and
+replace the key if it fails. (When Anthropic is only briefly unavailable, the
+turn instead comes back as a `refuse` asking you to retry, and the session
+stays active.)
+
 ## Encryption at rest
 
 The key is encrypted at rest with AES-256-GCM and is never returned
@@ -154,6 +172,7 @@ satisfy the 90-day gate.
 |    400 | bad-request             | api_key doesn't match the `sk-ant-` prefix / is empty, or /test was called with no key set                                                            |
 |    401 | unauthorized            | missing or invalid bearer token                                                                                                                       |
 |    403 | forbidden               | scope check failed (write op without account_owner)                                                                                                   |
+|    500 | internal                | a session turn whose key Anthropic rejected — surfaced from the agent-session message route; run the connection test before retrying                  |
 |    502 | byok-anthropic-required | session turn resolved no key (no BYOK + no bundled-llm + no fallback) — surfaced from the agent-session message route, not from this surface directly |
 |    503 | feature-unavailable     | encrypted key storage is not available on this deployment                                                                                             |
 

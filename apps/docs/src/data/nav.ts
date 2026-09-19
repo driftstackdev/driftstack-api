@@ -117,6 +117,7 @@ export const DOC_NAV: DocNavSection[] = [
     label: 'Guides',
     items: [
       { href: '/guides/', label: 'Guides overview' },
+      { href: '/guides/run-ai-tasks-from-code/', label: 'Run AI tasks from your code' },
       { href: '/guides/profile-management/', label: 'Profile management' },
       { href: '/guides/session-lifecycle/', label: 'Session lifecycle' },
       { href: '/guides/concurrency/', label: 'Concurrency & backpressure' },
@@ -191,6 +192,11 @@ export const DOC_NAV: DocNavSection[] = [
             method: 'POST',
           },
           {
+            href: '/api/agent-sessions/#fetch-a-captured-screenshot',
+            label: 'Fetch a captured screenshot',
+            method: 'GET',
+          },
+          {
             href: '/api/agent-sessions/#live-video-livekit',
             label: 'Live video (LiveKit)',
             method: 'POST',
@@ -222,6 +228,7 @@ export const DOC_NAV: DocNavSection[] = [
             method: 'POST',
           },
           { href: '/api/agent-sessions/#page-state', label: 'Page state', method: 'GET' },
+          { href: '/api/agent-sessions/#network-log', label: 'Network log', method: 'GET' },
           {
             href: '/api/agent-sessions/#read-the-cookie-jar',
             label: 'Read the cookie jar',

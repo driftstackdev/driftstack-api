@@ -15,6 +15,7 @@ import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AccountAuditActionSchema } from '@driftstack/api-types';
 import { PAIR_MODE_HEARTBEAT_TTL_MS } from '../../src/services/agent-pair-mode-heartbeat.js';
+import { codeOnly } from './_helpers/code-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -135,12 +136,30 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
     expect(body).toMatch(/still replays the original terminal result/);
     expect(body).toMatch(/when control of the session changes while a message is running/);
     expect(body).toMatch(/close or pause wins after model or\s*browser work has already settled/);
-    expect(body).toMatch(/resume a paused session, but\s*replace a closed one/);
+    expect(body).toMatch(/Closed sessions return `409 Conflict`; start a new one/);
     expect(body).toMatch(/never as an\s*invitation to replay them in a replacement session/);
     expect(body).toMatch(/the flat 10 cents\s*charged for the turn/);
     expect(body).toMatch(/not the model's measured cost/);
     expect(body).toMatch(/a per-turn figure rather than a running total/);
     expect(body).toMatch(/use cost\s*monitoring for the account total/);
+  });
+
+  it('tells a caller to replace a closed session and never to resume a paused one, because no code path stores `paused` — a bot-check pause leaves `status` active', () => {
+    // Every write of an agent session's status, in the repos that own it. Derived
+    // rather than listed, so a new writer is judged the day it lands.
+    const writers = [
+      'apps/server/src/db/agent-sessions-repo.ts',
+      'apps/server/src/services/agent-sessions.ts',
+    ]
+      .map((f) => codeOnly(readFileSync(resolve(REPO_ROOT, f), 'utf8')))
+      .join('\n');
+    const written = new Set([...writers.matchAll(/status: '(\w+)'/g)].map((m) => m[1]));
+    expect(written, 'status values the repos write').toContain('closed');
+    expect(written, 'status values the repos write').toContain('active');
+    expect(written.has('paused'), 'a repo now stores `paused` — revisit the page').toBe(false);
+
+    expect(body).not.toMatch(/resume a paused session/i);
+    expect(body).toMatch(/A session paused by a bot check still reads `status: "active"`/);
   });
 
   it('documents the heartbeat-timeout auto-handback (30s)', () => {

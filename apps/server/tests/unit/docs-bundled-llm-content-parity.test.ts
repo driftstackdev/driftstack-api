@@ -86,15 +86,15 @@ describe('Arc 6 docs.bundled-llm content parity', () => {
     expect(body).toMatch(/BundledLlmConsentRequiredError/);
   });
 
-  it('error table covers 400 / 401 / 402 (both); 503 is documented as agent-session-turn-only (not on these read routes)', () => {
+  it('error table covers 400 / 401 / 402 (both) and carries no 503: an unavailable bundled model sends a keyless turn a 502, not a 503', () => {
     expect(body).toMatch(/\|\s*400\s*\| validation-failed/);
     expect(body).toMatch(/\|\s*401\s*\| unauthorized/);
     expect(body).toMatch(/\|\s*402\s*\| bundled-llm-budget-exhausted/);
     expect(body).toMatch(/\|\s*402\s*\| bundled-llm-consent-required/);
-    // 503 was moved OUT of the settings/status error table — it surfaces on the
-    // agent-session turn route only. Pin the corrected prose, ban the old table row.
+    // No 503 anywhere for this case: when bundled AI is not set up the message
+    // route skips the bundled leg and throws ByokAnthropicRequiredError (502).
     expect(body).toMatch(
-      /The settings \+ status routes above do not return a `503`\. When\s*\n?bundled-LLM is not available on the deployment, the `503` is returned\s*\n?on the \*\*agent-session turn\*\* route, not on these reads\./,
+      /If bundled AI is not available, a turn with no\s*key of your own returns `502 byok-anthropic-required`/,
     );
     expect(body).not.toMatch(/\|\s*503\s*\| feature-unavailable/);
   });

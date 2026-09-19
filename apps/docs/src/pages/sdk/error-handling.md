@@ -63,6 +63,35 @@ with `errors.As`, as the Go example below shows.
 > surface the same payload fields (`current` / `limit` / `recordType`,
 > snake_case in Python).
 
+## Agent-session (AI) errors
+
+Agent sessions add these typed errors to the table above:
+
+| Server problem-type slug       | TS class                              | Python exception                      | Go type                                | Retryable |
+| ------------------------------ | ------------------------------------- | ------------------------------------- | -------------------------------------- | --------- |
+| `bundled-llm-budget-exhausted` | `BundledLlmBudgetExhaustedError`      | `BundledLlmBudgetExhaustedError`      | `*BundledLlmBudgetExhaustedError`      | no        |
+| `bundled-llm-consent-required` | `BundledLlmConsentRequiredError`      | `BundledLlmConsentRequiredError`      | `*BundledLlmConsentRequiredError`      | no        |
+| `byok-anthropic-required`      | `ByokAnthropicRequiredError`          | `ByokAnthropicRequiredError`          | `*ByokAnthropicRequiredError`          | no        |
+| `feature-unavailable`          | `FeatureUnavailableError`             | `FeatureUnavailableError`             | `*FeatureUnavailableError`             | no        |
+| `profile-in-use`               | `ProfileInUseError`                   | `ProfileInUseError`                   | `*ProfileInUseError`                   | no        |
+| `proxy-validation-failed`      | `ProxyValidationFailedError`          | `ProxyValidationFailedError`          | `*ProxyValidationFailedError`          | no        |
+| `storage-quota-exceeded`       | `StorageQuotaExceededError`           | `StorageQuotaExceededError`           | `*StorageQuotaExceededError`           | no        |
+| `pair-mode-conflict`           | `PairModeConflictError`               | `PairModeConflictError`               | `*PairModeConflictError`               | no        |
+| `pair-mode-invalid-transition` | `PairModeStateInvalidTransitionError` | `PairModeStateInvalidTransitionError` | `*PairModeStateInvalidTransitionError` | no        |
+
+Several agent-session refusals reuse the general classes and carry extra
+fields: a `ConflictError` can carry `turn_in_progress`, `session_status` or
+`idempotency_status`, and a `ForbiddenError` can carry `requires_own_key` and
+`model`. Read them from `err.extensions` (TypeScript), `err.problem`
+(Python) or `Problem` (Go). In Python, `ForbiddenError` subclasses
+`AuthError`, so catch `ForbiddenError` before `AuthError` if you treat them
+differently.
+
+`message()` is never retried for you, whatever the retry predicate says, and
+with an `Idempotency-Key` an error response is final for that key. See
+[Run AI tasks from your code](/guides/run-ai-tasks-from-code/#errors-and-safe-retries)
+for what to do about each one.
+
 ## TypeScript
 
 ```ts

@@ -145,6 +145,7 @@ func main() {
 
 - **[Profile management](/guides/profile-management/)** — persistent profiles let a session resume cookies, storage, and trust signals across runs.
 - **[Session lifecycle](/guides/session-lifecycle/)** — full lifecycle reference (states, the free-tier 20-minute duration cap, recovery on reconnect).
+- **[Run AI tasks from your code](/guides/run-ai-tasks-from-code/)** — give the AI agent a task in plain words and read its answer, with complete TypeScript, Python, Go and curl programs.
 - **[Agent sessions](/api/agent-sessions/)** — let an AI agent drive a session from plain-language instructions. Three modes: AI (default), manual, and pair (a person can step in and take over). Live transcript stream via Server-Sent Events.
 - **[Bundled LLM](/api/bundled-llm/)** and **[BYOK Anthropic](/api/byok-anthropic/)** — the two ways to supply an AI model. Bring your own Anthropic key (stored encrypted, never shown again), or use the bundled model with a monthly budget you control.
 - **[Idempotency keys](/reference/idempotency/)** — `Idempotency-Key` is honoured on four endpoints: agent-session creation, agent-session messages, and the two billing checkouts. It is **not** honoured on `POST /v1/sessions` — the `sessions.create()` call above. Retrying that after a timeout mints a second session and takes another concurrent slot, so guard it yourself (reuse the session id you already got back, or check `client.sessions.list()` before retrying).

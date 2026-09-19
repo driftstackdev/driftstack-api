@@ -202,7 +202,9 @@ describe('S22.4/S27 DOC_NAV endpoint children ↔ api/*.md + webhooks/*.md integ
     // 140 since P-17 documented POST /v1/agent-sessions/{id}/egress.
     // 141 since B2 documented POST /v1/agent-sessions/{id}/stop (the exactness
     // arm above passed first, so the +1 matches a real h2).
-    expect(apiTotal).toBe(141);
+    // 143 since the agent-sessions reference documented GET …/captures/{captureId}
+    // and GET …/network (both live routes; the exactness arm above passed first).
+    expect(apiTotal).toBe(143);
     expect(webhooksTotal).toBe(8);
   });
 });

@@ -40,7 +40,7 @@ There are three categories of scopes, in order of breadth:
 | `account_owner`             | account-control | Mint/revoke API keys, manage subscription and `/v1/account/*`, invite/remove team members, and accept team invites. Customer dashboard scope.                                                                                                                                                                                                   |
 | `driftstack_internal_admin` | account-control | `/v1/admin/*` — list all accounts, suspend account, change tier, force-actions. Driftstack staff.                                                                                                                                                                                                                                               |
 | `gui_control`               | special         | Manual control of a live session from the desktop app (`tap_at`, `type_focused`). Only added to a key when you ask for it while creating the key — a broad `read`, `write` or `admin` key does not include it. Nothing restricts who may ask for it: any account that can create API keys may request it.                                       |
-| `read:sessions`             | granular        | Read sessions endpoints only.                                                                                                                                                                                                                                                                                                                   |
+| `read:sessions`             | granular        | Read sessions and agent sessions — list, get, the agent-session transcript stream, page state, network log, captures, cookies and downloads.                                                                                                                                                                                                    |
 | `write:sessions`            | granular        | Create + drive + delete sessions. Does not include read — pair with `read:sessions` to list/get.                                                                                                                                                                                                                                                |
 | `read:profiles`             | granular        | Read profiles endpoints and their snapshots — `/v1/profiles`, `/v1/profiles/:id/snapshots`, `/v1/profile-snapshots` and `/v1/profile-snapshots/:id`. Snapshot reads return metadata (label, parent profile, capture time), never the stored browser state.                                                                                      |
 | `write:profiles`            | granular        | Create + edit + delete profiles (and their snapshots). Does not include read — pair with `read:profiles`.                                                                                                                                                                                                                                       |
@@ -64,11 +64,12 @@ There are three categories of scopes, in order of breadth:
 
 > **Note — agent-session endpoints require the broad `write` scope.**
 > Session routes (`/v1/sessions/*`) accept the granular `write:sessions`, but
-> agent-session endpoints (`/v1/agent-sessions/*` — create,
-> send-message, input-event, mode/takeover transitions) gate on the
+> every agent-session write (`/v1/agent-sessions/*` — create, message, stop,
+> close, mode, takeover/handback, input events, resume, cookie import,
+> history, file upload, proxy change and the live-video token) gates on the
 > broad `write` scope. There is no agent-sessions-specific granular
 > scope. If you mint a narrow CI key, include the broad `write` scope
-> to call these endpoints.
+> to call these endpoints. Agent-session reads accept `read:sessions`.
 
 ## broad-satisfies-granular rule
 
@@ -144,6 +145,10 @@ When you mint a key from the dashboard or via
   No access to profiles, webhooks, or billing.
 - **Production application:** `read` + `write`. Excludes
   account-management surfaces.
+- **AI automation job** (agent sessions): `read` + `write` — agent-session
+  writes need the broad `write`. Keep `account_owner` off the job key; store
+  your Anthropic key or opt in to bundled billing once from the dashboard
+  instead. See [Run AI tasks from your code](/guides/run-ai-tasks-from-code/).
 - **Backup automation:** `read` + `read:audit`.
 - **Webhook signing-only key:** mint a key with NO scopes.
   The key authenticates the webhook signature but cannot

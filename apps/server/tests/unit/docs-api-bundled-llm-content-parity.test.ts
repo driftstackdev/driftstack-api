@@ -8,6 +8,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import {
+  BundledLlmBudgetExhaustedError,
+  BundledLlmConsentRequiredError,
+} from '../../src/lib/errors.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -15,6 +19,26 @@ const LIB = resolve(REPO_ROOT, 'apps/docs/src/pages/api/bundled-llm.md');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
+}
+
+/** The JSON body of the page's `HTTP/1.1 <status line>` example. */
+function exampleBody(page: string, statusLine: string): Record<string, unknown> {
+  const at = page.indexOf(`HTTP/1.1 ${statusLine}`);
+  if (at === -1) return {};
+  const block = page.slice(at, page.indexOf('```', at));
+  return JSON.parse(block.slice(block.indexOf('{'))) as Record<string, unknown>;
+}
+
+/** The page's example for `type`, among its 402 examples. */
+function example402(page: string, type: string): Record<string, unknown> {
+  let from = 0;
+  for (;;) {
+    const at = page.indexOf('HTTP/1.1 402 Payment Required', from);
+    if (at === -1) return {};
+    const parsed = exampleBody(page.slice(at), '402 Payment Required');
+    if (parsed['type'] === type) return parsed;
+    from = at + 1;
+  }
 }
 
 describe('docs/api/bundled-llm content parity', () => {
@@ -84,10 +108,12 @@ describe('docs/api/bundled-llm content parity', () => {
     );
   });
 
-  it("BundledLlmBudgetExhausted 402 problem+json shape pinned: type 'https://errors.driftstack.dev/bundled-llm-budget-exhausted' + title 'Bundled-LLM monthly cap reached' + spent_cents + cap_cents extension fields. + 3-recovery-path list: raise cap / supply BYOK / wait for next month — pinned so the 402 problem-type + extension-fields + 3-recovery-path roster contract all stay documented", () => {
-    expect(body).toMatch(
-      /"type": "https:\/\/errors\.driftstack\.dev\/bundled-llm-budget-exhausted",\s*"title": "Bundled-LLM monthly cap reached",\s*"status": 402,\s*"detail": "Spend this month has reached the configured cap\.",\s*"spent_cents": 2000,\s*"cap_cents": 2000/,
-    );
+  it('the budget-exhausted 402 example is exactly the body the server sends for a $20 cap that is used up — type, title, status, detail and the spent_cents / cap_cents extensions — and the page lists the 3 recovery paths the detail names', () => {
+    const sent = new BundledLlmBudgetExhaustedError({
+      spentCents: 2000,
+      capCents: 2000,
+    }).toProblem();
+    expect(example402(body, sent.type), 'the page’s budget-exhausted example').toEqual(sent);
     expect(body).toMatch(/1\. Raise the cap via `PATCH \/v1\/account\/me\/bundled-llm-settings`/);
     expect(body).toMatch(
       /2\. Supply a BYOK key via the `x-byok-anthropic-api-key` header or\s*`PUT \/v1\/account\/me\/byok-anthropic-key`/,
@@ -95,9 +121,11 @@ describe('docs/api/bundled-llm content parity', () => {
     expect(body).toMatch(/3\. Wait for the next calendar month/);
   });
 
-  it("BundledLlmConsentRequired 402 problem+json shape pinned: type 'https://errors.driftstack.dev/bundled-llm-consent-required' + title 'Bundled-LLM consent required' + detail 'Opt in via PATCH /v1/account/me/bundled-llm-settings.' + no extension fields — pinned so the consent-gate 402 + opt-in-via-PATCH guidance + 'no extension fields' SDK contract all stay documented", () => {
+  it('the consent-required 402 example is exactly the body the server sends — type, title, status and detail, with no extension fields — and the page says that on plans without bundled billing the fix is your own key, not opting in', () => {
+    const sent = new BundledLlmConsentRequiredError().toProblem();
+    expect(example402(body, sent.type), 'the page’s consent-required example').toEqual(sent);
     expect(body).toMatch(
-      /"type": "https:\/\/errors\.driftstack\.dev\/bundled-llm-consent-required",\s*"title": "Bundled-LLM consent required",\s*"status": 402,\s*"detail": "Opt in via PATCH \/v1\/account\/me\/bundled-llm-settings\."/,
+      /On plans without bundled billing \(Team, Agency, API Starter\) this error does\s*not mean "opt in": opting in is refused on those plans\./,
     );
     expect(body).toMatch(
       /The SDK exposes the typed `BundledLlmConsentRequiredError` \(no\s*extension fields\)\./,
@@ -110,7 +138,7 @@ describe('docs/api/bundled-llm content parity', () => {
     );
   });
 
-  it("Errors table 4-row roster pinned: 400 validation-failed + 401 unauthorized + 402 bundled-llm-budget-exhausted + 402 bundled-llm-consent-required — pinned so the 2-different-402 distinction stays explicit (drift to merging them would lose the customer SDK's typed-error discrimination). The 503 (unwired bundled-LLM) is NOT returned on these settings/status reads — it surfaces on the agent-session turn route — so the table must NOT carry a 503 row.", () => {
+  it("Errors table roster pinned: 400 validation-failed + 401 unauthorized + 402 bundled-llm-budget-exhausted + 402 bundled-llm-consent-required, kept distinct so the SDKs' typed errors stay distinguishable. Neither these reads nor a turn return a 503 when bundled AI is unavailable: a turn with no key of its own gets 502 byok-anthropic-required, so the table carries no 503 row and the page says so.", () => {
     // V-1116 — the slug is `validation-failed`. ValidationError carries
     // PROBLEM_TYPES.ValidationFailed, and this table had named a type the
     // server cannot send; a client branching on it never matched.
@@ -124,7 +152,10 @@ describe('docs/api/bundled-llm content parity', () => {
     // 503 belongs to the agent-session turn route, not these reads.
     expect(body).not.toMatch(/\|\s*503 \| /);
     expect(body).toMatch(
-      /The settings \+ status routes above do not return a `503`\. When\s*bundled-LLM is not available on the deployment, the `503` is returned\s*on the \*\*agent-session turn\*\* route, not on these reads\./,
+      /The settings \+ status routes above do not return a `503`\. When\s*bundled-LLM is not available on the deployment, the agent-session turn\s*route returns `502 byok-anthropic-required` for a turn with no key of your\s*own; these reads keep working\./,
+    );
+    expect(body, 'the old 503-on-the-turn claim is back').not.toMatch(
+      /the `503` is returned\s*on the \*\*agent-session turn\*\* route|returns the corresponding typed `503`/,
     );
   });
 

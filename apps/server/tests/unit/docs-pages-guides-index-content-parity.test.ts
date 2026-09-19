@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { markupOnly } from './_helpers/markup-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -39,6 +40,18 @@ describe('W780 docs /guides index content parity', () => {
     expect(p).toMatch(/<a href="\/guides\/session-lifecycle\/">Session lifecycle<\/a>/);
     expect(p).toMatch(/<a href="\/guides\/team-rbac\/">Team RBAC — invite, accept, act-as<\/a>/);
     expect(p).toMatch(/<a href="\/guides\/live-video\/">Live video for agent sessions<\/a>/);
+  });
+
+  it('the task guide "Run AI tasks from your code" is listed first among the concept guides and links a page that exists', () => {
+    const p = markupOnly(read(PAGE));
+    const links = [...p.matchAll(/<a href="(\/guides\/[^"]+\/)">/g)].map((m) => m[1]);
+    expect(links[0], 'the first concept guide').toBe('/guides/run-ai-tasks-from-code/');
+    expect(p).toMatch(
+      /<a href="\/guides\/run-ai-tasks-from-code\/">Run AI tasks from your code<\/a>/,
+    );
+    expect(
+      existsSync(resolve(REPO_ROOT, 'apps/docs/src/pages/guides/run-ai-tasks-from-code.md')),
+    ).toBe(true);
   });
 
   it('CRITICAL live-video framing pinned. The "subscribe to a running agent session\'s video stream over LiveKit WebRTC; covers token mint, connect, render, input forwarding, and reconnect" wording threads the LK arc cross-references.', () => {

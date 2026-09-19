@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { AgentModelSchema, DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
+import { codeOnly } from './_helpers/code-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -17,6 +18,13 @@ const LIB = resolve(REPO_ROOT, 'apps/docs/src/pages/api/agent-sessions.md');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
+}
+
+/** The detail of the FeatureUnavailableError the message route throws itself. */
+function route503Detail(): string {
+  const route = read(resolve(REPO_ROOT, 'apps/server/src/routes/agent-sessions.ts'));
+  const at = route.indexOf('if (agentTurnReceipts === undefined) {');
+  return at === -1 ? '' : route.slice(at, at + 300);
 }
 
 describe('docs/pages/api/agent-sessions content parity', () => {
@@ -149,7 +157,16 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     );
     expect(body).not.toMatch(/Agent\s+[123]|until[^.]{0,120}lands/iu);
     expect(body).toMatch(/live session state is\s*unavailable on this deployment\./);
-    expect(body).toMatch(/no BYOK or bundled-LLM provider is available in the deployment/);
+    // The message route's only 503 is the idempotency record it could not write;
+    // with no key available a turn is a 502, never a 503 (the disabled-route stubs
+    // are not registered while the AI runtime exists, which bootstrap always builds).
+    expect(route503Detail(), 'the message route no longer names its idempotency 503').toMatch(
+      /could not safely record this request/,
+    );
+    expect(body).toMatch(
+      /on a message, an `Idempotency-Key` was sent but could not be recorded, so the turn did not run/,
+    );
+    expect(body).not.toMatch(/no BYOK or bundled-LLM provider is available in the deployment/);
     expect(body).not.toMatch(/control plane\s*is not wired|activation gate is off|key path wired/);
   });
 
@@ -178,7 +195,7 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(body).toMatch(/BYOK header is deliberately outside receipt identity/);
     expect(body).toMatch(/still replays the original terminal result/);
     expect(body).toMatch(/close or pause wins after model or\s*browser work has already settled/);
-    expect(body).toMatch(/resume a paused session, but\s*replace a closed one/);
+    expect(body).toMatch(/Closed sessions return `409 Conflict`; start a new one/);
     expect(body).toMatch(/redacted `partial_results` evidence described\s*above/);
     expect(body).toMatch(/the flat 10 cents\s*charged for the turn/);
     expect(body).toMatch(/not the model's measured cost/);
@@ -202,8 +219,14 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(body, 'the heartbeat-comment note is gone').toMatch(
       /Heartbeats are SSE comments, not events/,
     );
-    expect(body, 'the rate-limit exception is gone').toMatch(
+    expect(body, 'the plain-HTTP failures are no longer listed').toMatch(
+      /Authentication, scope and request-rate failures are ordinary HTTP\s*errors\./,
+    );
+    expect(body, 'the old one-exception claim is back').not.toMatch(
       /Rate-limit denial is the one exception/,
+    );
+    expect(body, 'the disconnect rule is gone').toMatch(
+      /Closing the connection does not cancel the turn\.\*\* It keeps running\./,
     );
 
     // The route must still behave the way the page now describes, or the page is
@@ -221,6 +244,14 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(route, 'the heartbeat is no longer an SSE comment').toMatch(/`: heartbeat \$\{/);
     expect(route, 'a rate-limit denial no longer bypasses the stream').toMatch(
       /err instanceof RateLimitedError \|\| !wantsEventStream/,
+    );
+    // Auth and scope run as preHandlers, before the handler can open a stream.
+    expect(codeOnly(route), 'auth + the write scope no longer run before the handler').toMatch(
+      /app\.post<[^>]*>\(\s*'\/v1\/agent-sessions\/:id\/message',\s*\{\s*preHandler: \[\s*controlKeyOrAccountAuth\('write'\)/,
+    );
+    // A viewer that disconnects only stops the writing; nothing aborts the turn.
+    expect(route, 'a disconnect now does more than stop writing').toMatch(
+      /const stopWriting = \(\): void => \{\s*viewerClosed = true;\s*\};/,
     );
   });
 

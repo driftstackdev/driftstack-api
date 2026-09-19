@@ -94,6 +94,15 @@ const codeLines = (file: string): string =>
  */
 const DOCUMENTED_BUT_UNPUBLISHED = new Map<string, string>([
   [
+    'GET /v1/agent-sessions/:p/captures/:p',
+    'GAP, not a decision. It serves the screenshot bytes behind the `captureId` the published ' +
+      'message response already carries, and an ordinary key with read:sessions reaches it, so ' +
+      'api/agent-sessions.md ("Fetch a captured screenshot") and the Run AI tasks guide teach it. ' +
+      'The reason it stayed out of the spec — "it returns raw image bytes, not a JSON contract" — ' +
+      'does not hold: the spec already publishes a binary body (GET …/downloads/content with ' +
+      'format=binary). Publishing it is a spec change owed, not a reason to keep it out.',
+  ],
+  [
     'POST /v1/oauth/authorize/complete',
     'Deliberate, and the reason was already recorded in source — openapi.ts ("dashboard-internal ' +
       '/authorize/complete endpoint, which requires an interactive web session and rejects API keys") ' +
@@ -127,10 +136,6 @@ const UNDOCUMENTED_ROUTES = new Map<string, string>([
   ['GET /metrics', 'infra — Prometheus scrape'],
   ['GET /openapi.json', 'infra — serves the spec; documenting it in the spec would be circular'],
   ['GET /ready', 'infra — readiness probe'],
-  [
-    'GET /v1/agent-sessions/:p/captures/:p',
-    'CUSTOMER — #7, serves the screenshot bytes the AI captured; its controlKeyOrAccountAuth preHandler falls through to requireAuth + read:sessions, so an ordinary customer key reaches it. Unpublished because it returns raw image bytes, not a JSON contract',
-  ],
   [
     'GET /v1/agent-sessions/:p/gui-control-key',
     'CUSTOMER — mints a control+read credential for the desktop client. Requires write + read:sessions on an ordinary key',
@@ -299,7 +304,6 @@ describe('a route in neither the spec nor the docs is a decision, not an oversig
       .map(([ep]) => ep)
       .sort();
     expect(derived, 'undocumented routes whose registration names a customer auth path:').toEqual([
-      'GET /v1/agent-sessions/:p/captures/:p',
       'GET /v1/agent-sessions/:p/gui-control-key',
       'POST /v1/agent-sessions/:p/transport-report',
       'POST /v1/sessions/:p/gui-input',

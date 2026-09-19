@@ -43,10 +43,10 @@ dedupe effect; guard those calls separately if they need at-most-once behavior.
 
 `POST /v1/agent-sessions/{id}/message` stores its receipt encrypted, which
 is not available on every deployment. Where it is not, that endpoint
-answers a valid `Idempotency-Key` with `503 feature-unavailable` — _"Agent-turn idempotency
-storage is unavailable. Do not retry this browser task without the same
-key; contact support."_ — while the same request WITHOUT the header runs
-the turn normally.
+answers a valid `Idempotency-Key` with `503 feature-unavailable` — _"We could
+not safely record this request. Do not retry it without the same
+Idempotency-Key. Contact support."_ — while the same request WITHOUT the header
+runs the turn normally.
 
 That is deliberate: a browser turn is expensive and side-effecting, and
 the server would rather refuse than accept a key it cannot honour and let
@@ -110,6 +110,14 @@ A completed replay returns the same status code and body as the original —
 including generated IDs or a terminal RFC 7807 problem.
 The client can treat the replay as if the original response had been
 received successfully.
+
+For an agent message turn, the stored result includes refusals: a turn
+answered with, for example, `409` `turn_in_progress`, a `429`, a `402` or a
+`502` is stored for its key, and retrying with the same key replays that
+answer. Reuse a key only
+when you got no response at all, or `409` with
+`idempotency_status: "in_progress"`; after any other response, fix the cause
+or wait, then send with a new key.
 
 That completed result remains authoritative if the session later closes,
 its mode changes between AI and manual, or your BYOK key rotates. Reusing

@@ -37,6 +37,14 @@ session holds its slot until you destroy it. Wrap session work in a
 [session lifecycle guide](/guides/session-lifecycle/) shows the
 pattern.
 
+> **Agent sessions have a cap of their own.** Open agent sessions
+> (`POST /v1/agent-sessions`) are limited to the same per-tier number,
+> counted separately from the sessions above. A session that is still
+> `provisioning` holds a slot too, and a create past the cap gets the same
+> `429 concurrency-limit`. Close agent sessions with
+> `DELETE /v1/agent-sessions/{id}` in a `finally` block — see
+> [Run AI tasks from your code](/guides/run-ai-tasks-from-code/#limits).
+
 ## The 429 signal
 
 When `POST /v1/sessions` would exceed the cap, the server responds

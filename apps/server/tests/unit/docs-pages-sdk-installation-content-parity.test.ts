@@ -6,7 +6,7 @@
 // SDK capability matrix would mismatch W775 SDK landing-page + the
 // SDK versioning policy.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -19,6 +19,62 @@ function read(p: string): string {
 }
 
 const PAGE = resolve(REPO_ROOT, 'apps/docs/src/pages/sdk/installation.md');
+const PY_RESOURCES = resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/resources');
+
+/**
+ * The Python resource accessors at least one of whose public methods returns a
+ * Pydantic model — derived from the SDK source, never listed here.
+ *
+ * A name counts as a model when the SDK declares it (directly or through one
+ * more class) as a `BaseModel` subclass. `LiveKitInfo` is deliberately excluded
+ * by that rule: the agent-sessions resource declares its own `TypedDict` of that
+ * name, which is a plain dict at runtime.
+ */
+function pythonResourcesReturningPydanticModels(): string[] {
+  const files = readdirSync(PY_RESOURCES).filter((f) => f.endsWith('.py') && !f.startsWith('_'));
+  const generated = read(
+    resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/_generated/models.py'),
+  );
+  const sources = new Map(files.map((f) => [f.slice(0, -3), read(resolve(PY_RESOURCES, f))]));
+
+  // Close over subclassing: `class RotateApiKeyResponse(CreateApiKeyResponse)`.
+  const models = new Set<string>();
+  const declarations = [...sources.values(), generated].flatMap((src) => [
+    ...src.matchAll(/^class (\w+)\(([\w., ]+)\):/gm),
+  ]);
+  for (let pass = 0; pass < 5; pass += 1) {
+    for (const d of declarations) {
+      const bases = (d[2] ?? '').split(',').map((b) => b.trim());
+      if (bases.some((b) => b === 'BaseModel' || models.has(b))) models.add(d[1] ?? '');
+    }
+  }
+  expect(models.has('Session'), 'the model extractor found the generated models').toBe(true);
+
+  const out: string[] = [];
+  for (const [name, src] of sources) {
+    // A module's own declaration wins over the generated one of the same name:
+    // `agent_sessions` declares `class LiveKitInfo(TypedDict)`, which shadows the
+    // generated `LiveKitInfo(BaseModel)` and is a plain dict at runtime.
+    const shadowed = new Set(
+      [...src.matchAll(/^class (\w+)\((?!BaseModel\b)[\w., ]*TypedDict[\w., ]*\):/gm)].map(
+        (m) => m[1] ?? '',
+      ),
+    );
+    const returns = [
+      ...src.matchAll(/^ {4}(?:async )?def \w+\([\s\S]*?\)\s*->\s*([^:\n]+):/gm),
+    ].map((m) => (m[1] ?? '').trim());
+    const bare = returns.map((r) =>
+      r
+        .replace(/^Async(?:Iterator|Generator)\[/, '')
+        .replace(/^Iterator\[/, '')
+        .replace(/\].*$/, '')
+        .replace(/\s*\|\s*None$/, '')
+        .trim(),
+    );
+    if (bare.some((r) => models.has(r) && !shadowed.has(r))) out.push(name);
+  }
+  return out;
+}
 
 describe('W778 docs /sdk/installation content parity', () => {
   it('sdk/installation.md file exists', () => {
@@ -266,11 +322,38 @@ describe('W778 docs /sdk/installation content parity', () => {
     ).toEqual([]);
   });
 
-  it("CRITICAL Python pydantic-OR-dict input + typed-Pydantic-output framing pinned. The 'Inputs accept either a Pydantic model OR a plain dict. Outputs are typed Pydantic models' wording is the load-bearing Python idiom.", () => {
+  it('the page names exactly the Python resources whose methods return Pydantic models, and says the rest return dicts', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /Inputs accept either a Pydantic model OR a plain `dict`\. Outputs are typed Pydantic models\./,
+    // This page used to say "Outputs are typed Pydantic models" of EVERY resource,
+    // and that sentence was pinned here as a quotation. Only six resources do;
+    // `agent_sessions` — the one the AI guide teaches — returns plain dicts, which
+    // the page's own Python examples read with result["field"]. So the claim is
+    // DERIVED from the SDK source now instead of copied into this file.
+    expect(p).toMatch(/Inputs accept either a Pydantic model OR a plain `dict`\./);
+    expect(p).toMatch(/returns plain dicts that mirror the API's JSON/);
+    expect(p, 'the old blanket claim must not come back').not.toMatch(
+      /Outputs are typed Pydantic models\./,
+    );
+
+    const modelReturning = pythonResourcesReturningPydanticModels();
+    // Vacuity: an extractor that found nothing would agree with any sentence.
+    expect(modelReturning.length, 'Python resources with a Pydantic return').toBeGreaterThan(3);
+    expect(modelReturning, 'sessions returns models').toContain('sessions');
+    expect(modelReturning, 'agent_sessions returns dicts').not.toContain('agent_sessions');
+
+    // The sentence names each model-returning resource in backticks, and no others.
+    const sentence = /Inputs accept either a Pydantic model[^\n]*/.exec(p)?.[0] ?? '';
+    expect(sentence, 'the Python output sentence was found').not.toBe('');
+    const named = [
+      ...new Set(
+        [...sentence.matchAll(/`(\w+)`/g)]
+          .map((m) => m[1] ?? '')
+          .filter((n) => n !== 'dict' && n !== 'agent_sessions'),
+      ),
+    ].sort();
+    expect(named, 'resources the page calls Pydantic-returning').toEqual(
+      [...modelReturning].sort(),
     );
   });
 

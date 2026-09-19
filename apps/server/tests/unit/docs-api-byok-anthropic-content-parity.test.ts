@@ -8,6 +8,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { BYOK_ANTHROPIC_KEY_TTL_MS } from '../../src/services/byok-anthropic.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -30,13 +31,22 @@ describe('docs/api/byok-anthropic content parity', () => {
     );
   });
 
-  it("4-verb endpoint roster pinned: GET /v1/account/me/byok-anthropic-key (metadata) + PUT (set/rotate) + DELETE (clear) + POST /test (connection test). + 'plaintext NEVER returned in any response — even after a successful PUT' + 'has_key is the only stable signal' — pinned so the 4-endpoint surface + plaintext-never-echoed + has_key-is-stable-signal contract all stay documented", () => {
+  it("4-verb endpoint roster pinned: GET /v1/account/me/byok-anthropic-key (metadata) + PUT (set/rotate) + DELETE (clear) + POST /test (connection test), the plaintext is never returned, and `has_key` is documented as 'a key is stored' — not as proof the key is used, because a stored key past its age limit still reads has_key:true while turns treat it as absent", () => {
     expect(body).toMatch(/`GET \/v1\/account\/me\/byok-anthropic-key`/);
     expect(body).toMatch(/`PUT \/v1\/account\/me\/byok-anthropic-key`/);
     expect(body).toMatch(/`DELETE \/v1\/account\/me\/byok-anthropic-key`/);
     expect(body).toMatch(/`POST \/v1\/account\/me\/byok-anthropic-key\/test`/);
     expect(body).toMatch(/the actual API key plaintext is\s*NEVER returned in any response/);
-    expect(body).toMatch(/`has_key` is the only stable signal\./);
+    const days = BYOK_ANTHROPIC_KEY_TTL_MS / (24 * 60 * 60 * 1000);
+    expect(days, 'the stored-key age limit is a whole number of days').toBe(Math.round(days));
+    expect(body).toMatch(/`has_key` says a key is stored\./);
+    expect(body).toMatch(
+      new RegExp(
+        `A stored key is used only while \`set_at\`\\s*is less than ${String(days)} days old`,
+      ),
+    );
+    expect(body).toMatch(/turns treat it as absent even though\s*`has_key` stays `true`/);
+    expect(body, 'the old "only stable signal" claim is back').not.toMatch(/only stable signal/);
   });
 
   it('AES-256-GCM at-rest encryption and the key-rotation consequence stay documented without internal env-var or storage names', () => {

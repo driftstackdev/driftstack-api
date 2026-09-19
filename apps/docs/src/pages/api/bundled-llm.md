@@ -18,9 +18,12 @@ it is used instead of the bundled LLM.
 
 The settings and status endpoints are always available. Consent and
 budget enforcement surface as typed `402` responses at agent-session
-turn time (see below). If the bundled model is unavailable, the
-agent-session turn endpoint returns the corresponding typed `503`;
-settings and status reads remain available.
+turn time (see below). If bundled AI is not available, a turn with no
+key of your own returns `502 byok-anthropic-required`; the settings and
+status reads stay available.
+
+Bundled billing is offered on API Builder, API Scale and Enterprise. Team,
+Agency and API Starter run the AI agent with your own Anthropic key only.
 
 ## Resource shape
 
@@ -87,9 +90,13 @@ account-wide month-to-date spend and remaining budget.
 
 `PATCH /v1/account/me/bundled-llm-settings`
 
+Requires `account_owner` — a broad `read` + `write` key cannot change
+consent or the cap.
+
 The same controls are live in the desktop app under **Settings → AI
-& billing**. The desktop form and this endpoint update the same
-consent and monthly-cap record.
+& billing** and in the dashboard's Settings page. The desktop form, the
+dashboard and this endpoint all update the same consent and monthly-cap
+record.
 
 Partial update — either field may be omitted, but at least one of
 `consent` / `monthly_cap_usd_cents` must be present. An empty body
@@ -148,7 +155,7 @@ Content-Type: application/problem+json
   "type": "https://errors.driftstack.dev/bundled-llm-budget-exhausted",
   "title": "Bundled-LLM monthly cap reached",
   "status": 402,
-  "detail": "Spend this month has reached the configured cap.",
+  "detail": "You've used $20.00 of your $20.00 monthly bundled-LLM budget. Raise the cap via PATCH /v1/account/me/bundled-llm-settings, supply your own Anthropic API key via PUT /v1/account/me/byok-anthropic-key, or wait for the next calendar month.",
   "spent_cents": 2000,
   "cap_cents": 2000
 }
@@ -179,12 +186,24 @@ Content-Type: application/problem+json
   "type": "https://errors.driftstack.dev/bundled-llm-consent-required",
   "title": "Bundled-LLM consent required",
   "status": 402,
-  "detail": "Opt in via PATCH /v1/account/me/bundled-llm-settings."
+  "detail": "This deployment offers bundled-LLM but your account has not opted in. PATCH /v1/account/me/bundled-llm-settings with { \"consent\": true } to enable, or PUT /v1/account/me/byok-anthropic-key to bring your own Anthropic key (BYOK always wins)."
 }
 ```
 
 The SDK exposes the typed `BundledLlmConsentRequiredError` (no
 extension fields).
+
+On plans without bundled billing (Team, Agency, API Starter) this error does
+not mean "opt in": opting in is refused on those plans. Add your own key
+instead — `PUT /v1/account/me/byok-anthropic-key`, or the
+`x-byok-anthropic-api-key` header on each message.
+
+When consent is on but the account's current plan no longer includes
+bundled billing (after a downgrade, for example), the turn returns
+`403 forbidden` instead, asking you to upgrade or add your own key.
+
+Branch on the problem `type`, not on the `detail` text: the detail is written
+for people and can change.
 
 ## Models on bundled billing
 
@@ -213,6 +232,11 @@ of its own and bundled billing on) and again on every turn, because a
 session created with your own key moves to bundled billing if that key is
 removed or expires. A session using your own key keeps every model.
 
+In the SDKs this is a `ForbiddenError`; read the flag from
+`err.extensions.requires_own_key` (TypeScript),
+`err.problem["requires_own_key"]` (Python) or
+`Problem["requires_own_key"]` (Go).
+
 ## Errors
 
 | Status | Type                         | When                                                                                |
@@ -225,8 +249,14 @@ removed or expires. A session using your own key keeps every model.
 |    402 | bundled-llm-consent-required | deployment has bundled-LLM but the customer hasn't opted in                         |
 
 The settings + status routes above do not return a `503`. When
-bundled-LLM is not available on the deployment, the `503` is returned
-on the **agent-session turn** route, not on these reads.
+bundled-LLM is not available on the deployment, the agent-session turn
+route returns `502 byok-anthropic-required` for a turn with no key of your
+own; these reads keep working.
+
+Agent-session turns on bundled billing can also return `403 forbidden` (the
+plan no longer includes bundled billing) and `429 concurrency-limit` (your
+account already has 3 turns running on bundled billing; retry when one
+finishes). See [Agent sessions — Errors](/api/agent-sessions/#errors).
 
 ## Privacy + how turns are counted
 

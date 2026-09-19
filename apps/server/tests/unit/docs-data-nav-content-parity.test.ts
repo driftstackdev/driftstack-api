@@ -164,9 +164,9 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     );
   });
 
-  it('Guides section: 11 entries (S29 added concurrency + the two migration guides + sentry; S37 added paying-with-crypto + crypto-troubleshooting); team-rbac label is the plain-words "Teams & access control" (page slug/title untouched)', () => {
+  it('Guides section: 12 entries (S29 added concurrency + the two migration guides + sentry; S37 added paying-with-crypto + crypto-troubleshooting; the task guide "Run AI tasks from your code" sits first after the overview); team-rbac label is the plain-words "Teams & access control" (page slug/title untouched)', () => {
     expect(body).toMatch(
-      /\{\s*label: 'Guides',\s*items: \[\s*\{ href: '\/guides\/', label: 'Guides overview' \},\s*\{ href: '\/guides\/profile-management\/', label: 'Profile management' \},\s*\{ href: '\/guides\/session-lifecycle\/', label: 'Session lifecycle' \},\s*\{ href: '\/guides\/concurrency\/', label: 'Concurrency & backpressure' \},\s*\{ href: '\/guides\/team-rbac\/', label: 'Teams & access control' \},\s*\{ href: '\/guides\/live-video\/', label: 'Live video' \},\s*\{ href: '\/guides\/migrate-from-puppeteer\/', label: 'Migrating from Puppeteer \/ Playwright' \},\s*\{ href: '\/guides\/migrate-from-browserless\/', label: 'Migrating from Browserless' \},\s*\{ href: '\/guides\/sentry\/', label: 'Sentry integration' \},\s*\{ href: '\/guides\/paying-with-crypto\/', label: 'Paying with crypto' \},\s*\{ href: '\/guides\/crypto-troubleshooting\/', label: 'Crypto payment troubleshooting' \},\s*\],\s*\},/,
+      /\{\s*label: 'Guides',\s*items: \[\s*\{ href: '\/guides\/', label: 'Guides overview' \},\s*\{ href: '\/guides\/run-ai-tasks-from-code\/', label: 'Run AI tasks from your code' \},\s*\{ href: '\/guides\/profile-management\/', label: 'Profile management' \},\s*\{ href: '\/guides\/session-lifecycle\/', label: 'Session lifecycle' \},\s*\{ href: '\/guides\/concurrency\/', label: 'Concurrency & backpressure' \},\s*\{ href: '\/guides\/team-rbac\/', label: 'Teams & access control' \},\s*\{ href: '\/guides\/live-video\/', label: 'Live video' \},\s*\{ href: '\/guides\/migrate-from-puppeteer\/', label: 'Migrating from Puppeteer \/ Playwright' \},\s*\{ href: '\/guides\/migrate-from-browserless\/', label: 'Migrating from Browserless' \},\s*\{ href: '\/guides\/sentry\/', label: 'Sentry integration' \},\s*\{ href: '\/guides\/paying-with-crypto\/', label: 'Paying with crypto' \},\s*\{ href: '\/guides\/crypto-troubleshooting\/', label: 'Crypto payment troubleshooting' \},\s*\],\s*\},/,
     );
   });
 
@@ -310,11 +310,12 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     );
   });
 
-  it('V-1080 total tree size: 61 top-level routes + 148 child anchors — the agent-session LIST endpoint joined the tree, a live route all three SDKs wrap whose page carried no section for it. Including the archetype catalog and its list endpoint. V-847 raised it from 141 — V-843 documented the crypto quote and receipt endpoints and V-846 gave them nav children, but this census lives in a DIFFERENT file from the one V-846 raised, so it kept the old number', () => {
+  it('V-1080 total tree size: 62 top-level routes + 151 child anchors — the agent-session LIST endpoint joined the tree, a live route all three SDKs wrap whose page carried no section for it. Including the archetype catalog and its list endpoint. V-847 raised it from 141 — V-843 documented the crypto quote and receipt endpoints and V-846 gave them nav children, but this census lives in a DIFFERENT file from the one V-846 raised, so it kept the old number', () => {
     const hrefs = [...body.matchAll(/href: '([^']+)',/g)].map((m) => m[1]!);
     const topLevel = hrefs.filter((h) => !h.includes('#'));
     const anchors = hrefs.filter((h) => h.includes('#'));
-    expect(topLevel).toHaveLength(61);
+    // 62 since the task guide /guides/run-ai-tasks-from-code/ joined the Guides section.
+    expect(topLevel).toHaveLength(62);
     // +1 anchor: the organization taxonomy child added alongside `98d767a73`.
     // Refreshed after the endpoint-children integrity guard proved the tree
     // matches every page's h2 set exactly.
@@ -330,14 +331,16 @@ describe('W463.A apps/docs/src/data/nav.ts content parity (S22.2 all-50-routes t
     // number. Raise BOTH.
     // 149 since B2 gave POST /v1/agent-sessions/{id}/stop its nav child (raised in
     // both files).
-    expect(anchors).toHaveLength(149);
+    // 151 since the agent-sessions reference documented the captured-screenshot
+    // fetch and the network log (raised in both files).
+    expect(anchors).toHaveLength(151);
     // No duplicate hrefs at either level (the apps/docs
     // doc-nav-section-label-baseline suite enforces the top-level rule at
     // runtime too; mirrored here so a server-only run still catches it).
-    expect(new Set(topLevel).size).toBe(61);
+    expect(new Set(topLevel).size).toBe(62);
     // Set size must track the count — equality here is what proves NO duplicate
     // anchor was introduced along with the new child.
-    expect(new Set(anchors).size).toBe(149);
+    expect(new Set(anchors).size).toBe(151);
   });
 
   it('the 22 previously-orphaned routes are all present (6 reference + 5 sdk/api spillover checks kept explicit for the highest-traffic ones)', () => {

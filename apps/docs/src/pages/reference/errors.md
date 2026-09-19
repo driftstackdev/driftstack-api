@@ -139,6 +139,32 @@ prove fresh MFA before the request will succeed. Retrying
 without an MFA prompt is the same as the first attempt;
 prompt the customer first.
 
+## AI agent messages
+
+`POST /v1/agent-sessions/{id}/message` runs a browser task, so a few of the
+rules above read differently there. The
+[Run AI tasks from your code](/guides/run-ai-tasks-from-code/#errors-and-safe-retries)
+guide has the full table.
+
+- **The SDKs never retry `message()` for you**, whatever `isRetryable` says: a
+  lost response may belong to a task that already ran. Retry it yourself, with
+  the same `Idempotency-Key` only when you got no response at all.
+- **A `500` (`InternalError`) on a message that used your own Anthropic key**
+  usually means Anthropic rejected the key. It is not transient: test the key
+  with `POST /v1/account/me/byok-anthropic-key/test` before sending again.
+- **`ConcurrencyLimitError` (429) on a message** means your account already has
+  3 turns running on bundled billing. It clears as soon as one finishes, so
+  wait and retry even though the class is marked not retryable. (At create it
+  means you have as many open agent sessions as your plan allows.)
+- **`FeatureUnavailableError` (503)** on a message sent with an
+  `Idempotency-Key` means the key could not be recorded and the turn did not
+  run; on `POST /v1/agent-sessions/{id}/stop` it means the stop could not be
+  confirmed. Both are worth retrying yourself — `isRetryable` reports `false`
+  for this class, so the SDKs will not.
+- **With an `Idempotency-Key`, an error is final for that key**: retrying with
+  the same key replays it. Send a new key once you have fixed the cause or
+  waited.
+
 ## Cross-references
 
 - [Idempotency keys](/reference/idempotency/) — when retrying a POST

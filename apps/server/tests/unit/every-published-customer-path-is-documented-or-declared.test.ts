@@ -63,9 +63,9 @@ const UNDOCUMENTED_BY_DESIGN: Record<string, string> = {
     'api/oauth.md documents Driftstack as an OAuth PROVIDER; the CLIENT flow has no page.',
   '/v1/auth/oauth-client/confirm-merge': 'same SPA-internal client flow as oauth-client/start',
   '/v1/auth/oauth-client/redeem': 'same SPA-internal client flow as oauth-client/start',
-  '/v1/agent-sessions/:id/network':
-    'GUI-internal DevTools-style network feed for the simulator; consumed by the desktop app ' +
-    'over control-key auth, not a customer SDK operation',
+  // `/v1/agent-sessions/:id/network` left this list when api/agent-sessions.md
+  // documented it: it is published and an ordinary key with `read:sessions`
+  // reaches it, so a customer building their own request log can use it.
 };
 
 function normalise(p: string): string {

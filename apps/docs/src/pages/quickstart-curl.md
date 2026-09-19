@@ -234,6 +234,7 @@ until you release it).
 
 - **[SDK quickstart](/quickstart/)** — the same flow in TypeScript, Python, or Go.
 - **[Sessions reference](/api/sessions/)** — every session endpoint and field.
+- **[Run AI tasks from your code](/guides/run-ai-tasks-from-code/)** — hand a task to the AI agent and read its answer, with a curl walk-through.
 - **[Concurrency & backpressure](/guides/concurrency/)** — caps per tier and how to back off.
 - **[Errors](/reference/errors/)** — the stable problem types every endpoint returns.
 - **[Rate limits](/reference/rate-limits/)** — request-rate buckets, separate from concurrency.

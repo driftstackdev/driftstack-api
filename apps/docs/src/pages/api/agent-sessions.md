@@ -24,13 +24,21 @@ Three modes:
   control to the AI (handback is not available yet — see below).
   State transitions are audit-logged.
 
-> **Scope note.** Write operations on agent-session endpoints
-> (create, send-message, input-event, mode/takeover transitions)
-> gate on the broad `write` scope — there is no agent-sessions-specific
-> granular scope. Regular session routes accept the
-> granular `write:sessions`, but agent sessions do not have a
-> granular equivalent. If you mint a narrow CI key, include the
-> broad `write` scope to call these endpoints.
+> **Running a task from code?** [Run AI tasks from your code](/guides/run-ai-tasks-from-code/)
+> walks through the whole flow — create a session, send the task, read the
+> answer, approve or answer when the agent asks, stop, close — with complete
+> TypeScript, Python, Go and curl programs.
+
+> **Scope note.** Every agent-session write — create, message, stop,
+> close, mode, takeover/handback, input events, resume, cookie import,
+> history, file upload, proxy change and the live-video token — gates on
+> the broad `write` scope; there is no agent-sessions-specific granular
+> scope. Regular session routes accept the granular `write:sessions`, but
+> agent sessions do not have a granular equivalent. Reads — list, get,
+> the transcript stream, page state, the network log, captures, cookies
+> and downloads — need `read:sessions`, which broad `read` and
+> `account_owner` also satisfy. If you mint a narrow CI key, include the
+> broad `write` scope to call the write endpoints.
 
 ## Resource shape
 
@@ -49,6 +57,7 @@ Three modes:
   "created_by_user_id": "<user-uuid> | null",
   "mode": "ai | manual | pair",
   "model": "claude-opus-5 | claude-sonnet-5 | claude-opus-4-8 | claude-opus-4-7 | claude-sonnet-4-6 | claude-haiku-4-5",
+  "stop_on_exit_ip_change": false,
   "pair_mode_state": "{ \"kind\": ... } | null",
   "created_at": "<ISO-8601>",
   "updated_at": "<ISO-8601>",
@@ -82,6 +91,22 @@ your cap exactly as an `active` one does.
 `vpn_egress_bringing_up` or `vpn_egress_active`), and is `null` once the session
 is active or closed. It may be absent entirely on older deployments, so
 read it defensively rather than assuming the key exists.
+
+`closed_reason` says why a closed session ended. It is an open string, not a
+fixed list: `customer-closed` (you closed it), `budget-exhausted` (its token
+budget ran out), `transcript-limit` (its history is full), `exit_ip_changed`
+(see `stop_on_exit_ip_change` under [Create](#create)), and values such as
+`idle_timeout` or `max_duration` when the browser behind the session ended it.
+Read any other value as "the session could not start, or Driftstack ended it".
+
+`stop_on_exit_ip_change` is always present and echoes the create-time setting.
+Two more fields are optional and read-only: `liveness` (`{ state, fresh }` —
+the browser's latest reported state, `active`, `provisioning`, `idle` or
+`terminating`, and whether that report is recent) and `capability_report` (the
+browser's latest report of what the session can do — for example its exit IP,
+country and timezone, and whether live video is streaming). Both are absent
+until the browser has reported; treat an absent field as "not known yet", never
+as "not running".
 
 The `error_event` field is **optional and nullable** — it carries the most
 recent launch or runtime failure recorded for the session, and is
@@ -124,7 +149,10 @@ Request body (all fields optional):
   "profile_id": "prof_<uuid>",
   "proxy_id": "a1b2c3d4-...",
   "initial_url": "https://driftstack.io",
-  "geolocation": { "latitude": 48.8566, "longitude": 2.3522, "accuracy": 20 }
+  "geolocation": { "latitude": 48.8566, "longitude": 2.3522, "accuracy": 20 },
+  "continue_from_agent_session_id": "agt_<uuid>",
+  "stop_on_exit_ip_change": false,
+  "skip_proxy_probe": false
 }
 ```
 
@@ -135,6 +163,10 @@ Headers:
   duplicate row. This endpoint is one of the four that honour the
   header; see [Idempotency keys](/reference/idempotency/) for the full
   list and the endpoints that ignore it.
+- `x-byok-anthropic-api-key: sk-ant-...` (optional) — your own Anthropic key.
+  At create it only decides whether an Opus model may be chosen without a
+  stored key (see below); the key is not stored, so send it on every message
+  too.
 
 Response `201 Created` returns the resource above.
 
@@ -153,10 +185,12 @@ If `mode` is omitted the server defaults to `ai`. If `model` is
 omitted it defaults to `claude-sonnet-5` (every earlier id stays
 accepted for back-compat) — the `model` selects which
 Claude model the AI agent runs, and applies in `ai` and `pair`
-mode. `token_budget` defaults to the deployment-configured value
-(typically 100,000 tokens). The optional `driftstack_session_id` attaches the
-agent session to an existing browser session; without it, one is started
-automatically on the first executed intent.
+mode. `token_budget` is the most model tokens the session may use; it
+defaults to 100,000 tokens and can be at most 10,000,000. The browser starts
+when the session is created (`status` is `provisioning` until it is ready).
+The optional `driftstack_session_id` links an existing browser session you
+created with `/v1/sessions`, for reference; it does not change which browser the
+AI drives.
 
 Claude Opus models (`claude-opus-5`, `claude-opus-4-8`, `claude-opus-4-7`)
 are available with your own Anthropic key only. On an account that would run
@@ -201,6 +235,37 @@ inconsistent (a detectable signal). `latitude` is `-90..90`, `longitude` is
 `-180..180`, and the optional `accuracy` is in meters (omit for the device
 default). Out-of-range values are rejected (`400`).
 
+The optional `continue_from_agent_session_id` is the id of one of your
+**closed** agent sessions. The new session starts with that session's recent
+conversation, so the agent remembers it — use it to carry on after a session
+closed with `budget-exhausted` or `transcript-limit`. An unknown id, or one
+your account does not own, returns `404`; a session that is not closed yet
+returns `409 conflict`.
+
+Set `stop_on_exit_ip_change: true` to end the session (`closed_reason:
+"exit_ip_changed"`) if its proxy's exit IP changes while it runs, so a proxy
+that silently rotates cannot carry on from a new apparent location. It
+defaults to `false`.
+
+When you pass a `proxy_id`, the create normally tests the proxy live first and
+refuses with `422 proxy-validation-failed` (its `reason` says why — see
+[Account proxies](/api/proxies/)) if it does not work, before any session
+exists. `skip_proxy_probe: true` skips that test for this launch only.
+
+### Create errors
+
+| Status | Type                    | When                                                                                                                                                                                                  |
+| -----: | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|    400 | validation-failed       | a field fails validation (for example a non-`http(s)` `initial_url` or an out-of-range `geolocation`)                                                                                                 |
+|    400 | bad-request             | `proxy_id` names an HTTP proxy; browser sessions need a SOCKS5, OpenVPN or WireGuard proxy                                                                                                            |
+|    403 | forbidden               | `ai` or `pair` on a plan without the AI agent; an Opus model without your own key (`requires_own_key: true`, `model`); a team member without the `admin` role; a VPN proxy your plan does not include |
+|    404 | not-found               | `profile_id`, `proxy_id`, `driftstack_session_id` or `continue_from_agent_session_id` is unknown or not yours                                                                                         |
+|    409 | profile-in-use          | the profile already has a live session (carries `active_session_id`)                                                                                                                                  |
+|    409 | conflict                | `continue_from_agent_session_id` names a session that is not closed yet                                                                                                                               |
+|    409 | storage-quota-exceeded  | your plan's profile storage is full (profile-backed creates only)                                                                                                                                     |
+|    422 | proxy-validation-failed | the live proxy test failed (carries `reason`)                                                                                                                                                         |
+|    429 | concurrency-limit       | your account already has as many open agent sessions as your plan allows (carries `current_sessions`, `limit`); a `provisioning` session counts                                                       |
+
 ## List
 
 `GET /v1/agent-sessions`
@@ -236,8 +301,19 @@ message and return without executing).
 Request body:
 
 ```json
-{ "user_message": "open https://example.com and capture a screenshot" }
+{
+  "user_message": "open https://example.com and capture a screenshot",
+  "approve_consequential_actions": [{ "category": "purchase", "matched_text": "Buy now" }]
+}
 ```
+
+- `user_message` (required) — the task, or your reply to the agent, 1 to
+  8,000 characters. It is kept word for word in the session's history and is
+  sent to the model, so never put a password or a one-time code in it.
+- `approve_consequential_actions` (optional) — up to 20 approvals, each
+  `{ category, matched_text }` with `matched_text` 1 to 200 characters, for a
+  step the previous turn held for your approval. See
+  [Confirming a purchase, payment or account deletion](#confirming-a-purchase-payment-or-account-deletion).
 
 Headers:
 
@@ -283,9 +359,32 @@ Response (200) is a discriminated union by `kind`:
   "results": [
     { "kind": "success", "intent": { ... }, "summary": "navigated", "captureId": "cap_..." }
   ],
-  "ok": true
+  "ok": true,
+  "answer": "The page title is \"Example Domain\"."
 }
 ```
+
+How to read a `plan-executed` turn:
+
+- `results` holds every step that ran, in order, each with the step itself as
+  `results[i].intent`. Read steps from there: `intents` is the plan, and a turn
+  that looked at the page and planned again can run steps that are not in it,
+  so the two arrays need not line up by index.
+- `answer` is the answer to what the message asked ("…and tell me the total"),
+  read back from the page. It is present only when the message asked for
+  information, every step succeeded and the session still had enough token
+  budget to read the page; a turn that only acts has no `answer`.
+- `notice` is present when the task is **not** finished: the turn stopped at a
+  limit (about three minutes of work, the number of planning rounds, too
+  little token budget left, or going in circles), or the agent asked you
+  something part-way. It is one sentence saying which; where it says so, send
+  "continue" and the agent carries on from the current page. It is absent when
+  the task finished or a step failed.
+- `ok` is `true` when the last planned steps ran without a failure and without
+  stopping for approval. It does not by itself mean the task is finished —
+  check `notice` — and a turn that recovered from a failed step can show
+  `ok: true` with that failure still in `results`. `ok` is `false` when a step
+  failed or a step is waiting for approval (`confirmation_required`, below).
 
 AI responses can include `usage`:
 
@@ -352,7 +451,8 @@ Read-only `capture` remains eligible for bounded automatic replay.
   "clarifying_question": "Which page should I capture — the home page or the pricing page?"
 }
 
-// "refuse" — the AI judged the request out of scope / unsafe
+// "refuse" — the AI judged the request out of scope / unsafe,
+// or the AI was briefly unavailable (the refuse_reason asks you to retry)
 {
   "kind": "refuse",
   "session": { ...AgentSession },
@@ -380,8 +480,20 @@ Read-only `capture` remains eligible for bounded automatic replay.
 A `stopped` turn lists only the steps that **ran** — `intents` never includes a
 step that was still to come. See [Stop the running turn](#stop-the-running-turn).
 
-Paused and closed sessions return `409 Conflict`; resume a paused session, but
-replace a closed one. If close or pause wins after model or
+A `refuse` can also mean the AI was briefly unavailable rather than that it
+judged the task out of scope; the `refuse_reason` then asks you to retry. The
+session stays active and you can send the message again (with a new
+`Idempotency-Key`).
+
+Step results come in three kinds: `success` (with `summary`, and `captureId`
+for a screenshot — see [Fetch a captured screenshot](#fetch-a-captured-screenshot)),
+`failure` (with `reason` and `diagnosis`, above), and `confirmation_required`
+(below).
+
+Closed sessions return `409 Conflict`; start a new one (optionally with
+`continue_from_agent_session_id`). When a turn ends the session, the 409
+carries `session_status: "closed"` and `GET /{id}` shows why in
+`closed_reason`. If close or pause wins after model or
 browser work has already settled, that terminal 409 retains the same consumed
 `tokens_consumed`, `usage`, and redacted `partial_results` evidence described
 above. Treat it as outcome-known evidence for those listed steps, never as an
@@ -392,15 +504,145 @@ bundled LLM and the account has reached its monthly bundled-LLM
 spend cap (`bundled_llm_monthly_cap_usd_cents`), the turn returns
 `402 Payment Required` (BundledLlmBudgetExhausted) with `spent_cents`
 and `cap_cents` extensions. (The separate per-session `token_budget`
-is not a 402: when a session exhausts its token budget the turn is
-refused and the session is auto-closed with
-`closed_reason='budget-exhausted'`.)
+is not a 402: when a turn uses the last of the session's token budget, the
+session closes with `closed_reason: "budget-exhausted"` and the turn returns
+`409 conflict` with `session_status: "closed"`.)
+
+If a turn that used your own Anthropic key fails with `500 internal`, the usual
+cause is that Anthropic rejected the key (invalid, revoked, or the Anthropic
+account cannot pay). Check it with
+[`POST /v1/account/me/byok-anthropic-key/test`](/api/byok-anthropic/#test-connection)
+before sending the turn again — retrying without fixing the key fails the same
+way.
+
+### Confirming a purchase, payment or account deletion
+
+Before a step that would make a purchase, a payment or delete an account, the
+turn halts. That step does **not** run, `ok` is `false`, and the last entry in
+`results` is:
+
+```json
+{
+  "kind": "confirmation_required",
+  "intent": { "kind": "interact", "action": "tap", "selector": "#buy" },
+  "category": "purchase",
+  "matchedText": "Buy now"
+}
+```
+
+`category` is one of `purchase`, `payment`, `account_deletion`. To approve,
+send the **next** message on the session with the approval — usually the same
+`user_message` again:
+
+```json
+{
+  "user_message": "<the same message>",
+  "approve_consequential_actions": [{ "category": "purchase", "matched_text": "Buy now" }]
+}
+```
+
+- Copy `matchedText` from the result into `matched_text`: the result field is
+  camelCase and the request field is snake_case. The SDKs rename it for you:
+  pass `{ category, matchedText }` to `approveConsequentialActions` in
+  TypeScript, the held step itself in Python, and `driftstack.ApprovalFor(step)`
+  in Go.
+- It must be the very next message on the session. That turn carries on from
+  the step that halted, without planning the task again. If any other message
+  arrives in between, the approval does not apply: the agent plans afresh and
+  halts again at the same kind of step.
+- An approval covers actions with that category and text. A later step with
+  different wording halts again and needs its own approval.
+- The approval is part of the request, so send it with a new
+  `Idempotency-Key`.
+
+Do not approve automatically in an unattended job; have a person decide.
+
+### Streaming the turn (SSE)
+
+Send `Accept: text/event-stream` on the message request and the turn
+streams instead of blocking. The official SDKs always do this. It differs
+from the JSON response in ways worth writing a client around:
+
+- **Heartbeats are SSE comments, not events.** The stream opens with
+  `: stream open` and emits `: heartbeat <ISO-8601>` about every 15 seconds.
+  Lines beginning `:` carry no event name and no data; they keep the
+  connection open while the agent works.
+- **Progress events arrive before the result.** Each is an SSE event with a
+  JSON `data:` line. Reading them is optional, new names are added over time,
+  and a client must ignore any event name it does not recognise:
+
+  | Event        | `data`                                                                                                                                     |
+  | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+  | `phase`      | `{ phase }` — `planning`, `starting_browser`, `executing`, `reading_page` or `answering`; later rounds of a turn add `segment` and `cause` |
+  | `plan`       | `{ total, intents, labels }` — the steps about to run, with a short caption for each; later rounds add `offset`                            |
+  | `step_start` | `{ index, total, label }` — a step is starting                                                                                             |
+  | `step`       | `{ index, result }` — a step finished; `result` has the same shape as an entry of `results`                                                |
+  | `answer`     | `{ answer }` — the read-back answer                                                                                                        |
+  | `notice`     | `{ notice }` — the same sentence as the result's `notice`                                                                                  |
+  | `response`   | `{ status, body }` — the result; always the last event                                                                                     |
+
+- **One terminal frame, always named `response`.** The stream ends with
+  `event: response` whose `data:` is JSON `{ status, body }` — the HTTP
+  status the JSON lane would have returned, and the same body. It is the only
+  authoritative result.
+- **Errors arrive inside that frame, not as a status code.** An invalid
+  body or an unknown session answers `200` at the HTTP layer and reports
+  the failure as the `status` field of the terminal envelope. Branching on
+  the response status alone will read every one of those as success; read
+  `status` from the payload.
+- **Authentication, scope and request-rate failures are ordinary HTTP
+  errors.** A missing or invalid key (`401`), a key without the `write` scope
+  (`403`) and the request-rate `429` are decided before any stream exists, so
+  they come back as plain statuses with no stream. Every other outcome —
+  including the `429` for too many turns running — arrives in the `response`
+  frame.
+- **Closing the connection does not cancel the turn.** It keeps running. To
+  cancel it, call [`POST /{id}/stop`](#stop-the-running-turn). To recover the
+  result, send the request again with the same `Idempotency-Key`: it returns
+  `409 conflict` with `idempotency_status: "in_progress"` until the turn
+  finishes, then replays the result.
+
+### Turn and session limits
+
+- **Time.** A turn stops starting new steps after about three minutes. A step
+  that is already running always finishes, and the answer may still be read
+  after that, so a turn can take longer; allow several minutes and use the
+  stream. A turn plans at most six times. When a turn stops at one of these
+  limits it returns `plan-executed` with a `notice`; send "continue" to carry on
+  from the current page.
+- **One turn at a time per session.** A message sent while another is still
+  running returns `409 conflict` with `turn_in_progress: true`.
+- **Turns running at once, per account.** At most 3 AI turns run at once
+  across your sessions; the next returns `429 rate-limited` with
+  `retry_after_seconds: 1`. On Driftstack's included AI, at most 3 turns run at
+  once; the next returns `429 concurrency-limit`. Retry when one finishes.
+- **Message rate.** Messages have their own `agent_sessions:message` rate-limit
+  bucket per plan — see [Rate limits](/reference/rate-limits/).
+- **History.** A session holds up to 256 history entries or 1 MiB (a turn
+  usually adds two or three entries). When the next message would not fit, the
+  session closes with `closed_reason: "transcript-limit"` and the message
+  returns `409 conflict` with `session_status: "closed"`. Carry on in a new
+  session with `continue_from_agent_session_id`.
+- **Token budget.** Each turn spends model tokens from the session's
+  `token_budget`. When too little is left to plan again, the turn ends with a
+  `notice`; when a turn uses the last of it, the session closes with
+  `closed_reason: "budget-exhausted"`.
+- **Idempotency.** With an `Idempotency-Key`, every response after the request
+  is accepted — errors included — is stored for that key and replayed on a
+  retry. Reuse a key only when you got no response, or got `409` with
+  `idempotency_status: "in_progress"`; after any other response, send a new
+  key once you have fixed the cause or waited.
 
 ## Close
 
 `DELETE /v1/agent-sessions/{id}`
 
-Sets `status='closed'` with `closed_at` stamped. Idempotent.
+Sets `status='closed'` with `closed_at` stamped and `closed_reason:
+"customer-closed"`, ends the session's browser, and returns `204 No Content`.
+Idempotent: closing a closed session also returns `204`. Closing frees one of
+your open-session slots, and a profile-backed session saves the profile's
+cookies and storage as it ends — close in a `finally` block, after you have
+fetched any downloads (they are available only while the session is open).
 
 ## Stop the running turn
 
@@ -430,7 +672,8 @@ from the moment the message is accepted, before any planning starts. If you get
 `200 no_turn_running` while your own `POST /message` is still waiting for its
 answer, either the turn has just finished (its response is on its way) or the
 message has not reached the turn yet; asking again a second later is safe and
-settles which. A `503` means we could not confirm the stop; try again.
+settles which. A `503` (`feature-unavailable`) means we could not confirm the
+stop; call it again.
 
 The turn itself ends on **its own** `POST /message` response, which comes back
 as `kind: "stopped"` with the steps that ran and a `notice` saying how far it
@@ -454,6 +697,26 @@ What happens to the work in progress:
   `usage` and against the session's token budget.
 - **The read-back is skipped.** If every step had already run, the turn ends
   without answering the question; the `notice` says so.
+
+## Fetch a captured screenshot
+
+`GET /v1/agent-sessions/{id}/captures/{captureId}`
+
+Downloads a screenshot the agent took during a turn — the `captureId`
+(`cap_<uuid>`) on a `success` result of a `capture` step. The response body
+is the image itself, `image/png` or `image/jpeg` (see the `Content-Type`
+header), not JSON. Requires `read:sessions` (broad `read` or `account_owner`
+also work).
+
+Captures are kept only briefly: at most the 20 most recent per session, and
+they can be removed once 30 minutes pass without a new capture in that
+session. Fetch them as soon as the turn ends. An unknown or expired
+`captureId`, or a session you cannot access, returns `404`.
+
+```bash
+curl -sS "https://api.driftstack.dev/v1/agent-sessions/$ID/captures/$CAPTURE_ID" \
+  -H "Authorization: Bearer $DRIFTSTACK_API_KEY" -o screenshot.png
+```
 
 ## Live video (LiveKit)
 
@@ -500,29 +763,6 @@ Errors:
 |    403 | forbidden           | session is not active (closed or paused) — only active sessions can mint a token                               |
 |    503 | feature-unavailable | live video is not available on this deployment, or is temporarily unavailable — contact support if it persists |
 
-### Streaming the turn (SSE)
-
-Send `Accept: text/event-stream` on the message request and the turn
-streams instead of blocking. It differs from the JSON response in ways
-worth writing a client around:
-
-- **Heartbeats are SSE comments, not events.** The stream opens with
-  `: stream open` and emits `: heartbeat <ISO-8601>` periodically. Lines
-  beginning `:` carry no event name and no data — a client waiting on
-  named events correctly sees nothing until the turn finishes, which for
-  a browser task is normal rather than a stall.
-- **One terminal frame, always named `response`.** The stream ends with
-  `event: response` whose `data:` is JSON `{ status, body }` — the HTTP
-  status the JSON lane would have returned, and the same body.
-- **Errors arrive inside that frame, not as a status code.** An invalid
-  body or an unknown session answers `200` at the HTTP layer and reports
-  the failure as the `status` field of the terminal envelope. Branching on
-  the response status alone will read every one of those as success; read
-  `status` from the payload.
-- **Rate-limit denial is the one exception.** A `429` is still a hard HTTP
-  status with no stream, because the bucket is decided before any body
-  exists.
-
 ## Live transcript stream (SSE)
 
 `GET /v1/agent-sessions/{id}/transcript`
@@ -550,8 +790,9 @@ Event types emitted:
 
 - `transcript.entry` — fires for each transcript append. The
   `id:` SSE field is the entry's monotonic index; the `data:`
-  field is JSON with `{ index, entry }` where `entry` has the
-  same shape as the elements of `AgentSession.transcript`:
+  field is JSON with `{ index, entry }` where `entry` is an object
+  with `role`, `body`, `at`, and optionally `intents` (entries can carry
+  other fields too; ignore any you do not recognise):
   - `role` — one of `'user'` (customer-supplied message), `'agent'`
     (the AI's output: plan-executed, clarify, or refuse), or
     `'operator'` (manual-mode pass-through — the customer's
@@ -581,7 +822,9 @@ Resume semantics (RFC 6202 + EventSource spec):
 - The replay is exclusive (strictly greater than the supplied
   index) so a resumed subscriber doesn't see duplicate events.
 
-Heartbeat: server sends a `: stream open` comment on connect.
+Heartbeat: server sends a `: stream open` comment on connect, then a
+`: heartbeat <ISO-8601>` comment about every 30 seconds. Each heartbeat
+re-checks your key, and the stream closes if the key has lost access.
 Browsers' EventSource auto-reconnect on disconnect uses
 `Last-Event-ID` for resume, so a transient network blip doesn't
 lose any transcript content as long as the customer's auth
@@ -823,19 +1066,28 @@ Response `202`:
 if the session is in a terminal state (resume requires an active
 session). Not available on every deployment.
 
-The seven endpoints below operate on the **live, running session**
-(they are what the desktop app's page overlay, Cookies drawer,
-back/forward buttons, file picker, and download bar call). Reads
-accept any bearer with the `read` scope; writes gate on the broad
-`write` scope (see the scope note at the top of this page). Apart
-from the page-state poll, each returns a **discriminated `200` body**
-in every case — `status` is one of `ok`, `unavailable` (the session
-is not running, cannot be reached right now, or live control is not
-enabled on this deployment), `timeout` (the session did not reply in
-time), or `error` (the session reported a failure; `reason` says why)
-— so expected-inert states surface as data, not HTTP errors. A
-malformed body or query is a `400`; an unknown or cross-account
-session id is a `404`.
+A session paused by a bot check still reads `status: "active"` — the pause is
+not reflected in `status`. Watch for the
+[`session.challenge_detected`](/webhooks/events/) webhook instead.
+
+The nine endpoints below operate on the **live, running session**
+(they are what the desktop app's page overlay, network pane, Cookies
+drawer, back/forward buttons, file picker, and download bar call). Reads
+need `read:sessions` (broad `read` or `account_owner` also work); writes
+gate on the broad `write` scope (see the scope note at the top of this
+page). Apart from the page-state poll, each returns a **discriminated
+`200` body** in every case — `status` is one of `ok`, `unavailable`
+(the session is not running, cannot be reached right now, or live
+control is not enabled on this deployment), `timeout` (the session did
+not reply in time), or `error` (the session reported a failure; `reason`
+says why) — so expected-inert states surface as data, not HTTP errors.
+The network log answers only `ok` or `unavailable`. A malformed body or
+query is a `400`; an unknown or cross-account session id is a `404`.
+
+The cookie read and import, proxy change, history step, and both download
+endpoints share a per-account limit of 16 requests in flight at once. Past
+it, the response is `status: "error"` with a `reason` asking you to retry
+shortly.
 
 ## Page state
 
@@ -870,6 +1122,41 @@ on-screen keyboard. `page_state` is `null` when
 nothing has been reported yet, the last report is older than the
 freshness bound, the session is closed, or live session state is
 unavailable on this deployment.
+
+## Network log
+
+`GET /v1/agent-sessions/{id}/network`
+
+The requests the running session's pages have made — URL, method, status, and
+the HTTP protocol each one used — for a request log in your own UI. Poll it,
+passing `after` (the `next_after` from the previous response) to get only the
+requests logged since then; omit it to read the whole recent log.
+
+Response (200):
+
+```json
+{
+  "status": "ok",
+  "entries": [
+    {
+      "id": "<id>",
+      "url": "https://example.com/",
+      "method": "GET",
+      "status": 200,
+      "protocol": "h2",
+      "started_at": 1780000000000,
+      "duration_ms": 84
+    }
+  ],
+  "next_after": "42"
+}
+```
+
+`protocol` is `h1` (HTTP/1.1), `h2` (HTTP/2) or `h3` (HTTP/3); `started_at` is
+unix milliseconds. Entries can also carry `alpn`, `type`, `initiator`,
+`size_bytes` and `from_cache`. When the session is not running, or network
+logging is not available on the deployment, `status` is `unavailable`,
+`entries` is empty, `next_after` is `null`, and `reason` says why.
 
 ## Read the cookie jar
 
@@ -1042,6 +1329,12 @@ not report one. A missing or too-large file is `status: "error"`
 with the cause in `reason`; on any non-`ok` status, `file` is
 `null`.
 
+Add `format=binary` to get the file's raw bytes instead
+(`application/octet-stream`, same 64 MiB cap) — simpler and smaller than
+decoding `dataB64`. Outcomes other than success still come back as the small
+JSON envelope above with `file: null`. Downloads can be listed and fetched only
+while the session is open, so fetch them before you close it.
+
 ## Audit log
 
 Six actions land on the customer audit log across the agent-session
@@ -1068,18 +1361,28 @@ Filter via
 
 | Status | Type                         | When                                                                                                                                                                                                                                                                     |
 | -----: | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-|    400 | validation-failed            | body fails schema (missing `user_message`, etc.)                                                                                                                                                                                                                         |
+|    400 | validation-failed            | body fails schema (missing `user_message`, a `user_message` over 8,000 characters, etc.)                                                                                                                                                                                 |
+|    400 | bad-request                  | create's `proxy_id` names an HTTP proxy                                                                                                                                                                                                                                  |
 |    403 | forbidden                    | create with — or mode-flip into — `mode: ai`/`pair` on a tier without the AI-agent feature (Free / Personal)                                                                                                                                                             |
 |    403 | forbidden                    | an Opus model on bundled billing, at create or on a message (`requires_own_key: true`)                                                                                                                                                                                   |
+|    403 | forbidden                    | a message on bundled billing when the account's current plan no longer includes it (add your own key)                                                                                                                                                                    |
 |    404 | not-found                    | session id you cannot access (not your own, and not a team you hold admin on)                                                                                                                                                                                            |
 |    409 | conflict                     | mode mismatch, or `ai_control_unavailable: true` when control of the session changes while a message is running; the latter includes `phase` and can include consumed `tokens_consumed`, `usage`, and redacted `partial_results` that must not be replayed automatically |
+|    409 | conflict                     | `turn_in_progress: true` — another message is still running on this session; wait for it or [stop it](#stop-the-running-turn)                                                                                                                                            |
+|    409 | conflict                     | `session_status` — the session has ended (read `closed_reason` with `GET /{id}`); start a new session, optionally with `continue_from_agent_session_id`                                                                                                                  |
+|    409 | conflict                     | `idempotency_status: "in_progress"` — the first request with this `Idempotency-Key` is still running (retry later with the same key); `"mismatch"` — the key was used for a different request (use a new key)                                                            |
 |    409 | profile-in-use               | create's `profile_id` already has a live session (carries `active_session_id`)                                                                                                                                                                                           |
+|    409 | storage-quota-exceeded       | a profile-backed create when your plan's profile storage is full                                                                                                                                                                                                         |
 |    409 | pair-mode-invalid-transition | the transition is not allowed from the current state (carries `from` + `transition`)                                                                                                                                                                                     |
 |    409 | pair-mode-conflict           | concurrent takeover lost the lock race (carries `winner_client_id`)                                                                                                                                                                                                      |
 |    402 | bundled-llm-budget-exhausted | bundled-LLM monthly cap reached                                                                                                                                                                                                                                          |
-|    402 | bundled-llm-consent-required | deployment has bundled-LLM but customer hasn't opted in                                                                                                                                                                                                                  |
-|    502 | byok-anthropic-required      | no BYOK + no consent + no fallback                                                                                                                                                                                                                                       |
-|    503 | feature-unavailable          | no BYOK or bundled-LLM provider is available in the deployment; on Stop, also when the stop could not be confirmed just now (try again)                                                                                                                                  |
+|    402 | bundled-llm-consent-required | no key of your own and no opt-in to bundled billing; on Team, Agency and API Starter opting in is refused, so add your own key instead                                                                                                                                   |
+|    422 | proxy-validation-failed      | create's live proxy test failed (carries `reason`)                                                                                                                                                                                                                       |
+|    429 | rate-limited                 | the `agent_sessions:message` request rate for your plan, or your account already has 3 AI turns running (`retry_after_seconds`)                                                                                                                                          |
+|    429 | concurrency-limit            | at create, your account already has as many open agent sessions as your plan allows; on a message, 3 turns on bundled billing are already running                                                                                                                        |
+|    500 | internal                     | on a message that used your own Anthropic key, usually Anthropic rejected the key — [test the key](/api/byok-anthropic/#test-connection) before retrying                                                                                                                 |
+|    502 | byok-anthropic-required      | no Anthropic key could be found for the turn: none sent, none stored, and bundled billing is not available                                                                                                                                                               |
+|    503 | feature-unavailable          | on a message, an `Idempotency-Key` was sent but could not be recorded, so the turn did not run (retry later with the same key); on Stop, the stop could not be confirmed just now (try again)                                                                            |
 
 The pair-mode transition errors are typed in all
 three SDKs: `PairModeStateInvalidTransitionError`. Branch on

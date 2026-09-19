@@ -146,6 +146,37 @@ endpoint. `verifyWebhookSignature` already checks every `v1=` entry
 in that header, so the call above keeps verifying through a rotation
 with no extra arguments and your verifier won't drop deliveries.
 
+## Run an AI task
+
+Hand a task to the AI agent in plain words and read its answer. The
+agent plans the taps and page loads itself:
+
+```ts
+import { randomUUID } from 'node:crypto';
+
+const agent = await client.agentSessions.create({ mode: 'ai' });
+try {
+  // A new session is `provisioning` until its browser is ready.
+  while ((await client.agentSessions.get(agent.id)).status === 'provisioning') {
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  const reply = await client.agentSessions.message(
+    agent.id,
+    'Open https://example.com and tell me the page title.',
+    { idempotencyKey: randomUUID() },
+  );
+  if (reply.kind === 'plan-executed') console.log(reply.answer ?? reply.results);
+  else console.log(reply.kind, reply);
+} finally {
+  await client.agentSessions.close(agent.id);
+}
+```
+
+The guide [Run AI tasks from your code](/guides/run-ai-tasks-from-code/)
+covers the rest a program needs: who pays for the AI, answering the
+agent's questions, approving a payment it held, stopping a task that
+runs too long, safe retries, and limits.
+
 ## Pair-mode takeover (interactive AI sessions)
 
 For sessions where a human needs to step in mid-flight, the SDK
@@ -220,6 +251,9 @@ The TS SDK re-exports `CANONICAL_MODIFIER_NAMES` from
 
 ## Next steps
 
+- [Run AI tasks from your code](/guides/run-ai-tasks-from-code/) — give
+  the AI agent a task, read its answer, and handle questions, approvals,
+  stops, errors and retries.
 - [Session lifecycle reference](/guides/session-lifecycle/) — states,
   the free-tier 20-minute duration cap, reconnect semantics.
 - [Profile management](/guides/profile-management/) — persistent
