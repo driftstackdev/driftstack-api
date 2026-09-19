@@ -2142,7 +2142,11 @@ function buildRegistry(): OpenAPIRegistry {
     .openapi('BundledLlmSettings');
   // The response above keeps the storage bound: a cap stored before the
   // 2026-09-19 limit is grandfathered and is returned as it is. A NEW value is
-  // limited to 10,000 ($100) — the bound published here is the enforced one.
+  // limited to 10,000 ($100). The schema bound published here is the STORAGE
+  // bound, because a kept limit above $100 may be lowered to a value that is still
+  // above $100 — a client validating against a $100 maximum would refuse a request
+  // the server accepts. The $100 rule depends on the stored value, so it lives in
+  // the description and is enforced by the route (bundledCapWriteRefusal).
   const PatchBundledLlmRequestOpenApi = z
     .object({
       consent: z.boolean().optional(),
@@ -2150,10 +2154,10 @@ function buildRegistry(): OpenAPIRegistry {
         .number()
         .int()
         .min(0)
-        .max(10_000)
+        .max(1_000_000)
         .optional()
         .describe(
-          'Monthly limit in US cents, at most 10000 ($100). A limit already above that, set before the maximum was lowered, is kept and may be sent back unchanged.',
+          'Monthly limit in US cents. A new limit is at most 10000 ($100). A limit already above that, set before the maximum was lowered, is kept: it may be sent back unchanged or lowered to any value, but never raised. A value the account may not set is refused with 400.',
         ),
     })
     .describe('At least one of consent / monthly_cap_usd_cents must be present.')

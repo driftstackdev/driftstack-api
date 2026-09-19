@@ -111,8 +111,10 @@ Constraints:
   Negative values rejected with `400`. A cap set above $100 before
   2026-09-19 (the earlier ceiling was 1,000,000 cents, $10,000) is kept:
   it is still enforced and returned, and sending that same value back
-  (for example when saving the whole settings form) is accepted. Any
-  other value above 10,000 is rejected with `400`.
+  (for example when saving the whole settings form) is accepted. It can
+  also be lowered to any smaller value, even one still above 10,000, and
+  the lowered value then becomes the most it can be. It can never be
+  raised: any other value above 10,000 is rejected with `400`.
 
 > **Tier availability.** Opting **in** (`consent: true`) requires a
 > tier that offers bundled-LLM access: API Builder, API Scale, or
@@ -213,14 +215,14 @@ removed or expires. A session using your own key keeps every model.
 
 ## Errors
 
-| Status | Type                         | When                                                                     |
-| -----: | ---------------------------- | ------------------------------------------------------------------------ |
-|    400 | validation-failed            | body fails schema (negative cap, a new cap above 10,000)                 |
-|    401 | unauthorized                 | missing or invalid bearer token                                          |
-|    403 | forbidden                    | `consent: true` on a tier without bundled-LLM access (below API Builder) |
-|    403 | forbidden                    | an Opus model on bundled billing (agent-session create or turn)          |
-|    402 | bundled-llm-budget-exhausted | spend reached the cap; recover via PATCH / BYOK / next month             |
-|    402 | bundled-llm-consent-required | deployment has bundled-LLM but the customer hasn't opted in              |
+| Status | Type                         | When                                                                                |
+| -----: | ---------------------------- | ----------------------------------------------------------------------------------- |
+|    400 | validation-failed            | body fails schema (negative cap), or a cap above 10,000 higher than the current one |
+|    401 | unauthorized                 | missing or invalid bearer token                                                     |
+|    403 | forbidden                    | `consent: true` on a tier without bundled-LLM access (below API Builder)            |
+|    403 | forbidden                    | an Opus model on bundled billing (agent-session create or turn)                     |
+|    402 | bundled-llm-budget-exhausted | spend reached the cap; recover via PATCH / BYOK / next month                        |
+|    402 | bundled-llm-consent-required | deployment has bundled-LLM but the customer hasn't opted in                         |
 
 The settings + status routes above do not return a `503`. When
 bundled-LLM is not available on the deployment, the `503` is returned

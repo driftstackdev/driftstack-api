@@ -334,7 +334,7 @@ const EMAIL_EVENTS = [
               type="number"
               inputmode="decimal"
               min="0"
-              max="10000"
+              max="100"
               step="0.01"
               disabled
               title="Sign in and wait for AI billing settings to load"
@@ -342,7 +342,11 @@ const EMAIL_EVENTS = [
             />
           </div>
           <p class="mt-1 text-xs text-tk-ink-3">
-            Between $0 and $10,000. A $0 limit stops all bundled AI use, even when it's enabled.
+            Up to $100. A $0 limit stops all bundled AI use, even when it's enabled.
+          </p>
+          <p data-bundled-cap-kept class="mt-1 hidden text-xs text-tk-ink-3">
+            Your current limit was set before new limits were capped at $100. You can keep it or
+            lower it, but not raise it.
           </p>
         </div>
 
@@ -1132,6 +1136,7 @@ const EMAIL_EVENTS = [
       const bundledForm = root.querySelector('[data-bundled-form]');
       const bundledConsent = root.querySelector('[data-field="bundled-consent"]');
       const bundledCapUsd = root.querySelector('[data-field="bundled-cap-usd"]');
+      const bundledCapKept = root.querySelector('[data-bundled-cap-kept]');
       const bundledSave = root.querySelector('[data-bundled-save]');
       const bundledLoading = root.querySelector('[data-bundled-state="loading"]');
       const bundledReady = root.querySelector('[data-bundled-state="ready"]');
@@ -1152,6 +1157,34 @@ const EMAIL_EVENTS = [
       let bundledKnown = false;
       let bundledSaving = false;
       let bundledLoadGeneration = 0;
+      // A new limit is at most $100 (BUNDLED_CAP_MAX_NEW_WRITE_CENTS on the server).
+      // A limit already stored above that is kept: it may be saved unchanged or
+      // lowered, never raised. So the highest value this form may send is the
+      // larger of $100 and the limit last loaded from the server.
+      const BUNDLED_CAP_NEW_MAX_CENTS = 10_000;
+      let bundledLoadedCapCents = 0;
+
+      function bundledCapCeilingCents() {
+        return Math.max(BUNDLED_CAP_NEW_MAX_CENTS, bundledLoadedCapCents);
+      }
+
+      // The server refuses a limit it will not store as a validation problem
+      // naming monthly_cap_usd_cents. Its text is written for API callers (it
+      // names the field in cents), so the form says the same rule in dollars.
+      function isBundledCapRefusal(response, body) {
+        if (response.status !== 400 || !body || typeof body !== 'object') return false;
+        if (body.type !== 'https://errors.driftstack.dev/validation-failed') return false;
+        const fieldErrors =
+          body.issues && typeof body.issues === 'object' ? body.issues.fieldErrors : undefined;
+        const capErrors =
+          fieldErrors && typeof fieldErrors === 'object'
+            ? fieldErrors.monthly_cap_usd_cents
+            : undefined;
+        return Array.isArray(capErrors) && capErrors.length > 0;
+      }
+
+      const BUNDLED_CAP_REFUSED_MESSAGE =
+        'That limit was not accepted. New limits are at most $100, and a limit already above $100 can be kept or lowered, but not raised.';
 
       function isBundledStatus(body) {
         return (
@@ -1217,7 +1250,17 @@ const EMAIL_EVENTS = [
       function renderBundledStatus(status) {
         bundledKnown = true;
         if (bundledConsent) bundledConsent.checked = status.consent;
-        if (bundledCapUsd) bundledCapUsd.value = (status.cap_cents / 100).toFixed(2);
+        bundledLoadedCapCents = status.cap_cents;
+        if (bundledCapUsd) {
+          // The max follows the loaded limit: the form has no novalidate, so a
+          // kept limit above $100 under a $100 max would stop the browser from
+          // submitting the form at all, even when only consent changed.
+          bundledCapUsd.max = (bundledCapCeilingCents() / 100).toFixed(2);
+          bundledCapUsd.value = (status.cap_cents / 100).toFixed(2);
+        }
+        if (bundledCapKept) {
+          bundledCapKept.classList.toggle('hidden', status.cap_cents <= BUNDLED_CAP_NEW_MAX_CENTS);
+        }
         if (bundledUsed) {
           bundledUsed.textContent = bundledCurrency.format(status.used_this_month_cents / 100);
         }
@@ -1286,12 +1329,17 @@ const EMAIL_EVENTS = [
 
       function desiredBundledSettings() {
         const raw = bundledCapUsd ? bundledCapUsd.value.trim() : '';
-        if (!/^(?:0|[1-9]\d{0,3}|10000)(?:\.\d{1,2})?$/.test(raw)) {
-          throw new Error('Enter a limit from $0 to $10,000 with at most two decimal places.');
-        }
+        const ceilingCents = bundledCapCeilingCents();
+        const invalid =
+          ceilingCents > BUNDLED_CAP_NEW_MAX_CENTS
+            ? 'Enter a limit from $0 up to your current ' +
+              bundledCurrency.format(ceilingCents / 100) +
+              ' limit, with at most two decimal places.'
+            : 'Enter a limit from $0 to $100 with at most two decimal places.';
+        if (!/^(?:0|[1-9]\d{0,4})(?:\.\d{1,2})?$/.test(raw)) throw new Error(invalid);
         const cents = Math.round(Number(raw) * 100);
-        if (!Number.isInteger(cents) || cents < 0 || cents > 1_000_000) {
-          throw new Error('Enter a limit from $0 to $10,000 with at most two decimal places.');
+        if (!Number.isInteger(cents) || cents < 0 || cents > ceilingCents) {
+          throw new Error(invalid);
         }
         return {
           consent: Boolean(bundledConsent && bundledConsent.checked),
@@ -1323,7 +1371,14 @@ const EMAIL_EVENTS = [
               body: JSON.stringify(desired),
             });
             const body = await response.json().catch(() => ({}));
-            if (!response.ok) throw window.driftstackResponseError(response, body);
+            if (!response.ok) {
+              if (isBundledCapRefusal(response, body)) {
+                const refused = new Error(BUNDLED_CAP_REFUSED_MESSAGE);
+                refused.bundledCapRefused = true;
+                throw refused;
+              }
+              throw window.driftstackResponseError(response, body);
+            }
             mutationAccepted = true;
 
             const live = await fetchBundledStatus();
@@ -1367,6 +1422,18 @@ const EMAIL_EVENTS = [
                   bundledStatus.textContent = "We couldn't confirm the AI billing save.";
                 }
                 setBundledPanel('error');
+              }
+            } else if (err && err.bundledCapRefused === true) {
+              // The stored limit may have changed elsewhere since this form
+              // loaded, so reload it: the next save then starts from the limit
+              // the server actually holds.
+              try {
+                renderBundledStatus(await fetchBundledStatus());
+                showBundledError(
+                  BUNDLED_CAP_REFUSED_MESSAGE + ' The form now shows your current settings.',
+                );
+              } catch {
+                showBundledError(BUNDLED_CAP_REFUSED_MESSAGE);
               }
             } else if (mutationAccepted) {
               bundledKnown = false;

@@ -21,14 +21,32 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { PROBLEM_TYPES } from '@driftstack/api-types';
+import { BUNDLED_CAP_MAX_NEW_WRITE_CENTS } from '../../src/services/bundled-llm.js';
+import { codeOnly } from './_helpers/code-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/settings.astro');
 const BYOK_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/account-byok-anthropic.ts');
+const BUNDLED_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/account-bundled-llm.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
+}
+
+/** The page's inline script with its comments removed, so a pin cannot be met by prose. */
+function pageScript(page: string): string {
+  const match = page.match(
+    /<script is:inline define:vars=\{\{ apiBaseUrl \}\}>([\s\S]*?)<\/script>/,
+  );
+  if (!match?.[1]) throw new Error('settings inline script not found');
+  return codeOnly(match[1]);
+}
+
+/** The page's markup with HTML and JSX-expression comments removed. */
+function pageMarkup(page: string): string {
+  return page.replace(/<!--[\s\S]*?-->/g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
 }
 
 describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity', () => {
@@ -145,12 +163,67 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
       /If you've saved your own Anthropic\s*API key, it's used first, billed by Anthropic/,
     );
     expect(body).toMatch(
-      /data-field="bundled-cap-usd"[\s\S]{0,250}min="0"[\s\S]{0,100}max="10000"[\s\S]{0,100}step="0\.01"/,
+      /data-field="bundled-cap-usd"[\s\S]{0,250}min="0"[\s\S]{0,100}max="100"[\s\S]{0,100}step="0\.01"/,
     );
     expect(body).toMatch(/data-field="bundled-used"/);
     expect(body).toMatch(/data-field="bundled-remaining"/);
     expect(body).toMatch(/data-field="bundled-reset"/);
-    expect(body).toMatch(/Between \$0 and \$10,000/);
+    expect(body).toMatch(
+      /Up to \$100\. A \$0 limit stops all bundled AI use, even when it's enabled\./,
+    );
+    // The old ceiling, which the server no longer accepts as a new limit.
+    expect(pageMarkup(body)).not.toMatch(/\$10,000|max="10000"/);
+    expect(pageScript(body)).not.toMatch(/\$10,000/);
+  });
+
+  it('the cap input accepts exactly what the server accepts: at most $100 for a new limit, and a kept higher limit only unchanged or lowered', () => {
+    const script = pageScript(body);
+    const markup = pageMarkup(body);
+    // The page's new-limit maximum is the server's, not a copy that can drift.
+    const pinned = script.match(/const BUNDLED_CAP_NEW_MAX_CENTS = ([\d_]+);/);
+    expect(pinned?.[1]).toBeDefined();
+    expect(Number(pinned?.[1]?.replace(/_/g, ''))).toBe(BUNDLED_CAP_MAX_NEW_WRITE_CENTS);
+    // The ceiling is the larger of $100 and the limit last loaded from the server…
+    expect(script).toMatch(
+      /function bundledCapCeilingCents\(\) \{\s*return Math\.max\(BUNDLED_CAP_NEW_MAX_CENTS, bundledLoadedCapCents\);\s*\}/,
+    );
+    // …remembered on every load and set as the input's max, so a kept limit above
+    // $100 never sits over a lower max that blocks the browser's submit (the form
+    // has no novalidate).
+    expect(script).toMatch(
+      /function renderBundledStatus\(status\) \{[\s\S]{0,200}bundledLoadedCapCents = status\.cap_cents;[\s\S]{0,100}bundledCapUsd\.max = \(bundledCapCeilingCents\(\) \/ 100\)\.toFixed\(2\);\s*bundledCapUsd\.value = \(status\.cap_cents \/ 100\)\.toFixed\(2\);/,
+    );
+    // The client check refuses anything above that ceiling before sending it.
+    expect(script).toMatch(
+      /function desiredBundledSettings\(\) \{[\s\S]{0,200}const ceilingCents = bundledCapCeilingCents\(\);[\s\S]{0,700}cents > ceilingCents/,
+    );
+    // A kept limit above $100 is explained, and only then.
+    expect(markup).toMatch(
+      /<p data-bundled-cap-kept class="[^"]*\bhidden\b[^"]*">\s*Your current limit was set before new limits were capped at \$100\. You can keep it or\s*lower it, but not raise it\.\s*<\/p>/,
+    );
+    expect(script).toMatch(
+      /bundledCapKept\.classList\.toggle\('hidden', status\.cap_cents <= BUNDLED_CAP_NEW_MAX_CENTS\)/,
+    );
+  });
+
+  it("a cap the server refuses is explained in dollars, keyed to the route's own problem type and field", () => {
+    const script = pageScript(body);
+    const route = codeOnly(read(BUNDLED_ROUTE));
+    // The route refuses a cap as a validation problem naming monthly_cap_usd_cents…
+    expect(route).toMatch(
+      /throw new ValidationError\(\{\s*formErrors: \[\],\s*fieldErrors: \{ monthly_cap_usd_cents: \[refusal\] \},\s*\}\)/,
+    );
+    // …and the page recognises exactly that shape.
+    expect(script).toContain(`body.type !== '${PROBLEM_TYPES.ValidationFailed}'`);
+    expect(script).toMatch(/fieldErrors\.monthly_cap_usd_cents/);
+    expect(script).toMatch(
+      /if \(isBundledCapRefusal\(response, body\)\) \{[\s\S]{0,200}throw refused;[\s\S]{0,20}\}\s*throw window\.driftstackResponseError\(response, body\);/,
+    );
+    // It says the rule in dollars — the server's own text names the API field in cents.
+    expect(script).toMatch(
+      /const BUNDLED_CAP_REFUSED_MESSAGE =\s*'That limit was not accepted\. New limits are at most \$100, and a limit already above \$100 can be kept or lowered, but not raised\.';/,
+    );
+    expect(script).not.toMatch(/showBundledError\([^)]*capErrors/);
   });
 
   it('bundled-AI wiring uses dedicated load failure/retry, busy reasons, and authoritative timeout reconciliation without optimistic mutation', () => {

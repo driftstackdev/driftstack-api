@@ -40,6 +40,15 @@ describe('Arc 6 docs.bundled-llm content parity', () => {
   it('cap ceiling pinned at $100 (10,000 cents) for new values, with the earlier $10,000 caps grandfathered — matches the route', () => {
     expect(body).toMatch(/0 to 10,000 \(\$100 ceiling\)/);
     expect(body).toMatch(/earlier ceiling was 1,000,000 cents, \$10,000\) is kept/);
+    // bundledCapWriteRefusal lets a kept cap be LOWERED to any value, even one still
+    // above 10,000; the page once said every other value above 10,000 was refused.
+    expect(body).toMatch(/lowered to any smaller value, even one still above 10,000/);
+    expect(body).toMatch(/It can never be\s+raised/);
+    // The errors table says the same: only a cap above 10,000 that RAISES the stored
+    // one is refused, not every "new" value above 10,000.
+    expect(body).toMatch(
+      /\|\s*400 \| validation-failed\s*\| body fails schema \(negative cap\), or a cap above 10,000 higher than the current one\s*\|/,
+    );
   });
 
   it('default cap pinned at $20 (2000 cents)', () => {

@@ -380,8 +380,10 @@ export const accounts = pgTable(
     //          enforced server-side per calendar month against
     //          usage_records rows with `source = 'agent_decomposer_bundled'`.
     //          PATCH /v1/account/me/bundled-llm-settings (sub-slice
-    //          6.6) lets the customer raise / lower in the [$0,$10,000]
-    //          range.
+    //          6.6) lets the customer set it: a NEW value is at most
+    //          $100 (2026-09-19); a value stored above that before then
+    //          is kept, and may be lowered but never raised. The column
+    //          CHECK keeps the old [$0,$10,000] storage bound.
     //   Q5=A — actual upstream Anthropic cost hidden; per-turn cost
     //          recorded at a posted flat rate (sub-slice 6.4).
     bundledLlmConsent: boolean('bundled_llm_consent').notNull().default(false),
