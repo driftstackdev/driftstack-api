@@ -243,7 +243,8 @@ is still private: it answers 401 without the token, at the edge as well. Nothing
 scrapes it yet, so nothing alerts from it. Alerts 1–3 are instead evaluated **inside the API** by the
 `agent_turn.health_watchdog` job, every **5 minutes**, from the
 `agent_turn_telemetry` table — the same rows the admin page reads, through the
-same summary code — and delivered through **Sentry**.
+same summary code — and delivered through **Sentry** and **by email to the
+owner** (see "Getting notified" below).
 
 **One set of numbers.** The watchdog's windows, thresholds, volume floors and
 `for:` durations are `AGENT_TURN_ALERT_RULES` in
@@ -293,20 +294,54 @@ so for first progress (the narrowest window) it shows a wider span, and for any
 rule it drifts from `window_since` / `window_until` as time passes. Expect the
 figures to be close, not identical.
 
-**Getting notified — a Sentry alert rule is REQUIRED.** An event reaching Sentry
-tells no one by itself. Because a condition's breaches share one issue, and a
-`recovered` event goes to a different issue and does not resolve the breach
-issue, the usual rules ("a new issue is created", "an issue changes state from
-resolved to unresolved") fire on the **first** breach only: a second incident
-and every reminder land in an issue that is already open and notify nobody. The
-project needs an issue alert that fires **per event**:
+**Getting notified — automatic, by email.** Every notice the watchdog sends to
+Sentry — breach, reminder, recovery, and "watchdog blind" — is also emailed
+through Postmark to the owner address (`DRIFTSTACK_OWNER_EMAIL`, the same one
+the owner gate uses). Nothing has to be configured: it is on whenever Postmark
+(`POSTMARK_API_TOKEN`, `POSTMARK_FROM`, `POSTMARK_REPLY_TO`) is configured and
+the owner address is not empty, which is production's normal state. Otherwise
+it is off, and boot logs `event: agent_turn_health_email_off` with a `reason`
+(`postmark_not_configured`, `no_owner_address` or `switched_off`) once; the
+line `agent_turn_health_email_on` means it is on.
+
+- **The subject says the condition and its state plainly**, e.g.
+  `AI automation: completion rate low — started 14:05 UTC`,
+  `… — still breaching since 2026-09-19 14:05 UTC`, `… — recovered (began …)`.
+  A non-production `SENTRY_ENVIRONMENT` is prefixed (`[staging] …`), so a
+  staging alert is never read as a production one.
+- **The body** gives what it means in one sentence, the window evaluated, the
+  counts and the measured value, the threshold with its floor and hold, and
+  where to look: the admin panel's **AI turns** page
+  (`https://admin.driftstack.io/agent-turns`) and this section. It is rendered
+  from the very payload that goes to Sentry, so it is content-free in the same
+  way: no account, session, task, URL or model output.
+- **At most 6 emails in any rolling hour**, across every condition
+  (`AGENT_TURN_HEALTH_EMAIL_MAX_PER_HOUR`). A real incident — three conditions
+  breaching together, then recovering — fits; a flapping one cannot fill the
+  inbox. Emails over the limit are held back (logged as
+  `agent_turn_health_email_withheld`), Sentry and the log still get each one,
+  and the next email that goes out says how many were held.
+- **A restart or deploy never mails the same transition twice.** The spent
+  budget is saved in the watchdog's job row together with the rest of its state,
+  before anything is sent.
+- **Email never hurts the product or the Sentry path.** It is sent last, each
+  message under a 10-second deadline; a failure or timeout is swallowed, logged
+  (`event: agent_turn_health_email_failed`, with Postmark's error category only)
+  and counted.
+
+**Optional: a per-event Sentry alert rule.** Email already covers every notice,
+so this is only for someone who also wants Sentry to notify (a paging channel,
+say). Sentry notifies on a new issue or a regression, and a condition's
+breaches share one issue that a `recovered` event does not resolve, so the
+usual rules fire on the **first** breach only. An issue alert that fires
+per event does the rest:
 
 - when: the number of events in an issue is more than 0 in 1 minute (or any
   equivalent per-event trigger);
 - if: the event's tag `component` equals `agent-turn-health`, and tag
   `transition` is `breach` or `still_breaching` (add `recovered` to be told of
   recoveries too);
-- then: notify the owner (email or the paging channel).
+- then: notify the channel you want.
 
 Sentry's per-issue action interval (5 minutes at the least) cannot swallow
 these: a condition sends at most one breach and one reminder every 6 hours, and
@@ -316,7 +351,10 @@ the next breach then also counts as a regression.
 
 **Silencing.** One condition: in Sentry, **Archive** (ignore) **both** its
 breach issue and its `… / recovered` issue — "until escalating" or forever;
-archiving only the first still lets its recoveries through. Everything: set
+archiving only the first still lets its recoveries through (Sentry archiving
+does not stop the email). Email only: set
+`DRIFTSTACK_DISABLE_AGENT_TURN_HEALTH_EMAIL=true` and restart; Sentry and the
+log continue. Everything: set
 `DRIFTSTACK_DISABLE_AGENT_TURN_HEALTH_WATCHDOG=true` and restart; the
 `bootstrap complete` log line then shows `agentTurnHealthWatchdog: false`.
 With Sentry unconfigured (dev, tests), the same events are still written as
@@ -331,8 +369,9 @@ the tick — they act as one watchdog (production runs one process today). A
 still-breaching condition fires again after a restart only if the pending row
 was lost.
 
-**Delivery is at most once.** The new state is saved before an event is sent,
-so nothing is ever sent twice — and an event that is lost is not retried. The
+**Delivery is at most once.** The new state is saved before an event or email
+is sent, so nothing is ever sent twice — and one that is lost is not retried.
+An email that Postmark refuses is logged and dropped. The
 Sentry SDK drops events quietly while Sentry is down or rate-limiting, and a
 process that dies between saving and sending sends nothing. Either way the
 next word from that condition is its reminder, up to 6 hours later, or its
@@ -341,8 +380,9 @@ record of what was meant to go out.
 
 **Its own health.** Failure counts are per process since boot and are not a
 metric (there is no scraper): every failure, status and notice line it logs
-carries `ticks_total`, `failed_ticks_total`, `delivery_failures_total` and
-`notices_sent_total`. Nothing watches the job chain itself in production
+carries `ticks_total`, `failed_ticks_total`, `delivery_failures_total`,
+`notices_sent_total`, `emails_sent_total`, `email_failures_total` and
+`emails_withheld_total`. Nothing watches the job chain itself in production
 today — the liveness gauge also needs the metrics registry — so after a deploy,
 check that an `agent_turn.health_watchdog` row is pending.
 

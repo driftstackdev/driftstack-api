@@ -16,12 +16,19 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_TURN_ALERT_RULES,
   AGENT_TURN_HEALTH_BLIND_AFTER_TICKS,
+  AGENT_TURN_HEALTH_EMAIL_DEADLINE_MS,
+  AGENT_TURN_HEALTH_EMAIL_MAX_PER_HOUR,
   AGENT_TURN_HEALTH_RENOTIFY_MS,
   AGENT_TURN_HEALTH_WATCHDOG_INTERVAL_MS,
   AGENT_TURN_HEALTH_WATCHDOG_JOB_TYPE,
   agentTurnHealthFingerprint,
   type AgentTurnHealthCondition,
 } from '../../src/services/agent-turn-health-watchdog.js';
+import {
+  AGENT_TURN_HEALTH_ADMIN_URL,
+  AGENT_TURN_HEALTH_EMAIL_DISABLE_ENV,
+  AGENT_TURN_HEALTH_RUNBOOK_REF,
+} from '../../src/services/agent-turn-health-email.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -146,13 +153,38 @@ describe('the runbook describes the watchdog that actually runs', () => {
     }
   });
 
-  it('CRITICAL tells the owner which Sentry alert rule makes reminders and second incidents notify anyone, and that silencing takes both issues', () => {
+  it('CRITICAL says email to the owner is automatic, with the bound, the switch and the page the code uses — and that the Sentry rule is optional', () => {
+    // The owner asked for alerts that need no configuring. The runbook used to
+    // make a Sentry per-event rule REQUIRED; it must now say email is automatic
+    // and state the numbers the code really enforces.
+    expect(section).toMatch(/\*\*Getting notified — automatic, by email\.\*\*/);
+    expect(section).not.toMatch(/a Sentry alert rule is REQUIRED/);
+    expect(section).toContain(
+      `**At most ${String(AGENT_TURN_HEALTH_EMAIL_MAX_PER_HOUR)} emails in any rolling hour**`,
+    );
+    expect(section).toContain('`AGENT_TURN_HEALTH_EMAIL_MAX_PER_HOUR`');
+    expect(section).toContain(
+      `under a ${String(AGENT_TURN_HEALTH_EMAIL_DEADLINE_MS / 1000)}-second deadline`,
+    );
+    expect(section).toContain(`\`${AGENT_TURN_HEALTH_EMAIL_DISABLE_ENV}=true\``);
+    expect(section).toContain(`\`${AGENT_TURN_HEALTH_ADMIN_URL}\``);
+    for (const reason of ['postmark_not_configured', 'no_owner_address', 'switched_off']) {
+      expect(section).toContain(`\`${reason}\``);
+    }
+    // The email points at a heading that exists, under the section it names.
+    const heading = /section "([^"]+)" \(under "([^"]+)"\)/.exec(AGENT_TURN_HEALTH_RUNBOOK_REF);
+    expect(heading).not.toBeNull();
+    expect(section).toContain(`**${heading![1]!}`);
+    expect(runbook).toContain(`## ${heading![2]!}`);
+  });
+
+  it('still tells anyone who wants Sentry to notify which per-event rule does it, and that silencing takes both issues', () => {
     // Breaches of one condition share an issue that a recovery never
     // resolves, so "new issue" / "regression" rules page on the first breach
     // only. The runbook must name a per-event rule filtered on the tags the
     // payload really carries.
-    expect(section).toMatch(/a Sentry alert rule is REQUIRED/);
-    expect(section).toMatch(/fires \*\*per event\*\*/);
+    expect(section).toMatch(/\*\*Optional: a per-event Sentry alert rule\.\*\*/);
+    expect(section).toMatch(/fires\s+per event/);
     expect(section).toMatch(/number of events in an issue is more than 0 in 1 minute/);
     expect(section).toContain('tag `component` equals `agent-turn-health`');
     expect(section).toMatch(/tag\s+`transition` is `breach` or `still_breaching`/);

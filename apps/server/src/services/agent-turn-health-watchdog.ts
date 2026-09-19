@@ -6,7 +6,8 @@
 // Alertmanager is on the box (measured 2026-09-18), so every rule in
 // ops/alerts is inert. Sentry IS live. This job evaluates the same conditions
 // from the `agent_turn_telemetry` table, over the same windows and thresholds,
-// and reports them through Sentry.
+// and reports them through Sentry AND by email to the project owner (see
+// agent-turn-health-email.ts for why Sentry alone tells nobody).
 //
 // WHY THE DATABASE and not the in-process counters: those reset on every
 // deploy and belong to one process, so "6 hours of turns" would mean "turns
@@ -42,9 +43,15 @@
 // from a closed list: condition, window, counts, rates, thresholds,
 // percentiles. Nothing is copied through from the summary wholesale.
 //
+// EMAIL. Every notice that goes to Sentry is also mailed to the owner, at most
+// AGENT_TURN_HEALTH_EMAIL_MAX_PER_HOUR an hour; the spent budget travels in the
+// job row with the rest of the state, so a restart neither resets it nor mails
+// a transition twice.
+//
 // IT MUST NEVER HURT THE PRODUCT. Every query is cancelled at a deadline and
 // every failure is swallowed, logged and counted; a Sentry client that throws
-// is caught. The only thing that can throw out of the handler is the re-arm
+// is caught, and an email is sent last, under its own deadline, with its
+// failure swallowed. The only thing that can throw out of the handler is the re-arm
 // itself, which is the scheduler's own retry path (as in every other chain).
 
 import type { AgentTurnSummary, AgentTurnSummaryService } from './agent-turn-summary.js';
@@ -89,6 +96,26 @@ export const AGENT_TURN_HEALTH_EVALUATION_DEADLINE_MS = 30_000;
  * is not news, a watchdog that has seen nothing for a quarter of an hour is.
  */
 export const AGENT_TURN_HEALTH_BLIND_AFTER_TICKS = 3;
+
+/**
+ * At most this many alert emails in any rolling hour, across every condition.
+ * The watchdog's own clocks already bound a condition to about two breaches and
+ * two recoveries an hour, but four signals flapping together could still fill
+ * an inbox; six covers a real incident (three conditions breaching at once, then
+ * recovering) and caps the worst case at 144 a day. Emails over the limit are
+ * held back — Sentry and the log still get every notice — and the next email
+ * that goes out says how many were held.
+ */
+export const AGENT_TURN_HEALTH_EMAIL_MAX_PER_HOUR = 6;
+const EMAIL_RATE_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Each email must be handed to Postmark within this. The emails of one tick go
+ * out together, so a hung Postmark costs a tick ten seconds, which with the
+ * three evaluation deadlines still sits well inside the scheduler's 5-minute
+ * stale-lock window.
+ */
+export const AGENT_TURN_HEALTH_EMAIL_DEADLINE_MS = 10_000;
 
 export const AGENT_TURN_HEALTH_CONDITIONS = [
   'completion_rate_low',
@@ -255,7 +282,11 @@ export function readAgentTurnHealthCondition(
 
 // ── evaluating every condition ─────────────────────────────────────────────
 
-function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+function withDeadline<T>(
+  work: Promise<T>,
+  ms: number,
+  what = 'agent turn health evaluation',
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   // A late rejection after the deadline must not surface as an unhandled one.
   work.catch(() => undefined);
@@ -263,7 +294,7 @@ function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
     work,
     new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
-        reject(new Error(`agent turn health evaluation exceeded ${String(ms)}ms`));
+        reject(new Error(`${what} exceeded ${String(ms)}ms`));
       }, ms);
       timer.unref();
     }),
@@ -371,10 +402,21 @@ export interface AgentTurnHealthSignalState {
   status: AgentTurnHealthStatus | null;
 }
 
+/** The alert-email rate limit, carried in the job row like everything else so
+ *  a deploy neither resets the budget nor re-sends what was already sent. */
+export interface AgentTurnHealthEmailState {
+  /** When each email of the last hour was handed over (ISO), oldest first. */
+  sentAt: string[];
+  /** Emails held back by the limit since the last one that went out. */
+  withheld: number;
+}
+
 export interface AgentTurnHealthState {
   /** Consecutive ticks in which at least one window could not be read. */
   failedTicks: number;
   signals: Partial<Record<AgentTurnHealthSignal, AgentTurnHealthSignalState>>;
+  /** Absent until alert email has first been planned. */
+  email?: AgentTurnHealthEmailState;
 }
 
 export const INITIAL_AGENT_TURN_HEALTH_STATE: AgentTurnHealthState = {
@@ -422,7 +464,56 @@ export function parseAgentTurnHealthState(payload: unknown): AgentTurnHealthStat
       status,
     };
   }
-  return { failedTicks, signals };
+  const email = parseEmailState((raw as { email?: unknown }).email);
+  return email === null ? { failedTicks, signals } : { failedTicks, signals, email };
+}
+
+function parseEmailState(raw: unknown): AgentTurnHealthEmailState | null {
+  if (raw === null || typeof raw !== 'object') return null;
+  const r = raw as { sentAt?: unknown; withheld?: unknown };
+  const sentAt = (Array.isArray(r.sentAt) ? (r.sentAt as unknown[]) : [])
+    .map(isoOrNull)
+    .filter((v): v is string => v !== null)
+    .sort()
+    // Only the newest can still count against the limit.
+    .slice(-AGENT_TURN_HEALTH_EMAIL_MAX_PER_HOUR);
+  const withheld =
+    typeof r.withheld === 'number' && Number.isInteger(r.withheld) && r.withheld > 0
+      ? Math.min(r.withheld, 1_000_000)
+      : 0;
+  return { sentAt, withheld };
+}
+
+/**
+ * Which of this tick's notices may be emailed. Pure. The first `send` notices
+ * are emailed, the rest held back; `withheldBefore` is the count the first
+ * email should report. The returned state is persisted with the re-arm BEFORE
+ * anything is sent, so the budget is spent at most once per notice even when a
+ * process dies mid-send.
+ */
+export function planAgentTurnHealthEmails(
+  prev: AgentTurnHealthEmailState | undefined,
+  noticeCount: number,
+  now: Date,
+): { send: number; withheld: number; withheldBefore: number; next: AgentTurnHealthEmailState } {
+  const nowMs = now.getTime();
+  const recent = (prev?.sentAt ?? []).filter((iso) => {
+    const t = Date.parse(iso);
+    return Number.isFinite(t) && nowMs - t < EMAIL_RATE_WINDOW_MS;
+  });
+  const budget = Math.max(0, AGENT_TURN_HEALTH_EMAIL_MAX_PER_HOUR - recent.length);
+  const send = Math.min(budget, noticeCount);
+  const withheld = noticeCount - send;
+  const withheldBefore = prev?.withheld ?? 0;
+  return {
+    send,
+    withheld,
+    withheldBefore,
+    next: {
+      sentAt: [...recent, ...Array.from({ length: send }, () => now.toISOString())],
+      withheld: send > 0 ? withheld : withheldBefore + withheld,
+    },
+  };
 }
 
 // ── transitions ────────────────────────────────────────────────────────────
@@ -608,7 +699,15 @@ export function advanceAgentTurnHealth(
     }
     signals[signal] = after;
   }
-  return { next: { failedTicks, signals }, notices, statusChanges };
+  return {
+    // The email budget is not the business of the conditions: carried as is.
+    next:
+      prev.email === undefined
+        ? { failedTicks, signals }
+        : { failedTicks, signals, email: prev.email },
+    notices,
+    statusChanges,
+  };
 }
 
 // ── delivery ───────────────────────────────────────────────────────────────
@@ -720,15 +819,29 @@ export interface AgentTurnHealthWatchdogStats {
    *  that misbehaved). */
   deliveryFailures: number;
   noticesSent: number;
+  /** Alert emails handed to Postmark. */
+  emailsSent: number;
+  /** Alert emails that failed or timed out (swallowed). */
+  emailFailures: number;
+  /** Alert emails held back by AGENT_TURN_HEALTH_EMAIL_MAX_PER_HOUR. */
+  emailsWithheld: number;
+}
+
+/** Sends one notice to the owner. Throws on failure; the watchdog catches. */
+export interface AgentTurnHealthEmailer {
+  send(notice: AgentTurnHealthNotice, context: { withheld: number }): Promise<void>;
 }
 
 export interface RegisterAgentTurnHealthWatchdogOpts {
   scheduledJobs: ScheduledJobsService;
   summary: Pick<AgentTurnSummaryService, 'summarize'>;
   sentry: Pick<SentryClient, 'captureMessage'>;
+  /** Null or absent: alert email is off (its factory logged why, once). */
+  email?: AgentTurnHealthEmailer | null;
   logger?: AgentTurnHealthLogger;
   nowFn?: () => number;
   deadlineMs?: number;
+  emailDeadlineMs?: number;
 }
 
 /**
@@ -807,13 +920,20 @@ export function registerAgentTurnHealthWatchdogJob(
     failedTicks: 0,
     deliveryFailures: 0,
     noticesSent: 0,
+    emailsSent: 0,
+    emailFailures: 0,
+    emailsWithheld: 0,
   };
   const totals = (): Record<string, number> => ({
     ticks_total: stats.ticks,
     failed_ticks_total: stats.failedTicks,
     delivery_failures_total: stats.deliveryFailures,
     notices_sent_total: stats.noticesSent,
+    emails_sent_total: stats.emailsSent,
+    email_failures_total: stats.emailFailures,
+    emails_withheld_total: stats.emailsWithheld,
   });
+  const emailer = opts.email ?? null;
   opts.scheduledJobs.register(AGENT_TURN_HEALTH_WATCHDOG_JOB_TYPE, async (job: ScheduledJobRow) => {
     stats.ticks += 1;
     const prev = parseAgentTurnHealthState(job.payload);
@@ -864,6 +984,15 @@ export function registerAgentTurnHealthWatchdogJob(
       );
     }
 
+    // Decide the emails BEFORE the re-arm, so the spent budget is saved with
+    // the rest of the state: a restart, or a retry of this row after a failed
+    // re-arm, can then never mail the same transition twice.
+    let emailPlan: ReturnType<typeof planAgentTurnHealthEmails> | null = null;
+    if (emailer !== null && notices.length > 0) {
+      emailPlan = planAgentTurnHealthEmails(next.email, notices.length, new Date(now()));
+      next = { ...next, email: emailPlan.next };
+    }
+
     const { enqueued } = await enqueueNextAgentTurnHealthWatchdog({
       scheduledJobs: opts.scheduledJobs,
       nowFn: now,
@@ -912,6 +1041,56 @@ export function registerAgentTurnHealthWatchdogJob(
           'agent turn health: Sentry delivery failed; the structured line above stands',
         );
       }
+    }
+
+    // Email last, so nothing it does can delay or stop the Sentry path.
+    if (emailer !== null && emailPlan !== null) {
+      const plan = emailPlan;
+      if (plan.withheld > 0) {
+        stats.emailsWithheld += plan.withheld;
+        opts.logger?.warn?.(
+          {
+            component: 'agent-turn-health',
+            event: 'agent_turn_health_email_withheld',
+            withheld: plan.withheld,
+            max_per_hour: AGENT_TURN_HEALTH_EMAIL_MAX_PER_HOUR,
+            ...totals(),
+          },
+          'agent turn health: alert emails held back by the hourly limit; Sentry and the log have them',
+        );
+      }
+      const deadline = opts.emailDeadlineMs ?? AGENT_TURN_HEALTH_EMAIL_DEADLINE_MS;
+      const batch = notices.slice(0, plan.send);
+      const results = await Promise.allSettled(
+        batch.map((notice, i) =>
+          withDeadline(
+            // Wrapped so a send() that throws synchronously is a rejection.
+            Promise.resolve().then(() =>
+              emailer.send(notice, { withheld: i === 0 ? plan.withheldBefore : 0 }),
+            ),
+            deadline,
+            'agent turn health alert email',
+          ),
+        ),
+      );
+      results.forEach((result, i) => {
+        if (result.status === 'fulfilled') {
+          stats.emailsSent += 1;
+          return;
+        }
+        stats.emailFailures += 1;
+        opts.logger?.warn?.(
+          {
+            component: 'agent-turn-health',
+            event: 'agent_turn_health_email_failed',
+            condition: batch[i]?.signal ?? null,
+            transition: batch[i]?.transition ?? null,
+            err: errorShape(result.reason),
+            ...totals(),
+          },
+          'agent turn health: alert email failed; Sentry and the structured line stand',
+        );
+      });
     }
   });
   return { stats: () => ({ ...stats }) };

@@ -44,6 +44,8 @@ import {
 import type { AgentTurnTelemetryRow } from '../../src/services/agent-turn-telemetry.js';
 import type { ScheduledJobRow, ScheduledJobsService } from '../../src/services/scheduled-jobs.js';
 import type { SentryMessage } from '../../src/lib/sentry.js';
+import { createAgentTurnHealthEmailer } from '../../src/services/agent-turn-health-email.js';
+import type { PostmarkSendApi } from '../../src/services/email.js';
 import { AGENT_TURN_ROW_NOW, row } from './_helpers/agent-turn-telemetry-row.js';
 
 const NOW = AGENT_TURN_ROW_NOW;
@@ -553,7 +555,17 @@ async function wire(
 ): Promise<AgentTurnHealthWatchdogHandle> {
   if (opts.disabled === true) {
     endAgentTurnHealthWatchdogChain(opts);
-    return { stats: () => ({ ticks: 0, failedTicks: 0, deliveryFailures: 0, noticesSent: 0 }) };
+    return {
+      stats: () => ({
+        ticks: 0,
+        failedTicks: 0,
+        deliveryFailures: 0,
+        noticesSent: 0,
+        emailsSent: 0,
+        emailFailures: 0,
+        emailsWithheld: 0,
+      }),
+    };
   }
   const handle = registerAgentTurnHealthWatchdogJob(opts);
   await enqueueNextAgentTurnHealthWatchdog({
@@ -1004,7 +1016,7 @@ describe('content-free alerts', () => {
     'cleared_by',
   ]);
 
-  it('CRITICAL sentinels planted in every string the watchdog can reach — the summary, the job row, its payload — reach neither Sentry, nor the log, nor the next job row', async () => {
+  it('CRITICAL sentinels planted in every string the watchdog can reach — the summary, the job row, its payload — reach neither Sentry, nor the owner email (subject, text or HTML), nor the log, nor the next job row', async () => {
     // A summary whose free-form strings are all sentinels. The real aggregates
     // cannot hold these (the table CHECK-constrains them); the point is that
     // the watchdog would not forward them if they could.
@@ -1024,10 +1036,23 @@ describe('content-free alerts', () => {
 
     const jobs = fakeJobs();
     const r = recorder();
+    const mailed: Array<Parameters<PostmarkSendApi['sendEmail']>[0]> = [];
     await wire({
       scheduledJobs: jobs.service,
       summary: { summarize: () => Promise.resolve(poisoned) },
       sentry: r.sentry,
+      email: createAgentTurnHealthEmailer({
+        postmark: { apiToken: 't', from: 'alerts@driftstack.test', replyTo: 'ops@driftstack.test' },
+        ownerEmail: 'owner@driftstack.test',
+        disabled: false,
+        client: {
+          sendEmail: (m) => {
+            mailed.push(m);
+            return Promise.resolve({});
+          },
+        },
+        logger: r.logger,
+      }),
       logger: r.logger,
       nowFn: () => NOW,
     });
@@ -1074,8 +1099,15 @@ describe('content-free alerts', () => {
       'conflict_rate_high:still_breaching',
       'first_progress_slow:still_breaching',
     ]);
+    // Positive control for the email: one per notice, with a real subject.
+    expect(mailed.map((m) => m.Subject)).toEqual([
+      'AI automation: completion rate low — started 12:00 UTC',
+      'AI automation: busy/conflict rate high — still breaching',
+      'AI automation: first progress slow — still breaching',
+    ]);
     const everything = JSON.stringify({
       sent: r.sent,
+      mailed: mailed.map((m) => [m.Subject, m.TextBody, m.HtmlBody]),
       logs: [r.logger.info.mock.calls, r.logger.warn.mock.calls, r.logger.error.mock.calls],
       nextRow: jobs.enqueued,
     });
@@ -1142,6 +1174,20 @@ describe('wiring', () => {
     expect(wiring![1]).toMatch(/scheduledJobs: scheduledJobsService,/);
     expect(wiring![1]).toMatch(/summary: agentTurnSummaryService,/);
     expect(wiring![1]).toMatch(/\bsentry,/);
+    // Email to the owner: the watchdog is handed the emailer bootstrap built
+    // from the live Postmark config and the owner address the owner gate uses,
+    // behind its own switch.
+    expect(wiring![1]).toMatch(/email: agentTurnHealthEmail,/);
+    const emailer =
+      /const agentTurnHealthEmail = agentTurnHealthWatchdogDisabled\s*\?\s*null\s*:\s*createAgentTurnHealthEmailer\(\{([\s\S]*?)\}\);/.exec(
+        bootstrap,
+      );
+    expect(emailer, 'bootstrap must build the owner emailer').not.toBeNull();
+    expect(emailer![1]).toMatch(/postmark: config\.postmark,/);
+    expect(emailer![1]).toMatch(/\bownerEmail,/);
+    expect(emailer![1]).toMatch(
+      /disabled: envFlag\(process\.env\.DRIFTSTACK_DISABLE_AGENT_TURN_HEALTH_EMAIL\)/,
+    );
     expect(bootstrap).toMatch(
       /const agentTurnHealthWatchdogDisabled = envFlag\(\s*process\.env\.DRIFTSTACK_DISABLE_AGENT_TURN_HEALTH_WATCHDOG,\s*\);/,
     );

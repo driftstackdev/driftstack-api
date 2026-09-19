@@ -361,7 +361,9 @@ const HTML_ESCAPE_MAP: Record<string, string> = {
   '"': '&quot;',
   "'": '&#39;',
 };
-function escapeHtml(value: string): string {
+// Exported (with wrapHtmlDocument) so the owner's AI-health alert email in
+// agent-turn-health-email.ts renders through the same chokepoints.
+export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch] ?? ch);
 }
 function escapeVarsForHtml(vars: Record<string, string>): Record<string, string> {
@@ -387,7 +389,7 @@ function escapeVarsForHtml(vars: Record<string, string>): Record<string, string>
 // doesn't trip spam heuristics. `title` is the email's subject (escaped) so
 // screen readers and clients that surface <title> announce something specific
 // rather than a generic "Driftstack".
-function wrapHtmlDocument(inner: string, title: string): string {
+export function wrapHtmlDocument(inner: string, title: string): string {
   return (
     '<!DOCTYPE html><html lang="en"><head>' +
     '<meta charset="utf-8">' +

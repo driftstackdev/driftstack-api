@@ -150,6 +150,7 @@ import {
   enqueueNextAgentTurnHealthWatchdog,
   registerAgentTurnHealthWatchdogJob,
 } from '../services/agent-turn-health-watchdog.js';
+import { createAgentTurnHealthEmailer } from '../services/agent-turn-health-email.js';
 import { AgentRuntime } from '../services/agent-runtime.js';
 import { resolveTaskRefusalConfig, type RefusalPattern } from '../services/task-refusal.js';
 import { StubAgentExecutor, type AgentExecutor } from '../services/agent-executor.js';
@@ -1863,6 +1864,22 @@ export async function createProductionDeps(
   const agentTurnHealthWatchdogDisabled = envFlag(
     process.env.DRIFTSTACK_DISABLE_AGENT_TURN_HEALTH_WATCHDOG,
   );
+  // Sentry alone notifies nobody on a repeat breach (see
+  // agent-turn-health-email.ts), so every notice is also mailed to the owner
+  // (the same `ownerEmail` the requireOwner gate uses) through Postmark. Off
+  // without Postmark or an owner address, or when switched off; it logs which,
+  // once.
+  const agentTurnHealthEmail = agentTurnHealthWatchdogDisabled
+    ? null
+    : createAgentTurnHealthEmailer({
+        postmark: config.postmark,
+        ownerEmail,
+        // Read by name, not through the exported constant, so the env-var
+        // census (every-env-var-the-server-reads-is-documented) sees it.
+        disabled: envFlag(process.env.DRIFTSTACK_DISABLE_AGENT_TURN_HEALTH_EMAIL),
+        environment: config.sentry?.environment ?? null,
+        logger,
+      });
   if (agentTurnHealthWatchdogDisabled) {
     endAgentTurnHealthWatchdogChain({ scheduledJobs: scheduledJobsService, logger });
   } else {
@@ -1870,6 +1887,7 @@ export async function createProductionDeps(
       scheduledJobs: scheduledJobsService,
       summary: agentTurnSummaryService,
       sentry,
+      email: agentTurnHealthEmail,
       logger,
     });
     await enqueueNextAgentTurnHealthWatchdog({ scheduledJobs: scheduledJobsService });
