@@ -491,6 +491,61 @@ groups:
             reason added in source without widening the table's CHECK
             constraints.
 
+      - alert: AgentActionNoProfileAttached
+        # A CONFIGURATION ALERT, NOT A DETECTABILITY VERDICT.
+        #
+        # The device reports, on every click and every typed step, whether a
+        # BEHAVIOUR PROFILE WAS ATTACHED to the session (`persona != nil`). A
+        # session acting with none is misconfigured, and the misconfiguration
+        # leaves no other trace: the step SUCCEEDS, the task finishes, the turn is
+        # `completed`. No rate over outcomes can see it.
+        #
+        # ⛔ What this does NOT say: that such an action looked mechanical, or
+        # that a profile being attached made one undetectable. The flag is
+        # necessary and not sufficient — nothing here measures what the device
+        # then did. `driftstack_agent_scroll_path_total` is chosen by the SAME
+        # predicate, so it is the same fact under another name and is NEVER
+        # alerted on; do not add a second rule for it.
+        #
+        # No rate and no share: one such action is the whole finding, so the
+        # threshold is zero and strict. The second clause is not a volume floor
+        # in the sense the three rules above use one — it only keeps a window
+        # with no AI action in it from reading as a clean bill of health.
+        #
+        # ⛔ INERT UNTIL SOMETHING SCRAPES /metrics. Nothing does in production
+        # today, so this rule never evaluates there; the condition is evaluated
+        # instead inside the API by the agent_turn.health_watchdog job, and every
+        # turn's counts are written to the journal as `agent_turn_action_paths`.
+        # See docs/runbooks/agent-turn-monitoring.md.
+        expr: |
+          (
+            sum(increase(driftstack_agent_action_profile_attached_total{profile_attached="false"}[30m])) or vector(0)
+          ) > 0
+          and
+          (sum(increase(driftstack_agent_action_profile_attached_total[30m])) or vector(0)) >= 1
+        for: 0m
+        labels:
+          severity: warning
+          team: driftstack-runtime
+        annotations:
+          summary: 'An AI session acted with no behaviour profile attached'
+          description: |
+            At least one click or typed step was performed by a session the
+            device had no behaviour profile for. The step itself will have
+            succeeded, so nothing else reports it. PAGE THE DEVICE TEAM, and
+            ask which device build the box is running: WHICH cause this is
+            depends on it. A build whose persona resolution falls back to a
+            compiled-in default (a missing or invalid personas file, or a
+            profile name it does not recognise) cannot reach `false` that way,
+            so there it is a session with no behaviour profile recorded against
+            it at all; an older build without that fallback does reach `false`
+            from a broken personas file, and degrades every session on the box
+            at once. The runbook lists both. An older device build that does not
+            report the flag reads `unreported`, never `false`. Break the series
+            down by `verb`, and read the per-turn `agent_turn_action_paths`
+            journal lines for the same counts on the box. This is a
+            configuration fact, not a statement about how the action looked.
+
 # ────────────────────────────────────────────────────────────────────
 # Metric inventory — drift-guard satisfaction
 #
@@ -505,9 +560,11 @@ groups:
 #
 # Dashboard-only (drift-guard reference; no paging rule yet). Checked by
 #   - driftstack_agent_decompose_total
+#   - driftstack_agent_look_to_tap_seconds
 #   - driftstack_agent_pre_tap_look_device_seconds
 #   - driftstack_agent_pre_tap_look_round_trip_seconds
 #   - driftstack_agent_pre_tap_look_total
+#   - driftstack_agent_scroll_path_total
 #   - driftstack_agent_tap_unoccluded_check_total
 #   - driftstack_agent_turn_duration_seconds
 #   - driftstack_agent_turn_model_call_total

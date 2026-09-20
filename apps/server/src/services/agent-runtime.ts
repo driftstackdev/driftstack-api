@@ -42,6 +42,10 @@ import {
   stopRequested,
 } from './agent-executor.js';
 import { intentReplayMayDuplicateEffect } from './agent-intent-result.js';
+// Values, not just types: a turn runs up to three plan segments and the counts
+// of all of them are the turn's. agent-turn-telemetry.ts imports from here with
+// `import type` only, so this edge is one-way at runtime.
+import { addAgentActionPathCounts, emptyAgentActionPathCounts } from './agent-turn-telemetry.js';
 import type {
   AgentSessionAuthoritySnapshot,
   AgentSessionRecord,
@@ -1430,6 +1434,23 @@ export function mergeExecutorRuns(
     ...(second.stopped === true ? { stopped: true } : {}),
     // B1 — likewise a run the repeat guard stopped: nothing ran after it.
     ...(second.repeatRefused !== undefined ? { repeatRefused: second.repeatRefused } : {}),
+    // ⛔ THE ACTION PATHS OF BOTH SEGMENTS, SUMMED. Unlike everything above,
+    // these are not a property of how the run ENDED: they are what the device
+    // did, and a turn that failed a step and re-planned around it performed the
+    // actions of both plans. Taking the second run's alone — the pattern every
+    // other field here follows — would drop the actions of the segment that went
+    // wrong, which is the segment the audit is about.
+    ...(first.actionPaths !== undefined || second.actionPaths !== undefined
+      ? {
+          actionPaths: addAgentActionPathCounts(
+            addAgentActionPathCounts(
+              emptyAgentActionPathCounts(),
+              first.actionPaths ?? emptyAgentActionPathCounts(),
+            ),
+            second.actionPaths ?? emptyAgentActionPathCounts(),
+          ),
+        }
+      : {}),
   };
 }
 

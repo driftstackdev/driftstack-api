@@ -486,12 +486,47 @@ export const METRIC_NAMES = {
   // blind. `shed` is the per-minute budget on rows for turned-away requests
   // doing its job under a 409/429 storm, and is not a failure.
   agentTurnTelemetryWriteTotal: 'driftstack_agent_turn_telemetry_write_total',
+  // WAS A BEHAVIOUR PROFILE ATTACHED TO THE SESSION THAT ACTED? One increment
+  // per DISPATCHED click / send_keys attempt, retries included, by `verb`
+  // (AGENT_ACTION_PROFILE_VERBS), `profile_attached`
+  // (AGENT_PROFILE_ATTACHED_VALUES: true | false | unreported) and `outcome`
+  // (AGENT_ACTION_OUTCOMES, the executor's own notion of a step's outcome).
+  //
+  // ⛔ A CONFIGURATION FACT, NOT A DETECTABILITY VERDICT. The device's flag is
+  // `persona != nil`: whether a behaviour profile was resolved for the session.
+  // `false` is a misconfiguration nothing else reports, because the step still
+  // SUCCEEDS; `true` is NECESSARY AND NOT SUFFICIENT for the human-like path to
+  // have run, and nothing here measures what the device then did. `unreported`
+  // is a step with no usable result and is never read as `true`. Emitted from
+  // recordAgentActionProfileAttached in services/agent-turn-telemetry.ts.
+  agentActionProfileAttachedTotal: 'driftstack_agent_action_profile_attached_total',
+  // WHICH OF THE DEVICE'S TWO SCROLL IMPLEMENTATIONS RAN, by `path`
+  // (AGENT_SCROLL_PATHS: flick | segmented | unreported) and `outcome`.
+  //
+  // ⛔ NOT AN INDEPENDENT SIGNAL, AND NEVER ALERTED ON. The device picks the
+  // path with the SAME predicate as `profile_attached` above, so the two are one
+  // fact seen twice — a dashboard must not present them as corroborating. BOTH
+  // paths are native touch sequences; `segmented` differs only in having a flat
+  // cadence. Emitted from recordAgentScrollPath in
+  // services/agent-turn-telemetry.ts.
+  agentScrollPathTotal: 'driftstack_agent_scroll_path_total',
   // The look before a tap: one read-only `perceive` for the tap's selector,
   // asking the device what it resolves to and what is at its tap point (see
   // agent-executor-control-plane.ts). Emitted from recordPreTapLook in
-  // services/agent-turn-telemetry.ts; `outcome` is PRE_TAP_LOOK_OUTCOMES.
+  // services/agent-turn-telemetry.ts; `outcome` is PRE_TAP_LOOK_OUTCOMES (the
+  // look's own verdict vocabulary), `resolved_by` is PRE_TAP_LOOK_RESOLVERS
+  // (native | script | none | unanswered — the per-step resolution path, and the
+  // native→script transition is what a detector would see) and `then` is
+  // PRE_TAP_LOOK_NEXT_ACTIONS (tapped | typed | refused | not_sent).
   // Looks by outcome. `covered` and `not_found` are taps that were NOT sent.
+  // EXTENDED rather than duplicated: the look already emitted one row per
+  // pre-tap look here, so the resolution path is two more labels on the same
+  // event and not a second counter that would have to agree with this one.
   agentPreTapLookTotal: 'driftstack_agent_pre_tap_look_total',
+  // Seconds from the look's answer to the tap's dispatch, by `verb`. The
+  // rhythm between "what is there?" and "touch it". Emitted from
+  // recordLookToTap in services/agent-turn-telemetry.ts.
+  agentLookToTapSeconds: 'driftstack_agent_look_to_tap_seconds',
   // The device's own duration for the look (its `durationMs`), by `outcome`.
   agentPreTapLookDeviceSeconds: 'driftstack_agent_pre_tap_look_device_seconds',
   // What the turn waited for the look, by `outcome` — the per-tap latency cost.

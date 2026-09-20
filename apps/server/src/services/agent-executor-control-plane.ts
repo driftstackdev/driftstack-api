@@ -59,9 +59,20 @@ import {
   tapRefusalOf,
 } from './agent-intent-result.js';
 import {
+  agentActionOutcomeOf,
+  emptyAgentActionPathCounts,
+  recordAgentActionProfileAttached,
+  recordAgentScrollPath,
+  recordLookToTap,
   recordPreTapLook,
   recordTapUnoccludedCheck,
+  type AgentActionPathCounts,
+  type AgentActionProfileVerb,
+  type AgentProfileAttached,
+  type AgentScrollPath,
+  type PreTapLookNextAction,
   type PreTapLookOutcome,
+  type PreTapLookResolver,
   type TapUnoccludedCheckResult,
   type TapUnoccludedCheckVerb,
   type TapUnoccludedCheckWhy,
@@ -252,16 +263,40 @@ const CONTROL_TYPES: ReadonlySet<string> = new Set([
  *                    or nothing resolved with no wait left to spend: the tap
  *                    goes ahead exactly as before the look existed
  */
+/**
+ * One look, as it will be COUNTED — held until the executor has decided what to
+ * do next, because `then` is part of the same event.
+ *
+ * ⛔ IT IS BUILT WHERE THE LOOK ENDS AND EMITTED WHERE THE STEP IS DECIDED. The
+ * look's own code cannot know whether the tap was later sent, refused by the
+ * confirmation gate or never reached; recording inside `lookBeforeTap` would
+ * have forced either a second counter or a `then` that was always a guess.
+ * `answeredAt` is the executor's injected clock at the moment the device's
+ * answer landed — null when none did, so a look that never answered cannot
+ * contribute a zero to the look→tap histogram.
+ */
+interface PreTapLookRecord {
+  outcome: PreTapLookOutcome;
+  resolvedBy: PreTapLookResolver;
+  deviceMs: number | null;
+  roundTripMs: number | null;
+  answeredAt: number | null;
+}
+
 type PreTapLook =
   | {
       verdict: 'clear' | 'covered' | 'outside_viewport' | 'unverified';
       target: TapTarget;
       waitedForElement: boolean;
+      record: PreTapLookRecord;
     }
-  | { verdict: 'not_found'; waitedForElement: boolean }
+  | { verdict: 'not_found'; waitedForElement: boolean; record: PreTapLookRecord }
   | {
       verdict: 'fallback';
       waitedForElement: boolean;
+      /** Absent only when the look was never sent at all (the look is switched
+       *  off), which is the one case that is not a look and is not counted. */
+      record?: PreTapLookRecord;
       /**
        * A look the deadline gave up on is STILL RUNNING on the device, and the
        * device runs one intent per session: anything sent before it finishes is
@@ -282,6 +317,11 @@ type PerceiveReading =
   | {
       kind: 'resolved';
       verdict: 'clear' | 'covered' | 'outside_viewport' | 'unverified';
+      /** WHICH of the device's two resolvers found the element — its own
+       *  `resolved_by`. The native→script transition is the thing a site's
+       *  detector can see, so it is recorded for every look, including the
+       *  looks whose step later failed. */
+      resolvedBy: 'native' | 'script';
       target: TapTarget;
       /** The element carried `hit_via_own_label` (either value): the device's
        *  single tap verdict has the own-label rule, and its send_keys takes
@@ -313,6 +353,10 @@ function readPerceiveAnswer(outputData: unknown): PerceiveReading {
       ? { kind: 'no_usable_answer', predatesLook: true }
       : { kind: 'no_usable_answer' };
   }
+  // The schema has already refused anything but these two, so this narrows a
+  // string the compiler cannot; a value from outside the pair would be a drifted
+  // frame that never reaches here.
+  const resolvedBy: 'native' | 'script' = value.resolved_by === 'native' ? 'native' : 'script';
   const elements = Array.isArray(value.elements) ? value.elements : null;
   if (elements === null) return { kind: 'no_usable_answer' };
   if (elements.length === 0) return { kind: 'nothing_resolved' };
@@ -347,6 +391,7 @@ function readPerceiveAnswer(outputData: unknown): PerceiveReading {
     return {
       kind: 'resolved',
       verdict: 'clear',
+      resolvedBy,
       target: hitViaOwnLabel === true ? { ...target, hitIsOwnLabel: true } : target,
       ownLabelVerdict,
     };
@@ -377,6 +422,7 @@ function readPerceiveAnswer(outputData: unknown): PerceiveReading {
     return {
       kind: 'resolved',
       verdict: 'clear',
+      resolvedBy,
       target: { ...target, hitIsOwnLabel: true },
       ownLabelVerdict,
     };
@@ -394,22 +440,28 @@ function readPerceiveAnswer(outputData: unknown): PerceiveReading {
     (!(typeof bounds.width === 'number' && bounds.width > 0) ||
       !(typeof bounds.height === 'number' && bounds.height > 0));
   if (state?.visible === false || emptyRect) {
-    return { kind: 'resolved', verdict: 'unverified', target, ownLabelVerdict };
+    return { kind: 'resolved', verdict: 'unverified', resolvedBy, target, ownLabelVerdict };
   }
   const reason = el.occlusion_reason;
   switch (reason) {
     case 'tap_point_outside_viewport':
-      return { kind: 'resolved', verdict: 'outside_viewport', target, ownLabelVerdict };
+      return {
+        kind: 'resolved',
+        verdict: 'outside_viewport',
+        resolvedBy,
+        target,
+        ownLabelVerdict,
+      };
     case 'nothing_hit':
-      return { kind: 'resolved', verdict: 'unverified', target, ownLabelVerdict };
+      return { kind: 'resolved', verdict: 'unverified', resolvedBy, target, ownLabelVerdict };
     case 'hit_is_not_target_or_descendant':
     case 'covered_at_enclosing_shadow_level':
-      return { kind: 'resolved', verdict: 'covered', target, ownLabelVerdict };
+      return { kind: 'resolved', verdict: 'covered', resolvedBy, target, ownLabelVerdict };
     default:
       // The device said OCCLUDED and gave no reason this build knows. That is
       // still its statement that the tap point is not on the target, so it is
       // read as covered: the direction in which nothing gets tapped by mistake.
-      return { kind: 'resolved', verdict: 'covered', target, ownLabelVerdict };
+      return { kind: 'resolved', verdict: 'covered', resolvedBy, target, ownLabelVerdict };
   }
 }
 
@@ -562,6 +614,55 @@ function unoccludedCheckResultOf(
 }
 
 /**
+ * The page-acting verbs whose result carries the device's profile-attached
+ * flag, or null for every other verb. Named from the verb ON THE WIRE, which is
+ * what the device team reads. `scroll` is NOT one of them: its flag names which
+ * implementation ran, which is a different fact and a different counter
+ * ({@link scrollPathOf}). `behavioral_pause` carries the flag too and is left
+ * uncounted on purpose — see AGENT_ACTION_PROFILE_VERBS.
+ */
+function profileVerbOf(intentName: HarnessIntentName): AgentActionProfileVerb | null {
+  return intentName === 'click' || intentName === 'send_keys' ? intentName : null;
+}
+
+/**
+ * Whether a behaviour profile was attached to the session that performed one
+ * action — the device's `persona != nil`, reported as `behavioral` on the wire.
+ *
+ * ⛔ A CONFIGURATION FACT. `false` says no profile was resolved for the session,
+ * not that the action looked mechanical; `true` says one was, which is
+ * necessary and not sufficient for the human-like path to have run. Nothing
+ * here measures what the device then did.
+ *
+ * ⛔ AN ABSENT FLAG IS `unreported`, NEVER `true`. The result schemas require
+ * the field today, so a device that omits it fails the frame and lands here as
+ * a failure — but the read must not depend on that: the one counter that can
+ * see the misconfiguration must never report a missing flag as configured,
+ * whatever a future schema allows.
+ */
+function profileAttachedOf(parsed: ParsedIntentResult): AgentProfileAttached {
+  if (!parsed.success) return 'unreported';
+  const value = recordOf(parsed.outputData)?.behavioral;
+  if (value === true) return 'true';
+  if (value === false) return 'false';
+  return 'unreported';
+}
+
+/**
+ * Which of the device's two scroll implementations ran. The device spells it
+ * with the same `behavioral` key, chosen by the same predicate as
+ * {@link profileAttachedOf} — so this is the same fact under a name that says
+ * what it names, and the two are never summed. Both paths are native touch.
+ */
+function scrollPathOf(parsed: ParsedIntentResult): AgentScrollPath {
+  if (!parsed.success) return 'unreported';
+  const value = recordOf(parsed.outputData)?.behavioral;
+  if (value === true) return 'flick';
+  if (value === false) return 'segmented';
+  return 'unreported';
+}
+
+/**
  * Controls commonly operated THROUGH their `<label>`: a styled checkbox or radio
  * is a visually hidden input, and the tap lands on the label drawn for it.
  */
@@ -692,6 +793,37 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
 
   async execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
     const results: IntentResult[] = [];
+    // WHICH PATH EACH OF THIS RUN'S ACTIONS TOOK, and how each step's selector
+    // resolved before the tap. Accumulated beside the registry counters at the
+    // same emit sites, and returned on EVERY exit — a run that ended on a Stop,
+    // a gate or a repeat refusal still performed the actions it performed, and a
+    // turn whose counts vanished on the unusual exits would report a clean
+    // configuration on exactly the turns most likely to be misconfigured.
+    const actionPaths = emptyAgentActionPathCounts();
+    // ⛔ OMITTED WHEN THERE IS NOTHING TO SAY, never reported as zeroes. A plan
+    // of navigates and captures dispatched no action and looked at nothing, and
+    // a line of zeroes for it would dilute the turn log an operator greps and
+    // read as "every action was fine" rather than "there were none".
+    const done = (run: ExecutorRunResult): ExecutorRunResult =>
+      actionPaths.actions > 0 || actionPaths.scrolls > 0 || actionPaths.looks > 0
+        ? { ...run, actionPaths }
+        : run;
+    /** Emit one look, now that what the executor did next is known. */
+    const countLook = (look: PreTapLook | null, then: PreTapLookNextAction): void => {
+      const record = look !== null && 'record' in look ? look.record : undefined;
+      if (record === undefined) return;
+      actionPaths.looks += 1;
+      actionPaths.verdicts[record.outcome] += 1;
+      actionPaths.resolvers[record.resolvedBy] += 1;
+      actionPaths.nextActions[then] += 1;
+      recordPreTapLook(this.metrics, {
+        outcome: record.outcome,
+        resolvedBy: record.resolvedBy,
+        then,
+        deviceMs: record.deviceMs,
+        roundTripMs: record.roundTripMs,
+      });
+    };
     // Record a result AND surface it as live progress in one place, so every
     // push (halt / unmappable / dispatched) streams to a subscribed caller as it
     // lands rather than only in the final ExecutorRunResult. Best-effort: a
@@ -724,13 +856,13 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     for (const [planIndex, intent] of args.plan.intents.entries()) {
       // B2 — Stop is checked before anything else about the next step, so once
       // it is observed nothing further is announced, gated or dispatched.
-      if (stopRequested(args.signal)) return { results, ok: false, stopped: true };
+      if (stopRequested(args.signal)) return done({ results, ok: false, stopped: true });
       if (!(await executionMayContinue(args.shouldContinue))) {
-        return { results, ok: false, authorityLost: true };
+        return done({ results, ok: false, authorityLost: true });
       }
       // Again after that await: a Stop that landed during the authority read must
       // not see the step announced as starting when it will never be sent.
-      if (stopRequested(args.signal)) return { results, ok: false, stopped: true };
+      if (stopRequested(args.signal)) return done({ results, ok: false, stopped: true });
 
       // P2 — resolve credential placeholders into the value the DEVICE gets.
       // `intent` (the placeholder form) is what every result below carries, so
@@ -782,8 +914,12 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
           elementWaitBudget,
           args.signal,
         );
-        if (look.verdict === 'stopped') return { results, ok: false, stopped: true };
-        if (look.verdict === 'authority_lost') return { results, ok: false, authorityLost: true };
+        // Neither carries a record: no verdict was reached, so no look is
+        // counted — the same rule the counter has always had.
+        if (look.verdict === 'stopped') return done({ results, ok: false, stopped: true });
+        if (look.verdict === 'authority_lost') {
+          return done({ results, ok: false, authorityLost: true });
+        }
       }
 
       // 0. W443/W445 consequential-action gate — halt (WITHOUT dispatching) on a
@@ -814,8 +950,11 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         deviceLabels(look),
       );
       if (halt) {
+        // The look ran and nothing was sent for it: the customer is being asked
+        // first. Counted with `not_sent`, which is not the look's own refusal.
+        countLook(look, 'not_sent');
         emitStep(halt);
-        return { results, ok: false, awaitingConfirmation: true };
+        return done({ results, ok: false, awaitingConfirmation: true });
       }
       const releasedApproval = approved.size < approvalsBeforeGate;
       // Announce the step BEFORE it runs — but AFTER the safety gate above.
@@ -902,7 +1041,13 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
             void _exhaustive;
           }
         }
-        if (look.verdict === 'not_found' || look.verdict === 'covered') break;
+        if (look.verdict === 'not_found' || look.verdict === 'covered') {
+          // The LOOK's own verdict stopped the step, and nothing reached the
+          // device. That is `refused` — told apart from `not_sent`, which is
+          // every other reason a looked-at step never went.
+          countLook(look, 'refused');
+          break;
+        }
       }
       // 1.6. B1 — the repeat guard, asked again now that the DEVICE has said
       //      which element this tap lands on. Two spellings of one id-less
@@ -924,12 +1069,14 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
           refused = 'repeat_refused';
         }
         if (refused !== null) {
-          return {
+          // Nothing was sent, and the look is not why: the guard is.
+          countLook(look, 'not_sent');
+          return done({
             results,
             ok: false,
             repeatRefused: refused,
             ...(tapTargets.size > 0 ? { tapTargets } : {}),
-          };
+          });
         }
       }
 
@@ -943,9 +1090,13 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       //      every dispatch), and Stop may cut the wait short: nothing is sent.
       if (look !== null && look.verdict === 'fallback' && look.deviceBusyUntil !== undefined) {
         const freed = await raceAbort(look.deviceBusyUntil, args.signal);
-        if (freed.aborted) return { results, ok: false, stopped: true };
+        if (freed.aborted) {
+          countLook(look, 'not_sent');
+          return done({ results, ok: false, stopped: true });
+        }
         if (!(await executionMayContinue(args.shouldContinue))) {
-          return { results, ok: false, authorityLost: true };
+          countLook(look, 'not_sent');
+          return done({ results, ok: false, authorityLost: true });
         }
       }
 
@@ -963,6 +1114,26 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       const dispatchParams =
         unoccludedCheck !== null ? { ...mapped.params, require_unoccluded: true } : mapped.params;
 
+      // 1.9. The step IS going to the device. The look is counted here, with
+      //      what it led to, and the gap between its answer and this dispatch is
+      //      observed — the rhythm between "what is there?" and "touch it",
+      //      which is a tell of its own. Both happen BEFORE the dispatch so a
+      //      step that then fails still has its resolution path recorded.
+      if (look !== null) {
+        const then: PreTapLookNextAction = mapped.intentName === 'send_keys' ? 'typed' : 'tapped';
+        const answeredAt = 'record' in look ? look.record?.answeredAt : undefined;
+        countLook(look, then);
+        if (answeredAt !== undefined && answeredAt !== null) {
+          const verb = profileVerbOf(mapped.intentName);
+          if (verb !== null) {
+            recordLookToTap(this.metrics, {
+              verb,
+              seconds: (this.now() - answeredAt) / 1000,
+            });
+          }
+        }
+      }
+
       // 2-4. Dispatch (with bounded auto-retry) + map the result back.
       const result = await this.runIntent(
         dispatchSessionId,
@@ -976,6 +1147,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         // without one); a second would re-ask what the first just answered.
         look !== null && 'waitedForElement' in look && look.waitedForElement,
         unoccludedCheck ?? undefined,
+        actionPaths,
       );
       if (result.result !== null) {
         emitStep(result.result);
@@ -983,7 +1155,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
           tapTargets.set(result.result, identities);
         }
       }
-      if (result.authorityLost) return { results, ok: false, authorityLost: true };
+      if (result.authorityLost) return done({ results, ok: false, authorityLost: true });
       // B2 — after the result is recorded, never before: a step that was running
       // when Stop arrived is part of what ran.
       //
@@ -997,9 +1169,9 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       if (result.stopped === true) {
         const finishedLastStep =
           planIndex === args.plan.intents.length - 1 && result.result?.kind === 'success';
-        if (!finishedLastStep) return { results, ok: false, stopped: true };
+        if (!finishedLastStep) return done({ results, ok: false, stopped: true });
       }
-      if (result.result === null) return { results, ok: false };
+      if (result.result === null) return done({ results, ok: false });
       // #139 — halt-on-first-failure, EXCEPT a `wait`: a wait is a best-effort
       // synchronization hint (the decomposer inserts idle-settles that a navigate
       // already covers). A wait timing out must NOT abort the plan and lose the
@@ -1009,11 +1181,11 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       if (result.result.kind === 'failure' && intent.kind !== 'wait') break;
     }
 
-    return {
+    return done({
       results,
       ok: results.every((r) => r.kind === 'success'),
       ...(tapTargets.size > 0 ? { tapTargets } : {}),
-    };
+    });
   }
 
   /**
@@ -1218,6 +1390,9 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   ): Promise<PreTapLook> {
     const selector = dispatchParams.value;
     const strategy = perceiveStrategyFor(dispatchParams.strategy);
+    // The look is switched off: no look happened, so there is nothing to count.
+    // Every other path below produces a record, which the CALLER emits once it
+    // knows what the step did next.
     if (this.preTapLookTimeoutMs === 0) return { verdict: 'fallback', waitedForElement: false };
     if (
       typeof selector !== 'string' ||
@@ -1228,14 +1403,27 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // only make every tap on it slower.
       this.sessionsPredatingLook.has(sessionId)
     ) {
-      recordPreTapLook(this.metrics, { outcome: 'fallback', deviceMs: null, roundTripMs: null });
-      return { verdict: 'fallback', waitedForElement: false };
+      return {
+        verdict: 'fallback',
+        waitedForElement: false,
+        record: {
+          outcome: 'fallback',
+          resolvedBy: 'unanswered',
+          deviceMs: null,
+          roundTripMs: null,
+          answeredAt: null,
+        },
+      };
     }
     let waitedForElement = false;
     for (;;) {
       const answer = await this.perceiveOnce(sessionId, selector, strategy, shouldContinue, signal);
       if (answer.kind === 'stopped') return { verdict: 'stopped' };
       if (answer.kind === 'authority_lost') return { verdict: 'authority_lost' };
+      // The clock is read ONCE, here, and carried: the gap the look→tap
+      // histogram measures starts where the device's answer landed, not where
+      // the record is later emitted.
+      const answeredAt = answer.kind === 'answered' ? this.now() : null;
       const reading: PerceiveReading =
         answer.kind === 'answered'
           ? readPerceiveAnswer(answer.outputData)
@@ -1252,6 +1440,25 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
           : reading.kind === 'nothing_resolved'
             ? 'not_found'
             : reading.verdict;
+      // ⛔ WHICH RESOLVER, PER STEP — the transition the audit is for. `none` is
+      // the device saying it resolved the selector and found nothing;
+      // `unanswered` is no usable answer at all (an error, a timeout, a
+      // malformed frame, a device that predates the look). The two are kept
+      // apart because one is a fact about the PAGE and the other about the
+      // device, and a detector only ever sees the first.
+      const resolvedBy: PreTapLookResolver =
+        reading.kind === 'resolved'
+          ? reading.resolvedBy
+          : reading.kind === 'nothing_resolved'
+            ? 'none'
+            : 'unanswered';
+      const record: PreTapLookRecord = {
+        outcome,
+        resolvedBy,
+        deviceMs: answer.kind === 'answered' || answer.kind === 'refused' ? answer.deviceMs : null,
+        roundTripMs: answer.kind === 'timed_out' ? this.preTapLookTimeoutMs : answer.roundTripMs,
+        answeredAt,
+      };
       // A `not_found` that is about to be waited on is not the look's verdict
       // yet; it is counted when the look ends, so one tap is one outcome.
       const willWait =
@@ -1260,27 +1467,20 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         this.elementAppearWaitMs > 0 &&
         elementWaitBudget.remainingMs !== null &&
         elementWaitBudget.remainingMs >= this.elementAppearWaitMs;
-      if (!willWait) {
-        recordPreTapLook(this.metrics, {
-          outcome,
-          deviceMs:
-            answer.kind === 'answered' || answer.kind === 'refused' ? answer.deviceMs : null,
-          roundTripMs: answer.kind === 'timed_out' ? this.preTapLookTimeoutMs : answer.roundTripMs,
-        });
-      }
       if (reading.kind === 'no_usable_answer') {
         return {
           verdict: 'fallback',
           waitedForElement,
+          record,
           ...(answer.kind === 'timed_out' ? { deviceBusyUntil: answer.deviceBusyUntil } : {}),
         };
       }
       if (reading.kind === 'resolved') {
-        return { verdict: reading.verdict, target: reading.target, waitedForElement };
+        return { verdict: reading.verdict, target: reading.target, waitedForElement, record };
       }
       // Nothing resolves and there is no wait to spend: the tap goes ahead and
       // meets the click's own element-not-found handling, retries included.
-      if (!willWait) return { verdict: 'fallback', waitedForElement };
+      if (!willWait) return { verdict: 'fallback', waitedForElement, record };
       waitedForElement = true;
       elementWaitBudget.remainingMs =
         (elementWaitBudget.remainingMs ?? 0) - this.elementAppearWaitMs;
@@ -1296,12 +1496,19 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       if (appeared === 'stopped') return { verdict: 'stopped' };
       if (appeared === 'authority_lost') return { verdict: 'authority_lost' };
       if (appeared === 'absent') {
-        recordPreTapLook(this.metrics, {
-          outcome: 'not_found',
-          deviceMs: answer.kind === 'answered' ? answer.deviceMs : null,
-          roundTripMs: answer.kind === 'answered' ? answer.roundTripMs : null,
-        });
-        return { verdict: 'not_found', waitedForElement };
+        return {
+          verdict: 'not_found',
+          waitedForElement,
+          record: {
+            outcome: 'not_found',
+            // The device resolved the selector and found nothing, twice: that
+            // is still `none`, not "no answer".
+            resolvedBy: 'none',
+            deviceMs: answer.kind === 'answered' ? answer.deviceMs : null,
+            roundTripMs: answer.kind === 'answered' ? answer.roundTripMs : null,
+            answeredAt,
+          },
+        };
       }
       // Appeared: look again, once — `waitedForElement` stops a second wait.
     }
@@ -1402,6 +1609,43 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   }
 
   /**
+   * Count one dispatched attempt, in the registry and in the run's tally at
+   * once, so the metric and the turn's log line are the same number from one
+   * place. A verb with nothing to report (a navigate, a capture) is not counted.
+   *
+   * ⛔ TWO COUNTERS, NEVER ONE. A click's flag says whether a behaviour profile
+   * was attached to the session; a scroll's says which of two implementations
+   * ran. `parsed` is null when Stop abandoned the dispatch in flight — nothing
+   * came back to read either from, so both are `unreported`.
+   */
+  private countAction(
+    intentName: HarnessIntentName,
+    parsed: ParsedIntentResult | null,
+    result: IntentResult,
+    actionPaths: AgentActionPathCounts | undefined,
+  ): void {
+    const outcome = agentActionOutcomeOf(result);
+    const verb = profileVerbOf(intentName);
+    if (verb !== null) {
+      const profileAttached = parsed === null ? 'unreported' : profileAttachedOf(parsed);
+      recordAgentActionProfileAttached(this.metrics, { verb, profileAttached, outcome });
+      if (actionPaths === undefined) return;
+      actionPaths.actions += 1;
+      actionPaths.profileAttached[profileAttached] += 1;
+      actionPaths.outcomes[outcome] += 1;
+      if (profileAttached === 'false') actionPaths.unprofiledByVerb[verb] += 1;
+      return;
+    }
+    if (intentName !== 'scroll') return;
+    const path = parsed === null ? 'unreported' : scrollPathOf(parsed);
+    recordAgentScrollPath(this.metrics, { path, outcome });
+    if (actionPaths === undefined) return;
+    actionPaths.scrolls += 1;
+    actionPaths.scrollPaths[path] += 1;
+    actionPaths.outcomes[outcome] += 1;
+  }
+
+  /**
    * B2 — send one attempt and return its result, honouring a Stop that arrives
    * while it is on its way.
    *
@@ -1483,6 +1727,9 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     /** Set when `params` carry `require_unoccluded`: which verb and why, for
      *  the counter. */
     unoccludedCheck?: UnoccludedCheck,
+    /** The run's action-path tally. Every DISPATCHED attempt adds one, which is
+     *  why it is here and not at the call site: the retries live in this loop. */
+    actionPaths?: AgentActionPathCounts,
   ): Promise<RunIntentOutcome> {
     let result: IntentResult | null = null;
     // Two independent budgets: the short general retryable-failure budget, and a
@@ -1544,11 +1791,22 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
               : unoccludedCheckResultOf(unoccludedCheck.verb, sent.parsed),
         });
       }
+      // ⛔ WHICH PATH IT TOOK — COUNTED PER DISPATCHED ATTEMPT, HERE. After the
+      // dispatch, on EVERY path out of an attempt: a success, a failure, each
+      // retry (a retry is another action the page saw), and a step Stop
+      // abandoned in flight. A success-only count would hide exactly the steps
+      // the audit is about — a failed native resolution falling back to script
+      // shows up on the steps that go wrong.
       if (sent.kind === 'abandoned') {
+        // Abandoned in flight: no result came back to read either flag from,
+        // and the executor's own outcome for it is `unknown` for anything that
+        // may have applied. Nothing is inferred; it is `unreported`.
+        this.countAction(intentName, null, sent.result, actionPaths);
         return { result: sent.result, authorityLost: false, stopped: true };
       }
       const parsed = sent.parsed;
       result = intentResultToCustomer(intent, parsed);
+      this.countAction(intentName, parsed, result, actionPaths);
       // A tap the device REFUSED before touching the page: provably nothing
       // was done, whatever code it arrived under.
       const refusal = tapRefusalOf(parsed);

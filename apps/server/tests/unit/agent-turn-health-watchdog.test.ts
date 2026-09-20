@@ -221,8 +221,18 @@ describe('time to first progress slow (30 min, streaming p95 > 5 s, floor 10 str
   });
 
   it('with no traffic at all, every condition is "not enough data" — the state production is usually in', async () => {
-    const readings = await evaluateAgentTurnHealth({ summary: summaryServiceOver([]) });
+    const readings = await evaluateAgentTurnHealth({
+      summary: summaryServiceOver([]),
+      // The fourth condition reads its own source, so it is given an empty one:
+      // "no AI action happened" must read as not-enough-data too, never as a
+      // clean bill of health.
+      profileAttachmentWindow: {
+        observeTurn: () => undefined,
+        since: () => ({ samples: 0, unprofiled: 0, byVerb: { click: 0, send_keys: 0 } }),
+      },
+    });
     expect(readings.map((r) => r.status)).toEqual([
+      'insufficient_data',
       'insufficient_data',
       'insufficient_data',
       'insufficient_data',
@@ -236,6 +246,7 @@ const ALL: readonly AgentTurnHealthCondition[] = [
   'completion_rate_low',
   'conflict_rate_high',
   'first_progress_slow',
+  'no_profile_attached',
 ];
 
 function readingsWith(

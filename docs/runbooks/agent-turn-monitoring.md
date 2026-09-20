@@ -1,6 +1,6 @@
 # AI turn monitoring
 
-How to see whether the AI automation is working in production, and the four
+How to see whether the AI automation is working in production, and the five
 conditions worth an alert.
 
 Before this existed the only evidence of how AI turns behaved was a grep over
@@ -113,10 +113,10 @@ the one on the admin page.
   here deliberately share its names so a death seen in production can be
   reproduced there under the same word.
 
-## The four alerts
+## The five alerts
 
 Defined in `ops/alerts/driftstack.yml`, group `driftstack-agent-turns`. Nothing
-scrapes them in production today; alerts 1–3 are evaluated there by the health
+scrapes them in production today; alerts 1–3 and 5 are evaluated there by the health
 watchdog instead — see "In production today: the health watchdog" at the end. Every
 ratio carries a volume floor (`and … >= 10`): at tens of turns a day, one failed
 turn in a quiet hour is a 100% failure rate, and a rule without a floor teaches
@@ -210,6 +210,171 @@ production). `dropped` means the writer hit its in-flight cap: the database has
 stopped answering it. `shed` is not in the rule and is not a fault — see "The
 per-request record" above.
 
+### 5. `AgentActionNoProfileAttached` — warning
+
+```promql
+(
+  sum(increase(driftstack_agent_action_profile_attached_total{profile_attached="false"}[30m])) or vector(0)
+) > 0
+and
+(sum(increase(driftstack_agent_action_profile_attached_total[30m])) or vector(0)) >= 1
+```
+
+**A configuration alert, not a detectability verdict.** The browser reports, on
+every click and every typed step, whether a **behaviour profile was attached**
+to the session. A session acting with none is misconfigured, and the
+misconfiguration leaves no other trace: the step succeeds, the task finishes,
+the turn is `completed`, and no rate over outcomes can see it.
+
+⛔ What it does **not** say: that the action looked mechanical, or that a
+profile being attached made it undetectable. The flag is **necessary and not
+sufficient** — nothing here measures what the browser then did with the profile.
+
+**What to check, in order.**
+
+1. **Page the team that owns the browser build — and ask which build the box is
+   running.** The flag is the browser's own answer to "did this session have a
+   profile when the step ran", so the cause is on its side; but WHICH cause
+   depends on the build, and the two are not the same fault.
+2. **On a build whose persona resolution fails closed**, a missing, unloadable
+   or invalid personas file falls back to a compiled-in default profile, and a
+   profile name the browser does not recognise falls back to its base one —
+   neither can produce `false` there. What remains is a session with **no
+   behaviour profile recorded against it at all** when its first action ran: a
+   session-lifecycle fault, not a packaging one.
+3. **On an older build without that fallback**, a missing, empty or malformed
+   personas file _is_ the cause — and it degrades every session on the box at
+   once, so the give-away is a count that is not confined to one session.
+4. **An older browser build that does not report the flag** reads `unreported`,
+   never `false`, so a rising `unreported` share is a different (and much
+   smaller) thing: the question is going unanswered, not being answered badly.
+5. The profile name we send is typed from `DEVICE_PERSONAS` and
+   `DEVICE_SPEED_MODIFIERS` in
+   `apps/server/src/schemas/harness-control-protocol.ts` — one constant per
+   axis, replacing a single six-name list that read as six interchangeable
+   profiles — so a name the browser cannot resolve cannot be written on our
+   side. The browser resolves that field on **two axes**: a persona (`casual` /
+   `regular` / `power_user`) **or** a speed (`fast` / `balanced` / `careful`)
+   applied to a fixed base, and the two do not combine. An unrecognised name
+   falls through to the base rather than leaving the session without one, so it
+   is not a cause of this alert.
+
+There is no acceptable share, so the threshold is zero and strict — one such
+action is the whole finding, and the rule has no hold. The second clause is not
+a volume floor in the sense the three ratio rules use one; it only stops a window
+with no AI action in it from reading as a clean bill of health.
+
+⛔ **What this alert cannot see.** It counts clicks and typed steps only. A turn
+that only scrolled and paused contributes nothing to it, so a session with no
+profile attached that never clicks or types does not raise it — read
+`scroll_path_segmented` on that turn's journal line instead (below). Adding
+scrolls to the alert is not the repair: the browser picks the scroll path with
+the same predicate, so it would page twice for one misconfiguration.
+
+## The paths each action took
+
+Three series and one journal line. Read the first two together with care: they
+are **not** independent evidence, and none of them is a measurement of how an
+action looked to a site.
+
+| Series                                           | Labels                                | Read it for                                                                                                                                 |
+| ------------------------------------------------ | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `driftstack_agent_action_profile_attached_total` | `verb`, `profile_attached`, `outcome` | whether the session that clicked or typed had a behaviour profile attached. One count per dispatched attempt, **retries included**          |
+| `driftstack_agent_scroll_path_total`             | `path`, `outcome`                     | which of the browser's two scroll implementations ran. **Reported, never alerted on** — see below                                           |
+| `driftstack_agent_pre_tap_look_total`            | `outcome`, `resolved_by`, `then`      | how each step's control was found before the tap, and what the step did next. Recorded for **every** look, including steps that then failed |
+| `driftstack_agent_look_to_tap_seconds`           | `verb`                                | histogram — the interval between "what is there?" and "touch it"                                                                            |
+
+⛔ **The first two are one fact, not two.** The browser picks the scroll path
+with the **same** predicate it reports as `profile_attached` — a profile is
+attached, or it is not — and nothing the control plane sends selects it. A
+session cannot today be profile-attached and scroll segmented. Never put them
+side by side as corroborating evidence, and never alert on the scroll path.
+
+⛔ **Both scroll paths are native touch.** Finger deltas, step durations and a
+press-to-first-move delay on either. `segmented` differs in having a **flat
+cadence** (a fixed interval with jitter) where the flick plan's varies. It is
+reported so the browser team can see which ran; it does not mean the scroll was
+anything other than a real touch sequence.
+
+**What each value means.**
+
+- `verb`: `click` or `send_keys` (typing). Scrolls are in their own series;
+  pauses are not counted at all, because every tap and typed step of the same
+  session already witnesses the configuration fact.
+- `profile_attached`: `true` a profile was attached — necessary, not sufficient,
+  and never evidence that the action was undetectable; `false` none was, which
+  is the configuration fault alert 5 reports; `unreported` the step produced no
+  usable result to read it from (a failure, no answer in time, a step the
+  customer's Stop cut short, or a browser build that omits the field).
+  `unreported` is never read as `true`.
+- `path`: `flick` or `segmented` — which scroll implementation ran, chosen by
+  the predicate above; `unreported` when no usable result came back.
+- `outcome`: `ok`, `failed`, or `unknown` — the executor's own verdict on the
+  step, where `unknown` is its existing word for "this may have taken effect and
+  we cannot confirm it".
+- `resolved_by`: `native` the browser's native find located the control;
+  `script` the script resolver it falls back to located it; `none` it looked and
+  found nothing; `unanswered` no usable answer at all. **The `native` → `script`
+  transition is the one to watch**: it is a change in how the page is being
+  searched, and it shows up on the steps that go wrong, which is why it is
+  recorded even when the tap is never sent.
+- `then`: `tapped` / `typed` a step was dispatched; `refused` the look's own
+  verdict stopped it (covered, or not found once waiting for it gave up);
+  `not_sent` nothing was sent for another reason (the confirmation gate, the
+  repeat guard, or Stop).
+- `outcome` on the look is the look's verdict, unchanged: `clear`, `covered`,
+  `not_found`, `outside_viewport`, `unverified`, `fallback`.
+
+**From `/metrics`, on the box.** The token is in `/opt/driftstack/api/.env`;
+read it from the environment and never print or paste it.
+
+```sh
+# every path, all four series, in one scrape
+set -a; . /opt/driftstack/api/.env; set +a
+curl -sS -H "Authorization: Bearer $METRICS_SCRAPE_TOKEN" \
+  http://127.0.0.1:7780/metrics \
+  | grep -E '^driftstack_agent_(action_profile_attached_total|scroll_path_total|pre_tap_look_total|look_to_tap_seconds)'
+```
+
+```sh
+# only the actions whose session had no behaviour profile attached
+set -a; . /opt/driftstack/api/.env; set +a
+curl -sS -H "Authorization: Bearer $METRICS_SCRAPE_TOKEN" \
+  http://127.0.0.1:7780/metrics \
+  | grep 'profile_attached="false"'
+```
+
+**From the journal.** Nothing scrapes `/metrics`, and the registry's counters
+reset on every deploy, so the journal is where these numbers survive. One line
+per turn, `event: agent_turn_action_paths`, counts only — no URL, no selector,
+no typed text, no session or account id:
+
+```sh
+# every turn's action paths, newest last
+journalctl -u driftstack-api --since '24 hours ago' --no-pager \
+  | grep agent_turn_action_paths
+```
+
+```sh
+# only the turns in which an action ran with no behaviour profile attached
+journalctl -u driftstack-api --since '7 days ago' --no-pager \
+  | grep agent_turn_action_paths | grep -v '"profile_attached_false":0'
+```
+
+Each line carries: `actions_total`, `profile_attached_true`,
+`profile_attached_false`, `profile_attached_unreported`, `no_profile_click`,
+`no_profile_send_keys`, `scrolls_total`, `scroll_path_flick`,
+`scroll_path_segmented`, `scroll_path_unreported`, `outcome_ok`,
+`outcome_failed`, `outcome_unknown`, `looks_total`, `resolved_by_native`,
+`resolved_by_script`, `resolved_by_none`, `resolved_by_unanswered`,
+`verdict_clear`, `verdict_covered`, `verdict_not_found`,
+`verdict_outside_viewport`, `verdict_unverified`, `verdict_fallback`,
+`then_tapped`, `then_typed`, `then_refused`, `then_not_sent`. A turn in which an
+action ran with no behaviour profile attached is logged at **warn**, with the
+sentence "an agent action ran with NO behaviour profile attached to the session
+(a configuration fault, not a detectability verdict)"; every other turn is
+`info`.
+
 ## Other series worth a dashboard panel
 
 | Series                                           | Panel                                                         |
@@ -244,7 +409,8 @@ scrapes it yet, so nothing alerts from it. Alerts 1–3 are instead evaluated **
 `agent_turn.health_watchdog` job, every **5 minutes**, from the
 `agent_turn_telemetry` table — the same rows the admin page reads, through the
 same summary code — and delivered through **Sentry** and **by email to the
-owner** (see "Getting notified" below).
+owner** (see "Getting notified" below). Alert 5 is evaluated by the same job on
+the same schedule, from a different place — see "Alert 5" below.
 
 **One set of numbers.** The watchdog's windows, thresholds, volume floors and
 `for:` durations are `AGENT_TURN_ALERT_RULES` in
@@ -275,6 +441,27 @@ constant.
 - **The watchdog itself cannot read the table** for 3 ticks in a row: it
   reports `AgentTurnHealthWatchdogBlind`, so a silent watchdog is not mistaken
   for a healthy product. A tick that fails for any other reason counts the same.
+
+**Alert 5 (an AI session acting with no behaviour profile attached) IS
+evaluated, from memory rather than from the table.** It is a CONFIGURATION
+check: the counts it needs have no column in
+`agent_turn_telemetry` — every text column of that table is a closed list
+enforced in the database, so carrying them there is a migration, and this change
+does not make one. The watchdog reads instead the same numbers each turn's
+`agent_turn_action_paths` journal line is written from, held in the API process
+that served the turn.
+
+⛔ **What that costs, plainly.** The window belongs to **one process** and starts
+empty after a deploy or restart, and the tick runs on whichever process claims
+the job row. Production runs one API process today, so today it sees every turn;
+with several it would see only its own. The error is one-sided — a turn it
+cannot see is a **missed** alert, never a false one — and the counts are in the
+journal either way, which is why "The paths each action took" above
+gives the exact `journalctl` command. A scraper, or a column, replaces this. A
+window with no AI action in it reports _not enough data_, never "all clear".
+The scroll path is **never** alerted on — it is the same predicate under
+another name (see "The paths each action took"), and a second alert for it
+would page twice for one misconfiguration.
 
 **Recognising its issues in Sentry.** Titles read
 `AI turns: AgentTurnCompletionRateLow breach` (or `still_breaching`,
@@ -388,6 +575,9 @@ check that an `agent_turn.health_watchdog` row is pending.
 
 **Where it differs from the PromQL:**
 
+- **Alert 5 reads memory, not the table**, so it sees only the turns served by
+  the process that runs the tick, and nothing from before the last restart. See
+  "Alert 5" above.
 - **Alert 4 (telemetry writes failing) is NOT evaluated.** A failed write leaves
   no row, so the table cannot see it, and the only count is the in-process
   `driftstack_agent_turn_telemetry_write_total` counter (live in production since

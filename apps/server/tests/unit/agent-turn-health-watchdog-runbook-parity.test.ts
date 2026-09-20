@@ -83,13 +83,25 @@ const CONDITIONS = Object.keys(AGENT_TURN_ALERT_RULES) as AgentTurnHealthConditi
 
 describe('AGENT_TURN_ALERT_RULES ↔ the runbook PromQL', () => {
   it('the parser reads real numbers (vacuity guard: a regex that silently matched nothing would make every comparison below trivially wrong or trivially right)', () => {
-    expect(CONDITIONS.length).toBe(3);
+    expect(CONDITIONS.length).toBe(4);
     for (const c of CONDITIONS) {
       const d = documented(AGENT_TURN_ALERT_RULES[c].alert);
       expect(d.windowMinutes).toBeGreaterThan(0);
-      expect(d.threshold).toBeGreaterThan(0);
+      // ⛔ A FINITE NUMBER, NOT A POSITIVE ONE. `no_profile_attached` counts
+      // events rather than a rate and its threshold is ZERO — the first such
+      // action breaches. `documented()` throws when its comparison regex finds
+      // nothing, so "the parse happened" is already proved by getting here; the
+      // vacuity this arm guards is a regex matching nothing, and requiring > 0
+      // would have forced the one rule whose honest threshold is 0 to be
+      // written wrong to satisfy its own guard.
+      expect(Number.isFinite(d.threshold)).toBe(true);
       expect(d.floor).toBeGreaterThan(0);
     }
+    // The three rate rules still have a positive threshold and a real floor;
+    // only the count rule is allowed a zero.
+    expect(
+      CONDITIONS.filter((c) => documented(AGENT_TURN_ALERT_RULES[c].alert).threshold > 0).length,
+    ).toBe(3);
   });
 
   it.each(CONDITIONS)(

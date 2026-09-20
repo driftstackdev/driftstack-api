@@ -138,6 +138,8 @@ import {
   AGENT_TURN_FIRST_PROGRESS_BUCKETS_SECONDS,
   AGENT_TURN_REPLAN_BUCKETS,
   AgentTurnTelemetry,
+  InProcessProfileAttachmentWindow,
+  LOOK_TO_TAP_BUCKETS_SECONDS,
   PRE_TAP_LOOK_DURATION_BUCKETS_SECONDS,
 } from '../services/agent-turn-telemetry.js';
 import { AgentTurnSummaryService } from '../services/agent-turn-summary.js';
@@ -835,12 +837,30 @@ export async function createProductionDeps(
       'Per-turn diagnostics row writes by outcome (ok | error | dropped | shed). The write is fire-and-forget, so error or dropped here is the only place its failure shows; shed is the row budget for turned-away requests under a storm.',
       ['outcome'],
     );
+    // Was a behaviour profile attached to the session that acted? Emitted from
+    // recordAgentActionProfileAttached in services/agent-turn-telemetry.ts.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.agentActionProfileAttachedTotal,
+      'Dispatched agent actions by verb (click | send_keys), profile_attached (true | false | unreported) and outcome (ok | failed | unknown). One count per dispatched attempt, retries included. A CONFIGURATION fact, not a detectability verdict: the device reports whether a behaviour profile was resolved for the session, so true is necessary and not sufficient for the human-like path to have run, and false is a misconfiguration the step succeeding would otherwise hide. unreported is a step with no usable result and is never read as true.',
+      ['verb', 'profile_attached', 'outcome'],
+    );
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.agentScrollPathTotal,
+      'Dispatched agent scrolls by which of the device two implementations ran (flick | segmented | unreported) and outcome. Selected by the SAME predicate as profile_attached, so it is not an independent signal and no dashboard may present the two as corroborating; both paths are native touch sequences and segmented differs only in a flatter cadence. Reported, never alerted on.',
+      ['path', 'outcome'],
+    );
     // The look before a tap (agent-executor-control-plane.ts), emitted from
     // recordPreTapLook in services/agent-turn-telemetry.ts.
     metricsRegistry.registerCounter(
       METRIC_NAMES.agentPreTapLookTotal,
-      'Looks before an agent tap by outcome (clear | covered | not_found | outside_viewport | fallback). covered and not_found are taps that were not sent; fallback is a tap sent without a verdict.',
-      ['outcome'],
+      'Looks before an agent tap by outcome (clear | covered | not_found | outside_viewport | unverified | fallback), resolved_by (native | script | none | unanswered) and then (tapped | typed | refused | not_sent). covered and not_found are taps that were not sent; fallback is a tap sent without a verdict. Recorded for every look, whether or not the tap was later sent.',
+      ['outcome', 'resolved_by', 'then'],
+    );
+    metricsRegistry.registerHistogram(
+      METRIC_NAMES.agentLookToTapSeconds,
+      "Seconds from the look's answer to the moment the executor hands the tap to the dispatcher, by verb (click | send_keys).",
+      LOOK_TO_TAP_BUCKETS_SECONDS,
+      ['verb'],
     );
     metricsRegistry.registerHistogram(
       METRIC_NAMES.agentPreTapLookDeviceSeconds,
@@ -1580,9 +1600,18 @@ export async function createProductionDeps(
   // scraper, which is what production is today — and the metrics half switches
   // on by itself when the registry exists.
   const agentTurnTelemetryRepo = new DrizzleAgentTurnTelemetryRepo(dbHandle);
+  // Where the health watchdog's fourth condition reads its numbers. The SAME
+  // instance is handed to the telemetry service (which fills it at the end of
+  // each turn, from the counts its `agent_turn_action_paths` line carries) and
+  // to the watchdog (which reads it a tick later) — one source, so the alert and
+  // the log line can never disagree. In-process on purpose: see
+  // AGENT_TURN_HEALTH_CONDITIONS for what that costs and why a column would be
+  // a migration.
+  const profileAttachmentWindow = new InProcessProfileAttachmentWindow();
   const agentTurnTelemetry = new AgentTurnTelemetry({
     writer: agentTurnTelemetryRepo,
     logger,
+    profileAttachmentWindow,
     ...(metricsRegistry !== undefined ? { metrics: metricsRegistry } : {}),
   });
   const agentTurnSummaryService = new AgentTurnSummaryService({ repo: agentTurnTelemetryRepo });
@@ -1921,6 +1950,7 @@ export async function createProductionDeps(
     registerAgentTurnHealthWatchdogJob({
       scheduledJobs: scheduledJobsService,
       summary: agentTurnSummaryService,
+      profileAttachmentWindow,
       sentry,
       email: agentTurnHealthEmail,
       logger,

@@ -55,6 +55,7 @@
 // itself, which is the scheduler's own retry path (as in every other chain).
 
 import type { AgentTurnSummary, AgentTurnSummaryService } from './agent-turn-summary.js';
+import type { ProfileAttachmentWindow } from './agent-turn-telemetry.js';
 import type { ScheduledJobRow, ScheduledJobsService } from './scheduled-jobs.js';
 import type { SentryClient } from '../lib/sentry.js';
 
@@ -117,10 +118,44 @@ const EMAIL_RATE_WINDOW_MS = 60 * 60 * 1000;
  */
 export const AGENT_TURN_HEALTH_EMAIL_DEADLINE_MS = 10_000;
 
-export const AGENT_TURN_HEALTH_CONDITIONS = [
+/** The conditions read from the per-request diagnostics table. */
+export const AGENT_TURN_SUMMARY_CONDITIONS = [
   'completion_rate_low',
   'conflict_rate_high',
   'first_progress_slow',
+] as const;
+export type AgentTurnSummaryCondition = (typeof AGENT_TURN_SUMMARY_CONDITIONS)[number];
+
+/**
+ * `no_profile_attached` is the fourth, and it is not read from the table.
+ *
+ * ⛔ IT IS A CONFIGURATION ALERT, NOT A DETECTABILITY VERDICT. The device
+ * reports, on every click and every typed step, whether a BEHAVIOUR PROFILE WAS
+ * ATTACHED to the session (`persona != nil`). A session acting with none is
+ * misconfigured, and the misconfiguration leaves NO other trace: the step
+ * succeeds, the customer's task finishes, the turn is `completed`, and none of
+ * the three conditions above can see it because every one of them is a rate
+ * over outcomes. What this does NOT say is that such an action looked
+ * mechanical, or that a profile being attached made it undetectable — the flag
+ * is necessary and not sufficient, and nothing here measures what the device
+ * then did.
+ *
+ * ⛔ WHERE ITS NUMBERS COME FROM, AND WHAT THAT COSTS. `agent_turn_telemetry`
+ * has no column for these counts and its text columns are CHECK-constrained
+ * closed lists, so carrying them there is a migration — which this change does
+ * not make. The watchdog instead reads the IN-PROCESS window the turn's
+ * `agent_turn_action_paths` log line is written from (see
+ * ProfileAttachmentWindow in agent-turn-telemetry.ts): the same numbers, from
+ * the same place, one tick later. That window belongs to ONE process and starts
+ * empty after a deploy, and the tick runs on whichever process claims the job
+ * row — production runs one API process today, so today it sees every turn.
+ * The error is ONE-SIDED: a turn it cannot see is a MISSED alert, never a false
+ * one, and the log line still carries the counts for an operator to grep (the
+ * runbook gives the command). A scraper, or a column, replaces this.
+ */
+export const AGENT_TURN_HEALTH_CONDITIONS = [
+  ...AGENT_TURN_SUMMARY_CONDITIONS,
+  'no_profile_attached',
 ] as const;
 export type AgentTurnHealthCondition = (typeof AGENT_TURN_HEALTH_CONDITIONS)[number];
 
@@ -135,7 +170,9 @@ export interface AgentTurnAlertRule {
    *  as the PromQL `<` / `>` is strict. */
   readonly breachWhen: 'below' | 'above';
   readonly threshold: number;
-  readonly unit: 'ratio' | 'ms';
+  /** `count` is a plain number of events in the window, not a rate: the rule
+   *  breaches on the FIRST one, so there is nothing to normalise. */
+  readonly unit: 'ratio' | 'ms' | 'count';
   /** The rule's `for:` — how long the condition must hold, tick after tick,
    *  before it is a breach. A single bad tick is flapping, not an incident. */
   readonly forMinutes: number;
@@ -180,6 +217,28 @@ export const AGENT_TURN_ALERT_RULES: Readonly<
     unit: 'ms',
     forMinutes: 15,
   },
+  no_profile_attached: {
+    alert: 'AgentActionNoProfileAttached',
+    windowMinutes: 30,
+    // ⛔ THE FLOOR IS ONE ACTION, NOT TEN. Every other rule here is a RATE, and
+    // a rate over a handful of turns is noise — hence their floors. This one
+    // counts events, and one action by a session with no behaviour profile
+    // attached is the whole finding. The floor exists only so that a window with
+    // no AI action in it answers "not enough data" instead of "none, so all is
+    // well".
+    minSamples: 1,
+    breachWhen: 'above',
+    // Zero, and strict: the first such action breaches. There is no acceptable
+    // share of AI sessions running unconfigured.
+    threshold: 0,
+    unit: 'count',
+    // No hold. The other three wait out a `for:` because a rate at tens of
+    // requests crosses its threshold on one unlucky customer; this is a count
+    // of a configuration that must never happen, and waiting to be sure of it
+    // only delays the news. Recovery uses the same clock, so it clears as soon
+    // as the last such action has aged out of the window.
+    forMinutes: 0,
+  },
 };
 
 /** A condition, or the watchdog's own blindness. */
@@ -208,6 +267,10 @@ export interface AgentTurnHealthFigures {
   p50_ms?: number | null;
   p95_ms?: number | null;
   consecutive_failed_ticks?: number;
+  /** Actions by a session with no behaviour profile attached, by verb. Counts
+   *  by verb and nothing else — no selector, no page, no session. */
+  no_profile_click?: number;
+  no_profile_send_keys?: number;
 }
 
 /** The exact span a reading was computed over, as ISO timestamps. Carried to
@@ -235,7 +298,7 @@ export interface AgentTurnHealthReading {
  * disagree about a number.
  */
 export function readAgentTurnHealthCondition(
-  condition: AgentTurnHealthCondition,
+  condition: AgentTurnSummaryCondition,
   summary: AgentTurnSummary,
 ): AgentTurnHealthReading {
   const rule = AGENT_TURN_ALERT_RULES[condition];
@@ -278,6 +341,45 @@ export function readAgentTurnHealthCondition(
   }
   const breaching = rule.breachWhen === 'below' ? value < rule.threshold : value > rule.threshold;
   return { condition, status: breaching ? 'breach' : 'ok', figures, window };
+}
+
+/**
+ * Judge the fourth condition — an AI action performed by a session with NO
+ * behaviour profile attached. Pure.
+ *
+ * `samples` is every AI action the window saw, so a window with no AI action in
+ * it is `insufficient_data` rather than a clean bill of health: at production's
+ * volume (zero AI turns when this was written) that is the usual state, and
+ * "none happened" must not read as "all of them were configured".
+ *
+ * ⛔ SCROLLS ARE NOT IN IT. The device picks the scroll implementation with the
+ * SAME predicate, so counting a segmented scroll here would count one fact
+ * twice and make a single misconfiguration look like two findings.
+ */
+export function readNoProfileAttachedCondition(
+  reading: {
+    samples: number;
+    unprofiled: number;
+    byVerb: { click: number; send_keys: number };
+  },
+  window: AgentTurnHealthWindow,
+): AgentTurnHealthReading {
+  const rule = AGENT_TURN_ALERT_RULES.no_profile_attached;
+  const figures: AgentTurnHealthFigures = {
+    samples: reading.samples,
+    value: reading.unprofiled,
+    no_profile_click: reading.byVerb.click,
+    no_profile_send_keys: reading.byVerb.send_keys,
+  };
+  if (reading.samples < rule.minSamples) {
+    return { condition: 'no_profile_attached', status: 'insufficient_data', figures, window };
+  }
+  return {
+    condition: 'no_profile_attached',
+    status: reading.unprofiled > rule.threshold ? 'breach' : 'ok',
+    figures,
+    window,
+  };
 }
 
 // ── evaluating every condition ─────────────────────────────────────────────
@@ -324,12 +426,17 @@ function errorShape(err: unknown): { name: string; message: string } {
  */
 export async function evaluateAgentTurnHealth(deps: {
   summary: Pick<AgentTurnSummaryService, 'summarize'>;
+  /** Where the fourth condition's numbers come from. Absent — not wired, or a
+   *  deployment without it — makes that condition `unavailable`, which holds
+   *  every clock: no evidence either way, never a clean bill of health. */
+  profileAttachmentWindow?: ProfileAttachmentWindow;
+  now?: () => number;
   deadlineMs?: number;
   logger?: AgentTurnHealthLogger;
 }): Promise<AgentTurnHealthReading[]> {
   const deadline = deps.deadlineMs ?? AGENT_TURN_HEALTH_EVALUATION_DEADLINE_MS;
   const byWindow = new Map<number, AgentTurnSummary | null>();
-  for (const condition of AGENT_TURN_HEALTH_CONDITIONS) {
+  for (const condition of AGENT_TURN_SUMMARY_CONDITIONS) {
     const minutes = AGENT_TURN_ALERT_RULES[condition].windowMinutes;
     if (byWindow.has(minutes)) continue;
     byWindow.set(
@@ -358,7 +465,7 @@ export async function evaluateAgentTurnHealth(deps: {
     );
   }
   const readings: AgentTurnHealthReading[] = [];
-  for (const condition of AGENT_TURN_HEALTH_CONDITIONS) {
+  for (const condition of AGENT_TURN_SUMMARY_CONDITIONS) {
     const summary = byWindow.get(AGENT_TURN_ALERT_RULES[condition].windowMinutes);
     if (summary === null || summary === undefined) {
       readings.push({ condition, status: 'unavailable', figures: {} });
@@ -380,7 +487,44 @@ export async function evaluateAgentTurnHealth(deps: {
       readings.push({ condition, status: 'unavailable', figures: {} });
     }
   }
+  readings.push(readProfileAttachment(deps));
   return readings;
+}
+
+/**
+ * The fourth condition, read from the in-process window. Never throws: a reader
+ * that misbehaves makes the condition `unavailable`, which holds its clocks,
+ * exactly as an unreadable database window does for the other three.
+ */
+function readProfileAttachment(deps: {
+  profileAttachmentWindow?: ProfileAttachmentWindow;
+  now?: () => number;
+  logger?: AgentTurnHealthLogger;
+}): AgentTurnHealthReading {
+  const source = deps.profileAttachmentWindow;
+  if (source === undefined) {
+    return { condition: 'no_profile_attached', status: 'unavailable', figures: {} };
+  }
+  const minutes = AGENT_TURN_ALERT_RULES.no_profile_attached.windowMinutes;
+  try {
+    const until = new Date((deps.now ?? Date.now)());
+    const reading = source.since(minutes, until.getTime());
+    return readNoProfileAttachedCondition(reading, {
+      since: new Date(until.getTime() - minutes * 60_000).toISOString(),
+      until: until.toISOString(),
+    });
+  } catch (err) {
+    deps.logger?.warn?.(
+      {
+        component: 'agent-turn-health',
+        event: 'agent_turn_health_evaluation_failed',
+        condition: 'no_profile_attached',
+        err: errorShape(err),
+      },
+      'agent turn health: could not judge a condition this tick',
+    );
+    return { condition: 'no_profile_attached', status: 'unavailable', figures: {} };
+  }
 }
 
 // ── state carried from tick to tick ────────────────────────────────────────
@@ -582,7 +726,19 @@ export function advanceAgentTurnHealth(
 } {
   const nowIso = now.toISOString();
   const nowMs = now.getTime();
-  const anyUnavailable = readings.some((r) => r.status === 'unavailable');
+  // ⛔ BLINDNESS IS ABOUT THE TABLE, AND ONLY THE TABLE. `evaluation_failing`
+  // says the watchdog could not READ the AI turn records; it is what stops a
+  // silent watchdog being mistaken for a healthy product. `no_profile_attached`
+  // reads somewhere else entirely (see AGENT_TURN_HEALTH_CONDITIONS), so its
+  // `unavailable` — a deployment where that source is not wired — is a fact
+  // about that one condition and must not be reported as the watchdog going
+  // blind. Counting it did exactly that: three ticks after boot, a watchdog
+  // reading every window perfectly would have paged that it could see nothing.
+  const anyUnavailable = readings.some(
+    (r) =>
+      r.status === 'unavailable' &&
+      (AGENT_TURN_SUMMARY_CONDITIONS as readonly AgentTurnHealthCondition[]).includes(r.condition),
+  );
   const failedTicks = anyUnavailable ? prev.failedTicks + 1 : 0;
 
   const blindStatus: AgentTurnHealthStatus = !anyUnavailable
@@ -737,6 +893,8 @@ const FIGURE_KEYS: ReadonlyArray<keyof AgentTurnHealthFigures> = [
   'p50_ms',
   'p95_ms',
   'consecutive_failed_ticks',
+  'no_profile_click',
+  'no_profile_send_keys',
 ];
 
 /** The figures, by the closed key list, numbers only. The type already says
@@ -835,6 +993,10 @@ export interface AgentTurnHealthEmailer {
 export interface RegisterAgentTurnHealthWatchdogOpts {
   scheduledJobs: ScheduledJobsService;
   summary: Pick<AgentTurnSummaryService, 'summarize'>;
+  /** The in-process window the fourth condition reads (see
+   *  AGENT_TURN_HEALTH_CONDITIONS for what it can and cannot see). Absent makes
+   *  that condition `unavailable` rather than silently healthy. */
+  profileAttachmentWindow?: ProfileAttachmentWindow;
   sentry: Pick<SentryClient, 'captureMessage'>;
   /** Null or absent: alert email is off (its factory logged why, once). */
   email?: AgentTurnHealthEmailer | null;
@@ -943,6 +1105,10 @@ export function registerAgentTurnHealthWatchdogJob(
     try {
       const readings = await evaluateAgentTurnHealth({
         summary: opts.summary,
+        now,
+        ...(opts.profileAttachmentWindow !== undefined
+          ? { profileAttachmentWindow: opts.profileAttachmentWindow }
+          : {}),
         ...(opts.deadlineMs !== undefined ? { deadlineMs: opts.deadlineMs } : {}),
         ...(opts.logger !== undefined ? { logger: opts.logger } : {}),
       });

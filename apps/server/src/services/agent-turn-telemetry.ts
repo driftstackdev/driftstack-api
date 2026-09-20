@@ -345,14 +345,38 @@ export const PRE_TAP_LOOK_DURATION_BUCKETS_SECONDS = [
  * all (a device already known to predate it), so a skipped look cannot pull
  * the latency histogram towards zero. Best-effort: a registry without these
  * metrics, or one that throws, costs the tap nothing.
+ *
+ * ⛔ `resolvedBy` AND `then` ARE LABELS ON THIS COUNTER, NOT A SECOND ONE. The
+ * look is already one row per pre-tap look, labelled by its verdict; the step's
+ * resolution path (which resolver found the element) and what the executor did
+ * next are two more dimensions of the SAME event. A separate counter would have
+ * to agree with this one for ever, and would drift the first time one emit site
+ * moved. See the header of {@link PRE_TAP_LOOK_RESOLVERS}.
+ *
+ * ⛔ THE VERDICT LABEL IS STILL CALLED `outcome`. It carries the look's own
+ * closed verdict vocabulary and has since the counter shipped; renaming it
+ * would silently empty every dashboard and alert matcher that selects on it.
+ *
+ * The two latency histograms keep the verdict alone: they answer "what does the
+ * look cost", and multiplying their buckets by sixteen answers nothing new.
  */
 export function recordPreTapLook(
   metrics: MetricsRegistry | undefined,
-  look: { outcome: PreTapLookOutcome; deviceMs: number | null; roundTripMs: number | null },
+  look: {
+    outcome: PreTapLookOutcome;
+    resolvedBy: PreTapLookResolver;
+    then: PreTapLookNextAction;
+    deviceMs: number | null;
+    roundTripMs: number | null;
+  },
 ): void {
   if (metrics === undefined) return;
   try {
-    metrics.inc(METRIC_NAMES.agentPreTapLookTotal, { outcome: look.outcome });
+    metrics.inc(METRIC_NAMES.agentPreTapLookTotal, {
+      outcome: look.outcome,
+      resolved_by: look.resolvedBy,
+      then: look.then,
+    });
     if (look.roundTripMs !== null) {
       metrics.observe(METRIC_NAMES.agentPreTapLookRoundTripSeconds, look.roundTripMs / 1000, {
         outcome: look.outcome,
@@ -363,6 +387,27 @@ export function recordPreTapLook(
         outcome: look.outcome,
       });
     }
+  } catch {
+    /* metrics are best-effort */
+  }
+}
+
+/**
+ * The gap between the look's answer and the moment the executor hands the tap
+ * to the dispatcher — the rhythm a site's detector would see. Secondary to the
+ * counters, and measured on the executor's own injected clock so a test drives
+ * it rather than races it. Observed only for a tap or a typed step that was
+ * actually sent, and only when the look got an answer to measure from.
+ */
+export function recordLookToTap(
+  metrics: MetricsRegistry | undefined,
+  sample: { verb: AgentActionProfileVerb; seconds: number },
+): void {
+  if (metrics === undefined) return;
+  try {
+    metrics.observe(METRIC_NAMES.agentLookToTapSeconds, Math.max(0, sample.seconds), {
+      verb: sample.verb,
+    });
   } catch {
     /* metrics are best-effort */
   }
@@ -460,6 +505,409 @@ export function recordTapUnoccludedCheck(
     });
   } catch {
     /* metrics are best-effort */
+  }
+}
+
+// ── what the device's result says about how it ran each action ────────────
+//
+// The device reports two different things and used to spell both `behavioral`.
+// They are counted as two metrics with two vocabularies, and NEITHER of them is
+// a verdict on whether a site could tell this session from a person.
+//
+// ⛔ WHAT `behavioral` ACTUALLY IS (device source, IntentExecutor.swift, read
+// 2026-09-20). On click and send_keys it is `persona != nil`: whether a
+// BEHAVIOUR PROFILE WAS ATTACHED to the session. That is a CONFIGURATION fact.
+// `false` means no profile was resolved for this session; `true` means one was,
+// which is NECESSARY AND NOT SUFFICIENT for the human-like path to have run —
+// nothing here measures what the device then did, and nothing here may be read
+// as "this action was human-like". On scroll the same flag names which of two
+// scroll implementations ran, selected by the SAME predicate.
+//
+// ⛔ SO THEY ARE TWO METRICS, NOT ONE LABEL SET. One counter over both meanings
+// would let a dashboard sum "a session with no profile" together with "a scroll
+// took the other code path", which are not the same event and not the same
+// question. Different metric NAMES make that impossible to do by accident.
+//
+// ⛔ RECORDED PER STEP EVEN WHEN THE STEP FAILS. A success-only counter hides
+// the transition that matters most — a native resolution failing and the script
+// path taking over — because that transition shows up on the steps that go
+// wrong. Every dispatched attempt is counted, retries included, and a step with
+// no usable result is counted as `unreported` rather than left out.
+//
+// ⛔ COUNTS AND CLOSED ENUMS ONLY. A selector, a URL, the typed text and the
+// device's own words never reach a label or the turn's log line.
+
+/**
+ * The verbs whose result carries the profile-attached flag and act on the page.
+ *
+ * `behavioral_pause` carries the same flag on the device and is deliberately
+ * NOT counted here: it is a dwell, not an action a site can observe as one, and
+ * the configuration fact it would witness is already witnessed by every tap and
+ * every typed step of the same session. Adding it would only change the
+ * denominator of a counter whose finding is "one is enough".
+ */
+export const AGENT_ACTION_PROFILE_VERBS = ['click', 'send_keys'] as const;
+export type AgentActionProfileVerb = (typeof AGENT_ACTION_PROFILE_VERBS)[number];
+
+/**
+ * Whether a behaviour profile was attached to the session that performed one
+ * action — the device's `persona != nil`.
+ *
+ *   true        a profile was resolved for this session. NECESSARY, NOT
+ *               SUFFICIENT: it says the human-like path was configured, never
+ *               that it ran, and never that the action was undetectable
+ *   false       no profile was resolved — a CONFIGURATION fault, on the device
+ *               side (see the runbook: its personas file is the first thing to
+ *               check). Not a measurement of what the action looked like
+ *   unreported  the step produced no usable result to read it from: a failure,
+ *               a timeout, a step Stop abandoned in flight, or a device build
+ *               that does not send the field
+ *
+ * ⛔ `unreported` IS NOT `true`. A missing flag read as "configured" would make
+ * the one counter that can see the misconfiguration report it as configured.
+ */
+export const AGENT_PROFILE_ATTACHED_VALUES = ['true', 'false', 'unreported'] as const;
+export type AgentProfileAttached = (typeof AGENT_PROFILE_ATTACHED_VALUES)[number];
+
+/**
+ * Which of the device's two scroll implementations ran.
+ *
+ *   flick       the flick-plan path (device `behavioral: true`)
+ *   segmented   the segmented path (device `behavioral: false`)
+ *   unreported  no usable result to read it from
+ *
+ * ⛔ NOT AN INDEPENDENT SIGNAL. The device picks the path with the SAME
+ * predicate as the flag above — `if let persona { flick } else { segmented }` —
+ * and nothing the control plane sends selects it. A session cannot today be
+ * profile-attached and scroll segmented, so these counts and
+ * {@link AGENT_PROFILE_ATTACHED_VALUES} are one fact seen twice, never two
+ * pieces of evidence. No dashboard may present them as corroborating.
+ *
+ * ⛔ BOTH PATHS ARE NATIVE TOUCH. Finger deltas, step durations and a
+ * press-to-first-move delay on either; the device has no `window.scrollBy`. The
+ * difference is that the segmented path's cadence is FLAT (a fixed interval
+ * with jitter) where the flick plan's varies. `segmented` is reported so the
+ * device team can see which ran; it is not alerted on and it does not mean the
+ * scroll was anything other than a real touch sequence.
+ */
+export const AGENT_SCROLL_PATHS = ['flick', 'segmented', 'unreported'] as const;
+export type AgentScrollPath = (typeof AGENT_SCROLL_PATHS)[number];
+
+/**
+ * The step's outcome, as the EXECUTOR already decides it — not a second notion.
+ *
+ *   ok       the executor built a `success` IntentResult for the attempt
+ *   failed   a `failure` the executor can say did not apply
+ *   unknown  a `failure` whose diagnosis category is `unknown`: the executor's
+ *            own word for "this may have taken effect and we cannot confirm it"
+ *            (a coarse WebDriver/dispatch failure on a page-changing step, and a
+ *            step still in flight when Stop ran out its grace)
+ */
+export const AGENT_ACTION_OUTCOMES = ['ok', 'failed', 'unknown'] as const;
+export type AgentActionOutcome = (typeof AGENT_ACTION_OUTCOMES)[number];
+
+/** The executor's own notion of one attempt's outcome, read off the result it
+ *  built. Kept here beside the label so the two cannot drift apart. */
+export function agentActionOutcomeOf(result: IntentResult): AgentActionOutcome {
+  if (result.kind === 'success') return 'ok';
+  if (result.kind === 'confirmation_required') return 'failed';
+  return result.diagnosis?.category === 'unknown' ? 'unknown' : 'failed';
+}
+
+/**
+ * How the pre-tap look resolved the step's selector (the device's own
+ * `resolved_by` on a perceive-by-selector answer).
+ *
+ *   native      the device's native find located it
+ *   script      the script resolver the click falls back to located it
+ *   none        the device resolved the selector and found nothing
+ *   unanswered  no usable answer at all: an error, a timeout, a malformed
+ *               answer, or a device that predates perceive-by-selector
+ *
+ * ⛔ THE native → script TRANSITION IS THE POINT. It is a change in how the page
+ * is being searched, and it shows up on the steps that go wrong — which is why
+ * this is recorded for EVERY look, including the ones whose tap is never sent.
+ */
+export const PRE_TAP_LOOK_RESOLVERS = ['native', 'script', 'none', 'unanswered'] as const;
+export type PreTapLookResolver = (typeof PRE_TAP_LOOK_RESOLVERS)[number];
+
+/**
+ * What the executor did NEXT with the step the look was for.
+ *
+ *   tapped    a click was dispatched
+ *   typed     a send_keys was dispatched (its first act on the device is the
+ *             tap that focuses the field, which is what the look protects)
+ *   refused   the look's own verdict stopped the step: covered, or not found
+ *             after the element wait gave up. Nothing reached the device
+ *   not_sent  nothing was sent for a reason that is not the look's verdict —
+ *             the confirmation gate halted the step, the repeat guard refused
+ *             it, or Stop / an authority change ended the run first
+ */
+export const PRE_TAP_LOOK_NEXT_ACTIONS = ['tapped', 'typed', 'refused', 'not_sent'] as const;
+export type PreTapLookNextAction = (typeof PRE_TAP_LOOK_NEXT_ACTIONS)[number];
+
+/**
+ * Seconds. From the look's answer to the moment the executor hands the tap to
+ * the dispatcher — the interval between "what is there?" and "touch it". Low
+ * end at 10 ms because the interesting shape is a gap that is always the same,
+ * and the top bound past the look's own 2 s ceiling plus the gate work that can
+ * follow it.
+ */
+export const LOOK_TO_TAP_BUCKETS_SECONDS = [
+  0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10,
+] as const;
+
+/** Count one DISPATCHED click or send_keys attempt by whether a behaviour
+ *  profile was attached. Retries included: a retry is another action the page
+ *  saw. Best-effort — a broken registry costs the step nothing. Labels are
+ *  closed unions only; the selector and the typed text never reach one. */
+export function recordAgentActionProfileAttached(
+  metrics: MetricsRegistry | undefined,
+  action: {
+    verb: AgentActionProfileVerb;
+    profileAttached: AgentProfileAttached;
+    outcome: AgentActionOutcome;
+  },
+): void {
+  if (metrics === undefined) return;
+  try {
+    metrics.inc(METRIC_NAMES.agentActionProfileAttachedTotal, {
+      verb: action.verb,
+      profile_attached: action.profileAttached,
+      outcome: action.outcome,
+    });
+  } catch {
+    /* metrics are best-effort */
+  }
+}
+
+/** Count one DISPATCHED scroll attempt by which implementation ran. Reported,
+ *  never alerted on: see {@link AGENT_SCROLL_PATHS} for why it is not an
+ *  independent signal. */
+export function recordAgentScrollPath(
+  metrics: MetricsRegistry | undefined,
+  scroll: { path: AgentScrollPath; outcome: AgentActionOutcome },
+): void {
+  if (metrics === undefined) return;
+  try {
+    metrics.inc(METRIC_NAMES.agentScrollPathTotal, {
+      path: scroll.path,
+      outcome: scroll.outcome,
+    });
+  } catch {
+    /* metrics are best-effort */
+  }
+}
+
+/** Per-turn counts of every path above, by the closed enums. Numbers only —
+ *  this is what the turn's log line carries, and the log line is the only
+ *  durable record of it where no scraper runs. */
+export interface AgentActionPathCounts {
+  /** Dispatched click / send_keys attempts, retries included. */
+  actions: number;
+  profileAttached: Record<AgentProfileAttached, number>;
+  /** Actions performed by a session with NO behaviour profile attached. */
+  unprofiledByVerb: Record<AgentActionProfileVerb, number>;
+  /** Dispatched scroll attempts, retries included. Counted apart from
+   *  `actions`: the two metrics must not be summable by accident. */
+  scrolls: number;
+  scrollPaths: Record<AgentScrollPath, number>;
+  /** Outcomes of every dispatched attempt on this line — clicks, typing and
+   *  scrolls together. An outcome is an outcome whatever the verb. */
+  outcomes: Record<AgentActionOutcome, number>;
+  /** Pre-tap looks, counted whether or not the tap was later sent. */
+  looks: number;
+  resolvers: Record<PreTapLookResolver, number>;
+  verdicts: Record<PreTapLookOutcome, number>;
+  nextActions: Record<PreTapLookNextAction, number>;
+}
+
+function zeroed<K extends string>(keys: readonly K[]): Record<K, number> {
+  const out = {} as Record<K, number>;
+  for (const key of keys) out[key] = 0;
+  return out;
+}
+
+export function emptyAgentActionPathCounts(): AgentActionPathCounts {
+  return {
+    actions: 0,
+    profileAttached: zeroed(AGENT_PROFILE_ATTACHED_VALUES),
+    unprofiledByVerb: zeroed(AGENT_ACTION_PROFILE_VERBS),
+    scrolls: 0,
+    scrollPaths: zeroed(AGENT_SCROLL_PATHS),
+    outcomes: zeroed(AGENT_ACTION_OUTCOMES),
+    looks: 0,
+    resolvers: zeroed(PRE_TAP_LOOK_RESOLVERS),
+    verdicts: zeroed(PRE_TAP_LOOK_OUTCOMES),
+    nextActions: zeroed(PRE_TAP_LOOK_NEXT_ACTIONS),
+  };
+}
+
+function addInto<K extends string>(into: Record<K, number>, from: Record<K, number>): void {
+  for (const key of Object.keys(into) as K[]) into[key] += from[key] ?? 0;
+}
+
+/** Sum two turns' — or two plan segments' — counts. A turn runs up to three
+ *  segments and the executor reports one set per segment. */
+export function addAgentActionPathCounts(
+  into: AgentActionPathCounts,
+  from: AgentActionPathCounts,
+): AgentActionPathCounts {
+  into.actions += from.actions;
+  into.scrolls += from.scrolls;
+  into.looks += from.looks;
+  addInto(into.profileAttached, from.profileAttached);
+  addInto(into.unprofiledByVerb, from.unprofiledByVerb);
+  addInto(into.scrollPaths, from.scrollPaths);
+  addInto(into.outcomes, from.outcomes);
+  addInto(into.resolvers, from.resolvers);
+  addInto(into.verdicts, from.verdicts);
+  addInto(into.nextActions, from.nextActions);
+  return into;
+}
+
+/** Actions performed with no behaviour profile attached — the configuration
+ *  fault the watchdog reports. Scrolls are deliberately NOT included: the
+ *  device picks the scroll path with the same predicate, so adding them would
+ *  count one fact twice and present it as two signals. */
+export function unprofiledActionCount(counts: AgentActionPathCounts): number {
+  return counts.profileAttached.false;
+}
+
+/** The turn's log-line event name. Named here so the writer, the runbook parity
+ *  test and the runbook's grep command cannot disagree about it. */
+export const AGENT_TURN_ACTION_PATHS_EVENT = 'agent_turn_action_paths';
+
+/**
+ * The turn's counts as the log line's fields: a FIXED list of keys, every value
+ * a number. Nothing here is derived from page content, a selector, typed text
+ * or anything a model wrote — the keys are the closed enums above, spelled out,
+ * so an operator greps one line and reads every path the turn took.
+ */
+export function agentActionPathLogFields(counts: AgentActionPathCounts): Record<string, number> {
+  return {
+    actions_total: counts.actions,
+    profile_attached_true: counts.profileAttached.true,
+    profile_attached_false: counts.profileAttached.false,
+    profile_attached_unreported: counts.profileAttached.unreported,
+    no_profile_click: counts.unprofiledByVerb.click,
+    no_profile_send_keys: counts.unprofiledByVerb.send_keys,
+    scrolls_total: counts.scrolls,
+    scroll_path_flick: counts.scrollPaths.flick,
+    scroll_path_segmented: counts.scrollPaths.segmented,
+    scroll_path_unreported: counts.scrollPaths.unreported,
+    outcome_ok: counts.outcomes.ok,
+    outcome_failed: counts.outcomes.failed,
+    outcome_unknown: counts.outcomes.unknown,
+    looks_total: counts.looks,
+    resolved_by_native: counts.resolvers.native,
+    resolved_by_script: counts.resolvers.script,
+    resolved_by_none: counts.resolvers.none,
+    resolved_by_unanswered: counts.resolvers.unanswered,
+    verdict_clear: counts.verdicts.clear,
+    verdict_covered: counts.verdicts.covered,
+    verdict_not_found: counts.verdicts.not_found,
+    verdict_outside_viewport: counts.verdicts.outside_viewport,
+    verdict_unverified: counts.verdicts.unverified,
+    verdict_fallback: counts.verdicts.fallback,
+    then_tapped: counts.nextActions.tapped,
+    then_typed: counts.nextActions.typed,
+    then_refused: counts.nextActions.refused,
+    then_not_sent: counts.nextActions.not_sent,
+  };
+}
+
+/** The log line's key list, frozen. The content-free test holds the emitted
+ *  line to exactly these keys plus `component` and `event`. */
+export const AGENT_TURN_ACTION_PATH_LOG_KEYS: readonly string[] = Object.keys(
+  agentActionPathLogFields(emptyAgentActionPathCounts()),
+);
+
+/**
+ * One turn's unprofiled actions, kept in memory for the health watchdog.
+ *
+ * ⛔ WHY IN MEMORY AND NOT IN THE TABLE. `agent_turn_telemetry` has no column
+ * for this and its text columns are CHECK-constrained closed lists, so carrying
+ * the counts there is a migration — which this change does not make. The
+ * watchdog therefore reads the same numbers the turn's log line carries, from
+ * the process that wrote them.
+ *
+ * ⛔ WHAT THAT COSTS, PLAINLY. This window belongs to ONE process and starts
+ * empty after a deploy or restart. The watchdog's tick runs on whichever process
+ * claims its job row, so with several API processes it would see only that
+ * process's turns — production runs one API process today, so today it sees all
+ * of them. The error is one-sided: a turn it cannot see is a MISSED alert, never
+ * a false one, and the turn's log line still carries the counts for an operator
+ * to grep (the runbook gives the command). A scraper, or a column, replaces this.
+ */
+export interface ProfileAttachmentWindow {
+  /** Record one finished turn. Never throws. */
+  observeTurn(counts: AgentActionPathCounts): void;
+  /** Actions and unprofiled actions in the last `minutes`, this process. */
+  since(
+    minutes: number,
+    now?: number,
+  ): {
+    samples: number;
+    unprofiled: number;
+    byVerb: Record<AgentActionProfileVerb, number>;
+  };
+}
+
+/** Turns kept in the window. A turn is one entry; at a thousand turns an hour
+ *  the widest window the watchdog asks for holds a few hundred. */
+const PROFILE_ATTACHMENT_WINDOW_MAX_TURNS = 4_000;
+
+export class InProcessProfileAttachmentWindow implements ProfileAttachmentWindow {
+  private readonly turns: Array<{
+    at: number;
+    actions: number;
+    unprofiled: number;
+    byVerb: Record<AgentActionProfileVerb, number>;
+  }> = [];
+
+  constructor(private readonly nowMs: () => number = () => Date.now()) {}
+
+  observeTurn(counts: AgentActionPathCounts): void {
+    try {
+      // Clicks and typed steps only. A turn that merely scrolled witnesses the
+      // same predicate under another name, and admitting it here would let one
+      // misconfiguration be counted twice — see AGENT_SCROLL_PATHS. A turn with
+      // neither is not a sample of anything.
+      if (counts.actions === 0) return;
+      this.turns.push({
+        at: this.nowMs(),
+        actions: counts.actions,
+        unprofiled: unprofiledActionCount(counts),
+        byVerb: { ...counts.unprofiledByVerb },
+      });
+      while (this.turns.length > PROFILE_ATTACHMENT_WINDOW_MAX_TURNS) this.turns.shift();
+    } catch {
+      /* telemetry must never reach the turn */
+    }
+  }
+
+  since(
+    minutes: number,
+    now = this.nowMs(),
+  ): { samples: number; unprofiled: number; byVerb: Record<AgentActionProfileVerb, number> } {
+    const cutoff = now - Math.max(0, minutes) * 60_000;
+    const byVerb = zeroed(AGENT_ACTION_PROFILE_VERBS);
+    let samples = 0;
+    let unprofiled = 0;
+    for (const turn of this.turns) {
+      if (turn.at < cutoff) continue;
+      samples += turn.actions;
+      unprofiled += turn.unprofiled;
+      for (const verb of AGENT_ACTION_PROFILE_VERBS) byVerb[verb] += turn.byVerb[verb];
+    }
+    return { samples, unprofiled, byVerb };
+  }
+
+  /** Drop entries older than the widest window anyone asks for. */
+  prune(olderThanMinutes: number, now = this.nowMs()): void {
+    const cutoff = now - Math.max(0, olderThanMinutes) * 60_000;
+    while (this.turns.length > 0 && (this.turns[0]?.at ?? 0) < cutoff) this.turns.shift();
   }
 }
 
@@ -989,7 +1437,17 @@ export interface AgentTurnTelemetryCollector {
 export interface AgentTurnTelemetryDeps {
   writer?: AgentTurnTelemetryWriter;
   metrics?: MetricsRegistry;
-  logger?: { warn?: (obj: Record<string, unknown>, msg: string) => void };
+  logger?: {
+    warn?: (obj: Record<string, unknown>, msg: string) => void;
+    info?: (obj: Record<string, unknown>, msg: string) => void;
+  };
+  /**
+   * Where the health watchdog reads the profile-attachment counts from, in this
+   * process. Optional: without it the turn's log line is still written and is
+   * still the durable record. See {@link ProfileAttachmentWindow} for what an
+   * in-process window can and cannot see.
+   */
+  profileAttachmentWindow?: ProfileAttachmentWindow;
   /** Monotonic milliseconds. Test seam. */
   nowMs?: () => number;
   /** Wall clock for the row's timestamp. Test seam. */
@@ -1133,6 +1591,20 @@ class Collector implements AgentTurnTelemetryCollector {
   /** The loop bound that ended this turn short of its task, if one did. */
   loopStoppedAt(): string | null {
     return this.result?.kind === 'plan-executed' ? (this.result.loop?.stopped ?? null) : null;
+  }
+
+  /**
+   * The paths this turn's actions took — profile attachment, scroll
+   * implementation, and how each step's selector resolved before the tap — as
+   * the executor counted them, summed over every plan segment of the turn. Undefined when no executor ran (a refusal, a
+   * clarification, a request turned away) or when the executor does not report
+   * them (the stub, the legacy driver path): a turn with nothing to say logs
+   * nothing rather than a line of zeroes.
+   */
+  actionPaths(): AgentActionPathCounts | undefined {
+    const executor =
+      this.result !== undefined && 'executor' in this.result ? this.result.executor : undefined;
+    return executor?.actionPaths;
   }
 
   observeResult(result: RunTurnResult): void {
@@ -1537,6 +2009,7 @@ export class AgentTurnTelemetry {
         'an agent turn stopped at a loop bound with its task unfinished',
       );
     }
+    this.emitActionPaths(collector);
     if (UNPERSISTED_OUTCOMES.has(row.outcome)) return;
     const writer = this.deps.writer;
     if (writer === undefined) return;
@@ -1592,6 +2065,52 @@ export class AgentTurnTelemetry {
       this.deps.metrics?.inc(METRIC_NAMES.agentTurnTelemetryWriteTotal, { outcome });
     } catch {
       /* an unregistered counter must not turn a swallowed failure into a thrown one */
+    }
+  }
+
+  /**
+   * ONE LINE PER TURN saying which paths the turn's actions took: whether a
+   * behaviour profile was attached to the session, which scroll implementation
+   * ran, and how each step's selector resolved before the tap.
+   *
+   * ⛔ WHY A LOG LINE AND NOT A COLUMN. `agent_turn_telemetry` has no column for
+   * this and every text column of it is a CHECK-constrained closed list, so
+   * carrying the counts there is a migration. Production has no metrics scraper
+   * either, so the registry's copy of these numbers is read by nothing. The
+   * journal is where they survive, and the runbook gives the exact command.
+   *
+   * ⛔ COUNTS ONLY. Every field is a number drawn from a closed enum's name;
+   * there is no selector, no URL, no typed text, no session or account id, and
+   * no free-text field. `agent-turn-action-paths-are-counts-only` holds the
+   * emitted line to exactly this key list.
+   */
+  private emitActionPaths(collector: Collector): void {
+    try {
+      const counts = collector.actionPaths();
+      if (counts === undefined) return;
+      if (counts.actions === 0 && counts.scrolls === 0 && counts.looks === 0) return;
+      this.deps.profileAttachmentWindow?.observeTurn(counts);
+      const fields = agentActionPathLogFields(counts);
+      const unprofiled = unprofiledActionCount(counts) > 0;
+      const line = {
+        component: 'agent-turn-telemetry',
+        event: AGENT_TURN_ACTION_PATHS_EVENT,
+        ...fields,
+      };
+      // A session with NO behaviour profile attached is a configuration fault,
+      // and the step still SUCCEEDED — so it is a warning even though nothing
+      // failed. It is not a statement about how the action looked; see the
+      // runbook. Everything else is the ordinary record.
+      if (unprofiled) {
+        this.deps.logger?.warn?.(
+          line,
+          'an agent action ran with NO behaviour profile attached to the session (a configuration fault, not a detectability verdict); see the counts on this line',
+        );
+        return;
+      }
+      this.deps.logger?.info?.(line, 'the paths this turn’s actions took');
+    } catch {
+      /* telemetry must never reach the turn */
     }
   }
 

@@ -54,6 +54,7 @@ import {
   AGENT_TURN_FIRST_PROGRESS_BUCKETS_SECONDS,
   AGENT_TURN_REPLAN_BUCKETS,
   AgentTurnTelemetry,
+  LOOK_TO_TAP_BUCKETS_SECONDS,
   PRE_TAP_LOOK_DURATION_BUCKETS_SECONDS,
   type AgentTurnTelemetryWriter,
 } from '../../../src/services/agent-turn-telemetry.js';
@@ -1103,9 +1104,27 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'Per-turn diagnostics row writes.',
     ['outcome'],
   );
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.agentActionProfileAttachedTotal,
+    'Dispatched agent actions by verb, profile_attached and outcome.',
+    ['verb', 'profile_attached', 'outcome'],
+  );
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.agentScrollPathTotal,
+    'Dispatched agent scrolls by path and outcome.',
+    ['path', 'outcome'],
+  );
   metricsRegistry.registerCounter(METRIC_NAMES.agentPreTapLookTotal, 'Looks before a tap.', [
     'outcome',
+    'resolved_by',
+    'then',
   ]);
+  metricsRegistry.registerHistogram(
+    METRIC_NAMES.agentLookToTapSeconds,
+    'Seconds from the look answer to the tap dispatch.',
+    LOOK_TO_TAP_BUCKETS_SECONDS,
+    ['verb'],
+  );
   metricsRegistry.registerHistogram(
     METRIC_NAMES.agentPreTapLookDeviceSeconds,
     'Device duration of the look before a tap.',

@@ -143,6 +143,22 @@ function isUnbounded(key: string): boolean {
  */
 const LABELLESS_METRICS: readonly string[] = ['METRIC_NAMES.unhandledRejectionTotal'];
 
+/**
+ * Keys that LOOK identifier-shaped by the rule above but are a closed enum on
+ * the one metric that uses them. Recorded per METRIC + KEY, never as a widening
+ * of `isUnbounded`: `path` on an HTTP counter really would be one series per URL,
+ * and the day someone registers that, this guard must still catch it.
+ *
+ * · agentScrollPathTotal / `path` — AGENT_SCROLL_PATHS in
+ *   services/agent-turn-telemetry.ts: flick | segmented | unreported. Three
+ *   values, named after the device's two scroll implementations and the absence
+ *   of an answer. It cannot grow with traffic; it can only grow if the device
+ *   grows a third implementation, which is a code change here too.
+ */
+const BOUNDED_DESPITE_NAME: ReadonlyArray<{ metric: string; key: string }> = [
+  { metric: 'METRIC_NAMES.agentScrollPathTotal', key: 'path' },
+];
+
 describe('metric label cardinality', () => {
   const registrations = collectRegistrations();
 
@@ -156,11 +172,21 @@ describe('metric label cardinality', () => {
   });
 
   it('CRITICAL no registered label key is identifier-shaped. The registry keys each series by its label VALUES in a Map that is never evicted, so one per-account or per-session label costs an entry per account for the life of the process — memory that climbs until restart and a scrape that grows with the customer base, invisible to every functional test.', () => {
+    const exempt = (metric: string, key: string): boolean =>
+      BOUNDED_DESPITE_NAME.some((e) => e.metric === metric && e.key === key);
     const offenders = registrations
-      .flatMap((r) => r.labelKeys.map((key) => ({ key, file: r.file })))
-      .filter(({ key }) => isUnbounded(key))
+      .flatMap((r) => r.labelKeys.map((key) => ({ key, metric: r.metric, file: r.file })))
+      .filter(({ key, metric }) => isUnbounded(key) && !exempt(metric, key))
       .map(({ key, file }) => `${key} (${file.slice(file.indexOf('/src/') + 1)})`);
     expect(offenders).toEqual([]);
+    // Rot: an exemption whose registration no longer carries that key is a
+    // fossil that makes the guard look narrower than it is. It must be removed.
+    expect(
+      BOUNDED_DESPITE_NAME.filter(
+        (e) => !registrations.some((r) => r.metric === e.metric && r.labelKeys.includes(e.key)),
+      ),
+      'recorded exemption(s) that no longer apply — remove them:',
+    ).toEqual([]);
   });
 
   it("CRITICAL every registration yields label keys, or is recorded as deliberately label-less. The two floors above count SITES and DISTINCT KEYS, and a truncated parse reduces neither — it empties one site's list while the site is still found and the other twenty still contribute keys. That is exactly how a `);` inside a help string hid a registration from the identifier-shaped-key arm: 21 sites still matched, 16 distinct keys still exceeded the floor of 12, and the one site that mattered contributed nothing. Floor the EXTRACTION, not just the discovery.", () => {
@@ -207,6 +233,24 @@ describe('metric label cardinality', () => {
     // focus tap (A3 V-3360): click | send_keys, closed as
     // TAP_UNOCCLUDED_CHECK_VERBS. A typed step's text never reaches a label.
     //
+    // `profile_attached` arrived with
+    // driftstack_agent_action_profile_attached_total: true | false | unreported,
+    // closed as AGENT_PROFILE_ATTACHED_VALUES in
+    // services/agent-turn-telemetry.ts. It is a CONFIGURATION fact — whether the
+    // device had a behaviour profile for the session — and `unreported` is a
+    // step with no usable result, never read as `true`. `path` arrived with
+    // driftstack_agent_scroll_path_total: flick | segmented | unreported, closed
+    // as AGENT_SCROLL_PATHS. Nothing the device said about WHAT it acted on
+    // reaches either label.
+    //
+    // `resolved_by` and `then` arrived on driftstack_agent_pre_tap_look_total,
+    // which was EXTENDED rather than duplicated: the look already emitted one
+    // row per pre-tap look, so the step's resolution path
+    // (PRE_TAP_LOOK_RESOLVERS: native | script | none | unanswered) and what the
+    // executor did next (PRE_TAP_LOOK_NEXT_ACTIONS: tapped | typed | refused |
+    // not_sent) are two more dimensions of the same event. Both closed unions in
+    // services/agent-turn-telemetry.ts.
+    //
     // `intent` arrived with driftstack_harness_intent_result_unknown_key_total:
     // HARNESS_INTENT_NAMES, a closed enum taken from the PENDING DISPATCH, never
     // from the device's frame. The unknown key NAMES it counts are device text
@@ -224,9 +268,12 @@ describe('metric label cardinality', () => {
       'method',
       'model',
       'outcome',
+      'path',
       'phase',
       'prefix',
+      'profile_attached',
       'reason',
+      'resolved_by',
       'result',
       'result_kind',
       'role',
@@ -235,6 +282,7 @@ describe('metric label cardinality', () => {
       'step_kind',
       'template',
       'terminal_state',
+      'then',
       'to',
       'token_type',
       'transport',

@@ -67,6 +67,11 @@ const SIGNAL_WORDS: Readonly<Record<string, SignalWords>> = {
     meaning:
       'Streaming AI turns are slow to show their first progress, so customers wait with nothing happening on screen.',
   },
+  no_profile_attached: {
+    title: 'AI session ran with no behaviour profile attached',
+    meaning:
+      'An AI session acted on a page with no behaviour profile attached to it, which is a CONFIGURATION fault: the device had no profile to work from. It is not a verdict on how the action looked — a profile being attached is necessary, not sufficient. The runbook says what to check first; the counts by action below say how many and which kind.',
+  },
   evaluation_failing: {
     title: 'health watchdog blind',
     meaning:
@@ -88,6 +93,8 @@ const FIGURE_LABELS: ReadonlyArray<readonly [string, string]> = [
   ['p50_ms', 'First progress p50'],
   ['p95_ms', 'First progress p95'],
   ['consecutive_failed_ticks', 'Consecutive unreadable checks'],
+  ['no_profile_click', 'Taps with no behaviour profile attached'],
+  ['no_profile_send_keys', 'Typing with no behaviour profile attached'],
 ];
 
 function str(v: unknown): string | null {
@@ -116,6 +123,8 @@ function formatMeasure(value: number | null, unit: string | null): string {
       return `${String(Math.round(value))} ms`;
     case 'ticks':
       return `${String(Math.round(value))} checks`;
+    case 'count':
+      return `${String(Math.round(value))} actions`;
     default:
       return String(value);
   }

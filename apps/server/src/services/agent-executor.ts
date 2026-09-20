@@ -59,6 +59,10 @@ import {
 } from './agent-consequential-action.js';
 import { redactText } from '../lib/redact-url.js';
 import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
+// Type only: the counts' shape and their closed enums live beside the metric
+// that emits them. Erased at build time, so this is not a runtime cycle with
+// agent-turn-telemetry.ts (which imports IntentResult from here, also as a type).
+import type { AgentActionPathCounts } from './agent-turn-telemetry.js';
 
 // Re-exported: the transcript sanitiser below is this module's contract, and
 // its bound is only correct because of this helper.
@@ -175,6 +179,23 @@ export interface ExecutorRunResult {
    * ends the turn with the matching stop sentence.
    */
   repeatRefused?: 'no_progress' | 'repeat_refused';
+  /**
+   * HOW THE DEVICE PERFORMED THIS RUN'S ACTIONS, and how each step's selector
+   * was resolved before the tap — counts only, by the closed enums in
+   * services/agent-turn-telemetry.ts.
+   *
+   * ⛔ WHY IT IS HERE AND NOT ONLY IN THE METRICS. Production has no scraper, so
+   * the registry's copy is read by nothing. The turn's telemetry collector reads
+   * this and writes ONE log line per turn (`agent_turn_action_paths`), which is
+   * the durable record an operator greps. The two are the same numbers from one
+   * source: the executor increments both at the same site.
+   *
+   * ⛔ NOT PUBLIC, AND NOT ON AN IntentResult. Like {@link tapTargets} this is
+   * evidence for the server, and an IntentResult is projected to the customer
+   * whole. Absent from executors that do not dispatch (the stub, the legacy
+   * driver path), which simply report nothing.
+   */
+  actionPaths?: AgentActionPathCounts;
 }
 
 /** Stable signature of a consequential action, for the approve → re-run carry

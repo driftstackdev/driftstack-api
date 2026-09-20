@@ -24,6 +24,11 @@ const ALERTS = [
   'AgentTurnConflictRateHigh',
   'AgentTurnFirstProgressSlow',
   'AgentTurnTelemetryWriteFailing',
+  // A CONFIGURATION alert: an AI session acting with no behaviour profile
+  // attached. It leaves no other trace — the step succeeds — so no rate over
+  // outcomes can see it, and it needs its own runbook section like every other
+  // alert here.
+  'AgentActionNoProfileAttached',
 ] as const;
 
 const squash = (s: string): string => s.replace(/\s+/g, '');
