@@ -22,7 +22,7 @@ import { serializeSessionAssign } from '../../src/services/harness-control-codec
 const BASE = {
   sessionId: 'agt_00000000-0000-4000-8000-000000000000',
   archetype: 'iphone16pro_ios18_6_safari18_6',
-  behaviorProfile: 'default',
+  behaviorProfile: 'regular',
   initialUrl: 'https://example.com/',
 };
 

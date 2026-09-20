@@ -19,6 +19,7 @@
 //   - readinessChecks fire every /ready hit. /ready 503 on any
 //     reachable-but-failing dep. Health checks are decoupled.
 
+import { DEFAULT_BEHAVIORAL_PROFILE } from '@driftstack/api-types';
 import { attachUnhandledRejectionMetric } from './unhandled-rejection-backstop.js';
 import { Redis } from 'ioredis';
 import { randomUUID } from 'node:crypto';
@@ -3151,7 +3152,15 @@ export async function createProductionDeps(
           // at a different landing URL / proxy.
           sessionDispatch: {
             archetype: 'iphone16pro_ios18_6_safari18_6',
-            behaviorProfile: 'default',
+            // ⛔ A PERSONA THE PHONE KNOWS (2026-09-20). This was the literal
+            // 'default', which is none of the six values the device resolves (a
+            // persona name casual|regular|power_user, or a speed fast|balanced|
+            // careful), so every AI session asked for a behaviour profile that
+            // does not exist and fell to the device's fallback — while ordinary
+            // sessions have always been given a real one ("the harness always gets
+            // a persona", services/sessions.ts). Same default as that path, from
+            // the same constant, until pace modes choose it per session.
+            behaviorProfile: DEFAULT_BEHAVIORAL_PROFILE,
             initialUrl: 'https://driftstack.io',
             // From env, or ABSENT. The literal that used to sit here
             // (127.0.0.1:1080) was a local fleet-demo value that became the

@@ -120,6 +120,7 @@ import {
   SetEgressApplyPointSchema,
   cookieErrorToken,
 } from '../schemas/harness-control-protocol.js';
+import type { DeviceBehaviorProfile } from '../schemas/harness-control-protocol.js';
 import { cookieErrorCopy } from '../services/cookie-error-copy.js';
 import {
   resolvePageStateMaxAgeSeconds,
@@ -945,7 +946,9 @@ export interface AgentSessionsRoutesDeps {
  *  AgentSessionsRoutesDeps.sessionDispatch). */
 export interface SessionDispatchConfig {
   archetype: string;
-  behaviorProfile: string;
+  /** One of the profiles the device resolves — never a free string. It was one,
+   *  and the value written into it ('default') named nothing on the device. */
+  behaviorProfile: DeviceBehaviorProfile;
   initialUrl: string;
   /** Operator-default egress for a session that names no `proxy_id`.
    *

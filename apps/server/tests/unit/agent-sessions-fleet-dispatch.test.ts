@@ -30,7 +30,7 @@ const NODE_UUID = '11111111-1111-4111-8111-111111111111';
 
 const DISPATCH: SessionDispatchConfig = {
   archetype: 'iphone16pro_ios18_6_safari18_6',
-  behaviorProfile: 'default',
+  behaviorProfile: 'regular',
   initialUrl: 'https://example.com',
   proxy: { host: '127.0.0.1', port: 1080, udp_associate: true, require_remote_dns: false },
 };
@@ -102,7 +102,7 @@ describe('dispatchSessionAssignOnCreate', () => {
       type: 'sessionAssign',
       sessionId: 'agt_demo1',
       archetype: 'iphone16pro_ios18_6_safari18_6',
-      behaviorProfile: 'default',
+      behaviorProfile: 'regular',
       initialUrl: 'https://example.com',
     });
     // inlineProxyConfig rides as the base64 wire string

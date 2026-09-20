@@ -626,7 +626,12 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     // (no long \s*\n? chain — backtracking rule).
     expect(body).toMatch(/sessionDispatch: \{/);
     expect(body).toMatch(/archetype: 'iphone16pro_ios18_6_safari18_6',/);
-    expect(body).toMatch(/behaviorProfile: 'default',/);
+    // ⛔ This pin used to lock `behaviorProfile: 'default'` — a name the device
+    // does not resolve (it knows three personas and three speeds), so the pin
+    // defended months of AI sessions asking for a behaviour profile that does not
+    // exist. Pin the SOURCE of the value, and that the dead literal stays gone.
+    expect(body).toMatch(/behaviorProfile: DEFAULT_BEHAVIORAL_PROFILE,/);
+    expect(body).not.toMatch(/behaviorProfile: 'default'/);
     expect(body).toMatch(/initialUrl: 'https:\/\/driftstack\.io',/);
     // ⛔ THIS PIN USED TO LOCK `host: '127.0.0.1', port: 1080` AS THE DEFAULT
     // EGRESS, and in doing so it froze the outage in place: that literal was a

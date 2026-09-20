@@ -1027,6 +1027,27 @@ export const SessionAssignExitIdentitySchema = z
   })
   .strict();
 
+/**
+ * ⛔ THE BEHAVIOUR PROFILES THE DEVICE RESOLVES (device team, 2026-09-20). The
+ * device reads `behaviorProfile` as a persona NAME (casual | regular |
+ * power_user) or as a SPEED on the regular persona (fast | balanced | careful).
+ * Anything else is not an error on the wire — it silently falls to the device's
+ * fallback, which is how every AI session came to ask for a profile called
+ * 'default' that does not exist, for months, with nothing red. The wire schema
+ * below stays an open string (a newer device may learn more names, and a
+ * decoder must not reject them); what WE send is typed from this list, so a
+ * value the device does not know cannot be written down on our side.
+ */
+export const DEVICE_BEHAVIOR_PROFILES = [
+  'casual',
+  'regular',
+  'power_user',
+  'fast',
+  'balanced',
+  'careful',
+] as const;
+export type DeviceBehaviorProfile = (typeof DEVICE_BEHAVIOR_PROFILES)[number];
+
 export const SessionAssignSchema = z
   .object({
     type: z.literal('sessionAssign'),

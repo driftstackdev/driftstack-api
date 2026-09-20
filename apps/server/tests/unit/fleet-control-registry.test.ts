@@ -68,7 +68,7 @@ describe('FleetControlConnection', () => {
     const assign = serializeSessionAssign({
       sessionId: 'ses_assign',
       archetype: 'iphone16pro_ios18_6_safari18_6',
-      behaviorProfile: 'default',
+      behaviorProfile: 'regular',
       initialUrl: 'https://example.com',
       inlineProxyConfig: {
         host: '127.0.0.1',
@@ -110,7 +110,7 @@ describe('FleetControlConnection', () => {
       serializeSessionAssign({
         sessionId: 'ses_assign',
         archetype: 'iphone16pro_ios18_6_safari18_6',
-        behaviorProfile: 'default',
+        behaviorProfile: 'regular',
         initialUrl: 'https://example.com',
       }),
     );

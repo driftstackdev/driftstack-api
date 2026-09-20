@@ -46,7 +46,7 @@ const NODE_UUID = '22222222-2222-4222-8222-222222222222';
 
 const DISPATCH: SessionDispatchConfig = {
   archetype: 'iphone16pro_ios18_6_safari18_6',
-  behaviorProfile: 'default',
+  behaviorProfile: 'regular',
   initialUrl: 'https://example.com',
   proxy: { host: '127.0.0.1', port: 1080, udp_associate: true, require_remote_dns: false },
 };
