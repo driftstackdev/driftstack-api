@@ -5418,6 +5418,29 @@ function buildRegistry(): OpenAPIRegistry {
           description:
             'Present when the turn ended before the task was finished — it reached a limit on steps, time or budget, or stopped rather than repeat itself — or when the agent asked you something part-way through. One or two sentences saying what to do next; when it asks for "continue", send that as the next message. Absent when the task finished or a step failed.',
         }),
+        // The same ending as `notice`, in one word a program can branch on.
+        // Open on purpose, like key_source below: the enum arm publishes the
+        // values that exist, and the string arm lets a client generated today
+        // still parse a turn that ends a way that does not exist yet.
+        notice_reason: z
+          .union([
+            z.enum([
+              'step_limit',
+              'time_limit',
+              'budget_low',
+              'no_progress',
+              'repeated_step',
+              'ai_unavailable',
+              'question',
+              'declined',
+            ]),
+            z.string(),
+          ])
+          .optional()
+          .openapi({
+            description:
+              'Why the turn ended, in one word, whenever `notice` is present — never without it. `step_limit`: the task needs more steps than one message runs; send "continue". `time_limit`: the message was taking too long; send "continue". `budget_low`: too little of the session’s AI budget is left; start a new session. `no_progress`: the page stopped changing and the next step would repeat one that changed nothing; a person should say what to try instead. `repeated_step`: the next step would have repeated an action that already ran, which could do it twice; check the page, then send "continue" if it is safe. `ai_unavailable`: the next steps could not be worked out just now; send "continue" to try again. `question`: the agent asked you something part-way; `notice` is the question, and your answer is the next message. `declined`: the agent stopped rather than carry on; a person should decide what to do. Treat it as an OPEN string: match the values you know, and show `notice` for any other.',
+          }),
         usage: AgentMessageUsageOpenApi.optional(),
       }),
       z.object({
@@ -5570,7 +5593,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       200: {
         description:
-          'Turn result — discriminated by `kind`: plan-executed (intents + results + ok, where `intents` covers every plan the turn made; plus `answer` when the turn read the page back to answer the question, or `answer_unavailable` saying why it could not; plus `notice` when the turn ended before the task was finished) / clarify (clarifying_question) / refuse (refuse_reason) / stopped (the turn was stopped with POST /v1/agent-sessions/{id}/stop: the steps that ran, including one that was already running when the stop arrived, and a `notice` saying how far it got) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.',
+          'Turn result — discriminated by `kind`: plan-executed (intents + results + ok, where `intents` covers every plan the turn made; plus `answer` when the turn read the page back to answer the question, or `answer_unavailable` saying why it could not; plus `notice` when the turn ended before the task was finished, with `notice_reason` saying which ending in one word) / clarify (clarifying_question) / refuse (refuse_reason) / stopped (the turn was stopped with POST /v1/agent-sessions/{id}/stop: the steps that ran, including one that was already running when the stop arrived, and a `notice` saying how far it got) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.',
         content: {
           'application/json': {
             schema: AgentMessageResponseOpenApi,
@@ -5594,7 +5617,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       429: {
         description:
-          'Rate limited. Besides the request rate limit for this route, two limits on AI turns running at once answer here, both as `rate-limited` with `retry_after_seconds: 1` and `Retry-After: 1`: the account already has the maximum number of AI turns running across its sessions, or the maximum number running on Driftstack’s included AI. No step was run; wait for a turn to finish, then send the message again. On the streamed representation the refusal arrives inside the `response` event, so the wait is in the body’s `retry_after_seconds` only.',
+          'Rate limited. Besides the request rate limit for this route, two limits on AI turns running at once answer here, both as `rate-limited` with `retry_after_seconds: 5` and `Retry-After: 5`: the account already has the maximum number of AI turns running across its sessions, or the maximum number running on Driftstack’s included AI. No step was run; wait for a turn to finish, then send the message again — the wait is a guess at how long a running turn takes, so be ready to wait again rather than resending every second. On the streamed representation the refusal arrives inside the `response` event, so the wait is in the body’s `retry_after_seconds` only.',
         content: {
           'application/problem+json': { schema: AgentTurnLimitProblemOpenApi },
         },

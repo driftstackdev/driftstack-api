@@ -233,7 +233,8 @@ type AgentUsage struct {
 //
 // On "plan-executed", Answer is what you asked for (when you asked for
 // information), AnswerUnavailable says why there is none when one could not be
-// produced, and Notice, when set, says why the task is not finished yet.
+// produced, Notice, when set, says why the task is not finished yet, and
+// NoticeReason says the same in one word you can switch on.
 // OK is true when the last planned steps ran cleanly; it does not by itself
 // mean the task is finished. Read typed steps with ParsedResults.
 type AgentMessageResponse struct {
@@ -269,6 +270,22 @@ type AgentMessageResponse struct {
 	// part-way through; when it asks for "continue", send that as the next
 	// message. On a "stopped" turn it is one sentence saying how far it got.
 	Notice string `json:"notice,omitempty"`
+	// NoticeReason is the same ending as Notice, in one word to switch on. Set
+	// on a "plan-executed" turn whenever Notice is, and never without it:
+	//
+	//	"step_limit"     the task needs more steps than one message runs; send "continue"
+	//	"time_limit"     the message was taking too long; send "continue"
+	//	"budget_low"     too little of the session's AI budget is left; start a new session
+	//	"no_progress"    the page stopped changing and the next step would repeat; ask a person
+	//	"repeated_step"  the next step would repeat an action that already ran; check, then "continue"
+	//	"ai_unavailable" the next steps could not be worked out just now; send "continue" to try again
+	//	"question"       the agent asked you something part-way; Notice is the question, answer it
+	//	"declined"       the agent stopped rather than carry on; a person should decide
+	//
+	// The set is OPEN: a turn can end a way this SDK version has never heard
+	// of, so a default branch that shows Notice is required, not optional.
+	// Empty on older servers.
+	NoticeReason string `json:"notice_reason,omitempty"`
 	// StoppedDuring is what a "stopped" turn was doing when it noticed the
 	// stop: "planning", "executing", "reading_page" or "answering".
 	StoppedDuring string `json:"stopped_during,omitempty"`
@@ -576,7 +593,8 @@ type MessageOptions struct {
 	OnStep func(step AgentStepEvent)
 	// OnEvent, when set, is called for every OTHER progress event on the
 	// turn's stream, by name, with its JSON payload — today "phase", "plan",
-	// "step_start", "answer" and "notice". The set of names is open: ignore the
+	// "step_start", "answer" and "notice" (whose data carries the same Notice
+	// and NoticeReason the final result does). The set of names is open: ignore the
 	// ones you do not recognise. The final result is always Message's return
 	// value, never one of these.
 	OnEvent func(name string, data json.RawMessage)
@@ -602,6 +620,13 @@ type MessageOptions struct {
 // too), or Anthropic refused your key (KeyRejected(); KeySource() and
 // KeyRejectedReason() say which key and why). No step ran, and it is not
 // retryable: fix the key first.
+//
+// A 503 *FeatureUnavailableError on a message sent WITH an idempotency key
+// means this deployment cannot record keys at all, so nothing ran. It is NOT
+// transient: the same key fails the same way for as long as the deployment is
+// in that state, and a retry loop never ends. The same message without an
+// idempotency key runs the turn — send it that way only if running the task
+// twice would be safe, because that is the protection you are giving up.
 func (r *AgentSessionsResource) Message(ctx context.Context, agentSessionID, userMessage string, opts *MessageOptions) (*AgentMessageResponse, error) {
 	var out AgentMessageResponse
 	body := map[string]any{"user_message": userMessage}

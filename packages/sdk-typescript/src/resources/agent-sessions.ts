@@ -397,6 +397,26 @@ export type AgentIntentResult =
       matchedText: string;
     };
 
+/**
+ * Why a turn ended before the task was finished — the one-word form of the
+ * `notice` sentence, for a program that cannot read English prose.
+ *
+ * ⛔ OPEN. `(string & {})` keeps the known values in editor completions while
+ * still admitting a value a newer server has and this SDK does not: a turn that
+ * learns a new way to end must not make an older program fail to typecheck (or,
+ * worse, throw) on a response that is perfectly valid.
+ */
+export type AgentNoticeReason =
+  | 'step_limit'
+  | 'time_limit'
+  | 'budget_low'
+  | 'no_progress'
+  | 'repeated_step'
+  | 'ai_unavailable'
+  | 'question'
+  | 'declined'
+  | (string & {});
+
 export type AgentMessageResponse =
   | {
       kind: 'plan-executed';
@@ -441,6 +461,33 @@ export type AgentMessageResponse =
        * task finished or a step failed.
        */
       notice?: string;
+      /**
+       * The same ending as `notice`, in one word you can branch on. Present
+       * whenever `notice` is, and never without it.
+       *
+       * - `'step_limit'` — the task needs more steps than one message runs.
+       *   Send "continue".
+       * - `'time_limit'` — the message was taking too long. Send "continue".
+       * - `'budget_low'` — too little of the session's AI budget is left. Start
+       *   a new session and carry on there.
+       * - `'no_progress'` — the page stopped changing and the next step would
+       *   have repeated one that changed nothing. Put it in front of a person:
+       *   `notice` asks what to try instead.
+       * - `'repeated_step'` — the next step would have repeated an action that
+       *   already ran, which could do it twice. Check the page, then send
+       *   "continue" if it is safe.
+       * - `'ai_unavailable'` — the next steps could not be worked out just now.
+       *   Send "continue" to try again.
+       * - `'question'` — the agent asked you something part-way. `notice` is
+       *   the question; send your answer as the next message.
+       * - `'declined'` — the agent stopped rather than carry on. A person
+       *   should decide what to do.
+       *
+       * ⛔ OPEN: a turn can end a way this SDK has never heard of, so the type
+       * admits any string. Match the values you know and fall back to showing
+       * `notice`. Absent on older servers.
+       */
+      notice_reason?: AgentNoticeReason;
       usage?: AgentUsage;
     }
   | {
@@ -656,7 +703,8 @@ export class AgentSessionsResource {
    *
    * - `'plan-executed'` — the steps ran. `answer` is what you asked for, when
    *   you asked for information; `results` has each step's outcome; `notice`,
-   *   when present, says why the task is not finished yet. A result of kind
+   *   when present, says why the task is not finished yet, and `notice_reason`
+   *   says the same in one word to branch on. A result of kind
    *   `'confirmation_required'` means the agent stopped before a purchase, a
    *   payment or an account deletion and is waiting for your approval.
    * - `'clarify'` — the agent needs more detail; reply with another message.
@@ -717,6 +765,12 @@ export class AgentSessionsResource {
    *   AI only on its own key is answered this way too), or Anthropic refused
    *   your key (`keyRejected`; `keySource` and `keyRejectedReason` say which
    *   key and why). No step ran. Not retryable: fix the key first.
+   * - 503 FeatureUnavailableError — you sent an `idempotencyKey` and this
+   *   deployment cannot record one, so nothing ran. ⛔ NOT transient: the same
+   *   key fails the same way for as long as the deployment is in that state, so
+   *   a retry loop never ends. The same message WITHOUT `idempotencyKey` runs
+   *   the turn — send it that way only if running the task twice would be safe,
+   *   because that is the protection you are giving up.
    */
   message(
     id: string,
@@ -748,7 +802,9 @@ export class AgentSessionsResource {
        *   steps it is about to run (`offset` is the turn-wide index of the first);
        * - `step_start` `{ index, total, label }` — a step is starting;
        * - `answer` `{ answer }` — the answer, before the turn's final result;
-       * - `notice` `{ notice }` — why the turn is ending before the task is done.
+       * - `notice` `{ notice, notice_reason? }` — why the turn is ending before
+       *   the task is done, as a sentence and as the one word the final result
+       *   carries as `notice_reason`.
        * The final result is always the resolved value, never one of these.
        *
        * ⛔ Treat an unrecognised `type` as nothing at all. The set is open: the

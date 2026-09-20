@@ -44,9 +44,11 @@ dedupe effect; guard those calls separately if they need at-most-once behavior.
 `POST /v1/agent-sessions/{id}/message` stores its receipt encrypted, which
 is not available on every deployment. Where it is not, that endpoint
 answers a valid `Idempotency-Key` with `503 feature-unavailable` — _"We could
-not safely record this request. Do not retry it without the same
-Idempotency-Key. Contact support."_ — while the same request WITHOUT the header
-runs the turn normally.
+not safely record this request, so nothing ran. This deployment cannot record an
+Idempotency-Key at all, so sending the same key again fails the same way; the
+same message without the header runs the turn, at the cost of its replay
+protection."_ — while the same request WITHOUT the header runs the turn
+normally.
 
 That is deliberate: a browser turn is expensive and side-effecting, and
 the server would rather refuse than accept a key it cannot honour and let

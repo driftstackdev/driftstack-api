@@ -255,7 +255,7 @@ own; these reads keep working.
 
 Agent-session turns on bundled billing can also return `403 forbidden` (the
 plan no longer includes bundled billing) and `429 rate-limited` with
-`retry_after_seconds: 1` (your account already has 3 turns running on bundled
+`retry_after_seconds: 5` (your account already has 3 turns running on bundled
 billing). No step ran, so wait for one to finish and send the same message
 again, [`Idempotency-Key`](/reference/idempotency/) and all. See
 [Agent sessions — Errors](/api/agent-sessions/#errors).

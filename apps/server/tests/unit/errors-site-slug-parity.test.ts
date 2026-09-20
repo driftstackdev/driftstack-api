@@ -112,6 +112,54 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
     }
   });
 
+  it('the AI pages a customer lands on from a `type` URI describe the API as it now answers', () => {
+    // These two are where a developer arrives from the URI in the error body,
+    // so they are the LAST place that should still describe an older API. Two
+    // things had gone stale: the AI-key 502 is two different answers (no key,
+    // and a key the provider refused) and the page described only the first,
+    // while telling everyone to opt in to the included AI — which an own-key-only
+    // plan cannot do; and the 429 covered only the request rate, with the untrue
+    // claim that the SDKs always retry it.
+    const byok = readFileSync(resolve(DIST, 'byok-anthropic-required', 'index.html'), 'utf8');
+    const limited = readFileSync(resolve(DIST, 'rate-limited', 'index.html'), 'utf8');
+
+    // The fields the published document says this problem carries are the
+    // fields the page has to explain. Derived, so a new one shows up here.
+    const spec = JSON.parse(
+      readFileSync(resolve(REPO_ROOT, 'packages/sdk-python/openapi.json'), 'utf8'),
+    ) as { components: { schemas: Record<string, { properties?: Record<string, unknown> }> } };
+    const rfc7807 = new Set(['type', 'title', 'status', 'detail', 'instance']);
+    const extensions = Object.keys(
+      spec.components.schemas['AgentAiKeyProblem']?.properties ?? {},
+    ).filter((f) => !rfc7807.has(f));
+    // Vacuity: a schema read as empty would demand nothing at all.
+    expect(extensions, 'the published AI-key problem extensions').toContain('key_rejected');
+    for (const field of extensions) {
+      expect(byok, `the key page explains ${field}`).toContain(field);
+    }
+    expect(byok, 'the page says a key can be REFUSED, not only missing').toMatch(
+      /Anthropic refused the key it did have/,
+    );
+    expect(byok, 'the page says own-key-only plans cannot opt in').toMatch(
+      /cannot opt in|only on your own key/,
+    );
+    expect(byok, 'the page no longer says a key is simply unavailable').not.toMatch(
+      /none is available on your account/,
+    );
+
+    expect(limited, 'the page covers the AI-turn limit').toMatch(
+      /AI turns running at once|AI turns running/,
+    );
+    expect(limited, 'the page names the wait it carries').toContain('retry_after_seconds');
+    expect(limited, 'the page says the AI-turn refusal ran nothing').toMatch(/no step ran/i);
+    expect(limited, 'the page no longer claims every SDK call retries this').not.toMatch(
+      /The SDKs retry this automatically/,
+    );
+    expect(limited, 'the page says which calls a program retries itself').toMatch(
+      /transcript stream are yours to retry|are yours to retry/,
+    );
+  });
+
   it('unknown-slug 404 is described but noindex with no conflicting canonical', () => {
     const rendered = readFileSync(resolve(DIST, '404.html'), 'utf8');
     expect(rendered.match(/<meta name="theme-color" content="#0b0f14">/g)).toHaveLength(1);

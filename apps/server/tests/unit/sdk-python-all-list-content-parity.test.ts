@@ -69,6 +69,9 @@ const REQUIRED_ALL_ENTRIES = [
   'LiveKitInfo',
   // What get_capture() returns and what transcript() yields.
   'AgentCapture',
+  // The one-word reason beside an unfinished turn's `notice`, as an OPEN
+  // union: exported so a caller can annotate the branch it writes on it.
+  'AgentNoticeReason',
   'AgentTranscriptEvent',
   'ListArchetypesResponse',
   'PublicArchetype',

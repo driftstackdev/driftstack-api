@@ -27,9 +27,11 @@ import {
   MAX_MODEL_CALLS_PER_TURN,
   MAX_PLANNER_CALLS_PER_TURN,
   MAX_RUNS_OF_ONE_STEP_PER_TURN,
+  ALL_TURN_NOTICE_REASONS,
   MAX_TURN_WALL_CLOCK_MS,
   REPLAN_MIN_BUDGET_TOKENS,
   TURN_LOOP_STOP_SENTENCES,
+  TURN_NOTICE_REASONS,
   admitSegment,
   sameSiteEffect,
   segmentRanToItsEnd,
@@ -50,6 +52,7 @@ import type {
   DecomposeResult,
   PlanStatus,
 } from '../../src/services/agent-decomposer.js';
+import type { TurnLoopStopReason } from '../../src/services/agent-runtime.js';
 
 const NAV: AgentIntent = { kind: 'navigate', url: 'https://shop.test/' };
 const SETTLE: AgentIntent = { kind: 'wait', condition: 'idle' };
@@ -542,6 +545,9 @@ describe('B1 — ⛔ EVERY BOUND STOPS THE LOOP, AND SAYS SO IN ITS OWN WORDS', 
     // Which KIND of hand-back it was travels with the result, because a
     // question and a refusal are different outcomes for the turn's telemetry.
     expect(result.loop?.handedBackKind).toBe('clarify');
+    // …and the customer's program is told the same thing in one word, so an
+    // unattended job can answer the question instead of sending "continue".
+    expect(result.noticeReason).toBe('question');
     expect(answers.n).toBe(0);
     const body = (await sessions.get(seedId))?.transcript.find(
       (e) => e.intents !== undefined,
@@ -567,6 +573,10 @@ describe('B1 — the loop remembers which page each step LED to', () => {
     if (result.kind !== 'plan-executed') throw new Error('type narrow');
     expect(result.loop).toMatchObject({ handedBack: true, handedBackKind: 'refuse' });
     expect(result.notice).toBe('That page asks for something I should not do.');
+    // ⛔ NOT `question`. A refusal and a question are the two hand-backs, and a
+    // program told "question" would send an answer to a turn that declined —
+    // the same wrong reply as "continue" to a turn going in circles.
+    expect(result.noticeReason).toBe('declined');
   });
 
   it('⛔ navigating AGAIN to the page the first navigate already reached is circles — the look after a segment is the page its steps led to', async () => {
@@ -1268,10 +1278,71 @@ describe('B6 — progress stays true across segments', () => {
     const { turn } = await makeRuntime(h, { plans: neverDone });
     await turn('keep going');
     const notice = h.events.at(-1);
+    // The sentence a person reads, and beside it the one word a program
+    // branches on — the pair the route puts on the wire as `notice` and
+    // `notice_reason`.
     expect(notice).toEqual({
       kind: 'notice',
       notice: TURN_LOOP_STOP_SENTENCES.planner_call_limit,
+      reason: TURN_NOTICE_REASONS.planner_call_limit,
     });
+  });
+});
+
+describe('B1 — every ending a turn can have says so in one word as well as in a sentence', () => {
+  it('every loop ending has a public reason, and the two hand-backs have their own', () => {
+    // Keyed by the reason type in the source, so a seventh loop ending is a
+    // compile error there; this arm is the runtime half — the set of values a
+    // program can receive, which every published surface is checked against.
+    const forLoopEndings = Object.values(TURN_NOTICE_REASONS);
+    expect(new Set(forLoopEndings).size, 'one reason per ending, none shared').toBe(
+      Object.keys(TURN_LOOP_STOP_SENTENCES).length,
+    );
+    expect([...ALL_TURN_NOTICE_REASONS].sort()).toEqual(
+      [...new Set([...forLoopEndings, 'question', 'declined'])].sort(),
+    );
+  });
+
+  it('each ending\u2019s one word is about the SAME thing its own sentence is about', () => {
+    // A mapping that is total, distinct and customer-worded can still be
+    // WRONG: send `time_limit` beside the sentence about running out of steps
+    // and a program reports the wrong cause for ever. Each public value is
+    // therefore pinned against a phrase of the sentence the runtime really
+    // sends for that ending, so the pair cannot be swapped without failing.
+    const SENTENCE_FOR: Record<TurnLoopStopReason, RegExp> = {
+      planner_call_limit: /more steps than I take in one message/,
+      wall_clock: /taking too long for one message/,
+      budget_floor: /not enough of this chat\u2019s AI budget left/,
+      no_progress: /rather than go in circles/,
+      repeat_refused: /repeated an action that already ran/,
+      planner_unavailable: /could not work out the next ones/,
+    };
+    const WORD_FOR: Record<TurnLoopStopReason, string> = {
+      planner_call_limit: 'step_limit',
+      wall_clock: 'time_limit',
+      budget_floor: 'budget_low',
+      no_progress: 'no_progress',
+      repeat_refused: 'repeated_step',
+      planner_unavailable: 'ai_unavailable',
+    };
+    for (const reason of Object.keys(TURN_LOOP_STOP_SENTENCES) as TurnLoopStopReason[]) {
+      expect(
+        TURN_LOOP_STOP_SENTENCES[reason],
+        `the sentence pinned for ${reason} is the one the runtime sends`,
+      ).toMatch(SENTENCE_FOR[reason]);
+      expect(TURN_NOTICE_REASONS[reason], `the one word beside ${reason}\u2019s sentence`).toBe(
+        WORD_FOR[reason],
+      );
+    }
+  });
+
+  it.each([...ALL_TURN_NOTICE_REASONS])('%s says what happened, in customer words', (reason) => {
+    // Same rule as the sentences: no internals, and nothing that reads as a
+    // code number or an identifier a customer would have to look up.
+    expect(reason).toMatch(/^[a-z]+(_[a-z]+)*$/);
+    expect(reason).not.toMatch(
+      /\b(fleet|node|control|plane|harness|observer|vantage|segment|planner|model|token|digest|port|wall|clock|floor)\b/i,
+    );
   });
 });
 

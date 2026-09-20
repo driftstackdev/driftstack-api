@@ -109,7 +109,7 @@ func TestTooManyAITurnsRunningIsARateLimitErrorWorthRetryingSentOnce(t *testing.
 	t.Parallel()
 	calls, err := refusedWith(t, 429, problemBody(429, "rate-limited", map[string]any{
 		"detail":              "Your account already has 3 AI turns running on Driftstack’s included AI (limit 3). Wait for one to finish, then try again.",
-		"retry_after_seconds": 1,
+		"retry_after_seconds": 5,
 	}), &MessageOptions{IdempotencyKey: "turn-1"})
 	var limited *RateLimitError
 	if !errors.As(err, &limited) {
@@ -120,7 +120,7 @@ func TestTooManyAITurnsRunningIsARateLimitErrorWorthRetryingSentOnce(t *testing.
 		t.Error("the AI-turn limit must not read as the session-slot limit")
 	}
 	// Read from the BODY: a stream has no Retry-After header left to carry it.
-	if limited.RetryAfterSeconds != 1 {
+	if limited.RetryAfterSeconds != 5 {
 		t.Errorf("RetryAfterSeconds=%d", limited.RetryAfterSeconds)
 	}
 	if !IsRetryable(err) {

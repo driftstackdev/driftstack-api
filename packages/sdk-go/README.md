@@ -180,6 +180,12 @@ if resp.Kind == "plan-executed" {
 `answer`, `notice`; ignore names you do not recognise). When you asked for
 information and none could be produced, `resp.AnswerUnavailable` says why.
 
+When a turn ends before the task is finished, `resp.Notice` is the sentence to
+show a person and `resp.NoticeReason` is the one word to switch on:
+`step_limit`, `time_limit`, `budget_low`, `no_progress`, `repeated_step`,
+`ai_unavailable`, `question` or `declined` — or, from a newer server, a value
+this SDK has never heard of, so show `Notice` in the default branch.
+
 A `capture` step's result carries a `CaptureID`; fetch the image as soon as the
 turn ends, because screenshots are kept only briefly:
 

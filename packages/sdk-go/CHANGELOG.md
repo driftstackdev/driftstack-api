@@ -8,6 +8,13 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A turn that hands back says why in one word** —
+  `AgentMessageResponse.NoticeReason` sits beside `Notice` on a
+  `"plan-executed"` turn: `"step_limit"`, `"time_limit"`, `"budget_low"`,
+  `"no_progress"`, `"repeated_step"`, `"ai_unavailable"`, `"question"` or
+  `"declined"`. The set is OPEN — a `switch` needs a default that shows
+  `Notice` — and the field is empty on an older server. The streamed `notice`
+  event carries the same pair. Nothing is removed.
 - **Fetch a screenshot** — `AgentSessions.GetCapture(ctx, id, captureID)`
   returns the image behind a `capture` step's `captureId` as `*AgentCapture`
   (`ContentType` `image/png` or `image/jpeg`, and `Bytes`). Screenshots are
@@ -59,9 +66,9 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - **Too many AI turns on the included AI is a `*RateLimitError` now** — the API
-  answers this refusal as `rate-limited` with `retry_after_seconds: 1` instead
+  answers this refusal as `rate-limited` with `retry_after_seconds: 5` instead
   of `concurrency-limit`, so `Message` returns `*RateLimitError`
-  (`IsRetryable` true, `RetryAfterSeconds` 1) where it returned
+  (`IsRetryable` true, `RetryAfterSeconds` 5) where it returned
   `*ConcurrencyLimitError`. No SDK change is needed to read it, and
   `*ConcurrencyLimitError` still means what it always meant on `Create`: your
   plan's concurrent-session limit. `Intents` on a `plan-executed` result now

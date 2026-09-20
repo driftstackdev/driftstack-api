@@ -33,6 +33,8 @@
 //     person has said it may be
 //   · a refusal
 //   · `answer_unavailable` — asked for information, none could be produced
+//   · not finished: a `notice` with a `notice_reason` the job may answer itself
+//     (`step_limit` → "continue"), and one it must not (`no_progress`)
 //   · not finished: a `notice` that asks for "continue", and "continue"
 //     carrying the task on — and one that asks for something else, which the
 //     job shows rather than answers
@@ -550,6 +552,9 @@ describe('a program written only from the guide runs unchanged against the serve
     // else would make that reply the wrong one, and the arm below is the case
     // where it does.
     expect(halted.notice, 'the sentence asks for “continue”').toMatch(/continue/i);
+    // And the job did not have to read the sentence to know that: the guide's
+    // table says `step_limit` is one of the three a program may answer itself.
+    expect(halted.noticeReason, 'the one-word reason beside the sentence').toBe('step_limit');
     expect(halted.messagesSent).toBe(1);
     await expectTheSessionWasClosedAndTheProfileIsFree(halted, stopped);
 
@@ -566,22 +571,22 @@ describe('a program written only from the guide runs unchanged against the serve
     await expectTheSessionWasClosedAndTheProfileIsFree(finished, carriedOn);
   }, 60_000);
 
-  it('shows a notice that asks for something other than "continue" instead of answering it', async () => {
-    // The guide's notice bullet: the sentence says what it needs from you, and
-    // it is NOT always "continue" — this is the going-in-circles one, which
-    // asks the reader to say what to try differently. A program that replied
-    // "continue" to it would send the agent round the same loop again, so the
-    // job surfaces the sentence and stops.
+  it('is told it may carry on, and still does not answer a notice whose `notice_reason` needs a person', async () => {
+    // The guide's notice_reason table: `no_progress` is one of the endings a
+    // program must NOT answer by itself — the agent said it was about to repeat
+    // something that changed nothing, and "continue" sends it round the same
+    // loop. The job is switched ON for automatic continues here, so the ONLY
+    // thing stopping it is the reason it read off the result.
     device.pageText = 'Ledger · running balance · nothing final yet';
     const profileId = await signedInProfile('supplier-portal-circles');
     const sentBefore = planner.calls.length;
 
     const report = await runInvoiceTask(
-      // Even told it may carry on, the job has nothing to carry on WITH here.
-      job({ profileId, task: TASK.goesInCircles, continueOnNotice: false }),
+      job({ profileId, task: TASK.goesInCircles, continueOnNotice: true }),
     );
 
     expect(report.outcome).toBe('not-finished');
+    expect(report.noticeReason, 'the ending a program must not answer itself').toBe('no_progress');
     expect(report.notice, 'the sentence does not ask for “continue”').not.toMatch(/continue/i);
     expect(report.notice, 'it says what it needs instead').toMatch(/what to try differently/i);
     expect(report.messagesSent, 'the job did not reply to it').toBe(1);
@@ -727,15 +732,61 @@ describe('a program written only from the guide runs unchanged against the serve
     }
   }, 60_000);
 
-  it('says the session ended when it ends underneath a running message, and does not repeat the steps that ran', async () => {
+  it('says the session ended when it ends ON ITS OWN underneath a running message, and does not repeat the steps that ran', async () => {
     // The guide: "A session can also end on its own — when its token budget runs
     // out, when its history is full, … or when the browser behind it ends it …
     // It then reads `status: "closed"` with a `closed_reason`, and a message to
     // it returns `409` with `session_status: "closed"`." The error table adds
     // that `partial_results` lists any steps that did run, and says to check
-    // them before sending the task again. Ending the session from outside while
-    // a message is running is the same event from the program's side.
+    // them before sending the task again.
+    //
+    // ⛔ ON ITS OWN, not by the customer's own close: the guide's "Close the
+    // session" says a close stops the running turn, so THAT path answers the
+    // `stopped` result the next arm measures. This one is the budget running
+    // out underneath the message, which is the sentence above.
     const profileId = await signedInProfile('supplier-portal-ended');
+    const sdk = owner();
+    const runningBefore = planner.calls.filter((call) => call.task === TASK.endsUnderneath).length;
+
+    const run = runInvoiceTask(job({ profileId, task: TASK.endsUnderneath, stopAfterMs: 120_000 }));
+    await waitFor(
+      () =>
+        planner.calls.filter((call) => call.task === TASK.endsUnderneath).length > runningBefore,
+      'the job’s message to be running',
+    );
+    const mine = await sdk.agentSessions.list({ limit: 1 });
+    const sessionId = mine.data[0]?.id ?? '';
+    expect(sessionId, 'the session the job created').toMatch(/^agt_/);
+    // The session ends the way the product ends one whose budget is spent —
+    // not through the customer's own DELETE.
+    const repo = fx?.agentSessionsRepo;
+    if (repo === undefined) throw new Error('the fixture wired no sessions repository');
+    await repo.closeWithReason(sessionId, 'budget-exhausted');
+
+    const report = await run;
+    expect(report.sessionId, 'the session the job reported is the one that ended').toBe(sessionId);
+    expect(report.outcome).toBe('session-ended');
+    expect(report.sessionStatus).toBe('closed');
+    expect(report.closedReason, 'why it ended').toBe('budget-exhausted');
+    expect(report.answer, 'nothing was answered').toBeUndefined();
+    expect(report.messagesSent, 'the job did not send the task again').toBe(1);
+    // Closed for good, and the profile is free for tomorrow's run.
+    expect((await sdk.agentSessions.get(sessionId)).status).toBe('closed');
+    const next = await sdk.agentSessions.create(
+      { mode: 'ai', profile_id: profileId },
+      { idempotencyKey: randomUUID() },
+    );
+    await sdk.agentSessions.close(next.id);
+  }, 30_000);
+
+  it('closing the session while its message is still running ends that message as `stopped`, not as a session that vanished', async () => {
+    // The guide's "Close the session": closing "stops a turn that is still
+    // running, so closing to cut a task short does not leave you paying out an
+    // AI call you will never read. That message answers the same `stopped`
+    // result POST /{id}/stop gives." Measured from the program's side: the job
+    // reports `stopped`, with how far the turn got, and never treats it as a
+    // session that ended underneath it.
+    const profileId = await signedInProfile('supplier-portal-closed-mid-turn');
     const sdk = owner();
     const runningBefore = planner.calls.filter((call) => call.task === TASK.endsUnderneath).length;
 
@@ -751,12 +802,13 @@ describe('a program written only from the guide runs unchanged against the serve
     await sdk.agentSessions.close(sessionId);
 
     const report = await run;
-    expect(report.sessionId, 'the session the job reported is the one that ended').toBe(sessionId);
-    expect(report.outcome).toBe('session-ended');
-    expect(report.sessionStatus).toBe('closed');
-    expect(report.answer, 'nothing was answered').toBeUndefined();
+    expect(report.sessionId).toBe(sessionId);
+    expect(report.outcome, 'the customer’s own close ends the turn, it does not lose it').toBe(
+      'stopped',
+    );
+    expect(report.stoppedDuring, 'how far the turn got').toBe('planning');
+    expect(report.notice, 'one sentence saying how far it got').toEqual(expect.any(String));
     expect(report.messagesSent, 'the job did not send the task again').toBe(1);
-    // Closed for good, and the profile is free for tomorrow's run.
     expect((await sdk.agentSessions.get(sessionId)).status).toBe('closed');
     const next = await sdk.agentSessions.create(
       { mode: 'ai', profile_id: profileId },

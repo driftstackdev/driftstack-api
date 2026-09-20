@@ -109,7 +109,20 @@ describe('W510.C apps/marketing-site/src/pages/docs/error-codes.astro content pa
     expect(body).toContain(
       "when: 'A capability required by this operation is disabled or unavailable on the deployment.', action: 'Not retryable until the capability is available; contact the deployment operator with X-Request-Id.'",
     );
-    expect(body).toContain("when: 'The agent-session turn has no usable Anthropic credential.'");
+    // The AI-key 502 is TWO answers, not one: no key at all, and a key the
+    // provider refused. A page that describes only the first sends a customer
+    // whose key was rejected off to add the key they already have — and its old
+    // advice to opt in to the included AI is impossible on an own-key-only plan.
+    expect(body).toContain('The agent-session turn had no Anthropic key to run on');
+    expect(body).toMatch(/with `key_rejected: true`, Anthropic refused the key it did have/);
+    expect(body).toMatch(/some plans run AI only on your own key and cannot opt in/);
+    expect(body).toMatch(/retrying unchanged fails the same way/);
+    expect(body).not.toContain('The agent-session turn has no usable Anthropic credential.');
+    // And the 429 covers the AI-turn limit, with the wait and the honest claim
+    // about which SDK calls retry for you.
+    expect(body).toMatch(/as many AI turns running at once as it may/);
+    expect(body).toMatch(/an AI message may reuse the same `Idempotency-Key`/);
+    expect(body).toMatch(/an agent-session message and the transcript stream are yours to retry/);
     expect(body).not.toMatch(
       /hasn't been wired|hasn’t been wired|documented path lands|operator must wire|BYOK-for-v1\.0|Often retryable/i,
     );

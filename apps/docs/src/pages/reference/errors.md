@@ -164,9 +164,12 @@ guide has the full table.
   active: `"closed"`, with `closed_reason` saying why, or `"paused"`. No second
   call is needed to read the reason.
 - **`FeatureUnavailableError` (503)** on a message sent with an
-  `Idempotency-Key` means the key could not be recorded and the turn did not
-  run; on `POST /v1/agent-sessions/{id}/stop`, `stop_unconfirmed: true` means
-  the stop could not be confirmed. Both are worth retrying yourself —
+  `Idempotency-Key` means this deployment cannot record keys, so the turn did
+  not run. Sending the same key again will fail the same way, however long you
+  wait; the same message **without** the header runs the turn, at the cost of
+  its replay protection — see [Idempotency](/reference/idempotency/). On
+  `POST /v1/agent-sessions/{id}/stop`, `stop_unconfirmed: true` means the stop
+  could not be confirmed just now and IS worth calling again yourself —
   `isRetryable` reports `false` for this class, so the SDKs will not. A `503`
   on Stop _without_ `stop_unconfirmed` means AI is not enabled here, and
   calling again will not help.

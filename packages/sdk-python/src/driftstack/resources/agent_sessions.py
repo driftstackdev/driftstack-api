@@ -8,7 +8,7 @@ Unsupported deployments return typed ``FeatureUnavailable`` errors.
 
 Discriminated message response: branch on ``["kind"]`` —
 ``plan-executed`` (carries ``intents`` + ``results`` + ``ok``, and ``answer`` or
-``answer_unavailable``, and ``notice``, when present), ``clarify``
+``answer_unavailable``, and ``notice`` with ``notice_reason``, when present), ``clarify``
 (``clarifying_question``), ``refuse``
 (``refuse_reason``), or ``stopped`` (the turn was stopped with ``stop()``:
 ``results`` are the steps that ran and ``notice`` says how far it got). A
@@ -98,6 +98,44 @@ def _create_headers(idempotency_key: str | None, byok_api_key: str | None) -> di
 # should reference these constants instead of hard-coding string literals.
 CANONICAL_MODIFIER_NAMES: tuple[str, ...] = ("cmd", "ctrl", "shift", "option")
 CanonicalModifier = Literal["cmd", "ctrl", "shift", "option"]
+
+#: Why a turn ended before the task was finished — the one-word form of the
+#: ``notice`` sentence, on a ``plan-executed`` result as ``notice_reason``.
+#:
+#: - ``"step_limit"`` — the task needs more steps than one message runs. Send
+#:   ``"continue"``.
+#: - ``"time_limit"`` — the message was taking too long. Send ``"continue"``.
+#: - ``"budget_low"`` — too little of the session's AI budget is left. Start a
+#:   new session and carry on there.
+#: - ``"no_progress"`` — the page stopped changing and the next step would have
+#:   repeated one that changed nothing. Put it in front of a person: ``notice``
+#:   asks what to try instead.
+#: - ``"repeated_step"`` — the next step would have repeated an action that
+#:   already ran, which could do it twice. Check the page, then send
+#:   ``"continue"`` if it is safe.
+#: - ``"ai_unavailable"`` — the next steps could not be worked out just now.
+#:   Send ``"continue"`` to try again.
+#: - ``"question"`` — the agent asked you something part-way. ``notice`` is the
+#:   question; send your answer as the next message.
+#: - ``"declined"`` — the agent stopped rather than carry on. A person should
+#:   decide what to do.
+#:
+#: ⛔ OPEN: ``str`` is part of the union on purpose. A turn can end a way this
+#: SDK has never heard of, and a program written today must still receive it —
+#: match the values you know and show ``notice`` for anything else.
+AgentNoticeReason = (
+    Literal[
+        "step_limit",
+        "time_limit",
+        "budget_low",
+        "no_progress",
+        "repeated_step",
+        "ai_unavailable",
+        "question",
+        "declined",
+    ]
+    | str
+)
 
 
 class LiveKitInfo(TypedDict):
@@ -312,8 +350,10 @@ class AgentSessionsResource:
           ``results`` has each step's outcome (``success``, ``failure`` with a
           ``diagnosis``, or ``confirmation_required``); ``notice``, when
           present, says why the task is not finished yet (send ``"continue"``
-          when it asks for that). ``ok`` is true when the last planned steps ran
-          cleanly — it does not by itself mean the task is finished.
+          when it asks for that), and ``notice_reason`` says the same in one
+          word your code can branch on — see :data:`AgentNoticeReason`. ``ok``
+          is true when the last planned steps ran cleanly — it does not by
+          itself mean the task is finished.
         - ``clarify`` — the agent needs more detail; reply with another message.
         - ``refuse`` — the agent will not do this, or the AI was briefly
           unavailable (the session stays active; send it again).
@@ -356,11 +396,21 @@ class AgentSessionsResource:
         again, fix the cause and use a NEW key. Use a new key too when the
         session, message or approvals change.
 
+        A 503 ``FeatureUnavailableError`` on a message sent WITH
+        ``idempotency_key`` means this deployment cannot record keys at all, so
+        nothing ran. ⛔ It is not transient: the same key fails the same way for
+        as long as the deployment is in that state, and a retry loop never ends.
+        The same message without ``idempotency_key`` runs the turn — send it
+        that way only if running the task twice would be safe, because that is
+        the protection you are giving up.
+
         ``on_step`` (optional) is called with each step as it lands:
         ``{"index": int, "result": {...}}``, where ``index`` is the step's
         position in the final ``results``. ``on_event`` (optional) is called as
         ``on_event(name, data)`` for every other progress event — today
-        ``phase``, ``plan``, ``step_start``, ``answer`` and ``notice``. The set of
+        ``phase``, ``plan``, ``step_start``, ``answer`` and ``notice`` (whose
+        data carries the same ``notice`` and ``notice_reason`` as the final
+        result). The set of
         names is open: ignore the ones you do not recognise. The final result is
         always the return value. If a callback raises, the exception propagates
         and the stream is closed; the turn keeps running on the server (send the

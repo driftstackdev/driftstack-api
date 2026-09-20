@@ -93,8 +93,9 @@ export const ERROR_PAGES = {
   'rate-limited': {
     status: 429,
     title: 'Too Many Requests',
-    meaning: 'You exceeded the request rate limit for this endpoint class.',
-    fix: 'Honour the `Retry-After` header and back off. The SDKs retry this automatically with exponential backoff.',
+    meaning:
+      'You exceeded the request rate limit for this endpoint class \u2014 or, on an AI agent-session message, your account already has as many AI turns running at once as it may, across your sessions or on Driftstack\u2019s included AI. In that second case no step ran, and the limit clears by itself when a running turn finishes.',
+    fix: 'Wait the number of seconds in the `retry_after_seconds` extension (the `Retry-After` header carries the same value), then send the same request again \u2014 for an AI message that means the same `Idempotency-Key` too, because nothing ran. The SDKs retry most calls for you with backoff; an agent-session message and the transcript stream are yours to retry.',
   },
   'concurrency-limit': {
     status: 429,
@@ -167,10 +168,10 @@ export const ERROR_PAGES = {
   },
   'byok-anthropic-required': {
     status: 502,
-    title: 'BYOK Anthropic key required',
+    title: 'Anthropic key required, or refused',
     meaning:
-      'An AI agent-session turn needs an Anthropic API key and none is available on your account.',
-    fix: 'Store a key via `PUT /v1/account/me/byok-anthropic-key` (or send `x-byok-anthropic-api-key` per request), or opt in to the bundled-LLM budget in Settings.',
+      'An AI agent-session turn could not run on a key. With no extension fields: there was no Anthropic key for it \u2014 none sent with the request, none stored on the account, and Driftstack\u2019s included AI not available to it. With `key_rejected: true`: Anthropic refused the key it did have, on the turn\u2019s first planning call. No step ran either way.',
+    fix: 'Without `key_rejected`: store a key via `PUT /v1/account/me/byok-anthropic-key`, send `x-byok-anthropic-api-key` with the request, or opt in to Driftstack\u2019s included AI where your plan offers it \u2014 some plans run AI only on your own key and cannot opt in, and on those a key is the only route. With `key_rejected: true`: `key_source` says which key was refused (`header`, the one sent with the request, or `stored`, the one saved on the account) and `key_rejected_reason` says why \u2014 replace the key for `invalid_or_unauthorized`, or settle billing with Anthropic for `billing`. Sending the same request again without fixing the key fails the same way.',
   },
   'pair-mode-conflict': {
     status: 409,

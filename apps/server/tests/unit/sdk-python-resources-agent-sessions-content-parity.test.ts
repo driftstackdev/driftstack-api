@@ -34,7 +34,7 @@ describe('sdk-python resources/agent_sessions content parity', () => {
 
   it('Discriminated message-response framing pinned: branch on `["kind"]` — plan-executed (intents + results + ok, and answer or answer_unavailable, and notice) / clarify (clarifying_question) / refuse (refuse_reason) / stopped (results + notice). Drift would force Python callers to introspect undocumented response shapes', () => {
     expect(body).toMatch(
-      /Discriminated message response: branch on ``\["kind"\]`` —\s*``plan-executed`` \(carries ``intents`` \+ ``results`` \+ ``ok``, and ``answer`` or\s*``answer_unavailable``, and ``notice``, when present\), ``clarify``\s*\(``clarifying_question``\), ``refuse``\s*\(``refuse_reason``\), or ``stopped``/,
+      /Discriminated message response: branch on ``\["kind"\]`` —\s*``plan-executed`` \(carries ``intents`` \+ ``results`` \+ ``ok``, and ``answer`` or\s*``answer_unavailable``, and ``notice`` with ``notice_reason``, when present\), ``clarify``\s*\(``clarifying_question``\), ``refuse``\s*\(``refuse_reason``\), or ``stopped``/,
     );
   });
 

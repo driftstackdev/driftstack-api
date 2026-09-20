@@ -12,6 +12,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
+import { AI_TURNS_RUNNING_RETRY_AFTER_SECONDS } from '../../src/routes/agent-sessions.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 let fx: TestAppFixture;
@@ -60,7 +61,13 @@ describe('bundled-LLM concurrent-turn cap (soft-cap TOCTOU bound)', () => {
     // too-many-ai-turns-running-is-a-refusal-worth-retrying.test.ts.
     const body = res.json<{ type: string; retry_after_seconds: number; detail: string }>();
     expect(body.type).toBe(PROBLEM_TYPES.RateLimited);
-    expect(body.retry_after_seconds).toBe(1);
+    // ⛔ DERIVED, NOT WRITTEN DOWN. Both "AI turns already running" refusals take
+    // their wait from one exported constant, and this one is the included-AI
+    // ceiling. A literal here is a second copy of that number in a file whose
+    // SUBJECT is the cap rather than the wait, which is why it was the one copy
+    // missed when the wait moved from 1 to 5 — the guard over the number reads
+    // the route and the documents, and could not see a third copy in a test.
+    expect(body.retry_after_seconds).toBe(AI_TURNS_RUNNING_RETRY_AFTER_SECONDS);
     expect(body.detail).toContain('(limit 1)');
   });
 

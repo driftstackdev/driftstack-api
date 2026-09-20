@@ -20,11 +20,33 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
-/** The detail of the FeatureUnavailableError the message route throws itself. */
+/**
+ * The detail of the FeatureUnavailableError the message route throws itself.
+ *
+ * ⛔ COMMENTS STRIPPED FIRST. A comment beside the throw that quotes the old
+ * wording — and one does, because the correction is worth explaining where it
+ * happened — would otherwise satisfy a pin on words the route no longer SENDS.
+ * The slice then starts at the branch and is generous enough to reach past the
+ * sentence, which is several lines long.
+ */
 function route503Detail(): string {
-  const route = read(resolve(REPO_ROOT, 'apps/server/src/routes/agent-sessions.ts'));
+  const route = codeOnly(read(resolve(REPO_ROOT, 'apps/server/src/routes/agent-sessions.ts')));
   const at = route.indexOf('if (agentTurnReceipts === undefined) {');
-  return at === -1 ? '' : route.slice(at, at + 300);
+  return at === -1 ? '' : route.slice(at, at + 600);
+}
+
+/**
+ * Every action that really asks the running turn to stop, DERIVED from the
+ * route's own call sites rather than listed here — so an action that stops
+ * cancelling, or a new one that starts, moves this set and the page must follow.
+ * Comments stripped: one of them names all four in prose.
+ */
+function actionsThatCancelTheTurn(): string[] {
+  const route = codeOnly(read(resolve(REPO_ROOT, 'apps/server/src/routes/agent-sessions.ts')));
+  return [...route.matchAll(/cancelRunningTurn\(\{[\s\S]{0,200}?action: '([a-z-]+)'/g)]
+    .map((m) => m[1] ?? '')
+    .filter((a, i, all) => a.length > 0 && all.indexOf(a) === i)
+    .sort();
 }
 
 describe('docs/pages/api/agent-sessions content parity', () => {
@@ -148,6 +170,46 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(body).toMatch(/may be absent entirely on older deployments/);
   });
 
+  it('names exactly the actions that really cut the in-flight AI call short, and says a pause is not one of them', () => {
+    // ⛔ THE PAGE SAYS "a takeover, handback, mode change, pause, or close
+    // cancels the turn", and now also says what cancelling COSTS THE CALL. Four
+    // of those five ask the runtime to stop: the fifth, a pause, does not —
+    // nothing further is started, but the call already in flight runs to the
+    // end. Written as one word, "cancelling", the second claim silently covers
+    // the pause as well and is false for it.
+    const cancels = actionsThatCancelTheTurn();
+    // A derivation that finds nothing would let anything through.
+    expect(cancels, 'no route call site asks the turn to stop').toEqual([
+      'close',
+      'handback',
+      'mode-change',
+      'takeover',
+    ]);
+    // The sentence about the in-flight call names each one, and pause is absent
+    // from it.
+    const claim =
+      /([^.]*?) stops the AI call the turn has in\s*flight[^.]*\./.exec(body)?.[1] ?? '';
+    expect(claim, 'the page no longer says what cancelling does to the call in flight').not.toBe(
+      '',
+    );
+    for (const action of cancels) {
+      expect(claim.toLowerCase(), `the in-flight claim does not name ${action}`).toContain(
+        action.replace('-', ' '),
+      );
+    }
+    expect(
+      claim.toLowerCase(),
+      'the in-flight claim covers a pause, which does not stop it',
+    ).not.toContain('pause');
+    // …and the exception is stated rather than left for a reader to discover.
+    expect(body, 'the page does not say a pause leaves the call running').toMatch(
+      /A pause is the one that does not/,
+    );
+    // The route really has no pause call site to derive from: a pause is not a
+    // customer route at all, which is why this one is prose and not behaviour.
+    expect(cancels, 'a pause now cancels — say so on the page instead').not.toContain('pause');
+  });
+
   it('documents the current HTTP 503 boundary and supported live-control channels without internal ownership or roadmap prose', () => {
     expect(body).toMatch(
       /\*\*HTTP manual input is unavailable\.\*\* Manual-mode and\s*pair-mode-after-takeover input-events return `503 feature-unavailable`;\s*the HTTP route does not accept them\./,
@@ -163,8 +225,39 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(route503Detail(), 'the message route no longer names its idempotency 503').toMatch(
       /could not safely record this request/,
     );
+    // ⛔ AND THE SENTENCE THE PROGRAM ACTUALLY RECEIVES SAYS THE SAME THING THE
+    // PAGES DO. The pages were corrected to "the same key will fail the same
+    // way"; the route's own detail still read "Do not retry it without the same
+    // Idempotency-Key" — an instruction to loop forever, and the only one of
+    // these sentences an unattended program ever sees. The two must not
+    // disagree: whichever a reader believes, they must end up doing the same
+    // thing.
+    expect(
+      route503Detail(),
+      'the 503 a program receives tells it to keep sending the same key',
+    ).not.toMatch(/Do not retry it without the same Idempotency-Key/);
+    expect(route503Detail(), 'the 503 no longer says the same key keeps failing').toMatch(
+      /sending the same key again fails the same way/,
+    );
+    expect(route503Detail(), 'the 503 no longer names the way out').toMatch(
+      /the same message without the header runs the turn/,
+    );
+    // The reference quotes that sentence verbatim, so a change here that does
+    // not reach the page leaves a quotation of something the API never says.
+    expect(
+      read(resolve(REPO_ROOT, 'apps/docs/src/pages/reference/idempotency.md')).replace(/\s+/g, ' '),
+      'reference/idempotency.md quotes a 503 sentence the route no longer sends',
+    ).toContain('sending the same key again fails the same way');
+    // The 503 a message gets from an unrecordable key is a DEPLOYMENT STATE, not
+    // a bad moment: the page must not send a customer into a retry loop that
+    // cannot end, and must name the way out (send it without the header).
     expect(body).toMatch(
-      /on a message, an `Idempotency-Key` was sent but could not be recorded, so the turn did not run/,
+      /on a message, an `Idempotency-Key` was sent but this deployment cannot record one, so the turn did not run/,
+    );
+    expect(body).toMatch(/the same key will fail the same way/);
+    expect(body).toMatch(/the same request without the header runs the turn/);
+    expect(body).not.toMatch(
+      /could not be recorded, so the turn did not run \(retry later with the same key\)/,
     );
     expect(body).not.toMatch(/no BYOK or bundled-LLM provider is available in the deployment/);
     expect(body).not.toMatch(/control plane\s*is not wired|activation gate is off|key path wired/);

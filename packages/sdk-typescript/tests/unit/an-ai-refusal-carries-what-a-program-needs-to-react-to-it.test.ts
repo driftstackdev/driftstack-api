@@ -174,7 +174,7 @@ describe('an AI refusal carries what a program needs to react to it', () => {
         status: 429,
         detail:
           'Your account already has 3 AI turns running on Driftstack’s included AI (limit 3). Wait for one to finish, then try again.',
-        retry_after_seconds: 1,
+        retry_after_seconds: 5,
       }),
     );
     const err = await sessions
@@ -182,7 +182,7 @@ describe('an AI refusal carries what a program needs to react to it', () => {
       .catch((e: unknown) => e);
     expect(err).toBeInstanceOf(RateLimitError);
     expect(err).not.toBeInstanceOf(ConcurrencyLimitError);
-    expect((err as RateLimitError).retryAfterSeconds).toBe(1);
+    expect((err as RateLimitError).retryAfterSeconds).toBe(5);
     expect(isRetryable(err)).toBe(true);
     // "Retryable" is advice to the caller's loop. The SDK never resends a turn.
     expect(requests()).toBe(1);

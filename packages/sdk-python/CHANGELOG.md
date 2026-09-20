@@ -8,6 +8,14 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **A turn that hands back says why in one word** — a `plan-executed` result
+  now carries `notice_reason` beside `notice`: `"step_limit"`, `"time_limit"`,
+  `"budget_low"`, `"no_progress"`, `"repeated_step"`, `"ai_unavailable"`,
+  `"question"` or `"declined"`, exported as the OPEN union
+  `AgentNoticeReason` (`Literal[...] | str`), so a turn that ends a way this
+  SDK has never heard of still type-checks: match the values you know and show
+  `notice` for the rest. The streamed `notice` event carries the same pair.
+  Nothing is removed — `notice` is the sentence it always was.
 - **Fetch a screenshot** — sync and async
   `agent_sessions.get_capture(id, capture_id)` return the image behind a
   `capture` step's `captureId` as `{"content_type", "bytes"}` (`image/png` or
@@ -53,9 +61,9 @@ timeout_s=...)` iterates a session's conversation (an iterator on the sync
 ### Changed
 
 - **Too many AI turns on the included AI is a `RateLimitError` now** — the API
-  answers this refusal as `rate-limited` with `retry_after_seconds: 1` instead
+  answers this refusal as `rate-limited` with `retry_after_seconds: 5` instead
   of `concurrency-limit`, so `message()` raises `RateLimitError`
-  (`is_retryable` true, `retry_after_seconds` 1) where it raised
+  (`is_retryable` true, `retry_after_seconds` 5) where it raised
   `ConcurrencyLimitError`. No SDK change is needed to read it, and
   `ConcurrencyLimitError` still means what it always meant on `create()`: your
   plan's concurrent-session limit. `intents` on a `plan-executed` result now

@@ -485,7 +485,14 @@ export class MfaStepUpRequiredError extends DriftstackError {
 }
 
 /** Endpoint requires infrastructure not configured in this deployment
- *  (e.g. avatar uploads when R2 isn't wired). HTTP 503. */
+ *  (e.g. avatar uploads when R2 isn't wired). HTTP 503.
+ *
+ *  ⛔ A DEPLOYMENT STATE, NOT A BAD MOMENT — which is why `isRetryable` is false
+ *  for the class. On `agentSessions.message()` sent with an idempotency key it
+ *  means this deployment cannot record keys at all: the same key fails the same
+ *  way indefinitely, and the same message without the key runs the turn (you
+ *  give up its replay protection). {@link FeatureUnavailableError.stopUnconfirmed}
+ *  is the one 503 of this class that IS worth calling again. */
 export class FeatureUnavailableError extends DriftstackError {
   /**
    * True only on the 503 `agentSessions.stop()` gets when the stop could not be

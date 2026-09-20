@@ -25,6 +25,9 @@ import type {
   DecomposeResult,
 } from '../../src/services/agent-decomposer.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+// The wait this refusal hands out is the route's own constant, never a number
+// written here — see the-wait-after-an-ai-turn-limit-is-one-number.test.ts.
+import { AI_TURNS_RUNNING_RETRY_AFTER_SECONDS } from '../../src/routes/agent-sessions.js';
 
 const OWN_KEY = 'sk-ant-api03-idempotent-aaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const TASK = 'open https://example.com and capture';
@@ -190,7 +193,7 @@ describe('a refusal that did no work leaves the Idempotency-Key free', () => {
       const refused = await send(id, 'key-account-turn-limit');
       expect(refused.statusCode).toBe(429);
       expect(refused.json<Problem>().type).toBe(PROBLEM_TYPES.RateLimited);
-      expect(refused.headers['retry-after']).toBe('1');
+      expect(refused.headers['retry-after']).toBe(String(AI_TURNS_RUNNING_RETRY_AFTER_SECONDS));
 
       planner.release();
       for (const turn of running) expect((await turn).statusCode).toBe(200);

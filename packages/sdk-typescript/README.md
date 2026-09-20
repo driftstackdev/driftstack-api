@@ -267,6 +267,12 @@ try {
 `answer`, `notice`; ignore names you do not recognise). When you asked for
 information and none could be produced, `resp.answer_unavailable` says why.
 
+When a turn ends before the task is finished, `resp.notice` is the sentence to
+show a person and `resp.notice_reason` is the one word to branch on:
+`step_limit`, `time_limit`, `budget_low`, `no_progress`, `repeated_step`,
+`ai_unavailable`, `question` or `declined` — or, from a newer server, a value
+this SDK has never heard of, so show `notice` for anything you do not know.
+
 A `capture` step's result carries a `captureId`; fetch the image as soon as the
 turn ends, because screenshots are kept only briefly:
 

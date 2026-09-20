@@ -47,6 +47,7 @@ import type {
   DecomposeResult,
 } from '../../src/services/agent-decomposer.js';
 import { AgentRuntime } from '../../src/services/agent-runtime.js';
+import { AI_TURNS_RUNNING_RETRY_AFTER_SECONDS } from '../../src/routes/agent-sessions.js';
 import {
   buildTestApp,
   type TestAppFixture,
@@ -127,7 +128,7 @@ describe('an AI answer that changed type is one the SDK already reads correctly'
     expect(err).not.toBeInstanceOf(ConcurrencyLimitError);
     expect(err.status).toBe(429);
     expect(isRetryable(err)).toBe(true);
-    expect((err as RateLimitError).retryAfterSeconds).toBe(1);
+    expect((err as RateLimitError).retryAfterSeconds).toBe(AI_TURNS_RUNNING_RETRY_AFTER_SECONDS);
     // Retryable is advice to the PROGRAM. The SDK itself never sends a message
     // twice, so a stored refusal is never replayed at it in a loop of our making.
     expect(messagesSent()).toBe(1);

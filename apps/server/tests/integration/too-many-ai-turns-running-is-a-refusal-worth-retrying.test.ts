@@ -23,6 +23,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+// Derived, never written down: the wait a program is told to take is the route's
+// own constant. What that constant may BE is the docs' business — see
+// the-wait-after-an-ai-turn-limit-is-one-number.test.ts.
+import { AI_TURNS_RUNNING_RETRY_AFTER_SECONDS } from '../../src/routes/agent-sessions.js';
 
 interface Problem {
   type: string;
@@ -75,8 +79,8 @@ describe('"too many AI turns running" is a refusal worth retrying, and says so',
     const body = res.json<Problem>();
     expect(body.type).toBe(PROBLEM_TYPES.RateLimited);
     expect(body.type).not.toBe(PROBLEM_TYPES.ConcurrencyLimit);
-    expect(body.retry_after_seconds).toBe(1);
-    expect(res.headers['retry-after']).toBe('1');
+    expect(body.retry_after_seconds).toBe(AI_TURNS_RUNNING_RETRY_AFTER_SECONDS);
+    expect(res.headers['retry-after']).toBe(String(AI_TURNS_RUNNING_RETRY_AFTER_SECONDS));
   });
 
   it('the copy is about AI turns: it gives the number running and the limit, and never talks about sessions or a plan', async () => {
@@ -101,7 +105,7 @@ describe('"too many AI turns running" is a refusal worth retrying, and says so',
     const terminal = JSON.parse(frame ?? '{}') as { status: number; body: Problem };
     expect(terminal.status).toBe(429);
     expect(terminal.body.type).toBe(PROBLEM_TYPES.RateLimited);
-    expect(terminal.body.retry_after_seconds).toBe(1);
+    expect(terminal.body.retry_after_seconds).toBe(AI_TURNS_RUNNING_RETRY_AFTER_SECONDS);
   });
 
   it('it clears by itself: once a running turn finishes, the same message is accepted, and the refused turn took no slot', async () => {

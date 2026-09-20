@@ -91,4 +91,32 @@ describe('W343.A /docs/error-codes ↔ PROBLEM_TYPES parity', () => {
     expect(body).toContain('/docs/rate-limits');
     expect(body).toContain('https://docs.driftstack.io/guides/concurrency/');
   });
+
+  it('the two AI rows describe the API as it now answers: a key that was REFUSED, and the AI-turn 429', () => {
+    // A developer reaches this page from the `type` URI in an error body, so a
+    // row that describes an older answer is worse than no row. The AI-key 502
+    // is two answers (no key at all, and a key Anthropic refused), and the 429
+    // covers the AI-turn limit as well as the request rate.
+    const row = (slug: string): string =>
+      body.split('\n').find((line) => line.includes(`uri: '${slug}'`)) ?? '';
+
+    const key = row('byok-anthropic-required');
+    expect(key, 'the AI-key row').not.toBe('');
+    expect(key).toMatch(/key_rejected/);
+    expect(key).toMatch(/key_source/);
+    expect(key).toMatch(/key_rejected_reason/);
+    // Opting in to the included AI is impossible on an own-key-only plan, so
+    // the row may not offer it as if it always worked.
+    expect(key).toMatch(/cannot opt in/);
+    expect(key).not.toMatch(/has no usable Anthropic credential/);
+
+    const limited = row('rate-limited');
+    expect(limited, 'the rate-limit row').not.toBe('');
+    expect(limited).toMatch(/AI turns running at once/);
+    expect(limited).toMatch(/retry_after_seconds/);
+    expect(limited).toMatch(/Idempotency-Key/);
+    // Honest about which calls the SDKs retry: not the AI message, and not the
+    // transcript stream.
+    expect(limited).toMatch(/yours to retry/);
+  });
 });

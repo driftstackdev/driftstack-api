@@ -268,6 +268,50 @@ describe('a new field on an AI answer reaches every SDK, or none', () => {
     ).toEqual([]);
   });
 
+  it('every value the published `notice_reason` can carry is named by all three SDKs, and all three say the list is open', () => {
+    // A value a program never hears about is a branch it never writes. The set
+    // is read from the PUBLISHED document — not from the runtime — so this arm
+    // fails when the server starts sending a value the SDKs have not been told
+    // about, which is the direction the compatibility rule cares about.
+    const schemas = SPEC.components.schemas;
+    const top = schemas['AgentMessageResponse'];
+    const arm = (top?.oneOf ?? top?.anyOf ?? [])
+      .map((v) => (v.$ref !== undefined ? schemas[v.$ref.split('/').pop() ?? ''] : v))
+      .find(
+        (v) =>
+          (v?.properties?.['kind']?.enum?.[0] ?? v?.properties?.['kind']?.const) ===
+          'plan-executed',
+      );
+    const published = arm?.properties?.['notice_reason'] as
+      | { anyOf?: Array<{ enum?: string[]; type?: string }> }
+      | undefined;
+    expect(published, 'notice_reason on the published plan-executed result').toBeDefined();
+    const values = published?.anyOf?.flatMap((v) => v.enum ?? []) ?? [];
+    // Vacuity: a field read as having no values would report no gaps at all.
+    expect(values.length, 'published notice_reason values').toBeGreaterThan(6);
+    // Published OPEN: the enum arm names the values, and a bare string arm
+    // accepts the ones that do not exist yet.
+    expect(
+      published?.anyOf?.some((v) => v.type === 'string' && v.enum === undefined),
+      'the published notice_reason accepts a value newer than the document',
+    ).toBe(true);
+
+    const resources: [string, string, string] = [TS_RESOURCE, PY_RESOURCE, GO_RESOURCE];
+    const gaps: string[] = [];
+    for (const value of values) {
+      const missing = missingFrom(resources, value);
+      if (missing.length > 0) gaps.push(`${value}: not named by ${missing.join(', ')}`);
+    }
+    expect(gaps.sort(), 'notice_reason values the server sends that an SDK never names').toEqual(
+      [],
+    );
+    // And each SDK tells its reader the set is open, so an unknown value is a
+    // default branch rather than a crash.
+    expect(TS_RESOURCE, 'TypeScript says the set is open').toMatch(/OPEN|open string/i);
+    expect(PY_RESOURCE, 'Python says the set is open').toMatch(/OPEN/);
+    expect(GO_RESOURCE, 'Go says the set is open').toMatch(/set is OPEN/);
+  });
+
   it('all three SDKs fetch a screenshot from the published capture route, reading the media type rather than assuming one', () => {
     const path = '/v1/agent-sessions/{id}/captures/{captureId}';
     expect(SPEC.paths[path], 'the capture route is published').toBeDefined();

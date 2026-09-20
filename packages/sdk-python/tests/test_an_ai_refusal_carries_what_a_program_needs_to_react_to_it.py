@@ -148,14 +148,14 @@ def test_too_many_ai_turns_running_is_a_rate_limit_error_worth_retrying_sent_onc
                 "rate-limited",
                 detail="Your account already has 3 AI turns running on Driftstack’s "
                 "included AI (limit 3). Wait for one to finish, then try again.",
-                retry_after_seconds=1,
+                retry_after_seconds=5,
             ),
         )
     )
     assert isinstance(err, RateLimitError)
     assert not isinstance(err, ConcurrencyLimitError)
     # Read from the BODY: a stream has no Retry-After header left to carry it.
-    assert err.retry_after_seconds == 1
+    assert err.retry_after_seconds == 5
     assert is_retryable(err) is True
     # "Retryable" is advice to the caller's loop. The SDK never resends a turn,
     # even with an Idempotency-Key on the request and retries enabled.

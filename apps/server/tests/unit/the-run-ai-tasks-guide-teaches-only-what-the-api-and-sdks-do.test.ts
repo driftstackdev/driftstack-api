@@ -21,8 +21,11 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { IntentResultSchema, PROBLEM_TYPES, TIER_FEATURES } from '@driftstack/api-types';
 import {
+  ALL_TURN_NOTICE_REASONS,
   TURN_LOOP_STOP_SENTENCES,
+  TURN_NOTICE_REASONS,
   type TurnLoopStopReason,
+  type TurnNoticeReason,
 } from '../../src/services/agent-runtime.js';
 import { codeOnly } from './_helpers/code-only.js';
 import { markupOnly } from './_helpers/markup-only.js';
@@ -824,6 +827,98 @@ describe('the Run AI tasks guide teaches only what the API and SDKs do', () => {
         /open text: show it, do not match on it/,
       );
     }
+  });
+
+  it('both pages give every `notice_reason` a turn can send, and tell a program what to DO about each one', () => {
+    // The point of the field: an unattended job decides without reading English.
+    // So it is not enough that the pages list the values — each value has to
+    // carry the ACTION, and the actions differ in ways that matter (three ask
+    // for "continue", one says start a new session, three say a person must
+    // look). The set is derived from the runtime, so a ninth value fails here
+    // until both pages say what to do about it.
+    const values = ALL_TURN_NOTICE_REASONS;
+    expect(values.length, 'values a turn can send as notice_reason').toBeGreaterThan(6);
+    // Every loop ending maps to one of them: the two that are not loop endings
+    // are the hand-backs (a question, and a refusal to carry on).
+    const mapped = new Set<string>(Object.values(TURN_NOTICE_REASONS));
+    expect(
+      values.filter((v) => !mapped.has(v)).sort(),
+      'values that are not a loop ending',
+    ).toEqual(['declined', 'question']);
+
+    /** What each value's row must tell a program to do. */
+    const ACTION: Record<TurnNoticeReason, RegExp> = {
+      step_limit: /send "continue"/i,
+      time_limit: /send "continue"/i,
+      ai_unavailable: /send "continue"/i,
+      repeated_step: /check the page/i,
+      budget_low: /start a new session/i,
+      no_progress: /ask a person/i,
+      question: /answer it/i,
+      declined: /ask a person/i,
+    };
+
+    for (const [label, page] of [
+      ['the guide', guide],
+      ['the reference', read(REFERENCE_PATH)],
+    ] as const) {
+      // Vacuity: the field itself has to be on the page at all.
+      expect(page, `${label} names the field`).toContain('`notice_reason`');
+      for (const value of values) {
+        // The row for this value, on one line — a markdown table row.
+        const row = page
+          .split('\n')
+          .find((line) => line.includes(`| \`${value}\``) || line.includes(`\`${value}\` |`));
+        expect(row, `${label} has a row for ${value}`).toBeDefined();
+        expect(row ?? '', `${label} says what to do about ${value}`).toMatch(ACTION[value]);
+      }
+      // And the OPEN rule, which is the whole compatibility story: a value this
+      // reader has never seen must not be treated as an error.
+      expect(page, `${label} says the list is open`).toMatch(
+        /list is \*\*open\*\*|The list is \*\*open\*\*/,
+      );
+      expect(page, `${label} says what to do with a value you do not recognise`).toMatch(
+        /value you do not recognise/i,
+      );
+    }
+  });
+
+  it('the guide says closing a session stops the turn it is running, because the close route really asks for the stop', () => {
+    // Derived from the route, not from the sentence: the DELETE handler asks the
+    // runtime to stop the turn and waits for it to wind down before closing, so
+    // the message answers `stopped`. If that call goes away, the guide's claim
+    // is a promise the product no longer keeps.
+    const route = codeOnly(read('apps/server/src/routes/agent-sessions.ts'));
+    const closeCancel =
+      /cancelRunningTurn\(\{\s*runtime,\s*agentSessionId: req\.params\.id,\s*action: 'close',\s*waitForWindDown: true,/;
+    expect(route, 'the close route asks the running turn to stop, and waits for it').toMatch(
+      closeCancel,
+    );
+    expect(guide, 'the guide tells the reader that closing stops a running turn').toMatch(
+      /it stops a turn that is still running/,
+    );
+    expect(guide, 'the guide says which result that message then answers').toMatch(
+      /the same `stopped` result/,
+    );
+  });
+
+  it('the guide does not send a reader into a retry loop that cannot end for an unrecordable key', () => {
+    // The 503 fires when the deployment has NO receipt store, which does not
+    // change while you wait — so "try again later with the same key" was advice
+    // that loops forever. Derived: the route throws it from the branch that
+    // finds no receipts repository at all, not from a failed write.
+    const route = codeOnly(read('apps/server/src/routes/agent-sessions.ts'));
+    expect(
+      route,
+      'the unrecordable-key 503 is thrown because the deployment has no receipt store',
+    ).toMatch(/agentTurnReceipts === undefined\)\s*\{\s*throw new FeatureUnavailableError\(/);
+    const row = guide
+      .split('\n')
+      .find((line) => line.includes('`feature-unavailable`') && line.includes('Idempotency-Key'));
+    expect(row, 'the guide’s 503 row').toBeDefined();
+    expect(row ?? '', 'the guide no longer calls it transient').not.toMatch(/try again later/i);
+    expect(row ?? '', 'the guide says the same key will keep failing').toMatch(/Not transient/i);
+    expect(row ?? '', 'the guide names the way out').toMatch(/without\*?\*? the header/i);
   });
 
   it('the refusals the guide says are safe to send again with the same key are exactly the ones the server gives the key back for', () => {

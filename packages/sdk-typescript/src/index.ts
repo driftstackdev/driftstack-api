@@ -56,6 +56,7 @@ export type {
   ConsequentialActionCategory,
   AgentUsage,
   AgentMessageResponse,
+  AgentNoticeReason,
   AgentSessionEgressResult,
   AgentStepEvent,
   AgentCapture,

@@ -202,7 +202,13 @@ export type AgentTurnProgressEvent =
   | { kind: 'answer'; answer: string }
   /** B1 — the turn stopped short of finished, or the planner asked something
    *  part-way through. See `notice` on the plan-executed turn result. */
-  | { kind: 'notice'; notice: string };
+  | {
+      kind: 'notice';
+      notice: string;
+      /** B1 — the one-word reason beside the sentence, when the ending has one.
+       *  Absent on a turn stopped by the customer: they know why it stopped. */
+      reason?: TurnNoticeReason;
+    };
 
 /** Publish a progress event without ever letting a broken sink break the turn. */
 function emitProgress(sink: RunTurnArgs['onProgress'], event: AgentTurnProgressEvent): void {
@@ -366,6 +372,12 @@ export type RunTurnResult =
        * step — a ✗ row is its own explanation.
        */
       notice?: string;
+      /**
+       * B1 — {@link notice}'s reason, in one word a program can branch on. Set
+       * whenever `notice` is, and never without it: they are the same ending
+       * said twice, once for a person and once for a program.
+       */
+      noticeReason?: TurnNoticeReason;
       /** B1 — how the loop ran, for callers that classify turns rather than
        *  render them. `stopped` is the bound that ended it, when one did. */
       loop?: {
@@ -661,6 +673,21 @@ const TURN_STOP_CLAIM_DEADLINE_MS = 500;
  *  treated as one that could not be asked, never as "nothing is running". */
 export const TURN_STOP_REQUEST_DEADLINE_MS = 1_500;
 
+/** The most a CLOSE waits for the turn it has just stopped to wind down before
+ *  it closes the session anyway (see {@link AgentRuntime.awaitTurnSettled}).
+ *
+ *  Close is the one caller that waits at all, and this is why: the turn's ending
+ *  is published under the session's authority, so a close that lands first turns
+ *  the customer's own "stop this and end the chat" into a 409 about a closed
+ *  session, with the steps that ran reported nowhere. Waiting for the wind-down
+ *  gets them the `stopped` result the stop route would have given.
+ *
+ *  It is a CEILING, not a delay: the wait ends the moment the turn ends, which
+ *  for an aborted provider call is immediate. A turn that ignores its signal
+ *  costs the close this much and no more — closing must never fail, or hang, on
+ *  a turn that will not stop. */
+export const TURN_SETTLE_DEADLINE_MS = 2_000;
+
 /** B2 — what {@link AgentRuntime.requestTurnStop} found. */
 export type TurnStopRequestOutcome = 'stop_requested' | 'no_turn_running';
 
@@ -944,6 +971,85 @@ export const TURN_LOOP_STOP_SENTENCES: Readonly<Record<TurnLoopStopReason, strin
   planner_unavailable:
     'I did the steps above, but could not work out the next ones just now, so the task is not finished. Send “continue” to try again.',
 };
+
+/**
+ * B1 — the same six endings, plus the two hand-backs, in ONE WORD a program can
+ * branch on: the public `notice_reason` beside the `notice` sentence.
+ *
+ * The sentence is for a person. It is prose, it is the only thing that says what
+ * the turn actually needs, and it is deliberately not a code — which left an
+ * unattended program with nothing to test but substrings of English. So each
+ * ending also gets a value that says WHAT HAPPENED, and the documentation says
+ * what a program should do about each one (carry on, start a new session, put it
+ * in front of a person, answer the question).
+ *
+ * ⛔ CUSTOMER-FACING NAMES, NOT THESE ONES. The keys of this map are how the
+ * turn loop talks about itself — a planner, its call limit, a wall clock. The
+ * values are what the customer's program sees, and none of them names a model, a
+ * call, a planner or a clock.
+ *
+ * ⛔ OPEN, NOT CLOSED. It is published as "one of these values, or any other
+ * string": a turn that learns a seventh way to end must be able to say so to a
+ * program written against six, and every SDK types it as an open string for
+ * exactly that reason. A program matches the values it knows and treats the rest
+ * the way it treats an ending it has never seen — show the sentence.
+ */
+export type TurnNoticeReason =
+  /** The task needs more steps than one message runs. Send "continue". */
+  | 'step_limit'
+  /** The message was taking too long. Send "continue". */
+  | 'time_limit'
+  /** Too little of the session's AI budget left. Start a new session. */
+  | 'budget_low'
+  /** The page stopped changing and the next step would repeat. Ask a person. */
+  | 'no_progress'
+  /** The next step would have repeated an action that already ran. Check, then continue. */
+  | 'repeated_step'
+  /** The AI could not work out the next steps just now. Send "continue" to try again. */
+  | 'ai_unavailable'
+  /** The AI asked you something part-way. Answer it as the next message. */
+  | 'question'
+  /** The AI declined to carry on part-way. A person should decide what to do. */
+  | 'declined';
+
+/**
+ * Every loop ending's public reason. Keyed by {@link TurnLoopStopReason}, so a
+ * seventh ending is a compile error here — and the guard over the documents
+ * fails until the guide and the reference say what to do about it.
+ */
+export const TURN_NOTICE_REASONS: Readonly<Record<TurnLoopStopReason, TurnNoticeReason>> = {
+  planner_call_limit: 'step_limit',
+  wall_clock: 'time_limit',
+  budget_floor: 'budget_low',
+  no_progress: 'no_progress',
+  repeat_refused: 'repeated_step',
+  planner_unavailable: 'ai_unavailable',
+};
+
+/**
+ * Every value a turn can send, as DATA — so the guards over the published spec,
+ * the three SDKs and the two documentation pages can ask "is each of these
+ * accounted for?" instead of keeping their own copy of the list.
+ *
+ * Keyed by the type, so a ninth value cannot be added without appearing here,
+ * and every guard that reads this fails until it is documented everywhere.
+ * Two of them are not loop endings: a turn hands back part-way to ask a
+ * `question` or because it `declined` to carry on.
+ */
+const EVERY_TURN_NOTICE_REASON: Readonly<Record<TurnNoticeReason, true>> = {
+  step_limit: true,
+  time_limit: true,
+  budget_low: true,
+  no_progress: true,
+  repeated_step: true,
+  ai_unavailable: true,
+  question: true,
+  declined: true,
+};
+
+export const ALL_TURN_NOTICE_REASONS: readonly TurnNoticeReason[] = Object.keys(
+  EVERY_TURN_NOTICE_REASON,
+) as TurnNoticeReason[];
 
 /**
  * What a turn whose planning call failed for a passing reason tells the
@@ -1615,6 +1721,10 @@ export class AgentRuntime {
   // ends `turn-in-progress` whatever its window says.
   private readonly openStopWindows = new Map<string, Set<AbortController>>();
   private readonly stopWindowControllers = new WeakMap<AgentTurnStopWindow, AbortController>();
+  // Callers waiting for a session's turn to finish winding down here — see
+  // `awaitTurnSettled`. Woken from the two places a turn stops being reachable:
+  // the `finally` that frees the slot, and a request's stop window closing.
+  private readonly turnSettledWaiters = new Map<string, Set<() => void>>();
 
   constructor(private readonly deps: AgentRuntimeDeps) {
     const limit = deps.maxConcurrentTurnsPerAccount ?? 3;
@@ -1675,6 +1785,75 @@ export class AgentRuntime {
   }
 
   /**
+   * Whether a turn of `agentSessionId` is still reachable ON THIS PROCESS: one
+   * registered by `runTurn`, or a request admitted for it whose turn has not
+   * registered yet. Both are what {@link requestTurnStop} aborts, so both are
+   * what a caller waiting for the stop to take effect must wait for.
+   */
+  private turnIsRunningHere(agentSessionId: string): boolean {
+    if (this.runningTurns.has(agentSessionId)) return true;
+    const pending = this.openStopWindows.get(agentSessionId);
+    return pending !== undefined && pending.size > 0;
+  }
+
+  /** Wake anything waiting on this session, once nothing is running for it. */
+  private notifyTurnSettled(agentSessionId: string): void {
+    if (this.turnIsRunningHere(agentSessionId)) return;
+    const waiters = this.turnSettledWaiters.get(agentSessionId);
+    if (waiters === undefined) return;
+    this.turnSettledWaiters.delete(agentSessionId);
+    for (const wake of waiters) wake();
+  }
+
+  /**
+   * Wait for the turn of `agentSessionId` to finish winding down on THIS
+   * process, bounded by `deadlineMs`. Resolves `true` when it has, `false` when
+   * the deadline came first. Never throws and never rejects: every caller is
+   * doing something else the customer asked for and must not fail on this.
+   *
+   * ⛔ ASK FOR THE STOP FIRST. This waits; it does not stop anything. On its own
+   * it would wait out a healthy turn to its natural end.
+   *
+   * "Wound down" means the request is answered, not merely that the provider
+   * call returned: the stop window stays open until the route has its terminal
+   * body, so a caller that waits for this can rely on the turn's own ending
+   * having been published while the session was still the way it found it.
+   */
+  async awaitTurnSettled(
+    agentSessionId: string,
+    deadlineMs: number = TURN_SETTLE_DEADLINE_MS,
+  ): Promise<boolean> {
+    if (!this.turnIsRunningHere(agentSessionId)) return true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let wake: (() => void) | undefined;
+    try {
+      return await new Promise<boolean>((resolve) => {
+        wake = (): void => {
+          resolve(true);
+        };
+        let waiters = this.turnSettledWaiters.get(agentSessionId);
+        if (waiters === undefined) {
+          waiters = new Set();
+          this.turnSettledWaiters.set(agentSessionId, waiters);
+        }
+        waiters.add(wake);
+        timer = setTimeout(() => {
+          resolve(false);
+        }, deadlineMs);
+      });
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      if (wake !== undefined) {
+        const waiters = this.turnSettledWaiters.get(agentSessionId);
+        waiters?.delete(wake);
+        if (waiters !== undefined && waiters.size === 0) {
+          this.turnSettledWaiters.delete(agentSessionId);
+        }
+      }
+    }
+  }
+
+  /**
    * B2 — open the stop window for a request the route has just admitted for
    * `agentSessionId` (see {@link AgentTurnStopWindow}). Synchronous, so there is
    * no await between admission and the window. Pass it to `runTurn` as
@@ -1699,6 +1878,7 @@ export class AgentRuntime {
         if (current === undefined) return;
         current.delete(controller);
         if (current.size === 0) this.openStopWindows.delete(agentSessionId);
+        this.notifyTurnSettled(agentSessionId);
       },
     };
     this.stopWindowControllers.set(window, controller);
@@ -2228,6 +2408,8 @@ export class AgentRuntime {
         if (remaining <= 0) this.activeTurnAccountCounts.delete(session.accountId);
         else this.activeTurnAccountCounts.set(session.accountId, remaining);
       }
+      // Wake a close that is holding the session open for this turn's ending.
+      this.notifyTurnSettled(args.agentSessionId);
     }
   }
 
@@ -3452,6 +3634,18 @@ export class AgentRuntime {
         : loopStopped !== undefined
           ? TURN_LOOP_STOP_SENTENCES[loopStopped]
           : undefined;
+    // The same ending in one word — see TurnNoticeReason. Computed from the same
+    // two variables as the sentence, so the pair cannot disagree about which
+    // ending this was, and a question is told from a refusal (they ask the
+    // customer for different things).
+    const turnNoticeReason: TurnNoticeReason | undefined =
+      plannerHandedBack !== undefined
+        ? plannerHandedBackKind === 'refuse'
+          ? 'declined'
+          : 'question'
+        : loopStopped !== undefined
+          ? TURN_NOTICE_REASONS[loopStopped]
+          : undefined;
     const closingLine =
       plannerHandedBack !== undefined
         ? `(stopped part-way to ask the customer: ${sanitizeTranscriptText(plannerHandedBack)})`
@@ -3886,7 +4080,11 @@ export class AgentRuntime {
     // Same position and same reason as the answer: past the finalize check, so a
     // successor controller's chat never receives this turn's words.
     if (turnNotice !== undefined) {
-      emitProgress(args.onProgress, { kind: 'notice', notice: turnNotice });
+      emitProgress(args.onProgress, {
+        kind: 'notice',
+        notice: turnNotice,
+        ...(turnNoticeReason !== undefined ? { reason: turnNoticeReason } : {}),
+      });
     }
     return {
       kind: 'plan-executed',
@@ -3897,6 +4095,7 @@ export class AgentRuntime {
       ...(publishedAnswer !== undefined ? { answer: publishedAnswer } : {}),
       ...(readbackUnavailable !== undefined ? { readbackUnavailable } : {}),
       ...(turnNotice !== undefined ? { notice: turnNotice } : {}),
+      ...(turnNoticeReason !== undefined ? { noticeReason: turnNoticeReason } : {}),
       // Only a turn whose planner spoke the loop, or that went round at all,
       // reports it: a legacy single-plan turn returns exactly what it always did.
       ...(plannerSpeaksLoop || segment > 1

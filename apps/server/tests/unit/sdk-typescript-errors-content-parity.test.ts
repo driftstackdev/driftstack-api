@@ -207,8 +207,15 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
       /\/\*\* V-353e — operation requires fresh MFA proof \(15-minute step-up window\)\.\s*\*\s*Customer should call `client\.auth\.mfaStepUp\(\{ code \}\)` and retry\. \*\//,
     );
     expect(body).toMatch(
-      /\/\*\* Endpoint requires infrastructure not configured in this deployment\s*\*\s*\(e\.g\. avatar uploads when R2 isn't wired\)\. HTTP 503\. \*\//,
+      /\/\*\* Endpoint requires infrastructure not configured in this deployment\s*\*\s*\(e\.g\. avatar uploads when R2 isn't wired\)\. HTTP 503\./,
     );
+    // …and says what that means for the one 503 a program is most likely to
+    // meet: an idempotency key this deployment cannot record. That is a
+    // deployment STATE, so "try again later" is advice that never ends, and the
+    // class doc is where a reader lands from `isRetryable` being false.
+    expect(body).toMatch(/A DEPLOYMENT STATE, NOT A BAD MOMENT/);
+    expect(body).toMatch(/the same key fails the same\s*\*?\s*way indefinitely/);
+    expect(body).toMatch(/the same message without the key runs the turn/);
   });
 
   it('CRITICAL TransportError — kind="transport" + status=0 default + type="about:blank" + title="Transport error". RFC 7807 says type="about:blank" indicates "no further metadata"; using it here tells customers this came from the SDK transport layer, NOT the server. status=0 default means "no HTTP status" — the request never reached the server.', () => {

@@ -55,6 +55,7 @@ from driftstack.errors import (
 )
 from driftstack.resources.agent_sessions import (
     AgentCapture,
+    AgentNoticeReason,
     AgentTranscriptEvent,
     LiveKitInfo,
 )
@@ -113,6 +114,7 @@ __all__ = [
     "ProxyValidationFailedError",
     "LiveKitInfo",
     "AgentCapture",
+    "AgentNoticeReason",
     "AgentTranscriptEvent",
     "ListArchetypesResponse",
     "PublicArchetype",

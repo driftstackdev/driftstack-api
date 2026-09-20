@@ -2187,6 +2187,83 @@ function storedVpnExitAsSwapIdentity(
   };
 }
 
+/**
+ * How long a program is told to wait after either "AI turns already running"
+ * refusal: the account's own running-turns limit, and the ceiling on turns
+ * running at once on Driftstack's included AI.
+ *
+ * Both are `rate-limited` with a Retry-After, because both clear BY THEMSELVES
+ * the moment a running turn finishes — nothing the customer does makes them
+ * clear sooner. The number is therefore a guess at how long that takes, and it
+ * used to be one second: a turn is tens of seconds of model calls and browser
+ * steps, so a program obeying it woke up ~30 times before there was any chance
+ * of a slot, and spent a message-rate token on each — burning the bucket that
+ * would have let it through when a slot did open, and turning a wait into a
+ * second refusal it had caused itself.
+ *
+ * Five seconds is the shortest wait that is not that. ⛔ ONE NUMBER FOR BOTH
+ * refusals: they are indistinguishable to a program (same status, same type,
+ * same reason to wait), so two values would only teach it that the wait is
+ * arbitrary. The published spec, the guide's limits table and the reference all
+ * name it — see the-wait-after-an-ai-turn-limit-is-one-number.test.ts, which
+ * reads this constant and fails if any of them drifts from it.
+ */
+export const AI_TURNS_RUNNING_RETRY_AFTER_SECONDS = 5;
+
+/**
+ * The turn a control change or a close cancels — actually cancelled.
+ *
+ * The reference has always said that a takeover, handback, mode change, pause or
+ * close cancels the running turn, and in one sense it always did: the turn's
+ * authority fence refuses to publish anything once control moved, so nothing
+ * further is started. But the model call ALREADY IN FLIGHT was left to run to
+ * the end, paid for, and thrown away — and the customer's message did not return
+ * until it did. Only POST /stop ever aborted the turn's own controller.
+ *
+ * So each of those actions now asks for the stop, exactly as the stop route
+ * does. Best-effort in every direction: the action the customer asked for is the
+ * one that must succeed, so a session with no turn running, and a shared store
+ * that cannot say whether one is, both carry on silently.
+ *
+ * `waitForWindDown` is the one difference between them, and it is CLOSE's:
+ *   · close — waits (bounded) for the turn to end before the session does, so
+ *     the customer gets the `stopped` result with the steps that ran, instead of
+ *     a 409 about a session that closed underneath their own stop.
+ *   · a control change — does NOT wait. Whoever asked for control gets it at
+ *     once, and the cancelled turn answers the 409 `ai_control_unavailable` it
+ *     has always answered, now as soon as the abort lands rather than a model
+ *     call later.
+ */
+async function cancelRunningTurn(args: {
+  runtime: AgentRuntime;
+  agentSessionId: string;
+  action: 'close' | 'takeover' | 'handback' | 'mode-change';
+  waitForWindDown: boolean;
+  logger: { warn: (obj: Record<string, unknown>, msg: string) => void };
+}): Promise<void> {
+  let outcome: Awaited<ReturnType<AgentRuntime['requestTurnStop']>>;
+  try {
+    outcome = await args.runtime.requestTurnStop(args.agentSessionId);
+  } catch (err) {
+    // Only reachable when this process does not hold the turn AND the shared
+    // store could not be asked. The stop route answers 503 here because its
+    // whole job was the stop; here the customer asked for something else, which
+    // must still happen.
+    args.logger.warn(
+      {
+        component: 'agent-session-cancel-turn',
+        sessionId: args.agentSessionId,
+        action: args.action,
+        err,
+      },
+      'could not ask the running turn to stop; the requested action carried on',
+    );
+    return;
+  }
+  if (outcome !== 'stop_requested' || !args.waitForWindDown) return;
+  await args.runtime.awaitTurnSettled(args.agentSessionId);
+}
+
 export function registerAgentSessionsRoutes(
   app: FastifyInstance,
   deps: AgentSessionsRoutesDeps,
@@ -5237,6 +5314,15 @@ export function registerAgentSessionsRoutes(
           `AgentSession ${req.params.id} is no longer active; mode was not changed.`,
         );
       }
+      // The mode really changed (the no-op return above kept its turn), so any
+      // turn admitted under the old mode is cancelled — see cancelRunningTurn.
+      await cancelRunningTurn({
+        runtime,
+        agentSessionId: req.params.id,
+        action: 'mode-change',
+        waitForWindDown: false,
+        logger: req.log,
+      });
       // Slice 6 follow-up 2026-05-20 — customer audit log entry. The
       // mode change is a meaningful state transition (especially
       // ai → manual / pair → ai for incident investigation). Best-effort:
@@ -5331,6 +5417,18 @@ export function registerAgentSessionsRoutes(
             expectedPersistedState: rec.pairModeState,
             nextState,
             takeoverClientId: parsed.data.client_id,
+          });
+          // Control is moving to the person, so the turn they are taking it
+          // from stops paying for a plan nobody will read — see
+          // cancelRunningTurn. After the commit, never before it: the turn's
+          // ending must find the authority already changed, so it answers the
+          // 409 `ai_control_unavailable` this route has always produced.
+          await cancelRunningTurn({
+            runtime,
+            agentSessionId: req.params.id,
+            action: 'takeover',
+            waitForWindDown: false,
+            logger: req.log,
           });
           // Arc 4 Wave 2.B sub-slice 8.17 (v2-#8) — Sentry breadcrumb.
           // Attaches state-machine context so any later exception in
@@ -5471,6 +5569,18 @@ export function registerAgentSessionsRoutes(
             sessionId: req.params.id,
             expectedPersistedState: rec.pairModeState,
             nextState,
+          });
+          // Symmetry with takeover, and the same reason: a turn admitted under
+          // the control this hands back is over, so its model call ends here
+          // rather than running on unread. Ordinarily the takeover that took
+          // control already cancelled it; this covers control taken any other
+          // way (the live view's own takeover, an auto-handback's sweep).
+          await cancelRunningTurn({
+            runtime,
+            agentSessionId: req.params.id,
+            action: 'handback',
+            waitForWindDown: false,
+            logger: req.log,
           });
           // Arc 4 Wave 2.B sub-slice 8.17 (v2-#8) — Sentry breadcrumb.
           sentry?.addBreadcrumb({
@@ -6015,7 +6125,7 @@ export function registerAgentSessionsRoutes(
             }
             throw refusedBeforeAnyWork(
               new RateLimitedError(
-                1,
+                AI_TURNS_RUNNING_RETRY_AFTER_SECONDS,
                 `Your account already has ${bundledTurnConcurrency.current(turnAccountId).toString()} AI turns running on Driftstack\u2019s included AI (limit ${bundledTurnConcurrency.limit.toString()}). Wait for one to finish, then try again.`,
               ),
             );
@@ -6160,7 +6270,7 @@ export function registerAgentSessionsRoutes(
       if (result.kind === 'account-turn-limit') {
         throw refusedBeforeAnyWork(
           new RateLimitedError(
-            1,
+            AI_TURNS_RUNNING_RETRY_AFTER_SECONDS,
             `Your account already has ${result.current.toString()} agent turns running (limit ${result.limit.toString()}). Wait for one to finish, then try again.`,
           ),
         );
@@ -6288,6 +6398,12 @@ export function registerAgentSessionsRoutes(
           // bound), or what the agent asked part-way through. Additive; absent on
           // every turn that simply finished or simply failed.
           ...(result.notice !== undefined ? { notice: result.notice } : {}),
+          // The same ending in one word, for a program that cannot read the
+          // sentence: `step_limit`, `time_limit`, `budget_low`, `no_progress`,
+          // `repeated_step`, `ai_unavailable`, `question`, `declined` — and, one
+          // day, something else, which is why it is published as an OPEN string.
+          // Additive, and never present without `notice`.
+          ...(result.noticeReason !== undefined ? { notice_reason: result.noticeReason } : {}),
           ...(usage !== undefined ? { usage } : {}),
         };
       }
@@ -6450,9 +6566,22 @@ export function registerAgentSessionsRoutes(
         ),
       };
     }
+    // ⛔ THIS IS A DEPLOYMENT STATE, NOT A BAD MOMENT, AND THE SENTENCE MUST SAY
+    // SO. The receipt store is absent for as long as this deployment is built
+    // this way, so the same key fails the same way every time — and the copy
+    // below used to read "Do not retry it without the same Idempotency-Key",
+    // which is an instruction to loop forever. The guide, the reference,
+    // reference/errors.md and the three SDKs were corrected to say the same key
+    // will keep failing and that the header is the thing to drop; this is the
+    // one sentence a running program actually receives, so it says it too.
+    // Pinned by docs-pages-api-agent-sessions-content-parity, and quoted
+    // verbatim by apps/docs/src/pages/reference/idempotency.md.
+    //
+    // ⚠️ Keep the `throw` on the line after the `if`: docs-idempotency-content-parity
+    // reads this branch straight out of the source.
     if (agentTurnReceipts === undefined) {
       throw new FeatureUnavailableError(
-        'We could not safely record this request. Do not retry it without the same Idempotency-Key. Contact support.',
+        'We could not safely record this request, so nothing ran. This deployment cannot record an Idempotency-Key at all, so sending the same key again fails the same way; the same message without the header runs the turn, at the cost of its replay protection.',
       );
     }
 
@@ -6842,7 +6971,13 @@ export function registerAgentSessionsRoutes(
             writeProgressFrame('answer', { answer: event.answer });
             return;
           case 'notice':
-            writeProgressFrame('notice', { notice: event.notice });
+            writeProgressFrame('notice', {
+              notice: event.notice,
+              // Same field, same values as the terminal body's `notice_reason`,
+              // so a subscriber that branches on the frame and one that branches
+              // on the body are reading the same thing.
+              ...(event.reason !== undefined ? { notice_reason: event.reason } : {}),
+            });
             return;
           default: {
             // A progress kind added to the union without a case here would be
@@ -7019,6 +7154,18 @@ export function registerAgentSessionsRoutes(
       if (pre.status === 'closed') {
         return reply.code(204).send();
       }
+      // Closing cuts the turn short, so stop paying for it: abort the model call
+      // in flight and give the turn a bounded moment to end while the session is
+      // still open, so it ends as `stopped` — the steps that ran, and the usage
+      // the aborted call consumed — rather than as a 409 about a closed session.
+      // See cancelRunningTurn: a close never fails, and never waits long, on it.
+      await cancelRunningTurn({
+        runtime,
+        agentSessionId: req.params.id,
+        action: 'close',
+        waitForWindDown: true,
+        logger: req.log,
+      });
       const closeOutcome = await sessions.closeWithReasonOutcome(req.params.id, 'customer-closed');
       // Exactly one concurrent closer owns teardown, cache eviction, counters,
       // and audit. Every loser remains an idempotent 204 without duplicating

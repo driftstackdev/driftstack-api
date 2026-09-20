@@ -58,7 +58,11 @@ export interface JobConfig {
   approveActions: boolean;
   /** Ask the agent to stop if one message runs longer than this. */
   stopAfterMs: number;
-  /** Send "continue" when the agent hands back a notice saying it is not finished. */
+  /**
+   * Carry on by itself when the agent hands back unfinished — but only for the
+   * endings whose `notice_reason` the guide says a program may answer on its
+   * own. The ones that need a person are never answered automatically.
+   */
   continueOnNotice: boolean;
   log: (line: string) => void;
 }
@@ -70,6 +74,8 @@ export interface JobReport {
   answer?: string;
   answerUnavailable?: string;
   notice?: string;
+  /** The same ending in one word, for the alerting side to branch on. */
+  noticeReason?: string;
   clarifyingQuestion?: string;
   refuseReason?: string;
   stoppedDuring?: string;
@@ -164,6 +170,40 @@ function waitBeforeRetry(err: unknown, attempt: number): number {
     return Math.max(err.retryAfterSeconds, 1) * 1_000;
   }
   return Math.min(500 * attempt, 5_000);
+}
+
+/**
+ * What the guide's `notice_reason` table says to do about an unfinished turn.
+ *
+ * ⛔ The default matters more than any of the cases. The guide says the list is
+ * OPEN — a turn may one day end a way this job has never heard of — and that an
+ * older server sends `notice` with no reason at all. Both land here, and both
+ * are handled the way the guide handles the endings it cannot answer for you:
+ * show the sentence and let a person decide.
+ */
+function whatToDoAbout(
+  noticeReason: string | undefined,
+): 'continue' | 'answer' | 'new-session' | 'ask-a-person' {
+  switch (noticeReason) {
+    // "Send continue."
+    case 'step_limit':
+    case 'time_limit':
+    case 'ai_unavailable':
+      return 'continue';
+    // "Check the page, then send continue only if it is safe." An unattended
+    // job cannot check the page, so this one is a person's call.
+    case 'repeated_step':
+      return 'ask-a-person';
+    // "Start a new session and carry on there."
+    case 'budget_low':
+      return 'new-session';
+    // "Answer it as the next message" — the same answer a `clarify` gets.
+    case 'question':
+      return 'answer';
+    // no_progress, declined, anything newer, and no reason at all.
+    default:
+      return 'ask-a-person';
+  }
 }
 
 /** The session was not active, or ended mid-message. No retry can fix it. */
@@ -344,10 +384,25 @@ export async function runInvoiceTask(config: JobConfig): Promise<JobReport> {
       }
 
       if (reply.notice !== undefined && config.continueOnNotice && continuesSent < 2) {
-        // Not finished — it stopped at a limit or asked something part-way.
-        log(`Not finished yet: ${reply.notice}`);
+        // Not finished — it stopped at a limit, or asked something part-way.
+        // `notice_reason` says which, so the job does not have to read English.
+        const next = whatToDoAbout(reply.notice_reason);
+        log(`Not finished yet (${reply.notice_reason ?? 'no reason given'}): ${reply.notice}`);
+        if (next === 'ask-a-person') {
+          // no_progress, declined, a reason this job has never heard of, and an
+          // older server that sends no reason at all: show the sentence to a
+          // person rather than replying to it.
+          log('A person should decide what to try next.');
+          break;
+        }
+        if (next === 'new-session') {
+          // budget_low: this session has too little AI budget left, so sending
+          // anything more to it only spends what is left for nothing.
+          log('This session is out of AI budget; carry on in a new one.');
+          break;
+        }
         continuesSent += 1;
-        reply = await send(id, 'continue');
+        reply = await send(id, next === 'answer' ? config.replyToQuestions : 'continue');
         collect(reply);
         continue;
       }
@@ -364,6 +419,7 @@ export async function runInvoiceTask(config: JobConfig): Promise<JobReport> {
           report.answerUnavailable = reply.answer_unavailable;
         }
         if (reply.notice !== undefined) report.notice = reply.notice;
+        if (reply.notice_reason !== undefined) report.noticeReason = reply.notice_reason;
 
         if (report.heldForApproval !== undefined) report.outcome = 'needs-a-person';
         else if (reply.notice !== undefined) report.outcome = 'not-finished';
@@ -396,7 +452,9 @@ export async function runInvoiceTask(config: JobConfig): Promise<JobReport> {
     log(`Outcome: ${report.outcome}`);
     if (report.answer !== undefined) log(`Answer: ${report.answer}`);
     if (report.answerUnavailable !== undefined) log(`No answer: ${report.answerUnavailable}`);
-    if (report.notice !== undefined) log(`Notice: ${report.notice}`);
+    if (report.notice !== undefined) {
+      log(`Notice (${report.noticeReason ?? 'no reason given'}): ${report.notice}`);
+    }
     if (report.refuseReason !== undefined) log(`Refused: ${report.refuseReason}`);
 
     // Screenshots work only while the session is open, so fetch before closing.

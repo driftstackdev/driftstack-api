@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { generateOpenApiSpec } from '../../src/lib/openapi.js';
+import { ALL_TURN_NOTICE_REASONS } from '../../src/services/agent-runtime.js';
 
 type JsonObject = Record<string, unknown>;
 
@@ -108,6 +109,46 @@ describe('agent-message OpenAPI response truth', () => {
       'model',
     ]);
     expect(array(usage.required, 'usage required')).toEqual(['decomposer_kind']);
+  });
+
+  it('publishes every reason a turn can end with, as an OPEN string beside the notice', () => {
+    // The route sends `notice_reason` from the runtime's own list. A value the
+    // runtime can send and the document does not publish is a branch no
+    // generated client can write, so the expected set is DERIVED from the
+    // runtime rather than written here.
+    const success = object(schemas.AgentMessageResponse, 'AgentMessageResponse');
+    const planExecuted = array(success.oneOf, 'AgentMessageResponse.oneOf')
+      .map((variant, index) => object(variant, `variant ${index.toString()}`))
+      .find(
+        (variant) =>
+          array(
+            object(object(variant.properties, 'properties').kind, 'kind').enum,
+            'kind enum',
+          )[0] === 'plan-executed',
+      );
+    expect(planExecuted, 'the plan-executed variant').toBeDefined();
+    const properties = object(planExecuted?.properties, 'plan-executed properties');
+    const reason = object(properties.notice_reason, 'notice_reason');
+    const arms = array(reason.anyOf, 'notice_reason.anyOf').map((a, i) =>
+      object(a, `notice_reason arm ${i.toString()}`),
+    );
+    const enumArm = arms.find((a) => Array.isArray(a.enum));
+    expect(enumArm, 'the enum arm naming the known values').toBeDefined();
+    expect(array(enumArm?.enum, 'known notice_reason values').sort()).toEqual(
+      [...ALL_TURN_NOTICE_REASONS].sort(),
+    );
+    // OPEN: a bare string arm, so a client generated today parses a turn that
+    // ends a way that does not exist yet instead of failing to decode it.
+    expect(
+      arms.some((a) => a.type === 'string' && a.enum === undefined),
+      'a string arm for values newer than this document',
+    ).toBe(true);
+    // Optional, and never required: a finished turn carries neither half.
+    expect(array(planExecuted?.required, 'plan-executed required')).not.toContain('notice_reason');
+    expect(array(planExecuted?.required, 'plan-executed required')).not.toContain('notice');
+    // The description tells a program what to do, not only what happened.
+    expect(reason.description, 'notice_reason description').toMatch(/send "continue"/);
+    expect(reason.description, 'notice_reason description').toMatch(/OPEN string/);
   });
 
   it('publishes bounded idempotency, authority, usage and settled-result evidence on 409', () => {

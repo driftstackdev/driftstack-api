@@ -23,6 +23,7 @@ import type {
 import {
   MAX_PLANNER_CALLS_PER_TURN,
   TURN_LOOP_STOP_SENTENCES,
+  TURN_NOTICE_REASONS,
 } from '../../src/services/agent-runtime.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
@@ -179,6 +180,9 @@ describe('a turn of several segments streams as ONE step list', () => {
     expect(body.ok).toBe(true);
     expect(body.results).toHaveLength(4);
     expect(body).not.toHaveProperty('notice');
+    // Neither half of the pair: a finished task has nothing to say about how it
+    // ended, so a program never sees a reason without a sentence.
+    expect(body).not.toHaveProperty('notice_reason');
   });
 
   it('⛔ a turn that STOPS AT A BOUND says so — as a `notice` frame before the terminal, and as `notice` in the body — because every step on the screen is a tick', async () => {
@@ -191,16 +195,20 @@ describe('a turn of several segments streams as ONE step list', () => {
     const frames = parseFrames((await stream(forever)).body);
     const names = frames.map((f) => f.event);
     const notice = frames.find((f) => f.event === 'notice');
+    // The sentence for a person, and beside it the one word a program branches
+    // on — the same pair the terminal body carries.
     expect(JSON.parse(notice?.data ?? '{}')).toEqual({
       notice: TURN_LOOP_STOP_SENTENCES.planner_call_limit,
+      notice_reason: TURN_NOTICE_REASONS.planner_call_limit,
     });
     expect(names.indexOf('notice')).toBeGreaterThan(names.lastIndexOf('step'));
     expect(names.at(-1)).toBe('response');
     const terminal = JSON.parse(frames.at(-1)?.data ?? '{}') as {
-      body: { ok: boolean; results: unknown[]; notice?: string };
+      body: { ok: boolean; results: unknown[]; notice?: string; notice_reason?: string };
     };
     expect(terminal.body.ok).toBe(true);
     expect(terminal.body.results).toHaveLength(MAX_PLANNER_CALLS_PER_TURN);
     expect(terminal.body.notice).toBe(TURN_LOOP_STOP_SENTENCES.planner_call_limit);
+    expect(terminal.body.notice_reason).toBe(TURN_NOTICE_REASONS.planner_call_limit);
   });
 });
