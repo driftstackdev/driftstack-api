@@ -88,6 +88,37 @@ export function intentReplayMayDuplicateEffect(intent: AgentIntent): boolean {
   return !REPLAY_SAFE_INTENT_KINDS.has(intent.kind);
 }
 
+/**
+ * Intent kinds a Stop may ABANDON THE INSTANT it arrives, with the dispatch
+ * still on the wire.
+ *
+ * ⛔ A DIFFERENT QUESTION FROM {@link intentReplayMayDuplicateEffect}, and the
+ * two must not be collapsed into one set. That one asks "may the executor
+ * blindly re-send this after an ambiguous failure". This one asks "does anything
+ * on the page depend on how this step ended". A `behavioral_pause` answers NO to
+ * the second and YES to the first, and both answers are load-bearing: waiting
+ * leaves nothing for a customer to inspect, so walking away from one costs them
+ * nothing — but a reading pause traverses the page (the mapper sends every
+ * reading pause as `scroll_through`), so replaying one after an ambiguous
+ * failure really does distort what ran, and the retry fence goes on refusing it.
+ *
+ * Before the split, Stop during a pause waited out the in-flight grace and then
+ * told the customer "I could not confirm whether it happened — check the page
+ * before doing it again", about a step whose entire effect was to wait.
+ *
+ * Built FROM the replay-safe set rather than beside it: a kind safe to REPLAY is
+ * necessarily safe to ABANDON, so stating the containment in code is what stops
+ * the two from drifting into disagreement.
+ */
+const STOP_ABANDONABLE_INTENT_KINDS: ReadonlySet<AgentIntent['kind']> = new Set([
+  ...REPLAY_SAFE_INTENT_KINDS,
+  'behavioral_pause',
+]);
+
+export function intentMayBeAbandonedOnStop(intent: AgentIntent): boolean {
+  return STOP_ABANDONABLE_INTENT_KINDS.has(intent.kind);
+}
+
 /** Map a decoded harness result + its originating intent → customer IntentResult. */
 export function intentResultToCustomer(
   intent: AgentIntent,

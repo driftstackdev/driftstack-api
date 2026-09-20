@@ -42,6 +42,7 @@ import {
   stopRequested,
 } from './agent-executor.js';
 import { intentReplayMayDuplicateEffect } from './agent-intent-result.js';
+import { TURN_HARD_STOP_MS } from './agent-turn-bounds.js';
 // Values, not just types: a turn runs up to three plan segments and the counts
 // of all of them are the turn's. agent-turn-telemetry.ts imports from here with
 // `import type` only, so this edge is one-way at runtime.
@@ -977,6 +978,26 @@ export const TURN_LOOP_STOP_SENTENCES: Readonly<Record<TurnLoopStopReason, strin
 };
 
 /**
+ * ⛔ "I DID THE STEPS ABOVE" IS ONLY TRUE WHEN THERE ARE STEPS ABOVE. The time
+ * bound is the one ending that can arrive before the first step ran: a single
+ * slow planning call can use the whole of the turn's time, and the executor then
+ * returns with nothing dispatched. The customer was told about steps they could
+ * not see. Same ending, same `notice_reason` (`time_limit`) — a program branches
+ * on the word, not the sentence — only the sentence stops claiming work that did
+ * not happen.
+ */
+export const TURN_RAN_OUT_OF_TIME_BEFORE_ANY_STEP_SENTENCE =
+  'This was taking too long for one message and I stopped before doing anything on the page, so nothing has changed. Send “continue” and I will try again.';
+
+/** The closing sentence for an ending, given how many steps the turn ran. */
+export function turnLoopStopSentence(reason: TurnLoopStopReason, stepsRan: number): string {
+  if (reason === 'wall_clock' && stepsRan === 0) {
+    return TURN_RAN_OUT_OF_TIME_BEFORE_ANY_STEP_SENTENCE;
+  }
+  return TURN_LOOP_STOP_SENTENCES[reason];
+}
+
+/**
  * B1 — the same six endings, plus the two hand-backs, in ONE WORD a program can
  * branch on: the public `notice_reason` beside the `notice` sentence.
  *
@@ -1432,6 +1453,10 @@ export function mergeExecutorRuns(
     ...(second.authorityLost === true ? { authorityLost: true } : {}),
     // B2 — the run that honoured Stop is always the LAST one: nothing runs after it.
     ...(second.stopped === true ? { stopped: true } : {}),
+    // Likewise a run the turn's hard stop ended: the loop reads this off the
+    // merged result, so a first segment that ran out of time is not lost the
+    // moment a second one is merged onto it.
+    ...(first.hardStopped === true || second.hardStopped === true ? { hardStopped: true } : {}),
     // B1 — likewise a run the repeat guard stopped: nothing ran after it.
     ...(second.repeatRefused !== undefined ? { repeatRefused: second.repeatRefused } : {}),
     // ⛔ THE ACTION PATHS OF BOTH SEGMENTS, SUMMED. Unlike everything above,
@@ -3140,6 +3165,11 @@ export class AgentRuntime {
         signal,
         // P3 — the TURN's element-wait ceiling, shared across every run below.
         elementWaitBudget,
+        // THE TURN'S HARD STOP, as an instant on the same monotonic clock the
+        // executor reads. Computed once from the turn's start, so every segment
+        // shares the one deadline rather than getting a fresh one each — and so
+        // a per-pace value later changes this expression and nothing else.
+        turnHardStopAtMs: turnStartedAtMs + TURN_HARD_STOP_MS,
         // P2 — the VALUES, to the executor only. Resolved into the dispatch and
         // nowhere else; the results this returns still carry the placeholders.
         ...(args.credentials !== undefined ? { credentials: args.credentials } : {}),
@@ -3295,6 +3325,21 @@ export class AgentRuntime {
       if (executorResult.authorityLost === true) break;
       if (stoppedDuring !== undefined) break;
       if (executorResult.awaitingConfirmation === true) break;
+      // THE HARD STOP ENDED A SEGMENT BETWEEN ITS STEPS. Recorded whatever the
+      // cause was, unlike `stopFor` below and for the same reason the repeat
+      // guard's is: the run ended on no ✗ row of its own — nothing was announced
+      // for the step that never started — so without the sentence the customer
+      // is shown a column of ticks over a task that is not finished.
+      //
+      // It is `wall_clock`, not a seventh ending. The customer-facing fact is
+      // the same one the three-minute bound reports ("this was taking too long
+      // for one message"), and inventing a second word for it would tell a
+      // program written against six endings about a seventh without telling it
+      // anything it could act on differently.
+      if (executorResult.hardStopped === true) {
+        loopStopped = 'wall_clock';
+        break;
+      }
       // ⛔ `continue` IS ASKED FIRST. A segment whose only ✗ is a best-effort wait
       // RAN TO ITS END (`segmentRanToItsEnd`), and a planner that said `continue`
       // is owed the next look. Asked second, that timed-out wait read as a
@@ -3325,6 +3370,17 @@ export class AgentRuntime {
       const stopFor = (reason: TurnLoopStopReason): void => {
         if (cause === 'continue') loopStopped = reason;
       };
+      // ⛔ THE CLOCK IS THE ONE BOUND THAT SPEAKS ON BOTH CAUSES. The others are
+      // continue-only because after a FAILURE the ✗ row is the message. That
+      // reasoning does not reach time: the row says what went wrong with a step,
+      // and it says nothing about the turn having run out of clock before the
+      // re-plan that would have recovered from it could be asked for. That path
+      // showed the customer no sentence at all, so "the task is not finished,
+      // send continue" was never said on the one ending where continuing is
+      // exactly the right next move.
+      const stopForTime = (): void => {
+        loopStopped = 'wall_clock';
+      };
       if (cause === 'replan' && replans >= MAX_REPLANS_PER_TURN) break;
       if (
         plannerCalls >= MAX_PLANNER_CALLS_PER_TURN ||
@@ -3334,7 +3390,7 @@ export class AgentRuntime {
         break;
       }
       if (this.nowMs() - turnStartedAtMs >= MAX_TURN_WALL_CLOCK_MS) {
-        stopFor('wall_clock');
+        stopForTime();
         break;
       }
       if (postDebitSession.tokenBudgetRemaining < REPLAN_MIN_BUDGET_TOKENS) {
@@ -3529,9 +3585,25 @@ export class AgentRuntime {
         // A plan that only waits or captures has no such excuse — the same run
         // showed `[wait, capture]` repeated on an unchanged page, which is the
         // dithering this check is for — so it is stopped the first time.
+        // ⛔ AND A PAGE BEING READ IS A PAGE BEING TRAVERSED. A reading pause is
+        // not a dwell on a frozen screen: the mapper turns every pause carrying
+        // a word count into `scroll_through`, and the device reads it by
+        // scrolling through the content. So a plan of "scroll, read what is
+        // there" moved the viewport exactly as a bare scroll did, and calling
+        // that going in circles told a customer the agent was stuck while their
+        // phone was reading the long page they asked about. The repeat guard has
+        // exempted pauses all along; this check was never taught the same thing.
+        //
+        // ⛔ ONLY A READING PAUSE, and the narrowness is the point. A
+        // `{duration_ms}` or bare pause scrolls nothing, and excusing those
+        // would defeat the case this check exists for: `[wait, capture]`
+        // repeated on a page that has not changed, which is dithering.
         const actsOnNothing = replanned.intents.every((i) => !repeatMayDuplicateSiteEffect(i));
         const scrolls = replanned.intents.some(
-          (i) => i.kind === 'scroll' || (i.kind === 'interact' && i.action === 'scroll'),
+          (i) =>
+            i.kind === 'scroll' ||
+            (i.kind === 'interact' && i.action === 'scroll') ||
+            (i.kind === 'behavioral_pause' && i.reading_word_count !== undefined),
         );
         if (actsOnNothing && scrolls && sameMovingPlanRepeats < 1) {
           sameMovingPlanRepeats += 1;
@@ -3653,7 +3725,7 @@ export class AgentRuntime {
       plannerHandedBack !== undefined
         ? sanitizeTranscriptText(plannerHandedBack)
         : loopStopped !== undefined
-          ? TURN_LOOP_STOP_SENTENCES[loopStopped]
+          ? turnLoopStopSentence(loopStopped, executorResult.results.length)
           : undefined;
     // The same ending in one word — see TurnNoticeReason. Computed from the same
     // two variables as the sentence, so the pair cannot disagree about which
@@ -3671,7 +3743,7 @@ export class AgentRuntime {
       plannerHandedBack !== undefined
         ? `(stopped part-way to ask the customer: ${sanitizeTranscriptText(plannerHandedBack)})`
         : loopStopped !== undefined
-          ? `(the task is NOT finished — ${TURN_LOOP_STOP_SENTENCES[loopStopped]})`
+          ? `(the task is NOT finished — ${turnLoopStopSentence(loopStopped, executorResult.results.length)})`
           : undefined;
     const planEntry = {
       ...transcriptEntry,

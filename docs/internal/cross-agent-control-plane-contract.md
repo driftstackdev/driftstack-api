@@ -187,6 +187,30 @@ alignment** — documented here so Agent 2 doesn't ship a harness-facing
 shape the harness then can't match. Once aligned, Agent 2 builds the
 control-plane halves gated + tested.
 
+#### What the control plane enforces today, while abort stays a proposal (2026-09-20)
+
+Two bounds are now enforced server-side and need nothing from the device. Both keep
+the cooperative shape the abort proposal above describes — **never mid-intent**.
+
+- **A turn-wide hard stop** (`TURN_HARD_STOP_MS`, five minutes, in
+  `services/agent-turn-bounds.ts`). The executor's step loop checks the turn's
+  deadline at the top of every step, beside the Stop check, and returns BETWEEN
+  steps: the step in flight runs to its own end and is recorded, nothing after it
+  is announced or dispatched. The same deadline is asked before a step's own retry
+  budget sends another dispatch, so a node that has stopped answering is re-asked
+  at most until the deadline rather than for the whole retry budget after it. Before it, the turn's three-minute bound was checked
+  only at the top of the TURN loop, so one segment of long intents could run for
+  tens of minutes before reaching the bound that would have refused the next
+  segment. The customer is told the message took too long and to send "continue".
+- **A `behavioral_pause` is abandoned on Stop.** It changes nothing on the page, so
+  the control plane stops waiting for its result at once instead of holding the
+  in-flight grace and then reporting an unknown outcome. It stays replay-**unsafe**
+  — the device reads long content by scrolling through it — so nothing auto-retries
+  a pause. Abandonable-on-Stop and safe-to-retry are separate properties.
+  ⚠️ **The residual is the device's:** with no cancel verb on the wire, the device
+  keeps pausing after we walk away, and the next turn's first dispatch can land on
+  a device still inside a dwell.
+
 ### Intent-dispatch contract — AgentIntent ↔ harness IntentDispatch (reverse-engineered from the wired harness 2026-06-05)
 
 Agent-3 has fully wired the harness intent executor (`harness/Sources/BrowserController/IntentExecutor.swift`,

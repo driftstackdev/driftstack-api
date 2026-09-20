@@ -54,10 +54,12 @@ import { agentIntentToDispatch } from './agent-intent-to-dispatch.js';
 import {
   elementCoveredResult,
   elementNotFoundResult,
+  intentMayBeAbandonedOnStop,
   intentReplayMayDuplicateEffect,
   intentResultToCustomer,
   tapRefusalOf,
 } from './agent-intent-result.js';
+import { TURN_READ_BACK_TIMEOUT_MS } from './agent-turn-bounds.js';
 import {
   agentActionOutcomeOf,
   emptyAgentActionPathCounts,
@@ -171,12 +173,11 @@ const DEFAULT_RETRY_DELAY_MS = 400;
 // without hanging a genuinely dead session too long.
 const DEFAULT_SESSION_ESTABLISH_MAX_RETRIES = 8;
 const DEFAULT_SESSION_ESTABLISH_RETRY_DELAY_MS = 1500;
-// #140 read-back deadline. get_page_source on a healthy box returns in <2s; a
-// hung box would otherwise burn the full 30s dispatch budget AFTER the plan has
-// already succeeded + been recorded. 10s cleanly separates "alive but slow"
-// (returns well under) from "hung" (never returns) so the read-back degrades to
-// "no answer, plan result stands" fast instead of freezing the turn.
-const DEFAULT_OBSERVE_TIMEOUT_MS = 10_000;
+// #140 read-back deadline. Its reason, and the number, live in
+// agent-turn-bounds.ts with the other three bounds on how long a turn can still
+// be running: the cross-process stop claim's TTL is derived from all four, and
+// a second copy of this number here is the one that would drift.
+const DEFAULT_OBSERVE_TIMEOUT_MS = TURN_READ_BACK_TIMEOUT_MS;
 
 // ── P3 patience ──────────────────────────────────────────────────────
 // WHY A SEPARATE BUDGET FROM `retryDelayMs`. `intent_element_not_found` is not a
@@ -857,6 +858,28 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // B2 — Stop is checked before anything else about the next step, so once
       // it is observed nothing further is announced, gated or dispatched.
       if (stopRequested(args.signal)) return done({ results, ok: false, stopped: true });
+      // THE TURN'S HARD STOP, in the one place the turn's own wall clock could
+      // not reach. That bound is checked at the top of the TURN loop, so it
+      // decides whether to ask for another segment and can say nothing about the
+      // segment already running — and this loop had no clock at all, which is
+      // how eight steps each pausing near the device's cap could spend tens of
+      // minutes inside one segment before reaching a bound that would have
+      // refused the next one.
+      //
+      // ⛔ CHECKED BETWEEN DISPATCHES, NEVER DURING ONE. The runtime's refusal
+      // to cut a segment is a real invariant — abandoning a plan halfway leaves
+      // dispatched actions in a state nobody can describe — and it is about
+      // cutting a step, not about starting one. Returning from here leaves
+      // nothing in flight: the step before this one settled and was recorded,
+      // and this one was never announced. So the invariant holds and the
+      // overrun ends.
+      //
+      // Here is where a STEP is refused; `runIntent` asks the same question
+      // before starting another ATTEMPT at one, because a step is not one
+      // dispatch — see the hard stop on the retry budgets there.
+      if (args.turnHardStopAtMs !== undefined && this.now() >= args.turnHardStopAtMs) {
+        return done({ results, ok: false, hardStopped: true });
+      }
       if (!(await executionMayContinue(args.shouldContinue))) {
         return done({ results, ok: false, authorityLost: true });
       }
@@ -1148,6 +1171,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         look !== null && 'waitedForElement' in look && look.waitedForElement,
         unoccludedCheck ?? undefined,
         actionPaths,
+        args.turnHardStopAtMs,
       );
       if (result.result !== null) {
         emitStep(result.result);
@@ -1650,13 +1674,19 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
    * while it is on its way.
    *
    * ⛔ THE DIRECTION IS THE SAFETY PROPERTY, exactly as in the retry fence below.
-   * A step that only reads or waits is abandoned the moment Stop arrives —
-   * nothing on the page depends on its answer. A step that may change the page
-   * (`intentReplayMayDuplicateEffect`: navigate, every interact, a relative
-   * scroll, a pacing dwell) may ALREADY HAVE HAPPENED, so its result is awaited
-   * for up to `stopInFlightGraceMs` and recorded. If that runs out the step is
-   * recorded as outcome-unknown — never as "not done", because telling the
-   * customer a submit did not happen when it may have is how it gets sent twice.
+   * A step nothing on the page depends on (`intentMayBeAbandonedOnStop`: a read,
+   * a wait, a pacing pause) is abandoned the moment Stop arrives. A step that
+   * may change the page — navigate, every interact, a relative scroll — may
+   * ALREADY HAVE HAPPENED, so its result is awaited for up to
+   * `stopInFlightGraceMs` and recorded. If that runs out the step is recorded as
+   * outcome-unknown — never as "not done", because telling the customer a submit
+   * did not happen when it may have is how it gets sent twice.
+   *
+   * ⛔ THE QUESTION HERE IS NOT THE RETRY FENCE'S. A pause is abandonable and
+   * still replay-UNSAFE, and the two predicates say so separately on purpose:
+   * widening the replay-safe set to reach this branch would also make a
+   * scroll-through reading pause auto-retryable after an ambiguous failure, and
+   * that one really does move the viewport.
    */
   private async dispatchHonouringStop(
     dispatch: IntentDispatch,
@@ -1669,7 +1699,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     const inFlight = this.dispatcher.dispatch(dispatch);
     const raced = await raceAbort(inFlight, signal);
     if (!raced.aborted) return { kind: 'settled', parsed: raced.value, stopped: false };
-    if (!intentReplayMayDuplicateEffect(intent)) {
+    if (intentMayBeAbandonedOnStop(intent)) {
       return {
         kind: 'abandoned',
         result: { kind: 'failure', intent, reason: STOPPED_BEFORE_FINISHING_REASON },
@@ -1730,8 +1760,25 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     /** The run's action-path tally. Every DISPATCHED attempt adds one, which is
      *  why it is here and not at the call site: the retries live in this loop. */
     actionPaths?: AgentActionPathCounts,
+    /** The turn's hard stop ({@link ExecuteArgs.turnHardStopAtMs}), so the
+     *  budgets below cannot start a fresh dispatch on a turn that is over. */
+    turnHardStopAtMs?: number,
   ): Promise<RunIntentOutcome> {
     let result: IntentResult | null = null;
+    // ⛔ A STEP IS NOT ONE DISPATCH, so the turn's hard stop has to be asked here
+    // too. The step loop refuses to START a step past the deadline; the budgets
+    // in this loop — two general retries, eight cold-start retries, one element
+    // wait — each send a fresh dispatch with its own deadline, and a step that
+    // spent them would run for as long again after the turn was already over.
+    // The stop claim's TTL is derived from arithmetic that says the tail past
+    // the hard stop is ONE dispatch (see agent-turn-bounds.ts); this is what
+    // makes that true rather than optimistic.
+    //
+    // Nothing is cut short by it, exactly as in the step loop: the attempt that
+    // was on the wire settled and is what gets recorded — the next one was never
+    // sent.
+    const pastTheTurnsHardStop = (): boolean =>
+      turnHardStopAtMs !== undefined && this.now() >= turnHardStopAtMs;
     // Two independent budgets: the short general retryable-failure budget, and a
     // longer PATIENT budget reserved for a cold-starting session (see below).
     let retryAttempt = 0;
@@ -1752,6 +1799,12 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         return { result, authorityLost: true };
       }
       if (stopRequested(signal)) return { result, authorityLost: false, stopped: true };
+      // The turn ran out of time while this step was being retried. `result`
+      // holds what the LAST attempt actually did, so the step is reported as
+      // that rather than as nothing. Never on the first attempt: a `null` result
+      // is a step the loop above has just admitted past this same deadline, and
+      // refusing it here would announce a step nothing was ever sent for.
+      if (result !== null && pastTheTurnsHardStop()) return { result, authorityLost: false };
       // Serialize to the base64 wire envelope (fresh intentId per attempt).
       // Re-validates params; should not fail (agentIntentToDispatch already
       // validated), but the executor must never throw — a guard converts any
@@ -1878,9 +1931,16 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // tap (`target_not_resolved`) is this same fact about the page, reported
       // by the device's check rather than its lookup, and is handled as it.
       const waitSelector = selectorOf(intent);
+      // ⛔ AND NOT PAST THE TURN'S HARD STOP. The wait asks the DEVICE for a few
+      // seconds, but what bounds it HERE is the dispatch deadline for a
+      // `wait_for` — over five minutes — so on a box that has stopped answering,
+      // an element wait started after the turn is over is another long dispatch,
+      // not a short one. The step is reported as the element-not-found it
+      // already is.
       if (
         (parsed.errorCode === 'intent_element_not_found' || refusal?.kind === 'target_gone') &&
         waitSelector !== null &&
+        !pastTheTurnsHardStop() &&
         !elementWaitUsed &&
         this.elementAppearWaitMs > 0 &&
         elementWaitBudget.remainingMs !== null &&

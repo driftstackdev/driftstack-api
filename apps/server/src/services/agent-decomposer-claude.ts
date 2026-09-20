@@ -77,6 +77,7 @@ import {
 } from './agent-planner-contract.js';
 // Re-exported through __TEST_ONLY__ for the cross-source AUP parity tests.
 import { AUP_REFUSAL_PATTERNS } from './agent-decomposer-deterministic.js';
+import { TURN_ANSWER_STREAM_CAP_MS } from './agent-turn-bounds.js';
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION_HEADER = '2023-06-01';
@@ -156,7 +157,11 @@ const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 25_000;
 // guards a different day — a model left at a higher effort, or a harder page —
 // and a false abort there still costs a second full call.
 const DEFAULT_STREAM_THINKING_IDLE_TIMEOUT_MS = 120_000;
-const DEFAULT_STREAM_TOTAL_TIMEOUT_MS = 300_000;
+// The absolute cap. It lives in agent-turn-bounds.ts because the answering call
+// is the last thing a turn does, so this number is one of the four the
+// cross-process stop claim's TTL is derived from — and a second copy here is the
+// one that would drift away from that arithmetic unnoticed.
+const DEFAULT_STREAM_TOTAL_TIMEOUT_MS = TURN_ANSWER_STREAM_CAP_MS;
 // A legitimate planning reply is only a few KiB of TEXT whatever the output
 // ceiling is: the ceiling is mostly headroom for reasoning, and hidden reasoning
 // streams no text (a full 8-intent plan measures ~1 KB).

@@ -27,6 +27,8 @@
 // A must never stop turn B that starts on the same session a moment later —
 // which is what a per-session flag would do to the customer's next message.
 
+import { LONGEST_TURN_THE_CONSTANTS_PERMIT_MS } from './agent-turn-bounds.js';
+
 /** One running turn's claim, as seen from any process. */
 export interface AgentTurnStopChannel {
   /** Record that `turnId` is running for `agentSessionId`. Best-effort. */
@@ -45,13 +47,40 @@ export interface AgentTurnStopChannel {
 }
 
 /**
- * How long a claim and a recorded stop live. A turn stops STARTING work at three
- * minutes (MAX_TURN_WALL_CLOCK_MS) and then finishes the segment in flight and
- * the read-back; fifteen minutes is several times the longest turn that can
- * exist, so a live turn never outlives its claim, and a claim orphaned by a
- * crashed process is gone well before anyone would still be waiting on it.
+ * What the TTL covers beyond the four bounds that compose a turn's tail: the
+ * look before a tap, the debits and transcript writes, and the clock skew
+ * between the process that writes the claim and the one that reads it.
+ *
+ * ⛔ WHAT IT IS NOT: cover for another dispatch. A step's retry budgets could
+ * each start one, and two more deadlines would swallow any margin this size —
+ * so the executor refuses to start an attempt past the turn's hard stop instead,
+ * and the composition below is what that guarantees rather than a hope this
+ * number absorbs it. A margin asked to cover an unbounded term is the thing the
+ * literal it replaced was.
  */
-export const AGENT_TURN_CLAIM_TTL_SECONDS = 15 * 60;
+const CLAIM_TTL_MARGIN_MS = 120_000;
+
+/**
+ * How long a claim and a recorded stop live — DERIVED from the bounds that
+ * decide how long a turn can still be running, never asserted.
+ *
+ * ⛔ IT USED TO BE A LITERAL FIFTEEN MINUTES, justified as "several times the
+ * longest turn that can exist". The arithmetic said otherwise: the hard stop,
+ * plus the dispatch deadline of a step that started just before it, plus the
+ * read-back, plus the answering call's stream cap already exceed it. A claim
+ * that expires under a live turn is not a tidy-up — the recorded Stop expires
+ * with it, so a customer who pressed Stop is never obeyed, and the concurrency
+ * slot is handed back while the turn still holds it.
+ *
+ * Both halves matter and pull opposite ways, which is why the number is
+ * computed: too short and a live turn outlives its claim; too long and a claim
+ * orphaned by a crashed process blocks the session for as long as it lasts. The
+ * guard is `the-stop-claim-outlives-the-longest-turn-the-constants-permit`,
+ * which goes red the day one of those four bounds grows past this.
+ */
+export const AGENT_TURN_CLAIM_TTL_SECONDS = Math.ceil(
+  (LONGEST_TURN_THE_CONSTANTS_PERMIT_MS + CLAIM_TTL_MARGIN_MS) / 1000,
+);
 
 /** The subset of ioredis this uses — narrowed in bootstrap, faked in tests. */
 export interface AgentTurnStopRedis {

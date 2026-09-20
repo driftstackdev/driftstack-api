@@ -147,6 +147,20 @@ export interface ExecutorRunResult {
    */
   stopped?: boolean;
   /**
+   * The turn's hard stop ({@link ExecuteArgs.turnHardStopAtMs}) was reached and
+   * this run ended BETWEEN steps: the step that had started ran to its own end
+   * and was recorded, nothing further was announced or dispatched, and nothing
+   * was left in flight.
+   *
+   * Distinct from `stopped`, which is the customer asking. Nobody asked for
+   * this one, so the turn owes the customer a sentence saying why it ended — the
+   * runtime reads this and ends the loop with the wall-clock sentence, on a
+   * re-plan exactly as on a `continue`, because this run ends on no ✗ row of its
+   * own and silence over a column of ticks is the failure the sentences exist
+   * to prevent.
+   */
+  hardStopped?: true;
+  /**
    * P1 — this result is the MERGE of a run that failed and a re-planned run that
    * then finished the job. No single `execute()` ever sets it; only
    * `mergeExecutorRuns` does.
@@ -387,9 +401,10 @@ export interface ExecuteArgs {
    * stop is observed. It does NOT abandon a dispatch already in flight when the
    * step can change the page: that step's result is awaited, bounded by
    * {@link STOP_IN_FLIGHT_GRACE_MS}, and recorded — outcome-unknown if the bound
-   * runs out. A read-only step (a wait, a capture, an element wait) is cut short
-   * at once, since abandoning it cannot leave the page in a state nobody knows.
-   * The result then carries `stopped: true`.
+   * runs out. A step that changes nothing on the page (a wait, a capture, an
+   * element wait, a behavioural pause) is cut short at once, since abandoning it
+   * cannot leave the page in a state nobody knows. The result then carries
+   * `stopped: true`.
    *
    * Kept apart from `shouldContinue` on purpose: a false `shouldContinue` means
    * control changed hands and ends the run as `authorityLost`, which the runtime
@@ -425,6 +440,30 @@ export interface ExecuteArgs {
    * private per-run budget, exactly as before.
    */
   elementWaitBudget?: ElementWaitBudget;
+  /**
+   * The instant, on the executor's own monotonic clock, past which the step loop
+   * starts no further step — the turn's HARD stop.
+   *
+   * ⛔ AN INSTANT, NOT A DURATION, for the reason `elementWaitBudget` is shared
+   * rather than rebuilt: a turn runs up to three plans, and a per-run duration
+   * would be three hard stops. The runtime computes it ONCE at the top of the
+   * turn (`turnStartedAtMs + TURN_HARD_STOP_MS`) and threads the same instant
+   * through every run, so what the comment promises is what a turn can spend.
+   *
+   * ⛔ ONE CLOCK. The runtime's `nowMs` and the executor's `now` are both
+   * `performance.now()` by default and a test that injects one must inject the
+   * other; comparing an instant from one monotonic clock against another is how
+   * a bound reads as "already exceeded" on a turn that just started.
+   *
+   * Checked at the TOP of the step loop beside the Stop check, so the run ends
+   * BETWEEN steps with nothing in flight, carrying
+   * {@link ExecutorRunResult.hardStopped} — and again before a step's own retry
+   * budget starts another dispatch, because a step is not one dispatch and the
+   * claim TTL derived from this bound assumes only one is left in flight past
+   * it. Omitted → no hard stop, which is what the stub and legacy executors and
+   * every pre-existing caller get.
+   */
+  turnHardStopAtMs?: number;
   /**
    * Live-progress hook (step streaming). Called once per intent AS its result
    * lands — BEFORE the whole run finishes — so a streaming caller can surface
@@ -582,9 +621,13 @@ export const STOPPED_OUTCOME_UNKNOWN_REASON =
   'this step was already running when the task was stopped, and I could not confirm whether it happened — check the page before doing it again';
 
 /**
- * B2 — the sentence a READ-ONLY step carries when Stop cut it short. Reading the
- * page or waiting for something to appear changes nothing on the site, so "it did
- * not finish" is the whole truth.
+ * B2 — the sentence a step carries when Stop cut it short and nothing on the
+ * page depended on its outcome. Reading the page, waiting for something to
+ * appear, or pausing the way a person would changes nothing on the site, so "it
+ * did not finish" is the whole truth — and it is the whole truth about a pause
+ * too, where the outcome-unknown sentence's "check the page before doing it
+ * again" would be asking the customer to inspect a page for the effects of
+ * waiting.
  */
 export const STOPPED_BEFORE_FINISHING_REASON = 'the task was stopped before this step finished';
 
