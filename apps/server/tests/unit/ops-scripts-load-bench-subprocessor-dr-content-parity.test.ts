@@ -133,11 +133,21 @@ describe('W808 ops scripts content parity', () => {
     );
   });
 
-  it('CRITICAL check-bench-regression.mjs slowdown computation pinned — (base.hz - cur.hz)/base.hz with positive ratio meaning slower. Flagged when slowdown >= THRESHOLD. Drift to mean-based comparison would invert the sign.', () => {
+  it('CRITICAL check-bench-regression.mjs slowdown computation pinned — (base.hz - cur.hz)/base.hz with positive ratio meaning slower, still computed and still reported. Drift to mean-based comparison would invert the sign.', () => {
     const p = read(BENCH);
     expect(p).toMatch(/\/\/ Slowdown: hz lower than baseline\. ratio > 0 means slower\./);
     expect(p).toMatch(/const slowdown = \(base\.hz - cur\.hz\) \/ base\.hz;/);
-    expect(p).toMatch(/const flag = slowdown >= THRESHOLD \? '⚠ REGRESSED' : 'ok';/);
+    expect(p).toMatch(/slowdownPct: \(slowdown \* 100\)\.toFixed\(1\),/);
+  });
+
+  it("CRITICAL check-bench-regression.mjs trips the threshold on the MEDIAN-NORMALISED slowdown, not the raw one — 'const flag = normalisedSlowdown >= threshold' over a speedFactor() that is the median of (current hz / baseline hz). 2026-09-20: this pin was moved off the raw slowdown deliberately, after the job failed five consecutive main runs on a ~2.7x slower runner with all 9 benchmarks (a bare node:crypto digest included) 54-70% down together. Drift back to the raw slowdown reinstates a check that always fails, which is a check nobody reads.", () => {
+    const p = read(BENCH);
+    expect(p).toMatch(/export function speedFactor\(current, baseline\) \{/);
+    expect(p).toMatch(/const normalisedHz = cur\.hz \/ factor;/);
+    expect(p).toMatch(/const normalisedSlowdown = \(base\.hz - normalisedHz\) \/ base\.hz;/);
+    expect(p).toMatch(/const flag = normalisedSlowdown >= threshold \? '⚠ REGRESSED' : 'ok';/);
+    expect(p).toMatch(/export const MIN_SHARED = 3;/);
+    expect(p).toMatch(/export const HARDWARE_BAND = 2;/);
   });
 
   it('CRITICAL check-bench-regression.mjs flatten() walks files→groups→benchmarks producing {key, hz, mean}. The key shape `${group.fullName} :: ${bench.name}` is the canonical bench-identity convention; drift would break baseline lookup.', () => {

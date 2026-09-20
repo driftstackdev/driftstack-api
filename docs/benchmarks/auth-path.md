@@ -65,3 +65,7 @@ Filters: `npx vitest bench --run apps/server/tests/bench/auth-cache.bench.ts` to
 ## Adding new bench files
 
 `vitest.config.ts` includes `apps/**/tests/bench/**/*.bench.ts`. New `*.bench.ts` files in that path are picked up automatically. Use `bench(name, fn)` from `vitest`. Tinybench provides hz/min/max/mean/p75/p99/p999/rme/samples.
+
+## Regression check
+
+`npm run bench:check-regression` compares a fresh `npm run bench:json` against `baseline.ci.json`, normalised against the run's own speed so a slow runner does not read as a regression in every benchmark at once. See `regression-check.md` — including what that normalisation cannot see, and how to re-record the baseline on a new runner class with `PERF_REGRESSION_RECORD_NEW=1`.

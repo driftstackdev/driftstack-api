@@ -43,11 +43,11 @@ Full runbook: `docs/runbooks/deploy-bridge.md`.
 
 ## CI helpers
 
-| Script                          | Purpose                                                        |
-| ------------------------------- | -------------------------------------------------------------- |
-| `check-bench-regression.mjs`    | V-120 — gates PRs that regress benchmark numbers.              |
-| `check-subprocessor-mirror.mjs` | V-493 — DPA Annex 3 ↔ sub-processors data-source parity check. |
-| `generate-changelog.sh`         | Cuts a SDK changelog entry from git log between tags.          |
+| Script                          | Purpose                                                               |
+| ------------------------------- | --------------------------------------------------------------------- |
+| `check-bench-regression.mjs`    | V-165 — advisory perf check; see docs/benchmarks/regression-check.md. |
+| `check-subprocessor-mirror.mjs` | V-493 — DPA Annex 3 ↔ sub-processors data-source parity check.        |
+| `generate-changelog.sh`         | Cuts a SDK changelog entry from git log between tags.                 |
 
 ## V-528 privatization toolkit
 

@@ -60,3 +60,7 @@ A `session.completed` event with a 10 KB payload extension.
 ```bash
 npx vitest bench --run packages/sdk-typescript/tests/bench/webhook-signature.bench.ts
 ```
+
+## Regression check
+
+`npm run bench:check-regression` compares a fresh `npm run bench:json` against `baseline.ci.json`, normalised against the run's own speed so a slow runner does not read as a regression in every benchmark at once. See `regression-check.md` — including what that normalisation cannot see, and how to re-record the baseline on a new runner class with `PERF_REGRESSION_RECORD_NEW=1`.

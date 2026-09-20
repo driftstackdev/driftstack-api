@@ -1,6 +1,6 @@
 {
   "recordedAtIso": "2026-05-05T08:21:28.628Z",
-  "note": "V-165 starter baseline — recorded on Apple M-class dev workstation, NOT a CI runner. CI runners produce different numbers; the 50% slowdown threshold (PERF_REGRESSION_THRESHOLD env, default 0.50) accommodates the divergence. Recalibrate on first stable CI run by deleting this file + letting the bench-regression CI step (advisory mode) record a fresh baseline via the script's bootstrap path, then commit the new file.",
+  "note": "V-165 starter baseline — recorded on Apple M-class dev workstation, NOT a CI runner. CI runners produce different numbers; the 50% slowdown threshold (PERF_REGRESSION_THRESHOLD env, default 0.50) accommodates the divergence. Recalibrate on first stable CI run by deleting this file + letting the bench-regression CI step (advisory mode) record a fresh baseline via the script's bootstrap path, then commit the new file. Preferred since 2026-09-20: `npm run bench:json && PERF_REGRESSION_RECORD_NEW=1 npm run bench:check-regression` re-records in place and stamps the node version + os/arch/cpu into the file, so a later run can say when it is comparing across hardware classes; see docs/benchmarks/regression-check.md.",
   "benchmarks": [
     {
       "key": "apps/server/tests/bench/auth-cache.bench.ts > sha256(plaintext) — cache key derivation :: createHash sha256 hex digest",
