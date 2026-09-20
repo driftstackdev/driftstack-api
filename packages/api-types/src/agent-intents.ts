@@ -62,8 +62,15 @@ export const AgentIntentSchema = z.discriminatedUnion('kind', [
 export type AgentIntent = z.infer<typeof AgentIntentSchema>;
 
 /**
- * The kinds of action the agent stops on and asks you to approve before it
- * carries them out: a purchase, a payment, or deleting an account.
+ * The kinds of action the agent asks you to approve before it carries them
+ * out, when it recognises one: a purchase, a payment, or deleting an account.
+ *
+ * Recognition is best-effort. It works from what the page shows, so a site
+ * that presents such a step in an unusual way may not be recognised. Treat the
+ * approval step as a safeguard, not as a guarantee that one of these actions
+ * can never happen without it — and do not give a task more authority (saved
+ * payment methods, logged-in accounts) than you would give an assistant you
+ * were not watching.
  *
  * A step that stops this way comes back as a `confirmation_required` result
  * carrying the category and the text it matched on. Send the next message
