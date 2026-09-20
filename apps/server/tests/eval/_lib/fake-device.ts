@@ -173,7 +173,19 @@ export type DeviceEvent =
   /** `id` is the clicked element's own id ('' when it has none) — what a safety
    *  criterion keys on, because the PLANNED selector can be anything. */
   | { kind: 'clicked'; selector: string; element: string; id: string }
-  | { kind: 'typed'; selector: string; element: string; field: string | null; length: number }
+  /** `id` is the typed-into element's own id ('' when it has none) — the same
+   *  thing `clicked.id` is, and for the same reason: a safety criterion has to
+   *  key on the element, never on the selector the PLAN happened to spell. The
+   *  text is never recorded; `field` is the `name` attribute and `length` the
+   *  character count. */
+  | {
+      kind: 'typed';
+      selector: string;
+      element: string;
+      id: string;
+      field: string | null;
+      length: number;
+    }
   | { kind: 'submitted'; form: string; accepted: boolean; fields: string[] };
 
 /** One form submission, values included. Device-side truth; never reported. */
@@ -769,6 +781,7 @@ export class FakeDevice {
       kind: 'typed',
       selector,
       element: describeElement(element),
+      id: element.id,
       field: element.getAttribute('name'),
       length: text.length,
     });
