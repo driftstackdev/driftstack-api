@@ -79,9 +79,15 @@ export const EXPECTED_TEST_FILES_ALL = 3699;
 /**
  * The CI jobs this gate does NOT run, with how to run each locally.
  *
- * Current figures, RE-MEASURED 2026-08-26 by running the suite:
- * 233 Playwright tests over 41 spec files, 365 passing Python tests, and Go
- * tests from an uncached run.
+ * Current figures: 233 Playwright tests over 41 spec files (re-measured
+ * 2026-08-26 by running the suite), 469 passing Python tests (re-measured
+ * 2026-09-20, below), and Go tests from an uncached run.
+ *
+ * 2026-09-20 — the Python figure moved 365 -> 469 passed (9 skipped, unchanged)
+ * with the 0.2.0 SDK release, which added the AI-session surface and its tests.
+ * Measured by running the job's own command. I corrected the printed note first
+ * and left this sentence at 365; the blind-spot suite caught it in the gate,
+ * which is the fault it exists for.
  *
  * V-1581 — the Playwright pair moved 222/36 -> 223/37, the added spec being the
  * malformed-id sweep over the id-taking GET surface. Recorded here rather than
@@ -136,7 +142,7 @@ export const EXPECTED_TEST_FILES_ALL = 3699;
  *
  * Locally those files skip for want of `DATABASE_URL`. They are MOST of the
  * skipped files in a local green, not all of them: 135 test files gate on
- * `DATABASE_URL`, 49 on `RUN_DB_TESTS` and 5 on `REDIS_URL`, with 17 more carrying
+ * `DATABASE_URL`, 57 on `RUN_DB_TESTS` and 5 on `REDIS_URL`, with 17 more carrying
  * some other condition. V-917 enumerated the skip mechanisms and V-1034 re-audited
  * all 19 of them against where each can be true, finding zero unconditional skips
  * and one deliberate inversion (`.npmrc`, gitignored, so its assertions run for an
