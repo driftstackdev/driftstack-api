@@ -44,7 +44,7 @@ import { spawn, spawnSync } from 'node:child_process';
  *
  * "It is under apps/gui-client" is not the question. The extension is.
  */
-export const EXPECTED_TEST_FILES = 3397;
+export const EXPECTED_TEST_FILES = 3408;
 
 /**
  * Files the ROOT config collects — both vitest projects, which is what CI's
@@ -74,7 +74,7 @@ export const EXPECTED_TEST_FILES = 3397;
  * scope; this note exists so "five jobs" is not read as "everything that can
  * fail a PR".
  */
-export const EXPECTED_TEST_FILES_ALL = 3685;
+export const EXPECTED_TEST_FILES_ALL = 3699;
 
 /**
  * The CI jobs this gate does NOT run, with how to run each locally.
@@ -171,7 +171,8 @@ export const NOT_COVERED_BY_THIS_GATE = [
     job: 'python-sdk',
     // V-1094: read 362 while the comment above already said 365. The re-run
     // that corrected the prose did not reach the string the operator sees.
-    what: '365 pytest tests + ruff/mypy',
+    // 2026-09-20: 469 passed + 9 skipped, measured after the 0.2.0 release prep.
+    what: '469 pytest tests (+9 skipped) + ruff/mypy',
     local: 'cd packages/sdk-python && ./.venv/bin/python -m pytest -q',
   },
   {
