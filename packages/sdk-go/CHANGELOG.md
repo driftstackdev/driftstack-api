@@ -8,6 +8,25 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Fetch a screenshot** — `AgentSessions.GetCapture(ctx, id, captureID)`
+  returns the image behind a `capture` step's `captureId` as `*AgentCapture`
+  (`ContentType` `image/png` or `image/jpeg`, and `Bytes`). Screenshots are
+  kept only briefly, so fetch one as soon as its turn ends; one that is no
+  longer kept is a `*NotFoundError`.
+- **Read the transcript** — `AgentSessions.Transcript(ctx, id, opts, fn)` calls
+  `fn` with every entry of a session's conversation, oldest first, and then
+  with each new one as it is written. Return `false` from `fn` to stop, or
+  cancel the context; `TranscriptOptions.LastEventID` resumes after the last
+  `Index` you saw. Held to the same 50-minute absolute limit and 8 MiB ceiling
+  as a message. Adds `AgentTranscriptEntry`, `AgentTranscriptEvent` and
+  `TranscriptOptions`.
+- **More of an AI answer is typed** — `AgentMessageResponse.AnswerUnavailable`
+  (why there is no `Answer`, when you asked for one);
+  `(*ConflictError).ClosedReason()` (why a closed session ended, without a
+  second call); `(*FeatureUnavailableError).StopUnconfirmed()` (the one `Stop`
+  503 worth calling again); and `(*ByokAnthropicRequiredError).KeyRejected()` /
+  `KeySource()` / `KeyRejectedReason()` (Anthropic refused your own key, which
+  key, and why).
 - **`AgentMessageResponse.Answer`** — the answer to the question a turn
   asked. It was dropped when the response was decoded, so Go callers could
   not read it at all. `Notice` is now documented for `plan-executed` turns
@@ -39,6 +58,18 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Too many AI turns on the included AI is a `*RateLimitError` now** — the API
+  answers this refusal as `rate-limited` with `retry_after_seconds: 1` instead
+  of `concurrency-limit`, so `Message` returns `*RateLimitError`
+  (`IsRetryable` true, `RetryAfterSeconds` 1) where it returned
+  `*ConcurrencyLimitError`. No SDK change is needed to read it, and
+  `*ConcurrencyLimitError` still means what it always meant on `Create`: your
+  plan's concurrent-session limit. `Intents` on a `plan-executed` result now
+  covers every plan the turn made, not only the first.
+- **A refusal that did no work leaves its idempotency key free** — after a 409
+  `TurnInProgress()`, a 429, a 402, a 403 about the plan's AI or the model, or
+  a 502 whose `KeyRejected()` is false, send the same request again with the
+  SAME key. The docs used to say every refusal needed a new one.
 - **Agent-session docs** describe what the API does and no longer mention how
   the service is built.
 

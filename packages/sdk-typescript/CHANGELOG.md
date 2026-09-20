@@ -8,6 +8,23 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Fetch a screenshot** — `agentSessions.getCapture(id, captureId)` returns
+  the image behind a `capture` step's `captureId` as `{ contentType, bytes }`
+  (`image/png` or `image/jpeg`). Screenshots are kept only briefly, so fetch
+  one as soon as its turn ends; one that is no longer kept is a
+  `NotFoundError`.
+- **Read the transcript** — `agentSessions.transcript(id, opts?)` is an async
+  generator over a session's conversation: every entry so far, then each new
+  one as it is written. `lastEventId` resumes after the last `index` you saw;
+  leaving the loop (or aborting `signal`) closes the connection. Held to the
+  same 50-minute absolute limit (`timeoutMs`) and 8 MiB ceiling as a message.
+  Exports `AgentCapture`, `AgentTranscriptEntry` and `AgentTranscriptEvent`.
+- **More of an AI answer is typed** — the `plan-executed` result gains
+  `answer_unavailable` (why there is no `answer`, when you asked for one);
+  `ConflictError.closedReason` (why a closed session ended, without a second
+  call); `FeatureUnavailableError.stopUnconfirmed` (the one `stop()` 503 worth
+  calling again); and `ByokAnthropicRequiredError.keyRejected` / `.keySource` /
+  `.keyRejectedReason` (Anthropic refused your own key, which key, and why).
 - **Run an AI task end to end** — `agentSessions.create(body, { byokApiKey })`
   sends your own Anthropic key at create, so an Opus session can be started
   without a stored key. `CreateAgentSessionRequest` gains `skip_proxy_probe`.
@@ -25,6 +42,14 @@ versioning follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Too many AI turns on the included AI is a `RateLimitError` now** — the API
+  answers this refusal as `rate-limited` with `retry_after_seconds: 1` instead
+  of `concurrency-limit`, so `message()` raises `RateLimitError`
+  (`isRetryable` true, `retryAfterSeconds` 1) where it raised
+  `ConcurrencyLimitError`. No SDK change is needed to read it, and
+  `ConcurrencyLimitError` still means what it always meant on `create()`: your
+  plan's concurrent-session limit. `intents` on a `plan-executed` result now
+  covers every plan the turn made, not only the first.
 - **`ConsequentialActionCategory` admits categories newer than the SDK** — the
   known values `| (string & {})`, so a `confirmation_required` result from a
   newer server can be passed straight back as an approval.

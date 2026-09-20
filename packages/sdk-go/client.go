@@ -253,6 +253,21 @@ type requestOptions struct {
 	// frame (event name + raw JSON data) as it arrives; the stream is then
 	// parsed incrementally instead of being read whole first.
 	onFrame func(event string, data []byte)
+	// onOpenFrame, when set on an eventStream request, marks a stream that has
+	// NO terminal event: the server keeps it open and sends frames as things
+	// happen. Each frame goes to the callback, which returns false to stop
+	// reading; the request returns when it does, when the server closes the
+	// stream, or when the context ends.
+	onOpenFrame func(event string, data []byte) (bool, error)
+	// rawOut, when set, receives a 2xx body as bytes — with the media type the
+	// server gave them — instead of being decoded as JSON.
+	rawOut *rawBody
+}
+
+// rawBody is a response body that is not JSON: a screenshot, say.
+type rawBody struct {
+	contentType string
+	bytes       []byte
 }
 
 // do executes a request with retry. Returns nil on success (with out
@@ -413,6 +428,13 @@ func (c *Client) doOnce(ctx context.Context, opts requestOptions) error {
 	// returns no error on truncation, so a >cap valid JSON body would otherwise
 	// masquerade as a misleading "failed to parse JSON response body" below.
 	const maxBodyBytes = 8 * 1024 * 1024
+	if opts.onOpenFrame != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		// An open-ended stream: same byte ceiling, no terminal event to wait for.
+		if !isEventStreamSuccess(resp) {
+			return transportErrorFromHTTP("expected an event stream and the response was not one", nil)
+		}
+		return readOpenEventStream(resp.Body, maxBodyBytes, opts.onOpenFrame)
+	}
 	if opts.eventStream && opts.onFrame != nil && isEventStreamSuccess(resp) {
 		// Live path: hand each progress frame to the caller as it lands, under
 		// the same byte ceiling and single-terminal rule as the buffered path.
@@ -444,6 +466,12 @@ func (c *Client) doOnce(ctx context.Context, opts requestOptions) error {
 		retryAfter = ""
 	}
 
+	if opts.rawOut != nil && statusCode >= 200 && statusCode < 300 {
+		opts.rawOut.bytes = body
+		opts.rawOut.contentType = strings.ToLower(strings.TrimSpace(
+			strings.SplitN(resp.Header.Get("Content-Type"), ";", 2)[0]))
+		return nil
+	}
 	if statusCode >= 200 && statusCode < 300 {
 		if statusCode == http.StatusNoContent || len(body) == 0 || opts.out == nil {
 			return nil
@@ -598,6 +626,69 @@ func readLiveEventStream(r io.Reader, limit int, onFrame func(string, []byte)) (
 		return 0, nil, transportErrorFromHTTP("agent turn stream ended without a terminal response", nil)
 	}
 	return status, terminalBody, nil
+}
+
+// readOpenEventStream reads a stream that has no terminal event, handing each
+// frame with data to onFrame as it arrives. Comments (the keep-alives) are
+// skipped by parseEventBlock. It returns nil when onFrame returns false or the
+// server closes the stream, onFrame's error when it returns one, and the
+// context's error when the context ends. The whole stream is held to limit
+// bytes, exactly as readLiveEventStream holds a turn's.
+func readOpenEventStream(r io.Reader, limit int, onFrame func(string, []byte) (bool, error)) error {
+	handle := func(block string) (bool, error) {
+		event, data, hasData := parseEventBlock(block)
+		if !hasData {
+			return true, nil
+		}
+		return onFrame(event, []byte(data))
+	}
+
+	buf := make([]byte, 32*1024)
+	pending := ""
+	total := 0
+	for {
+		n, readErr := r.Read(buf)
+		if n > 0 {
+			total += n
+			if total > limit {
+				return transportErrorFromHTTP(
+					fmt.Sprintf("response body exceeds %d-byte limit", limit),
+					nil,
+				)
+			}
+			pending = strings.ReplaceAll(pending+string(buf[:n]), "\r\n", "\n")
+			for {
+				end := strings.Index(pending, "\n\n")
+				if end < 0 {
+					break
+				}
+				block := pending[:end]
+				pending = pending[end+2:]
+				cont, err := handle(block)
+				if err != nil || !cont {
+					return err
+				}
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			// The caller's cancel, or a deadline, surfaces as itself — the same
+			// rule doOnce applies to a request that never got its headers.
+			if errors.Is(readErr, context.Canceled) || errors.Is(readErr, context.DeadlineExceeded) {
+				return readErr
+			}
+			return transportErrorFromHTTP("failed to read response body", readErr)
+		}
+	}
+	for _, block := range strings.Split(pending, "\n\n") {
+		cont, err := handle(block)
+		if err != nil || !cont {
+			return err
+		}
+	}
+	return nil
 }
 
 // decodeTerminalResult is the success/problem tail for a live-read stream:

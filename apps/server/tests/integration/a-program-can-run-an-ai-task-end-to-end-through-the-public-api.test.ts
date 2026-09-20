@@ -41,8 +41,16 @@
 //      message, continues the same task;
 //   7. stop answers `stop_requested` while a turn runs, the turn ends as
 //      `stopped`, and stop then answers `no_turn_running`;
-//   8. close ends the session: it reads `closed`, a later message is refused
-//      with a 409, and the profile is free for the next run.
+//   8. a message refused because another turn holds the session leaves its
+//      Idempotency-Key free: the SAME key, sent again once the session is idle,
+//      runs the task once, and a third send of it replays that one result;
+//   9. the screenshot behind a step's `captureId` comes back through the SDK,
+//      as bytes with the media type the server gave them;
+//  10. the session's conversation reads back through the SDK, oldest entry
+//      first, and resumes from a given index without repeating anything;
+//  11. close ends the session: it reads `closed`, a later message is refused
+//      with a 409 whose typed fields say the session is over and why, and the
+//      profile is free for the next run.
 //
 // Two arms after the flow pin the edges of the same contracts: an approval that
 // does NOT come straight after the halt is not used, and a key with only the
@@ -54,10 +62,12 @@ import {
   ConflictError,
   Driftstack,
   ForbiddenError,
+  NotFoundError,
   ProfileInUseError,
   type AgentIntentResult,
   type AgentMessageResponse,
   type AgentSession,
+  type AgentTranscriptEvent,
 } from '@driftstack/sdk';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type {
@@ -69,6 +79,8 @@ import type {
   DecomposeResult,
 } from '../../src/services/agent-decomposer.js';
 import type * as AgentExecutorModule from '../../src/services/agent-executor.js';
+import type * as AppModule from '../../src/lib/app.js';
+import type { SessionCaptureStore } from '../../src/services/session-capture-store.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 // ── The device: the test app's stub executor, able to read the page back ─────
@@ -78,7 +90,35 @@ const device = vi.hoisted(() => ({
   pageText: 'Invoices · INV-0926 · September 2026 · Total due: $1,284.50',
   /** The session id of every page read, in order. */
   reads: [] as string[],
+  /** The smallest valid PNG, as base64 — what a screenshot step "took". */
+  screenshotB64:
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+  /** Every capture id the screenshots were stored under, in order. */
+  captureIds: [] as string[],
 }));
+
+/**
+ * The screenshot store, the one the production app shares between the executor
+ * that writes a capture and the route that serves it.
+ *
+ * The fixture does not wire one, and its file belongs to another workflow, so it
+ * is injected here where the app is assembled — the same dependency, reaching
+ * the same two places. Without it the capture route would answer 404 for every
+ * id, and the stage below would be testing nothing but the 404.
+ */
+const capture = vi.hoisted(() => ({ store: undefined as SessionCaptureStore | undefined }));
+
+vi.mock('../../src/lib/app.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof AppModule>();
+  const { SessionCaptureStore } = await import('../../src/services/session-capture-store.js');
+  return {
+    ...actual,
+    buildApp: (deps: Parameters<typeof actual.buildApp>[0]) => {
+      capture.store ??= new SessionCaptureStore();
+      return actual.buildApp({ ...deps, sessionCaptureStore: capture.store });
+    },
+  };
+});
 
 vi.mock('../../src/services/agent-executor.js', async (importOriginal) => {
   const actual = await importOriginal<typeof AgentExecutorModule>();
@@ -86,6 +126,42 @@ vi.mock('../../src/services/agent-executor.js', async (importOriginal) => {
     observe(sessionId: string): Promise<string | null> {
       device.reads.push(sessionId);
       return Promise.resolve(device.pageText);
+    }
+
+    /**
+     * A screenshot step stores real bytes and carries the id they are under, as
+     * the production executor does. The rewrite happens BEFORE the step is
+     * announced, so the streamed `step` frame and the final `results` entry
+     * carry the same id — they are the same object.
+     */
+    override execute(
+      args: Parameters<AgentExecutorModule.StubAgentExecutor['execute']>[0],
+    ): ReturnType<AgentExecutorModule.StubAgentExecutor['execute']> {
+      const announce = args.onStep;
+      return super.execute({
+        ...args,
+        onStep: (result, index) => {
+          if (
+            result.kind === 'success' &&
+            result.intent.kind === 'capture' &&
+            result.intent.capture === 'screenshot' &&
+            capture.store !== undefined
+          ) {
+            // Keyed the way the production executor keys it: by the AGENT
+            // session id, which is what the capture route looks a screenshot up
+            // under. `sessionId` is the browser session, and is `unattached`
+            // for a pure agent-session run.
+            const id = capture.store.put(
+              args.agentSessionId ?? args.sessionId,
+              device.screenshotB64,
+              'png',
+            );
+            (result as { captureId?: string }).captureId = id;
+            device.captureIds.push(id);
+          }
+          announce?.(result, index);
+        },
+      });
     }
   }
   return { ...actual, StubAgentExecutor: StubAgentExecutorThatReadsThePage };
@@ -313,6 +389,7 @@ const flow: {
   firstTurn?: PlanExecuted;
   firstTurnKey?: string;
   halted?: ConfirmationRequired;
+  captureId?: string;
 } = {};
 
 function need<T>(value: T | undefined, what: string): T {
@@ -546,6 +623,139 @@ describe('a program can run an AI task end to end through the public API', () =>
     expect(lastCall('POST', `/v1/agent-sessions/${id}/stop`).status).toBe(200);
   });
 
+  it('a message refused because another turn holds the session leaves its Idempotency-Key free: the same key runs the task once the session is idle, and a third send replays that one result', async () => {
+    const sdk = need(flow.sdk, 'the SDK');
+    const id = need(flow.sessionId, 'the session');
+    const key = randomUUID();
+
+    // A turn that will not finish until it is stopped occupies the session.
+    const occupying = sdk.agentSessions.message(id, TASK.longRunning, {
+      idempotencyKey: randomUUID(),
+      byokApiKey: OWN_KEY,
+    });
+    await waitFor(() => planner.waitingToBeStopped, 'the occupying turn to be running');
+
+    // The task a program actually wanted to run, refused before it did anything.
+    const refused = await sdk.agentSessions
+      .message(id, TASK.readInvoice, { idempotencyKey: key, byokApiKey: OWN_KEY })
+      .catch((err: unknown) => err);
+    expect(refused).toBeInstanceOf(ConflictError);
+    expect((refused as ConflictError).turnInProgress, 'which conflict it is, in a field').toBe(
+      true,
+    );
+    expect((refused as ConflictError).sessionStatus, 'the session itself is fine').toBeUndefined();
+
+    // Let the session go idle again.
+    await sdk.agentSessions.stop(id);
+    expectKind(await occupying, 'stopped');
+
+    // The SAME key, unchanged, and the task runs — once.
+    const plannedBefore = planner.calls.length;
+    const readsBefore = device.reads.length;
+    const ran = expectKind(
+      await sdk.agentSessions.message(id, TASK.readInvoice, {
+        idempotencyKey: key,
+        byokApiKey: OWN_KEY,
+      }),
+      'plan-executed',
+    );
+    expect(ran.ok, 'the refusal was not replayed; the task ran').toBe(true);
+    expect(ran.answer).toBe('The latest invoice totals $1,284.50.');
+    expect(planner.calls.length, 'the task was planned exactly once').toBe(plannedBefore + 1);
+    expect(device.reads.length, 'the page was read exactly once').toBe(readsBefore + 1);
+
+    // And from that moment the key is spent, as any completed turn's key is:
+    // the third send replays the result rather than running the task again.
+    const replay = await sdk.agentSessions.message(id, TASK.readInvoice, {
+      idempotencyKey: key,
+      byokApiKey: OWN_KEY,
+    });
+    expect(replay).toEqual(ran);
+    expect(planner.calls.length, 'nothing was planned a second time').toBe(plannedBefore + 1);
+    expect(device.reads.length, 'the page was not read a second time').toBe(readsBefore + 1);
+
+    flow.captureId = ran.results
+      .map((r) => (r.kind === 'success' ? r.captureId : undefined))
+      .at(-1);
+  });
+
+  it('the screenshot behind a step’s captureId comes back through the SDK as its bytes, with the media type the server gave them', async () => {
+    const sdk = need(flow.sdk, 'the SDK');
+    const id = need(flow.sessionId, 'the session');
+    const captureId = need(flow.captureId, 'the captureId of the screenshot step');
+    // The id on the result is the id the screenshot was stored under, not a
+    // placeholder: the stage above watched it being minted.
+    expect(
+      device.captureIds,
+      'the id on the result is one a screenshot was stored under',
+    ).toContain(captureId);
+
+    const shot = await sdk.agentSessions.getCapture(id, captureId);
+
+    expect(shot.contentType).toBe('image/png');
+    expect(Buffer.from(shot.bytes).toString('base64'), 'the bytes arrive unchanged').toBe(
+      device.screenshotB64,
+    );
+    const call = lastCall('GET', `/v1/agent-sessions/${id}/captures/${captureId}`);
+    expect(call.status).toBe(200);
+    expect(call.contentType, 'the body is the image, not JSON').toBe('image/png');
+
+    // A screenshot that is no longer kept is a NotFoundError, never empty bytes.
+    const gone = await sdk.agentSessions
+      .getCapture(id, 'cap_never_stored')
+      .catch((err: unknown) => err);
+    expect(gone).toBeInstanceOf(NotFoundError);
+  });
+
+  it('the session’s conversation reads back through the SDK, oldest entry first, and resumes from a given index without repeating anything', async () => {
+    const sdk = need(flow.sdk, 'the SDK');
+    const id = need(flow.sessionId, 'the session');
+
+    // What a program does: ask how long the conversation is, then read that
+    // many entries and leave the loop — which closes the stream.
+    const { transcript_length: length } = await sdk.agentSessions.get(id);
+    expect(length, 'the session has a conversation by now').toBeGreaterThan(4);
+
+    const all: AgentTranscriptEvent[] = [];
+    for await (const event of sdk.agentSessions.transcript(id)) {
+      all.push(event);
+      if (event.index === length - 1) break;
+    }
+
+    expect(
+      all.map((e) => e.index),
+      'every entry, oldest first, with no gaps',
+    ).toEqual(Array.from({ length }, (_unused, i) => i));
+    expect(all[0]?.entry.role, 'the first entry is the first thing the program sent').toBe('user');
+    expect(all[0]?.entry.body).toBe(TASK.readInvoice);
+    expect(all.map((e) => e.entry.role).every((role) => ['user', 'agent'].includes(role))).toBe(
+      true,
+    );
+    expect(
+      all.every((e) => typeof e.entry.at === 'string' && typeof e.entry.body === 'string'),
+      'each entry carries plain text and when it was written',
+    ).toBe(true);
+    // The conversation really is this session's: the clarifying question it
+    // asked, and the answer the program read back, are both in it.
+    const bodies = all.map((e) => e.entry.body);
+    expect(bodies.some((b) => b.includes(QUESTION))).toBe(true);
+    expect(bodies.some((b) => b.includes('$1,284.50'))).toBe(true);
+
+    // Resuming is exclusive: pass the second-to-last index and only the last
+    // entry arrives, so a program that reconnects never re-reads what it has.
+    const resumed: AgentTranscriptEvent[] = [];
+    for await (const event of sdk.agentSessions.transcript(id, { lastEventId: length - 2 })) {
+      resumed.push(event);
+      if (event.index === length - 1) break;
+    }
+    expect(resumed.map((e) => e.index)).toEqual([length - 1]);
+    expect(resumed[0]).toEqual(all.at(-1));
+
+    const call = lastCall('GET', `/v1/agent-sessions/${id}/transcript`);
+    expect(call.status).toBe(200);
+    expect(call.contentType).toContain('text/event-stream');
+  });
+
   it('close ends the session: it reads closed, a later message is refused with a 409, and the profile is free for the next run', async () => {
     const sdk = need(flow.sdk, 'the SDK');
     const id = need(flow.sessionId, 'the session');
@@ -571,6 +781,11 @@ describe('a program can run an AI task end to end through the public API', () =>
     // The refusal says which conflict it is in fields, not only in its sentence:
     // a program tells "this session is over" from "this session is busy" by
     // `session_status`, and reads why it ended without a second call.
+    expect((refused as ConflictError).sessionStatus, 'this session is over').toBe('closed');
+    expect((refused as ConflictError).closedReason, 'and why, without a second call').toBe(
+      'customer-closed',
+    );
+    expect((refused as ConflictError).turnInProgress, 'not "this session is busy"').toBe(false);
     expect((refused as ConflictError).extensions).toMatchObject({
       session_status: 'closed',
       closed_reason: 'customer-closed',

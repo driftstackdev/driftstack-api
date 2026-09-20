@@ -46,26 +46,26 @@ asyncio.run(main())
 
 Every public API endpoint is a typed method on a resource accessor:
 
-| Accessor                   | Methods                                                                                                                                                                                                                             |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `client.sessions`          | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `extract`, `search`, `login`, `destroy`                                                                                                            |
-| `client.agent_sessions`    | `create`, `get`, `list`, `iterate`, `message`, `stop`, `close`, `set_mode`, `set_egress`, `send_input_event`, `takeover`, `handback`, `livekit_token`, `resume` (run AI tasks in a browser — see "Run an AI task" below)            |
-| `client.egress`            | `attach_to_session`, `get_session_proxy` (**capability-gated — 503/404 on every deployment today; no egress backend is wired**), `list_proxies`, `create_proxy`, `update_proxy`, `delete_proxy`, `test_proxy` (reusable proxy CRUD) |
-| `client.profiles`          | `create`, `list`, `iterate`, `get`, `update`, `delete`, `clone` (V-313)                                                                                                                                                             |
-| `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete` (V-312 — immutable point-in-time copies)                                                                                                               |
-| `client.recipes`           | `create`, `list`, `iterate`, `get`, `delete` (snapshot and manage an agent-session's intent_log; no execute method)                                                                                                                 |
-| `client.api_keys`          | `create`, `list`, `rotate` (V-296), `revoke`                                                                                                                                                                                        |
-| `client.usage`             | `current_period`                                                                                                                                                                                                                    |
-| `client.webhooks`          | `create`, `list`, `get`, `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` (V-307)                                                                                                                               |
-| `client.team`              | `invite`, `list_members`, `list_invites`, `list_owners`, `accept_invite`, `remove_member` (V-298)                                                                                                                                   |
-| `client.billing`           | `get_state`, `create_checkout_session`, `create_portal_session`                                                                                                                                                                     |
-| `client.crypto_orders`     | `quote`, `create_checkout`, `list`, `iterate`, `get`, `update_note`, `cancel`, `receipt` (V-666 — crypto checkout orders)                                                                                                           |
-| `client.auth`              | `signup`, `verify_email`, `login`, `refresh`, `logout`, `request_magic_link`, `consume_magic_link`, `request_password_reset`, `confirm_password_reset`                                                                              |
-| `client.mfa`               | `status`, `enroll`, `verify`, `disable`, `regenerate_recovery_codes` (V-353b — TOTP MFA enrollment)                                                                                                                                 |
-| `client.account`           | `me` (V-385 — full /v1/account/me with slug / region / avatar / mfa / teams)                                                                                                                                                        |
-| `client.legal`             | `documents`, `required`, `accept` (V-049 — legal-document catalog + acceptance)                                                                                                                                                     |
-| `client.audit_log`         | `list`, `iterate`, `export` (V-216 — append-only account event ledger; V-462 export)                                                                                                                                                |
-| `client.email_preferences` | `list`, `set`, `opt_out`, `opt_in` (V-204 — non-critical email opt-out toggles)                                                                                                                                                     |
+| Accessor                   | Methods                                                                                                                                                                                                                                               |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client.sessions`          | `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `extract`, `search`, `login`, `destroy`                                                                                                                              |
+| `client.agent_sessions`    | `create`, `get`, `list`, `iterate`, `message`, `get_capture`, `transcript`, `stop`, `close`, `set_mode`, `set_egress`, `send_input_event`, `takeover`, `handback`, `livekit_token`, `resume` (run AI tasks in a browser — see "Run an AI task" below) |
+| `client.egress`            | `attach_to_session`, `get_session_proxy` (**capability-gated — 503/404 on every deployment today; no egress backend is wired**), `list_proxies`, `create_proxy`, `update_proxy`, `delete_proxy`, `test_proxy` (reusable proxy CRUD)                   |
+| `client.profiles`          | `create`, `list`, `iterate`, `get`, `update`, `delete`, `clone` (V-313)                                                                                                                                                                               |
+| `client.profile_snapshots` | `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete` (V-312 — immutable point-in-time copies)                                                                                                                                 |
+| `client.recipes`           | `create`, `list`, `iterate`, `get`, `delete` (snapshot and manage an agent-session's intent_log; no execute method)                                                                                                                                   |
+| `client.api_keys`          | `create`, `list`, `rotate` (V-296), `revoke`                                                                                                                                                                                                          |
+| `client.usage`             | `current_period`                                                                                                                                                                                                                                      |
+| `client.webhooks`          | `create`, `list`, `get`, `delete`, `list_deliveries`, `iterate_deliveries`, `replay_delivery` (V-307)                                                                                                                                                 |
+| `client.team`              | `invite`, `list_members`, `list_invites`, `list_owners`, `accept_invite`, `remove_member` (V-298)                                                                                                                                                     |
+| `client.billing`           | `get_state`, `create_checkout_session`, `create_portal_session`                                                                                                                                                                                       |
+| `client.crypto_orders`     | `quote`, `create_checkout`, `list`, `iterate`, `get`, `update_note`, `cancel`, `receipt` (V-666 — crypto checkout orders)                                                                                                                             |
+| `client.auth`              | `signup`, `verify_email`, `login`, `refresh`, `logout`, `request_magic_link`, `consume_magic_link`, `request_password_reset`, `confirm_password_reset`                                                                                                |
+| `client.mfa`               | `status`, `enroll`, `verify`, `disable`, `regenerate_recovery_codes` (V-353b — TOTP MFA enrollment)                                                                                                                                                   |
+| `client.account`           | `me` (V-385 — full /v1/account/me with slug / region / avatar / mfa / teams)                                                                                                                                                                          |
+| `client.legal`             | `documents`, `required`, `accept` (V-049 — legal-document catalog + acceptance)                                                                                                                                                                       |
+| `client.audit_log`         | `list`, `iterate`, `export` (V-216 — append-only account event ledger; V-462 export)                                                                                                                                                                  |
+| `client.email_preferences` | `list`, `set`, `opt_out`, `opt_in` (V-204 — non-critical email opt-out toggles)                                                                                                                                                                       |
 
 Inputs accept either a Pydantic model OR a plain `dict` (both serialize identically on the wire). `sessions`, `api_keys`, `usage`, `webhooks`, `team` and `archetypes` return typed Pydantic models; the other resources — `agent_sessions` included — return plain dicts that mirror the API's JSON.
 
@@ -135,12 +135,15 @@ key only for an ambiguous retry of the exact same
 session/message/approvals/BYOK request. A completed turn replays without
 executing its browser actions again; changed or still-running turns fail closed.
 
-A turn is never retried automatically, and once the server has accepted a key
-the response it gives for that key is final — errors included. Reuse the same
-key only when you got no response at all, or a `ConflictError` whose
-`idempotency_status` is `"in_progress"`. After any other error (a 409
-`turn_in_progress`, a 429, a 402, a 502, a 403 `requires_own_key`), fix the
-cause or wait, then send the turn with a **new** key.
+A turn is never retried automatically. A refusal raised **before the turn did
+any work** gives the key back, so the **same** key runs the turn once the cause
+is gone: a 409 `turn_in_progress`, a 429, a 402, a 403 about the plan's AI or
+the model (`requires_own_key`), and a 502 whose `key_rejected` is false. So does
+a `ConflictError` whose `idempotency_status` is `"in_progress"` — the first
+attempt is still being resolved. Every other answer is final for its key:
+a completed turn, a failure after the turn started, a rejected own key
+(`key_rejected`), a 500, a `"refuse"` result, and the 409 for a closed or
+paused session. Those need a **new** key.
 
 ## Run an AI task
 
@@ -168,12 +171,48 @@ finally:
 `on_event(name, data)` receives the other progress events (`phase`, `plan`,
 `step_start`, `answer`, `notice`; ignore names you do not recognise); on
 `AsyncDriftstack` both callbacks may be `async def`. `timeout_s=` bounds the
-whole call (default 50 minutes). AI refusals are typed:
-`ForbiddenError.requires_own_key` (an Opus model needs your own Anthropic key),
-`ConflictError.turn_in_progress` / `.session_status`, `RateLimitError`,
+whole call (default 50 minutes). When you asked for information and none could
+be produced, `resp.get("answer_unavailable")` says why.
+
+A `capture` step's result carries a `captureId`; fetch the image as soon as the
+turn ends, because screenshots are kept only briefly:
+
+```python
+for r in resp["results"]:
+    if r["kind"] == "success" and "captureId" in r:
+        shot = client.agent_sessions.get_capture(session["id"], r["captureId"])
+        name = "shot.jpg" if shot["content_type"] == "image/jpeg" else "shot.png"
+        with open(name, "wb") as f:
+            f.write(shot["bytes"])
+```
+
+`transcript(id)` yields the conversation so far and then follows it live, so
+leave the loop when you have what you need (that closes the connection). To
+read only what is there now:
+
+```python
+length = client.agent_sessions.get(session["id"])["transcript_length"]
+if length > 0:
+    for event in client.agent_sessions.transcript(session["id"]):
+        print(event["index"], event["entry"]["role"], event["entry"]["body"])
+        if event["index"] == length - 1:
+            break
+```
+
+Pass `last_event_id=` (the last `index` you saw) to carry on from there. On
+`AsyncDriftstack` use `async for`.
+
+AI refusals are typed: `ForbiddenError.requires_own_key` (an Opus model needs
+your own Anthropic key), `ConflictError.turn_in_progress` / `.session_status` /
+`.closed_reason`, `RateLimitError` (the message rate, or too many AI turns
+running at once — wait `retry_after_seconds`, then send the same request
+again, the same idempotency key and all),
 `BundledLlmBudgetExhaustedError`, `BundledLlmConsentRequiredError` and
-`ByokAnthropicRequiredError`. See [`examples/agent_chat.py`](examples/agent_chat.py)
-for the complete flow.
+`ByokAnthropicRequiredError` (`.key_rejected`, `.key_source`,
+`.key_rejected_reason` when Anthropic refused your own key). On `stop()`,
+`FeatureUnavailableError.stop_unconfirmed` means the stop could not be
+confirmed: call `stop()` again. See
+[`examples/agent_chat.py`](examples/agent_chat.py) for the complete flow.
 
 ## Webhook signature verification
 

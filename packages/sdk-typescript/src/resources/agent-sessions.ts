@@ -5,6 +5,8 @@
 //   create(body?, opts?)                  start a session
 //   get(id) / list(query?) / iterate()    read sessions
 //   message(id, userMessage, opts?)       send one task and wait for its outcome
+//   getCapture(id, captureId)             fetch a screenshot the agent took
+//   transcript(id, opts?)                 read the conversation, then follow it live
 //   stop(id)                              stop the task that is running
 //   close(id)                             end the session
 //   setMode / setEgress / sendInputEvent / takeover / handback /
@@ -15,7 +17,7 @@
 // FeatureUnavailableError; the remaining session surface stays available.
 
 import type { PaginationQueryInput } from '@driftstack/api-types';
-import type { HttpClient } from '../http.js';
+import type { EventStreamFrame, HttpClient } from '../http.js';
 import { iteratePaginated } from '../pagination.js';
 
 /**
@@ -399,9 +401,11 @@ export type AgentMessageResponse =
   | {
       kind: 'plan-executed';
       session: AgentSession;
-      /** The steps the agent planned. Read each step's outcome from `results`,
-       *  which carries the step it ran as `results[i].intent`; the two arrays
-       *  need not line up by index. */
+      /** Every step the turn attempted, in order, across every plan it made.
+       *  Read each step's outcome from `results`, which carries the step it ran
+       *  as `results[i].intent`; the two arrays need not line up by index —
+       *  `intents` is longer when a plan was abandoned part-way, because the
+       *  steps that did not run have no result. */
       intents: ReadonlyArray<AgentIntent>;
       /** Every step that ran, in order. */
       results: ReadonlyArray<AgentIntentResult>;
@@ -420,6 +424,14 @@ export type AgentMessageResponse =
        * screenshot) has no answer and omits the field.
        */
       answer?: string;
+      /**
+       * Why there is no `answer`, when the message asked for information and
+       * none could be produced: one sentence, in plain words. Never present
+       * together with `answer`, and absent on a message that only asked for
+       * actions. Open text — show it, do not match on it. Absent on older
+       * servers.
+       */
+      answer_unavailable?: string;
       /**
        * Present when the turn ended before the task was finished — it reached a
        * limit on steps, time or budget, or stopped rather than repeat itself —
@@ -493,6 +505,61 @@ export const AGENT_MESSAGE_STREAM_TIMEOUT_MS = 50 * 60_000;
 export interface AgentStepEvent {
   index: number;
   result: AgentIntentResult;
+}
+
+/** A screenshot fetched with {@link AgentSessionsResource.getCapture}. */
+export interface AgentCapture {
+  /** `'image/png'` or `'image/jpeg'` — which one this screenshot is. */
+  contentType: string;
+  /** The image itself. Write it to a file as-is. */
+  bytes: Uint8Array;
+}
+
+/**
+ * One entry of a session's conversation. `role` is who wrote it: `'user'` (a
+ * message you sent), `'agent'` (the AI's outcome) or `'operator'` (a message
+ * recorded by a `'manual'`-mode session). `body` is always plain text, never
+ * JSON. `intents` is present on an agent entry whose plan ran; sensitive typed
+ * values are withheld from it. Entries can carry other fields too; ignore any
+ * you do not recognise.
+ */
+export interface AgentTranscriptEntry {
+  role: 'user' | 'agent' | 'operator' | (string & {});
+  body: string;
+  /** ISO-8601 time the entry was written. */
+  at: string;
+  intents?: ReadonlyArray<AgentIntent>;
+  [k: string]: unknown;
+}
+
+/** One item yielded by {@link AgentSessionsResource.transcript}: the entry and
+ *  its 0-based position in the conversation. Pass the last `index` you saw as
+ *  `lastEventId` to carry on from there. */
+export interface AgentTranscriptEvent {
+  index: number;
+  entry: AgentTranscriptEntry;
+}
+
+/** The `transcript.entry` frames of a stream, as events. The set of event names
+ *  is open: a frame that is not a transcript entry, or does not look like one,
+ *  is skipped, never an error. */
+async function* transcriptEvents(
+  frames: AsyncGenerator<EventStreamFrame, void, void>,
+): AsyncGenerator<AgentTranscriptEvent, void, void> {
+  for await (const frame of frames) {
+    if (frame.type !== 'transcript.entry') continue;
+    const data = frame.data as { index?: unknown; entry?: unknown } | null;
+    if (
+      data === null ||
+      typeof data !== 'object' ||
+      typeof data.index !== 'number' ||
+      typeof data.entry !== 'object' ||
+      data.entry === null
+    ) {
+      continue;
+    }
+    yield { index: data.index, entry: data.entry as AgentTranscriptEntry };
+  }
 }
 
 export class AgentSessionsResource {
@@ -615,26 +682,41 @@ export class AgentSessionsResource {
    * `idempotencyKey` (strongly recommended) identifies this logical turn.
    * Reuse it when retrying after a lost/ambiguous stream so the server replays
    * the durable terminal result instead of executing browser actions twice.
-   * Once the server has accepted a key, the response it gives for that key is
-   * final, errors included: reuse the same key only when you got no response at
-   * all, or a ConflictError whose `idempotencyStatus` is `'in_progress'` (the
-   * first attempt is still running; it replays the result once it finishes).
-   * After any other error, fix the cause or wait, then send with a NEW key. Use
-   * a new key too whenever the message, session or approvals change.
+   * A refusal raised BEFORE the turn did any work gives the key back, so the
+   * same key runs the turn once the cause is gone: a ConflictError whose
+   * `turnInProgress` is true, a RateLimitError (the message rate, or too many
+   * AI turns running at once), BundledLlmConsentRequiredError,
+   * BundledLlmBudgetExhaustedError, a
+   * ForbiddenError about the plan's AI or the model (`requiresOwnKey`), and a
+   * ByokAnthropicRequiredError whose `keyRejected` is false. Fix the cause or
+   * wait, then send the same request again with the SAME key. So is a
+   * ConflictError whose `idempotencyStatus` is `'in_progress'`: the first
+   * attempt is still being resolved, and the same key replays its result.
+   *
+   * Every other answer is final for that key and sending it again replays it —
+   * every completed turn, every failure after the turn started, a rejected own
+   * key (`keyRejected`), a 500, a `'refuse'` result, and the 409 for a session
+   * that is closed or paused. To send one of those again, fix the cause and use
+   * a NEW key. Use a new key too whenever the message, session or approvals
+   * change.
    *
    * Errors you should expect:
    * - 409 ConflictError — `turnInProgress`: another message is still running
-   *   on this session (wait, or `stop()` it); `sessionStatus`: the session
-   *   has ended (read `closed_reason` with `get()` and start a new one,
-   *   optionally with `continue_from_agent_session_id`).
+   *   on this session (wait, or `stop()` it); `sessionStatus`: the session is
+   *   not active — `'closed'` (`closedReason` says why; start a new one,
+   *   optionally with `continue_from_agent_session_id`) or `'paused'`.
    * - 429 RateLimitError — the account's message rate, or too many AI turns
-   *   running at once across your sessions; wait `retryAfterSeconds`.
-   * - 429 ConcurrencyLimitError — too many turns on Driftstack's included AI
-   *   are running at once; retry when one finishes.
+   *   running at once: across your sessions, or on Driftstack's included AI.
+   *   No step ran; wait `retryAfterSeconds`, then send the same request again
+   *   — the same idempotency key still works (`isRetryable` is true).
    * - 403 ForbiddenError — the plan has no AI, the included AI is not on your
    *   plan, or an Opus model needs your own key (`requiresOwnKey`).
-   * - 402 BundledLlmBudgetExhaustedError / BundledLlmConsentRequiredError and
-   *   502 ByokAnthropicRequiredError — no AI key or budget is available.
+   * - 402 BundledLlmBudgetExhaustedError / BundledLlmConsentRequiredError —
+   *   the included AI's budget is used up, or the account has not opted in.
+   * - 502 ByokAnthropicRequiredError — the turn has no AI key (a plan that runs
+   *   AI only on its own key is answered this way too), or Anthropic refused
+   *   your key (`keyRejected`; `keySource` and `keyRejectedReason` say which
+   *   key and why). No step ran. Not retryable: fix the key first.
    */
   message(
     id: string,
@@ -719,6 +801,80 @@ export class AgentSessionsResource {
             onStep(event as AgentStepEvent);
           },
       onEvent,
+    );
+  }
+
+  /**
+   * Fetch a screenshot the agent took. A `capture` step's result carries a
+   * `captureId`; this returns the image behind it, with its `contentType`
+   * (`'image/png'` or `'image/jpeg'`).
+   *
+   * Screenshots are kept only briefly — at most the 20 most recent per session,
+   * and they can be removed once 30 minutes pass without a new one in that
+   * session — so fetch one as soon as its turn ends.
+   *
+   * Errors: 404 NotFoundError — the session is unknown, or no screenshot with
+   * this id is kept for it any more.
+   */
+  async getCapture(id: string, captureId: string): Promise<AgentCapture> {
+    const res = await this.http.requestBytes({
+      method: 'GET',
+      path: `/v1/agent-sessions/${encodeURIComponent(id)}/captures/${encodeURIComponent(captureId)}`,
+    });
+    return { contentType: res.contentType, bytes: res.bytes };
+  }
+
+  /**
+   * Read a session's conversation, then follow it live. Yields every entry
+   * already in the transcript, oldest first, and then each new entry as it is
+   * written — so the loop does not end by itself while the session is open.
+   * Stop it by leaving the loop (`break`), or by aborting `signal`; either
+   * closes the connection.
+   *
+   * To read only what is there now, read `transcript_length` with `get(id)`
+   * first and leave the loop at `index === transcript_length - 1` (skip the
+   * call when it is 0).
+   *
+   * `lastEventId` resumes: pass the last `index` you saw and the stream starts
+   * with the entry after it, so nothing is repeated. The stream ends when the
+   * server closes it (your key lost access, or the connection was recycled);
+   * call again with `lastEventId` to carry on.
+   *
+   * `timeoutMs` is the absolute limit on how long one call may stay open
+   * (default 50 minutes, the same as `message()`); past it the call throws a
+   * TransportError. It is not an idle timeout.
+   *
+   * Entries are returned as the session recorded them: `body` is free text,
+   * and may contain whatever was sent to the agent. Treat the transcript as
+   * sensitive.
+   *
+   * Errors: 404 NotFoundError; 429 RateLimitError — an account may hold at
+   * most 10 transcript streams open at once (wait `retryAfterSeconds`).
+   */
+  transcript(
+    id: string,
+    opts?: {
+      /** Resume after this entry index (the `index` of the last event you saw). */
+      lastEventId?: number;
+      /** Abort to end the stream from outside the loop. Ends it quietly. */
+      signal?: AbortSignal;
+      /** Absolute limit for this call, in ms. Defaults to 50 minutes. */
+      timeoutMs?: number;
+    },
+  ): AsyncGenerator<AgentTranscriptEvent, void, void> {
+    return transcriptEvents(
+      this.http.requestEventFrames(
+        {
+          method: 'GET',
+          path: `/v1/agent-sessions/${encodeURIComponent(id)}/transcript`,
+          timeoutMs: opts?.timeoutMs ?? AGENT_MESSAGE_STREAM_TIMEOUT_MS,
+          // `!== undefined`, not truthiness: 0 is an index.
+          ...(opts?.lastEventId !== undefined
+            ? { headers: { 'Last-Event-ID': String(opts.lastEventId) } }
+            : {}),
+        },
+        opts?.signal,
+      ),
     );
   }
 
@@ -935,8 +1091,11 @@ export class AgentSessionsResource {
    * running, 200 `{ status: 'no_turn_running', session_id }` when none was.
    * Safe to call again.
    *   - 404 — session unknown (or cross-account; existence not leaked)
-   *   - 503 FeatureUnavailableError — the stop could not be confirmed just
-   *     now; call `stop()` again
+   *   - 503 FeatureUnavailableError — when its `stopUnconfirmed` is true, the
+   *     stop could not be confirmed just now and the turn may still be running:
+   *     call `stop()` again. (`isRetryable` is false for this class, because
+   *     the same 503 without the flag means AI is not enabled and calling again
+   *     would not help; the SDK does not retry `stop()` by itself.)
    */
   stop(id: string): Promise<{ status: 'stop_requested' | 'no_turn_running'; session_id: string }> {
     return this.http.request({

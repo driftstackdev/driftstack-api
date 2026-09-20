@@ -53,7 +53,11 @@ from driftstack.errors import (
     ValidationError,
     is_retryable,
 )
-from driftstack.resources.agent_sessions import LiveKitInfo
+from driftstack.resources.agent_sessions import (
+    AgentCapture,
+    AgentTranscriptEvent,
+    LiveKitInfo,
+)
 from driftstack.resources.api_keys import ApiKeyList
 from driftstack.resources.archetypes import ListArchetypesResponse, PublicArchetype
 from driftstack.resources.sessions import SessionsListPage
@@ -108,6 +112,8 @@ __all__ = [
     "ProfileInUseError",
     "ProxyValidationFailedError",
     "LiveKitInfo",
+    "AgentCapture",
+    "AgentTranscriptEvent",
     "ListArchetypesResponse",
     "PublicArchetype",
     # Customer-facing pydantic models — used as return types on

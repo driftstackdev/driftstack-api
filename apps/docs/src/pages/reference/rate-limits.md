@@ -95,11 +95,13 @@ with an RFC 9457 problem-details body
 
 The standard `Retry-After` HTTP header carries the same value as
 `retry_after_seconds`. SDK clients honour it automatically with
-exponential backoff capped at 10s. The exception is agent-session messages
-(`message()`), which the SDKs never retry for you: wait
-`retry_after_seconds` and send the message again yourself, with a new
-`Idempotency-Key`. [Idempotency keys](/reference/idempotency/) lists the
-requests that accept one and how a key is matched.
+exponential backoff capped at 10s. Two calls are the exception, and the
+SDKs never retry either for you: an agent-session message (`message()`) and
+the transcript reader (`transcript()`) — wait `retry_after_seconds` and call
+again yourself. A `429` on a message refuses it before the turn does any
+work, so the same `Idempotency-Key` still works.
+[Idempotency keys](/reference/idempotency/) lists the requests that accept
+one, how a key is matched, and which other refusals free it.
 
 When a distinct selected owner's bucket is exhausted, the request also
 returns 429, but the problem remains generic (`"Rate limit exceeded."`).

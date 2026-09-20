@@ -4033,6 +4033,40 @@
         "type": "string",
         "description": "Server-sent event stream of NotificationEvent frames for the calling account."
       },
+      "AgentOwnKeyRequiredProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "description": "Stable URI identifying the problem class. Clients switch on this."
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "requires_own_key": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "model": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "title", "status"],
+        "additionalProperties": {},
+        "description": "RFC 7807 forbidden. `requires_own_key: true` means the refusal is about the AI model: the chosen model runs only on your own Anthropic key (every Opus-class model does), and this session or turn would have run on Driftstack’s included AI. `model` names the model that was refused. Both are absent on every other 403."
+      },
       "AgentSessionTranscriptStream": {
         "type": "string",
         "description": "Server-sent event stream of transcript.entry frames; each frame carries an `id:` (the entry index) and a JSON `data:` payload of { index, entry }."
@@ -4439,7 +4473,8 @@
                       "required": ["kind"]
                     }
                   ]
-                }
+                },
+                "description": "Every step the turn attempted, in order, across every plan it made. It lines up one for one with `results` when every plan ran to its end, and is longer when a plan was abandoned part-way: the steps that did not run have no result. Read a step’s outcome from `results`, where `results[i].intent` is the step that result is for."
               },
               "results": {
                 "type": "array",
@@ -4866,6 +4901,14 @@
               },
               "answer": {
                 "type": "string"
+              },
+              "answer_unavailable": {
+                "type": "string",
+                "description": "Why there is no `answer`, when the message asked for information and none could be produced: one sentence, in plain words. Never present together with `answer`, and absent on a message that only asked for actions. Open text: show it, do not match on it."
+              },
+              "notice": {
+                "type": "string",
+                "description": "Present when the turn ended before the task was finished — it reached a limit on steps, time or budget, or stopped rather than repeat itself — or when the agent asked you something part-way through. One or two sentences saying what to do next; when it asks for \"continue\", send that as the next message. Absent when the task finished or a step failed."
               },
               "usage": {
                 "$ref": "#/components/schemas/AgentMessageUsage"
@@ -6973,6 +7016,9 @@
             "type": "string",
             "enum": ["active", "paused", "closed"]
           },
+          "closed_reason": {
+            "type": "string"
+          },
           "turn_in_progress": {
             "type": "boolean",
             "enum": [true]
@@ -6980,7 +7026,122 @@
         },
         "required": ["type", "title", "status"],
         "additionalProperties": {},
-        "description": "RFC 7807 conflict with bounded agent-turn evidence. Idempotency conflicts identify mismatch versus unresolved work; authority/lifecycle conflicts may include consumed usage and redacted settled results that must be inspected before another action, plus `session_status` when the session itself ended and `turn_in_progress` when another turn still holds the session."
+        "description": "RFC 7807 conflict with bounded agent-turn evidence. Idempotency conflicts identify mismatch versus unresolved work; authority/lifecycle conflicts may include consumed usage and redacted settled results that must be inspected before another action, plus `session_status` when the session is not active — whether it was already closed or paused when the message arrived, or ended while the turn ran — with `closed_reason` beside it when the session records one, and `turn_in_progress` when another turn still holds the session."
+      },
+      "AgentTurnLimitProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "description": "Stable URI identifying the problem class. Clients switch on this."
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "retry_after_seconds": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["type", "title", "status"],
+        "additionalProperties": {},
+        "description": "RFC 7807 rate-limited. `retry_after_seconds` is how long to wait before sending again; it repeats the `Retry-After` header, and is the only place the wait appears when the refusal arrives inside the streamed `response` event."
+      },
+      "AgentAiKeyProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "description": "Stable URI identifying the problem class. Clients switch on this."
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "key_rejected": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "key_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["header", "stored"]
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "key_rejected_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["invalid_or_unauthorized", "billing"]
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "required": ["type", "title", "status"],
+        "additionalProperties": {},
+        "description": "RFC 7807 byok-anthropic-required. With no extension fields: the turn has no Anthropic key to run on. With `key_rejected: true`: Anthropic refused your own key on the turn’s first planning call, and no step was run. `key_source` says which key (`header` — the one sent with this request; `stored` — the one saved on the account) and `key_rejected_reason` says why (`invalid_or_unauthorized` — invalid, revoked, or not permitted to run the model; `billing` — the Anthropic account behind it cannot pay for the call). The key itself never appears in the response."
+      },
+      "AgentStopUnavailableProblem": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "format": "uri",
+            "description": "Stable URI identifying the problem class. Clients switch on this."
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "stop_unconfirmed": {
+            "type": "boolean",
+            "enum": [true]
+          }
+        },
+        "required": ["type", "title", "status"],
+        "additionalProperties": {},
+        "description": "RFC 7807 feature-unavailable. `stop_unconfirmed: true` is present only when the stop could not be confirmed; that is the one case worth calling again."
       },
       "LiveKitInfo": {
         "type": "object",
@@ -36391,6 +36552,16 @@
             "required": false,
             "name": "idempotency-key",
             "in": "header"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Optional. Your own Anthropic API key. Create uses it only to decide whether the chosen `model` is allowed: some models, every Opus-class one included, run only on your own key, so without a key here or stored on the account the create is refused with a 403 carrying `requires_own_key: true`. The key is not stored and is never logged; send it on every message too."
+            },
+            "required": false,
+            "name": "x-byok-anthropic-api-key",
+            "in": "header"
           }
         ],
         "requestBody": {
@@ -36780,11 +36951,11 @@
             }
           },
           "403": {
-            "description": "Caller not permitted — key lacks the write scope, or mode ai/pair was requested on a tier without the AI-agent feature (Free / Personal).",
+            "description": "Caller not permitted — key lacks the write scope, mode ai/pair was requested on a tier without the AI-agent feature (Free / Personal), or the chosen `model` runs only on your own Anthropic key (every Opus-class model does) and the session would run on Driftstack’s included AI. The last case carries `requires_own_key: true` and `model`: add your own Anthropic key (stored, or the `x-byok-anthropic-api-key` header) or pick another model.",
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Problem"
+                  "$ref": "#/components/schemas/AgentOwnKeyRequiredProblem"
                 }
               }
             }
@@ -38274,7 +38445,7 @@
         },
         "responses": {
           "200": {
-            "description": "Turn result — discriminated by `kind`: plan-executed (intents + results + ok, plus `answer` when the turn read the page back to answer the question) / clarify (clarifying_question) / refuse (refuse_reason) / stopped (the turn was stopped with POST /v1/agent-sessions/{id}/stop: the steps that ran, including one that was already running when the stop arrived, and a `notice` saying how far it got) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.",
+            "description": "Turn result — discriminated by `kind`: plan-executed (intents + results + ok, where `intents` covers every plan the turn made; plus `answer` when the turn read the page back to answer the question, or `answer_unavailable` saying why it could not; plus `notice` when the turn ended before the task was finished) / clarify (clarifying_question) / refuse (refuse_reason) / stopped (the turn was stopped with POST /v1/agent-sessions/{id}/stop: the steps that ran, including one that was already running when the stop arrived, and a `notice` saying how far it got) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.",
             "content": {
               "application/json": {
                 "schema": {
@@ -38341,7 +38512,7 @@
             }
           },
           "403": {
-            "description": "Caller not permitted.",
+            "description": "Caller not permitted: the key lacks the `write` scope; the turn would run on Driftstack’s included AI and the plan does not include it; or the session’s model runs only on your own Anthropic key (every Opus-class model does) and the turn would have run on the included AI (`requires_own_key: true`, with `model` naming it). No step was run. Whether the plan includes the AI agent at all is settled when the session is created or its mode is changed, never on a message.",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
@@ -38353,7 +38524,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Problem"
+                  "$ref": "#/components/schemas/AgentOwnKeyRequiredProblem"
                 }
               }
             }
@@ -38369,7 +38540,7 @@
             }
           },
           "409": {
-            "description": "Agent session is closed/paused, its control authority changed, its transcript capacity is exhausted, another turn is already running, or the Idempotency-Key is pending/reused with a different logical turn. Authority/lifecycle conflicts can include usage and redacted settled partial results; inspect that evidence before taking another action.",
+            "description": "Agent session is closed/paused (`session_status`, with `closed_reason` when the session records one), its control authority changed, its transcript capacity is exhausted, another turn is already running (`turn_in_progress`), or the Idempotency-Key is pending/reused with a different logical turn (`idempotency_status`). Authority/lifecycle conflicts can include usage and redacted settled partial results; inspect that evidence before taking another action.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -38379,7 +38550,7 @@
             }
           },
           "429": {
-            "description": "Rate limit or concurrency limit hit.",
+            "description": "Rate limited. Besides the request rate limit for this route, two limits on AI turns running at once answer here, both as `rate-limited` with `retry_after_seconds: 1` and `Retry-After: 1`: the account already has the maximum number of AI turns running across its sessions, or the maximum number running on Driftstack’s included AI. No step was run; wait for a turn to finish, then send the message again. On the streamed representation the refusal arrives inside the `response` event, so the wait is in the body’s `retry_after_seconds` only.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
@@ -38446,17 +38617,17 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Problem"
+                  "$ref": "#/components/schemas/AgentTurnLimitProblem"
                 }
               }
             }
           },
           "502": {
-            "description": "No Anthropic credential is available for this turn. Set a stored key with PUT /v1/account/me/byok-anthropic-key, or supply `x-byok-anthropic-api-key` on the request.",
+            "description": "The turn has no usable Anthropic key. Either none is available — set a stored key with PUT /v1/account/me/byok-anthropic-key, or supply `x-byok-anthropic-api-key` on the request; a plan that can only run AI on its own key is answered this way too — or Anthropic refused your own key on the first planning call (`key_rejected: true`, with `key_source` and `key_rejected_reason`). No step was run in either case. Not worth retrying unchanged: add, replace or fix the key first.",
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Problem"
+                  "$ref": "#/components/schemas/AgentAiKeyProblem"
                 }
               }
             }
@@ -39172,7 +39343,7 @@
             }
           },
           "503": {
-            "description": "AI chat is not activated on this deployment (the response carries the activation message), or the stop could not be confirmed just now — try again in a moment.",
+            "description": "Two causes share this status and problem type. `stop_unconfirmed: true` means the stop could not be confirmed just now and the turn may still be running: call stop again. Without that field, AI chat is not activated on this deployment (the response carries the activation message) and calling again will not help.",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
@@ -39184,7 +39355,7 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Problem"
+                  "$ref": "#/components/schemas/AgentStopUnavailableProblem"
                 }
               }
             }
@@ -39237,7 +39408,258 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "properties": {}
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "account_id": {
+                      "type": "string"
+                    },
+                    "driftstack_session_id": {
+                      "type": ["string", "null"]
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "closed_reason": {
+                      "type": ["string", "null"]
+                    },
+                    "provisioning_detail": {
+                      "type": ["string", "null"]
+                    },
+                    "token_budget_total": {
+                      "type": "integer"
+                    },
+                    "token_budget_remaining": {
+                      "type": "integer"
+                    },
+                    "transcript_length": {
+                      "type": "integer"
+                    },
+                    "closed_at": {
+                      "type": ["string", "null"]
+                    },
+                    "created_by_user_id": {
+                      "type": ["string", "null"]
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": ["manual", "ai", "pair"]
+                    },
+                    "model": {
+                      "type": "string",
+                      "enum": [
+                        "claude-opus-5",
+                        "claude-sonnet-5",
+                        "claude-opus-4-8",
+                        "claude-opus-4-7",
+                        "claude-sonnet-4-6",
+                        "claude-haiku-4-5"
+                      ]
+                    },
+                    "stop_on_exit_ip_change": {
+                      "type": "boolean"
+                    },
+                    "pair_mode_state": {
+                      "type": ["object", "null"],
+                      "properties": {
+                        "kind": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["kind"]
+                    },
+                    "created_at": {
+                      "type": "string"
+                    },
+                    "updated_at": {
+                      "type": "string"
+                    },
+                    "livekit": {
+                      "type": "object",
+                      "properties": {
+                        "ws_url": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "room": {
+                          "type": "string"
+                        },
+                        "token": {
+                          "type": "string"
+                        },
+                        "participant_identity": {
+                          "type": "string"
+                        },
+                        "expires_at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["ws_url", "room", "token", "participant_identity", "expires_at"]
+                    },
+                    "liveness": {
+                      "type": "object",
+                      "properties": {
+                        "state": {
+                          "type": ["string", "null"],
+                          "enum": ["active", "provisioning", "idle", "terminating", null]
+                        },
+                        "fresh": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["state", "fresh"]
+                    },
+                    "capability_report": {
+                      "type": "object",
+                      "properties": {
+                        "timestamp": {
+                          "type": "string"
+                        },
+                        "manual_input_available": {
+                          "type": ["boolean", "null"]
+                        },
+                        "streaming_state": {
+                          "type": ["string", "null"],
+                          "enum": [
+                            "provisioning",
+                            "live",
+                            "blank",
+                            "failed",
+                            "permission_denied",
+                            null
+                          ]
+                        },
+                        "egress_state": {
+                          "type": ["string", "null"],
+                          "enum": ["live", "dead_proxy", null]
+                        },
+                        "proxy_kind": {
+                          "type": "string",
+                          "enum": ["socks5", "openvpn", "wireguard"]
+                        },
+                        "proxy_udp_supported": {
+                          "type": "boolean"
+                        },
+                        "transport_mode_requested": {
+                          "type": "string",
+                          "enum": ["h2-only", "h2-and-h3"]
+                        },
+                        "transport_mode_active": {
+                          "type": "string",
+                          "enum": ["h2-only", "h2-and-h3"]
+                        },
+                        "safeguards_passed": {
+                          "type": "boolean"
+                        },
+                        "h3_connection_observed": {
+                          "type": ["boolean", "null"]
+                        },
+                        "h3_connection_count": {
+                          "type": ["integer", "null"],
+                          "minimum": 0
+                        },
+                        "exit_ip": {
+                          "type": ["string", "null"]
+                        },
+                        "exit_country": {
+                          "type": ["string", "null"]
+                        },
+                        "exit_timezone": {
+                          "type": ["string", "null"]
+                        },
+                        "webrtc_candidate_ips": {
+                          "type": ["array", "null"],
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "observed_at": {
+                          "type": ["string", "null"]
+                        }
+                      },
+                      "required": [
+                        "timestamp",
+                        "manual_input_available",
+                        "streaming_state",
+                        "egress_state",
+                        "proxy_kind",
+                        "proxy_udp_supported",
+                        "transport_mode_requested",
+                        "transport_mode_active",
+                        "safeguards_passed",
+                        "h3_connection_observed",
+                        "exit_ip",
+                        "exit_country",
+                        "exit_timezone",
+                        "webrtc_candidate_ips",
+                        "observed_at"
+                      ]
+                    },
+                    "error_event": {
+                      "type": ["object", "null"],
+                      "properties": {
+                        "timestamp": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[a-z][a-z0-9_]{0,127}$"
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": ["info", "warn", "error", "fatal"]
+                        },
+                        "summary": {
+                          "type": "string",
+                          "maxLength": 4096
+                        },
+                        "detail": {
+                          "type": ["string", "null"],
+                          "maxLength": 16384,
+                          "description": "Null when the server has nothing to add beyond `summary`."
+                        },
+                        "customer_actionable": {
+                          "type": "boolean",
+                          "description": "Whether a human can do anything about this failure."
+                        },
+                        "retryable": {
+                          "type": "boolean",
+                          "description": "Whether repeating the same call is worth trying."
+                        }
+                      },
+                      "required": [
+                        "timestamp",
+                        "code",
+                        "severity",
+                        "summary",
+                        "detail",
+                        "customer_actionable",
+                        "retryable"
+                      ],
+                      "description": "The most recent failure recorded for this session, at launch or while running. Null when none has been reported."
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "account_id",
+                    "driftstack_session_id",
+                    "status",
+                    "closed_reason",
+                    "token_budget_total",
+                    "token_budget_remaining",
+                    "transcript_length",
+                    "closed_at",
+                    "created_by_user_id",
+                    "mode",
+                    "model",
+                    "stop_on_exit_ip_change",
+                    "pair_mode_state",
+                    "created_at",
+                    "updated_at"
+                  ]
                 }
               }
             }
@@ -39690,7 +40112,14 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                  "client_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128,
+                    "description": "Optional. The same `client_id` the takeover was requested with, identifying which tab or window is handing control back."
+                  }
+                }
               }
             }
           }
@@ -41891,6 +42320,210 @@
           },
           "404": {
             "description": "Agent session not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit or concurrency limit hit.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Limit": {
+                "description": "Request capacity of the bucket this call was charged to.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in that bucket.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until that bucket refills.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Bucket": {
+                "description": "Which bucket was charged, e.g. `global` or `sessions:create`. Sent alongside the X-RateLimit-* aliases of the three headers above, kept for existing clients.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Legacy alias of `RateLimit-Limit`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Legacy alias of `RateLimit-Remaining`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Legacy alias of `RateLimit-Reset`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AI chat agent not enabled on this deployment.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent-sessions/{id}/captures/{captureId}": {
+      "get": {
+        "summary": "Fetch a screenshot the AI captured, by its `captureId` (requires `read:sessions`, broad `read`, or `account_owner`)",
+        "description": "A `capture` step’s result carries a `captureId`; this returns the image behind it as raw bytes. Screenshots are kept only briefly: at most the 20 most recent per session, and they can be removed once 30 minutes pass without a new screenshot in that session. Fetch one as soon as its turn ends.",
+        "tags": ["agent-chat"],
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "required": true,
+            "name": "id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The `captureId` from a `capture` step’s result."
+            },
+            "required": true,
+            "name": "captureId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The image bytes. `Content-Type` says which format this one is: `image/png` or `image/jpeg`.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication failed.",
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Authentication challenge. `Bearer` on ordinary API routes; a route may send a more specific challenge, e.g. `Bearer realm=\"metrics\"`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Caller not permitted.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent session not found (or owned by another account), or no screenshot with this `captureId` is kept for it: the id is unknown, or the screenshot is no longer kept.",
             "content": {
               "application/problem+json": {
                 "schema": {

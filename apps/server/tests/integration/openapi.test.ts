@@ -305,6 +305,11 @@ describe('OpenAPI spec generation', () => {
         // AI-D — agent chat sessions
         '/v1/agent-sessions',
         '/v1/agent-sessions/{id}',
+        // Published 2026-09-19: the screenshot behind a `capture` step's `captureId`,
+        // as image/png or image/jpeg bytes. Registered long before that; the spec
+        // had left it out on the reasoning that a binary body is not a JSON
+        // contract, which the download fetch beside it already disproved.
+        '/v1/agent-sessions/{id}/captures/{captureId}',
         '/v1/agent-sessions/{id}/transcript',
         '/v1/agent-sessions/{id}/handback',
         '/v1/agent-sessions/{id}/input-event',

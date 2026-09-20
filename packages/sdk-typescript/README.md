@@ -73,6 +73,8 @@ client.agentSessions.get(id)
 client.agentSessions.list(query?)       // cursor-paginated, newest first
 client.agentSessions.iterate(opts?)
 client.agentSessions.message(id, userMessage, opts?)  // send a task; returns plan-executed | clarify | refuse | stopped | logged-manual — branch on kind
+client.agentSessions.getCapture(id, captureId)  // a screenshot the agent took: { contentType, bytes }
+client.agentSessions.transcript(id, opts?)  // async generator: the conversation so far, then live; opts: lastEventId, signal, timeoutMs
 client.agentSessions.stop(id)           // stop the running task; its message() returns kind 'stopped'
 client.agentSessions.close(id)
 client.agentSessions.setMode(id, mode)  // 'manual' | 'ai' | 'pair'
@@ -224,12 +226,15 @@ only for an ambiguous retry of the exact same session/message/approvals/BYOK
 request. A completed turn is replayed without executing its browser actions
 again; changed or still-running turns fail closed.
 
-A turn is never retried automatically, and once the server has accepted a key
-the response it gives for that key is final — errors included. Reuse the same
-key only when you got no response at all, or a `ConflictError` whose
-`idempotencyStatus` is `'in_progress'`. After any other error (a 409
-`turnInProgress`, a 429, a 402, a 502, a 403 `requiresOwnKey`), fix the cause
-or wait, then send the turn with a **new** key.
+A turn is never retried automatically. A refusal raised **before the turn did
+any work** gives the key back, so the **same** key runs the turn once the cause
+is gone: a 409 `turnInProgress`, a 429, a 402, a 403 about the plan's AI or the
+model (`requiresOwnKey`), and a 502 whose `keyRejected` is false. So does a
+`ConflictError` whose `idempotencyStatus` is `'in_progress'` — the first
+attempt is still being resolved. Every other answer is final for its key:
+a completed turn, a failure after the turn started, a rejected own key
+(`keyRejected`), a 500, a `'refuse'` result, and the 409 for a closed or paused
+session. Those need a **new** key.
 
 ## Run an AI task
 
@@ -259,11 +264,49 @@ try {
 ```
 
 `onEvent` receives the other progress events (`phase`, `plan`, `step_start`,
-`answer`, `notice`; ignore names you do not recognise). AI refusals are typed:
-`ForbiddenError.requiresOwnKey` (an Opus model needs your own Anthropic key),
-`ConflictError.turnInProgress` / `.sessionStatus`, `RateLimitError`,
+`answer`, `notice`; ignore names you do not recognise). When you asked for
+information and none could be produced, `resp.answer_unavailable` says why.
+
+A `capture` step's result carries a `captureId`; fetch the image as soon as the
+turn ends, because screenshots are kept only briefly:
+
+```ts
+import { writeFile } from 'node:fs/promises';
+
+for (const r of resp.results) {
+  if (r.kind === 'success' && r.captureId !== undefined) {
+    const shot = await client.agentSessions.getCapture(session.id, r.captureId);
+    await writeFile(shot.contentType === 'image/jpeg' ? 'shot.jpg' : 'shot.png', shot.bytes);
+  }
+}
+```
+
+`transcript(id)` yields the conversation so far and then follows it live, so
+leave the loop when you have what you need (that closes the connection). To
+read only what is there now:
+
+```ts
+const { transcript_length } = await client.agentSessions.get(session.id);
+if (transcript_length > 0) {
+  for await (const { index, entry } of client.agentSessions.transcript(session.id)) {
+    console.log(index, entry.role, entry.body);
+    if (index === transcript_length - 1) break;
+  }
+}
+```
+
+Pass `{ lastEventId }` (the last `index` you saw) to carry on from there.
+
+AI refusals are typed: `ForbiddenError.requiresOwnKey` (an Opus model needs
+your own Anthropic key), `ConflictError.turnInProgress` / `.sessionStatus` /
+`.closedReason`, `RateLimitError` (the message rate, or too many AI turns
+running at once — wait `retryAfterSeconds`, then send the same request again,
+the same idempotency key and all),
 `BundledLlmBudgetExhaustedError`, `BundledLlmConsentRequiredError` and
-`ByokAnthropicRequiredError`. See [`examples/agent-chat.ts`](./examples/agent-chat.ts)
+`ByokAnthropicRequiredError` (`.keyRejected`, `.keySource`,
+`.keyRejectedReason` when Anthropic refused your own key). On `stop()`,
+`FeatureUnavailableError.stopUnconfirmed` means the stop could not be confirmed:
+call `stop()` again. See [`examples/agent-chat.ts`](./examples/agent-chat.ts)
 for the complete flow.
 
 ## Webhook signature verification

@@ -361,25 +361,41 @@ Response (200) is a discriminated union by `kind`:
   ],
   "ok": true,
   "answer": "The page title is \"Example Domain\"."
+  // or, when the message asked for information and none could be produced:
+  // "answer_unavailable": "The page could not be read back, so there is no answer."
 }
 ```
 
 How to read a `plan-executed` turn:
 
 - `results` holds every step that ran, in order, each with the step itself as
-  `results[i].intent`. Read steps from there: `intents` is the plan, and a turn
-  that looked at the page and planned again can run steps that are not in it,
-  so the two arrays need not line up by index.
+  `results[i].intent`. Read steps from there. `intents` is every step the turn
+  attempted, across every plan it made — a turn that looked at the page and
+  planned again contributes all of its plans — so `intents` is longer than
+  `results` whenever a plan was abandoned part-way, and the two arrays need not
+  line up by index.
 - `answer` is the answer to what the message asked ("…and tell me the total"),
   read back from the page. It is present only when the message asked for
   information, every step succeeded and the session still had enough token
   budget to read the page; a turn that only acts has no `answer`.
+- `answer_unavailable` takes its place when the message asked for information
+  and none could be produced — the page could not be read back, there was no
+  AI key to answer with, too little token budget was left, the turn used up
+  its planning rounds before it got to the read-back, or the answering step
+  did not complete. One sentence, in plain words. It is never present
+  together with `answer`, and a message that only asked for actions has
+  neither. It is open text: show it, do not match on it.
 - `notice` is present when the task is **not** finished: the turn stopped at a
-  limit (about three minutes of work, the number of planning rounds, too
-  little token budget left, or going in circles), or the agent asked you
-  something part-way. It is one sentence saying which; where it says so, send
-  "continue" and the agent carries on from the current page. It is absent when
-  the task finished or a step failed.
+  limit — about three minutes of work, the planning rounds it may make, too
+  little token budget left, going in circles, or a next step that would have
+  repeated an action that already ran — or it could not work out the next
+  steps, or the agent asked you something part-way. It is one sentence saying
+  which, and what it needs from you. Most ask you to send "continue", and the
+  agent carries on from the current page; the token-budget one asks you to
+  start a new session instead (its sentence calls that a new chat), and the
+  going-in-circles one asks you to say what to try differently. No other field says which, so treat `notice` as open
+  text: show it, do not match on it. It is absent when the task finished or a
+  step failed.
 - `ok` is `true` when the last planned steps ran without a failure and without
   stopping for approval. It does not by itself mean the task is finished —
   check `notice` — and a turn that recovered from a failed step can show
@@ -613,9 +629,11 @@ from the JSON response in ways worth writing a client around:
 - **One turn at a time per session.** A message sent while another is still
   running returns `409 conflict` with `turn_in_progress: true`.
 - **Turns running at once, per account.** At most 3 AI turns run at once
-  across your sessions; the next returns `429 rate-limited` with
-  `retry_after_seconds: 1`. On Driftstack's included AI, at most 3 turns run at
-  once; the next returns `429 concurrency-limit`. Retry when one finishes.
+  across your sessions, and at most 3 of them on Driftstack's included AI.
+  Either ceiling refuses the next turn with `429 rate-limited`,
+  `retry_after_seconds: 1` and a `Retry-After` header. No step ran, so the
+  `Idempotency-Key` is free: wait for a turn to finish, then send the same
+  message again.
 - **Message rate.** Messages have their own `agent_sessions:message` rate-limit
   bucket per plan — see [Rate limits](/reference/rate-limits/).
 - **History.** A session holds up to 256 history entries or 1 MiB (a turn
@@ -672,8 +690,17 @@ from the moment the message is accepted, before any planning starts. If you get
 `200 no_turn_running` while your own `POST /message` is still waiting for its
 answer, either the turn has just finished (its response is on its way) or the
 message has not reached the turn yet; asking again a second later is safe and
-settles which. A `503` (`feature-unavailable`) means we could not confirm the
-stop; call it again.
+settles which. A `503` (`feature-unavailable`) carrying `stop_unconfirmed:
+true` means we could not confirm the stop and the turn may still be running;
+call it again. A `503` of the same type **without** that field means AI chat is
+not enabled on this deployment, and calling again will not help.
+
+The SDKs return the `{ status, session_id }` body so you can branch on it:
+`agentSessions.stop(id)` in TypeScript, `agent_sessions.stop(id)` in Python
+(sync and async) and `AgentSessions.Stop(ctx, id)` in Go. Each raises the `503`
+as the typed feature-unavailable error, with `stop_unconfirmed` among the extra
+fields, and none of them retries a stop by itself. Because `message()` blocks
+until the turn ends, call stop from another thread, task or goroutine.
 
 The turn itself ends on **its own** `POST /message` response, which comes back
 as `kind: "stopped"` with the steps that ran and a `notice` saying how far it
@@ -717,6 +744,11 @@ session. Fetch them as soon as the turn ends. An unknown or expired
 curl -sS "https://api.driftstack.dev/v1/agent-sessions/$ID/captures/$CAPTURE_ID" \
   -H "Authorization: Bearer $DRIFTSTACK_API_KEY" -o screenshot.png
 ```
+
+The SDKs fetch it for you and hand back the bytes with the media type the
+server gave them: `agentSessions.getCapture(id, captureId)` in TypeScript,
+`agent_sessions.get_capture(id, capture_id)` in Python (sync and async), and
+`AgentSessions.GetCapture(ctx, id, captureID)` in Go.
 
 ## Live video (LiveKit)
 
@@ -829,6 +861,16 @@ Browsers' EventSource auto-reconnect on disconnect uses
 `Last-Event-ID` for resume, so a transient network blip doesn't
 lose any transcript content as long as the customer's auth
 token is still valid.
+
+From a server, use the SDK rather than an SSE client of your own:
+`agentSessions.transcript(id, opts?)` in TypeScript (an async generator),
+`agent_sessions.transcript(id, last_event_id=…)` in Python (an iterator, and an
+async iterator on `AsyncDriftstack`), and
+`AgentSessions.Transcript(ctx, id, opts, fn)` in Go (a callback that returns
+`false` to stop). Each one replays the entries already recorded, then follows
+new ones; each sends `Last-Event-ID` for you when you pass the last `index` you
+saw; and leaving the loop closes the connection, which matters because of the
+account-wide cap below.
 
 Example (TypeScript browser):
 
@@ -1364,12 +1406,12 @@ Filter via
 |    400 | validation-failed            | body fails schema (missing `user_message`, a `user_message` over 8,000 characters, etc.)                                                                                                                                                                                 |
 |    400 | bad-request                  | create's `proxy_id` names an HTTP proxy                                                                                                                                                                                                                                  |
 |    403 | forbidden                    | create with — or mode-flip into — `mode: ai`/`pair` on a tier without the AI-agent feature (Free / Personal)                                                                                                                                                             |
-|    403 | forbidden                    | an Opus model on bundled billing, at create or on a message (`requires_own_key: true`)                                                                                                                                                                                   |
+|    403 | forbidden                    | a model that runs only on your own key, at create or on a message (`requires_own_key: true`, with `model` naming it)                                                                                                                                                     |
 |    403 | forbidden                    | a message on bundled billing when the account's current plan no longer includes it (add your own key)                                                                                                                                                                    |
 |    404 | not-found                    | session id you cannot access (not your own, and not a team you hold admin on)                                                                                                                                                                                            |
 |    409 | conflict                     | mode mismatch, or `ai_control_unavailable: true` when control of the session changes while a message is running; the latter includes `phase` and can include consumed `tokens_consumed`, `usage`, and redacted `partial_results` that must not be replayed automatically |
 |    409 | conflict                     | `turn_in_progress: true` — another message is still running on this session; wait for it or [stop it](#stop-the-running-turn)                                                                                                                                            |
-|    409 | conflict                     | `session_status` — the session has ended (read `closed_reason` with `GET /{id}`); start a new session, optionally with `continue_from_agent_session_id`                                                                                                                  |
+|    409 | conflict                     | `session_status` — the session was not active (`"closed"`, with `closed_reason` beside it when the session records one, or `"paused"`); start a new session, optionally with `continue_from_agent_session_id`, or resume the paused one                                  |
 |    409 | conflict                     | `idempotency_status: "in_progress"` — the first request with this `Idempotency-Key` is still running (retry later with the same key); `"mismatch"` — the key was used for a different request (use a new key)                                                            |
 |    409 | profile-in-use               | create's `profile_id` already has a live session (carries `active_session_id`)                                                                                                                                                                                           |
 |    409 | storage-quota-exceeded       | a profile-backed create when your plan's profile storage is full                                                                                                                                                                                                         |
@@ -1378,11 +1420,11 @@ Filter via
 |    402 | bundled-llm-budget-exhausted | bundled-LLM monthly cap reached                                                                                                                                                                                                                                          |
 |    402 | bundled-llm-consent-required | no key of your own and no opt-in to bundled billing; on Team, Agency and API Starter opting in is refused, so add your own key instead                                                                                                                                   |
 |    422 | proxy-validation-failed      | create's live proxy test failed (carries `reason`)                                                                                                                                                                                                                       |
-|    429 | rate-limited                 | the `agent_sessions:message` request rate for your plan, or your account already has 3 AI turns running (`retry_after_seconds`)                                                                                                                                          |
-|    429 | concurrency-limit            | at create, your account already has as many open agent sessions as your plan allows; on a message, 3 turns on bundled billing are already running                                                                                                                        |
-|    500 | internal                     | on a message that used your own Anthropic key, usually Anthropic rejected the key — [test the key](/api/byok-anthropic/#test-connection) before retrying                                                                                                                 |
-|    502 | byok-anthropic-required      | no Anthropic key could be found for the turn: none sent, none stored, and bundled billing is not available                                                                                                                                                               |
-|    503 | feature-unavailable          | on a message, an `Idempotency-Key` was sent but could not be recorded, so the turn did not run (retry later with the same key); on Stop, the stop could not be confirmed just now (try again)                                                                            |
+|    429 | rate-limited                 | the `agent_sessions:message` request rate for your plan, or your account already has as many AI turns running at once as it may — across your sessions, or on bundled billing (`retry_after_seconds`)                                                                    |
+|    429 | concurrency-limit            | at create only, your account already has as many open agent sessions as your plan allows                                                                                                                                                                                 |
+|    500 | internal                     | something went wrong on our side; it is never about your own Anthropic key                                                                                                                                                                                               |
+|    502 | byok-anthropic-required      | no Anthropic key could be found for the turn: none sent, none stored, and bundled billing is not available — or, with `key_rejected: true`, Anthropic refused yours on the first planning call (`key_source`, `key_rejected_reason`)                                     |
+|    503 | feature-unavailable          | on a message, an `Idempotency-Key` was sent but could not be recorded, so the turn did not run (retry later with the same key); on Stop, `stop_unconfirmed: true` means the stop could not be confirmed just now (try again)                                             |
 
 The pair-mode transition errors are typed in all
 three SDKs: `PairModeStateInvalidTransitionError`. Branch on

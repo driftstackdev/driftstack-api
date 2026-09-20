@@ -67,6 +67,9 @@ const REQUIRED_ALL_ENTRIES = [
   // callers can annotate handlers without deep-importing via
   // driftstack.resources.*).
   'LiveKitInfo',
+  // What get_capture() returns and what transcript() yields.
+  'AgentCapture',
+  'AgentTranscriptEvent',
   'ListArchetypesResponse',
   'PublicArchetype',
   'AcceptInviteResponse',

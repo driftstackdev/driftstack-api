@@ -42,6 +42,20 @@ export interface RequestOptions {
   headers?: Record<string, string>;
 }
 
+/** A response whose body is raw bytes (an image, a file) rather than JSON. */
+export interface BinaryResponse {
+  /** The media type the server gave the bytes, lower-cased, without parameters
+   *  (`'image/png'`). Empty when the server sent none. */
+  contentType: string;
+  bytes: Uint8Array;
+}
+
+/** One frame of an open-ended event stream: its SSE event name and JSON payload. */
+export interface EventStreamFrame {
+  type: string;
+  data: unknown;
+}
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 // Matches the Go SDK's response ceiling. API JSON and RFC 7807 bodies are
 // normally tiny; this leaves generous headroom for list responses while
@@ -241,6 +255,169 @@ export class HttpClient {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * Send a request whose successful response is raw bytes rather than JSON — a
+   * screenshot, say. Everything around the body is the same as `request`: the
+   * authorization header, the timeout, the retry policy (a GET is retried), the
+   * typed error for a non-2xx answer, and the 8 MiB ceiling.
+   */
+  async requestBytes(opts: RequestOptions): Promise<BinaryResponse> {
+    const fetchImpl = this.config.fetch ?? fetch;
+    const timeoutMs = this.resolveTimeoutMs(opts);
+    const url = this.buildUrl(opts.path, opts.query);
+    const baseRetry = opts.retry ?? this.config.retry;
+    const retryConfig: RetryConfig | undefined = isRetrySafe(opts.method, opts.headers)
+      ? baseRetry
+      : { ...baseRetry, maxAttempts: 0 };
+
+    return withRetry(async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        let response: Response;
+        try {
+          response = await fetchImpl(url, {
+            method: opts.method,
+            headers: this.defaultHeaders(opts),
+            ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+            signal: controller.signal,
+          });
+        } catch (err) {
+          throw new TransportError(transportMessage(err), 0, err);
+        }
+        if (!response.ok) {
+          // Always throws: the typed error for a problem body, a TransportError
+          // for anything else.
+          const text = await readBoundedResponseText(response);
+          return decodeJsonResponse<never>(
+            response.status,
+            text,
+            response.headers.get('retry-after'),
+          );
+        }
+        const bytes = await readBoundedResponseBytes(response);
+        return { contentType: mediaTypeOf(response), bytes };
+      } finally {
+        clearTimeout(timer);
+      }
+    }, retryConfig);
+  }
+
+  /**
+   * Open an event stream that has no terminal event — the server keeps it open
+   * and sends frames as things happen — and yield each frame as it arrives.
+   * Comments (the keep-alives) are skipped, and so is a frame whose data is not
+   * JSON. The generator ends when the server closes the stream, when the
+   * consumer stops iterating, or when `signal` is aborted; all three close the
+   * connection.
+   *
+   * It holds to the same two bounds as a turn's stream: `timeoutMs` is an
+   * absolute limit on how long the stream may stay open (a TransportError when
+   * it passes — it is not an idle timeout, the keep-alives see to that), and
+   * the whole stream may not exceed the 8 MiB response ceiling. Never retried
+   * here: the caller knows the last frame it saw and resumes from it.
+   */
+  async *requestEventFrames(
+    opts: RequestOptions,
+    signal?: AbortSignal,
+  ): AsyncGenerator<EventStreamFrame, void, void> {
+    if (signal?.aborted === true) return;
+    const fetchImpl = this.config.fetch ?? fetch;
+    const timeoutMs = this.resolveTimeoutMs(opts);
+    const url = this.buildUrl(opts.path, opts.query);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // A caller's abort ends the stream quietly; only the SDK's own timer is a
+    // failure. Both go through the one controller the fetch is bound to.
+    let abortedByCaller = false;
+    const onCallerAbort = (): void => {
+      abortedByCaller = true;
+      controller.abort();
+    };
+    signal?.addEventListener('abort', onCallerAbort, { once: true });
+    try {
+      let response: Response;
+      try {
+        response = await fetchImpl(url, {
+          method: opts.method,
+          headers: { ...this.defaultHeaders(opts), accept: 'text/event-stream' },
+          ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
+          signal: controller.signal,
+        });
+      } catch (err) {
+        if (abortedByCaller) return;
+        throw new TransportError(transportMessage(err), 0, err);
+      }
+      if (!response.ok) {
+        const text = await readBoundedResponseText(response);
+        decodeJsonResponse<never>(response.status, text, response.headers.get('retry-after'));
+        return;
+      }
+      if (mediaTypeOf(response) !== 'text/event-stream') {
+        await response.body?.cancel().catch(() => undefined);
+        throw new TransportError(
+          'expected an event stream and the response was not one',
+          response.status,
+        );
+      }
+      if (response.body === null) return;
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let bytesRead = 0;
+      try {
+        for (;;) {
+          let chunk: ReadableStreamReadResult<Uint8Array>;
+          try {
+            chunk = await reader.read();
+          } catch (err) {
+            if (abortedByCaller) return;
+            throw new TransportError(transportMessage(err), response.status, err);
+          }
+          if (chunk.done) break;
+          bytesRead += chunk.value.byteLength;
+          if (bytesRead > MAX_RESPONSE_BODY_BYTES) throw responseBodyTooLarge(response.status);
+          buffer += decoder.decode(chunk.value, { stream: true });
+          let idx = buffer.search(/\r?\n\r?\n/);
+          while (idx !== -1) {
+            const sepLen = (/\r?\n\r?\n/.exec(buffer.slice(idx))?.[0] ?? '\n\n').length;
+            const frame = parseEventFrame(buffer.slice(0, idx));
+            buffer = buffer.slice(idx + sepLen);
+            if (frame !== null) yield frame;
+            idx = buffer.search(/\r?\n\r?\n/);
+          }
+        }
+        buffer += decoder.decode();
+        const last = buffer.trim().length > 0 ? parseEventFrame(buffer) : null;
+        if (last !== null) yield last;
+      } finally {
+        // Reached when the stream ends, when it fails, and when the consumer
+        // stops iterating (`break` runs the generator's return()).
+        await reader.cancel().catch(() => undefined);
+        reader.releaseLock();
+      }
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onCallerAbort);
+      controller.abort();
+    }
+  }
+
+  /** The headers every request carries, with the caller's merged on top. */
+  private defaultHeaders(opts: RequestOptions): Record<string, string> {
+    const isBrowserContext = typeof globalThis !== 'undefined' && 'window' in globalThis;
+    return {
+      authorization: `Bearer ${this.config.apiKey}`,
+      ...(this.config.effectiveAccount !== undefined
+        ? { 'x-driftstack-account': this.config.effectiveAccount }
+        : {}),
+      ...(isBrowserContext ? {} : { 'user-agent': 'driftstack-sdk-typescript/0.0.1' }),
+      ...(opts.body !== undefined ? { 'content-type': 'application/json' } : {}),
+      ...opts.headers,
+    };
   }
 
   /**
@@ -507,6 +684,67 @@ async function readBoundedResponseText(response: Response): Promise<string> {
     throw new TransportError(transportMessage(err), response.status, err);
   } finally {
     reader.releaseLock();
+  }
+}
+
+/** The bytes of a response, under the same ceiling as `readBoundedResponseText`. */
+async function readBoundedResponseBytes(response: Response): Promise<Uint8Array> {
+  const declaredLength = response.headers.get('content-length');
+  if (declaredLength !== null && /^\d+$/.test(declaredLength)) {
+    if (Number(declaredLength) > MAX_RESPONSE_BODY_BYTES) {
+      await response.body?.cancel().catch(() => undefined);
+      throw responseBodyTooLarge(response.status);
+    }
+  }
+  if (response.body === null) return new Uint8Array(0);
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let bytesRead = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesRead += value.byteLength;
+      if (bytesRead > MAX_RESPONSE_BODY_BYTES) throw responseBodyTooLarge(response.status);
+      chunks.push(value);
+    }
+  } catch (err) {
+    await reader.cancel().catch(() => undefined);
+    if (err instanceof TransportError) throw err;
+    throw new TransportError(transportMessage(err), response.status, err);
+  } finally {
+    reader.releaseLock();
+  }
+  const out = new Uint8Array(bytesRead);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return out;
+}
+
+/** `image/png; charset=binary` → `image/png`; no header → `''`. */
+function mediaTypeOf(response: Response): string {
+  return (response.headers.get('content-type') ?? '').split(';', 1)[0]?.trim().toLowerCase() ?? '';
+}
+
+/** One SSE block → its frame, or null for a comment, a frame with no data, or
+ *  data that is not JSON (progress is best-effort; a bad frame is never fatal). */
+function parseEventFrame(block: string): EventStreamFrame | null {
+  let type = 'message';
+  const data: string[] = [];
+  for (const line of block.split(/\r?\n/)) {
+    if (line.startsWith(':')) continue;
+    if (line.startsWith('event:')) type = line.slice('event:'.length).trim();
+    else if (line.startsWith('data:')) data.push(line.slice('data:'.length).trimStart());
+  }
+  if (data.length === 0) return null;
+  try {
+    return { type, data: JSON.parse(data.join('\n')) as unknown };
+  } catch {
+    return null;
   }
 }
 

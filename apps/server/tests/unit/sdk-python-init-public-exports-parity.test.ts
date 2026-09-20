@@ -75,7 +75,11 @@ describe('Python SDK __init__.py public-export parity', () => {
   });
 
   it('LiveKitInfo (slice 61 + 63) still re-exported alongside the new 9 types — drift-guard against the new types accidentally displacing it', () => {
-    expect(body).toMatch(/from driftstack\.resources\.agent_sessions import LiveKitInfo/);
+    // One line or parenthesised: LiveKitInfo shares this import with the capture
+    // and transcript types, so it need not be the only name on it.
+    expect(body).toMatch(
+      /from driftstack\.resources\.agent_sessions import (?:\([^)]*\bLiveKitInfo\b[^)]*\)|[^\n(]*\bLiveKitInfo\b)/,
+    );
     expect(body).toMatch(/"LiveKitInfo",/);
   });
 });

@@ -7,8 +7,9 @@ Availability depends on the deployment's agent-runtime configuration.
 Unsupported deployments return typed ``FeatureUnavailable`` errors.
 
 Discriminated message response: branch on ``["kind"]`` —
-``plan-executed`` (carries ``intents`` + ``results`` + ``ok``, and ``answer`` /
-``notice`` when present), ``clarify`` (``clarifying_question``), ``refuse``
+``plan-executed`` (carries ``intents`` + ``results`` + ``ok``, and ``answer`` or
+``answer_unavailable``, and ``notice``, when present), ``clarify``
+(``clarifying_question``), ``refuse``
 (``refuse_reason``), or ``stopped`` (the turn was stopped with ``stop()``:
 ``results`` are the steps that ran and ``notice`` says how far it got). A
 ``manual``-mode session answers ``logged-manual``.
@@ -128,6 +129,54 @@ class LiveKitInfo(TypedDict):
 
     expires_at: str
     """ISO-8601 timestamp at which the token expires."""
+
+
+class AgentCapture(TypedDict):
+    """A screenshot fetched with :meth:`AgentSessionsResource.get_capture`."""
+
+    content_type: str
+    """``"image/png"`` or ``"image/jpeg"`` — which one this screenshot is."""
+
+    bytes: bytes
+    """The image itself. Write it to a file as-is."""
+
+
+class AgentTranscriptEvent(TypedDict):
+    """One item yielded by :meth:`AgentSessionsResource.transcript`."""
+
+    index: int
+    """The entry's 0-based position in the conversation. Pass the last one you
+    saw as ``last_event_id`` to carry on from there."""
+
+    entry: dict[str, Any]
+    """``{"role": "user" | "agent" | "operator", "body": str, "at": str,
+    "intents"?: [...]}``. ``body`` is always plain text, never JSON; ``intents``
+    is present on an agent entry whose plan ran, with sensitive typed values
+    withheld. Entries can carry other fields too; ignore any you do not
+    recognise."""
+
+
+def _transcript_headers(last_event_id: int | None) -> dict[str, str] | None:
+    # `is not None`, not truthiness: 0 is an index, and "resume after entry 0"
+    # is not the same request as "replay from the beginning".
+    if last_event_id is None:
+        return None
+    return {"Last-Event-ID": str(last_event_id)}
+
+
+def _transcript_event(name: str, data: Any) -> AgentTranscriptEvent | None:
+    """A ``transcript.entry`` frame as an event; anything else is skipped.
+
+    The set of event names is open, so a name this SDK does not know is never an
+    error.
+    """
+    if name != "transcript.entry" or not isinstance(data, dict):
+        return None
+    index = data.get("index")
+    entry = data.get("entry")
+    if isinstance(index, bool) or not isinstance(index, int) or not isinstance(entry, dict):
+        return None
+    return {"index": index, "entry": entry}
 
 
 class AgentSessionsResource:
@@ -257,12 +306,14 @@ class AgentSessionsResource:
         turn ends. The result is a dict keyed by ``kind``:
 
         - ``plan-executed`` — the steps ran. ``answer`` is what you asked for,
-          when you asked for information; ``results`` has each step's outcome
-          (``success``, ``failure`` with a ``diagnosis``, or
-          ``confirmation_required``); ``notice``, when present, says why the task
-          is not finished yet (send ``"continue"`` when it asks for that). ``ok``
-          is true when the last planned steps ran cleanly — it does not by
-          itself mean the task is finished.
+          when you asked for information, and ``answer_unavailable`` says why
+          there is none when one could not be produced (never both); ``intents``
+          is every step the turn attempted, across every plan it made;
+          ``results`` has each step's outcome (``success``, ``failure`` with a
+          ``diagnosis``, or ``confirmation_required``); ``notice``, when
+          present, says why the task is not finished yet (send ``"continue"``
+          when it asks for that). ``ok`` is true when the last planned steps ran
+          cleanly — it does not by itself mean the task is finished.
         - ``clarify`` — the agent needs more detail; reply with another message.
         - ``refuse`` — the agent will not do this, or the AI was briefly
           unavailable (the session stays active; send it again).
@@ -286,13 +337,24 @@ class AgentSessionsResource:
         ``idempotency_key`` (strongly recommended) identifies this logical
         turn. Reuse it after a lost/ambiguous stream so the server replays the
         durable terminal response instead of executing browser actions twice.
-        Once the server has accepted a key, the response it gives for that key
-        is final, errors included: reuse the same key only when you got no
-        response at all, or a ``ConflictError`` whose ``idempotency_status`` is
-        ``"in_progress"`` (the first attempt is still running; it replays the
-        result once it finishes). After any other error, fix the cause or wait,
-        then send with a NEW key. Use a new key too when the session, message
-        or approvals change.
+        A refusal raised BEFORE the turn did any work gives the key back, so
+        the same key runs the turn once the cause is gone: a ``ConflictError``
+        whose ``turn_in_progress`` is true, a ``RateLimitError`` (the message
+        rate, or too many AI turns running at once),
+        ``BundledLlmConsentRequiredError``, ``BundledLlmBudgetExhaustedError``,
+        a ``ForbiddenError`` about the plan's AI or the model
+        (``requires_own_key``), and a ``ByokAnthropicRequiredError`` whose
+        ``key_rejected`` is false. Fix the cause or wait, then send the same
+        request again with the SAME key. So is a ``ConflictError`` whose
+        ``idempotency_status`` is ``"in_progress"``: the first attempt is still
+        being resolved, and the same key replays its result.
+
+        Every other answer is final for that key and sending it again replays
+        it — every completed turn, every failure after the turn started, a
+        rejected own key (``key_rejected``), a 500, a ``"refuse"`` result, and
+        the 409 for a session that is closed or paused. To send one of those
+        again, fix the cause and use a NEW key. Use a new key too when the
+        session, message or approvals change.
 
         ``on_step`` (optional) is called with each step as it lands:
         ``{"index": int, "result": {...}}``, where ``index`` is the step's
@@ -309,14 +371,22 @@ class AgentSessionsResource:
         keep-alives hold the connection open while a long step runs.
 
         Errors you should expect: 409 ``ConflictError`` (``turn_in_progress``:
-        another message is still running; ``session_status``: the session has
-        ended — start a new one), 429 ``RateLimitError`` (the message rate, or
-        too many AI turns running at once on your account), 429
-        ``ConcurrencyLimitError`` (too many turns on the included AI at once),
-        403 ``ForbiddenError`` (no AI on the plan, or ``requires_own_key``), and
+        another message is still running; ``session_status``: the session is
+        not active — ``"closed"``, with ``closed_reason`` saying why, so start
+        a new one, or ``"paused"``), 429 ``RateLimitError`` (the message rate,
+        or too many AI turns running at once: across your sessions, or on
+        Driftstack's included AI — no step ran; wait ``retry_after_seconds``,
+        then send the same request again, the same idempotency key and all;
+        ``is_retryable`` is true),
+        403 ``ForbiddenError`` (no AI on the plan, or ``requires_own_key``),
         402 ``BundledLlmBudgetExhaustedError`` /
-        ``BundledLlmConsentRequiredError`` or 502 ``ByokAnthropicRequiredError``
-        when no AI key or budget is available.
+        ``BundledLlmConsentRequiredError`` (the included AI's budget is used up,
+        or the account has not opted in), and 502
+        ``ByokAnthropicRequiredError``: the turn has no AI key (a plan that runs
+        AI only on its own key is answered this way too), or Anthropic refused
+        your key (``key_rejected``; ``key_source`` and ``key_rejected_reason``
+        say which key and why). No step ran, and it is not retryable: fix the
+        key first.
         """
         body, extra_headers = _message_request(
             user_message, byok_api_key, idempotency_key, approve_consequential_actions
@@ -330,6 +400,79 @@ class AgentSessionsResource:
             on_step=on_step,
             on_event=on_event,
         )
+
+    def get_capture(self, agent_session_id: str, capture_id: str) -> AgentCapture:
+        """Fetch a screenshot the agent took.
+
+        A ``capture`` step's result carries a ``captureId``; this returns the
+        image behind it as ``{"content_type": "image/png" | "image/jpeg",
+        "bytes": b"..."}``.
+
+        Screenshots are kept only briefly — at most the 20 most recent per
+        session, and they can be removed once 30 minutes pass without a new one
+        in that session — so fetch one as soon as its turn ends.
+
+        Raises ``NotFoundError`` (404) when the session is unknown, or no
+        screenshot with this id is kept for it any more.
+        """
+        content, media_type = self._http.request_bytes(
+            "GET",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}"
+            f"/captures/{quote(capture_id, safe='')}",
+        )
+        return {"content_type": media_type, "bytes": content}
+
+    def transcript(
+        self,
+        agent_session_id: str,
+        *,
+        last_event_id: int | None = None,
+        timeout_s: float | None = None,
+    ) -> Iterator[AgentTranscriptEvent]:
+        """Read a session's conversation, then follow it live.
+
+        Yields ``{"index": int, "entry": {...}}`` for every entry already in the
+        transcript, oldest first, and then for each new entry as it is written —
+        so the loop does not end by itself while the session is open. Leave the
+        loop (``break``) to stop; that closes the connection. To close it at a
+        precise point, wrap the call in ``contextlib.closing``.
+
+        To read only what is there now, read ``transcript_length`` with
+        :meth:`get` first and leave the loop at ``index == transcript_length -
+        1`` (skip the call when it is 0).
+
+        ``last_event_id`` resumes: pass the last ``index`` you saw and the
+        stream starts with the entry after it, so nothing is repeated. The
+        stream ends when the server closes it (your key lost access, or the
+        connection was recycled); call again with ``last_event_id`` to carry on.
+
+        ``timeout_s`` is the absolute limit on how long one call may stay open
+        (default 50 minutes, the same as :meth:`message`); past it the call
+        raises ``TransportError``. It is not an idle timeout.
+
+        Entries are returned as the session recorded them: ``body`` is free
+        text, and may contain whatever was sent to the agent. Treat the
+        transcript as sensitive.
+
+        Raises ``NotFoundError`` (404), and ``RateLimitError`` (429) when the
+        account already has 10 transcript streams open (wait
+        ``retry_after_seconds``).
+        """
+        frames = self._http.iter_event_frames(
+            "GET",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/transcript",
+            extra_headers=_transcript_headers(last_event_id),
+            stream_timeout_s=timeout_s,
+        )
+        # Closed explicitly: the connection must go when THIS iterator is
+        # closed, not whenever the inner one happens to be collected.
+        try:
+            for name, data in frames:
+                event = _transcript_event(name, data)
+                if event is not None:
+                    yield event
+        finally:
+            frames.close()
 
     def close(self, agent_session_id: str) -> None:
         """End the agent session and its browser (idempotent).
@@ -567,8 +710,12 @@ class AgentSessionsResource:
         turn was running, 200 ``{"status": "no_turn_running", ...}`` when none
         was. Safe to call again. Raises ``NotFoundError`` (404) for an unknown
         session (or one owned by another account), and
-        ``FeatureUnavailableError`` (503) when the stop could not be confirmed
-        just now — call ``stop()`` again.
+        ``FeatureUnavailableError`` (503): when its ``stop_unconfirmed`` is
+        true, the stop could not be confirmed just now and the turn may still
+        be running — call ``stop()`` again. (``is_retryable`` is false for this
+        class, because the same 503 without the flag means AI is not enabled
+        and calling again would not help; the SDK does not retry ``stop()`` by
+        itself.)
         """
         return self._http.request(
             "POST",
@@ -649,6 +796,46 @@ class AsyncAgentSessionsResource:
             on_step=on_step,
             on_event=on_event,
         )
+
+    async def get_capture(self, agent_session_id: str, capture_id: str) -> AgentCapture:
+        """Async mirror of :meth:`AgentSessionsResource.get_capture` — same result and errors."""
+        content, media_type = await self._http.request_bytes(
+            "GET",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}"
+            f"/captures/{quote(capture_id, safe='')}",
+        )
+        return {"content_type": media_type, "bytes": content}
+
+    async def transcript(
+        self,
+        agent_session_id: str,
+        *,
+        last_event_id: int | None = None,
+        timeout_s: float | None = None,
+    ) -> AsyncIterator[AgentTranscriptEvent]:
+        """Async mirror of :meth:`AgentSessionsResource.transcript`.
+
+        Use it with ``async for``. Same events, resume, limits and errors as the
+        sync method. Leaving the loop closes the connection once the iterator is
+        collected; to close it at a precise point, wrap the call in
+        ``contextlib.aclosing``.
+        """
+        frames = self._http.iter_event_frames(
+            "GET",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/transcript",
+            extra_headers=_transcript_headers(last_event_id),
+            stream_timeout_s=timeout_s,
+        )
+        # Closed explicitly. Closing an async generator does not close one it
+        # was iterating: without this the connection stays open until the inner
+        # generator is collected, and an account may hold only 10 of them.
+        try:
+            async for name, data in frames:
+                event = _transcript_event(name, data)
+                if event is not None:
+                    yield event
+        finally:
+            await frames.aclose()
 
     async def close(self, agent_session_id: str) -> None:
         await self._http.request("DELETE", f"/v1/agent-sessions/{quote(agent_session_id, safe='')}")

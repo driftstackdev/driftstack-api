@@ -111,13 +111,33 @@ including generated IDs or a terminal RFC 7807 problem.
 The client can treat the replay as if the original response had been
 received successfully.
 
-For an agent message turn, the stored result includes refusals: a turn
-answered with, for example, `409` `turn_in_progress`, a `429`, a `402` or a
-`502` is stored for its key, and retrying with the same key replays that
-answer. Reuse a key only
-when you got no response at all, or `409` with
-`idempotency_status: "in_progress"`; after any other response, fix the cause
-or wait, then send with a new key.
+For an agent message turn, a refusal raised **before the turn did any work**
+gives the key back instead of storing it: nothing ran, so there is nothing a
+retry could repeat, and the same key runs the turn once the cause is gone.
+These are the refusals that free their key:
+
+| Status | `type`                         | The refusal                                                                                                                |
+| -----: | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+|    409 | `conflict`                     | `turn_in_progress: true` — another message is still running on this session                                                |
+|    429 | `rate-limited`                 | your account already has the most AI messages it may run at once, across your sessions or on Driftstack's included AI      |
+|    402 | `bundled-llm-consent-required` | the account has not opted in to Driftstack's included AI                                                                   |
+|    402 | `bundled-llm-budget-exhausted` | this month's included-AI budget is used up                                                                                 |
+|    403 | `forbidden`                    | the plan does not include the included AI, or the session's model runs only on your own Anthropic key (`requires_own_key`) |
+|    502 | `byok-anthropic-required`      | no Anthropic key was available for the turn — the case **without** `key_rejected: true`                                    |
+
+Fix the cause or wait, then send the same request again with the **same** key.
+While the first request is still being resolved you may get `409` with
+`idempotency_status: "in_progress"`; that is safe to retry with the same key
+too.
+
+Every other answer is final for its key, and sending the same key again
+replays it. That includes every completed turn, every failure after the turn
+started, `502` `byok-anthropic-required` with `key_rejected: true` (Anthropic
+refused your key on the first planning call), `500` `internal`, `200` with
+`kind: "refuse"` (including "the AI is briefly unavailable"), and the `409`
+for a session that is closed or paused (`session_status`) or whose control
+changed (`ai_control_unavailable`). To send one of those again, fix the cause
+and use a **new** key.
 
 That completed result remains authoritative if the session later closes,
 its mode changes between AI and manual, or your BYOK key rotates. Reusing

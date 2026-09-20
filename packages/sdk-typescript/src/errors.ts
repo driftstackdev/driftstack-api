@@ -186,10 +186,16 @@ export class ConflictError extends DriftstackError {
   /** True when another message is still running on this agent session. Wait
    *  for it to finish (or stop it), then send again. */
   readonly turnInProgress: boolean;
-  /** Set when the agent session is no longer active (`'closed'` or `'paused'`),
-   *  including when this turn ended it — for example its token budget ran out.
-   *  Read `closed_reason` with `agentSessions.get(id)`. An open string. */
+  /** Set when the agent session is not active (`'closed'` or `'paused'`):
+   *  it already was when the message arrived, or this turn ended it — for
+   *  example its token budget ran out. An open string. */
   readonly sessionStatus: string | undefined;
+  /** Why the session ended, when `sessionStatus` is `'closed'` and the session
+   *  records a reason: the same value `agentSessions.get(id)` returns as
+   *  `closed_reason` (`'customer-closed'`, `'budget-exhausted'`,
+   *  `'transcript-limit'`, …), so no second call is needed. An open string;
+   *  `undefined` for a paused session and on older servers. */
+  readonly closedReason: string | undefined;
   /** Set when the conflict is about the Idempotency-Key: `'in_progress'` (the
    *  first request with this key is still running — retry the SAME key later
    *  and it replays the result) or `'mismatch'` (the key was already used for
@@ -213,6 +219,7 @@ export class ConflictError extends DriftstackError {
     const ext = p as {
       turn_in_progress?: unknown;
       session_status?: unknown;
+      closed_reason?: unknown;
       idempotency_status?: unknown;
       ai_control_unavailable?: unknown;
       phase?: unknown;
@@ -222,6 +229,7 @@ export class ConflictError extends DriftstackError {
     };
     this.turnInProgress = ext.turn_in_progress === true;
     this.sessionStatus = typeof ext.session_status === 'string' ? ext.session_status : undefined;
+    this.closedReason = typeof ext.closed_reason === 'string' ? ext.closed_reason : undefined;
     this.idempotencyStatus =
       typeof ext.idempotency_status === 'string' ? ext.idempotency_status : undefined;
     this.aiControlUnavailable = ext.ai_control_unavailable === true;
@@ -479,9 +487,18 @@ export class MfaStepUpRequiredError extends DriftstackError {
 /** Endpoint requires infrastructure not configured in this deployment
  *  (e.g. avatar uploads when R2 isn't wired). HTTP 503. */
 export class FeatureUnavailableError extends DriftstackError {
+  /**
+   * True only on the 503 `agentSessions.stop()` gets when the stop could not be
+   * confirmed just now: the turn may still be running, so call `stop()` again.
+   * False for every other 503 of this class — including "AI is not enabled",
+   * where calling again would not help — which is why `isRetryable` stays false
+   * for the class and this flag exists.
+   */
+  readonly stopUnconfirmed: boolean;
   constructor(p: Problem) {
     super(toOpts('feature_unavailable', p));
     this.name = 'FeatureUnavailableError';
+    this.stopUnconfirmed = (p as { stop_unconfirmed?: unknown }).stop_unconfirmed === true;
   }
 }
 
@@ -540,15 +557,44 @@ export class PairModeStateInvalidTransitionError extends DriftstackError {
 }
 
 /**
- * 502 — the turn has no AI key to run on: no key on the request, none stored,
- * and Driftstack's included AI is not available to the account. Store your
- * Anthropic key (PUT /v1/account/me/byok-anthropic-key) or send it with the
- * call (`byokApiKey`).
+ * 502 — the turn has no usable AI key. Two cases, told apart by `keyRejected`:
+ *
+ * - `keyRejected` false — there is no key to run on: none on the request, none
+ *   stored, and Driftstack's included AI is not available to the account (a
+ *   plan that runs AI only on its own key is answered this way too). Store your
+ *   Anthropic key (PUT /v1/account/me/byok-anthropic-key) or send it with the
+ *   call (`byokApiKey`).
+ * - `keyRejected` true — Anthropic refused YOUR key on the turn's first
+ *   planning call. `keySource` says which key and `keyRejectedReason` why.
+ *
+ * No step ran in either case. `isRetryable` is false although the status is a
+ * 502: sending the same request again gets the same answer until the key is
+ * added, replaced or fixed.
  */
 export class ByokAnthropicRequiredError extends DriftstackError {
+  /** True when Anthropic refused your own key; false when there was no key. */
+  readonly keyRejected: boolean;
+  /** Which key was refused: `'header'` (the `byokApiKey` sent with the call)
+   *  or `'stored'` (the one saved on the account). An open string; `undefined`
+   *  unless `keyRejected`. */
+  readonly keySource: 'header' | 'stored' | (string & {}) | undefined;
+  /** Why it was refused: `'invalid_or_unauthorized'` (invalid, revoked, or not
+   *  permitted to run the model — replace it) or `'billing'` (the Anthropic
+   *  account behind it cannot pay for the call — fix billing with Anthropic).
+   *  An open string; `undefined` unless `keyRejected`. */
+  readonly keyRejectedReason: 'invalid_or_unauthorized' | 'billing' | (string & {}) | undefined;
   constructor(p: Problem) {
     super(toOpts('byok_anthropic_required', p));
     this.name = 'ByokAnthropicRequiredError';
+    const ext = p as {
+      key_rejected?: unknown;
+      key_source?: unknown;
+      key_rejected_reason?: unknown;
+    };
+    this.keyRejected = ext.key_rejected === true;
+    this.keySource = typeof ext.key_source === 'string' ? ext.key_source : undefined;
+    this.keyRejectedReason =
+      typeof ext.key_rejected_reason === 'string' ? ext.key_rejected_reason : undefined;
   }
 }
 

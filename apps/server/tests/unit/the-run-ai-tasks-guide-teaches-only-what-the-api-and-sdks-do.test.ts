@@ -20,6 +20,10 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { IntentResultSchema, PROBLEM_TYPES, TIER_FEATURES } from '@driftstack/api-types';
+import {
+  TURN_LOOP_STOP_SENTENCES,
+  type TurnLoopStopReason,
+} from '../../src/services/agent-runtime.js';
 import { codeOnly } from './_helpers/code-only.js';
 import { markupOnly } from './_helpers/markup-only.js';
 
@@ -505,21 +509,38 @@ describe('the Run AI tasks guide teaches only what the API and SDKs do', () => {
     expect([...new Set(namedPhases)].sort(), 'phases the guide names').toEqual(phases);
   });
 
-  it('the screenshot-and-download section tells the reader to fetch by hand, and no SDK yet says otherwise', () => {
-    // The claim "no SDK method yet" is only true while it is true. Derive it.
+  it('the screenshot-and-download section names the SDK method for whichever of the two has one, and still teaches the other by hand', () => {
+    // Which of the two has an SDK method is DERIVED, never asserted from memory:
+    // when the download fetch gains one, "no SDK method yet" becomes false here
+    // and this fails until the section is rewritten.
     const sdkMethods = [
       ...tsAgentSessionMethods(),
       ...pyAgentSessionMethods(),
       ...goAgentSessionMethods(),
     ];
     expect(sdkMethods.length, 'agent-session methods across the three SDKs').toBeGreaterThan(30);
-    const wrappers = sdkMethods.filter((m) => /capture|download/i.test(m)).sort();
-    expect(wrappers, 'SDK methods that wrap captures or downloads').toEqual([]);
+    const captureMethods = sdkMethods.filter((m) => /capture/i.test(m)).sort();
+    const downloadMethods = sdkMethods.filter((m) => /download/i.test(m)).sort();
 
     const section =
       /## Get a screenshot or a downloaded file\n[\s\S]*?(?=\n## )/.exec(guide)?.[0] ?? '';
     expect(section, 'the guide has the screenshot-and-download section').not.toBe('');
-    expect(section, 'the section says these two have no SDK method').toMatch(/no SDK method yet/);
+
+    // All three SDKs fetch a capture, and the section names each spelling, so a
+    // reader in any language finds the call rather than the curl.
+    expect(captureMethods, 'capture methods across the three SDKs').toEqual([
+      'GetCapture',
+      'getCapture',
+      'get_capture',
+    ]);
+    for (const method of captureMethods) {
+      expect(section, `the section names the ${method} method`).toContain(method);
+    }
+    // The download fetch has none, so the section must still say so.
+    expect(downloadMethods, 'SDK methods that wrap the download fetch').toEqual([]);
+    expect(section, 'the section says the download fetch has no SDK method').toMatch(
+      /no SDK method yet/,
+    );
     // Every sample here is self-contained. A reader lands on this section from the
     // result table, not from the curl program far below, so a sample leaning on the
     // `$API` / `$AUTH` shorthands that program defines would not run as written.
@@ -578,6 +599,287 @@ describe('the Run AI tasks guide teaches only what the API and SDKs do', () => {
     expect(used.size, 'query parameters the guide sends').toBeGreaterThan(0);
     for (const key of used.keys()) expect(accepted, `query parameter ${key}`).toContain(key);
     expect(formats, 'the format the guide asks for').toContain(used.get('format'));
+  });
+
+  it('the live-transcript bullet names the SDK method in all three languages, and each SDK really has one', () => {
+    // Derived: if an SDK loses its transcript method, the sentence that tells a
+    // reader to call it stops being true, and this says so.
+    const surfaces: ReadonlyArray<readonly [string, Set<string>]> = [
+      ['TypeScript', tsAgentSessionMethods()],
+      ['Python', pyAgentSessionMethods()],
+      ['Go', goAgentSessionMethods()],
+    ];
+    const named: string[] = [];
+    for (const [lang, methods] of surfaces) {
+      expect(methods.size, `${lang}: agent-session methods extracted`).toBeGreaterThan(8);
+      const transcript = [...methods].filter(
+        (m) => m.toLowerCase().replace(/[^a-z]/g, '') === 'transcript',
+      );
+      expect(transcript, `${lang}: a method for the session transcript`).toHaveLength(1);
+      named.push(transcript[0] ?? '');
+    }
+
+    const section = /## Watch it live \(optional\)\n[\s\S]*?(?=\n## )/.exec(guide)?.[0] ?? '';
+    expect(section, 'the guide has the watch-it-live section').not.toBe('');
+    for (const method of new Set(named)) {
+      expect(section, `the section names the ${method} method`).toContain(method);
+    }
+    // And the route behind it, under the method the server registers.
+    const routes = registeredRoutes();
+    expect(routes, 'the transcript route is registered').toContain(
+      'GET /v1/agent-sessions/:p/transcript',
+    );
+    expect(pathsIn(section), 'the section names the transcript route').toContain(
+      '/v1/agent-sessions/:p/transcript',
+    );
+  });
+
+  it('the stop section names the SDK method in all three languages, and says each hands back the status the section tells you to branch on', () => {
+    // The section tells a reader to tell `stop_requested` from `no_turn_running`
+    // — "If your own message is still waiting, ask again a second later". A
+    // reader who cannot see that the SDK hands the status back has to guess
+    // whether it does. Derived: the method set comes from each SDK's source,
+    // and the returned status values from the TypeScript signature, so a stop
+    // that stopped returning them fails here.
+    const surfaces: ReadonlyArray<readonly [string, Set<string>]> = [
+      ['TypeScript', tsAgentSessionMethods()],
+      ['Python', pyAgentSessionMethods()],
+      ['Go', goAgentSessionMethods()],
+    ];
+    const named: string[] = [];
+    for (const [lang, methods] of surfaces) {
+      expect(methods.size, `${lang}: agent-session methods extracted`).toBeGreaterThan(8);
+      const stop = [...methods].filter((m) => m.toLowerCase() === 'stop');
+      expect(stop, `${lang}: a method that stops the running turn`).toHaveLength(1);
+      named.push(stop[0] ?? '');
+    }
+
+    // The statuses the SDK really hands back, from its own signature.
+    const tsStop =
+      /\n {2}stop\(id: string\): Promise<\{([^}]*)\}>/.exec(read(TS_RESOURCE))?.[1] ?? '';
+    expect(tsStop, 'the TypeScript stop() return type was found').toContain('status');
+    const statuses = [...tsStop.matchAll(/'([a-z_]+)'/g)].map((m) => m[1] ?? '');
+    expect(statuses.length, 'statuses the TypeScript stop() can return').toBeGreaterThan(1);
+
+    const pages: ReadonlyArray<readonly [string, string]> = [
+      ['the guide', /## Stop a task that runs too long\n[\s\S]*?(?=\n## )/.exec(guide)?.[0] ?? ''],
+      [
+        'the reference',
+        /## Stop the running turn\n[\s\S]*?(?=\n## )/.exec(read(REFERENCE_PATH))?.[0] ?? '',
+      ],
+    ];
+    for (const [label, section] of pages) {
+      expect(section.length, `${label} has a stop section`).toBeGreaterThan(400);
+      for (const method of new Set(named)) {
+        // As a CALL, not as a word: both sections are headed "Stop …", so
+        // `toContain('Stop')` would pass on a page that never names the method.
+        expect(section, `${label} names the ${method} method`).toContain(`${method}(`);
+      }
+      for (const status of statuses) {
+        expect(section, `${label} names the ${status} status`).toContain(status);
+      }
+      expect(section, `${label} says the SDKs hand the status back`).toMatch(
+        /SDKs (?:hand you that|return the)/,
+      );
+      expect(section, `${label} names the field on the unconfirmed 503`).toContain(
+        'stop_unconfirmed',
+      );
+    }
+  });
+
+  it('every field the published plan-executed result can carry is one the guide teaches, or one it declares it leaves out', () => {
+    // A field added to the turn result is a field a reader needs to know about.
+    // The list is DERIVED from the published response, so a new one shows up
+    // here rather than waiting to be noticed.
+    const spec = JSON.parse(read('packages/sdk-python/openapi.json')) as {
+      components: { schemas: Record<string, SpecSchema> };
+    };
+    const schemas = spec.components.schemas;
+    const top = schemas['AgentMessageResponse'];
+    const planExecuted = (top?.oneOf ?? top?.anyOf ?? [])
+      .map((v) => (v.$ref !== undefined ? schemas[v.$ref.split('/').pop() ?? ''] : v))
+      .find(
+        (v) =>
+          (v?.properties?.['kind']?.enum?.[0] ?? v?.properties?.['kind']?.const) ===
+          'plan-executed',
+      );
+    const fields = Object.keys(planExecuted?.properties ?? {}).sort();
+    // Vacuity: a variant read as empty would pass on a guide that taught nothing.
+    expect(fields, 'fields on the published plan-executed result').toContain('answer');
+    expect(fields.length, 'fields on the published plan-executed result').toBeGreaterThan(5);
+
+    /** Fields the guide deliberately does not teach, each with the reason. */
+    const NOT_TAUGHT = new Map<string, string>([
+      ['kind', 'the discriminator itself: the kind table IS this field, row by row'],
+      [
+        'session',
+        'the session envelope, taught in its own right under "Start a session" and "Close the session"',
+      ],
+      [
+        'usage',
+        'per-turn token and cost evidence for billing, not something a task-running program branches on; the reference documents it',
+      ],
+    ]);
+    const untaught = fields.filter((f) => !NOT_TAUGHT.has(f) && !guide.includes(`\`${f}\``));
+    expect(
+      untaught,
+      'fields the published plan-executed result carries that the guide neither teaches nor declares it leaves out',
+    ).toEqual([]);
+    // The declared list cannot outlive the fields it excuses.
+    expect(
+      [...NOT_TAUGHT.keys()].filter((f) => !fields.includes(f)).sort(),
+      'declared-untaught fields the published result no longer has',
+    ).toEqual([]);
+  });
+
+  it('both pages name every reason a turn hands back with a notice, and both say the sentence does not always ask for “continue”', () => {
+    // `notice` is prose, and nothing else in the result says WHY the turn
+    // stopped — so the sentence is the whole of what a reader has to go on, and
+    // a page that lists four of the six causes reads as a closed list that is
+    // missing two. The set is DERIVED from the copy the runtime actually sends,
+    // and the record below is keyed by the reason type, so a seventh reason is
+    // a compile error here until both pages say what it asks the reader for.
+    const reasons = Object.keys(TURN_LOOP_STOP_SENTENCES) as TurnLoopStopReason[];
+    expect(reasons.length, 'reasons a turn can hand back for').toBeGreaterThan(3);
+
+    const bulletIn = (page: string, pattern: RegExp, what: string): string => {
+      // Wrapped prose: a phrase the page states can be split across two lines,
+      // so compare against one line rather than against the page's wrapping.
+      const bullet = (pattern.exec(page)?.[0] ?? '').replace(/\s+/g, ' ');
+      // Vacuity: an extraction that missed would pass every assertion below.
+      expect(bullet.length, `the ${what} notice paragraph`).toBeGreaterThan(200);
+      return bullet;
+    };
+    const pages: ReadonlyArray<readonly [string, string]> = [
+      [
+        'the guide',
+        bulletIn(guide, /1\. \*\*`notice` is present\*\*[\s\S]*?(?=\n2\. \*\*)/, 'guide’s'),
+      ],
+      [
+        'the reference',
+        bulletIn(
+          read(REFERENCE_PATH),
+          /- `notice` is present when the task[\s\S]*?(?=\n- `ok` is)/,
+          'reference’s',
+        ),
+      ],
+    ];
+
+    /** Per reason: a phrase from its OWN sentence, and the cause both pages must name. */
+    const CAUSES: Record<TurnLoopStopReason, { inSentence: RegExp; inDocs: RegExp }> = {
+      planner_call_limit: {
+        inSentence: /more steps than I take in one message/,
+        inDocs: /planning rounds/i,
+      },
+      wall_clock: {
+        inSentence: /taking too long for one message/,
+        inDocs: /ran out of time|three minutes/i,
+      },
+      budget_floor: { inSentence: /AI budget left/, inDocs: /token budget/i },
+      no_progress: { inSentence: /rather than go in circles/, inDocs: /going in circles/i },
+      repeat_refused: {
+        inSentence: /repeated an action that already ran/,
+        inDocs: /repeated an action that already ran/i,
+      },
+      planner_unavailable: {
+        inSentence: /could not work out the next ones/,
+        inDocs: /could not work out the next steps/i,
+      },
+    };
+
+    for (const reason of reasons) {
+      const cause = CAUSES[reason];
+      // The phrase is anchored to the live copy, so the mapping cannot drift
+      // from the sentence it claims to be about.
+      expect(
+        TURN_LOOP_STOP_SENTENCES[reason],
+        `the phrase pinned for ${reason} is in the sentence the runtime sends`,
+      ).toMatch(cause.inSentence);
+      for (const [label, bullet] of pages) {
+        expect(bullet, `${label} names the cause behind ${reason}`).toMatch(cause.inDocs);
+      }
+    }
+
+    // The premise behind the advice, derived: some sentences ask for "continue"
+    // and some ask for something else. If that stops being true, the pages are
+    // over-explaining and this arm says so rather than going quietly stale.
+    const asksToContinue = reasons.filter((r) => /continue/i.test(TURN_LOOP_STOP_SENTENCES[r]));
+    expect(asksToContinue.length, 'reasons whose sentence asks for “continue”').toBeGreaterThan(0);
+    expect(
+      reasons.length - asksToContinue.length,
+      'reasons whose sentence asks for something other than “continue”',
+    ).toBeGreaterThan(0);
+
+    for (const [label, bullet] of pages) {
+      expect(bullet, `${label} says which ones ask for “continue”`).toMatch(
+        /"continue"|“continue”/,
+      );
+      expect(bullet, `${label} gives the token-budget sentence’s own advice`).toMatch(
+        /start a new session/i,
+      );
+      expect(bullet, `${label} gives the going-in-circles sentence’s own advice`).toMatch(
+        /what to try differently/i,
+      );
+      expect(bullet, `${label} says the sentence is open text, not something to match on`).toMatch(
+        /open text: show it, do not match on it/,
+      );
+    }
+  });
+
+  it('the refusals the guide says are safe to send again with the same key are exactly the ones the server gives the key back for', () => {
+    // THE point of the retry section. The server releases an Idempotency-Key
+    // only for a refusal wrapped in refusedBeforeAnyWork() at its throw site;
+    // both the set and each refusal's status/type are derived from source, so
+    // the guide cannot drift from the predicate.
+    const route = codeOnly(read('apps/server/src/routes/agent-sessions.ts'));
+    const errorsSrc = codeOnly(read('apps/server/src/lib/errors.ts'));
+
+    /** name → `409 conflict`, from a class or helper that builds one problem. */
+    function problemOf(source: string, name: string): string {
+      const at = new RegExp(
+        `(?:export )?(?:class ${name}\\b|function ${name}\\b|const ${name} = )`,
+      ).exec(source);
+      if (at === null) return '';
+      const body = source.slice(at.index, at.index + 1500);
+      const slug = /type: PROBLEM_TYPES\.(\w+)/.exec(body)?.[1];
+      const status = /status: (\d{3})/.exec(body)?.[1];
+      if (slug !== undefined && status !== undefined) {
+        return `${status} ${PROBLEM_TYPES[slug as keyof typeof PROBLEM_TYPES].split('/').pop() ?? ''}`;
+      }
+      // One hop: a helper that delegates to another builder in the same file.
+      const delegate = new RegExp(`return (?:new )?(\\w*Error)\\(`).exec(body)?.[1];
+      return delegate === undefined || delegate === name ? '' : problemOf(source, delegate);
+    }
+
+    const released = new Set<string>();
+    for (const m of route.matchAll(/refusedBeforeAnyWork\(\s*(?:new )?(\w+)\(/g)) {
+      const name = m[1] ?? '';
+      const problem = problemOf(route, name) || problemOf(errorsSrc, name);
+      expect(
+        problem,
+        `the status and type of ${name}, the error at a released throw site`,
+      ).not.toBe('');
+      released.add(problem);
+    }
+    // Vacuity: no throw sites found would make the comparison below pass empty.
+    expect(released.size, 'distinct refusals the server gives the key back for').toBeGreaterThan(4);
+
+    // The guide's same-key table, read as `status type` pairs.
+    const rows = tableRows(guide, 'Status').length;
+    expect(rows, 'the guide still has its error table').toBeGreaterThan(10);
+    const sameKey =
+      /- \*\*The same key, after a refusal that did no work\.\*\*[\s\S]*?\n\n(?=- )/.exec(
+        guide,
+      )?.[0];
+    expect(sameKey, 'the guide has a same-key retry table').toBeDefined();
+    const taught = new Set(
+      [...(sameKey ?? '').matchAll(/^\s*\|\s*(\d{3})\s*\|\s*`([a-z-]+)`/gm)].map(
+        (m) => `${m[1] ?? ''} ${m[2] ?? ''}`,
+      ),
+    );
+    expect([...taught].sort(), 'the guide’s same-key list vs the server’s released set').toEqual(
+      [...released].sort(),
+    );
   });
 
   it('the guide is written in customer words: no internal machinery, ticket ids, agent names, the word founder, or AI credits', () => {

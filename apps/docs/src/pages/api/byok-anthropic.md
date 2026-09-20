@@ -138,12 +138,22 @@ corresponding account-audit event.
 
 ## When Anthropic rejects the key
 
-If Anthropic rejects the key during a turn — it is invalid or revoked, or the
-Anthropic account cannot pay — the message returns `500 internal`. Retrying
-the same turn fails the same way, so run the connection test above first and
-replace the key if it fails. (When Anthropic is only briefly unavailable, the
-turn instead comes back as a `refuse` asking you to retry, and the session
-stays active.)
+If Anthropic rejects the key on the turn's first planning call, the message
+returns `502 byok-anthropic-required` with `key_rejected: true`. No step was
+run, and the session stays active. Two more fields say what to do:
+
+- `key_source` — `header` (the key sent with this request) or `stored` (the
+  one saved on the account).
+- `key_rejected_reason` — `invalid_or_unauthorized` (invalid, revoked, or not
+  permitted to run the model: run the connection test above and replace the
+  key) or `billing` (the Anthropic account behind the key cannot pay for the
+  call: fix that with Anthropic).
+
+Neither the key nor Anthropic's own words appear in the response. Retrying the
+same turn fails the same way until the key is fixed, and with an
+[`Idempotency-Key`](/reference/idempotency/) this answer is final for that key —
+fix the key, then send with a new one. (When Anthropic is only briefly unavailable, the turn instead
+comes back as a `refuse` asking you to retry, and the session stays active.)
 
 ## Encryption at rest
 
@@ -167,14 +177,13 @@ satisfy the 90-day gate.
 
 ## Errors
 
-| Status | Type                    | When                                                                                                                                                  |
-| -----: | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-|    400 | bad-request             | api_key doesn't match the `sk-ant-` prefix / is empty, or /test was called with no key set                                                            |
-|    401 | unauthorized            | missing or invalid bearer token                                                                                                                       |
-|    403 | forbidden               | scope check failed (write op without account_owner)                                                                                                   |
-|    500 | internal                | a session turn whose key Anthropic rejected — surfaced from the agent-session message route; run the connection test before retrying                  |
-|    502 | byok-anthropic-required | session turn resolved no key (no BYOK + no bundled-llm + no fallback) — surfaced from the agent-session message route, not from this surface directly |
-|    503 | feature-unavailable     | encrypted key storage is not available on this deployment                                                                                             |
+| Status | Type                    | When                                                                                                                                                                                                                                                      |
+| -----: | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|    400 | bad-request             | api_key doesn't match the `sk-ant-` prefix / is empty, or /test was called with no key set                                                                                                                                                                |
+|    401 | unauthorized            | missing or invalid bearer token                                                                                                                                                                                                                           |
+|    403 | forbidden               | scope check failed (write op without account_owner)                                                                                                                                                                                                       |
+|    502 | byok-anthropic-required | session turn resolved no key (no BYOK + no bundled-llm + no fallback), or Anthropic rejected your key (`key_rejected: true`, with `key_source` and `key_rejected_reason`) — surfaced from the agent-session message route, not from this surface directly |
+|    503 | feature-unavailable     | encrypted key storage is not available on this deployment                                                                                                                                                                                                 |
 
 ## Privacy
 

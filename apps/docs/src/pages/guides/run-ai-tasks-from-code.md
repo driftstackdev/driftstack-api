@@ -221,13 +221,13 @@ A message returns when the task is done or stops at a limit.
 
 Every result has a `kind`, and the `session` as it is now:
 
-| `kind`          | What happened                                                                          | Read                                                   |
-| --------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `plan-executed` | The agent planned steps and ran them.                                                  | `results`, `ok`, `answer`, `notice`                    |
-| `clarify`       | The agent needs more information before it starts.                                     | `clarifying_question` — answer it in your next message |
-| `refuse`        | The agent would not do the task, or the AI was briefly unavailable.                    | `refuse_reason`                                        |
-| `stopped`       | You [stopped](#stop-a-task-that-runs-too-long) the task.                               | `results` (the steps that ran), `notice`               |
-| `logged-manual` | Only in `manual` mode: your message was logged and nothing ran. Not used in this flow. | —                                                      |
+| `kind`          | What happened                                                                          | Read                                                        |
+| --------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `plan-executed` | The agent planned steps and ran them.                                                  | `results`, `ok`, `answer` or `answer_unavailable`, `notice` |
+| `clarify`       | The agent needs more information before it starts.                                     | `clarifying_question` — answer it in your next message      |
+| `refuse`        | The agent would not do the task, or the AI was briefly unavailable.                    | `refuse_reason`                                             |
+| `stopped`       | You [stopped](#stop-a-task-that-runs-too-long) the task.                               | `results` (the steps that ran), `notice`                    |
+| `logged-manual` | Only in `manual` mode: your message was logged and nothing ran. Not used in this flow. | —                                                           |
 
 - Field names are mixed on purpose: the result's own fields are snake_case
   (`clarifying_question`, `refuse_reason`, `stopped_during`), the fields inside
@@ -235,19 +235,30 @@ Every result has a `kind`, and the `session` as it is now:
 - A `stopped` result also carries `stopped_during` — `planning`, `executing`,
   `reading_page` or `answering` — saying how far it got.
 - A `refuse` is either the agent declining the task or the AI being briefly
-  unavailable; `refuse_reason` says which. If it asks you to retry, send the
-  task again under a **new** `Idempotency-Key`: the refusal is already stored
-  against the old one. A refusal of the task itself will repeat, so change the
-  task instead.
+  unavailable; `refuse_reason` says which. Either way the session stays active.
+  If it asks you to retry, send the task again under a **new**
+  `Idempotency-Key`: this answer is stored against the old one. A refusal of
+  the task itself will repeat, so change the task instead.
 
 For `plan-executed`, decide in this order:
 
 1. **`notice` is present** — the task is **not** finished. The agent stopped at
-   a limit (time, steps, budget, going in circles) or asked you something
-   part-way. Read the sentence: send "continue" where it says so, or answer it.
+   a limit — it ran out of time, or out of the planning rounds it may make for
+   one message, or out of token budget; it was going in circles; or its next
+   step would have repeated an action that already ran — or it could not work
+   out the next steps, or it asked you something part-way. The sentence says which, and what
+   it needs from you. Most of them ask you to send "continue", and the agent
+   carries on from the current page; the budget one asks you to start a new
+   session instead (its sentence calls that a new chat), and the
+   going-in-circles one asks you to say what to try differently. Nothing else in the result says which, so `notice` is open text:
+   show it, do not match on it, and in an unattended job alert a person rather
+   than reply to it automatically.
 2. **`ok` is `false`** — the last step failed or is waiting for your approval.
    Look at the last entry of `results`.
-3. **Otherwise** the task is done. Read `answer` if you asked for one.
+3. **Otherwise** the task is done. Read `answer` if you asked for one — or
+   `answer_unavailable`, one sentence saying why there is none. The two never
+   arrive together, and a task that only acts has neither. `answer_unavailable`
+   is open text: show it, do not match on it.
 
 `ok: true` does not mean "finished": it means the last planned steps ran
 without a failure. A message that recovered from a failed step can show
@@ -262,8 +273,10 @@ as `results[i].intent`:
 | `failure`               | The step did not work.                                                          | `reason`, `diagnosis.category`, `diagnosis.retryable` |
 | `confirmation_required` | The step would buy, pay or delete an account, so it was held for your approval. | `category`, `matchedText`                             |
 
-Read steps from `results`, not `intents`: `intents` is the plan and need not
-line up with `results` by index.
+Read steps from `results`, not `intents`: `intents` is every step the turn
+attempted, across every plan it made, so it is longer than `results` whenever a
+plan was abandoned part-way. `results[i].intent` is the step each result is
+for.
 
 On a `failure`, `diagnosis` is optional — check it is there before reading it.
 `diagnosis.category` is an open list (`page_load_failed`, `element_not_found`,
@@ -275,28 +288,39 @@ have happened; look at the page first.
 
 ## Get a screenshot or a downloaded file
 
-These two have no SDK method yet — make them with your language's own HTTP
-client and the same `Authorization: Bearer` header. Both need `read:sessions`,
-which broad `read` covers, and both work only **while the session is open**,
-so fetch before you close it. Below, `$ID` is the agent session's `id` and
-`$CAPTURE_ID` a step's `captureId`.
+Both need `read:sessions`, which broad `read` covers, and both work only
+**while the session is open**, so fetch before you close it.
 
-**A screenshot.** A `success` step with a `captureId` has an image behind it:
+**A screenshot.** A `success` step with a `captureId` has an image behind it.
+The SDKs fetch it for you — `getCapture(id, captureId)` in TypeScript,
+`get_capture(id, capture_id)` in Python, `GetCapture(ctx, id, captureID)` in
+Go — and hand back the bytes with the media type the server gave them:
+
+```ts
+for (const step of reply.results) {
+  if (step.kind === 'success' && step.captureId !== undefined) {
+    const shot = await client.agentSessions.getCapture(sessionId, step.captureId);
+    await writeFile(shot.contentType === 'image/jpeg' ? 'step.jpg' : 'step.png', shot.bytes);
+  }
+}
+```
+
+By hand, it is one `GET`, and the body is the image itself — `image/png` or
+`image/jpeg`, see `Content-Type` — not JSON:
 
 ```bash
 curl -sS "https://api.driftstack.dev/v1/agent-sessions/$ID/captures/$CAPTURE_ID" \
   -H "Authorization: Bearer $DRIFTSTACK_API_KEY" -o step.png
 ```
 
-The body is the image itself — `image/png` or `image/jpeg`, see
-`Content-Type` — not JSON. Only the 20 most recent captures of a session are
-kept, and they can be removed once 30 minutes pass without a new one, so fetch
-them as soon as the message returns. An unknown or expired `captureId` is a
-`404`.
+Only the 20 most recent captures of a session are kept, and they can be
+removed once 30 minutes pass without a new one, so fetch them as soon as the
+message returns. An unknown or expired `captureId` is a `404`.
 
 **A file the page downloaded.** If the task asked the agent to download
-something ("download the September invoice"), the file lands here. List them,
-then fetch one by name:
+something ("download the September invoice"), the file lands here. This one
+has no SDK method yet — make it with your language's own HTTP client and the
+same `Authorization: Bearer` header. List the files, then fetch one by name:
 
 ```bash
 curl -sS "https://api.driftstack.dev/v1/agent-sessions/$ID/downloads" \
@@ -307,12 +331,13 @@ curl -sS "https://api.driftstack.dev/v1/agent-sessions/$ID/downloads/content?nam
   -H "Authorization: Bearer $DRIFTSTACK_API_KEY" -o invoice-september.pdf
 ```
 
-- `name` is the bare file name from the list — never a path.
-- Both replies are discriminated on `status`, and only `ok` is a success:
-  `unavailable` (the session is not running), `timeout` and `error` (`reason`
-  says why) all arrive as `200` with `files: null` / `file: null`. **Read
-  `status` before you trust the bytes** — with `format=binary` a failure still
-  comes back as that small JSON envelope, so a plain `-o` can write the
+- `$ID` is the agent session's `id`, `$CAPTURE_ID` a step's `captureId`, and
+  `name` the bare file name from the list — never a path.
+- Both download replies are discriminated on `status`, and only `ok` is a
+  success: `unavailable` (the session is not running), `timeout` and `error`
+  (`reason` says why) all arrive as `200` with `files: null` / `file: null`.
+  **Read `status` before you trust the bytes** — with `format=binary` a failure
+  still comes back as that small JSON envelope, so a plain `-o` can write the
   envelope into your file.
 - Leave `format` off and you get
   `{"file": {"name", "mime", "dataB64"}, "status": "ok"}` with the bytes
@@ -374,7 +399,16 @@ timer, or a second worker — with `POST /v1/agent-sessions/{id}/stop`:
   that ran and a `notice` saying how far it got.
 - `200 {"status": "no_turn_running"}` — nothing was running. If your own
   message is still waiting, ask again a second later.
-- `503` — the stop could not be confirmed. Call it again.
+- `503` with `stop_unconfirmed: true` — the stop could not be confirmed and
+  the task may still be running. Call it again. A `503` **without** that field
+  means AI is not enabled on this deployment, and calling again will not help.
+
+The SDKs hand you that `status` to branch on — `stop(id)` in TypeScript,
+`stop(id)` in Python (sync and async) and `Stop(ctx, id)` in Go all return the
+`{ status, session_id }` body above, and raise the `503` as the typed
+feature-unavailable error with `stop_unconfirmed` among its extra fields
+(`err.extensions` / `err.problem` / `err.Problem`). None of them retries a stop
+for you, so the "call it again" above is yours to do.
 
 Stopping is safe to repeat. A step that was already running is given a short
 time to finish so its result is known; nothing starts after it. The session
@@ -406,33 +440,47 @@ The SDKs raise these as typed errors: `err.extensions` in TypeScript,
 `err.problem` in Python and `err.Problem` in Go carry the extra fields shown
 here. See the [error reference](/reference/errors/) for every class.
 
-| Status | `type`                         | When                                                                                                                                               | What to do                                                                                                    |
-| -----: | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-|    400 | `validation-failed`            | The body is wrong, e.g. `user_message` over 8,000 characters.                                                                                      | Fix the request.                                                                                              |
-|    401 | `unauthorized`                 | The API key is missing or invalid.                                                                                                                 | Fix the key.                                                                                                  |
-|    402 | `bundled-llm-consent-required` | No key of your own and no opt-in to the included AI.                                                                                               | See [Who pays for the AI](#who-pays-for-the-ai).                                                              |
-|    402 | `bundled-llm-budget-exhausted` | This month's included budget is used up.                                                                                                           | Raise the cap, add your own key, or wait.                                                                     |
-|    403 | `forbidden`                    | The key lacks `write`; the plan has no AI agent or no longer includes the included AI; or an Opus model without your own key (`requires_own_key`). | Fix the key, plan or model.                                                                                   |
-|    404 | `not-found`                    | The session does not exist or is not yours.                                                                                                        | Check the id.                                                                                                 |
-|    409 | `conflict`                     | `turn_in_progress: true` — another message is still running on this session.                                                                       | Wait for it, or stop it.                                                                                      |
-|    409 | `conflict`                     | `session_status: "closed"` — the session ended, possibly mid-message; `partial_results` then lists the steps that did run.                         | Check `partial_results`, read `closed_reason` with `GET /v1/agent-sessions/{id}`, then start a new session.   |
-|    409 | `conflict`                     | `idempotency_status: "in_progress"` — the first attempt with this key is still running.                                                            | Wait, then send again with the **same** key.                                                                  |
-|    409 | `conflict`                     | `idempotency_status: "mismatch"` — this key was used for a different message.                                                                      | Use a new key.                                                                                                |
-|    409 | `conflict`                     | `ai_control_unavailable: true` — a person took control of the session from the desktop app while your message was running, so it stopped early.    | Read `partial_results` before repeating anything; send the task again with a new key once the AI has control. |
-|    429 | `rate-limited`                 | Too many requests, or your account already has 3 AI messages running.                                                                              | Wait `retry_after_seconds` (also in `Retry-After`).                                                           |
-|    429 | `concurrency-limit`            | At create: too many open sessions. On a message: too many messages on the included AI at once.                                                     | Wait for one to finish.                                                                                       |
-|    500 | `internal`                     | On a message that used your own key, usually Anthropic rejected the key.                                                                           | Run [the key test](/api/byok-anthropic/#test-connection) before sending again.                                |
-|    502 | `byok-anthropic-required`      | No Anthropic key could be found for the message.                                                                                                   | See [Who pays for the AI](#who-pays-for-the-ai).                                                              |
-|    503 | `feature-unavailable`          | You sent an `Idempotency-Key` and it could not be recorded, so the message did not run.                                                            | Try again later with the same key; contact support if it continues.                                           |
+| Status | `type`                         | When                                                                                                                                                                                  | What to do                                                                                                                                                                                                                                                                                  |
+| -----: | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|    400 | `validation-failed`            | The body is wrong, e.g. `user_message` over 8,000 characters.                                                                                                                         | Fix the request.                                                                                                                                                                                                                                                                            |
+|    401 | `unauthorized`                 | The API key is missing or invalid.                                                                                                                                                    | Fix the key.                                                                                                                                                                                                                                                                                |
+|    402 | `bundled-llm-consent-required` | No key of your own and no opt-in to the included AI.                                                                                                                                  | See [Who pays for the AI](#who-pays-for-the-ai).                                                                                                                                                                                                                                            |
+|    402 | `bundled-llm-budget-exhausted` | This month's included budget is used up.                                                                                                                                              | Raise the cap, add your own key, or wait.                                                                                                                                                                                                                                                   |
+|    403 | `forbidden`                    | The key lacks `write`; the plan has no AI agent or no longer includes the included AI; or the session's model runs only on your own key (`requires_own_key`, with `model` naming it). | Fix the key, plan or model.                                                                                                                                                                                                                                                                 |
+|    404 | `not-found`                    | The session does not exist or is not yours.                                                                                                                                           | Check the id.                                                                                                                                                                                                                                                                               |
+|    409 | `conflict`                     | `turn_in_progress: true` — another message is still running on this session.                                                                                                          | Wait for it, or stop it.                                                                                                                                                                                                                                                                    |
+|    409 | `conflict`                     | `session_status: "closed"` or `"paused"` — the session was not active, or ended mid-message; `closed_reason` says why it closed, and `partial_results` lists any steps that did run.  | Check `partial_results`, then resume a paused session or start a new one.                                                                                                                                                                                                                   |
+|    409 | `conflict`                     | `idempotency_status: "in_progress"` — the first attempt with this key is still running.                                                                                               | Wait, then send again with the **same** key.                                                                                                                                                                                                                                                |
+|    409 | `conflict`                     | `idempotency_status: "mismatch"` — this key was used for a different message.                                                                                                         | Use a new key.                                                                                                                                                                                                                                                                              |
+|    409 | `conflict`                     | `ai_control_unavailable: true` — a person took control of the session from the desktop app while your message was running, so it stopped early.                                       | Read `partial_results` before repeating anything; send the task again with a new key once the AI has control.                                                                                                                                                                               |
+|    429 | `rate-limited`                 | Too many requests, or your account already has the most AI messages it may run at once — across your sessions, or on the included AI.                                                 | Wait `retry_after_seconds` (also in `Retry-After`), then send the same message again.                                                                                                                                                                                                       |
+|    429 | `concurrency-limit`            | At create only: too many open sessions.                                                                                                                                               | Close one, or wait for one to finish.                                                                                                                                                                                                                                                       |
+|    500 | `internal`                     | Something went wrong on our side. It is never about your key.                                                                                                                         | Try again later with a new key; contact support if it keeps happening.                                                                                                                                                                                                                      |
+|    502 | `byok-anthropic-required`      | No Anthropic key could be found for the message — or, with `key_rejected: true`, Anthropic refused yours on the first planning call.                                                  | Without `key_rejected`, see [Who pays for the AI](#who-pays-for-the-ai). With it, `key_source` says which key and `key_rejected_reason` whether to replace it (`invalid_or_unauthorized`) or fix billing with Anthropic (`billing`); [test it](/api/byok-anthropic/#test-connection) after. |
+|    503 | `feature-unavailable`          | You sent an `Idempotency-Key` and it could not be recorded, so the message did not run.                                                                                               | Try again later with the same key; contact support if it continues.                                                                                                                                                                                                                         |
 
-Retrying a message safely:
+Retrying a message safely — which key to send:
 
-- **You got no response** (the connection dropped, your process restarted):
-  send it again with the **same** `Idempotency-Key`. You get the stored result,
-  or `409` with `idempotency_status: "in_progress"` while it is still running.
-- **Any response other than `in_progress` is final for that key** — sending
-  the same key again replays it. To try again after an error, fix the cause or
-  wait, then send with a **new** key.
+- **The same key, after a refusal that did no work.** Nothing ran, so the key
+  is given back and the same request runs the turn once the cause is gone:
+
+  | Status | `type`                         | The refusal                                                         |
+  | -----: | ------------------------------ | ------------------------------------------------------------------- |
+  |    409 | `conflict`                     | `turn_in_progress: true`                                            |
+  |    429 | `rate-limited`                 | the message rate, or too many AI messages running at once           |
+  |    402 | `bundled-llm-consent-required` | not opted in to the included AI                                     |
+  |    402 | `bundled-llm-budget-exhausted` | this month's included-AI budget is used up                          |
+  |    403 | `forbidden`                    | the included AI is not on the plan, or the model needs your own key |
+  |    502 | `byok-anthropic-required`      | no Anthropic key was available — **without** `key_rejected: true`   |
+
+- **The same key, when you got no response** (the connection dropped, your
+  process restarted). You get the stored result, or `409` with
+  `idempotency_status: "in_progress"` while the first attempt is still being
+  resolved — also safe to retry with the same key.
+- **A new key for everything else.** Every other answer is final for its key
+  and sending it again replays it: a finished turn, any failure after the turn
+  started, `502` with `key_rejected: true`, `500`, a `200` with
+  `kind: "refuse"`, and the `409` for a session that is closed or paused.
 - **Check before you repeat work that changes things.** After a `5xx`, or a
   `409` that carries `partial_results`, some steps may already have run. Look
   at the page or the transcript before you send the task again.
@@ -453,7 +501,7 @@ arrives in the final `response` event with the status inside it, so read
 | Open sessions per profile                         | 1                                                                                          | `409 profile-in-use` at create                                               |
 | Messages running at once, per session             | 1                                                                                          | `409 conflict` with `turn_in_progress: true`                                 |
 | AI messages running at once, per account          | 3                                                                                          | `429 rate-limited`, retry after 1 second                                     |
-| Included-AI messages running at once, per account | 3                                                                                          | `429 concurrency-limit`                                                      |
+| Included-AI messages running at once, per account | 3                                                                                          | `429 rate-limited`, retry after 1 second                                     |
 | Message rate                                      | The `agent_sessions:message` bucket for your plan ([rate limits](/reference/rate-limits/)) | `429 rate-limited`                                                           |
 | Message length                                    | 8,000 characters                                                                           | `400 validation-failed`                                                      |
 | Model tokens per session                          | `token_budget` (default 100,000)                                                           | The session closes with `closed_reason: "budget-exhausted"`                  |
@@ -497,10 +545,30 @@ that session's recent conversation.
   | `notice`     | `{ notice }`                                                                             |
   | `response`   | `{ status, body }` — the result; always last                                             |
 
-- **The whole conversation:** the
-  [live transcript stream](/api/agent-sessions/#live-transcript-stream-sse)
-  (`GET /v1/agent-sessions/{id}/transcript`) sends every message and result as
-  it is written.
+- **The whole conversation:** `transcript(id)` in TypeScript and Python,
+  `Transcript(ctx, id, opts, fn)` in Go, reads every entry already in the
+  session's history, oldest first, and then follows it live over the
+  [transcript stream](/api/agent-sessions/#live-transcript-stream-sse)
+  (`GET /v1/agent-sessions/{id}/transcript`). It does not end by itself while
+  the session is open, so leave the loop when you have what you need — that
+  closes the connection. To read only what is there now, take
+  `transcript_length` from `get(id)` first and stop at `index ===
+transcript_length - 1`:
+
+  ```ts
+  const { transcript_length } = await client.agentSessions.get(sessionId);
+  if (transcript_length > 0) {
+    for await (const { index, entry } of client.agentSessions.transcript(sessionId)) {
+      console.log(index, entry.role, entry.body);
+      if (index === transcript_length - 1) break;
+    }
+  }
+  ```
+
+  Pass the last `index` you saw back as `lastEventId` (`last_event_id`,
+  `LastEventID`) to carry on where you left off. An account may hold 10
+  transcript streams open at once.
+
 - **Watch the screen:** see [live video](/guides/live-video/), or open the
   session in the desktop app.
 
@@ -560,7 +628,8 @@ const TASK =
   'Open https://portal.example.com/invoices, find the invoice for September 2026 ' +
   'and tell me its total amount.';
 // What the job answers if the agent asks a question part-way.
-const REPLY_TO_QUESTIONS = 'Use the invoice dated September 2026. Do not pay anything.';
+const REPLY_TO_QUESTIONS =
+  'Use the invoice dated September 2026 and tell me its total. Do not pay anything.';
 // Leave this off for an unattended job: a person should approve payments.
 const APPROVE_ACTIONS = process.env.APPROVE_ACTIONS === 'yes';
 const STOP_AFTER_MS = 10 * 60_000;
@@ -720,7 +789,9 @@ TASK = (
     "and tell me its total amount."
 )
 # What the job answers if the agent asks a question part-way.
-REPLY_TO_QUESTIONS = "Use the invoice dated September 2026. Do not pay anything."
+REPLY_TO_QUESTIONS = (
+    "Use the invoice dated September 2026 and tell me its total. Do not pay anything."
+)
 # Leave this off for an unattended job: a person should approve payments.
 APPROVE_ACTIONS = os.environ.get("APPROVE_ACTIONS") == "yes"
 STOP_AFTER_SECONDS = 10 * 60
@@ -884,7 +955,7 @@ const (
 	task = "Open https://portal.example.com/invoices, find the invoice for September 2026 " +
 		"and tell me its total amount."
 	// What the job answers if the agent asks a question part-way.
-	replyToQuestions = "Use the invoice dated September 2026. Do not pay anything."
+	replyToQuestions = "Use the invoice dated September 2026 and tell me its total. Do not pay anything."
 	stopAfter        = 10 * time.Minute
 )
 
@@ -1119,7 +1190,7 @@ send message.json
 
 # 4a. It asked a question (kind "clarify"): answer it as the next message.
 if [ "$(jq -r .body.kind result.json)" = clarify ]; then
-  jq -n '{user_message: "Use the invoice dated September 2026. Do not pay anything."}' > reply.json
+  jq -n '{user_message: "Use the invoice dated September 2026 and tell me its total. Do not pay anything."}' > reply.json
   send reply.json
 fi
 

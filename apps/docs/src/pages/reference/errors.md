@@ -147,23 +147,35 @@ rules above read differently there. The
 guide has the full table.
 
 - **The SDKs never retry `message()` for you**, whatever `isRetryable` says: a
-  lost response may belong to a task that already ran. Retry it yourself, with
-  the same `Idempotency-Key` only when you got no response at all.
-- **A `500` (`InternalError`) on a message that used your own Anthropic key**
-  usually means Anthropic rejected the key. It is not transient: test the key
-  with `POST /v1/account/me/byok-anthropic-key/test` before sending again.
-- **`ConcurrencyLimitError` (429) on a message** means your account already has
-  3 turns running on bundled billing. It clears as soon as one finishes, so
-  wait and retry even though the class is marked not retryable. (At create it
-  means you have as many open agent sessions as your plan allows.)
+  lost response may belong to a task that already ran. Retry it yourself.
+- **A `502` (`ByokAnthropicRequiredError`) with `key_rejected: true`** means
+  Anthropic refused your own key on the turn's first planning call. No step
+  ran. `key_source` says which key (`header` or `stored`) and
+  `key_rejected_reason` why: `invalid_or_unauthorized` (replace the key — test
+  it with `POST /v1/account/me/byok-anthropic-key/test`) or `billing` (fix
+  billing with Anthropic). Without `key_rejected` the same type means no key
+  was available at all. A `500` (`InternalError`) on a message is never about
+  your key.
+- **`RateLimitError` (429) on a message** is the request rate, or your account
+  already running as many AI turns at once as it may — across your sessions, or
+  on bundled billing. `retry_after_seconds` says how long to wait. No step ran.
+  (`ConcurrencyLimitError` is now only the open-session cap at create.)
+- **`ConflictError` (409) with `session_status`** means the session was not
+  active: `"closed"`, with `closed_reason` saying why, or `"paused"`. No second
+  call is needed to read the reason.
 - **`FeatureUnavailableError` (503)** on a message sent with an
   `Idempotency-Key` means the key could not be recorded and the turn did not
-  run; on `POST /v1/agent-sessions/{id}/stop` it means the stop could not be
-  confirmed. Both are worth retrying yourself — `isRetryable` reports `false`
-  for this class, so the SDKs will not.
-- **With an `Idempotency-Key`, an error is final for that key**: retrying with
-  the same key replays it. Send a new key once you have fixed the cause or
-  waited.
+  run; on `POST /v1/agent-sessions/{id}/stop`, `stop_unconfirmed: true` means
+  the stop could not be confirmed. Both are worth retrying yourself —
+  `isRetryable` reports `false` for this class, so the SDKs will not. A `503`
+  on Stop _without_ `stop_unconfirmed` means AI is not enabled here, and
+  calling again will not help.
+- **With an `Idempotency-Key`, a refusal raised before the turn did any work
+  gives the key back** — the 409 `turn_in_progress`, the 429s, the 402s, the
+  403s about the plan's AI or the model, and the 502 without `key_rejected`.
+  Fix the cause or wait, then send the same request again with the same key.
+  Every other answer is final for its key and replays; those need a new one.
+  See [Idempotency](/reference/idempotency/).
 
 ## Cross-references
 

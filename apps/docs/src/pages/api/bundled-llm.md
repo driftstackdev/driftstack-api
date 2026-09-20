@@ -254,9 +254,11 @@ route returns `502 byok-anthropic-required` for a turn with no key of your
 own; these reads keep working.
 
 Agent-session turns on bundled billing can also return `403 forbidden` (the
-plan no longer includes bundled billing) and `429 concurrency-limit` (your
-account already has 3 turns running on bundled billing; retry when one
-finishes). See [Agent sessions — Errors](/api/agent-sessions/#errors).
+plan no longer includes bundled billing) and `429 rate-limited` with
+`retry_after_seconds: 1` (your account already has 3 turns running on bundled
+billing). No step ran, so wait for one to finish and send the same message
+again, [`Idempotency-Key`](/reference/idempotency/) and all. See
+[Agent sessions — Errors](/api/agent-sessions/#errors).
 
 ## Privacy + how turns are counted
 

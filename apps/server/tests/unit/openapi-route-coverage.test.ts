@@ -223,8 +223,6 @@ const INTENTIONALLY_UNPUBLISHED_OPERATIONS = new Set([
   // that ceiling in the same change.
   'GET /v1/admin/agent-turns/summary',
   'GET /v1/agent-sessions/:p/gui-control-key',
-  // #7 — raw screenshot bytes for the GUI; not an SDK JSON contract.
-  'GET /v1/agent-sessions/:p/captures/:p',
   'GET /v1/auth/oauth/github/callback',
   'GET /v1/auth/oauth/google/callback',
   'GET /v1/internal/atlas-priority/event/:p',
@@ -275,7 +273,11 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     // 2026-09-11 — 238 since `POST /v1/auth/oauth-client/redeem` was published
     // (v2 cookie-free sign-in hand-off).
     // B2 — 239 since `POST /v1/agent-sessions/{id}/stop` was published.
-    expect(specOperations.size).toBe(239);
+    // 240 since `GET /v1/agent-sessions/{id}/captures/{captureId}` was published:
+    // the screenshot behind a `captureId`, as image/png or image/jpeg bytes. It
+    // was already registered, so the registration count below does not move, and
+    // its INTENTIONALLY_UNPUBLISHED_OPERATIONS entry left in the same change.
+    expect(specOperations.size).toBe(240);
     // f66e8a02c added PUT /v1/admin/incidents/:id as the 254th unique Fastify
     // registration; this verifier-only correction does not add a route.
     // 256 since V-1611 #14 registered `GET /v1/teams` + `PATCH /v1/teams/:id`.

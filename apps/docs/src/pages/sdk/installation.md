@@ -60,6 +60,8 @@ client.agentSessions.iterate(opts?);
 client.agentSessions.get(id);
 // Send a task; returns plan-executed | clarify | refuse | stopped | logged-manual — branch on kind.
 client.agentSessions.message(id, userMessage, opts?);
+client.agentSessions.getCapture(id, captureId); // a screenshot the agent took: { contentType, bytes }
+client.agentSessions.transcript(id, opts?); // the conversation so far, then live
 client.agentSessions.stop(id); // stop the running task; its message() returns kind 'stopped'
 client.agentSessions.close(id);
 client.agentSessions.setMode(id, mode);

@@ -93,15 +93,11 @@ const codeLines = (file: string): string =>
  * letting them pass as considered exclusions. It blesses one entry, not three.
  */
 const DOCUMENTED_BUT_UNPUBLISHED = new Map<string, string>([
-  [
-    'GET /v1/agent-sessions/:p/captures/:p',
-    'GAP, not a decision. It serves the screenshot bytes behind the `captureId` the published ' +
-      'message response already carries, and an ordinary key with read:sessions reaches it, so ' +
-      'api/agent-sessions.md ("Fetch a captured screenshot") and the Run AI tasks guide teach it. ' +
-      'The reason it stayed out of the spec — "it returns raw image bytes, not a JSON contract" — ' +
-      'does not hold: the spec already publishes a binary body (GET …/downloads/content with ' +
-      'format=binary). Publishing it is a spec change owed, not a reason to keep it out.',
-  ],
+  // GET /v1/agent-sessions/:p/captures/:p was the first entry here, recorded as
+  // "GAP, not a decision": it serves the screenshot behind the `captureId` the
+  // published message response carries, and the docs taught it. It is published
+  // now (image/png and image/jpeg binary bodies, beside the download fetch that
+  // already had one), so it left this list — which the stale arm below enforces.
   [
     'POST /v1/oauth/authorize/complete',
     'Deliberate, and the reason was already recorded in source — openapi.ts ("dashboard-internal ' +

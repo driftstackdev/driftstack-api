@@ -115,8 +115,12 @@ function publishedCustomerPaths(): Set<string> {
  *     the desktop client or the dashboard. ⚠️ That is an EXPLANATION, not a
  *     justification: it says why no method was written and does not excuse a
  *     published, documented endpoint having none.
- *   - THREE have no consumer anywhere in this repo — `transcript`,
- *     `billing-portal`, `fleet/events`. Those are the real gaps.
+ *   - THREE had no consumer anywhere in this repo — `transcript`,
+ *     `billing-portal`, `fleet/events`. Those were the real gaps. `transcript`
+ *     has since left the map: all three SDKs read it now
+ *     (`agentSessions.transcript` / `agent_sessions.transcript` /
+ *     `AgentSessions.Transcript`), which the stale arm below enforced when the
+ *     method landed. Two remain.
  *
  * ⛔ And the reason a placeholder beats a guess: the most PLAUSIBLE sentence
  * available was false. "The SDK models JSON, and these stream" would have
@@ -188,10 +192,6 @@ const SDK_ABSENT = new Map<string, string>([
     '/v1/agent-sessions/:p/page-state',
     "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (2 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
-  [
-    '/v1/agent-sessions/:p/transcript',
-    'PUBLISHED and documented with NO consumer anywhere in this repo — not the desktop client, not the dashboard, not the admin panel. The purest of the three gaps: it exists only as customer surface, and no SDK reaches it (W-7). Streaming is NOT the reason — the SDK streams /message through the same requestEventStream. The GUI\'s "transcript" is its own local chat history, not this endpoint',
-  ],
   ['/v1/auth/oauth-client/confirm-merge', 'OAuth 2 browser flow step — redirect-driven'],
   ['/v1/auth/oauth-client/redeem', 'OAuth 2 browser flow step — redirect-driven'],
   ['/v1/auth/oauth-client/start', 'OAuth 2 browser flow entry — redirect-driven'],
@@ -201,11 +201,11 @@ const SDK_ABSENT = new Map<string, string>([
   ],
   [
     '/v1/billing/crypto-orders/:p/receipt.pdf',
-    'returns application/pdf, and the SDK cannot express that. VERIFIED rather than assumed (V-1640): http.ts never calls res.json() — every path reads the body as text and does JSON.parse(text) as T, with no blob/arrayBuffer branch anywhere, so a PDF byte stream throws. Contrast the SSE excuse this map used to carry, which was false because the machinery DID exist',
+    'returns application/pdf. NO LONGER inexpressible: this entry used to say "the SDK cannot express that", verified against an http.ts whose every path was JSON.parse(text). http.ts now has requestBytes (raw bytes plus the media type, under the same ceiling), which agentSessions.getCapture uses for screenshots — so this is an UNWRITTEN method, the same kind of gap as its console-surface neighbours, and no longer a limit of the client (W-7)',
   ],
   [
     '/v1/billing/crypto-orders/:p/receipt.txt',
-    'returns text/plain, and the SDK cannot express that. Same proof as the .pdf sibling (V-1640): every response path is JSON.parse(text), so a plain-text body throws just as a PDF does',
+    'returns text/plain. Same correction as the .pdf sibling: request() still JSON.parses every body, so a plain-text one throws there, but requestBytes can now carry it — an unwritten method, not an inexpressible one (W-7)',
   ],
   [
     '/v1/egress/echo',

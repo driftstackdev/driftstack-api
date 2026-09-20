@@ -5130,6 +5130,18 @@ function buildRegistry(): OpenAPIRegistry {
   // Agent-chat routes use bundled Anthropic credentials or an explicit
   // customer BYOK key. Deployments with neither path configured return
   // FeatureUnavailable while preserving this public contract.
+
+  // The 403 create and message share. Every field is optional because the same
+  // status also answers a missing scope and a plan without the AI agent, which
+  // carry neither; `requires_own_key` is what tells the model refusal apart
+  // without reading the sentence.
+  const AgentOwnKeyRequiredProblemOpenApi = ProblemSchema.extend({
+    requires_own_key: z.literal(true).optional(),
+    model: z.string().optional(),
+  }).openapi('AgentOwnKeyRequiredProblem', {
+    description:
+      'RFC 7807 forbidden. `requires_own_key: true` means the refusal is about the AI model: the chosen model runs only on your own Anthropic key (every Opus-class model does), and this session or turn would have run on Driftstack’s included AI. `model` names the model that was refused. Both are absent on every other 403.',
+  });
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions',
@@ -5148,6 +5160,18 @@ function buildRegistry(): OpenAPIRegistry {
           .openapi({
             description:
               'Optional durable identity for this creation. Retrying with the same key replays the original 201 rather than minting a second agent session, so a create lost to a timeout is safe to repeat. Use a new key for an intentionally new session.',
+          })
+          .optional(),
+        // The route has always read this header at create: it is what lets an
+        // account that sends its key per request (none stored) start a session
+        // on an Opus-class model. Undeclared, a generated client had no
+        // parameter to send it with.
+        'x-byok-anthropic-api-key': z
+          .string()
+          .min(1)
+          .openapi({
+            description:
+              'Optional. Your own Anthropic API key. Create uses it only to decide whether the chosen `model` is allowed: some models, every Opus-class one included, run only on your own key, so without a key here or stored on the account the create is refused with a 403 carrying `requires_own_key: true`. The key is not stored and is never logged; send it on every message too.',
           })
           .optional(),
       }),
@@ -5239,8 +5263,10 @@ function buildRegistry(): OpenAPIRegistry {
       // tier; mode manual is available on every tier.
       403: {
         description:
-          'Caller not permitted — key lacks the write scope, or mode ai/pair was requested on a tier without the AI-agent feature (Free / Personal).',
-        content: problemContent,
+          'Caller not permitted — key lacks the write scope, mode ai/pair was requested on a tier without the AI-agent feature (Free / Personal), or the chosen `model` runs only on your own Anthropic key (every Opus-class model does) and the session would run on Driftstack’s included AI. The last case carries `requires_own_key: true` and `model`: add your own Anthropic key (stored, or the `x-byok-anthropic-api-key` header) or pick another model.',
+        content: {
+          'application/problem+json': { schema: AgentOwnKeyRequiredProblemOpenApi },
+        },
       },
       503: {
         description: 'AI chat agent not enabled on this deployment.',
@@ -5369,12 +5395,29 @@ function buildRegistry(): OpenAPIRegistry {
       z.object({
         kind: z.literal('plan-executed'),
         session: AgentSessionSchema,
-        intents: z.array(AgentIntentSchema),
+        intents: z.array(AgentIntentSchema).openapi({
+          description:
+            'Every step the turn attempted, in order, across every plan it made. It lines up one for one with `results` when every plan ran to its end, and is longer when a plan was abandoned part-way: the steps that did not run have no result. Read a step’s outcome from `results`, where `results[i].intent` is the step that result is for.',
+        }),
         results: z.array(IntentResultSchema),
         ok: z.boolean(),
         // The read-back answer to the customer's question, present only when
         // the turn read the page back and produced one.
         answer: z.string().optional(),
+        // Why there is no `answer`, when the message asked for one. The route
+        // returns it on both representations; undeclared, a generated model
+        // dropped it.
+        answer_unavailable: z.string().optional().openapi({
+          description:
+            'Why there is no `answer`, when the message asked for information and none could be produced: one sentence, in plain words. Never present together with `answer`, and absent on a message that only asked for actions. Open text: show it, do not match on it.',
+        }),
+        // Why a turn whose steps all ran is not finished, or what the agent
+        // asked part-way through. The route has returned it since turns could
+        // end at a limit; the published variant never declared it.
+        notice: z.string().optional().openapi({
+          description:
+            'Present when the turn ended before the task was finished — it reached a limit on steps, time or budget, or stopped rather than repeat itself — or when the agent asked you something part-way through. One or two sentences saying what to do next; when it asks for "continue", send that as the next message. Absent when the task finished or a step failed.',
+        }),
         usage: AgentMessageUsageOpenApi.optional(),
       }),
       z.object({
@@ -5428,10 +5471,42 @@ function buildRegistry(): OpenAPIRegistry {
     // Lifecycle discriminators, so a client tells these conflicts apart by field
     // rather than by parsing the sentence.
     session_status: z.enum(['active', 'paused', 'closed']).optional(),
+    // Why the session ended — the same value GET /v1/agent-sessions/{id} returns
+    // as `closed_reason` — so a program need not make that second call. An open
+    // string, like the resource's own field.
+    closed_reason: z.string().optional(),
     turn_in_progress: z.literal(true).optional(),
   }).openapi('AgentMessageConflictProblem', {
     description:
-      'RFC 7807 conflict with bounded agent-turn evidence. Idempotency conflicts identify mismatch versus unresolved work; authority/lifecycle conflicts may include consumed usage and redacted settled results that must be inspected before another action, plus `session_status` when the session itself ended and `turn_in_progress` when another turn still holds the session.',
+      'RFC 7807 conflict with bounded agent-turn evidence. Idempotency conflicts identify mismatch versus unresolved work; authority/lifecycle conflicts may include consumed usage and redacted settled results that must be inspected before another action, plus `session_status` when the session is not active — whether it was already closed or paused when the message arrived, or ended while the turn ran — with `closed_reason` beside it when the session records one, and `turn_in_progress` when another turn still holds the session.',
+  });
+
+  // The two limits on AI turns running at once answer with the ordinary
+  // rate-limited problem; what is worth declaring is that the wait is in the
+  // body too, because the streamed representation has no response headers left
+  // to carry Retry-After by the time the refusal is known.
+  const AgentTurnLimitProblemOpenApi = ProblemSchema.extend({
+    retry_after_seconds: z.number().int().nonnegative().optional(),
+  }).openapi('AgentTurnLimitProblem', {
+    description:
+      'RFC 7807 rate-limited. `retry_after_seconds` is how long to wait before sending again; it repeats the `Retry-After` header, and is the only place the wait appears when the refusal arrives inside the streamed `response` event.',
+  });
+
+  // No key to run on, or the customer's own key refused by the provider. The
+  // second carries fields so a program can tell it from the first, and tell a
+  // key to replace from a bill to pay, without reading the sentence.
+  const AgentAiKeyProblemOpenApi = ProblemSchema.extend({
+    key_rejected: z.literal(true).optional(),
+    // Open on purpose, like the step-failure category: the enum arm keeps the
+    // known values in the published spec, and the string arm lets a client
+    // generated before a value existed still parse a response carrying it.
+    key_source: z.union([z.enum(['header', 'stored']), z.string()]).optional(),
+    key_rejected_reason: z
+      .union([z.enum(['invalid_or_unauthorized', 'billing']), z.string()])
+      .optional(),
+  }).openapi('AgentAiKeyProblem', {
+    description:
+      'RFC 7807 byok-anthropic-required. With no extension fields: the turn has no Anthropic key to run on. With `key_rejected: true`: Anthropic refused your own key on the turn’s first planning call, and no step was run. `key_source` says which key (`header` — the one sent with this request; `stored` — the one saved on the account) and `key_rejected_reason` says why (`invalid_or_unauthorized` — invalid, revoked, or not permitted to run the model; `billing` — the Anthropic account behind it cannot pay for the call). The key itself never appears in the response.',
   });
 
   registerRoute(r, {
@@ -5488,12 +5563,14 @@ function buildRegistry(): OpenAPIRegistry {
         // V-1534 declared: the account has no usable Anthropic credential and
         // bundled-LLM cannot cover the turn.
         description:
-          'No Anthropic credential is available for this turn. Set a stored key with PUT /v1/account/me/byok-anthropic-key, or supply `x-byok-anthropic-api-key` on the request.',
-        content: problemContent,
+          'The turn has no usable Anthropic key. Either none is available — set a stored key with PUT /v1/account/me/byok-anthropic-key, or supply `x-byok-anthropic-api-key` on the request; a plan that can only run AI on its own key is answered this way too — or Anthropic refused your own key on the first planning call (`key_rejected: true`, with `key_source` and `key_rejected_reason`). No step was run in either case. Not worth retrying unchanged: add, replace or fix the key first.',
+        content: {
+          'application/problem+json': { schema: AgentAiKeyProblemOpenApi },
+        },
       },
       200: {
         description:
-          'Turn result — discriminated by `kind`: plan-executed (intents + results + ok, plus `answer` when the turn read the page back to answer the question) / clarify (clarifying_question) / refuse (refuse_reason) / stopped (the turn was stopped with POST /v1/agent-sessions/{id}/stop: the steps that ran, including one that was already running when the stop arrived, and a `notice` saying how far it got) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.',
+          'Turn result — discriminated by `kind`: plan-executed (intents + results + ok, where `intents` covers every plan the turn made; plus `answer` when the turn read the page back to answer the question, or `answer_unavailable` saying why it could not; plus `notice` when the turn ended before the task was finished) / clarify (clarifying_question) / refuse (refuse_reason) / stopped (the turn was stopped with POST /v1/agent-sessions/{id}/stop: the steps that ran, including one that was already running when the stop arrived, and a `notice` saying how far it got) / logged-manual (transcript-only operator entry). The `session` envelope is always present and carries the updated transcript_length + token_budget_remaining counters. Model-backed variants include `usage` when provider evidence is available.',
         content: {
           'application/json': {
             schema: AgentMessageResponseOpenApi,
@@ -5507,13 +5584,29 @@ function buildRegistry(): OpenAPIRegistry {
         },
       },
       ...errors4xx,
+      403: {
+        description:
+          'Caller not permitted: the key lacks the `write` scope; the turn would run on Driftstack’s included AI and the plan does not include it; or the session’s model runs only on your own Anthropic key (every Opus-class model does) and the turn would have run on the included AI (`requires_own_key: true`, with `model` naming it). No step was run. Whether the plan includes the AI agent at all is settled when the session is created or its mode is changed, never on a message.',
+        content: {
+          'application/problem+json': { schema: AgentOwnKeyRequiredProblemOpenApi },
+        },
+        headers: requestIdHeader,
+      },
+      429: {
+        description:
+          'Rate limited. Besides the request rate limit for this route, two limits on AI turns running at once answer here, both as `rate-limited` with `retry_after_seconds: 1` and `Retry-After: 1`: the account already has the maximum number of AI turns running across its sessions, or the maximum number running on Driftstack’s included AI. No step was run; wait for a turn to finish, then send the message again. On the streamed representation the refusal arrives inside the `response` event, so the wait is in the body’s `retry_after_seconds` only.',
+        content: {
+          'application/problem+json': { schema: AgentTurnLimitProblemOpenApi },
+        },
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
+      },
       404: {
         description: 'Agent session not found (or owned by another account).',
         content: problemContent,
       },
       409: {
         description:
-          'Agent session is closed/paused, its control authority changed, its transcript capacity is exhausted, another turn is already running, or the Idempotency-Key is pending/reused with a different logical turn. Authority/lifecycle conflicts can include usage and redacted settled partial results; inspect that evidence before taking another action.',
+          'Agent session is closed/paused (`session_status`, with `closed_reason` when the session records one), its control authority changed, its transcript capacity is exhausted, another turn is already running (`turn_in_progress`), or the Idempotency-Key is pending/reused with a different logical turn (`idempotency_status`). Authority/lifecycle conflicts can include usage and redacted settled partial results; inspect that evidence before taking another action.',
         content: {
           'application/problem+json': { schema: AgentMessageConflictProblemOpenApi },
         },
@@ -5678,8 +5771,17 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
       503: {
         description:
-          'AI chat is not activated on this deployment (the response carries the activation message), or the stop could not be confirmed just now — try again in a moment.',
-        content: problemContent,
+          'Two causes share this status and problem type. `stop_unconfirmed: true` means the stop could not be confirmed just now and the turn may still be running: call stop again. Without that field, AI chat is not activated on this deployment (the response carries the activation message) and calling again will not help.',
+        content: {
+          'application/problem+json': {
+            schema: ProblemSchema.extend({
+              stop_unconfirmed: z.literal(true).optional(),
+            }).openapi('AgentStopUnavailableProblem', {
+              description:
+                'RFC 7807 feature-unavailable. `stop_unconfirmed: true` is present only when the stop could not be confirmed; that is the one case worth calling again.',
+            }),
+          },
+        },
         headers: requestIdHeader,
       },
     },
@@ -5705,7 +5807,7 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description:
           'Returns the post-transition AgentSession (with mode + pair_mode_state updated atomically). Idempotent on same-mode targets.',
-        content: { 'application/json': { schema: z.object({}).passthrough() } },
+        content: { 'application/json': { schema: AgentSessionSchema } },
       },
       404: { description: 'Agent session not found.', content: problemContent },
       409: {
@@ -5788,7 +5890,24 @@ function buildRegistry(): OpenAPIRegistry {
     request: {
       body: {
         required: false,
-        content: { 'application/json': { schema: z.object({}) } },
+        content: {
+          'application/json': {
+            // The route has always accepted the tab's `client_id` here; the
+            // published body was an empty object, so a generated client could
+            // not send it.
+            schema: z.object({
+              client_id: z
+                .string()
+                .min(1)
+                .max(128)
+                .openapi({
+                  description:
+                    'Optional. The same `client_id` the takeover was requested with, identifying which tab or window is handing control back.',
+                })
+                .optional(),
+            }),
+          },
+        },
       },
     },
     responses: {
@@ -6219,6 +6338,49 @@ function buildRegistry(): OpenAPIRegistry {
         },
       },
       404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+
+  // A screenshot the AI captured. The message result carries only a
+  // `captureId`; this serves the image behind it. Published with the same
+  // binary body the download fetch above already uses.
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/agent-sessions/{id}/captures/{captureId}',
+    summary:
+      'Fetch a screenshot the AI captured, by its `captureId` (requires `read:sessions`, broad `read`, or `account_owner`)',
+    description:
+      'A `capture` step’s result carries a `captureId`; this returns the image behind it as raw bytes. Screenshots are kept only briefly: at most the 20 most recent per session, and they can be removed once 30 minutes pass without a new screenshot in that session. Fetch one as soon as its turn ends.',
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      params: z.object({
+        id: z.string(),
+        captureId: z
+          .string()
+          .min(1)
+          .openapi({ description: 'The `captureId` from a `capture` step’s result.' }),
+      }),
+    },
+    responses: {
+      200: {
+        description:
+          'The image bytes. `Content-Type` says which format this one is: `image/png` or `image/jpeg`.',
+        content: {
+          'image/png': { schema: { type: 'string', format: 'binary' } },
+          'image/jpeg': { schema: { type: 'string', format: 'binary' } },
+        },
+      },
+      404: {
+        description:
+          'Agent session not found (or owned by another account), or no screenshot with this `captureId` is kept for it: the id is unknown, or the screenshot is no longer kept.',
+        content: problemContent,
+      },
       ...errors4xx,
       503: {
         description: 'AI chat agent not enabled on this deployment.',

@@ -232,15 +232,18 @@ type AgentUsage struct {
 // this SDK version does not know.
 //
 // On "plan-executed", Answer is what you asked for (when you asked for
-// information) and Notice, when set, says why the task is not finished yet.
+// information), AnswerUnavailable says why there is none when one could not be
+// produced, and Notice, when set, says why the task is not finished yet.
 // OK is true when the last planned steps ran cleanly; it does not by itself
 // mean the task is finished. Read typed steps with ParsedResults.
 type AgentMessageResponse struct {
 	Kind    string       `json:"kind"`
 	Session AgentSession `json:"session"`
-	// Intents are the steps the agent planned. Read each step's outcome from
-	// Results, which carries the step it ran; the two need not line up by
-	// index. Decode them with ParsedIntents.
+	// Intents are every step the turn attempted, in order, across every plan
+	// it made. Read each step's outcome from Results, which carries the step it
+	// ran; the two need not line up by index — Intents is longer when a plan
+	// was abandoned part-way, because the steps that did not run have no
+	// result. Decode them with ParsedIntents.
 	Intents []json.RawMessage `json:"intents,omitempty"`
 	// Results are every step that ran, in order. Decode them with
 	// ParsedResults.
@@ -255,6 +258,11 @@ type AgentMessageResponse struct {
 	// from the page; empty when the turn only acted (navigate, tap,
 	// screenshot) or no answer could be read.
 	Answer string `json:"answer,omitempty"`
+	// AnswerUnavailable says why there is no Answer, when the message asked
+	// for information and none could be produced: one sentence, in plain
+	// words. Never set together with Answer, and empty on a message that only
+	// asked for actions. Open text: show it, do not match on it.
+	AnswerUnavailable string `json:"answer_unavailable,omitempty"`
 	// Notice is set on a "plan-executed" turn that ended before the task was
 	// finished — it reached a limit on steps, time or budget, or stopped
 	// rather than repeat itself — or when the agent asked you something
@@ -539,13 +547,25 @@ type MessageOptions struct {
 	ByokAPIKey string
 	// IdempotencyKey identifies one logical turn. Reuse it after a lost or
 	// ambiguous stream so the server replays the durable terminal result instead
-	// of executing browser actions twice. Once the server has accepted a key,
-	// the response it gives for that key is final, errors included: reuse the
-	// same key only when you got no response at all, or a *ConflictError whose
-	// IdempotencyStatus() is "in_progress" (the first attempt is still
-	// running; it replays the result once it finishes). After any other error,
-	// fix the cause or wait, then send with a NEW key. Change it too when the
-	// session, message or approvals change.
+	// of executing browser actions twice.
+	//
+	// A refusal raised BEFORE the turn did any work gives the key back, so the
+	// same key runs the turn once the cause is gone: a *ConflictError whose
+	// TurnInProgress() is true, a *RateLimitError (the message rate, or too
+	// many AI turns running at once), ErrBundledLlmConsentRequired,
+	// ErrBundledLlmBudgetExhausted, a *ForbiddenError about the plan's AI or
+	// the model (RequiresOwnKey()), and a *ByokAnthropicRequiredError whose
+	// KeyRejected() is false. Fix the cause or wait, then send the same request
+	// again with the SAME key. So is a *ConflictError whose
+	// IdempotencyStatus() is "in_progress": the first attempt is still being
+	// resolved, and the same key replays its result.
+	//
+	// Every other answer is final for that key and sending it again replays it
+	// — every completed turn, every failure after the turn started, a rejected
+	// own key (KeyRejected()), a 500, a "refuse" result, and the 409 for a
+	// session that is closed or paused. To send one of those again, fix the
+	// cause and use a NEW key. Change it too when the session, message or
+	// approvals change.
 	IdempotencyKey              string
 	ApproveConsequentialActions []ConsequentialActionApproval
 	// Timeout is the absolute heartbeat-stream backstop. Zero uses
@@ -570,12 +590,18 @@ type MessageOptions struct {
 //
 // Errors you should expect: 409 *ConflictError (TurnInProgress(): another
 // message is still running — wait, or Stop it; SessionStatus(): the session
-// has ended — start a new one), 429 *RateLimitError (the message rate, or too
-// many AI turns running at once on your account), 429 *ConcurrencyLimitError
-// (too many turns on the included AI at once), 403 *ForbiddenError (no AI on
-// the plan, or RequiresOwnKey()), and 402 *BundledLlmBudgetExhaustedError /
-// *BundledLlmConsentRequiredError or 502 *ByokAnthropicRequiredError when no
-// AI key or budget is available.
+// is not active — "closed", with ClosedReason() saying why, so start a new
+// one, or "paused"), 429 *RateLimitError (the message rate, or too many AI
+// turns running at once: across your sessions, or on Driftstack's included AI
+// — no step ran; wait RetryAfterSeconds, then send the same request again,
+// the same idempotency key and all; IsRetryable is true), 403 *ForbiddenError (no AI on the
+// plan, or RequiresOwnKey()), 402 *BundledLlmBudgetExhaustedError /
+// *BundledLlmConsentRequiredError (the included AI's budget is used up, or the
+// account has not opted in), and 502 *ByokAnthropicRequiredError: the turn has
+// no AI key (a plan that runs AI only on its own key is answered this way
+// too), or Anthropic refused your key (KeyRejected(); KeySource() and
+// KeyRejectedReason() say which key and why). No step ran, and it is not
+// retryable: fix the key first.
 func (r *AgentSessionsResource) Message(ctx context.Context, agentSessionID, userMessage string, opts *MessageOptions) (*AgentMessageResponse, error) {
 	var out AgentMessageResponse
 	body := map[string]any{"user_message": userMessage}
@@ -635,6 +661,124 @@ func progressDispatcher(onStep func(AgentStepEvent), onEvent func(string, json.R
 			onEvent(name, json.RawMessage(append([]byte(nil), data...)))
 		}
 	}
+}
+
+// AgentCapture is a screenshot fetched with GetCapture. ContentType is
+// "image/png" or "image/jpeg" — which one this screenshot is — and Bytes is the
+// image itself; write it to a file as-is.
+type AgentCapture struct {
+	ContentType string
+	Bytes       []byte
+}
+
+// GetCapture fetches a screenshot the agent took. A "capture" step's result
+// carries a CaptureID; this returns the image behind it.
+//
+// Screenshots are kept only briefly — at most the 20 most recent per session,
+// and they can be removed once 30 minutes pass without a new one in that
+// session — so fetch one as soon as its turn ends.
+//
+// Errors: 404 *NotFoundError — the session is unknown, or no screenshot with
+// this id is kept for it any more.
+func (r *AgentSessionsResource) GetCapture(ctx context.Context, agentSessionID, captureID string) (*AgentCapture, error) {
+	var raw rawBody
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/captures/" + url.PathEscape(captureID),
+		rawOut: &raw,
+	}); err != nil {
+		return nil, err
+	}
+	return &AgentCapture{ContentType: raw.contentType, Bytes: raw.bytes}, nil
+}
+
+// AgentTranscriptEntry is one entry of a session's conversation. Role is who
+// wrote it: "user" (a message you sent), "agent" (the AI's outcome) or
+// "operator" (a message recorded by a "manual"-mode session); an open set.
+// Body is always plain text, never JSON. Intents is set on an agent entry
+// whose plan ran; sensitive typed values are withheld from it.
+type AgentTranscriptEntry struct {
+	Role string `json:"role"`
+	Body string `json:"body"`
+	// At is the ISO-8601 time the entry was written.
+	At      string        `json:"at"`
+	Intents []AgentIntent `json:"intents,omitempty"`
+}
+
+// AgentTranscriptEvent is one item handed to Transcript's callback: the
+// entry and its 0-based position in the conversation. Pass the last Index you
+// saw as TranscriptOptions.LastEventID to carry on from there.
+type AgentTranscriptEvent struct {
+	Index int                  `json:"index"`
+	Entry AgentTranscriptEntry `json:"entry"`
+}
+
+// TranscriptOptions carries optional per-call overrides for Transcript.
+type TranscriptOptions struct {
+	// LastEventID resumes after this entry index (the Index of the last event
+	// you saw): the stream starts with the entry after it, so nothing is
+	// repeated. A pointer because 0 is an index: nil replays from the
+	// beginning, and a pointer to 0 resumes after entry 0.
+	LastEventID *int
+	// Timeout is the absolute limit on how long one call may stay open. Zero
+	// uses AgentMessageStreamTimeout (50 minutes), the same as Message. It is
+	// not an idle timeout. An earlier caller context wins.
+	Timeout time.Duration
+}
+
+// Transcript reads a session's conversation, then follows it live. fn is
+// called with every entry already in the transcript, oldest first, and then
+// with each new entry as it is written — so the call does not return by itself
+// while the session is open. Return false from fn to stop (Transcript
+// then returns nil), or an error to stop with that error; cancelling ctx stops
+// it too. Each of these closes the connection.
+//
+// To read only what is there now, read TranscriptLength with Get first and
+// return false at Index == TranscriptLength-1 (skip the call when it is 0).
+//
+// The call also returns nil when the server closes the stream (your key lost
+// access, or the connection was recycled); call again with LastEventID to
+// carry on. When the time limit passes it returns context.DeadlineExceeded.
+//
+// Entries are returned as the session recorded them: Body is free text, and
+// may contain whatever was sent to the agent. Treat the transcript as
+// sensitive.
+//
+// Pass nil for opts to replay from the beginning with the default limit.
+//
+// Errors: 404 *NotFoundError; 429 *RateLimitError — an account may hold at most
+// 10 transcript streams open at once (wait RetryAfterSeconds).
+func (r *AgentSessionsResource) Transcript(ctx context.Context, agentSessionID string, opts *TranscriptOptions, fn func(AgentTranscriptEvent) (bool, error)) error {
+	req := requestOptions{
+		method:        "GET",
+		path:          "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/transcript",
+		eventStream:   true,
+		streamTimeout: AgentMessageStreamTimeout,
+		onOpenFrame: func(name string, data []byte) (bool, error) {
+			// The set of event names is open: anything that is not a transcript
+			// entry, or does not decode as one, is skipped, never an error.
+			if name != "transcript.entry" {
+				return true, nil
+			}
+			var event struct {
+				Index *int                  `json:"index"`
+				Entry *AgentTranscriptEntry `json:"entry"`
+			}
+			if err := json.Unmarshal(data, &event); err != nil || event.Index == nil || event.Entry == nil {
+				return true, nil
+			}
+			return fn(AgentTranscriptEvent{Index: *event.Index, Entry: *event.Entry})
+		},
+	}
+	if opts != nil {
+		if opts.Timeout > 0 {
+			req.streamTimeout = opts.Timeout
+		}
+		if opts.LastEventID != nil {
+			req.headers = map[string]string{"Last-Event-ID": strconv.Itoa(*opts.LastEventID)}
+		}
+	}
+	return r.client.doEventStream(ctx, req)
 }
 
 // Close ends the agent session and its browser (idempotent). Close every
@@ -931,8 +1075,11 @@ type StopAgentTurnResponse struct {
 //
 // Errors (mapped to typed Driftstack errors):
 //   - 404 — session unknown (or cross-account; existence not leaked)
-//   - 503 *FeatureUnavailableError — the stop could not be confirmed just
-//     now; call Stop again
+//   - 503 *FeatureUnavailableError — when its StopUnconfirmed() is true, the
+//     stop could not be confirmed just now and the turn may still be running:
+//     call Stop again. (IsRetryable is false for this type, because the same
+//     503 without the flag means AI is not enabled and calling again would not
+//     help; the SDK does not retry Stop by itself.)
 func (r *AgentSessionsResource) Stop(ctx context.Context, agentSessionID string) (*StopAgentTurnResponse, error) {
 	var out StopAgentTurnResponse
 	req := requestOptions{

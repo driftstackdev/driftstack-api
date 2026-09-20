@@ -67,8 +67,12 @@ describe('LK.5 — LiveKitInfo cross-SDK parity', () => {
       resolve(REPO_ROOT, 'packages/sdk-python/src/driftstack/__init__.py'),
       'utf8',
     );
-    // Import line from the resource module.
-    expect(pyInit).toMatch(/from driftstack\.resources\.agent_sessions import LiveKitInfo/);
+    // Imported from the resource module. It shares that import with the capture
+    // and transcript types now, so the pin reads the whole statement, one line
+    // or parenthesised, rather than requiring LiveKitInfo to be its only name.
+    expect(pyInit).toMatch(
+      /from driftstack\.resources\.agent_sessions import (?:\([^)]*\bLiveKitInfo\b[^)]*\)|[^\n(]*\bLiveKitInfo\b)/,
+    );
     // __all__ list — pin the literal entry so `from driftstack import
     // LiveKitInfo` keeps working even if the import line moves.
     expect(pyInit).toMatch(/"LiveKitInfo",/);

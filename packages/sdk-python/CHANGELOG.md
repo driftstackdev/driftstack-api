@@ -8,6 +8,25 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Fetch a screenshot** — sync and async
+  `agent_sessions.get_capture(id, capture_id)` return the image behind a
+  `capture` step's `captureId` as `{"content_type", "bytes"}` (`image/png` or
+  `image/jpeg`). Screenshots are kept only briefly, so fetch one as soon as
+  its turn ends; one that is no longer kept raises `NotFoundError`.
+- **Read the transcript** — `agent_sessions.transcript(id, last_event_id=...,
+timeout_s=...)` iterates a session's conversation (an iterator on the sync
+  client, an async iterator on the async one): every entry so far, then each
+  new one as it is written. `last_event_id` resumes after the last `index` you
+  saw; closing the iterator closes the connection. Held to the same 50-minute
+  absolute limit and 8 MiB ceiling as a message, with a read-idle limit a
+  quiet stream survives. Exports `AgentCapture` and `AgentTranscriptEvent`.
+- **More of an AI answer is typed** — `ConflictError.closed_reason` (why a
+  closed session ended, without a second call);
+  `FeatureUnavailableError.stop_unconfirmed` (the one `stop()` 503 worth
+  calling again); and `ByokAnthropicRequiredError.key_rejected` /
+  `.key_source` / `.key_rejected_reason` (Anthropic refused your own key, which
+  key, and why). The generated `plan-executed` model gains `notice` and
+  `answer_unavailable` (why there is no `answer`, when you asked for one).
 - **Live progress for AI tasks** — sync and async
   `agent_sessions.message(..., on_step=..., on_event=...)` parse the turn's
   stream as it arrives: `on_step(step)` gets each step
@@ -33,6 +52,14 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Too many AI turns on the included AI is a `RateLimitError` now** — the API
+  answers this refusal as `rate-limited` with `retry_after_seconds: 1` instead
+  of `concurrency-limit`, so `message()` raises `RateLimitError`
+  (`is_retryable` true, `retry_after_seconds` 1) where it raised
+  `ConcurrencyLimitError`. No SDK change is needed to read it, and
+  `ConcurrencyLimitError` still means what it always meant on `create()`: your
+  plan's concurrent-session limit. `intents` on a `plan-executed` result now
+  covers every plan the turn made, not only the first.
 - **Agent-session docstrings** describe what the API does — result kinds, how
   an approval resumes the paused steps, when an idempotency key may be
   reused — and no longer mention how the service is built. The README no

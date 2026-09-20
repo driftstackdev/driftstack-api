@@ -150,11 +150,21 @@ class ConflictError(DriftstackError):
 
     @property
     def session_status(self) -> str | None:
-        """Set when the agent session is no longer active (``"closed"`` or
-        ``"paused"``), including when this turn ended it — for example its token
-        budget ran out. Read ``closed_reason`` with ``agent_sessions.get(id)``.
-        An open string."""
+        """Set when the agent session is not active (``"closed"`` or
+        ``"paused"``): it already was when the message arrived, or this turn
+        ended it — for example its token budget ran out. An open string."""
         value = self.problem.get("session_status")
+        return value if isinstance(value, str) else None
+
+    @property
+    def closed_reason(self) -> str | None:
+        """Why the session ended, when :attr:`session_status` is ``"closed"``
+        and the session records a reason: the same value
+        ``agent_sessions.get(id)`` returns as ``closed_reason``
+        (``"customer-closed"``, ``"budget-exhausted"``, ``"transcript-limit"``,
+        …), so no second call is needed. An open string; ``None`` for a paused
+        session and on older servers."""
+        value = self.problem.get("closed_reason")
         return value if isinstance(value, str) else None
 
     @property
@@ -435,6 +445,15 @@ class FeatureUnavailableError(DriftstackError):
     """Endpoint requires infrastructure not configured in this deployment
     (e.g. avatar uploads when R2 isn't wired). HTTP 503."""
 
+    @property
+    def stop_unconfirmed(self) -> bool:
+        """True only on the 503 ``agent_sessions.stop()`` gets when the stop
+        could not be confirmed just now: the turn may still be running, so call
+        ``stop()`` again. False for every other 503 of this class — including
+        "AI is not enabled", where calling again would not help — which is why
+        ``is_retryable`` stays false for the class and this flag exists."""
+        return self.problem.get("stop_unconfirmed") is True
+
 
 class MfaStepUpRequiredError(DriftstackError):
     """V-353e — operation requires a fresh MFA proof (15-minute step-up
@@ -529,10 +548,43 @@ class PairModeStateInvalidTransitionError(DriftstackError):
 
 
 class ByokAnthropicRequiredError(DriftstackError):
-    """502 — the turn has no AI key to run on: no key on the request, none
-    stored, and Driftstack's included AI is not available to the account. Store
-    your Anthropic key (PUT /v1/account/me/byok-anthropic-key) or send it with
-    the call (``byok_api_key=``)."""
+    """502 — the turn has no usable AI key. Two cases, told apart by
+    :attr:`key_rejected`:
+
+    - false — there is no key to run on: none on the request, none stored, and
+      Driftstack's included AI is not available to the account (a plan that runs
+      AI only on its own key is answered this way too). Store your Anthropic key
+      (PUT /v1/account/me/byok-anthropic-key) or send it with the call
+      (``byok_api_key=``).
+    - true — Anthropic refused YOUR key on the turn's first planning call.
+      :attr:`key_source` says which key and :attr:`key_rejected_reason` why.
+
+    No step ran in either case. ``is_retryable`` is false although the status is
+    a 502: sending the same request again gets the same answer until the key is
+    added, replaced or fixed.
+    """
+
+    @property
+    def key_rejected(self) -> bool:
+        """True when Anthropic refused your own key; false when there was no key."""
+        return self.problem.get("key_rejected") is True
+
+    @property
+    def key_source(self) -> str | None:
+        """Which key was refused: ``"header"`` (the ``byok_api_key`` sent with
+        the call) or ``"stored"`` (the one saved on the account). An open
+        string; ``None`` unless :attr:`key_rejected`."""
+        value = self.problem.get("key_source")
+        return value if isinstance(value, str) else None
+
+    @property
+    def key_rejected_reason(self) -> str | None:
+        """Why it was refused: ``"invalid_or_unauthorized"`` (invalid, revoked,
+        or not permitted to run the model — replace it) or ``"billing"`` (the
+        Anthropic account behind it cannot pay for the call — fix billing with
+        Anthropic). An open string; ``None`` unless :attr:`key_rejected`."""
+        value = self.problem.get("key_rejected_reason")
+        return value if isinstance(value, str) else None
 
 
 # ── Mapping problem-type URI → subclass ──────────────────────────────────

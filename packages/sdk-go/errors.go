@@ -167,11 +167,21 @@ func (e *ConflictError) TurnInProgress() bool {
 	return v
 }
 
-// SessionStatus is set when the agent session is no longer active ("closed"
-// or "paused"), including when this turn ended it — for example its token
-// budget ran out. Read ClosedReason with Get. An open string.
+// SessionStatus is set when the agent session is not active ("closed" or
+// "paused"): it already was when the message arrived, or this turn ended it —
+// for example its token budget ran out. An open string.
 func (e *ConflictError) SessionStatus() string {
 	v, _ := e.Problem["session_status"].(string)
+	return v
+}
+
+// ClosedReason is why the session ended, when SessionStatus is "closed" and
+// the session records a reason: the same value Get returns as ClosedReason
+// ("customer-closed", "budget-exhausted", "transcript-limit", …), so no second
+// call is needed. An open string; empty for a paused session and on older
+// servers.
+func (e *ConflictError) ClosedReason() string {
+	v, _ := e.Problem["closed_reason"].(string)
 	return v
 }
 
@@ -426,6 +436,16 @@ type FeatureUnavailableError struct{ apiError }
 
 func (e *FeatureUnavailableError) Is(target error) bool { return target == ErrFeatureUnavailable }
 
+// StopUnconfirmed is true only on the 503 AgentSessions.Stop gets when the
+// stop could not be confirmed just now: the turn may still be running, so call
+// Stop again. False for every other 503 of this type — including "AI is not
+// enabled", where calling again would not help — which is why IsRetryable
+// stays false for the type and this flag exists.
+func (e *FeatureUnavailableError) StopUnconfirmed() bool {
+	v, _ := e.Problem["stop_unconfirmed"].(bool)
+	return v
+}
+
 // MfaStepUpRequiredError — the requested operation requires a fresh
 // MFA proof (V-353e step-up gate, 15-minute freshness window).
 // Customer should call POST /v1/auth/mfa/step-up with a TOTP code
@@ -441,15 +461,48 @@ type InternalError struct{ apiError }
 
 func (e *InternalError) Is(target error) bool { return target == ErrInternal }
 
-// ByokAnthropicRequiredError — 502: the turn has no AI key to run on: no key
-// on the request, none stored, and Driftstack's included AI is not available
-// to the account. Store your Anthropic key (PUT
-// /v1/account/me/byok-anthropic-key) or send it with the call
-// (MessageOptions.ByokAPIKey).
+// ByokAnthropicRequiredError — 502: the turn has no usable AI key. Two cases,
+// told apart by KeyRejected():
+//
+//   - false — there is no key to run on: none on the request, none stored, and
+//     Driftstack's included AI is not available to the account (a plan that
+//     runs AI only on its own key is answered this way too). Store your
+//     Anthropic key (PUT /v1/account/me/byok-anthropic-key) or send it with
+//     the call (MessageOptions.ByokAPIKey).
+//   - true — Anthropic refused YOUR key on the turn's first planning call.
+//     KeySource() says which key and KeyRejectedReason() why.
+//
+// No step ran in either case. IsRetryable is false although the status is a
+// 502: sending the same request again gets the same answer until the key is
+// added, replaced or fixed.
 type ByokAnthropicRequiredError struct{ apiError }
 
 func (e *ByokAnthropicRequiredError) Is(target error) bool {
 	return target == ErrByokAnthropicRequired
+}
+
+// KeyRejected is true when Anthropic refused your own key, and false when
+// there was no key.
+func (e *ByokAnthropicRequiredError) KeyRejected() bool {
+	v, _ := e.Problem["key_rejected"].(bool)
+	return v
+}
+
+// KeySource is which key was refused: "header" (the ByokAPIKey sent with the
+// call) or "stored" (the one saved on the account). An open string; empty
+// unless KeyRejected.
+func (e *ByokAnthropicRequiredError) KeySource() string {
+	v, _ := e.Problem["key_source"].(string)
+	return v
+}
+
+// KeyRejectedReason is why it was refused: "invalid_or_unauthorized" (invalid,
+// revoked, or not permitted to run the model — replace it) or "billing" (the
+// Anthropic account behind it cannot pay for the call — fix billing with
+// Anthropic). An open string; empty unless KeyRejected.
+func (e *ByokAnthropicRequiredError) KeyRejectedReason() string {
+	v, _ := e.Problem["key_rejected_reason"].(string)
+	return v
 }
 
 // BundledLlmBudgetExhaustedError — 402: the account's monthly budget for

@@ -20,8 +20,8 @@ import codecs
 import inspect
 import json
 import time
-from collections.abc import AsyncIterator, Callable, Iterator
-from typing import Any, TypeVar
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Generator, Iterator
+from typing import Any, NoReturn, TypeVar
 
 import httpx
 import pydantic
@@ -73,6 +73,14 @@ _BODY_TIMEOUT_HEADROOM_S = 15.0
 # them is effectively unreachable. Without this backstop a Python caller could
 # block indefinitely where the other two SDKs give up at 50 minutes.
 AGENT_MESSAGE_STREAM_TIMEOUT_S = 50 * 60.0
+
+# Per-read idle limit for an OPEN-ENDED event stream (one with no terminal
+# event, such as a session's transcript). Such a stream is quiet between events
+# and the server keeps it alive with a comment about every 30 seconds, which is
+# the same as httpx's default 30s read timeout — so the default would cut a
+# healthy stream at its first quiet half-minute. Three missed keep-alives is a
+# dead connection; this is what notices it.
+OPEN_EVENT_STREAM_READ_IDLE_S = 90.0
 
 # Live-progress callbacks for one agent turn. ``StepCallback`` receives each
 # ``event: step`` payload (``{"index": int, "result": {...}}``); ``EventCallback``
@@ -514,6 +522,96 @@ class HttpClient:
         except httpx.HTTPError as err:
             raise TransportError(str(err), status=0) from _scrub_chained_request(err)
 
+    def request_bytes(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        retry: RetryConfig | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> tuple[bytes, str]:
+        """Send a request whose successful response is raw bytes, not JSON.
+
+        Returns ``(body, media_type)``. Everything around the body is the same as
+        :meth:`request`: the authorization header, the timeout, the retry policy
+        (a GET is retried), the typed error for a non-2xx answer, and the
+        response ceiling.
+        """
+        url = self._base_url + path
+        headers = _build_headers(
+            self._api_key, has_body=False, effective_account=self._effective_account
+        )
+        headers["accept"] = "*/*"
+        if extra_headers:
+            headers.update(extra_headers)
+
+        def _do() -> tuple[bytes, str]:
+            try:
+                with self._client.stream(method, url, params=params, headers=headers) as response:
+                    content = _read_bounded_response(response)
+                    return _bytes_or_raise(response, content)
+            except httpx.TimeoutException as err:
+                raise TransportError("request timed out", status=0) from _scrub_chained_request(err)
+            except httpx.HTTPError as err:
+                raise TransportError(str(err), status=0) from _scrub_chained_request(err)
+
+        if not _is_retry_safe(method, headers):
+            return _do()
+        return with_retry(_do, retry or self._retry)
+
+    def iter_event_frames(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        stream_timeout_s: float | None = None,
+    ) -> Generator[tuple[str, Any], None, None]:
+        """Open an event stream with no terminal event and yield its frames.
+
+        Yields ``(event_name, data)`` as each frame arrives. Comments (the
+        keep-alives) are skipped, and so is a frame whose data is not JSON. The
+        iterator ends when the server closes the stream; closing the iterator
+        (or leaving a ``for`` loop over it) closes the connection.
+
+        Held to the same two bounds as a turn's stream: ``stream_timeout_s`` is
+        an absolute limit on how long the stream may stay open (50 minutes by
+        default; a :class:`TransportError` when it passes), and the whole stream
+        may not exceed the response ceiling. Never retried: the caller knows the
+        last frame it saw and resumes from it.
+        """
+        url = self._base_url + path
+        headers = _build_headers(
+            self._api_key, has_body=False, effective_account=self._effective_account
+        )
+        if extra_headers:
+            headers.update(extra_headers)
+        headers["accept"] = "text/event-stream"
+        deadline = time.monotonic() + (
+            AGENT_MESSAGE_STREAM_TIMEOUT_S if stream_timeout_s is None else stream_timeout_s
+        )
+        try:
+            with self._client.stream(
+                method,
+                url,
+                params=params,
+                headers=headers,
+                timeout=_open_event_stream_timeout(self._timeout_s),
+            ) as response:
+                if not _is_event_stream_success(response):
+                    _raise_not_an_event_stream(response, _read_bounded_response(response))
+                parser = _TurnStreamParser(response.status_code)
+                for chunk in _iter_chunks(response, deadline):
+                    _check_open_stream_deadline(deadline)
+                    yield from parser.feed(chunk)
+                yield from parser.finish()
+        except httpx.TimeoutException as err:
+            raise TransportError("request timed out", status=0) from _scrub_chained_request(err)
+        except httpx.HTTPError as err:
+            raise TransportError(str(err), status=0) from _scrub_chained_request(err)
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # Async HTTP client (httpx.AsyncClient)
@@ -651,6 +749,88 @@ class AsyncHttpClient:
         except httpx.HTTPError as err:
             raise TransportError(str(err), status=0) from _scrub_chained_request(err)
 
+    async def request_bytes(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        retry: RetryConfig | None = None,
+        extra_headers: dict[str, str] | None = None,
+    ) -> tuple[bytes, str]:
+        """Async mirror of :meth:`HttpClient.request_bytes`."""
+        url = self._base_url + path
+        headers = _build_headers(
+            self._api_key, has_body=False, effective_account=self._effective_account
+        )
+        headers["accept"] = "*/*"
+        if extra_headers:
+            headers.update(extra_headers)
+
+        async def _do() -> tuple[bytes, str]:
+            try:
+                async with self._client.stream(
+                    method, url, params=params, headers=headers
+                ) as response:
+                    content = await _read_bounded_response_async(response)
+                    return _bytes_or_raise(response, content)
+            except httpx.TimeoutException as err:
+                raise TransportError("request timed out", status=0) from _scrub_chained_request(err)
+            except httpx.HTTPError as err:
+                raise TransportError(str(err), status=0) from _scrub_chained_request(err)
+
+        if not _is_retry_safe(method, headers):
+            return await _do()
+        return await with_retry_async(_do, retry or self._retry)
+
+    async def iter_event_frames(
+        self,
+        method: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        stream_timeout_s: float | None = None,
+    ) -> AsyncGenerator[tuple[str, Any], None]:
+        """Async mirror of :meth:`HttpClient.iter_event_frames`.
+
+        Closing the async iterator (``await it.aclose()``, or
+        ``contextlib.aclosing``) closes the connection.
+        """
+        url = self._base_url + path
+        headers = _build_headers(
+            self._api_key, has_body=False, effective_account=self._effective_account
+        )
+        if extra_headers:
+            headers.update(extra_headers)
+        headers["accept"] = "text/event-stream"
+        deadline = time.monotonic() + (
+            AGENT_MESSAGE_STREAM_TIMEOUT_S if stream_timeout_s is None else stream_timeout_s
+        )
+        try:
+            async with self._client.stream(
+                method,
+                url,
+                params=params,
+                headers=headers,
+                timeout=_open_event_stream_timeout(self._timeout_s),
+            ) as response:
+                if not _is_event_stream_success(response):
+                    _raise_not_an_event_stream(
+                        response, await _read_bounded_response_async(response)
+                    )
+                parser = _TurnStreamParser(response.status_code)
+                async for chunk in _aiter_chunks(response, deadline):
+                    _check_open_stream_deadline(deadline)
+                    for frame in parser.feed(chunk):
+                        yield frame
+                for frame in parser.finish():
+                    yield frame
+        except httpx.TimeoutException as err:
+            raise TransportError("request timed out", status=0) from _scrub_chained_request(err)
+        except httpx.HTTPError as err:
+            raise TransportError(str(err), status=0) from _scrub_chained_request(err)
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # Shared response handling
@@ -715,6 +895,48 @@ def _check_stream_deadline(deadline: float | None) -> None:
             "event stream exceeded its absolute timeout without a terminal event",
             status=0,
         )
+
+
+def _check_open_stream_deadline(deadline: float) -> None:
+    """The same backstop, for a stream that has no terminal event to wait for."""
+    if time.monotonic() > deadline:
+        raise TransportError("event stream exceeded its absolute timeout", status=0)
+
+
+def _open_event_stream_timeout(base_timeout_s: float) -> httpx.Timeout:
+    """Connect/write/pool limits as configured; a read-idle limit a quiet stream survives."""
+    return httpx.Timeout(base_timeout_s, read=max(base_timeout_s, OPEN_EVENT_STREAM_READ_IDLE_S))
+
+
+def _media_type(response: httpx.Response) -> str:
+    """``image/png; charset=binary`` → ``image/png``; no header → ``""``."""
+    content_type: str = response.headers.get("content-type", "")
+    return content_type.split(";", 1)[0].strip().lower()
+
+
+def _bytes_or_raise(response: httpx.Response, content: bytes) -> tuple[bytes, str]:
+    """2xx → ``(body, media_type)``. Anything else → raise the typed error."""
+    if 200 <= response.status_code < 300:
+        return content, _media_type(response)
+    raise _error_from_response_data(
+        status=response.status_code,
+        text=content.decode("utf-8", errors="replace"),
+        retry_after_header=response.headers.get("retry-after"),
+    )
+
+
+def _raise_not_an_event_stream(response: httpx.Response, content: bytes) -> NoReturn:
+    """A non-2xx answer raises its typed error; a 2xx that is not a stream is a contract error."""
+    if not 200 <= response.status_code < 300:
+        raise _error_from_response_data(
+            status=response.status_code,
+            text=content.decode("utf-8", errors="replace"),
+            retry_after_header=response.headers.get("retry-after"),
+        )
+    raise TransportError(
+        "expected an event stream and the response was not one",
+        status=response.status_code,
+    )
 
 
 def _read_bounded_response(response: httpx.Response, deadline: float | None = None) -> bytes:
