@@ -917,6 +917,19 @@ export async function createProductionDeps(
       'Agent taps sent with the device check at the real tap point, by verb (click | send_keys, whose check is on the tap that focuses the field), why (outside_viewport | consequential) and result (tapped, checked, no_tap, unconfirmed, a refusal reason, unrecognised_reason, failed_otherwise, no_answer). A refusal is a tap that was not made; occlusion_check_unavailable is the fail-closed rate; no_tap is typing with no tap to verify, not a pass.',
       ['verb', 'why', 'result'],
     );
+    // The commitment arm of the consequential gate (services/agent-page-
+    // commitment.ts), emitted from recordCommitmentFacts and
+    // recordConsequentialHalt in services/agent-turn-telemetry.ts.
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.agentCommitmentFactsTotal,
+      'What the commitment arm had to judge on, once per step it judged, by outcome (refreshed | unavailable | budget_spent | stale_used). unavailable means no facts at all, so the gate was the caption matcher alone — alert on it. budget_spent and stale_used both mean the last facts were used, which can only add halts; refreshed against those two is the cost of the extra page read.',
+      ['outcome'],
+    );
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.agentConsequentialHaltTotal,
+      'Agent steps halted for the customer to approve, by the arm that raised the halt: caption (the English phrases), structure (the page markup says the control submits a form that commits value) or declared (the planner said this step commits). Without the split a safety number cannot tell the gate stopping an action from the planner not attempting one.',
+      ['arm'],
+    );
   }
 
   // Arc 7 obs.13 — construct the email service after the metrics
@@ -1634,9 +1647,19 @@ export async function createProductionDeps(
   // replacing the StubAgentExecutor's synthetic per-intent successes (the founder-
   // reported "returns a response without completing steps one by one" / "mock").
   // Without the flag (local/test/pre-fleet), the stub stays — preserving the
-  // pre-launch demo path + every existing decompose→execute test. The consequential-
-  // action confirmation gate is preserved across the swap (ControlPlaneAgentExecutor
-  // applies the SAME consequentialHalt as the stub).
+  // pre-launch demo path + every existing decompose→execute test.
+  //
+  // ⛔ THE CONFIRMATION GATE IS NOT THE SAME ON BOTH SIDES OF THE SWAP, and this
+  // comment used to say it was. Both executors call the same `consequentialHalt`
+  // and so both apply the CAPTION arm, which is all there was when that was
+  // written. The other two arms need things only this executor has: the page's
+  // structural facts (it reads the page before a step that could submit a form)
+  // and the turn's commitment budget (the runtime threads one only here). The
+  // stub reads no pages and is threaded no budget, so it halts on the fourteen
+  // English phrases and nothing else. That is the right posture — the stub
+  // dispatches nothing to a real device — but it is a NARROWER gate, not the
+  // same one, and a reader who believed otherwise would be measuring the wrong
+  // executor.
   // #7 — per-agent-session screenshot capture store: the control-plane executor
   // stashes a screenshot's bytes here + mints a captureId; GET /v1/agent-sessions/
   // :id/captures/:id serves them. Constructed here so the SAME instance is shared

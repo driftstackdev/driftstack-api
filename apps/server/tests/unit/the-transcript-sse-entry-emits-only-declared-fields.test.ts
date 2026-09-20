@@ -90,7 +90,7 @@ const EMITTED_KEYS = [
 const STRIPPED_KEYS: ReadonlyMap<string, string> = new Map([
   [
     'commitment',
-    "the confirmation gate's turn-scoped arming, persisted so an approval resume is armed as the halted turn was — it carries a figure the server parsed off the page and answers no customer question",
+    "the confirmation gate's turn-scoped arming, persisted so an approval resume is armed as the halted turn was — it carries a figure the server parsed off the page, opaque per-page prompt tallies and the planner's own declarations, and answers no customer question",
   ],
 ]);
 
@@ -103,7 +103,18 @@ const FULLY_POPULATED: TranscriptEntry = {
   intents: [{ kind: 'navigate', url: 'https://example.test/' }],
   awaitingConfirmation: true,
   resumeFromIntentIndex: 2,
-  commitment: { sawMoney: true, amount: '£12.34', prompts: 1 },
+  commitment: {
+    sawMoney: true,
+    amount: '£12.34',
+    prompts: 1,
+    // The gate's own bookkeeping, populated here for the same reason every
+    // other optional field is: a partial fixture lets a member escape the check
+    // simply by being absent. `pages` carries opaque per-surface tallies and
+    // `declared` the planner's own "this step commits" marks — both answer no
+    // customer question, and both ride inside the key stripped below.
+    pages: [{ id: 'a'.repeat(16), prompts: 1, approved: true }],
+    declared: [{ at: 0, category: 'purchase' }],
+  },
 };
 
 describe('the transcript SSE entry emits only declared fields', () => {

@@ -41,8 +41,13 @@ import {
   STOPPED_OUTCOME_UNKNOWN_REASON,
   stopRequested,
 } from './agent-executor.js';
+import type { ConsequentialActionCategory } from '@driftstack/api-types';
 import { intentReplayMayDuplicateEffect } from './agent-intent-result.js';
-import { newCommitmentBudget, type CommitmentBudget } from './agent-page-commitment.js';
+import {
+  commitmentBudgetPages,
+  newCommitmentBudget,
+  type CommitmentBudget,
+} from './agent-page-commitment.js';
 import { TURN_HARD_STOP_MS } from './agent-turn-bounds.js';
 // Values, not just types: a turn runs up to three plan segments and the counts
 // of all of them are the turn's. agent-turn-telemetry.ts imports from here with
@@ -1732,7 +1737,19 @@ function reconstructHaltedPlan(
   ) {
     return null;
   }
-  return { kind: 'plan', intents: intents.slice(resumeFrom), tokensConsumed: 0 };
+  // P5 — the planner's declarations for the suffix ride with it. Written
+  // rebased onto `resumeFrom` when the halt was recorded, so they are already
+  // in the resumed plan's own index space; bounded by the suffix, because a
+  // declaration outside it names no step this plan will run.
+  const declared = (pending.commitment?.declared ?? []).filter(
+    (d) => Number.isSafeInteger(d.at) && d.at >= 0 && d.at < intents.length - resumeFrom,
+  );
+  return {
+    kind: 'plan',
+    intents: intents.slice(resumeFrom),
+    tokensConsumed: 0,
+    ...(declared.length > 0 ? { declaredCommitments: declared } : {}),
+  };
 }
 
 /**
@@ -3134,6 +3151,13 @@ export class AgentRuntime {
     // re-plan. The transcript entry carries this rather than the first plan
     // alone, so the recipe/intent_log consumers see what actually ran.
     const attemptedIntents: AgentIntent[] = [...plannedIntents];
+    // P5 — and every DECLARATION attempted this turn, in the SAME index space.
+    // A resume replays `attemptedIntents` from an index into it, so a
+    // declaration filed against the segment it came from would point at the
+    // wrong step the moment a re-plan pushed a second segment on.
+    const attemptedDeclarations: Array<{ at: number; category: ConsequentialActionCategory }> = [
+      ...(decomposed.kind === 'plan' ? (decomposed.declaredCommitments ?? []) : []),
+    ];
     let announcedExecuting = false;
     // Both progress index spaces are offset by the results ALREADY accumulated,
     // so a re-planned suffix continues the customer's step list instead of
@@ -3205,6 +3229,11 @@ export class AgentRuntime {
         // P4 — the TURN's commitment budget, for the same reason: arming, the
         // extra-read allowance and the prompt ceiling are facts about the turn.
         commitmentBudget,
+        // P5 — what THIS segment's planner said commits. Per plan, not per
+        // turn: the indices are into the plan being run.
+        ...(plan.declaredCommitments !== undefined && plan.declaredCommitments.length > 0
+          ? { declaredCommitments: plan.declaredCommitments }
+          : {}),
         // THE TURN'S HARD STOP, as an instant on the same monotonic clock the
         // executor reads. Computed once from the turn's start, so every segment
         // shares the one deadline rather than getting a fresh one each — and so
@@ -3679,6 +3708,21 @@ export class AgentRuntime {
       intentOffset += plannedIntents.length;
       plannedIntents = suffix;
       attemptedIntents.push(...suffix);
+      // ⛔ REBASED ONTO WHAT WAS ADMITTED, NOT ONTO WHAT WAS PLANNED.
+      // `admitSegment` returns a pure SUFFIX of the returned plan (it trims the
+      // re-described prefix), so a declaration filed against the planner's own
+      // index would slide onto a different step by exactly what was trimmed —
+      // and would then halt the wrong step, or the right one silently
+      // undeclared. The trim is the length difference, which is exact because
+      // the admission only ever drops from the front.
+      const trimmedFromFront = replanned.intents.length - suffix.length;
+      const segmentDeclarations: Array<{ at: number; category: ConsequentialActionCategory }> = [];
+      for (const declaration of replanned.declaredCommitments ?? []) {
+        const at = declaration.at - trimmedFromFront;
+        if (at < 0) continue;
+        segmentDeclarations.push({ at, category: declaration.category });
+        attemptedDeclarations.push({ at: at + intentOffset, category: declaration.category });
+      }
       observationBehindLastPlan = pageNow;
       lastStatus = replanned.status;
       // ⛔ NO APPROVALS. A later segment reaching a purchase must stop for a
@@ -3687,12 +3731,16 @@ export class AgentRuntime {
       // said what each tap lands on — against the steps of EARLIER segments
       // only: `ranSteps` gains this segment's steps after it has run.
       const ranBeforeThisSegment = [...ranSteps];
-      const nextRun = await runPlan({ ...replanned, intents: suffix }, undefined, {
-        segment,
-        ...(replanned.status !== undefined ? { status: replanned.status } : {}),
-        repeatGuard: (intent, targets) =>
-          repeatRefusedAtTarget({ cause, intent, targets, ran: ranBeforeThisSegment, pageNow }),
-      });
+      const nextRun = await runPlan(
+        { ...replanned, intents: suffix, declaredCommitments: segmentDeclarations },
+        undefined,
+        {
+          segment,
+          ...(replanned.status !== undefined ? { status: replanned.status } : {}),
+          repeatGuard: (intent, targets) =>
+            repeatRefusedAtTarget({ cause, intent, targets, ran: ranBeforeThisSegment, pageNow }),
+        },
+      );
       lastRunResults = nextRun.results;
       lastRun = nextRun;
       noteRan(nextRun, segment, pageNow);
@@ -3814,6 +3862,24 @@ export class AgentRuntime {
               sawMoney: commitmentBudget.sawMoney,
               ...(commitmentBudget.amount !== null ? { amount: commitmentBudget.amount } : {}),
               prompts: commitmentBudget.prompts,
+              // The per-page tallies, so approving once cannot give a page a
+              // fresh allowance of prompts next turn.
+              ...(commitmentBudget.promptedPages.size > 0
+                ? { pages: commitmentBudgetPages(commitmentBudget) }
+                : {}),
+              // ⛔ AND THE DECLARATIONS FOR THE SUFFIX, rebased onto it. The
+              // resume replays `attemptedIntents` from `resumeFromIntentIndex`,
+              // so a declaration for a step BEFORE that index has already been
+              // answered and one after it must travel or be lost — and a
+              // declared step that comes back undeclared is judged by two arms
+              // that, for a script-handler commit, are no arm at all.
+              ...(attemptedDeclarations.some((d) => d.at >= resumeFromIntentIndex)
+                ? {
+                    declared: attemptedDeclarations
+                      .filter((d) => d.at >= resumeFromIntentIndex)
+                      .map((d) => ({ at: d.at - resumeFromIntentIndex, category: d.category })),
+                  }
+                : {}),
             },
           }
         : {}),

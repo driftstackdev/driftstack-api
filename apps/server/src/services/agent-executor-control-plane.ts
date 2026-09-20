@@ -33,6 +33,7 @@
 // `kind:'failure'` IntentResult.
 
 import { randomUUID } from 'node:crypto';
+import type { ConsequentialActionCategory } from '@driftstack/api-types';
 import type {
   AgentExecutor,
   ElementWaitBudget,
@@ -52,7 +53,9 @@ import {
 } from './agent-executor.js';
 import {
   armFromFacts,
+  forgetTouchedSelectors,
   intentMayCommit,
+  noteTouchedSelector,
   readCommitFacts,
   tapCannotBeASubmit,
   type CommitmentBudget,
@@ -73,10 +76,13 @@ import {
   emptyAgentActionPathCounts,
   recordAgentActionProfileAttached,
   recordAgentScrollPath,
+  recordCommitmentFacts,
+  recordConsequentialHalt,
   recordLookToTap,
   recordPreTapLook,
   recordTapUnoccludedCheck,
   type AgentActionPathCounts,
+  type CommitmentFactsOutcome,
   type AgentActionProfileVerb,
   type AgentProfileAttached,
   type AgentScrollPath,
@@ -850,8 +856,17 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     // of navigates and captures dispatched no action and looked at nothing, and
     // a line of zeroes for it would dilute the turn log an operator greps and
     // read as "every action was fine" rather than "there were none".
+    // ⛔ AND A HALT HAS SOMETHING TO SAY EVEN THOUGH IT DISPATCHED NOTHING. The
+    // gate's own counts — what the commitment arm had to judge on, and which
+    // arm stopped the step — are raised on a path where no action ran and, on a
+    // device that cannot resolve the selector, no look was recorded either. A
+    // condition that asked only about dispatches would drop the line on exactly
+    // the turns it exists to explain.
+    const anyGateCount = (): boolean =>
+      Object.values(actionPaths.commitmentFacts).some((n) => n > 0) ||
+      Object.values(actionPaths.haltArms).some((n) => n > 0);
     const done = (run: ExecutorRunResult): ExecutorRunResult =>
-      actionPaths.actions > 0 || actionPaths.scrolls > 0 || actionPaths.looks > 0
+      actionPaths.actions > 0 || actionPaths.scrolls > 0 || actionPaths.looks > 0 || anyGateCount()
         ? { ...run, actionPaths }
         : run;
     /** Emit one look, now that what the executor did next is known. */
@@ -901,6 +916,15 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     // Absent — every caller that does not thread one — leaves the gate as the
     // caption matcher alone, which is exactly what shipped.
     const commitmentBudget = args.commitmentBudget;
+    // P5 — ⛔ THE PLANNER'S OWN DECLARATIONS, by index into THIS plan's intents.
+    // A third arm that can only add halts: the structural arm cannot see a
+    // commit behind a script handler on a div or a link, an iframed payment
+    // form, or account deletion in a language the caption arm does not read,
+    // and in every one of those the model usually knows what the step is.
+    const declaredByIndex = new Map<number, ConsequentialActionCategory>();
+    for (const declaration of args.declaredCommitments ?? []) {
+      declaredByIndex.set(declaration.at, declaration.category);
+    }
     // #139 — dispatch on the AGENT session id (the box + agent_sessions.node_id
     // routing key). Fall back to `sessionId` only if the runtime didn't thread it
     // (legacy callers) — never dispatch on the `unattached` sentinel.
@@ -1060,17 +1084,23 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         intentMayCommit(intent) &&
         !lookRefusedTheTap &&
         !tapCannotBeASubmit(targetType);
+      // ⛔ THE DECLARED ARM NEEDS NO PAGE READ AND NO FACTS, and is deliberately
+      // not bounded by what the DEVICE says the target is: a link styled as a
+      // button and a `<div>` with a script handler are exactly the controls the
+      // structural arm cannot see, and are the reason this arm exists. It keeps
+      // the two bounds that are about fairness rather than shape — a step the
+      // caption arm already halts is not judged twice, and a tap the look has
+      // already refused is not going to the page, so it costs no prompt.
+      const declaredHere = declaredByIndex.get(planIndex);
+      const mayDeclare =
+        declaredHere !== undefined &&
+        commitmentBudget !== undefined &&
+        haltsUnlooked === null &&
+        intentMayCommit(intent) &&
+        !lookRefusedTheTap;
       if (mayCommit && commitmentBudget !== undefined) {
         const page = this.gatePage(dispatchSessionId);
         if (page.factsEpoch !== page.epoch) {
-          // ⛔ NOT COUNTED YET, AND THAT IS REPORTED RATHER THAN QUIETLY TRUE.
-          // A counter here (how often the facts were refreshed, unavailable,
-          // over the allowance, or used stale) is what turns this arm's cost
-          // and its blind spots into measured numbers. Registering one reaches
-          // lib/bootstrap.ts and apps/docs, which belong to other lanes, so it
-          // is a cross-lane slice rather than a line added here — see the
-          // review report. Until then the arm's behaviour is pinned by the
-          // eval, not by production.
           if (commitmentBudget.pageReads < MAX_COMMITMENT_READS) {
             commitmentBudget.pageReads += 1;
             const source = await this.observe(dispatchSessionId, args.shouldContinue, args.signal);
@@ -1085,6 +1115,26 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
 
       const approvalsBeforeGate = approved.size;
       const gatePage = this.gatePage(dispatchSessionId);
+      // ⛔ WHAT THE ARM ACTUALLY HAD TO JUDGE ON, counted once per step it
+      // judged. Until this existed the arm's cost (one extra page read per
+      // stale step) and its blind spot (`unavailable` — no facts, so the gate
+      // is the caption matcher alone, which is the exact shape measured
+      // completing an unapproved purchase) were invisible in production, so
+      // nobody could state a wild-web false-positive rate or price the read
+      // allowance. Emitted BEFORE the gate, so a step is counted whether or not
+      // it then halts.
+      if (mayCommit && commitmentBudget !== undefined) {
+        const outcome: CommitmentFactsOutcome =
+          gatePage.facts === null
+            ? 'unavailable'
+            : gatePage.factsEpoch === gatePage.epoch
+              ? 'refreshed'
+              : commitmentBudget.pageReads >= MAX_COMMITMENT_READS
+                ? 'budget_spent'
+                : 'stale_used';
+        actionPaths.commitmentFacts[outcome] += 1;
+        recordCommitmentFacts(this.metrics, outcome);
+      }
       // ⛔ STALE FACTS ARE STILL FACTS, AND THEY FAIL TOWARD HALTING. When no
       // fresh read could be taken — the turn's allowance spent, the read timed
       // out, the document over the device's result cap — the arm used to go
@@ -1093,30 +1143,36 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // only ADD a halt (the caption arm is decided first and never released by
       // this one), so they are used, and the degradation they carry is one
       // stale prompt rather than one unapproved purchase.
+      // ⛔ THE ARM IS CONSULTED WITH NULL FACTS TOO, now that a declaration can
+      // reach it. `classifyCommitTap` returns nothing for null facts, so the
+      // structural half is byte-identical to what it was; the declared half is
+      // the one that needs no page reading at all.
+      const commitmentArm =
+        commitmentBudget !== undefined && (mayCommit || mayDeclare)
+          ? {
+              facts: mayCommit ? gatePage.facts : null,
+              budget: commitmentBudget,
+              ...(targetType !== undefined ? { targetType } : {}),
+              ...(focusSelector !== undefined ? { focusSelector } : {}),
+              ...(mayDeclare && declaredHere !== undefined ? { declared: declaredHere } : {}),
+            }
+          : undefined;
       const halt = consequentialHalt(
         intent,
         approved,
         gatePage.labels,
         deviceLabels(look),
-        mayCommit && commitmentBudget !== undefined && gatePage.facts !== null
-          ? {
-              facts: gatePage.facts,
-              budget: commitmentBudget,
-              ...(targetType !== undefined ? { targetType } : {}),
-              ...(focusSelector !== undefined ? { focusSelector } : {}),
-            }
-          : undefined,
+        commitmentArm,
+        (arm) => {
+          actionPaths.haltArms[arm] += 1;
+          recordConsequentialHalt(this.metrics, arm);
+        },
       );
       if (halt) {
         // The look ran and nothing was sent for it: the customer is being asked
         // first. Counted with `not_sent`, which is not the look's own refusal.
         countLook(look, 'not_sent');
-        // ⛔ WHICH ARM RAISED IT IS NOT COUNTED YET, AND IT SHOULD BE: without
-        // it a safety number cannot tell "the gate stopped this" from "the
-        // planner declined to do it". The counter needs a registration in
-        // lib/bootstrap.ts and a row in apps/docs, both other lanes' files —
-        // reported as a cross-lane slice rather than added from here.
-        // ⛔ THE THIRD COMMITMENT PROMPT IS NOT A PROMPT. A page that can raise
+        // ⛔ A COMMITMENT PROMPT PAST THE CEILING IS NOT A PROMPT. A page that can raise
         // one can scatter commit-shaped forms and farm consent by fatigue, so
         // past the ceiling the turn STOPS instead of asking again. Nothing was
         // dispatched either way — this is a smaller action than the halt, never
@@ -1126,7 +1182,12 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
             kind: 'failure',
             intent,
             reason:
-              'this page asked for approval more times than one task should need, ' +
+              // WHAT, never HOW. It used to say "this page", which stopped
+              // being true the moment an approved prompt stopped counting: the
+              // customer's own third purchase used to end here, and calling
+              // that the page's doing was a false accusation. What remains is
+              // always a page asking again — it just need not be this one.
+              'a page in this task asked for approval more times than it should need, ' +
               'so nothing further was sent',
             diagnosis: { category: 'invalid_request', retryable: false },
           });
@@ -1351,8 +1412,25 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
           (intent.action === 'tap' || intent.action === 'type')
         ) {
           focusSelector = intent.selector;
+          // …and C3 remembers it. A form the run has put something into is one
+          // it is FILLING IN; a form it has put nothing into and then submits
+          // is one it is COMMITTING, whatever fields happen to sit inside it.
+          // A tap counts as well as typing: choosing an option in a `<select>`
+          // is a tap, and the customer's own value is what lands in it.
+          if (commitmentBudget !== undefined) {
+            noteTouchedSelector(commitmentBudget, intent.selector);
+          }
         }
-        if (intent.kind === 'navigate') focusSelector = undefined;
+        if (intent.kind === 'navigate') {
+          focusSelector = undefined;
+          // ⛔ …AND C3 FORGETS WHAT THE RUN TYPED, for the same reason. A
+          // touched key is a selector key and nothing about it is page-unique,
+          // so carrying it into the next document let a field typed on an
+          // earlier page read as THIS order form being filled in — measured
+          // removing the halt on a one-field checkout outright. See
+          // `forgetTouchedSelectors`.
+          if (commitmentBudget !== undefined) forgetTouchedSelectors(commitmentBudget);
+        }
       }
       if (result.authorityLost) return done({ results, ok: false, authorityLost: true });
       // B2 — after the result is recorded, never before: a step that was running

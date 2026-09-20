@@ -375,11 +375,31 @@ Each line carries: `actions_total`, `profile_attached_true`,
 `resolved_by_script`, `resolved_by_none`, `resolved_by_unanswered`,
 `verdict_clear`, `verdict_covered`, `verdict_not_found`,
 `verdict_outside_viewport`, `verdict_unverified`, `verdict_fallback`,
-`then_tapped`, `then_typed`, `then_refused`, `then_not_sent`. A turn in which an
+`then_tapped`, `then_typed`, `then_refused`, `then_not_sent`,
+`commit_facts_refreshed`, `commit_facts_unavailable`,
+`commit_facts_budget_spent`, `commit_facts_stale_used`, `halt_arm_caption`,
+`halt_arm_structure`, `halt_arm_declared`. A turn in which an
 action ran with no behaviour profile attached is logged at **warn**, with the
 sentence "an agent action ran with NO behaviour profile attached to the session
 (a configuration fault, not a detectability verdict)"; every other turn is
 `info`.
+
+The seven `commit_*` and `halt_arm_*` fields are the approval gate. `halt_arm_*`
+says which of its three readings stopped a step — the button's wording, the
+page's markup, or the planner saying the step commits — and a count that stays
+at zero for one of them means that reading is doing nothing in production.
+`commit_facts_unavailable` is the one to watch: the gate had no reading of the
+page at all for a step that could submit a form, so only the wording was
+checked. `commit_facts_budget_spent` and `commit_facts_stale_used` both mean an
+older reading was used, which can only add approval requests, never remove one;
+`commit_facts_refreshed` against those two is what the extra page read is
+buying.
+
+```sh
+# turns where the gate judged a step with no reading of the page
+journalctl -u driftstack-api --since '7 days ago' --no-pager \
+  | grep agent_turn_action_paths | grep -v '"commit_facts_unavailable":0'
+```
 
 ## Other series worth a dashboard panel
 

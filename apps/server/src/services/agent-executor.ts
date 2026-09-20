@@ -58,12 +58,18 @@ import {
   type ConsequentialActionCategory,
 } from './agent-consequential-action.js';
 import {
-  COMMITMENT_PROMPT_CEILING,
+  COMMITMENT_NO_SURFACE,
   amountValueOf,
   classifyCommitTap,
+  commitmentPageIdentity,
+  commitmentPromptAllowed,
   commitmentReleasedByApproval,
+  declaredCommitVerdict,
+  declaredSurfaceIdentity,
+  noteCommitmentApproved,
   selectorKeysForTap,
   type CommitmentBudget,
+  type CommitmentVerdict,
   type PageCommitFacts,
 } from './agent-page-commitment.js';
 import { redactText } from '../lib/redact-url.js';
@@ -269,7 +275,23 @@ export interface CommitmentArm {
   /** Where the device's focus is believed to be — the last control this run
    *  typed into or tapped — for a key press that submits the focused form. */
   focusSelector?: string;
+  /**
+   * ⛔ THE PLANNER'S OWN DECLARATION for this step, when it made one: that
+   * carrying it out commits a purchase, a payment or an account deletion.
+   *
+   * A THIRD arm, never the only one. The structural arm cannot see a commit
+   * behind a script handler on a `<div>` or a link, an iframed payment form, or
+   * account deletion in a language the caption arm does not read — and in every
+   * one of those the model usually knows what the step is, because the customer
+   * asked for it. It is consulted after the other two, so it can only ADD
+   * halts, and a page that talks the model out of declaring changes nothing
+   * about what they do.
+   */
+  declared?: ConsequentialActionCategory;
 }
+
+/** Which arm of the gate raised a halt. A closed set: it is a metric label. */
+export type ConsequentialHaltArm = 'caption' | 'structure' | 'declared';
 
 /** If `intent` is a consequential action not yet approved, returns the
  *  confirmation_required result to halt on. A matching approval is consumed
@@ -297,7 +319,21 @@ export function consequentialHalt(
   pageLabels?: ReadonlyMap<string, string>,
   deviceLabels?: ReadonlyArray<string>,
   commitment?: CommitmentArm,
+  /** Called with the arm that raised a halt, for the counter. Best-effort and
+   *  never consulted: a gate whose telemetry throws still gates. */
+  onHalt?: (arm: ConsequentialHaltArm) => void,
 ): Extract<IntentResult, { kind: 'confirmation_required' }> | null {
+  const halted = (
+    arm: ConsequentialHaltArm,
+    result: Extract<IntentResult, { kind: 'confirmation_required' }>,
+  ): Extract<IntentResult, { kind: 'confirmation_required' }> => {
+    try {
+      onHalt?.(arm);
+    } catch {
+      /* a broken counter must never change a verdict */
+    }
+    return result;
+  };
   const withLabels = (labels: ReadonlyArray<string>): AgentIntent => {
     const text = labels.filter((label) => label.length > 0).join(' ');
     return text.length > 0 && intent.kind === 'interact'
@@ -324,7 +360,11 @@ export function consequentialHalt(
     // still the phrase one of the fourteen patterns matched. This arm can only
     // ADD halts — it is never consulted for a tap the words already halt, and
     // it never releases one.
-    return commitment === undefined ? null : commitmentHalt(intent, approved, commitment);
+    if (commitment === undefined) return null;
+    const structuralOrDeclared = commitmentHalt(intent, approved, commitment);
+    return structuralOrDeclared === null
+      ? null
+      : halted(structuralOrDeclared.arm, structuralOrDeclared.result);
   }
   const signature = consequentialSignature(v.category, v.matchedText);
   // ⛔ AN APPROVAL RELEASES THE KIND OF ACTION IT WAS GIVEN FOR, NOT THE TAP.
@@ -358,22 +398,22 @@ export function consequentialHalt(
     const unapproved = crossKind.find((d) => !approved.has(d.signature));
     if (unapproved !== undefined) {
       // Nothing is released, so the plan's approval is NOT consumed.
-      return {
+      return halted('caption', {
         kind: 'confirmation_required',
         intent,
         category: unapproved.category,
         matchedText: unapproved.matchedText,
-      };
+      });
     }
     for (const d of crossKind) approved.delete(d.signature);
   }
   if (approved.delete(signature)) return null;
-  return {
+  return halted('caption', {
     kind: 'confirmation_required',
     intent,
     category: v.category,
     matchedText: v.matchedText,
-  };
+  });
 }
 
 /**
@@ -395,46 +435,77 @@ function commitmentHalt(
   intent: AgentIntent,
   approved: Set<string>,
   commitment: CommitmentArm,
-): Extract<IntentResult, { kind: 'confirmation_required' }> | null {
-  const verdict = classifyCommitTap({
+): {
+  arm: ConsequentialHaltArm;
+  result: Extract<IntentResult, { kind: 'confirmation_required' }>;
+} | null {
+  const structural = classifyCommitTap({
     intent,
     facts: commitment.facts,
     budget: commitment.budget,
     ...(commitment.targetType !== undefined ? { targetType: commitment.targetType } : {}),
     ...(commitment.focusSelector !== undefined ? { focusSelector: commitment.focusSelector } : {}),
   });
+  // ⛔ THE STRUCTURAL ARM IS ASKED FIRST, so every halt that happens today keeps
+  // the phrase — and therefore the approval signature — it has always had. The
+  // declaration is the arm that reaches what the structure cannot see.
+  const verdict: CommitmentVerdict | null =
+    structural ?? declaredCommitVerdict(intent, commitment.declared);
   if (verdict === null) return null;
   const control = verdict.control;
+  // WHICH COMMITMENT SURFACE this prompt belongs to, for the ceiling.
+  //
+  // ⛔ AND WHEN THE PAGE OFFERS NOTHING TO KEY ON, THE DECLARATION IS THE
+  // SURFACE. Every page the declared arm exists for is one the structural arm
+  // cannot read, so keying them all by the page gave all of them the SAME
+  // identity — and the per-page ceiling, which no approval refunds, then read
+  // three different purchases the customer asked for as one page asking three
+  // times and handed the third back. See `declaredSurfaceIdentity` for why
+  // this loosens nothing a page can reach without the customer's own answer.
+  const pageSurface = commitmentPageIdentity(commitment.facts);
+  const pageId =
+    pageSurface === COMMITMENT_NO_SURFACE && verdict.arm === 'declared'
+      ? declaredSurfaceIdentity(verdict)
+      : pageSurface;
   const signature = consequentialSignature(verdict.category, verdict.matchedText);
   if (approved.delete(signature)) {
+    // The customer approved this exact commitment, so it no longer counts
+    // toward the per-task ceiling: asking for a second purchase is not a page
+    // asking twice. The per-PAGE count is untouched — see
+    // COMMITMENT_PROMPT_CEILING.
+    noteCommitmentApproved(commitment.budget, pageId);
     // What the customer said yes to, so the SECOND step of a two-step confirm
     // is the same decision rather than a second interrogation. Bound to the
     // destination, the amount, and ⛔ to being a control the approved page was
-    // NOT already offering; see `commitmentReleasedByApproval`.
-    commitment.budget.approved = {
-      category: verdict.category,
-      action: control?.action ?? '',
-      amount: verdict.amount,
-      value: verdict.amount === null ? null : amountValueOf(verdict.amount),
-      siblings: new Set(
-        [...(commitment.facts?.controls.values() ?? [])].map((candidate) => candidate.key),
-      ),
-    };
+    // NOT already offering; see `commitmentReleasedByApproval`. Only a
+    // STRUCTURAL verdict can release a later step: a declaration names no
+    // destination and no amount to bound one with.
+    commitment.budget.approved =
+      verdict.arm === 'structure'
+        ? {
+            category: verdict.category,
+            action: control?.action ?? '',
+            amount: verdict.amount,
+            value: verdict.amount === null ? null : amountValueOf(verdict.amount),
+            siblings: new Set(
+              [...(commitment.facts?.controls.values() ?? [])].map((candidate) => candidate.key),
+            ),
+          }
+        : null;
     return null;
   }
   if (control !== undefined && commitmentReleasedByApproval(commitment.budget, verdict, control)) {
     return null;
   }
-  if (commitment.budget.prompts >= COMMITMENT_PROMPT_CEILING) {
-    commitment.budget.overCeiling = true;
-  } else {
-    commitment.budget.prompts += 1;
-  }
+  commitmentPromptAllowed(commitment.budget, pageId);
   return {
-    kind: 'confirmation_required',
-    intent,
-    category: verdict.category,
-    matchedText: verdict.matchedText,
+    arm: verdict.arm,
+    result: {
+      kind: 'confirmation_required',
+      intent,
+      category: verdict.category,
+      matchedText: verdict.matchedText,
+    },
   };
 }
 
@@ -546,6 +617,20 @@ export interface ExecuteArgs {
    * caller get.
    */
   commitmentBudget?: CommitmentBudget;
+  /**
+   * ⛔ THE PLANNER'S OWN DECLARATIONS for this plan's steps, by index into
+   * `plan.intents`: that carrying this step out commits a purchase, a payment
+   * or an account deletion.
+   *
+   * NOT A FIELD ON THE INTENT. `AgentIntent` is published — it is what a turn
+   * response lists back to the customer — and a declaration is the gate's
+   * business, not the customer's API. It travels beside the plan, inside this
+   * process, exactly as the page's own structural facts do.
+   *
+   * Omitted → the third arm is off and the gate is the two arms that shipped,
+   * which is what every caller that does not plan with a model gets.
+   */
+  declaredCommitments?: ReadonlyArray<{ at: number; category: ConsequentialActionCategory }>;
   /**
    * The instant, on the executor's own monotonic clock, past which the step loop
    * starts no further step — the turn's HARD stop.

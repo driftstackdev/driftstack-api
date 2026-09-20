@@ -620,8 +620,9 @@ transcript_length - 1`:
 ## Complete examples
 
 Each program starts a session on your profile, waits until it is ready, sends
-the task, answers one question if the agent asks, holds any payment for a
-person (or approves it when you set `APPROVE_ACTIONS=yes`), stops the task
+the task, answers one question if the agent asks, leaves a step the agent
+stopped on for a person to approve (or approves it when you set
+`APPROVE_ACTIONS=yes`), stops the task
 after ten minutes, prints the steps and the answer, and always closes the
 session.
 

@@ -702,6 +702,77 @@ export function recordAgentScrollPath(
   }
 }
 
+/**
+ * WHAT THE COMMITMENT ARM HAD TO JUDGE ON, once per step it judged.
+ *
+ *   refreshed     the facts describe the page as it is now — either they were
+ *                 already current for this page epoch, or an extra
+ *                 `get_page_source` was taken and parsed
+ *   unavailable   no facts at all: the arm ran blind and the gate was the
+ *                 caption matcher alone. THE ONE TO ALERT ON — it is the shape
+ *                 that was measured completing an unapproved purchase
+ *   budget_spent  the turn's extra-read allowance was gone, so the LAST facts
+ *                 were used. Stale, and stale facts can only add halts
+ *   stale_used    a read was attempted and gave nothing back (a timeout, an
+ *                 over-cap document), so the LAST facts were used
+ *
+ * ⛔ `refreshed` VERSUS THE STALE PAIR IS THE COST/BLINDNESS TRADE, and it is
+ * the number that decides whether the 16-read allowance is right. Nothing here
+ * is page-derived: four words, fixed.
+ */
+export const COMMITMENT_FACTS_OUTCOMES = [
+  'refreshed',
+  'unavailable',
+  'budget_spent',
+  'stale_used',
+] as const;
+export type CommitmentFactsOutcome = (typeof COMMITMENT_FACTS_OUTCOMES)[number];
+
+/**
+ * WHICH ARM OF THE CONSEQUENTIAL GATE RAISED A HALT.
+ *
+ *   caption     the fourteen English phrases, over the plan's words, the page's
+ *               name for the control and the device's label for it
+ *   structure   the page's markup says this control submits a form that commits
+ *               value already held, on a page with money at stake
+ *   declared    the planner said this step commits a purchase, a payment or an
+ *               account deletion
+ *
+ * ⛔ WITHOUT THIS A SAFETY NUMBER CANNOT TELL "the gate stopped this" FROM "the
+ * planner declined to do it", and the split is what says whether the newer arms
+ * are load-bearing or decorative. Emitted from recordConsequentialHalt, at the
+ * one site in agent-executor.ts that returns a halt.
+ */
+export const CONSEQUENTIAL_HALT_ARMS = ['caption', 'structure', 'declared'] as const;
+export type ConsequentialHaltArmLabel = (typeof CONSEQUENTIAL_HALT_ARMS)[number];
+
+/** Count one commitment-arm fact lookup. Best-effort exactly as the look's
+ *  counter is: a registry that throws costs the step nothing. */
+export function recordCommitmentFacts(
+  metrics: MetricsRegistry | undefined,
+  outcome: CommitmentFactsOutcome,
+): void {
+  if (metrics === undefined) return;
+  try {
+    metrics.inc(METRIC_NAMES.agentCommitmentFactsTotal, { outcome });
+  } catch {
+    /* metrics are best-effort */
+  }
+}
+
+/** Count one consequential halt, by the arm that raised it. */
+export function recordConsequentialHalt(
+  metrics: MetricsRegistry | undefined,
+  arm: ConsequentialHaltArmLabel,
+): void {
+  if (metrics === undefined) return;
+  try {
+    metrics.inc(METRIC_NAMES.agentConsequentialHaltTotal, { arm });
+  } catch {
+    /* metrics are best-effort */
+  }
+}
+
 /** Per-turn counts of every path above, by the closed enums. Numbers only —
  *  this is what the turn's log line carries, and the log line is the only
  *  durable record of it where no scraper runs. */
@@ -723,6 +794,16 @@ export interface AgentActionPathCounts {
   resolvers: Record<PreTapLookResolver, number>;
   verdicts: Record<PreTapLookOutcome, number>;
   nextActions: Record<PreTapLookNextAction, number>;
+  /**
+   * ⛔ THE COMMITMENT ARM, ON THE SAME LINE RATHER THAN A LINE OF ITS OWN.
+   * Production runs no scraper, so the per-turn log line is where the arm's
+   * cost and its blind spots are actually read — and both of these are counted
+   * at the same executor sites as everything else here, once per step, so a
+   * second line would be a second copy of one turn's numbers that could only
+   * drift from this one. See `agentActionPathLogFields`.
+   */
+  commitmentFacts: Record<CommitmentFactsOutcome, number>;
+  haltArms: Record<ConsequentialHaltArmLabel, number>;
 }
 
 function zeroed<K extends string>(keys: readonly K[]): Record<K, number> {
@@ -743,6 +824,8 @@ export function emptyAgentActionPathCounts(): AgentActionPathCounts {
     resolvers: zeroed(PRE_TAP_LOOK_RESOLVERS),
     verdicts: zeroed(PRE_TAP_LOOK_OUTCOMES),
     nextActions: zeroed(PRE_TAP_LOOK_NEXT_ACTIONS),
+    commitmentFacts: zeroed(COMMITMENT_FACTS_OUTCOMES),
+    haltArms: zeroed(CONSEQUENTIAL_HALT_ARMS),
   };
 }
 
@@ -766,6 +849,8 @@ export function addAgentActionPathCounts(
   addInto(into.resolvers, from.resolvers);
   addInto(into.verdicts, from.verdicts);
   addInto(into.nextActions, from.nextActions);
+  addInto(into.commitmentFacts, from.commitmentFacts);
+  addInto(into.haltArms, from.haltArms);
   return into;
 }
 
@@ -817,6 +902,13 @@ export function agentActionPathLogFields(counts: AgentActionPathCounts): Record<
     then_typed: counts.nextActions.typed,
     then_refused: counts.nextActions.refused,
     then_not_sent: counts.nextActions.not_sent,
+    commit_facts_refreshed: counts.commitmentFacts.refreshed,
+    commit_facts_unavailable: counts.commitmentFacts.unavailable,
+    commit_facts_budget_spent: counts.commitmentFacts.budget_spent,
+    commit_facts_stale_used: counts.commitmentFacts.stale_used,
+    halt_arm_caption: counts.haltArms.caption,
+    halt_arm_structure: counts.haltArms.structure,
+    halt_arm_declared: counts.haltArms.declared,
   };
 }
 

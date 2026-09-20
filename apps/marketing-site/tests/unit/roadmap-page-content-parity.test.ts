@@ -42,15 +42,20 @@ describe('/roadmap legacy URL current-state content', () => {
       /device profiles across\s+19 iPhone models, from the iPhone 13 to the 17 Pro Max \(\{DEVICE_SUPPORT\.deviceFamilies\}\)/,
     );
     expect(body).not.toMatch(/every iPhone from/i);
-    // apps/server/src/services/agent-consequential-action.ts is a
-    // conservative keyword heuristic on the tap target (buy / order /
-    // checkout / pay / delete-account phrases) whose header accepts false
-    // negatives for v1.0, so the page must not promise a pause before "any
-    // action with real-world consequences".
+    // ⛔ THE PAUSE IS SCOPED TO WHAT THE GATE RECOGNISES, AND THE SENTENCE MOVED
+    // WITH THE GATE. agent-consequential-action.ts is a conservative keyword
+    // heuristic on the tap target (buy / order / checkout / pay /
+    // delete-account phrases) whose header accepts false negatives; beside it
+    // now sit the structural reading of the page's markup
+    // (agent-page-commitment.ts) and the planner's own declaration that a step
+    // commits. Three readings, none complete — so the page says the pause is
+    // before a step it RECOGNISES, and it no longer names the button, because
+    // the pause is not scoped to buttons.
     expect(body).toMatch(
-      /an Approve \/ Deny pause before it taps a\s+button to buy, pay, or delete an account\./,
+      /an Approve \/ Deny pause before a step it\s+recognises as buying, paying, or deleting an account\./,
     );
     expect(body).not.toMatch(/real-world consequences|before any action/i);
+    expect(body).not.toMatch(/pause before it taps a\s+button/i);
     // apps/marketing-site/src/pages/docs/oauth-apps.astro: client
     // registration is admin-gated (email request), not self-serve.
     expect(body).toMatch(

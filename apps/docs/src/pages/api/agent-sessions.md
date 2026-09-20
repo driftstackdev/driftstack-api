@@ -559,9 +559,9 @@ way.
 
 ### Confirming a purchase, payment or account deletion
 
-Before a step that would make a purchase, a payment or delete an account, the
-turn halts. That step does **not** run, `ok` is `false`, and the last entry in
-`results` is:
+When the agent recognises a step that would make a purchase, a payment or
+delete an account, the turn halts before it. That step does **not** run, `ok` is
+`false`, and the last entry in `results` is:
 
 ```json
 {
@@ -598,6 +598,14 @@ send the **next** message on the session with the approval — usually the same
   `Idempotency-Key`.
 
 Do not approve automatically in an unattended job; have a person decide.
+
+Recognition is best-effort. It works from what the page shows and from the
+agent's own reading of the step, so a site that presents one of these steps in
+an unusual way may not be recognised. Treat the approval step as a safeguard,
+not as a guarantee that a purchase, a payment or an account deletion can never
+happen without it — and do not give a task more authority (saved payment
+methods, signed-in accounts) than you would give an assistant you were not
+watching.
 
 ### Streaming the turn (SSE)
 

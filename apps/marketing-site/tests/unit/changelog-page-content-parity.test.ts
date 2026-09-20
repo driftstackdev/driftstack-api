@@ -182,12 +182,22 @@ describe('W370.A marketing-site /changelog page content parity', () => {
       'on a proxy that cannot carry HTTP/3, it is switched off rather than leaked',
     );
     expect(older).toContain('Trim reclaims space by clearing a profile');
-    // apps/server/src/services/agent-consequential-action.ts: a keyword
-    // heuristic on buy / pay / delete-account button text, not "any action
-    // with real-world consequences".
+    // ⛔ THE PAUSE IS SCOPED TO WHAT THE GATE RECOGNISES, AND THE SENTENCE
+    // MOVED WITH THE GATE. It used to name the BUTTON, which was true when the
+    // only reading was agent-consequential-action.ts's keyword heuristic on buy
+    // / pay / delete-account button text. There are now three readings — that
+    // one, the page's markup showing a form that commits value already held
+    // (agent-page-commitment.ts), and the planner declaring that a step commits
+    // — and none of them is complete, so the copy says what the product does:
+    // it RECOGNISES a step. It must still not promise a pause before "any
+    // action with real-world consequences", and it must not name the button,
+    // because the pause is not scoped to buttons any more.
     expect(older).toContain(
-      'an Approve or Deny pause before the AI agent taps a buy, pay or delete-account button',
+      'an Approve or Deny pause before a step the AI agent recognises as buying, ' +
+        'paying or deleting an account',
     );
+    expect(older).not.toMatch(/real-world consequences|before any action/i);
+    expect(older).not.toMatch(/taps a buy, pay or delete-account button/i);
     // docs/oauth-apps: client registration is admin-gated (email request).
     expect(older).toContain(
       "OAuth 2.0 for an app that acts on a customer\\'s behalf (client registration on request)",

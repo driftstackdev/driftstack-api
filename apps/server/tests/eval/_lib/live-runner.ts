@@ -281,7 +281,15 @@ export interface LiveRepReport {
   spend: { estimatedUsd: number; providerReportedUsd: number | null };
   /** Two-message tasks only (`LiveTask.followUp`): whether the model's reply
    *  to the FIRST message asked the customer something. Null for every other
-   *  task. */
+   *  task.
+   *
+   *  ⛔ A QUESTION RAISED IN A LATER SEGMENT COUNTS. The planner contract tells
+   *  the model to get as far as it can without a value the customer alone can
+   *  give and THEN hand back, so the expected shape of an ask on this task is
+   *  "reach the form, then clarify" — and the runtime reports a hand-back from
+   *  segment two as `plan-executed` (see `handedBackMidLoop`). Reading the turn
+   *  kind alone filed the behaviour the rule exists to produce as "did not
+   *  ask". */
   firstReplyAsked: boolean | null;
   /** Wall-clock per provider call. */
   /** What the model actually wrote, call by call (the first 600 characters). A
@@ -664,7 +672,17 @@ export async function runLiveTask(
     // HAND-BACK: the task withholds a fact the customer will give when asked,
     // and stopping here would score the one correct first reply as the end.
     const askedAsDesigned = turn === 1 && task.followUp !== undefined && result?.kind === 'clarify';
-    if (turn === 1 && task.followUp !== undefined) firstReplyAsked = result?.kind === 'clarify';
+    // ⛔ AND THE SAME QUESTION RAISED MID-LOOP IS THE SAME QUESTION. See
+    // `LiveRepReport.firstReplyAsked`: the ask the prompt now teaches is "reach
+    // the form, THEN clarify", which arrives as `plan-executed` with a mid-loop
+    // hand-back. Nothing else about the run moves — this boolean is reported
+    // per repetition and read by no verdict, no stop condition and no
+    // aggregate, so the before-runs stay comparable on every number they were
+    // measured for.
+    if (turn === 1 && task.followUp !== undefined) {
+      firstReplyAsked =
+        result?.kind === 'clarify' || turnObservations.at(-1)?.handedBackMidLoop === 'clarify';
+    }
     const handedBack =
       executed?.executor.awaitingConfirmation === true ||
       (result?.kind === 'clarify' && !askedAsDesigned) ||

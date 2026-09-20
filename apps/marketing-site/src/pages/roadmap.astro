@@ -11,8 +11,12 @@ import { DEVICE_SUPPORT } from '../data/capabilities';
 // facts follow pricing.ts, and everything else names a released surface
 // that the changelog or the docs already describe. Refuter pass the same
 // day: the model span counts models (19; the catalog has no SE, 16e or
-// Air), the Approve / Deny pause is scoped to the buttons it recognises
-// (agent-consequential-action.ts: buy / pay / delete-account phrases),
+// Air), the Approve / Deny pause is scoped to the steps it RECOGNISES —
+// three arms, none of them complete: buy / pay / delete-account phrases
+// (agent-consequential-action.ts), the page markup showing a form that
+// commits value already held (agent-page-commitment.ts), and the planner
+// declaring a step commits — so the copy says "recognises" and not
+// "before it taps a button to buy",
 // and OAuth client registration is on request (docs/oauth-apps).
 // Second pass: profile snapshots have no desktop-app surface and v1
 // captures device + name only, restore minting a NEW profile
@@ -76,8 +80,8 @@ import { DEVICE_SUPPORT } from '../data/capabilities';
       <Card title="The AI agent">
         Describe a task in plain English and the agent drives the session
         while you watch — AI, manual and pair modes, the screenshots it takes
-        shown under each step, and an Approve / Deny pause before it taps a
-        button to buy, pay, or delete an account.
+        shown under each step, and an Approve / Deny pause before a step it
+        recognises as buying, paying, or deleting an account.
         On Team plans and up, and on every API
         plan; bring your own Anthropic key, or use the bundled option from API
         Builder up.

@@ -23,17 +23,28 @@ import type { AgentIntent } from '@driftstack/api-types';
 import {
   COMMITMENT_FALLBACK_TEXT_MAX,
   COMMITMENT_MATCHED_TEXT_MAX,
+  COMMITMENT_MAX_TRACKED_PAGES,
+  COMMITMENT_NO_SURFACE,
+  COMMITMENT_PAGE_OVERFLOW,
   COMMITMENT_PROMPT_CEILING,
   amountValueOf,
   armFromFacts,
   classifyCommitTap,
+  commitmentBudgetPages,
+  commitmentPageIdentity,
+  commitmentPromptAllowed,
   commitmentReleasedByApproval,
   commitControlForTap,
+  declaredCommitVerdict,
+  declaredSurfaceIdentity,
   decodeCharacterReferences,
   intentMayCommit,
   keyMaySubmitAForm,
   moneyAmountsIn,
+  forgetTouchedSelectors,
   newCommitmentBudget,
+  noteCommitmentApproved,
+  noteTouchedSelector,
   readCommitFacts,
   selectorKeysForTap,
   tapCannotBeASubmit,
@@ -121,16 +132,64 @@ describe('the four conditions', () => {
     expect(verdictFor(page, '#go')).not.toBeNull();
   });
 
-  it('⛔ C3 NEGATIVE CONTROL — one ordinary entry field, no card token, no amount inside the form', () => {
+  it('⛔ C3 — one ordinary entry field NOBODY FILLED IN is still a commitment (the decoy-field bypass)', () => {
+    // THE MEASURED RESIDUAL THIS CLOSES. A site owner turned a halting checkout
+    // into a silent one by adding a delivery-note box and moving nothing else:
+    // the form had an entry field, so it read as collecting new value. But
+    // "collecting new value" is a claim about what the RUN is doing, and this
+    // run put nothing into it.
     const page = CHECKOUT.replace(
       '<p>Paying with the card on file.</p>',
       '<p><input id="note" name="note" type="text"></p>',
     );
-    expect(verdictFor(page, '#go')).toBeNull();
+    expect(verdictFor(page, '#go')).not.toBeNull();
     const control = commitControlForTap(facts(page), '#go');
     expect(control?.entryFields).toBe(1);
+    expect(control?.entryFieldKeys.has('#note'), 'the field is keyed to its form').toBe(true);
     expect(control?.method, 'C1 and C2 still hold').toBe('post');
     expect(facts(page).stakes, 'C4 still holds').toBe(true);
+  });
+
+  it('⛔ C3 NEGATIVE CONTROL — the SAME form, once this run has typed into it, is collecting', () => {
+    // And this is the half that keeps it from nagging: a newsletter, a login, a
+    // quote wizard and a contact form are all forms the turn must fill in
+    // before it can submit them, so none of them raises a prompt. Measured over
+    // every page of the live corpus: zero.
+    const page = CHECKOUT.replace(
+      '<p>Paying with the card on file.</p>',
+      '<p><input id="note" name="note" type="text"></p>',
+    );
+    const budget = newCommitmentBudget({ sawMoney: false });
+    noteTouchedSelector(budget, '#note');
+    expect(
+      classifyCommitTap({ intent: tap('#go'), facts: facts(page), budget }),
+      'the run filled this form in, so submitting it is not committing value already held',
+    ).toBeNull();
+  });
+
+  it('…and a field the run touched in ANOTHER form does not excuse this one', () => {
+    const page = CHECKOUT.replace(
+      '<p>Paying with the card on file.</p>',
+      '<p><input id="note" name="note" type="text"></p>',
+    );
+    const budget = newCommitmentBudget({ sawMoney: false });
+    noteTouchedSelector(budget, '#somewhere-else');
+    expect(classifyCommitTap({ intent: tap('#go'), facts: facts(page), budget })).not.toBeNull();
+  });
+
+  it('⛔ C3 — TWO ordinary fields is a form that collects, typed into or not', () => {
+    // ⛔ THE BOUND IS ONE FIELD, AND IT WAS MEASURED. Without it the rule fires
+    // on the live corpus's vet fee page — a two-field lead-capture form on a
+    // page whose table carries three currency amounts — raising a PURCHASE
+    // prompt on a page that sells nothing. One field beside a commit control is
+    // a commit control with a note box; two is a form whose purpose is
+    // collection.
+    const page = CHECKOUT.replace(
+      '<p>Paying with the card on file.</p>',
+      '<p><input id="note" name="note" type="text"><input id="ref" name="ref" type="text"></p>',
+    );
+    expect(commitControlForTap(facts(page), '#go')?.entryFields).toBe(2);
+    expect(verdictFor(page, '#go'), 'R2 residual: a second field is outside the rule').toBeNull();
   });
 
   it('…and C3 is PROMOTED back by a card field, or by the amount being inside the form', () => {
@@ -241,13 +300,24 @@ describe('the form plumbing, each line of which is an open bypass if it is misse
     expect(verdictFor(asGet, '#go')).toBeNull();
   });
 
-  it('a field hoisted INTO a form by form="id" counts against that form', () => {
+  it('a field hoisted INTO a form by form="id" counts against that form, and by its KEY', () => {
     const body =
       `<main>${TOTAL}<form id="pay" method="post">` +
       '<button id="go" type="submit">Go</button></form>' +
       '<input id="note" name="note" type="text" form="pay"></main>';
-    expect(commitControlForTap(facts(body), '#go')?.entryFields).toBe(1);
-    expect(verdictFor(body, '#go')).toBeNull();
+    const control = commitControlForTap(facts(body), '#go');
+    expect(control?.entryFields).toBe(1);
+    // ⛔ THE KEY HAS TO TRAVEL WITH THE COUNT. C3 asks whether the run filled
+    // the form in, and a hoisted field whose key never reached the form would
+    // make a form the run DID type into read as untouched — one extra prompt
+    // on a real single-page checkout, every time.
+    expect(control?.entryFieldKeys.has('#note')).toBe(true);
+    const filled = newCommitmentBudget({ sawMoney: false });
+    noteTouchedSelector(filled, '#note');
+    expect(
+      classifyCommitTap({ intent: tap('#go'), facts: facts(body), budget: filled }),
+    ).toBeNull();
+    expect(verdictFor(body, '#go'), 'and untouched it is a commitment').not.toBeNull();
   });
 
   it('nested forms mark the facts UNRELIABLE rather than "no commit form" — malformed markup cannot downgrade to no-halt', () => {
@@ -557,7 +627,7 @@ describe('the turn: arming, the ceiling and the one release', () => {
     expect(
       commitmentReleasedByApproval(
         { ...budget },
-        { category: 'purchase', matchedText: 'x', amount: '£100.00' },
+        { arm: 'structure', category: 'purchase', matchedText: 'x', amount: '£100.00' },
         control,
       ),
       'no more than what was approved, same destination',
@@ -565,7 +635,7 @@ describe('the turn: arming, the ceiling and the one release', () => {
     expect(
       commitmentReleasedByApproval(
         { ...budget },
-        { category: 'purchase', matchedText: 'x', amount: '£900.00' },
+        { arm: 'structure', category: 'purchase', matchedText: 'x', amount: '£900.00' },
         control,
       ),
       'a larger amount is a different decision',
@@ -573,7 +643,7 @@ describe('the turn: arming, the ceiling and the one release', () => {
     expect(
       commitmentReleasedByApproval(
         { ...budget },
-        { category: 'purchase', matchedText: 'x', amount: null },
+        { arm: 'structure', category: 'purchase', matchedText: 'x', amount: null },
         control,
       ),
       'an unknown amount fails closed',
@@ -581,7 +651,7 @@ describe('the turn: arming, the ceiling and the one release', () => {
     expect(
       commitmentReleasedByApproval(
         { ...budget },
-        { category: 'payment', matchedText: 'x', amount: '£1' },
+        { arm: 'structure', category: 'payment', matchedText: 'x', amount: '£1' },
         control,
       ),
       'a different kind of action is a different decision',
@@ -589,7 +659,7 @@ describe('the turn: arming, the ceiling and the one release', () => {
     expect(
       commitmentReleasedByApproval(
         { ...budget },
-        { category: 'purchase', matchedText: 'x', amount: '£1' },
+        { arm: 'structure', category: 'purchase', matchedText: 'x', amount: '£1' },
         {
           action: '/somewhere-else',
         },
@@ -599,7 +669,7 @@ describe('the turn: arming, the ceiling and the one release', () => {
     expect(
       commitmentReleasedByApproval(
         newCommitmentBudget(),
-        { category: 'purchase', matchedText: 'x', amount: '£1' },
+        { arm: 'structure', category: 'purchase', matchedText: 'x', amount: '£1' },
         control,
       ),
       'nothing was approved, so nothing is released',
@@ -619,7 +689,12 @@ describe('the turn: arming, the ceiling and the one release', () => {
     };
     const control = commitControlForTap(facts(CHECKOUT), '#go');
     if (control === undefined) throw new Error('no control');
-    const verdict = { category: 'purchase' as const, matchedText: 'x', amount: '£10.00' };
+    const verdict = {
+      arm: 'structure' as const,
+      category: 'purchase' as const,
+      matchedText: 'x',
+      amount: '£10.00',
+    };
     expect(commitmentReleasedByApproval(budget, verdict, control)).toBe(true);
     expect(commitmentReleasedByApproval(budget, verdict, control)).toBe(false);
   });
@@ -801,7 +876,7 @@ describe('⛔ one approval is one decision, not one shape of decision', () => {
     expect(
       commitmentReleasedByApproval(
         { ...budget },
-        { category: 'purchase', matchedText: 'B · £124.50', amount: '£124.50' },
+        { arm: 'structure', category: 'purchase', matchedText: 'B · £124.50', amount: '£124.50' },
         second,
       ),
       'it was sitting beside the one they approved, so they never saw it as a next step',
@@ -811,7 +886,7 @@ describe('⛔ one approval is one decision, not one shape of decision', () => {
     expect(
       commitmentReleasedByApproval(
         { ...budget },
-        { category: 'purchase', matchedText: 'Yes · £124.50', amount: '£124.50' },
+        { arm: 'structure', category: 'purchase', matchedText: 'Yes · £124.50', amount: '£124.50' },
         { action: '/orders', key: '#confirm-on-the-next-page' },
       ),
     ).toBe(true);
@@ -835,5 +910,294 @@ describe('the words a customer is asked to approve are words the page SHOWED the
     // The moment the page shows a figure, the figure is what is shown back.
     const priced = page.replace('<h1>Checkout</h1>', '<h1>Checkout</h1><p>Total — £9.99</p>');
     expect(verdictFor(priced, `#${sentence}`)?.matchedText).toBe('£9.99');
+  });
+});
+
+// ── ⛔ THE THIRD ARM, AND THE TWO CEILINGS ────────────────────────────
+
+describe('⛔ a step the planner DECLARED commits is halted, with no page reading at all', () => {
+  const div = tap('#place', 'Weiter');
+
+  it('a declared tap halts even when there are NO facts — which is the point of it', () => {
+    const v = declaredCommitVerdict(div, 'purchase');
+    expect(v).not.toBeNull();
+    expect(v?.arm).toBe('declared');
+    expect(v?.category).toBe('purchase');
+    expect(v?.matchedText, "the step's own words, never the page's prose").toBe('Weiter');
+  });
+
+  it('⛔ NEGATIVE CONTROL — with no declaration the same step raises nothing', () => {
+    expect(declaredCommitVerdict(div, undefined)).toBeNull();
+  });
+
+  it('the three declarable categories are exactly the published ones — no new public value', () => {
+    for (const category of ['purchase', 'payment', 'account_deletion'] as const) {
+      expect(declaredCommitVerdict(div, category)?.category).toBe(category);
+    }
+  });
+
+  it('⛔ a declaration on a step that CANNOT submit anything is ignored', () => {
+    // The bound on a model that over-declares: a navigate, a wait, a capture, a
+    // scroll and a non-submitting key press commit nothing, so a declaration on
+    // one is not a prompt the customer has to answer.
+    const cannot: AgentIntent[] = [
+      { kind: 'navigate', url: 'https://x.test/' },
+      { kind: 'wait', condition: 'idle' },
+      { kind: 'capture', capture: 'screenshot' },
+      { kind: 'scroll', direction: 'down' },
+      { kind: 'interact', action: 'press', value: 'Tab' },
+      { kind: 'interact', action: 'type', selector: '#q', value: 'no newline' },
+    ];
+    for (const intent of cannot) {
+      expect(declaredCommitVerdict(intent, 'purchase'), JSON.stringify(intent)).toBeNull();
+    }
+    // …and every step that CAN submit is judged.
+    expect(
+      declaredCommitVerdict({ kind: 'interact', action: 'press', value: 'Enter' }, 'payment'),
+    ).not.toBeNull();
+    expect(
+      declaredCommitVerdict(
+        { kind: 'interact', action: 'type', selector: '#q', value: 'x\n' },
+        'payment',
+      ),
+    ).not.toBeNull();
+  });
+
+  it('the text falls back to the selector, then to the category — never to nothing', () => {
+    expect(declaredCommitVerdict(tap('#place'), 'purchase')?.matchedText).toBe('#place');
+    expect(
+      declaredCommitVerdict({ kind: 'interact', action: 'press', value: 'Enter' }, 'payment')
+        ?.matchedText,
+      'a press has no selector and its value is the key name',
+    ).toBe('Enter');
+  });
+
+  it('⛔ the declared text is ONE line, control characters out, and clamped', () => {
+    // It reaches the customer's approval prompt and the route validates it at
+    // 200 characters, so a page that gets a very long caption into the plan's
+    // own words must not produce a halt nobody can approve.
+    const long = tap('#x', `${'A'.repeat(400)}\n${String.fromCharCode(7)}B`);
+    const text = declaredCommitVerdict(long, 'purchase')?.matchedText ?? '';
+    expect(text.length).toBe(COMMITMENT_MATCHED_TEXT_MAX);
+    expect(text).not.toMatch(/[\n\p{Cc}]/u);
+  });
+});
+
+describe('⛔ the prompt ceiling bounds the PAGE without rationing the customer', () => {
+  const pageA = facts(`<main>${TOTAL}${COMMIT_FORM}</main>`);
+  const pageB = facts(
+    `<main>${TOTAL}<form id="other" action="/o" method="post">` +
+      '<button id="elsewhere" type="submit">B</button></form></main>',
+  );
+
+  it('two surfaces have two identities, and one page has one', () => {
+    expect(commitmentPageIdentity(pageA)).not.toBe(commitmentPageIdentity(pageB));
+    expect(commitmentPageIdentity(pageA)).toBe(
+      commitmentPageIdentity(facts(`<main>${TOTAL}${COMMIT_FORM}</main>`)),
+    );
+    expect(commitmentPageIdentity(null), 'no facts is its own bucket').toBe('none');
+  });
+
+  it('⛔ the identity is an opaque digest — never the page’s own strings', () => {
+    const id = commitmentPageIdentity(pageA);
+    expect(id).toMatch(/^[0-9a-f]{16}$/);
+    expect(id).not.toContain('go');
+  });
+
+  it('ONE page runs out at the ceiling however many approvals it collects', () => {
+    const budget = newCommitmentBudget({ sawMoney: true });
+    const id = commitmentPageIdentity(pageA);
+    expect(commitmentPromptAllowed(budget, id)).toBe(true);
+    noteCommitmentApproved(budget, id);
+    expect(commitmentPromptAllowed(budget, id)).toBe(true);
+    noteCommitmentApproved(budget, id);
+    expect(commitmentPromptAllowed(budget, id), 'the page asked twice; a third is a stop').toBe(
+      false,
+    );
+    expect(budget.overCeiling).toBe(true);
+    expect(COMMITMENT_PROMPT_CEILING).toBe(2);
+  });
+
+  it('⛔ …and three DISTINCT surfaces the customer approves all get through', () => {
+    // This is the defect item D closed: the count used to travel across an
+    // approval with no distinction, so a customer asking for three separate
+    // purchases in one task got two and then a hand-back.
+    const budget = newCommitmentBudget({ sawMoney: true });
+    for (const id of ['a'.repeat(16), 'b'.repeat(16), 'c'.repeat(16)]) {
+      expect(commitmentPromptAllowed(budget, id), id).toBe(true);
+      noteCommitmentApproved(budget, id);
+    }
+    expect(budget.overCeiling).toBe(false);
+  });
+
+  it('⛔ NEGATIVE CONTROL — without the refund the third of those is refused', () => {
+    const budget = newCommitmentBudget({ sawMoney: true });
+    for (const id of ['a'.repeat(16), 'b'.repeat(16)]) {
+      expect(commitmentPromptAllowed(budget, id)).toBe(true);
+    }
+    expect(commitmentPromptAllowed(budget, 'c'.repeat(16)), 'unanswered prompts still bind').toBe(
+      false,
+    );
+  });
+
+  it('an approval refunds ONCE per surface, so re-approving the same page buys nothing', () => {
+    const budget = newCommitmentBudget({ sawMoney: true });
+    const id = commitmentPageIdentity(pageA);
+    commitmentPromptAllowed(budget, id);
+    noteCommitmentApproved(budget, id);
+    expect(budget.prompts).toBe(0);
+    commitmentPromptAllowed(budget, id);
+    noteCommitmentApproved(budget, id);
+    expect(budget.prompts, 'the second approval on the same surface refunds nothing').toBe(1);
+  });
+
+  it('the per-page tallies survive a resume, and are bounded', () => {
+    const budget = newCommitmentBudget({ sawMoney: true });
+    const id = commitmentPageIdentity(pageA);
+    commitmentPromptAllowed(budget, id);
+    noteCommitmentApproved(budget, id);
+    const resumed = newCommitmentBudget({
+      sawMoney: true,
+      prompts: budget.prompts,
+      pages: commitmentBudgetPages(budget),
+    });
+    expect(resumed.promptedPages.get(id)).toBe(1);
+    expect(resumed.approvedPages.has(id)).toBe(true);
+    // Bounded: past the tracked ceiling every further surface shares one
+    // bucket, which reaches the per-page ceiling sooner — the safe direction.
+    const many = newCommitmentBudget();
+    for (let i = 0; i < COMMITMENT_MAX_TRACKED_PAGES + 4; i++) {
+      many.prompts = 0;
+      commitmentPromptAllowed(many, `id-${String(i)}`);
+    }
+    expect(many.promptedPages.size).toBeLessThanOrEqual(COMMITMENT_MAX_TRACKED_PAGES + 1);
+    expect(many.promptedPages.has(COMMITMENT_PAGE_OVERFLOW)).toBe(true);
+  });
+
+  it('⛔ and the OVERFLOW BUCKET IS THE TALLY THE CEILING READS, not a number nobody consults', () => {
+    // ⛔ THE ASSERTION ABOVE IS ABOUT BOOKKEEPING AND THIS ONE IS ABOUT
+    // BEHAVIOUR, which is the pair that was missing. The bucket existed and was
+    // incremented, but the ceiling was compared against the UNTRACKED id's own
+    // tally — absent, therefore always zero — so every surface past the
+    // tracking limit had an unlimited per-page allowance. Measured then: three
+    // prompts in a row where the ceiling is two.
+    const budget = newCommitmentBudget();
+    for (let i = 0; i < COMMITMENT_MAX_TRACKED_PAGES; i++) {
+      const id = `filler-${String(i)}`;
+      commitmentPromptAllowed(budget, id);
+      noteCommitmentApproved(budget, id);
+    }
+    expect(budget.promptedPages.size).toBe(COMMITMENT_MAX_TRACKED_PAGES);
+    const untracked = 'past-the-limit';
+    const allowed: boolean[] = [];
+    for (let i = 0; i < 4; i++) {
+      // The customer answers each one, so ONLY the per-page bound is left to
+      // stop this — which is the bound being tested.
+      allowed.push(commitmentPromptAllowed(budget, untracked));
+      noteCommitmentApproved(budget, untracked);
+    }
+    expect(allowed, 'the shared bucket reaches the ceiling like any other surface').toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+    expect(budget.promptedPages.get(COMMITMENT_PAGE_OVERFLOW)).toBe(COMMITMENT_PROMPT_CEILING);
+    expect(budget.overCeiling).toBe(true);
+  });
+
+  it('⛔ a RESUME keeps the overflow bucket, which the tracking cap used to drop', () => {
+    const budget = newCommitmentBudget();
+    for (let i = 0; i < COMMITMENT_MAX_TRACKED_PAGES; i++) {
+      const id = `filler-${String(i)}`;
+      commitmentPromptAllowed(budget, id);
+      noteCommitmentApproved(budget, id);
+    }
+    commitmentPromptAllowed(budget, 'past-the-limit');
+    const resumed = newCommitmentBudget({ pages: commitmentBudgetPages(budget) });
+    expect(
+      resumed.promptedPages.get(COMMITMENT_PAGE_OVERFLOW),
+      'the tally that bounds every surface the turn could not name',
+    ).toBe(1);
+  });
+
+  it('⛔ THREE DECLARED PURCHASES ARE THREE SURFACES, not one page asking three times', () => {
+    // ⛔ THE DEFECT THIS PINS. Every page the declared arm exists for is one the
+    // structural arm cannot read, so all of them hashed to COMMITMENT_NO_SURFACE
+    // and the per-page ceiling — which no approval refunds — handed the
+    // customer's THIRD requested purchase back. The identity of a declared halt
+    // on an unreadable page is the declaration, so three different ones are
+    // three surfaces.
+    expect(commitmentPageIdentity(null)).toBe(COMMITMENT_NO_SURFACE);
+    const ids = ['Bestellung abschicken', 'Commander maintenant', 'Comprar ahora'].map((text) => {
+      const verdict = declaredCommitVerdict(tap(`#${text.slice(0, 3)}`, text), 'purchase');
+      if (verdict === null) throw new Error('the declared arm returned nothing');
+      return declaredSurfaceIdentity(verdict);
+    });
+    expect(new Set(ids).size, 'three distinct surfaces').toBe(3);
+    for (const id of ids) expect(id).not.toBe(COMMITMENT_NO_SURFACE);
+
+    const budget = newCommitmentBudget();
+    for (const id of ids) {
+      expect(commitmentPromptAllowed(budget, id), `a prompt for ${id}`).toBe(true);
+      noteCommitmentApproved(budget, id);
+    }
+    expect(budget.overCeiling, 'none of the three was handed back').toBe(false);
+  });
+
+  it('⛔ …and the SAME declaration twice is ONE surface, so a page cannot repeat itself past the ceiling', () => {
+    const verdict = declaredCommitVerdict(tap('#go', 'Jetzt kaufen'), 'purchase');
+    if (verdict === null) throw new Error('the declared arm returned nothing');
+    const id = declaredSurfaceIdentity(verdict);
+    const budget = newCommitmentBudget();
+    const allowed: boolean[] = [];
+    for (let i = 0; i < 4; i++) {
+      allowed.push(commitmentPromptAllowed(budget, id));
+      noteCommitmentApproved(budget, id);
+    }
+    expect(allowed).toEqual([true, true, false, false]);
+    // …and the digest carries no page text, only a fixed-width opaque key.
+    expect(id).toMatch(/^d:[0-9a-f]{16}$/);
+    expect(id).not.toContain('kaufen');
+  });
+});
+
+describe('⛔ what the run typed does not travel to the next document', () => {
+  // ⛔ THE MEASURED DEFECT. A touched key is a SELECTOR key — `#email`, `#note`,
+  // `input[type="text"]` — and nothing about it is page-unique. Kept for the
+  // whole turn, typing into a sign-in page's `#email` made a checkout whose one
+  // entry field is also `#email` read as a form this run had filled in, and C3
+  // then read the order form as collecting rather than committing: the halt was
+  // removed outright. The executor clears the set on every navigate.
+  const checkout = facts(
+    `<main>${TOTAL}<form id="pay" action="/orders" method="post">` +
+      '<input id="email" name="note" type="text">' +
+      '<button id="place" type="submit">Onwards</button></form></main>',
+  );
+  const buy = tap('#place', 'Onwards');
+  const armed = () => newCommitmentBudget({ sawMoney: true, amount: '£133.50' });
+
+  it('the one-field order form nobody typed into is a commitment', () => {
+    expect(classifyCommitTap({ intent: buy, facts: checkout, budget: armed() })).not.toBeNull();
+  });
+
+  it('⛔ a key typed on an EARLIER page removes that halt until the set is cleared', () => {
+    const carried = armed();
+    noteTouchedSelector(carried, '#email');
+    expect(
+      classifyCommitTap({ intent: buy, facts: checkout, budget: carried }),
+      'this is the bypass, and the clear below is what closes it',
+    ).toBeNull();
+    forgetTouchedSelectors(carried);
+    expect(classifyCommitTap({ intent: buy, facts: checkout, budget: carried })).not.toBeNull();
+  });
+
+  it('…and a key typed into THIS form, with no navigate since, still reads as collecting', () => {
+    const here = armed();
+    noteTouchedSelector(here, '#email');
+    expect(
+      classifyCommitTap({ intent: buy, facts: checkout, budget: here }),
+      'the whole population the "filled in" reading exists to keep quiet',
+    ).toBeNull();
   });
 });

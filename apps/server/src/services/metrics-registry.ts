@@ -548,4 +548,30 @@ export const METRIC_NAMES = {
   // ignores; the `intent_result_unknown_keys` log line names it. Emitted from
   // services/harness-result-unknown-keys.ts. Key names are NEVER a label.
   harnessIntentResultUnknownKeyTotal: 'driftstack_harness_intent_result_unknown_key_total',
+  // WHAT THE COMMITMENT ARM HAD TO JUDGE ON, once per step it judged, by
+  // `outcome` (COMMITMENT_FACTS_OUTCOMES: refreshed | unavailable |
+  // budget_spent | stale_used). Emitted from recordCommitmentFacts in
+  // services/agent-turn-telemetry.ts.
+  //
+  // ⛔ THE ARM SHIPPED WITH NO TELEMETRY AT ALL, and that is what this closes.
+  // Its cost is one extra `get_page_source` per step whose facts are stale, up
+  // to sixteen a turn, and its blind spot is `unavailable` — no facts, so the
+  // gate degrades to the caption matcher, which is the exact shape measured
+  // completing an unapproved purchase ten times out of ten. Neither number was
+  // observable in production, so nobody could state a wild-web false-positive
+  // rate or price the read allowance. `unavailable` is the alert signal;
+  // `refreshed` against the stale pair is the cost/blindness trade.
+  agentCommitmentFactsTotal: 'driftstack_agent_commitment_facts_total',
+  // Consequential halts by the `arm` that raised one (CONSEQUENTIAL_HALT_ARMS:
+  // caption | structure | declared). Emitted from recordConsequentialHalt in
+  // services/agent-turn-telemetry.ts.
+  //
+  // ⛔ WITHOUT THE SPLIT A SAFETY NUMBER CANNOT TELL "the gate stopped this"
+  // FROM "the planner declined to do it". `caption` is the fourteen English
+  // phrases; `structure` is the page's markup saying the control submits a form
+  // that commits value; `declared` is the planner saying so itself. A
+  // `structure` or `declared` count that stays at zero in production means the
+  // newer arms are decorative, which is the thing this change most needs to be
+  // able to find out.
+  agentConsequentialHaltTotal: 'driftstack_agent_consequential_halt_total',
 } as const;

@@ -516,8 +516,10 @@ export function scriptedModel(args: {
   firstAnswerWanted?: true;
   recover?: (observation: string) => ReadonlyArray<unknown> | null;
   /** A reply that is not a plan at all — a question or a refusal — for a
-   *  planning call that can see the page. Wins over `recover`. */
-  handBack?: (observation: string) => StandInReply | null;
+   *  planning call that can see the page. Wins over `recover`. The request is
+   *  passed too, so a model can stop asking once the CUSTOMER has answered;
+   *  callers that do not need it take one argument as before. */
+  handBack?: (observation: string, request: ProviderRequestView) => StandInReply | null;
   answer?: (pageText: string) => string;
   asks?: { question: string; answeredBy: string };
 }): StandInModel {
@@ -532,7 +534,8 @@ export function scriptedModel(args: {
       if (!customerSaid) return clarifyReply(args.asks.question);
     }
     const observation = observationIn(request);
-    const handedBack = observation === null ? null : (args.handBack?.(observation) ?? null);
+    const handedBack =
+      observation === null ? null : (args.handBack?.(observation, request) ?? null);
     if (handedBack !== null) return handedBack;
     const recovered = observation === null ? null : (args.recover?.(observation) ?? null);
     return recovered !== null
@@ -892,6 +895,44 @@ export const HANDS_BACK_MID_LOOP_MODEL: StandInModel = scriptedModel({
   handBack: (observation) =>
     observation.includes('#last-step')
       ? clarifyReply('The basket comes to £133.50 with Saturday delivery. Shall I place the order?')
+      : null,
+});
+
+/** Has the CUSTOMER said this, in a message of their own? Page observations
+ *  arrive as user messages too, so this is only ever asked about a value no
+ *  fixture page carries. */
+function customerSaid(request: ProviderRequestView, value: string): boolean {
+  return request.messages.some((m) => m.role === 'user' && m.text.includes(value));
+}
+
+/**
+ * ⛔ THE ASK THE PLANNER CONTRACT ACTUALLY TEACHES, AND THE ONE THE REPORT USED
+ * TO MISS. "A VALUE ONLY THE CUSTOMER KNOWS IS ASKED FOR, NEVER INVENTED" ends
+ * "get as far as you can without it, then hand back and CLARIFY" — so the
+ * expected shape of a correct first reply on `L-TWO-MESSAGES` is not a question
+ * from a blank tab: it is REACH THE FORM, THEN ASK. That question is raised in
+ * the loop's SECOND segment, which the runtime reports as `plan-executed`, and
+ * `firstReplyAsked` read the turn kind alone — so the model that did exactly
+ * what the prompt asks was recorded as not having asked.
+ *
+ * Answered by the customer's second message, it types the address they gave and
+ * finishes, so this is a control for the whole two-message shape and not only
+ * for the boolean.
+ */
+export const ASKS_AT_THE_FORM_MID_LOOP_MODEL: StandInModel = scriptedModel({
+  first: [nav('https://quillpress.test/newsletter'), SETTLE],
+  firstStatus: 'continue',
+  handBack: (observation, request) =>
+    observation.includes('#letter-email') && !customerSaid(request, LIVE_NEWSLETTER_EMAIL)
+      ? clarifyReply('Which email address should I sign up for the letter?')
+      : null,
+  recover: (observation) =>
+    observation.includes('#letter-email')
+      ? [
+          type('#letter-email', LIVE_NEWSLETTER_EMAIL),
+          tap('#letter-subscribe', 'Subscribe'),
+          CAPTURE,
+        ]
       : null,
 });
 

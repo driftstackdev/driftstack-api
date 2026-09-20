@@ -561,6 +561,8 @@ groups:
 # Alert-backed (defined above):
 #
 # Dashboard-only (drift-guard reference; no paging rule yet). Checked by
+#   - driftstack_agent_commitment_facts_total
+#   - driftstack_agent_consequential_halt_total
 #   - driftstack_agent_decompose_total
 #   - driftstack_agent_look_to_tap_seconds
 #   - driftstack_agent_pre_tap_look_device_seconds

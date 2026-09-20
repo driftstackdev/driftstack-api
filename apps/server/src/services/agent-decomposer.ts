@@ -24,7 +24,7 @@
  * (D1 design doc; landed under a separate slice).
  */
 
-import type { AgentModel } from '@driftstack/api-types';
+import type { AgentModel, ConsequentialActionCategory } from '@driftstack/api-types';
 
 export interface TranscriptEntry {
   /** ISO timestamp the entry was created. */
@@ -86,6 +86,24 @@ export interface TranscriptEntry {
     sawMoney: boolean;
     amount?: string;
     prompts: number;
+    /**
+     * Prompts raised per COMMITMENT SURFACE, so the per-page ceiling cannot be
+     * reset by approving once and coming back. `id` is an opaque digest of the
+     * page's commit-shaped controls (never the controls themselves), bounded in
+     * count and in width — see `commitmentPageIdentity`.
+     */
+    pages?: ReadonlyArray<{ id: string; prompts: number; approved?: boolean }>;
+    /**
+     * ⛔ THE PLANNER'S DECLARATIONS FOR THE SUFFIX THIS RESUME WILL RUN, by
+     * index into the resumed intents.
+     *
+     * Without them a resume is the hole the declared arm would otherwise open:
+     * the reviewed plan is replayed from the transcript, not re-planned, so a
+     * SECOND declared step after the approved one would come back undeclared
+     * and be judged by the other two arms alone — which for a script-handler
+     * commit or a non-English deletion is no arm at all.
+     */
+    declared?: ReadonlyArray<{ at: number; category: ConsequentialActionCategory }>;
   };
 }
 
@@ -288,6 +306,23 @@ export type DecomposeResult =
        * say more. A reader must therefore never default it.
        */
       status?: PlanStatus;
+      /**
+       * ⛔ STEPS THE PLANNER SAID COMMIT — a purchase, a payment or an account
+       * deletion — by index into `intents`. A THIRD arm of the approval gate,
+       * never the only one: the structural arm cannot see a commit behind a
+       * script handler on a `<div>` or a link, an iframed payment form, or
+       * account deletion in a language the caption arm does not read, and in
+       * every one of those the model usually knows what the step is because the
+       * customer asked for it.
+       *
+       * ⛔ NOT A FIELD ON THE INTENT, which is published and listed back to the
+       * customer. It rides beside the plan, inside this process, and reaches
+       * only the executor's gate. Absent from the deterministic decomposer,
+       * every scripted plan and every stored transcript, and a reader must
+       * never default it: absent means "nothing declared", which is exactly
+       * what a plan meant before this existed.
+       */
+      declaredCommitments?: ReadonlyArray<{ at: number; category: ConsequentialActionCategory }>;
       /**
        * The planner's own reading of the customer's message: `true` when they
        * asked, in ANY language, to be told something found on the page; `false`
