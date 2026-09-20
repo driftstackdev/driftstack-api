@@ -41,16 +41,24 @@ import type { PgInstant } from '../db/credit-windows-repo.js';
 import { firstMillisecondAtOrAfter } from '../db/credit-windows-repo.js';
 import type { Logger } from '../lib/logger.js';
 import type { CreditsRefreshResult, CreditSweepResult } from './credit-grants.js';
+import { CREDITS_INVARIANT_AUDIT_JOB_TYPE } from './credit-invariant-audit.js';
 import type { ScheduledJobRow, ScheduledJobsService } from './scheduled-jobs.js';
 
 export const CREDITS_WINDOW_BOUNDARY_JOB_TYPE = 'credits.window_boundary';
 export const CREDITS_COVERAGE_SWEEP_JOB_TYPE = 'credits.coverage_sweep';
 export const CREDITS_EXPIRY_SWEEP_JOB_TYPE = 'credits.expiry_sweep';
 
-/** The two recurring chains, for the liveness gauge's "not run here" set while credits are off. */
+/**
+ * The recurring chains, for the liveness gauge's "not run here" set while
+ * credits are off. The daily invariant audit (S9, `credit-invariant-audit.ts`)
+ * belongs here too: it is registered and seeded under the same switch, so with
+ * the mode off it has no pending row and the gauge must omit it rather than
+ * report a dead chain.
+ */
 export const CREDITS_RECURRING_JOB_TYPES: readonly string[] = [
   CREDITS_COVERAGE_SWEEP_JOB_TYPE,
   CREDITS_EXPIRY_SWEEP_JOB_TYPE,
+  CREDITS_INVARIANT_AUDIT_JOB_TYPE,
 ];
 
 export const CREDITS_COVERAGE_SWEEP_INTERVAL_MS = 15 * 60 * 1000;

@@ -439,10 +439,14 @@ export class CreditGrantsService implements CreditsRefresher {
    * then the account's debt is paid down from whatever free credit it has left,
    * because the database refuses to COMMIT debt beside spendable credit.
    *
-   * ⚠️ THE PENDING CLAIM IS RECORDED HERE AND PAID IN S7. `pending_micro` is
-   * the part of the shortfall that credits held by running tasks cover. Nothing
-   * releases a hold yet, so nothing pays it down yet; the row is what S7's
-   * settle path will find and charge against when it does.
+   * ⛔ THE PENDING CLAIM IS ASKED OF HELD CREDIT NO CLAIM ALREADY STANDS
+   * AGAINST. `pending_micro` is the part of the shortfall that credits held by
+   * running tasks cover, and a settlement pays it from the credit it releases.
+   * Held credit is therefore a FINITE pot that earlier claims have already drawn
+   * on: asking for it twice would let two claims stand over one credit, and at
+   * settlement only one of them could be paid — the other silently becoming
+   * nothing, or debt for credit the first claim had taken. So what earlier
+   * clawbacks are still owed is subtracted before this one asks.
    */
   async clawBack(
     tx: CreditLedgerTx,
@@ -466,7 +470,9 @@ export class CreditGrantsService implements CreditsRefresher {
 
     const lots = await windows.clawbackTargets(tx, accountId, input.windowId);
     const heldTotal = await ledger.heldMicro(accountId, tx);
-    const plan = planClawbackOfAmount(lots, input.amountMicro, heldTotal);
+    const standingClaims = await windows.pendingClaimTotalMicro(tx, accountId);
+    const claimable = Math.max(0, heldTotal - standingClaims);
+    const plan = planClawbackOfAmount(lots, input.amountMicro, claimable);
 
     for (const take of plan.takes) {
       await ledger.append(
@@ -601,7 +607,54 @@ export type CreditsRefreshTrigger =
   | 'stripe_webhook'
   | 'crypto_activation'
   | 'crypto_refund'
-  | 'admin_tier_change';
+  | 'admin_tier_change'
+  /** The lazy refresh a task does inside `reserve`, under a savepoint (H5). */
+  | 'task_reserve';
+
+/**
+ * Record a refresh that failed, in the log and in the error reporter.
+ *
+ * ⛔ THE ALERT CARRIES THE TRIGGER AND NOTHING ELSE: no account, no invoice, no
+ * amount. The account id is in the log line beside it, which is where customer
+ * data is allowed to be.
+ */
+export function reportCreditsRefreshFailed(
+  err: unknown,
+  accountId: string,
+  opts: {
+    trigger: CreditsRefreshTrigger;
+    message: string;
+    logger?: { error?: (obj: Record<string, unknown>, msg: string) => void } | null;
+    sentry?: Pick<SentryClient, 'captureMessage'> | null;
+  },
+): void {
+  opts.logger?.error?.(
+    {
+      component: 'credit-grants',
+      event: 'ai_credits_refresh_failed',
+      trigger: opts.trigger,
+      accountId,
+      err:
+        err instanceof Error
+          ? { name: err.name, message: err.message, cause: err.cause }
+          : { value: err },
+    },
+    opts.message,
+  );
+  try {
+    opts.sentry?.captureMessage({
+      message:
+        'Refreshing an account’s AI credits failed after a billing change. ' +
+        'Find the account id in the server log; the coverage sweep retries it.',
+      level: 'error',
+      fingerprint: ['billing', 'ai_credits_refresh_failed', opts.trigger],
+      tags: { kind: 'ai_credits_refresh_failed', trigger: opts.trigger },
+      extra: { trigger: opts.trigger },
+    });
+  } catch {
+    // Fire-and-forget, like every Sentry call.
+  }
+}
 
 /**
  * Refresh an account's credits after something that may have changed its paid
@@ -634,31 +687,12 @@ export async function refreshCreditsAfter(
     await refresher.refreshCredits(accountId);
   } catch (err) {
     if (opts.rethrowTransient && isTransientInfraError(err)) throw err;
-    opts.logger?.error?.(
-      {
-        component: 'credit-grants',
-        event: 'ai_credits_refresh_failed',
-        trigger: opts.trigger,
-        accountId,
-        err:
-          err instanceof Error
-            ? { name: err.name, message: err.message, cause: err.cause }
-            : { value: err },
-      },
-      'refreshing AI credits failed — what triggered it stands; the coverage sweep retries',
-    );
-    try {
-      opts.sentry?.captureMessage({
-        message:
-          'Refreshing an account’s AI credits failed after a billing change. ' +
-          'Find the account id in the server log; the coverage sweep retries it.',
-        level: 'error',
-        fingerprint: ['billing', 'ai_credits_refresh_failed', opts.trigger],
-        tags: { kind: 'ai_credits_refresh_failed', trigger: opts.trigger },
-        extra: { trigger: opts.trigger },
-      });
-    } catch {
-      // Fire-and-forget, like every Sentry call.
-    }
+    reportCreditsRefreshFailed(err, accountId, {
+      trigger: opts.trigger,
+      message:
+        'refreshing AI credits failed — what triggered it stands; the coverage sweep retries',
+      logger: opts.logger,
+      sentry: opts.sentry,
+    });
   }
 }

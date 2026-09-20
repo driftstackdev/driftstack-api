@@ -918,6 +918,13 @@
       "when": 1786665600018,
       "tag": "0130_credit_windows",
       "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1786665600019,
+      "tag": "0131_credit_reservations",
+      "breakpoints": true
     }
   ]
 }

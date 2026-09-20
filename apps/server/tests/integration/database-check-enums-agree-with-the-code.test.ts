@@ -46,6 +46,16 @@ import {
   CREDIT_PLAN_OVERRIDE_REASONS,
 } from '../../src/db/credit-ledger-repo.js';
 import {
+  CREDIT_CALL_BOUND_BASES,
+  CREDIT_CALL_SETTLE_BASES,
+  CREDIT_MODEL_CALL_PURPOSES,
+  CREDIT_MODEL_CALL_STATES,
+  CREDIT_RESERVATION_MODES,
+  CREDIT_RESERVATION_STATES,
+  CREDIT_SETTLE_REASONS,
+  CREDIT_WOULD_REFUSE_REASONS,
+} from '../../src/db/credit-reservations-repo.js';
+import {
   CREDIT_CLAWBACK_SOURCES,
   CREDIT_CLAWBACK_STATES,
   CREDIT_WINDOW_LEVEL_CHANGE_REASONS,
@@ -208,6 +218,22 @@ const SERVER_SIDE_ENUMS: { name: string; values: readonly string[] }[] = [
   { name: 'CREDIT_WINDOW_LEVEL_CHANGE_REASONS', values: CREDIT_WINDOW_LEVEL_CHANGE_REASONS },
   { name: 'CREDIT_CLAWBACK_SOURCES', values: CREDIT_CLAWBACK_SOURCES },
   { name: 'CREDIT_CLAWBACK_STATES', values: CREDIT_CLAWBACK_STATES },
+  // Task reservations, their holds and their model calls (0131). Eight
+  // enumerations, each registered rather than listed as unchecked: this is the
+  // strong form, and the one the header above says to prefer. ⛔ The two shape
+  // CHECKs they sit beside — a reservation's terminal shape and a call's — are
+  // deliberately SEPARATE constraints from the vocabularies, so that each
+  // enumeration is a clean value set. Written as one constraint each, the shape
+  // would mix `open`/`settled`/`shadow` into the settle-reason list and this
+  // file's own near-match arm would fire on a set that is correct.
+  { name: 'CREDIT_RESERVATION_MODES', values: CREDIT_RESERVATION_MODES },
+  { name: 'CREDIT_RESERVATION_STATES', values: CREDIT_RESERVATION_STATES },
+  { name: 'CREDIT_WOULD_REFUSE_REASONS', values: CREDIT_WOULD_REFUSE_REASONS },
+  { name: 'CREDIT_SETTLE_REASONS', values: CREDIT_SETTLE_REASONS },
+  { name: 'CREDIT_MODEL_CALL_PURPOSES', values: CREDIT_MODEL_CALL_PURPOSES },
+  { name: 'CREDIT_CALL_BOUND_BASES', values: CREDIT_CALL_BOUND_BASES },
+  { name: 'CREDIT_MODEL_CALL_STATES', values: CREDIT_MODEL_CALL_STATES },
+  { name: 'CREDIT_CALL_SETTLE_BASES', values: CREDIT_CALL_SETTLE_BASES },
 ];
 
 /**
@@ -387,6 +413,8 @@ describe('the database CHECK enumerations agree with the code', () => {
       'BILLING_INTERVALS=billing_invoice_payments_line_interval',
       'BILLING_INTERVALS=subscriptions_billing_interval',
       'BILLING_INVOICE_LINE_KINDS=billing_invoice_payments_line_kind',
+      'CREDIT_CALL_BOUND_BASES=credit_model_calls_basis',
+      'CREDIT_CALL_SETTLE_BASES=credit_model_calls_settle_basis',
       'CREDIT_CLAWBACK_SOURCES=credit_clawbacks_source',
       // The shape CHECK names two of the three states and the 'unmatched' TARGET
       // KEY, which spells the third state: the same three words, so it pairs.
@@ -397,9 +425,15 @@ describe('the database CHECK enumerations agree with the code', () => {
       'CREDIT_LEDGER_KINDS=credit_ledger_shape',
       'CREDIT_LOT_KINDS=credit_lots_kind',
       'CREDIT_LOT_KINDS=credit_lots_rank_matches_kind',
+      'CREDIT_MODEL_CALL_PURPOSES=credit_model_calls_purpose',
+      'CREDIT_MODEL_CALL_STATES=credit_model_calls_state',
       'CREDIT_PLAN_OVERRIDE_REASONS=credit_plan_overrides_reason',
+      'CREDIT_RESERVATION_MODES=credit_reservations_mode',
+      'CREDIT_RESERVATION_STATES=credit_reservations_state',
+      'CREDIT_SETTLE_REASONS=credit_reservations_settle_reason',
       'CREDIT_WINDOW_LEVEL_CHANGE_REASONS=credit_window_level_changes_reason',
       'CREDIT_WINDOW_SOURCES=credit_windows_source',
+      'CREDIT_WOULD_REFUSE_REASONS=credit_reservations_would_refuse_reason',
       'CryptoOrderStatusSchema=crypto_orders_status_check',
       'PERIOD_START_SOURCES=subscriptions_period_start_source',
     ]);

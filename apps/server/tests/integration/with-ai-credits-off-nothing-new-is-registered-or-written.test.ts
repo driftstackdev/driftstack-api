@@ -25,6 +25,14 @@ import {
   CREDITS_EXPIRY_SWEEP_JOB_TYPE,
   CREDITS_WINDOW_BOUNDARY_JOB_TYPE,
 } from '../../src/services/credit-grant-jobs.js';
+import { CREDITS_INVARIANT_AUDIT_JOB_TYPE } from '../../src/services/credit-invariant-audit.js';
+import { MICRO } from './_helpers/credit-ledger-fixtures.js';
+import {
+  agedReservation,
+  fundedTaskLot,
+  lotState,
+  newTaskAccount,
+} from './_helpers/credit-reservation-fixtures.js';
 import { ensureFreshIsolatedDatabase } from './_helpers/fresh-isolated-database.js';
 import { assertIsolatedDatabase } from './_helpers/isolated-database.js';
 import { buildInvoice, buildInvoiceEvent } from './_helpers/stripe-invoice-fixtures.js';
@@ -50,6 +58,15 @@ async function bootOn(name: string, mode: string | undefined): Promise<Booted | 
   if (url === null) return null;
   const sql = postgres(url, { max: 2, onnotice: () => undefined });
   await assertIsolatedDatabase(sql, name);
+  return { boot: await bootAgainst(url, mode), sql };
+}
+
+/**
+ * Boot the real factory against a database that ALREADY EXISTS, so an arm can
+ * put rows in front of the boot and ask what the boot did to them. Split out of
+ * `bootOn` for the boot-pass arm, which boots the same database twice.
+ */
+async function bootAgainst(url: string, mode: string | undefined): Promise<BootstrapResult> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     NODE_ENV: 'test',
@@ -59,8 +76,7 @@ async function bootOn(name: string, mode: string | undefined): Promise<Booted | 
   };
   delete env.DRIFTSTACK_AI_CREDITS_MODE;
   if (mode !== undefined) env.DRIFTSTACK_AI_CREDITS_MODE = mode;
-  const boot = await createProductionDeps(loadConfig(env), createTestLogger());
-  return { boot, sql };
+  return createProductionDeps(loadConfig(env), createTestLogger());
 }
 
 beforeAll(async () => {
@@ -175,10 +191,11 @@ describe.skipIf(!RUN_DB_TESTS)('with AI credits off nothing new is registered or
     expect(await pendingCreditJobs(b.sql), 'the event armed a credits job').toEqual([]);
   });
 
-  it('CRITICAL mode " Shadow\\n" (as a secret store would hand it over): both sweeps are armed at boot, and the window-boundary job is not — it has no account to wait for yet', async () => {
+  it('CRITICAL mode " Shadow\\n" (as a secret store would hand it over): both sweeps and the daily invariant audit are armed at boot, and the window-boundary job is not — it has no account to wait for yet', async () => {
     expect(await pendingCreditJobs(booted(on).sql)).toEqual([
       CREDITS_COVERAGE_SWEEP_JOB_TYPE,
       CREDITS_EXPIRY_SWEEP_JOB_TYPE,
+      CREDITS_INVARIANT_AUDIT_JOB_TYPE,
     ]);
   });
 
@@ -202,4 +219,54 @@ describe.skipIf(!RUN_DB_TESTS)('with AI credits off nothing new is registered or
     expect(job?.on_time, 'the boundary job is due when the window ends').toBe(true);
     expect(Number.isFinite(Date.parse(job?.boundary_at ?? ''))).toBe(true);
   });
+
+  it('CRITICAL S9 the BOOT PASS runs no query while the mode is off, proved by putting an abandoned task in front of it: the boot with the mode unset leaves it open with its credit still held, and the SAME database booted again in shadow settles it. Two boots, one seed, one difference — which is the only way to tell "the `if` is false" apart from "there was nothing to find".', async () => {
+    const url = await ensureFreshIsolatedDatabase('driftstack_iso_ai_credits_boot_pass');
+    if (url === null) throw new Error('isolated database unreachable');
+    const sql = postgres(url, { max: 2, onnotice: () => undefined });
+    const boots: BootstrapResult[] = [];
+    try {
+      await assertIsolatedDatabase(sql, 'driftstack_iso_ai_credits_boot_pass');
+      // An abandoned task, exactly as a process that died mid-turn leaves one:
+      // open, past its hard ceiling, holding the customer's credit and one of
+      // their three slots. The keeper's boot pass is what frees it.
+      const accountId = await newTaskAccount(sql);
+      const lotId = await fundedTaskLot(sql, accountId, { credits: 100 });
+      const reservationId = await agedReservation(sql, {
+        accountId,
+        lotId,
+        reservedMicro: 10 * MICRO,
+      });
+      expect((await lotState(sql, lotId)).held, 'the abandoned task holds credit').toBe(10 * MICRO);
+
+      boots.push(await bootAgainst(url, undefined));
+      const [afterOff] = await sql<Array<{ state: string; settle_reason: string | null }>>`
+          SELECT state, settle_reason FROM credit_reservations WHERE id = ${reservationId}::uuid`;
+      expect(
+        { state: afterOff?.state, reason: afterOff?.settle_reason },
+        'with the mode off the boot pass does not exist, so the task is untouched',
+      ).toEqual({ state: 'open', reason: null });
+      expect(
+        (await lotState(sql, lotId)).held,
+        'and its credit is still held — nothing was released, so nothing was queried',
+      ).toBe(10 * MICRO);
+
+      // ⛔ THE POSITIVE CONTROL, ON THE SAME ROW. Without it this arm would
+      // pass just as happily against a boot pass that was deleted outright.
+      boots.push(await bootAgainst(url, 'shadow'));
+      const [afterOn] = await sql<Array<{ state: string; settle_reason: string | null }>>`
+          SELECT state, settle_reason FROM credit_reservations WHERE id = ${reservationId}::uuid`;
+      expect(
+        { state: afterOn?.state, reason: afterOn?.settle_reason },
+        'switched on, the very next boot finishes it from what it recorded',
+      ).toEqual({ state: 'settled', reason: 'max_age' });
+      expect(
+        (await lotState(sql, lotId)).held,
+        'and the customer has their credit and their slot back',
+      ).toBe(0);
+    } finally {
+      for (const b of boots) await b.teardown().catch(() => {});
+      await sql.end({ timeout: 5 }).catch(() => {});
+    }
+  }, 240_000);
 });

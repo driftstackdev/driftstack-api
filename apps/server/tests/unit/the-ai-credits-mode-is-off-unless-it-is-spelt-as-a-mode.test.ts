@@ -88,8 +88,13 @@ describe('the AI credits mode is off unless it is spelt as a mode', () => {
     expect(inBlock.sort()).toEqual([
       'enqueueNextCreditsCoverageSweep',
       'enqueueNextCreditsExpirySweep',
+      // Slice S9 — the daily invariant audit is registered and seeded under the
+      // same switch as the three grant jobs, so with the mode off it has no
+      // handler and no pending row either.
+      'enqueueNextCreditsInvariantAudit',
       'registerCreditsCoverageSweepJob',
       'registerCreditsExpirySweepJob',
+      'registerCreditsInvariantAuditJob',
       'registerCreditsWindowBoundaryJob',
     ]);
     const outside = BOOTSTRAP.replace(block, '');

@@ -147,9 +147,16 @@ describe('every tick-driven service is wired, or recorded as deliberately not', 
   });
 
   it('records the current split, so the TWO unwired services are a visible number rather than a thing someone has to go looking for', () => {
-    // V-1591 — was THREE. AuditArchiveService is wired now (for session_events
-    // only; the four audit-shaped tables it can also archive stay unscheduled,
-    // recorded in `four-of-five-audit-tables-are-still-not-archived`).
+    // V-1591 — was THREE, then TWO when AuditArchiveService was wired (for
+    // session_events only; the four audit-shaped tables it can also archive
+    // stay unscheduled, recorded in
+    // `four-of-five-audit-tables-are-still-not-archived`). THREE again with
+    // AI credits slice S7, whose reservations service could not be constructed
+    // until the code that spends and releases a reservation existed. TWO again
+    // with slice S9: the lease keeper is that code — it is the only thing that
+    // gives back a slot and its credit when the process running a task goes
+    // away — so bootstrap now builds the reservations service beside it, under
+    // the same DRIFTSTACK_AI_CREDITS_MODE switch.
     const unwired = services.filter((s) => !wiredInApplication(s.name, s.file)).map((s) => s.name);
     expect(unwired.sort()).toEqual([
       'DurableWebhookDeliveryService',

@@ -96,7 +96,19 @@ const CASCADE_ONLY_TABLES = new Map<string, string>([
     'credit_lots',
     'PER-EVENT — one row per grant: each month of included credits, each plan change, goodwill grant and top-up. Removed only with the account, by trigger',
   ],
+  [
+    'credit_model_calls',
+    'PER-EVENT — one row per billable model call a task makes, written before it is sent (0131). Bounded per TASK by the fit ladder and by what the task reserved, and unbounded over time the way the ledger is: it is the record of what each call was allowed to cost and what it did cost. Removed only with the account, by trigger',
+  ],
   ['credit_plan_overrides', 'entity — at most one per account (its primary key), set by an admin'],
+  [
+    'credit_reservation_holds',
+    'PER-EVENT — one row per (task, lot): what one task held in one lot (0131). At most three open tasks per account at a time, but the rows stay after the task settles, so it grows with tasks run. Removed only with the account, by trigger',
+  ],
+  [
+    'credit_reservations',
+    'PER-EVENT — one row per AI task (0131). AT MOST THREE OPEN at a time per account (credit_reservations_open_slot_unique), which bounds what is IN FLIGHT and not what accumulates: a settled row stays, because it is what the task charges point at. Removed only with the account, by trigger',
+  ],
   [
     'credit_clawbacks',
     'PER-EVENT — one row per refund, dispute or plan change whose credits were taken back (unique on source, reference and target, so the same one is recorded once). Bounded by how often payments are reversed or plans change, not by use; removed only with the account, by trigger',
@@ -162,7 +174,16 @@ const UNIQUENESS_KEY = new Map<string, string>([
   // `windowId` is the partial unique "at most one MONTHLY lot per window" (0130);
   // a window may still hold several plan-change lots, so the per-grant key stands.
   ['credit_lots', 'grantKey;windowId'],
+  ['credit_model_calls', 'reservationId,seq'],
   ['credit_plan_overrides', '(pk only)'],
+  // Two partial unique indexes: at most three OPEN enforced tasks per account
+  // (one per slot), and at most one task per (account, request key) where a
+  // request key is present — only the idempotent lane sets one (M2).
+  // `id,accountId` is not a third way to be unique — the id alone already is.
+  // It is there so a hold and a model call can key on the task AND the account
+  // (0131), which is what stops a task being backed by another account's credit.
+  ['credit_reservations', 'accountId,slot;accountId,requestKey;id,accountId'],
+  ['credit_reservation_holds', '(pk only)'],
   ['credit_clawbacks', 'source,sourceRef,targetKey'],
   ['credit_window_level_changes', '(pk only)'],
   // `id,accountId` is not a second way to be unique — the id alone already is.
@@ -192,7 +213,14 @@ function declaredUniquenessKeys(): Map<string, string> {
     const next = schema.indexOf('export const', start + 10);
     const body = schema.slice(start, next === -1 ? schema.length : next);
     const keys: string[] = [];
-    for (const u of body.matchAll(/uniqueIndex\([^)]*\)\s*\.on\(([^)]*)\)/g)) {
+    // ⛔ BOTH SPELLINGS. Drizzle declares uniqueness two ways — `uniqueIndex(…)`
+    // and the table-level `unique(…)` — and reading only the first is a silent
+    // scope boundary: a key declared the other way reads as "(pk only)" here,
+    // which is indistinguishable from a table that has no key at all. 0131
+    // converts `credit_windows_id_account_unique` from one spelling to the
+    // other and declares `credit_model_calls_seq_unique` in the second, so both
+    // were about to fall out of this derivation.
+    for (const u of body.matchAll(/(?:uniqueIndex|unique)\([^)]*\)\s*\.on\(([^)]*)\)/g)) {
       keys.push(
         (u[1] ?? '')
           .split(',')
@@ -374,7 +402,7 @@ describe('a cascade from a row nobody deletes is not a retention policy', () => 
     ).toEqual([...CASCADE_ONLY_TABLES.keys()].sort());
   });
 
-  it('CRITICAL the per-event set is still exactly these fourteen. The entity-bounded majority is the boring part of the roster; this is the list that says whether the situation is getting worse, and a fifteenth would otherwise arrive as one more line in a table of twenty-four.', () => {
+  it('CRITICAL the per-event set is still exactly these seventeen. The entity-bounded majority is the boring part of the roster; this is the list that says whether the situation is getting worse, and an eighteenth would otherwise arrive as one more line in a table of twenty-seven.', () => {
     const perEvent = [...CASCADE_ONLY_TABLES.entries()]
       .filter(([, why]) => why.startsWith('PER-EVENT'))
       .map(([t]) => t)
@@ -394,6 +422,13 @@ describe('a cascade from a row nobody deletes is not a retention policy', () => 
       'credit_clawbacks',
       'credit_ledger',
       'credit_lots',
+      // The tasks credits are spent through, what each held, and every model
+      // call each made (0131). Three open tasks per account at a time is a
+      // bound on what is IN FLIGHT; the settled rows stay, because they are
+      // what a task charge in the ledger points at.
+      'credit_model_calls',
+      'credit_reservation_holds',
+      'credit_reservations',
       'credit_window_level_changes',
       'credit_windows',
       'crypto_entitlements',

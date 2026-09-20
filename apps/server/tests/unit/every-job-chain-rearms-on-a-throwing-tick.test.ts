@@ -186,10 +186,14 @@ describe('a recurring sweep re-arms even when its tick throws', () => {
     // expiry sweep, and the per-account window-boundary job (which re-arms
     // itself every 5 minutes while the next month is unpaid, so a throwing tick
     // must not end it either).
+    // 20 → 21 with the daily AI credit invariant audit (slice S9). Its whole
+    // job is to notice records that stopped adding up, so a chain of its own
+    // that died on one throwing tick would be the failure it exists to catch,
+    // one level up and with nothing left watching.
     expect(
       helpers.map((h) => h.name).sort(),
       'the register*Job scan came back short — the checks below cover only what it found',
-    ).toHaveLength(20);
+    ).toHaveLength(21);
   });
 
   it('the detector detects — it must flag the broken shape and clear both working ones', () => {

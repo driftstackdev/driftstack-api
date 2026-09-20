@@ -38,6 +38,9 @@ const SRC = resolve(HERE, '..', '..', 'src');
  * exemption cannot sit here reading like a decision someone made.
  */
 const RECORDED_DORMANT = new Map<string, string>([
+  // CreditReservationsService left this list in slice S9. It was here because it
+  // could hold credit no code path released; the lease keeper (S9) is that code
+  // path, so bootstrap now builds the two together under DRIFTSTACK_AI_CREDITS_MODE.
   [
     'DurableWebhookDeliveryService',
     'V-173 forward path. Its own header: webhooks.ts is "production today", migration deferred ' +

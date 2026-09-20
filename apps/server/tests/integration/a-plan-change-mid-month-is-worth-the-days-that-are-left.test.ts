@@ -459,9 +459,9 @@ describe.skipIf(!RUN_DB_TESTS)('a plan change mid-month is worth the days that a
     const first = await h().grants.refreshCredits(accountId);
     expect(first.window.outcome).toBe('created');
 
-    // Parenthesised: spliced bare into `window_end - <since>` below, Postgres
-    // would read `(window_end - now()) - interval '38 hours'` and the check
-    // would quietly measure a different span from the one under test.
+    // Parenthesised: spliced bare into `window_end - <since>`, Postgres would
+    // read `(window_end - now()) - interval '38 hours'` and the check would
+    // quietly measure a different span from the one under test.
     const since = "(date_trunc('second', now()) - interval '38 hours')";
     await mirrorMovedTo(db(), subscriptionId, 'api_starter', since);
     const result = await h().grants.refreshCredits(accountId);
@@ -469,12 +469,22 @@ describe.skipIf(!RUN_DB_TESTS)('a plan change mid-month is worth the days that a
     // Computed by Postgres from the stored instants, with `trunc` rather than
     // `floor` because the magnitude is floored and the sign kept: floor(−x)
     // would take back one credit MORE than the customer ever had.
+    //
+    // ⛔ IT READS THE STORED `tier_since`, NEVER `since` A SECOND TIME. That
+    // string holds `now()`, so evaluating it again here dates the move from
+    // THIS statement's clock instead of the one the service prorated from. The
+    // two differ by however long the statements took, which is ~0.012 credits a
+    // second on a 30,000-credit month — invisible until the gap happens to
+    // straddle a whole credit, and then the arm is off by exactly one. Measured:
+    // it failed in a full-suite run with `expected -23925000000 to be
+    // -23924000000` and passed three times in a row when run alone.
     const [row] = await db()<Array<{ expected: string }>>`
       SELECT trunc(
                (${String(3_000 - 30_000)}::numeric
-                 * extract(epoch FROM (w.window_end - ${db().unsafe(since)})))
+                 * extract(epoch FROM (w.window_end - s.tier_since)))
                / extract(epoch FROM (w.natural_end - w.natural_start)))::text AS expected
         FROM credit_windows w
+        JOIN subscriptions s ON s.stripe_subscription_id = ${subscriptionId}
        WHERE w.account_id = ${accountId}::uuid AND w.window_start <= now() AND now() < w.window_end`;
     expect(row, 'the account has no current window to prorate over').toBeDefined();
     expect(result.level?.deltaMicro).toBe(Number(row?.expected) * MICRO);

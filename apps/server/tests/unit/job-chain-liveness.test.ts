@@ -120,6 +120,7 @@ describe('a dead job chain is reported as 0, not as an absent series', () => {
       'cost.recompute_nightly',
       'credits.coverage_sweep',
       'credits.expiry_sweep',
+      'credits.invariant_audit',
       'crypto.entitlement_expiry_sweep',
       'crypto.entitlement_reconcile',
       'crypto.order_expiry_sweep',

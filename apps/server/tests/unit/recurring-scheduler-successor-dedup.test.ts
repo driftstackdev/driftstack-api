@@ -49,6 +49,13 @@ const RECURRING_CONSUMERS = [
   // The two AI credits sweeps, and the per-account window-boundary job, which
   // re-arms itself the same way (one pending row per account, never two).
   'credit-grant-jobs.ts',
+  // The daily AI credit invariant audit (slice S9). It is the one chain whose
+  // OWN liveness nothing else watches: every other job here is noticed when its
+  // work stops happening, while an audit that stopped running looks exactly
+  // like an audit that keeps finding nothing. A re-arm that fanned out into two
+  // parallel chains would double its alerts, and a reader who learns to ignore
+  // a doubled alert is the failure this audit was written to prevent.
+  'credit-invariant-audit.ts',
 ] as const;
 
 describe('recurring scheduled-job successor dedup invariant', () => {

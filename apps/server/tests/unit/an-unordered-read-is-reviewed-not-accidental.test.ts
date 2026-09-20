@@ -177,11 +177,90 @@ const REVIEWED_RAW: Array<{ match: string; why: string }> = [
       'credit_clawbacks_idempotency_unique — at most one row, and that uniqueness is the ' +
       'whole reason the read exists',
   },
+  // credit-windows-repo, the standing-claims total (reviewed 2026-09-20). An
+  // aggregate over one account, one row, one column.
+  {
+    match: 'SELECT COALESCE(SUM(pending_micro), 0)::text AS micro FROM credit_clawbacks',
+    why:
+      'pendingClaimTotalMicro: a SUM over one account. One row, and it is read as a number — ' +
+      'there is no row set whose order could matter',
+  },
+  // credit-reservations-repo (reviewed 2026-09-20). Three statements: two that
+  // can return at most one row by a PRIMARY KEY, and one aggregate.
+  {
+    match: 'SELECT id, account_id, agent_session_id, mode, model, rate_card_version, slot, state,',
+    why:
+      'lockReservation: one reservation by `credit_reservations.id`, its primary key — at most ' +
+      'one row, and the FOR UPDATE on it is the point of the read',
+  },
+  {
+    match: 'SELECT account_id FROM credit_reservations WHERE id = ${id}::uuid',
+    why: 'accountOf: the same primary-key lookup, one column of it',
+  },
+  {
+    match: 'SELECT COALESCE(SUM(charged_micro), 0)::text AS micro FROM credit_model_calls',
+    why:
+      "chargedByCalls: a SUM over one reservation's calls. One row, read as a number; the " +
+      'database re-checks the same total at COMMIT',
+  },
+  {
+    match: 'SET committed_micro = (SELECT COALESCE(SUM(CASE WHEN c.state =',
+    why:
+      'settleStartedCallsAfterACrash: a scalar sub-SELECT that recomputes one reservation’s ' +
+      "committed_micro from its own calls — a started call's bound, a settled one's charge. " +
+      'One row, one number, correlated on the reservation’s primary key; it is the same ' +
+      'expression `credit_check_reservation` re-evaluates at COMMIT',
+  },
+  // credit-reservations-repo, the per-call admission and settlement (reviewed
+  // 2026-09-20). Four statements, each about ONE task or ONE call, addressed by
+  // a primary key or a unique constraint.
+  {
+    match: 'SELECT state, model, (now() >= max_until) AS past_ceiling',
+    why:
+      'admissionRefusal: one reservation by `credit_reservations.id`, its primary key, read only ' +
+      'to say which predicate the admission UPDATE failed — at most one row',
+  },
+  {
+    match: 'INSERT INTO credit_model_calls (id, reservation_id, account_id, seq,',
+    why:
+      "insertModelCall: the SELECT is an aggregate over one task's calls (MAX(seq) + 1), which " +
+      'returns exactly one row with no GROUP BY. It names the next sequence number; ' +
+      '`credit_model_calls_seq_unique` refuses a second call that reuses one',
+  },
+  {
+    match: 'SELECT r.id AS reservation_id, r.mode, r.rate_card_version',
+    why:
+      'lockCallForSettlement, first half: one call by `credit_model_calls.id`, its primary key, ' +
+      'joined to its one reservation by that table’s primary key — at most one row, and the ' +
+      'FOR UPDATE on the reservation is the point of the read',
+  },
+  {
+    match: 'SELECT account_id, state, sent, model, bound_micro::text AS bound,',
+    why:
+      'lockCallForSettlement, second half: the same call by its primary key, re-read AFTER the ' +
+      'reservation lock is held because a joined read re-checks only the relation it locks — at ' +
+      'most one row, and it takes that row’s own lock',
+  },
+  {
+    match: 'SELECT mode, model, rate_card_version, state, reserved_micro::text AS reserved,',
+    why:
+      'reservationTerms: the same primary-key lookup as lockReservation, without the lock, so ' +
+      'planning the next call does not queue behind a settlement of the same task',
+  },
   {
     match: 'FROM credit_windows WHERE account_id = ${accountId}::uuid AND window_start <= now()',
     why:
       'currentWindow: the window containing now(). credit_windows_no_overlap (an exclusion ' +
       "constraint) means an account's windows never overlap, so one instant is in at most one",
+  },
+  // credit-reservations-repo, the lease keeper's claim (reviewed 2026-09-20).
+  {
+    match: "SELECT CASE WHEN max_until < now() THEN 'max_age' ELSE 'lease_expired' END AS reason",
+    why:
+      'claimLapsedReservation: one reservation by `credit_reservations.id`, its primary key — at ' +
+      'most one row. The FOR UPDATE on it is the point of the read, and the row it locks is the ' +
+      'one the same transaction then settles. (Its candidate read, `lapsedReservations`, DOES ' +
+      'order — by lease then id — because there the order decides which fifty are settled first)',
   },
 ];
 

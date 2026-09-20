@@ -28,6 +28,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { REDIS_QUIT_DEADLINE_MS, withTeardownDeadline } from '../../src/lib/bootstrap.js';
+import { codeOnly } from './_helpers/code-only.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -80,7 +81,19 @@ function teardownWorstCaseMs(): number {
   if (telemetryFlush === null) {
     throw new Error('AGENT_TURN_TELEMETRY_FLUSH_DEADLINE_MS not found in bootstrap.ts');
   }
-  const serialBefore = Number(telemetryFlush[1]!.replace(/_/g, ''));
+  // AI credits S9 — handing this process's task leases back is the second step
+  // that needs the pool before it closes. It is started BEFORE the flush is
+  // awaited and awaited after it, so the two run concurrently and the pair
+  // costs the LONGER of them; the arm below proves that shape rather than
+  // trusting it, because read as serial these two would not fit.
+  const leaseRelease = /const CREDIT_LEASE_RELEASE_DEADLINE_MS = ([\d_]+);/.exec(bootstrap);
+  if (leaseRelease === null) {
+    throw new Error('CREDIT_LEASE_RELEASE_DEADLINE_MS not found in bootstrap.ts');
+  }
+  const serialBefore = Math.max(
+    Number(telemetryFlush[1]!.replace(/_/g, '')),
+    Number(leaseRelease[1]!.replace(/_/g, '')),
+  );
   return serialBefore + Math.max(sentryArm, redisArm, dbArm);
 }
 
@@ -111,6 +124,40 @@ describe('the shutdown budget fits inside the systemd stop window', () => {
     expect(block![1], 'the Redis quit belongs in the concurrent block').toMatch(/redis\.quit/);
     expect(block![1], 'so does the Postgres close').toMatch(/dbHandle\.close/);
     expect(block![1], 'and the Sentry flush/close arm').toMatch(/sentry\.flush/);
+  });
+
+  // ⛔ COMMENTS STRIPPED FIRST. This arm decides the ORDER of two statements from
+  // where their text appears, and the comment block sitting directly above the
+  // lease release already discusses `withTeardownDeadline` by name. A comment
+  // that quoted either expression in full would move one of these indices and
+  // the arm would start reporting on prose — silently, and in whichever
+  // direction the prose happened to sit.
+  it('CRITICAL the two pre-close steps that need the Postgres pool run CONCURRENTLY with each other, which is what lets the arithmetic above take the LONGER of them instead of their sum. Read as serial they do not fit: the budget has 250ms of slack and the lease release alone is 750. The lease release must therefore be STARTED before the telemetry flush is awaited, and awaited after it — a refactor that moved its `await` up to its own line would be silently 750ms over the wall.', () => {
+    const bootstrap = codeOnly(readFileSync(BOOTSTRAP, 'utf8'));
+    const started = bootstrap.indexOf(
+      'withTeardownDeadline(CREDIT_LEASE_RELEASE_DEADLINE_MS, () =>',
+    );
+    const flush = bootstrap.indexOf(
+      'await withTeardownDeadline(AGENT_TURN_TELEMETRY_FLUSH_DEADLINE_MS, () =>',
+    );
+    const awaited = bootstrap.indexOf('await creditLeasesReleased;');
+    expect(started, 'the lease release is not wrapped in the teardown deadline').toBeGreaterThan(
+      -1,
+    );
+    expect(flush, 'the telemetry flush is not wrapped in the teardown deadline').toBeGreaterThan(
+      -1,
+    );
+    expect(
+      awaited,
+      'the lease release is never awaited, so teardown may close the pool under it',
+    ).toBeGreaterThan(-1);
+    expect(started, 'the lease release must START before the flush is awaited').toBeLessThan(flush);
+    expect(awaited, 'and be awaited after it').toBeGreaterThan(flush);
+    // It is started WITHOUT its own `await`; that is the whole shape.
+    expect(
+      bootstrap.slice(Math.max(0, started - 7), started),
+      'the lease release is awaited on its own line, which makes the two steps serial',
+    ).not.toContain('await ');
   });
 
   it('CRITICAL redis.quit carries a deadline. It is the one teardown step that had none, and it runs against a socket that may never answer — an unreachable Redis is not hypothetical during an incident deploy, which is exactly when a clean shutdown matters most.', () => {

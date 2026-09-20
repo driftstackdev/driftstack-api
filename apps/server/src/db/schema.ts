@@ -3540,20 +3540,11 @@ export const creditLots = pgTable(
     // `.references()` on the column. MATCH SIMPLE, so a lot with no window
     // (a top-up, an adjustment) satisfies it.
     //
-    // ⚠️ IT IS THE ONE THING IN THIS FILE `drizzle-kit export` CANNOT REPLAY.
-    // Its target, `credit_windows_id_account_unique`, is declared as a
-    // uniqueIndex, so drizzle emits it AFTER the foreign keys — and applying
-    // that export fails on this statement with "there is no unique constraint
-    // matching given keys for referenced table credit_windows". Measured
-    // 2026-09-19: moving that one CREATE UNIQUE INDEX above this ALTER makes the
-    // whole export apply cleanly, so nothing else in the schema is affected.
-    // Migration 0130 itself is fine — it creates the index first — and no gate
-    // builds a database from the export, so this is latent rather than broken.
-    // The fix, for whichever migration next touches `credit_windows`: declare
-    // the target as a table-level UNIQUE CONSTRAINT (`unique(...)` here,
-    // `CONSTRAINT … UNIQUE ("id", "account_id")` inside the CREATE TABLE). That
-    // also stops the key resting on Postgres accepting a bare unique index as a
-    // foreign-key target, which it does but its documentation does not promise.
+    // Its target, `credit_windows_id_account_unique`, is a table-level UNIQUE
+    // CONSTRAINT: 0130 created it as a unique index and 0131 promoted that index
+    // in place. As a constraint it is the form PostgreSQL's documentation
+    // promises a foreign key may target, and drizzle emits it INSIDE the table
+    // rather than after the foreign keys, so `drizzle-kit export` replays.
     foreignKey({
       name: 'credit_lots_window_fk',
       columns: [t.windowId, t.accountId],
@@ -3603,8 +3594,10 @@ export const creditLedger = pgTable(
     lotDeltaMicro: bigint('lot_delta_micro', { mode: 'number' }).notNull().default(0),
     debtDeltaMicro: bigint('debt_delta_micro', { mode: 'number' }).notNull().default(0),
     idempotencyKey: text('idempotency_key').notNull(),
-    /** The task a charge belongs to; its foreign key arrives with the reservations table. */
-    reservationId: uuid('reservation_id'),
+    /** The task a charge belongs to (0131's `credit_ledger_reservation_fk`). */
+    reservationId: uuid('reservation_id').references(() => creditReservations.id, {
+      onDelete: 'cascade',
+    }),
     agentSessionId: text('agent_session_id'),
     model: text('model'),
     rateCardVersion: integer('rate_card_version').references(() => creditRateCards.version),
@@ -3747,8 +3740,10 @@ export const creditWindows = pgTable(
     // What `credit_lots_window_fk` points at: a window is identified by its id
     // AND its account, so an included lot can only name a window of its own
     // account. Redundant as a key — the id alone is the primary key — and there
-    // only so the foreign key can carry the account.
-    uniqueIndex('credit_windows_id_account_unique').on(t.id, t.accountId),
+    // only so the foreign key can carry the account. 0130 created it as a unique
+    // INDEX and 0131 promoted that same index to a unique CONSTRAINT in place,
+    // which is the form a foreign key is documented to be allowed to target.
+    unique('credit_windows_id_account_unique').on(t.id, t.accountId),
     check(
       'credit_windows_source',
       sql`${t.source} IN ('stripe_invoice', 'crypto_entitlement', 'plan_override')`,
@@ -3866,3 +3861,325 @@ export const creditClawbacks = pgTable(
 );
 
 export type CreditClawbackRow = typeof creditClawbacks.$inferSelect;
+
+// ───────────────────────────────────────────────────────────────────────────
+// credit_reservations / credit_reservation_holds / credit_model_calls — the
+// tasks AI credits are spent through (0131)
+// ───────────────────────────────────────────────────────────────────────────
+//
+// A RESERVATION is one task. Before it runs it sets credits aside: how much, at
+// which rate card, in which of the account's three enforced slots, and one HOLD
+// per lot the amount was taken from. Held credit is not spendable by anything
+// else — not another task, not a clawback, not the expiry sweep — and a hold is
+// the only thing that moves `credit_lots.held_micro`. Each MODEL CALL the task
+// makes is written before it is sent, with the upper bound it was admitted
+// under. Read and written through `credit-reservations-repo.ts`; no route
+// reserves yet.
+//
+// ⛔ TRIGGERS AND PARTIAL INDEXES DRIZZLE CANNOT FULLY EXPRESS — migration 0131
+// installs them, and the integration tests named beside each prove them against
+// a real database with raw SQL:
+//
+//   (Every function below pins `search_path = public, pg_temp`.)
+//
+//   credit_holds_apply_trigger         AFTER INSERT OR UPDATE ON
+//                                      credit_reservation_holds
+//     · INSERT adds the hold to its lot's `held_micro`, and refuses (23514) a
+//       lot that has not STARTED, has expired, is revoked, or belongs to another
+//       account. The start is H4: every spendable predicate in the system says
+//       `starts_at <= now()`, so a task cannot hold credits of a month that has
+//       not begun.
+//     · INSERT also refuses (23514) a hold that is BORN RELEASED: the release
+//       branch needs `released_at` to have been NULL, so such a row would raise
+//       `held_micro` with no path back and the credit would be frozen — not
+//       spendable, not expirable, never charged.
+//     · UPDATE takes the hold back off the lot, and ONLY for a release —
+//       `released_at` NULL → an instant, with the amount, the lot, the ACCOUNT
+//       and the TASK unchanged. Every other update is refused (55000). The
+//       account matters because `credit_check_debt_vs_free` below asks about the
+//       hold's own `account_id`: a release that re-pointed it at an account
+//       owing nothing would free credit beside debt and still pass.
+//     · It raises the transaction-local flag 0128's `credit_lots_guard` demands
+//       for a `held_micro` change, and that guard also requires
+//       pg_trigger_depth() >= 2, so a session cannot raise the flag itself.
+//   credit_reservations_guard_trigger  BEFORE UPDATE ON credit_reservations
+//     · Refuses (55000) a change to the terms — account, session, request key,
+//       model, rate card, mode, slot, reserved amount, lease owner, `max_until`,
+//       created — and any update at all to a settled reservation.
+//   credit_model_calls_guard_trigger   BEFORE UPDATE ON credit_model_calls
+//     · Refuses (55000) a change to the call's identity or its bound, a `sent`
+//       that goes back to false, and any update to a settled call.
+//   credit_reservations_delete_guard,  BEFORE DELETE, all three tables
+//   credit_holds_delete_guard,
+//   credit_model_calls_delete_guard
+//     · 0128's `credit_rows_die_only_with_their_account`: a row goes only with
+//       its account.
+//   credit_reservations_balance,       CONSTRAINT TRIGGERS, DEFERRABLE
+//   credit_model_calls_balance         INITIALLY DEFERRED
+//     · At COMMIT, `credit_check_reservation(rid)` refuses (23514) a reservation
+//       whose `committed_micro` is not its calls' bounds and charges, an
+//       enforced one whose holds do not sum to exactly what it reserved, and a
+//       settled one whose charge is not equal across its calls, its holds and
+//       its `task_charge` ledger rows. Deferred because a reservation and its
+//       holds — and a settlement's charge, releases and ledger rows — are
+//       separate statements in one transaction.
+//   credit_holds_debt_vs_free          CONSTRAINT TRIGGER AFTER UPDATE ON
+//                                      credit_reservation_holds, DEFERRABLE
+//                                      INITIALLY DEFERRED
+//     · 0128's `credit_check_debt_vs_free` again: releasing a hold frees credit
+//       WITHOUT a ledger row, so it is the second way an account could end a
+//       transaction holding debt beside spendable credit.
+//
+// The two partial unique indexes carry rules the columns do not say:
+// `credit_reservations_open_slot_unique` is what makes "at most three enforced
+// tasks at once" a fact about the database rather than a count the service
+// takes before it inserts, and `credit_reservations_request_unique` applies only
+// where a request key is present, because only the idempotent lane sets one
+// (M2 — the inbound request id is client-controlled).
+//
+// ⛔ A HOLD AND A MODEL CALL NAME A TASK OF THEIR OWN ACCOUNT. Both are keyed on
+// (task, account) against `credit_reservations_id_account_unique`, the shape
+// 0130 gave a lot and its window. Keyed on the task alone, a hold could put
+// ANOTHER account's credit behind this task — measured against Postgres, it
+// committed — and the damage is the frozen-credit one twice over: the
+// stranger's lot holds credit it can neither spend nor expire, and the task can
+// never settle, because `credit_ledger_apply` refuses a charge naming a lot of
+// another account, so the hold is never released and the slot never freed.
+//
+// Proved by (integration):
+// `a-task-reserves-credits-in-one-locked-transaction`,
+// `at-most-three-enforced-tasks-hold-credit-at-once`,
+// `a-hold-moves-held-credit-and-nothing-else-does`,
+// `a-settled-task-is-charged-only-what-it-held`.
+export const creditReservations = pgTable(
+  'credit_reservations',
+  {
+    /** Minted by the caller before `reserve`, so a crash mid-reserve is findable. */
+    id: uuid('id').primaryKey(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    agentSessionId: text('agent_session_id').notNull(),
+    /** `'idem:<Idempotency-Key>'`, and NULL on every other lane (M2). */
+    requestKey: text('request_key'),
+    model: text('model').notNull(),
+    rateCardVersion: integer('rate_card_version')
+      .notNull()
+      .references(() => creditRateCards.version),
+    /** 'enforce' | 'shadow' (CREDIT_RESERVATION_MODES). */
+    mode: text('mode').notNull(),
+    /** 1..3 for an enforced task, NULL for a shadow one. */
+    slot: smallint('slot'),
+    /** 'open' | 'settled' (CREDIT_RESERVATION_STATES). */
+    state: text('state').notNull().default('open'),
+    reservedMicro: bigint('reserved_micro', { mode: 'number' }).notNull(),
+    /** Open call bounds plus settled call charges. */
+    committedMicro: bigint('committed_micro', { mode: 'number' }).notNull().default(0),
+    chargedMicro: bigint('charged_micro', { mode: 'number' }),
+    /** Shadow only: the first check enforcement would have refused on. */
+    wouldRefuseReason: text('would_refuse_reason'),
+    /** The boot id of the process holding the lease. */
+    leaseOwner: text('lease_owner').notNull(),
+    leaseExpiresAt: timestamp('lease_expires_at', { withTimezone: true }).notNull(),
+    /** The hard ceiling: `created_at` + at most 30 minutes (M1). */
+    maxUntil: timestamp('max_until', { withTimezone: true }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+    /** 'completed' | 'lease_expired' | 'max_age' | 'admin' (CREDIT_SETTLE_REASONS). */
+    settleReason: text('settle_reason'),
+  },
+  (t) => [
+    uniqueIndex('credit_reservations_open_slot_unique')
+      .on(t.accountId, t.slot)
+      .where(sql`${t.state} = 'open' AND ${t.mode} = 'enforce'`),
+    uniqueIndex('credit_reservations_request_unique')
+      .on(t.accountId, t.requestKey)
+      .where(sql`${t.requestKey} IS NOT NULL`),
+    index('credit_reservations_lease_idx')
+      .on(t.leaseExpiresAt)
+      .where(sql`${t.state} = 'open'`),
+    index('credit_reservations_max_until_idx')
+      .on(t.maxUntil)
+      .where(sql`${t.state} = 'open'`),
+    index('credit_reservations_session_idx').on(t.agentSessionId, t.createdAt),
+    check('credit_reservations_mode', sql`${t.mode} IN ('enforce', 'shadow')`),
+    check(
+      'credit_reservations_slot',
+      sql`((${t.mode} = 'enforce') = (${t.slot} IS NOT NULL)) AND (${t.slot} IS NULL OR ${t.slot} BETWEEN 1 AND 3)`,
+    ),
+    check('credit_reservations_state', sql`${t.state} IN ('open', 'settled')`),
+    check(
+      'credit_reservations_amounts',
+      sql`${t.reservedMicro} > 0 AND ${t.committedMicro} >= 0 AND (${t.mode} = 'shadow' OR ${t.committedMicro} <= ${t.reservedMicro})`,
+    ),
+    check(
+      'credit_reservations_max_until',
+      sql`${t.maxUntil} > ${t.createdAt} AND ${t.maxUntil} <= ${t.createdAt} + interval '30 minutes'`,
+    ),
+    check(
+      'credit_reservations_shadow_reason',
+      sql`${t.mode} = 'shadow' OR ${t.wouldRefuseReason} IS NULL`,
+    ),
+    check(
+      'credit_reservations_would_refuse_reason',
+      sql`${t.wouldRefuseReason} IS NULL OR ${t.wouldRefuseReason} IN ('model', 'tasks_in_flight', 'debt', 'balance', 'call_did_not_fit')`,
+    ),
+    check(
+      'credit_reservations_settle_reason',
+      sql`${t.settleReason} IS NULL OR ${t.settleReason} IN ('completed', 'lease_expired', 'max_age', 'admin')`,
+    ),
+    check(
+      'credit_reservations_terminal_shape',
+      sql`(${t.state} = 'open' AND ${t.chargedMicro} IS NULL AND ${t.settledAt} IS NULL AND ${t.settleReason} IS NULL) OR (${t.state} = 'settled' AND ${t.chargedMicro} >= 0 AND (${t.mode} = 'shadow' OR ${t.chargedMicro} <= ${t.reservedMicro}) AND ${t.settledAt} IS NOT NULL AND ${t.settleReason} IS NOT NULL)`,
+    ),
+    check(
+      'credit_reservations_request_key_length',
+      sql`${t.requestKey} IS NULL OR length(${t.requestKey}) BETWEEN 1 AND 300`,
+    ),
+    // What a hold and a model call point at: a task is identified by its id AND
+    // its account, so a row of either child table can only name a task of its
+    // own account. Redundant as a key — the id alone is the primary key — and
+    // there only so those two foreign keys can carry the account, exactly as
+    // `credit_windows_id_account_unique` does for a lot and its window.
+    unique('credit_reservations_id_account_unique').on(t.id, t.accountId),
+  ],
+);
+
+export type CreditReservationRow = typeof creditReservations.$inferSelect;
+
+// What one task holds in one lot. `held_micro` never changes; the row is
+// released exactly once, for the part the task actually used.
+export const creditReservationHolds = pgTable(
+  'credit_reservation_holds',
+  {
+    /**
+     * ⛔ NO COLUMN-LEVEL `.references()`: the key to the task is the pair
+     * (task, account), declared as a table-level foreign key below.
+     */
+    reservationId: uuid('reservation_id').notNull(),
+    lotId: uuid('lot_id')
+      .notNull()
+      .references(() => creditLots.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    heldMicro: bigint('held_micro', { mode: 'number' }).notNull(),
+    /** What the task took out of this lot; NULL until the hold is released. */
+    chargedMicro: bigint('charged_micro', { mode: 'number' }),
+    releasedAt: timestamp('released_at', { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.reservationId, t.lotId] }),
+    // 0131: a hold names a task of ITS OWN account. The account is part of the
+    // key, which is why this is a table-level foreign key and not a
+    // `.references()` on the column — and the hold's lot already has to belong
+    // to the hold's account (the apply trigger), so between them a task can
+    // only ever be backed by its own account's credit.
+    foreignKey({
+      name: 'credit_reservation_holds_reservation_fk',
+      columns: [t.reservationId, t.accountId],
+      foreignColumns: [creditReservations.id, creditReservations.accountId],
+    }).onDelete('cascade'),
+    check('credit_reservation_holds_positive', sql`${t.heldMicro} > 0`),
+    check(
+      'credit_reservation_holds_release_shape',
+      sql`(${t.releasedAt} IS NULL) = (${t.chargedMicro} IS NULL) AND (${t.chargedMicro} IS NULL OR ${t.chargedMicro} BETWEEN 0 AND ${t.heldMicro})`,
+    ),
+  ],
+);
+
+export type CreditReservationHoldRow = typeof creditReservationHolds.$inferSelect;
+
+// One row per billable HTTP attempt, written BEFORE it is sent. Its bound is the
+// ceiling the attempt was admitted under and never changes; what it actually
+// cost arrives when it settles. Written by S8's per-call admission.
+export const creditModelCalls = pgTable(
+  'credit_model_calls',
+  {
+    id: uuid('id').primaryKey(),
+    /** ⛔ Keyed to the task by (task, account); see the foreign key below. */
+    reservationId: uuid('reservation_id').notNull(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    /** 1, 2, 3 … within the reservation. */
+    seq: integer('seq').notNull(),
+    /** 'plan' | 'answer' (CREDIT_MODEL_CALL_PURPOSES). */
+    purpose: text('purpose').notNull(),
+    model: text('model').notNull(),
+    inputBoundTokens: integer('input_bound_tokens').notNull(),
+    /** 'region_bytes' | 'token_count' (CREDIT_CALL_BOUND_BASES). */
+    inputBoundBasis: text('input_bound_basis').notNull(),
+    inputBoundMicro: bigint('input_bound_micro', { mode: 'number' }).notNull(),
+    maxOutputTokens: integer('max_output_tokens').notNull(),
+    boundMicro: bigint('bound_micro', { mode: 'number' }).notNull(),
+    /** Shadow only: the bound did not fit what the task had left. */
+    shadowOverReservation: boolean('shadow_over_reservation').notNull().default(false),
+    /** 'started' | 'settled' (CREDIT_MODEL_CALL_STATES). */
+    state: text('state').notNull().default('started'),
+    /** One-way: set true in its own statement immediately before the request goes out. */
+    sent: boolean('sent').notNull().default(false),
+    /** CREDIT_CALL_SETTLE_BASES; NULL until the call settles. */
+    settleBasis: text('settle_basis'),
+    uncachedInputTokens: integer('uncached_input_tokens'),
+    outputTokens: integer('output_tokens'),
+    cacheReadTokens: integer('cache_read_tokens'),
+    cacheWrite5mTokens: integer('cache_write_5m_tokens'),
+    cacheWrite1hTokens: integer('cache_write_1h_tokens'),
+    actualMicro: bigint('actual_micro', { mode: 'number' }),
+    chargedMicro: bigint('charged_micro', { mode: 'number' }),
+    usageRecordId: uuid('usage_record_id'),
+    startedAt: timestamp('started_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('credit_model_calls_open_idx')
+      .on(t.reservationId)
+      .where(sql`${t.state} = 'started'`),
+    // 0131, as on the holds: a call belongs to a task of its own account, so a
+    // stranger's call cannot enter what this task committed and was charged.
+    foreignKey({
+      name: 'credit_model_calls_reservation_fk',
+      columns: [t.reservationId, t.accountId],
+      foreignColumns: [creditReservations.id, creditReservations.accountId],
+    }).onDelete('cascade'),
+    unique('credit_model_calls_seq_unique').on(t.reservationId, t.seq),
+    check('credit_model_calls_purpose', sql`${t.purpose} IN ('plan', 'answer')`),
+    check('credit_model_calls_basis', sql`${t.inputBoundBasis} IN ('region_bytes', 'token_count')`),
+    check(
+      'credit_model_calls_bound',
+      sql`${t.seq} >= 1 AND ${t.inputBoundTokens} > 0 AND ${t.maxOutputTokens} > 0 AND ${t.inputBoundMicro} > 0 AND ${t.boundMicro} > ${t.inputBoundMicro}`,
+    ),
+    check('credit_model_calls_state', sql`${t.state} IN ('started', 'settled')`),
+    check(
+      'credit_model_calls_settle_basis',
+      sql`${t.settleBasis} IS NULL OR ${t.settleBasis} IN ('provider_usage', 'provider_rejected', 'never_sent', 'partial_usage', 'no_record')`,
+    ),
+    check(
+      'credit_model_calls_charge_le_bound',
+      sql`${t.chargedMicro} IS NULL OR (${t.chargedMicro} >= 0 AND ${t.chargedMicro} <= ${t.boundMicro})`,
+    ),
+    check(
+      'credit_model_calls_unbilled',
+      sql`${t.settleBasis} NOT IN ('provider_rejected', 'never_sent') OR ${t.chargedMicro} = 0`,
+    ),
+    check(
+      'credit_model_calls_never_sent_really',
+      sql`${t.settleBasis} <> 'never_sent' OR NOT ${t.sent}`,
+    ),
+    check(
+      'credit_model_calls_no_record_pays_bound',
+      sql`${t.settleBasis} <> 'no_record' OR ${t.chargedMicro} = ${t.boundMicro}`,
+    ),
+    check(
+      'credit_model_calls_terminal_shape',
+      sql`(${t.state} = 'started' AND ${t.chargedMicro} IS NULL AND ${t.settledAt} IS NULL AND ${t.settleBasis} IS NULL) OR (${t.state} = 'settled' AND ${t.chargedMicro} IS NOT NULL AND ${t.settledAt} IS NOT NULL AND ${t.settleBasis} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export type CreditModelCallRow = typeof creditModelCalls.$inferSelect;

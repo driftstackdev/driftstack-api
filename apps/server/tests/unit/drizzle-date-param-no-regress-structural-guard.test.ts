@@ -159,6 +159,16 @@ const ALLOW_LIST: Record<string, string[]> = {
     // binds no Date at all: every boundary it passes is microsecond UTC text,
     // cast to timestamptz by the database.
     't.createdAt',
+    // credit reservations (migration 0131): the terminal-shape CHECKs on a
+    // reservation and on a model call (`settled_at IS NULL` / `IS NOT NULL`),
+    // the hold's release shape (`released_at IS NULL` paired with its charge)
+    // and the 30-minute ceiling `max_until <= created_at + interval`. Column
+    // REFERENCES rendering as identifiers. The reservations repo binds no Date
+    // either: every instant it writes is the DATABASE's now(), because the
+    // lease, the ceiling and every spendable test are decided on one clock.
+    't.settledAt',
+    't.releasedAt',
+    't.maxUntil',
   ],
   // MFA monotonic timestamp expressions bind pre-serialized nowIso strings.
   // The remaining Date-looking expressions are Drizzle COLUMN references,

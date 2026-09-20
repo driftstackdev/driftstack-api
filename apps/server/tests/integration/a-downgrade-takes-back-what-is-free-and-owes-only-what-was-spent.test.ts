@@ -16,18 +16,20 @@
 //     held credit covers becomes a PENDING CLAIM on the clawback record, paid
 //     out of those credits when the tasks settle.
 //
-// ⚠️ THE PENDING CLAIM IS RECORDED HERE AND PAID IN S7. Nothing releases a hold
-// yet, because reservations arrive with migration 0131. What these arms prove
-// is that a clawback reads held credit, leaves it alone, and books the
-// shortfall it covers as a claim instead of debt. The pay-down at settle is
-// S7's to build and to prove.
+// ⚠️ THE PENDING CLAIM IS RECORDED HERE AND PAID AT SETTLE. What these arms
+// prove is that a clawback reads held credit, leaves it alone, and books the
+// shortfall it covers as a claim instead of debt; that the claim is then paid
+// out of the credit the task releases is proved in
+// `a-settled-task-is-charged-only-what-it-held`.
 //
-// ⚠️ AND THE HOLDS BELOW ARE FORGED. `credit_lots.held_micro` moves only
-// through `credit_reservation_holds`, which does not exist yet, so the two arms
-// that need held credit write the column directly with the lot guard switched
-// off for one statement (see `forgeHoldOnLot`). S7 owes the same property
-// driven through a real reservation. The arithmetic itself is proved without a
-// database in `a-clawback-asks-each-lot-for-what-it-still-has…`.
+// ⛔ THE HOLDS BELOW ARE REAL (0131). They were forged before the reservations
+// existed — `credit_lots.held_micro` written directly with the lot guard
+// switched off for one statement — which proved what `clawBack` does with a
+// number and nothing about whether anything could put the number there. Each is
+// now a reservation and a `credit_reservation_holds` row, so the trigger moves
+// `held_micro` itself and no trigger is disabled anywhere. The arithmetic itself
+// is proved without a database in
+// `a-clawback-asks-each-lot-for-what-it-still-has…`.
 //
 // ⛔ DEBT IS NEVER LEFT BESIDE CREDIT. The database refuses to COMMIT an account
 // that owes credits while it holds spendable ones, so every clawback ends by
@@ -47,7 +49,7 @@ import {
 } from './_helpers/credit-grant-fixtures.js';
 import {
   clawbacksOf,
-  forgeHoldOnLot,
+  holdOnLot,
   leaving,
   mirrorMovedTo,
   paidMonth,
@@ -171,7 +173,7 @@ describe.skipIf(!RUN_DB_TESTS)(
       const { accountId, subscriptionId, windowId, lotId } = await scaleMonth();
       await spendFromLot(db(), accountId, lotId, 20_000);
       // 10,000 left, every credit of it held by a task that is still running.
-      await forgeHoldOnLot(db(), lotId, 10_000);
+      await holdOnLot(db(), accountId, lotId, 10_000);
 
       await downgradeToStarter(subscriptionId);
       const result = await h().grants.refreshCredits(accountId);
@@ -202,7 +204,7 @@ describe.skipIf(!RUN_DB_TESTS)(
 
     it('a claim never exceeds what is held: with the whole month held by running tasks the downgrade writes NO debt at all, only a claim for its full amount', async () => {
       const { accountId, subscriptionId, lotId } = await scaleMonth();
-      await forgeHoldOnLot(db(), lotId, 30_000);
+      await holdOnLot(db(), accountId, lotId, 30_000);
 
       await downgradeToStarter(subscriptionId);
       const result = await h().grants.refreshCredits(accountId);

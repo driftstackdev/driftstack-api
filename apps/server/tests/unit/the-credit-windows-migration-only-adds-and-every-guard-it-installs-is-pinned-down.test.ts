@@ -162,7 +162,14 @@ describe('migration 0130 only adds, and every guard it installs is pinned down',
         .filter((n) => mine.test(n))
         .sort();
     expect(named(['check'])).toEqual(inSql.checks);
-    expect(named(['index', 'uniqueIndex'])).toEqual(inSql.indexes);
+    // `unique` as well as `uniqueIndex`: migration 0131 promoted
+    // `credit_windows_id_account_unique` from a unique INDEX to the unique
+    // CONSTRAINT backed by that same index (which is the form a foreign key is
+    // documented to be allowed to target), so schema.ts now declares it as a
+    // table-level `unique(...)`. The migration that CREATES it is still 0130 and
+    // still creates an index, so the two sides are compared across the two
+    // spellings rather than one being re-pinned away.
+    expect(named(['index', 'uniqueIndex', 'unique'])).toEqual(inSql.indexes);
     // The lot→window key carries the ACCOUNT, so it is a table-level foreign
     // key over two columns, not a `.references()` on `window_id` alone: a lot
     // names a window of its own account or no window at all.

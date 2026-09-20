@@ -155,10 +155,12 @@ interface LedgerEntryCommon {
 }
 
 /**
- * A ledger row this module writes, one variant per movement. Task charges,
- * refund movements and top-ups are written by the work that owns them, not
- * here; the two proration movements are below because a mid-month plan change
- * is written through `append` like every other movement (`credit-grants.ts`).
+ * A ledger row this module writes, one variant per movement. Top-ups are
+ * written by the work that owns them, not here; the proration movements
+ * (`credit-grants.ts`) and the task charge and its claims
+ * (`services/credit-reservations.ts`) are below because every movement goes
+ * through `append`, which is what makes "a balance moves only through a ledger
+ * row, and the same key applies once" one rule rather than one per writer.
  */
 export type NewCreditLedgerEntry = LedgerEntryCommon &
   (
@@ -189,13 +191,32 @@ export type NewCreditLedgerEntry = LedgerEntryCommon &
       }
     | {
         /**
-         * A mid-month DOWNGRADE takes back what one lot still holds. Never more
-         * than the lot's free credit: what a running task holds is not taken
-         * (the clawback records that part as a pending claim instead).
+         * A mid-month DOWNGRADE takes back what one lot still holds, and a
+         * refund or dispute takes back what one lot held of a payment that was
+         * reversed (S17). Never more than the lot's free credit: what a running
+         * task holds is not taken (the clawback records that part as a pending
+         * claim, which a settlement pays from the credit it releases).
          */
-        readonly kind: 'proration_clawback';
+        readonly kind: 'proration_clawback' | 'refund_clawback';
         readonly lotId: string;
         readonly amountMicro: number;
+        readonly reason?: string | null;
+      }
+    | {
+        /**
+         * What ONE TASK took out of ONE LOT, written when the task settles. It
+         * is the only movement that names the work it paid for, and the database
+         * requires all three of those facts together
+         * (`credit_ledger_task_charge_context`): which task, at which rate card,
+         * on which model. The reservation's own COMMIT-time check then requires
+         * these rows to sum to exactly what the task was charged.
+         */
+        readonly kind: 'task_charge';
+        readonly lotId: string;
+        readonly amountMicro: number;
+        readonly reservationId: string;
+        readonly rateCardVersion: number;
+        readonly model: string;
         readonly reason?: string | null;
       }
     | {
@@ -235,6 +256,10 @@ export interface CreditLedgerRowValues {
   readonly debtDeltaMicro: number;
   readonly idempotencyKey: string;
   readonly agentSessionId: string | null;
+  /** The three facts a task charge must carry; null on every other movement. */
+  readonly reservationId: string | null;
+  readonly rateCardVersion: number | null;
+  readonly model: string | null;
   readonly reason: string | null;
   readonly actor: CreditLedgerActor;
 }
@@ -320,6 +345,9 @@ export function creditLedgerRowFor(entry: NewCreditLedgerEntry): CreditLedgerRow
     agentSessionId: entry.agentSessionId ?? null,
     actor: entry.actor ?? 'system',
     reason: entry.reason ?? null,
+    reservationId: null,
+    rateCardVersion: null,
+    model: null,
   };
   switch (entry.kind) {
     case 'grant':
@@ -347,12 +375,24 @@ export function creditLedgerRowFor(entry: NewCreditLedgerEntry): CreditLedgerRow
         debtDeltaMicro: 0,
       };
     case 'proration_clawback':
+    case 'refund_clawback':
       return {
         ...common,
-        kind: 'proration_clawback',
+        kind: entry.kind,
         lotId: entry.lotId,
-        lotDeltaMicro: -positiveMicro('a proration clawback', entry.amountMicro),
+        lotDeltaMicro: -positiveMicro('a clawback', entry.amountMicro),
         debtDeltaMicro: 0,
+      };
+    case 'task_charge':
+      return {
+        ...common,
+        kind: 'task_charge',
+        lotId: entry.lotId,
+        lotDeltaMicro: -positiveMicro('a task charge', entry.amountMicro),
+        debtDeltaMicro: 0,
+        reservationId: entry.reservationId,
+        rateCardVersion: entry.rateCardVersion,
+        model: entry.model,
       };
     case 'adjustment': {
       if ('lotId' in entry) {
@@ -536,7 +576,10 @@ export class DrizzleCreditLedgerRepo {
       record.lotId === row.lotId &&
       record.lotDeltaMicro === row.lotDeltaMicro &&
       record.debtDeltaMicro === row.debtDeltaMicro &&
-      record.reason === row.reason;
+      record.reason === row.reason &&
+      record.reservationId === row.reservationId &&
+      record.rateCardVersion === row.rateCardVersion &&
+      record.model === row.model;
     if (!same) throw new CreditLedgerKeyReusedError(row.accountId, row.idempotencyKey);
     return { applied: false, entry: record };
   }
@@ -670,6 +713,30 @@ export class DrizzleCreditLedgerRepo {
       owed = owed - amount;
     }
     return repaid;
+  }
+
+  /**
+   * Why the account owes credits: the reason on the NEWEST `debt_incurred` row.
+   * Null when it has never owed any.
+   *
+   * Debt has one figure and several possible causes, and nothing records the
+   * cause on the balance itself — a repayment does not say which debt it paid —
+   * so the newest reason is the best answer available, and it is the one a
+   * customer is shown when a task is refused for debt. Ordered explicitly: with
+   * no ORDER BY, "the newest" would be whichever row Postgres happened to return.
+   */
+  async latestDebtReason(
+    accountId: string,
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<AiDebtReason | null> {
+    const [row] = await on
+      .select({ reason: creditLedger.reason })
+      .from(creditLedger)
+      .where(and(eq(creditLedger.accountId, accountId), eq(creditLedger.kind, 'debt_incurred')))
+      .orderBy(desc(creditLedger.id))
+      .limit(1);
+    if (row?.reason === undefined || row.reason === null) return null;
+    return member('credit_ledger.reason', AiDebtReasonSchema.options, row.reason);
   }
 
   /**

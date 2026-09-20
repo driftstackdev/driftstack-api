@@ -39,6 +39,7 @@ export const EXPECTED_RECURRING_JOB_TYPES: readonly string[] = [
   'cost.recompute_nightly',
   'credits.coverage_sweep',
   'credits.expiry_sweep',
+  'credits.invariant_audit',
   'crypto.entitlement_expiry_sweep',
   'crypto.entitlement_reconcile',
   'crypto.order_expiry_sweep',
@@ -64,6 +65,7 @@ export const EXPECTED_RECURRING_JOB_TYPES: readonly string[] = [
 export const OFF_BY_DEFAULT_JOB_TYPES: ReadonlyMap<string, string> = new Map([
   ['credits.coverage_sweep', 'runs only while DRIFTSTACK_AI_CREDITS_MODE is shadow or enforce'],
   ['credits.expiry_sweep', 'runs only while DRIFTSTACK_AI_CREDITS_MODE is shadow or enforce'],
+  ['credits.invariant_audit', 'runs only while DRIFTSTACK_AI_CREDITS_MODE is shadow or enforce'],
 ]);
 
 /**

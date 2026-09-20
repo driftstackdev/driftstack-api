@@ -81,6 +81,14 @@ const NOT_A_RETENTION_JOB: Record<string, string> = {
   CreditsWindowBoundaryJob:
     "Grants an account's next month of AI credits when its current window ends. Deletes and " +
     'anonymises nothing, so no retention promise depends on it.',
+  // Slice S9, registered under the same DRIFTSTACK_AI_CREDITS_MODE switch as the
+  // three above and for the same reason: with the mode off there are no credit
+  // records to disagree with each other.
+  CreditsInvariantAuditJob:
+    'Asks the credit tables once a day whether their records still agree with each other and ' +
+    'alerts a person with rule names and row counts when they do not. READ-ONLY — it runs ' +
+    'eight SELECTs and writes nothing at all, so it deletes, expires and anonymises nothing ' +
+    'and no retention promise depends on it.',
 };
 
 /**

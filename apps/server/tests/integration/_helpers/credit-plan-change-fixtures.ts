@@ -166,51 +166,122 @@ export async function mirrorCanceled(sql: Sql, subscriptionId: string): Promise<
 }
 
 /**
- * Spend `credits` out of a lot, as a task would: a `task_charge` row, which the
- * ledger's apply trigger takes off the lot. `nth` distinguishes repeated charges
- * on one lot, because the ledger refuses a repeated idempotency key.
+ * Spend `credits` out of a lot, as a task really does: a reservation that held
+ * exactly that much, one model call that cost it, the hold released for the
+ * whole of it, the `task_charge` row that takes it off the lot, and the
+ * reservation settled. One transaction. `nth` distinguishes repeated charges on
+ * one lot, because the ledger refuses a repeated idempotency key.
+ *
+ * ⛔ IT USED TO BE THE LEDGER ROW ALONE, NAMING A RESERVATION THAT DID NOT
+ * EXIST. Migration 0131 gives `credit_ledger.reservation_id` its foreign key, so
+ * that row is now refused (23503) — which is the point of the key, and was
+ * predicted when 0128 landed without it. Writing the whole task instead also
+ * puts the fixture under the COMMIT-time balance check: a settled task whose
+ * charge is not equal across its calls, its holds and its ledger rows is
+ * refused, so the fixture cannot drift into describing a state production
+ * cannot reach.
  */
 export async function spendFromLot(
-  sql: Sql,
+  sql: postgres.Sql,
   accountId: string,
   lotId: string,
   credits: number,
   nth = 1,
-): Promise<void> {
-  await sql`
-    INSERT INTO credit_ledger
-      (account_id, kind, lot_id, lot_delta_micro, idempotency_key, reservation_id,
-       rate_card_version, model, actor)
-    VALUES (${accountId}::uuid, 'task_charge', ${lotId}::uuid, ${String(-credits * MICRO)}::bigint,
-            ${`task:${lotId}:${String(nth)}`}, ${randomUUID()}::uuid, 1, 'claude-sonnet-4-6', 'system')`;
+): Promise<string> {
+  const reservationId = randomUUID();
+  const micro = String(credits * MICRO);
+  await sql.begin(async (tx) => {
+    await tx`
+      INSERT INTO credit_reservations (id, account_id, agent_session_id, model, rate_card_version,
+                                       mode, slot, reserved_micro, committed_micro, lease_owner,
+                                       lease_expires_at, max_until)
+      SELECT ${reservationId}::uuid, ${accountId}::uuid, ${`as_${reservationId}`},
+             'claude-sonnet-4-6', 1, 'enforce',
+             (SELECT s FROM generate_series(1, 3) s
+               WHERE NOT EXISTS (SELECT 1 FROM credit_reservations o
+                                  WHERE o.account_id = ${accountId}::uuid
+                                    AND o.state = 'open' AND o.mode = 'enforce' AND o.slot = s)
+               ORDER BY s LIMIT 1),
+             ${micro}::bigint, ${micro}::bigint, 'fixture-boot',
+             now() + interval '90 seconds', now() + interval '30 minutes'`;
+    await tx`
+      INSERT INTO credit_reservation_holds (reservation_id, lot_id, account_id, held_micro)
+      VALUES (${reservationId}::uuid, ${lotId}::uuid, ${accountId}::uuid, ${micro}::bigint)`;
+    await tx`
+      INSERT INTO credit_model_calls (id, reservation_id, account_id, seq, purpose, model,
+                                      input_bound_tokens, input_bound_basis, input_bound_micro,
+                                      max_output_tokens, bound_micro, sent, state, settle_basis,
+                                      charged_micro, settled_at)
+      VALUES (${randomUUID()}::uuid, ${reservationId}::uuid, ${accountId}::uuid, 1, 'plan',
+              'claude-sonnet-4-6', 1000, 'region_bytes', 1, 4096, ${micro}::bigint,
+              true, 'settled', 'provider_usage', ${micro}::bigint, now())`;
+    // The release comes before the charge: `held_micro` counts against what the
+    // lot has left, so charging first would leave it holding more than it has.
+    await tx`
+      UPDATE credit_reservation_holds SET released_at = now(), charged_micro = ${micro}::bigint
+       WHERE reservation_id = ${reservationId}::uuid`;
+    await tx`
+      INSERT INTO credit_ledger
+        (account_id, kind, lot_id, lot_delta_micro, idempotency_key, reservation_id,
+         rate_card_version, model, actor)
+      VALUES (${accountId}::uuid, 'task_charge', ${lotId}::uuid, ${`-${micro}`}::bigint,
+              ${`task:${lotId}:${String(nth)}`}, ${reservationId}::uuid, 1,
+              'claude-sonnet-4-6', 'system')`;
+    await tx`
+      UPDATE credit_reservations
+         SET state = 'settled', charged_micro = ${micro}::bigint, settled_at = now(),
+             settle_reason = 'completed'
+       WHERE id = ${reservationId}::uuid`;
+  });
+  return reservationId;
 }
 
 /**
- * ⚠️ A FORGED HOLD. `credit_lots.held_micro` moves only through
- * `credit_reservation_holds`, and that table arrives with the reservations in
- * S7 — so there is no legal way yet to make a lot's credit "held by a running
- * task". This writes the column directly, with the lot guard switched off for
- * the one statement, so that the CLAWBACK's reading of held credit can be
- * exercised against the real database before S7 exists.
+ * A RUNNING TASK holding `credits` of one lot: a real reservation and a real
+ * `credit_reservation_holds` row, in one transaction.
  *
- * ⛔ S7 OWES THE REAL PROOF: the same property driven through an actual
- * reservation, where the hold is taken and released by the code that will do it
- * in production. What is proved here is that `clawBack` reads `held_micro`,
- * leaves it alone, and books the shortfall it covers as a PENDING CLAIM rather
- * than debt — not that a reservation puts the right number there.
+ * ⛔ IT REPLACES A FORGERY. Before migration 0131 existed there was no legal way
+ * to make a lot's credit "held by a running task", so these arms wrote
+ * `credit_lots.held_micro` directly with the lot guard switched OFF for one
+ * statement. That proved what `clawBack` does with a number, and nothing about
+ * whether anything could put the number there. Now the hold is written the only
+ * way production writes one: the trigger moves `held_micro` itself, it refuses a
+ * lot that is not started, live, unrevoked and this account's, and the
+ * COMMIT-time check refuses a reservation whose holds do not sum to what it
+ * reserved. No trigger is disabled anywhere in this file.
  *
- * Safe where it is used: an isolated database, rebuilt from the migrations on
- * every run, and the guard is switched back on before the function returns.
+ * The amounts here are whole months of credits, far above any model's
+ * `max_reserve`, so the reservation is written directly rather than through
+ * `reserve()` — which is what the reservation tests drive. What this needs is a
+ * lot with credit genuinely held, not a realistic task.
  */
-export async function forgeHoldOnLot(sql: Sql, lotId: string, credits: number): Promise<void> {
-  await sql`ALTER TABLE credit_lots DISABLE TRIGGER credit_lots_guard_trigger`;
-  try {
-    await sql`
-      UPDATE credit_lots SET held_micro = ${String(credits * MICRO)}::bigint
-       WHERE id = ${lotId}::uuid`;
-  } finally {
-    await sql`ALTER TABLE credit_lots ENABLE TRIGGER credit_lots_guard_trigger`;
-  }
+export async function holdOnLot(
+  sql: postgres.Sql,
+  accountId: string,
+  lotId: string,
+  credits: number,
+): Promise<string> {
+  const reservationId = randomUUID();
+  await sql.begin(async (tx) => {
+    await tx`
+      INSERT INTO credit_reservations (id, account_id, agent_session_id, model, rate_card_version,
+                                       mode, slot, reserved_micro, lease_owner,
+                                       lease_expires_at, max_until)
+      SELECT ${reservationId}::uuid, ${accountId}::uuid, ${`as_${reservationId}`},
+             'claude-sonnet-5', 1, 'enforce',
+             (SELECT s FROM generate_series(1, 3) s
+               WHERE NOT EXISTS (SELECT 1 FROM credit_reservations o
+                                  WHERE o.account_id = ${accountId}::uuid
+                                    AND o.state = 'open' AND o.mode = 'enforce' AND o.slot = s)
+               ORDER BY s LIMIT 1),
+             ${String(credits * MICRO)}::bigint, 'fixture-boot',
+             now() + interval '90 seconds', now() + interval '30 minutes'`;
+    await tx`
+      INSERT INTO credit_reservation_holds (reservation_id, lot_id, account_id, held_micro)
+      VALUES (${reservationId}::uuid, ${lotId}::uuid, ${accountId}::uuid,
+              ${String(credits * MICRO)}::bigint)`;
+  });
+  return reservationId;
 }
 
 export interface LevelChangeRow {

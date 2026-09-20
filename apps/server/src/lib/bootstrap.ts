@@ -263,7 +263,19 @@ import { CryptoTierActivationService } from '../services/crypto-tier-activation.
 import { DrizzleCreditLedgerRepo } from '../db/credit-ledger-repo.js';
 import { DrizzleCreditPlanOverridesRepo } from '../db/credit-plan-overrides-repo.js';
 import { DrizzleCreditWindowsRepo } from '../db/credit-windows-repo.js';
+import { DrizzleCreditRateCardRepo } from '../db/credit-rate-card-repo.js';
+import { DrizzleCreditReservationsRepo } from '../db/credit-reservations-repo.js';
+import { DrizzleCreditInvariantAuditRepo } from '../db/credit-invariant-audit-repo.js';
 import { CreditGrantsService, creditGrantsRun } from '../services/credit-grants.js';
+import { CreditReservationsService } from '../services/credit-reservations.js';
+import {
+  AiCreditLeaseKeeper,
+  CREDIT_LEASE_KEEPER_INTERVAL_MS,
+} from '../services/ai-credit-lease-keeper.js';
+import {
+  enqueueNextCreditsInvariantAudit,
+  registerCreditsInvariantAuditJob,
+} from '../services/credit-invariant-audit.js';
 import {
   CREDITS_RECURRING_JOB_TYPES,
   enqueueNextCreditsCoverageSweep,
@@ -364,6 +376,22 @@ export const REDIS_QUIT_DEADLINE_MS = 2_000;
  * stop-window` adds this to the worst case; at 1.5s it did not fit.
  */
 export const AGENT_TURN_TELEMETRY_FLUSH_DEADLINE_MS = 750;
+
+/**
+ * Longest teardown waits to hand this process's AI task leases back (H6).
+ *
+ * One UPDATE over a partial index, of at most a handful of rows — it takes
+ * milliseconds when the database is healthy. It runs CONCURRENTLY with the
+ * telemetry flush above, both before the Postgres close, so the pair costs the
+ * longer of the two and not their sum; `shutdown-budget-fits-systemd-stop-
+ * window` reads it that way, and the budget has only 250 ms of slack, so a
+ * serial step here would not fit.
+ *
+ * Missing the deadline costs nothing anybody can see: the leases then lapse on
+ * their own 90-second schedule, which is exactly what happens when a process is
+ * killed outright.
+ */
+export const CREDIT_LEASE_RELEASE_DEADLINE_MS = 750;
 
 /**
  * Run one teardown step with a deadline, resolving either way.
@@ -989,6 +1017,52 @@ export async function createProductionDeps(
         logger,
       })
     : null;
+
+  // AI credits, the spending half (slices S7-S9). NULL WHILE THE MODE IS OFF,
+  // on the same value as the grants above: with it off nothing sets credits
+  // aside, no lease keeper ticks, and no boot pass runs a single query.
+  //
+  // ⛔ THE SERVICE AND THE KEEPER ARE ONE UNIT and neither may exist without the
+  // other. The service is what puts credit beyond reach — an open reservation
+  // holds one of the account's three slots and the credit backing it — and the
+  // keeper is the ONLY thing that gives either back when the process running
+  // the task goes away, which §5.3 calls the main path. Built alone, the
+  // service would hold credit no code path could release; built alone, the
+  // keeper would have nothing to keep. Two guards (`tick-services-are-wired-
+  // invariant`, `every-service-is-wired-or-recorded-as-dormant`) recorded the
+  // service as deliberately dormant until exactly this line existed.
+  //
+  // The boot id is the lease owner: this process owns the leases it takes and
+  // no others, which is what lets any number of processes share the database
+  // (H6). It is minted per boot, so a restart never inherits its own old
+  // leases — those lapse and are settled from what each task recorded.
+  const creditLeaseOwner = `boot-${randomUUID()}`;
+  const creditLedgerRepo = creditGrants === null ? null : new DrizzleCreditLedgerRepo(dbHandle);
+  const creditReservationsRepo = creditGrants === null ? null : new DrizzleCreditReservationsRepo();
+  const creditReservationsService =
+    creditGrants === null || creditLedgerRepo === null || creditReservationsRepo === null
+      ? null
+      : new CreditReservationsService({
+          ledger: creditLedgerRepo,
+          reservations: creditReservationsRepo,
+          rateCards: new DrizzleCreditRateCardRepo(dbHandle),
+          refresher: creditGrants,
+          logger,
+          sentry,
+        });
+  const creditLeaseKeeper =
+    creditLedgerRepo === null ||
+    creditReservationsRepo === null ||
+    creditReservationsService === null
+      ? null
+      : new AiCreditLeaseKeeper({
+          ledger: creditLedgerRepo,
+          reservations: creditReservationsRepo,
+          settler: creditReservationsService,
+          executor: dbHandle.db,
+          leaseOwner: creditLeaseOwner,
+          logger,
+        });
 
   // Webhooks first so sessions + api-keys can wire it.
   // V-225 — accountAudit wired for webhook_endpoint.{created,deleted}.
@@ -2129,6 +2203,57 @@ export async function createProductionDeps(
       grants: creditGrants,
       logger,
     });
+    // The daily invariant audit (§5.3). It writes nothing and asks nine
+    // questions the enforcement already answers — which is the point: a guard
+    // that has been dropped, worked around or restored from a backup taken
+    // mid-transaction leaves records that no longer add up and nothing that
+    // asks. Its alert carries rule names and counts only.
+    registerCreditsInvariantAuditJob({
+      scheduledJobs: scheduledJobsService,
+      audit: new DrizzleCreditInvariantAuditRepo(dbHandle),
+      logger,
+      sentry,
+    });
+    await enqueueNextCreditsInvariantAudit({ scheduledJobs: scheduledJobsService });
+  }
+
+  // THE BOOT PASS (H6). Step (b) of the lease keeper, once, before this process
+  // serves anything: every task whose lease has already lapsed or whose ceiling
+  // has passed is settled from what it recorded, so a deploy's predecessor
+  // frees its customers' slots and credit at once rather than 90 seconds later.
+  //
+  // ⛔ IT SETTLES ONLY LAPSED LEASES, AND THERE IS NO SINGLE-PROCESS FLAG. A
+  // second boot, a canary, a manual `node dist/index.js` during an incident and
+  // a deploy running migrations while the old process still serves are all
+  // ordinary here, because the only tasks this can touch are ones whose owner
+  // has stopped saying it is there. The earlier design settled every task owned
+  // by another boot id and would have charged live turns their full bound.
+  //
+  // A failure is logged and boot continues: the ordinary 15-second tick does
+  // the same work, so the cost of a bad boot pass is 15 seconds, and refusing
+  // to come up over it would turn a bookkeeping delay into an outage.
+  if (creditLeaseKeeper !== null) {
+    try {
+      const swept = await creditLeaseKeeper.bootPass();
+      if (swept.settled > 0 || swept.failed > 0) {
+        logger.info(
+          { component: 'ai-credit-lease-keeper', event: 'ai_credits_boot_pass', ...swept },
+          'boot pass settled AI tasks whose lease had lapsed',
+        );
+      }
+    } catch (err) {
+      logger.warn(
+        {
+          component: 'ai-credit-lease-keeper',
+          event: 'ai_credits_boot_pass_failed',
+          err:
+            err instanceof Error
+              ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+              : { value: err },
+        },
+        'the AI credit boot pass failed (the 15-second keeper does the same work)',
+      );
+    }
   }
 
   // V-1591 — bound session_events on the 90-day window (archive to R2, then
@@ -3432,8 +3557,12 @@ export async function createProductionDeps(
                       ...(agentTurnHealthWatchdogDisabled
                         ? [AGENT_TURN_HEALTH_WATCHDOG_JOB_TYPE]
                         : []),
-                      // With AI credits off the two credit sweeps are neither
+                      // With AI credits off every credit chain — the two
+                      // sweeps and the daily invariant audit — is neither
                       // registered nor enqueued, so they are omitted, not 0.
+                      // The list is imported rather than written out here, so
+                      // a chain added under the same switch is covered on the
+                      // day it lands.
                       ...(creditGrants === null ? CREDITS_RECURRING_JOB_TYPES : []),
                     ]),
                   }
@@ -3808,6 +3937,37 @@ export async function createProductionDeps(
   }, PAIR_MODE_HEARTBEAT_SWEEP_INTERVAL_MS);
   pairModeHeartbeatSweepTimer.unref();
 
+  // AI credits slice S9 — the lease keeper. Every 15 seconds it renews the
+  // leases of the tasks this process is running and settles up to fifty that
+  // nobody is coming back for (§4.7, §5.3). Same shape as the pair-mode sweep
+  // above and for the same reason: a 15-second promise cannot be made by a
+  // 60-second poller, and a keeper that rode on `scheduled_jobs` would be
+  // waiting on the very poller a stuck process is not running.
+  //
+  // NULL WHILE THE MODE IS OFF, so no timer is created and no query is made.
+  const creditLeaseKeeperTimer =
+    creditLeaseKeeper === null
+      ? null
+      : setInterval(() => {
+          void (async () => {
+            try {
+              await creditLeaseKeeper.tickOnce();
+            } catch (err) {
+              logger.warn(
+                {
+                  component: 'ai-credit-lease-keeper',
+                  err:
+                    err instanceof Error
+                      ? { name: err.name, message: err.message, stack: err.stack, cause: err.cause }
+                      : { value: err },
+                },
+                'ai-credit-lease-keeper tickOnce threw unexpectedly (interval continues)',
+              );
+            }
+          })();
+        }, CREDIT_LEASE_KEEPER_INTERVAL_MS);
+  creditLeaseKeeperTimer?.unref();
+
   // Webhook delivery worker — claims due deliveries (FOR UPDATE SKIP LOCKED,
   // multi-instance-safe) and POSTs the signed payload to the customer endpoint,
   // recording delivered / retry / DLQ. 60s tickOnce, mirroring the other
@@ -3887,6 +4047,7 @@ export async function createProductionDeps(
     if (healthProbeTimer) clearInterval(healthProbeTimer);
     if (statusSnapshotTimer) clearInterval(statusSnapshotTimer);
     clearInterval(pairModeHeartbeatSweepTimer);
+    if (creditLeaseKeeperTimer) clearInterval(creditLeaseKeeperTimer);
     clearInterval(webhookDeliveryTimer);
     // The three closes are INDEPENDENT — a Redis client, a Postgres pool and
     // the Sentry transport share nothing — so they run CONCURRENTLY. In series
@@ -3907,9 +4068,30 @@ export async function createProductionDeps(
     // allSettled never rejects — because a failed close must not prevent
     // process.exit(0); a teardown that throws is a teardown that leaves the
     // deploy hanging.
+    // H6 — hand this process's AI task leases back before the pool closes, so
+    // the next boot's pass frees a deploy's slots and credit at once instead of
+    // waiting out each 90-second lease. It settles nothing: only the lease
+    // moves, and what each task costs is still decided by what it recorded.
+    //
+    // ⛔ STARTED HERE AND AWAITED BELOW, so it runs CONCURRENTLY with the
+    // telemetry flush rather than after it. Both are one bounded write against
+    // the same pool, and in series their deadlines would ADD to a shutdown
+    // budget that already sits 250 ms inside the systemd stop window —
+    // `shutdown-budget-fits-systemd-stop-window` does that arithmetic and reads
+    // the maximum of the two from this shape. `withTeardownDeadline` never
+    // rejects, so a promise held across the flush cannot become an unhandled
+    // rejection, and a deadline that expires leaves exactly today's behaviour:
+    // the leases lapse on their own 90-second schedule.
+    const creditLeasesReleased =
+      creditLeaseKeeper === null
+        ? null
+        : withTeardownDeadline(CREDIT_LEASE_RELEASE_DEADLINE_MS, () =>
+            creditLeaseKeeper.releaseOwnLeases(),
+          );
     await withTeardownDeadline(AGENT_TURN_TELEMETRY_FLUSH_DEADLINE_MS, () =>
       agentTurnTelemetry.flush(),
     );
+    if (creditLeasesReleased !== null) await creditLeasesReleased;
     await Promise.allSettled([
       (async () => {
         await sentry.flush(2000);

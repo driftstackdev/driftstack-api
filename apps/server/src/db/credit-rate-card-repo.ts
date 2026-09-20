@@ -14,6 +14,7 @@
 import { and, desc, eq, isNull, lte, sql } from 'drizzle-orm';
 import type { CreditRateCardModelRow } from '@driftstack/api-types';
 import type { Database } from './client.js';
+import type { CreditLedgerExecutor } from './credit-ledger-repo.js';
 import {
   creditRateCardModels,
   creditRateCards,
@@ -46,20 +47,32 @@ export interface CreditRateCardReader {
    *
    * `at` has millisecond precision and the column has microseconds, so an
    * instant read back from `effectiveAt` may sit just under it.
+   *
+   * `on` runs the read inside a transaction the caller holds, so a reservation
+   * picks its card on the same snapshot and the same clock as the balance it is
+   * drawing on. A card is immutable once it has taken effect, so the two forms
+   * can differ only across a publication.
    */
-  cardInForce(at?: Date): Promise<CreditRateCardRecord | null>;
+  cardInForce(at?: Date, on?: CreditLedgerExecutor): Promise<CreditRateCardRecord | null>;
   /**
    * One model's row on a card, or null when that card does not price the model
    * (an Opus-class model, an unknown id, or a version that does not exist).
    */
-  modelRow(version: number, model: string): Promise<CreditRateCardModelRecord | null>;
+  modelRow(
+    version: number,
+    model: string,
+    on?: CreditLedgerExecutor,
+  ): Promise<CreditRateCardModelRecord | null>;
 }
 
 export class DrizzleCreditRateCardRepo implements CreditRateCardReader {
   constructor(private readonly database: Database) {}
 
-  async cardInForce(at?: Date): Promise<CreditRateCardRecord | null> {
-    const [row] = await this.database.db
+  async cardInForce(
+    at?: Date,
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<CreditRateCardRecord | null> {
+    const [row] = await on
       .select()
       .from(creditRateCards)
       .where(
@@ -75,8 +88,12 @@ export class DrizzleCreditRateCardRepo implements CreditRateCardReader {
     return row === undefined ? null : toCardRecord(row);
   }
 
-  async modelRow(version: number, model: string): Promise<CreditRateCardModelRecord | null> {
-    const [row] = await this.database.db
+  async modelRow(
+    version: number,
+    model: string,
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<CreditRateCardModelRecord | null> {
+    const [row] = await on
       .select()
       .from(creditRateCardModels)
       .where(and(eq(creditRateCardModels.version, version), eq(creditRateCardModels.model, model)))

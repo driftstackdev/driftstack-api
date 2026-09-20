@@ -832,6 +832,22 @@ export class DrizzleCreditWindowsRepo {
     }));
   }
 
+  /**
+   * What earlier clawbacks are still owed out of credit that running tasks hold.
+   *
+   * ⛔ IT IS SUBTRACTED FROM HELD CREDIT BEFORE A NEW CLAWBACK MAKES A CLAIM OF
+   * ITS OWN. Without it, two clawbacks landing while one task runs each record a
+   * pending claim over the SAME held credit, and at settlement only one of them
+   * can be paid: the second's share silently becomes nothing, or — if it is
+   * turned into debt later — debt for credit the first claim already took.
+   */
+  async pendingClaimTotalMicro(tx: CreditLedgerExecutor, accountId: string): Promise<number> {
+    const result = await tx.execute<{ micro: string }>(sql`
+      SELECT COALESCE(SUM(pending_micro), 0)::text AS micro FROM credit_clawbacks
+       WHERE account_id = ${accountId}::uuid AND pending_micro > 0`);
+    return exactMicro('a standing claim', rowsOf<{ micro: string }>(result)[0]?.micro ?? '0');
+  }
+
   /** The clawback already recorded for this key, if there is one. */
   async findClawback(
     tx: CreditLedgerExecutor,
