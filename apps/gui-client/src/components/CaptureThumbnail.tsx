@@ -36,6 +36,7 @@ export function CaptureThumbnail({
   sessionId,
   captureId,
   src,
+  variant = 'inline',
 }: {
   baseUrl: string;
   apiKey: string | null;
@@ -49,6 +50,16 @@ export function CaptureThumbnail({
    * the gates measure the shipped element, not a stand-in of it.
    */
   src?: string;
+  /**
+   * Where this thumbnail is being drawn (spec §3.5). `inline` is the shipped
+   * one — under its own capture step, as it has always looked. `figure` is the
+   * answer card's 72px phone-ratio tile, which fills a frame the card draws;
+   * `lightbox` is that same image at full size. The <img> itself is identical
+   * in all three — same alt, same source, same fetch — because
+   * capture-thumbnail.test.tsx pins the alt text and the fetch argument order,
+   * and because a customer must not be shown two different pictures.
+   */
+  variant?: 'inline' | 'figure' | 'lightbox';
 }): JSX.Element {
   const [state, setState] = useState<ThumbState>(
     src === undefined ? { kind: 'loading' } : { kind: 'ready', url: src },
@@ -85,12 +96,26 @@ export function CaptureThumbnail({
   }, [baseUrl, apiKey, sessionId, captureId, src]);
 
   if (state.kind === 'error') {
-    return <span className="mt-1 block text-2xs text-ink-secondary">Screenshot unavailable</span>;
+    return (
+      <span
+        className={
+          variant === 'inline'
+            ? 'mt-1 block text-2xs text-ink-secondary'
+            : 'block p-2 text-2xs text-ink-secondary'
+        }
+      >
+        Screenshot unavailable
+      </span>
+    );
   }
   if (state.kind === 'loading') {
     return (
       <span
-        className="mt-1 block h-20 w-32 animate-pulse rounded border border-surface-divider bg-surface-raised"
+        className={
+          variant === 'inline'
+            ? 'mt-1 block h-20 w-32 animate-pulse rounded border border-surface-divider bg-surface-raised'
+            : 'block h-full w-full animate-pulse bg-surface-elevated'
+        }
         aria-hidden="true"
       />
     );
@@ -99,7 +124,13 @@ export function CaptureThumbnail({
     <img
       src={state.url}
       alt="Screenshot the agent captured on this step"
-      className="mt-1 block max-h-64 max-w-full rounded border border-surface-divider"
+      className={
+        variant === 'inline'
+          ? 'mt-1 block max-h-64 max-w-full rounded border border-surface-divider'
+          : variant === 'figure'
+            ? 'ai-shot-img'
+            : 'ai-lightbox-img'
+      }
     />
   );
 }

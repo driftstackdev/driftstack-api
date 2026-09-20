@@ -6,10 +6,11 @@
 // a red "Stopped at step 3", so it is one pure function and these are its arms.
 //
 // Two things this file is deliberately strict about:
-//   • ORDER. `paused` outranks everything, because a halted turn has SETTLED
-//     (`sending` is false) and the gate is still up. `sending` outranks the
-//     settled verdicts, because the last turn's outcome is history the moment a
-//     new one starts.
+//   • ORDER. `paused` outranks every TURN-SHAPED verdict, because a halted turn
+//     has SETTLED (`sending` is false) and the gate is still up. It does NOT
+//     outrank `sending` — see the pin moved in stage 5 below. `sending` outranks
+//     the settled verdicts, because the last turn's outcome is history the
+//     moment a new one starts.
 //   • ABSENCE. About a dozen view tests mock the chat hook with a partial
 //     object. A field this function reads may simply not be there, and the
 //     absence must resolve to a phase rather than throw — so the arms below
@@ -111,8 +112,33 @@ describe('the AI view names the one thing it is doing', () => {
       pendingConfirmation: { category: 'purchase', matchedText: 'Place order · $104.00' },
     });
     expect(missionPhase(halted)).toBe('paused');
-    // …and it outranks a send that is somehow still in flight.
-    expect(missionPhase({ ...halted, sending: true })).toBe('paused');
+  });
+
+  it('⛔ is NOT paused while a send the customer started instead of approving is in flight', () => {
+    // ⛔ PIN MOVED IN STAGE 5, ON PURPOSE. This arm read "…and it outranks a
+    // send that is somehow still in flight" and asserted 'paused'. The send is
+    // not "somehow": the composer stays usable while the gate is up and says so
+    // ("Or send a new instruction instead of approving.", spec §3.7), and during
+    // that send the halted turn is still the last AGENT turn — so the gate is up
+    // AND a turn is running. `approve()` is the same shape: it resolves the gate
+    // only after its re-send succeeds, so the approved step runs with the dock
+    // still mounted.
+    //
+    // `paused` is what stops every infinite animation in the view (§3.6). A
+    // still, amber room over a plan streaming new steps is the view
+    // contradicting what the customer can see.
+    const halted = chat({
+      sending: false,
+      turns: [agentTurn(2, planExecuted([ok('Opened the store'), gated('Place order · $104.00')]))],
+      pendingConfirmation: { category: 'purchase', matchedText: 'Place order · $104.00' },
+    });
+    // Nothing streamed yet: the new instruction is being planned.
+    expect(missionPhase({ ...halted, sending: true })).toBe('thinking');
+    // A step has landed: it is acting, gate or no gate.
+    expect(missionPhase({ ...halted, sending: true, liveStepIndex: 0 })).toBe('acting');
+    // CONTROL — take the send away and the very same chat is paused again, so
+    // this arm is measuring `sending`, not the shape of the halted turn.
+    expect(missionPhase(halted)).toBe('paused');
   });
 
   it('is done when the last turn ran a plan and every step succeeded', () => {

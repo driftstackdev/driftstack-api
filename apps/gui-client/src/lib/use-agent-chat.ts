@@ -144,11 +144,51 @@ export interface LivePlan {
    *  the step's position in the WHOLE TURN, across every segment of it. */
   labels: ReadonlyArray<string>;
   total: number;
+  /**
+   * §7 — what KIND of action each planned step is, indexed exactly like
+   * `labels`: `navigate`, `capture`, `wait`, `scroll`, `behavioral_pause`, or
+   * for an `interact` step the ACTION it performs (`tap`, `type`, `press`,
+   * `swipe`), because "interact" is not a thing a customer can picture and the
+   * four actions are. See `stepKindOf`.
+   *
+   * Present only when the server sent the intents; a slot nobody described is
+   * `null`, which the view draws as a hollow node. ⛔ NEVER GUESSED: an icon is
+   * a claim about what a step is going to do, and a wrong one is a lie told
+   * before the step has had a chance to run.
+   */
+  kinds?: ReadonlyArray<string | null>;
+  /**
+   * §7 — the step positions a NEW plan started at, i.e. where the agent looked
+   * at the page again and changed its mind. Ascending, never 0 (the first
+   * segment starts no-one's mind changing), and present only when at least one
+   * happened. The view draws "Looked at the page and updated the plan" above
+   * the step at each of these indices.
+   */
+  replanAt?: ReadonlyArray<number>;
 }
 
 /** Shown in a slot whose real caption never arrived. Such a slot is normally
  *  behind a completed step and never rendered; this is what it says if it is. */
 const UNKNOWN_STEP_LABEL = 'Working';
+
+/**
+ * §7 — the kind of one planned step, read off the intent the server published
+ * with the plan, or null when there is nothing there to read.
+ *
+ * An `interact` intent reports its ACTION (`tap`, `type`, `press`, `swipe`),
+ * because those are four different pictures and "interact" is none of them.
+ * Everything else reports its own `kind`. ⛔ Nothing is inferred from a
+ * selector, a URL or a value: this decides which drawing sits beside a step
+ * that has NOT RUN YET, and a guess there is a claim about the future.
+ */
+export function stepKindOf(intent: unknown): string | null {
+  if (typeof intent !== 'object' || intent === null) return null;
+  const record = intent as { kind?: unknown; action?: unknown };
+  const kind = typeof record.kind === 'string' && record.kind.length > 0 ? record.kind : null;
+  if (kind === null) return null;
+  if (kind !== 'interact') return kind;
+  return typeof record.action === 'string' && record.action.length > 0 ? record.action : kind;
+}
 
 /**
  * Fold one `plan` frame into the live plan.
@@ -164,10 +204,22 @@ const UNKNOWN_STEP_LABEL = 'Working';
  * does not send it (older, or a first segment) is read the way its `total`
  * implies: `total` has always been cumulative, so a frame that lists fewer
  * captions than its total starts at the difference.
+ *
+ * §7 adds two OPTIONAL companions, folded the same way and by the same offset:
+ * `kinds` (one per caption, for the row icons) and `replan` (this frame is the
+ * agent having looked again and changed the plan, so `offset` is a boundary).
+ * Both are omitted from the result when nothing is known, so a server that
+ * sends neither produces the byte-identical `{ labels, total }` it always did.
  */
 export function mergeLivePlan(
   previous: LivePlan | null,
-  frame: { labels: ReadonlyArray<string>; total: number; offset?: number },
+  frame: {
+    labels: ReadonlyArray<string>;
+    total: number;
+    offset?: number;
+    kinds?: ReadonlyArray<string | null>;
+    replan?: boolean;
+  },
 ): LivePlan {
   const implied = Math.max(0, frame.total - frame.labels.length);
   const offset =
@@ -176,7 +228,26 @@ export function mergeLivePlan(
       : implied;
   const kept = Array.from({ length: offset }, (_, i) => previous?.labels[i] ?? UNKNOWN_STEP_LABEL);
   const labels = [...kept, ...frame.labels];
-  return { labels, total: Math.max(frame.total, labels.length) };
+  // A kind is kept per slot, or null where nobody ever said. The array is
+  // built only when SOMETHING is known — an all-null array would render
+  // identically to no array at all and would break every `toEqual` that
+  // describes the shape this function had before §7.
+  const keptKinds = Array.from({ length: offset }, (_, i) => previous?.kinds?.[i] ?? null);
+  const newKinds = frame.labels.map((_, i) => frame.kinds?.[i] ?? null);
+  const kinds = [...keptKinds, ...newKinds];
+  const knownKind = kinds.some((k) => k !== null);
+  // A boundary at 0 is the first plan, which is nobody changing their mind.
+  const priorReplans = previous?.replanAt ?? [];
+  const replanAt =
+    frame.replan === true && offset > 0 && !priorReplans.includes(offset)
+      ? [...priorReplans, offset].sort((a, b) => a - b)
+      : priorReplans;
+  return {
+    labels,
+    total: Math.max(frame.total, labels.length),
+    ...(knownKind ? { kinds } : {}),
+    ...(replanAt.length > 0 ? { replanAt } : {}),
+  };
 }
 
 /**
@@ -191,6 +262,47 @@ export interface InterruptedTurn {
   steps: ReadonlyArray<AgentIntentResult>;
 }
 
+/**
+ * §7 — the plan the server announced while the turn was running, kept on the
+ * settled turn.
+ *
+ * WHY IT IS KEPT. A settled turn arrives with `intents` (the raw actions) and
+ * `results`, and the server's customer-safe CAPTIONS — "Opened the store" —
+ * were thrown away at the hand-off. So a failed or gated row had nothing left
+ * to read but the raw intent, which is a CSS selector. This carries the
+ * captions across, and with them the step kinds and the re-plan boundaries.
+ *
+ * ⛔ OPTIONAL, AND ONLY EVER AN IMPROVEMENT. A restored chat, a replayed
+ * idempotent response and every turn stored by a build older than this one have
+ * none, and each of the three readers below falls back to exactly what it drew
+ * before: `result.summary` / `humanIntentLabel`, a hollow node, no re-plan row.
+ */
+export interface TurnPlan {
+  /** One customer-safe caption per planned step of the WHOLE turn. */
+  labels: ReadonlyArray<string>;
+  /** The kind of each planned step, `null` where the server never said. */
+  kinds?: ReadonlyArray<string | null>;
+  /** Step positions a new plan started at. Ascending, never 0. */
+  replanAt?: ReadonlyArray<number>;
+}
+
+/**
+ * §7 — how long the turn and its steps took, as THIS CLIENT observed them.
+ *
+ * ⛔ OBSERVED, not reported: these are arrival deltas between the frames this
+ * client received, so they include the wire and the render, and they exist only
+ * for a turn this client actually watched. A replayed idempotent response, a
+ * restored chat and an older build's turn carry none — and the view then draws
+ * no clock and no durations, rather than a row of honest-looking zeros.
+ */
+export interface TurnTiming {
+  /** Wall-clock milliseconds from Send to the settled response. */
+  elapsedMs?: number;
+  /** One entry per step that ran, aligned with `results`. `null` where the
+   *  step's start was never announced, so its duration is unknown. */
+  stepMs?: ReadonlyArray<number | null>;
+}
+
 export interface ChatTurn {
   /** Stable, monotonic id for React keys (turns are append-only). */
   id: number;
@@ -202,6 +314,57 @@ export interface ChatTurn {
   /** Set when role === 'agent' and the turn stopped partway. Mutually exclusive
    *  with `response` — an interrupted turn never produced one. */
   interrupted?: InterruptedTurn;
+  /** §7, optional — the live plan's captions/kinds/re-plans, kept at settle. */
+  plan?: TurnPlan;
+  /** §7, optional — what this client timed while the turn ran. */
+  timing?: TurnTiming;
+}
+
+/**
+ * §7 — what a settled turn keeps from the stream this client watched.
+ *
+ * PURE, and exported, so the rule below is unit-testable without a fake server:
+ * **a field only exists when it was observed.** Every absence here is rendered
+ * as an absence — no clock, no durations, no re-plan row — never as a zero.
+ *
+ * ⛔ `elapsedMs` needs MORE than a start time. Every send records one, including
+ * the send whose response the server REPLAYED from its idempotency store: no
+ * frames arrive for that one, and its wall time is how long the replay took,
+ * not how long the turn ran. Timing a turn this client never watched would put
+ * "Finished · 6 of 6 steps · 0:02" under six steps that took a minute. So the
+ * clock is kept only when at least one frame of the turn was actually seen.
+ */
+export function observedTurn(observed: {
+  plan: LivePlan | null;
+  startedAt: number | null;
+  settledAt: number;
+  stepMs: ReadonlyArray<number | null>;
+}): { plan?: TurnPlan; timing?: TurnTiming } {
+  const watched = observed.plan !== null || observed.stepMs.length > 0;
+  const plan: TurnPlan | undefined =
+    observed.plan === null
+      ? undefined
+      : {
+          labels: observed.plan.labels,
+          ...(observed.plan.kinds !== undefined ? { kinds: observed.plan.kinds } : {}),
+          ...(observed.plan.replanAt !== undefined ? { replanAt: observed.plan.replanAt } : {}),
+        };
+  const elapsedMs =
+    watched && observed.startedAt !== null
+      ? Math.max(0, observed.settledAt - observed.startedAt)
+      : undefined;
+  const stepMs = observed.stepMs.some((ms) => ms !== null) ? observed.stepMs : undefined;
+  const timing: TurnTiming | undefined =
+    elapsedMs === undefined && stepMs === undefined
+      ? undefined
+      : {
+          ...(elapsedMs !== undefined ? { elapsedMs } : {}),
+          ...(stepMs !== undefined ? { stepMs } : {}),
+        };
+  return {
+    ...(plan !== undefined ? { plan } : {}),
+    ...(timing !== undefined ? { timing } : {}),
+  };
 }
 
 /**
@@ -453,6 +616,22 @@ export interface UseAgentChatResult {
    *  that never produces one. The settled turn renders the same text, so this
    *  clears with the rest of the live progress. */
   liveAnswer: string | null;
+  /**
+   * §7, OPTIONAL — `Date.now()` at the moment this turn was sent, so the view
+   * can run an elapsed clock. Null between turns.
+   *
+   * ⛔ Optional on purpose, and so are the two below: a dozen unit tests mock
+   * this module with a hand-built object, and a REQUIRED new field would make
+   * every one of them a type error — which is the ratchet the gui-client test
+   * census guards. A reader that does not see it simply shows no clock.
+   */
+  liveStartedAt?: number | null;
+  /** §7, OPTIONAL — how long each landed step of the in-flight turn took,
+   *  aligned with `liveSteps`; `null` for a step whose start never arrived. */
+  liveStepMs?: ReadonlyArray<number | null>;
+  /** §7, OPTIONAL — the server's "this turn is not finished" sentence, as soon
+   *  as it is streamed instead of at settle. Null when none has arrived. */
+  liveNotice?: string | null;
   error: ChatError | null;
   /** The consequential action the last turn halted on (Approve/Deny), or null. */
   pendingConfirmation: PendingConfirmation | null;
@@ -654,17 +833,45 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   const [livePlan, setLivePlan] = useState<LivePlan | null>(null);
   const [liveStepIndex, setLiveStepIndex] = useState<number | null>(null);
   const [liveAnswer, setLiveAnswer] = useState<string | null>(null);
+  // §7 — what this client OBSERVED about the turn's shape and its timing. Each
+  // is additive: a server that sends none of the frames behind them leaves
+  // every one at its empty value and the view draws exactly what it drew
+  // before. The refs beside them exist for the same reason liveStepsRef does —
+  // the settle and the catch run inside a closure that was created before the
+  // first frame arrived, so the render values they can see are the empty ones.
+  const [liveStartedAt, setLiveStartedAt] = useState<number | null>(null);
+  const [liveStepMs, setLiveStepMs] = useState<ReadonlyArray<number | null>>([]);
+  const [liveNotice, setLiveNotice] = useState<string | null>(null);
   // The live steps mirrored into a ref. The catch below needs the steps THIS
   // turn streamed, and the `liveSteps` it can see through the closure is the
   // value from the render that started the send — i.e. empty.
   const liveStepsRef = useRef<ReadonlyArray<AgentIntentResult>>([]);
+  const livePlanRef = useRef<LivePlan | null>(null);
+  const liveStartedAtRef = useRef<number | null>(null);
+  const liveStepMsRef = useRef<ReadonlyArray<number | null>>([]);
+  /** When each announced step STARTED, keyed by the index the server gave it.
+   *  A step whose start never arrived is simply absent, and gets no duration. */
+  const stepStartedAtRef = useRef<Map<number, number>>(new Map());
+  /** The `cause` of the most recent `phase` frame. A `plan` frame that follows
+   *  a `replan` cause is the agent having looked again and changed its mind —
+   *  which is the only thing that earns a re-plan row. Consumed by that frame
+   *  and then cleared, so one cause can never mark two boundaries. */
+  const replanPendingRef = useRef(false);
   const clearLiveProgress = useCallback((): void => {
     liveStepsRef.current = [];
+    livePlanRef.current = null;
+    liveStartedAtRef.current = null;
+    liveStepMsRef.current = [];
+    stepStartedAtRef.current = new Map();
+    replanPendingRef.current = false;
     setLiveSteps([]);
     setLivePhase(null);
     setLivePlan(null);
     setLiveStepIndex(null);
     setLiveAnswer(null);
+    setLiveStartedAt(null);
+    setLiveStepMs([]);
+    setLiveNotice(null);
   }, []);
   // B6 — set when a failed send LEFT the customer's message on screen (as its
   // own turn plus an interrupted agent turn). A ref, because the caller reads it
@@ -865,6 +1072,24 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       // Stop that could not be confirmed must not wipe them. They stay, as an
       // interrupted turn saying why the chat stopped waiting, beside the message.
       const ranSteps = liveStepsRef.current;
+      // §7 — and so are their captions and their durations. This is the THIRD
+      // place a turn settles onto the transcript (post()'s success and its catch
+      // are the other two), and a turn that left through this door used to lose
+      // everything this client watched: the failed and gated rows fell back to
+      // "Tap something on the page" and the durations vanished, for no reason
+      // other than which exit the turn took.
+      //
+      // ⛔ COMPUTED BEFORE `clearLiveProgress()`, AND OUTSIDE THE UPDATER, for
+      // the reason spelled out at post()'s own settle: the clear empties every
+      // ref below, and React runs a `setTurns` body when it chooses to.
+      // `ranSteps` IS `liveStepsRef.current` here, so the durations are aligned
+      // with it by construction — nothing was replayed or substituted.
+      const observed = observedTurn({
+        plan: livePlanRef.current,
+        startedAt: liveStartedAtRef.current,
+        settledAt: Date.now(),
+        stepMs: liveStepMsRef.current,
+      });
       // Drop live progress now: cancel short-circuits the in-flight post()'s finally
       // (it nulls activePostRef), so the settle-clear there won't run for this turn.
       clearLiveProgress();
@@ -876,7 +1101,12 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         inFlightUserTurnIdRef.current = null;
         setTurns((t) => [
           ...t,
-          { id: nextId(), role: 'agent', interrupted: { reason: keep.reason, steps: ranSteps } },
+          {
+            id: nextId(),
+            role: 'agent',
+            interrupted: { reason: keep.reason, steps: ranSteps },
+            ...observed,
+          },
         ]);
         return;
       }
@@ -1062,6 +1292,23 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       .catch(() => undefined);
   }, []);
 
+  /**
+   * §7 — the per-step durations, but ONLY when this client saw exactly the
+   * steps the settled turn shows.
+   *
+   * ⛔ A DURATION IS POSITIONAL. `stepMs[i]` is read against `results[i]`, so a
+   * turn whose settled results are not the ones that were streamed — a server
+   * replaying a stored response, or an error whose `partial_results` replace
+   * the streamed list — would hang step 2's four seconds off step 5. Those
+   * durations are not "approximately right", they are attached to the wrong
+   * sentence, so the whole array is dropped and the rows show no time at all.
+   */
+  const alignedStepMs = useCallback(
+    (settledSteps: number): ReadonlyArray<number | null> =>
+      liveStepsRef.current.length === settledSteps ? liveStepMsRef.current : [],
+    [],
+  );
+
   const post = useCallback(
     async (
       userMessage: string,
@@ -1125,6 +1372,13 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       setLastUserMessage(userMessage);
       // Fresh turn → clear any progress left visible from a prior one.
       clearLiveProgress();
+      // §7 — the turn's clock starts HERE, at the customer's Send, not at the
+      // first frame: the wait before anything is announced is the part of a
+      // turn that feels longest, and a clock that starts when the first step
+      // begins would hide it.
+      const sentAt = Date.now();
+      liveStartedAtRef.current = sentAt;
+      setLiveStartedAt(sentAt);
       // Drop the optimistic user bubble on any NON-success outcome (Stop / error)
       // so the transcript never persists an unanswered "complete" turn (#3) and the
       // composer draft that submit() restores on a falsey result isn't a duplicate
@@ -1230,6 +1484,18 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
           // newer turn's view).
           onStep: (step) => {
             if (cancelGenRef.current !== gen) return;
+            // §7 — how long this step took, as the delta between the frame that
+            // announced it starting and this one. The server's own index is
+            // preferred and the row's position is the fallback; when neither
+            // was ever announced the entry is null and the row shows NO
+            // duration. It must never fall back to 0, which reads as "instant".
+            const at = liveStepsRef.current.length;
+            const announced = typeof step.index === 'number' ? step.index : at;
+            const startedAt =
+              stepStartedAtRef.current.get(announced) ?? stepStartedAtRef.current.get(at);
+            const ms = startedAt === undefined ? null : Math.max(0, Date.now() - startedAt);
+            liveStepMsRef.current = [...liveStepMsRef.current, ms];
+            setLiveStepMs(liveStepMsRef.current);
             liveStepsRef.current = [...liveStepsRef.current, step.result];
             setLiveSteps((prev) => [...prev, step.result]);
           },
@@ -1242,6 +1508,11 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
             if (event.type === 'phase') {
               const data = event.data as { phase?: unknown; cause?: unknown } | null;
               const phase = data?.phase;
+              // §7 — remember that the agent is going round again BECAUSE it
+              // re-planned. The plan frame that follows is the new segment, and
+              // its offset is where the re-plan row goes. `continue` is a
+              // different thing (the same plan, carried on) and earns no row.
+              if (data?.cause === 'replan') replanPendingRef.current = true;
               // An unrecognised phase leaves the caption as it was rather than
               // blanking a truthful one or showing a raw token.
               if (typeof phase === 'string') {
@@ -1255,29 +1526,53 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
                 total?: unknown;
                 labels?: unknown;
                 offset?: unknown;
+                intents?: unknown;
               } | null;
               const labels = Array.isArray(data?.labels)
                 ? data.labels.filter((l): l is string => typeof l === 'string')
                 : [];
               const total = typeof data?.total === 'number' ? data.total : labels.length;
               const offset = typeof data?.offset === 'number' ? data.offset : undefined;
+              // §7 — the kind of each planned step, read off the same public
+              // intents the captions were written from. A frame without them
+              // (an older server) yields nulls, and the rows stay hollow.
+              const kinds = Array.isArray(data?.intents)
+                ? data.intents.map((i) => stepKindOf(i))
+                : undefined;
+              const replan = replanPendingRef.current;
+              replanPendingRef.current = false;
               // MERGED, not replaced: a turn announces one plan per segment.
               if (labels.length > 0) {
-                setLivePlan((previous) =>
-                  mergeLivePlan(previous, {
-                    labels,
-                    total,
-                    ...(offset !== undefined ? { offset } : {}),
-                  }),
-                );
+                const merged = mergeLivePlan(livePlanRef.current, {
+                  labels,
+                  total,
+                  ...(offset !== undefined ? { offset } : {}),
+                  ...(kinds !== undefined ? { kinds } : {}),
+                  ...(replan ? { replan } : {}),
+                });
+                livePlanRef.current = merged;
+                setLivePlan(merged);
               }
               return;
             }
             if (event.type === 'step_start') {
               const index = (event.data as { index?: unknown } | null)?.index;
               if (typeof index === 'number' && Number.isInteger(index) && index >= 0) {
+                // §7 — the other end of this step's duration. Recorded before
+                // the state update so a slow render cannot be billed to the
+                // step, and keyed by the server's index because a turn of
+                // several segments counts across all of them.
+                stepStartedAtRef.current.set(index, Date.now());
                 setLiveStepIndex(index);
               }
+              return;
+            }
+            if (event.type === 'notice') {
+              // §7 — "I did the steps above, but the task is not finished."
+              // The settled turn renders the same sentence; this one lands
+              // while the turn is still running, which is when it is useful.
+              const notice = (event.data as { notice?: unknown } | null)?.notice;
+              if (typeof notice === 'string' && notice.trim().length > 0) setLiveNotice(notice);
               return;
             }
             if (event.type === 'answer') {
@@ -1310,7 +1605,26 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         // P2 #9 — the turn completed (an agent reply now backs the user bubble), so
         // the bubble is no longer "dangling" — clear the in-flight marker.
         inFlightUserTurnIdRef.current = null;
-        setTurns((t) => [...t, { id: nextId(), role: 'agent', response }]);
+        // §7 — the captions, kinds, re-plan boundaries and timings this client
+        // watched, kept so the settled rows can say what the live ones said.
+        // Absent for a turn nothing was streamed for.
+        //
+        // ⛔ COMPUTED HERE, NOT INSIDE THE UPDATER. A `setTurns(t => …)` body
+        // runs when REACT chooses to run it — after this function's `finally`,
+        // which calls `clearLiveProgress()` and empties every ref below, and
+        // twice under StrictMode. Reading the refs from in there produced a
+        // turn with no timing at all, with every unit of the machinery correct.
+        const observed = observedTurn({
+          plan: livePlanRef.current,
+          startedAt: liveStartedAtRef.current,
+          settledAt: Date.now(),
+          stepMs: alignedStepMs(
+            response.kind === 'plan-executed' || response.kind === 'stopped'
+              ? response.results.length
+              : 0,
+          ),
+        });
+        setTurns((t) => [...t, { id: nextId(), role: 'agent', response, ...observed }]);
         outcome = true;
         return true;
       } catch (err) {
@@ -1343,12 +1657,23 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         const partialFromServer = partialResultsFromError(err);
         const ranSteps = partialFromServer.length > 0 ? partialFromServer : liveStepsRef.current;
         if (appendedUserTurnId !== null) inFlightUserTurnIdRef.current = null;
+        // §7 — an interrupted turn keeps what it watched too: the steps that
+        // ran are the whole point of B6, and their captions and durations are
+        // part of what ran. Computed OUTSIDE the updater, for the reason the
+        // success path above spells out.
+        const observed = observedTurn({
+          plan: livePlanRef.current,
+          startedAt: liveStartedAtRef.current,
+          settledAt: Date.now(),
+          stepMs: alignedStepMs(ranSteps.length),
+        });
         setTurns((t) => [
           ...t,
           {
             id: nextId(),
             role: 'agent',
             interrupted: { reason: interruptedTurnReason(err), steps: ranSteps },
+            ...observed,
           },
         ]);
         // The interrupted turn above already says what happened and what to do;
@@ -1389,6 +1714,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       nextId,
       closeServerSession,
       clearStopping,
+      alignedStepMs,
     ],
   );
 
@@ -1642,6 +1968,9 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     livePlan,
     liveStepIndex,
     liveAnswer,
+    liveStartedAt,
+    liveStepMs,
+    liveNotice,
     error,
     pendingConfirmation,
     deniedTurnIds,

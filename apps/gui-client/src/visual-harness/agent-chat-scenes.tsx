@@ -37,7 +37,7 @@
 // grow a third member.
 
 import { type ReactNode } from 'react';
-import type { AgentIntentResult, AgentSession, AgentUsage } from '@driftstack/sdk';
+import type { AgentIntent, AgentIntentResult, AgentSession, AgentUsage } from '@driftstack/sdk';
 import type { ChatTurn, PendingConfirmation, UseAgentChatResult } from '../lib/use-agent-chat';
 
 /** The seven states, named for what the customer is doing — not for the hook
@@ -216,6 +216,39 @@ const PLAN_LABELS: ReadonlyArray<string> = [
   'Screenshot the product page',
 ];
 
+/** §7 — what each planned step IS, which is what puts a drawing on a row that
+ *  has not run yet. Aligned with PLAN_LABELS; `null` would render the hollow
+ *  node, and the scene deliberately has none so the gate measures the icons. */
+const PLAN_KINDS: ReadonlyArray<string | null> = [
+  'navigate',
+  'tap',
+  'type',
+  'tap',
+  'read',
+  'capture',
+];
+
+/** §7 — the turn looked at the page after its third step and planned the rest
+ *  from what it saw. The view draws "Looked at the page and updated the plan"
+ *  at that boundary, which is what a turn of several segments really did. */
+const REPLAN_AT: ReadonlyArray<number> = [3];
+
+/** §7 — how long each step took, in ms, as a client watching the stream would
+ *  have measured it. Deliberately UNEVEN: a real turn's steps are not the same
+ *  length, and a fixture of identical numbers would hide a column that does not
+ *  line up. The done scene's total (0:41) is the elapsed clock, not their sum —
+ *  a turn also spends time planning and reading back. */
+const STEP_MS: ReadonlyArray<number | null> = [3100, 1400, 5200, 14_600, 6000, 1200];
+
+/** The done turn's whole wall time, matching the mockup's "Finished · 6 of 6
+ *  steps · 0:41". */
+const DONE_ELAPSED_MS = 41_000;
+
+/** A step that finished. The INTENT matters as much as the summary now: stage 2
+ *  derives the mono fact chip from it (a host for a navigation, the text that
+ *  was typed, "1 image" for a capture), so a fixture whose every step is a
+ *  `wait` would render a timeline with no facts on it and the gate would
+ *  measure a chip that never appears. */
 function ok(summary: string, captureId?: string): AgentIntentResult {
   return captureId === undefined
     ? { kind: 'success', intent: { kind: 'wait', condition: 'idle' }, summary }
@@ -226,6 +259,28 @@ function ok(summary: string, captureId?: string): AgentIntentResult {
         captureId,
       };
 }
+
+/** A finished navigation — its chip is the host it landed on. */
+function went(url: string, summary: string): AgentIntentResult {
+  return { kind: 'success', intent: { kind: 'navigate', url }, summary };
+}
+
+/** A finished `type` step — its chip is the text that was typed, in quotes. */
+function typed(value: string, summary: string): AgentIntentResult {
+  return {
+    kind: 'success',
+    intent: { kind: 'interact', action: 'type', selector: '#q', value },
+    summary,
+  };
+}
+
+/** A step that was PLANNED and never ran, so the turn can say "N later steps
+ *  didn't run" — `intents` is longer than `results` exactly when a plan was
+ *  abandoned part-way, which is the shape a failed and a gated turn both have. */
+const NOT_RUN: ReadonlyArray<AgentIntent> = [
+  { kind: 'interact', action: 'tap', selector: '#confirm' },
+  { kind: 'capture', capture: 'screenshot' },
+];
 
 const USAGE: AgentUsage = {
   decomposer_kind: 'claude',
@@ -331,9 +386,9 @@ const ANSWER =
   'The Ridgeline Trail 2 is the best-rated pair under $120 at $104.00, and US size 10 is in stock. I have saved a screenshot of the product page below.';
 
 const RUNNING_STEPS: ReadonlyArray<AgentIntentResult> = [
-  ok('Opened the store at shop.example.com'),
+  went('https://shop.example.com/', 'Opened the store'),
   ok('Accepted the cookie banner'),
-  ok('Searched the store for “trail running shoes”'),
+  typed('trail running shoes', 'Searched the store'),
 ];
 
 const DONE_STEPS: ReadonlyArray<AgentIntentResult> = [
@@ -344,7 +399,7 @@ const DONE_STEPS: ReadonlyArray<AgentIntentResult> = [
 ];
 
 const APPROVAL_STEPS: ReadonlyArray<AgentIntentResult> = [
-  ok('Opened the store at shop.example.com'),
+  went('https://shop.example.com/checkout', 'Opened the store'),
   ok('Opened Ridgeline Trail 2 in US size 10'),
   ok('Added it to the cart'),
   ok('Opened the checkout and filled in the saved delivery address'),
@@ -357,7 +412,7 @@ const APPROVAL_STEPS: ReadonlyArray<AgentIntentResult> = [
 ];
 
 const TROUBLE_STEPS: ReadonlyArray<AgentIntentResult> = [
-  ok('Opened the store at shop.example.com'),
+  went('https://shop.example.com/', 'Opened the store'),
   ok('Opened Ridgeline Trail 2 in US size 10'),
   {
     kind: 'failure',
@@ -415,9 +470,18 @@ export function agentChatSceneFixture(
           turns: [turn(1, TASK)],
           sending: true,
           livePhase: 'Looking at the page…',
-          livePlan: { labels: PLAN_LABELS, total: PLAN_LABELS.length },
+          livePlan: {
+            labels: PLAN_LABELS,
+            total: PLAN_LABELS.length,
+            kinds: PLAN_KINDS,
+            replanAt: REPLAN_AT,
+          },
           liveSteps: RUNNING_STEPS,
           liveStepIndex: 3,
+          // §7 — the clock reads 0:48 against the harness's frozen now, which
+          // is what the mockup's running scene shows.
+          liveStartedAt: now - 48_000,
+          liveStepMs: STEP_MS.slice(0, RUNNING_STEPS.length),
           session: session(now, {
             id: 'agt_audit_running',
             liveness: { state: 'active', fresh: true },
@@ -427,7 +491,8 @@ export function agentChatSceneFixture(
         markers: [
           TASK,
           'Looking at the page…',
-          'Searched the store for “trail running shoes”',
+          'Searched the store',
+          'Looked at the page and updated the plan',
           // The live plan's glyph and its label are separate text nodes (the
           // pinned `'▶ ' + label` is a textContent, not one node), so the marker
           // is the label — what a customer reads — and never the glyph.
@@ -450,7 +515,7 @@ export function agentChatSceneFixture(
               response: {
                 kind: 'plan-executed',
                 session: session(now, { id: 'agt_audit_approval' }),
-                intents: APPROVAL_STEPS.map((r) => r.intent),
+                intents: [...APPROVAL_STEPS.map((r) => r.intent), ...NOT_RUN.slice(0, 1)],
                 results: APPROVAL_STEPS,
                 ok: false,
                 usage: USAGE,
@@ -492,6 +557,13 @@ export function agentChatSceneFixture(
                 answer: ANSWER,
                 usage: USAGE,
               },
+              // §7 — the captions, the kinds, the re-plan boundary and the
+              // timings the live turn announced, kept across the settle. This
+              // is the scene that proves the WITH-timing render; every other
+              // settled turn in this file deliberately carries none, which is
+              // the WITHOUT-timing render measured in the same gate run.
+              plan: { labels: PLAN_LABELS, kinds: PLAN_KINDS, replanAt: REPLAN_AT },
+              timing: { elapsedMs: DONE_ELAPSED_MS, stepMs: STEP_MS },
             },
           ],
           session: session(now, {
@@ -500,7 +572,12 @@ export function agentChatSceneFixture(
             capability_report: capabilityReport(now),
           }),
         },
-        markers: [TASK, ANSWER, 'Captured a screenshot of the product page'],
+        markers: [
+          TASK,
+          ANSWER,
+          'Captured a screenshot of the product page',
+          'Looked at the page and updated the plan',
+        ],
       };
 
     case 'trouble':
@@ -517,7 +594,7 @@ export function agentChatSceneFixture(
               response: {
                 kind: 'plan-executed',
                 session: session(now, { id: 'agt_audit_trouble' }),
-                intents: TROUBLE_STEPS.map((r) => r.intent),
+                intents: [...TROUBLE_STEPS.map((r) => r.intent), ...NOT_RUN],
                 results: TROUBLE_STEPS,
                 ok: false,
                 usage: USAGE,

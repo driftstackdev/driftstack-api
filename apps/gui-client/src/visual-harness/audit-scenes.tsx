@@ -490,6 +490,42 @@ export function auditStoredChats(): StoredChat[] {
       createdAt: now - 86_400_000,
       updatedAt: now - 86_400_000 + 600_000,
     },
+    // Stage 6 — the rail's THIRD group and its red outcome dot. Without a chat
+    // older than yesterday the "Earlier" heading was never rendered, and
+    // without one whose last turn ended badly neither the error dot nor the
+    // "Didn’t finish" meta line was ever measured: the gate would have reported
+    // a clean rail with two of its five states unseen. A stopped turn (the
+    // customer pressed Stop) is the commonest of them.
+    {
+      id: 'chat_audit_cart',
+      title: 'Add three items to the cart and stop',
+      profileId: 'prof_audit_amsterdam',
+      model: 'claude-sonnet-5',
+      turns: [
+        { id: 1, role: 'user', text: 'Add three items to the cart, then stop before checkout.' },
+        {
+          id: 2,
+          role: 'agent',
+          interrupted: {
+            reason: 'Stopped after step 2 of 5, as you asked.',
+            steps: [
+              {
+                kind: 'success',
+                intent: { kind: 'navigate', url: 'https://shop.example.com' },
+                summary: 'Opened the store',
+              },
+              {
+                kind: 'success',
+                intent: { kind: 'interact', action: 'tap', selector: '#add-to-cart' },
+                summary: 'Added the first item to the cart',
+              },
+            ],
+          },
+        },
+      ],
+      createdAt: now - 4 * 86_400_000,
+      updatedAt: now - 4 * 86_400_000 + 900_000,
+    },
   ];
 }
 

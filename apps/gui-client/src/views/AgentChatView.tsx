@@ -28,7 +28,7 @@
 // re-exports below, so nothing that imported `describeResult`,
 // `summariseChatTurn` or a notice constant FROM THIS FILE had to change.
 
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type AgentSession } from '@driftstack/sdk';
 import { describeAgentSessionState } from '../lib/session-liveness';
 import { useSettings } from '../lib/SettingsContext';
@@ -50,14 +50,26 @@ import {
 import { listProxies, type ProxyConfig } from '../lib/proxies';
 import { listBindings } from '../lib/profile-bindings';
 import { ensureAccountProxyRow } from '../lib/proxy-server-test';
-import { ApprovalDock } from './agent-chat/ApprovalDock';
+import { ApprovalDock, confirmationHost, gatedStepTaps } from './agent-chat/ApprovalDock';
 import { ChatRail } from './agent-chat/ChatRail';
 import { Composer, growComposerToFit } from './agent-chat/Composer';
-import { IdleHero } from './agent-chat/IdleHero';
+import { GateCard, IdleHero } from './agent-chat/IdleHero';
+import { IconEye, IconKey } from './agent-chat/icons';
 import { MissionBar } from './agent-chat/MissionBar';
 import { REATTACHING_NOTICE } from './agent-chat/notices';
 import { Stage } from './agent-chat/Stage';
-import { LiveTurnRow, RestoredHistoryDivider, TurnRow, TypingRow } from './agent-chat/Turn';
+import {
+  LiveTurnRow,
+  RestoredHistoryDivider,
+  TurnRow,
+  TypingRow,
+  type TurnActions,
+} from './agent-chat/Turn';
+import { missionPhase } from './agent-chat/mission-phase';
+import { liveChatStatus } from './agent-chat/mission-status';
+import { useShortView } from './agent-chat/use-short-view';
+import { useViewTier } from './agent-chat/use-view-width';
+import { useStickToBottom } from './agent-chat/use-stick-to-bottom';
 
 // ─── re-exports: the view's public surface is unchanged by the split ───
 //
@@ -253,6 +265,19 @@ export function AgentChatView({
   // caret at the end, and grow it to fit the inserted prompt (mirrors the
   // onChange auto-grow) instead of leaving a cramped, unfocused box.
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  // The scrolling column the transcript lives in. Stage 2 follows the newest
+  // content in it — but only for a customer who was already at the bottom.
+  const logRef = useRef<HTMLDivElement>(null);
+  // The mission column. Stage 5 measured its HEIGHT for the short tier; stage 6
+  // moved that measurement to the view root (the bar left the column, so the two
+  // boxes stopped being the same one — see `shortView` below). The ref stays:
+  // stage 4 makes this element the container spec §1's tiers are written
+  // against, and nothing else in the view can point at it.
+  const columnRef = useRef<HTMLDivElement>(null);
+  // The WHOLE view — the box spec §1's width tiers are written against (the
+  // rail is inside it, so the chat column alone cannot answer "is the rail a
+  // strip?"). Stage 4 is where this becomes a real container.
+  const viewRef = useRef<HTMLDivElement>(null);
   // Bundled-LLM one-click consent CTA (error banner). Local, not part of the
   // chat hook — this is a settings mutation, not a chat turn.
   const [bundledLlmEnabling, setBundledLlmEnabling] = useState(false);
@@ -690,6 +715,101 @@ export function AgentChatView({
     });
   }
 
+  /** Put text in the composer and leave the caret in it — the suggestion under
+   *  a failed step, and the same hand-off a template makes. Nothing is sent. */
+  function fillComposer(text: string): void {
+    handlePickTemplate(text);
+  }
+
+  /**
+   * "Continue from here" — the honest action under a failure. There is no
+   * step-retry API: the server carries on from the page the browser is already
+   * on when it is sent "continue", so that is exactly what this sends. It runs
+   * the SAME guards Send does, because it reaches the same place.
+   */
+  function continueFromHere(): void {
+    if (chat.sending || !aiReady || chat.adopting || chat.stoppedTurnStillRunning) return;
+    if (proxyState.kind === 'pending' || proxyState.kind === 'blocked') return;
+    void chat.send('continue');
+  }
+
+  /** Focus the composer for a follow-up, without putting words in it. */
+  function askFollowUp(): void {
+    composerRef.current?.focus();
+  }
+
+  /** Open the save-as-task dialog — the same one the bar's button opens. */
+  function openSaveDialog(): void {
+    setSaveError(null);
+    setSaveOpen(true);
+  }
+
+  // ⛔ THIS OBJECT'S IDENTITY IS LOAD-BEARING. `TurnRow` is `React.memo` so that
+  // a keystroke in the composer — whose `draft` state lives in THIS component —
+  // does not re-render every turn in the transcript (the 2026-07-08 input-lag
+  // audit). `memo` compares props shallowly, so a fresh `{…}` here would make
+  // that compare fail for every row on every keystroke and silently undo it.
+  // The handlers are read through a ref that is refreshed on every render, so
+  // they always call the newest closure while the object handed down changes
+  // only when one of the two things a turn can SEE changes.
+  // (typing-a-message-does-not-re-render-the-turns-above-it.test.tsx counts it.)
+  const live = useRef({ continueFromHere, fillComposer, askFollowUp, openSaveDialog });
+  live.current = { continueFromHere, fillComposer, askFollowUp, openSaveDialog };
+  const sessionActive = chat.session !== null;
+  const turnActions: TurnActions = useMemo(
+    () => ({
+      onContinue: () => {
+        live.current.continueFromHere();
+      },
+      onSuggest: (text: string) => {
+        live.current.fillComposer(text);
+      },
+      onSaveAsTask: canSaveRecipe
+        ? () => {
+            live.current.openSaveDialog();
+          }
+        : undefined,
+      onAskFollowUp: () => {
+        live.current.askFollowUp();
+      },
+      sessionActive,
+    }),
+    [canSaveRecipe, sessionActive],
+  );
+
+  // Follow the newest content — and only for a customer who is already at the
+  // bottom. While a turn RUNS the newest step is the thing to look at; once it
+  // settles with an answer, the answer is, so the log anchors on the card
+  // rather than on the last row of a plan that pushed it off the screen.
+  useStickToBottom(
+    logRef,
+    [chat.turns.length, chat.liveSteps?.length ?? 0, chat.liveAnswer, chat.sending, started],
+    { anchorSelector: chat.sending ? null : '.ai-result', enabled: started },
+  );
+
+  // What the AI is doing, as ONE word (spec §3.1). Stage 4 hangs the room light,
+  // the device rim and the stage caption off it; stage 5 needs it for one thing
+  // the approval gate promises — while the gate is up NOTHING in the view moves,
+  // and "nothing" is a rule the CSS can only apply if it knows the phase.
+  const phase = missionPhase(chat);
+  // D6 — measured, not guessed, and false where nothing can measure. It buys the
+  // empty composer's fifth row back for the templates at the 600px-tall minimum.
+  // ⛔ THE VIEW'S BOX, NOT THE COLUMN'S — and it used to be the same box. Stage
+  // 5 measured `columnRef` because the column was full height; stage 6 lifted
+  // the bar out of it into the deck, so the column is now 52px shorter than the
+  // view. Spec §1 writes this tier as `@container aiview (max-height: 620px)` —
+  // the VIEW — so pointing it at the view root keeps the number stage 5
+  // measured (564px at the 960x600 minimum) instead of silently moving the
+  // short tier 52px up the window.
+  const shortView = useShortView(viewRef);
+  // Spec §1's width tiers, measured on the view's own box. `narrow` turns the
+  // rail into the 44px strip and the bar into its 44px form; `wide` only
+  // spells the budget out, and is CSS-only.
+  const tier = useViewTier(viewRef);
+  // What the chat being worked on is doing, in the words the rail's active row
+  // shows (spec §3.2). One derivation, shared by the row and the strip's dot.
+  const liveStatus = liveChatStatus(chat);
+
   function submit(): void {
     const text = draft.trim();
     // Don't fire a doomed request when there's no API key connected — it would
@@ -738,20 +858,42 @@ export function AgentChatView({
   }
 
   return (
-    <div className="flex h-full bg-surface-base">
+    // `data-ai-phase` is the one word the whole view is keyed on (spec §3.1).
+    // Stage 5 uses it for a single promise: while the approval gate is up, the
+    // calm is LITERAL — every infinite animation in the view stops.
+    <div
+      ref={viewRef}
+      className="flex h-full bg-surface-base"
+      data-ai-phase={phase}
+      /* ⛔ VALUELESS OR ABSENT, never `false`. React renders `data-x={false}`
+         as the STRING "false", which a `[data-ai-narrow]` selector matches —
+         the whole view would wear the strip layout at every width. */
+      data-ai-narrow={tier.narrow ? '' : undefined}
+      data-ai-wide={tier.wide ? '' : undefined}
+    >
       <ChatRail
         chats={chats}
         activeId={activeChatId}
         busy={chat.sending}
+        narrow={tier.narrow}
+        liveStatus={liveStatus}
         onNew={handleNewChat}
         onSelect={handleSelectChat}
         onDelete={handleDeleteChat}
       />
-      <div
-        className="flex h-full min-w-0 flex-1 flex-col"
-        data-component="ai-automation-chat-column"
-      >
+      {/* THE DECK — the bar, and under it everything the bar is about.
+          ⛔ THIS WRAPPER IS WHY THE BAR CAN BE ONE ROW. Until stage 6 the header
+          lived INSIDE the chat column, so at the 1280px default window it was
+          laid out in 572px (the column, after the 300px live pane took its
+          share) and wrapped to two rows — three at the 960px minimum. The bar
+          is about the whole mission, not about the transcript, so it spans the
+          deck: 872px at 1280, 692 at 960, which is what spec §1's table says.
+          Stage 4 re-cuts what is UNDER it (order stage → mission, container
+          queries, the device frame); this is only the box the bar sits in, and
+          nothing inside either half moved. */}
+      <div className="ai-deck">
         <MissionBar
+          chat={chat}
           sessionState={sessionState}
           session={chat.session}
           liveOpen={liveOpen}
@@ -769,250 +911,283 @@ export function AgentChatView({
             setSaveError(null);
             setSaveOpen(true);
           }}
-          onNewChat={handleNewChat}
         />
-
-        {/* Honest execution-mode banner — auto-updates with /version
-            agent_execution (#139): shows the live indicator when AI-automation
-            executes for real over the fleet control plane (prod), and only says
-            "preview mode" on a genuine stub (agent_execution:'simulated'). */}
-        <div className="border-b border-surface-divider bg-surface-inset px-4 py-1.5">
-          {actionsAreLive ? (
-            <span className="text-2xs text-ink-muted">
-              <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent align-middle"></span>
-              Live device — Claude plans each step and runs it on a real iPhone.
-            </span>
-          ) : (
-            <span className="text-2xs text-ink-muted">
-              Claude plans each step, but browser actions run in preview mode for now — they are not
-              carried out on a real device yet.
-            </span>
-          )}
-        </div>
-
-        {!aiReady && (
+        <div className="ai-deck-body">
           <div
-            role="status"
-            data-component="ai-api-key-gate"
-            className="border-b border-accent/35 bg-accent-subtle px-4 py-3"
+            ref={columnRef}
+            className="flex h-full min-w-0 flex-1 flex-col"
+            data-component="ai-automation-chat-column"
           >
-            <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-ink-primary">
-                  Connect your API key to run automations
-                </p>
-                <p className="mt-0.5 text-xs text-ink-secondary">
-                  You can explore templates and draft a task now. Add your key in Settings before
-                  sending it to the browser.
-                </p>
+            {/* Honest execution-mode banner — auto-updates with /version
+            agent_execution (#139): shows the live indicator when AI-automation
+            executes for real over the fleet control plane (prod). The PREVIEW
+            half of this strip is now a gate card in the column below (spec §10);
+            stage 4 replaces this live half with the stage's LIVE chip. */}
+            {actionsAreLive && (
+              <div className="border-b border-surface-divider bg-surface-inset px-4 py-1.5">
+                <span className="text-2xs text-ink-muted">
+                  <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent align-middle"></span>
+                  Live device — Claude plans each step and runs it on a real iPhone.
+                </span>
               </div>
-              {onGoToSettings !== undefined && (
-                <button
-                  type="button"
-                  onClick={onGoToSettings}
-                  className="btn-primary shrink-0 px-3 py-1.5 text-xs"
-                >
-                  Connect in Settings
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+            )}
 
-        {/* Transcript */}
-        <div className="flex-1 overflow-auto px-4 py-4">
-          {!started ? (
-            <IdleHero onPick={handlePickTemplate} />
-          ) : (
-            <ol
-              className="mx-auto flex max-w-3xl flex-col gap-3"
-              // a11y: announce streaming assistant replies to a screen reader — focus stays
-              // in the composer after Send, so without a live region the reply arrives
-              // silently and the chat is unusable without sight (audit 2026-07-09).
-              aria-live="polite"
-              aria-relevant="additions"
-            >
-              {chat.turns.map((turn, i) => (
-                <Fragment key={turn.id}>
-                  <TurnRow
-                    turn={turn}
-                    denied={chat.deniedTurnIds.has(turn.id)}
-                    // optional-chained: a partial useAgentChat double in a test may omit
-                    // this newer field; the real hook always provides it. An approved
-                    // consequential step renders past-tense instead of "confirmation
-                    // required" forever.
-                    approved={chat.approvedTurnIds?.has(turn.id) ?? false}
-                    // A reopened chat has no live session, so fetch its persisted captures
-                    // from the continue-from id the server still serves (LOW #9). The live
-                    // id wins once the chat is live again.
-                    sessionId={chat.session?.id ?? chat.restoredSessionId ?? null}
-                    baseUrl={settings.baseUrl}
-                    apiKey={settings.apiKey}
-                    captureSrc={captureSrc}
-                  />
-                  {/* Honest history boundary: the turns above were restored from
+            {/* Transcript */}
+            <div ref={logRef} className="ai-log flex-1 overflow-auto px-4 py-4">
+              {/* The gates that stand between the customer and a working chat, as
+              cards at the top of the column (spec §3.8). ⛔ Exactly ONE
+              `role="status"` may exist in the idle no-key state, and it is this
+              one — the preview card beside it is a plain div. */}
+              {!aiReady && (
+                <GateCard
+                  status
+                  component="ai-api-key-gate"
+                  icon={<IconKey />}
+                  title="Connect your API key to run automations"
+                  body="You can explore templates and draft a task now. Add your key in Settings before sending it to the browser."
+                  action={
+                    onGoToSettings !== undefined ? (
+                      <button
+                        type="button"
+                        onClick={onGoToSettings}
+                        className="btn-primary shrink-0 px-3 py-1.5 text-xs"
+                      >
+                        Connect in Settings
+                      </button>
+                    ) : undefined
+                  }
+                />
+              )}
+              {!actionsAreLive && (
+                <GateCard
+                  icon={<IconEye />}
+                  title="Preview mode"
+                  body="The AI plans each step, but browser actions are not carried out on a real iPhone yet."
+                />
+              )}
+              {!started ? (
+                <IdleHero
+                  onPick={handlePickTemplate}
+                  preview={!actionsAreLive}
+                  // §3.8: the gate card above takes the beats' place, so the first
+                  // screen still ends at the templates rather than below the fold.
+                  gated={!aiReady}
+                />
+              ) : (
+                <ol
+                  className="mx-auto flex max-w-3xl flex-col"
+                  // a11y: announce streaming assistant replies to a screen reader — focus stays
+                  // in the composer after Send, so without a live region the reply arrives
+                  // silently and the chat is unusable without sight (audit 2026-07-09).
+                  aria-live="polite"
+                  aria-relevant="additions"
+                >
+                  {chat.turns.map((turn, i) => (
+                    <Fragment key={turn.id}>
+                      <TurnRow
+                        turn={turn}
+                        denied={chat.deniedTurnIds.has(turn.id)}
+                        // optional-chained: a partial useAgentChat double in a test may omit
+                        // this newer field; the real hook always provides it. An approved
+                        // consequential step renders past-tense instead of "confirmation
+                        // required" forever.
+                        approved={chat.approvedTurnIds?.has(turn.id) ?? false}
+                        // A reopened chat has no live session, so fetch its persisted captures
+                        // from the continue-from id the server still serves (LOW #9). The live
+                        // id wins once the chat is live again.
+                        sessionId={chat.session?.id ?? chat.restoredSessionId ?? null}
+                        baseUrl={settings.baseUrl}
+                        apiKey={settings.apiKey}
+                        captureSrc={captureSrc}
+                        // The first row in the log draws no separator above it, and
+                        // an earlier brief clamps to one line: the thing to read now
+                        // is the newest turn, not the question that started it.
+                        first={i === 0}
+                        past={i < chat.turns.length - 2}
+                        actions={turnActions}
+                      />
+                      {/* Honest history boundary: the turns above were restored from
                       saved history and are NOT in a live agent session. Continuing
                       the chat starts a fresh session that won't remember them — so
                       say so, rather than presenting one seamless conversation the
                       agent silently has amnesia about (sweep2). */}
-                  {chat.session === null &&
-                    // Held back while an adoption is in flight: until the GET
-                    // answers, "continuing starts a fresh session" is a claim we
-                    // cannot yet make.
-                    !chat.adopting &&
-                    chat.restoredHistoryCount > 0 &&
-                    i === chat.restoredHistoryCount - 1 && <RestoredHistoryDivider />}
-                </Fragment>
-              ))}
-              {chat.sending &&
-                // B2 — the progress the server streams BEFORE any step has
-                // completed. Until this landed, Send produced three dots for 10
-                // to 30 seconds (up to ~150s at worst) with nothing to read.
-                // Each source is independently optional: a server that sends no
-                // progress falls through to exactly the old spinner.
-                (chat.livePlan !== null || chat.liveSteps.length > 0 || chat.livePhase !== null ? (
-                  <LiveTurnRow
-                    livePhase={chat.livePhase}
-                    liveAnswer={chat.liveAnswer}
-                    liveSteps={chat.liveSteps}
-                    livePlan={chat.livePlan}
-                    liveStepIndex={chat.liveStepIndex}
-                    sessionId={chat.session?.id ?? null}
-                    baseUrl={settings.baseUrl}
-                    apiKey={settings.apiKey}
-                    captureSrc={captureSrc}
-                  />
-                ) : (
-                  <TypingRow
-                    label={
-                      chat.session === null ? 'Starting a session…' : 'Working on your request…'
-                    }
-                  />
-                ))}
-              {/* (l) #8 — the reattach in flight is visible without hovering the
+                      {chat.session === null &&
+                        // Held back while an adoption is in flight: until the GET
+                        // answers, "continuing starts a fresh session" is a claim we
+                        // cannot yet make.
+                        !chat.adopting &&
+                        chat.restoredHistoryCount > 0 &&
+                        i === chat.restoredHistoryCount - 1 && <RestoredHistoryDivider />}
+                    </Fragment>
+                  ))}
+                  {chat.sending &&
+                    // B2 — the progress the server streams BEFORE any step has
+                    // completed. Until this landed, Send produced three dots for 10
+                    // to 30 seconds (up to ~150s at worst) with nothing to read.
+                    // Each source is independently optional: a server that sends no
+                    // progress falls through to exactly the old spinner.
+                    (chat.livePlan !== null ||
+                    chat.liveSteps.length > 0 ||
+                    chat.livePhase !== null ? (
+                      <LiveTurnRow
+                        livePhase={chat.livePhase}
+                        liveAnswer={chat.liveAnswer}
+                        liveSteps={chat.liveSteps}
+                        livePlan={chat.livePlan}
+                        liveStepIndex={chat.liveStepIndex}
+                        // §7 (stage 3) — the elapsed clock, the per-step durations
+                        // and the "not finished yet" notice, each OPTIONAL on the
+                        // hook's contract so the dozen tests that mock this module
+                        // with a hand-built object keep type-checking and simply
+                        // render a turn with no clock and no durations.
+                        liveStartedAt={chat.liveStartedAt}
+                        liveStepMs={chat.liveStepMs}
+                        liveNotice={chat.liveNotice}
+                        sessionId={chat.session?.id ?? null}
+                        baseUrl={settings.baseUrl}
+                        apiKey={settings.apiKey}
+                        captureSrc={captureSrc}
+                      />
+                    ) : (
+                      <TypingRow
+                        label={
+                          chat.session === null ? 'Starting a session…' : 'Working on your request…'
+                        }
+                      />
+                    ))}
+                  {/* (l) #8 — the reattach in flight is visible without hovering the
                   disabled Send: the same slot the "Starting a session…" row
                   uses. A failed reattach is a notice with a retry, below. */}
-              {chat.adopting && !chat.sending && chat.adoptError === null && (
-                <TypingRow label={REATTACHING_NOTICE} />
+                  {chat.adopting && !chat.sending && chat.adoptError === null && (
+                    <TypingRow label={REATTACHING_NOTICE} />
+                  )}
+                </ol>
               )}
-            </ol>
-          )}
-        </div>
+            </div>
 
-        {/* Consequential-action confirmation gate */}
-        {chat.pendingConfirmation !== null && (
-          <ApprovalDock
-            category={chat.pendingConfirmation.category}
-            matchedText={chat.pendingConfirmation.matchedText}
-            sending={chat.sending}
-            onDeny={() => {
-              chat.deny();
-              // Deny ends the task (the gated step won't run and nothing after it
-              // continues); say so instead of leaving the user waiting on a
-              // continuation that never comes (audit 2026-07-08).
-              toasts.push({
-                title: 'Task stopped',
-                body: 'You denied a step — the task won’t continue. Send a new instruction to keep going.',
-                tone: 'info',
-              });
-            }}
-            onApprove={() => void chat.approve()}
-          />
-        )}
+            {/* Consequential-action confirmation gate */}
+            {chat.pendingConfirmation !== null && (
+              <ApprovalDock
+                category={chat.pendingConfirmation.category}
+                matchedText={chat.pendingConfirmation.matchedText}
+                // Two facts derived from the transcript, not from the gate: whether
+                // the held step presses something (one word of the next-step line)
+                // and where the phone is (the "on <host>" clause, dropped entirely
+                // when nothing this build can parse was navigated to).
+                taps={gatedStepTaps(chat.turns, chat.pendingConfirmation.turnId)}
+                host={confirmationHost(chat.turns)}
+                sessionActive={sessionActive}
+                sending={chat.sending}
+                composerRef={composerRef}
+                onDeny={() => {
+                  chat.deny();
+                  // Deny ends the task (the gated step won't run and nothing after it
+                  // continues); say so instead of leaving the user waiting on a
+                  // continuation that never comes (audit 2026-07-08).
+                  toasts.push({
+                    title: 'Task stopped',
+                    body: 'You denied a step — the task won’t continue. Send a new instruction to keep going.',
+                    tone: 'info',
+                  });
+                }}
+                onApprove={() => void chat.approve()}
+              />
+            )}
 
-        {/* Error */}
-        {chat.error !== null && chat.error.kind === 'bundled_llm_consent' && (
-          <div className="border-t border-accent/40 bg-accent-subtle px-4 py-3">
-            <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-ink">{chat.error.message}</p>
-                <p className="mt-0.5 text-2xs text-ink-muted">
-                  {bundledLlmEnabled
-                    ? 'Enabled — send your message again to continue.'
-                    : 'You can use bundled AI usage billed to your account, or your own Anthropic key.'}
-                </p>
-                {bundledLlmEnableError !== null && (
-                  <p className="mt-0.5 text-2xs text-status-error">{bundledLlmEnableError}</p>
-                )}
-              </div>
-              {!bundledLlmEnabled && (
-                <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={onGoToSettings}
-                    className="btn-secondary px-3 py-1.5 text-xs"
-                  >
-                    Use my own key
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleEnableBundledLlm}
-                    disabled={bundledLlmEnabling}
-                    className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
-                  >
-                    {bundledLlmEnabling ? 'Enabling…' : 'Enable AI features'}
-                  </button>
+            {/* Error */}
+            {chat.error !== null && chat.error.kind === 'bundled_llm_consent' && (
+              <div className="border-t border-accent/40 bg-accent-subtle px-4 py-3">
+                <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-ink">{chat.error.message}</p>
+                    <p className="mt-0.5 text-2xs text-ink-muted">
+                      {bundledLlmEnabled
+                        ? 'Enabled — send your message again to continue.'
+                        : 'You can use bundled AI usage billed to your account, or your own Anthropic key.'}
+                    </p>
+                    {bundledLlmEnableError !== null && (
+                      <p className="mt-0.5 text-2xs text-status-error">{bundledLlmEnableError}</p>
+                    )}
+                  </div>
+                  {!bundledLlmEnabled && (
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={onGoToSettings}
+                        className="btn-secondary px-3 py-1.5 text-xs"
+                      >
+                        Use my own key
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleEnableBundledLlm}
+                        disabled={bundledLlmEnabling}
+                        className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
+                      >
+                        {bundledLlmEnabling ? 'Enabling…' : 'Enable AI features'}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
-        )}
-        {chat.error !== null && chat.error.kind === 'bundled_llm_budget' && (
-          <div className="border-t border-status-error/40 bg-status-error/10 px-4 py-3">
-            <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium text-ink">{chat.error.message}</p>
-                <p className="mt-0.5 text-2xs text-ink-muted">
-                  {chat.error.spentCents !== undefined && chat.error.capCents !== undefined
-                    ? `You've used ${formatUsd(chat.error.spentCents)} of your ${formatUsd(chat.error.capCents)} monthly limit.`
-                    : 'Raise your monthly limit, or use your own Anthropic key to keep going.'}
-                </p>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onGoToSettings}
-                  className="btn-secondary px-3 py-1.5 text-xs"
-                >
-                  Use my own key
-                </button>
-                <button
-                  type="button"
-                  onClick={onGoToSettings}
-                  className="btn-primary px-3 py-1.5 text-xs"
-                >
-                  Raise my limit
-                </button>
+            )}
+            {chat.error !== null && chat.error.kind === 'bundled_llm_budget' && (
+              <div className="border-t border-status-error/40 bg-status-error/10 px-4 py-3">
+                <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-ink">{chat.error.message}</p>
+                    <p className="mt-0.5 text-2xs text-ink-muted">
+                      {chat.error.spentCents !== undefined && chat.error.capCents !== undefined
+                        ? `You've used ${formatUsd(chat.error.spentCents)} of your ${formatUsd(chat.error.capCents)} monthly limit.`
+                        : 'Raise your monthly limit, or use your own Anthropic key to keep going.'}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={onGoToSettings}
+                      className="btn-secondary px-3 py-1.5 text-xs"
+                    >
+                      Use my own key
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onGoToSettings}
+                      className="btn-primary px-3 py-1.5 text-xs"
+                    >
+                      Raise my limit
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        )}
-        {chat.error !== null && chat.error.kind === undefined && (
-          <div
-            role="alert"
-            className="border-t border-status-error/40 bg-status-error/10 px-4 py-2"
-          >
-            <p className="mx-auto max-w-3xl text-sm text-status-error">{chat.error.message}</p>
-          </div>
-        )}
+            )}
+            {chat.error !== null && chat.error.kind === undefined && (
+              <div
+                role="alert"
+                className="border-t border-status-error/40 bg-status-error/10 px-4 py-2"
+              >
+                <p className="mx-auto max-w-3xl text-sm text-status-error">{chat.error.message}</p>
+              </div>
+            )}
 
-        {/* Composer */}
-        <Composer
-          chat={chat}
-          draft={draft}
-          onDraftChange={setDraft}
-          onSubmit={submit}
-          composerRef={composerRef}
-          aiReady={aiReady}
-          proxyState={proxyState}
-          sendHeldByAdopt={sendHeldByAdopt}
-          onRetryAdopt={retryAdopt}
-          onGoToSettings={onGoToSettings}
-        />
-      </div>
-      {/* end main column */}
+            {/* Composer */}
+            <Composer
+              chat={chat}
+              draft={draft}
+              onDraftChange={setDraft}
+              onSubmit={submit}
+              composerRef={composerRef}
+              aiReady={aiReady}
+              proxyState={proxyState}
+              sendHeldByAdopt={sendHeldByAdopt}
+              short={shortView}
+              onRetryAdopt={retryAdopt}
+              onGoToSettings={onGoToSettings}
+            />
+          </div>
+          {/* end main column */}
 
-      {/* Live iPhone watch pane (founder 2026-06-24: "a visual iPhone here showing
+          {/* Live iPhone watch pane (founder 2026-06-24: "a visual iPhone here showing
           in realtime what is happening" when a task is dispatched). The chat runs
           against a normal streamable agent session (chat.session.id), the same
           LiveKit-backed session the simulator streams — so this mirrors the
@@ -1021,12 +1196,15 @@ export function AgentChatView({
           READ-ONLY: interactive is left false (the default) so NO tap/scroll/key
           input is captured here — the agent drives the phone, the user only
           watches; clicking the view can never interfere with the automation. */}
-      <Stage
-        sessionId={chat.session?.id ?? null}
-        open={liveOpen}
-        onClose={closeLiveView}
-        standIn={standIn}
-      />
+          <Stage
+            sessionId={chat.session?.id ?? null}
+            open={liveOpen}
+            onClose={closeLiveView}
+            standIn={standIn}
+          />
+        </div>
+      </div>
+      {/* end deck */}
 
       {/* Save-as-recipe dialog */}
       {saveOpen && (

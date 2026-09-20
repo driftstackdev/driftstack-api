@@ -66,9 +66,26 @@ function wentWrong(results: ReadonlyArray<AgentIntentResult>, denied: boolean): 
 }
 
 export function missionPhase(chat: MissionPhaseChat): MissionPhase {
-  // Nothing moves until the customer decides — this outranks `sending`, because
-  // a halted turn has SETTLED (`sending` is false) and the gate is still up.
-  if (chat.pendingConfirmation !== undefined && chat.pendingConfirmation !== null) return 'paused';
+  // Nothing moves until the customer decides. A halted turn has SETTLED
+  // (`sending` is false) and the gate is still up, so this outranks every
+  // turn-shaped rule below it.
+  //
+  // ⛔ PIN MOVED IN STAGE 5, ON PURPOSE. Stage 0 wrote this as "paused outranks
+  // a send that is somehow still in flight" — and stage 5 found that the send
+  // is not "somehow", it is a designed path. "Or send a new instruction instead
+  // of approving" (§3.7) keeps the composer usable while the gate is up, and
+  // during that send the halted turn is still the last AGENT turn, so
+  // `pendingConfirmation` is still set. `approve()` is the same shape: it
+  // re-sends and resolves the gate only after the re-send succeeds, so the
+  // approved step RUNS with the dock still mounted and its buttons disabled.
+  //
+  // In both, the AI is working. `paused` is what stops every infinite animation
+  // in the view (§3.6) and hangs the amber room light — a still, amber room
+  // over a plan streaming new steps is the view contradicting what the customer
+  // can see. The gate being up is the DOCK's business; the phase describes what
+  // the AI is doing, and what it is doing is working.
+  const gated = chat.pendingConfirmation !== undefined && chat.pendingConfirmation !== null;
+  if (gated && chat.sending !== true) return 'paused';
 
   if (chat.sending === true) {
     // No step to point at yet: the plan is still being made, or the first step

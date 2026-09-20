@@ -18,6 +18,19 @@ export interface AssistantTemplate {
   prompt: string;
   /** true = shipped default, false = user-saved custom. */
   builtin: boolean;
+  /**
+   * Which drawing the idle hero puts on this card (spec §3.8). A NAME, not a
+   * component: this module is pure data with no React in it, and the view maps
+   * the name to an icon. Absent on a custom template, which gets the neutral one.
+   */
+  icon?: 'globe' | 'search' | 'camera' | 'cart';
+  /**
+   * The one thing this template will NOT do, in three or four words —
+   * "no logins · no purchases". It is the sentence that makes a stranger
+   * comfortable pressing a button that drives a real browser, and it is a
+   * promise about the PROMPT above, so the two are edited together.
+   */
+  guard?: string;
 }
 
 // Shipped defaults. Warming presets are deliberately conservative (no logins /
@@ -27,6 +40,8 @@ export const DEFAULT_ASSISTANT_TEMPLATES: readonly AssistantTemplate[] = [
     id: 'warm-browse',
     label: 'Warm up — browse',
     description: 'Age the profile by browsing popular sites naturally.',
+    icon: 'globe',
+    guard: 'no logins · no purchases',
     prompt:
       'Warm up this profile: visit a handful of popular, reputable websites and browse them naturally — scroll, read, follow a few internal links, pause between pages. Do not log in anywhere, enter any data, or make any purchase.',
     builtin: true,
@@ -35,6 +50,8 @@ export const DEFAULT_ASSISTANT_TEMPLATES: readonly AssistantTemplate[] = [
     id: 'warm-search',
     label: 'Warm up — search',
     description: 'Run a few realistic searches and read results.',
+    icon: 'search',
+    guard: 'no logins · no purchases',
     prompt:
       'Warm up this profile by running a few realistic web searches on everyday topics, opening a couple of results for each, and reading them for a little while before moving on. No logins, no forms, no purchases.',
     builtin: true,
@@ -43,6 +60,8 @@ export const DEFAULT_ASSISTANT_TEMPLATES: readonly AssistantTemplate[] = [
     id: 'open-screenshot',
     label: 'Open & screenshot',
     description: 'Navigate to a site and capture the page.',
+    icon: 'camera',
+    guard: 'one page · one image',
     prompt: 'Open example.com and take a screenshot of the page.',
     builtin: true,
   },
@@ -50,6 +69,8 @@ export const DEFAULT_ASSISTANT_TEMPLATES: readonly AssistantTemplate[] = [
     id: 'add-to-cart',
     label: 'Add to cart (stop before paying)',
     description: 'Shop a product into the cart — never checks out.',
+    icon: 'cart',
+    guard: 'stops before paying',
     prompt:
       'Go to a product page on a shopping site, add a few items to the cart, and stop before entering any payment details or placing the order.',
     builtin: true,

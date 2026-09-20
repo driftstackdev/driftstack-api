@@ -307,8 +307,15 @@ describe('the model picker and the account’s own key', () => {
     fireEvent.click(row as HTMLButtonElement);
     await waitFor(() => expect(modelSelect().value).toBe('claude-opus-5'));
     // New chat empties the conversation, which unlocks the picker.
+    // ⛔ PIN MOVED 2026-09-20 (AI-view rebuild, stage 6), deliberately. There
+    // used to be TWO of these buttons — the bar's `New chat` and the rail's
+    // `+ New chat` — and this exact-string match resolved only because of the
+    // plus. The bar's copy is gone (spec §3.3 makes the bar one row and the
+    // rail already owns this command), so the one button left is the rail's,
+    // and its name is `+ New chat` at every width: the 44px strip's version
+    // carries the same name in an `aria-label`.
     h.useAgentChat.mockReturnValue(chatWith());
-    fireEvent.click(screen.getByRole('button', { name: 'New chat' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ New chat' }));
   }
 
   it('a New chat opened from a reopened Opus chat starts on the default model when the account has no key', async () => {

@@ -1038,21 +1038,1848 @@
    keep in step, it is the same rule read at a different time. Four pieces end
    somewhere wrong: a wash parked as a bright band at the row's right edge, a
    pulse ring frozen at full spread, a halo frozen mid-flash, and an outgoing
-   caption sitting on top of the words that replaced it. They are REMOVED, not
-   frozen. (The spec's fifth such piece is the mockup's tap ring on its drawn
-   page; the app's stand-in is a still image and has none.)
+   caption sitting on top of the words that replaced it (that last one is named
+   twice below — once as the class, once as the pseudo-element stage 2 ships).
+   They are REMOVED, not frozen. (The spec's fifth such piece is the mockup's
+   tap ring on its drawn page; the app's stand-in is a still image and has none.)
    `display: none` rather than `opacity: 0` so nothing is left to hit-test. */
 @media (prefers-reduced-motion: reduce) {
+  /* The last selector is the SAME piece as `.ai-tense-out`, in the spelling
+     stage 2 actually ships: the outgoing caption is a PSEUDO-element carrying
+     `attr(data-was)`, not a span, so the old words never reach textContent (the
+     live plan's `'▶ ' + label` is pinned), the accessibility tree, or the text
+     gate. A selector has to be named here in its own spelling to be removed. */
   .ai-sweep,
   .ai-pulse,
   .ai-halo,
-  .ai-tense-out {
+  .ai-tense-out,
+  .ai-step.landing .ai-step-label::before {
     display: none !important;
   }
   /* and the turn's compositor promotion goes with the turn. */
   .ai-rig.is-turning {
     will-change: auto;
   }
+}
+
+/* ═════ the conversation column — stage 2 (spec §3.5, §3.8, §4, §5) ════════
+   The chrome the mission column wears: a turn, the plan as a TIMELINE with a
+   connecting rail, fact chips, the flight strip, the answer card, the notice
+   and diagnosis cards, and the idle hero. It arrives WITH its components, per
+   the scope note on the motion layer above.
+
+   Two rules everything here obeys:
+   · every text run sits on a real `background-color` (the text gate reads
+     nothing else — a gradient under copy is measured as the colour behind it);
+   · nothing animates a layout property, and nothing here is an ancestor of the
+     composer, whose autogrow forces a reflow per keystroke. */
+
+/* one drawing, sized by the font-size of whatever holds it */
+.ai-i {
+  display: block;
+  width: 1em;
+  height: 1em;
+}
+
+/* ─── the log, and one turn in it ─────────────────────────────────────── */
+.ai-log {
+  scrollbar-width: thin;
+}
+/* A turn is TWO rows of the log: the customer's brief and the AI's body. The
+   dashed rule therefore goes above every brief but the first, which is where
+   one turn ends and the next begins. */
+.ai-brief.is-later {
+  margin-top: 16px;
+  padding-top: 15px;
+  border-top: 1px dashed rgb(var(--surface-divider-rgb) / 0.7);
+}
+.ai-body {
+  display: block;
+  min-width: 0;
+}
+/* a sentence a turn SAYS — the "not finished, send continue" notice, the
+   stopped-turn receipt. Prose, not a log line, and not the answer's size. */
+.ai-said {
+  margin-top: 12px;
+  font-size: 13.5px;
+  line-height: 21px;
+  color: rgb(var(--ink-primary-rgb));
+  white-space: pre-wrap;
+}
+/* 1 · the brief — the customer's own words, at the top of their turn. */
+.ai-brief {
+  display: grid;
+  grid-template-columns: 14px 1fr;
+  column-gap: 8px;
+}
+.ai-brief-caret {
+  font-size: 17px;
+  line-height: 21px;
+  font-weight: 700;
+  color: rgb(var(--accent-rgb));
+}
+.ai-brief p {
+  font-size: 13.5px;
+  line-height: 21px;
+  color: rgb(var(--ink-primary-rgb));
+}
+/* an earlier turn's brief clamps to one line: the thing to read now is below it */
+.ai-brief.is-past p {
+  color: rgb(var(--ink-secondary-rgb));
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* the ONE large light line per turn — always the thing to read now */
+.ai-voice {
+  font-weight: var(--ai-voice-weight);
+  letter-spacing: var(--ai-voice-tracking);
+  color: rgb(var(--ink-primary-rgb));
+}
+.ai-voice-xl {
+  font-size: var(--ai-voice-xl);
+  line-height: 2.125rem;
+  letter-spacing: -0.022em;
+}
+.ai-voice-lg {
+  font-size: var(--ai-voice-lg);
+  line-height: 1.75rem;
+}
+.ai-voice em {
+  font-style: normal;
+  font-weight: 600;
+  color: rgb(var(--accent-text-rgb));
+}
+
+/* ─── 3 · the flight strip: ONE fixed-height slot, so nothing jumps ───── */
+.ai-flight {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 0;
+  height: 28px;
+  min-width: 0;
+}
+.ai-flight.is-settled {
+  height: 22px;
+}
+.ai-flight .ai-voice {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-flight-head {
+  font-size: 12.5px;
+  line-height: 20px;
+  font-weight: 600;
+  color: rgb(var(--ink-primary-rgb));
+}
+.ai-flight-meta {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  color: rgb(var(--ink-muted-rgb));
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ai-flight-meta b {
+  font-weight: 500;
+  color: rgb(var(--ink-secondary-rgb));
+}
+/* the orbit: a dot that travels a ring, with a core that beats with it */
+.ai-orbit {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px rgb(var(--accent-rgb) / 0.3);
+}
+.ai-orbit::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 1.5px,
+    rgb(var(--accent-rgb)) 0 2.2px,
+    transparent 2.8px
+  );
+  animation: ds-ai-spin 1400ms linear infinite;
+}
+.ai-orbit::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: rgb(var(--accent-rgb));
+  animation: ds-ai-beat 1400ms ease-in-out infinite;
+}
+.ai-stamp {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: 10px;
+}
+.ai-stamp-ok {
+  background: rgb(var(--status-ready-rgb));
+  color: rgb(var(--surface-base-rgb));
+}
+.ai-stamp-ok svg {
+  stroke-width: 2.4;
+}
+.ai-stamp-bad {
+  background: rgb(var(--status-error-rgb) / 0.18);
+  color: rgb(var(--status-error-text-rgb));
+  box-shadow: inset 0 0 0 1px rgb(var(--status-error-rgb) / 0.5);
+}
+.ai-stamp-hold {
+  background: rgb(var(--status-busy-rgb));
+  color: rgb(var(--surface-base-rgb));
+}
+.ai-stamp-bad svg,
+.ai-stamp-hold svg {
+  stroke-width: 2.4;
+}
+/* a quiet text button: Hide steps, Show steps, Copy */
+.ai-linkbtn {
+  font-size: 11px;
+  line-height: 16px;
+  color: rgb(var(--ink-secondary-rgb));
+  padding: 1px 6px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgb(var(--surface-divider-rgb) / 0.7);
+  flex: none;
+  transition: background-color var(--ai-dur-quick);
+}
+.ai-linkbtn:hover {
+  color: rgb(var(--ink-primary-rgb));
+  background: rgb(var(--surface-elevated-rgb) / 0.6);
+}
+
+/* ─── 4 · segments: one bar per planned step. The WORDS are in the meta. ── */
+.ai-segs {
+  display: flex;
+  gap: 3px;
+  margin: 9px 0 12px;
+}
+.ai-segs > i {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: rgb(var(--surface-divider-rgb) / 0.55);
+  position: relative;
+  overflow: hidden;
+}
+.ai-segs > i.is-ok {
+  background: rgb(var(--status-ready-rgb) / 0.85);
+}
+.ai-segs > i.is-bad {
+  background: rgb(var(--status-error-rgb) / 0.9);
+}
+.ai-segs > i.is-hold {
+  background: rgb(var(--status-busy-rgb));
+}
+.ai-segs > i.is-run {
+  background: rgb(var(--accent-rgb) / 0.35);
+}
+.ai-segs > i.is-run > .ai-fill {
+  position: absolute;
+  inset: 0;
+  background: rgb(var(--accent-rgb));
+}
+
+/* ─── 5 · the timeline ─────────────────────────────────────────────────── */
+.ai-plan {
+  position: relative;
+}
+.ai-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  column-gap: 10px;
+  align-items: start;
+  padding: 5px 8px 5px 6px;
+  margin: 0 -8px 0 -6px;
+  border-radius: 8px;
+}
+/* the rail: it joins a row to the one below it, and stops at the last row. */
+.ai-step::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 27px;
+  bottom: -7px;
+  width: 2px;
+  border-radius: 1px;
+  background: rgb(var(--surface-divider-rgb) / 0.7);
+}
+.ai-step.is-last::before {
+  display: none;
+}
+.ai-step.is-done::before {
+  background: rgb(var(--status-ready-rgb) / 0.5);
+}
+.ai-step > * {
+  position: relative;
+}
+.ai-node {
+  position: relative;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+}
+.ai-step.is-done .ai-node {
+  background: rgb(var(--status-ready-rgb) / 0.16);
+  color: rgb(var(--status-ready-rgb));
+  box-shadow: inset 0 0 0 1px rgb(var(--status-ready-rgb) / 0.45);
+}
+.ai-step.is-done .ai-node svg {
+  stroke-width: 2.2;
+}
+.ai-step.is-next .ai-node,
+.ai-step.is-skip .ai-node {
+  color: rgb(var(--ink-muted-rgb));
+  background: rgb(var(--surface-base-rgb));
+  box-shadow: inset 0 0 0 1px rgb(var(--surface-divider-rgb));
+}
+.ai-step.is-skip .ai-node {
+  box-shadow: none;
+  border: 1px dashed rgb(var(--surface-divider-rgb));
+}
+.ai-step.is-run .ai-node {
+  color: rgb(var(--on-accent-rgb));
+  background: rgb(var(--accent-rgb));
+  box-shadow: var(--ai-glow-accent);
+}
+.ai-step.is-run .ai-node::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  border-top-color: rgb(var(--accent-hover-rgb));
+  border-right-color: rgb(var(--accent-hover-rgb) / 0.4);
+  animation: ds-ai-spin 1100ms linear infinite;
+}
+.ai-step.is-hold .ai-node {
+  color: rgb(var(--surface-base-rgb));
+  background: rgb(var(--status-busy-rgb));
+  box-shadow: 0 0 0 4px rgb(var(--status-busy-rgb) / 0.2);
+}
+.ai-step.is-fail .ai-node {
+  color: rgb(var(--status-error-text-rgb));
+  background: rgb(var(--status-error-rgb) / 0.16);
+  box-shadow: inset 0 0 0 1px rgb(var(--status-error-rgb) / 0.6);
+}
+.ai-step.is-fail .ai-node svg,
+.ai-step.is-hold .ai-node svg {
+  stroke-width: 2.2;
+}
+.ai-step-label {
+  font-size: 12.5px;
+  line-height: 20px;
+  color: rgb(var(--ink-primary-rgb));
+  min-width: 0;
+}
+.ai-step-sub {
+  display: block;
+  font-size: 11.5px;
+  line-height: 16px;
+  color: rgb(var(--ink-muted-rgb));
+}
+.ai-step.is-next .ai-step-label,
+.ai-step.is-skip .ai-step-label {
+  color: rgb(var(--ink-muted-rgb));
+}
+/* the running row — the one row that is a surface, and the word "now" as
+   generated content so the pinned `'▶ ' + label` textContent stays exact. */
+.ai-step.is-run {
+  background: rgb(var(--accent-subtle-rgb) / var(--accent-subtle-alpha));
+  box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.35);
+}
+.ai-step.is-run .ai-step-label {
+  font-weight: 600;
+}
+.ai-step.is-run::after {
+  content: 'now';
+  grid-column: 3;
+  grid-row: 1;
+  font-family: 'Berkeley Mono', 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 20px;
+  color: rgb(var(--ink-secondary-rgb));
+}
+.ai-wash {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ai-wash > .ai-sweep {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 25%,
+    rgb(var(--accent-hover-rgb) / 0.16) 50%,
+    transparent 75%
+  );
+}
+/* the gated row: amber, and it says in words what the colour means */
+.ai-step.is-hold {
+  background: rgb(var(--status-busy-rgb) / 0.1);
+  box-shadow: inset 0 0 0 1px rgb(var(--status-busy-rgb) / 0.4);
+  padding-top: 7px;
+  padding-bottom: 8px;
+  margin-top: 3px;
+  margin-bottom: 3px;
+}
+.ai-step.is-hold::before {
+  top: 30px;
+}
+.ai-step.is-hold .ai-step-label {
+  font-weight: 600;
+}
+.ai-step.is-hold .ai-step-sub {
+  color: rgb(var(--status-busy-rgb));
+  font-weight: 400;
+}
+.ai-plan.is-settled > .ai-step {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.ai-plan.is-settled > .ai-step::before {
+  top: 25px;
+}
+/* 10-11 · the tense shift: the future-tense caption leaves upward as the
+   server's past-tense summary rises into its place, and the tick lands. */
+.ai-step.landing .ai-step-label::before {
+  content: attr(data-was);
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  font-weight: 600;
+  color: rgb(var(--ink-primary-rgb));
+  pointer-events: none;
+  animation: ds-ai-tense-out 240ms var(--ai-ease) both;
+}
+/* the fact chip: what the step DID, in the page's own words — a host, the
+   text that was typed, an image count. Never a selector. */
+.ai-fact {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  margin-left: 8px;
+  padding: 0 7px;
+  height: 18px;
+  vertical-align: 1px;
+  border-radius: 5px;
+  font-family: 'Berkeley Mono', 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 10.5px;
+  line-height: 18px;
+  letter-spacing: -0.01em;
+  color: rgb(var(--ink-secondary-rgb));
+  background: rgb(var(--surface-inset-rgb));
+  box-shadow: inset 0 0 0 1px rgb(var(--surface-divider-rgb) / 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-fact svg {
+  flex: none;
+  color: rgb(var(--ink-muted-rgb));
+}
+/* §7 · how long a step took — the third column `.ai-step`'s grid already
+   reserves (`20px 1fr auto`). It is rendered ONLY for a step that was really
+   timed, so this rule is never the reason a row looks empty: an untimed row has
+   no third column at all rather than a "0.0s" in it. Tabular figures so a
+   column of them lines up the way a column of times should. */
+.ai-dur {
+  align-self: start;
+  padding-top: 1px;
+  font-size: 10.5px;
+  line-height: 18px;
+  color: rgb(var(--ink-muted-rgb));
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* §7 · the seam between two plans of one turn. The rail runs THROUGH it (the
+   turn did not stop here — the agent looked again), so the diamond sits on the
+   same 20px centre line every node does, punched out of the page behind it. */
+.ai-replan {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  column-gap: 10px;
+  align-items: center;
+  padding: 3px 8px 3px 6px;
+  margin: 0 -8px 0 -6px;
+  font-size: 11.5px;
+  line-height: 18px;
+  color: rgb(var(--ink-muted-rgb));
+}
+.ai-replan::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: -5px;
+  bottom: -5px;
+  width: 2px;
+  border-radius: 1px;
+  background: rgb(var(--status-ready-rgb) / 0.5);
+}
+.ai-replan > * {
+  position: relative;
+}
+.ai-replan-node {
+  justify-self: center;
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  background: rgb(var(--surface-base-rgb));
+  box-shadow: inset 0 0 0 1.5px rgb(var(--ink-muted-rgb));
+}
+/* the plan skeleton, while it is still working out the steps */
+.ai-ghost {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  column-gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+}
+.ai-ghost > i {
+  display: block;
+  border-radius: 999px;
+  background: rgb(var(--surface-elevated-rgb) / 0.8);
+}
+.ai-ghost > i:first-child {
+  width: 20px;
+  height: 20px;
+}
+.ai-ghost > i:last-child {
+  height: 9px;
+}
+.ai-aside {
+  margin-top: 10px;
+  font-size: 11.5px;
+  line-height: 17px;
+  color: rgb(var(--ink-muted-rgb));
+}
+.ai-usage {
+  margin: 4px 0 0 30px;
+  font-size: 10.5px;
+  line-height: 16px;
+  color: rgb(var(--ink-muted-rgb));
+}
+
+/* ─── the answer card ──────────────────────────────────────────────────── */
+.ai-result {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 14px;
+  align-items: start;
+  padding: 14px 16px 14px 18px;
+  border-radius: 10px;
+  background: rgb(var(--surface-raised-rgb));
+  box-shadow:
+    inset 2px 0 0 rgb(var(--accent-rgb)),
+    inset 0 0 0 1px rgb(var(--surface-divider-rgb) / 0.7),
+    var(--ai-lift);
+}
+.ai-answer {
+  min-width: 0;
+}
+.ai-answer-hd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+.ai-answer-hd .section-label {
+  color: rgb(var(--accent-text-rgb));
+  flex: none;
+}
+.ai-answer-rule {
+  flex: 1;
+  height: 1px;
+}
+.ai-answer-say {
+  font-size: 1.0625rem;
+  line-height: 1.625rem;
+  font-weight: 400;
+  letter-spacing: -0.008em;
+  color: rgb(var(--ink-primary-rgb));
+  white-space: pre-wrap;
+}
+.ai-answer-src {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 16px;
+  color: rgb(var(--ink-muted-rgb));
+  min-width: 0;
+}
+.ai-answer-src .mono {
+  font-size: 11px;
+  color: rgb(var(--ink-secondary-rgb));
+}
+.ai-answer-src .ai-linkbtn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+/* the screenshot as a figure, at the phone's own ratio */
+.ai-shot {
+  width: 72px;
+  flex: none;
+  text-align: left;
+}
+.ai-shot-frame {
+  position: relative;
+  display: block;
+  width: 72px;
+  aspect-ratio: 402 / 874;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgb(var(--surface-inset-rgb));
+  box-shadow:
+    0 0 0 1px rgb(var(--surface-divider-rgb)),
+    var(--ai-lift);
+}
+.ai-shot-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.ai-shot-zoom {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  z-index: 5;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: rgb(255 255 255);
+  /* the room's own surface, at 78%: a scrim over a photograph of a phone
+     screen has to be a token like everything else — a typed hue here is how a
+     second palette gets into the view one badge at a time. */
+  background: rgb(var(--ai-stage-rgb) / 0.78);
+}
+.ai-shot-cap {
+  display: block;
+  margin-top: 5px;
+  font-size: 10px;
+  line-height: 13px;
+  color: rgb(var(--ink-muted-rgb));
+  white-space: nowrap;
+  text-align: center;
+}
+.ai-after {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* the lightbox the figure opens */
+.ai-lightbox-img {
+  display: block;
+  max-height: 82vh;
+  max-width: 100%;
+  border-radius: 12px;
+  background: rgb(var(--surface-inset-rgb));
+  box-shadow: var(--ai-float);
+}
+
+/* ─── the cards: a notice, a diagnosis, a gate ─────────────────────────── */
+.ai-card {
+  border-radius: 8px;
+  background: rgb(var(--surface-raised-rgb));
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--surface-divider-rgb) / 0.7),
+    var(--ai-lift);
+}
+.ai-card-ico {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  flex: none;
+  color: rgb(var(--ink-secondary-rgb));
+  background: rgb(var(--surface-elevated-rgb));
+}
+/* A notice is the sentence a turn SAYS — a refusal, a clarifying question, a
+   plan that produced no runnable steps, the reason an interrupted turn ended.
+   One column and a rule in the hue of what it is saying: the flight strip above
+   has already named what happened, so an icon tile beside a bare paragraph
+   would be furniture. (The headline-and-actions variant spec §3.5 describes for
+   the own-key refusal needs a KIND on the interrupted turn — a hook field, and
+   therefore stage 3. It arrives with the data that can tell those apart, not
+   with a string match on the reason.) */
+.ai-notice {
+  margin: 12px 0 0 22px;
+  padding: 11px 13px 12px;
+  box-shadow:
+    inset 2px 0 0 rgb(var(--surface-divider-rgb)),
+    inset 0 0 0 1px rgb(var(--surface-divider-rgb) / 0.7),
+    var(--ai-lift);
+}
+.ai-notice.is-bad {
+  box-shadow:
+    inset 2px 0 0 rgb(var(--status-error-rgb) / 0.8),
+    inset 0 0 0 1px rgb(var(--surface-divider-rgb) / 0.7),
+    var(--ai-lift);
+}
+.ai-notice p {
+  font-size: 12px;
+  line-height: 18px;
+  color: rgb(var(--ink-secondary-rgb));
+}
+.ai-notice p.ai-notice-bad {
+  color: rgb(var(--status-error-text-rgb));
+}
+.ai-diag {
+  grid-column: 2 / -1;
+  margin: 6px 0 4px;
+  padding: 10px 12px 11px;
+  box-shadow:
+    inset 2px 0 0 rgb(var(--status-error-rgb) / 0.8),
+    inset 0 0 0 1px rgb(var(--surface-divider-rgb) / 0.7),
+    var(--ai-lift);
+}
+.ai-diag h4 {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  color: rgb(var(--ink-primary-rgb));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ai-diag p {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: rgb(var(--ink-secondary-rgb));
+}
+/* a FILLED tag: no border, no pointer — it cannot be read as a button beside
+   the two real ones underneath it. */
+.ai-tag {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: rgb(var(--status-busy-rgb) / 0.14);
+  color: rgb(var(--status-busy-rgb));
+  cursor: default;
+}
+.ai-diag details {
+  margin-top: 7px;
+  font-size: 10.5px;
+  line-height: 16px;
+  color: rgb(var(--ink-muted-rgb));
+}
+.ai-diag summary {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  list-style: none;
+  border-radius: 3px;
+}
+.ai-diag summary::-webkit-details-marker {
+  display: none;
+}
+.ai-diag summary::before {
+  content: '›';
+  display: inline-block;
+  font-weight: 700;
+  transition: transform var(--ai-dur-quick);
+}
+.ai-diag details[open] summary::before {
+  transform: rotate(90deg);
+}
+/* the ONE place a selector may appear */
+.ai-diag code {
+  display: inline-block;
+  margin-top: 4px;
+  font-family: 'Berkeley Mono', 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 10.5px;
+  color: rgb(var(--ink-secondary-rgb));
+  background: rgb(var(--surface-inset-rgb));
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.ai-acts {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.ai-gate {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  column-gap: 11px;
+  align-items: center;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  box-shadow:
+    inset 2px 0 0 rgb(var(--status-busy-rgb) / 0.8),
+    inset 0 0 0 1px rgb(var(--surface-divider-rgb) / 0.7),
+    var(--ai-lift);
+}
+.ai-gate .ai-card-ico {
+  color: rgb(var(--status-busy-rgb));
+  background: rgb(var(--status-busy-rgb) / 0.13);
+}
+.ai-gate-title {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgb(var(--ink-primary-rgb));
+}
+.ai-gate-body {
+  display: block;
+  font-size: 11.5px;
+  line-height: 16px;
+  color: rgb(var(--ink-secondary-rgb));
+}
+
+/* ─── 3.8 · idle: a first impression that is composed, not centred ─────── */
+.ai-hello {
+  padding: 8px 2px 0;
+}
+.ai-hello > h1 {
+  margin-top: 8px;
+}
+.ai-hello > p {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 20px;
+  color: rgb(var(--ink-secondary-rgb));
+  max-width: 54ch;
+}
+.ai-beats {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid rgb(var(--surface-divider-rgb) / 0.7);
+  border-bottom: 1px solid rgb(var(--surface-divider-rgb) / 0.7);
+}
+.ai-beats li {
+  padding: 9px 10px 10px 0;
+  font-size: 11.5px;
+  line-height: 16px;
+  color: rgb(var(--ink-secondary-rgb));
+}
+.ai-beats li + li {
+  padding-left: 12px;
+  border-left: 1px solid rgb(var(--surface-divider-rgb) / 0.7);
+}
+.ai-beats b {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgb(var(--ink-primary-rgb));
+}
+.ai-beats .ai-beat-n {
+  display: block;
+  font-size: 10px;
+  color: rgb(var(--accent-text-rgb));
+  margin-bottom: 3px;
+}
+.ai-tpl-h {
+  margin: 18px 0 8px;
+}
+.ai-tpl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ai-tpl > button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  column-gap: 10px;
+  align-content: start;
+  text-align: left;
+  padding: 10px 11px;
+  border-radius: 8px;
+  background: rgb(var(--surface-raised-rgb));
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--surface-divider-rgb) / 0.7),
+    var(--ai-lift);
+  transition:
+    transform 200ms var(--ai-ease),
+    box-shadow 200ms var(--ai-ease);
+}
+.ai-tpl > button:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--accent-rgb) / 0.6),
+    var(--ai-lift);
+}
+.ai-tpl-ico {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: rgb(var(--accent-text-rgb));
+  background: rgb(var(--accent-subtle-rgb) / var(--accent-subtle-alpha));
+}
+.ai-tpl b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 17px;
+  color: rgb(var(--ink-primary-rgb));
+}
+.ai-tpl-desc {
+  display: block;
+  font-size: 11.5px;
+  line-height: 16px;
+  color: rgb(var(--ink-muted-rgb));
+  margin-top: 1px;
+}
+.ai-tpl-guard {
+  display: inline-block;
+  margin-top: 6px;
+  font-family: 'Berkeley Mono', 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  line-height: 14px;
+  letter-spacing: -0.01em;
+  color: rgb(var(--ink-secondary-rgb));
+}
+
+/* ═════ the trust moment and the composer — stage 5 (§3.6, §3.7, §4, §5) ═══
+   The two things at the bottom of the mission column: the card that asks
+   before the AI spends money, and the console the customer types into.
+
+   The same two rules as the block above apply, plus one more that belongs to
+   this block specifically: NOTHING HERE ANIMATES AN ANCESTOR OF THE COMPOSER.
+   The composer's autogrow forces a reflow per keystroke, so an animating
+   ancestor would repaint the whole column on every character. `.ai-dock` is a
+   SIBLING of `.ai-cmd`, not a parent, which is why it may have an entrance. */
+
+/* ─── the approval dock (§3.6) ─────────────────────────────────────────────
+   A raised card, not a strip: the moment the AI asks to spend money is the one
+   moment the conversation stops being a log. It is `role="alert"` and
+   `tabindex="-1"` in the DOM, so it can take focus without becoming tabbable. */
+.ai-dock {
+  position: relative;
+  flex: none;
+  width: calc(100% - 32px);
+  max-width: 48rem;
+  margin: 0 auto 10px;
+  padding: 13px 16px 14px;
+  border-radius: 10px;
+  /* A REAL background-color, not a wash: the text gate reads nothing else, and
+     four sentences sit on this card. */
+  background-color: rgb(var(--surface-raised-rgb));
+  box-shadow: var(--ai-glow-busy), var(--ai-float);
+}
+/* ⛔ THE DOCK TAKES FOCUS WHEN THE GATE APPEARS (§3.6) — only from `<body>` or
+   an EMPTY composer, never from a draft, and never onto Approve. It is
+   `tabindex="-1"` and has no action of its own, so it keeps an indicator (a
+   sighted keyboard user has to see that focus moved, or the next Tab lands on
+   Deny from nowhere) but takes it in the BUSY hue: the global ring is the brand
+   accent, and an oxblood ring around an amber card reads as "Driftstack", not
+   as "you are here". Only the colour is overridden — width, offset and radius
+   stay the global ones, and the buttons inside are untouched. */
+.ai-dock:focus-visible {
+  outline-color: rgb(var(--status-busy-rgb) / 0.75);
+}
+/* The busy hairline along the top edge — the card's one piece of colour that is
+   not a word, and it is paired with the amber label beside the shield. */
+.ai-dock::before {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 0;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background-color: rgb(var(--status-busy-rgb));
+}
+/* 16 · the halo. `display: none` under reduced motion (see the block above), so
+   NOTHING may be gated on its animationend — a display:none element fires none. */
+.ai-dock > .ai-halo {
+  display: block;
+  position: absolute;
+  inset: -4px;
+  border-radius: 14px;
+  pointer-events: none;
+  box-shadow:
+    0 0 0 2px rgb(var(--status-busy-rgb) / 0.7),
+    0 0 30px 2px rgb(var(--status-busy-rgb) / 0.35);
+}
+.ai-dock-h {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.ai-dock-ico {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: rgb(var(--status-busy-rgb));
+  background-color: rgb(var(--status-busy-rgb) / 0.13);
+  box-shadow: inset 0 0 0 1px rgb(var(--status-busy-rgb) / 0.4);
+}
+.ai-dock-label {
+  color: rgb(var(--status-busy-rgb));
+}
+/* The wait. `aria-hidden` in the DOM — a text node that rewrites itself once a
+   second inside a `role="alert"` would re-announce the whole card every second. */
+.ai-dock-wait {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: rgb(var(--ink-muted-rgb));
+  font-variant-numeric: tabular-nums;
+}
+.ai-dock-wait b {
+  font-weight: 400;
+}
+.ai-dock-say {
+  margin-top: 8px;
+}
+.ai-dock-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 9px;
+  font-size: 12.5px;
+  line-height: 20px;
+  color: rgb(var(--ink-secondary-rgb));
+}
+/* A REPLICA of the control on the phone — it looks like the button the step is
+   about to press, so the eye can match it to the live view above. It is not a
+   control: no handler, `cursor: default`, and it carries a `title` because it
+   is allowed to ellipsis (the gate's truncation rule). */
+.ai-replica {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgb(var(--ink-primary-rgb));
+  background-color: rgb(var(--surface-inset-rgb));
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--surface-divider-rgb)),
+    0 1px 0 rgb(0 0 0 / 0.25);
+  cursor: default;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The clause never splits across lines: "on shop.example.com" is one fact. */
+.ai-dock-site {
+  white-space: nowrap;
+}
+.ai-dock-site .mono {
+  font-size: 12px;
+  color: rgb(var(--ink-primary-rgb));
+}
+.ai-dock-calm {
+  margin-top: 9px;
+  font-size: 12px;
+  line-height: 18px;
+  color: rgb(var(--ink-secondary-rgb));
+}
+.ai-dock-calm b {
+  font-weight: 600;
+  color: rgb(var(--ink-primary-rgb));
+}
+.ai-dock-a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.ai-dock-hint {
+  margin-right: auto;
+  font-size: 11px;
+  line-height: 15px;
+  color: rgb(var(--ink-muted-rgb));
+}
+.ai-dock-btn {
+  min-width: 92px;
+  padding: 7px 14px;
+  font-size: 13px;
+}
+
+/* ⛔ THE CALM IS LITERAL (§3.6). While the gate is up and nothing is running,
+   nothing in the view moves: a card that says "nothing has happened yet" over a
+   pulsing dot is telling the customer two different things. `paused` is exactly
+   that state — stage 5 narrowed it so a send the customer started INSTEAD of
+   approving keeps its motion (see mission-phase.ts).
+
+   The `.ai-beat` family is stopped where it is declared, in the motion layer
+   above. This is the one Tailwind loop the view still runs while paused — the
+   live-device strip's dot — scoped by a hook that exists on the AI view's root
+   and nowhere else. Unlayered, so it outranks the utility.
+   MEASURED, with the rule removed and restored: 1 infinite animation → 0. */
+[data-ai-phase='paused'] .animate-pulse {
+  animation: none;
+}
+
+/* ─── the composer, as an inset console (§3.7) ─────────────────────────────
+   A recess in the surface with an accent `›` prompt, its caption and its button
+   inside the same box. The rest height is `min-height`/`height` on
+   `[data-rest]` — style, never the `rows` attribute, which stays 5. */
+.ai-cmd {
+  flex: none;
+  padding: 0 16px 14px;
+}
+.ai-cmd-box {
+  position: relative;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  max-width: 48rem;
+  margin: 0 auto;
+  border-radius: 10px;
+  background-color: rgb(var(--surface-inset-rgb));
+  box-shadow: inset 0 0 0 1px rgb(var(--surface-divider-rgb));
+  /* 18 · the only transition on the console, and it fires on focus alone. The
+     global `:focus-visible` outline stays on the buttons inside. */
+  transition: box-shadow 200ms ease;
+}
+.ai-cmd-box:focus-within {
+  box-shadow: var(--ai-glow-accent);
+}
+.ai-cmd-caret {
+  grid-column: 1;
+  padding: 10px 0 0 12px;
+  font-size: 17px;
+  line-height: 20px;
+  font-weight: 700;
+  color: rgb(var(--accent-rgb));
+}
+.ai-cmd-input {
+  --ai-rest-rows: 5;
+  grid-column: 2;
+  display: block;
+  width: 100%;
+  resize: none;
+  border: 0;
+  background: transparent;
+  padding: 11px 14px 4px 6px;
+  font-size: 13.5px;
+  line-height: 20px;
+  color: rgb(var(--ink-primary-rgb));
+  /* BOTH, and for different reasons: `height` is what the box rests at before a
+     single keystroke has set an inline height (without it the `rows` attribute
+     would win and every rest would be five rows); `min-height` is the floor the
+     autogrow's inline height cannot go under. */
+  height: calc(var(--ai-rest-rows) * 20px + 15px);
+  min-height: calc(var(--ai-rest-rows) * 20px + 15px);
+}
+.ai-cmd-input::placeholder {
+  color: rgb(var(--ink-muted-rgb));
+  opacity: 1;
+}
+.ai-cmd-input:focus-visible {
+  outline: none;
+}
+/* Coordinator's §12 D1 (the owner, 2026-08-31: "the text bar should be larger"):
+   three rows in a conversation, five in an empty chat, five on focus. D6: four
+   in a view too short to spare the fifth. `watch` is the customer watching a run
+   or reading an approval with nothing typed — the transcript is the thing then. */
+.ai-cmd[data-rest='watch'] .ai-cmd-input {
+  --ai-rest-rows: 2;
+}
+.ai-cmd[data-rest='chat'] .ai-cmd-input {
+  --ai-rest-rows: 3;
+}
+.ai-cmd[data-rest='chat'] .ai-cmd-box:focus-within .ai-cmd-input {
+  --ai-rest-rows: 5;
+}
+.ai-cmd[data-rest='idle'][data-short] .ai-cmd-input {
+  --ai-rest-rows: 4;
+}
+.ai-cmd-foot {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 8px 8px 14px;
+}
+.ai-cmd-cap {
+  margin-right: auto;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: rgb(var(--ink-muted-rgb));
+}
+.ai-cmd-cap-bad {
+  color: rgb(var(--status-error-text-rgb));
+}
+.ai-btn-send {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+}
+.ai-btn-send .ai-i {
+  font-size: 12px;
+}
+/* Stop is NOT a filled button. It is the only destructive control in the
+   column and it sits where Send sits; a red fill beside a customer's own words
+   reads as an error the customer caused. A raised surface with an error-hued
+   ring and an error-hued square says "this stops something" without shouting. */
+.ai-btn-stop {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 0.25rem;
+  font-size: 13px;
+  color: rgb(var(--ink-primary-rgb));
+  background-color: rgb(var(--surface-raised-rgb));
+  box-shadow: inset 0 0 0 1px rgb(var(--status-error-rgb) / 0.45);
+  transition:
+    background-color 150ms var(--ai-ease),
+    box-shadow 150ms var(--ai-ease);
+}
+.ai-btn-stop:hover:not(:disabled) {
+  background-color: rgb(var(--status-error-rgb) / 0.12);
+  box-shadow: inset 0 0 0 1px rgb(var(--status-error-rgb) / 0.8);
+}
+.ai-btn-stop .ai-i {
+  font-size: 11px;
+  color: rgb(var(--status-error-rgb));
+}
+
+/* ═════ the bar and the rail — stage 6 (spec §3.2, §3.3, §1) ═══════════════
+   The two pieces of chrome that frame every state: ONE row across the top, and
+   the history down the side. Both are written against the VIEW's own box, not
+   the window — `[data-ai-narrow]` / `[data-ai-wide]` are set on the view root
+   from a measured ResizeObserver (see use-view-width.ts), and are the same
+   tiers spec §1 writes as `@container aiview` queries. Stage 4 swaps the
+   attributes for the container and these rules keep their shape.
+
+   Every text run below sits on a real `background-color`: the text gate reads
+   nothing else, and a wash over a gradient is measured as the gradient. */
+
+/* ─── the deck: the bar, and everything it is about ────────────────────── */
+.ai-deck {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ai-deck-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+
+/* ─── the bar ──────────────────────────────────────────────────────────── */
+/* ONE number for the bar's height, because two things need it: the bar, and the
+   rail's overlay, which hangs from the bar's underside and is in a different
+   part of this file. The view root always carries `data-ai-phase`, so this is
+   the outermost place both can read it from. */
+[data-ai-phase] {
+  --ai-bar-h: 52px;
+}
+[data-ai-narrow] {
+  --ai-bar-h: 44px;
+}
+.ai-bar {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  height: var(--ai-bar-h);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid rgb(var(--surface-divider-rgb));
+  background: rgb(var(--surface-base-rgb));
+}
+.ai-bar-id {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+.ai-bar-chip {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: rgb(var(--accent-rgb));
+  background: rgb(var(--accent-subtle-rgb) / var(--accent-subtle-alpha));
+  box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.25);
+}
+.ai-bar-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.005em;
+  color: rgb(var(--ink-primary-rgb));
+  white-space: nowrap;
+}
+/* the control cluster: it may SHRINK (the pickers ellipsize), never wrap. */
+.ai-bar-r {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.ai-bar-r > .ai-budget,
+.ai-bar-r > button {
+  flex: none;
+}
+.ai-bar-btn {
+  height: 28px;
+  padding: 0 9px;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 16px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.ai-bar-btn-i {
+  display: block;
+  font-size: 12px;
+  color: rgb(var(--ink-muted-rgb));
+}
+/* the live-view toggle: quieter than Save as task, which is the bar's one
+   real command. */
+.ai-bar-btn-quiet {
+  display: inline-flex;
+  align-items: center;
+  color: rgb(var(--ink-secondary-rgb));
+  box-shadow: inset 0 0 0 1px rgb(var(--surface-divider-rgb));
+  transition:
+    background-color var(--ai-dur-quick),
+    color var(--ai-dur-quick);
+}
+.ai-bar-btn-quiet:hover {
+  background: rgb(var(--surface-elevated-rgb));
+  color: rgb(var(--ink-primary-rgb));
+}
+
+/* ─── the status pill ──────────────────────────────────────────────────── */
+.ai-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  border-radius: 999px;
+  padding: 2px 9px 2px 8px;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ai-pip {
+  display: block;
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+}
+
+/* ─── the AI budget ────────────────────────────────────────────────────── */
+.ai-budget {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 2px;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  color: rgb(var(--ink-secondary-rgb));
+}
+.ai-budget-mark {
+  display: block;
+  font-size: 11px;
+  color: rgb(var(--ink-muted-rgb));
+}
+.ai-budget-wide {
+  display: none;
+}
+.ai-budget-bar {
+  display: block;
+  width: 44px;
+  height: 4px;
+  flex: none;
+  border-radius: 2px;
+  overflow: hidden;
+  background: rgb(var(--surface-elevated-rgb));
+}
+.ai-budget-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: rgb(var(--status-ready-rgb));
+}
+/* Under 15% the reading turns to error ink — and keeps its place in the narrow
+   tier, where the budget is otherwise the first thing to stand down. */
+.ai-budget[data-low] {
+  color: rgb(var(--status-error-text-rgb));
+}
+.ai-budget[data-low] .ai-budget-mark {
+  color: rgb(var(--status-error-text-rgb));
+}
+.ai-budget[data-low] .ai-budget-fill {
+  background: rgb(var(--status-error-rgb));
+}
+
+/* ─── the two pickers ──────────────────────────────────────────────────── */
+.ai-field {
+  display: flex;
+  align-items: center;
+  min-width: 84px;
+  flex: 0 1 auto;
+}
+.ai-select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  min-width: 84px;
+  max-width: 176px;
+  border: 1px solid rgb(var(--surface-divider-rgb));
+  background-color: rgb(var(--surface-inset-rgb));
+  background-repeat: no-repeat;
+  background-position: right 7px center;
+  background-size: 9px;
+  border-radius: 4px;
+  padding: 4px 22px 4px 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: rgb(var(--ink-primary-rgb));
+  text-overflow: ellipsis;
+}
+[data-mode='dark'] .ai-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6' fill='none' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+}
+[data-mode='light'] .ai-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6' fill='none' stroke='%235b6270' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+}
+.ai-field-lock {
+  display: block;
+  font-size: 11px;
+  margin-right: 3px;
+  color: rgb(var(--ink-muted-rgb));
+}
+/* LOCKED: still the same `<select disabled>` with the same options and title —
+   drawn as the settled context it has become. A bordered field invites a click
+   that does nothing; this says "decided" and costs a third of the width. */
+.ai-field[data-locked] {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.ai-field[data-locked] .ai-select {
+  opacity: 1;
+  min-width: 0;
+  max-width: 150px;
+  border-color: transparent;
+  background-image: none;
+  background-color: transparent;
+  padding: 4px 2px;
+  color: rgb(var(--ink-secondary-rgb));
+  cursor: default;
+}
+.ai-field[data-locked] + .ai-field[data-locked] {
+  margin-left: -2px;
+}
+.ai-field[data-locked] + .ai-field[data-locked]::before {
+  content: '·';
+  margin-right: 5px;
+  color: rgb(var(--ink-muted-rgb));
+}
+
+/* ─── the history rail ─────────────────────────────────────────────────── */
+.ai-rail {
+  position: relative;
+  z-index: 3;
+  width: 184px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  background: rgb(var(--surface-raised-rgb) / 0.6);
+  border-right: 1px solid rgb(var(--surface-divider-rgb));
+}
+.ai-rail-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ai-rail-top {
+  flex: none;
+  padding: 10px;
+  border-bottom: 1px solid rgb(var(--surface-divider-rgb) / 0.7);
+}
+/* QUIET, not a fill. Send and Approve are the view's only accent fills (spec
+   §3.2) — a third one on a command the customer presses between tasks was
+   competing with the one that starts the task. The accent survives on the
+   glyph, and the ring warms on hover. */
+.ai-rail-new {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgb(var(--ink-primary-rgb));
+  background: rgb(var(--surface-elevated-rgb) / 0.6);
+  box-shadow: inset 0 0 0 1px rgb(var(--surface-divider-rgb));
+  transition:
+    box-shadow var(--ai-dur-quick),
+    background-color var(--ai-dur-quick);
+}
+.ai-rail-new:hover:not(:disabled) {
+  background: rgb(var(--surface-elevated-rgb) / 0.9);
+  box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.7);
+}
+.ai-rail-new:disabled {
+  opacity: 0.4;
+}
+.ai-rail-plus {
+  color: rgb(var(--accent-text-rgb));
+  font-weight: 600;
+}
+.ai-rail-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 6px 10px;
+  scrollbar-width: thin;
+  /* When the overlay opens, focus lands on the first row and the browser scrolls
+     it into view — which put the "Today" heading above it off the top of the
+     panel. This leaves the heading its line. */
+  scroll-padding-top: 30px;
+}
+.ai-rail-empty {
+  padding: 12px 8px;
+  font-size: 11px;
+  line-height: 16px;
+  color: rgb(var(--ink-muted-rgb));
+}
+.ai-rail-group {
+  display: block;
+  padding: 10px 8px 4px;
+}
+.ai-rail-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 6px;
+  padding: 1px;
+  transition: background-color var(--ai-dur-quick);
+}
+.ai-rail-row:hover {
+  background: rgb(var(--surface-elevated-rgb) / 0.5);
+}
+.ai-rail-row.is-active {
+  background: rgb(var(--accent-subtle-rgb) / var(--accent-subtle-alpha));
+}
+.ai-rail-open {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 6px 1fr;
+  column-gap: 8px;
+  align-items: start;
+  text-align: left;
+  padding: 6px 7px;
+  border-radius: 5px;
+}
+.ai-rail-open:disabled {
+  cursor: not-allowed;
+}
+.ai-rail-dot {
+  display: block;
+  width: 6px;
+  height: 6px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: rgb(var(--status-idle-rgb));
+}
+.ai-rail-dot-ok {
+  background: rgb(var(--status-ready-rgb));
+}
+.ai-rail-dot-bad {
+  background: rgb(var(--status-error-rgb));
+}
+/* a ring, so "waiting on you" reads as held rather than merely amber */
+.ai-rail-dot-wait {
+  background: rgb(var(--status-busy-rgb));
+  box-shadow: 0 0 0 3px rgb(var(--status-busy-rgb) / 0.2);
+}
+.ai-rail-dot-run {
+  background: rgb(var(--accent-rgb));
+  box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / 0.22);
+}
+.ai-rail-meta {
+  display: block;
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: rgb(var(--ink-muted-rgb));
+}
+/* ⛔ ink-muted on `surface-elevated` measures 4.04:1 in dark — the hover state
+   of this exact line, and a failure no scene had ever rendered. The lit row
+   speaks in ink-secondary. */
+.ai-rail-row:hover .ai-rail-meta,
+.ai-rail-row.is-active .ai-rail-meta {
+  color: rgb(var(--ink-secondary-rgb));
+}
+.ai-rail-act {
+  flex: none;
+  width: 18px;
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  font-size: 12px;
+  color: rgb(var(--ink-muted-rgb));
+  transition:
+    color var(--ai-dur-quick),
+    opacity var(--ai-dur-quick);
+}
+.ai-rail-act:hover {
+  color: rgb(var(--ink-primary-rgb));
+}
+/* ⛔ OUT OF FLOW, because it is invisible at rest. Reserving 18px of every row
+   for a button nobody can see cost the meta line the words it needs at 184px:
+   "Didn’t finish · 4 d ago" clipped to "Didn’t finish · 4 d a…" on a rail whose
+   whole job is to say how a chat ended. It sits over the row instead, on the
+   row's own background, and only once the row is hovered or focused. */
+.ai-rail-del {
+  position: absolute;
+  right: 2px;
+  top: 1px;
+  bottom: 1px;
+  opacity: 0;
+  border-radius: 0 5px 5px 0;
+  padding-left: 3px;
+  background: rgb(var(--surface-elevated-rgb));
+  /* ⛔ REVIEW REPAIR — ink-secondary, NOT the `.ai-rail-act` ink-muted it
+     inherits. This tile has to be OPAQUE (it covers the meta line it sits on),
+     and the background it therefore paints is `surface-elevated` — the exact
+     pair the note on `.ai-rail-meta` above rejects at 4.04:1 in dark. Measured
+     revealed (row hovered, and on the `:focus-within` reveal this stage added,
+     which is a state that did not exist before): 4.04:1 with ink-muted, 6.97:1
+     with ink-secondary; light goes 6.03:1 → 7.04:1. Its own hover (the error
+     ink, 4.59:1 dark) is unchanged and still clears the bar. The text
+     gate cannot catch this on its own — at rest the button is `opacity: 0`, so
+     no scene ever renders the pair it measures. */
+  color: rgb(var(--ink-secondary-rgb));
+}
+.ai-rail-del:hover:not(:disabled) {
+  color: rgb(var(--status-error-text-rgb));
+}
+/* focus-within as well as hover: the ✕ used to be reachable by keyboard and
+   invisible while focused, so the tab stop had no visible home. */
+.ai-rail-row:hover .ai-rail-del,
+.ai-rail-row:focus-within .ai-rail-del {
+  opacity: 1;
+}
+
+/* ─── the 44px strip (narrow tier) ─────────────────────────────────────── */
+.ai-rail-mini {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+}
+.ai-rail-mini-btn {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: rgb(var(--ink-secondary-rgb));
+  background: rgb(var(--surface-elevated-rgb) / 0.5);
+  box-shadow: inset 0 0 0 1px rgb(var(--surface-divider-rgb));
+  transition:
+    color var(--ai-dur-quick),
+    background-color var(--ai-dur-quick);
+}
+.ai-rail-mini-btn:hover:not(:disabled) {
+  color: rgb(var(--ink-primary-rgb));
+  background: rgb(var(--surface-elevated-rgb));
+}
+.ai-rail-mini-btn:disabled {
+  opacity: 0.4;
+}
+.ai-rail-mini-plus {
+  color: rgb(var(--accent-text-rgb));
+}
+.ai-rail-count {
+  position: absolute;
+  right: -4px;
+  top: -5px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 15px;
+  font-weight: 600;
+  text-align: center;
+  background: rgb(var(--surface-elevated-rgb));
+  color: rgb(var(--ink-primary-rgb));
+  box-shadow: 0 0 0 1px rgb(var(--surface-divider-rgb));
+}
+.ai-rail-mini-dot {
+  position: absolute;
+  left: -2px;
+  bottom: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgb(var(--surface-base-rgb));
+}
+
+/* ─── the tiers ────────────────────────────────────────────────────────── */
+/* WIDE (spec §1, ≥ 1300px of view): more rail, and the budget says what it is
+   instead of leaving it to a sparkle. */
+[data-ai-wide] .ai-rail {
+  width: 208px;
+}
+[data-ai-wide] .ai-budget-wide {
+  display: inline;
+}
+[data-ai-wide] .ai-budget-mark {
+  display: none;
+}
+[data-ai-wide] .ai-select {
+  max-width: 220px;
+}
+
+/* NARROW (spec §1, ≤ 900px of view): the rail becomes a 44px strip and the bar
+   gives up everything that is not the answer to "what is it doing?" — 164px of
+   width and 8px of height, handed to the mission column. */
+[data-ai-narrow] .ai-rail {
+  width: 44px;
+}
+[data-ai-narrow] .ai-rail-panel {
+  display: none;
+}
+/* ⛔ REVIEW REPAIR — THE PANEL'S `z-index: 40` IS SCOPED, AND ONLY THIS LINE
+   MAKES IT REAL. `.ai-rail` is `position: relative; z-index: 3`, which is a
+   STACKING CONTEXT: everything inside it, the overlay's 40 included, is sorted
+   against its siblings at level 3 and no higher. `.ai-deck-body` next door is
+   `position: relative; z-index: auto` — NOT a stacking context — so a
+   positioned descendant of the column with a z-index of its own competes in the
+   ROOT context at its own number. `.ai-shot-zoom` is already one of those (5),
+   and stage 4 adds more (the HUD chips, the room light, the device rim). Today
+   nothing overlaps the panel's box — measured, 0 of 176 sample points pierced,
+   the only z > 3 in the deck being a zoom badge at x=906 against a panel that
+   ends at 500 — so this is the trap being closed, not a defect being fixed.
+   Raising the RAIL is safe and raising the panel is not: the rail is a flex
+   sibling of the deck and never overlaps the bar, the live pane's slide-over
+   (fixed, right edge) or anything else, and 41 stays under the save-as-task
+   dialog and the screenshot lightbox, which are both z-50. */
+[data-ai-narrow] .ai-rail[data-open] {
+  z-index: 41;
+}
+/* The list is the SAME list, moved — not a second copy to keep in step. */
+[data-ai-narrow] .ai-rail[data-open] .ai-rail-panel {
+  display: flex;
+  position: absolute;
+  left: 44px;
+  /* It hangs from the BAR's underside, not from the top of the view: the bar
+     stays readable while the list is open, so the customer can still see what
+     the AI is doing while they pick a chat. (`.ai-bar` paints above this anyway
+     — both sit at z-index 3 and the bar is later in the document — so an
+     overlay at `top: 0` would be half-hidden rather than layered.) */
+  top: var(--ai-bar-h);
+  bottom: 0;
+  width: 232px;
+  z-index: 40;
+  background: rgb(var(--surface-raised-rgb));
+  border-right: 1px solid rgb(var(--surface-divider-rgb));
+  box-shadow: var(--ai-float);
+}
+[data-ai-narrow] .ai-bar {
+  gap: 8px;
+  padding: 0 10px 0 12px;
+}
+[data-ai-narrow] .ai-bar-chip {
+  display: none;
+}
+[data-ai-narrow] .ai-budget:not([data-low]) {
+  display: none;
+}
+[data-ai-narrow] .ai-budget {
+  gap: 5px;
+  margin-right: 0;
+}
+[data-ai-narrow] .ai-budget-bar {
+  display: none;
+}
+[data-ai-narrow] .ai-budget-mid {
+  display: none;
+}
+[data-ai-narrow] .ai-select {
+  max-width: 118px;
 }
 
 /* ─── Profiles list-view responsive columns (founder 2026-06-16) ──────────

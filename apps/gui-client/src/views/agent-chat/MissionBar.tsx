@@ -1,23 +1,45 @@
 // The bar across the top of the AI view: what this is, what the session is
 // doing, and the controls that belong to the whole chat.
 //
-// Stage 0 of the AI-view rebuild (spec §9): lifted out of AgentChatView.tsx with
-// the DOM byte-identical — the same `<header>` and its wrap behaviour, the same
-// `data-component="agent-status-pill"`, the same `aria-label="Profile"` /
-// `aria-label="Model"` selects with the same titles and option text, the same
-// `Save as task` / `New chat` / `Toggle live view` names. Stage 6 makes it one
-// row; nothing here anticipates that.
+// Stage 6 of the AI-view rebuild (spec §3.3). ONE ROW AT EVERY SUPPORTED WIDTH.
+// What it replaces: a `flex-wrap` header that took two rows at the 1280px
+// default and THREE at the 960px minimum — a title row, a control row, and a
+// row holding nothing but "New chat" — spending 122px of a 564px-tall view on
+// chrome before the customer's first template was reached. The wrap was a
+// deliberate 2026 fix for buttons running off the panel edge; this stage removes
+// the pressure that made it necessary instead of the wrap alone:
+//
+//   · the "New chat" button is GONE from the bar. There was never a reason for
+//     two of them — the rail's "+ New chat" is the one the customer already
+//     reaches for, and it is the one the redesign draws. (The pin that named
+//     the bar's copy, `getByRole('button', { name: 'New chat' })`, now names the
+//     rail's `'+ New chat'`; see the model-picker test.)
+//   · the subtitle "natural-language automation" is gone (spec §10) — it said
+//     nothing the title and the first screen do not.
+//   · the two pickers stop being form fields the moment the chat has started.
+//     They are still the SAME `<select disabled>` elements with the same titles
+//     and the same options; they are just drawn as what they have become —
+//     quiet, locked context with a lock beside it — which costs a third of the
+//     width a bordered field does.
+//   · the sparkle chip and the budget bar step aside in the narrow tier.
+//
+// ⛔ THE PILL'S TONE NO LONGER COMES FROM `sessionState.tone`. See
+// `mission-status.ts` for why (five tones, nine labels, and two of the
+// collisions were the bar telling the customer something false). The pill is
+// NOT `role="status"`: the no-key idle state must contain exactly one, and that
+// one is the API-key gate card in the column.
 
 import { type AgentSession } from '@driftstack/sdk';
 import { CHAT_MODELS, NEEDS_OWN_KEY_SUFFIX, modelNeedsOwnKey } from '../../lib/chat-models';
 import type { SessionStateDescriptor } from '../../lib/session-liveness';
 import { type ChatModel } from '../../lib/use-agent-chat';
-import { IconSparkle } from './icons';
+import { IconBookmark, IconLock, IconSparkle } from './icons';
+import { missionPill, type MissionStatusChat, type MissionPillTone } from './mission-status';
 
 /* Written out in full rather than composed, because Tailwind's scanner only
    sees class names that appear literally in the source.
 
-   ⛔ `stopping` IS NOT A HUE, it is the NEUTRAL tone (spec §3.3). The grey
+   ⛔ `neutral` IS NOT A HUE, and it is what four of these labels wear. The grey
    status token was being used as TEXT on its own 15% wash: 3.18:1 in dark and
    2.47:1 in light, both under the 4.5 a 10px label needs — measured by
    scripts/gui-text-quality.mjs the moment the audit-agent-chat-stopping scene
@@ -29,25 +51,27 @@ import { IconSparkle } from './icons';
    keeps --status-idle: it is a 6px dot, not text, and it is never the only
    signal (the label says the same thing in words).
 
-   Stage 6 moves `Session open` / `Idle` / `Paused` / `Ended` onto this same
-   neutral tone and adds the `Needs your approval` override; stage 1 fixes only
-   the failure the gate can now see. */
-const STATUS_PILL_TONE: Record<SessionStateDescriptor['tone'], string> = {
-  running: 'bg-accent/15 text-accent-text',
-  starting: 'bg-status-busy/15 text-status-busy',
-  stopping: 'bg-surface-elevated/80 text-ink-secondary ring-1 ring-surface-divider',
+   Stage 1 gave `Stopping` this tone to close the failure the gate could see.
+   Stage 6 moves `Session open`, `Idle`, `Paused` and `Ended` onto it too, so
+   that a session merely OPEN stops wearing the amber of one coming up and a
+   session that has ENDED stops wearing the green of one that is ready. */
+const PILL_TONE: Record<MissionPillTone, string> = {
+  run: 'bg-accent/15 text-accent-text',
+  busy: 'bg-status-busy/15 text-status-busy',
+  neutral: 'bg-surface-elevated/80 text-ink-secondary ring-1 ring-surface-divider',
   ready: 'bg-status-ready/15 text-status-ready',
-  error: 'bg-status-error/15 text-status-error',
+  bad: 'bg-status-error/15 text-status-error-text',
 };
-const STATUS_DOT_TONE: Record<SessionStateDescriptor['tone'], string> = {
-  running: 'bg-accent',
-  starting: 'bg-status-busy',
-  stopping: 'bg-status-idle',
+const PIP_TONE: Record<MissionPillTone, string> = {
+  run: 'bg-accent',
+  busy: 'bg-status-busy',
+  neutral: 'bg-status-idle',
   ready: 'bg-status-ready',
-  error: 'bg-status-error',
+  bad: 'bg-status-error',
 };
 
 export function MissionBar({
+  chat,
   sessionState,
   session,
   liveOpen,
@@ -62,8 +86,9 @@ export function MissionBar({
   sending,
   canSaveRecipe,
   onSaveAsTask,
-  onNewChat,
 }: {
+  /** Only for the pill's approval override — every read is optional-chained. */
+  chat: MissionStatusChat;
   sessionState: SessionStateDescriptor;
   session: AgentSession | null;
   liveOpen: boolean;
@@ -79,153 +104,179 @@ export function MissionBar({
   sending: boolean;
   canSaveRecipe: boolean;
   onSaveAsTask: () => void;
-  onNewChat: () => void;
 }): JSX.Element {
+  const pill = missionPill(chat, sessionState);
+  // The lock rule is UNCHANGED (spec §6): lock once started OR while the FIRST
+  // send is in flight. During the first send `started` is still false (turns
+  // stay empty until the reply lands), so without `|| sending` the customer
+  // could change the profile after Send — the session is created with the OLD
+  // value while the bar shows the new one and the persist writes the new one,
+  // desyncing saved chat metadata from the session that actually ran.
+  const locked = started || sending;
   return (
-    /* Header — #139: flex-wrap + min-w-0 so the dense control cluster (live
-       toggle, budget, profile, model, save, new chat) WRAPS to a second row
-       at narrow widths instead of pushing the rightmost buttons off the
-       panel edge (founder: "buttons cut off / run outside the panel"). */
-    <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-surface-divider px-4 py-2.5">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="flex h-6 w-6 items-center justify-center rounded bg-accent-subtle text-accent">
+    <header className="ai-bar">
+      <div className="ai-bar-id">
+        <span className="ai-bar-chip" aria-hidden="true">
           <IconSparkle />
         </span>
-        <div className="flex flex-col">
-          <span className="text-sm font-medium text-ink-primary">AI Browser Automation</span>
-          <span className="text-2xs text-ink-muted">natural-language automation</span>
-        </div>
-        {/* V-1611 — this pill reported API-KEY PRESENCE and called it "AI
-            ready": a claim about CONFIGURATION worn as a claim about STATE.
-            A customer with a key and no session, and one with a session
-            running right now, saw the identical pill. The freshest session
-            we hold wins — the poll's copy if it has answered, else the one
-            the chat hook created. */}
-        <span
-          data-component="agent-status-pill"
-          className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${STATUS_PILL_TONE[sessionState.tone]}`}
-          title={sessionState.title}
-        >
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_TONE[sessionState.tone]} ${
-              sessionState.tone === 'running' ? 'animate-pulse' : ''
-            }`}
-          />
-          {sessionState.label}
-        </span>
+        <span className="ai-bar-title">AI Browser Automation</span>
       </div>
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        {/* Below lg the live-view pane is hidden; this button reveals it as a
-            slide-over (hidden at lg+, where the pane is always inline). */}
-        <button
-          type="button"
-          aria-label="Toggle live view"
-          onClick={onToggleLiveView}
-          className="rounded border border-surface-divider px-2 py-1 text-2xs font-medium text-ink-secondary hover:text-ink-primary lg:hidden"
-        >
-          {liveOpen ? 'Hide live' : 'Live view'}
-        </button>
+      {/* V-1611 — this pill reported API-KEY PRESENCE and called it "AI
+          ready": a claim about CONFIGURATION worn as a claim about STATE.
+          A customer with a key and no session, and one with a session
+          running right now, saw the identical pill. The freshest session
+          we hold wins — the poll's copy if it has answered, else the one
+          the chat hook created. */}
+      <span
+        data-component="agent-status-pill"
+        className={`ai-pill ${PILL_TONE[pill.tone]}`}
+        title={pill.title}
+      >
+        <span
+          className={`ai-pip ${PIP_TONE[pill.tone]} ${pill.tone === 'run' ? 'ai-beat-slow' : ''}`}
+        />
+        {pill.label}
+      </span>
+      <div className="ai-bar-r">
         {session !== null && (
           <BudgetMeter
             remaining={session.token_budget_remaining}
             total={session.token_budget_total}
           />
         )}
-        <select
-          aria-label="Profile"
-          value={profileId}
-          // Lock once started OR while the FIRST send is in flight: during the
-          // first send `started` is still false (turns.length===0 until the
-          // reply lands), so without `|| chat.sending` the customer could change
-          // the profile after Send — the session is created with the OLD value
-          // while the header shows the new one and the persist writes the new
-          // one, desyncing saved chat metadata from the actual session (audit).
-          disabled={started || sending}
-          onChange={(e) => onProfileChange(e.target.value)}
-          className="max-w-[10rem] truncate rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary disabled:opacity-60"
-          title={
-            started || sending
-              ? 'Profile is locked for this chat — start a new chat to change it'
-              : 'Which profile the agent works on. Temporary = a throwaway session that saves nothing.'
-          }
-        >
-          <option value="">Temporary profile (saves nothing)</option>
-          {profiles.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="Model"
-          value={model}
-          // Same first-send race as the Profile select above — lock on
-          // `started || chat.sending` so the model can't change after Send
-          // creates the session with the prior value.
-          disabled={started || sending}
-          onChange={(e) => onModelChange(e.target.value as ChatModel)}
-          className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary disabled:opacity-60"
-          title={
-            started || sending
-              ? 'Model is locked for the current chat — start a new chat to change it'
-              : hasOwnKey === false
-                ? 'Some models run only on your own Anthropic key. Add one in Settings → AI & billing.'
-                : 'Model'
-          }
-        >
-          {/* An own-key-only model stays IN the list when the account has no
-              key, only disabled: a reopened chat stored on it must still match
-              an option, or the select would silently show a different model
-              from the one the chat ran on. */}
-          {CHAT_MODELS.map((m) => {
-            const needsKey = hasOwnKey === false && modelNeedsOwnKey(m.id);
-            return (
-              <option key={m.id} value={m.id} disabled={needsKey}>
-                {needsKey ? `${m.label} ${NEEDS_OWN_KEY_SUFFIX}` : m.label}
+        <label className="ai-field" data-locked={locked ? '' : undefined}>
+          {locked && (
+            <span className="ai-field-lock" aria-hidden="true">
+              <IconLock />
+            </span>
+          )}
+          <select
+            aria-label="Profile"
+            value={profileId}
+            disabled={locked}
+            onChange={(e) => onProfileChange(e.target.value)}
+            className="ai-select"
+            title={
+              locked
+                ? 'Profile is locked for this chat — start a new chat to change it'
+                : 'Which profile the agent works on. Temporary = a throwaway session that saves nothing.'
+            }
+          >
+            <option value="">Temporary profile (saves nothing)</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
               </option>
-            );
-          })}
-        </select>
+            ))}
+          </select>
+        </label>
+        <label className="ai-field" data-locked={locked ? '' : undefined}>
+          <select
+            aria-label="Model"
+            value={model}
+            disabled={locked}
+            onChange={(e) => onModelChange(e.target.value as ChatModel)}
+            className="ai-select"
+            title={
+              locked
+                ? 'Model is locked for the current chat — start a new chat to change it'
+                : hasOwnKey === false
+                  ? 'Some models run only on your own Anthropic key. Add one in Settings → AI & billing.'
+                  : 'Model'
+            }
+          >
+            {/* An own-key-only model stays IN the list when the account has no
+                key, only disabled: a reopened chat stored on it must still match
+                an option, or the select would silently show a different model
+                from the one the chat ran on. */}
+            {CHAT_MODELS.map((m) => {
+              const needsKey = hasOwnKey === false && modelNeedsOwnKey(m.id);
+              return (
+                <option key={m.id} value={m.id} disabled={needsKey}>
+                  {needsKey ? `${m.label} ${NEEDS_OWN_KEY_SUFFIX}` : m.label}
+                </option>
+              );
+            })}
+          </select>
+        </label>
         <button
           type="button"
           onClick={onSaveAsTask}
           disabled={!canSaveRecipe || sending}
-          className="btn-secondary px-2 py-1 text-xs disabled:opacity-50"
+          className="btn-secondary ai-bar-btn disabled:opacity-50"
           title={
             canSaveRecipe
               ? 'Save this chat as a task you can run again later'
-              : 'Run at least one task first, then save it to replay later'
+              : 'Available once a task has finished in this chat'
           }
         >
+          {/* aria-hidden, so the accessible name stays exactly "Save as task" */}
+          <span className="ai-bar-btn-i" aria-hidden="true">
+            <IconBookmark />
+          </span>
           Save as task
         </button>
+        {/* ⛔ UNCHANGED BY THIS STAGE, ON PURPOSE. Spec §3.3 wants this as an
+            icon button with `aria-pressed` that COLLAPSES an inline stage — but
+            the stage is not inline yet. Below the `lg` breakpoint the live pane
+            is still a slide-over and this button is the only way to open it, so
+            hiding it (as the mockup's narrow tier does) or re-labelling it would
+            take the live view away at exactly the width this stage is buying
+            room at. Its visible text is pinned ('Hide live' after the toggle) in
+            agent-chat-save-recipe. Stage 4 owns the behaviour change and the
+            re-label together. */}
         <button
           type="button"
-          onClick={onNewChat}
-          disabled={!started || sending}
-          className="btn-secondary px-2 py-1 text-xs disabled:opacity-50"
+          aria-label="Toggle live view"
+          onClick={onToggleLiveView}
+          className="ai-bar-btn ai-bar-btn-quiet lg:hidden"
         >
-          New chat
+          {liveOpen ? 'Hide live' : 'Live view'}
         </button>
       </div>
     </header>
   );
 }
 
+/**
+ * The AI budget, as ONE reading: "82% left" and a 44px bar (spec §3.3).
+ *
+ * `role="img"` + `aria-label` because the meter is three elements saying one
+ * thing — a mark, a number and a bar. Without it a screen reader reads "82%
+ * left" with no idea what is 82% left of, which is the same complaint the
+ * journey audit made about the bare bar this replaces (a percentage with no
+ * number read as meaningless). The visible text is still real text on a real
+ * background, so the contrast gate measures it.
+ *
+ * The wide tier spells "AI budget" out in front instead of leaving it to the
+ * sparkle; that is a CSS decision (`.ai-budget-wide`), not a React one, so the
+ * bar does not re-render on a resize.
+ */
 function BudgetMeter({ remaining, total }: { remaining: number; total: number }): JSX.Element {
   const pct = total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
+  const shown = Math.round(pct);
+  // Below 15% the reading turns to error ink AND keeps its place in the narrow
+  // tier, where the budget is otherwise the first thing to go.
+  const low = pct < 15;
+  const sentence = `AI budget: ${String(shown)}% of this session's budget is left`;
   return (
-    <div className="flex items-center gap-1.5" title={`${remaining} / ${total} tokens remaining`}>
-      <span className="section-label">budget</span>
-      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-inset">
-        <span
-          className={`block h-full rounded-full ${pct < 15 ? 'bg-status-error' : 'bg-status-ready'}`}
-          style={{ width: `${pct}%` }}
-        />
+    <span
+      className="ai-budget"
+      data-low={low ? '' : undefined}
+      role="img"
+      aria-label={sentence}
+      title={sentence}
+    >
+      <span className="ai-budget-mark" aria-hidden="true">
+        <IconSparkle />
       </span>
-      {/* Show the percentage inline — a bare bar with no number read as
-          meaningless (journey audit L5); the hover title keeps the exact ratio. */}
-      <span className="text-2xs tabular-nums text-ink-muted">{Math.round(pct)}%</span>
-    </div>
+      <span className="ai-budget-read tabular-nums">
+        <span className="ai-budget-wide">AI budget · </span>
+        {shown}%<span className="ai-budget-mid"> left</span>
+      </span>
+      <span className="ai-budget-bar" aria-hidden="true">
+        <span className="ai-budget-fill" style={{ width: `${String(shown)}%` }} />
+      </span>
+    </span>
   );
 }

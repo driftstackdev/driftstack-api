@@ -462,16 +462,21 @@ describe('review — hover states, opacity, and the simulator dark scope', () =>
   });
 
   it('every text-carrying accent fill in the swept components hovers to the fill token, never the rose', () => {
-    // The Launch buttons (table + tile) and "+ New chat" are `bg-accent text-white`
-    // with a hover; `hover:bg-accent-hover` back on any of them reds this.
+    // The Launch buttons (table + tile) are `bg-accent text-white` with a hover;
+    // `hover:bg-accent-hover` back on any of them reds this.
     // ⛔ REPOINTED 2026-09-19 (AI-view rebuild, stage 0): "+ New chat" moved with
     // the history rail out of views/AgentChatView.tsx into
-    // views/agent-chat/ChatRail.tsx. The class string is byte-identical; only the
-    // file holding it changed.
+    // views/agent-chat/ChatRail.tsx.
+    // ⛔ REMOVED 2026-09-20 (stage 6): the rail's "+ New chat" is no longer an
+    // accent fill at all. Spec §3.2 leaves the view exactly two — Send and
+    // Approve, both `.btn-primary`, whose hover this file pins one arm up — so a
+    // quiet elevated button with an accent glyph is what starts a new chat. A
+    // POSITIVE arm asserting a hover on a fill that no longer exists would pass
+    // by describing nothing; the arm below took its place, and asserts the
+    // absence it left behind.
     for (const rel of [
       'components/ProfilesTable.tsx',
       'components/ProfilePhoneCard.tsx',
-      'views/agent-chat/ChatRail.tsx',
       'views/TeamView.tsx',
     ]) {
       const src = readSrc(rel);
@@ -507,6 +512,43 @@ describe('review — hover states, opacity, and the simulator dark scope', () =>
         /bg-accent [^"'`\n]*text-white[^"'`\n]*(?<!group-)hover:bg-accent-hover/,
       );
     }
+  });
+
+  it('the AI view carries NO raw accent fill under text — Send and Approve are the only two, and they go through .btn-primary', () => {
+    // ⛔ THE ARM THAT MOVED HERE, AND WHY IT IS AN ABSENCE. Stage 6 made the
+    // rail's "+ New chat" a quiet button, so the positive arm above ("this file
+    // contains hover:bg-accent-fill-hover") had nothing left to assert about the
+    // AI view. Dropping it silently would have left the view's accent fills
+    // unswept; asserting the hover on a class string that is gone would have
+    // been a test of its own comment. So the claim the redesign actually makes
+    // is pinned instead: spec §3.2 says Send and Approve are the view's only two
+    // accent fills, and both wear `.btn-primary` — whose hover token is pinned
+    // by the `.btn-primary` arm above, for the whole app at once. Anything that
+    // paints white on a raw `bg-accent` inside the AI view has therefore escaped
+    // that pin, and reds here.
+    const AGENT_CHAT = join(SRC, 'views', 'agent-chat');
+    const AI_VIEW_SOURCES = [
+      join(SRC, 'views', 'AgentChatView.tsx'),
+      ...readdirSync(AGENT_CHAT)
+        .filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
+        .map((f) => join(AGENT_CHAT, f)),
+    ];
+    expect(AI_VIEW_SOURCES.length, 'the AI-view sweep derived nothing to scan').toBeGreaterThan(5);
+    // A raw fill: `bg-accent` (not -subtle, not /15) with white ink on it.
+    const RAW_FILL = /bg-accent(?![-/\w])[^"'`\n]*text-white/;
+    for (const file of AI_VIEW_SOURCES) {
+      expect(readFileSync(file, 'utf8'), file).not.toMatch(RAW_FILL);
+    }
+    // POSITIVE CONTROL: the same regex still finds the fills that legitimately
+    // exist elsewhere. Without it, a regex that had stopped matching anything at
+    // all would report the AI view clean — which is precisely how a negative
+    // sweep lies.
+    expect(readSrc('components/ProfilesTable.tsx')).toMatch(RAW_FILL);
+    expect(readSrc('views/TeamView.tsx')).toMatch(RAW_FILL);
+    // …and the two fills the AI view DOES have are the shared component class,
+    // so they inherit the `.btn-primary` hover pin rather than needing one here.
+    expect(readSrc('views/agent-chat/Composer.tsx')).toMatch(/className="btn-primary /);
+    expect(readSrc('views/agent-chat/ApprovalDock.tsx')).toMatch(/className="btn-primary /);
   });
 
   it('the sign-out shortcut hint carries no opacity — opacity-70 painted it at 3.02 (dark) / 3.16 (light) on the sign-out wash', () => {
@@ -719,5 +761,47 @@ describe('audit-scene follow-ups — the error hue as text, and the saved-chat r
     // string is byte-identical; only the file holding it changed.
     const src = readSource2('views/agent-chat/ChatRail.tsx');
     expect(src).toMatch(/className="block truncate text-xs text-ink-primary" title=\{c\.title\}>/);
+    // ⛔ KEPT BYTE-FOR-BYTE THROUGH STAGE 6 (2026-09-20), on purpose. The rail
+    // around it was re-cut — day groups, an outcome dot, a new meta line, a
+    // 44px strip — and this one span was left exactly as it was, because the
+    // truncation rule it encodes (a clipped title must carry its full text) is
+    // the thing being pinned, not the styling of the rail.
+  });
+
+  it('the rail’s delete ✕ is legible on the tile it paints — the text gate can never see it, because at rest it is opacity 0', () => {
+    // ⛔ REVIEW REPAIR, stage 6 (2026-09-20). `.ai-rail-del` is absolutely
+    // positioned OVER the meta line, so it has to paint its own opaque
+    // background, and the one it paints is `surface-elevated`. Inheriting
+    // `.ai-rail-act`'s ink-muted put it at 4.04:1 in dark — the exact pair the
+    // note on `.ai-rail-meta` rejects three rules above, reintroduced by the
+    // new tile. It matters more than it used to: stage 6 also made the button
+    // reveal on `:focus-within`, so a keyboard user now SEES this state.
+    //
+    // ⛔ AND NO OTHER GATE CATCHES IT. scripts/gui-text-quality.mjs measures
+    // every visible text leaf of every scene in both themes — but at rest this
+    // button is `opacity: 0`, so no scene it can render ever shows the pair.
+    // Breaking the `color:` line below leaves that gate perfectly green.
+    const rule = /\.ai-rail-del \{([^}]*)\}/.exec(CSS)?.[1] ?? '';
+    expect(rule, '.ai-rail-del rule not found in index.css').not.toBe('');
+    expect(rule).toContain('background: rgb(var(--surface-elevated-rgb));');
+    expect(rule).toContain('color: rgb(var(--ink-secondary-rgb));');
+    for (const [name, block] of [
+      ['light', LIGHT],
+      ['dark', DARK],
+    ] as const) {
+      const tile = token(block, 'surface-elevated-rgb');
+      expect(contrast(token(block, 'ink-secondary-rgb'), tile), name).toBeGreaterThanOrEqual(4.5);
+      // …and its own hover, the error ink, still clears the bar on that tile.
+      expect(contrast(token(block, 'status-error-text-rgb'), tile), name).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    }
+    // CONTROL: the ink it used to wear FAILS on that same tile in dark (4.04,
+    // measured in a browser on the revealed button). Without this the arm would
+    // pass just as happily with ink-muted restored — it would only be asserting
+    // that some token somewhere is readable.
+    expect(
+      contrast(token(DARK, 'ink-muted-rgb'), token(DARK, 'surface-elevated-rgb')),
+    ).toBeLessThan(4.5);
   });
 });
