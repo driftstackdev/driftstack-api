@@ -92,7 +92,7 @@ describe('W876 Profile policy cross-source invariant', () => {
 
   it("CRITICAL V-312 anchor pinned for ProfileSnapshot block — 'immutable point-in-time copies'.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/profiles.ts'));
-    expect(p).toMatch(/V-312 — profile snapshots \(immutable point-in-time copies\)/);
+    expect(p).toMatch(/profile snapshots \(immutable point-in-time copies\)/);
   });
 
   it('CRITICAL ProfileSnapshotSchema fields — id + parent_profile_id (nullable) + label + description + parent_archetype + parent_name + captured_at + created_at. The 8-field shape lets restore-after-delete work via parent_archetype/parent_name fallback when parent_profile_id is null.', () => {
@@ -123,7 +123,7 @@ describe('W876 Profile policy cross-source invariant', () => {
 
   it("CRITICAL V-313 anchor pinned for CloneProfileRequestSchema. The 'when name is omitted the server auto-derives a non-conflicting ${source} (copy) / (copy 2)' framing pins the rename-on-clone-conflict policy.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/profiles.ts'));
-    expect(p).toMatch(/V-313 — POST \/v1\/profiles\/:id\/clone request body/);
+    expect(p).toMatch(/POST \/v1\/profiles\/:id\/clone request body/);
     expect(p).toMatch(
       /server auto-derives a non-\s*\/\/ conflicting `\$\{source\} \(copy\)` \/ `\(copy 2\)`/,
     );
@@ -155,7 +155,7 @@ describe('W876 Profile policy cross-source invariant', () => {
 
   it("CRITICAL packages/api-types/src/profiles.ts header pins V-081 framing — 'A profile is a persistent customer-defined identity slot' + 'sessions are created against profiles to share browser state'. The framing distinguishes profile-as-identity from session-as-execution-context.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/profiles.ts'));
-    expect(p).toMatch(/Profile schemas \(V-081\)/);
+    expect(p).toMatch(/Profile schemas/);
     expect(p).toMatch(/A profile is a persistent customer-defined\s*\n\/\/ identity slot/);
     expect(p).toMatch(/sessions are created against profiles to share\s*\n\/\/ browser state/);
   });

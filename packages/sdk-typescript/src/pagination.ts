@@ -1,4 +1,4 @@
-// V-118: cursor-pagination async-iterator helper.
+// Cursor-pagination async-iterator helper.
 //
 // Every Driftstack list endpoint returns the same envelope shape:
 //   { data: T[], next_cursor: string | null }

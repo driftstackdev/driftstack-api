@@ -110,9 +110,11 @@ describe('W859 SessionPurpose cross-source invariant', () => {
 
   // ─── V-169 anchor traceable ─────────────────────────────────
 
-  it("CRITICAL V-169 anchor pinned in Go SDK SessionPurpose type comment — 'SessionPurpose drives WebKit driver harness selection (V-169)'. The V-169 anchor threads the harness-routing provenance.", () => {
+  it('CRITICAL the Go SDK SessionPurpose type comment keeps saying what the field DOES — it selects the browser driver a session runs on — so a customer picking a value knows what they are picking. types.go ships inside the Go module and pkg.go.dev renders this comment, so it carries no internal ticket anchor.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/sdk-go/types.go'));
-    expect(p).toMatch(/SessionPurpose drives WebKit driver harness selection \(V-169\)/);
+    expect(p).toMatch(
+      /SessionPurpose declares what a session is for; it selects the browser\s*\n\s*\/\/ driver the session runs on\./,
+    );
   });
 
   // ─── 3-value cardinality + customer-vs-internal split ─────────

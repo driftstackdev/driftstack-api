@@ -41,7 +41,7 @@ describe('W589.A packages/sdk-go/auth.go content parity', () => {
 
   it('file exists at canonical path + V-079 framing + empty-key-fine-for-auth contract pinned. CRITICAL: "These endpoints don\'t require an API key — they ARE the auth gate." Drift to requiring auth on auth endpoints would create a chicken-and-egg lockout.', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(/\/\/ AuthResource handles \/v1\/auth\/\* endpoints \(V-079\)\./);
+    expect(body).toMatch(/\/\/ AuthResource handles \/v1\/auth\/\* endpoints[^\n]*\./);
     expect(body).toMatch(
       /\/\/ These endpoints don't require an API key — they ARE the auth gate\./,
     );
@@ -138,7 +138,7 @@ describe('W589.A packages/sdk-go/auth.go content parity', () => {
   });
 
   it('MfaChallenge — V-445 POST /v1/auth/mfa/challenge exchanges the V-353d login challenge_token for a session via TOTP code OR recovery code. CRITICAL: response carries Via = "totp" | "recovery" discriminator so dashboards can show different post-MFA UI (e.g. "regenerate recovery codes" prompt after recovery-code use).', () => {
-    expect(body).toMatch(/\/\/ MfaChallenge — V-445\. Exchange the V-353d login challenge_token/);
+    expect(body).toMatch(/\/\/ MfaChallenge[^\n]*\. Exchange the[^\n]*login challenge_token/);
     expect(body).toMatch(/\/\/ for a session via TOTP code or recovery code\. Distinguished/);
     expect(body).toMatch(/\/\/ response carries Via = "totp" \| "recovery"\./);
     expect(body).toMatch(
@@ -148,10 +148,8 @@ describe('W589.A packages/sdk-go/auth.go content parity', () => {
   });
 
   it('MfaStepUp — V-445 POST /v1/auth/mfa/step-up REFRESHES mfa_satisfied_at on the CALLING web session (V-353e step-up gate; 15-MINUTE freshness window). CRITICAL: "No new session issued; returns the new mfa_satisfied_at timestamp." Drift to issuing a new session would let step-up double as login + force callers to swap session tokens mid-flow.', () => {
-    expect(body).toMatch(/\/\/ MfaStepUp — V-445\. Refresh mfa_satisfied_at on the calling web/);
-    expect(body).toMatch(
-      /\/\/ session \(V-353e step-up gate; 15-minute freshness window\)\. No new/,
-    );
+    expect(body).toMatch(/\/\/ MfaStepUp[^\n]*\. Refresh mfa_satisfied_at on the calling web/);
+    expect(body).toMatch(/\/\/ session[^\n]*step-up gate; 15-minute freshness window\)\. No new/);
     expect(body).toMatch(/\/\/ session issued; returns the new mfa_satisfied_at timestamp\./);
     expect(body).toMatch(
       /func \(r \*AuthResource\) MfaStepUp\(ctx context\.Context, body \*MfaStepUpRequest\) \(\*MfaStepUpResponse, error\)/,
@@ -160,9 +158,7 @@ describe('W589.A packages/sdk-go/auth.go content parity', () => {
   });
 
   it('CliAuthorizeInitiate returns a separate device-displayed user_code', () => {
-    expect(body).toMatch(
-      /\/\/ CliAuthorizeInitiate — V-460 \/ V-266\. Start the CLI\/GUI activation/,
-    );
+    expect(body).toMatch(/\/\/ CliAuthorizeInitiate[^\n]*\. Start the CLI\/GUI activation/);
     expect(body).toMatch(/\/\/ flow\. Returns a one-shot code, device-displayed user_code, and/);
     expect(body).toMatch(/\/\/ browser_url\. The user types that code in the dashboard before/);
     expect(body).toMatch(/\/\/ CliAuthorizeExchange can return the plaintext API key\./);
@@ -173,9 +169,7 @@ describe('W589.A packages/sdk-go/auth.go content parity', () => {
   });
 
   it('CliAuthorizeBind documents the required initiating-device UserCode', () => {
-    expect(body).toMatch(
-      /\/\/ CliAuthorizeBind — V-460 \/ V-266\. Web-session-authenticated\. Called/,
-    );
+    expect(body).toMatch(/\/\/ CliAuthorizeBind[^\n]*\. Web-session-authenticated\. Called/);
     expect(body).toMatch(
       /\/\/ by the dashboard's confirm page after the user submits the initiating/,
     );
@@ -195,7 +189,7 @@ describe('W589.A packages/sdk-go/auth.go content parity', () => {
   });
 
   it('CliAuthorizeExchange — V-460/V-266 STEP 3 (polled by CLI/GUI). 3-state status discriminator: "pending" (keep polling) / "bound" (one-shot delivery; APIKey + AccountID populated) / "expired" (restart the flow). CRITICAL "one-shot delivery" framing: once exchange returns "bound", a subsequent poll will return "expired" — the key is not re-retrievable, mirroring the broader plaintext-once contract.', () => {
-    expect(body).toMatch(/\/\/ CliAuthorizeExchange — V-460 \/ V-266\. Polled by the CLI\/GUI\./);
+    expect(body).toMatch(/\/\/ CliAuthorizeExchange[^\n]*\. Polled by the CLI\/GUI\./);
     expect(body).toMatch(
       /\/\/ Status discriminator: "pending" \(keep polling\), "bound" \(one-shot/,
     );

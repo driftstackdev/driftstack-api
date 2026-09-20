@@ -100,7 +100,7 @@ export const PROMPT_CACHE_PRICING = {
   cacheReadMultiplier: 0.1,
 } as const;
 
-/**
+/*
  * Per-model cost-to-serve rates. Anthropic list price (2026-05-27 founder
  * decision — use real list price, not the retired Opus 4.1 figure):
  *   - Opus 5     — $5 / $25 per MTok  → 0.5c / 2.5c per 1k. VERIFIED against the
@@ -124,6 +124,11 @@ export const PROMPT_CACHE_PRICING = {
  * https://platform.claude.com/docs/en/build-with-claude/prompt-caching (read
  * 2026-09-18): Opus 5 → 512; Opus 4.8, Sonnet 5, Sonnet 4.6 → 1024; Opus 4.7 →
  * 2048; Haiku 4.5 → 4096.
+ */
+/**
+ * The models an AI session can use, with the label to show for each and the
+ * rates a call is costed at. `minCacheablePromptTokens` is the shortest
+ * prompt that model will cache, so a prompt below it is never a cache hit.
  */
 export const CLAUDE_MODELS: Record<AgentModel, AgentModelInfo> = {
   'claude-opus-5': {
@@ -244,11 +249,11 @@ export const CLAUDE_MODEL_REQUEST_CAPABILITIES: Record<AgentModel, AgentModelReq
 /**
  * Which key a model may run on.
  *
- *  · `any_key` — the customer's own key, or the deployment's key when the
- *    account's plan includes AI (the "bundled" leg).
- *  · `own_key_only` — the customer's own key only. The owner's decision of
- *    2026-09-19: Opus-class models never run on included credits, because at
- *    2.5x Sonnet's rate a handful of Opus turns would spend a month's allowance.
+ *  · `any_key` — your own model key, or the bundled key when your plan
+ *    includes model usage.
+ *  · `own_key_only` — your own model key only. Opus-class models are
+ *    own-key-only: they cost several times more per turn than Sonnet, so a
+ *    bundled key never runs them.
  *
  * ⛔ A TOTAL MAP OVER THE ENUM, ON PURPOSE. Adding a model to
  * {@link AgentModelSchema} without deciding its key policy is a type error here,

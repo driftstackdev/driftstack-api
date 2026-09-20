@@ -47,10 +47,10 @@ function read(p: string): string {
 describe('W426.C packages/sdk-typescript/src/resources/profile-snapshots.ts content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + module header V-312 anchor + dual-base-path (/v1/profiles/:id/snapshots + /v1/profile-snapshots) coverage', () => {
+  it('file exists at canonical path + module header + dual-base-path (/v1/profiles/:id/snapshots + /v1/profile-snapshots) coverage', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
-      /\/\/ ProfileSnapshotsResource — typed methods for \/v1\/profiles\/:id\/snapshots\s*\/\/ \+ \/v1\/profile-snapshots \(V-312\)\./,
+      /\/\/ ProfileSnapshotsResource — typed methods for \/v1\/profiles\/:id\/snapshots\s*\/\/ \+ \/v1\/profile-snapshots[^\n]*\./,
     );
   });
 

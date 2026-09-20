@@ -34,12 +34,10 @@ function read(p: string): string {
 describe('W585.B packages/sdk-python/src/driftstack/errors.py content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + module docstring + RFC 7807 server mirror (apps/server/src/lib/errors.ts) + catch-with-granularity example. CRITICAL: the example shows `except RateLimitError as e: time.sleep(e.retry_after_seconds or 1)` — drift to dropping retry_after_seconds from the example would lose the customer-facing catch pattern.', () => {
+  it('file exists at canonical path + module docstring + RFC 7807 problem-type mirror + catch-with-granularity example. The docstring must NOT name the server source file it mirrors: this module ships in the wheel and the sdist, and a customer reads it. CRITICAL: the example shows `except RateLimitError as e: time.sleep(e.retry_after_seconds or 1)` — drift to dropping retry_after_seconds from the example would lose the customer-facing catch pattern.', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/^"""Error class hierarchy for the Driftstack Python SDK\.\n/);
-    expect(body).toMatch(
-      /Mirrors the server's RFC 7807 problem-types \(apps\/server\/src\/lib\/errors\.ts\)\./,
-    );
+    expect(body).toMatch(/Mirrors the API's RFC 7807 problem types\./);
     expect(body).toMatch(/The HTTP layer maps `application\/problem\+json` responses to the right/);
     expect(body).toMatch(/subclass; non-HTTP failures \(timeouts, parse errors, network\) raise/);
     expect(body).toMatch(/``TransportError``\./);
@@ -180,7 +178,7 @@ describe('W585.B packages/sdk-python/src/driftstack/errors.py content parity', (
     expect(body).toMatch(/Endpoint requires infrastructure not configured in this deployment/);
     expect(body).toMatch(/\(e\.g\. avatar uploads when R2 isn't wired\)\. HTTP 503\./);
     expect(body).toMatch(/^class MfaStepUpRequiredError\(DriftstackError\):$/m);
-    expect(body).toMatch(/V-353e — operation requires a fresh MFA proof \(15-minute step-up/);
+    expect(body).toMatch(/[Oo]peration requires a fresh MFA proof \(15-minute step-up/);
     expect(body).toMatch(/freshness window\)\. Customer should call POST \/v1\/auth\/mfa\/step-up/);
     expect(body).toMatch(/with a TOTP code and retry the original request\./);
     expect(body).toMatch(/^class InternalError\(DriftstackError\):$/m);
@@ -188,7 +186,7 @@ describe('W585.B packages/sdk-python/src/driftstack/errors.py content parity', (
     expect(body).toMatch(/check Driftstack status \/ contact support if this persists\./);
   });
 
-  it('PROBLEM_TYPE_TO_ERROR mapping — 24 problem-type URI → subclass entries. Maps the server constants in apps/server/src/lib/problem-types.ts onto the right Python exception. Every URI is `https://errors.driftstack.dev/<slug>`. The HTTP layer consults this mapping so customers get typed exceptions instead of bare DriftstackError + .problem_type string compare.', () => {
+  it('PROBLEM_TYPE_TO_ERROR mapping — 24 problem-type URI → subclass entries. Maps each problem-type URI the API returns onto the right Python exception. Every URI is `https://errors.driftstack.dev/<slug>`. The HTTP layer consults this mapping so customers get typed exceptions instead of bare DriftstackError + .problem_type string compare.', () => {
     expect(body).toMatch(/^PROBLEM_TYPE_TO_ERROR: dict\[str, type\[DriftstackError\]\] = \{$/m);
     // RFC-7807 standard problem types.
     expect(body).toMatch(/"https:\/\/errors\.driftstack\.dev\/bad-request": BadRequestError,/);
@@ -249,7 +247,7 @@ describe('W585.B packages/sdk-python/src/driftstack/errors.py content parity', (
 
   it('PROBLEM_TYPE_TO_ERROR audit-comment + driver-error duplicate entry. Both /driver-error AND /driver-not-integrated map to the same DriverError class — drift to splitting them into separate classes would force customers to catch two specific errors for what is conceptually one "upstream driver issue". The comment "Keep the mapping in one place for ease of audit + extension" is load-bearing for the future-extension expectation.', () => {
     expect(body).toMatch(
-      /# Keep the mapping in one place for ease of audit \+ extension\. The HTTP\s*\n# layer in `driftstack\.http` consults this; the keys match the server\s*\n# constants in apps\/server\/src\/lib\/problem-types\.ts\./,
+      /# Keep the mapping in one place for ease of audit \+ extension\. The HTTP\s*\n# layer in `driftstack\.http` consults this; the keys are the problem-type\s*\n# URIs the API returns\./,
     );
     // driver-error AND driver-not-integrated both → DriverError.
     expect(body).toMatch(/"https:\/\/errors\.driftstack\.dev\/driver-error": DriverError,/);
@@ -258,11 +256,9 @@ describe('W585.B packages/sdk-python/src/driftstack/errors.py content parity', (
     );
   });
 
-  it('V-490 is_retryable predicate + V-489 TS mirror reference. Function-level docstring + _RETRYABLE_TYPES tuple. CRITICAL retry-allowlist invariant: only 3 retryable classes (TransportError network-failure + InternalError 5xx + RateLimitError 429-with-Retry-After). Everything else is NOT retryable. Drift to widening the tuple would let SDK retry validation errors / auth failures / state-driven errors, none of which would change on retry.', () => {
-    expect(body).toMatch(/V-490 — public retry predicate\. Mirrors the V-489 TS implementation/);
-    expect(body).toMatch(
-      /\(packages\/sdk-typescript\/src\/errors\.ts:isRetryable\)\. Returns True for/,
-    );
+  it('is_retryable predicate + TS mirror reference (by NAME, not by source path — this comment ships). Function-level docstring + _RETRYABLE_TYPES tuple. CRITICAL retry-allowlist invariant: only 3 retryable classes (TransportError network-failure + InternalError 5xx + RateLimitError 429-with-Retry-After). Everything else is NOT retryable. Drift to widening the tuple would let SDK retry validation errors / auth failures / state-driven errors, none of which would change on retry.', () => {
+    expect(body).toMatch(/public retry predicate\. Mirrors the[^\n]*TS implementation/);
+    expect(body).toMatch(/`isRetryable`\. Returns True for/);
     expect(body).toMatch(/error kinds where a retry stands a reasonable chance of succeeding;/);
     expect(body).toMatch(/Retryable: TransportError \(network failure\), InternalError \(5xx\),/);
     expect(body).toMatch(/RateLimitError \(429 with Retry-After hint\)\./);

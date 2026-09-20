@@ -52,7 +52,7 @@ describe('W801 cross-SDK profile-management examples parity', () => {
 
   it('CRITICAL Go header pins the 8-step walk + V-313 + V-312 anchors. The single-line "create → list → get → update → clone (V-313) → snapshot capture (V-312) → snapshot restore → cleanup" is the load-bearing flow contract.', () => {
     expect(read(GO)).toMatch(
-      /Walks the persistent-profile surface end-to-end: create →\s*\n\/\/ list → get → update → clone \(V-313\) → snapshot capture \(V-312\) →\s*\n\/\/ snapshot restore → cleanup\./,
+      /Walks the persistent-profile surface end-to-end: create →\s*\n\/\/ list → get → update → clone[^\n]*→ snapshot capture[^\n]*→\s*\n\/\/ snapshot restore → cleanup\./,
     );
   });
 
@@ -87,7 +87,7 @@ describe('W801 cross-SDK profile-management examples parity', () => {
     expect(read(PY)).toMatch(
       /V-313 — clone the profile\. Server auto-derives "\(copy\)"\s*\n\s*#\s+naming when no body is supplied\./,
     );
-    expect(read(GO)).toMatch(/\/\/ 5\. V-313 clone — server auto-derives "\(copy\)" naming\./);
+    expect(read(GO)).toMatch(/\/\/ 5\.[^\n]*clone — server auto-derives "\(copy\)" naming\./);
   });
 
   // ─── V-312 snapshot capture + frozen-parent framing ───────────
@@ -97,7 +97,7 @@ describe('W801 cross-SDK profile-management examples parity', () => {
       /V-312 — capture an immutable point-in-time snapshot of the\s*\n\s*\/\/\s+parent profile\. The snapshot is frozen; the parent keeps\s*\n\s*\/\/\s+evolving\./,
     );
     expect(read(PY)).toMatch(/V-312 — capture an immutable point-in-time snapshot\./);
-    expect(read(GO)).toMatch(/\/\/ 6\. V-312 snapshot capture — frozen point-in-time copy\./);
+    expect(read(GO)).toMatch(/\/\/ 6\.[^\n]*snapshot capture — frozen point-in-time copy\./);
   });
 
   // ─── Snapshot restore creates NEW profile, parent unmodified ──

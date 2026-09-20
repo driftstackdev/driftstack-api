@@ -47,7 +47,7 @@ describe('W594.A packages/sdk-go/error_mapping.go content parity', () => {
     expect(body).toMatch(
       /"https:\/\/errors\.driftstack\.dev\/driver-not-integrated":\s+buildDriverError,/,
     );
-    expect(body).toMatch(/\/\/ V-437 — auth-flow problem types\./);
+    expect(body).toMatch(/\/\/[^\n]*auth-flow problem types\./);
     expect(body).toMatch(
       /"https:\/\/errors\.driftstack\.dev\/email-already-registered":\s+buildEmailAlreadyRegistered,/,
     );
@@ -57,7 +57,7 @@ describe('W594.A packages/sdk-go/error_mapping.go content parity', () => {
     expect(body).toMatch(
       /"https:\/\/errors\.driftstack\.dev\/email-not-verified":\s+buildEmailNotVerified,/,
     );
-    expect(body).toMatch(/\/\/ V-438 — remaining problem types\./);
+    expect(body).toMatch(/\/\/[^\n]*remaining problem types\./);
     expect(body).toMatch(
       /"https:\/\/errors\.driftstack\.dev\/feature-unavailable":\s+buildFeatureUnavailable,/,
     );

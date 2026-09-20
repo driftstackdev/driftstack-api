@@ -64,11 +64,10 @@ export type {
   AgentTranscriptEvent,
   LiveKitInfo,
 } from './resources/agent-sessions.js';
-// Slice 6 cross-SDK lock 2026-05-20 — re-export the canonical
-// LK.6 modifier vocabulary so TS customers can import it without
-// reaching into @driftstack/api-types directly.
+// Re-export the canonical keyboard-modifier vocabulary so TS customers
+// can import it without reaching into @driftstack/api-types directly.
 export { CANONICAL_MODIFIER_NAMES, type CanonicalModifier } from '@driftstack/api-types';
-// W637 — re-export the archetype catalog so SDK + GUI consumers can render
+// Re-export the archetype catalog so SDK + GUI consumers can render
 // the selectable archetype list (filtered by `status`) without deep-importing
 // @driftstack/api-types. ARCHETYPE_REGISTRY is the single source of truth; a
 // new device lights up everywhere once its `status` flips to launch/available.
@@ -84,15 +83,15 @@ export {
   type ArchetypeStatus,
   type ArchetypeCanvasFamily,
 } from '@driftstack/api-types';
-// doc-150 items 5/6 — re-export the per-account storage quota constants so
+// Re-export the per-account storage quota constants so
 // SDK + GUI consumers can render the per-profile size meter + account-wide
 // quota bar against the SAME caps the server enforces, without deep-importing
 // @driftstack/api-types. TIER_STORAGE_BYTES_CAP is keyed by AccountTier (bytes);
 // STORAGE_SOFT_WARN_FRACTION is the soft (80%) warn threshold.
 export { TIER_STORAGE_BYTES_CAP, STORAGE_SOFT_WARN_FRACTION } from '@driftstack/api-types';
-// T-20 — re-export the OpenVPN directive rejection list + line finder so the
-// desktop client can name the line the control plane will refuse (and offer to
-// strip it) BEFORE the create request is sent, against the SAME list the server
+// Re-export the OpenVPN directive rejection list + line finder so the
+// desktop client can name the line the API will refuse (and offer to strip
+// it) BEFORE the create request is sent, against the SAME list the server
 // enforces, without deep-importing @driftstack/api-types.
 export {
   DANGEROUS_OPENVPN_DIRECTIVES,
@@ -217,7 +216,7 @@ export type {
   WebhookEndpointId,
   WebhookEventType,
   RotateWebhookSecretResponse,
-  // V-460 / V-266 CLI/GUI activation flow
+  // CLI/GUI activation flow
   CliAuthorizeBindRequest,
   CliAuthorizeBindResponse,
   CliAuthorizeExchangeRequest,
@@ -225,15 +224,15 @@ export type {
   CliAuthorizeExchangeStatus,
   CliAuthorizeInitiateRequest,
   CliAuthorizeInitiateResponse,
-  // V-079 auth flow
+  // Auth flow
   LoginRequest,
   LoginResponse,
-  // V-353d login MFA challenge — discriminated-union response shape
+  // The login MFA challenge — discriminated-union response shape
   LoginMfaRequiredResponse,
   LoginResponseUnion,
   LogoutRequest,
   LogoutResponse,
-  // V-353d/e MFA challenge + step-up
+  // MFA challenge + step-up
   MfaChallengeRequest,
   MfaChallengeResponse,
   MfaStepUpRequest,
@@ -253,26 +252,26 @@ export type {
   VerifyEmailRequest,
   VerifyEmailResponse,
   WebSession,
-  // V-081 profiles
+  // Profiles
   Profile,
   ProfileId,
   CreateProfileRequest,
   UpdateProfileRequest,
-  // V-313 profile clone
+  // Profile clone
   CloneProfileRequest,
-  // V-312 profile snapshots
+  // Profile snapshots
   ProfileSnapshot,
   CaptureSnapshotRequest,
   RestoreSnapshotRequest,
-  // V-204 email preferences
+  // Email preferences
   EmailPreference,
   ListEmailPreferencesResponse,
   OptOutableEmailEvent,
   SetEmailPreferenceRequest,
-  // V-352 / V-352b account self-edit + avatar upload
+  // Account self-edit + avatar upload
   UpdateAccountMeRequest,
   UploadAvatarRequest,
-  // V-082 billing
+  // Billing
   BillingPeriod,
   CreateCheckoutSessionRequest,
   CreateCheckoutSessionResponse,
@@ -280,7 +279,7 @@ export type {
   GetBillingStateResponse,
   Subscription,
   SubscriptionStatus,
-  // EG-API-1.1 — customer-configurable egress (planning 133)
+  // Customer-configurable egress
   EgressSafeguard,
   OpenVpnProxyConfig,
   ProxyConfig,

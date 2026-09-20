@@ -1,4 +1,4 @@
-"""Legal resource — /v1/legal/* (V-049 / V-458).
+"""Legal resource — /v1/legal/*.
 
 Customer acceptance of legal documents (ToS / Privacy / DPA / AUP).
 Document content is served separately on the marketing site; this

@@ -68,7 +68,7 @@ describe('W428.A packages/sdk-typescript/src/resources/api-keys.ts content parit
 
   it('V-296 RotateApiKeyResponse doc-comment pinned per-line — covers "Includes the new key\'s plaintext (shown ONCE)" + "the previous key\'s id" + "the timestamp at which the previous key auto-revokes via the existing expires_at-driven auth gate". CRITICAL: the auto-revoke mechanism ("existing expires_at-driven auth gate") is what makes V-296 work without a separate cleanup job — the auth gate already checks expires_at on every request, so setting OLD.expires_at = now+24h is the entire rotation logic on the server side.', () => {
     expect(body).toMatch(
-      /\*\s*V-296 — response shape for POST \/v1\/api-keys\/:id\/rotate\. Includes the\s*\*\s*new key's plaintext \(shown ONCE\), the previous key's id, and the\s*\*\s*timestamp at which the previous key auto-revokes via the existing\s*\*\s*expires_at-driven auth gate\./,
+      /response shape for POST \/v1\/api-keys\/:id\/rotate\. Includes the\s*\*\s*new key's plaintext \(shown ONCE\), the previous key's id, and the\s*\*\s*timestamp at which the previous key auto-revokes via the existing\s*\*\s*expires_at-driven auth gate\./,
     );
   });
 
@@ -124,16 +124,16 @@ describe('W428.A packages/sdk-typescript/src/resources/api-keys.ts content parit
     );
   });
 
-  it('V-296 rotate verb JSDoc — pinned per-line: (1) "Mints a fresh plaintext + sets the OLD key\'s expires_at to now + 24h grace" (the SERVER-SIDE rotation logic — atomic mint + expires_at update). (2) "Both keys work concurrently during the grace window; deploy the new key, then the old key auto-revokes at the grace boundary via the existing expires_at-driven auth gate" (the CUSTOMER-FACING deploy flow). Drift to a non-24h window OR a non-auto-revoke mechanism would silently change rotation semantics customers anchor their deploy timelines on.', () => {
+  it('rotate verb JSDoc — pinned per-line: (1) "Mints a fresh plaintext + sets the OLD key\'s expires_at to now + 24h grace" (the SERVER-SIDE rotation logic — atomic mint + expires_at update). (2) "Both keys work concurrently during the grace window; deploy the new key, then the old key auto-revokes at the grace boundary via the existing expires_at-driven auth gate" (the CUSTOMER-FACING deploy flow). Drift to a non-24h window OR a non-auto-revoke mechanism would silently change rotation semantics customers anchor their deploy timelines on.', () => {
     expect(body).toMatch(
-      /\*\s*V-296 — rotate an API key\. Mints a fresh plaintext \+ sets the OLD key's\s*\*\s*expires_at to now \+ 24h grace\. Both keys work concurrently during the\s*\*\s*grace window; deploy the new key, then the old key auto-revokes at the\s*\*\s*grace boundary via the existing expires_at-driven auth gate\./,
+      /[Rr]otate an API key\. Mints a fresh plaintext \+ sets the OLD key's\s*\*\s*expires_at to now \+ 24h grace\. Both keys work concurrently during the\s*\*\s*grace window; deploy the new key, then the old key auto-revokes at the\s*\*\s*grace boundary via the existing expires_at-driven auth gate\./,
     );
     expect(body).toMatch(
       /\*\s*The new plaintext is returned ONCE in the response — store it now\./,
     );
   });
 
-  it('V-296 rotate verb implementation — POST /v1/api-keys/${encodeURIComponent(keyId)}/rotate with RotateApiKeyOptions body (default-empty `= {}`) → Promise<RotateApiKeyResponse>. Default-empty options lets callers write `apiKeys.rotate(keyId)` without passing options at all (covering the "rotate, keep the old name" common case).', () => {
+  it('rotate verb implementation — POST /v1/api-keys/${encodeURIComponent(keyId)}/rotate with RotateApiKeyOptions body (default-empty `= {}`) → Promise<RotateApiKeyResponse>. Default-empty options lets callers write `apiKeys.rotate(keyId)` without passing options at all (covering the "rotate, keep the old name" common case).', () => {
     expect(body).toMatch(
       /rotate\(keyId: string, options: RotateApiKeyOptions = \{\}\): Promise<RotateApiKeyResponse> \{\s*return this\.http\.request<RotateApiKeyResponse>\(\{\s*method: 'POST',\s*path: `\/v1\/api-keys\/\$\{encodeURIComponent\(keyId\)\}\/rotate`,\s*body: options,\s*\}\);\s*\}/,
     );

@@ -59,9 +59,9 @@ describe('W699 cross-SDK V-312 profile-snapshots immutable point-in-time parity'
     const go = read(GO_SNAP);
     const py = read(PY_SNAP);
 
-    expect(ts).toMatch(/V-312/);
-    expect(go).toMatch(/V-312/);
-    expect(py).toMatch(/V-312/);
+    expect(ts).toMatch(/Immutable point-in-time copies of/);
+    expect(go).toMatch(/immutable point-in-time copy of a saved/);
+    expect(py).toMatch(/Immutable point-in-time copies of/);
   });
 
   it('CRITICAL 7-verb surface pinned in all 3 SDKs — capture + listForProfile + list + iterate + get + restore + delete. The 7-verb set is the full snapshot lifecycle; drift to dropping any would break the dashboard or compliance/rollback flow.', () => {
@@ -119,7 +119,7 @@ describe('W699 cross-SDK V-312 profile-snapshots immutable point-in-time parity'
 
     expect(ts).toMatch(/Immutable point-in-time copies/);
     // sdk-go: "V-312 immutable point-in-time copy of a saved\n// profile"
-    expect(go).toMatch(/V-312 immutable point-in-time copy/);
+    expect(go).toMatch(/immutable point-in-time copy/);
     expect(py).toMatch(/Immutable point-in-time copies/);
   });
 
@@ -210,7 +210,7 @@ describe('W699 cross-SDK V-312 profile-snapshots immutable point-in-time parity'
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-312`).toMatch(/V-312/);
+      expect(body, `${name} immutable copies`).toMatch(/immutable point-in-time cop/i);
       expect(body, `${name} /v1/profile-snapshots`).toMatch(/\/v1\/profile-snapshots/);
       expect(body, `${name} /restore`).toMatch(/\/restore/);
       expect(body, `${name} /snapshots`).toMatch(/\/snapshots/);

@@ -10,6 +10,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import {
+  goSdkVersion,
+  nextMinor,
+  pythonSdkVersion,
+  typescriptSdkVersion,
+} from './_helpers/sdk-versions.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -84,11 +90,15 @@ describe('W777 docs /sdk/versioning content parity', () => {
     expect(p).toMatch(/The bar is the same as post-1\.0;/);
   });
 
-  it('CRITICAL pre-1.0 customers are told to pin a compatible version and read the CHANGELOG.', () => {
+  it('CRITICAL pre-1.0 customers are told to pin a compatible version and read the CHANGELOG, at the version the package is about to publish.', () => {
     const p = read(PAGE);
+    const ts = typescriptSdkVersion();
 
     expect(p).toMatch(
-      /Customers integrating a pre-1\.0 SDK should pin a compatible version\s*\n?\(e\.g\., `\^0\.1\.5`\) and read the CHANGELOG before bumping\./,
+      /Customers integrating a pre-1\.0 SDK should pin a compatible version\s*\n?\(e\.g\., `\^[0-9]+\.[0-9]+\.[0-9]+`\) and read the CHANGELOG before bumping\./,
+    );
+    expect(p, `the pre-1.0 pin example must name the published version ${ts}`).toContain(
+      `(e.g., \`^${ts}\`) and read the CHANGELOG before bumping.`,
     );
     expect(p).not.toMatch(/`1\.0\.0` ships when|first paying customer/);
   });
@@ -172,27 +182,47 @@ describe('W777 docs /sdk/versioning content parity', () => {
     );
   });
 
-  it('CRITICAL 3-language version-pinning recommendations pinned. TS caret ^0.1.5 (pre-1.0 minor pin) + Python PEP 440 on the REAL dist name driftstack-sdk (S36 2026-07-07 fable-truth-audit: pinning `driftstack` would target a different PyPI package) + Go go.mod v0.1.5 + go get -u.', () => {
+  it('CRITICAL 3-language version-pinning recommendations pinned, and each number is DERIVED from the package it pins. TS caret (pre-1.0 minor pin) + Python PEP 440 on the REAL dist name driftstack-sdk (S36 2026-07-07 fable-truth-audit: pinning `driftstack` would target a different PyPI package) + Go go.mod + go get -u. A literal here went stale for four months while this guard stayed green — the page recommended ^0.1.5 with 0.1.6 on npm.', () => {
     const p = read(PAGE);
+    const ts = typescriptSdkVersion();
+    const py = pythonSdkVersion();
+    const go = goSdkVersion();
 
-    expect(p).toMatch(/"@driftstack\/sdk": "\^0\.1\.5"`/);
-    expect(p).toMatch(/`driftstack-sdk>=0\.1\.5,<0\.2`/);
-    expect(p).toMatch(/`driftstack-sdk~=0\.1\.5`/);
+    expect(p, `the TypeScript pin must name the published version ${ts}`).toContain(
+      `"@driftstack/sdk": "^${ts}"\``,
+    );
+    expect(p, `the Python floor must name the published version ${py}`).toContain(
+      `\`driftstack-sdk>=${py},<${nextMinor(py)}\``,
+    );
+    expect(p, `the Python compatible-release pin must name ${py}`).toContain(
+      `\`driftstack-sdk~=${py}\``,
+    );
     expect(p).toMatch(/PEP 440 compatible-release/);
     expect(p).toMatch(/pip install driftstack-sdk/);
     expect(p).toMatch(/`go\.mod` with `github\.com\/driftstackdev\/driftstack-api\//);
-    expect(p).toMatch(/packages\/sdk-go v0\.1\.5`/);
+    expect(p, `the Go pin must name the version the tag will carry, v${go}`).toContain(
+      `packages/sdk-go v${go}\``,
+    );
     expect(p).toMatch(/Bump via `go get -u`\./);
-    // Negative pin — the bare-import-name pin advice must not come back.
-    expect(p).not.toMatch(/`driftstack>=0\.1\.5/);
-    expect(p).not.toMatch(/`driftstack~=0\.1\.5`/);
+    // Negative pin — the bare-import-name pin advice must not come back, at any version.
+    expect(p).not.toMatch(/`driftstack[>~]=\d/);
   });
 
-  it('CRITICAL production-pin-exact-versions framing pinned. The \'Production deployments SHOULD pin exact versions ("@driftstack/sdk": "0.1.5") and bump deliberately\' wording matches dependency-stability best-practice.', () => {
+  it("CRITICAL the page tells a production reader what the three install lines above have in common, and it is NOT 'pin exact'. The pin MOVED on 2026-09-20: this used to require 'Production deployments SHOULD pin exact versions and bump deliberately', which contradicted the caret / compatible-release / go.mod recommendations three paragraphs above it and the SDK README as well — four published documents, four answers. The one answer: while a package is 0.x a MINOR can change the surface and a PATCH never does, so the default install already takes only the safe releases; a lockfile is what makes a build reproducible, and pinning exactly is for when you need that and nothing else", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Production deployments SHOULD pin exact versions\s*\n?\(`"@driftstack\/sdk": "0\.1\.5"`\) and bump deliberately\./,
+      /while a package is `0\.x`, a\s*\n?MINOR version can change the surface and a PATCH never does/,
+    );
+    expect(p, 'the reader is no longer told to read the CHANGELOG before a minor').toMatch(
+      /Read the CHANGELOG before moving\s*\n?to a new minor\./,
+    );
+    expect(
+      p,
+      'the exact-pin escape hatch lost its condition, which is what made it advice',
+    ).toMatch(/Pin an exact version only if you need a byte-for-byte\s*\n?reproducible build/);
+    expect(p, 'the page must not go back to recommending an exact pin by default').not.toMatch(
+      /Production deployments SHOULD pin exact versions/,
     );
   });
 

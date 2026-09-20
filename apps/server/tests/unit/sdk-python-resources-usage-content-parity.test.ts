@@ -70,7 +70,7 @@ describe('W580.B packages/sdk-python/src/driftstack/resources/usage.py content p
 
   it('series (sync) — V-452 GET /v1/usage/series with kwarg-only days (`*, days: int | None = None`). Conditional ?days= query (urlencoded; only emitted when days is not None). Days clamps server-side to 1-90 + defaults to 30 (so omitting the kwarg defers to the server default). Returns a bare dict[str, Any] with shape `{"from_date", "to_date", "buckets"}` (no pydantic class yet for the time-series envelope).', () => {
     expect(body).toMatch(/def series\(self, \*, days: int \| None = None\) -> dict\[str, Any\]:/);
-    expect(body).toMatch(/"""V-452 — daily-bucketed usage time series\. ``days`` is 1-90;/);
+    expect(body).toMatch(/[Dd]aily-bucketed usage time series\. ``days`` is 1-90;/);
     expect(body).toMatch(/default 30\. Returns ``\{"from_date", "to_date", "buckets"\}``\./);
     expect(body).toMatch(
       /path = "\/v1\/usage\/series"\s*\n\s*if days is not None:\s*\n\s*path = f"\{path\}\?\{urlencode\(\{'days': days\}\)\}"\s*\n\s*return self\._http\.request\("GET", path\)/,

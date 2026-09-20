@@ -53,10 +53,10 @@ describe('W702 cross-SDK V-359/V-307/V-351/V-356 webhooks rotation + replay pari
     const py = read(PY_WH);
 
     for (const sdk of [ts, go, py]) {
-      expect(sdk).toMatch(/V-359/);
-      expect(sdk).toMatch(/V-307/);
-      expect(sdk).toMatch(/V-351/);
-      expect(sdk).toMatch(/V-356/);
+      expect(sdk).toMatch(/[Rr]otate the webhook signing secret\./);
+      expect(sdk).toMatch(/Scoped to the EFFECTIVE account: the delivery/i);
+      expect(sdk).toMatch(/[Pp]artial-update a webhook endpoint\./);
+      expect(sdk).toMatch(/is reachable \+ signature-valid before depending on/i);
     }
   });
 
@@ -241,10 +241,10 @@ describe('W702 cross-SDK V-359/V-307/V-351/V-356 webhooks rotation + replay pari
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-359`).toMatch(/V-359/);
-      expect(body, `${name} V-307`).toMatch(/V-307/);
-      expect(body, `${name} V-351`).toMatch(/V-351/);
-      expect(body, `${name} V-356`).toMatch(/V-356/);
+      expect(body, `${name} V-359`).toMatch(/[Rr]otate the webhook signing secret\./);
+      expect(body, `${name} V-307`).toMatch(/Scoped to the EFFECTIVE account: the delivery/i);
+      expect(body, `${name} V-351`).toMatch(/[Pp]artial-update a webhook endpoint\./);
+      expect(body, `${name} V-356`).toMatch(/is reachable \+ signature-valid before depending on/i);
       expect(body, `${name} dual-signs`).toMatch(/dual-signs/);
       expect(body, `${name} 24h`).toMatch(/24h/);
       expect(body, `${name} /v1/webhooks`).toMatch(/\/v1\/webhooks/);

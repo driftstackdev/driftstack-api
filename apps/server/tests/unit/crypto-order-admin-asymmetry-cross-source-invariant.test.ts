@@ -83,8 +83,8 @@ describe('W896 CryptoOrder admin/customer asymmetry cross-source invariant', () 
 
   it('CRITICAL V-666.BU + V-666.BX anchors pinned for cursor + window framing. The 2 sub-anchors distinguish pagination from filter — each has its own provenance.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/crypto-orders.ts'));
-    expect(p).toMatch(/V-666\.BU — forward cursor/);
-    expect(p).toMatch(/V-666\.BX — half-open window on created_at; ISO 8601 strings/);
+    expect(p).toMatch(/forward cursor/);
+    expect(p).toMatch(/half-open window on created_at; ISO 8601 strings/);
   });
 
   // ─── AdminEvents source = 5 (incl. 'swept') ──────────────────

@@ -37,8 +37,8 @@ describe('W889 V-352 UpdateAccountMe cross-source invariant', () => {
 
   it("CRITICAL packages/api-types/src/accounts.ts pins V-352 anchor — 'V-352 — PATCH /v1/account/me request shape' + 'partial update of self-editable basics. At least one field must be provided. name may be set to null to clear'. The anchor + 3-sentence framing pin the API contract.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
-    expect(p).toMatch(/V-352 — PATCH \/v1\/account\/me request shape/);
-    expect(p).toMatch(/V-352 — partial update of self-editable basics/);
+    expect(p).toMatch(/PATCH \/v1\/account\/me request shape/);
+    expect(p).toMatch(/partial update of self-editable basics/);
     expect(p).toMatch(/At least one\s*\n\s*\*\s*field must be provided/);
     expect(p).toMatch(/`name` may be set to null to clear/);
   });
@@ -138,7 +138,7 @@ describe('W889 V-352 UpdateAccountMe cross-source invariant', () => {
 
   it("CRITICAL slug field comment pins the 'Pass null to clear; pass a valid slug to set' framing + 'unique-when-set; the server returns 409 if another account already owns the value'. The null-vs-undefined distinction is the V-352 partial-PATCH contract.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
-    expect(p).toMatch(/V-298a — readable account handle\. Pass null to clear; pass a/);
+    expect(p).toMatch(/readable account handle\. Pass null to clear; pass a/);
     expect(p).toMatch(
       /valid slug to set\. Unique-when-set; the server returns 409 if\s*\n\s*\/\/ another account already owns the value\./,
     );
@@ -146,7 +146,7 @@ describe('W889 V-352 UpdateAccountMe cross-source invariant', () => {
 
   it("CRITICAL region field comment pins V-298b — 'data-residency region preference. Null clears.' The Null-clears semantics matches slug.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
-    expect(p).toMatch(/V-298b — data-residency region preference\. Null clears\./);
+    expect(p).toMatch(/data-residency region preference\. Null clears\./);
   });
 
   // ─── timezone IANA-name framing ──────────────────────────────

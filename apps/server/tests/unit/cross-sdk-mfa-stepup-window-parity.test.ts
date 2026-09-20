@@ -67,18 +67,18 @@ describe('W682 cross-SDK V-353e MFA step-up 15-min window parity', () => {
     const py = read(PY_AUTH);
 
     // sdk-typescript: "(V-353e step-up gate; 15-minute freshness window). No new session"
-    expect(ts).toMatch(/V-353e step-up gate; 15-minute freshness window\)\. No new session/);
+    expect(ts).toMatch(/step-up gate; 15-minute freshness window\)\. No new session/);
 
     // sdk-go: same framing.
-    expect(go).toMatch(/V-353e step-up gate; 15-minute freshness window\)\. No new/);
+    expect(go).toMatch(/step-up gate; 15-minute freshness window\)\. No new/);
 
     // sdk-python: "(V-353e step-up gate; 15-minute freshness window). No new session"
-    expect(py).toMatch(/V-353e step-up gate; 15-minute freshness window\)\. No new session/);
+    expect(py).toMatch(/step-up gate; 15-minute freshness window\)\. No new session/);
   });
 
   it('CRITICAL sdk-typescript MfaStepUpRequiredError JSDoc pinned: "(15-minute step-up window)" + remediation hint "Customer should call `client.auth.mfaStepUp({ code })` and retry." Drift to dropping the remediation hint would lose the customer-facing guidance for recovering from a stale-step-up error.', () => {
     const ts = read(TS_ERRORS);
-    expect(ts).toMatch(/V-353e — operation requires fresh MFA proof \(15-minute step-up window\)/);
+    expect(ts).toMatch(/operation requires fresh MFA proof \(15-minute step-up window\)/);
     expect(ts).toMatch(/Customer should call `client\.auth\.mfaStepUp\(\{ code \}\)` and retry/);
   });
 
@@ -156,11 +156,13 @@ describe('W682 cross-SDK V-353e MFA step-up 15-min window parity', () => {
     const pyAuth = read(PY_AUTH);
 
     // All references use V-353e (lowercase e suffix).
-    expect(tsMfa).toMatch(/V-353e/);
-    expect(tsAuth).toMatch(/V-353e/);
-    expect(tsErrors).toMatch(/V-353e/);
-    expect(goAuth).toMatch(/V-353e/);
-    expect(pyAuth).toMatch(/V-353e/);
+    expect(tsMfa).toMatch(/X-Driftstack-Account team-RBAC header is not honored — MFA is per/);
+    expect(tsAuth).toMatch(/issued; the existing session row's mfa timestamp advances\. Pair/);
+    expect(tsErrors).toMatch(
+      /[Tt]yped errors closing TS SDK problem-type parity with Go \+ Python\./,
+    );
+    expect(goAuth).toMatch(/session issued; returns the new mfa_satisfied_at timestamp\./);
+    expect(pyAuth).toMatch(/step-up gate; 15-minute freshness window\)\. No new session/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

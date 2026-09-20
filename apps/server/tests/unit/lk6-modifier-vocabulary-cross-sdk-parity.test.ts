@@ -39,7 +39,7 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
   it('api-types schema comment pins Slice 6 cross-SDK lock + references the cross-surface parity test', () => {
     const lib = resolve(REPO_ROOT, 'packages/api-types/src/agent-input-event.ts');
     const body = read(lib);
-    expect(body).toMatch(/Canonical modifier vocabulary \(Slice 6 cross-SDK lock 2026-05-20\)\./);
+    expect(body).toMatch(/Canonical modifier vocabulary[^\n]*cross-SDK lock 2026-05-20\)\./);
     expect(body).toMatch(/Quartz `CGEventFlags`/);
     expect(body).toMatch(/lk6-modifier-vocabulary-cross-surface-\s*\* parity\.test\.ts/);
     expect(body).toMatch(/DOM-standard variants/);

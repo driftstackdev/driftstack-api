@@ -100,7 +100,7 @@ describe('W875 InteractAction+WaitCondition cross-source invariant', () => {
 
   it("CRITICAL L-001 anchor pinned for InteractAction intent-only model. The 'intent-only ... coordinate primitives (tap_at, tap.offset, etc.) live on the gui_control plane' framing distinguishes customer-facing vs internal-GUI surfaces.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
-    expect(p).toMatch(/Customer-facing InteractAction is intent-only per L-001/);
+    expect(p).toMatch(/Customer-facing InteractAction is intent-only per/);
     expect(p).toMatch(
       /coordinate\s*\/\/ primitives \(tap_at, tap\.offset, etc\.\) live on the gui_control plane/,
     );

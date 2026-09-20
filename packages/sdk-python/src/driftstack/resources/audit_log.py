@@ -1,4 +1,4 @@
-"""Audit log resource — /v1/account/audit-log (V-216 / V-449).
+"""Audit log resource — /v1/account/audit-log.
 
 Append-only event ledger for compliance / monitoring. Returns
 ``dict[str, Any]`` pending the next regen pass.
@@ -55,7 +55,7 @@ class AuditLogResource:
         return iterate_paginated(fetch_page)
 
     def export(self) -> dict[str, Any]:
-        """V-462 / V-297 — bulk-export the calling account's audit log as
+        """Bulk-export the calling account's audit log as
         a JSON envelope (GDPR Article 20 portability). Single call; up to
         10,000 rows; ``truncated`` is True when older entries were
         omitted. The CSV branch is not exposed here — hit
@@ -94,5 +94,5 @@ class AsyncAuditLogResource:
         return aiterate_paginated(fetch_page)
 
     async def export(self) -> dict[str, Any]:
-        """V-462 / V-297 — async mirror of ``AuditLogResource.export``."""
+        """Async mirror of ``AuditLogResource.export``."""
         return await self._http.request("GET", "/v1/account/audit-log/export?format=json")

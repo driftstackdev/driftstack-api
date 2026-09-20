@@ -382,7 +382,7 @@ export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsuppor
  * it means that line was lowered rather than deleted. Running the finder on
  * `config` afterwards yields nothing — the strip is idempotent.
  */
-/**
+/*
  * Lower `script-security 2|3` to 1, and touch NOTHING else.
  *
  * ⛔ This exists because the control plane REFUSED a config for a directive that
@@ -420,6 +420,18 @@ export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsuppor
  * ⚠️ Do NOT widen this to the script directives. Silently deleting a line that
  * would have run the customer's program changes what their config DOES without
  * telling them; refusing it and naming the line is the honest answer there.
+ */
+/**
+ * Lowers a `script-security 2` or `3` line to `1` and changes nothing else.
+ *
+ * Many providers ship profiles with `script-security 2`, which only PERMITS
+ * scripts — it runs nothing by itself. Every directive that does run
+ * something stays refused by name, so lowering this one line makes such a
+ * profile usable without making it do anything new.
+ *
+ * Run it on a config the API refused for this reason and offer the customer
+ * the result. It never removes a script directive: a line that would have
+ * run their program is refused and named, not deleted behind their back.
  */
 export function lowerOpenvpnScriptSecurity(configBlob: string): {
   config: string;
@@ -491,11 +503,12 @@ export function stripUnsupportedOpenvpnLines(configBlob: string): {
 }
 
 /**
- * OpenVPN cert/key directives whose material must be INLINE (an
- * `<directive>…</directive>` block), because the userspace-egress node renders
- * the config into an isolated directory holding only `client.ovpn` + `auth.txt`:
- * a bare file argument (`ca ca.crt`) names a path that cannot exist there.
- * Matched on the first whitespace token, case-insensitively.
+ * The OpenVPN cert and key directives whose material must be INLINE — inside
+ * an `<directive>…</directive>` block — because a session runs your config on
+ * its own, with no access to files from the machine you uploaded from. A bare
+ * `ca ca.crt` names a path that will not exist there.
+ *
+ * Matched on the first whitespace-separated token, case-insensitively.
  */
 export const OPENVPN_INLINE_REQUIRED_DIRECTIVES: ReadonlySet<string> = new Set([
   'ca',
@@ -505,7 +518,7 @@ export const OPENVPN_INLINE_REQUIRED_DIRECTIVES: ReadonlySet<string> = new Set([
   'tls-crypt',
 ]);
 
-/**
+/*
  * Lines that reference an EXTERNAL cert/key file the server cannot provide — a
  * `ca`/`cert`/`key`/`tls-auth`/`tls-crypt` directive with a file argument and NO
  * corresponding inline `<directive>` block anywhere in the blob. Such a config
@@ -568,6 +581,24 @@ export const OPENVPN_INLINE_REQUIRED_DIRECTIVES: ReadonlySet<string> = new Set([
  * config bypass this check silently (worse than no check: it reads clean).
  *
  * Pure, dependency-free and total (never throws): safe to run on every paste.
+ */
+/**
+ * Finds the lines of an OpenVPN config that point at a certificate or key
+ * FILE which will not exist when the session runs — a `ca`, `cert`, `key`,
+ * `tls-auth` or `tls-crypt` directive with a filename argument and no
+ * matching inline `<directive>` block anywhere in the file.
+ *
+ * Such a config saves and starts and then fails late with an "Options error"
+ * that names neither the field nor the cause. Checking it up front lets you
+ * tell the customer which line to fix: most providers offer an inline, or
+ * "unified", `.ovpn` that has the material embedded.
+ *
+ * An inline block always wins, even when a stray `ca ca.crt` line is also
+ * present. Comment lines and bare directives with no argument are ignored,
+ * and Windows line endings are handled.
+ *
+ * Pure, dependency-free and total — it never throws, so it is safe to run on
+ * every paste.
  */
 export function findUnresolvableOpenvpnFileReferences(
   configBlob: string,
@@ -780,7 +811,7 @@ export interface OpenvpnClientDirectiveFix {
   config: string;
 }
 
-/**
+/*
  * A config that never says it is a client, plus the same config with the missing
  * `client` line added — or null when adding one would be a guess.
  *
@@ -809,6 +840,24 @@ export interface OpenvpnClientDirectiveFix {
  * are not directives and are never read as one.
  *
  * Pure, dependency-free and total (never throws): safe to run on every paste.
+ */
+/**
+ * Adds the missing `client` line to an OpenVPN config that dials out but
+ * never says which end of the tunnel it is, and returns the corrected text —
+ * or null when adding the line would be a guess.
+ *
+ * `client` is shorthand for `tls-client` plus `pull`, both of which such a
+ * file already means, so this is the same one-line edit a customer makes by
+ * hand. OpenVPN 2.7 refuses a profile without it, so the fix is not specific
+ * to this API.
+ *
+ * Returns null — offer nothing, change nothing — when the config already
+ * says `client` or `tls-client`, when it is the server end, when it uses a
+ * static key, when it has no `remote` line to dial, or when it has no
+ * directives at all.
+ *
+ * Pure, dependency-free and total — it never throws, so it is safe to run on
+ * every paste.
  */
 export function addMissingOpenvpnClientDirective(
   configBlob: string,

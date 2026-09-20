@@ -21,12 +21,12 @@
 import { z } from 'zod';
 
 export const LiveKitInfoSchema = z.object({
-  /** WebSocket URL the client connects to. Per-Mac (each Mac runs
+  /** WebSocket URL the client connects to. Per host (each host runs
    *  its own LiveKit server on a unique hostname). */
   ws_url: z.string().url(),
   /** LiveKit room name — always the agent_session id. */
   room: z.string(),
-  /** Short-lived HS256 JWT signed with the per-Mac api_secret. */
+  /** Short-lived HS256 JWT signed with the per-host api_secret. */
   token: z.string(),
   /** Identity claim baked into the JWT — `customer-<account-uuid>`. */
   participant_identity: z.string(),

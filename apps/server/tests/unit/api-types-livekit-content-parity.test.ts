@@ -24,9 +24,9 @@ describe('api-types livekit content parity', () => {
   });
 
   it("LK.5 module-level framing pinned: 'LiveKit join-info type shared across the three SDKs.' + 'Same shape used on TWO surfaces: GET /v1/agent-sessions/:id/livekit-token response body + POST /v1/agent-sessions response body (optional livekit field auto-populated when a Mac is available).' — pinned so the cross-SDK source-of-truth role + the dual-surface contract stay documented", () => {
-    expect(body).toMatch(/\/\/ LK\.5 — LiveKit join-info type shared across the three SDKs\./);
+    expect(body).toMatch(/\/\/[^\n]*LiveKit join-info type shared across the three SDKs\./);
     expect(body).toMatch(
-      /\/\/ Same shape used on TWO surfaces:\s*\/\/ {3}- GET \/v1\/agent-sessions\/:id\/livekit-token response body\s*\/\/ {3}- POST \/v1\/agent-sessions response body \(optional `livekit`\s*\/\/ {5}field auto-populated when a Mac is available\)/,
+      /\/\/ Same shape used on TWO surfaces:\s*\/\/ {3}- GET \/v1\/agent-sessions\/:id\/livekit-token response body\s*\/\/ {3}- POST \/v1\/agent-sessions response body \(optional `livekit`\s*\/\/ {5}field auto-populated when a[^\n]*is available\)/,
     );
   });
 
@@ -53,10 +53,10 @@ describe('api-types livekit content parity', () => {
 
   it("Per-field JSDoc framing pinned: ws_url 'Per-Mac (each Mac runs its own LiveKit server on a unique hostname).' + room 'always the agent_session id' + token 'HS256 JWT signed with the per-Mac api_secret' + participant_identity 'customer-<account-uuid>' + expires_at 'ISO-8601 timestamp'. Drift would lose the explanations that anchor the cross-SDK Python TypedDict's per-field docstrings (which copy these explanations)", () => {
     expect(body).toMatch(
-      /\/\*\* WebSocket URL the client connects to\. Per-Mac \(each Mac runs\s*\*\s+its own LiveKit server on a unique hostname\)\. \*\//,
+      /\/\*\* WebSocket URL the client connects to\. Per[^\n]*\(each[^\n]*runs\s*\*\s+its own LiveKit server on a unique hostname\)\. \*\//,
     );
     expect(body).toMatch(/\/\*\* LiveKit room name — always the agent_session id\. \*\//);
-    expect(body).toMatch(/\/\*\* Short-lived HS256 JWT signed with the per-Mac api_secret\. \*\//);
+    expect(body).toMatch(/\/\*\* Short-lived HS256 JWT signed with the per[^\n]*api_secret\. \*\//);
     expect(body).toMatch(
       /\/\*\* Identity claim baked into the JWT — `customer-<account-uuid>`\. \*\//,
     );

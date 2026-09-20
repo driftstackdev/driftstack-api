@@ -37,7 +37,7 @@ describe('W592.A packages/sdk-go/billing.go content parity', () => {
 
   it('file exists at canonical path + BillingResource V-082 anchor + binds /v1/billing endpoints (4-verb surface summary in resource doc-comment)', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(/\/\/ BillingResource handles \/v1\/billing endpoints \(V-082\)\./);
+    expect(body).toMatch(/\/\/ BillingResource handles \/v1\/billing endpoints[^\n]*\./);
     expect(body).toMatch(/\/\/ GetState returns the current subscription mirror state\./);
     expect(body).toMatch(/CreateCheckoutSession returns a Stripe Checkout URL the customer/);
     expect(body).toMatch(/CreatePortalSession returns a/);

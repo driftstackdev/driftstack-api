@@ -19,8 +19,10 @@
 //     via Omit<...,'cursor'> on opts (callers MUST NOT pass cursor).
 //     Termination on EITHER null OR undefined next_cursor (defensive
 //     against server-side absence-vs-null differences).
-//   • Per-verb V-anchor pinned (H/C/G/BR/BU/Q/J/M) — drift to dropping
-//     any anchor would lose the changelog provenance for that verb.
+//   • Per-verb DOC COMMENT pinned — every customer-visible verb carries
+//     one, because this file compiles into dist/index.d.ts and that
+//     comment is the hover text. The internal ticket anchors that used
+//     to sit in those comments must NOT come back: they ship.
 //   • Per-id wire-path inventory + encodeURIComponent on orderId
 //     (4 occurrences: get + updateNote + cancel + receipt).
 //   • cancel verb POST (not DELETE) — abandons state, doesn't
@@ -48,7 +50,7 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
   it('file exists at canonical path + module header V-666 anchor on the resource line', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
-      /\/\/ CryptoOrdersResource — typed methods for \/v1\/billing\/crypto-\* \(V-666\)\./,
+      /\/\/ CryptoOrdersResource — typed methods for \/v1\/billing\/crypto[^\n]*\./,
     );
   });
 
@@ -67,13 +69,13 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
 
   it('CreateCryptoCheckoutOptions interface — V-666.AO idempotencyKey field pinned with "passes it as the Idempotency-Key header" framing. Drift to passing as a query param OR body field would not match HTTP spec convention.', () => {
     expect(body).toMatch(
-      /export interface CreateCryptoCheckoutOptions \{\s*\/\*\* V-666\.AO — idempotency key\. The SDK passes it as the Idempotency-Key header\. \*\/\s*idempotencyKey\?: string;\s*\}/,
+      /export interface CreateCryptoCheckoutOptions \{\s*\/[^\n]*idempotency key\. The SDK passes it as the Idempotency-Key header\. \*\/\s*idempotencyKey\?: string;\s*\}/,
     );
   });
 
   it('ListCryptoOrdersOptions type-alias — V-666.BR `export type ListCryptoOrdersOptions = ListCryptoOrdersQuery` (re-export from api-types). CRITICAL rationale: "status union stays in lockstep with the server-side enum." Drift to a local hand-rolled type would silently let the SDK accept status values the server-side enum rejects.', () => {
     expect(body).toMatch(
-      /\*\s*V-666\.BR — list options\. Sourced from @driftstack\/api-types so the\s*\*\s*status union stays in lockstep with the server-side enum\./,
+      /list options\. Sourced from @driftstack\/api-types so the\s*\*\s*status union stays in lockstep with the server-side enum\./,
     );
     expect(body).toMatch(/export type ListCryptoOrdersOptions = ListCryptoOrdersQuery;/);
   });
@@ -85,7 +87,7 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
 
   it('V-666.H quote verb — POST /v1/billing/crypto-checkout/quote with CryptoQuoteRequest body → Promise<CryptoQuoteResponse>. Authoritative fiat-price preview without minting an order.', () => {
     expect(body).toMatch(
-      /\/\*\* V-666\.H — preview the authoritative fiat price without minting an order\. \*\//,
+      /\/[^\n]*[Pp]review the authoritative fiat price without minting an order\. \*\//,
     );
     expect(body).toMatch(
       /quote\(body: CryptoQuoteRequest\): Promise<CryptoQuoteResponse> \{\s*return this\.http\.request<CryptoQuoteResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/billing\/crypto-checkout\/quote',\s*body,\s*\}\);\s*\}/,
@@ -94,7 +96,7 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
 
   it("CRITICAL V-666.C createCheckout verb — POST /v1/billing/crypto-checkout with body + opts default-empty + CONDITIONAL headers spread. The `...(opts.idempotencyKey !== undefined ? { headers: { ... } } : {})` pattern means: (1) when idempotencyKey IS provided, send Idempotency-Key header; (2) when NOT provided, DON'T send headers key at all (vs sending undefined which would pay the overhead). Drift to always sending headers would let stale state leak; drift to NOT conditionally spreading would force the customer to pass idempotencyKey on every call.", () => {
     expect(body).toMatch(
-      /\/\*\* V-666\.C — mint a new crypto order\. Send an `idempotencyKey` to dedupe retries\. \*\//,
+      /\/[^\n]*[Mm]int a new crypto order\. Send an `idempotencyKey` to dedupe retries\. \*\//,
     );
     expect(body).toMatch(
       /createCheckout\(\s*body: CreateCryptoCheckoutRequest,\s*opts: CreateCryptoCheckoutOptions = \{\},\s*\): Promise<CreateCryptoCheckoutResponse> \{\s*return this\.http\.request<CreateCryptoCheckoutResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/billing\/crypto-checkout',\s*body,\s*\.\.\.\(opts\.idempotencyKey !== undefined\s*\? \{ headers: \{ 'idempotency-key': opts\.idempotencyKey \} \}\s*: \{\}\),\s*\}\);\s*\}/,
@@ -103,7 +105,7 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
 
   it('V-666.G/BR/BU list verb — GET /v1/billing/crypto-orders with 5-param query. JSDoc pinned per-anchor: V-666.G (caller account, newest first), V-666.BR (status filter), V-666.BU (cursor pagination, loop until next_cursor null). Each anchor MUST stay attached because the list verb spans 3 user-facing features (read-only listing + status-filter + cursor-pagination).', () => {
     expect(body).toMatch(
-      /\*\s*V-666\.G — list the caller account's crypto orders \(newest first\)\.\s*\*\s*V-666\.BR — pass `status` to narrow the list to a single status\.\s*\*\s*V-666\.BU — pass `cursor` from a prior page's `next_cursor` to\s*\*\s*iterate\. Loop until the response's `next_cursor` is null\./,
+      /\*\s*[^\n]*[Ll]ist the caller account's crypto orders \(newest first\)\.\s*\*\s*[^\n]*[Pp]ass `status` to narrow the list to a single status\.\s*\*\s*[^\n]*[Pp]ass `cursor` from a prior page's `next_cursor` to\s*\*\s*iterate\. Loop until the response's `next_cursor` is null\./,
     );
   });
 
@@ -118,7 +120,7 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
 
   it('CRITICAL V-666.BU listAll verb — a method returning AsyncGenerator<CryptoOrderEnvelope, void, void> that DELEGATES to the shared iteratePaginated helper (audit 2026-06-23 — was an inline async* while-loop), so it inherits the non-advancing-cursor guard every other list has. Internal cursor management via `Omit<ListCryptoOrdersOptions, "cursor">` — callers MUST NOT pass cursor (the type system rejects it at compile time). The crypto envelope keys rows off `orders`, so the fetch closure adapts orders→data + `next_cursor ?? null`. Drift to dropping the adapter or the shared helper would re-introduce the unguarded loop / iterate an empty list.', () => {
     expect(body).toMatch(
-      /\*\s*V-666\.BU — async generator that walks every page until the\s*\*\s*server stops emitting a next_cursor\. Yields the envelope of\s*\*\s*each order one at a time so consumers can break early\./,
+      /async generator that walks every page until the\s*\*\s*server stops emitting a next_cursor\. Yields the envelope of\s*\*\s*each order one at a time so consumers can break early\./,
     );
     expect(body).toMatch(
       /\*\s*Accepts the same options as `list\(\)` minus `cursor` \(the\s*\*\s*iterator manages cursors internally\)\./,
@@ -131,28 +133,28 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
   });
 
   it('V-666.G get verb — GET /v1/billing/crypto-orders/${encodeURIComponent(orderId)} → Promise<CryptoOrderEnvelope>. Single-line minimalist implementation; encodeURIComponent wrapping prevents path traversal via maliciously-crafted orderIds.', () => {
-    expect(body).toMatch(/\/\*\* V-666\.G — read a single order envelope\. \*\//);
+    expect(body).toMatch(/\/[^\n]*[Rr]ead a single order envelope\. \*\//);
     expect(body).toMatch(
       /get\(orderId: string\): Promise<CryptoOrderEnvelope> \{\s*return this\.http\.request<CryptoOrderEnvelope>\(\{\s*method: 'GET',\s*path: `\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}`,\s*\}\);\s*\}/,
     );
   });
 
   it('V-666.Q updateNote verb — PATCH /v1/billing/crypto-orders/${encodeURIComponent(orderId)} with UpdateCryptoOrderNoteRequest body → Promise<CryptoOrderEnvelope>. Customer-facing free-text note; PATCH (not PUT) because the note is just one field on the broader order envelope.', () => {
-    expect(body).toMatch(/\/\*\* V-666\.Q — update the customer-facing free-text note\. \*\//);
+    expect(body).toMatch(/\/[^\n]*[Uu]pdate the customer-facing free-text note\. \*\//);
     expect(body).toMatch(
       /updateNote\(orderId: string, body: UpdateCryptoOrderNoteRequest\): Promise<CryptoOrderEnvelope> \{\s*return this\.http\.request<CryptoOrderEnvelope>\(\{\s*method: 'PATCH',\s*path: `\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}`,\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('CRITICAL V-666.J cancel verb — POST (NOT DELETE) /v1/billing/crypto-orders/${encodeURIComponent(orderId)}/cancel → Promise<CancelCryptoOrderResponse>. POST (state transition, not row deletion) + audit-log preservation. Drift to DELETE would lose the audit-log row that captures the cancellation event. "abandon a pending order (self-service)" — the ONLY out for non-refundable crypto payments.', () => {
-    expect(body).toMatch(/\/\*\* V-666\.J — abandon a pending order \(self-service\)\. \*\//);
+    expect(body).toMatch(/\/[^\n]*[Aa]bandon a pending order \(self-service\)\. \*\//);
     expect(body).toMatch(
       /cancel\(orderId: string\): Promise<CancelCryptoOrderResponse> \{\s*return this\.http\.request<CancelCryptoOrderResponse>\(\{\s*method: 'POST',\s*path: `\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/cancel`,\s*\}\);\s*\}/,
     );
   });
 
   it('V-666.M receipt verb — GET /v1/billing/crypto-orders/${encodeURIComponent(orderId)}/receipt → Promise<CryptoOrderReceipt>. Returns JSON (NOT PDF — PDF download lives elsewhere). Drift to a binary blob response type would break content-negotiation typing across the SDK.', () => {
-    expect(body).toMatch(/\/\*\* V-666\.M — fetch the JSON receipt\. \*\//);
+    expect(body).toMatch(/\/[^\n]*[Ff]etch the JSON receipt\. \*\//);
     expect(body).toMatch(
       /receipt\(orderId: string\): Promise<CryptoOrderReceipt> \{\s*return this\.http\.request<CryptoOrderReceipt>\(\{\s*method: 'GET',\s*path: `\/v1\/billing\/crypto-orders\/\$\{encodeURIComponent\(orderId\)\}\/receipt`,\s*\}\);\s*\}/,
     );
@@ -180,12 +182,55 @@ describe('W426.A packages/sdk-typescript/src/resources/crypto-orders.ts content 
     expect(body).not.toMatch(/method: 'PUT'/);
   });
 
-  it('V-anchor coverage — 8 distinct V-666 sub-anchors pinned (H + C + G appears 2× since list mentions both G and BR but also G is on get + BR + BU + Q + J + M). Distinct V-666 anchor mentions: H (1) + C (1) + G (2: list + get) + BR (1) + BU (2: list + listAll) + Q (1) + J (1) + M (1) + AO (1 in CreateCryptoCheckoutOptions). Total V-666 anchor mentions ≥ 11 (one per verb context + 1 type + listAll). The wide anchor coverage is what threads each verb back to the V-666 changelog entry.', () => {
-    const v666Matches = body.match(/V-666\./g) ?? [];
+  // Was: a count of V-666 sub-anchors. That guard REQUIRED internal ticket ids
+  // inside a file that compiles into dist/index.d.ts, which is the text a
+  // customer reads on hover. What the count was standing in for is that every
+  // verb is documented at all, so this pins that directly instead.
+  function hasDocCommentAbove(src: string, decl: string): boolean {
+    const at = src.indexOf(decl);
+    if (at < 0) return false;
+    return src.slice(0, at).trimEnd().endsWith('*/');
+  }
+
+  it('Doc-comment coverage — every customer-visible option, type and verb carries its own doc comment, because this file compiles into dist/index.d.ts and that comment is what an editor shows on hover. CRITICAL: the internal ticket anchors these comments used to open with must NOT come back — they ship inside the npm package.', () => {
+    const declarations = [
+      '\n  idempotencyKey?: string;',
+      '\nexport type ListCryptoOrdersOptions',
+      '\n  quote(body: CryptoQuoteRequest)',
+      '\n  createCheckout(',
+      '\n  list(opts: ListCryptoOrdersOptions = {})',
+      '\n  listAll(',
+      '\n  iterate(',
+      '\n  get(orderId: string)',
+      '\n  updateNote(orderId: string,',
+      '\n  cancel(orderId: string)',
+      '\n  receipt(orderId: string)',
+    ];
+    for (const decl of declarations) {
+      expect(body.includes(decl), `${decl.trim()} is not declared in this file`).toBe(true);
+      expect(hasDocCommentAbove(body, decl), `${decl.trim()} has no doc comment above it`).toBe(
+        true,
+      );
+    }
+    expect(body, 'an internal ticket anchor is back in text that ships').not.toMatch(/V-\d/);
+  });
+
+  it('NEGATIVE CONTROL — the doc-comment check and the ticket-anchor check each fail on text that deserves to fail, so a green arm above is a measurement and not a vacuous pass', () => {
     expect(
-      v666Matches.length,
-      'expected V-666 anchors threaded across the file',
-    ).toBeGreaterThanOrEqual(10);
+      hasDocCommentAbove(
+        'class X {\n  quote(body: CryptoQuoteRequest) {}\n}',
+        '\n  quote(body: CryptoQuoteRequest)',
+      ),
+    ).toBe(false);
+    expect(
+      hasDocCommentAbove(
+        '/** Preview the price. */\n  quote(body: CryptoQuoteRequest) {}',
+        '\n  quote(body: CryptoQuoteRequest)',
+      ),
+    ).toBe(true);
+    expect(hasDocCommentAbove(body, '\n  thisVerbDoesNotExist(')).toBe(false);
+    expect('/** V-666.H \u2014 preview the price. */').toMatch(/V-\d/);
+    expect('/** Preview the price. */').not.toMatch(/V-\d/);
   });
 
   it("Wire-path inventory — bare /v1/billing/crypto-checkout/quote + /v1/billing/crypto-checkout (createCheckout) + /v1/billing/crypto-orders (list) + per-id templates for get/updateNote/cancel/receipt. listAll delegates via this.list() so doesn't emit its own path. Drift to renaming any path would break dashboard URL-generation logic.", () => {

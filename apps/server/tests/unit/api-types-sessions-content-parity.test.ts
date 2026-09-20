@@ -70,19 +70,19 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
 
   it('V-169 SessionPurpose framing pinned: harness config driver lives in WebKit driver; production_customer ephemeral+ATFP; cumulative_rig_validation persistent matches V-179 baseline; test_domain_probe tracker-context adversarial; MockDriver accepts but no-ops', () => {
     expect(body).toMatch(
-      /\*\s*V-169 — session purpose drives harness configuration in the WebKit\s*\*\s*driver \(per AFP Layer 1 design from Agent 1's Phase 3 work; see\s*\*\s*`docs\/architecture\/afp-harness-configuration\.md` once Agent 1 lands\s*\*\s*the cross-reference doc\)\./,
+      /session purpose drives[^\n]*configuration in the WebKit\s*\*\s*driver \(per AFP Layer 1 design from[^\n]*s Phase 3 work; see\s*\*\s*`docs\/architecture\/afp[^\n]*configuration\.md` once[^\n]*lands\s*\*\s*the cross-reference doc\)\./,
     );
     expect(body).toMatch(
       /\*\s*- `production_customer` \(default\): ephemeral context \+\s*\*\s*`_resourceLoadStatisticsEnabled=YES`\. ATFP fires per iOS per-site\s*\*\s*logic\. This is what every paying-customer session uses\./,
     );
     expect(body).toMatch(
-      /\*\s*- `cumulative_rig_validation`: persistent context, NOT ephemeral\.\s*\*\s*ATFP doesn't fire \(matches the V-179 baseline rig\)\. Used by Agent 1\s*\*\s*to validate that the static-fingerprint surface remains\s*\*\s*bit-identical across releases\./,
+      /\*\s*- `cumulative_rig_validation`: persistent context, NOT ephemeral\.\s*\*\s*ATFP doesn't fire[^\n]*\s*\*\s*to validate that the static-fingerprint surface remains\s*\*\s*bit-identical across releases\./,
     );
     expect(body).toMatch(
-      /\*\s*- `test_domain_probe`: ephemeral context on tracker-context URLs\.\s*\*\s*ATFP fires deterministically\. Used by Agent 1 for adversarial\s*\*\s*validation against detection vendors\./,
+      /\*\s*- `test_domain_probe`: ephemeral context on tracker-context URLs\.\s*\*\s*ATFP fires deterministically\. Used by[^\n]*for adversarial\s*\*\s*validation against detection vendors\./,
     );
     expect(body).toMatch(
-      /\*\s*The MockDriver accepts the field but doesn't act on it \(the WebKit\s*\*\s*driver is where the harness branching lives\)\. Production customer\s*\*\s*sessions use the default; the other two purposes are reserved for\s*\*\s*internal validation tools and not part of the customer-facing API\s*\*\s*contract today\./,
+      /\*\s*The MockDriver accepts the field but doesn't act on it \(the WebKit\s*\*\s*driver is where the[^\n]*branching lives\)\. Production customer\s*\*\s*sessions use the default; the other two purposes are reserved for\s*\*\s*internal validation tools and not part of the customer-facing API\s*\*\s*contract today\./,
     );
   });
 
@@ -98,14 +98,14 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
 
   it('SessionSchema: 14-field shape (id + account_id + api_key_id + status + archetype + V-169 purpose + label nullable + metadata nullable + egress_capabilities (migration 0045) nullable + egress_capability_report (Arc 5 EGRESS eg.1 migration 0054) nullable + 4 timestamps incl. last_state_at/destroyed_at nullable)', () => {
     expect(body).toMatch(
-      /export const SessionSchema = z\.object\(\{\s*id: SessionIdSchema,\s*account_id: AccountIdSchema,\s*api_key_id: ApiKeyIdSchema,\s*status: SessionStatusSchema,\s*archetype: ArchetypeSchema,\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*purpose: SessionPurposeSchema,\s*label: z\.string\(\)\.nullable\(\),\s*metadata: SessionMetadataSchema\.nullable\(\),[\s\S]*?egress_capabilities: EgressCapabilitiesSchema\.nullable\(\),[\s\S]*?egress_capability_report: z\.record\(z\.unknown\(\)\)\.nullable\(\),\s*created_at: Iso8601Schema,\s*updated_at: Iso8601Schema,\s*last_state_at: Iso8601Schema\.nullable\(\),\s*destroyed_at: Iso8601Schema\.nullable\(\),\s*\}\);/,
+      /export const SessionSchema = z\.object\(\{\s*id: SessionIdSchema,\s*account_id: AccountIdSchema,\s*api_key_id: ApiKeyIdSchema,\s*status: SessionStatusSchema,\s*archetype: ArchetypeSchema,\s*\/[^\n]*purpose; defaults to `production_customer`\. \*\/\s*purpose: SessionPurposeSchema,\s*label: z\.string\(\)\.nullable\(\),\s*metadata: SessionMetadataSchema\.nullable\(\),[\s\S]*?egress_capabilities: EgressCapabilitiesSchema\.nullable\(\),[\s\S]*?egress_capability_report: z\.record\(z\.unknown\(\)\)\.nullable\(\),\s*created_at: Iso8601Schema,\s*updated_at: Iso8601Schema,\s*last_state_at: Iso8601Schema\.nullable\(\),\s*destroyed_at: Iso8601Schema\.nullable\(\),\s*\}\);/,
     );
   });
 
   it('CreateSessionRequest: selectable archetype optional + canonical bounded label + metadata/profile/persona fields', () => {
     expect(body).toMatch(/export const SessionLabelSchema = z\.string\(\)\.max\(120\);/);
     expect(body).toMatch(
-      /export const CreateSessionRequestSchema = z\.object\(\{\s*archetype: SelectableArchetypeIdSchema\.optional\(\),\s*\/\*\* V-169 — harness purpose; defaults to `production_customer`\. \*\/\s*purpose: SessionPurposeSchema\.optional\(\),\s*label: SessionLabelSchema\.optional\(\),\s*metadata: SessionMetadataSchema\.optional\(\),[\s\S]*?profile_id: ProfileIdInputSchema\.optional\(\),[\s\S]*?behavioral_profile: BehavioralProfileSchema\.optional\(\),\s*\}\);/,
+      /export const CreateSessionRequestSchema = z\.object\(\{\s*archetype: SelectableArchetypeIdSchema\.optional\(\),\s*\/[^\n]*purpose; defaults to `production_customer`\. \*\/\s*purpose: SessionPurposeSchema\.optional\(\),\s*label: SessionLabelSchema\.optional\(\),\s*metadata: SessionMetadataSchema\.optional\(\),[\s\S]*?profile_id: ProfileIdInputSchema\.optional\(\),[\s\S]*?behavioral_profile: BehavioralProfileSchema\.optional\(\),\s*\}\);/,
     );
     // 2026-05-20 anti-enumeration framing pinned
     expect(body).toMatch(/a profile_id outside it returns/);
@@ -151,7 +151,7 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
 
   it('L-001 framing pinned: InteractAction intent-only; coordinate primitives (tap_at, tap.offset, etc.) live on gui_control plane', () => {
     expect(body).toMatch(
-      /\/\/ Customer-facing InteractAction is intent-only per L-001 — coordinate\s*\/\/ primitives \(tap_at, tap\.offset, etc\.\) live on the gui_control plane,\s*\/\/ not here\. See docs\/locked-decisions\.md\./,
+      /\/\/ Customer-facing InteractAction is intent-only per[^\n]*coordinate\s*\/\/ primitives \(tap_at, tap\.offset, etc\.\) live on the gui_control plane,\s*\/\/ not here\. See docs\/locked-decisions\.md\./,
     );
   });
 

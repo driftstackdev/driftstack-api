@@ -1,7 +1,7 @@
-"""MFA enrollment resource — /v1/account/mfa/* (V-353b / V-448).
+"""MFA enrollment resource — /v1/account/mfa/*.
 
 Pairs with ``client.auth.mfa_challenge`` (login MFA exchange) +
-``client.auth.mfa_step_up`` (V-353e step-up gate).
+``client.auth.mfa_step_up`` (the step-up gate).
 
 Returns ``dict[str, Any]`` pending the next ``scripts/generate.sh``
 regen pass — the rich enrollment shapes will surface as Pydantic
@@ -38,7 +38,7 @@ class MfaResource:
         return self._http.request("POST", "/v1/account/mfa/verify", json_body=coerce_body(body))
 
     def disable(self, body: dict[str, Any]) -> None:
-        """Disable MFA. Step-up gated (V-353e); call
+        """Disable MFA. Step-up gated; call
         ``client.auth.mfa_step_up`` first if the 15-minute window is
         stale. Recovery codes are invalidated."""
         self._http.request("DELETE", "/v1/account/mfa", json_body=coerce_body(body))

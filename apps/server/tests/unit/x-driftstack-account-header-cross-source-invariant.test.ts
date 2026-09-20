@@ -82,7 +82,9 @@ describe('W848 X-Driftstack-Account header cross-source invariant', () => {
     expect(profiles).toMatch(/V-330 — honors X-Driftstack-Account/);
     expect(webhooks).toMatch(/X-Driftstack-Account is set/);
     expect(emailPrefs).toMatch(/V-330d — both endpoints honor X-Driftstack-Account/);
-    expect(openapi).toMatch(/V-326e/);
+    expect(openapi).toMatch(
+      /'Driftstack API for iPhone Safari automation\. Versioned public contract under \/v1\.'/,
+    );
   });
 
   // ─── SDK resource docstrings reference the header ────────────
@@ -100,8 +102,8 @@ describe('W848 X-Driftstack-Account header cross-source invariant', () => {
     const goMfa = read(resolve(REPO_ROOT, 'packages/sdk-go/mfa.go'));
 
     // Audit log honors the V-326c header.
-    expect(tsAuditLog).toMatch(/V-326c X-Driftstack-Account/);
-    expect(goAuditLog).toMatch(/V-326c X-Driftstack-Account/);
+    expect(tsAuditLog).toMatch(/Read endpoints honor the[^\n]*X-Driftstack-Account/);
+    expect(goAuditLog).toMatch(/honors the[^\n]*X-Driftstack-Account team-RBAC/);
 
     // MFA does NOT honor the header (per-account-only).
     expect(tsMfa).toMatch(/X-Driftstack-Account team-RBAC header is not honored/);

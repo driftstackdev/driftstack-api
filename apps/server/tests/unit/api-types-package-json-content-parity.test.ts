@@ -8,15 +8,42 @@
 //   • Name: @driftstack/api-types.
 //   • description: 'Public API contract types (Zod schemas) for the
 //     Driftstack API.'.
-//   • license: MIT, type: module.
+//   • license: MIT, type: module, sideEffects: false.
 //   • main: dist/index.js + types: dist/index.d.ts.
 //   • exports.': dual types+import (ESM with TS types).
-//   • files: dist + README.md (publish-clean — no source, no tests).
+//   • files: dist + README.md (publish-clean — no source, no tests),
+//     minus two withheld paths (see below).
 //   • publishConfig.access: public.
 //   • repository.directory: packages/api-types (monorepo-aware npm
 //     publish).
-//   • 2 scripts: build (tsc --build) + typecheck (tsc --build).
+//   • 3 scripts: build (tsc --build, then a comment-free JS pass) +
+//     build:publish (the shape npm gets) + typecheck (tsc --build).
 //   • Single runtime dep: zod ^3.24.0 (Zod is the schema runtime).
+//
+// TWO THINGS HERE ARE LOAD-BEARING AND LOOK LIKE NOISE:
+//
+//   `!dist/ai-*` and `!dist/.tsbuildinfo` are npm `files` NEGATIONS, and
+//   npm honours them. The first withholds the unreleased pricing module
+//   the workspace barrel re-exports; the second stops 45 KB of
+//   incremental-build metadata from shipping. `the-published-api-types-
+//   withholds-the-unreleased-pricing` is where that whole design is
+//   argued and measured — this file only pins the literal.
+//
+//   `sideEffects: false` is a THIRD. It is true of this package — every
+//   module is schema and constant declarations with no global registration,
+//   no clock and no I/O — and it is what lets a bundler drop the modules its
+//   importer does not use. @driftstack/sdk bundles this package, and without
+//   this field esbuild kept the whole barrel, including `dist/ai-credits.js`:
+//   measured 2026-09-20, the first bundled SDK build shipped
+//   MICROCREDITS_PER_CREDIT and the rate card to npm. Removing this line does
+//   not fail any build; it republishes an unreleased feature.
+//
+//   `build` is TWO tsc passes. The second re-emits the JS with
+//   `removeComments`, so the package's internal engineering notes stay in
+//   `src/` and never reach `dist/*.js`, while the `.d.ts` keeps the JSDoc
+//   a customer reads on hover. Dropping the second pass puts 607 internal
+//   findings back into the tarball; dropping the first drops the hover
+//   docs.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +65,7 @@ describe('W531.A packages/api-types/package.json content parity', () => {
     description: string;
     license: string;
     type: string;
+    sideEffects: boolean;
     main: string;
     types: string;
     exports: Record<string, Record<string, string>>;
@@ -48,21 +76,26 @@ describe('W531.A packages/api-types/package.json content parity', () => {
     dependencies: Record<string, string>;
   };
 
-  it("Package identity + dist-entry framing pinned: 'name: @driftstack/api-types' + 'description: \"Public API contract types (Zod schemas) for the Driftstack API.\"' + 'license: MIT' + 'type: module' + 'main: dist/index.js' + 'types: dist/index.d.ts' — pinned so the package-name + canonical Zod-schemas description + MIT license + ESM + dist-entry commitment survives", () => {
+  it("Package identity + dist-entry framing pinned: 'name: @driftstack/api-types' + 'description: \"Public API contract types (Zod schemas) for the Driftstack API.\"' + 'license: MIT' + 'type: module' + 'sideEffects: false' (every module here is pure declarations, and this is what lets @driftstack/sdk's bundler drop the modules it does not use — including the unreleased pricing one) + 'main: dist/index.js' + 'types: dist/index.d.ts' — pinned so the package-name + canonical Zod-schemas description + MIT license + ESM + dist-entry commitment survives", () => {
     expect(pkg.name).toBe('@driftstack/api-types');
     expect(pkg.description).toBe('Public API contract types (Zod schemas) for the Driftstack API.');
     expect(pkg.license).toBe('MIT');
     expect(pkg.type).toBe('module');
+    // sideEffects: false is a factual claim about this package AND the lever
+    // that keeps the unreleased pricing module out of @driftstack/sdk's
+    // bundle. the-published-sdk-loads-under-require-and-import asserts the
+    // consequence; this pins the cause.
+    expect(pkg.sideEffects).toBe(false);
     expect(pkg.main).toBe('dist/index.js');
     expect(pkg.types).toBe('dist/index.d.ts');
   });
 
-  it('exports map + files publish framing pinned: \'exports.".".types: ./dist/index.d.ts + .import: ./dist/index.js\' (dual types+ESM, NO require-form — pure ESM publication) + \'files: ["dist", "README.md"]\' (publish-clean: no src, no tests, no tsconfig) — pinned so the pure-ESM exports + 2-file publish-allowlist commitment survives (drift to including src in files would publish source code; drift to adding a require: form would imply CJS support not actually built)', () => {
+  it('exports map + files publish framing pinned: \'exports.".".types: ./dist/index.d.ts + .import: ./dist/index.js\' (dual types+ESM, NO require-form — pure ESM publication) + \'files: ["dist", "!dist/ai-*", "!dist/.tsbuildinfo", "README.md"]\' (publish-clean: no src, no tests, no tsconfig — and two NEGATIONS that withhold the unreleased pricing module and the 45 KB incremental-build cache) — pinned so the pure-ESM exports + publish-allowlist + withheld-paths commitment survives (drift to including src in files would publish source code; drift to adding a require: form would imply CJS support not actually built; drift to dropping a negation would publish an unreleased feature or build metadata)', () => {
     expect(pkg.exports['.']).toEqual({
       types: './dist/index.d.ts',
       import: './dist/index.js',
     });
-    expect(pkg.files).toEqual(['dist', 'README.md']);
+    expect(pkg.files).toEqual(['dist', '!dist/ai-*', '!dist/.tsbuildinfo', 'README.md']);
   });
 
   it('publishConfig + repository.directory framing pinned: \'publishConfig.access: "public"\' + \'repository.type: "git"\' + \'repository.url: "git+https://github.com/driftstackdev/driftstack-api.git"\' + \'repository.directory: "packages/api-types"\' (monorepo-aware npm publish — npmjs.com points to the subdir, not the repo root) — pinned so the public-access + monorepo-directory commitment survives (drift to dropping publishConfig.access would default to private + 402 on publish; drift to dropping repository.directory would point npmjs.com to the repo root instead of this subdir)', () => {
@@ -72,8 +105,11 @@ describe('W531.A packages/api-types/package.json content parity', () => {
     expect(pkg.repository.directory).toBe('packages/api-types');
   });
 
-  it("Scripts + single-dep framing pinned: 'build: tsc --build' (project-references aware) + 'typecheck: tsc --build' (same — build IS the typecheck for a Zod-schemas package) + dependencies.zod (only runtime dep — Zod IS the schema runtime, drift to adding any other runtime dep would bloat consumers) — pinned so the 2-script tsc--build pipeline + Zod-only-runtime-dep commitment survives", () => {
-    expect(pkg.scripts.build).toBe('tsc --build');
+  it("Scripts + single-dep framing pinned: 'build: tsc --build && tsc -p tsconfig.dist-js.json' (project-references aware, then a removeComments pass that re-emits the JS only — the .d.ts keeps its hover docs, dist/*.js keeps none of the internal notes) + 'build:publish: npm run build && node ../../scripts/api-types-build-publish.mjs' (the shape npm gets, withholding the unreleased pricing module) + 'typecheck: tsc --build' (build IS the typecheck for a Zod-schemas package) + dependencies.zod (only runtime dep — Zod IS the schema runtime, drift to adding any other runtime dep would bloat consumers) — pinned so the two-pass build + publish-shape step + Zod-only-runtime-dep commitment survives", () => {
+    expect(pkg.scripts.build).toBe('tsc --build && tsc -p tsconfig.dist-js.json');
+    expect(pkg.scripts['build:publish']).toBe(
+      'npm run build && node ../../scripts/api-types-build-publish.mjs',
+    );
     expect(pkg.scripts.typecheck).toBe('tsc --build');
     expect(pkg.dependencies).toHaveProperty('zod');
     expect(Object.keys(pkg.dependencies)).toEqual(['zod']);

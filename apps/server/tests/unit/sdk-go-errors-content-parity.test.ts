@@ -73,12 +73,12 @@ describe('W588.C packages/sdk-go/errors.go content parity', () => {
     );
     expect(body).toMatch(/ErrDriverError\s+= errors\.New\("driver error"\)/);
     expect(body).toMatch(/ErrTransport\s+= errors\.New\("transport-level failure"\)/);
-    expect(body).toMatch(/\/\/ V-437 — auth-flow problem types\./);
+    expect(body).toMatch(/\/\/[^\n]*auth-flow problem types\./);
     expect(body).toMatch(/ErrEmailAlreadyRegistered\s+= errors\.New\("email already registered"\)/);
     expect(body).toMatch(/ErrInvalidCredentials\s+= errors\.New\("invalid credentials"\)/);
     expect(body).toMatch(/ErrInvalidAuthToken\s+= errors\.New\("invalid auth token"\)/);
     expect(body).toMatch(/ErrEmailNotVerified\s+= errors\.New\("email not verified"\)/);
-    expect(body).toMatch(/\/\/ V-438 — remaining problem types\./);
+    expect(body).toMatch(/\/\/[^\n]*remaining problem types\./);
     expect(body).toMatch(/ErrFeatureUnavailable = errors\.New\("feature unavailable"\)/);
     expect(body).toMatch(/ErrMfaStepUpRequired\s+= errors\.New\("mfa step-up required"\)/);
     expect(body).toMatch(/ErrInternal\s+= errors\.New\("internal error"\)/);
@@ -134,7 +134,7 @@ describe('W588.C packages/sdk-go/errors.go content parity', () => {
   });
 
   it('V-491 IsRetryable: V-489 TS / V-490 Python mirror; TransportError + InternalError + RateLimitError = retryable; non-driftstack errors return false; example code block pinned', () => {
-    expect(body).toMatch(/\/\/ V-491 — public retry predicate\. Mirrors the V-489 TS \/ V-490/);
+    expect(body).toMatch(/\/\/[^\n]*public retry predicate\. Mirrors the[^\n]*TS \//);
     expect(body).toMatch(/\/\/ Python implementations\. Returns true when err is a Driftstack/);
     expect(body).toMatch(/\/\/ error whose kind is retryable; false otherwise\./);
     expect(body).toMatch(/\/\/ Retryable: TransportError, InternalError, RateLimitError\./);

@@ -49,7 +49,7 @@ breaks bump the MINOR version AND get explicit deprecation notice
 the difference is only that we haven't promised long-term stability.
 
 Customers integrating a pre-1.0 SDK should pin a compatible version
-(e.g., `^0.1.5`) and read the CHANGELOG before bumping.
+(e.g., `^0.2.0`) and read the CHANGELOG before bumping.
 
 ## Deprecation policy
 
@@ -126,17 +126,22 @@ exceed one MINOR release.
 
 In customer code:
 
-- **TypeScript**: `"@driftstack/sdk": "^0.1.5"` (caret = pre-1.0
+- **TypeScript**: `"@driftstack/sdk": "^0.2.0"` (caret = pre-1.0
   pinning to MINOR). Bump on customer schedule.
-- **Python**: `driftstack-sdk>=0.1.5,<0.2` or
-  `driftstack-sdk~=0.1.5` (PEP 440 compatible-release). Pin the
+- **Python**: `driftstack-sdk>=0.2.0,<0.3` or
+  `driftstack-sdk~=0.2.0` (PEP 440 compatible-release). Pin the
   `driftstack-sdk` distribution name — `pip install driftstack-sdk`,
   then `import driftstack`.
 - **Go**: `go.mod` with `github.com/driftstackdev/driftstack-api/
-packages/sdk-go v0.1.5`. Bump via `go get -u`.
+packages/sdk-go v0.3.0`. Bump via `go get -u`.
 
-Production deployments SHOULD pin exact versions
-(`"@driftstack/sdk": "0.1.5"`) and bump deliberately.
+What every one of those lines has in common: while a package is `0.x`, a
+MINOR version can change the surface and a PATCH never does, so the default
+install already takes only the safe releases. Read the CHANGELOG before moving
+to a new minor. Pin an exact version only if you need a byte-for-byte
+reproducible build — and a lockfile (`package-lock.json`, the resolved
+requirements file, `go.sum`) already gives you one, so for most deployments
+there is nothing further to do.
 
 ## Releases
 

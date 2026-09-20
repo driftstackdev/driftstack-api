@@ -1,11 +1,10 @@
 // AccountResource — typed methods for /v1/account/*.
 //
-// V-237 introduced GET /v1/account/me as the customer self-profile
-// endpoint. V-298a/V-298b/V-352b/V-353h/V-326c added slug, region,
-// avatar_url, mfa_enrolled, and teams fields. The shape below mirrors
-// the server's full /me response.
+// GET /v1/account/me is the customer self-profile endpoint. It carries
+// slug, region, avatar_url, mfa_enrolled, and teams fields. The shape
+// below mirrors the server's full /me response.
 //
-// V-450 — also wraps /web-sessions list + revoke, /me/avatar
+// This resource also wraps /web-sessions list + revoke, /me/avatar
 // upload + clear, and /rate-limits read.
 
 import type {
@@ -21,20 +20,21 @@ export interface AccountSelfProfile {
   name: string | null;
   tier: AccountTier;
   status: 'active' | 'suspended' | 'deleted';
-  /** V-352 — IANA timezone (e.g. "Europe/Amsterdam"); null = UTC fallback. */
+  /** An IANA timezone (e.g. "Europe/Amsterdam"); null = UTC fallback. */
   timezone: string | null;
-  /** V-298a — readable account handle; null when unset. */
+  /** A readable account handle; null when unset. */
   slug: string | null;
-  /** V-298b — stated infrastructure-region preference; null when unset. */
+  /** The stated infrastructure-region preference; null when unset. */
   region: 'us' | 'eu' | 'apac' | null;
-  /** T-13 — ISO instant onboarding was first completed; null if never. Seeds
-   *  the desktop client's first-run gate so a finished customer skips it. */
+  /** The ISO instant at which onboarding was first completed; null if never.
+   *  Seeds the desktop client's first-run gate so a finished customer skips
+   *  it. */
   onboarding_completed_at: string | null;
-  /** V-352b — short-lived (~1h) presigned R2 GET URL; null when no avatar. */
+  /** A short-lived (~1h) presigned R2 GET URL; null when no avatar. */
   avatar_url: string | null;
   /** Whether avatar_url is a removable upload, read-only IDP fallback, or absent. */
   avatar_source: 'user' | 'idp' | 'none';
-  /** V-353h — true once TOTP enrollment is verified. */
+  /** True once TOTP enrollment is verified. */
   mfa_enrolled: boolean;
   /** Concurrent session cap for this account's tier. */
   concurrent_session_cap: number;
@@ -44,7 +44,7 @@ export interface AccountSelfProfile {
   profile_cap: number | null;
   /** Existing profiles right now (live count, not cached). */
   profile_count: number;
-  /** V-326c — team memberships the calling account holds. Empty when none.
+  /** Team memberships the calling account holds. Empty when none.
    *  `owner_email`/`owner_name` let the dashboard label a team by who owns it
    *  (instead of a bare acc_<uuid>); email is always present, name is null
    *  when the owner never set a display name. */
@@ -57,7 +57,7 @@ export interface AccountSelfProfile {
   }>;
 }
 
-// V-355 — active dashboard sign-in for the calling account.
+// An active dashboard sign-in for the calling account.
 export interface WebSessionEntry {
   id: string;
   os: string;
@@ -72,14 +72,14 @@ export interface ListWebSessionsResponse {
   data: WebSessionEntry[];
 }
 
-// V-352b — avatar upload response. Presigned R2 URL is short-lived (~1h).
+// The avatar upload response. Presigned R2 URL is short-lived (~1h).
 export interface UploadAvatarResponse {
   avatar_url: string | null;
   content_type: 'image/png' | 'image/jpeg' | 'image/webp';
   bytes: number;
 }
 
-// V-258 — effective rate-limit config (per-bucket capacity + refill).
+// The effective rate-limit config (per-bucket capacity + refill).
 // Bucket keys mirror the server's BUCKET_KEYS / TIER_RATE_LIMIT_DEFAULTS —
 // all four enforced buckets, so an exhaustive switch over `bucket_key` covers
 // every limit the server actually returns (the agent_sessions:* pair was
@@ -101,7 +101,7 @@ export interface GetAccountRateLimitsResponse {
   buckets: RateLimitBucket[];
 }
 
-// Arc 1 sub-slice 6.6/6.7 — bundled-LLM settings + spend status. Lets the GUI
+// Customer bundled-LLM settings + spend status. Lets the GUI
 // give the customer an in-app fix for BundledLlmConsentRequiredError /
 // BundledLlmBudgetExhaustedError instead of pointing at a raw curl command.
 export interface BundledLlmSettings {
@@ -142,7 +142,7 @@ export class AccountResource {
   constructor(private readonly http: HttpClient) {}
 
   /**
-   * V-237 — customer self-profile. Powers the GUI client's
+   * The customer self-profile. Powers the GUI client's
    * "X / Y concurrent sessions" + "P / Q profiles" header gates.
    */
   me(): Promise<AccountSelfProfile> {
@@ -152,7 +152,7 @@ export class AccountResource {
     });
   }
 
-  /** V-352 — partial update of the calling account (name / timezone / slug / region). */
+  /** A partial update of the calling account (name / timezone / slug / region). */
   updateMe(body: UpdateAccountMeRequest): Promise<AccountSelfProfile> {
     return this.http.request<AccountSelfProfile>({
       method: 'PATCH',
@@ -161,7 +161,7 @@ export class AccountResource {
     });
   }
 
-  /** V-352b — upload (or replace) the calling account avatar. */
+  /** Upload (or replace) the calling account avatar. */
   uploadAvatar(body: UploadAvatarRequest): Promise<UploadAvatarResponse> {
     return this.http.request<UploadAvatarResponse>({
       method: 'POST',
@@ -170,7 +170,7 @@ export class AccountResource {
     });
   }
 
-  /** V-352b — clear the calling account avatar pointer. */
+  /** Clear the calling account avatar pointer. */
   clearAvatar(): Promise<void> {
     return this.http.request<void>({
       method: 'DELETE',
@@ -178,7 +178,7 @@ export class AccountResource {
     });
   }
 
-  /** V-355 — list active dashboard sign-ins for the calling account. */
+  /** List active dashboard sign-ins for the calling account. */
   listWebSessions(): Promise<ListWebSessionsResponse> {
     return this.http.request<ListWebSessionsResponse>({
       method: 'GET',
@@ -186,7 +186,7 @@ export class AccountResource {
     });
   }
 
-  /** V-355 — revoke a single web session by id. Idempotent. */
+  /** Revoke a single web session by id. Idempotent. */
   revokeWebSession(id: string): Promise<void> {
     return this.http.request<void>({
       method: 'DELETE',
@@ -194,7 +194,7 @@ export class AccountResource {
     });
   }
 
-  /** V-355 — revoke every web session except the calling one. */
+  /** Revoke every web session except the calling one. */
   revokeAllOtherWebSessions(): Promise<void> {
     return this.http.request<void>({
       method: 'DELETE',
@@ -207,7 +207,7 @@ export class AccountResource {
     });
   }
 
-  /** V-258 — read effective rate-limit config (per-bucket caps + override status). */
+  /** Read effective rate-limit config (per-bucket caps + override status). */
   rateLimits(): Promise<GetAccountRateLimitsResponse> {
     return this.http.request<GetAccountRateLimitsResponse>({
       method: 'GET',
@@ -215,7 +215,7 @@ export class AccountResource {
     });
   }
 
-  /** Arc 1 sub-slice 6.6 — read current bundled-LLM consent + monthly cap. */
+  /** Read current bundled-LLM consent + monthly cap. */
   getBundledLlmSettings(): Promise<BundledLlmSettings> {
     return this.http.request<BundledLlmSettings>({
       method: 'GET',
@@ -223,7 +223,7 @@ export class AccountResource {
     });
   }
 
-  /** Arc 1 sub-slice 6.6 — flip consent and/or raise/lower the monthly cap.
+  /** Flip consent and/or raise/lower the monthly cap.
    *  account_owner scope required server-side. */
   updateBundledLlmSettings(body: UpdateBundledLlmSettingsRequest): Promise<BundledLlmSettings> {
     return this.http.request<BundledLlmSettings>({
@@ -233,7 +233,7 @@ export class AccountResource {
     });
   }
 
-  /** Arc 1 sub-slice 6.7 — consent + cap + month-to-date spend + remaining
+  /** Consent + cap + month-to-date spend + remaining
    *  headroom, for the "you've used $X of $Y" dashboard/GUI display. */
   getBundledLlmStatus(): Promise<BundledLlmStatus> {
     return this.http.request<BundledLlmStatus>({

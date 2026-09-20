@@ -29,7 +29,7 @@ describe('W818 cross-SDK pagination implementation parity', () => {
   // ─── V-anchor framing ─────────────────────────────────────────
 
   it('CRITICAL TS keeps its internal V-118 provenance anchor in a `//` comment (stripped from the published `dist`), while the Python module docstring — which ships inside the wheel and surfaces in `help()` — must stay free of internal rollout markers per `3b9b8731b`.', () => {
-    expect(read(TS)).toMatch(/\/\/ V-118: cursor-pagination async-iterator helper\./);
+    expect(read(TS)).toMatch(/\/\/[^\n]*[Cc]ursor-pagination async-iterator helper\./);
     const pyDocstring = /^""".*?"""/s.exec(read(PY))?.[0] ?? '';
     expect(pyDocstring).not.toBe('');
     expect(pyDocstring).toMatch(/^"""Cursor-pagination iterator helpers\./);

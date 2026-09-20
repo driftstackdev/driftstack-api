@@ -94,7 +94,7 @@ describe('W898 WebhookDelivery shape + V-512 DLQ cross-source invariant', () => 
   it("CRITICAL V-512 framing pins the support-workflow narrative — 'Customer support workflow: a customer reports my endpoint is missing events; admin pulls just that endpoint's DLQ rows without wading through other accounts'. The narrative teaches support reps the use case.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
     expect(p).toMatch(
-      /V-512 — optional drill-down by webhook-endpoint id\. Customer\s*\n\s*\/\/ support workflow: a customer reports "my endpoint is missing\s*\n\s*\/\/ events"; admin pulls just that endpoint's DLQ rows without\s*\n\s*\/\/ wading through other accounts'\./,
+      /optional drill-down by webhook-endpoint id\. Customer\s*\n\s*\/\/ support workflow: a customer reports "my endpoint is missing\s*\n\s*\/\/ events"; admin pulls just that endpoint's DLQ rows without\s*\n\s*\/\/ wading through other accounts'\./,
     );
   });
 
@@ -111,7 +111,7 @@ describe('W898 WebhookDelivery shape + V-512 DLQ cross-source invariant', () => 
 
   it('CRITICAL WebhookEndpoint.delivery_counts uses 3-field aggregate shape (delivered + failed + dlq, each int().nonnegative()). The V-185 anchor + 3-counter aggregate is what per-endpoint summary dashboards depend on.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
-    expect(p).toMatch(/V-185 — aggregate per-endpoint delivery counts/);
+    expect(p).toMatch(/aggregate per-endpoint delivery counts/);
     expect(p).toMatch(
       /delivery_counts: z\.object\(\{\s*\n\s*delivered: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n\s*failed: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n\s*dlq: z\.number\(\)\.int\(\)\.nonnegative\(\),/,
     );

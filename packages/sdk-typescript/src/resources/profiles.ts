@@ -1,4 +1,4 @@
-// ProfilesResource — typed methods for /v1/profiles (V-081).
+// ProfilesResource — typed methods for /v1/profiles.
 
 import type {
   CloneProfileRequest,
@@ -19,7 +19,7 @@ export interface ProfilesListPage {
 }
 
 /**
- * V-480 — versioned, metadata-only export envelope. Per-profile browser
+ * A versioned, metadata-only export envelope. Per-profile browser
  * state lives driver-side and is out of scope for the v1 envelope; the
  * `version` literal lets a future v2 stay back-compat. `source_*` fields
  * are informational — import always mints a fresh id, into any account.
@@ -46,14 +46,14 @@ export interface TransferProfileResponse {
 }
 
 /**
- * doc-150 §8 — discriminated response from `trim()`. The server ALWAYS returns
+ * The discriminated response from `trim()`. The server ALWAYS returns
  * HTTP 200 with one of these shapes (branch on `status`, never the HTTP code):
  *  - `ok`          → caches cleared; `bytes_reclaimed` freed, `size_bytes` is the
  *                    new (smaller) sealed-store size persisted server-side.
  *  - `unavailable` → nothing to trim (fresh profile or no connected
- *                    storage-capable node). `reason` is human-readable. Not an error.
- *  - `timeout`     → the session node did not respond in time. Safe to retry.
- *  - `error`       → the node reported a failure; the stored blob is untouched.
+ *                    storage-capable device). `reason` is human-readable. Not an error.
+ *  - `timeout`     → the session's device did not respond in time. Safe to retry.
+ *  - `error`       → the device reported a failure; the stored blob is untouched.
  */
 /**
  * What {@link Profiles.trim} clears. Absent = `cache`, which is what the op did
@@ -63,7 +63,7 @@ export type TrimProfileScope = 'cache' | 'cookies' | 'history' | 'all';
 
 export type TrimProfileResponse =
   | { status: 'ok'; size_bytes: number; bytes_reclaimed: number }
-  /** `blocked: true` marks an unavailable that REFUSED to run (node offline,
+  /** `blocked: true` marks an unavailable that REFUSED to run (device offline,
    *  profile in use, another trim in flight …) rather than "nothing to clear".
    *  A refused destructive request must not be presented as a benign no-op.
    *  Absent on older servers — treat absent as the benign flavor. */
@@ -118,7 +118,7 @@ export class ProfilesResource {
   }
 
   /**
-   * P-23 — the profile's recent navigation, projected from the account's agent
+   * The profile's recent navigation, projected from the account's agent
    * session transcripts, most recent first. This is ACCOUNT ACTIVITY, not
    * browsing history: the profile's "Clear history" (`trim` with
    * `scope: 'history'`) clears its open tabs on the device and does not remove
@@ -208,7 +208,7 @@ export class ProfilesResource {
   }
 
   /**
-   * V-313 — duplicate a profile. Server auto-derives a "(copy)" /
+   * Duplicate a profile. Server auto-derives a "(copy)" /
    * "(copy 2)" / ... name when `body.name` is omitted. Tier-cap +
    * name-conflict checked the same as create.
    */
@@ -221,7 +221,7 @@ export class ProfilesResource {
   }
 
   /**
-   * V-480 — export this profile as a versioned, metadata-only JSON
+   * Export this profile as a versioned, metadata-only JSON
    * envelope. Feed the result to `import()` (in any account) to mint a
    * fresh profile from it.
    */
@@ -233,7 +233,7 @@ export class ProfilesResource {
   }
 
   /**
-   * V-480 — import a profile from a v1 export envelope, minting a fresh
+   * Import a profile from a v1 export envelope, minting a fresh
    * profile in the EFFECTIVE account — your own, or the owner you are acting
    * as via `X-Driftstack-Account`. Tier-cap + name-conflict semantics
    * match `create`. Importing an envelope from a different account is
@@ -248,7 +248,7 @@ export class ProfilesResource {
   }
 
   /**
-   * V-666 — transfer ownership of a profile to another Driftstack
+   * Transfer ownership of a profile to another Driftstack
    * account by its `acc_<uuid>` id (shared out-of-band; no email path).
    * Mints a NEW row in the recipient's account carrying the source's name,
    * archetype and description, and removes the source from the sender.
@@ -271,7 +271,7 @@ export class ProfilesResource {
   }
 
   /**
-   * doc-150 §8 — "Clear cache, keep logins", now with a `scope` selecting WHAT
+   * "Clear cache, keep logins", now with a `scope` selecting WHAT
    * goes. The phrase is kept verbatim because the Go and Python SDKs carry it too
    * and a cross-SDK parity guard pins all three to the same words; it still
    * describes the DEFAULT exactly.

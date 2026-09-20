@@ -1,5 +1,5 @@
 """Profile snapshots resource — /v1/profiles/:id/snapshots +
-/v1/profile-snapshots (V-312). Immutable point-in-time copies of
+/v1/profile-snapshots. Immutable point-in-time copies of
 saved profiles.
 
 Type annotations on request/response bodies use ``dict[str, Any]``
@@ -59,8 +59,7 @@ class ProfileSnapshotsResource:
         """List every snapshot owned by the EFFECTIVE account.
 
         Your own account, or the owner you are acting as via
-        ``X-Driftstack-Account``. V-1121 — this said "the calling
-        account"; the handler resolves the team header first.
+        ``X-Driftstack-Account``: the team header is resolved first.
         """
         qs = _encode_query({"limit": limit, "cursor": cursor})
         path = "/v1/profile-snapshots" + (f"?{qs}" if qs else "")

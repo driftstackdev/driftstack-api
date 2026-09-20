@@ -51,9 +51,9 @@ describe('W701 cross-SDK V-296 api-keys lifecycle parity', () => {
     const go = read(GO_KEYS);
     const py = read(PY_KEYS);
 
-    expect(ts).toMatch(/V-296/);
-    expect(go).toMatch(/V-296/);
-    expect(py).toMatch(/V-296/);
+    expect(ts).toMatch(/[Rr]otate an API key\. Mints a fresh plaintext \+ sets the OLD key's/);
+    expect(go).toMatch(/mints a fresh plaintext \+ sets the OLD key's/);
+    expect(py).toMatch(/[Rr]esponse shape for ``POST \/v1\/api-keys\/:id\/rotate``\./);
   });
 
   it('CRITICAL 4-verb surface pinned in all 3 SDKs — create + list + revoke + rotate. The 4-verb set is the full api-key lifecycle; drift to dropping any would break the dashboard or compliance flow.', () => {
@@ -232,7 +232,9 @@ describe('W701 cross-SDK V-296 api-keys lifecycle parity', () => {
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-296`).toMatch(/V-296/);
+      expect(body, `${name} V-296`).toMatch(
+        /window; deploy the new key, then the old key auto-revokes at/i,
+      );
       expect(body, `${name} /v1/api-keys`).toMatch(/\/v1\/api-keys/);
       expect(body, `${name} /rotate path`).toMatch(/\/rotate/);
       expect(body, `${name} 24h grace`).toMatch(/24h/);

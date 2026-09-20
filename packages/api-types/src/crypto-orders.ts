@@ -45,11 +45,7 @@ export type CryptoOrderEvent = z.infer<typeof CryptoOrderEventSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 export const CreateCryptoCheckoutRequestSchema = z.object({
-  /**
-   * Target tier. Must be a self-serve paid tier (not 'free' or 'enterprise') —
-   * the same set as `CreateCheckoutSessionRequestSchema.tier` in ./billing.ts,
-   * which is the Stripe sibling of this endpoint.
-   *
+  /*
    * V-924: this was `z.string()` with the constraint stated only in prose, so
    * the published OpenAPI schema advertised no valid-value list at all while the
    * route enforced `z.enum(SUPPORTED_PRODUCTS)`. The prose also named only the
@@ -59,6 +55,10 @@ export const CreateCryptoCheckoutRequestSchema = z.object({
    * Spelled as an enum rather than a refine for the reason recorded on
    * PURCHASABLE_TIERS: a refine does not survive into JSON Schema, so it would
    * have published all eight tiers including the two that 400.
+   */
+  /**
+   * Target tier. Must be a self-serve paid tier — `free` and `enterprise`
+   * are refused. The same set the card checkout accepts.
    */
   product: z
     .enum(PURCHASABLE_TIERS, {
@@ -106,9 +106,9 @@ export const CryptoOrderEnvelopeSchema = z.object({
   payment_id: z.string().nullable(),
   status: CryptoOrderStatusSchema,
   customer_note: z.string().nullable(),
-  /** V-666.AU — append-only state-transition timeline. */
+  /** An append-only state-transition timeline. */
   events: z.array(CryptoOrderEventSchema),
-  /** V-666.AV — informational pay-window deadline. Null on non-pending. */
+  /** An informational pay-window deadline. Null on non-pending. */
   expires_at: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -118,7 +118,7 @@ export type CryptoOrderEnvelope = z.infer<typeof CryptoOrderEnvelopeSchema>;
 export const ListCryptoOrdersResponseSchema = z.object({
   orders: z.array(CryptoOrderEnvelopeSchema),
   /**
-   * V-666.BU — forward cursor; null when there is no further page.
+   * A forward cursor; null when there is no further page.
    * Pass back as `?cursor=` on the next request. Treat as opaque.
    */
   next_cursor: z.string().nullable().optional(),
@@ -131,16 +131,15 @@ export type ListCryptoOrdersResponse = z.infer<typeof ListCryptoOrdersResponseSc
 export const ListCryptoOrdersQuerySchema = z.object({
   limit: z.number().int().min(1).max(100).optional(),
   status: CryptoOrderStatusSchema.optional(),
-  /**
-   * V-666.BU — forward cursor from a prior page's next_cursor.
-   *
+  /*
    * V-1473 — `.max(512)` added for the slice-149 convention. This schema is
    * offered for dashboards and SDKs to reuse and currently has no consumer at
    * all, so nothing was unbounded in practice; a published schema that omits the
    * cap is how the next consumer inherits one.
    */
+  /** A forward cursor from a prior page's `next_cursor`. Treat as opaque. */
   cursor: z.string().min(1).max(512).optional(),
-  /** V-666.BX — half-open window on created_at; ISO 8601 strings. */
+  /** A half-open window on created_at; ISO 8601 strings. */
   created_after: z.string().datetime().optional(),
   created_before: z.string().datetime().optional(),
 });
@@ -167,7 +166,7 @@ export type CancelCryptoOrderResponse = z.infer<typeof CancelCryptoOrderResponse
 // ───────────────────────────────────────────────────────────────────────────
 
 export const CryptoQuoteRequestSchema = z.object({
-  /**
+  /*
    * V-1475 — the THIRD endpoint with the V-924 defect, and the one that fix did
    * not reach.
    *
@@ -181,6 +180,10 @@ export const CryptoQuoteRequestSchema = z.object({
    *
    * `the-purchasable-product-set-is-one-set` scopes itself to "both checkout
    * endpoints"; the quote rail is a third and is covered there now.
+   */
+  /**
+   * Target tier to quote. Must be a self-serve paid tier — `free` and
+   * `enterprise` are refused, as they are on the checkout itself.
    */
   product: z
     .enum(PURCHASABLE_TIERS, {
@@ -307,7 +310,7 @@ export const AdminCryptoPendingAgeResponseSchema = z.object({
 });
 export type AdminCryptoPendingAgeResponse = z.infer<typeof AdminCryptoPendingAgeResponseSchema>;
 
-/**
+/*
  * V-1474 — bounds matched to `ApplyIpnBody` in
  * `apps/server/src/routes/admin-crypto-orders.ts`, which enforces
  * `min(1).max(64)` and `min(1).max(128)` on these two fields.
@@ -317,6 +320,9 @@ export type AdminCryptoPendingAgeResponse = z.infer<typeof AdminCryptoPendingAge
  * a 400 — the V-927 class, where a hand-written mirror agrees on names and
  * required-ness while dropping the bound beside them.
  */
+/** Applies a payment-provider notification to an order. `provider_status`
+ *  is at most 64 characters and `payment_id` at most 128; longer values are
+ *  refused. */
 export const AdminApplyIpnRequestSchema = z.object({
   provider_status: z.string().min(1).max(64),
   payment_id: z.string().min(1).max(128),

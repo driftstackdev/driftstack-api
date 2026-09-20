@@ -1,6 +1,6 @@
-"""Account resource — /v1/account/* (V-385 / V-428 / V-434 / V-450).
+"""Account resource — /v1/account/*.
 
-V-450 extends to cover update-me, avatar upload+clear, web-sessions
+The resource extends to cover update-me, avatar upload+clear, web-sessions
 list+revoke, and rate-limits read.
 
 Type annotations on the response use ``dict[str, Any]`` pending the
@@ -26,11 +26,11 @@ class AccountResource:
         """Read the calling account's full self-visible state.
 
         Returns 15+ fields incl. ``id``, ``email``, ``name``, ``tier``,
-        ``status``, ``timezone`` (V-352), ``slug`` (V-298a),
-        ``region`` (V-298b), ``avatar_url`` (V-352b),
-        ``mfa_enrolled`` (V-353h), ``concurrent_session_cap`` /
+        ``status``, ``timezone``, ``slug``,
+        ``region``, ``avatar_url``,
+        ``mfa_enrolled``, ``concurrent_session_cap`` /
         ``concurrent_session_active`` / ``profile_cap`` /
-        ``profile_count``, and ``teams`` (V-326c).
+        ``profile_count``, and ``teams``.
 
         Bearer-authenticated; never honors the X-Driftstack-Account
         team-RBAC header (always returns the caller's own account).
@@ -38,55 +38,55 @@ class AccountResource:
         return self._http.request("GET", "/v1/account/me")
 
     def update_me(self, body: dict[str, Any]) -> dict[str, Any]:
-        """V-352 — partial update of the calling account
+        """Partial update of the calling account
         (name / timezone / slug / region). Pass ``null`` to clear a
         nullable field; at least one field required.
         """
         return self._http.request("PATCH", "/v1/account/me", json_body=coerce_body(body))
 
     def upload_avatar(self, body: dict[str, Any]) -> dict[str, Any]:
-        """V-352b — upload (or replace) the calling account avatar.
+        """Upload (or replace) the calling account avatar.
         Body: ``{"data_base64": "...", "content_type": "image/png|jpeg|webp"}``.
         Returns ``{"avatar_url": ..., "content_type": ..., "bytes": ...}``.
         """
         return self._http.request("POST", "/v1/account/me/avatar", json_body=coerce_body(body))
 
     def clear_avatar(self) -> None:
-        """V-352b — clear the avatar pointer."""
+        """Clear the avatar pointer."""
         self._http.request("DELETE", "/v1/account/me/avatar")
 
     def list_web_sessions(self) -> dict[str, Any]:
-        """V-355 — list active dashboard sign-ins. The calling
+        """List active dashboard sign-ins. The calling
         session is marked with ``current: true``."""
         return self._http.request("GET", "/v1/account/web-sessions")
 
     def revoke_web_session(self, session_id: str) -> None:
-        """V-355 — revoke a single web session by id. Idempotent."""
+        """Revoke a single web session by id. Idempotent."""
         self._http.request("DELETE", f"/v1/account/web-sessions/{quote(session_id, safe='')}")
 
     def revoke_all_other_web_sessions(self) -> None:
-        """V-355 — revoke every web session except the calling one."""
+        """Revoke every web session except the calling one."""
         # `?keep=current` is REQUIRED by the endpoint; without it the server
         # answers 400 "Bulk revoke requires `?keep=current`".
         self._http.request("DELETE", "/v1/account/web-sessions", params={"keep": "current"})
 
     def rate_limits(self) -> dict[str, Any]:
-        """V-258 — read effective rate-limit config."""
+        """Read effective rate-limit config."""
         return self._http.request("GET", "/v1/account/rate-limits")
 
     def get_bundled_llm_settings(self) -> dict[str, Any]:
-        """Arc 1 sub-slice 6.6 — read current bundled-LLM consent + monthly cap."""
+        """Read current bundled-LLM consent + monthly cap."""
         return self._http.request("GET", "/v1/account/me/bundled-llm-settings")
 
     def update_bundled_llm_settings(self, body: dict[str, Any]) -> dict[str, Any]:
-        """Arc 1 sub-slice 6.6 — flip consent and/or raise/lower the monthly
-        cap. account_owner scope required server-side."""
+        """Flip consent and/or raise/lower the monthly cap.
+        account_owner scope required server-side."""
         return self._http.request(
             "PATCH", "/v1/account/me/bundled-llm-settings", json_body=coerce_body(body)
         )
 
     def get_bundled_llm_status(self) -> dict[str, Any]:
-        """Arc 1 sub-slice 6.7 — consent + cap + month-to-date spend +
+        """Consent + cap + month-to-date spend +
         remaining headroom, for the "you've used $X of $Y" display."""
         return self._http.request("GET", "/v1/account/me/bundled-llm-status")
 

@@ -45,9 +45,9 @@ function read(p: string): string {
 describe('W425.A packages/sdk-typescript/src/resources/auth.ts content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + module header V-079 anchor on the resource line', () => {
+  it('file exists at canonical path + module header names /v1/auth/* on the resource line', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(/\/\/ AuthResource — typed methods for \/v1\/auth\/\* \(V-079\)\./);
+    expect(body).toMatch(/\/\/ AuthResource — typed methods for \/v1\/auth\/[^\n]*\./);
   });
 
   it('CRITICAL V-079 auth-gate-API-key-unused posture pinned per-line. "These endpoints don\'t require an API key (they ARE the auth gate)." + "the API key on the client is unused for these calls (the server doesn\'t validate it)." + "The resource is here for ergonomics + type safety, not for API-key-driven auth." Drift to making auth.signup() refuse without a key would break first-time signup.', () => {
@@ -111,7 +111,7 @@ describe('W425.A packages/sdk-typescript/src/resources/auth.ts content parity', 
 
   it("CRITICAL V-353d login discriminated-union JSDoc — full doc pinned per-line + in-JSDoc 5-line example pattern. The example shows `if ('mfa_required' in out && out.mfa_required) { ... } else { ... }` branching. Drift to dropping the example would lose the customer-facing guidance — without it, customers might unwrap `out.session` directly and silently break on MFA-required accounts.", () => {
     expect(body).toMatch(
-      /\*\s*V-353d — discriminated-union response\. When the account has MFA\s*\*\s*enrolled, the server returns `\{ mfa_required: true, challenge_token,\s*\*\s*challenge_expires_at \}` instead of a session\. Branch on the\s*\*\s*`mfa_required` literal:/,
+      /discriminated-union response\. When the account has MFA\s*\*\s*enrolled, the server returns `\{ mfa_required: true, challenge_token,\s*\*\s*challenge_expires_at \}` instead of a session\. Branch on the\s*\*\s*`mfa_required` literal:/,
     );
     expect(body).toMatch(
       /\*\s*const out = await client\.auth\.login\(\{ email, password \}\);\s*\*\s*if \('mfa_required' in out && out\.mfa_required\) \{\s*\*\s*\/\/ exchange out\.challenge_token via \/v1\/auth\/mfa\/challenge\s*\*\s*\} else \{\s*\*\s*\/\/ out\.session is the real session\s*\*\s*\}/,
@@ -153,7 +153,7 @@ describe('W425.A packages/sdk-typescript/src/resources/auth.ts content parity', 
 
   it("CRITICAL V-445 mfaChallenge JSDoc — `via: 'totp' | 'recovery'` 2-value discriminator pinned. Drift to dropping the discriminator would prevent customers from counting TOTP-vs-recovery use in MFA-strength metrics (recovery-code use signals higher account-risk than TOTP use). Drift to a 3rd value (e.g. 'webauthn') without coordinated server+client update would break the closed-set switch.", () => {
     expect(body).toMatch(
-      /\*\s*V-445 — exchange a login challenge_token \(returned on the\s*\*\s*MFA-required branch\) for a real session via TOTP code or recovery\s*\*\s*code\. Distinguished response carries `via: 'totp' \| 'recovery'`\./,
+      /[Ee]xchange a login challenge_token \(returned on the\s*\*\s*MFA-required branch\) for a real session via TOTP code or recovery\s*\*\s*code\. Distinguished response carries `via: 'totp' \| 'recovery'`\./,
     );
   });
 
@@ -165,7 +165,7 @@ describe('W425.A packages/sdk-typescript/src/resources/auth.ts content parity', 
 
   it('CRITICAL V-445 mfaStepUp JSDoc — 4-line invariant: "refresh `mfa_satisfied_at` on the calling web session" + V-353e 15-minute freshness window + "No new session issued; the existing session row\'s mfa timestamp advances" + "Pair with `MfaStepUpRequiredError` recovery flows". Drift to issuing a NEW session on step-up would force session-cookie rotation mid-flow — breaks the "same session identity, just freshly MFA-proved" contract.', () => {
     expect(body).toMatch(
-      /\*\s*V-445 — refresh `mfa_satisfied_at` on the calling web session\s*\*\s*\(V-353e step-up gate; 15-minute freshness window\)\. No new session\s*\*\s*issued; the existing session row's mfa timestamp advances\. Pair\s*\*\s*with `MfaStepUpRequiredError` recovery flows\./,
+      /[Rr]efresh `mfa_satisfied_at` on the calling web session\s*\*\s*\([^\n]*step-up gate; 15-minute freshness window\)\. No new session\s*\*\s*issued; the existing session row's mfa timestamp advances\. Pair\s*\*\s*with `MfaStepUpRequiredError` recovery flows\./,
     );
   });
 
@@ -195,7 +195,7 @@ describe('W425.A packages/sdk-typescript/src/resources/auth.ts content parity', 
 
   it("CRITICAL V-460/V-266 cliAuthorizeExchange JSDoc — 3-branch discriminated union pinned per-line: (1) `{ status: 'pending' }` keep polling; (2) `{ status: 'bound', api_key, account_id }` ONE-SHOT delivery + \"Subsequent calls 404\" framing; (3) `{ status: 'expired' }` user took too long, restart. Drift to dropping the one-shot 404 framing would let CLIs re-fetch the plaintext key after binding (catastrophic key-leak).", () => {
     expect(body).toMatch(
-      /\*\s*V-460 — V-266 CLI\/GUI activation flow: exchange\.\s*\*\s*\*\s*Polled by the CLI\/GUI\. Returns one of three branches:\s*\*\s*- `\{ status: 'pending' \}` — keep polling\.\s*\*\s*- `\{ status: 'bound', api_key, account_id \}` — one-shot delivery\s*\*\s*of the plaintext API key\. Subsequent calls 404\.\s*\*\s*- `\{ status: 'expired' \}` — user took too long; restart the flow\./,
+      /CLI\/GUI activation flow: exchange\.\s*\*\s*\*\s*Polled by the CLI\/GUI\. Returns one of three branches:\s*\*\s*- `\{ status: 'pending' \}` — keep polling\.\s*\*\s*- `\{ status: 'bound', api_key, account_id \}` — one-shot delivery\s*\*\s*of the plaintext API key\. Subsequent calls 404\.\s*\*\s*- `\{ status: 'expired' \}` — user took too long; restart the flow\./,
     );
     expect(body).toMatch(
       /cliAuthorizeExchange\(body: CliAuthorizeExchangeRequest\): Promise<CliAuthorizeExchangeResponse> \{\s*return this\.http\.request<CliAuthorizeExchangeResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/auth\/cli-authorize\/exchange',\s*body,\s*\}\);\s*\}/,

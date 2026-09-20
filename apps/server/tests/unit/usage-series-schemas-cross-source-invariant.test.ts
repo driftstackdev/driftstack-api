@@ -76,7 +76,7 @@ describe('W894 V-170 Usage series cross-source invariant', () => {
 
   it("CRITICAL V-170 anchor + 'daily-bucketed usage series' framing + 'contiguous (days with zero usage are included as empty totals: {})' contiguity contract.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/usage.ts'));
-    expect(p).toMatch(/V-170 — daily-bucketed usage series/);
+    expect(p).toMatch(/daily-bucketed usage series/);
     expect(p).toMatch(
       /contiguous \(days with\s*\n\s*\*\s*zero usage are included as empty `totals: \{\}`\)/,
     );

@@ -39,10 +39,10 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
 
   it('V-081 framing pinned: profile = persistent customer-defined identity slot; sessions share browser state across runs; control plane stores metadata only; per-profile state in WebKit driver layer', () => {
     expect(body).toMatch(
-      /\/\/ Profile schemas \(V-081\)\. A profile is a persistent customer-defined\s*\/\/ identity slot — sessions are created against profiles to share\s*\/\/ browser state \(cookies \/ localStorage \/ IndexedDB\) across runs\./,
+      /\/\/ Profile schemas[^\n]*\. A profile is a persistent customer-defined\s*\/\/ identity slot — sessions are created against profiles to share\s*\/\/ browser state \(cookies \/ localStorage \/ IndexedDB\) across runs\./,
     );
     expect(body).toMatch(
-      /\/\/ The control plane stores only the profile metadata; per-profile\s*\/\/ browser state lives in the WebKit driver layer\./,
+      /\/\/ The[^\n]*stores only the profile metadata; per-profile\s*\/\/ browser state lives in the WebKit driver layer\./,
     );
   });
 
@@ -111,7 +111,7 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
 
   it('V-313 CloneProfileRequest: name optional only; server auto-derives `${source} (copy)` / `(copy 2)` / ... when omitted rationale', () => {
     expect(body).toMatch(
-      /\/\/ V-313 — POST \/v1\/profiles\/:id\/clone request body\. Both fields\s*\/\/ optional: when `name` is omitted the server auto-derives a non-\s*\/\/ conflicting `\$\{source\} \(copy\)` \/ `\(copy 2\)` \/ \.\.\. name\./,
+      /\/\/[^\n]*POST \/v1\/profiles\/:id\/clone request body\. Both fields\s*\/\/ optional: when `name` is omitted the server auto-derives a non-\s*\/\/ conflicting `\$\{source\} \(copy\)` \/ `\(copy 2\)` \/ \.\.\. name\./,
     );
     expect(body).toMatch(
       /export const CloneProfileRequestSchema = z\.object\(\{\s*name: ProfileNameSchema\.optional\(\),\s*\}\);/,
@@ -119,7 +119,7 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
   });
 
   it('V-312 ProfileSnapshot: id + parent_profile_id nullable + label + description nullable + parent_archetype + parent_name + captured_at + created_at', () => {
-    expect(body).toMatch(/\/\/ V-312 — profile snapshots \(immutable point-in-time copies\)/);
+    expect(body).toMatch(/\/\/[^\n]*profile snapshots \(immutable point-in-time copies\)/);
     expect(body).toMatch(
       /export const ProfileSnapshotSchema = z\.object\(\{\s*id: z\.string\(\),\s*parent_profile_id: z\.string\(\)\.nullable\(\),\s*label: z\.string\(\),\s*description: z\.string\(\)\.nullable\(\),\s*parent_archetype: z\.string\(\),\s*parent_name: z\.string\(\),\s*captured_at: Iso8601Schema,\s*created_at: Iso8601Schema,\s*\}\);/,
     );
@@ -142,7 +142,7 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
 
   it('V-480 export/import framing pinned: metadata-only round-trip; per-profile browser state out of scope for v1; versioned envelope; future v2 backward-compat (callers reject unknown versions)', () => {
     expect(body).toMatch(
-      /\/\/ V-480 — profile import \/ export\. Metadata-only round-trip; per-profile\s*\/\/ browser state \(cookies \/ localStorage \/ IndexedDB\) lives driver-side and\s*\/\/ is out of scope for v1\. The envelope is versioned so a future v2 that\s*\/\/ extends to driver state stays backward-compatible: callers reject\s*\/\/ envelopes whose `version` they don't understand\./,
+      /\/\/[^\n]*profile import \/ export\. Metadata-only round-trip; per-profile\s*\/\/ browser state \(cookies \/ localStorage \/ IndexedDB\) lives driver-side and\s*\/\/ is out of scope for v1\. The envelope is versioned so a future v2 that\s*\/\/ extends to driver state stays backward-compatible: callers reject\s*\/\/ envelopes whose `version` they don't understand\./,
     );
     expect(body).toMatch(/export const PROFILE_EXPORT_ENVELOPE_VERSION = 1 as const;/);
   });

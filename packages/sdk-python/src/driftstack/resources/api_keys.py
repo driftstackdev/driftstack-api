@@ -19,7 +19,7 @@ class ApiKeyList(BaseModel):
 
 
 class RotateApiKeyResponse(CreateApiKeyResponse):
-    """V-296 — response shape for ``POST /v1/api-keys/:id/rotate``.
+    """Response shape for ``POST /v1/api-keys/:id/rotate``.
 
     Extends ``CreateApiKeyResponse`` with the previous-key reference and
     the timestamp at which the previous key auto-revokes via the
@@ -55,7 +55,7 @@ class ApiKeysResource:
         self._http.request("DELETE", f"/v1/api-keys/{quote(key_id, safe='')}")
 
     def rotate(self, key_id: str, *, name: str | None = None) -> RotateApiKeyResponse:
-        """V-296 — rotate an API key with a 24h grace period.
+        """Rotate an API key with a 24h grace period.
 
         Mints a fresh plaintext + sets the OLD key's ``expires_at`` to
         ``now + 24h``. Both keys work concurrently during the grace
@@ -74,7 +74,7 @@ class ApiKeysResource:
              key because it is about to expire does not hand you a
              longer-lived one.
 
-        Rotation also DE-ESCALATES (V-775): ``driftstack_internal_admin``
+        Rotation also DE-ESCALATES: ``driftstack_internal_admin``
         is dropped and the legacy ``admin`` alias becomes
         ``account_owner``, which carries the same customer authority.
         """
@@ -107,7 +107,7 @@ class AsyncApiKeysResource:
         await self._http.request("DELETE", f"/v1/api-keys/{quote(key_id, safe='')}")
 
     async def rotate(self, key_id: str, *, name: str | None = None) -> RotateApiKeyResponse:
-        """V-296 — async rotate. See :meth:`ApiKeysResource.rotate`."""
+        """Async rotate. See :meth:`ApiKeysResource.rotate`."""
         body: dict[str, Any] = {}
         if name is not None:
             body["name"] = name

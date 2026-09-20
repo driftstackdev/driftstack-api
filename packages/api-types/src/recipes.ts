@@ -5,13 +5,8 @@ import { AgentIntentSchema } from './agent-intents.js';
  * Saved-recipe resource (list/summary shape) — the metadata returned by
  * `POST /v1/recipes` (201) and each row of `GET /v1/recipes`. A recipe
  * is a replayable navigation flow assembled from an agent session's
- * plan-executed turns. Mirrors the route's `PublicRecipe` interface
- * (apps/server/src/routes/recipes.ts) field-for-field; a drift guard
- * pins the two in lockstep. The heavy `intent_log` is omitted here and
+ * plan-executed turns. The heavy `intent_log` is omitted here and
  * carried only by the detail view ({@link RecipeDetailSchema}).
- *
- * Before this schema existed the OpenAPI recipe responses were
- * `z.object({})` (empty), leaving the resource untyped for SDK codegen.
  */
 export const RecipeSchema = z.object({
   id: z.string(),

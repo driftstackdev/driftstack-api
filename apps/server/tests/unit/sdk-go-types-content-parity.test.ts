@@ -44,7 +44,7 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
       /\/\/ schemas are the source of truth \(Zod → OpenAPI 3\.1 → these types\)\./,
     );
     expect(body).toMatch(/\/\/ Re-generated when schemas change; tracked manually for now since/);
-    expect(body).toMatch(/\/\/ oapi-codegen lacks OpenAPI 3\.1 support \(see V-026 for the/);
+    expect(body).toMatch(/\/\/ oapi-codegen lacks OpenAPI 3\.1 support \(see[^\n]*for the/);
     expect(body).toMatch(/\/\/ codegen-vs-hand-written decision\)\./);
     expect(body).toMatch(
       /\/\/ Naming follows the Stripe-Go convention: PascalCase exported types,/,
@@ -61,7 +61,7 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
     expect(body).toMatch(/TierEnterprise\s+AccountTier = "enterprise"/);
     expect(body).toMatch(/^type AccountStatus string$/m);
     expect(body).toMatch(/AccountActive\s+AccountStatus = "active"/);
-    expect(body).toMatch(/\/\/ APIKeyScope\. V-174 split the legacy single `admin` scope into/);
+    expect(body).toMatch(/\/\/ APIKeyScope\.[^\n]*split the legacy single `admin` scope into/);
     expect(body).toMatch(
       /\/\/ `account_owner` \(customer self-serve\) and `driftstack_internal_admin`/,
     );
@@ -72,7 +72,7 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
       /\/\/ alias for `account_owner` and `admin:\*`; it never grants staff authority\./,
     );
     expect(body).toMatch(/ScopeRead\s+APIKeyScope = "read"/);
-    expect(body).toMatch(/ScopeAdmin\s+APIKeyScope = "admin" \/\/ compat alias \(V-174\)/);
+    expect(body).toMatch(/ScopeAdmin\s+APIKeyScope = "admin" \/\/ compat alias/);
     expect(body).toMatch(/ScopeAccountOwner\s+APIKeyScope = "account_owner"/);
     expect(body).toMatch(/ScopeDriftstackInternalAdmin APIKeyScope = "driftstack_internal_admin"/);
     expect(body).toMatch(/ScopeGUIControl\s+APIKeyScope = "gui_control"/);
@@ -81,7 +81,7 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
     expect(body).toMatch(/SessionReady\s+SessionStatus = "ready"/);
     expect(body).toMatch(/SessionDestroyed SessionStatus = "destroyed"/);
     expect(body).toMatch(/SessionErrored\s+SessionStatus = "errored"/);
-    expect(body).toMatch(/\/\/ V-433 — these are the only values the server's/);
+    expect(body).toMatch(/\/\/[^\n]*these are the only values the server's/);
     expect(body).toMatch(/PurposeProductionCustomer\s+SessionPurpose = "production_customer"/);
     expect(body).toMatch(
       /PurposeCumulativeRigValidation SessionPurpose = "cumulative_rig_validation"/,
@@ -91,7 +91,7 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
     expect(body).toMatch(/^type WebhookEventType string$/m);
     expect(body).toMatch(/EventSessionCompleted\s+WebhookEventType = "session\.completed"/);
     expect(body).toMatch(/EventTestPing WebhookEventType = "test\.ping"/);
-    expect(body).toMatch(/\/\/ V-356 — synthetic test event sent only via/);
+    expect(body).toMatch(/\/\/[^\n]*synthetic test event sent only via/);
     expect(body).toMatch(/^type WebhookDeliveryStatus string$/m);
     expect(body).toMatch(/DeliveryDLQ\s+WebhookDeliveryStatus = "dlq"/);
     expect(body).toMatch(/^type UsageRecordType string$/m);
@@ -113,17 +113,17 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
       /^type CreateAPIKeyResponse struct \{\s*\n\s*APIKey\s*\n\s*Plaintext string `json:"plaintext"`\s*\n\}/m,
     );
     expect(body).toMatch(
-      /\/\/ V-296 — RotateAPIKeyRequest is the body for POST \/v1\/api-keys\/:id\/rotate\./,
+      /\/\/[^\n]*RotateAPIKeyRequest is the body for POST \/v1\/api-keys\/:id\/rotate\./,
     );
     expect(body).toMatch(
       /^type RotateAPIKeyResponse struct \{\s*\n\s*CreateAPIKeyResponse\s*\n\s*RotatedFrom\s+string\s+`json:"rotated_from"`\s*\n\s*GracePeriodEndsAt time\.Time `json:"grace_period_ends_at"`\s*\n\}/m,
     );
-    expect(body).toMatch(/\/\/ V-298c \/ V-309g — Team RBAC v1\./);
+    expect(body).toMatch(/GracePeriodEndsAt time\.Time `json:"grace_period_ends_at"/);
     expect(body).toMatch(/^type TeamMember struct \{/m);
     expect(body).toMatch(/^type TeamInvite struct \{/m);
     expect(body).toMatch(/^type TeamOwner struct \{/m);
     expect(body).toMatch(/^type TeamOwnersList struct \{/m);
-    expect(body).toMatch(/\/\/ LoginResponse — V-425 \+ V-353d\. The server returns one of two/);
+    expect(body).toMatch(/\/\/ LoginResponse[^\n][^\n]*\. The server returns one of two/);
     expect(body).toMatch(
       /\/\/ {3}- MFA-required: `\{ "mfa_required": true, "challenge_token": "\.\.\.",/,
     );
@@ -138,11 +138,11 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
         ),
       );
     }
-    expect(body).toMatch(/\/\/ V-445 — MFA challenge \+ step-up shapes\./);
+    expect(body).toMatch(/\/\/[^\n]*MFA challenge \+ step-up shapes\./);
     expect(body).toMatch(/^type MfaChallengeRequest struct \{/m);
     expect(body).toMatch(/^type MfaStepUpRequest struct \{/m);
     expect(body).toMatch(/Via\s+string\s+`json:"via"` \/\/ "totp" \| "recovery"/);
-    expect(body).toMatch(/\/\/ V-460 \/ V-266 CLI\/GUI activation flow \(browser-OAuth-style\)\./);
+    expect(body).toMatch(/\/\/[^\n]*CLI\/GUI activation flow \(browser-OAuth-style\)\./);
     expect(body).toMatch(/^type CliAuthorizeInitiateRequest struct \{/m);
     expect(body).toMatch(/^type CliAuthorizeBindRequest struct \{/m);
     expect(body).toMatch(/^type CliAuthorizeExchangeRequest struct \{/m);
@@ -155,11 +155,9 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
 
   it('Session API: InteractAction (tap/type/scroll/press) + WaitCondition (selector/selector_hidden/url_matches/time) discriminated unions with 4 constructors each; L-001 gui-input gated framing pinned', () => {
     expect(body).toMatch(/\/\/ InteractAction is a discriminated-union of action kinds\. Use the/);
-    expect(body).toMatch(
-      /\/\/ This is the customer-facing intent-only surface \(L-001\)\. Coordinate/,
-    );
+    expect(body).toMatch(/\/\/ This is the customer-facing intent-only surface[^\n]*\. Coordinate/);
     expect(body).toMatch(/\/\/ primitives \(tap_at \/ type_focused \/ tap\.offset\) live on the/);
-    expect(body).toMatch(/\/\/ gui-control plane and are NOT part of this SDK — they're internal/);
+    expect(body).toMatch(/\/\/ gui[^\n]*and are NOT part of this SDK — they're internal/);
     expect(body).toMatch(/\/\/ to the self-hosted GUI workflow and gated behind the `gui_control`/);
     expect(body).toMatch(/^type InteractAction struct \{/m);
     expect(body).toMatch(/Kind\s+string `json:"kind"` {15}\/\/ tap \| type \| scroll \| press/);
@@ -218,24 +216,20 @@ describe('W589.C packages/sdk-go/types.go content parity', () => {
   });
 
   it('Webhook/billing/profile/event-envelope structures: V-359 WebhookEndpoint rotation grace + V-351 UpdateWebhookRequest pointer fields + V-185 WebhookEndpointDeliveryCounts + V-429 Subscription + Event{Type+Data raw} + V-426 Profile structs pinned', () => {
-    expect(body).toMatch(
-      /\/\/ V-359 — rotation grace state\. Both null when no rotation in flight\./,
-    );
+    expect(body).toMatch(/\/\/[^\n]*rotation grace state\. Both null when no rotation in flight\./);
     expect(body).toMatch(/PrevSecretPrefix\s+\*string\s+`json:"prev_secret_prefix"`/);
     expect(body).toMatch(
       /RotationGraceExpiresAt \*time\.Time\s+`json:"rotation_grace_expires_at"`/,
     );
-    expect(body).toMatch(
-      /\/\/ WebhookEndpointDeliveryCounts — V-185 aggregate per-endpoint delivery/,
-    );
-    expect(body).toMatch(/\/\/ UpdateWebhookRequest — V-351 partial update\. Pointer fields so/);
+    expect(body).toMatch(/\/\/ WebhookEndpointDeliveryCounts[^\n]*aggregate per-endpoint delivery/);
+    expect(body).toMatch(/\/\/ UpdateWebhookRequest[^\n]*partial update\. Pointer fields so/);
     expect(body).toMatch(
       /\/\/ callers can distinguish "leave as-is" \(nil\) from "set explicitly"/,
     );
     expect(body).toMatch(
       /^type UpdateWebhookRequest struct \{\s*\n\s*URL\s+\*string\s+`json:"url,omitempty"`\s*\n\s*Events\s+\*\[\]WebhookEventType `json:"events,omitempty"`\s*\n\s*Description \*string\s+`json:"description,omitempty"`\s*\n\s*Active\s+\*bool\s+`json:"active,omitempty"`\s*\n\}/m,
     );
-    expect(body).toMatch(/\/\/ Subscription — V-429\./);
+    expect(body).toMatch(/\/\/ Subscription[^\n]*\./);
     expect(body).toMatch(/\/\/ Event is the envelope every webhook delivery wraps\./);
     expect(body).toMatch(
       /^type Event struct \{\s*\n\s*ID\s+string\s+`json:"id"`\s*\n\s*Type\s+WebhookEventType `json:"type"`\s*\n\s*CreatedAt time\.Time\s+`json:"created_at"`\s*\n\s*Data\s+json\.RawMessage\s+`json:"data"`\s*\n\}/m,

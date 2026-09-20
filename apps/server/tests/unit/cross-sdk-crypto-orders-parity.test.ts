@@ -115,9 +115,9 @@ describe('W693 cross-SDK V-666 crypto-orders parity', () => {
     const go = read(GO_CRYPTO);
     const py = read(PY_CRYPTO);
 
-    expect(ts).toMatch(/preview the authoritative fiat price without minting an order/);
+    expect(ts).toMatch(/[Pp]review the authoritative fiat price without minting an order/);
     expect(go).toMatch(/previews the authoritative fiat price without minting an/);
-    expect(py).toMatch(/preview the authoritative fiat price without minting an order/);
+    expect(py).toMatch(/[Pp]review the authoritative fiat price without minting an order/);
   });
 
   it('CRITICAL V-666.J cancel-self-service semantic — "abandon a pending order (self-service)". This is the ONLY out for non-refundable crypto payments. Drift to admin-only-cancel would force customers through support for refund-equivalent flow.', () => {
@@ -125,9 +125,9 @@ describe('W693 cross-SDK V-666 crypto-orders parity', () => {
     const go = read(GO_CRYPTO);
     const py = read(PY_CRYPTO);
 
-    expect(ts).toMatch(/abandon a pending order \(self-service\)/);
-    expect(go).toMatch(/abandon.*pending order/);
-    expect(py).toMatch(/abandon a pending order \(self-service\)/);
+    expect(ts).toMatch(/[Aa]bandon a pending order \(self-service\)/);
+    expect(go).toMatch(/[Aa]bandon.*pending order/);
+    expect(py).toMatch(/[Aa]bandon a pending order \(self-service\)/);
   });
 
   it('CRITICAL V-666.BU cursor walker pinned per-SDK. The cursor pagination + iterate() / listAll() / iterate generator surface is what lets customers walk every order. The envelope `{ orders: [...], next_cursor: ... }` is DIFFERENT from the standard `{ data: ..., next_cursor: ... }` envelope (see W689 + W654) — this DELIBERATE divergence is why each SDK hand-rolls iterate.', () => {

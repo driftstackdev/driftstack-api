@@ -50,13 +50,13 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
     );
     expect(body).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
     expect(body).toMatch(
-      /\/\/ V-356 — synthetic test event, sent only via POST\s*\/\/ \/v1\/webhooks\/:id\/test\. Customers cannot subscribe to it\s*\/\/ \(UpdateSubscriptionsSchema rejects it\) — the endpoint dispatches\s*\/\/ a one-off delivery regardless of subscription, so the customer\s*\/\/ can verify their handler before relying on it for real events\.\s*'test\.ping',/,
+      /\/\/[^\n]*synthetic test event, sent only via POST\s*\/\/ \/v1\/webhooks\/:id\/test\. Customers cannot subscribe to it\s*\/\/ \(UpdateSubscriptionsSchema rejects it\) — the endpoint dispatches\s*\/\/ a one-off delivery regardless of subscription, so the customer\s*\/\/ can verify their handler before relying on it for real events\.\s*'test\.ping',/,
     );
   });
 
   it('V-356 SubscribableWebhookEventType: excludes test.ping; "subscribing to test.ping is meaningless" rationale pinned. 2026-05-22 — V-666 crypto.order.paid + crypto.order.failed added (migration 0064).', () => {
     expect(body).toMatch(
-      /\*\s*V-356 — events the customer is allowed to subscribe to\. Excludes\s*\*\s*`test\.ping`, which is only ever emitted via the explicit test\s*\*\s*endpoint \(subscribing to it would be meaningless — the test\s*\*\s*endpoint dispatches regardless of subscription\)\./,
+      /events the customer is allowed to subscribe to\. Excludes\s*\*\s*`test\.ping`, which is only ever emitted via the explicit test\s*\*\s*endpoint \(subscribing to it would be meaningless — the test\s*\*\s*endpoint dispatches regardless of subscription\)\./,
     );
     expect(body).toMatch(/export const SubscribableWebhookEventTypeSchema = z\.enum\(\[/);
     expect(body).toMatch(/'session\.completed',/);
@@ -73,20 +73,20 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
     );
   });
 
-  it('WebhookEndpoint shape: id + url + secret_prefix + V-359 prev_secret_prefix nullable + V-359 rotation_grace_expires_at nullable + events + description nullable + active + consecutive_failures + last_success_at + last_failure_at + disabled_at + V-185 delivery_counts aggregate (delivered/failed/dlq) + created_at', () => {
+  it('WebhookEndpoint shape: id + url + secret_prefix + prev_secret_prefix nullable (24h rotation grace) + rotation_grace_expires_at nullable (when dual-signing stops) + events + description nullable + active + consecutive_failures + last_success_at + last_failure_at + disabled_at + delivery_counts aggregate (delivered/failed/dlq) + created_at. The anchors are gone from the shipped comments on purpose: this header is compiled into @driftstack/api-types and a customer reads it on hover', () => {
     expect(body).toMatch(/export const WebhookEndpointSchema = z\.object\(\{/);
     expect(body).toMatch(/url: z\.string\(\)\.url\(\),/);
     expect(body).toMatch(/secret_prefix: z\.string\(\),/);
     expect(body).toMatch(
-      /\/\*\* V-359 — populated only during the 24h rotation grace period\.\s*\*\s*Null when no rotation in flight\. \*\/\s*prev_secret_prefix: z\s*\.string\(\)\s*\.nullable\(\)\s*\.describe\(\s*'First chars of the prior signing secret, present only while a rotation is in its grace period\. Null means no rotation is in flight, not that no prior secret ever existed\.',\s*\),/,
+      /\/\*\*[^\n]*populated only during the 24h rotation grace period\.\s*\*\s*Null when no rotation in flight\. \*\/\s*prev_secret_prefix: z\s*\.string\(\)\s*\.nullable\(\)\s*\.describe\(\s*'First chars of the prior signing secret, present only while a rotation is in its grace period\. Null means no rotation is in flight, not that no prior secret ever existed\.',\s*\),/,
     );
     expect(body).toMatch(
-      /\/\*\* V-359 — when prev_secret is active, this is the timestamp at\s*\*\s*which dual-signing stops\. Null when no rotation in flight\. \*\/\s*rotation_grace_expires_at: Iso8601Schema\.nullable\(\)\.describe\(\s*'When dual-signing stops\. Until this timestamp every delivery is signed with both secrets\. Null when no rotation is in flight\.',\s*\),/,
+      /\/\*\*[^\n]*prev_secret is active, the timestamp at\s*\*\s*which dual-signing stops\. Null when no rotation in flight\. \*\/\s*rotation_grace_expires_at: Iso8601Schema\.nullable\(\)\.describe\(\s*'When dual-signing stops\. Until this timestamp every delivery is signed with both secrets\. Null when no rotation is in flight\.',\s*\),/,
     );
     expect(body).toMatch(/events: z\.array\(SubscribableWebhookEventTypeSchema\),/);
     expect(body).toMatch(/consecutive_failures: z\.number\(\)\.int\(\)\.nonnegative\(\),/);
     expect(body).toMatch(
-      /\/\*\* V-185 — aggregate per-endpoint delivery counts\. \*\/\s*delivery_counts: z\.object\(\{\s*delivered: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*failed: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*dlq: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\}\),/,
+      /\/[^\n]*aggregate per-endpoint delivery counts\. \*\/\s*delivery_counts: z\.object\(\{\s*delivered: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*failed: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*dlq: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\}\),/,
     );
   });
 
@@ -100,7 +100,7 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
       /url: z\s*\.string\(\)\s*\.url\(\)\s*\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\),/,
     );
     expect(body).toMatch(
-      /\/\/ V-356 — only subscribable event types accepted on create\. Customers\s*\/\/ can't subscribe to `test\.ping`; that event is only emitted via the\s*\/\/ POST \/v1\/webhooks\/:id\/test endpoint, regardless of subscription\.\s*events: z\.array\(SubscribableWebhookEventTypeSchema\)\.min\(1\)\.max\(10\),/,
+      /\/\/[^\n]*only subscribable event types accepted on create\. Customers\s*\/\/ can't subscribe to `test\.ping`; that event is only emitted via the\s*\/\/ POST \/v1\/webhooks\/:id\/test endpoint, regardless of subscription\.\s*events: z\.array\(SubscribableWebhookEventTypeSchema\)\.min\(1\)\.max\(10\),/,
     );
     expect(body).toMatch(/description: z\.string\(\)\.max\(200\)\.nullable\(\)\.optional\(\),/);
   });
@@ -113,7 +113,7 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
 
   it('V-359 RotateWebhookSecretResponse: id + plaintext secret ONCE + secret_prefix + prev_secret_prefix + grace_expires_at; rationale .describe text pinned (dual-sign window for verifier rollout)', () => {
     expect(body).toMatch(
-      /\/\/ V-359 — POST \/v1\/webhooks\/:id\/rotate-secret response\. Surfaces the\s*\/\/ fresh plaintext secret ONCE alongside metadata about the grace\s*\/\/ window during which both the old \+ new secrets are accepted by the\s*\/\/ server's outbound dual-sign\./,
+      /\/\/[^\n]*POST \/v1\/webhooks\/:id\/rotate-secret response\. Surfaces the\s*\/\/ fresh plaintext secret ONCE alongside metadata about the grace\s*\/\/ window during which both the old \+ new secrets are accepted by the\s*\/\/ server's outbound dual-sign\./,
     );
     expect(body).toMatch(
       /export const RotateWebhookSecretResponseSchema = z\.object\(\{\s*id: WebhookEndpointIdSchema,\s*secret: z\.string\(\)\.describe\('Fresh plaintext signing secret\. Returned ONCE\.'\),\s*secret_prefix: z\.string\(\),\s*prev_secret_prefix: z\s*\.string\(\)\s*\.describe\('First chars of the prior secret, kept active during grace\.'\),\s*grace_expires_at: Iso8601Schema\.describe\(\s*'Until this time, every delivery is signed with both the new and the old secret, so you can update your verifier without missing deliveries\.',\s*\),\s*\}\);/,
@@ -121,7 +121,9 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
   });
 
   it('V-351 UpdateWebhookRequest: all four fields optional (url with https-refine + events 1..10 + description nullable + active) + at-least-one-field .refine', () => {
-    expect(body).toMatch(/\/\/ V-351 — Update/);
+    expect(body).toMatch(
+      /\/\/[^\n]*\bUpdate\b[\s\S]{0,400}?export const UpdateWebhookRequestSchema/,
+    );
     expect(body).toMatch(
       /export const UpdateWebhookRequestSchema = z\s*\.object\(\{\s*url: z\s*\.string\(\)\s*\.url\(\)\s*\.regex\(\/\^https:\\\/\\\/\/, \{ message: 'Webhook URL must use https:\/\/' \}\)\s*\.optional\(\),\s*events: z\.array\(SubscribableWebhookEventTypeSchema\)\.min\(1\)\.max\(10\)\.optional\(\),\s*description: z\.string\(\)\.max\(200\)\.nullable\(\)\.optional\(\),\s*active: z\.boolean\(\)\.optional\(\),\s*\}\)\s*\.refine\(\s*\(v\) =>\s*v\.url !== undefined \|\|\s*v\.events !== undefined \|\|\s*v\.description !== undefined \|\|\s*v\.active !== undefined,\s*\{ message: 'At least one field must be provided\.' \},\s*\);/,
     );
@@ -139,7 +141,7 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
     // schema doesn't extend the base shape (carries its own status
     // filter), so the cap is duplicated explicitly here.
     expect(body).toMatch(
-      /export const ListDeliveriesQuerySchema = z\.object\(\{\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\/\/ Slice 149[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*status: WebhookDeliveryStatusSchema\.optional\(\),\s*\}\);/,
+      /export const ListDeliveriesQuerySchema = z\.object\(\{\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),\s*\/\/[^\n]*[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*status: WebhookDeliveryStatusSchema\.optional\(\),\s*\}\);/,
     );
     expect(body).toMatch(
       /export type ListDeliveriesQuery = z\.infer<typeof ListDeliveriesQuerySchema>;/,

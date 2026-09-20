@@ -60,9 +60,11 @@ describe('W694 cross-SDK V-204 email-preferences critical-emails parity', () => 
     const go = read(GO_EMAIL_PREFS);
     const py = read(PY_EMAIL_PREFS);
 
-    expect(ts).toMatch(/V-204/);
-    expect(go).toMatch(/V-204/);
-    expect(py).toMatch(/V-204/);
+    expect(ts).toMatch(
+      /EmailPreferencesResource — typed methods for \/v1\/account\/email-preferences/,
+    );
+    expect(go).toMatch(/EmailPreferencesResource handles \/v1\/account\/email-preferences/);
+    expect(py).toMatch(/Email preferences resource — \/v1\/account\/email-preferences/);
   });
 
   it('CRITICAL 3 critical email event types pinned in all 3 SDKs as NOT opt-outable. Drift to letting ANY of these (verification / password-reset / billing-failure) into the OptOutableEmailEvent enum would silently let customers opt out of safety-net emails. S44 negative pins: the deleted subscription-cancellation + support-ack templates must not resurface in SDK docstrings.', () => {
@@ -180,7 +182,7 @@ describe('W694 cross-SDK V-204 email-preferences critical-emails parity', () => 
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-204`).toMatch(/V-204/);
+      expect(body, `${name} email-preferences route`).toMatch(/\/v1\/account\/email-preferences/);
       expect(body, `${name} non-critical`).toMatch(/non-critical/);
       // 3 critical events appear in the file (S44 trimmed the roster 5→3).
       expect(body, `${name} verification`).toMatch(/verification/);

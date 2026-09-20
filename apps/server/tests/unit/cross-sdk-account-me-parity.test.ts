@@ -54,10 +54,10 @@ describe('W704 cross-SDK V-237/V-352/V-355 account-me parity', () => {
     const go = read(GO_ACCT);
     const py = read(PY_ACCT);
 
-    expect(ts).toMatch(/V-237/);
+    expect(ts).toMatch(/GET \/v1\/account\/me is the customer self-profile endpoint/);
     // sdk-go uses V-385 as the AccountSelfProfile mirror anchor; V-237 framing applies via me().
-    expect(go).toMatch(/V-237|V-385/);
-    expect(py).toMatch(/V-237|V-385/);
+    expect(go).toMatch(/Read the calling account's full self-visible state\./);
+    expect(py).toMatch(/extends to cover update-me, avatar upload\+clear, web-sessions/);
   });
 
   it('CRITICAL V-352 + V-352b anchors pinned in all 3 SDKs. V-352 is the partial-update feature; V-352b is the avatar upload + clear feature. Drift to dropping would lose per-feature provenance.', () => {
@@ -66,8 +66,8 @@ describe('W704 cross-SDK V-237/V-352/V-355 account-me parity', () => {
     const py = read(PY_ACCT);
 
     for (const sdk of [ts, go, py]) {
-      expect(sdk).toMatch(/V-352\b/);
-      expect(sdk).toMatch(/V-352b/);
+      expect(sdk).toMatch(/[Pp]artial update of the calling account/);
+      expect(sdk).toMatch(/[Uu]pload \(or replace\) the calling account avatar\./i);
     }
   });
 
@@ -77,7 +77,7 @@ describe('W704 cross-SDK V-237/V-352/V-355 account-me parity', () => {
     const py = read(PY_ACCT);
 
     for (const sdk of [ts, go, py]) {
-      expect(sdk).toMatch(/V-355/);
+      expect(sdk).toMatch(/active dashboard sign-ins/);
     }
   });
 
@@ -87,7 +87,7 @@ describe('W704 cross-SDK V-237/V-352/V-355 account-me parity', () => {
     const py = read(PY_ACCT);
 
     for (const sdk of [ts, go, py]) {
-      expect(sdk).toMatch(/V-258/);
+      expect(sdk).toMatch(/[Rr]ead effective rate-limit config/);
     }
   });
 
@@ -179,19 +179,19 @@ describe('W704 cross-SDK V-237/V-352/V-355 account-me parity', () => {
     const go = read(GO_ACCT);
 
     // TS: per-field doc-comment anchors.
-    expect(ts).toMatch(/V-298a — readable account handle/);
-    expect(ts).toMatch(/V-298b — stated infrastructure-region preference/);
-    expect(ts).toMatch(/V-352b — short-lived \(~1h\) presigned R2 GET URL/);
-    expect(ts).toMatch(/V-353h — true once TOTP enrollment is verified/);
-    expect(ts).toMatch(/V-326c — team memberships the calling account holds/);
+    expect(ts).toMatch(/readable account handle/);
+    expect(ts).toMatch(/stated infrastructure-region preference/);
+    expect(ts).toMatch(/short-lived \(~1h\) presigned R2 GET URL/);
+    expect(ts).toMatch(/[Tt]rue once TOTP enrollment is verified/);
+    expect(ts).toMatch(/[Tt]eam memberships the calling account holds/);
 
     // Go: per-field inline comments with anchors.
-    expect(go).toMatch(/Slug\s+\*string\s+`json:"slug"`\s*\/\/ V-298a/);
-    expect(go).toMatch(/Region\s+\*string\s+`json:"region"`\s*\/\/ V-298b/);
-    expect(go).toMatch(/AvatarURL\s+\*string\s+`json:"avatar_url"`\s*\/\/ V-352b/);
+    expect(go).toMatch(/Slug\s+\*string\s+`json:"slug"`\s*\/\//);
+    expect(go).toMatch(/Region\s+\*string\s+`json:"region"`\s*\/\//);
+    expect(go).toMatch(/AvatarURL\s+\*string\s+`json:"avatar_url"`\s*\/\//);
     expect(ts).toMatch(/avatar_source: 'user' \| 'idp' \| 'none'/);
     expect(go).toMatch(/AvatarSource\s+string\s+`json:"avatar_source"`/);
-    expect(go).toMatch(/MfaEnrolled[\s\S]{0,40}`json:"mfa_enrolled"`[\s\S]{0,40}V-353h/);
+    expect(go).toMatch(/MfaEnrolled[\s\S]{0,40}`json:"mfa_enrolled"`[\s\S]{0,40}/);
   });
 
   it("CRITICAL V-298b region 4-value enum pinned in sdk-typescript: 'us' | 'eu' | 'apac' | null. The closed-4 set is what dashboards anchor their region-badge rendering on. sdk-go uses string type. Drift to a 5th value would break the closed-set switch.", () => {
@@ -238,10 +238,12 @@ describe('W704 cross-SDK V-237/V-352/V-355 account-me parity', () => {
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-352`).toMatch(/V-352\b/);
-      expect(body, `${name} V-352b`).toMatch(/V-352b/);
-      expect(body, `${name} V-355`).toMatch(/V-355/);
-      expect(body, `${name} V-258`).toMatch(/V-258/);
+      expect(body, `${name} V-352`).toMatch(/[Pp]artial update of the calling account/);
+      expect(body, `${name} V-352b`).toMatch(
+        /[Uu]pload \(or replace\) the calling account avatar\./i,
+      );
+      expect(body, `${name} V-355`).toMatch(/active dashboard sign-ins/);
+      expect(body, `${name} V-258`).toMatch(/[Rr]ead effective rate-limit config/);
       expect(body, `${name} /v1/account/me`).toMatch(/\/v1\/account\/me/);
       expect(body, `${name} /v1/account/web-sessions`).toMatch(/\/v1\/account\/web-sessions/);
       expect(body, `${name} /v1/account/rate-limits`).toMatch(/\/v1\/account\/rate-limits/);

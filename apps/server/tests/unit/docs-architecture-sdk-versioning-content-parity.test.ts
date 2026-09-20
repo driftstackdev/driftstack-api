@@ -23,6 +23,13 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import {
+  goSdkVersion,
+  nextMinor,
+  pythonDistName,
+  pythonSdkVersion,
+  typescriptSdkVersion,
+} from './_helpers/sdk-versions.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
@@ -96,7 +103,7 @@ describe('W558.B /docs/architecture/sdk-versioning.md content parity', () => {
     expect(body).toMatch(/The deprecation period is at minimum 30 days post-deprecation-release/);
   });
 
-  it("Cross-SDK lockstep + pinning + release-process framing pinned: '## Cross-SDK consistency' + 'The three SDKs MUST stay in lockstep on:' + 'Resource names + method names. `client.sessions.create()` exists in' + 'Error class hierarchy. `RateLimitError` / `InvalidKeyError` /' + '`SessionTimeoutError` / etc.' + 'Webhook signature verification helper. `verifyWebhookSignature` in' + 'TS, `verify_webhook_signature` in Python, `VerifyWebhookSignature`' + 'in Go.' + 'OpenAPI schema. Each SDK regenerates its types from the same' + 'The lag should be ≤ one MINOR release.' + '## Version-pinning recommendations' + '**TypeScript**: `\"@driftstack/sdk\": \"^0.1.5\"`' + '**Python**: `driftstack>=0.1.5,<0.2` or' + '**Go**: `go.mod`' + '## Release process' + 'TS: `npm publish` from `packages/sdk-typescript/`.' + 'Python: `python -m build && python -m twine upload`' + 'Go: tag the commit with `packages/sdk-go/v<version>`' + 'Pre-launch (no paying customers yet) the publish steps are gated on' + 'founder approval. Post-launch, MINOR + PATCH publishes are' + 'autonomous; MAJOR publishes always require explicit founder approval.' — pinned so the cross-SDK-lockstep-4-category + 3-pin-recommendation + 3-language-publish + pre-launch-gated + MAJOR-always-founder commitment survives", () => {
+  it("Cross-SDK lockstep + pinning + release-process framing pinned: '## Cross-SDK consistency' + 'The three SDKs MUST stay in lockstep on:' + 'Resource names + method names. `client.sessions.create()` exists in' + 'Error class hierarchy. `RateLimitError` / `InvalidKeyError` /' + '`SessionTimeoutError` / etc.' + 'Webhook signature verification helper. `verifyWebhookSignature` in' + 'TS, `verify_webhook_signature` in Python, `VerifyWebhookSignature`' + 'in Go.' + 'OpenAPI schema. Each SDK regenerates its types from the same' + 'The lag should be ≤ one MINOR release.' + '## Version-pinning recommendations' + the three pinning recommendations, each at the version its own package publishes + '**Go**: `go.mod`' + '## Release process' + 'TS: `npm publish` from `packages/sdk-typescript/`.' + 'Python: `python -m build && python -m twine upload`' + 'Go: tag the commit with `packages/sdk-go/v<version>`' + 'Pre-launch (no paying customers yet) the publish steps are gated on' + 'founder approval. Post-launch, MINOR + PATCH publishes are' + 'autonomous; MAJOR publishes always require explicit founder approval.' — pinned so the cross-SDK-lockstep-4-category + 3-pin-recommendation + 3-language-publish + pre-launch-gated + MAJOR-always-founder commitment survives", () => {
     expect(body).toMatch(/## Cross-SDK consistency/);
     expect(body).toMatch(/The three SDKs MUST stay in lockstep on:/);
     expect(body).toMatch(
@@ -117,7 +124,6 @@ describe('W558.B /docs/architecture/sdk-versioning.md content parity', () => {
     expect(body).toMatch(/- OpenAPI schema\. Each SDK regenerates its types from the same/);
     expect(body).toMatch(/The lag should be ≤ one MINOR release\./);
     expect(body).toMatch(/## Version-pinning recommendations/);
-    expect(body).toMatch(/- \*\*TypeScript\*\*: `"@driftstack\/sdk": "\^0\.1\.5"`/);
     // V-1105 — this required `driftstack>=0.1.5,<0.2`, a pin that does not
     // resolve to this SDK: the PyPI distribution is `driftstack-sdk` and
     // `driftstack` is only the import name. The customer page carries a
@@ -126,22 +132,30 @@ describe('W558.B /docs/architecture/sdk-versioning.md content parity', () => {
     // one file and mandating it in another, with both guards green. The
     // distribution name is read from pyproject.toml now rather than spelled
     // here, so the two cannot disagree again.
-    const dist = /^name = "([^"]+)"/m.exec(
-      readFileSync(resolve(REPO_ROOT, 'packages/sdk-python/pyproject.toml'), 'utf8'),
+    //
+    // 2026-09-20 — the VERSION in each pin is derived the same way, and for the
+    // same reason. Spelled as a literal it went stale: this file and the
+    // customer page both recommended `^0.1.5` while npm served 0.1.6, and this
+    // guard required the stale string, so the drift was mandatory rather than
+    // merely tolerated.
+    const distName = pythonDistName();
+    const ts = typescriptSdkVersion();
+    const py = pythonSdkVersion();
+    const go = goSdkVersion();
+    expect(body, `the TypeScript pin must name the published version ${ts}`).toContain(
+      `- **TypeScript**: \`"@driftstack/sdk": "^${ts}"\``,
     );
-    expect(
-      dist,
-      'the Python distribution name is no longer declared in pyproject.toml',
-    ).not.toBeNull();
-    const distName = dist?.[1] ?? '';
-    expect(distName, 'the distribution name parsed as empty').toMatch(/\S/);
-    expect(body, `the Python pin must name the ${distName} distribution`).toContain(
-      `- **Python**: \`${distName}>=0.1.5,<0.2\` or`,
+    expect(body, `the Python pin must name the ${distName} distribution at ${py}`).toContain(
+      `- **Python**: \`${distName}>=${py},<${nextMinor(py)}\` or`,
     );
-    expect(body, 'the bare import-name pin must not return').not.toMatch(
-      /`driftstack>=0\.1\.5|`driftstack~=0\.1\.5`/,
+    expect(body, `the Python compatible-release pin must name ${py}`).toContain(
+      `\`${distName}~=${py}\``,
     );
+    expect(body, 'the bare import-name pin must not return').not.toMatch(/`driftstack[>~]=\d/);
     expect(body).toMatch(/- \*\*Go\*\*: `go\.mod`/);
+    expect(body, `the Go pin must name the version the tag will carry, v${go}`).toContain(
+      `packages/sdk-go v${go}\``,
+    );
     expect(body).toMatch(/## Release process/);
     expect(body).toMatch(/- TS: `npm publish` from `packages\/sdk-typescript\/`\./);
     expect(body).toMatch(/- Python: `python -m build && python -m twine upload`/);

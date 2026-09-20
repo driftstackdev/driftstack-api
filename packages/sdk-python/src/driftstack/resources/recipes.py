@@ -50,9 +50,9 @@ class RecipesResource:
         Server-side: ``agent_session_id`` must be a session you can
         ACCESS — one your own account owns, or one owned by a team you
         hold ``admin`` on. Anything else returns 404 (not 403) by
-        design; existence isn't leaked. V-1120 — this read as though any
-        cross-account id 404s, which is the rule V-812 retracted; the
-        recipe is still filed under YOUR account either way.
+        design; existence isn't leaked. A team admin snapshotting the
+        owner's session gets a 201, and the recipe is still filed under
+        YOUR account either way.
         """
         body: dict[str, Any] = {
             "agent_session_id": agent_session_id,

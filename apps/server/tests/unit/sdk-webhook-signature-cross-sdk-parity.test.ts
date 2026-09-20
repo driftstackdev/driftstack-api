@@ -55,7 +55,7 @@ describe('W816 cross-SDK webhook-signature parity', () => {
   // ─── V-359 dual-signature rotation grace ──────────────────────
 
   it('CRITICAL all 3 implementations support the V-359 headerPrev / HeaderPrev / header_prev fallback input AND accurately state Driftstack does NOT emit a separate header (prev HMAC is a second v1= inside the main x-driftstack-signature header). The fallback stays for backward-compat; drift back to claiming a separate prev header is emitted would contradict the corrected customer docs.', () => {
-    expect(read(TS)).toMatch(/V-359 — OPTIONAL fallback for a separately-supplied previous-secret/);
+    expect(read(TS)).toMatch(/OPTIONAL fallback for a separately-supplied previous-secret/);
     expect(read(TS)).toMatch(/headerPrev\?: string \| string\[\] \| undefined;/);
     expect(read(TS)).toMatch(/Driftstack does NOT emit a separate header:/);
     expect(read(PY)).toMatch(/Mirrors :func:`verifyWebhookSignature` from the TypeScript SDK/);
@@ -69,7 +69,7 @@ describe('W816 cross-SDK webhook-signature parity', () => {
     expect(read(TS)).toMatch(
       /accepts EITHER\s*\n\s+\* `header` OR `headerPrev` matching the `secret`\./,
     );
-    expect(read(GO)).toMatch(/accepts EITHER `header` OR `HeaderPrev` matching `secret`\. V-359\./);
+    expect(read(GO)).toMatch(/accepts EITHER `header` OR `HeaderPrev` matching `secret`\./);
   });
 
   // ─── 300s tolerance default ───────────────────────────────────

@@ -42,12 +42,12 @@ describe('W593.C packages/sdk-go/profile_snapshots.go content parity', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/^package driftstack$/m);
     expect(body).toMatch(/\/\/ ProfileSnapshotsResource handles \/v1\/profiles\/:id\/snapshots \+/);
-    expect(body).toMatch(/\/\/ \/v1\/profile-snapshots endpoints \(V-312\)\./);
+    expect(body).toMatch(/\/\/ \/v1\/profile-snapshots endpoints[^\n]*\./);
     expect(body).toMatch(/^type ProfileSnapshotsResource struct \{\s*\n\s*client \*Client\s*\n\}/m);
   });
 
   it('ProfileSnapshot — V-312 immutable point-in-time struct (8 fields with exact json tags): ID + nullable ParentProfileID + Label + nullable Description + ParentArchetype + ParentName + CapturedAt + CreatedAt. ParentProfileID is *string nullable because when the parent profile is deleted, the snapshot survives with parent_profile_id = null — load-bearing for the "snapshots outlive their parent" customer-facing guarantee.', () => {
-    expect(body).toMatch(/\/\/ ProfileSnapshot — V-312 immutable point-in-time copy of a saved/);
+    expect(body).toMatch(/\/\/ ProfileSnapshot[^\n]*immutable point-in-time copy of a saved/);
     expect(body).toMatch(
       /\/\/ profile\. The parent profile keeps evolving; the snapshot is frozen\./,
     );

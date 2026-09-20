@@ -38,7 +38,7 @@ describe('W583.C packages/sdk-python/src/driftstack/resources/billing.py content
 
   it('file exists at canonical path + module docstring + V-082 framing + dict[str, Any] typing-pending-regen comment + imports (HttpClient + AsyncHttpClient + coerce_body)', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(/^"""Billing resource — \/v1\/billing \(V-082\)\.\n/);
+    expect(body).toMatch(/^"""Billing resource — \/v1\/billing[^\n]*\.\n/);
     expect(body).toMatch(/``dict\[str, Any\]`` typing pending the next regen pass\./);
     expect(body).toMatch(/^from __future__ import annotations$/m);
     expect(body).toMatch(/from driftstack\.http import AsyncHttpClient, HttpClient/);

@@ -8,7 +8,7 @@ export interface ApiKeyList {
 }
 
 /**
- * V-296 — response shape for POST /v1/api-keys/:id/rotate. Includes the
+ * The response shape for POST /v1/api-keys/:id/rotate. Includes the
  * new key's plaintext (shown ONCE), the previous key's id, and the
  * timestamp at which the previous key auto-revokes via the existing
  * expires_at-driven auth gate.
@@ -53,7 +53,7 @@ export class ApiKeysResource {
   }
 
   /**
-   * V-296 — rotate an API key. Mints a fresh plaintext + sets the OLD key's
+   * Rotate an API key. Mints a fresh plaintext + sets the OLD key's
    * expires_at to now + 24h grace. Both keys work concurrently during the
    * grace window; deploy the new key, then the old key auto-revokes at the
    * grace boundary via the existing expires_at-driven auth gate.
@@ -69,7 +69,7 @@ export class ApiKeysResource {
    *   is about to expire does not hand you a longer-lived one — set the expiry
    *   you want at create time, or leave it unset.
    *
-   * Rotation also DE-ESCALATES (V-775): `driftstack_internal_admin` is dropped
+   * Rotation also DE-ESCALATES: `driftstack_internal_admin` is dropped
    * and the legacy `admin` alias becomes `account_owner`, which carries the
    * same customer authority. Rotation is an issuance path and must not launder
    * a scope `create` would refuse.

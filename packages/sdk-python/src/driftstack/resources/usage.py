@@ -21,7 +21,7 @@ class UsageResource:
         return parse_model(UsagePeriodSummary, data)
 
     def series(self, *, days: int | None = None) -> dict[str, Any]:
-        """V-452 — daily-bucketed usage time series. ``days`` is 1-90;
+        """Daily-bucketed usage time series. ``days`` is 1-90;
         default 30. Returns ``{"from_date", "to_date", "buckets"}``.
         """
         path = "/v1/usage/series"

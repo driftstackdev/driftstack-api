@@ -35,7 +35,7 @@ describe('W731 V-219 TIER_RATE_LIMIT_DEFAULTS parity', () => {
 
   it('CRITICAL V-219 anchor + per-tier defaults framing pinned. The "per-tier rate-limit defaults (token-bucket capacity + refill)" wording is what tells engineers this is the wire-format law.', () => {
     const c = read(COMMON);
-    expect(c).toMatch(/V-219 — per-tier rate-limit defaults \(token-bucket capacity \+ refill\)/);
+    expect(c).toMatch(/per-tier rate-limit defaults \(token-bucket capacity \+ refill\)/);
   });
 
   it("CRITICAL the bucket-key roster in the doc comment lists every bucket the constant defines. V-1091: this arm used to pin a two-key roster and warn that a third would mismatch the cross-SDK guards — by then four existed, nothing had mismatched, and the comment still said 'Two bucket keys are defined today'. The count is derived from the constant now, so a fifth cannot be described here as anything else.", () => {
@@ -62,14 +62,14 @@ describe('W731 V-219 TIER_RATE_LIMIT_DEFAULTS parity', () => {
   it('CRITICAL anti-abuse-not-pricing framing pinned — "These are anti-abuse limits, not pricing — per ADR-004, customers pay for concurrent sessions, not per-call". The wording threads ADR-004\'s pricing-model decision into the rate-limit constants.', () => {
     const c = read(COMMON);
     expect(c).toMatch(
-      /These are anti-abuse limits, not pricing — per ADR-004, customers\s*\n\s*\*\s*pay for concurrent sessions, not per-call/,
+      /These are anti-abuse limits, not pricing — per[^\n]*customers\s*\n\s*\*\s*pay for concurrent sessions, not per-call/,
     );
   });
 
   it('CRITICAL V-052 per-account overrides framing pinned — "Per-account overrides via the rate-limit-overrides path (V-052) supersede these defaults". The override path is what lets admins bump real Enterprise customers above the floor.', () => {
     const c = read(COMMON);
     expect(c).toMatch(
-      /Per-account overrides\s*\n\s*\*\s*via the rate-limit-overrides path \(V-052\) supersede these defaults/,
+      /Per-account overrides\s*\n\s*\*\s*via the rate-limit-overrides path[^\n]*supersede these defaults/,
     );
   });
 
@@ -206,8 +206,8 @@ describe('W731 V-219 TIER_RATE_LIMIT_DEFAULTS parity', () => {
   it('V-219 6-invariant cluster — anchor + 2-bucket-key roster + 8 tier entries + anti-abuse-not-pricing framing + V-052 override path + BucketLimitConfig 2-field shape + bucketConfigFor() helper.', () => {
     const c = read(COMMON);
 
-    expect(c).toMatch(/V-219/);
-    expect(c).toMatch(/V-052/);
+    expect(c).toMatch(/per-tier rate-limit defaults \(token-bucket capacity \+ refill\)\./);
+    expect(c).toMatch(/supersede these defaults\./);
     expect(c).toMatch(/'global' \| 'sessions:create'/);
     expect(c).toMatch(/TIER_RATE_LIMIT_DEFAULTS/);
     expect(c).toMatch(/anti-abuse limits, not pricing/);

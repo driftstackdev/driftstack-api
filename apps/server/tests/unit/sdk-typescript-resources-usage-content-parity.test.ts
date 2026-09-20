@@ -58,7 +58,7 @@ describe('W429.B packages/sdk-typescript/src/resources/usage.ts content parity',
   });
 
   it('V-452 series() doc-comment — "daily-bucketed usage time series" + "`days` is 1-90; default 30" server-side contract + "per-record-type totals for that day" structural shape + "rendering trend charts in customer dashboards" use-case framing. All four contract points pinned individually because dropping any silently shrinks the customer-facing contract.', () => {
-    expect(body).toMatch(/V-452 — daily-bucketed usage time series\. `days` is 1-90; default/);
+    expect(body).toMatch(/daily-bucketed usage time series\. `days` is 1-90; default/);
     expect(body).toMatch(/30\. Each bucket holds per-record-type totals for that day\. Useful/);
     expect(body).toMatch(/for rendering trend charts in customer dashboards\./);
   });

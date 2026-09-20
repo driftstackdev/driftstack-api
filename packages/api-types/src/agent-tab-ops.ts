@@ -53,14 +53,12 @@ const MAX_TAB_TITLE_LENGTH = 512;
 const MAX_ID_LENGTH = 128;
 
 /**
- * A single logical browser tab (doc-150 §7.2 — the TabDescriptor the harness
- * defines as a Swift struct): `{ url, scrollY, title }` + a stable `id` for GUI
- * reorder/close correlation. The harness may also retain a bounded live background
- * browsing context for this id; the descriptor remains the persistence/fallback
- * state when that context is cold or evicted.
+ * One browser tab: its `url`, how far down it is scrolled, its `title`, and a
+ * stable `id` you can use to reorder or close it. The tab may also be live in
+ * the background; this descriptor is what persists either way.
  *
- * `scrollY` is a finite, non-negative number (a scroll offset can't be
- * negative; NaN/Infinity are rejected).
+ * `scrollY` is a finite number and never negative — NaN and Infinity are
+ * refused.
  */
 export const TabDescriptorSchema = z.object({
   id: z.string().min(1).max(MAX_ID_LENGTH),
@@ -71,10 +69,10 @@ export const TabDescriptorSchema = z.object({
 export type TabDescriptor = z.infer<typeof TabDescriptorSchema>;
 
 /**
- * `tabListUpdate` — GUI → box FIRE-AND-FORGET state push (doc-150 §7.2);
- * NO correlated reply. The GUI sends the FULL ordered tab list on every
- * new / close / switch / reorder; the harness reconciles last-write-wins.
- * `activeTabId` is the tab currently published into the video stream.
+ * `tabListUpdate` — tells the session what the tab bar now looks like. There
+ * is no reply: send the FULL ordered list every time a tab is opened,
+ * closed, switched or moved, and the last message received wins.
+ * `activeTabId` is the tab whose video is being streamed.
  */
 export const TabListUpdateSchema = z.object({
   sessionId: z.string().min(1).max(MAX_ID_LENGTH),
@@ -84,12 +82,11 @@ export const TabListUpdateSchema = z.object({
 export type TabListUpdate = z.infer<typeof TabListUpdateSchema>;
 
 /**
- * `activateTab` — GUI → box CORRELATED request (doc-150 §7.3). Carries a
- * `requestId` so the harness's `activateTabResult` reply can be matched for
- * revert-on-reject, plus the optional outgoing `prevTabId` needed to cache the
- * first live context before an optimistic switch. The harness re-validates `url`
- * through the navigate allowlist (customer-controlled → SSRF gate) before any
- * first-touch/eviction cold-load fallback.
+ * `activateTab` — asks the session to switch to a tab, and expects a reply.
+ * `requestId` is echoed back on `activateTabResult`, so a switch that is
+ * refused can be undone. `prevTabId` names the tab being left, so it can be
+ * kept warm. The `url` is checked again before it is loaded, exactly as a
+ * navigate would be.
  */
 export const ActivateTabRequestSchema = z.object({
   requestId: z.string().min(1).max(MAX_ID_LENGTH),
@@ -105,12 +102,11 @@ export const ActivateTabRequestSchema = z.object({
 export type ActivateTabRequest = z.infer<typeof ActivateTabRequestSchema>;
 
 /**
- * `activateTabResult` — box → GUI reply to `activateTab`, correlated by the
- * echoed `requestId`. SUCCESS → `ok:true`; FAILURE (unknown/inactive session,
- * disallowed url, WD error) → `error` set. Shape is identical to the
- * NavigateHistoryResult idiom (a plain lenient object, `ok?` / `error?`); A3
- * reuses the same drain/requeue plumbing. The GUI reverts its optimistic
- * switch on `ok:false` / `error`.
+ * `activateTabResult` — the reply to `activateTab`, matched by the echoed
+ * `requestId`. A switch that worked answers `ok: true`; one that did not
+ * sets `error` — an unknown or closed session, a url that is not allowed, or
+ * a browser failure. Undo the switch in your own UI when `ok` is false or
+ * `error` is present.
  */
 export const ActivateTabResultSchema = z.object({
   ok: z.boolean().optional(),
@@ -120,16 +116,15 @@ export const ActivateTabResultSchema = z.object({
 export type ActivateTabResult = z.infer<typeof ActivateTabResultSchema>;
 
 /**
- * `tabListRestore` — box → GUI FIRE-AND-FORGET push on profile reopen
- * (doc-150 §7.5, the reopen direction). The harness is the only party that
- * can decrypt `ProfileBlob.openTabs` (server-opaque), so on `ProfileSession.
- * prepare` it pushes the restored tab set to the GUI over the EXISTING
- * page_state data channel; the GUI repopulates the tab bar and sets the
- * active tab's url. Same `{ tabs, activeTabId }` shape as `tabListUpdate`
- * minus `sessionId` (the restore is scoped to the channel's own session).
- * The active tab is restored live by the harness; background tabs stay inert
- * until switched via `activateTab` (§7.3) — restoring all at once would be a
- * bot tell (§1.5). Frame on the wire is `{ type: 'tabListRestore', ...this }`.
+ * `tabListRestore` — sent to you when a profile reopens, carrying the tabs it
+ * had. Repopulate your tab bar from it and show the active tab's url. Only
+ * the session can read a profile's saved tabs; the server cannot.
+ *
+ * Same `{ tabs, activeTabId }` shape as `tabListUpdate`, without
+ * `sessionId`, because a restore belongs to the session it arrives on. Only
+ * the active tab is loaded — the rest stay dormant until you switch to one
+ * with `activateTab`, because loading a row of tabs at once is not something
+ * a person does.
  */
 export const TabListRestoreSchema = z.object({
   tabs: z.array(TabDescriptorSchema).max(MAX_TABS),

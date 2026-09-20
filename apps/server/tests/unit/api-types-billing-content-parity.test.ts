@@ -40,7 +40,7 @@ describe('W433.C packages/api-types/src/billing.ts content parity', () => {
   const body = read(LIB);
 
   it('V-082 framing pinned + 3 endpoints listed (POST checkout-session/portal-session + GET subscription) + trial_pack retirement note', () => {
-    expect(body).toMatch(/\/\/ Billing flow schemas \(V-082\)\./);
+    expect(body).toMatch(/\/\/ Billing flow schemas[^\n]*\./);
     expect(body).toMatch(
       /\/\/ Endpoints exposed under \/v1\/billing\/\*:\s*\/\/\s*- POST \/v1\/billing\/checkout-session\s+\(start a paid-tier subscription\)\s*\/\/\s*- POST \/v1\/billing\/portal-session\s+\(open Stripe Customer Portal\)\s*\/\/\s*- GET\s+\/v1\/billing\/subscription\s+\(current subscription state\)/,
     );

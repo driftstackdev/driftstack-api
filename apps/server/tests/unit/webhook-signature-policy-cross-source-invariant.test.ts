@@ -83,8 +83,8 @@ describe('W905 webhook signature policy cross-source invariant', () => {
 
   it("CRITICAL V-359 anchor + 'verifier accepts EITHER header matching secret' fallback framing for HeaderPrev. The accept-EITHER fallback stays for backward-compat, but passing `header` alone already verifies rotation deliveries.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/sdk-go/webhook_signature.go'));
-    expect(p).toMatch(/V-359/);
-    expect(p).toMatch(/accepts EITHER `header` OR `HeaderPrev` matching `secret`\. V-359\./);
+    expect(p).toMatch(/header on an inbound request is well-formed, the timestamp is within/);
+    expect(p).toMatch(/accepts EITHER `header` OR `HeaderPrev` matching `secret`\./);
   });
 
   it('CRITICAL VerifyWebhookOptions.HeaderPrev framing — accurately states it is an OPTIONAL fallback and Driftstack does NOT emit a separate header (prev HMAC is a second v1= inside the main X-Driftstack-Signature header). Drift back to claiming a separate prev header is emitted would contradict the corrected customer docs.', () => {

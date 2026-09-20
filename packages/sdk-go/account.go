@@ -6,15 +6,13 @@ import (
 	"time"
 )
 
-// AccountResource handles /v1/account/* endpoints.
-//
-// V-428 — adds the Go AccountResource with Me() returning the rich
-// /v1/account/me response (V-385). Mirrors the TS + Python SDKs.
+// AccountResource handles /v1/account/* endpoints. Me() returns the rich
+// /v1/account/me response. Mirrors the TS + Python SDKs.
 type AccountResource struct {
 	client *Client
 }
 
-// AccountTeamMembership — V-326c. One entry per team the calling
+// AccountTeamMembership — one entry per team the calling
 // account is a member of.
 type AccountTeamMembership struct {
 	OwnerAccountID string  `json:"owner_account_id"`
@@ -25,7 +23,7 @@ type AccountTeamMembership struct {
 }
 
 // AccountSelfProfile — full /v1/account/me response. Includes all
-// V-298a/V-298b/V-352b/V-353h fields the server adds beyond the
+// the identity, avatar, MFA and quota fields the server adds beyond the
 // base AccountSchema. Pointer fields are nullable; absent in the
 // JSON means nil.
 type AccountSelfProfile struct {
@@ -34,26 +32,26 @@ type AccountSelfProfile struct {
 	Name                    *string                 `json:"name"`
 	Tier                    AccountTier             `json:"tier"`
 	Status                  AccountStatus           `json:"status"`
-	Timezone                *string                 `json:"timezone"`                // V-352
-	Slug                    *string                 `json:"slug"`                    // V-298a
-	Region                  *string                 `json:"region"`                  // V-298b — "us"|"eu"|"apac"|null
-	OnboardingCompletedAt   *string                 `json:"onboarding_completed_at"` // T-13 — ISO instant; null = never
-	AvatarURL               *string                 `json:"avatar_url"`              // V-352b — short-lived presigned URL
+	Timezone                *string                 `json:"timezone"`                // IANA zone name; null = unset
+	Slug                    *string                 `json:"slug"`                    // URL-safe account handle; null = unset
+	Region                  *string                 `json:"region"`                  // "us"|"eu"|"apac"|null
+	OnboardingCompletedAt   *string                 `json:"onboarding_completed_at"` // ISO instant; null = never
+	AvatarURL               *string                 `json:"avatar_url"`              // short-lived presigned URL
 	AvatarSource            string                  `json:"avatar_source"`           // "user"|"idp"|"none"
-	MfaEnrolled             bool                    `json:"mfa_enrolled"`            // V-353h
+	MfaEnrolled             bool                    `json:"mfa_enrolled"`            // true once TOTP MFA is enrolled
 	ConcurrentSessionCap    int                     `json:"concurrent_session_cap"`
 	ConcurrentSessionActive int                     `json:"concurrent_session_active"`
 	ProfileCap              *int                    `json:"profile_cap"` // null = enterprise
 	ProfileCount            int                     `json:"profile_count"`
-	Teams                   []AccountTeamMembership `json:"teams"` // V-326c
-	// Note: V-211 — the rich /me response intentionally doesn't include
+	Teams                   []AccountTeamMembership `json:"teams"` // teams this account belongs to
+	// Note: the rich /me response intentionally doesn't include
 	// any IP / user-agent fingerprint of the caller. The server-side
 	// audit log captures them in a separate internal store; the
 	// /v1/account/audit-log customer-facing surface elides them.
 	_ struct{} // force keyed-struct construction for forward-compat
 }
 
-// Me — V-385. Read the calling account's full self-visible state.
+// Me — GET /v1/account/me. Read the calling account's full self-visible state.
 // Bearer-authenticated; never honors the X-Driftstack-Account header
 // (always returns the caller's own account, even when the caller is
 // on a team).
@@ -69,7 +67,7 @@ func (r *AccountResource) Me(ctx context.Context) (*AccountSelfProfile, error) {
 	return &out, nil
 }
 
-// V-450 — extend AccountResource with update / avatar / web-sessions /
+// The methods below extend AccountResource with update / avatar / web-sessions /
 // rate-limits methods.
 
 // UpdateMeRequest — partial update body. At least one field must be
@@ -83,7 +81,7 @@ type UpdateMeRequest struct {
 	Region   *string `json:"region,omitempty"` // "us" | "eu" | "apac"
 }
 
-// UpdateMe — V-352 partial update of the calling account.
+// UpdateMe — partial update of the calling account.
 func (r *AccountResource) UpdateMe(ctx context.Context, body *UpdateMeRequest) (*AccountSelfProfile, error) {
 	var out AccountSelfProfile
 	if err := r.client.do(ctx, requestOptions{
@@ -97,7 +95,7 @@ func (r *AccountResource) UpdateMe(ctx context.Context, body *UpdateMeRequest) (
 	return &out, nil
 }
 
-// UploadAvatarRequest — V-352b. Inline base64 body; max 2 MiB raw.
+// UploadAvatarRequest — inline base64 body; max 2 MiB raw.
 type UploadAvatarRequest struct {
 	DataBase64  string `json:"data_base64"`
 	ContentType string `json:"content_type"` // "image/png" | "image/jpeg" | "image/webp"
@@ -109,7 +107,7 @@ type UploadAvatarResponse struct {
 	Bytes       int     `json:"bytes"`
 }
 
-// UploadAvatar — V-352b upload (or replace) the calling account avatar.
+// UploadAvatar — upload (or replace) the calling account avatar.
 func (r *AccountResource) UploadAvatar(ctx context.Context, body *UploadAvatarRequest) (*UploadAvatarResponse, error) {
 	var out UploadAvatarResponse
 	if err := r.client.do(ctx, requestOptions{
@@ -123,7 +121,7 @@ func (r *AccountResource) UploadAvatar(ctx context.Context, body *UploadAvatarRe
 	return &out, nil
 }
 
-// ClearAvatar — V-352b clear the avatar pointer.
+// ClearAvatar — clear the avatar pointer.
 func (r *AccountResource) ClearAvatar(ctx context.Context) error {
 	return r.client.do(ctx, requestOptions{
 		method: "DELETE",
@@ -131,7 +129,7 @@ func (r *AccountResource) ClearAvatar(ctx context.Context) error {
 	})
 }
 
-// WebSessionEntry — V-355 active dashboard sign-in.
+// WebSessionEntry — an active dashboard sign-in.
 type WebSessionEntry struct {
 	ID         string    `json:"id"`
 	OS         string    `json:"os"`
@@ -145,7 +143,7 @@ type ListWebSessionsResponse struct {
 	Data []WebSessionEntry `json:"data"`
 }
 
-// ListWebSessions — V-355 active dashboard sign-ins.
+// ListWebSessions — list active dashboard sign-ins.
 func (r *AccountResource) ListWebSessions(ctx context.Context) (*ListWebSessionsResponse, error) {
 	var out ListWebSessionsResponse
 	if err := r.client.do(ctx, requestOptions{
@@ -158,7 +156,7 @@ func (r *AccountResource) ListWebSessions(ctx context.Context) (*ListWebSessions
 	return &out, nil
 }
 
-// RevokeWebSession — V-355 revoke a single web session by id. Idempotent.
+// RevokeWebSession — revoke a single web session by id. Idempotent.
 func (r *AccountResource) RevokeWebSession(ctx context.Context, sessionID string) error {
 	return r.client.do(ctx, requestOptions{
 		method: "DELETE",
@@ -166,7 +164,7 @@ func (r *AccountResource) RevokeWebSession(ctx context.Context, sessionID string
 	})
 }
 
-// RevokeAllOtherWebSessions — V-355 revoke every session except the calling one.
+// RevokeAllOtherWebSessions — revoke every session except the calling one.
 func (r *AccountResource) RevokeAllOtherWebSessions(ctx context.Context) error {
 	return r.client.do(ctx, requestOptions{
 		method: "DELETE",
@@ -178,7 +176,7 @@ func (r *AccountResource) RevokeAllOtherWebSessions(ctx context.Context) error {
 	})
 }
 
-// RateLimitBucket — V-258 per-bucket effective rate-limit config.
+// RateLimitBucket — per-bucket effective rate-limit config.
 type RateLimitBucket struct {
 	// "global" | "sessions:create" | "agent_sessions:message" | "agent_sessions:input_event"
 	BucketKey         string  `json:"bucket_key"`
@@ -193,7 +191,7 @@ type GetAccountRateLimitsResponse struct {
 	Buckets []RateLimitBucket `json:"buckets"`
 }
 
-// RateLimits — V-258 read effective rate-limit config.
+// RateLimits — read effective rate-limit config.
 func (r *AccountResource) RateLimits(ctx context.Context) (*GetAccountRateLimitsResponse, error) {
 	var out GetAccountRateLimitsResponse
 	if err := r.client.do(ctx, requestOptions{
@@ -206,8 +204,8 @@ func (r *AccountResource) RateLimits(ctx context.Context) (*GetAccountRateLimits
 	return &out, nil
 }
 
-// BundledLlmSettings — Arc 1 sub-slice 6.6. Bundled-LLM consent + monthly cap
-// lets the GUI give the customer an in-app fix for
+// BundledLlmSettings — bundled-LLM consent + monthly cap. Reading and
+// writing them lets an app offer an in-app fix for
 // BundledLlmConsentRequiredError / BundledLlmBudgetExhaustedError instead of
 // pointing at a raw curl command.
 type BundledLlmSettings struct {
@@ -221,7 +219,7 @@ type UpdateBundledLlmSettingsRequest struct {
 	MonthlyCapUsdCents *int  `json:"monthly_cap_usd_cents,omitempty"`
 }
 
-// GetBundledLlmSettings — Arc 1 sub-slice 6.6 read current bundled-LLM consent + monthly cap.
+// GetBundledLlmSettings — read current bundled-LLM consent + monthly cap.
 func (r *AccountResource) GetBundledLlmSettings(ctx context.Context) (*BundledLlmSettings, error) {
 	var out BundledLlmSettings
 	if err := r.client.do(ctx, requestOptions{
@@ -234,7 +232,7 @@ func (r *AccountResource) GetBundledLlmSettings(ctx context.Context) (*BundledLl
 	return &out, nil
 }
 
-// UpdateBundledLlmSettings — Arc 1 sub-slice 6.6 flip consent and/or raise/lower
+// UpdateBundledLlmSettings — flip consent and/or raise/lower
 // the monthly cap. account_owner scope required server-side.
 func (r *AccountResource) UpdateBundledLlmSettings(ctx context.Context, body *UpdateBundledLlmSettingsRequest) (*BundledLlmSettings, error) {
 	var out BundledLlmSettings
@@ -249,7 +247,7 @@ func (r *AccountResource) UpdateBundledLlmSettings(ctx context.Context, body *Up
 	return &out, nil
 }
 
-// BundledLlmStatus — Arc 1 sub-slice 6.7. Consent + cap + month-to-date spend +
+// BundledLlmStatus — consent + cap + month-to-date spend +
 // remaining headroom, for the "you've used $X of $Y" dashboard/GUI display.
 type BundledLlmStatus struct {
 	Consent               bool   `json:"consent"`
@@ -260,7 +258,7 @@ type BundledLlmStatus struct {
 	MonthStartedAt        string `json:"month_started_at"`
 }
 
-// GetBundledLlmStatus — Arc 1 sub-slice 6.7 read consent + cap + month-to-date
+// GetBundledLlmStatus — read consent + cap + month-to-date
 // spend + remaining headroom.
 func (r *AccountResource) GetBundledLlmStatus(ctx context.Context) (*BundledLlmStatus, error) {
 	var out BundledLlmStatus

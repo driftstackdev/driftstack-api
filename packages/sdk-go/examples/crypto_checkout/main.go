@@ -1,4 +1,4 @@
-// Example: crypto-checkout self-serve flow (V-666).
+// Example: crypto-checkout self-serve flow.
 //
 // Walks through every customer-facing operation on the
 // `client.CryptoOrders` resource: quote, mint a checkout with an
@@ -56,7 +56,7 @@ func main() {
 	fmt.Printf("Quote: %v %v for solo_manual\n", quote["price_cents"], quote["price_currency"])
 
 	// 2) Mint the order with a fresh idempotency key. The SDK forwards
-	//    the key as the Idempotency-Key header (V-666.AO) — a network
+	//    the key as the Idempotency-Key header — a network
 	//    retry with the same key returns the original order instead of
 	//    minting a duplicate.
 	key := newIdempotencyKey()

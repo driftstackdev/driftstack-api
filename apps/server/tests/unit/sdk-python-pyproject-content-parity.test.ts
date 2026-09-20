@@ -72,10 +72,10 @@ describe('W532.C packages/sdk-python/pyproject.toml content parity', () => {
     expect(body).toMatch(/"datamodel-code-generator\[http\]>=0\.25",/);
   });
 
-  it('Hatch wheel + project URLs framing pinned: \'packages = ["src/driftstack"]\' (wheel content: src/driftstack only) + sdist include 3-path /src/driftstack + /README.md + /pyproject.toml + Homepage:driftstack.io + Repository:github.com/driftstackdev/driftstack-api + Issues:.../issues — pinned so the wheel-content + 3-sdist-allowlist + 3-URL commitment survives', () => {
+  it('Hatch wheel + project URLs framing pinned: \'packages = ["src/driftstack"]\' (wheel content: src/driftstack only) + sdist include 5-path /src/driftstack + /README.md + /CHANGELOG.md + /LICENSE + /pyproject.toml (the release notes and the licence text were added on 2026-09-20; PyPI was serving neither) + Homepage:driftstack.io + Repository:github.com/driftstackdev/driftstack-api + Issues:.../issues — pinned so the wheel-content + 5-sdist-allowlist + 3-URL commitment survives', () => {
     expect(body).toMatch(/packages = \["src\/driftstack"\]/);
     expect(body).toMatch(
-      /include = \[\s*"\/src\/driftstack",\s*"\/README\.md",\s*"\/pyproject\.toml",\s*\]/,
+      /include = \[\s*"\/src\/driftstack",\s*"\/README\.md",\s*"\/CHANGELOG\.md",\s*"\/LICENSE",\s*"\/pyproject\.toml",\s*\]/,
     );
     expect(body).toMatch(/Homepage = "https:\/\/driftstack\.io"/);
     expect(body).toMatch(/Repository = "https:\/\/github\.com\/driftstackdev\/driftstack-api"/);

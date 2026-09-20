@@ -170,7 +170,7 @@ describe('W890 V-295a Incident lifecycle schemas cross-source invariant', () => 
   it("CRITICAL description field doc pins V-295c markdown-renderer TODO — 'Markdown body. Rendered as plaintext on the status page until V-295c wires the markdown renderer'. The forward-reference is the public TODO for upgrading the render path.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/incidents.ts'));
     expect(p).toMatch(
-      /Markdown body\. Rendered as plaintext on the status page until\s*\n\s*\*\s*V-295c wires the markdown renderer/,
+      /Markdown body\. Rendered as plaintext on the status page until\s*\n[^\n]*wires the markdown renderer/,
     );
   });
 

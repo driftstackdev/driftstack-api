@@ -152,7 +152,7 @@ describe('W584.A packages/sdk-python/src/driftstack/resources/webhooks.py conten
   it('Sync rotate_secret — V-359 POST /v1/webhooks/{id}/rotate-secret. CRITICAL grace-window claim, each line pinned: fresh plaintext ONCE + 24h grace + grace_expires_at field + Driftstack-dual-signs-during-window + customer rolls verifier infra inside the window. Drift to 12h or 48h or dropping the dual-sign-during-grace would silently change rotation semantics.', () => {
     expect(body).toMatch(/def rotate_secret\(self, webhook_id: str\) -> dict\[str, Any\]:/);
     expect(body).toMatch(
-      /"""V-359 — rotate the webhook signing secret\.\s*\n\s*\n\s*Returns the fresh plaintext \(shown ONCE\) plus grace metadata:\s*\n\s*the previous secret stays active for 24h\s*\n\s*\(``grace_expires_at``\) during which Driftstack dual-signs\s*\n\s*every outbound delivery \(both new \+ old HMAC\)\. Roll the new\s*\n\s*secret across your verifier infra inside that window\.\s*\n\s*"""/,
+      /[Rr]otate the webhook signing secret\.\s*\n\s*\n\s*Returns the fresh plaintext \(shown ONCE\) plus grace metadata:\s*\n\s*the previous secret stays active for 24h\s*\n\s*\(``grace_expires_at``\) during which Driftstack dual-signs\s*\n\s*every outbound delivery \(both new \+ old HMAC\)\. Roll the new\s*\n\s*secret across your verifier infra inside that window\.\s*\n\s*"""/,
     );
     expect(body).toMatch(
       /return self\._http\.request\("POST", _webhook_path\(webhook_id, "\/rotate-secret"\), json_body=\{\}\)/,
@@ -162,7 +162,7 @@ describe('W584.A packages/sdk-python/src/driftstack/resources/webhooks.py conten
   it("Sync send_test — V-356 POST /v1/webhooks/{id}/test. CRITICAL: \"Bypasses subscription so customers can verify their handler is reachable + signature-valid before depending on it for real events.\" If send_test required the event to be in the endpoint's subscription, customers couldn't test the handler until AFTER they'd already subscribed — useless for first-time setup. Returns 3-field response shape pinned: {delivery_id, event_id, event_type}.", () => {
     expect(body).toMatch(/def send_test\(self, webhook_id: str\) -> dict\[str, Any\]:/);
     expect(body).toMatch(
-      /"""V-356 — send a synthetic ``test\.ping`` event to the endpoint\.\s*\n\s*\n\s*Bypasses subscription so customers can verify their handler\s*\n\s*is reachable \+ signature-valid before depending on it for\s*\n\s*real events\. Returns ``\{delivery_id, event_id, event_type\}``\.\s*\n\s*"""/,
+      /[Ss]end a synthetic ``test\.ping`` event to the endpoint\.\s*\n\s*\n\s*Bypasses subscription so customers can verify their handler\s*\n\s*is reachable \+ signature-valid before depending on it for\s*\n\s*real events\. Returns ``\{delivery_id, event_id, event_type\}``\.\s*\n\s*"""/,
     );
     expect(body).toMatch(
       /return self\._http\.request\("POST", _webhook_path\(webhook_id, "\/test"\), json_body=\{\}\)/,
@@ -174,7 +174,7 @@ describe('W584.A packages/sdk-python/src/driftstack/resources/webhooks.py conten
       /def update\(self, webhook_id: str, body: dict\[str, Any\]\) -> WebhookEndpoint:/,
     );
     expect(body).toMatch(
-      /"""V-351 — partial-update a webhook endpoint\.\s*\n\s*\n\s*At least one of ``url``, ``events``, ``description``, or\s*\n\s*``active`` must be present\. The signing secret is NOT rotated\s*\n\s*by update; use :meth:`rotate_secret` for that\. Disabled\s*\n\s*endpoints cannot be updated \(returns 409\)\.\s*\n\s*"""/,
+      /[Pp]artial-update a webhook endpoint\.\s*\n\s*\n\s*At least one of ``url``, ``events``, ``description``, or\s*\n\s*``active`` must be present\. The signing secret is NOT rotated\s*\n\s*by update; use :meth:`rotate_secret` for that\. Disabled\s*\n\s*endpoints cannot be updated \(returns 409\)\.\s*\n\s*"""/,
     );
     expect(body).toMatch(
       /data = self\._http\.request\("PATCH", _webhook_path\(webhook_id\), json_body=coerce_body\(body\)\)/,
@@ -212,16 +212,16 @@ describe('W584.A packages/sdk-python/src/driftstack/resources/webhooks.py conten
 
   it('Async V-307/V-359/V-356/V-351 four behavioural verbs — :meth: cross-refs back to sync for each, signaling the contract is identical to the sync twin so users only need to read it once.', () => {
     expect(body).toMatch(
-      /async def replay_delivery\(self, delivery_id: str\) -> WebhookDelivery:\s*\n\s*"""V-307 — async replay\. See :meth:`WebhooksResource\.replay_delivery`\."""/,
+      /async def replay_delivery\(self, delivery_id: str\) -> WebhookDelivery:\s*\n[^\n]*[Aa]sync replay\. See :meth:`WebhooksResource\.replay_delivery`\."""/,
     );
     expect(body).toMatch(
-      /async def rotate_secret\(self, webhook_id: str\) -> dict\[str, Any\]:\s*\n\s*"""V-359 — async secret rotation\. See :meth:`WebhooksResource\.rotate_secret`\."""/,
+      /async def rotate_secret\(self, webhook_id: str\) -> dict\[str, Any\]:\s*\n[^\n]*[Aa]sync secret rotation\. See :meth:`WebhooksResource\.rotate_secret`\."""/,
     );
     expect(body).toMatch(
-      /async def send_test\(self, webhook_id: str\) -> dict\[str, Any\]:\s*\n\s*"""V-356 — async test ping\. See :meth:`WebhooksResource\.send_test`\."""/,
+      /async def send_test\(self, webhook_id: str\) -> dict\[str, Any\]:\s*\n[^\n]*[Aa]sync test ping\. See :meth:`WebhooksResource\.send_test`\."""/,
     );
     expect(body).toMatch(
-      /async def update\(self, webhook_id: str, body: dict\[str, Any\]\) -> WebhookEndpoint:\s*\n\s*"""V-351 — async partial-update\. See :meth:`WebhooksResource\.update`\."""/,
+      /async def update\(self, webhook_id: str, body: dict\[str, Any\]\) -> WebhookEndpoint:\s*\n[^\n]*[Aa]sync partial-update\. See :meth:`WebhooksResource\.update`\."""/,
     );
   });
 

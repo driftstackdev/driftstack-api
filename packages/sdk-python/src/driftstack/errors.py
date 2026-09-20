@@ -1,6 +1,6 @@
 """Error class hierarchy for the Driftstack Python SDK.
 
-Mirrors the server's RFC 7807 problem-types (apps/server/src/lib/errors.ts).
+Mirrors the API's RFC 7807 problem types.
 The HTTP layer maps `application/problem+json` responses to the right
 subclass; non-HTTP failures (timeouts, parse errors, network) raise
 ``TransportError``.
@@ -322,7 +322,7 @@ class ConcurrencyLimitError(DriftstackError):
 
 
 class StorageQuotaExceededError(DriftstackError):
-    """doc-150 item 6 — per-account profile-storage quota reached at session-launch.
+    """Per-account profile-storage quota reached at session-launch.
 
     409 Conflict. Raised when a profile-backed session-create would grow the
     account's stored state past its tier's hard cap. ``used_bytes`` /
@@ -372,7 +372,7 @@ class ProxyValidationFailedError(DriftstackError):
 
 
 class ProfileInUseError(ConflictError):
-    """409 — A3 finding #7 single-active-session-per-profile guard.
+    """409 — single-active-session-per-profile guard.
 
     A session-create carried a ``profile_id`` that already has a live (non-
     terminal) session for the account. Two sessions on the same profile would both
@@ -419,7 +419,7 @@ class TransportError(DriftstackError):
     """
 
 
-# ── Auth-flow errors (V-079; SDK normalization V-115) ────────────────────
+# ── Auth-flow errors (normalized to typed classes) ───────────────────────
 
 
 class EmailAlreadyRegisteredError(DriftstackError):
@@ -438,7 +438,7 @@ class EmailNotVerifiedError(ForbiddenError):
     """Login attempted before email verification step completed."""
 
 
-# V-439 — additional typed problem types matching Go SDK V-438 coverage.
+# Additional typed problem types, matching the Go SDK's coverage.
 
 
 class FeatureUnavailableError(DriftstackError):
@@ -456,7 +456,7 @@ class FeatureUnavailableError(DriftstackError):
 
 
 class MfaStepUpRequiredError(DriftstackError):
-    """V-353e — operation requires a fresh MFA proof (15-minute step-up
+    """Operation requires a fresh MFA proof (15-minute step-up
     freshness window). Customer should call POST /v1/auth/mfa/step-up
     with a TOTP code and retry the original request."""
 
@@ -498,8 +498,7 @@ class BundledLlmConsentRequiredError(DriftstackError):
 
 
 class PairModeConflictError(DriftstackError):
-    """Arc 2 sub-slice 8.10 (v2-#8) — pair-mode takeover lost the
-    SET-NX-EX lock race. HTTP 409.
+    """Pair-mode takeover lost the race to another client. HTTP 409.
 
     Cross-SDK parity: TS exposes ``err.winnerClientId``; Go exposes
     ``err.WinnerClientID``; Python exposes snake_case
@@ -521,7 +520,7 @@ class PairModeConflictError(DriftstackError):
 
 
 class PairModeStateInvalidTransitionError(DriftstackError):
-    """Arc 2 sub-slice 8.10 (v2-#8) — invalid pair-mode transition.
+    """Invalid pair-mode transition.
     HTTP 409. Extensions: ``from_`` (current state, named ``from_``
     because ``from`` is a reserved word in Python) + ``transition``
     (the rejected action).
@@ -590,8 +589,8 @@ class ByokAnthropicRequiredError(DriftstackError):
 # ── Mapping problem-type URI → subclass ──────────────────────────────────
 
 # Keep the mapping in one place for ease of audit + extension. The HTTP
-# layer in `driftstack.http` consults this; the keys match the server
-# constants in apps/server/src/lib/problem-types.ts.
+# layer in `driftstack.http` consults this; the keys are the problem-type
+# URIs the API returns.
 
 PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/bad-request": BadRequestError,
@@ -602,11 +601,11 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/rate-limited": RateLimitError,
     "https://errors.driftstack.dev/concurrency-limit": ConcurrencyLimitError,
     "https://errors.driftstack.dev/tier-limit": QuotaExceededError,
-    # doc-150 item 6 — per-account profile-storage quota (409 at session-launch).
+    # Per-account profile-storage quota (409 at session-launch).
     "https://errors.driftstack.dev/storage-quota-exceeded": StorageQuotaExceededError,
     # Live pre-launch proxy validation (422 at launch).
     "https://errors.driftstack.dev/proxy-validation-failed": ProxyValidationFailedError,
-    # A3 finding #7 — single-active-session-per-profile guard (409 at launch).
+    # Single-active-session-per-profile guard (409 at launch).
     "https://errors.driftstack.dev/profile-in-use": ProfileInUseError,
     "https://errors.driftstack.dev/revoked-key": RevokedKeyError,
     "https://errors.driftstack.dev/expired-key": ExpiredKeyError,
@@ -617,21 +616,21 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/driver-error": DriverError,
     "https://errors.driftstack.dev/driver-not-integrated": DriverError,
     "https://errors.driftstack.dev/validation-failed": ValidationError,
-    # V-115: V-079 auth-flow problem types.
+    # Auth-flow problem types.
     "https://errors.driftstack.dev/email-already-registered": EmailAlreadyRegisteredError,
     "https://errors.driftstack.dev/invalid-credentials": InvalidCredentialsError,
     "https://errors.driftstack.dev/invalid-auth-token": InvalidAuthTokenError,
     "https://errors.driftstack.dev/email-not-verified": EmailNotVerifiedError,
-    # V-439: ops-flow problem types.
+    # Ops-flow problem types.
     "https://errors.driftstack.dev/feature-unavailable": FeatureUnavailableError,
     "https://errors.driftstack.dev/mfa-step-up-required": MfaStepUpRequiredError,
     "https://errors.driftstack.dev/internal": InternalError,
-    # v2-#24: Q.1.d BYOK Anthropic key path — closes TS/Python parity.
+    # BYOK Anthropic key path.
     "https://errors.driftstack.dev/byok-anthropic-required": ByokAnthropicRequiredError,
-    # Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM 402 paths.
+    # Bundled-LLM 402 paths.
     "https://errors.driftstack.dev/bundled-llm-budget-exhausted": BundledLlmBudgetExhaustedError,
     "https://errors.driftstack.dev/bundled-llm-consent-required": BundledLlmConsentRequiredError,
-    # Arc 2 sub-slice 8.10 (v2-#8) — pair-mode 409 paths.
+    # Pair-mode 409 paths.
     "https://errors.driftstack.dev/pair-mode-conflict": PairModeConflictError,
     "https://errors.driftstack.dev/pair-mode-invalid-transition": (
         PairModeStateInvalidTransitionError
@@ -639,8 +638,8 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
 }
 
 
-# V-490 — public retry predicate. Mirrors the V-489 TS implementation
-# (packages/sdk-typescript/src/errors.ts:isRetryable). Returns True for
+# The public retry predicate. Mirrors the TS implementation's
+# `isRetryable`. Returns True for
 # error kinds where a retry stands a reasonable chance of succeeding;
 # False otherwise. Non-DriftstackError values return False.
 #

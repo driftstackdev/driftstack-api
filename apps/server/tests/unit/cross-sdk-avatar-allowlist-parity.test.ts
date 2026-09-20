@@ -46,9 +46,13 @@ describe('W690 cross-SDK V-352b avatar content_type allowlist parity', () => {
     const go = read(GO_ACCOUNT);
     const py = read(PY_ACCOUNT);
 
-    expect(ts).toMatch(/V-352b/);
-    expect(go).toMatch(/V-352b/);
-    expect(py).toMatch(/V-352b/);
+    expect(ts).toMatch(
+      /Whether avatar_url is a removable upload, read-only IDP fallback, or absent\./,
+    );
+    expect(go).toMatch(
+      /AvatarSource\s+string\s+`json:"avatar_source"`\s+\/\/ "user"\|"idp"\|"none"/,
+    );
+    expect(py).toMatch(/Returns 15\+ fields incl\. ``id``, ``email``, ``name``, ``tier/);
   });
 
   it('CRITICAL UploadAvatarResponse content_type 3-value allowlist pinned in sdk-typescript: `image/png | image/jpeg | image/webp` literal-type union. The TS type system REJECTS any other content_type at COMPILE TIME — drift to widening to `string` would lose this compile-time guard.', () => {
@@ -136,7 +140,9 @@ describe('W690 cross-SDK V-352b avatar content_type allowlist parity', () => {
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-352b anchor`).toMatch(/V-352b/);
+      expect(body, `${name} V-352b anchor`).toMatch(
+        /[Uu]pload \(or replace\) the calling account avatar\./i,
+      );
       expect(body, `${name} png`).toMatch(/png/);
       expect(body, `${name} jpeg`).toMatch(/jpeg/);
       expect(body, `${name} webp`).toMatch(/webp/);

@@ -38,7 +38,7 @@ describe('W903 V-297 GDPR Article 20 audit export cross-source invariant', () =>
 
   it("CRITICAL packages/api-types/src/accounts.ts pins V-297 anchor — 'V-297 — bulk export envelope for GDPR Article 20 portability'. The Article 20 framing is what makes this a compliance feature.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
-    expect(p).toMatch(/V-297 — bulk export envelope for GDPR Article 20 portability/);
+    expect(p).toMatch(/bulk export envelope for GDPR Article 20 portability/);
   });
 
   // ─── ExportAccountAuditLogQuery format enum ─────────────────

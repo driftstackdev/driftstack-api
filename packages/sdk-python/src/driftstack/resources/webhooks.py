@@ -103,7 +103,7 @@ class WebhooksResource:
         return iterate_paginated(fetch_page)
 
     def replay_delivery(self, delivery_id: str) -> WebhookDelivery:
-        """V-307 — replay a webhook delivery.
+        """Replay a webhook delivery.
 
         Resets the delivery to ``pending`` so the worker re-fires it.
         Scoped to the EFFECTIVE account: the delivery must belong to an
@@ -119,7 +119,7 @@ class WebhooksResource:
         return parse_model(WebhookDelivery, data)
 
     def rotate_secret(self, webhook_id: str) -> dict[str, Any]:
-        """V-359 — rotate the webhook signing secret.
+        """Rotate the webhook signing secret.
 
         Returns the fresh plaintext (shown ONCE) plus grace metadata:
         the previous secret stays active for 24h
@@ -130,7 +130,7 @@ class WebhooksResource:
         return self._http.request("POST", _webhook_path(webhook_id, "/rotate-secret"), json_body={})
 
     def send_test(self, webhook_id: str) -> dict[str, Any]:
-        """V-356 — send a synthetic ``test.ping`` event to the endpoint.
+        """Send a synthetic ``test.ping`` event to the endpoint.
 
         Bypasses subscription so customers can verify their handler
         is reachable + signature-valid before depending on it for
@@ -139,7 +139,7 @@ class WebhooksResource:
         return self._http.request("POST", _webhook_path(webhook_id, "/test"), json_body={})
 
     def update(self, webhook_id: str, body: dict[str, Any]) -> WebhookEndpoint:
-        """V-351 — partial-update a webhook endpoint.
+        """Partial-update a webhook endpoint.
 
         At least one of ``url``, ``events``, ``description``, or
         ``active`` must be present. The signing secret is NOT rotated
@@ -205,7 +205,7 @@ class AsyncWebhooksResource:
         return aiterate_paginated(fetch_page)
 
     async def replay_delivery(self, delivery_id: str) -> WebhookDelivery:
-        """V-307 — async replay. See :meth:`WebhooksResource.replay_delivery`."""
+        """Async replay. See :meth:`WebhooksResource.replay_delivery`."""
         data = await self._http.request(
             "POST",
             f"/v1/webhook-deliveries/{quote(delivery_id, safe='')}/replay",
@@ -214,17 +214,17 @@ class AsyncWebhooksResource:
         return parse_model(WebhookDelivery, data)
 
     async def rotate_secret(self, webhook_id: str) -> dict[str, Any]:
-        """V-359 — async secret rotation. See :meth:`WebhooksResource.rotate_secret`."""
+        """Async secret rotation. See :meth:`WebhooksResource.rotate_secret`."""
         return await self._http.request(
             "POST", _webhook_path(webhook_id, "/rotate-secret"), json_body={}
         )
 
     async def send_test(self, webhook_id: str) -> dict[str, Any]:
-        """V-356 — async test ping. See :meth:`WebhooksResource.send_test`."""
+        """Async test ping. See :meth:`WebhooksResource.send_test`."""
         return await self._http.request("POST", _webhook_path(webhook_id, "/test"), json_body={})
 
     async def update(self, webhook_id: str, body: dict[str, Any]) -> WebhookEndpoint:
-        """V-351 — async partial-update. See :meth:`WebhooksResource.update`."""
+        """Async partial-update. See :meth:`WebhooksResource.update`."""
         data = await self._http.request(
             "PATCH", _webhook_path(webhook_id), json_body=coerce_body(body)
         )

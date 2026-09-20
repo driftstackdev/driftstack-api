@@ -37,9 +37,7 @@ describe('W581.B packages/sdk-python/src/driftstack/resources/audit_log.py conte
 
   it('file exists at canonical path + module docstring V-216/V-449 framing + append-only-event-ledger contract pinned. Drift to dropping the append-only framing would let a future "edit/delete" verb sneak in and silently break the compliance-audit story.', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(
-      /^"""Audit log resource — \/v1\/account\/audit-log \(V-216 \/ V-449\)\.\n/,
-    );
+    expect(body).toMatch(/^"""Audit log resource — \/v1\/account\/audit-log[^\n]*\.\n/);
     expect(body).toMatch(/Append-only event ledger for compliance \/ monitoring\. Returns/);
     expect(body).toMatch(/``dict\[str, Any\]`` pending the next regen pass\./);
   });
@@ -95,7 +93,7 @@ describe('W581.B packages/sdk-python/src/driftstack/resources/audit_log.py conte
 
   it('export (sync) — V-462/V-297 GET /v1/account/audit-log/export?format=json single-call JSON envelope for GDPR Article 20 portability. 10,000 rows max + truncated bool flag when older entries omitted. CSV BRANCH INTENTIONALLY NOT EXPOSED through the SDK — hardcoded ?format=json so the SDK never accidentally returns binary CSV. CSV path documented as "hit /v1/account/audit-log/export?format=csv directly with the bearer" — separation keeps SDK return type predictable.', () => {
     expect(body).toMatch(/def export\(self\) -> dict\[str, Any\]:/);
-    expect(body).toMatch(/"""V-462 \/ V-297 — bulk-export the calling account's audit log as/);
+    expect(body).toMatch(/[Bb]ulk-export the calling account's audit log as/);
     expect(body).toMatch(/a JSON envelope \(GDPR Article 20 portability\)\. Single call; up to/);
     expect(body).toMatch(/10,000 rows; ``truncated`` is True when older entries were/);
     expect(body).toMatch(/omitted\. The CSV branch is not exposed here — hit/);
@@ -125,7 +123,7 @@ describe('W581.B packages/sdk-python/src/driftstack/resources/audit_log.py conte
       /def iterate\(\s*\n\s*self,\s*\n\s*\*,\s*\n\s*limit: int \| None = None,\s*\n\s*action: str \| None = None,\s*\n\s*\) -> AsyncIterator\[dict\[str, Any\]\]:\s*\n\s*async def fetch_page\(cursor: str \| None\) -> dict\[str, Any\]:\s*\n\s*return await self\.list\(limit=limit, cursor=cursor, action=action\)\s*\n\s*return aiterate_paginated\(fetch_page\)/,
     );
     expect(body).toMatch(
-      /async def export\(self\) -> dict\[str, Any\]:\s*\n\s*"""V-462 \/ V-297 — async mirror of ``AuditLogResource\.export``\."""\s*\n\s*return await self\._http\.request\("GET", "\/v1\/account\/audit-log\/export\?format=json"\)/,
+      /async def export\(self\) -> dict\[str, Any\]:\s*\n[^\n]*Async mirror of ``AuditLogResource\.export``\."""\s*\n\s*return await self\._http\.request\("GET", "\/v1\/account\/audit-log\/export\?format=json"\)/,
     );
   });
 });

@@ -1,4 +1,4 @@
-"""Auth-flow resource — /v1/auth/* (V-079).
+"""Auth-flow resource — /v1/auth/*.
 
 These endpoints don't require an API key (they ARE the auth gate).
 The SDK's HTTP layer always sends the Authorization header; the
@@ -72,21 +72,21 @@ class AuthResource:
         return self._http.request("POST", "/v1/auth/logout", json_body=coerce_body(body))
 
     def mfa_challenge(self, body: dict[str, Any]) -> dict[str, Any]:
-        """V-445 — exchange login challenge_token for a session via TOTP
+        """Exchange login challenge_token for a session via TOTP
         code or recovery code. Response carries ``via: "totp" | "recovery"``
         indicating which factor was used.
         """
         return self._http.request("POST", "/v1/auth/mfa/challenge", json_body=coerce_body(body))
 
     def mfa_step_up(self, body: dict[str, Any]) -> dict[str, Any]:
-        """V-445 — refresh ``mfa_satisfied_at`` on the calling web session
-        (V-353e step-up gate; 15-minute freshness window). No new session
+        """Refresh ``mfa_satisfied_at`` on the calling web session
+        (step-up gate; 15-minute freshness window). No new session
         issued; the existing session's mfa timestamp advances.
         """
         return self._http.request("POST", "/v1/auth/mfa/step-up", json_body=coerce_body(body))
 
     def cli_authorize_initiate(self, body: dict[str, Any]) -> dict[str, Any]:
-        """V-460 / V-266 CLI/GUI activation flow: initiate.
+        """CLI/GUI activation flow: initiate.
 
         Returns a one-shot ``code``, device-displayed ``user_code``, and
         ``browser_url``. The user types that code in the dashboard before
@@ -97,7 +97,7 @@ class AuthResource:
         )
 
     def cli_authorize_bind(self, body: dict[str, Any]) -> dict[str, Any]:
-        """V-460 / V-266 CLI/GUI activation flow: bind.
+        """CLI/GUI activation flow: bind.
 
         Web-session-authenticated. Called by the dashboard's confirm page
         after the user submits the initiating device's ``user_code`` and
@@ -109,7 +109,7 @@ class AuthResource:
         )
 
     def cli_authorize_exchange(self, body: dict[str, Any]) -> dict[str, Any]:
-        """V-460 / V-266 CLI/GUI activation flow: exchange.
+        """CLI/GUI activation flow: exchange.
 
         Polled by the CLI/GUI. Discriminated-union response on
         ``status``: ``pending`` (keep polling) / ``bound`` (one-shot

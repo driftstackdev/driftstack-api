@@ -156,19 +156,19 @@ describe('W709 api-types Problem-type URI canonical roster parity', () => {
 
   it('CRITICAL V-079 auth-flow problem-types grouped together (EmailAlreadyRegistered + InvalidCredentials + InvalidAuthToken + EmailNotVerified) under the V-079 comment-anchor. Drift to splitting would lose the per-feature provenance.', () => {
     const src = read(PROBLEM_SCHEMA);
-    expect(src).toMatch(/Auth-flow problem types \(V-079\)/);
+    expect(src).toMatch(/Auth-flow problem types/);
   });
 
   it('CRITICAL V-352b FeatureUnavailable framing pinned — "feature explicitly disabled at deploy-time (e.g. avatar upload requires the public R2 bucket)". The 503 vs 404 distinction is what prevents a misleading not-found surface on missing feature config.', () => {
     const src = read(PROBLEM_SCHEMA);
-    expect(src).toMatch(/V-352b[\s\S]{0,200}feature explicitly disabled at deploy-time/);
+    expect(src).toMatch(/[\s\S]{0,200}feature explicitly disabled at deploy-time/);
     expect(src).toMatch(/503 instead of a misleading/);
     expect(src).toMatch(/404 \/ 500/);
   });
 
   it('CRITICAL V-353e MfaStepUpRequired framing pinned — "Returned as 403 with `requires_mfa_step_up: true` extension". The 403 status + extension key is the client-side discriminator for the step-up retry flow.', () => {
     const src = read(PROBLEM_SCHEMA);
-    expect(src).toMatch(/V-353e[\s\S]{0,80}step-up MFA challenge/);
+    expect(src).toMatch(/[\s\S]{0,80}step-up MFA challenge/);
     expect(src).toMatch(/Returned as 403 with `requires_mfa_step_up: true` extension/);
     expect(src).toMatch(/Client[\s\S]{0,40}collects a fresh 6-digit code/);
     expect(src).toMatch(/posts to \/v1\/auth\/mfa\/step-up/);

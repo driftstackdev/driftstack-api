@@ -35,7 +35,7 @@ describe('W584.C packages/sdk-python/src/driftstack/resources/profile_snapshots.
   it('file exists at canonical path + module docstring V-312 framing + dual-endpoint scope (/v1/profiles/:id/snapshots + /v1/profile-snapshots) + immutable-point-in-time-copies invariant + ProfileSnapshot pydantic models pending regen', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/^"""Profile snapshots resource — \/v1\/profiles\/:id\/snapshots \+/);
-    expect(body).toMatch(/\/v1\/profile-snapshots \(V-312\)\. Immutable point-in-time copies of/);
+    expect(body).toMatch(/\/v1\/profile-snapshots[^\n]*\. Immutable point-in-time copies of/);
     expect(body).toMatch(/saved profiles\./);
     expect(body).toMatch(/Type annotations on request\/response bodies use ``dict\[str, Any\]``/);
     expect(body).toMatch(/pending the next ``scripts\/generate\.sh`` regeneration pass that/);

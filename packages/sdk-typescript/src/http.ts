@@ -16,7 +16,7 @@ export interface HttpClientConfig {
   /** Default per-request timeout (ms). */
   timeoutMs?: number;
   /**
-   * V-326c/V-330 team workspaces — when set, every request carries
+   * Team workspaces — when set, every request carries
    * `X-Driftstack-Account: <owner account id>` so reads resolve against
    * that owner's workspace (writes additionally require the admin role,
    * enforced server-side). Format `acc_<uuid>` or the bare uuid, exactly
@@ -110,8 +110,8 @@ export class HttpClient {
           method: opts.method,
           // The non-browser `user-agent` set below is INTENTIONALLY frozen
           // at 0.0.1 — the stable metric-bucketing marker, deliberately NOT
-          // tracking package.json (see W834). Don't "sync" it to the package
-          // version; ~5 SDK tests pin the 0.0.1 freeze on purpose.
+          // tracking package.json. Don't "sync" it to the package version;
+          // ~5 SDK tests pin the 0.0.1 freeze on purpose.
           headers: {
             authorization: `Bearer ${this.config.apiKey}`,
             ...(this.config.effectiveAccount !== undefined

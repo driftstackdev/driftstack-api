@@ -52,9 +52,9 @@ describe('W696 cross-SDK V-452 usage time-series parity', () => {
     const go = read(GO_USAGE);
     const py = read(PY_USAGE);
 
-    expect(ts).toMatch(/V-452/);
-    expect(go).toMatch(/V-452/);
-    expect(py).toMatch(/V-452/);
+    expect(ts).toMatch(/[Dd]aily-bucketed usage time series\. `days` is 1-90; default/);
+    expect(go).toMatch(/[Dd]aily-bucketed usage time series\. `days` is 1-90/);
+    expect(py).toMatch(/[Dd]aily-bucketed usage time series\. ``days`` is 1-90/);
   });
 
   it('CRITICAL 2-verb surface pinned across all 3 SDKs — current (TS) / current_period (Python) / CurrentPeriod (Go) + series. Drift to dropping either verb would break dashboards (current() for billing-period summary, series() for trend charts).', () => {
@@ -91,9 +91,9 @@ describe('W696 cross-SDK V-452 usage time-series parity', () => {
     const go = read(GO_USAGE);
     const py = read(PY_USAGE);
 
-    expect(ts).toMatch(/daily-bucketed/);
-    expect(go).toMatch(/daily-bucketed/);
-    expect(py).toMatch(/daily-bucketed/);
+    expect(ts).toMatch(/[Dd]aily-bucketed/);
+    expect(go).toMatch(/[Dd]aily-bucketed/);
+    expect(py).toMatch(/[Dd]aily-bucketed/);
   });
 
   it('CRITICAL `days` 1-90 + default 30 framing pinned in all 3 SDKs. The `1-90` bound is the SERVER-SIDE cap (drift to >90 would silently widen the query window past the index-cache budget on usage_event rows — server returns 400). The default-30 is the SERVER-SIDE default when the client omits days. Drift to dropping either would let dashboards request unbounded windows.', () => {
@@ -181,10 +181,10 @@ describe('W696 cross-SDK V-452 usage time-series parity', () => {
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-452`).toMatch(/V-452/);
+      expect(body, `${name} V-452`).toMatch(/[Dd]aily-bucketed usage time series\. `/);
       expect(body, `${name} /v1/usage`).toMatch(/\/v1\/usage/);
       expect(body, `${name} /v1/usage/series`).toMatch(/\/v1\/usage\/series/);
-      expect(body, `${name} daily-bucketed`).toMatch(/daily-bucketed/);
+      expect(body, `${name} daily-bucketed`).toMatch(/[Dd]aily-bucketed/);
       expect(body, `${name} 1-90`).toMatch(/1-90/);
     }
   });

@@ -128,7 +128,7 @@ func (r *WebhooksResource) IterateDeliveries(ctx context.Context, webhookID stri
 	}
 }
 
-// ReplayDelivery is V-307 — resets a webhook delivery to pending so the
+// ReplayDelivery resets a webhook delivery to pending so the
 // worker re-fires it. Scoped to the EFFECTIVE account: the delivery must
 // belong to an endpoint the caller's own account owns, or one owned by the
 // account they are acting as via X-Driftstack-Account (replay re-fires, so
@@ -146,7 +146,7 @@ func (r *WebhooksResource) ReplayDelivery(ctx context.Context, deliveryID string
 	return &out, nil
 }
 
-// RotateWebhookSecretResponse — V-359 secret rotation result. The
+// RotateWebhookSecretResponse — the secret rotation result. The
 // fresh plaintext is in Secret (returned ONCE); during the
 // GraceExpiresAt window Driftstack dual-signs every outbound delivery
 // with both the new + previous secret.
@@ -158,7 +158,7 @@ type RotateWebhookSecretResponse struct {
 	GraceExpiresAt   time.Time `json:"grace_expires_at"`
 }
 
-// RotateSecret is V-359 — rotate the webhook signing secret. The fresh
+// RotateSecret — rotate the webhook signing secret. The fresh
 // plaintext is returned ONCE. The previous secret stays active for 24h
 // (GraceExpiresAt) during which Driftstack dual-signs every outbound
 // delivery. Roll the new secret across your verifier infra inside that
@@ -176,7 +176,7 @@ func (r *WebhooksResource) RotateSecret(ctx context.Context, webhookID string) (
 	return &out, nil
 }
 
-// SendTestWebhookResponse — V-356 synthetic test.ping delivery
+// SendTestWebhookResponse — the synthetic test.ping delivery
 // receipt. The endpoint receives the event regardless of which event
 // types it's subscribed to.
 type SendTestWebhookResponse struct {
@@ -185,7 +185,7 @@ type SendTestWebhookResponse struct {
 	EventType  string `json:"event_type"` // always "test.ping"
 }
 
-// Update is V-351 — partial-update a webhook endpoint. At least one
+// Update — partial-update a webhook endpoint. At least one
 // of URL / Events / Description / Active must be non-nil; otherwise
 // the server returns 400. The signing secret is NOT rotated by
 // Update; use RotateSecret for that. Disabled endpoints can't be
@@ -203,7 +203,7 @@ func (r *WebhooksResource) Update(ctx context.Context, webhookID string, body *U
 	return &out, nil
 }
 
-// SendTest is V-356 — send a synthetic test.ping event to the
+// SendTest sends a synthetic test.ping event to the
 // endpoint. Bypasses subscription so customers can verify their
 // handler is reachable + signature-valid before depending on it for
 // real events. Returns 202 + the synthetic delivery id. Requires

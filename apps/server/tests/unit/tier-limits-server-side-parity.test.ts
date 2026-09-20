@@ -97,7 +97,7 @@ describe('W730 tier-limit server-side records parity', () => {
   it('CRITICAL ADR-004 + marketing.ts cross-reference pinned. The "Locked per ADR-004. Values mirrored in apps/marketing-site/src/data/pricing.ts:API_TIERS field `concurrent`" framing makes the cross-file dependency explicit.', () => {
     const c = read(COMMON);
     expect(c).toMatch(
-      /Locked per ADR-004\. Values mirrored in\s*\n\s*\*\s*`apps\/marketing-site\/src\/data\/pricing\.ts:API_TIERS`/,
+      /Locked per[^\n]*\. Values mirrored in\s*\n\s*\*\s*`apps\/marketing-site\/src\/data\/pricing\.ts:API_TIERS`/,
     );
   });
 
@@ -131,7 +131,7 @@ describe('W730 tier-limit server-side records parity', () => {
     expect(s).toMatch(/PROFILES_PER_TIER/);
     expect(s).toMatch(/TIER_CONCURRENT_SESSION_LIMITS/);
     expect(s).toMatch(/V-156/);
-    expect(s).toMatch(/V-136/);
+    expect(s).toMatch(/Profile count limit per tier — enforced at the \/v1\/profiles/);
     expect(s).toMatch(/return TIER_CONCURRENT_SESSION_LIMITS\[tier\]/);
   });
 
@@ -201,7 +201,7 @@ describe('W730 tier-limit server-side records parity', () => {
     expect(c).toMatch(/TIER_CONCURRENT_SESSION_LIMITS/);
     expect(c).toMatch(/concurrentSessionLimitFor/);
     expect(c).toMatch(/sentinel floor for the smallest/);
-    expect(c).toMatch(/Locked per ADR-004/);
+    expect(c).toMatch(/Locked per/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

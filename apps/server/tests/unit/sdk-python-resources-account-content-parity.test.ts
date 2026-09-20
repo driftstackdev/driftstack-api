@@ -15,11 +15,13 @@
 //     Drift to honoring the header would let a team member with
 //     bearer-token access to the owner's account read the owner's
 //     ME row, widening the auth surface.
-//   • me() 15-field catalogue pinned with V-anchor per field group:
-//     V-352 timezone, V-298a slug, V-298b region, V-352b avatar_url,
-//     V-353h mfa_enrolled, V-326c teams. Drift to dropping any
-//     V-anchor field would silently lose the dashboard's ability
-//     to render that section.
+//   • me() 15-field catalogue pinned per field group: timezone,
+//     slug, region, avatar_url, mfa_enrolled, teams. Drift to
+//     dropping any of these fields would silently lose the
+//     dashboard's ability to render that section. The pins used to
+//     quote an internal ticket id beside each field; this module
+//     ships inside the PyPI wheel and a customer reads it on hover,
+//     so the FIELD is pinned and the id is gone.
 //   • V-352b avatar allowlist (png/jpeg/webp) pinned + 3-field
 //     response (avatar_url + content_type + bytes). The allowlist
 //     is load-bearing — drift to accepting GIF/SVG would open XSS
@@ -49,13 +51,11 @@ function read(p: string): string {
 describe('W581.C packages/sdk-python/src/driftstack/resources/account.py content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + module docstring with 4 V-anchors (V-385/V-428/V-434/V-450) on the resource line + V-450 self-service extension framing per-line (update-me + avatar + web-sessions + rate-limits)', () => {
+  it('file exists at canonical path + module docstring naming the resource and its self-service extension per-line (update-me + avatar + web-sessions + rate-limits). The internal ticket anchors must NOT come back: this docstring ships in the wheel and surfaces in help().', () => {
     expect(existsSync(LIB)).toBe(true);
+    expect(body).toMatch(/^"""Account resource — \/v1\/account\/[^\n]*\.\n/);
     expect(body).toMatch(
-      /^"""Account resource — \/v1\/account\/\* \(V-385 \/ V-428 \/ V-434 \/ V-450\)\.\n/,
-    );
-    expect(body).toMatch(
-      /V-450 extends to cover update-me, avatar upload\+clear, web-sessions\s*\nlist\+revoke, and rate-limits read\./,
+      /extends to cover update-me, avatar upload\+clear, web-sessions\s*\nlist\+revoke, and rate-limits read\./,
     );
   });
 
@@ -91,19 +91,19 @@ describe('W581.C packages/sdk-python/src/driftstack/resources/account.py content
     expect(body).toMatch(/return self\._http\.request\("GET", "\/v1\/account\/me"\)/);
   });
 
-  it("Sync me() — 15-field catalogue pinned per V-anchor field group: V-352 timezone + V-298a slug + V-298b region + V-352b avatar_url + V-353h mfa_enrolled + V-326c teams + concurrent_session/profile_count quotas. Each V-anchor MUST stay attached to its field — drift to silently dropping a V-anchor would lose the dashboard's ability to render that section + lose the changelog provenance for that field.", () => {
+  it("Sync me() — 15-field catalogue pinned per field group: timezone + slug + region + avatar_url + mfa_enrolled + teams + concurrent_session/profile_count quotas. CRITICAL: the FIELD LIST must stay — dropping a field would lose the dashboard's ability to render that section. The internal ticket anchors must NOT stay: this docstring ships inside the wheel and a customer reads it on hover.", () => {
     expect(body).toMatch(/Returns 15\+ fields incl\. ``id``, ``email``, ``name``, ``tier``,/);
-    expect(body).toMatch(/``status``, ``timezone`` \(V-352\), ``slug`` \(V-298a\),/);
-    expect(body).toMatch(/``region`` \(V-298b\), ``avatar_url`` \(V-352b\),/);
-    expect(body).toMatch(/``mfa_enrolled`` \(V-353h\), ``concurrent_session_cap`` \//);
+    expect(body).toMatch(/``status``, ``timezone[^\n]*slug/);
+    expect(body).toMatch(/``region[^\n]*avatar_url/);
+    expect(body).toMatch(/``mfa_enrolled[^\n]*concurrent_session_cap`` \//);
     expect(body).toMatch(/``concurrent_session_active`` \/ ``profile_cap`` \//);
-    expect(body).toMatch(/``profile_count``, and ``teams`` \(V-326c\)\./);
+    expect(body).toMatch(/``profile_count``, and ``teams[^\n]*\./);
   });
 
   it('Sync update_me — V-352 PATCH /v1/account/me. CRITICAL: "partial update (name / timezone / slug / region). Pass null to clear a nullable field; at least one field required." Drift to making all fields required would break partial-update UX (e.g. customer can\'t update just timezone without re-sending name); drift to allowing zero fields would let a no-op PATCH succeed silently.', () => {
     expect(body).toMatch(/def update_me\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/);
     expect(body).toMatch(
-      /"""V-352 — partial update of the calling account\s*\n\s*\(name \/ timezone \/ slug \/ region\)\. Pass ``null`` to clear a\s*\n\s*nullable field; at least one field required\.\s*\n\s*"""/,
+      /[Pp]artial update of the calling account\s*\n\s*\(name \/ timezone \/ slug \/ region\)\. Pass ``null`` to clear a\s*\n\s*nullable field; at least one field required\.\s*\n\s*"""/,
     );
     expect(body).toMatch(
       /return self\._http\.request\("PATCH", "\/v1\/account\/me", json_body=coerce_body\(body\)\)/,
@@ -113,7 +113,7 @@ describe('W581.C packages/sdk-python/src/driftstack/resources/account.py content
   it('Sync upload_avatar — V-352b POST /v1/account/me/avatar. CRITICAL avatar allowlist pinned: content_type MUST be "image/png|jpeg|webp" — drift to accepting GIF would open animated-image abuse; drift to accepting SVG would open XSS via SVG-embedded <script>. 3-field response (avatar_url + content_type + bytes) pinned so dashboard can render the upload-success state without re-fetching me().', () => {
     expect(body).toMatch(/def upload_avatar\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/);
     expect(body).toMatch(
-      /"""V-352b — upload \(or replace\) the calling account avatar\.\s*\n\s*Body: ``\{"data_base64": "\.\.\.", "content_type": "image\/png\|jpeg\|webp"\}``\.\s*\n\s*Returns ``\{"avatar_url": \.\.\., "content_type": \.\.\., "bytes": \.\.\.\}``\.\s*\n\s*"""/,
+      /[Uu]pload \(or replace\) the calling account avatar\.\s*\n\s*Body: ``\{"data_base64": "\.\.\.", "content_type": "image\/png\|jpeg\|webp"\}``\.\s*\n\s*Returns ``\{"avatar_url": \.\.\., "content_type": \.\.\., "bytes": \.\.\.\}``\.\s*\n\s*"""/,
     );
     expect(body).toMatch(
       /return self\._http\.request\("POST", "\/v1\/account\/me\/avatar", json_body=coerce_body\(body\)\)/,
@@ -122,19 +122,19 @@ describe('W581.C packages/sdk-python/src/driftstack/resources/account.py content
 
   it('Sync clear_avatar — V-352b DELETE /v1/account/me/avatar. Returns None (no body). Idempotent — re-clearing an already-cleared avatar is a no-op. Drift to non-idempotent would break the "let me reset my profile picture" UX where the dashboard might double-click.', () => {
     expect(body).toMatch(
-      /def clear_avatar\(self\) -> None:\s*\n\s*"""V-352b — clear the avatar pointer\."""\s*\n\s*self\._http\.request\("DELETE", "\/v1\/account\/me\/avatar"\)/,
+      /def clear_avatar\(self\) -> None:\s*\n[^\n]*[Cc]lear the avatar pointer\."""\s*\n\s*self\._http\.request\("DELETE", "\/v1\/account\/me\/avatar"\)/,
     );
   });
 
   it('Sync list_web_sessions — V-355 GET /v1/account/web-sessions. CRITICAL: "The calling session is marked with current: true" — the response carries a `current: true` flag on whichever session is being used to make this very call. Without that marker, the dashboard couldn\'t distinguish "revoke other devices" from "revoke this device".', () => {
     expect(body).toMatch(
-      /def list_web_sessions\(self\) -> dict\[str, Any\]:\s*\n\s*"""V-355 — list active dashboard sign-ins\. The calling\s*\n\s*session is marked with ``current: true``\."""\s*\n\s*return self\._http\.request\("GET", "\/v1\/account\/web-sessions"\)/,
+      /def list_web_sessions\(self\) -> dict\[str, Any\]:\s*\n[^\n]*[Ll]ist active dashboard sign-ins\. The calling\s*\n\s*session is marked with ``current: true``\."""\s*\n\s*return self\._http\.request\("GET", "\/v1\/account\/web-sessions"\)/,
     );
   });
 
   it('Sync revoke_web_session — V-355 DELETE /v1/account/web-sessions/{quote(session_id, safe=\'\')}. Per-id quote-escape with NO safe-chars; drift to safe=\'/\' would let "abc/../../admin" traverse path segments. "Idempotent" framing pinned — revoking an already-revoked session is a no-op (not a 404) so the dashboard can fire revoke without first checking liveness.', () => {
     expect(body).toMatch(
-      /def revoke_web_session\(self, session_id: str\) -> None:\s*\n\s*"""V-355 — revoke a single web session by id\. Idempotent\."""\s*\n\s*self\._http\.request\("DELETE", f"\/v1\/account\/web-sessions\/\{quote\(session_id, safe=''\)\}"\)/,
+      /def revoke_web_session\(self, session_id: str\) -> None:\s*\n[^\n]*[Rr]evoke a single web session by id\. Idempotent\."""\s*\n\s*self\._http\.request\("DELETE", f"\/v1\/account\/web-sessions\/\{quote\(session_id, safe=''\)\}"\)/,
     );
   });
 
@@ -142,7 +142,7 @@ describe('W581.C packages/sdk-python/src/driftstack/resources/account.py content
     // Re-anchored on the CLAIMS: the previous regex ran from the signature
     // through the request call, so adding the required `?keep=current` broke it.
     expect(body, 'signature + framing').toMatch(
-      /def revoke_all_other_web_sessions\(self\) -> None:\s*\n\s*"""V-355 — revoke every web session except the calling one\."""/,
+      /def revoke_all_other_web_sessions\(self\) -> None:\s*\n[^\n]*[Rr]evoke every web session except the calling one\."""/,
     );
     // Without this the server answers 400 "Bulk revoke requires `?keep=current`".
     expect(body, 'the confirm-intent query the endpoint requires').toMatch(
@@ -152,7 +152,7 @@ describe('W581.C packages/sdk-python/src/driftstack/resources/account.py content
 
   it('Sync rate_limits — V-258 GET /v1/account/rate-limits. Read-only; returns effective rate-limit config (per-endpoint quotas + window). Drift to a POST (e.g. for adjusting limits via this endpoint) would shift this from a read-only diagnostic to a write surface that needs CSRF protection.', () => {
     expect(body).toMatch(
-      /def rate_limits\(self\) -> dict\[str, Any\]:\s*\n\s*"""V-258 — read effective rate-limit config\."""\s*\n\s*return self\._http\.request\("GET", "\/v1\/account\/rate-limits"\)/,
+      /def rate_limits\(self\) -> dict\[str, Any\]:\s*\n[^\n]*[Rr]ead effective rate-limit config\."""\s*\n\s*return self\._http\.request\("GET", "\/v1\/account\/rate-limits"\)/,
     );
   });
 

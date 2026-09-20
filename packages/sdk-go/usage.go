@@ -25,7 +25,7 @@ func (r *UsageResource) CurrentPeriod(ctx context.Context) (*UsagePeriodSummary,
 	return &out, nil
 }
 
-// UsageDailyBucket — V-452 single-day bucket on the time series.
+// UsageDailyBucket — a single-day bucket on the time series.
 // `Totals` keys are the UsageRecordType enum values (e.g.
 // "session_minute", "navigate", "interact", etc.).
 type UsageDailyBucket struct {
@@ -33,14 +33,14 @@ type UsageDailyBucket struct {
 	Totals map[string]int `json:"totals"`
 }
 
-// UsageSeriesResponse — V-452 daily-bucketed time series.
+// UsageSeriesResponse — a daily-bucketed time series.
 type UsageSeriesResponse struct {
 	FromDate string             `json:"from_date"`
 	ToDate   string             `json:"to_date"`
 	Buckets  []UsageDailyBucket `json:"buckets"`
 }
 
-// Series — V-452 daily-bucketed usage time series. `days` is 1-90;
+// Series — a daily-bucketed usage time series. `days` is 1-90;
 // default 30 server-side when 0 / negative.
 func (r *UsageResource) Series(ctx context.Context, days int) (*UsageSeriesResponse, error) {
 	var out UsageSeriesResponse

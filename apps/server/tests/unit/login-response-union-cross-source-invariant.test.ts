@@ -78,7 +78,7 @@ describe('W880 LoginResponseUnion cross-source invariant', () => {
 
   it("CRITICAL V-353d anchor pinned for the alternate-login response. The 'must POST the challenge_token + 6-digit code (or recovery code) to /v1/auth/mfa/challenge' framing is the call-flow doc.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
-    expect(p).toMatch(/V-353d — alternate login response when the account has MFA enrolled/);
+    expect(p).toMatch(/alternate login response when the account has MFA enrolled/);
     expect(p).toMatch(
       /must POST the challenge_token \+ 6-digit code \(or\s*\n\/\/ recovery code\) to \/v1\/auth\/mfa\/challenge/,
     );

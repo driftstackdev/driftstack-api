@@ -1,6 +1,6 @@
 """Exponential-backoff retry policy with full jitter.
 
-Mirrors `packages/sdk-typescript/src/retry.ts`. Honours `Retry-After`
+Mirrors the retry policy of the Driftstack TypeScript SDK. Honours `Retry-After`
 when the server set one (the SDK's HTTP layer maps it onto the
 RateLimitError before retry decides). Idempotent or read-shaped
 methods are retried; a mutating method is retried only when the request
@@ -13,10 +13,8 @@ backoff, jitter — and does not make a request eligible. Eligibility is
 decided by :func:`driftstack.http._is_retry_safe`, which reads only the
 method and the headers.
 
-V-810 — this paragraph used to say a caller could enable retries for
-mutating methods through that argument. Passing it has never had that
-effect, so a customer expecting their POSTs to be retried got silence;
-the header is the actual opt-in and was the one thing left unsaid.
+Passing the argument alone never makes a mutating request eligible; the
+``Idempotency-Key`` header is the actual opt-in.
 """
 
 from __future__ import annotations

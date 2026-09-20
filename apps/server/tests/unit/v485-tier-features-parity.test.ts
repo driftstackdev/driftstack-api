@@ -102,7 +102,7 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
 
   it('CRITICAL V-485 anchor + single-source-of-truth framing pinned. The registry consolidates scattered call-site checks (tier===trial_pack, PROFILES_PER_TIER, TIER_CONCURRENT_SESSION_LIMITS) into one place.', () => {
     const c = read(COMMON);
-    expect(c).toMatch(/V-485 — per-tier feature gating registry/);
+    expect(c).toMatch(/per-tier feature gating registry/);
     expect(c).toMatch(
       /Single source of truth for "which capabilities does this tier\s*\n\s*\*\s*unlock\?"/,
     );
@@ -253,7 +253,7 @@ describe('W732 V-485 TIER_FEATURES per-tier feature registry parity', () => {
   it('V-485 6-invariant cluster — V-485 anchor + 6-field TierFeatures + 8-tier roster + marketing-mirror framing + requireTierFeature consumer + new-feature-extension recipe + aiAgent/llmBilling/trialPack gate matrices.', () => {
     const c = read(COMMON);
 
-    expect(c).toMatch(/V-485/);
+    expect(c).toMatch(/per-tier feature gating registry\./);
     expect(c).toMatch(/export interface TierFeatures \{/);
     expect(c).toMatch(/export const TIER_FEATURES: Record<AccountTier, TierFeatures>/);
     expect(c).toMatch(/Both layers MUST agree/);

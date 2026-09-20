@@ -58,7 +58,7 @@ describe('W583.A packages/sdk-python/src/driftstack/resources/auth.py content pa
   });
 
   it("Module docstring — V-079 anchor + auth-gate-public-routes posture pinned per-line. CRITICAL: \"These endpoints don't require an API key (they ARE the auth gate). The SDK's HTTP layer always sends the Authorization header; the server ignores it on these public routes.\" Drift to making auth.signup() refuse to run without an API key would break the first-time signup flow (the customer doesn't HAVE a key yet — that's why they're signing up).", () => {
-    expect(body).toMatch(/^"""Auth-flow resource — \/v1\/auth\/\* \(V-079\)\.\n/);
+    expect(body).toMatch(/^"""Auth-flow resource — \/v1\/auth\/[^\n]*\.\n/);
     expect(body).toMatch(/These endpoints don't require an API key \(they ARE the auth gate\)\./);
     expect(body).toMatch(/The SDK's HTTP layer always sends the Authorization header; the/);
     expect(body).toMatch(/server ignores it on these public routes\. The resource exists for/);
@@ -153,7 +153,7 @@ describe('W583.A packages/sdk-python/src/driftstack/resources/auth.py content pa
   it('Sync mfa_challenge — V-445 POST /v1/auth/mfa/challenge. CRITICAL: response carries `via: "totp" | "recovery"` 2-value discriminator. Drift to dropping the discriminator would prevent customers from counting TOTP-vs-recovery use in MFA-strength metrics (recovery-code use signals a higher account-risk than TOTP use). Drift to a 3rd value (e.g. "webauthn") without coordinated server+client update would break the closed-set switch.', () => {
     expect(body).toMatch(/def mfa_challenge\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/);
     expect(body).toMatch(
-      /"""V-445 — exchange login challenge_token for a session via TOTP\s*\n\s*code or recovery code\. Response carries ``via: "totp" \| "recovery"``\s*\n\s*indicating which factor was used\.\s*\n\s*"""/,
+      /[Ee]xchange login challenge_token for a session via TOTP\s*\n\s*code or recovery code\. Response carries ``via: "totp" \| "recovery"``\s*\n\s*indicating which factor was used\.\s*\n\s*"""/,
     );
     expect(body).toMatch(/"POST", "\/v1\/auth\/mfa\/challenge", json_body=coerce_body\(body\)/);
   });
@@ -161,7 +161,7 @@ describe('W583.A packages/sdk-python/src/driftstack/resources/auth.py content pa
   it('Sync mfa_step_up — V-353e POST /v1/auth/mfa/step-up. CRITICAL invariant: "refresh mfa_satisfied_at on the calling web session (V-353e step-up gate; 15-minute freshness window). No new session issued; the existing session\'s mfa timestamp advances." Drift to issuing a NEW session on step-up would force a session-cookie rotation mid-flow — breaks the "same session identity, just freshly MFA-proved" contract that V-353e relies on for dashboard-flow continuity.', () => {
     expect(body).toMatch(/def mfa_step_up\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/);
     expect(body).toMatch(
-      /"""V-445 — refresh ``mfa_satisfied_at`` on the calling web session\s*\n\s*\(V-353e step-up gate; 15-minute freshness window\)\. No new session\s*\n\s*issued; the existing session's mfa timestamp advances\.\s*\n\s*"""/,
+      /[Rr]efresh ``mfa_satisfied_at`` on the calling web session\s*\n[^\n]*step-up gate; 15-minute freshness window\)\. No new session\s*\n\s*issued; the existing session's mfa timestamp advances\.\s*\n\s*"""/,
     );
     expect(body).toMatch(/"POST", "\/v1\/auth\/mfa\/step-up", json_body=coerce_body\(body\)/);
   });
@@ -195,7 +195,7 @@ describe('W583.A packages/sdk-python/src/driftstack/resources/auth.py content pa
       /def cli_authorize_exchange\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(
-      /"""V-460 \/ V-266 CLI\/GUI activation flow: exchange\.\s*\n\s*\n\s*Polled by the CLI\/GUI\. Discriminated-union response on\s*\n\s*``status``: ``pending`` \(keep polling\) \/ ``bound`` \(one-shot\s*\n\s*delivery; ``api_key`` \+ ``account_id`` in body\) \/ ``expired``\.\s*\n\s*"""/,
+      /CLI\/GUI activation flow: exchange\.\s*\n\s*\n\s*Polled by the CLI\/GUI\. Discriminated-union response on\s*\n\s*``status``: ``pending`` \(keep polling\) \/ ``bound`` \(one-shot\s*\n\s*delivery; ``api_key`` \+ ``account_id`` in body\) \/ ``expired``\.\s*\n\s*"""/,
     );
     expect(body).toMatch(
       /"POST", "\/v1\/auth\/cli-authorize\/exchange", json_body=coerce_body\(body\)/,

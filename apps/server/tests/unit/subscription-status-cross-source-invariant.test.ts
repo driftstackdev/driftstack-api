@@ -101,7 +101,7 @@ describe('W856 SubscriptionStatus cross-source invariant', () => {
 
   it('CRITICAL V-429 anchor pinned in Go SDK Subscription struct comment. The V-429 anchor threads the public-subscription contract provenance.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/sdk-go/types.go'));
-    expect(p).toMatch(/Subscription — V-429/);
+    expect(p).toMatch(/\/\/ Subscription[^\n]*Matches the server's `publicSubscription`/);
   });
 
   // ─── 8-value cardinality ─────────────────────────────────────

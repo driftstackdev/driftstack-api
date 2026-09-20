@@ -106,18 +106,31 @@ jobs:
       # if the entry point or exports map stops re-exporting it.
       #
       # Expectation derived from the source, asserted against the BUILT bundle.
-      - name: SDK build smoke (every source-declared resource survives the build)
+      #
+      # ⛔ BOTH ENTRY POINTS, and the second one is why. Until 2026-09-20 this
+      # step loaded only `dist/index.js` — the ESM build — whose inner imports
+      # resolve under the `import` condition. Nothing in the repository ever
+      # loaded `dist/index.cjs`, the file `main` and the exports `require`
+      # condition both point at, and for the whole 0.2.0 preparation it was
+      # broken: `require('@driftstack/sdk')` threw ERR_PACKAGE_PATH_NOT_EXPORTED
+      # on a clean install, because the bundle required the ESM-only
+      # @driftstack/api-types. Loading one format proves nothing about the other.
+      - name: SDK build smoke (every source-declared resource survives the build, in both entry points)
         run: |
           node -e "
           const fs = require('fs');
           const src = fs.readFileSync('packages/sdk-typescript/src/client.ts', 'utf8');
           const expected = [...new Set([...src.matchAll(/readonly (\w+):\s*\w+Resource/g)].map((m) => m[1]))].sort();
           if (expected.length < 15) throw new Error('source scan found only ' + expected.length + ' resources');
-          const { Driftstack } = require('./packages/sdk-typescript/dist/index.js');
-          const client = new Driftstack({ apiKey: 'ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' });
-          const missing = expected.filter((k) => client[k] === undefined);
-          if (missing.length) throw new Error('built client is missing: ' + missing.join(', '));
-          console.log('sdk build smoke ok — all ' + expected.length + ' source-declared resources survive the build');
+          const check = (label, sdk) => {
+            if (typeof sdk.Driftstack !== 'function') throw new Error(label + ': no Driftstack export');
+            const client = new sdk.Driftstack({ apiKey: 'ds_test_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' });
+            const missing = expected.filter((k) => client[k] === undefined);
+            if (missing.length) throw new Error(label + ' is missing: ' + missing.join(', '));
+            console.log('sdk build smoke ok — all ' + expected.length + ' source-declared resources survive the build via ' + label);
+          };
+          check('require(dist/index.cjs)', require('./packages/sdk-typescript/dist/index.cjs'));
+          import('./packages/sdk-typescript/dist/index.js').then((esm) => check('import(dist/index.js)', esm)).catch((e) => { console.error(e); process.exit(1); });
           "
 
       # Runs HERE because it scans the BUILT html of all six customer-facing

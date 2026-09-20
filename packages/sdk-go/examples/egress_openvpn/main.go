@@ -1,5 +1,4 @@
-// Example: customer-configurable egress — OpenVPN variant (Phase 2
-// priority per planning 133 + ORCHESTRATOR-STATE 2026-05-16).
+// Example: customer-configurable egress — the OpenVPN variant.
 //
 // Demonstrates the OpenVPN attach flow:
 //  1. Read the customer's .ovpn file from disk.

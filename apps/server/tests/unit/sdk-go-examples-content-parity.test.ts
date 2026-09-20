@@ -117,9 +117,7 @@ describe('W621 sdk-go/examples content parity', () => {
       /^\/\/ Package main is the profile-management example for the Driftstack$/m,
     );
     expect(body).toMatch(/end-to-end: create →$/m);
-    expect(body).toMatch(
-      /\/\/ list → get → update → clone \(V-313\) → snapshot capture \(V-312\) →/,
-    );
+    expect(body).toMatch(/\/\/ list → get → update → clone[^\n]*→ snapshot capture[^\n]*→/);
     expect(body).toMatch(
       /created, err := client\.Profiles\.Create\(ctx, &driftstack\.CreateProfileRequest\{/,
     );
@@ -132,9 +130,9 @@ describe('W621 sdk-go/examples content parity', () => {
     expect(body).toMatch(
       /updated, err := client\.Profiles\.Update\(ctx, created\.ID, &driftstack\.UpdateProfileRequest\{/,
     );
-    expect(body).toMatch(/\/\/ 5\. V-313 clone — server auto-derives "\(copy\)" naming\./);
+    expect(body).toMatch(/\/\/ 5\.[^\n]*clone — server auto-derives "\(copy\)" naming\./);
     expect(body).toMatch(/cloned, err := client\.Profiles\.Clone\(ctx, updated\.ID, nil\)/);
-    expect(body).toMatch(/\/\/ 6\. V-312 snapshot capture — frozen point-in-time copy\./);
+    expect(body).toMatch(/\/\/ 6\.[^\n]*snapshot capture — frozen point-in-time copy\./);
     expect(body).toMatch(/snap, err := client\.ProfileSnapshots\.Capture\(ctx, updated\.ID,/);
     expect(body).toMatch(/Label:\s+"baseline",/);
     expect(body).toMatch(/restored, err := client\.ProfileSnapshots\.Restore\(ctx, snap\.ID,/);
@@ -226,7 +224,7 @@ describe('W621 sdk-go/examples content parity', () => {
 
   it('crypto_checkout/main.go: V-666 + crypto/rand + hex.EncodeToString 32-char idempotency key (no google/uuid dep) + ptr[T any] generic helper + 6-step flow (Quote → CreateCheckout with CreateCheckoutOptions IdempotencyKey V-666.AO → UpdateNote PO-0001 → Get → Receipt → Iterate paid 7d RFC3339 with visit-callback returning bool) + non-refundable pinned', () => {
     const body = read(E('crypto_checkout/main.go'));
-    expect(body).toMatch(/^\/\/ Example: crypto-checkout self-serve flow \(V-666\)\.$/m);
+    expect(body).toMatch(/^\/\/ Example: crypto-checkout self-serve flow[^\n]*\.$/m);
     expect(body).toMatch(/\/\/ Crypto payments are non-refundable\./);
     expect(body).toMatch(/^\s+"crypto\/rand"$/m);
     expect(body).toMatch(/^\s+"encoding\/hex"$/m);

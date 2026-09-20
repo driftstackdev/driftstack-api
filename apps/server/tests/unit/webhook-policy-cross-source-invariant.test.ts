@@ -107,7 +107,7 @@ describe('W871 Webhook policy cross-source invariant', () => {
 
   it('CRITICAL V-359 anchor pinned for rotate-secret response. The framing pins the secret-rotation provenance to future maintainers.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
-    expect(p).toMatch(/V-359 — POST \/v1\/webhooks\/:id\/rotate-secret response/);
+    expect(p).toMatch(/POST \/v1\/webhooks\/:id\/rotate-secret response/);
   });
 
   // ─── 24h grace period framing pinned ─────────────────────────
@@ -116,7 +116,7 @@ describe('W871 Webhook policy cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     expect(p).toMatch(/prev_secret_prefix: z\s*\.string\(\)\s*\.nullable\(\)/);
     expect(p).toMatch(/rotation_grace_expires_at: Iso8601Schema\.nullable\(\)/);
-    expect(p).toMatch(/V-359 — populated only during the 24h rotation grace period/);
+    expect(p).toMatch(/populated only during the 24h rotation grace period/);
   });
 
   // ─── Customer-dashboard https-required form helper ────────────
@@ -149,7 +149,7 @@ describe('W871 Webhook policy cross-source invariant', () => {
     expect(p).toMatch(
       /delivery_counts: z\.object\(\{\s*\n\s*delivered: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n\s*failed: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n\s*dlq: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*\n\s*\}\)/,
     );
-    expect(p).toMatch(/V-185 — aggregate per-endpoint delivery counts/);
+    expect(p).toMatch(/aggregate per-endpoint delivery counts/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

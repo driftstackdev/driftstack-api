@@ -126,8 +126,20 @@ describe('v2-#14 cross-SDK enum roster parity', () => {
     const go = read(SDK_GO_TYPES);
     expect(go).toMatch(/"session\.completed"/);
     expect(go).toMatch(/"session\.failed"/);
-    expect(go).not.toMatch(/"quota\.warning_80pct"/);
-    expect(go).not.toMatch(/"quota\.exceeded"/);
+    // The two retired quota events are restored as DEPRECATED constants —
+    // the deprecation policy wants a released MINOR carrying the notice before
+    // a removal — so this pin moved from "the file must not mention them" to
+    // the thing it was really protecting: they are not part of the LIVE
+    // roster, and wherever they do appear they carry a Deprecated: notice.
+    const liveEvents = go.match(/const \(\n\tEventSessionCompleted[\s\S]*?\n\)/);
+    expect(liveEvents, 'the live WebhookEventType const block').not.toBeNull();
+    expect(liveEvents![0]).not.toMatch(/quota\.warning_80pct|quota\.exceeded/);
+    expect(go).toMatch(
+      /\/\/ Deprecated:[^\n]*\n(?:\s*\/\/[^\n]*\n)*\s*EventQuotaWarning80Pct WebhookEventType = "quota\.warning_80pct"/,
+    );
+    expect(go).toMatch(
+      /\/\/ Deprecated:[^\n]*\n(?:\s*\/\/[^\n]*\n)*\s*EventQuotaExceeded WebhookEventType = "quota\.exceeded"/,
+    );
     expect(go).toMatch(/"api_key\.revoked"/);
     expect(go).toMatch(/"session\.egress_capability_changed"/);
     expect(go).toMatch(/"test\.ping"/);

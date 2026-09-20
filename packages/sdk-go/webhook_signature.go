@@ -27,7 +27,7 @@ type VerifyWebhookOptions struct {
 	// header (t=,v1=<new>,v1=<old>), which the verifier already checks.
 	// So passing `header` alone verifies rotation deliveries correctly
 	// and this input is rarely needed. When set, VerifyWebhookSignature
-	// accepts EITHER `header` OR `HeaderPrev` matching `secret`. V-359.
+	// accepts EITHER `header` OR `HeaderPrev` matching `secret`.
 	HeaderPrev string
 }
 
@@ -44,7 +44,7 @@ type VerifyWebhookOptions struct {
 // need to use a raw-body access path (e.g. read req.Body once and
 // preserve it).
 //
-// V-359 — Driftstack does NOT emit a separate prev header: during a
+// Driftstack does NOT emit a separate prev header: during a
 // rotation grace window the previous-secret HMAC arrives as a second
 // v1= inside the same X-Driftstack-Signature header, which is already
 // verified above, so passing `header` alone covers rotation. The
@@ -52,7 +52,7 @@ type VerifyWebhookOptions struct {
 // for a separately-supplied previous-secret signature; when set, the
 // verifier accepts either header matching `secret`.
 func VerifyWebhookSignature(body []byte, header string, secret string, opts ...VerifyWebhookOptions) bool {
-	// V-2010 — refuse before hashing when the signing secret is empty. Go's
+	// Refuse before hashing when the signing secret is empty. Go's
 	// hmac.New accepts a zero-length key and returns a perfectly good digest, so
 	// without this an attacker who knows the body and timestamp computes
 	// HMAC-SHA256("", "<t>.<body>") and it verifies. Measured: that exact input

@@ -44,9 +44,9 @@ function read(p: string): string {
 describe('W422.A packages/sdk-typescript/src/pagination.ts content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + V-118 anchor on the file header', () => {
+  it('file exists at canonical path + the file header names the cursor-pagination helper', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(/V-118: cursor-pagination async-iterator helper\./);
+    expect(body).toMatch(/[Cc]ursor-pagination async-iterator helper\./);
   });
 
   it('V-118 envelope shape pinned per-line: "Every Driftstack list endpoint returns the same envelope shape: { data: T[], next_cursor: string | null }". CRITICAL: this is the ONE envelope shape every list endpoint MUST follow. Drift to a different envelope shape would force iteratePaginated to be re-implemented per-resource (defeating the point of the shared helper).', () => {

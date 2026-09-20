@@ -58,22 +58,22 @@ function read(p: string): string {
 describe('W426.B packages/sdk-typescript/src/resources/audit-log.ts content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + module header V-216 anchor on the resource line', () => {
+  it('file exists at canonical path + module header names /v1/account/audit-log on the resource line', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
-      /\/\/ AuditLogResource — typed methods for \/v1\/account\/audit-log \(V-216\)\./,
+      /\/\/ AuditLogResource — typed methods for \/v1\/account\/audit-log[^\n]*\./,
     );
   });
 
   it('Append-only ledger scope pinned — comprehensive list of accountable actions: api_key lifecycle + session events + profile/webhook config + MFA lifecycle + team membership. CRITICAL: drift to making this list NON-exhaustive would let a new V-anchor (e.g. crypto-checkout, billing-portal) silently skip the audit-log; the comprehensiveness is the load-bearing claim.', () => {
     expect(body).toMatch(
-      /\/\/ Append-only event ledger of every account action: api_key lifecycle,\s*\/\/ session events, profile \/ webhook config changes, MFA lifecycle,\s*\/\/ team membership changes, etc\. Pairs with V-216 dashboard \/audit-log\s*\/\/ rendering\./,
+      /\/\/ Append-only event ledger of every account action: api_key lifecycle,\s*\/\/ session events, profile \/ webhook config changes, MFA lifecycle,\s*\/\/ team membership changes, etc\. Pairs with[^\n]*dashboard \/audit-log\s*\/\/ rendering\./,
     );
   });
 
   it('CRITICAL: V-326c X-Driftstack-Account team-RBAC header passthrough on READ endpoints. "Read endpoints honor the V-326c X-Driftstack-Account team-RBAC header (a member with read access on the team owner can pull the OWNER\'s audit log)." This is the ONE place a non-owner can legitimately read owner data — drift to silently dropping the header passthrough would BREAK the team-member compliance-pull flow; drift to extending the passthrough to WRITE endpoints would invert the read-only invariant.', () => {
     expect(body).toMatch(
-      /Read endpoints honor the V-326c X-Driftstack-Account\s*\/\/ team-RBAC header \(a member with read access on the team owner can\s*\/\/ pull the OWNER's audit log\)\./,
+      /Read endpoints honor the[^\n]*X-Driftstack-Account\s*\/\/ team-RBAC header \(a member with read access on the team owner can\s*\/\/ pull the OWNER's audit log\)\./,
     );
   });
 
@@ -85,7 +85,7 @@ describe('W426.B packages/sdk-typescript/src/resources/audit-log.ts content pari
 
   it('AuditLogEntry doc-comment + "lean api-types schema is dashboard-targeted; SDK consumers get the full shape directly" rationale pinned. Drift to importing the shape from api-types would mean SDK customers lose access to fields the dashboard doesn\'t render (e.g. actor_key_id which matters for forensic queries).', () => {
     expect(body).toMatch(
-      /\*\s*V-216 — single audit-log entry shape\. The same row also surfaces\s*\*\s*via the export endpoint \(CSV \/ JSON file format\)\. Defined inline\s*\*\s*here because the lean api-types schema is dashboard-targeted; SDK\s*\*\s*consumers get the full shape directly\./,
+      /single audit-log entry shape\. The same row also surfaces\s*\*\s*via the export endpoint \(CSV \/ JSON file format\)\. Defined inline\s*\*\s*here because the lean api-types schema is dashboard-targeted; SDK\s*\*\s*consumers get the full shape directly\./,
     );
   });
 
@@ -98,7 +98,7 @@ describe('W426.B packages/sdk-typescript/src/resources/audit-log.ts content pari
   it('AuditLogEntry — id/account_id/actor_account_id/actor_key_id top-half pinned with CRITICAL "may be a team member acting on the OWNER\'s log per V-326c" framing. This is what tells dashboards that actor_account_id MAY DIFFER from account_id — the whole point of team-RBAC accounting in the audit log. Drift to dropping the framing would lose the team-attribution semantic.', () => {
     expect(body).toMatch(/export interface AuditLogEntry \{\s*id: string;\s*account_id: string;/);
     expect(body).toMatch(
-      /\/\*\* The CALLING account for customer actions \(may be a team member acting on the OWNER's log per V-326c\)\. \*\/\s*actor_account_id: string \| null;\s*actor_key_id: string \| null;/,
+      /\/\*\* The CALLING account for customer actions \(may be a team member acting on the OWNER's log[^\n]*\. \*\/\s*actor_account_id: string \| null;\s*actor_key_id: string \| null;/,
     );
   });
 
@@ -122,7 +122,7 @@ describe('W426.B packages/sdk-typescript/src/resources/audit-log.ts content pari
 
   it('V-297 AuditLogExportResponse doc-comment — "GDPR Article 20 portability JSON branch (programmatic)" + CSV-via-browser-direct workaround. CRITICAL: the SDK MUST stay JSON-only because the SDK return type is Promise<AuditLogExportResponse> (a typed object), not Promise<Blob>. Drift to surfacing CSV through the SDK would force a content-negotiation-aware return type that\'s impossible to type correctly across both branches.', () => {
     expect(body).toMatch(
-      /\*\s*V-297 — bulk-export envelope for GDPR Article 20 portability\. The\s*\*\s*SDK exposes the JSON branch \(programmatic\)\. Customers wanting a CSV\s*\*\s*download in a browser hit `\/v1\/account\/audit-log\/export\?format=csv`\s*\*\s*directly with their bearer\./,
+      /bulk-export envelope for GDPR Article 20 portability\. The\s*\*\s*SDK exposes the JSON branch \(programmatic\)\. Customers wanting a CSV\s*\*\s*download in a browser hit `\/v1\/account\/audit-log\/export\?format=csv`\s*\*\s*directly with their bearer\./,
     );
   });
 
@@ -161,7 +161,7 @@ describe('W426.B packages/sdk-typescript/src/resources/audit-log.ts content pari
 
   it('V-462/V-297 export verb — GET /v1/account/audit-log/export with `query: { format: \'json\' }` HARDCODED. CRITICAL: format=json is HARDCODED (not a parameter) so the SDK return type stays Promise<AuditLogExportResponse>, not Promise<Blob>. "single call, up to 10,000 rows, no pagination" framing pinned + truncated-bool semantic + CSV-NOT-surfaced-here-hit-URL-directly workaround.', () => {
     expect(body).toMatch(
-      /\*\s*V-462 \/ V-297 — bulk-export the calling account's audit log as a\s*\*\s*JSON envelope\. Designed for GDPR Article 20 data-portability\s*\*\s*requests: a single call, up to 10,000 rows, no pagination\.\s*\*\s*Capped server-side at 10k; if `truncated` is `true` the older\s*\*\s*entries weren't returned\. CSV download in a browser is not\s*\*\s*surfaced here — hit `\/v1\/account\/audit-log\/export\?format=csv`\s*\*\s*directly with your bearer for the spreadsheet flow\./,
+      /[Bb]ulk-export the calling account's audit log as a\s*\*\s*JSON envelope\. Designed for GDPR Article 20 data-portability\s*\*\s*requests: a single call, up to 10,000 rows, no pagination\.\s*\*\s*Capped server-side at 10k; if `truncated` is `true` the older\s*\*\s*entries weren't returned\. CSV download in a browser is not\s*\*\s*surfaced here — hit `\/v1\/account\/audit-log\/export\?format=csv`\s*\*\s*directly with your bearer for the spreadsheet flow\./,
     );
     expect(body).toMatch(
       /export\(\): Promise<AuditLogExportResponse> \{\s*return this\.http\.request<AuditLogExportResponse>\(\{\s*method: 'GET',\s*path: '\/v1\/account\/audit-log\/export',\s*query: \{ format: 'json' \},\s*\}\);\s*\}/,

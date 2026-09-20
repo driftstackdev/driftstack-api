@@ -88,7 +88,7 @@ describe('W424.B packages/sdk-typescript/src/webhook-signature.ts content parity
   });
 
   it('CRITICAL V-359 headerPrev JSDoc — accuracy invariant: it is an OPTIONAL fallback for a separately-supplied previous-secret signature, Driftstack does NOT emit a separate header (prev HMAC is a second v1= inside the main x-driftstack-signature header), and the verifier accepts EITHER header OR headerPrev matching the secret. Drift back to claiming a separate `x-driftstack-signature-prev` header is emitted would contradict the corrected customer docs.', () => {
-    expect(body).toMatch(/\* V-359 — OPTIONAL fallback for a separately-supplied previous-secret/);
+    expect(body).toMatch(/OPTIONAL fallback for a separately-supplied previous-secret/);
     expect(body).toMatch(/\* signature\. Driftstack does NOT emit a separate header:/);
     expect(body).toMatch(/\* second `v1=` inside the main `x-driftstack-signature` header/);
     expect(body).toMatch(/\* passing `header` alone verifies rotation deliveries correctly and/);
@@ -129,7 +129,7 @@ describe('W424.B packages/sdk-typescript/src/webhook-signature.ts content parity
       /const ok = await verifySingleHeader\(input\.header, input\);\s*if \(ok\) return true;/,
     );
     expect(body).toMatch(
-      /\/\/ V-359 — fall through to the prev header \(rotation grace\)\. When\s*\/\/ unset this is a no-op; when set the customer accepts either the\s*\/\/ new or the old secret's HMAC during the 24h grace window\./,
+      /\/\/[^\n]*[Ff]all through to the prev header \(rotation grace\)\. When\s*\/\/ unset this is a no-op; when set the customer accepts either the\s*\/\/ new or the old secret's HMAC during the 24h grace window\./,
     );
     expect(body).toMatch(
       /if \(input\.headerPrev !== undefined\) \{\s*return verifySingleHeader\(input\.headerPrev, input\);\s*\}\s*return false;\s*\}/,

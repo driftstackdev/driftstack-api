@@ -23,7 +23,7 @@ const MAX_KEY_LENGTH = 64;
 /** Maximum modifier count. Practical max is 4 (Cmd+Shift+Option+Ctrl). */
 const MAX_MODIFIERS = 8;
 
-/** Canonical modifier vocabulary (Slice 6 cross-SDK lock 2026-05-20).
+/* Canonical modifier vocabulary (Slice 6 cross-SDK lock 2026-05-20).
  *
  * The 4 names below map 1:1 onto Quartz `CGEventFlags` on the macOS
  * harness side; the harness decoder rejects DOM-standard variants
@@ -38,6 +38,14 @@ const MAX_MODIFIERS = 8;
  * version bump. Customers building their own input-event producer
  * MUST use the 4 names below; anything else round-trips through the
  * schema unchanged but is dropped on the harness side. */
+/** The modifier key names an input event may carry.
+ *
+ * Use exactly these four spellings. The DOM spellings
+ * (`Shift / Control / Alt / Meta`) are NOT accepted: they pass the schema
+ * unchanged and are then discarded, so the key never registers.
+ *
+ * `modifiers` is typed as `string[]` rather than an enum on purpose, so
+ * further modifier names can be added without a breaking schema change. */
 export const CANONICAL_MODIFIER_NAMES = ['cmd', 'ctrl', 'shift', 'option'] as const;
 export type CanonicalModifier = (typeof CANONICAL_MODIFIER_NAMES)[number];
 
@@ -142,14 +150,11 @@ export type InputEvent = z.infer<typeof InputEventSchema>;
 export const SendInputEventRequestSchema = z.object({
   event: InputEventSchema,
   /**
-   * Slice 5 (Wave 29-NNN ARC 3) — pair-mode takeover-trigger
-   * attribution and ownership. Required whenever mode='pair': in
-   * ai-driving the first input fires takeover-request; in human-driving
-   * every input must match the clientId that won takeover. This prevents
-   * a sibling tab from injecting events into another tab's control turn.
-   * Optional only in manual mode.
-   * UUID-shape is typical; 128 cap matches the OAuth client_id
-   * cap.
+   * Which client sent this event. Required whenever `mode` is `pair`: in
+   * `ai-driving` the first input asks to take over, and in `human-driving`
+   * every input must carry the id of the client that took over — otherwise
+   * a second tab could inject events into someone else's turn. Optional
+   * only in manual mode. A uuid is typical; the cap is 128 characters.
    */
   client_id: z.string().min(1).max(128).optional(),
 });
@@ -159,11 +164,9 @@ export type SendInputEventRequest = z.infer<typeof SendInputEventRequestSchema>;
  *  shapes via a `kind` discriminator. */
 export const SendInputEventResponseSchema = z.discriminatedUnion('kind', [
   /**
-   * Slice 5 (Wave 29-NNN ARC 3) — pair-mode takeover-trigger
-   * outcome. Returned when the first input-event in a pair-mode
-   * `ai-driving` session fires the takeover-request transition.
-   * The dashboard reads pair_mode_state to render the takeover
-   * status (takeover-pending vs takeover-queued, etc.).
+   * The result of asking to take over, returned when the first input event
+   * in a pair-mode `ai-driving` session makes that request. Read
+   * `pair_mode_state` to show whether the takeover is pending or queued.
    */
   z.object({
     kind: z.literal('pair-mode-takeover-fired'),

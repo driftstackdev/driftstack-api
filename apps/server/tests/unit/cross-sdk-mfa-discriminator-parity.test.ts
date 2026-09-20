@@ -45,26 +45,25 @@ describe('W688 cross-SDK V-445 mfaChallenge + V-353d login discriminator parity'
     expect(existsSync(PY_AUTH), `missing ${PY_AUTH}`).toBe(true);
   });
 
-  it('CRITICAL V-445 anchor pinned in all 3 SDKs on the mfaChallenge + mfaStepUp methods. The V-445 anchor is what threads the MFA-challenge feature across the SDKs.', () => {
-    const ts = read(TS_AUTH);
-    const go = read(GO_AUTH);
-    const py = read(PY_AUTH);
+  it('CRITICAL both MFA verbs are carried by all 3 SDKs — the login challenge exchange AND the step-up refresh, each naming the 15-minute freshness window. This used to count an internal ticket id in each file; these three files SHIP, and a customer reading them on hover gets no meaning from an id. The pair of verbs plus the window is what the id was standing in for.', () => {
+    const surfaces = {
+      'sdk-typescript': [read(TS_AUTH), /mfaChallenge\(/, /mfaStepUp\(/],
+      'sdk-go': [read(GO_AUTH), /MfaChallenge\(/, /MfaStepUp\(/],
+      'sdk-python': [read(PY_AUTH), /def mfa_challenge\(/, /def mfa_step_up\(/],
+    } as const;
 
-    // Each SDK should reference V-445 at least twice (mfaChallenge + mfaStepUp).
-    const tsMatches = (ts.match(/V-445/g) ?? []).length;
-    const goMatches = (go.match(/V-445/g) ?? []).length;
-    const pyMatches = (py.match(/V-445/g) ?? []).length;
-
-    expect(tsMatches, 'sdk-typescript V-445 count').toBeGreaterThanOrEqual(2);
-    expect(goMatches, 'sdk-go V-445 count').toBeGreaterThanOrEqual(2);
-    expect(pyMatches, 'sdk-python V-445 count').toBeGreaterThanOrEqual(2);
+    for (const [name, [body, challenge, stepUp]] of Object.entries(surfaces)) {
+      expect(body, `${name} exposes the login MFA challenge exchange`).toMatch(challenge);
+      expect(body, `${name} exposes the step-up refresh`).toMatch(stepUp);
+      expect(body, `${name} states the step-up freshness window`).toMatch(/15-minute/);
+    }
   });
 
   it("CRITICAL V-353d login MFA discriminated-union response pinned in sdk-typescript. The mfa_required literal-narrowing pattern is what TypeScript customers anchor their `if ('mfa_required' in out && out.mfa_required)` branching on. Drift to a non-literal-union return would lose static-type checking on the branches.", () => {
     const ts = read(TS_AUTH);
 
     // sdk-typescript: "V-353d — discriminated-union response. When the account has MFA"
-    expect(ts).toMatch(/V-353d — discriminated-union response/);
+    expect(ts).toMatch(/discriminated-union response/);
 
     // The mfa_required: true branch with challenge_token + challenge_expires_at fields.
     expect(ts).toMatch(/\{ mfa_required: true, challenge_token,\s*\*\s*challenge_expires_at \}/);
@@ -92,7 +91,7 @@ describe('W688 cross-SDK V-445 mfaChallenge + V-353d login discriminator parity'
     expect(ts).toMatch(/`via: 'totp' \| 'recovery'`/);
 
     // sdk-go: Distinguished response with via field.
-    expect(go).toMatch(/V-445.*Exchange the V-353d login challenge_token/);
+    expect(go).toMatch(/.*Exchange the[^\n]*login challenge_token/);
 
     // sdk-python: `via: "totp" | "recovery"` in docstring.
     expect(py).toMatch(/``via: "totp" \| "recovery"``/);
@@ -136,13 +135,17 @@ describe('W688 cross-SDK V-445 mfaChallenge + V-353d login discriminator parity'
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-445`).toMatch(/V-445/);
+      expect(body, `${name} V-445`).toMatch(/step-up gate; 15-minute freshness window\)\. No new/i);
       // 2-credential set: TOTP + recovery mentioned together.
       expect(body, `${name} TOTP+recovery`).toMatch(/TOTP.*recovery|recovery.*TOTP/i);
     }
-    // V-353d is sdk-typescript-only.
-    expect(read(TS_AUTH), 'sdk-typescript V-353d').toMatch(/V-353d/);
-    expect(read(GO_AUTH), 'sdk-go V-353d').toMatch(/V-353d/);
+    // Both TS and Go document the login challenge the discriminated union carries.
+    expect(read(TS_AUTH), 'sdk-typescript login MFA union').toMatch(
+      /discriminated-union response\. When the account has MFA/,
+    );
+    expect(read(GO_AUTH), 'sdk-go login MFA challenge').toMatch(
+      /Exchange the[^\n]*login challenge_token/,
+    );
   });
 
   it('test file metadata — file exists at canonical path', () => {

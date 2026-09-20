@@ -59,7 +59,7 @@ export type IncidentUpdate = z.infer<typeof IncidentUpdateSchema>;
 export const CreateIncidentRequestSchema = z.object({
   title: z.string().min(1).max(200),
   /** Markdown body. Rendered as plaintext on the status page until
-   *  V-295c wires the markdown renderer. */
+   *  a later release wires the markdown renderer. */
   description: z.string().min(1).max(5000),
   severity: IncidentSeveritySchema,
   /** Initial active status; defaults to 'investigating'. */
@@ -73,14 +73,12 @@ export const CreateIncidentRequestSchema = z.object({
   public: z.boolean().optional(),
   /** ISO-8601 timestamp when the incident actually started.
    *
-   *  Optional here because the two routes sharing this schema treat it
-   *  differently, and V-1064 corrected this comment for saying only the
-   *  first: `POST /v1/admin/incidents` defaults to server-now if omitted,
+   *  Optional here because the two routes that share this schema treat it
+   *  differently: `POST /v1/admin/incidents` defaults to server-now if omitted,
    *  while `PUT /v1/admin/incidents/:id` — the idempotent create with a
-   *  caller-owned id — rejects its absence with a 400 in the handler,
-   *  after this schema has already accepted it. The published document
-   *  states that difference per verb; see
-   *  `the-document-is-neither-looser-nor-stricter`.
+   *  caller-owned id — rejects its absence with a 400 in the handler, after
+   *  this schema has already accepted it. The published document states that
+   *  difference per verb.
    *
    *  Operators usually backdate this once they identify the actual start
    *  time. */

@@ -56,12 +56,12 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
   });
 
   it('V-204 OptOutableEmailEvent framing pinned: security + financial emails (signup-verification / password-reset / billing-failure) NEVER opt-outable — absent on purpose so API surface matches policy. (S44 2026-07-07 founder-approved trim deleted the never-wired subscription-cancellation + support-ack templates from the roster.)', () => {
-    expect(body).toMatch(/\/\/ V-204 — email notification preferences/);
+    expect(body).toMatch(/\/\/[^\n]*email notification preferences/);
     expect(body).toMatch(
       /\*\s*Event types the customer can opt out of\. Security \+ financial emails\s*\*\s*\(signup-verification, password-reset, billing-failure\)\s*\*\s*are never opt-outable; they're absent from this enum on purpose so\s*\*\s*the API surface matches the policy\./,
     );
     expect(body).toMatch(
-      /S44 2026-07-07 deleted the\s*\*\s*never-wired subscription-cancellation \+ support-ack templates\s*\*\s*outright\./,
+      /2026-07-07 deleted the\s*\*\s*never-wired subscription-cancellation \+ support-ack templates\s*\*\s*outright\./,
     );
   });
 
@@ -69,11 +69,11 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
     expect(body).toMatch(/export const OptOutableEmailEventSchema = z\.enum\(\[/);
     expect(body).toMatch(/'signup-welcome',/);
     expect(body).toMatch(/'session-failed-first',/);
-    expect(body).toMatch(/\/\/ V-304a — first successful session activation milestone email\./);
+    expect(body).toMatch(/\/\/[^\n]*first successful session activation milestone email\./);
     expect(body).toMatch(/'session-success-first',/);
     expect(body).toMatch(/'tier-changed',/);
     expect(body).toMatch(/'billing-receipt',/);
-    expect(body).toMatch(/\/\/ V-304b — 7-days-before-renewal reminder\. Driven by Stripe/);
+    expect(body).toMatch(/\/\/[^\n]*7-days-before-renewal reminder\. Driven by Stripe/);
     expect(body).toMatch(/'billing-renewal-reminder',/);
     // Trial-pack values removed with the dead trial_pack lifecycle.
     expect(body).not.toMatch(/'trial-pack-purchased'/);
@@ -85,16 +85,16 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
 
   it('V-352 UpdateAccountMe framing + V-298a slug regex (3..32 lowercase a-z+0-9+hyphen no leading/trailing/consecutive) + V-298b region enum us|eu|apac; UpdateAccountMeRequest at-least-one-field refine + IANA timezone Intl-validity refine (2026-06-03: replaced a regex that wrongly rejected single-segment zones like UTC/GMT/Japan AND wrongly accepted non-zones like Foo/Bar)', () => {
     expect(body).toMatch(
-      /\*\s*V-352 — partial update of self-editable basics\. At least one\s*\*\s*field must be provided\. `name` may be set to null to clear; the\s*\*\s*email-display fallback uses the email address\. `timezone` accepts\s*\*\s*an IANA name \(e\.g\. `Europe\/Amsterdam`\) or null to clear \(UTC fallback\)\./,
+      /partial update of self-editable basics\. At least one\s*\*\s*field must be provided\. `name` may be set to null to clear; the\s*\*\s*email-display fallback uses the email address\. `timezone` accepts\s*\*\s*an IANA name \(e\.g\. `Europe\/Amsterdam`\) or null to clear \(UTC fallback\)\./,
     );
     expect(body).toMatch(
-      /\*\s*V-298a — slug shape: lowercase a-z \+ 0-9 \+ hyphen, no leading or\s*\*\s*trailing hyphen, no consecutive hyphens, 3-32 chars total\./,
+      /slug shape: lowercase a-z \+ 0-9 \+ hyphen, no leading or\s*\*\s*trailing hyphen, no consecutive hyphens, 3-32 chars total\./,
     );
     expect(body).toMatch(
       /export const AccountSlugSchema = z\s*\.string\(\)\s*\.min\(3\)\s*\.max\(32\)\s*\.regex\(\s*\/\^\[a-z0-9\]\(\?:\[a-z0-9-\]\*\[a-z0-9\]\)\?\$\/,\s*'Use 3 to 32 lowercase letters, numbers or hyphens\. It cannot start or end with a hyphen\.',\s*\)\s*\.refine\(\(s\) => !s\.includes\('--'\), \{\s*message: 'Slug cannot contain consecutive hyphens\.',\s*\}\);/,
     );
     expect(body).toMatch(
-      /\*\s*V-298b — Stripe-style data-residency region preference\. 'us' \/\s*\*\s*'eu' \/ 'apac'\. Customer-stated; informational\. Actual physical\s*\*\s*region routing of compute \/ storage is governed by the DPA Annex 3\s*\*\s*sub-processor list, not this field\./,
+      /Stripe-style data-residency region preference\. 'us' \/\s*\*\s*'eu' \/ 'apac'\. Customer-stated; informational\. Actual physical\s*\*\s*region routing of compute \/ storage is governed by the DPA Annex 3\s*\*\s*sub-processor list, not this field\./,
     );
     expect(body).toMatch(/export const AccountRegionSchema = z\.enum\(\['us', 'eu', 'apac'\]\);/);
     expect(body).toMatch(
@@ -113,7 +113,7 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
 
   it('V-352b avatar upload framing pinned: 2 MiB cap + base64 inline + 3 content-types + R2 public-snapshot bucket + V-294 disclosure scope updated atomically; AVATAR_MAX_BYTES + AVATAR_ALLOWED_CONTENT_TYPES + UploadAvatarRequest base64 size cap (Math.ceil((MAX*4)/3)+4)', () => {
     expect(body).toMatch(
-      /\*\s*V-352b — customer-uploaded avatar\. The image is sent inline as\s*\*\s*base64 \(no multipart on this control plane\)\. Storage backend is\s*\*\s*the existing R2 public-snapshot bucket \(already disclosed as a\s*\*\s*sub-processor for status-page snapshots; per V-294 the disclosure\s*\*\s*scope is updated atomically with this slice to also cover avatars\)\./,
+      /customer-uploaded avatar\. The image is sent inline as\s*\*\s*base64 \(no multipart on this[^\n]*\. Storage backend is\s*\*\s*the existing R2 public-snapshot bucket \(already disclosed as a\s*\*\s*sub-processor for status-page snapshots; per[^\n]*the disclosure\s*\*\s*scope is updated atomically with this slice to also cover avatars\)\./,
     );
     expect(body).toMatch(
       /\*\s*Cap: 2 MiB raw bytes\. The base64 wire size is ~33% larger; the\s*\*\s*base64 string is bounded at ~2\.8 MiB to keep the request body\s*\*\s*inside Fastify's default JSON body limit\./,
@@ -153,28 +153,28 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
 
   it('V-216 AccountAuditAction key values pinned: account 4-event base + api_key (mint/revoke + V-296 rotate 24h grace) + sessions (created/destroyed) + profiles (created/deleted + V-480 exported/imported source-account+profile lineage) + subscription.tier_changed + webhook_endpoint (CRUD + V-359 secret_rotated) + V-307 webhook_delivery.replayed + V-298f Team RBAC v1 (member_invited/invite_accepted/member_removed) + V-353b MFA lifecycle (mfa_enrolled on first verify / mfa_disabled / recovery_code_used) + V-281 admin (refund_recorded + support_note)', () => {
     expect(body).toMatch(
-      /\/\/ V-296 — customer self-service rotation; old key continues for grace\s*\/\/ period \(24h\), new key shown once\. Audit captures both ids for\s*\/\/ post-hoc reconstruction\./,
+      /\/\/[^\n]*customer self-service rotation; old key continues for grace\s*\/\/ period \(24h\), new key shown once\. Audit captures both ids for\s*\/\/ post-hoc reconstruction\./,
     );
     expect(body).toMatch(
-      /\/\/ V-480 — profile import\/export\. exported fires on GET \.\.\/export\s*\/\/ \(read-side audit trail for "who pulled what out"\); imported fires\s*\/\/ on the POST \/v1\/profiles\/import handler when a new profile is\s*\/\/ minted from an envelope\. Both carry the source profile id \+\s*\/\/ source account id from the envelope so customers can reconstruct\s*\/\/ file-flow lineage post-hoc\./,
+      /\/\/[^\n]*profile import\/export\. exported fires on GET \.\.\/export\s*\/\/ \(read-side audit trail for "who pulled what out"\); imported fires\s*\/\/ on the POST \/v1\/profiles\/import handler when a new profile is\s*\/\/ minted from an envelope\. Both carry the source profile id \+\s*\/\/ source account id from the envelope so customers can reconstruct\s*\/\/ file-flow lineage post-hoc\./,
     );
     expect(body).toMatch(
-      /\/\/ V-359 — signing secret rotation\. Payload: new_secret_prefix,\s*\/\/ old_secret_prefix, grace_expires_at \(24h default\)\./,
+      /\/\/[^\n]*signing secret rotation\. Payload: new_secret_prefix,\s*\/\/ old_secret_prefix, grace_expires_at \(24h default\)\./,
     );
     expect(body).toMatch(/'webhook_endpoint\.secret_rotated',/);
-    expect(body).toMatch(/\/\/ V-307 — customer self-service replay of a webhook delivery\./);
+    expect(body).toMatch(/\/\/[^\n]*customer self-service replay of a webhook delivery\./);
     expect(body).toMatch(/'webhook_delivery\.replayed',/);
     expect(body).toMatch(
-      /\/\/ V-298f — Team RBAC v1 customer audit entries\.\s*'team\.member_invited',\s*'team\.invite_accepted',\s*'team\.member_removed',/,
+      /\/\/[^\n]*Team RBAC v1 customer audit entries\.\s*'team\.member_invited',\s*'team\.invite_accepted',\s*'team\.member_removed',/,
     );
     expect(body).toMatch(
-      /\/\/ V-353b — MFA lifecycle\. mfa_enrolled fires on successful first\s*\/\/ verify \(not on \/enroll, which is reversible\)\./,
+      /\/\/[^\n]*MFA lifecycle\. mfa_enrolled fires on successful first\s*\/\/ verify \(not on \/enroll, which is reversible\)\./,
     );
     expect(body).toMatch(
       /'account\.mfa_enrolled',\s*'account\.mfa_disabled',\s*'account\.recovery_code_used',/,
     );
     expect(body).toMatch(
-      /\/\/ V-281 — admin-recorded notes\. Refund recording is audit-only;\s*\/\/ actual money movement happens via Stripe dashboard manually per\s*\/\/ the V-280 launch-day runbook\. Support notes are free-form\s*\/\/ operator notes attached to a customer account for post-incident\s*\/\/ \/ context-passing visibility\./,
+      /\/\/[^\n]*admin-recorded notes\. Refund recording is audit-only;\s*\/\/ actual money movement happens via Stripe dashboard manually per\s*\/\/ the[^\n]*launch-day runbook\. Support notes are free-form\s*\/\/ operator notes attached to a customer account for post-incident\s*\/\/ \/ context-passing visibility\./,
     );
     expect(body).toMatch(/'admin\.refund_recorded',\s*'admin\.support_note',/);
   });
@@ -190,12 +190,12 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
 
   it('V-484 ListAccountAuditLogQuery: limit + cursor + action + from/to coerce.date (handles YYYY-MM-DD + full ISO) + actor_type + target_resource_id 1..200', () => {
     expect(body).toMatch(
-      /\/\/ V-484 — additional filters\. ISO 8601 dates for from\/to \(inclusive\)\.\s*\/\/ Coerced from query strings; Zod's coerce\.date\(\) handles\s*\/\/ YYYY-MM-DD and full ISO 8601 timestamps\./,
+      /\/\/[^\n]*additional filters\. ISO 8601 dates for from\/to \(inclusive\)\.\s*\/\/ Coerced from query strings; Zod's coerce\.date\(\) handles\s*\/\/ YYYY-MM-DD and full ISO 8601 timestamps\./,
     );
     // Slice 149 added `.min(1).max(512)` to cursor (same defensive
     // cap pattern as PaginationQuerySchema in common.ts).
     expect(body).toMatch(
-      /export const ListAccountAuditLogQuerySchema = z\.object\(\{\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.optional\(\)\.default\(50\),\s*\/\/ Slice 149[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*action: AccountAuditActionSchema\.optional\(\),/,
+      /export const ListAccountAuditLogQuerySchema = z\.object\(\{\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.optional\(\)\.default\(50\),\s*\/\/[^\n]*[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*action: AccountAuditActionSchema\.optional\(\),/,
     );
     expect(body).toMatch(
       /from: z\.coerce\.date\(\)\.optional\(\),\s*to: z\.coerce\.date\(\)\.optional\(\),/,
@@ -209,7 +209,7 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
 
   it('V-297 GDPR Article 20 portability framing pinned: format=json returns shape / format=csv text/csv not surfaced through typed SDK methods (browsers hit directly); 10,000-row truncated ceiling; export query default json; export response generated_at + account_id + row_count + truncated + data', () => {
     expect(body).toMatch(
-      /\/\/ V-297 — bulk export envelope for GDPR Article 20 portability\.\s*\/\/ `format=json` returns this shape; `format=csv` returns text\/csv\s*\/\/ \(not surfaced through the typed SDK methods — customers wanting\s*\/\/ CSV download in a browser hit the endpoint directly\)\./,
+      /\/\/[^\n]*bulk export envelope for GDPR Article 20 portability\.\s*\/\/ `format=json` returns this shape; `format=csv` returns text\/csv\s*\/\/ \(not surfaced through the typed SDK methods — customers wanting\s*\/\/ CSV download in a browser hit the endpoint directly\)\./,
     );
     expect(body).toMatch(
       /export const ExportAccountAuditLogQuerySchema = z\.object\(\{\s*format: z\.enum\(\['csv', 'json'\]\)\.optional\(\)\.default\('json'\),\s*\}\);/,
@@ -226,7 +226,7 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
   });
 
   it('V-219 RateLimitBucket: bucket_key enum (global|sessions:create|agent_sessions:message|agent_sessions:input_event — the customer-read GET /v1/account/rate-limits returns all four) + capacity positive int + refill_per_second positive + source enum (tier_default|override) + override_expires_at nullable; GetAccountRateLimitsResponse: tier + buckets', () => {
-    expect(body).toMatch(/\/\/ V-219 — customer-facing rate-limit view/);
+    expect(body).toMatch(/\/\/[^\n]*customer-facing rate-limit view/);
     expect(body).toMatch(
       /export const RateLimitBucketSchema = z\.object\(\{[\s\S]*?bucket_key: z\.enum\(\[\s*'global',\s*'sessions:create',\s*'agent_sessions:message',\s*'agent_sessions:input_event',\s*\]\),\s*capacity: z\.number\(\)\.int\(\)\.positive\(\),\s*refill_per_second: z\.number\(\)\.positive\(\),/,
     );

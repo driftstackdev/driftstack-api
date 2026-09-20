@@ -24,7 +24,7 @@ export type Account = z.infer<typeof AccountSchema>;
  * Event types the customer can opt out of. Security + financial emails
  * (signup-verification, password-reset, billing-failure)
  * are never opt-outable; they're absent from this enum on purpose so
- * the API surface matches the policy. (S44 2026-07-07 deleted the
+ * the API surface matches the policy. (2026-07-07 deleted the
  * never-wired subscription-cancellation + support-ack templates
  * outright.)
  */
@@ -63,13 +63,13 @@ export type SetEmailPreferenceRequest = z.infer<typeof SetEmailPreferenceRequest
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * V-352 — partial update of self-editable basics. At least one
+ * A partial update of self-editable basics. At least one
  * field must be provided. `name` may be set to null to clear; the
  * email-display fallback uses the email address. `timezone` accepts
  * an IANA name (e.g. `Europe/Amsterdam`) or null to clear (UTC fallback).
  */
 /**
- * V-298a — slug shape: lowercase a-z + 0-9 + hyphen, no leading or
+ * The slug shape: lowercase a-z + 0-9 + hyphen, no leading or
  * trailing hyphen, no consecutive hyphens, 3-32 chars total. Mirrors
  * the standard "URL-safe handle" pattern (GitHub usernames, Stripe
  * account ids). Server-side normalisation is deliberately strict: we
@@ -90,7 +90,7 @@ export const AccountSlugSchema = z
 export type AccountSlug = z.infer<typeof AccountSlugSchema>;
 
 /**
- * V-298b — Stripe-style data-residency region preference. 'us' /
+ * A Stripe-style data-residency region preference. 'us' /
  * 'eu' / 'apac'. Customer-stated; informational. Actual physical
  * region routing of compute / storage is governed by the DPA Annex 3
  * sub-processor list, not this field.
@@ -160,7 +160,7 @@ export type UpdateAccountMeRequest = z.infer<typeof UpdateAccountMeRequestSchema
 // V-352b — POST /v1/account/me/avatar request shape
 // ───────────────────────────────────────────────────────────────────────────
 
-/**
+/*
  * V-352b — customer-uploaded avatar. The image is sent inline as
  * base64 (no multipart on this control plane). Storage backend is
  * the existing R2 public-snapshot bucket (already disclosed as a
@@ -170,6 +170,11 @@ export type UpdateAccountMeRequest = z.infer<typeof UpdateAccountMeRequestSchema
  * Cap: 2 MiB raw bytes. The base64 wire size is ~33% larger; the
  * base64 string is bounded at ~2.8 MiB to keep the request body
  * inside Fastify's default JSON body limit.
+ */
+/**
+ * The largest avatar you can upload: 2 MiB of raw image bytes. The image
+ * travels inline as base64, which is about a third larger, so the encoded
+ * string itself is capped a little under 2.8 MiB.
  */
 export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 export const AVATAR_ALLOWED_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;

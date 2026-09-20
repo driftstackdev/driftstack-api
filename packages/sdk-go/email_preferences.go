@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-// EmailPreferencesResource handles /v1/account/email-preferences (V-204).
+// EmailPreferencesResource handles /v1/account/email-preferences.
 //
 // Per-event opt-in/opt-out for non-critical emails. Critical emails
 // (verification / password-reset / billing-failure) are

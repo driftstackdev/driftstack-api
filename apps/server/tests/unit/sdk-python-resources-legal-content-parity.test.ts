@@ -36,7 +36,7 @@ describe('W580.A packages/sdk-python/src/driftstack/resources/legal.py content p
 
   it('file exists at canonical path + module docstring V-049/V-458 framing + ToS/Privacy/DPA/AUP scope. CRITICAL architectural invariant pinned: "Document content is served separately on the marketing site; this resource handles the catalog + acceptance machinery." Drift to surfacing document TEXT through the API would put binary legal content on the JSON surface — the load-bearing separation that keeps legal-doc PDFs/MDX on Cloudflare Pages.', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(/^"""Legal resource — \/v1\/legal\/\* \(V-049 \/ V-458\)\.\n/);
+    expect(body).toMatch(/^"""Legal resource — \/v1\/legal\/[^\n]*\.\n/);
     expect(body).toMatch(
       /Customer acceptance of legal documents \(ToS \/ Privacy \/ DPA \/ AUP\)\./,
     );

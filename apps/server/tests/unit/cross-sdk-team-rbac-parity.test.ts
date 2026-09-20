@@ -45,9 +45,13 @@ describe('W691 cross-SDK V-298c/V-298d team-RBAC parity', () => {
     const go = read(GO_TEAM);
     const py = read(PY_TEAM);
 
-    expect(ts).toMatch(/V-298c/);
-    expect(go).toMatch(/V-298c/);
-    expect(py).toMatch(/V-298c/);
+    expect(ts).toMatch(
+      /All six \/v1\/team\/\* endpoints, plus the two \/v1\/teams team-record endpoints\. Team membership IS honored on the auth/,
+    );
+    expect(go).toMatch(
+      /authorized against your membership role \(admin or member\) and the route's/,
+    );
+    expect(py).toMatch(/resources of an owner you are a member of\. The request is authorized/);
   });
 
   it('CRITICAL the acting-as contract is stated identically in all 3 SDKs, and the superseded "no implicit permissions" caveat is banned. That caveat was a deferred promise that became FALSE: `resolveEffectiveAccount` (apps/server/src/services/auth.ts) resolves `X-Driftstack-Account: acc_<uuid>` against `ctx.teams` and carries the membership role through, so members DO act on the owner\'s resources today. Leaving it pinned would have kept a false limitation on three shipped SDK surfaces.', () => {
@@ -190,7 +194,9 @@ describe('W691 cross-SDK V-298c/V-298d team-RBAC parity', () => {
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-298c`).toMatch(/V-298c/);
+      expect(body, `${name} V-298c`).toMatch(
+        /resources of an owner you are a member of\. The request is/i,
+      );
       // V-298d is deliberately NOT pinned: it referenced a pending auth-path
       // integration that has since shipped, and the anchor was removed with the
       // stale caveat it belonged to.

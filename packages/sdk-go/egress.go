@@ -82,18 +82,18 @@ type AccountProxyMetadata struct {
 	UDPProbe    *bool   `json:"udp_probe"`
 	UDPProbeAt  *string `json:"udp_probe_at"`
 	// ExitObserved is the last exit identity observed THROUGH this proxy — by a
-	// live session (observed_via "session") or by the fleet-vantage test
+	// live session (observed_via "session") or by a proxy test
 	// ("probe"), latest wins — or nil when never observed. For an OpenVPN /
 	// WireGuard proxy this is the only source of its location and timezone
 	// short of running a test. Nil is "not observed", never a placeholder.
 	ExitObserved *AccountProxyExitObserved `json:"exit_observed"`
-	// ExitSupersededAt is when a fleet-vantage test found the tunnel DOWN while
+	// ExitSupersededAt is when a proxy test found the tunnel DOWN while
 	// ExitObserved was set (RFC 3339), or nil when never contradicted. The
 	// stored exit is the last thing SEEN; this is when it was CONTRADICTED, so
 	// a caller adopting ExitObserved should refuse an observation dated at or
 	// before it. Cleared by the next exit observation (session or probe).
 	ExitSupersededAt *string `json:"exit_superseded_at"`
-	// OsFingerprint is the LAST OS fingerprint the control plane observed for
+	// OsFingerprint is the LAST OS fingerprint Driftstack recorded for
 	// this proxy's own TCP stack (POST :id/test takes it; this list is how it
 	// reaches a machine that never ran that test), or nil when never measured.
 	// Nil is "not measured", never "no OS" and never a placeholder.
@@ -105,7 +105,7 @@ type AccountProxyMetadata struct {
 }
 
 // AccountProxyExitObserved is the stored exit identity on AccountProxyMetadata.
-// Country and Timezone are nil when the observer could not resolve them;
+// Country and Timezone are nil when they could not be resolved;
 // ObservedAt is when the observation was recorded (RFC 3339), or nil.
 type AccountProxyExitObserved struct {
 	IP          string  `json:"ip"`
@@ -123,24 +123,25 @@ type AccountProxyList struct {
 // AccountProxyTestResult is the POST :id/test result. Ok=true carries
 // LatencyMs; Ok=false carries Reason. 200 either way.
 //
-// NotRun is set when NOTHING RAN, so an Ok=false result is not a verdict
-// about the proxy: "live_session" (a fleet-vantage test of a VPN proxy was
-// refused because a live session holds the tunnel), "node_busy" or
-// "node_error" (the fleet node could not run the probe), or "no_node" (no
-// fleet node measured a VPN tunnel — none was free, the dispatch timed out,
-// or the deployment has no fleet; the Reason says which — and the control
-// plane cannot measure a tunnel itself). Branch on it — never on the Reason
-// prose — before treating Ok=false as a failed proxy.
+// NotRun is set when NOTHING RAN, so an Ok=false result is not a judgement
+// about the proxy: "live_session" (a test of a VPN proxy was refused because
+// a live session holds the tunnel), "node_busy" or "node_error" (the machine
+// that would have run the test could not), or "no_node" (no machine measured
+// the VPN tunnel — none was free, the dispatch timed out, or this deployment
+// has none; the Reason says which, and Driftstack cannot measure a tunnel
+// from anywhere else). Branch on it — never on the Reason prose — before
+// treating Ok=false as a failed proxy.
 type AccountProxyTestResult struct {
 	Ok        bool   `json:"ok"`
 	LatencyMs int    `json:"latency_ms,omitempty"`
 	Reason    string `json:"reason,omitempty"`
 	NotRun    string `json:"not_run,omitempty"`
-	// MeasuredFrom names the vantage that produced the verdict: "control_plane"
-	// or "fleet" (a Mac in the fleet, for VPN rows and ?vantage=fleet).
+	// MeasuredFrom names where the measurement was taken: "control_plane"
+	// (Driftstack measured it) or "fleet" (the machine that would run your
+	// profile measured it — what `?vantage=fleet` asks for, used for VPN rows).
 	MeasuredFrom *string `json:"measured_from,omitempty"`
 	// OsFingerprint is the proxy's own TCP-stack fingerprint, present only when
-	// the control plane actually observed it. Absent is "not observed", never
+	// Driftstack actually observed it. Absent is "not observed", never
 	// a placeholder OS.
 	OsFingerprint *AccountProxyOsFingerprint `json:"os_fingerprint,omitempty"`
 	// OsFingerprintAt is set when OsFingerprint is a STORED reading the server
@@ -151,16 +152,16 @@ type AccountProxyTestResult struct {
 	OsFingerprintAt *string `json:"os_fingerprint_at,omitempty"`
 	// OsFingerprintUnavailable names WHY OsFingerprint is absent when the server
 	// knows: "vpn_tunnel" (a tunnel has no SOCKS5 stack to fingerprint),
-	// "not_observed" (the observer tunnel was refused) or "observer_off" (the
-	// deployment runs no observer). Nil when a fingerprint is present or the
-	// server predates the field.
+	// "not_observed" (the measuring connection was refused) or "observer_off"
+	// (this deployment does not take fingerprints). Nil when a fingerprint is
+	// present or the server predates the field.
 	OsFingerprintUnavailable *string `json:"os_fingerprint_unavailable,omitempty"`
-	// ExitObserved is the exit the fleet saw behind a VPN row, when one was
+	// ExitObserved is the exit seen behind a VPN row, when one was
 	// observed; nil otherwise.
 	ExitObserved *AccountProxyExitObserved `json:"exit_observed,omitempty"`
 }
 
-// AccountProxyOsFingerprint is the control plane's passive TCP-stack
+// AccountProxyOsFingerprint is Driftstack's passive TCP-stack
 // fingerprint of the proxy host (or its exit IP), as the server reports it.
 type AccountProxyOsFingerprint struct {
 	OS          string `json:"os"`
@@ -174,7 +175,7 @@ type AccountProxyOsFingerprint struct {
 	SingleHostVantage bool `json:"single_host_vantage"`
 	// WebPortVantage is true when the reading was taken on port 443 at an IP
 	// literal, the port a website connects on. With ObservedVia "proxy_host"
-	// it still names a stack rather than giving a verdict.
+	// it still names a stack rather than giving a conclusion.
 	WebPortVantage bool `json:"web_port_vantage"`
 }
 

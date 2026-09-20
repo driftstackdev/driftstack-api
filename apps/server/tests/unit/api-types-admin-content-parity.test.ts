@@ -39,7 +39,7 @@ describe('W435.B packages/api-types/src/admin.ts content parity', () => {
 
   it('Admin API contracts framing pinned: /v1/admin/* routes require admin scope (D-012 + D-025); schemas describe public request/response shape', () => {
     expect(body).toMatch(
-      /\/\/ Admin API contracts\. Routes under \/v1\/admin\/\* require the admin\s*\/\/ scope \(see D-012 \+ D-025\)\. These schemas describe the public shape\s*\/\/ of admin requests and responses\./,
+      /\/\/ Admin API contracts\. Routes under \/v1\/admin\/\* require the admin\s*\/\/ scope \(see[^\n]*\. These schemas describe the public shape\s*\/\/ of admin requests and responses\./,
     );
   });
 
@@ -50,7 +50,7 @@ describe('W435.B packages/api-types/src/admin.ts content parity', () => {
   });
 
   it('V-218 ValidationSchedule: id uuid + archetype_id + cadence_seconds positive int + enabled + last_run_at nullable + next_run_at + last_run_id nullable + reason nullable + created/updated_at', () => {
-    expect(body).toMatch(/\/\/ V-218 — continuous validation harness/);
+    expect(body).toMatch(/\/\/[^\n]*continuous validation/);
     expect(body).toMatch(
       /export const ValidationScheduleSchema = z\.object\(\{\s*id: z\.string\(\)\.uuid\(\),\s*archetype_id: z\.string\(\),\s*cadence_seconds: z\.number\(\)\.int\(\)\.positive\(\),\s*enabled: z\.boolean\(\),\s*last_run_at: z\.string\(\)\.nullable\(\),\s*next_run_at: z\.string\(\),\s*last_run_id: z\.string\(\)\.nullable\(\),\s*reason: z\.string\(\)\.nullable\(\),\s*created_at: z\.string\(\),\s*updated_at: z\.string\(\),\s*\}\);/,
     );
@@ -94,7 +94,7 @@ describe('W435.B packages/api-types/src/admin.ts content parity', () => {
       /\*\s*Records that the operator manually issued a refund via the Stripe\s*\*\s*dashboard\. The endpoint does NOT call Stripe\. Money movement happens\s*\*\s*out-of-band; the audit row is the post-action receipt for compliance\s*\*\s*and customer support follow-up\./,
     );
     expect(body).toMatch(
-      /\*\s*Per V-280 launch-day-runbook \+ the founder's tier-3 boundary on\s*\*\s*direct financial actions\./,
+      /\*\s*Per[^\n]*launch-day-runbook \+ the[^\n]*boundary on\s*\*\s*direct financial actions\./,
     );
     expect(body).toMatch(
       /export const RecordRefundRequestSchema = z\.object\(\{\s*\/\*\* The Stripe charge \/ payment_intent \/ invoice id refunded\. \*\/\s*external_reference: z\.string\(\)\.min\(3\)\.max\(120\),\s*\/\*\* Refund amount in cents\. May be partial\. \*\/\s*amount_cents: z\.number\(\)\.int\(\)\.positive\(\),\s*\/\*\* Currency ISO 4217; defaults to USD if omitted\. \*\/\s*currency: z\.string\(\)\.length\(3\)\.optional\(\),\s*\/\*\* Reason recorded on the audit row \+ the customer-visible audit slice\. \*\/\s*reason: z\.string\(\)\.min\(1\)\.max\(500\),\s*\}\);/,
@@ -125,7 +125,7 @@ describe('W435.B packages/api-types/src/admin.ts content parity', () => {
 
   it('V-512 ListDlqQuery endpoint_id drill-down framing pinned: customer-support workflow ("my endpoint is missing events") — admin pulls just that endpoint\'s DLQ rows without wading through other accounts', () => {
     expect(body).toMatch(
-      /\/\/ V-512 — optional drill-down by webhook-endpoint id\. Customer\s*\/\/ support workflow: a customer reports "my endpoint is missing\s*\/\/ events"; admin pulls just that endpoint's DLQ rows without\s*\/\/ wading through other accounts'\./,
+      /\/\/[^\n]*optional drill-down by webhook-endpoint id\. Customer\s*\/\/ support workflow: a customer reports "my endpoint is missing\s*\/\/ events"; admin pulls just that endpoint's DLQ rows without\s*\/\/ wading through other accounts'\./,
     );
     expect(body).toMatch(
       // V-1473 — this pin FROZE the defect. It quoted `cursor: z.string()
@@ -168,15 +168,15 @@ describe('W435.B packages/api-types/src/admin.ts content parity', () => {
       );
     }
     // V-anchor section comments retained as readable provenance dividers.
-    expect(body).toMatch(/\/\/ V-100: force actions on customer resources\./);
-    expect(body).toMatch(/\/\/ V-281: customer-support tooling \(audit-only\)\./);
-    expect(body).toMatch(/\/\/ V-295a: status-page incident management\./);
-    expect(body).toMatch(/\/\/ V-295c3-tombstone: status-page email subscriber admin actions\./);
+    expect(body).toMatch(/\/\/[^\n]*force actions on customer resources\./);
+    expect(body).toMatch(/\/\/[^\n]*customer-support tooling \(audit-only\)\./);
+    expect(body).toMatch(/\/\/[^\n]*status-page incident management\./);
+    expect(body).toMatch(/\/\/[^\n]*tombstone: status-page email subscriber admin actions\./);
   });
 
   it('V-521 ListAuditLogQuery target_resource_id framing pinned: admin-side parity with V-484 customer audit-log filter set; drill into single resource (one webhook delivery) across every admin action that touched it', () => {
     expect(body).toMatch(
-      /\/\/ V-521 — admin-side parity with the V-484 customer audit-log\s*\/\/ filter set\. Drill into a single resource \(e\.g\. one webhook\s*\/\/ delivery\) across every admin action that touched it\./,
+      /\/\/[^\n]*admin-side parity with the[^\n]*customer audit-log\s*\/\/ filter set\. Drill into a single resource \(e\.g\. one webhook\s*\/\/ delivery\) across every admin action that touched it\./,
     );
     expect(body).toMatch(
       /export const ListAuditLogQuerySchema = z\.object\(\{\s*admin_id: z\.string\(\)\.optional\(\),\s*target_id: z\.string\(\)\.optional\(\),\s*action: AdminAuditActionSchema\.optional\(\),\s*from: Iso8601Schema\.optional\(\),\s*to: Iso8601Schema\.optional\(\),/,

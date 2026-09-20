@@ -1,18 +1,15 @@
 import { z } from 'zod';
 
 /**
- * A single structured intent the agent decomposer emits — the closed
- * verb vocabulary (navigate / interact / wait / capture / scroll /
- * behavioral_pause). navigate/interact/wait/capture map onto the
- * `/v1/sessions/:id/{navigate,interact,wait,capture}` driver routes;
- * scroll + behavioral_pause (Agent-3 API-gap, W140) map server-side onto
- * the harness control-plane scroll / behavioral_pause intents. The agent
- * cannot invent new verbs. Mirrors the route's `AgentIntent` union
- * (apps/server/src/services/agent-decomposer.ts); a drift guard pins the
- * member `kind`s in lockstep.
+ * One step the AI decided to take, from a closed list of verbs: navigate,
+ * interact, wait, capture, scroll and behavioral_pause. The first four are
+ * the same actions as `/v1/sessions/:id/{navigate,interact,wait,capture}`;
+ * scroll and behavioral_pause move and pause the way a person would. The
+ * AI cannot invent a verb that is not here.
  *
- * Surfaced on the typed `intents` array of the `POST /v1/agent-sessions/
- * {id}/message` plan-executed turn result (was `z.object({})`).
+ * These appear in the `intents` array of a plan-executed turn returned by
+ * `POST /v1/agent-sessions/{id}/message`, so you can see exactly what was
+ * done on your behalf.
  */
 export const AgentIntentSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('navigate'), url: z.string() }),
@@ -22,9 +19,9 @@ export const AgentIntentSchema = z.discriminatedUnion('kind', [
     action: z.enum(['tap', 'type', 'scroll', 'swipe', 'press']),
     selector: z.string().optional(),
     value: z.string().optional(),
-    /** W1150 (A3 W1149) — type-action only: sensitive value (card/OTP/PIN);
-     *  harness suppresses visible typo-corrections. Rides the dispatch wire
-     *  as the send_keys `sensitive` param. */
+    /** Type actions only. Marks the value as sensitive — a card number, a
+     *  one-time code, a PIN — so it is typed straight through without the
+     *  visible typing mistakes and corrections a person would make. */
     sensitive: z.boolean().optional(),
   }),
   z.object({
@@ -47,15 +44,17 @@ export const AgentIntentSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('scroll'),
     direction: z.enum(['up', 'down']),
-    /** Viewport scroll distance; omit → harness 600px persona default. */
+    /** How far to scroll, in pixels. Omit for the default of 600px. */
     amount_px: z.number().int().positive().optional(),
   }),
   z.object({
     kind: z.literal('behavioral_pause'),
-    /** Explicit pause; omit both → harness persona idle pause. */
+    /** How long to pause, in milliseconds. Omit both fields for the pause the
+     *  session's behaviour profile would take on its own. */
     duration_ms: z.number().int().nonnegative().optional(),
-    /** "Pause like a human reading N words" — scaled to the persona's reading speed
-     *  (harness {kind:'reading', word_count}); wins over duration_ms when present. */
+    /** Pause for as long as a person would take to read this many words,
+     *  scaled to the session's reading speed. Takes precedence over
+     *  `duration_ms` when both are given. */
     reading_word_count: z.number().int().nonnegative().optional(),
   }),
 ]);
@@ -63,9 +62,13 @@ export const AgentIntentSchema = z.discriminatedUnion('kind', [
 export type AgentIntent = z.infer<typeof AgentIntentSchema>;
 
 /**
- * The executor's per-intent result. Mirrors the route's `IntentResult`
- * union (apps/server/src/services/agent-executor.ts). Surfaced on the
- * typed `results` array of the message plan-executed turn result.
+ * The kinds of action the agent stops on and asks you to approve before it
+ * carries them out: a purchase, a payment, or deleting an account.
+ *
+ * A step that stops this way comes back as a `confirmation_required` result
+ * carrying the category and the text it matched on. Send the next message
+ * with the approval to let that step through; send anything else and it is
+ * not carried out.
  */
 // W443/W445 — consequential-action categories for the human-confirm guardrail.
 export const ConsequentialActionCategorySchema = z.enum([
@@ -141,10 +144,12 @@ export type FailureDiagnosis = z.infer<typeof FailureDiagnosisSchema>;
 /** A category as a reader receives it: a known one, or one newer than the reader. */
 export type PublishedFailureDiagnosisCategory = FailureDiagnosisCategory | (string & {});
 
-/** Open on purpose — see the comment above FailureDiagnosisCategorySchema. The
- *  `z.string()` arm is what lets a reader built before a category existed still
- *  parse a response carrying it; the enum arm keeps the known values in the
- *  published spec, so generated SDKs still list them. */
+/** The category set is OPEN: a turn can fail a way this version has never
+ *  heard of, so the type admits any string. The `z.string()` arm is what lets
+ *  a program built before a category existed still parse a response carrying
+ *  it; the enum arm keeps the known values in the published spec, so the SDKs
+ *  still list them. Match the categories you know and treat anything else as
+ *  `unknown`. */
 export const PublishedFailureDiagnosisCategorySchema: z.ZodType<PublishedFailureDiagnosisCategory> =
   z
     .union([FailureDiagnosisCategorySchema, z.string()])

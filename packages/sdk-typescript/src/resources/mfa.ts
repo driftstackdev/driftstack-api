@@ -1,12 +1,12 @@
-// MfaResource — typed methods for /v1/account/mfa/* (V-353b/V-448).
+// MfaResource — typed methods for /v1/account/mfa/*.
 //
 // Enrollment management (status / enroll / verify / disable / regenerate
-// recovery codes). Uses the calling web-session bearer; the V-326e
+// recovery codes). Uses the calling web-session bearer; the
 // X-Driftstack-Account team-RBAC header is not honored — MFA is per-
 // account, not per-team-context.
 //
 // Pairs with `client.auth.mfaChallenge` (login MFA exchange) +
-// `client.auth.mfaStepUp` (V-353e step-up gate).
+// `client.auth.mfaStepUp` (the step-up gate).
 
 import type { HttpClient } from '../http.js';
 
@@ -77,7 +77,7 @@ export class MfaResource {
   }
 
   /**
-   * Disable MFA. Requires fresh MFA proof per V-353e step-up gate
+   * Disable MFA. Requires fresh MFA proof per the step-up gate
    * (15-minute freshness window) — call `client.auth.mfaStepUp(...)`
    * first if the gate is stale. Recovery codes are invalidated.
    */

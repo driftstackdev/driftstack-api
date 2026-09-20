@@ -119,11 +119,7 @@ export const AccountTierSchema = z.enum([
 ]);
 export type AccountTier = z.infer<typeof AccountTierSchema>;
 
-/**
- * The tiers a customer can buy through a self-serve checkout: every
- * AccountTier except `free` (perpetual, nothing to purchase) and `enterprise`
- * (negotiated, paid by bank wire).
- *
+/*
  * V-924 — spelled as an explicit tuple rather than derived with `.refine()`.
  * Both checkout request schemas used `AccountTierSchema.refine(t => t !== 'free'
  * && t !== 'enterprise')`, which is a runtime predicate that JSON Schema cannot
@@ -135,6 +131,11 @@ export type AccountTier = z.infer<typeof AccountTierSchema>;
  * `the-purchasable-product-set-is-one-set` asserts this tuple stays equal to
  * AccountTierSchema minus those two, and equal to the server's priced-tier map,
  * so the explicit spelling cannot drift from either.
+ */
+/**
+ * The plans you can buy through a self-serve checkout: every `AccountTier`
+ * except `free` (perpetual, nothing to purchase) and `enterprise`
+ * (negotiated, paid by bank transfer).
  */
 export const PURCHASABLE_TIERS = [
   'solo_manual',
@@ -148,7 +149,7 @@ export const PURCHASABLE_TIERS = [
 export const PurchasableTierSchema = z.enum(PURCHASABLE_TIERS);
 export type PurchasableTier = z.infer<typeof PurchasableTierSchema>;
 
-/**
+/*
  * Profile-count limits per tier — single source of truth for
  * marketing-site, customer-dashboard, and server-side enforcement.
  * Numeric tiers expose the concrete cap; `'custom'` means
@@ -159,6 +160,13 @@ export type PurchasableTier = z.infer<typeof PurchasableTierSchema>;
  * `profiles`) — the marketing copy uses friendlier display strings
  * but the numbers are the same. The server-side enforcement at
  * `/v1/profiles` creation gate reads from this constant.
+ */
+/**
+ * How many device profiles each plan may keep. `'custom'` means the
+ * allowance is part of a negotiated contract (Enterprise only).
+ *
+ * Creating a profile beyond the plan's number is refused at
+ * `POST /v1/profiles`.
  */
 export const PROFILES_PER_TIER: Record<AccountTier, number | 'custom'> = {
   free: 1,
@@ -171,7 +179,7 @@ export const PROFILES_PER_TIER: Record<AccountTier, number | 'custom'> = {
   enterprise: 'custom',
 };
 
-/**
+/*
  * doc-150 item 6 — per-account profile-storage quota (bytes). The
  * enforced quota is the PER-ACCOUNT TOTAL: the SUM of the account's
  * live (non-trashed) profiles' `size_bytes`. The per-profile rails
@@ -194,6 +202,17 @@ export const PROFILES_PER_TIER: Record<AccountTier, number | 'custom'> = {
  * Sessions WITHOUT a profile are never blocked; reads/restores always
  * work. The dashboard surfaces the soft (80%) warn state compute-on-read.
  */
+/**
+ * How much profile storage each plan includes, in bytes. The figure that
+ * counts is the account TOTAL: the sum of `size_bytes` over every profile
+ * you have not sent to the trash.
+ *
+ * At 100% of the cap, launching a session that uses a profile is refused
+ * with a `storage_quota_exceeded` problem (HTTP 409). Sessions that use no
+ * profile are never blocked, and reading or restoring a profile always
+ * works. The dashboard warns at 80%. Enterprise accounts are warned but
+ * never blocked.
+ */
 export const TIER_STORAGE_BYTES_CAP: Record<AccountTier, number> = {
   free: 1 * 2 ** 30,
   solo_manual: 5 * 2 ** 30,
@@ -207,14 +226,13 @@ export const TIER_STORAGE_BYTES_CAP: Record<AccountTier, number> = {
 };
 
 /**
- * doc-150 item 6 — fraction of the per-account storage cap at which the
- * dashboard surfaces a soft "approaching your limit" warning. Soft never
- * blocks; the hard block is at 100% (`fraction >= 1`). Single source of
- * truth shared by the server quota helper + the dashboard meter.
+ * The fraction of your storage allowance at which an "approaching your
+ * limit" warning appears. A warning never blocks anything; the block is at
+ * 100% (`fraction >= 1`).
  */
 export const STORAGE_SOFT_WARN_FRACTION = 0.8;
 
-/**
+/*
  * Concurrent session limit per tier — the primary metering primitive
  * on paid tiers. A customer can have up to N sessions in `creating` /
  * `ready` / `busy` state simultaneously; creating an (N+1)th triggers
@@ -230,6 +248,15 @@ export const STORAGE_SOFT_WARN_FRACTION = 0.8;
  * constant via `concurrentSessionLimitFor()`. Cross-workspace consumers
  * (customer-dashboard /sessions tier-info, admin-panel account-detail)
  * can import directly.
+ */
+/**
+ * How many sessions each plan may run at once — the thing paid plans are
+ * metered on. A session counts while it is `creating`, `ready` or `busy`;
+ * asking for one more than the plan allows returns
+ * `concurrency_limit_exceeded` (HTTP 429), so retry once a session ends.
+ *
+ * The Enterprise number is the floor for the smallest negotiated contract;
+ * an Enterprise account's own limit can be higher.
  */
 export const TIER_CONCURRENT_SESSION_LIMITS: Record<AccountTier, number> = {
   free: 1,
@@ -264,11 +291,9 @@ export const PROXIES_PER_TIER: Record<AccountTier, number | 'custom'> = {
 };
 
 /**
- * 6.g — maximum wall-clock duration (minutes) for a single session before
- * auto-destroy. `null` = unlimited (paid tiers). Free is capped so it
- * reads as an evaluation tier (bounds the fleet-slot cost-to-serve and
- * deters sustained free use) without needing a daily-usage meter. The
- * session service enforces this at create + via the idle/duration sweep.
+ * The longest a single session may run before it is destroyed, in minutes.
+ * `null` means no limit, which is every paid plan. The free plan is capped
+ * so it stays an evaluation plan; nothing else about it is metered.
  */
 export const MAX_SESSION_MINUTES_PER_TIER: Record<AccountTier, number | null> = {
   free: 20,
@@ -281,7 +306,7 @@ export const MAX_SESSION_MINUTES_PER_TIER: Record<AccountTier, number | null> = 
   enterprise: null,
 };
 
-/**
+/*
  * V-219 — per-tier rate-limit defaults (token-bucket capacity + refill).
  *
  * One config per `(tier, bucketKey)`. Four bucket keys are defined today:
@@ -315,11 +340,32 @@ export const MAX_SESSION_MINUTES_PER_TIER: Record<AccountTier, number | null> = 
  * Cross-workspace consumers can import directly. Per-account overrides
  * via the rate-limit-overrides path (V-052) supersede these defaults.
  */
+/** One rate-limit bucket: `capacity` is the largest burst it allows, and
+ * `refill_per_second` is the rate it refills at, which is the sustained
+ * calls per second for a call of default cost. */
 export interface BucketLimitConfig {
   capacity: number;
   refill_per_second: number;
 }
 
+/**
+ * The rate limits that apply to each plan, one entry per bucket. These are
+ * anti-abuse limits rather than pricing: you pay for concurrent sessions,
+ * not per call. Your account may have higher limits agreed separately.
+ *
+ * The buckets are:
+ *
+ *   - `global` — every authenticated `/v1/*` call draws on this one.
+ *   - `sessions:create` — `POST /v1/sessions` only, capped lower because
+ *     starting a session is the most expensive request you can make.
+ *   - `agent_sessions:message` — `POST /v1/agent-sessions/:id/message`. A
+ *     turn costs model tokens, so it sits well under `global`.
+ *   - `agent_sessions:input_event` — the stream of pointer and key events
+ *     from manual control. These allowances are the largest, because one
+ *     drag emits events continuously.
+ *
+ * Exceeding a bucket returns HTTP 429 with a `Retry-After` header.
+ */
 export const TIER_RATE_LIMIT_DEFAULTS: Record<
   AccountTier,
   Record<
@@ -387,7 +433,7 @@ export const TIER_RATE_LIMIT_DEFAULTS: Record<
   },
 };
 
-/**
+/*
  * V-485 — per-tier feature gating registry.
  *
  * Single source of truth for "which capabilities does this tier
@@ -412,6 +458,12 @@ export const TIER_RATE_LIMIT_DEFAULTS: Record<
  * in `TIER_FEATURES`, then have the route handler call
  * `requireTierFeature(tier, 'newFeature')` on the gated path.
  */
+/**
+ * How the model calls an AI session makes are paid for on a plan.
+ * `byok_only` — you supply your own model API key. `byok_or_bundled` — your
+ * own key, or usage billed by Driftstack. `byok_or_bundled_custom` — the
+ * same, on negotiated terms. `null` — the plan has no AI agent.
+ */
 export type LlmBilling = 'byok_only' | 'byok_or_bundled' | 'byok_or_bundled_custom' | null;
 
 export interface TierFeatures {
@@ -432,14 +484,20 @@ export interface TierFeatures {
   /** LLM billing model when aiAgent is true; `null` when off. */
   llmBilling: LlmBilling;
   /**
-   * 6.g — OpenVPN / WireGuard egress profiles allowed on this tier.
-   * `false` on free (SOCKS5 proxy only — see PROXIES_PER_TIER); all
-   * paid tiers `true`. (Every tier needs at least one proxy: a session
-   * on the bare datacenter IP is not permitted.)
+   * Whether OpenVPN and WireGuard egress are available on this plan.
+   * `false` on free, which is SOCKS5 only — see `PROXIES_PER_TIER`; every
+   * paid plan is `true`. Every plan needs at least one proxy: a session on
+   * a bare datacenter address is not permitted.
    */
   vpnEgress: boolean;
 }
 
+/**
+ * What each plan includes, in the form route handlers and clients act on.
+ * Use it to decide what to offer before making a call: asking for a feature
+ * the plan does not include is refused with a `feature_not_available`
+ * problem (HTTP 403).
+ */
 export const TIER_FEATURES: Record<AccountTier, TierFeatures> = {
   free: {
     concurrentSessions: 1,
@@ -537,7 +595,7 @@ export function tierHasFeature(tier: AccountTier, feature: TierBooleanFeature): 
   return TIER_FEATURES[tier][feature];
 }
 
-/**
+/*
  * Currently-locked archetype identifier + human-readable label.
  *
  * The identifier (`iphone16pro_ios18_7_safari26_4`) is what the API
@@ -556,6 +614,15 @@ export function tierHasFeature(tier: AccountTier, feature: TierBooleanFeature): 
  * correct `iphone16pro_ios18_7_safari26_4`. Customer-facing copy
  * also redlined in the same commit.
  */
+/**
+ * The device profile a session gets when it names none, and the label shown
+ * for it. The identifier is what `POST /v1/sessions { archetype }` accepts
+ * and what is stored on the session and on any profile it creates.
+ *
+ * Both values change together whenever the default device moves. Use
+ * `GET /v1/archetypes` to list everything your account may select rather
+ * than hard-coding this one.
+ */
 // 2026-06-11 launch-archetype cutover: the v1.0 launch DEFAULT moved from
 // iphone16pro_ios18_7_safari26_4 to iphone17_ios18_7_safari26_4 — the single
 // real-device-verified ("PASS") archetype per Agent-1's atlas validator
@@ -565,7 +632,7 @@ export function tierHasFeature(tier: AccountTier, feature: TierBooleanFeature): 
 export const LOCKED_ARCHETYPE_ID = 'iphone17_ios18_7_safari26_4';
 export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 17 / iOS 18.7 / Safari 26.4';
 
-/**
+/*
  * Multi-archetype registry — the catalogue of device archetypes the
  * platform models. Driftstack is NOT a single-device product: it spans
  * many iPhone/iPad models across iOS + Safari versions. LOCKED_ARCHETYPE_ID
@@ -603,15 +670,21 @@ export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 17 / iOS 18.7 / Safari 26.
  * instead of re-hardcoding a list. Flipping the launch default = changing
  * which entry is `status:'launch'`, NOT a system-wide slug swap.
  */
+/**
+ * Which canvas rendering pipeline a device uses. Devices in the same family
+ * draw identically; the value is derived from the Safari version and is not
+ * something you choose.
+ */
 export type ArchetypeCanvasFamily = 'A' | 'B';
 export type ArchetypeStatus = 'launch' | 'available' | 'reference' | 'planned';
 
 /**
- * The EVIDENCE axis, mirrored from Agent-1's catalog `lifecycle` field.
- * `bit_identical` — fork output demonstrated byte-identical to a real capture on
- * the gated surfaces. `available` — config validated and UA measured at that
- * cell, byte-identity not demonstrated there. `held` — withheld on policy.
- * `reference` — our own internal baseline, not a catalog row.
+ * How strong the evidence is that this device is reproduced exactly.
+ * `bit_identical` — output was demonstrated byte-for-byte equal to a real
+ * device on the surfaces that are checked. `available` — the configuration
+ * was validated and the user agent measured on that device, without a
+ * byte-for-byte demonstration. `held` — not offered. `reference` — an
+ * internal baseline rather than a device you can select.
  */
 export type ArchetypeLifecycle =
   | 'bit_identical'
@@ -631,7 +704,7 @@ export interface ArchetypeConfig {
   readonly iosVersion: string;
   /** Safari version segment of the slug, e.g. `26.4`. */
   readonly safariVersion: string;
-  /** Canvas pipeline family (Wave 29-408 A/B split). */
+  /** Which canvas rendering pipeline this device uses. */
   readonly canvasFamily: ArchetypeCanvasFamily;
   /** Fingerprint-atlas readiness — see the enum above. */
   readonly status: ArchetypeStatus;
@@ -697,7 +770,7 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
   enterprise: null,
 };
 
-/**
+/*
  * ⛔ CHROME-ON-iOS ARCHETYPES ARE HELD OUT of this registry on A1's direct
  * instruction (2026-08-30). The held-out set, as of 2026-09-02, is SIX:
  *
@@ -764,6 +837,17 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
  * The flip event is A1 saying so — a direct message to A2 or a `[for A2]` line
  * in operations/agent-bus/live/A1.md. `operations/archetype-catalog.json` is
  * STALE (June 2026 numbers, per A1) and must not be treated as a readiness feed.
+ */
+/**
+ * Every device this platform models, with its identifier, display label and
+ * evidence level. It is not a list of one device: it spans many iPhone and
+ * iPad models across iOS and Safari versions.
+ *
+ * `status` says what a device may be used for: `launch` is the current
+ * default, `available` is selectable but not the default, `reference` is an
+ * internal baseline, and `planned` is a recognised identifier whose device
+ * is not ready yet. The set you can select is `launch` plus `available`;
+ * `GET /v1/archetypes` returns exactly what your account may ask for.
  */
 export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
   // <generated:archetype-registry> — regenerate, do not hand-edit
@@ -1878,7 +1962,7 @@ export function archetypeIdsForTier(tier: AccountTier): readonly string[] {
  * keep the launch default (LOCKED_ARCHETYPE_ID). A tier with a device entitlement gets
  * the NEWEST selectable archetype of its first entitled device — a free account that
  * omits the device must not be handed the iPhone 17 it is not entitled to (and could
- * not then clone, import or restore). Decided 2026-09-05 (ledger P-15).
+ * not then clone, import or restore).
  */
 export function defaultArchetypeIdForTier(tier: AccountTier): string {
   const allowed = ARCHETYPE_DEVICES_PER_TIER[tier];
@@ -1959,7 +2043,7 @@ export const SelectableArchetypeIdSchema = z
 // layer, only granted to keys for the self-hosted GUI workflow per
 // L-001 in docs/locked-decisions.md. Default key creation does not
 // include this scope; enterprise-tier accounts get it explicitly.
-/**
+/*
  * V-174 — scope architecture split. Two new scopes carve up what
  * 'admin' did pre-V-174:
  *
@@ -1999,6 +2083,26 @@ export const SelectableArchetypeIdSchema = z
  *   `driftstack_internal_admin`; cross-account staff authority requires that
  *   exact scope. The enum value remains so stored legacy customer keys parse
  *   and retain their own-account access until they are rotated or revoked.
+ */
+/**
+ * What an API key is allowed to do. A key carries one or more of these.
+ *
+ * The broad scopes are `read`, `write` and `account_owner`; the last one
+ * covers account control — minting and revoking keys, managing the
+ * subscription, and the `/v1/account/*` routes. It resolves to exactly one
+ * account, which is your own unless you send `X-Driftstack-Account` for a
+ * team you are a confirmed member of.
+ *
+ * The granular scopes are written `verb:resource`, such as
+ * `read:sessions`. A broad scope satisfies a granular check of the same
+ * verb, but a granular scope never satisfies a broad one — a narrow key
+ * stays narrow.
+ *
+ * `admin` is kept for keys minted before the scopes were split. It behaves
+ * as `account_owner` plus the customer `admin:*` scopes, so existing keys
+ * keep working until they are rotated or revoked.
+ * `driftstack_internal_admin` is a Driftstack staff scope and is never
+ * granted on a customer key.
  */
 export const ApiKeyScopeSchema = z.enum([
   'read',
@@ -2043,8 +2147,9 @@ export const ApiKeyScopeListRequestSchema = z
   });
 
 /**
- * V-481 — split a granular scope into `[verb, resource]`. Returns
- * null for non-granular scopes (the broad ones don't have a colon).
+ * Split a granular scope into `[verb, resource]` — `'read:sessions'`
+ * becomes `['read', 'sessions']`. Returns null for the broad scopes, which
+ * have no colon in them.
  */
 export function parseGranularScope(
   scope: ApiKeyScope,

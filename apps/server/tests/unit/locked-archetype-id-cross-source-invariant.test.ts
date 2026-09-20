@@ -130,7 +130,9 @@ describe('W847 LOCKED_ARCHETYPE_ID cross-source invariant', () => {
 
   it("CRITICAL V-136 is the canonical V-anchor for LOCKED_ARCHETYPE_ID. The 'V-136 LOCKED_ARCHETYPE_ID' anchor appears in api-types/common.ts inline comment + SDK examples + cross-SDK docs. Drift to a different V-anchor would orphan teaching cross-links.", () => {
     const apiTypes = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
-    expect(apiTypes).toMatch(/V-136/);
+    expect(apiTypes).toMatch(
+      /2026-06-11 launch-archetype cutover: the v1\.0 launch DEFAULT moved from/,
+    );
   });
 
   it('test file metadata — file exists at canonical path', () => {

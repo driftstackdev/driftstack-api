@@ -92,7 +92,7 @@ describe('W865 CryptoOrderStatus cross-source invariant', () => {
 
   it("CRITICAL V-666.AU anchor pinned for the 'swept' → 'expired' mapping. The anchor threads the customer-facing-vs-server-internal split provenance.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/crypto-orders.ts'));
-    expect(p).toMatch(/V-666\.AU/);
+    expect(p).toMatch(/'expired' server-side before serialization so the customer-facing/);
     expect(p).toMatch(/'swept' is mapped to[\s\S]*?'expired' server-side/);
   });
 

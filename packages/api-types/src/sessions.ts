@@ -25,7 +25,7 @@ export const ArchetypeSchema = z
   .min(3)
   .max(60);
 
-/**
+/*
  * V-169 — session purpose drives harness configuration in the WebKit
  * driver (per AFP Layer 1 design from Agent 1's Phase 3 work; see
  * `docs/architecture/afp-harness-configuration.md` once Agent 1 lands
@@ -49,6 +49,21 @@ export const ArchetypeSchema = z
  * internal validation tools and not part of the customer-facing API
  * contract today.
  */
+/**
+ * What a session is for. Leave it unset unless you have been asked to set
+ * it: `production_customer` is the value every customer session uses.
+ *
+ * - `production_customer` (the default) — a private browsing context that
+ *   keeps nothing between sessions, with iOS tracking prevention active as
+ *   it is on a real device.
+ * - `cumulative_rig_validation` — a context that persists instead, used to
+ *   check that a device's fingerprint stays identical across releases.
+ * - `test_domain_probe` — a private context aimed at tracker-owned URLs,
+ *   used for adversarial testing against detection vendors.
+ *
+ * The last two are validation purposes and are not part of the customer API
+ * contract today.
+ */
 export const SessionPurposeSchema = z.enum([
   'production_customer',
   'cumulative_rig_validation',
@@ -58,14 +73,10 @@ export type SessionPurpose = z.infer<typeof SessionPurposeSchema>;
 export const DEFAULT_SESSION_PURPOSE: SessionPurpose = 'production_customer';
 
 /**
- * 2026-06-05 — per-session behavioural persona (file 05 §"Persona model").
- * Selects the human-behaviour profile the harness drives the session with:
- * touch/scroll/typing cadence + dwell distributions. The values mirror the
- * canonical persona catalogue in `@driftstack/behavioural-simulation`
- * (`PersonaId`); a cross-source guard pins them in lockstep. The control
- * plane passes the chosen persona to the driver at create-time; the harness
- * (single source of truth for the behavioural model) consumes it. Optional
- * on session-create; the service defaults it to the middle persona.
+ * How a session behaves like a person: the pace of its touches, scrolling
+ * and typing, and how long it pauses between them. `casual`, `regular` and
+ * `power_user` run from slowest to fastest. Optional when you create a
+ * session — omit it and the middle profile is used.
  */
 export const BehavioralProfileSchema = z.enum(['casual', 'regular', 'power_user']);
 export type BehavioralProfile = z.infer<typeof BehavioralProfileSchema>;
@@ -97,24 +108,22 @@ export const SessionSchema = z.object({
   api_key_id: ApiKeyIdSchema,
   status: SessionStatusSchema,
   archetype: ArchetypeSchema,
-  /** V-169 — harness purpose; defaults to `production_customer`. */
+  /** The session purpose; defaults to `production_customer`. */
   purpose: SessionPurposeSchema,
   label: z.string().nullable(),
   metadata: SessionMetadataSchema.nullable(),
   /**
-   * Harness-reported SOCKS5 egress capabilities (migration 0045 +
-   * cross-agent contract 7d5992d9). Null until the harness emits the
-   * `egress.capability_report` event after proxy wire-up; non-SOCKS5
-   * sessions stay null permanently. Shape pinned by
-   * `EgressCapabilitiesSchema` in `./egress.ts`.
+   * What this session's SOCKS5 proxy turned out to support — see
+   * `EgressCapabilitiesSchema`. Null until the report arrives, shortly
+   * after the proxy is wired up, and permanently null for a session that
+   * does not use SOCKS5.
    */
   egress_capabilities: EgressCapabilitiesSchema.nullable(),
   /**
-   * Arc 5 EGRESS eg.1 — RAW harness-emitted event payload (migration
-   * 0054). Stored alongside `egress_capabilities` (the derived view)
-   * for forensics + schema-evolution safety. Opaque JSON; consumers
-   * should prefer `egress_capabilities` for typed access. Null until
-   * the harness emits.
+   * The egress report exactly as it was reported, kept beside the typed
+   * `egress_capabilities` view of it. Treat it as opaque JSON whose shape
+   * can grow; read `egress_capabilities` unless you need something it does
+   * not expose. Null until the report arrives.
    */
   egress_capability_report: z.record(z.unknown()).nullable(),
   created_at: Iso8601Schema,
@@ -133,11 +142,11 @@ export const SessionLabelSchema = z.string().max(120);
 
 export const CreateSessionRequestSchema = z.object({
   archetype: SelectableArchetypeIdSchema.optional(),
-  /** V-169 — harness purpose; defaults to `production_customer`. */
+  /** The session purpose; defaults to `production_customer`. */
   purpose: SessionPurposeSchema.optional(),
   label: SessionLabelSchema.optional(),
   metadata: SessionMetadataSchema.optional(),
-  /**
+  /*
    * 2026-05-20 — profile binding. When supplied, the server records
    * the session as belonging to this profile (cookies, localStorage,
    * archetype inherited from the profile by default) + bumps the
@@ -151,19 +160,27 @@ export const CreateSessionRequestSchema = z.object({
    * `ownerAccountId = effective.kind === 'team' ? effective.accountId :
    * ctx.account.id` and scopes the lookup to THAT, so a team admin acting
    * as an owner must pass one of the OWNER's profiles; passing their own
-   * gets the 404 the sentence promised for someone else's. Same shape as
-   * the recipes `agent_session_id` claim V-812 retracted, in a package the
-   * recipes work never looked at. Optional so ephemeral sessions
-   * (no persistent state) still work as before. Accepts the canonical
-   * `prof_<uuid>` id the profiles API returns OR a bare uuid (the server
-   * normalizes); kept loose here so the prefixed form validates client-side too.
+   * gets the 404 the sentence promised for someone else's.
+   */
+  /**
+   * Start the session from a saved profile. It inherits that profile's
+   * cookies, local storage and device, and the profile's `last_used_at` is
+   * updated.
+   *
+   * The profile must belong to the account you are acting AS — your own, or
+   * the owner named by `X-Driftstack-Account`. A profile outside that
+   * account returns 404 rather than revealing that it exists, so acting for
+   * an owner means passing one of the OWNER's profiles and not your own.
+   *
+   * Omit it for an ephemeral session that keeps nothing. Accepts either the
+   * `prof_<uuid>` id the profiles API returns or a bare uuid, so the
+   * prefixed form validates client-side too.
    */
   profile_id: ProfileIdInputSchema.optional(),
   /**
-   * 2026-06-05 — behavioural persona for this session. When supplied, the
-   * harness drives touch/scroll/typing with the selected persona's profile;
-   * omitted → the server applies DEFAULT_BEHAVIORAL_PROFILE. Set once for the
-   * session's lifetime (file 05 §"Persona consistency").
+   * How this session should behave like a person — see
+   * `BehavioralProfileSchema`. Omit it for the default. It is chosen once
+   * and holds for the life of the session.
    */
   behavioral_profile: BehavioralProfileSchema.optional(),
 });
@@ -420,7 +437,7 @@ export const ExtractionSpecSchema = z.object({
 export type ExtractionSpec = z.infer<typeof ExtractionSpecSchema>;
 
 export const ExtractRequestSchema = z.object({
-  /** Batch of named extractions (harness bound: ≤100). */
+  /** Batch of named extractions, at most 100 per request. */
   extractions: z.array(ExtractionSpecSchema).min(1).max(100),
 });
 export type ExtractRequest = z.infer<typeof ExtractRequestSchema>;
@@ -443,15 +460,15 @@ export type ExtractResponse = z.infer<typeof ExtractResponseSchema>;
 export const SearchRequestSchema = z.object({
   /** The search text, typed via the behavioural send-keys path. */
   query: z.string().min(1).max(10_000),
-  /** Explicit search-input selector; omit → harness heuristic detection. */
+  /** Explicit search-input selector; omit and the field is found for you. */
   search_selector: z.string().min(1).max(262_144).optional(),
   /** Submit (Return) after typing. Defaults to true. */
   submit: z.boolean().default(true),
   /** Optional selector to wait for after submit (results loaded); omit → a
    *  brief idle settle. When present, drives `results_visible` in the response. */
   wait_for_results_selector: z.string().min(1).max(262_144).optional(),
-  /** Caps the `wait_for_results_selector` wait (seconds). Omit → harness
-   *  default (10s). A timeout is `results_visible: false`, not an error. */
+  /** Caps the `wait_for_results_selector` wait (seconds). Omit for the
+   *  default of 10s. A timeout is `results_visible: false`, not an error. */
   timeout_seconds: z.number().int().min(1).max(120).optional(),
 });
 export type SearchRequest = z.infer<typeof SearchRequestSchema>;
@@ -518,7 +535,7 @@ export const SessionLoginRequestSchema = z.object({
   username: z.string().min(1).max(10_000),
   /** SENSITIVE — typed via the behavioural send-keys path; never logged. */
   password: z.string().min(1).max(10_000),
-  /** Explicit username/email field selector; omit → harness heuristic detection. */
+  /** Explicit username/email field selector; omit and the field is found for you. */
   username_selector: z.string().min(1).max(262_144).optional(),
   /** Explicit password field selector; omit → heuristic. */
   password_selector: z.string().min(1).max(262_144).optional(),
@@ -527,7 +544,7 @@ export const SessionLoginRequestSchema = z.object({
   /** Optional selector whose post-submit presence means success; omit → the
    *  password-field-gone + URL heuristic. Robust for known / multi-step logins. */
   success_selector: z.string().min(1).max(262_144).optional(),
-  /** Caps the post-submit success wait (seconds). Omit → harness default (10s). */
+  /** Caps the post-submit success wait (seconds). Omit for the default of 10s. */
   timeout_seconds: z.number().int().min(1).max(120).optional(),
 });
 export type SessionLoginRequest = z.infer<typeof SessionLoginRequestSchema>;
@@ -549,9 +566,8 @@ const SessionLoginSubmittedResponseSchema = z
      *  Not redacted or otherwise rewritten: an authorized `GET /state` already
      *  returns the same URL. Keep it out of logs like any other session URL. */
     post_login_url: z.string().optional(),
-    /** Producer-observed duration. The public contract caps this at the
-     *  intended 600-second whole-login fence; activation remains held until
-     *  the harness proves that bound at the result-publication boundary. */
+    /** How long the login took, measured where it ran. The public contract
+     *  caps a whole login at 600 seconds. */
     duration_ms: SessionLoginDurationMsSchema,
   })
   .strict();

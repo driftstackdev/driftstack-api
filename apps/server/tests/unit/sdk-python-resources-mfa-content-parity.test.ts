@@ -35,11 +35,9 @@ describe('W582.A packages/sdk-python/src/driftstack/resources/mfa.py content par
 
   it('file exists at canonical path + module docstring V-353b/V-448 framing + auth-pair cross-ref (mfa_challenge + V-353e mfa_step_up) + dict[str, Any]-pending-regen', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(
-      /^"""MFA enrollment resource — \/v1\/account\/mfa\/\* \(V-353b \/ V-448\)\.\n/,
-    );
+    expect(body).toMatch(/^"""MFA enrollment resource — \/v1\/account\/mfa\/[^\n]*\.\n/);
     expect(body).toMatch(/Pairs with ``client\.auth\.mfa_challenge`` \(login MFA exchange\) \+/);
-    expect(body).toMatch(/``client\.auth\.mfa_step_up`` \(V-353e step-up gate\)\./);
+    expect(body).toMatch(/``client\.auth\.mfa_step_up[^\n]*step-up gate\)\./);
     expect(body).toMatch(/Returns ``dict\[str, Any\]`` pending the next ``scripts\/generate\.sh``/);
     expect(body).toMatch(/regen pass — the rich enrollment shapes will surface as Pydantic/);
     expect(body).toMatch(/models then\./);
@@ -80,7 +78,7 @@ describe('W582.A packages/sdk-python/src/driftstack/resources/mfa.py content par
 
   it('disable (sync) — DELETE /v1/account/mfa with coerce_body(body). RETURNS None (the only verb in the resource that does — Python idiom for "204 No Content, no useful response"). V-353e step-up gate + 15-MINUTE window invariant + "Recovery codes are invalidated" side-effect all pinned because dropping any silently makes MFA-disable easier than intended.', () => {
     expect(body).toMatch(/def disable\(self, body: dict\[str, Any\]\) -> None:/);
-    expect(body).toMatch(/"""Disable MFA\. Step-up gated \(V-353e\); call/);
+    expect(body).toMatch(/"""Disable MFA\. Step-up gated[^\n]*call/);
     expect(body).toMatch(/``client\.auth\.mfa_step_up`` first if the 15-minute window is/);
     expect(body).toMatch(/stale\. Recovery codes are invalidated\."""/);
     expect(body).toMatch(

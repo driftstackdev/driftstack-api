@@ -1,12 +1,16 @@
 // EG-API-1.1 — per-session customer-configurable egress schema (Phase 1).
 //
 // Source of truth: docs/planning/133-egress-architecture-cross-agent.md
-// in the driftstack repo (`/Users/john/code/driftstack/.claude/worktrees/
-// busy-satoshi-5fc161/docs/planning/133-egress-architecture-cross-agent.md`
-// pending merge). The planning file LOCKED this schema as binding cross-
-// agent contract on 2026-05-16; Agent 1 (WebKit fork) + Agent 2 (this
+// in the driftstack repo. The planning file LOCKED this schema as binding
+// cross-agent contract on 2026-05-16; Agent 1 (WebKit fork) + Agent 2 (this
 // repo / API + dashboard) + harness (Mac fleet session manager) all
 // read/write per this shape.
+//
+// ⛔ 2026-09-20 — an absolute path to a working copy of the PRIVATE repo used
+// to be quoted above, naming a machine, a home directory and a worktree. This
+// file is compiled into `@driftstack/api-types`, whose dist carries its
+// comments verbatim, and that package is published to npm. Nothing in here is
+// private by default: write it as if a customer will read it, because one can.
 //
 // Why this lives in @driftstack/api-types (not apps/server/src/schemas):
 //   - Customer dashboard reads + writes this shape.
@@ -43,15 +47,13 @@ export type ProxyType = z.infer<typeof ProxyTypeSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * SOCKS5 proxy config (Phase 1).
+ * SOCKS5 proxy settings for a session.
  *
- * `udp_associate: true` is the planning-133 default — UDP ASSOCIATE
- * support is required for WebRTC to route through the proxy (per
- * planning 133 §"Cross-agent split" Agent 1 scope: "for SOCKS5: standard
- * SOCKS5 supports UDP via UDP ASSOCIATE; WebRTC traffic uses ASSOCIATE
- * path"). Customers whose proxy lacks UDP ASSOCIATE will see ICE-
- * candidate gathering fail; the harness rejects the session-create with
- * a clear error at the proxy connectivity check step.
+ * `udp_associate` defaults to `true` because WebRTC can only travel through
+ * a SOCKS5 proxy that supports the UDP ASSOCIATE command. If your proxy does
+ * not support it, ICE candidate gathering fails; the session is refused at
+ * the proxy connectivity check with an error naming the cause, rather than
+ * starting and failing later.
  */
 export const SocksProxyConfigSchema = z.object({
   host: z.string().min(1).max(253),
@@ -60,24 +62,23 @@ export const SocksProxyConfigSchema = z.object({
   password: z.string().min(1).max(256).optional(),
   udp_associate: z.boolean().default(true),
   /**
-   * EG-WK-1.9 (founder verdict 2026-05-17 ~20:15 UTC) — when `true`,
-   * the harness uses SOCKS5 ATYP DOMAINNAME (0x03) so DNS lookups
-   * resolve through the proxy's resolver instead of the local host's.
+   * Resolve host names through the proxy instead of locally. Defaults to
+   * `true`, which asks the proxy for SOCKS5 ATYP DOMAINNAME (0x03) so every
+   * lookup is performed by the proxy's own resolver.
    *
-   * Security hardening — DEFAULTS TO `true` (remote resolution). A SOCKS5
-   * session whose DNS resolves on the fleet node's LOCAL resolver leaks a
-   * lookup from the node's real IP on every navigation, deanonymizing the
-   * session even though all TCP/UDP rides the customer's proxy (a classic
-   * DNS leak that defeats the proxy's IP-hiding purpose). The customer must
-   * not be able to opt into that by omitting the flag, so the secure mode
-   * is the default; the saved-proxy path (account-proxies) already forces
-   * it on. Set explicitly to `false` ONLY for a local/loopback proxy where
-   * there is no real egress to leak (e.g. the fleet-demo gost at 127.0.0.1).
+   * This is the secure mode and it is the default on purpose. Resolving
+   * locally sends a DNS lookup from the session's own address on every
+   * navigation, which identifies the session even though all of its other
+   * traffic rides your proxy. Omitting the field must not opt you into that,
+   * so it defaults to on, and a saved proxy always uses it.
    *
-   * If `true` but the proxy doesn't support DOMAINNAME, the harness emits
-   * the warning code `dns_remote_resolve_unsupported_by_proxy` and falls
-   * back per safeguard policy. The actual mode used is reported back in
-   * `egress_capabilities.dns_remote_resolve`.
+   * Set it to `false` only for a loopback or local proxy, where there is no
+   * real egress to leak.
+   *
+   * If the proxy does not support name resolution on its side, the session
+   * reports the warning `dns_remote_resolve_unsupported_by_proxy` and then
+   * follows your egress safeguard settings. The mode actually used is
+   * reported back in `egress_capabilities.dns_remote_resolve`.
    */
   require_remote_dns: z.boolean().default(true),
 });
@@ -112,6 +113,15 @@ export type SocksProxyConfig = z.infer<typeof SocksProxyConfigSchema>;
  */
 const OVPN_CLIENT_DIRECTIVE_RE = /^[ \t]*client[ \t]*(?:[#;].*)?$/m;
 const OVPN_REMOTE_DIRECTIVE_RE = /^[ \t]*remote\s+\S+/m;
+/**
+ * OpenVPN settings for a session.
+ *
+ * `config_blob` is the full text of your `.ovpn` file, up to 256 KB. It must
+ * be a client configuration: it needs a `client` line and a `remote` line
+ * naming the server, or the request is refused with a message saying which
+ * one is missing. Comments and blank lines are fine. `username` and
+ * `password` are for configurations that use `auth-user-pass`.
+ */
 export const OpenVpnProxyConfigSchema = z.object({
   config_blob: z
     .string()
@@ -182,6 +192,19 @@ const WG_CIDR_LIST_RE =
   /^[ \t]*[0-9A-Fa-f:.]+\/\d{1,3}(?:[ \t]*,[ \t]*[0-9A-Fa-f:.]+\/\d{1,3})*[ \t]*$/;
 const WG_IP_LIST_RE = /^[ \t]*[0-9A-Fa-f:.]+(?:[ \t]*,[ \t]*[0-9A-Fa-f:.]+)*[ \t]*$/;
 
+/**
+ * WireGuard settings for a session, given as the individual values of a
+ * `wg0.conf` rather than as one blob, so each can be checked and reported on
+ * its own.
+ *
+ * `private_key`, `peer_public_key` and the optional `preshared_key` are
+ * base64 WireGuard keys (44 characters). `endpoint` is `host:port`, with an
+ * IPv6 literal bracketed as wg-quick writes it (`[2001:db8::1]:51820`).
+ * `address` is the `[Interface] Address` line and is required — without it a
+ * session cannot bring the tunnel up. `allowed_ips` defaults to `0.0.0.0/0`,
+ * and `dns` is optional. Keys and the preshared key are stored encrypted and
+ * never returned.
+ */
 export const WireGuardProxyConfigSchema = z.object({
   private_key: z.string().regex(/^[A-Za-z0-9+/]{43}=$/, {
     message: 'private_key must be a valid WireGuard key (44 characters, base64)',
@@ -258,8 +281,8 @@ export type WireGuardProxyConfig = z.infer<typeof WireGuardProxyConfigSchema>;
  * Discriminated union: `type` selects which sibling field carries the
  * real config. The non-matching siblings MUST be omitted (Zod
  * discriminatedUnion enforces this — passing `{type:'socks5', openvpn:
- * {...}}` rejects). This mirrors planning 133's JSON example where
- * each request carries exactly one of socks5 / openvpn / wireguard.
+ * {...}}` rejects). Each request carries exactly one of socks5 / openvpn /
+ * wireguard.
  */
 export const ProxyConfigSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('socks5'), socks5: SocksProxyConfigSchema }),
@@ -313,14 +336,13 @@ export type InlineVpnProxyWire = z.infer<typeof InlineVpnProxyWireSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * Per planning 133 §"Egress safeguard enforcement" — defense-in-depth
- * configuration. The defaults match planning 133's locked example: all
- * three checks ON. Customers can NOT relax any of these for v1 launch
- * (CLAUDE.md "Egress safeguards enforce: sessions cannot egress without
- * proxy" is non-negotiable); the fields exist in the schema so future
- * enterprise customers with audited proxy infrastructure can selectively
- * opt out (Tier-3 founder verdict required before any opt-out is
- * implemented).
+ * Defence-in-depth checks on a session's egress. All three are on by
+ * default, and a session cannot reach the internet outside the proxy you
+ * configured: sessions do not egress without one.
+ *
+ * Relaxing a safeguard is not available today — the fields are part of the
+ * shape so that an audited opt-out can be offered later without a breaking
+ * change.
  */
 export const EgressSafeguardSchema = z.object({
   block_direct_internet: z.boolean().default(true),
@@ -334,16 +356,13 @@ export type EgressSafeguard = z.infer<typeof EgressSafeguardSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * The canonical per-session egress config — what flows from the API
- * through the harness to the WebKit fork. Planning 133 §"Per-session
- * config schema" specifies this exact shape; Agent 1 + Agent 2 +
- * harness all consume `SessionEgressConfig` (the inferred type) from
- * this single Zod source.
+ * The egress configuration for one session: which proxy it uses and which
+ * safeguards apply. Sent to POST /v1/sessions/{id}/proxy and returned on
+ * GET /v1/sessions/{id}.
  *
- * `session_id` is repeated here (it's also in the URL on POST
- * /v1/sessions/{id}/proxy) so the payload is self-contained for the
- * harness — the harness gets the payload via stdin / IPC, not via the
- * HTTP URL, so the body must carry the id.
+ * `session_id` is repeated in the body even though it is already in the URL,
+ * so the payload identifies its own session wherever it is stored, logged or
+ * replayed.
  */
 export const SessionEgressConfigSchema = z.object({
   session_id: z.string().min(1),
@@ -361,10 +380,10 @@ export type SessionEgressConfig = z.infer<typeof SessionEgressConfigSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * Customers can save reusable proxy configs (per planning 133
- * §"Cross-agent split" Agent 2 scope: "POST /v1/proxies — store
- * reusable customer proxy config"). The save-payload shape mirrors
- * `proxy: ProxyConfigSchema` plus a customer-visible label.
+ * A reusable proxy configuration stored on your account with
+ * POST /v1/proxies, so you do not have to repeat it on every session.
+ * `proxy` has the same shape it has on a session; `label` is the name you
+ * give it.
  */
 export const SavedProxyConfigSchema = z.object({
   label: z.string().min(1).max(120),
@@ -377,47 +396,37 @@ export type SavedProxyConfig = z.infer<typeof SavedProxyConfigSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * Capability report emitted by the harness control-websocket after a
- * SOCKS5 proxy is wired up. The control plane persists the report on
- * `sessions.egress_capabilities` (migration 0045) and surfaces it on
- * GET /v1/sessions/{id}.
+ * What your proxy turned out to support, reported once a SOCKS5 proxy has
+ * been wired up for the session and returned on GET /v1/sessions/{id}.
  *
- * Shape locked by the cross-agent contract — fields are NOT optional in
- * the wire payload, only the column itself is nullable (pre-migration
- * rows + non-SOCKS5 sessions + async-report-not-yet-arrived).
+ * The whole object is null until that report arrives, and for sessions that
+ * do not use SOCKS5. Once it is present, every field in it is filled in.
  *
- * - `udp_associate` — does the customer's SOCKS5 proxy support the
- *   UDP ASSOCIATE command per RFC 1928 §6? Drives QUIC-over-proxy
- *   feasibility.
- * - `quic_route` — how QUIC traffic is being handled for this session:
- *   `proxy` (UDP-tunneled through SOCKS5), `direct` (proxy refuses UDP,
- *   QUIC bypasses safeguard — only reachable in opt-out configs;
- *   default safeguard blocks this), or `disabled` (QUIC support turned
- *   off, all traffic falls back to HTTP/2 over TCP).
- * - `dns_remote_resolve` — added by founder verdict EG-WK-1.9 2026-05-17
- *   ~20:15 UTC ("proxy-only DNS"). Whether DNS lookups are being
- *   resolved THROUGH the SOCKS5 proxy server (`true`) or via the local
- *   host's resolver (`false`). When the session's
- *   `proxy.require_remote_dns` flag is set, the harness verifies the
- *   proxy supports SOCKS5 ATYP DOMAINNAME (0x03) and reports here;
- *   if the proxy can't, the harness emits warning
- *   `dns_remote_resolve_unsupported_by_proxy` and falls back to local
- *   resolution (or refuses to wire egress, depending on safeguard
- *   policy).
- * - `warnings` — string codes from a closed enum the harness may report
- *   alongside the capability result. Known codes:
- *     - `udp_unsupported_by_proxy` (SOCKS5 server returned a non-success
- *       reply to UDP ASSOCIATE)
- *     - `quic_disabled_fallback_http2` (QUIC was disabled at session
- *       create time; emitted for parity with `udp_unsupported_by_proxy`
- *       so dashboards can render a uniform "why no QUIC?" hint)
- *     - `dns_remote_resolve_unsupported_by_proxy` (proxy returned a
- *       non-success reply for an ATYP DOMAINNAME request, falling
- *       back to local resolution per EG-WK-1.9)
+ * - `udp_associate` — whether your SOCKS5 proxy supports the UDP ASSOCIATE
+ *   command (RFC 1928 §6). This decides whether QUIC can travel through it.
+ * - `quic_route` — how QUIC traffic is handled for this session: `proxy`
+ *   (tunnelled over SOCKS5 UDP), `direct` (the proxy refused UDP and QUIC
+ *   goes around the tunnel — reachable only where a safeguard has been
+ *   relaxed; the default safeguards block it), or `disabled` (QUIC is off
+ *   for this session and traffic falls back to HTTP/2 over TCP).
+ * - `dns_remote_resolve` — whether host names were resolved by the proxy
+ *   (`true`) or locally (`false`). When `proxy.require_remote_dns` is set,
+ *   the proxy is checked for SOCKS5 ATYP DOMAINNAME (0x03) support; if it
+ *   has none, the warning below is reported and the session falls back to
+ *   local resolution, or refuses to egress, according to your safeguard
+ *   settings.
+ * - `warnings` — codes naming anything the proxy could not do:
+ *     - `udp_unsupported_by_proxy` — the proxy answered UDP ASSOCIATE with
+ *       a non-success reply.
+ *     - `quic_disabled_fallback_http2` — QUIC was switched off when the
+ *       session was created, so there was no QUIC to route.
+ *     - `dns_remote_resolve_unsupported_by_proxy` — the proxy answered an
+ *       ATYP DOMAINNAME request with a non-success reply, so lookups fell
+ *       back to local resolution.
  *
- * Unknown warning codes are passed through verbatim — the SDK does not
- * narrow to a Zod enum so the harness can ship new codes without an
- * SDK release. Dashboard treats unknown codes as opaque strings.
+ * Read `warnings` as opaque strings: a code you do not recognise is passed
+ * through verbatim rather than rejected, so a new one can appear without an
+ * SDK upgrade.
  */
 export const EgressCapabilitiesSchema = z.object({
   udp_associate: z.boolean(),

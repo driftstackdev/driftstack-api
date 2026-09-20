@@ -73,7 +73,7 @@ describe('W869 RateLimitBucket cross-source invariant', () => {
 
   it("CRITICAL V-219 anchor pinned in api-types/common.ts above TIER_RATE_LIMIT_DEFAULTS. The 'V-219 — per-tier rate-limit defaults' header threads the rate-limit-policy provenance.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
-    expect(p).toMatch(/V-219 — per-tier rate-limit defaults/);
+    expect(p).toMatch(/per-tier rate-limit defaults/);
   });
 
   // ─── api-types accounts.ts RateLimitBucketSchema enum field ──

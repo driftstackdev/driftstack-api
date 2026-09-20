@@ -47,20 +47,16 @@ describe('W590.C packages/sdk-go/mfa.go content parity', () => {
   it("file exists at canonical path + V-353b/V-448 MfaResource binds /v1/account/mfa/* + pairs-with-auth-MfaChallenge/MfaStepUp + CRITICAL per-account-only invariant: 'MFA enrollment is per-account, never per-team-context — these endpoints don't honor the X-Driftstack-Account header.' Drift to honoring the header would let a team member set up MFA on the owner's account.", () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/^package driftstack$/m);
-    expect(body).toMatch(
-      /\/\/ MfaResource handles \/v1\/account\/mfa\/\* endpoints \(V-353b \/ V-448\)\./,
-    );
+    expect(body).toMatch(/\/\/ MfaResource handles \/v1\/account\/mfa\/\* endpoints[^\n]*\./);
     expect(body).toMatch(/\/\/ Pairs with `client\.Auth\.MfaChallenge` \(login MFA exchange\) and/);
-    expect(body).toMatch(
-      /\/\/ `client\.Auth\.MfaStepUp` \(V-353e step-up gate\)\. MFA enrollment is/,
-    );
+    expect(body).toMatch(/\/\/ `client\.Auth\.MfaStepUp[^\n]*step-up gate\)\. MFA enrollment is/);
     expect(body).toMatch(/\/\/ per-account, never per-team-context — these endpoints don't honor/);
     expect(body).toMatch(/\/\/ the X-Driftstack-Account header\./);
     expect(body).toMatch(/^type MfaResource struct \{\s*\n\s*client \*Client\s*\n\}/m);
   });
 
   it("MfaStatus — V-353b 4-field enrollment state with nullable EnrolledAt + LastUsedAt + UnusedRecoveryCodes count. UnusedRecoveryCodes int is what lets the dashboard nag users when they've burnt through their codes and should regenerate before lockout.", () => {
-    expect(body).toMatch(/\/\/ MfaStatus — V-353b enrollment state\./);
+    expect(body).toMatch(/\/\/ MfaStatus[^\n]*enrollment state\./);
     expect(body).toMatch(
       /^type MfaStatus struct \{\s*\n\s*Enrolled\s+bool\s+`json:"enrolled"`\s*\n\s*EnrolledAt\s+\*time\.Time `json:"enrolled_at"`\s*\n\s*LastUsedAt\s+\*time\.Time `json:"last_used_at"`\s*\n\s*UnusedRecoveryCodes int\s+`json:"unused_recovery_codes"`\s*\n\}/m,
     );
@@ -126,9 +122,7 @@ describe('W590.C packages/sdk-go/mfa.go content parity', () => {
   });
 
   it('Disable — V-353e step-up-gated DELETE /v1/account/mfa. CRITICAL framing: "Requires fresh MFA proof per V-353e step-up gate. Customer should call MfaStepUp first if the 15-min window is stale. Recovery codes are invalidated." Both the 15-min step-up window AND the "recovery codes are invalidated" side-effect are pinned because dropping either would silently make MFA-disable easier than intended.', () => {
-    expect(body).toMatch(
-      /\/\/ Disable — disable MFA\. Requires fresh MFA proof per V-353e step-up/,
-    );
+    expect(body).toMatch(/\/\/ Disable — disable MFA\. Requires fresh MFA proof per[^\n]*step-up/);
     expect(body).toMatch(
       /\/\/ gate\. Customer should call MfaStepUp\(ctx, \.\.\.\) first if the 15-min/,
     );

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "driftstack-sdk"
-version = "0.1.5"
+version = "0.2.0"
 description = "Driftstack Python SDK — stealth iPhone Safari automation. Import as `driftstack`."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -61,8 +61,19 @@ packages = ["src/driftstack"]
 include = [
   "/src/driftstack",
   "/README.md",
+  "/CHANGELOG.md",
+  "/LICENSE",
   "/pyproject.toml",
 ]
+# NOTE: this `include` list does not decide everything in the sdist. Hatchling
+# FORCE-INCLUDES the nearest .gitignore at or above this directory, and neither
+# `include` nor `exclude` overrides a force-include. With no .gitignore here the
+# nearest one is the repository root's, and PyPI served it verbatim inside
+# `driftstack_sdk-<version>.tar.gz`: internal identifiers, the name and path of
+# the private repository, and a line saying which document there records where
+# the guards are weak. `packages/sdk-python/.gitignore` now stands in front of
+# it — a short, local, publishable file. Do not delete it. The packaging guard
+# in apps/server/tests/unit pins both halves.
 
 # ──────────────────────────────────────────────────────────────────
 # pytest
@@ -142,8 +153,4 @@ module = "driftstack.resources.*"
 # JSON; mypy was already trusting that on the call site. Scoped
 # override keeps strict checking everywhere else (http.py, client.py,
 # retry.py, errors.py, webhook_signature.py).
-#
-# Tracked in docs/internal/2026-05-19-audit-log-coverage-audit.md
-# (audit-log gap context) + the FULL AUTOPILOT directive's
-# "Python SDK mypy 132 errors" backlog slice.
 warn_return_any = false

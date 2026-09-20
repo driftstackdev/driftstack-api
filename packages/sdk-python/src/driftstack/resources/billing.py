@@ -1,4 +1,4 @@
-"""Billing resource — /v1/billing (V-082).
+"""Billing resource — /v1/billing.
 
 ``dict[str, Any]`` typing pending the next regen pass.
 """

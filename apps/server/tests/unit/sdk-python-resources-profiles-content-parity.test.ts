@@ -34,7 +34,7 @@ describe('W582.C packages/sdk-python/src/driftstack/resources/profiles.py conten
 
   it('file exists at canonical path + module docstring V-081 framing + 3-pending-pydantic-model regen invariant (Profile + CreateProfileRequest + UpdateProfileRequest will surface on next generate.sh pass). "Runtime path already returns the parsed JSON shape; type-strictness lands on the next regen" framing pinned because it tells customers the wire shape is stable today even though Python typing is dict[str, Any].', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(/^"""Profiles resource — \/v1\/profiles \(V-081\)\.\n/);
+    expect(body).toMatch(/^"""Profiles resource — \/v1\/profiles[^\n]*\.\n/);
     expect(body).toMatch(/Type annotations on request\/response bodies use ``dict\[str, Any\]``/);
     expect(body).toMatch(/pending the next ``scripts\/generate\.sh`` regeneration pass that/);
     expect(body).toMatch(
@@ -112,7 +112,7 @@ describe('W582.C packages/sdk-python/src/driftstack/resources/profiles.py conten
       /def clone\(self, profile_id: str, body: dict\[str, Any\] \| None = None\) -> dict\[str, Any\]:/,
     );
     expect(body).toMatch(
-      /"""V-313 — duplicate a profile\. Server auto-derives "\(copy\)" \/ "\(copy 2\)" \//,
+      /[Dd]uplicate a profile\. Server auto-derives "\(copy\)" \/ "\(copy 2\)" \//,
     );
     expect(body).toMatch(
       /\.\.\. name when ``body\["name"\]`` is omitted\. Tier-cap \+ name-conflict/,

@@ -1,4 +1,4 @@
-// AuthResource — typed methods for /v1/auth/* (V-079).
+// AuthResource — typed methods for /v1/auth/*.
 //
 // Note: these endpoints don't require an API key (they ARE the auth
 // gate). Customers using the auth flow do so from a browser dashboard
@@ -58,7 +58,7 @@ export class AuthResource {
   }
 
   /**
-   * V-353d — discriminated-union response. When the account has MFA
+   * A discriminated-union response. When the account has MFA
    * enrolled, the server returns `{ mfa_required: true, challenge_token,
    * challenge_expires_at }` instead of a session. Branch on the
    * `mfa_required` literal:
@@ -127,7 +127,7 @@ export class AuthResource {
   }
 
   /**
-   * V-445 — exchange a login challenge_token (returned on the
+   * Exchange a login challenge_token (returned on the
    * MFA-required branch) for a real session via TOTP code or recovery
    * code. Distinguished response carries `via: 'totp' | 'recovery'`.
    */
@@ -140,8 +140,8 @@ export class AuthResource {
   }
 
   /**
-   * V-445 — refresh `mfa_satisfied_at` on the calling web session
-   * (V-353e step-up gate; 15-minute freshness window). No new session
+   * Refresh `mfa_satisfied_at` on the calling web session
+   * (step-up gate; 15-minute freshness window). No new session
    * issued; the existing session row's mfa timestamp advances. Pair
    * with `MfaStepUpRequiredError` recovery flows.
    */
@@ -154,7 +154,7 @@ export class AuthResource {
   }
 
   /**
-   * V-460 — V-266 CLI/GUI activation flow: initiate.
+   * CLI/GUI activation flow: initiate.
    *
    * The CLI/GUI calls this with a CSRF nonce + optional client label.
    * Returns a one-shot code, a separate user code displayed by the
@@ -170,7 +170,7 @@ export class AuthResource {
   }
 
   /**
-   * V-460 — V-266 CLI/GUI activation flow: bind.
+   * CLI/GUI activation flow: bind.
    *
    * Web-session-authenticated. Called by the dashboard's
    * /cli/authorize confirmation page after the user enters the initiating
@@ -188,7 +188,7 @@ export class AuthResource {
   }
 
   /**
-   * V-460 — V-266 CLI/GUI activation flow: exchange.
+   * CLI/GUI activation flow: exchange.
    *
    * Polled by the CLI/GUI. Returns one of three branches:
    * - `{ status: 'pending' }` — keep polling.

@@ -4,7 +4,7 @@ Header format (Stripe-style): ``t=<unix-seconds>,v1=<hex hmac>``.
 HMAC = HMAC-SHA256(``<unix-seconds>.<raw body>``, ``<secret>``).
 
 Mirrors :func:`verifyWebhookSignature` from the TypeScript SDK so a
-multi-language receiver fleet works against the same wire format.
+multi-language receiver setup works against the same wire format.
 
 Example::
 
@@ -134,7 +134,7 @@ def verify_webhook_signature(
     ``request.get_data()``; FastAPI: ``await request.body()``;
     Django: ``request.body``).
 
-    V-359 — ``header_prev`` is an OPTIONAL fallback for a
+    ``header_prev`` is an OPTIONAL fallback for a
     separately-supplied previous-secret signature. Driftstack does
     NOT emit a separate header: during a rotation grace window the
     previous-secret HMAC is included as a second ``v1=`` inside the
@@ -144,7 +144,7 @@ def verify_webhook_signature(
     needed. When set, the verifier accepts EITHER ``header`` OR
     ``header_prev`` matching ``secret``.
     """
-    # V-2010 — refuse before hashing when the signing secret is empty. ``hmac.new``
+    # Refuse before hashing when the signing secret is empty. ``hmac.new``
     # accepts a zero-length key and returns a perfectly good digest, so without
     # this an attacker who knows the body and timestamp computes
     # ``HMAC-SHA256(b"", f"{t}.{body}")`` and it verifies. Measured: that exact

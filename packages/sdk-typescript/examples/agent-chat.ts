@@ -111,10 +111,22 @@ function printOutcome(resp: AgentMessageResponse): void {
           console.log(`  ⏸ waiting for approval: ${r.category} ("${r.matchedText}")`);
         }
       }
-      if (resp.answer !== undefined) console.log(`Answer: ${resp.answer}`);
+      // `answer` and `answer_unavailable` never arrive together, and a task
+      // that only acts has neither. `answer_unavailable` is open text: show it,
+      // do not match on it.
+      if (resp.answer !== undefined) {
+        console.log(`Answer: ${resp.answer}`);
+      } else if (resp.answer_unavailable !== undefined) {
+        console.log(`No answer: ${resp.answer_unavailable}`);
+      }
       // `ok` alone does not mean finished: a `notice` says why the task is not
       // done yet (send "continue" as the next message when it asks for that).
-      if (resp.notice !== undefined) console.log(`Not finished: ${resp.notice}`);
+      // `notice_reason` is the one word an unattended job branches on; the
+      // sentence is what a person reads. A reason this example has never heard
+      // of still shows its sentence.
+      if (resp.notice !== undefined) {
+        console.log(`Not finished (${resp.notice_reason ?? 'no reason given'}): ${resp.notice}`);
+      }
       console.log(resp.ok && resp.notice === undefined ? 'Done.' : 'The task did not finish.');
       break;
     case 'clarify':

@@ -1,4 +1,4 @@
-// EmailPreferencesResource — typed methods for /v1/account/email-preferences (V-204).
+// EmailPreferencesResource — typed methods for /v1/account/email-preferences.
 //
 // Per-event opt-in/opt-out toggles for non-critical customer emails
 // (signup-welcome, session-failed-first, billing-receipt, etc).

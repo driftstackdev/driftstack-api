@@ -1,4 +1,4 @@
-"""V-298c / V-309f — Team RBAC resource.
+"""Team RBAC resource.
 
 All six /v1/team/* endpoints, plus the two /v1/teams team-record
 endpoints. Team membership IS honored on the auth

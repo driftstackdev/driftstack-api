@@ -103,25 +103,25 @@ class Driftstack:
         self.usage = UsageResource(self._http)
         self.webhooks = WebhooksResource(self._http)
         self.profiles = ProfilesResource(self._http)
-        # V-312 — immutable point-in-time profile snapshots.
+        # Immutable point-in-time profile snapshots.
         self.profile_snapshots = ProfileSnapshotsResource(self._http)
         self.billing = BillingResource(self._http)
-        # V-666 — crypto-checkout / crypto-orders.
+        # Crypto-checkout / crypto-orders.
         self.crypto_orders = CryptoOrdersResource(self._http)
         self.auth = AuthResource(self._http)
-        # V-385 / V-434 — /v1/account/me rich-shape read.
+        # /v1/account/me rich-shape read.
         self.account = AccountResource(self._http)
-        # V-353b / V-448 — MFA enrollment management.
+        # MFA enrollment management.
         self.mfa = MfaResource(self._http)
-        # V-216 / V-449 — audit-log read + iterate.
+        # Audit-log read + iterate.
         self.audit_log = AuditLogResource(self._http)
-        # V-204 / V-449 — email preferences.
+        # Email preferences.
         self.email_preferences = EmailPreferencesResource(self._http)
-        # V-049 / V-458 — legal acceptance.
+        # Legal acceptance.
         self.legal = LegalResource(self._http)
-        # V-298c — Team RBAC. Act on an owner's account via X-Driftstack-Account.
+        # Team RBAC. Act on an owner's account via X-Driftstack-Account.
         self.team = TeamResource(self._http)
-        # EG-API-1.2/1.3 — customer-configurable egress (planning 133).
+        # Customer-configurable egress.
         self.egress = EgressResource(self._http)
         # Agent sessions: create, inspect, control, stream, and close browser-agent work.
         self.agent_sessions = AgentSessionsResource(self._http)
@@ -171,25 +171,25 @@ class AsyncDriftstack:
         self.usage = AsyncUsageResource(self._http)
         self.webhooks = AsyncWebhooksResource(self._http)
         self.profiles = AsyncProfilesResource(self._http)
-        # V-312 — immutable point-in-time profile snapshots.
+        # Immutable point-in-time profile snapshots.
         self.profile_snapshots = AsyncProfileSnapshotsResource(self._http)
         self.billing = AsyncBillingResource(self._http)
-        # V-666 — crypto-checkout / crypto-orders.
+        # Crypto-checkout / crypto-orders.
         self.crypto_orders = AsyncCryptoOrdersResource(self._http)
         self.auth = AsyncAuthResource(self._http)
-        # V-385 / V-434 — /v1/account/me rich-shape read.
+        # /v1/account/me rich-shape read.
         self.account = AsyncAccountResource(self._http)
-        # V-353b / V-448 — MFA enrollment management.
+        # MFA enrollment management.
         self.mfa = AsyncMfaResource(self._http)
-        # V-216 / V-449 — audit-log read + iterate.
+        # Audit-log read + iterate.
         self.audit_log = AsyncAuditLogResource(self._http)
-        # V-204 / V-449 — email preferences.
+        # Email preferences.
         self.email_preferences = AsyncEmailPreferencesResource(self._http)
-        # V-049 / V-458 — legal acceptance.
+        # Legal acceptance.
         self.legal = AsyncLegalResource(self._http)
-        # V-298c — Team RBAC. Act on an owner's account via X-Driftstack-Account.
+        # Team RBAC. Act on an owner's account via X-Driftstack-Account.
         self.team = AsyncTeamResource(self._http)
-        # EG-API-1.2/1.3 — customer-configurable egress (planning 133).
+        # Customer-configurable egress.
         self.egress = AsyncEgressResource(self._http)
         # Agent sessions: create, inspect, control, stream, and close browser-agent work.
         self.agent_sessions = AsyncAgentSessionsResource(self._http)

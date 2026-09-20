@@ -5,7 +5,7 @@ import (
 	"net/url"
 )
 
-// TeamResource handles /v1/team/* and /v1/teams. V-298c routes. Team membership IS
+// TeamResource handles /v1/team/* and /v1/teams. Team-RBAC routes. Team membership IS
 // honored on the auth path: send X-Driftstack-Account: acc_<owner-uuid> to
 // act on the resources of an owner you are a member of. The request is
 // authorized against your membership role (admin or member) and the route's

@@ -54,21 +54,23 @@ describe('W697 cross-SDK V-216/V-326c audit-log team-RBAC passthrough parity', (
     const go = read(GO_AUDIT);
     const py = read(PY_AUDIT);
 
-    expect(ts).toMatch(/V-216/);
-    expect(go).toMatch(/V-216/);
-    expect(py).toMatch(/V-216/);
+    expect(ts).toMatch(/single audit-log entry shape\. The same row also surfaces/);
+    expect(go).toMatch(/single ledger entry\. Action-specific structured/);
+    expect(py).toMatch(/Append-only event ledger for compliance \/ monitoring\. Returns/);
   });
 
   it("CRITICAL V-326c X-Driftstack-Account team-RBAC passthrough header pinned in sdk-typescript + sdk-go on the audit-log resource header. The team-passthrough is what lets a team member with read access on the OWNER pull the OWNER's audit log — drift to dropping would silently break the team-admin compliance flow. sdk-python (next regen pass) does not yet mention V-326c in its docstring.", () => {
     const ts = read(TS_AUDIT);
     const go = read(GO_AUDIT);
 
-    // sdk-typescript: "V-326c X-Driftstack-Account team-RBAC header"
-    expect(ts).toMatch(/V-326c X-Driftstack-Account/);
+    // sdk-typescript: the read endpoints honour the team-RBAC header.
+    expect(ts).toMatch(
+      /Read endpoints honor the[^\n]*X-Driftstack-Account\s*\/\/ team-RBAC header/,
+    );
     expect(ts).toMatch(/team-RBAC header/);
 
-    // sdk-go: "V-326c X-Driftstack-Account team-RBAC header"
-    expect(go).toMatch(/V-326c X-Driftstack-Account/);
+    // sdk-go: the same header, in the resource's own doc comment.
+    expect(go).toMatch(/honors the[^\n]*X-Driftstack-Account team-RBAC\s*\/\/ header/);
     expect(go).toMatch(/team-RBAC/);
   });
 
@@ -150,7 +152,7 @@ describe('W697 cross-SDK V-216/V-326c audit-log team-RBAC passthrough parity', (
 
     // sdk-typescript: "actor_account_id" with "CALLING account for customer actions" framing.
     expect(ts).toMatch(/CALLING account for customer actions/);
-    expect(ts).toMatch(/may be a team member acting on the OWNER's log per V-326c/);
+    expect(ts).toMatch(/may be a team member acting on the OWNER's log/);
 
     // sdk-go: ActorAccountID with separate AccountID.
     expect(go).toMatch(/ActorAccountID\s+\*string\s+`json:"actor_account_id"`/);
@@ -174,9 +176,9 @@ describe('W697 cross-SDK V-216/V-326c audit-log team-RBAC passthrough parity', (
     const py = read(PY_AUDIT);
 
     // V-462/V-297 anchors.
-    expect(ts).toMatch(/V-462 \/ V-297/);
-    expect(go).toMatch(/V-462 \/ V-297/);
-    expect(py).toMatch(/V-462 \/ V-297/);
+    expect(ts).toMatch(/[Bb]ulk-export the calling account's audit log as a/);
+    expect(go).toMatch(/Designed for compliance/);
+    expect(py).toMatch(/[Aa]sync mirror of ``AuditLogResource\.export``\."""/);
 
     // 10,000-row cap.
     for (const sdk of [ts, go, py]) {
@@ -230,8 +232,8 @@ describe('W697 cross-SDK V-216/V-326c audit-log team-RBAC passthrough parity', (
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-216`).toMatch(/V-216/);
-      expect(body, `${name} V-462/V-297`).toMatch(/V-462 \/ V-297/);
+      expect(body, `${name} names the audit-log resource`).toMatch(/Audit ?[Ll]og ?[Rr]esource/);
+      expect(body, `${name} documents the bulk export`).toMatch(/account's audit log/);
       expect(body, `${name} audit-log path`).toMatch(/\/v1\/account\/audit-log/);
       expect(body, `${name} Append-only`).toMatch(/[Aa]ppend-only/);
     }

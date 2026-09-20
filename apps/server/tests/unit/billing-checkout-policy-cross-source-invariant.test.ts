@@ -87,7 +87,7 @@ describe('W877 Billing checkout policy cross-source invariant', () => {
 
   it('CRITICAL V-082 anchor pinned at the api-types/billing.ts file header. The V-082 anchor threads the billing-flow provenance.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/billing.ts'));
-    expect(p).toMatch(/Billing flow schemas \(V-082\)/);
+    expect(p).toMatch(/Billing flow schemas/);
   });
 
   it('CRITICAL BillingProvider interface framing pinned — "actual Stripe API calls are gated behind a BillingProvider interface so tests run against an in-memory provider that returns deterministic checkout URLs". The interface contract is what makes tests deterministic.', () => {

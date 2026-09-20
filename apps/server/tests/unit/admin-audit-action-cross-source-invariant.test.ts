@@ -159,10 +159,10 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
 
   it('CRITICAL V-100 + V-281 + V-295a + V-295c3-tombstone anchors pinned in api-types/admin.ts as inline section dividers. The anchors thread provenance for the action-roster expansion across feature work.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
-    expect(p).toMatch(/V-100: force actions on customer resources/);
-    expect(p).toMatch(/V-281: customer-support tooling \(audit-only\)/);
-    expect(p).toMatch(/V-295a: status-page incident management/);
-    expect(p).toMatch(/V-295c3-tombstone: status-page email subscriber admin actions/);
+    expect(p).toMatch(/force actions on customer resources/);
+    expect(p).toMatch(/customer-support tooling \(audit-only\)/);
+    expect(p).toMatch(/status-page incident management/);
+    expect(p).toMatch(/tombstone: status-page email subscriber admin actions/);
   });
 
   // ─── DB pgEnum has matching V-anchor comments ────────────────
@@ -174,9 +174,9 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
     expect(m).not.toBeNull();
     const body = m![0];
     expect(body).toMatch(/V-100: admin force-actions on customer resources/);
-    expect(body).toMatch(/V-281: customer-support tooling/);
-    expect(body).toMatch(/V-295a: status-page incident management/);
-    expect(body).toMatch(/V-295c3-tombstone: status-page email subscriber admin actions/);
+    expect(body).toMatch(/customer-support tooling/);
+    expect(body).toMatch(/status-page incident management/);
+    expect(body).toMatch(/tombstone: status-page email subscriber admin actions/);
   });
 
   // ─── 16-value cardinality + 6-category split ─────────────────

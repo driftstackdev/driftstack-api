@@ -10,7 +10,7 @@ import (
 // This file mirrors the Zod schemas in `packages/api-types/`. The
 // schemas are the source of truth (Zod → OpenAPI 3.1 → these types).
 // Re-generated when schemas change; tracked manually for now since
-// oapi-codegen lacks OpenAPI 3.1 support (see V-026 for the
+// oapi-codegen lacks OpenAPI 3.1 support (see the CHANGELOG for the
 // codegen-vs-hand-written decision).
 //
 // Naming follows the Stripe-Go convention: PascalCase exported types,
@@ -21,8 +21,9 @@ import (
 // Common / shared
 // ──────────────────────────────────────────────────────────────────
 
-// AccountTier is the closed enum of pricing tiers (V-148 two-ladder
-// restructure; locked per ADR-004; trial_pack retired 2026-05-27 → free).
+// AccountTier is the closed enum of pricing tiers: the two-ladder set of
+// manual plans and API plans, plus free and enterprise. The `trial_pack`
+// tier was retired on 2026-05-27; those accounts read as `free`.
 type AccountTier string
 
 const (
@@ -36,6 +37,28 @@ const (
 	TierEnterprise   AccountTier = "enterprise"
 )
 
+// The tier names below belong to the single pricing ladder that ran until
+// 2026-05-05. They are restored so a program written against v0.1.6 still
+// compiles, and will be removed in a later minor release. No account is on
+// any of them: the server never returns these values, so a comparison
+// against one is always false. Replace each with the constant its notice
+// names.
+const (
+	// Deprecated: the Starter plan is now API Starter.
+	// Use TierAPIStarter.
+	TierStarter AccountTier = "starter"
+	// Deprecated: the Solo plan was split across the manual and API ladders
+	// and has no single successor. Use TierSoloManual or TierTeamManual,
+	// whichever matches what the account pays for.
+	TierSolo AccountTier = "solo"
+	// Deprecated: the Builder plan is now API Builder.
+	// Use TierAPIBuilder.
+	TierBuilder AccountTier = "builder"
+	// Deprecated: the Scale plan is now API Scale.
+	// Use TierAPIScale.
+	TierScale AccountTier = "scale"
+)
+
 // AccountStatus.
 type AccountStatus string
 
@@ -45,7 +68,7 @@ const (
 	AccountDeleted   AccountStatus = "deleted"
 )
 
-// APIKeyScope. V-174 split the legacy single `admin` scope into
+// APIKeyScope. The server split the legacy single `admin` scope into
 // `account_owner` (customer self-serve) and `driftstack_internal_admin`
 // (staff cross-account). The legacy `admin` token remains a customer-side
 // alias for `account_owner` and `admin:*`; it never grants staff authority.
@@ -54,7 +77,7 @@ type APIKeyScope string
 const (
 	ScopeRead                    APIKeyScope = "read"
 	ScopeWrite                   APIKeyScope = "write"
-	ScopeAdmin                   APIKeyScope = "admin" // compat alias (V-174)
+	ScopeAdmin                   APIKeyScope = "admin" // compat alias
 	ScopeAccountOwner            APIKeyScope = "account_owner"
 	ScopeDriftstackInternalAdmin APIKeyScope = "driftstack_internal_admin"
 	ScopeGUIControl              APIKeyScope = "gui_control"
@@ -71,10 +94,13 @@ const (
 	SessionErrored   SessionStatus = "errored"
 )
 
-// SessionPurpose drives WebKit driver harness selection (V-169).
+// SessionPurpose declares what a session is for; it selects the browser
+// driver the session runs on. Customer traffic uses DefaultSessionPurpose;
+// the other values exist for Driftstack's own validation runs and are not
+// normally what you want.
 type SessionPurpose string
 
-// V-433 — these are the only values the server's
+// Purpose values — these are the only values the server's
 // SessionPurposeSchema accepts. The previous Go SDK enum
 // (`recapture_run` / `fingerprint_probe` / `behavioural_capture`)
 // matched no server enum value and would 400 if a customer used
@@ -88,9 +114,9 @@ const (
 // DefaultSessionPurpose matches packages/api-types DEFAULT_SESSION_PURPOSE.
 const DefaultSessionPurpose = PurposeProductionCustomer
 
-// BehavioralProfile selects the per-session human-behaviour persona the
-// harness drives touch/scroll/typing with (file 05 "Persona model"). These
-// are the only values the server's BehavioralProfileSchema accepts.
+// BehavioralProfile selects the human-behaviour persona a session uses
+// when it taps, scrolls and types. These are the only values the
+// server's BehavioralProfileSchema accepts.
 type BehavioralProfile string
 
 const (
@@ -109,30 +135,43 @@ const (
 	EventSessionCompleted WebhookEventType = "session.completed"
 	EventSessionFailed    WebhookEventType = "session.failed"
 	EventAPIKeyRevoked    WebhookEventType = "api_key.revoked"
-	// Arc 5 EGRESS eg.7 — fired when a SOCKS5 session's egress
-	// capability report is ingested; subscribable so customers can
-	// branch on proxy-health changes without a GET.
+	// Fired when a SOCKS5 session reports what its proxy can do;
+	// subscribe to react to proxy-health changes without polling.
 	EventSessionEgressCapabilityChanged WebhookEventType = "session.egress_capability_changed"
-	// V-356 — synthetic test event sent only via
+	// A synthetic test event sent only via
 	// POST /v1/webhooks/:id/test. Customers cannot subscribe to it
 	// (the create / update Zod schemas reject it); it's dispatched
 	// regardless of subscription so customers can verify their
 	// handler signature-checks correctly before relying on real events.
 	EventTestPing WebhookEventType = "test.ping"
-	// V-666 — crypto-order terminal transitions, fired by the IPN
-	// handler on pending/confirming/partial → paid|failed. Subscribable
-	// so crypto-checkout integrators can react in their own accounting.
+	// Crypto-order terminal transitions, fired when an order moves from
+	// pending/confirming/partial to paid or failed. Subscribe to settle
+	// crypto checkouts in your own accounting.
 	EventCryptoOrderPaid   WebhookEventType = "crypto.order.paid"
 	EventCryptoOrderFailed WebhookEventType = "crypto.order.failed"
-	// W393 — challenge-handling. Fired when the harness ChallengeDetector flags
-	// a bot-check (DataDome/Arkose/PerimeterX/AWS-WAF/GeeTest/…) and the control
-	// plane relays it. Subscribable so customers wire challenge alerts into their
-	// own ops surface; the harness auto-pauses + the customer resumes.
+	// Fired when a session meets a bot-check challenge
+	// (DataDome/Arkose/PerimeterX/AWS-WAF/GeeTest/…). Subscribe to route
+	// challenge alerts into your own on-call surface; the session pauses
+	// itself and waits for you to resume it.
 	EventSessionChallengeDetected WebhookEventType = "session.challenge_detected"
-	// A3 W1364 — profile save-back failed at session teardown (terminal; the
-	// session itself succeeded). Subscribable so customers persisting profile
-	// state can alert on a stale next restore.
+	// Saving the profile back failed as the session ended (terminal; the
+	// session itself succeeded). Subscribe if you depend on profile state,
+	// so you learn that the next restore will be stale.
 	EventSessionProfileSaveFailed WebhookEventType = "session.profile_save_failed"
+)
+
+// The two event names below are restored so a program written against
+// v0.1.6 still compiles, and will be removed in a later minor release.
+// Neither event is sent any more and neither can be subscribed to — the
+// create and update schemas reject them — and no event replaced them.
+// Read quota headroom from Usage.CurrentPeriod instead.
+const (
+	// Deprecated: quota warnings are no longer delivered by webhook.
+	// Read Quotas from Usage.CurrentPeriod instead.
+	EventQuotaWarning80Pct WebhookEventType = "quota.warning_80pct"
+	// Deprecated: quota-exceeded is no longer delivered by webhook.
+	// Read Quotas from Usage.CurrentPeriod instead.
+	EventQuotaExceeded WebhookEventType = "quota.exceeded"
 )
 
 // WebhookDeliveryStatus.
@@ -198,14 +237,14 @@ type CreateAPIKeyResponse struct {
 	Plaintext string `json:"plaintext"`
 }
 
-// V-296 — RotateAPIKeyRequest is the body for POST /v1/api-keys/:id/rotate.
+// RotateAPIKeyRequest is the body for POST /v1/api-keys/:id/rotate.
 type RotateAPIKeyRequest struct {
 	// Optional new name for the rotated key. Empty string defaults to the
 	// old key's name.
 	Name string `json:"name,omitempty"`
 }
 
-// V-296 — RotateAPIKeyResponse extends CreateAPIKeyResponse with the
+// RotateAPIKeyResponse extends CreateAPIKeyResponse with the
 // previous-key reference and the timestamp at which the previous key
 // auto-revokes via the existing expires_at-driven auth gate.
 type RotateAPIKeyResponse struct {
@@ -215,7 +254,7 @@ type RotateAPIKeyResponse struct {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// V-298c / V-309g — Team RBAC v1.
+// Team RBAC v1.
 // ──────────────────────────────────────────────────────────────────
 
 type TeamRole string
@@ -330,12 +369,11 @@ type Session struct {
 	Label              *string             `json:"label"`
 	Metadata           map[string]any      `json:"metadata"`
 	EgressCapabilities *EgressCapabilities `json:"egress_capabilities"`
-	// Arc 5 EGRESS eg.1.g — RAW harness-emitted event payload
-	// (migration 0054). Stored alongside the derived
-	// EgressCapabilities view for forensics + schema-evolution
-	// safety. Opaque map; consumers should prefer
+	// The raw egress report exactly as the session sent it, kept
+	// beside the derived EgressCapabilities view so a newer
+	// report shape is never lost. Opaque map; prefer
 	// EgressCapabilities for typed access. Null until the
-	// harness emits.
+	// session reports.
 	EgressCapabilityReport map[string]any `json:"egress_capability_report"`
 	CreatedAt              time.Time      `json:"created_at"`
 	UpdatedAt              time.Time      `json:"updated_at"`
@@ -343,11 +381,10 @@ type Session struct {
 	DestroyedAt            *time.Time     `json:"destroyed_at"`
 }
 
-// EgressCapabilities is the harness-reported per-session SOCKS5
-// capability shape (cross-agent contract 7d5992d9 + EG-WK-1.9
-// dns_remote_resolve extension, migration 0045). Null until the
-// harness emits `egress.capability_report`; non-SOCKS5 sessions stay
-// null permanently.
+// EgressCapabilities is what a session reports about its SOCKS5 proxy:
+// which capabilities that proxy actually offers. Null until the session
+// reports `egress.capability_report`; non-SOCKS5 sessions stay null
+// permanently.
 type EgressCapabilities struct {
 	UDPAssociate     bool     `json:"udp_associate"`
 	QUICRoute        string   `json:"quic_route"` // "proxy" | "direct" | "disabled"
@@ -366,7 +403,7 @@ type CreateSessionRequest struct {
 	Label     string         `json:"label,omitempty"`
 	Metadata  map[string]any `json:"metadata,omitempty"`
 	// ProfileID binds the session to a persistent antidetect profile
-	// (cookies/localStorage/archetype inherited). Optional (V-081/V-480).
+	// (cookies/localStorage/archetype inherited). Optional.
 	ProfileID string `json:"profile_id,omitempty"`
 	// BehavioralProfile selects the per-session persona (2026-06-05).
 	BehavioralProfile BehavioralProfile `json:"behavioral_profile,omitempty"`
@@ -405,9 +442,9 @@ type NavigateResponse struct {
 // InteractAction is a discriminated-union of action kinds. Use the
 // constructors (NewTapAction, NewTypeAction, ...) to build one.
 //
-// This is the customer-facing intent-only surface (L-001). Coordinate
+// This is the customer-facing intent-only surface. Coordinate
 // primitives (tap_at / type_focused / tap.offset) live on the
-// gui-control plane and are NOT part of this SDK — they're internal
+// gui-control surface and are NOT part of this SDK — they're internal
 // to the self-hosted GUI workflow and gated behind the `gui_control`
 // API-key scope.
 type InteractAction struct {
@@ -416,7 +453,7 @@ type InteractAction struct {
 	Text     string `json:"text,omitempty"`     // type
 	DelayMs  *int   `json:"delay_ms,omitempty"` // type
 	// Sensitive marks the typed value (card number / OTP / PIN) so the
-	// harness suppresses visible typo-corrections while typing it (W1150).
+	// session does not act out visible typo-corrections while typing it.
 	Sensitive *bool  `json:"sensitive,omitempty"` // type
 	DeltaX    int    `json:"delta_x,omitempty"`   // scroll
 	DeltaY    int    `json:"delta_y,omitempty"`   // scroll
@@ -493,7 +530,7 @@ type PageStateError struct {
 	Message    string `json:"message"`
 }
 
-// PageState is the page lifecycle (W615): loading | loaded | errored,
+// PageState is the page lifecycle: loading | loaded | errored,
 // with Error present only when errored. Nil on SessionState until the
 // session reports a lifecycle event.
 type PageState struct {
@@ -567,7 +604,7 @@ type SearchRequest struct {
 	// caller can send an explicit false (a plain bool's zero value can't).
 	Submit                 *bool  `json:"submit,omitempty"`
 	WaitForResultsSelector string `json:"wait_for_results_selector,omitempty"`
-	// Caps the wait_for_results_selector wait (seconds; 1..120). Omit → harness default (10s).
+	// Caps the wait_for_results_selector wait (seconds; 1..120). Omit → server default (10s).
 	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 }
 
@@ -635,7 +672,7 @@ type SessionLoginRequest struct {
 	PasswordSelector string `json:"password_selector,omitempty"`
 	SubmitSelector   string `json:"submit_selector,omitempty"`
 	SuccessSelector  string `json:"success_selector,omitempty"`
-	// Caps the post-submit success wait (seconds; 1..120). Omit → harness default (10s).
+	// Caps the post-submit success wait (seconds; 1..120). Omit → server default (10s).
 	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 }
 
@@ -725,7 +762,7 @@ type UsagePeriodSummary struct {
 // Webhooks
 // ──────────────────────────────────────────────────────────────────
 
-// WebhookEndpointDeliveryCounts — V-185 aggregate per-endpoint delivery
+// WebhookEndpointDeliveryCounts — aggregate per-endpoint delivery
 // counts surfaced on every WebhookEndpoint response.
 type WebhookEndpointDeliveryCounts struct {
 	Delivered int `json:"delivered"`
@@ -737,7 +774,7 @@ type WebhookEndpoint struct {
 	ID           string `json:"id"`
 	URL          string `json:"url"`
 	SecretPrefix string `json:"secret_prefix"`
-	// V-359 — rotation grace state. Both null when no rotation in flight.
+	// Secret rotation grace state. Both null when no rotation in flight.
 	PrevSecretPrefix       *string                       `json:"prev_secret_prefix"`
 	RotationGraceExpiresAt *time.Time                    `json:"rotation_grace_expires_at"`
 	Events                 []WebhookEventType            `json:"events"`
@@ -770,7 +807,7 @@ type CreateWebhookResponse struct {
 	Secret string `json:"secret"`
 }
 
-// UpdateWebhookRequest — V-351 partial update. Pointer fields so
+// UpdateWebhookRequest — partial update. Pointer fields so
 // callers can distinguish "leave as-is" (nil) from "set explicitly"
 // (non-nil). At least one field must be non-nil; the server returns
 // 400 otherwise.
@@ -840,10 +877,10 @@ type APIKeyRevokedData struct {
 // ──────────────────────────────────────────────────────────────────
 
 // Profile matches the public ProfileSchema returned by
-// /v1/profiles. Per-profile browser state (persona / storage_state /
-// notes) lives in the WebKit driver layer, not the control plane;
-// the customer API surfaces only the metadata below. `Description`
-// is `*string` to capture explicit-null vs. unset.
+// /v1/profiles. The browser state a profile carries (persona /
+// storage_state / notes) is held for you and is not readable through
+// the API; this struct is the metadata you can read and set.
+// `Description` is `*string` to capture explicit-null vs. unset.
 type Profile struct {
 	ID          string   `json:"id"`
 	Name        string   `json:"name"`
@@ -856,7 +893,7 @@ type Profile struct {
 	Icon       *string    `json:"icon"`
 	Note       *string    `json:"note"`
 	LastUsedAt *time.Time `json:"last_used_at"`
-	// SizeBytes + LastSavedAt — doc-150 item 5. SizeBytes is the byte size of
+	// SizeBytes + LastSavedAt. SizeBytes is the byte size of
 	// the last saved sealed store (the opaque encrypted browser-state blob);
 	// nil until the profile is first saved. *int64: a sealed store can exceed
 	// the 2^31 int ceiling. LastSavedAt is when it was last saved back.
@@ -915,7 +952,7 @@ type ListProfilesQuery struct {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Billing (V-082, V-183)
+// Billing
 // ──────────────────────────────────────────────────────────────────
 
 type SubscriptionStatus string
@@ -931,7 +968,7 @@ const (
 	SubStatusPaused            SubscriptionStatus = "paused"
 )
 
-// Subscription — V-429. Matches the server's `publicSubscription`
+// Subscription — the account's billing subscription. Matches the server's `publicSubscription`
 // output shape. `stripe_subscription_id` is always present (Stripe's
 // id assigned at checkout-completion); `current_period_end` and
 // `canceled_at` are nullable depending on subscription state.
@@ -946,7 +983,7 @@ type Subscription struct {
 	UpdatedAt            time.Time          `json:"updated_at"`
 }
 
-// GetBillingStateResponse — V-429. `Subscription` is nullable
+// GetBillingStateResponse — `Subscription` is nullable
 // (account never subscribed). The trial_pack envelope was removed
 // 2026-05-27 with the trial_pack retirement.
 type GetBillingStateResponse struct {
@@ -969,7 +1006,7 @@ type CreatePortalSessionResponse struct {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Auth flows (V-079) — unauthenticated endpoints
+// Auth flows — unauthenticated endpoints
 // ──────────────────────────────────────────────────────────────────
 
 type SignupRequest struct {
@@ -978,9 +1015,9 @@ type SignupRequest struct {
 	Name     string `json:"name,omitempty"`
 }
 
-// SignupResponse — V-425. Matches the server's actual response shape
-// (was previously typed as { account_id, verify_email_sent } which the
-// server never returns). `DebugToken` is populated only when the
+// SignupResponse matches the server's response to a signup: when the
+// verification email expires, and nothing else you need to act on.
+// `DebugToken` is populated only when the
 // server runs with `EMAIL_DELIVERY_MODE=stub`; production responses
 // omit it.
 type SignupResponse struct {
@@ -992,7 +1029,7 @@ type VerifyEmailRequest struct {
 	Token string `json:"token"`
 }
 
-// WebSession — V-425. Matches the server's `WebSessionSchema`
+// WebSession matches the server's `WebSessionSchema`
 // returned nested under `session` on every web-auth flow response
 // (verify-email, login non-MFA branch, magic-link consume, password-
 // reset confirm, refresh).
@@ -1011,7 +1048,7 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-// LoginResponse — V-425 + V-353d. The server returns one of two
+// LoginResponse is the result of a password login. The server returns one of two
 // shapes:
 //
 //   - Non-MFA: `{ "session": { ... } }` — `Session` is populated;
@@ -1031,7 +1068,7 @@ type LoginRequest struct {
 type LoginResponse struct {
 	// Populated on the non-MFA branch.
 	Session WebSession `json:"session,omitempty"`
-	// Populated on the MFA-required branch (V-353d).
+	// Populated on the MFA-required branch.
 	MfaRequired        bool   `json:"mfa_required,omitempty"`
 	ChallengeToken     string `json:"challenge_token,omitempty"`
 	ChallengeExpiresAt string `json:"challenge_expires_at,omitempty"`
@@ -1090,8 +1127,8 @@ type PasswordResetConfirmResponse struct {
 	ChallengeExpiresAt string     `json:"challenge_expires_at,omitempty"`
 }
 
-// RefreshSessionRequest — V-425. Server expects `{ "token": "..." }`,
-// not `{ "session_token": "..." }` as the Go SDK previously sent.
+// RefreshSessionRequest — the server expects `{ "token": "..." }`,
+// not `{ "session_token": "..." }`.
 type RefreshSessionRequest struct {
 	Token string `json:"token"`
 }
@@ -1100,7 +1137,7 @@ type RefreshSessionResponse struct {
 	Session WebSession `json:"session"`
 }
 
-// LogoutRequest — V-425. Server expects `{ "token": "..." }`, not
+// LogoutRequest — the server expects `{ "token": "..." }`, not
 // `{ "session_token": "..." }`.
 type LogoutRequest struct {
 	Token string `json:"token"`
@@ -1110,9 +1147,9 @@ type LogoutResponse struct {
 	OK bool `json:"ok"`
 }
 
-// V-445 — MFA challenge + step-up shapes.
+// MFA challenge + step-up shapes.
 
-// MfaChallengeRequest — exchange the V-353d login challenge_token
+// MfaChallengeRequest — exchange the login challenge_token
 // for a session via TOTP code or recovery code. Supply exactly one
 // of `Code` (6-digit TOTP) OR `RecoveryCode` (single-use recovery
 // code).
@@ -1129,7 +1166,7 @@ type MfaChallengeResponse struct {
 }
 
 // MfaStepUpRequest — refresh `mfa_satisfied_at` on the calling web
-// session (V-353e step-up gate; 15-minute freshness window). Same
+// session (step-up gate; 15-minute freshness window). Same
 // one-of code-vs-recovery_code constraint as challenge.
 type MfaStepUpRequest struct {
 	Code         string `json:"code,omitempty"`
@@ -1143,7 +1180,7 @@ type MfaStepUpResponse struct {
 	MfaSatisfiedAt time.Time `json:"mfa_satisfied_at"`
 }
 
-// V-460 / V-266 CLI/GUI activation flow (browser-OAuth-style).
+// CLI/GUI activation flow (browser-OAuth-style).
 
 // CliAuthorizeInitiateRequest — the CLI/GUI starts the flow with a
 // CSRF nonce + optional human-friendly client label that appears on

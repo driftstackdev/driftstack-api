@@ -54,6 +54,10 @@ A nightly job that:
   `pip install driftstack-sdk`, or
   `go get github.com/driftstackdev/driftstack-api/packages/sdk-go@latest`.
   See [SDK installation](/sdk/installation/).
+- **SDK versions.** The programs here need `@driftstack/sdk` 0.2.0,
+  `driftstack-sdk` 0.2.0, or the Go module at `v0.3.0`. Earlier releases have
+  no agent sessions at all, so they cannot run these examples — and the
+  published packages before those versions will not even compile them.
 
 ## One-time setup: a signed-in profile
 
@@ -736,7 +740,12 @@ function report(reply: AgentMessageResponse): void {
         console.log(`Not finished (${reply.notice_reason ?? 'no reason given'}): ${reply.notice}`);
       } else if (!reply.ok)
         console.log('A step failed or is waiting for approval; see the steps above.');
+      // `answer` and `answer_unavailable` never arrive together, and a task
+      // that only acts has neither. Without the second branch a turn that ran
+      // cleanly but could not read the page back prints nothing at all.
       if (reply.answer !== undefined) console.log(`Answer: ${reply.answer}`);
+      else if (reply.answer_unavailable !== undefined)
+        console.log(`No answer: ${reply.answer_unavailable}`);
       break;
     case 'clarify':
       console.log(`The agent still has a question: ${reply.clarifying_question}`);
@@ -907,8 +916,13 @@ def report(reply: dict[str, Any]) -> None:
             print(f"Not finished ({reason}): {reply['notice']}")
         elif not reply["ok"]:
             print("A step failed or is waiting for approval; see the steps above.")
+        # `answer` and `answer_unavailable` never arrive together, and a task
+        # that only acts has neither. Without the second branch a turn that ran
+        # cleanly but could not read the page back prints nothing at all.
         if "answer" in reply:
             print(f"Answer: {reply['answer']}")
+        elif "answer_unavailable" in reply:
+            print(f"No answer: {reply['answer_unavailable']}")
     elif kind == "clarify":
         print(f"The agent still has a question: {reply['clarifying_question']}")
     elif kind == "refuse":
@@ -1092,8 +1106,13 @@ func report(reply *driftstack.AgentMessageResponse) {
 		} else if !reply.OK {
 			fmt.Println("A step failed or is waiting for approval; see the steps above.")
 		}
+		// Answer and AnswerUnavailable never arrive together, and a task that
+		// only acts has neither. Without the second branch a turn that ran
+		// cleanly but could not read the page back prints nothing at all.
 		if reply.Answer != "" {
 			fmt.Println("Answer:", reply.Answer)
+		} else if reply.AnswerUnavailable != "" {
+			fmt.Println("No answer:", reply.AnswerUnavailable)
 		}
 	case "clarify":
 		fmt.Println("The agent still has a question:", reply.ClarifyingQuestion)

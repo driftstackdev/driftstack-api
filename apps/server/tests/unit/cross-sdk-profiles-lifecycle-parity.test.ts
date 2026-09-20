@@ -54,9 +54,9 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     const go = read(GO_PROFILES);
     const py = read(PY_PROFILES);
 
-    expect(ts).toMatch(/V-081/);
-    expect(go).toMatch(/V-081/);
-    expect(py).toMatch(/V-081/);
+    expect(ts).toMatch(/ProfilesResource — typed methods for \/v1\/profiles/);
+    expect(go).toMatch(/ProfilesResource handles \/v1\/profiles endpoints/);
+    expect(py).toMatch(/Profiles resource — \/v1\/profiles/);
   });
 
   it('CRITICAL V-313 anchor pinned on the clone verb in all 3 SDKs. V-313 is the profile-clone sub-feature; drift to dropping would lose per-verb provenance.', () => {
@@ -64,9 +64,11 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     const go = read(GO_PROFILES);
     const py = read(PY_PROFILES);
 
-    expect(ts).toMatch(/V-313/);
-    expect(go).toMatch(/V-313/);
-    expect(py).toMatch(/V-313/);
+    expect(ts).toMatch(/[Dd]uplicate a profile\. Server auto-derives a "\(copy\)" \//);
+    expect(go).toMatch(/Pass an empty struct to let the server/);
+    expect(py).toMatch(
+      /[Dd]uplicate a profile\. Server auto-derives "\(copy\)" \/ "\(copy 2\)" \//,
+    );
   });
 
   it('CRITICAL 7-verb surface pinned in all 3 SDKs — create + list + iterate + get + update + delete + clone. The 7-verb set covers the entire profile CRUD lifecycle; drift to dropping any would break the dashboard or SDK flow.', () => {
@@ -250,7 +252,7 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
 
     // doc-150 §8 "Clear cache, keep logins" framing pinned per SDK.
     for (const sdk of [ts, go, py]) {
-      expect(sdk).toMatch(/doc-150 §8/);
+      expect(sdk).toMatch(/Clear cache, keep logins"/);
       expect(sdk).toMatch(/Clear cache, keep logins/);
     }
 
@@ -258,8 +260,11 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     // fields (size_bytes / bytes_reclaimed on ok; reason on unavailable/error).
     expect(ts).toMatch(/TrimProfileResponse/);
     expect(go).toMatch(/type TrimProfileResponse struct/);
-    expect(ts).toMatch(/fresh profile or no connected\s*\*\s*storage-capable node/);
-    expect(go).toMatch(/fresh profile or no connected\s*\/\/\s*storage-capable node/);
+    expect(ts).toMatch(/fresh profile or no connected\s*\*\s*storage-capable device/);
+    // `node` is the internal name for the machine a session runs on and does
+    // not belong in text a customer reads. Both SDKs now say `device`; the
+    // sentence, which is what this pin protects, is unchanged.
+    expect(go).toMatch(/fresh profile or no connected\s*\/\/\s*storage-capable device/);
     expect(ts).not.toMatch(/storage trim not wired/);
     expect(go).not.toMatch(/storage trim not wired/);
     expect(go).toMatch(/SizeBytes\s+int64\s+`json:"size_bytes,omitempty"`/);
@@ -274,8 +279,8 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-081`).toMatch(/V-081/);
-      expect(body, `${name} V-313`).toMatch(/V-313/);
+      expect(body, `${name} names the profiles resource`).toMatch(/Profiles ?Resource/i);
+      expect(body, `${name} documents clone as a duplicate`).toMatch(/duplicates? a profile/i);
       expect(body, `${name} /v1/profiles`).toMatch(/\/v1\/profiles/);
       expect(body, `${name} /clone path`).toMatch(/\/clone/);
       expect(body, `${name} Tier-limit framing`).toMatch(/Tier-limit/);

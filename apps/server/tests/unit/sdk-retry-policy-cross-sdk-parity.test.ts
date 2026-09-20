@@ -31,12 +31,12 @@ describe('W815 cross-SDK retry policy parity', () => {
 
   // ─── Header framing ───────────────────────────────────────────
 
-  it("CRITICAL all 3 retry implementations document exponential-backoff with full jitter + Retry-After honoring + cross-SDK lockstep framing. Python explicitly says 'Mirrors packages/sdk-typescript/src/retry.ts'; Go says 'Matches the TS + Python SDKs'. Drift would break the three-way lockstep.", () => {
+  it("CRITICAL all 3 retry implementations document exponential-backoff with full jitter + Retry-After honoring + cross-SDK lockstep framing. Python says 'Mirrors the retry policy of the Driftstack TypeScript SDK'; Go says 'Matches the TS + Python SDKs'. Drift would break the three-way lockstep. The Python docstring names the SDK and NOT its source path: that docstring ships in the wheel and the sdist, and customer-facing text says what the product does, never how it is built.", () => {
     expect(read(TS)).toMatch(
       /Retry logic — exponential backoff with full jitter, with explicit support\s*\n\/\/ for 429 Retry-After\./,
     );
     expect(read(PY)).toMatch(/Exponential-backoff retry policy with full jitter\./);
-    expect(read(PY)).toMatch(/Mirrors `packages\/sdk-typescript\/src\/retry\.ts`/);
+    expect(read(PY)).toMatch(/Mirrors the retry policy of the Driftstack TypeScript SDK\./);
     expect(read(GO)).toMatch(/Matches the TS \+ Python SDKs: 3 retries, 200ms-10s window\./);
   });
 

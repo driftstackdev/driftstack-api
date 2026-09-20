@@ -1,13 +1,13 @@
-"""Crypto-orders resource — /v1/billing/crypto-* (V-666).
+"""Crypto-orders resource — /v1/billing/crypto-*.
 
 Customer-facing only; admin endpoints aren't exposed here (use the
 OpenAPI spec at ``/openapi.json`` directly).
 
-V-666.AO — ``create_checkout`` accepts an ``idempotency_key`` keyword
+``create_checkout`` accepts an ``idempotency_key`` keyword
 that's forwarded as the ``Idempotency-Key`` header so retries don't
 mint duplicate orders.
 
-V-666.BU — ``list`` accepts ``cursor`` for cursor-pagination;
+``list`` accepts ``cursor`` for cursor-pagination;
 ``iterate`` walks every page until ``next_cursor`` is null. The
 response envelope keys its rows off ``orders`` (not the standard
 ``data``), so iteration adapts the page shape and delegates to the
@@ -65,7 +65,7 @@ class CryptoOrdersResource:
 
     # Requires read:billing; broad read/account_owner also satisfy it.
     def quote(self, body: dict[str, Any]) -> dict[str, Any]:
-        """V-666.H — preview the authoritative fiat price without minting an order."""
+        """Preview the authoritative fiat price without minting an order."""
         return self._http.request(
             "POST",
             "/v1/billing/crypto-checkout/quote",
@@ -78,7 +78,7 @@ class CryptoOrdersResource:
         *,
         idempotency_key: str | None = None,
     ) -> dict[str, Any]:
-        """V-666.C — mint a new crypto order.
+        """Mint a new crypto order.
 
         Pass ``idempotency_key`` to dedupe network retries — the server
         returns the original order on replay, never a second one. With a
@@ -103,7 +103,7 @@ class CryptoOrdersResource:
         created_after: str | None = None,
         created_before: str | None = None,
     ) -> dict[str, Any]:
-        """V-666.G / .BR / .BU / .BX — list the caller's crypto orders newest-first."""
+        """List the caller's crypto orders newest-first."""
         return self._http.request(
             "GET",
             _list_path(
@@ -123,7 +123,7 @@ class CryptoOrdersResource:
         created_after: str | None = None,
         created_before: str | None = None,
     ) -> Iterator[dict[str, Any]]:
-        """V-666.BU — lazily walk every order across cursor pages.
+        """Lazily walk every order across cursor pages.
 
         Yields envelopes one at a time so the caller can break early.
         Cursor handoff is managed internally; callers MUST NOT pass
@@ -146,14 +146,14 @@ class CryptoOrdersResource:
         return iterate_paginated(_fetch)
 
     def get(self, order_id: str) -> dict[str, Any]:
-        """V-666.G — read a single order envelope."""
+        """Read a single order envelope."""
         return self._http.request(
             "GET",
             f"/v1/billing/crypto-orders/{quote(order_id, safe='')}",
         )
 
     def update_note(self, order_id: str, body: dict[str, Any]) -> dict[str, Any]:
-        """V-666.Q — update the customer-facing free-text note."""
+        """Update the customer-facing free-text note."""
         return self._http.request(
             "PATCH",
             f"/v1/billing/crypto-orders/{quote(order_id, safe='')}",
@@ -161,14 +161,14 @@ class CryptoOrdersResource:
         )
 
     def cancel(self, order_id: str) -> dict[str, Any]:
-        """V-666.J — abandon a pending order (self-service)."""
+        """Abandon a pending order (self-service)."""
         return self._http.request(
             "POST",
             f"/v1/billing/crypto-orders/{quote(order_id, safe='')}/cancel",
         )
 
     def receipt(self, order_id: str) -> dict[str, Any]:
-        """V-666.M — fetch the JSON receipt."""
+        """Fetch the JSON receipt."""
         return self._http.request(
             "GET",
             f"/v1/billing/crypto-orders/{quote(order_id, safe='')}/receipt",

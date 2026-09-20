@@ -92,9 +92,9 @@ describe('W850 AccountTier 8-value cross-source invariant', () => {
     expect(p).toMatch(/TierEnterprise +AccountTier = "enterprise"/);
   });
 
-  it("CRITICAL Go SDK AccountTier comment references V-148 (two-ladder pricing) + 'closed enum'. The V-148 anchor threads the pricing-policy provenance.", () => {
+  it("CRITICAL Go SDK AccountTier comment keeps the 'closed enum' + 'two-ladder' framing, which is what tells a reader the set is fixed and why it has the shape it has. Internal ticket anchors must NOT come back: types.go ships inside the Go module and pkg.go.dev renders it.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/sdk-go/types.go'));
-    expect(p).toMatch(/AccountTier is the closed enum of pricing tiers \(V-148 two-ladder/);
+    expect(p).toMatch(/AccountTier is the closed enum of pricing tiers[^\n]*two-ladder/);
   });
 
   // ─── 3-ladder + 2-special framing ────────────────────────────

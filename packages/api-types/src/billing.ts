@@ -24,14 +24,16 @@ export const BillingPeriodSchema = z.enum(['monthly', 'annual']);
 export type BillingPeriod = z.infer<typeof BillingPeriodSchema>;
 
 export const CreateCheckoutSessionRequestSchema = z.object({
-  /**
-   * Target tier. Must be a self-serve paid tier (not 'free' or 'enterprise').
-   *
+  /*
    * V-924 — an enum of the accepted values, not `AccountTierSchema.refine(...)`.
    * A refine is a runtime predicate JSON Schema cannot express, so the generated
    * OpenAPI document emitted all eight tiers and advertised `free` and
    * `enterprise` as valid on a live billing endpoint that returns 400 for both.
    * Same accepted set, same rejection message, accurate published contract.
+   */
+  /**
+   * Target tier. Must be a self-serve paid tier (not 'free' or 'enterprise').
+   * Both are refused, because neither is bought through this checkout.
    */
   tier: z.enum(PURCHASABLE_TIERS, {
     message: 'Choose a paid plan. Free and Enterprise plans cannot be selected here.',

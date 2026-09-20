@@ -7,7 +7,7 @@
 //
 //   • Module is intentionally tiny (no other imports beyond
 //     __future__).
-//   • __version__ = "0.1.5" — bump in lockstep with package.json /
+//   • __version__ = "0.2.0" — bump in lockstep with package.json /
 //     pyproject.toml when releasing.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -33,9 +33,9 @@ describe('W587.D packages/sdk-python/src/driftstack/_version.py content parity',
     expect(body).toMatch(/needed — useful for tools that scrape the version without installing\./);
   });
 
-  it('__version__ = "0.1.5" pinned (drift here = unintentional version bump; expected to change only via lockstep release)', () => {
+  it('__version__ = "0.2.0" pinned (drift here = unintentional version bump; expected to change only via lockstep release)', () => {
     expect(body).toMatch(/^from __future__ import annotations$/m);
-    expect(body).toMatch(/^__version__ = "0\.1\.5"$/m);
+    expect(body).toMatch(/^__version__ = "0\.2\.0"$/m);
   });
 
   it('file exists at canonical path', () => {

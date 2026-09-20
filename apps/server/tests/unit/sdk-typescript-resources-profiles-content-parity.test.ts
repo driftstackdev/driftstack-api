@@ -53,9 +53,9 @@ function read(p: string): string {
 describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + module header V-081 anchor on the resource line', () => {
+  it('file exists at canonical path + module header names /v1/profiles on the resource line', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(/\/\/ ProfilesResource — typed methods for \/v1\/profiles \(V-081\)\./);
+    expect(body).toMatch(/\/\/ ProfilesResource — typed methods for \/v1\/profiles[^\n]*\./);
   });
 
   it('Imports — 7 api-types shapes (CloneProfileRequest + CreateProfileRequest + PaginationQueryInput + Profile + Session + UpdateProfileRequest + ProfileActivityResponse) + HttpClient + iteratePaginated. 2026-05-20 — Session added because launch() returns the freshly-minted Session. 2026-09-05 — ProfileActivityResponse added for activity() (P-23).', () => {
@@ -135,7 +135,7 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
 
   it('CRITICAL V-313 clone verb — POST /v1/profiles/${encodeURIComponent(id)}/clone with CloneProfileRequest body (DEFAULT `= {}`). The default-empty parameter lets callers write `profiles.clone(id)` without specifying a body — covering the "just duplicate this" UX. Server auto-derives "(copy)" / "(copy 2)" / ... name when body.name is OMITTED. Tier-cap + name-conflict checks mirror create. Drift to requiring body.name would break the convenience UX (dashboard "duplicate" button calls clone(id) without prompting).', () => {
     expect(body).toMatch(
-      /\*\s*V-313 — duplicate a profile\. Server auto-derives a "\(copy\)" \/\s*\*\s*"\(copy 2\)" \/ \.\.\. name when `body\.name` is omitted\. Tier-cap \+\s*\*\s*name-conflict checked the same as create\./,
+      /[Dd]uplicate a profile\. Server auto-derives a "\(copy\)" \/\s*\*\s*"\(copy 2\)" \/ \.\.\. name when `body\.name` is omitted\. Tier-cap \+\s*\*\s*name-conflict checked the same as create\./,
     );
     expect(body).toMatch(
       /clone\(id: string, body: CloneProfileRequest = \{\}\): Promise<Profile> \{\s*return this\.http\.request<Profile>\(\{\s*method: 'POST',\s*path: `\/v1\/profiles\/\$\{encodeURIComponent\(id\)\}\/clone`,\s*body,\s*\}\);\s*\}/,

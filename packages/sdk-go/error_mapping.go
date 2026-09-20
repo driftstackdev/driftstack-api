@@ -29,28 +29,27 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	"https://errors.driftstack.dev/driver-error":              buildDriverError,
 	"https://errors.driftstack.dev/driver-not-integrated":     buildDriverError,
 	"https://errors.driftstack.dev/validation-failed":         buildValidation,
-	// V-437 — auth-flow problem types.
+	// The auth-flow problem types.
 	"https://errors.driftstack.dev/email-already-registered": buildEmailAlreadyRegistered,
 	"https://errors.driftstack.dev/invalid-credentials":      buildInvalidCredentials,
 	"https://errors.driftstack.dev/invalid-auth-token":       buildInvalidAuthToken,
 	"https://errors.driftstack.dev/email-not-verified":       buildEmailNotVerified,
-	// V-438 — remaining problem types.
+	// The remaining problem types.
 	"https://errors.driftstack.dev/feature-unavailable":  buildFeatureUnavailable,
 	"https://errors.driftstack.dev/mfa-step-up-required": buildMfaStepUpRequired,
 	"https://errors.driftstack.dev/internal":             buildInternal,
-	// v2-#24 — Q.1.d BYOK Anthropic key path; closes the TS/Python
-	// parity gap so Go customers can errors.As(err, &ByokAnthropicRequiredError)
-	// before falling back to a deployment-managed key path.
+	// Your own Anthropic key is required; errors.As(err, &ByokAnthropicRequiredError)
+	// lets a caller supply one, or fall back to a deployment-managed key path.
 	"https://errors.driftstack.dev/byok-anthropic-required": buildByokAnthropicRequired,
-	// Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM 402 paths.
+	// Bundled-LLM 402 paths.
 	"https://errors.driftstack.dev/bundled-llm-budget-exhausted": buildBundledLlmBudgetExhausted,
 	"https://errors.driftstack.dev/bundled-llm-consent-required": buildBundledLlmConsentRequired,
-	// Arc 2 sub-slice 8.10 (v2-#8) — pair-mode 409 paths.
+	// Pair-mode 409 paths.
 	"https://errors.driftstack.dev/pair-mode-conflict":           buildPairModeConflict,
 	"https://errors.driftstack.dev/pair-mode-invalid-transition": buildPairModeInvalidTransition,
 	// Live pre-launch proxy validation (422 at launch).
 	"https://errors.driftstack.dev/proxy-validation-failed": buildProxyValidationFailed,
-	// A3 finding #7 — single-active-session-per-profile guard (409 at launch).
+	// Single-active-session-per-profile guard (409 at launch).
 	"https://errors.driftstack.dev/profile-in-use": buildProfileInUse,
 }
 
@@ -206,7 +205,7 @@ func buildConcurrencyLimit(base apiError, problem map[string]any, _ string) erro
 }
 
 func buildQuotaExceeded(base apiError, problem map[string]any, _ string) error {
-	// V-815 — the server sends `resource` on the tier-limit problem;
+	// The server sends `resource` on the tier-limit problem;
 	// `record_type` was never on the wire, so RecordType was always "".
 	// The old key stays as a fallback; the FIELD keeps its published name.
 	rt, _ := problem["resource"].(string)

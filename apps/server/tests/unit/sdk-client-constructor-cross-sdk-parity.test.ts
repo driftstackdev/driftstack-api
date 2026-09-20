@@ -122,17 +122,17 @@ describe('W819 cross-SDK client constructor parity', () => {
     );
   });
 
-  // ─── V-anchor framing inline in TS client ─────────────────────
+  // ─── Per-resource framing inline in TS client ─────────────────
 
-  it('CRITICAL TS client docstrings thread V-NNN provenance to each resource. V-312 (profileSnapshots) + V-666 (cryptoOrders) + V-353b (mfa) + V-216 (auditLog) + V-204 (emailPreferences) + V-049 (legal) + V-298c (team). Drift to dropping the V-anchors would lose teaching cross-links.', () => {
+  it('CRITICAL TS client docstrings say what each resource IS: profileSnapshots + cryptoOrders + mfa + auditLog + emailPreferences + legal + team. That sentence is the hover text a customer reads, so drift to dropping it would leave a bare field name. The internal ticket anchors that used to precede it must NOT come back — they ship.', () => {
     const p = read(TS);
-    expect(p).toMatch(/V-312 — immutable point-in-time profile snapshots/);
-    expect(p).toMatch(/V-666 — crypto-payment orders \(customer surface\)/);
-    expect(p).toMatch(/V-353b — MFA enrollment management/);
-    expect(p).toMatch(/V-216 — append-only customer audit log/);
-    expect(p).toMatch(/V-204 — non-critical email opt-in\/opt-out preferences/);
-    expect(p).toMatch(/V-049 — legal-document acceptance machinery/);
-    expect(p).toMatch(/V-298c — Team RBAC\. Act on an owner's account via X-Driftstack-Account\./);
+    expect(p).toMatch(/[Ii]mmutable point-in-time profile snapshots/);
+    expect(p).toMatch(/crypto-payment orders \(customer surface\)/);
+    expect(p).toMatch(/MFA enrollment management/);
+    expect(p).toMatch(/append-only customer audit log/);
+    expect(p).toMatch(/non-critical email opt-in\/opt-out preferences/);
+    expect(p).toMatch(/legal-document acceptance machinery/);
+    expect(p).toMatch(/Team RBAC\. Act on an owner's account via X-Driftstack-Account\./);
     // V-1015 — the field once advertised the auth-path integration as future work.
     expect(p, 'the retracted pending-integration anchor is back').not.toMatch(/V-298d/);
   });

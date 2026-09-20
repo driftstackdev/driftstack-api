@@ -28,12 +28,17 @@ export const UsagePeriodSummarySchema = z.object({
 
 export type UsagePeriodSummary = z.infer<typeof UsagePeriodSummarySchema>;
 
-/**
+/*
  * V-170 — daily-bucketed usage series. Used by customer-dashboard
  * /usage sparklines + admin-panel account-detail charts. Returns one
  * bucket per UTC day in `[from_date, to_date)`, contiguous (days with
  * zero usage are included as empty `totals: {}`). `to_date` is
  * exclusive (typically today's UTC midnight); `from_date` is inclusive.
+ */
+/**
+ * One day of usage. The series returns one bucket per UTC day across
+ * `[from_date, to_date)` with no gaps: a day with no usage is present with
+ * an empty `totals`. `from_date` is inclusive and `to_date` is exclusive.
  */
 export const UsageDailyBucketSchema = z.object({
   /** UTC date in `YYYY-MM-DD`. */

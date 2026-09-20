@@ -72,7 +72,7 @@ describe('W881 CliAuthorizeExchange cross-source invariant', () => {
 
   it("CRITICAL V-266 anchor pinned at file header. The 'Browser-based CLI / GUI authorization flow' framing pins the OAuth-style-handshake provenance.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/cli-authorize.ts'));
-    expect(p).toMatch(/V-266 — Browser-based CLI \/ GUI authorization flow/);
+    expect(p).toMatch(/Browser-based CLI \/ GUI authorization flow/);
   });
 
   it("CRITICAL CliAuthorizeExchangeStatusSchema JSDoc pins the 3 status semantics — 'pending → keep polling. bound → key delivered (one-shot; code deleted on delivery → re-poll returns expired, HTTP 200). expired → user took too long; restart the flow.' The doc teaches consumers what each branch means.", () => {

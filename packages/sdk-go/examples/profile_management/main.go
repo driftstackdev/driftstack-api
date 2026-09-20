@@ -1,6 +1,6 @@
 // Package main is the profile-management example for the Driftstack
 // Go SDK. Walks the persistent-profile surface end-to-end: create →
-// list → get → update → clone (V-313) → snapshot capture (V-312) →
+// list → get → update → clone → snapshot capture →
 // snapshot restore → cleanup.
 //
 // Run:
@@ -77,7 +77,7 @@ func main() {
 	}
 	fmt.Printf("  → %s\n", updated.Name)
 
-	// 5. V-313 clone — server auto-derives "(copy)" naming.
+	// 5. Profile clone — server auto-derives "(copy)" naming.
 	fmt.Println("cloning…")
 	cloned, err := client.Profiles.Clone(ctx, updated.ID, nil)
 	if err != nil {
@@ -85,7 +85,7 @@ func main() {
 	}
 	fmt.Printf("  → %s  name=%q\n", cloned.ID, cloned.Name)
 
-	// 6. V-312 snapshot capture — frozen point-in-time copy.
+	// 6. Profile snapshot capture — frozen point-in-time copy.
 	fmt.Println("capturing snapshot…")
 	snap, err := client.ProfileSnapshots.Capture(ctx, updated.ID,
 		&driftstack.CaptureSnapshotRequest{

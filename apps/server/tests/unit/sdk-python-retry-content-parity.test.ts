@@ -11,7 +11,8 @@
 //   • _backoff_delay_ms: Retry-After wins (in ms), capped at max;
 //     otherwise full-jitter random.uniform(0, capped).
 //   • with_retry / with_retry_async: sleep + time.sleep / asyncio.sleep.
-//   • TS SDK parity: packages/sdk-typescript/src/retry.ts mirror.
+//   • TS SDK parity: mirrors the TypeScript SDK's retry policy. The
+//     docstring names the SDK, never the source path — it ships.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -29,10 +30,10 @@ function read(p: string): string {
 describe('W586.A packages/sdk-python/src/driftstack/retry.py content parity', () => {
   const body = read(LIB);
 
-  it('Module docstring + TS SDK retry.ts mirror + Retry-After honoured + read-shaped retried + mutating-retries-need-an-Idempotency-Key framing pinned (V-810 corrected the opt-in: the `retry` argument tunes policy only)', () => {
+  it('Module docstring + TS SDK retry mirror (named, not path-referenced — this docstring ships) + Retry-After honoured + read-shaped retried + mutating-retries-need-an-Idempotency-Key framing pinned (V-810 corrected the opt-in: the `retry` argument tunes policy only)', () => {
     expect(body).toMatch(/^"""Exponential-backoff retry policy with full jitter\.\n/);
     expect(body).toMatch(
-      /Mirrors `packages\/sdk-typescript\/src\/retry\.ts`\. Honours `Retry-After`/,
+      /Mirrors the retry policy of the Driftstack TypeScript SDK\. Honours `Retry-After`/,
     );
     expect(body).toMatch(/when the server set one \(the SDK's HTTP layer maps it onto the/);
     expect(body).toMatch(/RateLimitError before retry decides\)\. Idempotent or read-shaped/);

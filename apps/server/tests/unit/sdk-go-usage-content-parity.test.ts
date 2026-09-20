@@ -53,7 +53,7 @@ describe('W592.B packages/sdk-go/usage.go content parity', () => {
   });
 
   it('UsageDailyBucket — V-452 single-day bucket struct. Date is string with YYYY-MM-DD format invariant (inline-comment // YYYY-MM-DD pinned). Totals is map[string]int keyed by UsageRecordType enum values (session_minute / navigate / interact / etc.) so the buckets share the enum surface with other usage endpoints.', () => {
-    expect(body).toMatch(/\/\/ UsageDailyBucket — V-452 single-day bucket on the time series\./);
+    expect(body).toMatch(/\/\/ UsageDailyBucket[^\n]*single-day bucket on the time series\./);
     expect(body).toMatch(/\/\/ `Totals` keys are the UsageRecordType enum values \(e\.g\./);
     expect(body).toMatch(/\/\/ "session_minute", "navigate", "interact", etc\.\)\./);
     expect(body).toMatch(
@@ -62,14 +62,14 @@ describe('W592.B packages/sdk-go/usage.go content parity', () => {
   });
 
   it('UsageSeriesResponse — V-452 3-field envelope (from_date + to_date + buckets). Date range bookends pinned so customer charting code can render axis labels without computing the window from the bucket array.', () => {
-    expect(body).toMatch(/\/\/ UsageSeriesResponse — V-452 daily-bucketed time series\./);
+    expect(body).toMatch(/\/\/ UsageSeriesResponse[^\n]*daily-bucketed time series\./);
     expect(body).toMatch(
       /^type UsageSeriesResponse struct \{\s*\n\s*FromDate string\s+`json:"from_date"`\s*\n\s*ToDate\s+string\s+`json:"to_date"`\s*\n\s*Buckets\s+\[\]UsageDailyBucket `json:"buckets"`\s*\n\}/m,
     );
   });
 
   it('Series — V-452 GET /v1/usage/series daily-bucketed time series. days param server-side clamps to 1-90; defaults to 30 server-side when days≤0. The SDK only emits ?days when days>0 — so calling Series(ctx, 0) sends NO query param (server applies default) rather than a redundant ?days=0. Drift to always-emit would force every call to carry a redundant param.', () => {
-    expect(body).toMatch(/\/\/ Series — V-452 daily-bucketed usage time series\. `days` is 1-90;/);
+    expect(body).toMatch(/\/\/ Series[^\n]*daily-bucketed usage time series\. `days` is 1-90;/);
     expect(body).toMatch(/\/\/ default 30 server-side when 0 \/ negative\./);
     expect(body).toMatch(
       /func \(r \*UsageResource\) Series\(ctx context\.Context, days int\) \(\*UsageSeriesResponse, error\)/,

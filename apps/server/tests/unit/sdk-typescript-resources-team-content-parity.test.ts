@@ -51,7 +51,7 @@ describe('W427.B packages/sdk-typescript/src/resources/team.ts content parity', 
 
   it('file exists at canonical path + module header + all six team endpoints scope', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(/\/\/ V-298c \/ V-309e — Team RBAC resource\./);
+    expect(body).toMatch(/\/\/[^\n]*Team RBAC resource\./);
     // V-1611 #14 added the two `/v1/teams` team-record endpoints beside the six
     // membership ones, so this sentence now names both families.
     expect(body).toMatch(

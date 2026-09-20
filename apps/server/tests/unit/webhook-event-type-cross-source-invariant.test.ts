@@ -136,7 +136,19 @@ describe('W852 WebhookEventType cross-source invariant', () => {
     expect(p).toMatch(
       /EventSessionProfileSaveFailed +WebhookEventType = "session\.profile_save_failed"/,
     );
-    expect(p).not.toMatch(/EventQuotaWarning80Pct|EventQuotaExceeded/);
+    // EventQuotaWarning80Pct + EventQuotaExceeded are restored as DEPRECATED
+    // constants for their removal window. What this arm protects is unchanged:
+    // they are not in the LIVE roster, and each carries a Deprecated: notice.
+    const liveEvents = p.match(/const \(\n\tEventSessionCompleted[\s\S]*?\n\)/);
+    expect(liveEvents, 'the live WebhookEventType const block').not.toBeNull();
+    expect(liveEvents![0]).not.toMatch(/EventQuotaWarning80Pct|EventQuotaExceeded/);
+    for (const name of ['EventQuotaWarning80Pct', 'EventQuotaExceeded']) {
+      expect(p, `${name} may only return as a deprecated alias`).toMatch(
+        new RegExp(
+          '// Deprecated:[^\\n]*\\n(?:\\s*//[^\\n]*\\n)*\\s*' + name + ' WebhookEventType = ',
+        ),
+      );
+    }
   });
 
   it("CRITICAL Go SDK 'closed enum' framing pinned. The 'closed enum of supported webhook events' comment threads the type-system intent (vs an open-string enum). Drift to weakening the framing would invite a Go SDK consumer to invent their own consts.", () => {
@@ -163,7 +175,7 @@ describe('W852 WebhookEventType cross-source invariant', () => {
 
   it("CRITICAL V-356 anchor pinned in api-types/webhooks.ts. The 'V-356' anchor threads the test-ping-only-via-test-endpoint provenance for cross-link discovery.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
-    expect(p).toMatch(/V-356/);
+    expect(p).toMatch(/can't subscribe to `test\.ping`; that event is only emitted via the/);
   });
 
   // ─── 9 + 8 cardinality (6+5 pre-egress; 7+6 pre-V-666-crypto) ───

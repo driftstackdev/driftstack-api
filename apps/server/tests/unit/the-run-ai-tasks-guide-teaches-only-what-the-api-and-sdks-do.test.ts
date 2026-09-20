@@ -229,6 +229,72 @@ function messageKindsFromSpec(): string[] {
     .sort();
 }
 
+/**
+ * The "there is no answer, and here is why" field name, DERIVED from the
+ * published response rather than spelled here.
+ *
+ * ⛔ IT IS THE HALF THAT GOES MISSING. `answer` and this field never arrive
+ * together and a task that only acts has neither, so a program that branches
+ * only on `answer` prints NOTHING for a turn that ran cleanly and could not
+ * read the page back — silence that reads like a crash. The three guide
+ * snippets lost that branch once already; nothing asserted it, so nothing said.
+ */
+function answerUnavailableFieldFromSpec(): string {
+  const spec = JSON.parse(read('packages/sdk-python/openapi.json')) as {
+    components: { schemas: Record<string, SpecSchema> };
+  };
+  const schemas = spec.components.schemas;
+  const top = schemas['AgentMessageResponse'];
+  const variants = (top?.oneOf ?? top?.anyOf ?? []).map((v) =>
+    v.$ref !== undefined ? schemas[v.$ref.split('/').pop() ?? ''] : v,
+  );
+  const names = new Set<string>();
+  for (const v of variants) for (const k of Object.keys(v?.properties ?? {})) names.add(k);
+  const candidates = [...names].filter((n) => /^answer_/u.test(n));
+  if (candidates.length !== 1 || candidates[0] === undefined) {
+    throw new Error(
+      `the published AgentMessageResponse has ${candidates.length} answer_* fields ` +
+        `(${candidates.join(', ')}); this guard assumed exactly one and would otherwise ` +
+        'assert on a field nobody publishes',
+    );
+  }
+  return candidates[0];
+}
+
+/** `answer_unavailable` -> `AnswerUnavailable`, the Go SDK's spelling of the same field. */
+function pascal(snake: string): string {
+  return snake.replace(/(?:^|_)([a-z])/gu, (_m, c: string) => c.toUpperCase());
+}
+
+/**
+ * The body of the guide's `report()` function in one language's complete
+ * program, comments stripped.
+ *
+ * Scoped to that function on purpose: the field name appears in the guide's
+ * prose and in its result table too, so a whole-page search would stay green
+ * with all three programs silently missing the branch.
+ */
+function reportBody(lang: 'ts' | 'python' | 'go'): string {
+  const [tag, open, strip] = (
+    {
+      ts: ['ts', /^function report\(/mu, codeOnly],
+      python: ['python', /^def report\(/mu, (src: string) => src.replace(/#[^\n]*/gu, '')],
+      go: ['go', /^func report\(/mu, codeOnly],
+    } as const
+  )[lang];
+  const complete = strip(fences(guide, [tag]).find((b) => b.length > 3000) ?? '');
+  const at = open.exec(complete)?.index;
+  if (at === undefined) return '';
+  const rest = complete.slice(at);
+  // TypeScript and Go close the function with a `}` in column 1; Python ends at
+  // the next line that starts in column 1 and is not blank.
+  const end =
+    lang === 'python' ? /\n(?=[^\s#])/u.exec(rest.slice(rest.indexOf('\n'))) : /\n\}/u.exec(rest);
+  return end === null || end.index === undefined
+    ? rest
+    : rest.slice(0, lang === 'python' ? rest.indexOf('\n') + end.index : end.index + 2);
+}
+
 /** The step-result kinds, from the schema the executor's results are published with. */
 function stepKindsFromSchema(): string[] {
   return IntentResultSchema.options.map((o) => o.shape.kind.value as string).sort();
@@ -979,6 +1045,73 @@ describe('the Run AI tasks guide teaches only what the API and SDKs do', () => {
 
   it('the guide is written in customer words: no internal machinery, ticket ids, agent names, the word founder, or AI credits', () => {
     expect(bannedIn(guide), 'banned words found in the guide').toEqual([]);
+  });
+
+  it('CRITICAL all three report() snippets branch on the no-answer field, not just on `answer`. The two never arrive together and a task that only acts has neither, so a program that reads only `answer` prints nothing at all for a turn that ran cleanly and could not read the page back. The branch was missing from all three snippets until 2026-09-20 and this page has 50 pins, none of which read a report() body', () => {
+    const field = answerUnavailableFieldFromSpec();
+    expect(field, 'the field is derived from the published response').toBe('answer_unavailable');
+    const goField = pascal(field);
+    // The Go spelling is checked against the SDK that defines it rather than
+    // assumed from the snake_case name.
+    expect(
+      codeOnly(read('packages/sdk-go/agent_sessions.go')),
+      `the Go SDK does not expose ${goField}`,
+    ).toMatch(new RegExp(`\\b${goField}\\b`, 'u'));
+
+    const branches = [
+      ['TypeScript', 'ts', new RegExp(`(?:else\\s+if|if)\\s*\\([^)]*\\breply\\.${field}\\b`, 'u')],
+      ['Python', 'python', new RegExp(`(?:elif|if)\\s+[^\\n:]*["']${field}["'][^\\n:]*:`, 'u')],
+      ['Go', 'go', new RegExp(`(?:else\\s+if|if)\\s+[^{\\n]*\\breply\\.${goField}\\b`, 'u')],
+    ] as const;
+
+    for (const [lang, tag, branch] of branches) {
+      const body = reportBody(tag);
+      // Vacuity: an extractor that returned nothing would make every assertion
+      // below pass on a page with no programs at all.
+      expect(
+        body.length,
+        `${lang}: report() body was not extracted from the guide`,
+      ).toBeGreaterThan(200);
+      expect(body, `${lang}: report() no longer prints the answer`).toMatch(/answer/iu);
+      expect(
+        body,
+        `${lang}: report() does not branch on ${field} — a turn that ran cleanly but could ` +
+          'not read the page back prints nothing',
+      ).toMatch(branch);
+    }
+  });
+
+  it(`NEGATIVE CONTROL the report() branch check fails on a body with the branch deleted, in each language's own syntax — otherwise "it branches" is a claim a matcher that matches nothing also satisfies`, () => {
+    const field = answerUnavailableFieldFromSpec();
+    const goField = pascal(field);
+    const cases = [
+      [
+        new RegExp(`(?:else\\s+if|if)\\s*\\([^)]*\\breply\\.${field}\\b`, 'u'),
+        `if (reply.answer !== undefined) console.log(reply.answer);\n  else if (reply.${field} !== undefined) console.log(reply.${field});`,
+        'if (reply.answer !== undefined) console.log(reply.answer);',
+      ],
+      [
+        new RegExp(`(?:elif|if)\\s+[^\\n:]*["']${field}["'][^\\n:]*:`, 'u'),
+        `if "answer" in reply:\n    print(reply["answer"])\nelif "${field}" in reply:\n    print(reply["${field}"])`,
+        'if "answer" in reply:\n    print(reply["answer"])',
+      ],
+      [
+        new RegExp(`(?:else\\s+if|if)\\s+[^{\\n]*\\breply\\.${goField}\\b`, 'u'),
+        `if reply.Answer != "" {\n\t\tfmt.Println(reply.Answer)\n\t} else if reply.${goField} != "" {\n\t\tfmt.Println(reply.${goField})\n\t}`,
+        'if reply.Answer != "" {\n\t\tfmt.Println(reply.Answer)\n\t}',
+      ],
+    ] as const;
+    for (const [branch, withBranch, withoutBranch] of cases) {
+      expect(branch.test(withBranch), 'the matcher rejects a body that DOES branch').toBe(true);
+      expect(branch.test(withoutBranch), 'the matcher accepts a body that does NOT branch').toBe(
+        false,
+      );
+      // Mentioning the field without branching on it must not count either.
+      expect(
+        branch.test(`// ${field} is documented above\n${withoutBranch}`),
+        'a mention of the field satisfies the matcher',
+      ).toBe(false);
+    }
   });
 
   it('the extractors discriminate: each flags a planted defect and passes the clean control', () => {

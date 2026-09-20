@@ -50,8 +50,16 @@ var internalReferences = []internalReference{
 
 var notInfrastructure = regexp.MustCompile(`(?i)\bnode(?:\.js|:[a-z])`)
 
+// The public proxy-test API spells these itself: `measured_from` comes back as
+// "control_plane" or "fleet", and the request takes `?vantage=fleet`. An SDK
+// that cannot name its own enum values documents nothing, so the quoted value
+// and the query parameter are removed before matching. A bare `fleet`, or
+// `fleet-vantage`, is still reported — see the control test below.
+var wireValues = regexp.MustCompile(`"fleet"|\?vantage=fleet`)
+
 func internalFindings(label, text string) []string {
 	text = notInfrastructure.ReplaceAllString(text, "")
+	text = wireValues.ReplaceAllString(text, "")
 	var out []string
 	for _, ref := range internalReferences {
 		if m := ref.pattern.FindString(text); m != "" {
@@ -131,6 +139,14 @@ func TestControlTheMatcherFlagsEachKindOfInternalReferenceAndPassesProductCopy(t
 	if got := internalFindings("plain", plain); len(got) != 0 {
 		t.Errorf("plain copy flagged: %v", got)
 	}
+	wire := `measured_from is "control_plane" or "fleet", asked for with ?vantage=fleet`
+	if got := internalFindings("wire", wire); len(got) != 0 {
+		t.Errorf("the API's own enum values flagged: %v", got)
+	}
+	// …and the exemption is for those two spellings only.
+	if got := internalFindings("prose", "a fleet-vantage test of a VPN proxy"); len(got) != 2 {
+		t.Errorf("bare fleet / vantage in prose found %d: %v", len(got), got)
+	}
 }
 
 func TestTheDocCollectorsReadRealTextSoAnEmptyScanCannotPassForACleanOne(t *testing.T) {
@@ -176,6 +192,63 @@ func TestTheAIErrorTypesDocumentThemselvesWithoutInternalReferences(t *testing.T
 	var hits []string
 	for name, doc := range typeDocs(t, "errors.go", aiErrorTypes) {
 		hits = append(hits, internalFindings("errors.go "+name, doc)...)
+	}
+	if len(hits) > 0 {
+		sort.Strings(hits)
+		t.Errorf("internal references in customer-facing docs:\n%s", strings.Join(hits, "\n"))
+	}
+}
+
+// The AI surface was swept first because it was written last. pkg.go.dev
+// renders EVERY exported doc comment in this module, the module zip carries
+// every file, and a customer's editor shows whichever comment they hover — so
+// the rule the two checks above apply to `agent_sessions.go` and the AI error
+// types is the rule for the whole package. This widens them to it.
+//
+// It reads real files and counts what it read: a walk that finds no files, or
+// a parser that returns no comments, reports "clean" and is indistinguishable
+// from a package with nothing wrong in it.
+func TestEveryCommentInEveryShippedFileIsFreeOfInternalReferences(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := []string{}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		paths = append(paths, name)
+	}
+	examples, err := os.ReadDir("examples")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range examples {
+		if e.IsDir() {
+			paths = append(paths, "examples/"+e.Name()+"/main.go")
+		}
+	}
+	sort.Strings(paths)
+
+	// Floors, not targets. Measured on 2026-09-20: 28 non-test files at the
+	// package root plus 12 example programs — 40 files carrying 716 comment
+	// groups. A walk that stops finding them reports a clean package.
+	if len(paths) < 38 {
+		t.Fatalf("only %d shipped files found — the walk is not reading the package", len(paths))
+	}
+	groups := 0
+	var hits []string
+	for _, path := range paths {
+		comments := fileComments(t, path)
+		groups += len(comments)
+		for line, text := range comments {
+			hits = append(hits, internalFindings(path+":"+strconv.Itoa(line), text)...)
+		}
+	}
+	if groups < 700 {
+		t.Fatalf("only %d comment groups read across %d files", groups, len(paths))
 	}
 	if len(hits) > 0 {
 		sort.Strings(hits)

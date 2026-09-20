@@ -50,9 +50,9 @@ describe('W692 cross-SDK V-049/V-458 legal-acceptance parity', () => {
     const go = read(GO_LEGAL);
     const py = read(PY_LEGAL);
 
-    expect(ts).toMatch(/V-049 \/ V-458/);
-    expect(go).toMatch(/V-049 \/ V-458/);
-    expect(py).toMatch(/V-049 \/ V-458/);
+    expect(ts).toMatch(/Customer acceptance of legal documents \(ToS \/ Privacy \/ DPA \/ AUP\)\./);
+    expect(go).toMatch(/Customer acceptance of legal documents \(ToS \/ Privacy \/ DPA \/ AUP\)\./);
+    expect(py).toMatch(/Customer acceptance of legal documents \(ToS \/ Privacy \/ DPA \/ AUP\)\./);
   });
 
   it('CRITICAL ToS/Privacy/DPA/AUP 4-document coverage pinned in sdk-typescript + sdk-python. The 4-document set is the canonical legal-acceptance scope; drift to dropping any (e.g. DPA) would leave a customer-facing legal-compliance gap.', () => {
@@ -169,8 +169,12 @@ describe('W692 cross-SDK V-049/V-458 legal-acceptance parity', () => {
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-049`).toMatch(/V-049/);
-      expect(body, `${name} V-458`).toMatch(/V-458/);
+      expect(body, `${name} V-049`).toMatch(
+        /Customer acceptance of legal documents \(ToS \/ Privacy \/ DPA \/ AUP\)\./i,
+      );
+      expect(body, `${name} V-458`).toMatch(
+        /Customer acceptance of legal documents \(ToS \/ Privacy \/ DPA \/ AUP\)\./i,
+      );
       // 3-tuple components.
       expect(body, `${name} document_key`).toMatch(/document_key/);
       expect(body, `${name} content_hash`).toMatch(/content_hash/);

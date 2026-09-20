@@ -1,4 +1,4 @@
-// BillingResource — typed methods for /v1/billing (V-082).
+// BillingResource — typed methods for /v1/billing.
 //
 // `getState` returns the current subscription mirror.
 // `createCheckoutSession` returns a Stripe Checkout URL the customer

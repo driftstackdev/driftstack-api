@@ -137,3 +137,63 @@ def test_the_ai_example_is_free_of_internal_references() -> None:
     lines = EXAMPLE.read_text(encoding="utf-8").splitlines()
     hits = [hit for i, line in enumerate(lines, 1) for hit in findings(f"agent_chat.py:{i}", line)]
     assert hits == []
+
+
+# ── The whole shipped package, not only the AI surface ──────────────────────
+#
+# 2026-09-20. The three arms above read the agent-sessions resource, five error
+# classes and the AI example, because that was the surface under review. Every
+# module in `src/driftstack` ships: the wheel carries the compiled package and
+# the sdist carries this source verbatim, and `help()` shows these docstrings to
+# a customer for any resource they touch, not just the AI one. So the same
+# question is asked of all of them.
+
+SHIPPED_MODULES = sorted((PKG / "src" / "driftstack").rglob("*.py"))
+
+# The ONE exemption, with its reason. The proxy-test route answers with
+# ``measured_from: "fleet"`` or ``"control_plane"`` and takes ``?vantage=fleet``
+# on the way in. Those are WIRE VALUES — the server sends them, a customer types
+# them, and the API's own OpenAPI description publishes both — so the generated
+# models have to be able to spell them. Renaming one is a breaking change to the
+# API, not an edit to a comment, and belongs to whoever owns that contract.
+#
+# The exemption is a WHOLE-LITERAL match, not a word match: a string whose
+# entire value IS one of the enum members is the wire value. A docstring that
+# happens to contain the word is prose and is still reported — the difference
+# between an exemption and an off switch. The control below asserts both halves.
+MEASURED_FROM_ENUM = frozenset({"fleet", "control_plane"})
+
+
+def is_wire_value(text: str) -> bool:
+    """True when the whole literal IS a published `measured_from` enum member."""
+    return text in MEASURED_FROM_ENUM
+
+
+def test_the_shipped_walk_really_read_the_package_so_an_empty_scan_cannot_pass() -> None:
+    names = {p.relative_to(PKG / "src" / "driftstack").as_posix() for p in SHIPPED_MODULES}
+    assert len(SHIPPED_MODULES) >= 25
+    assert {"client.py", "errors.py", "http.py", "resources/account.py"} <= names
+    texts = [t for p in SHIPPED_MODULES for _, t in strings_and_comments(p)]
+    assert len(texts) > 500
+    assert any("Rotate an API key with a 24h grace period" in t for t in texts)
+
+
+def test_every_shipped_module_documents_itself_without_internal_references() -> None:
+    hits = [
+        hit
+        for path in SHIPPED_MODULES
+        for line, text in strings_and_comments(path)
+        if not is_wire_value(text)
+        for hit in findings(f"{path.relative_to(PKG).as_posix()}:{line}", text)
+    ]
+    assert hits == []
+
+
+def test_control_the_wire_value_exemption_excuses_the_value_and_nothing_else() -> None:
+    assert is_wire_value("fleet")
+    assert is_wire_value("control_plane")
+    assert findings("value", "fleet") != []
+
+    prose = "routes the session to the device fleet"
+    assert not is_wire_value(prose)
+    assert findings("prose", prose) != []

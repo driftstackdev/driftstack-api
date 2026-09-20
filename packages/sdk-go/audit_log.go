@@ -7,20 +7,20 @@ import (
 	"time"
 )
 
-// AuditLogResource handles /v1/account/audit-log (V-216 / V-449).
+// AuditLogResource handles /v1/account/audit-log.
 //
-// Append-only ledger; honors the V-326c X-Driftstack-Account team-RBAC
+// Append-only ledger; honors the X-Driftstack-Account team-RBAC
 // header (a member with read access on the team owner can pull the
 // OWNER's audit log).
 type AuditLogResource struct {
 	client *Client
 }
 
-// AuditLogEntry — V-216 single ledger entry. Action-specific structured
+// AuditLogEntry — a single ledger entry. Action-specific structured
 // payload lives in `Payload`; see /api/audit-log doc for shapes per
 // action type. IPAddress + UserAgent are server-stored fields but
-// nulled in customer-facing responses per V-211 (see also V-413
-// caveat about auth-flow events leaking via payload).
+// nulled in customer-facing responses — with the caveat that an
+// auth-flow event can leak them through its payload.
 type AuditLogEntry struct {
 	ID               string                 `json:"id"`
 	AccountID        string                 `json:"account_id"`
@@ -72,7 +72,7 @@ func (r *AuditLogResource) List(ctx context.Context, query *ListAuditLogQuery) (
 	return &out, nil
 }
 
-// AuditLogExportResponse — V-297 bulk-export envelope (GDPR Article
+// AuditLogExportResponse — the bulk-export envelope (GDPR Article
 // 20 portability). Up to 10,000 rows per call; `Truncated` flips to
 // true when older entries weren't returned.
 type AuditLogExportResponse struct {
@@ -84,7 +84,7 @@ type AuditLogExportResponse struct {
 }
 
 // Export returns a single-call JSON bulk-export of the calling
-// account's audit log (V-462 / V-297). Designed for compliance
+// account's audit log. Designed for compliance
 // portability requests; up to 10,000 rows. The CSV branch is not
 // surfaced through the SDK — hit /v1/account/audit-log/export?format=csv
 // directly with the bearer for spreadsheet downloads.

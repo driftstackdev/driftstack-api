@@ -64,28 +64,28 @@ var (
 	ErrLegalAcceptanceRequired = errors.New("legal acceptance required")
 	ErrDriverError             = errors.New("driver error")
 	ErrTransport               = errors.New("transport-level failure")
-	// V-437 — auth-flow problem types.
+	// The auth-flow problem types.
 	ErrEmailAlreadyRegistered = errors.New("email already registered")
 	ErrInvalidCredentials     = errors.New("invalid credentials")
 	ErrInvalidAuthToken       = errors.New("invalid auth token")
 	ErrEmailNotVerified       = errors.New("email not verified")
-	// V-438 — remaining problem types.
+	// The remaining problem types.
 	ErrFeatureUnavailable = errors.New("feature unavailable")
 	ErrMfaStepUpRequired  = errors.New("mfa step-up required")
 	ErrInternal           = errors.New("internal error")
-	// v2-#24 — BYOK Anthropic key required (Q.1.d 2026-05-17). Closes
-	// the TS/Python parity gap so Go customers can errors.Is(err,
-	// driftstack.ErrByokAnthropicRequired) before falling back.
+	// Your own Anthropic key is required. errors.Is(err,
+	// driftstack.ErrByokAnthropicRequired) tells a caller to supply one,
+	// or to fall back, before retrying.
 	ErrByokAnthropicRequired = errors.New("byok anthropic key required")
-	// Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM 402 paths.
+	// Bundled-LLM 402 paths.
 	ErrBundledLlmBudgetExhausted = errors.New("bundled-llm monthly cap reached")
 	ErrBundledLlmConsentRequired = errors.New("bundled-llm consent required")
-	// Arc 2 sub-slice 8.10 (v2-#8) — pair-mode 409 paths.
+	// Pair-mode 409 paths.
 	ErrPairModeConflict               = errors.New("pair-mode takeover already in flight")
 	ErrPairModeStateInvalidTransition = errors.New("invalid pair-mode transition")
 	// Live pre-launch proxy validation (422 at launch).
 	ErrProxyValidationFailed = errors.New("proxy validation failed")
-	// A3 finding #7 — single-active-session-per-profile guard (409 at launch).
+	// Single-active-session-per-profile guard (409 at launch).
 	ErrProfileInUse = errors.New("profile already in use")
 )
 
@@ -275,7 +275,7 @@ func (e *ConcurrencyLimitError) Is(target error) bool { return target == ErrConc
 // QuotaExceededError — 429 because a per-period usage quota is
 // exhausted. Current/Limit/RecordType describe which quota. RecordType
 // carries the resource whose cap was reached ("profile" today); the server
-// spells that field `resource` on the wire (V-815).
+// spells that field `resource` on the wire.
 type QuotaExceededError struct {
 	apiError
 	Current    int
@@ -285,7 +285,7 @@ type QuotaExceededError struct {
 
 func (e *QuotaExceededError) Is(target error) bool { return target == ErrQuotaExceeded }
 
-// StorageQuotaExceededError — 409 (doc-150 item 6). A profile-backed
+// StorageQuotaExceededError — 409. A profile-backed
 // session-launch was refused because the account's aggregate profile
 // storage reached its tier's hard cap. UsedBytes/CapBytes/Tier report the
 // overage. Only profile-backed launches raise this; enterprise is soft-only
@@ -318,7 +318,7 @@ func (e *ProxyValidationFailedError) Is(target error) bool {
 	return target == ErrProxyValidationFailed
 }
 
-// ProfileInUseError — 409 (A3 finding #7). A session-create carried a
+// ProfileInUseError — 409. A session-create carried a
 // profile_id that already has a live (non-terminal) session for the account.
 // Two sessions on the same profile would both restore + overwrite the same
 // saved cookie/state blob (losing the customer's logins), so the launch is
@@ -393,8 +393,8 @@ func (e *TransportError) Is(target error) bool { return target == ErrTransport }
 // the .Message and .Problem map.
 type UnknownError struct{ apiError }
 
-// V-437 — typed auth-flow errors. Added to match the TS SDK's typed
-// error coverage; previously these types fell through to UnknownError.
+// Typed auth-flow errors. They match the TS SDK's typed error
+// coverage; before they existed these responses fell through to UnknownError.
 
 // EmailAlreadyRegisteredError — POST /v1/auth/signup returned 409 because
 // the email is already registered. Customer should log in instead, or
@@ -413,7 +413,7 @@ type InvalidCredentialsError struct{ apiError }
 
 func (e *InvalidCredentialsError) Is(target error) bool { return target == ErrInvalidCredentials }
 
-// InvalidAuthTokenError — V-079 magic-link / password-reset / verify-
+// InvalidAuthTokenError — a magic-link / password-reset / verify-
 // email token is malformed, already-consumed, or expired.
 type InvalidAuthTokenError struct{ apiError }
 
@@ -426,7 +426,7 @@ type EmailNotVerifiedError struct{ apiError }
 
 func (e *EmailNotVerifiedError) Is(target error) bool { return target == ErrEmailNotVerified }
 
-// V-438 — additional typed errors closing the remaining
+// Additional typed errors closing the remaining
 // problem-type gap.
 
 // FeatureUnavailableError — an endpoint requires infrastructure not
@@ -447,7 +447,7 @@ func (e *FeatureUnavailableError) StopUnconfirmed() bool {
 }
 
 // MfaStepUpRequiredError — the requested operation requires a fresh
-// MFA proof (V-353e step-up gate, 15-minute freshness window).
+// MFA proof (step-up gate, 15-minute freshness window).
 // Customer should call POST /v1/auth/mfa/step-up with a TOTP code
 // and retry the original request.
 type MfaStepUpRequiredError struct{ apiError }
@@ -529,7 +529,7 @@ func (e *BundledLlmConsentRequiredError) Is(target error) bool {
 	return target == ErrBundledLlmConsentRequired
 }
 
-// Arc 2 sub-slice 8.10 (v2-#8) — pair-mode takeover lock contention.
+// Pair-mode takeover lock contention.
 // WinnerClientID surfaces the holder; loser can show "X is taking over".
 type PairModeConflictError struct {
 	apiError
@@ -538,7 +538,7 @@ type PairModeConflictError struct {
 
 func (e *PairModeConflictError) Is(target error) bool { return target == ErrPairModeConflict }
 
-// Arc 2 sub-slice 8.10 (v2-#8) — invalid pair-mode transition.
+// Invalid pair-mode transition.
 // From + Transition carry the state-machine diagnostic context.
 type PairModeStateInvalidTransitionError struct {
 	apiError
@@ -550,7 +550,7 @@ func (e *PairModeStateInvalidTransitionError) Is(target error) bool {
 	return target == ErrPairModeStateInvalidTransition
 }
 
-// V-491 — public retry predicate. Mirrors the V-489 TS / V-490
+// IsRetryable is the public retry predicate. Mirrors the TS /
 // Python implementations. Returns true when err is a Driftstack
 // error whose kind is retryable; false otherwise.
 //

@@ -38,7 +38,7 @@ describe('W434.A packages/api-types/src/incidents.ts content parity', () => {
   const body = read(LIB);
 
   it('V-295a framing pinned: public-status incident schemas; two-table semantics (top-level Incident + chronological IncidentUpdate timeline); status page renders public; admin reads/writes both via /v1/admin/incidents/*', () => {
-    expect(body).toMatch(/\/\/ V-295a — public-status incident schemas\./);
+    expect(body).toMatch(/\/\/[^\n]*public-status incident schemas\./);
     expect(body).toMatch(
       /\/\/ Incidents have two-table semantics: a top-level Incident row with\s*\/\/ the current state \+ a chronological list of IncidentUpdate rows\s*\/\/ for the timeline\. The status page renders public incidents; admin\s*\/\/ surface reads \+ writes both via \/v1\/admin\/incidents\/\*\./,
     );
@@ -81,7 +81,7 @@ describe('W434.A packages/api-types/src/incidents.ts content parity', () => {
     );
     expect(body).toMatch(/title: z\.string\(\)\.min\(1\)\.max\(200\),/);
     expect(body).toMatch(
-      /\/\*\* Markdown body\. Rendered as plaintext on the status page until\s*\*\s*V-295c wires the markdown renderer\. \*\/\s*description: z\.string\(\)\.min\(1\)\.max\(5000\),/,
+      /\/\*\* Markdown body\. Rendered as plaintext on the status page until\s*\*\s*[^\n]*wires the markdown renderer\. \*\/\s*description: z\.string\(\)\.min\(1\)\.max\(5000\),/,
     );
     expect(body).toMatch(
       /\/\*\* Initial active status; defaults to 'investigating'\. \*\/\s*status: CreateIncidentStatusSchema\.optional\(\),/,

@@ -7,7 +7,7 @@
 //   • V-237 me() framing — powers the GUI client's "X / Y concurrent
 //     sessions" + "P / Q profiles" header gates. Drift to dropping
 //     fields would break dashboard rendering.
-//   • Per-V-anchor field pinning on AccountSelfProfile —
+//   • Per-field description pinning on AccountSelfProfile —
 //     V-352 timezone (IANA, null=UTC), V-298a slug, V-298b region
 //     (3-region closed union), V-352b avatar_url (R2 ~1h presigned),
 //     V-353h mfa_enrolled, V-326c teams membership array.
@@ -44,20 +44,20 @@ function read(p: string): string {
 describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + module header anchor on the resource line', () => {
+  it('file exists at canonical path + module header names the resource line', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/\/\/ AccountResource — typed methods for \/v1\/account\/\*\./);
   });
 
-  it('V-237/V-298a/V-298b/V-352b/V-353h/V-326c framing pinned — 6-V-anchor module header. CRITICAL: every V-anchor MUST stay attached because each represents a separate field addition to the /me response. Drift to dropping any anchor would lose changelog provenance for that field.', () => {
+  it('Module header framing pinned — the header says /v1/account/me is the customer self-profile endpoint and names the fields the shape below mirrors. CRITICAL: the FIELD LIST must stay. The internal ticket anchors must NOT: this header ships inside the npm package and a customer reads it on hover.', () => {
     expect(body).toMatch(
-      /\/\/ V-237 introduced GET \/v1\/account\/me as the customer self-profile\s*\/\/ endpoint\. V-298a\/V-298b\/V-352b\/V-353h\/V-326c added slug, region,\s*\/\/ avatar_url, mfa_enrolled, and teams fields\. The shape below mirrors\s*\/\/ the server's full \/me response\./,
+      /\/\/[^\n]*GET \/v1\/account\/me is the customer self-profile endpoint\.[\s\S]{0,200}?slug, region, avatar_url, mfa_enrolled, and teams fields\. The shape\s*\/\/ below mirrors the server's full \/me response\./,
     );
   });
 
   it('V-450 self-service extension framing pinned — "also wraps /web-sessions list + revoke, /me/avatar upload + clear, and /rate-limits read." Drift to dropping any one of the 3 V-450 extension areas would silently shrink the SDK\'s self-service surface.', () => {
     expect(body).toMatch(
-      /\/\/ V-450 — also wraps \/web-sessions list \+ revoke, \/me\/avatar\s*\/\/ upload \+ clear, and \/rate-limits read\./,
+      /\/\/[^\n]*also wraps \/web-sessions list \+ revoke, \/me\/avatar\s*\/\/ upload \+ clear, and \/rate-limits read\./,
     );
   });
 
@@ -76,32 +76,32 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
 
   it('V-352 timezone field — IANA zone (e.g. "Europe/Amsterdam") nullable with "null = UTC fallback" framing. Drift to dropping the UTC-fallback semantic would force every customer to set a timezone (breaking the "I don\'t care" default).', () => {
     expect(body).toMatch(
-      /\/\*\* V-352 — IANA timezone \(e\.g\. "Europe\/Amsterdam"\); null = UTC fallback\. \*\/\s*timezone: string \| null;/,
+      /\/[^\n]*IANA timezone \(e\.g\. "Europe\/Amsterdam"\); null = UTC fallback\. \*\/\s*timezone: string \| null;/,
     );
   });
 
   it('V-298a slug — readable account handle (e.g. /@acme); nullable when unset. The "readable" framing tells customers this is the human-facing handle (vs the opaque account_id). Drift to a non-nullable slug would force every account to pick one.', () => {
     expect(body).toMatch(
-      /\/\*\* V-298a — readable account handle; null when unset\. \*\/\s*slug: string \| null;/,
+      /\/[^\n]*readable account handle; null when unset\. \*\/\s*slug: string \| null;/,
     );
   });
 
   it('CRITICAL V-298b region — 3-value closed union (us|eu|apac) + null when unset. The 3-region closed-set is what defines where the customer\'s data lives. Drift to widening (e.g. adding "africa") without coordinated server+client update would break the regional-routing infrastructure. Drift to making non-nullable would force every customer to pick a region at signup (vs deferring).', () => {
     expect(body).toMatch(
-      /\/\*\* V-298b — stated infrastructure-region preference; null when unset\. \*\/\s*region: 'us' \| 'eu' \| 'apac' \| null;/,
+      /\/[^\n]*stated infrastructure-region preference; null when unset\. \*\/\s*region: 'us' \| 'eu' \| 'apac' \| null;/,
     );
   });
 
   it('CRITICAL V-352b avatar_url — short-lived (~1h) PRESIGNED R2 GET URL; nullable when no avatar. The "short-lived" framing tells customers the URL EXPIRES — drift to dropping the freshness window claim would let dashboards cache stale URLs that 404 after expiry. Drift to making non-presigned would expose the R2 bucket directly.', () => {
     expect(body).toMatch(
-      /\/\*\* V-352b — short-lived \(~1h\) presigned R2 GET URL; null when no avatar\. \*\/\s*avatar_url: string \| null;/,
+      /\/[^\n]*short-lived \(~1h\) presigned R2 GET URL; null when no avatar\. \*\/\s*avatar_url: string \| null;/,
     );
     expect(body).toMatch(/avatar_source: 'user' \| 'idp' \| 'none';/);
   });
 
   it('V-353h mfa_enrolled — boolean (true once TOTP enrollment verified). Drift to making nullable would let dashboards render an "MFA: unknown" state (vs the clear yes/no).', () => {
     expect(body).toMatch(
-      /\/\*\* V-353h — true once TOTP enrollment is verified\. \*\/\s*mfa_enrolled: boolean;/,
+      /\/[^\n]*[Tt]rue once TOTP enrollment is verified\. \*\/\s*mfa_enrolled: boolean;/,
     );
   });
 
@@ -119,12 +119,12 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
 
   it('CRITICAL V-326c teams membership array — Array<{owner_account_id + owner_email + owner_name + role (admin|member) + membership_id}>. "Empty when none" framing tells dashboards an empty array is the canonical "I\'m not on any team" signal (not absence of the field). 2-value role union pinned (admin|member). owner_email/owner_name (sweep-3) let dashboards label a team by who owns it. Drift to dropping owner_account_id would prevent dashboards from rendering "you\'re a member of X\'s team" cross-account links.', () => {
     expect(body).toMatch(
-      /\/\*\* V-326c — team memberships the calling account holds\. Empty when none\.(?:[\s\S]*?)\*\/\s*teams: Array<\{\s*owner_account_id: string;\s*owner_email: string;\s*owner_name: string \| null;\s*role: 'admin' \| 'member';\s*membership_id: string;\s*\}>;/,
+      /\/[^\n]*[Tt]eam memberships the calling account holds\. Empty when none\.(?:[\s\S]*?)\*\/\s*teams: Array<\{\s*owner_account_id: string;\s*owner_email: string;\s*owner_name: string \| null;\s*role: 'admin' \| 'member';\s*membership_id: string;\s*\}>;/,
     );
   });
 
   it('CRITICAL V-355 WebSessionEntry — id + os + browser + last_used_at + expires_at + current bool. "True when this entry is the calling session itself" framing pinned on `current` field. Drift to dropping `current` would force dashboards to compare every entry against the cookie\'s session id to identify "this device" (fragile + leaks session info into client logic).', () => {
-    expect(body).toMatch(/\/\/ V-355 — active dashboard sign-in for the calling account\./);
+    expect(body).toMatch(/\/\/[^\n]*active dashboard sign-in for the calling account\./);
     expect(body).toMatch(
       /export interface WebSessionEntry \{\s*id: string;\s*os: string;\s*browser: string;\s*last_used_at: string;\s*expires_at: string;\s*\/\*\* True when this entry is the calling session itself\. \*\/\s*current: boolean;\s*\}/,
     );
@@ -135,7 +135,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
 
   it('CRITICAL V-352b UploadAvatarResponse — content_type 3-value closed union (image/png|image/jpeg|image/webp). Drift to widening (e.g. adding image/gif or image/svg+xml) would open XSS via SVG-embedded <script>. The closed allowlist is the load-bearing security claim. Pre-signed R2 ~1h URL framing pinned.', () => {
     expect(body).toMatch(
-      /\/\/ V-352b — avatar upload response\. Presigned R2 URL is short-lived \(~1h\)\./,
+      /\/\/[^\n]*avatar upload response\. Presigned R2 URL is short-lived \(~1h\)\./,
     );
     expect(body).toMatch(
       /export interface UploadAvatarResponse \{\s*avatar_url: string \| null;\s*content_type: 'image\/png' \| 'image\/jpeg' \| 'image\/webp';\s*bytes: number;\s*\}/,
@@ -144,7 +144,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
 
   it('CRITICAL V-258 RateLimitBucket — bucket_key 4-value union (global|sessions:create|agent_sessions:message|agent_sessions:input_event, mirroring the server BUCKET_KEYS — sweep-3) + source 2-value union (tier_default|override) + override_expires_at nullable. Drift to NARROWING bucket_key would make an exhaustive switch silently mishandle a real bucket the server returns; drift to widening source would lose the tier-vs-override distinction the dashboard uses to render "tier default" badges. GetAccountRateLimitsResponse wraps tier (string, not AccountTier — admins can override) + buckets[].', () => {
     expect(body).toMatch(
-      /\/\/ V-258 — effective rate-limit config \(per-bucket capacity \+ refill\)\./,
+      /\/\/[^\n]*effective rate-limit config \(per-bucket capacity \+ refill\)\./,
     );
     const bucket = body.match(/export interface RateLimitBucket \{[\s\S]*?\n\}/)?.[0] ?? '';
     for (const key of [
@@ -172,7 +172,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
 
   it('me() verb — V-237 GET /v1/account/me → Promise<AccountSelfProfile>. CRITICAL: "Powers the GUI client\'s `X / Y concurrent sessions` + `P / Q profiles` header gates" — drift to dropping any gauge field would break the dashboard header rendering.', () => {
     expect(body).toMatch(
-      /\*\s*V-237 — customer self-profile\. Powers the GUI client's\s*\*\s*"X \/ Y concurrent sessions" \+ "P \/ Q profiles" header gates\./,
+      /customer self-profile\. Powers the GUI client's\s*\*\s*"X \/ Y concurrent sessions" \+ "P \/ Q profiles" header gates\./,
     );
     expect(body).toMatch(
       /me\(\): Promise<AccountSelfProfile> \{\s*return this\.http\.request<AccountSelfProfile>\(\{\s*method: 'GET',\s*path: '\/v1\/account\/me',\s*\}\);\s*\}/,
@@ -181,7 +181,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
 
   it('updateMe verb — V-352 PATCH /v1/account/me with UpdateAccountMeRequest body → Promise<AccountSelfProfile>. CRITICAL: "(name / timezone / slug / region)" 4-field partial-update list pinned. Drift to dropping any field from the parenthetical would lose the customer-facing list of updatable fields. PATCH (not PUT) so missing fields stay unchanged.', () => {
     expect(body).toMatch(
-      /\/\*\* V-352 — partial update of the calling account \(name \/ timezone \/ slug \/ region\)\. \*\//,
+      /\/[^\n]*partial update of the calling account \(name \/ timezone \/ slug \/ region\)\. \*\//,
     );
     expect(body).toMatch(
       /updateMe\(body: UpdateAccountMeRequest\): Promise<AccountSelfProfile> \{\s*return this\.http\.request<AccountSelfProfile>\(\{\s*method: 'PATCH',\s*path: '\/v1\/account\/me',\s*body,\s*\}\);\s*\}/,
@@ -189,14 +189,14 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
   });
 
   it('uploadAvatar verb — V-352b POST /v1/account/me/avatar with UploadAvatarRequest body → Promise<UploadAvatarResponse>. The "or replace" framing on the JSDoc tells customers upload IS idempotent at the avatar-pointer level (re-uploading replaces, not duplicates).', () => {
-    expect(body).toMatch(/\/\*\* V-352b — upload \(or replace\) the calling account avatar\. \*\//);
+    expect(body).toMatch(/\/[^\n]*[Uu]pload \(or replace\) the calling account avatar\. \*\//);
     expect(body).toMatch(
       /uploadAvatar\(body: UploadAvatarRequest\): Promise<UploadAvatarResponse> \{\s*return this\.http\.request<UploadAvatarResponse>\(\{\s*method: 'POST',\s*path: '\/v1\/account\/me\/avatar',\s*body,\s*\}\);\s*\}/,
     );
   });
 
   it('clearAvatar verb — V-352b DELETE /v1/account/me/avatar → Promise<void>. "clear the calling account avatar pointer" framing — drift to "delete the avatar file" would mismatch the actual server-side semantics (the file may stick around in R2 with TTL).', () => {
-    expect(body).toMatch(/\/\*\* V-352b — clear the calling account avatar pointer\. \*\//);
+    expect(body).toMatch(/\/[^\n]*[Cc]lear the calling account avatar pointer\. \*\//);
     expect(body).toMatch(
       /clearAvatar\(\): Promise<void> \{\s*return this\.http\.request<void>\(\{\s*method: 'DELETE',\s*path: '\/v1\/account\/me\/avatar',\s*\}\);\s*\}/,
     );
@@ -204,7 +204,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
 
   it('listWebSessions verb — V-355 GET /v1/account/web-sessions → Promise<ListWebSessionsResponse>. The list-with-current-marker is the load-bearing claim that lets dashboards distinguish "this device" from "other devices".', () => {
     expect(body).toMatch(
-      /\/\*\* V-355 — list active dashboard sign-ins for the calling account\. \*\//,
+      /\/[^\n]*[Ll]ist active dashboard sign-ins for the calling account\. \*\//,
     );
     expect(body).toMatch(
       /listWebSessions\(\): Promise<ListWebSessionsResponse> \{\s*return this\.http\.request<ListWebSessionsResponse>\(\{\s*method: 'GET',\s*path: '\/v1\/account\/web-sessions',\s*\}\);\s*\}/,
@@ -212,7 +212,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
   });
 
   it('revokeWebSession verb — V-355 DELETE /v1/account/web-sessions/${encodeURIComponent(id)} → Promise<void>. CRITICAL: "Idempotent" framing — drift to non-idempotent would break the standard cleanup pattern. encodeURIComponent wrapping prevents path traversal.', () => {
-    expect(body).toMatch(/\/\*\* V-355 — revoke a single web session by id\. Idempotent\. \*\//);
+    expect(body).toMatch(/\/[^\n]*[Rr]evoke a single web session by id\. Idempotent\. \*\//);
     expect(body).toMatch(
       /revokeWebSession\(id: string\): Promise<void> \{\s*return this\.http\.request<void>\(\{\s*method: 'DELETE',\s*path: `\/v1\/account\/web-sessions\/\$\{encodeURIComponent\(id\)\}`,\s*\}\);\s*\}/,
     );
@@ -223,7 +223,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
   // REQUIRES broke it — a pin that fails when a bug is fixed is a pin that
   // pressures the next person to revert the fix.
   it('CRITICAL revokeAllOtherWebSessions verb — V-355 DELETE /v1/account/web-sessions (NO id, collection root) WITH ?keep=current. "revoke every web session EXCEPT the calling one" framing pinned. Drift to including the calling session would log customer OUT mid-revocation; dropping the query makes the endpoint refuse the call outright.', () => {
-    expect(body).toMatch(/\/\*\* V-355 — revoke every web session except the calling one\. \*\//);
+    expect(body).toMatch(/\/[^\n]*[Rr]evoke every web session except the calling one\. \*\//);
     expect(body, 'DELETE on the collection root, no id').toMatch(
       /revokeAllOtherWebSessions\(\): Promise<void>/,
     );
@@ -238,7 +238,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
 
   it('rateLimits verb — V-258 GET /v1/account/rate-limits → Promise<GetAccountRateLimitsResponse>. Read-only diagnostic; drift to a POST (e.g. for adjusting limits) would shift this from read-only to write surface needing CSRF protection.', () => {
     expect(body).toMatch(
-      /\/\*\* V-258 — read effective rate-limit config \(per-bucket caps \+ override status\)\. \*\//,
+      /\/[^\n]*[Rr]ead effective rate-limit config \(per-bucket caps \+ override status\)\. \*\//,
     );
     expect(body).toMatch(
       /rateLimits\(\): Promise<GetAccountRateLimitsResponse> \{\s*return this\.http\.request<GetAccountRateLimitsResponse>\(\{\s*method: 'GET',\s*path: '\/v1\/account\/rate-limits',\s*\}\);\s*\}/,
@@ -246,9 +246,7 @@ describe('W425.C packages/sdk-typescript/src/resources/account.ts content parity
   });
 
   it('CRITICAL bundled-LLM settings/status verbs (Arc 1 sub-slice 6.6/6.7) — GET+PATCH /v1/account/me/bundled-llm-settings and GET /v1/account/me/bundled-llm-status. Lets the GUI give the customer an in-app fix for BundledLlmConsentRequiredError / BundledLlmBudgetExhaustedError instead of pointing at a raw curl command — drift to dropping any of these 3 verbs would strand the customer on the unreadable API-error path.', () => {
-    expect(body).toMatch(
-      /\/\/ Arc 1 sub-slice 6\.6\/6\.7 — bundled-LLM settings \+ spend status\./,
-    );
+    expect(body).toMatch(/\/\/[^\n]*bundled-LLM settings \+ spend status\./);
     expect(body).toMatch(
       /export interface BundledLlmSettings \{\s*consent: boolean;\s*monthly_cap_usd_cents: number;\s*\}/,
     );

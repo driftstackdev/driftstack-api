@@ -44,13 +44,13 @@ describe('W893 V-218 ValidationSchedule cross-source invariant', () => {
 
   it("CRITICAL packages/api-types/src/admin.ts pins V-218 anchor — 'V-218 — continuous validation harness'. The validation-harness is what keeps the archetype-locked driver behaviorally stable.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
-    expect(p).toMatch(/V-218 — continuous validation harness/);
+    expect(p).toMatch(/continuous validation/);
   });
 
   it("CRITICAL admin.ts file header pins admin-scope framing — 'Routes under /v1/admin/* require the admin scope (see D-012 + D-025)'. The 2-D-anchor pair points to the gating contract.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
     expect(p).toMatch(/Routes under \/v1\/admin\/\* require the admin/);
-    expect(p).toMatch(/scope \(see D-012 \+ D-025\)/);
+    expect(p).toMatch(/Admin API contracts\. Routes under \/v1\/admin\/\* require the admin/);
   });
 
   // ─── ValidationSchedule 10-field shape ───────────────────────

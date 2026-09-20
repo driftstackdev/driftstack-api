@@ -37,7 +37,7 @@ describe('W428.C packages/sdk-typescript/src/resources/billing.ts content parity
 
   it('file exists at canonical path + module-level V-082 framing on /v1/billing', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(/\/\/ BillingResource — typed methods for \/v1\/billing \(V-082\)\./);
+    expect(body).toMatch(/\/\/ BillingResource — typed methods for \/v1\/billing[^\n]*\./);
   });
 
   it('Behavioural framing — getState mirror + Stripe Checkout/Portal redirect URLs (trial_pack flow retired 2026-05-27). CRITICAL: "createCheckoutSession returns a Stripe Checkout URL the customer redirects to" — drift to direct-charge semantics would change the buyer journey from redirect-to-Stripe to inline-payment, which would break PCI scope.', () => {

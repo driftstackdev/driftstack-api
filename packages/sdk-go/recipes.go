@@ -65,12 +65,10 @@ type CreateRecipeRequest struct {
 // returns 404 (not 403) — the server intentionally doesn't distinguish
 // missing from forbidden to avoid existence leakage.
 //
-// V-1120 — this read "Cross-account access on AgentSessionID returns 404",
-// the rule V-812 retracted. The route gates on callerCanAccessAgentSession,
-// so a team admin snapshotting the owner's session is created, and the
-// recipe is filed under the ADMIN's account. The Get/Delete comments below
-// are about recipeID and stay as they are: those really are strictly
-// own-account.
+// A team admin snapshotting the owner's session therefore succeeds, and
+// the recipe is filed under the ADMIN's account. The Get/Delete comments
+// below are about recipeID and say something different on purpose: those
+// really are strictly own-account.
 func (r *RecipesResource) Create(ctx context.Context, body CreateRecipeRequest) (*Recipe, error) {
 	var out Recipe
 	if err := r.client.do(ctx, requestOptions{
@@ -166,9 +164,9 @@ func (r *RecipesResource) Delete(ctx context.Context, recipeID string) error {
 	})
 }
 
-// RecipeSuggestion is the doc-132 §5.2 (recipe auto-generation) v1.0
-// slice response: a deterministic label/description suggestion derived
-// from a session's own intent_log (same assembly Create uses).
+// RecipeSuggestion is the recipe auto-generation response: a
+// deterministic label/description suggestion derived from a session's
+// own intent_log (the same assembly Create uses).
 type RecipeSuggestion struct {
 	SuggestedLabel       string `json:"suggested_label"`
 	SuggestedDescription string `json:"suggested_description"`

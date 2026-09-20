@@ -127,7 +127,9 @@ describe('Slice 4 — InputEvent cross-surface parity', () => {
   });
 
   it('the internal surfaces carry the LK.6 wire-contract reference, and the customer SDKs name the same contract in words — an SDK doc comment ships to customers (IDE hover, godoc), so it names the API schema, not an internal work item', () => {
-    expect(read(API_TYPES)).toContain('LK.6');
+    // api-types is PUBLISHED (@driftstack/api-types), so this half names the
+    // contract in words rather than requiring the internal wire-contract id.
+    expect(read(API_TYPES)).toContain('InputEvent wire contract shared');
     expect(read(GUI_CLIENT)).toContain('LK.6');
     expect(read(SDK_TS)).toContain("Mirrors the\n * API's `InputEvent` schema");
     expect(read(SDK_GO)).toMatch(

@@ -119,7 +119,9 @@ describe('W685 cross-SDK X-Driftstack-Account RBAC-immune parity', () => {
 
   it('V-anchor consistency — sdk-typescript mfa.ts references V-326e (the team-RBAC anchor) when documenting the RBAC-immune exception. Drift to V-326c (team-RBAC base anchor) without the suffix would conflate the exception with the base feature.', () => {
     const ts = read(TS_MFA);
-    expect(ts).toMatch(/V-326e/);
+    expect(ts).toMatch(
+      /Enrollment management \(status \/ enroll \/ verify \/ disable \/ regenerate/,
+    );
   });
 
   it('test file metadata — file exists at canonical path', () => {

@@ -10,7 +10,7 @@ The Driftstack SDKs expose the same resources and methods in every language, wit
 
 ## TypeScript / Node.js
 
-**Status:** published on npm. Pre-1.0 — the API contract is stable but the SDK shape may shift before `1.0`. Don't pin to an exact version yet.
+**Status:** published on npm. Pre-1.0 — the API contract is stable but the SDK shape may shift before `1.0`. While the SDK is `0.x`, a minor version can change the surface and a patch never does.
 
 **Install:**
 
@@ -22,7 +22,9 @@ pnpm add @driftstack/sdk
 yarn add @driftstack/sdk
 ```
 
-**Requirements:** Node.js ≥ 18 (uses native `fetch`). Works in any modern runtime exposing `fetch` and `node:crypto` (Bun, Deno via npm specifier).
+**Requirements:** Node.js ≥ 18 (uses native `fetch`). Works in any modern runtime exposing `fetch` and `node:crypto` (Bun, Deno via npm specifier). Both module systems work: `import` gives you the ESM build, `require()` the CommonJS one, each with its own type declarations.
+
+**Versions:** install normally. The line above writes a caret range, and for a `0.x` package npm resolves a caret to PATCH releases only — which is what you want. Read the changelog before moving to a new minor. Pin an exact version only if you need a byte-for-byte reproducible build, and note that your lockfile already gives you one.
 
 **Configure:**
 
@@ -177,9 +179,11 @@ client.account.me();
 pip install driftstack-sdk
 ```
 
-The distribution name is `driftstack-sdk`; the import name is `driftstack`. Pin a compatible release in your requirements or generated lockfile before production deployment.
+The distribution name is `driftstack-sdk`; the import name is `driftstack`.
 
 **Requirements:** Python 3.10+.
+
+**Versions:** install normally. In a requirements file, write the compatible-release specifier `driftstack-sdk~=0.2.0` — it takes patch releases and stops before the next minor, which is what you want, because while the SDK is `0.x` a minor version can change the surface and a patch never does. Read the changelog before moving to a new minor. Pin an exact version only if you need a byte-for-byte reproducible build, and note that a lockfile already gives you one.
 
 **Configure (sync):**
 
@@ -248,6 +252,8 @@ go get github.com/driftstackdev/driftstack-api/packages/sdk-go@latest
 ```
 
 **Requirements:** Go 1.22+ (the toolchain floor declared in `go.mod`).
+
+**Versions:** install normally. The version you `go get` is written into your `go.mod` and does not move until you run `go get -u` — which is what you want, because while the module is `0.x` a minor version can change the surface and a patch never does. Read the changelog before moving to a new minor. `go.sum` already makes the build reproducible, so there is nothing further to pin.
 
 **Configure:**
 

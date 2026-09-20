@@ -1,6 +1,6 @@
 // Example: customer-configurable egress flow.
 //
-// Demonstrates the EGRESS Phase 1 SOCKS5 lifecycle (planning 133):
+// Demonstrates the SOCKS5 egress lifecycle:
 //   1. Save a reusable SOCKS5 config to the customer's library.
 //   2. Attach the proxy to an existing session (id passed in via env).
 //   3. Read the session's proxy summary back (verifies safeguards).
@@ -46,8 +46,8 @@ func main() {
 
 	proxy := map[string]any{
 		"type": "socks5",
-		// udp_associate: required for WebRTC routing per planning 133.
-		// require_remote_dns: EG-WK-1.9 (2026-05-17) — leave false to keep
+		// udp_associate: required for WebRTC routing.
+		// require_remote_dns: leave false to keep
 		// DNS resolution local-side; set true to route DNS through the
 		// proxy via SOCKS5 ATYP DOMAINNAME (0x03).
 		"socks5": map[string]any{

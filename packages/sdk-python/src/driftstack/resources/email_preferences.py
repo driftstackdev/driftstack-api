@@ -1,4 +1,4 @@
-"""Email preferences resource — /v1/account/email-preferences (V-204 / V-449).
+"""Email preferences resource — /v1/account/email-preferences.
 
 Per-event opt-in/opt-out toggles for non-critical customer emails.
 Critical emails (verification / password-reset / billing-failure)

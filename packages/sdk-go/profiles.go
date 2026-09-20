@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// ProfilesResource handles /v1/profiles endpoints (V-081).
+// ProfilesResource handles /v1/profiles endpoints.
 type ProfilesResource struct {
 	client *Client
 }
@@ -176,7 +176,7 @@ func (r *ProfilesResource) Purge(ctx context.Context, profileID string) error {
 // silently did nothing; it has been removed so setting one is a compile
 // error instead of a no-op. If you need customer-controlled egress
 // today, use AgentSessionsResource.Create with ProxyID instead -- that
-// resource dispatches to the real device fleet and routes traffic
+// resource dispatches to a real device and routes traffic
 // through one of your saved account proxies.
 type LaunchProfileRequest struct {
 	Label string `json:"label,omitempty"`
@@ -205,7 +205,7 @@ func (r *ProfilesResource) Launch(
 	return &out, nil
 }
 
-// CloneProfileRequest — V-313. Pass an empty struct to let the server
+// CloneProfileRequest — the Clone body. Pass an empty struct to let the server
 // auto-derive a "(copy)" / "(copy 2)" / ... name.
 type CloneProfileRequest struct {
 	Name string `json:"name,omitempty"`
@@ -240,7 +240,7 @@ type ProfileExportPayload struct {
 	Description *string `json:"description"`
 }
 
-// ProfileExportEnvelope — V-480 versioned, metadata-only export. Per-profile
+// ProfileExportEnvelope — a versioned, metadata-only export. Per-profile
 // browser state lives driver-side and is out of scope for the v1 envelope; the
 // Version field lets a future v2 stay back-compat. The Source* fields are
 // informational — Import always mints a fresh id, into any account.
@@ -327,14 +327,15 @@ func (r *ProfilesResource) Transfer(ctx context.Context, profileID string, body 
 	return &out, nil
 }
 
-// TrimProfileResponse — doc-150 §8 discriminated body for Trim. The server
+// TrimProfileResponse — the discriminated body for Trim. The server
 // ALWAYS returns HTTP 200; branch on Status, never the HTTP code:
 //   - "ok"          → caches cleared; BytesReclaimed freed, SizeBytes is the new
 //     (smaller) sealed-store size persisted server-side.
 //   - "unavailable" → nothing to trim (fresh profile or no connected
-//     storage-capable node). Reason is human-readable. Not an error.
-//   - "timeout"     → the session node did not respond in time. Safe to retry.
-//   - "error"       → the node reported a failure; the stored blob is untouched.
+//     storage-capable device). Reason is human-readable. Not an error.
+//   - "timeout"     → the device running the session did not respond in time.
+//     Safe to retry.
+//   - "error"       → the device reported a failure; the stored blob is untouched.
 //
 // SizeBytes / BytesReclaimed are present only on "ok"; Reason only on
 // "unavailable" / "error" — hence omitempty on all three.
@@ -345,7 +346,7 @@ type TrimProfileResponse struct {
 	Reason         string `json:"reason,omitempty"`
 }
 
-// Trim — doc-150 §8 "Clear cache, keep logins". Reclaims a profile's
+// Trim — "Clear cache, keep logins". Reclaims a profile's
 // re-fetchable caches (HTTP/media/DOMCache/service-workers) WITHOUT touching
 // logins, localStorage, IndexedDB or open tabs — the headline reclaim action
 // when an account is over its storage cap. The server always responds 200 with

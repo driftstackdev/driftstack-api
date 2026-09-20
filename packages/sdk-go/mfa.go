@@ -5,17 +5,17 @@ import (
 	"time"
 )
 
-// MfaResource handles /v1/account/mfa/* endpoints (V-353b / V-448).
+// MfaResource handles /v1/account/mfa/* endpoints.
 //
 // Pairs with `client.Auth.MfaChallenge` (login MFA exchange) and
-// `client.Auth.MfaStepUp` (V-353e step-up gate). MFA enrollment is
+// `client.Auth.MfaStepUp` (the step-up gate). MFA enrollment is
 // per-account, never per-team-context — these endpoints don't honor
 // the X-Driftstack-Account header.
 type MfaResource struct {
 	client *Client
 }
 
-// MfaStatus — V-353b enrollment state.
+// MfaStatus — the enrollment state.
 type MfaStatus struct {
 	Enrolled            bool       `json:"enrolled"`
 	EnrolledAt          *time.Time `json:"enrolled_at"`
@@ -89,7 +89,7 @@ func (r *MfaResource) Verify(ctx context.Context, body *MfaVerifyRequest) (*MfaV
 	return &out, nil
 }
 
-// Disable — disable MFA. Requires fresh MFA proof per V-353e step-up
+// Disable — disable MFA. Requires fresh MFA proof per the step-up
 // gate. Customer should call MfaStepUp(ctx, ...) first if the 15-min
 // window is stale. Recovery codes are invalidated.
 func (r *MfaResource) Disable(ctx context.Context, body *MfaDisableRequest) error {

@@ -141,7 +141,7 @@ describe('W851 incident enum cross-source invariant', () => {
 
   it('CRITICAL V-295a anchor pinned in api-types/incidents.ts. The V-295a anchor threads the incident-system provenance for cross-link discovery.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/incidents.ts'));
-    expect(p).toMatch(/V-295a/);
+    expect(p).toMatch(/Incidents have two-table semantics: a top-level Incident row with/);
   });
 
   // ─── Server service typed-imports ────────────────────────────

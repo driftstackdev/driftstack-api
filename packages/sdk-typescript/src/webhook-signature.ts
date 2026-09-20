@@ -35,7 +35,7 @@ export interface VerifySignatureInput {
   body: string | Uint8Array | ArrayBuffer;
   header: string | string[] | undefined;
   /**
-   * V-359 — OPTIONAL fallback for a separately-supplied previous-secret
+   * An OPTIONAL fallback for a separately-supplied previous-secret
    * signature. Driftstack does NOT emit a separate header: during a
    * rotation grace window the previous-secret HMAC is included as a
    * second `v1=` inside the main `x-driftstack-signature` header
@@ -55,30 +55,18 @@ export interface VerifySignatureInput {
 const DEFAULT_TOLERANCE_SEC = 300;
 
 export async function verifyWebhookSignature(input: VerifySignatureInput): Promise<boolean> {
-  // V-2010 — refuse before hashing when the signing secret is empty.
-  //
-  // The three SDK verifiers each document "returns false on any failure mode",
-  // and an empty secret is a failure mode. They reached three DIFFERENT wrong
-  // answers: Python and Go hash with a zero-length key (both accept an HMAC an
-  // attacker computes with no secret at all, since the message is the timestamp
-  // and the body they already have), and this one THREW `DataError: Zero-length
-  // key is not supported` out of `subtle.importKey` — safe against forgery by
-  // accident of WebCrypto, but an exception in the customer's webhook handler
-  // where the contract promises a boolean. The server-side sibling has carried
-  // this check since V-1465 for exactly the same reason.
-  // ⛔ `!input.secret`, NOT `.length === 0` — V-2011. The first spelling of this
-  // guard read `.length`, which THROWS a TypeError when an untyped JavaScript
-  // caller passes `undefined` or `null`, and untyped JS is the common case for a
-  // webhook handler. Measured before and after: pre-guard, `null` RETURNED FALSE
-  // and `undefined` threw a DOMException out of subtle.importKey; the `.length`
-  // guard made `null` throw too, so the fix regressed the very contract it was
-  // written to restore. The falsy test covers '', undefined and null in one, and
-  // is what Python's `if not secret:` has always done.
+  // Refuse before hashing when the signing secret is empty. This function
+  // documents "returns false on any failure mode", and a missing secret is a
+  // failure mode: it must never accept an HMAC an attacker can compute without
+  // the secret, and it must never throw at a caller that promised a boolean.
+  // ⛔ `!input.secret`, NOT `.length === 0` — the falsy test covers '',
+  // undefined and null in one, so an untyped JavaScript caller (the common case
+  // for a webhook handler) gets `false` instead of a TypeError.
   if (!input.secret) return false;
 
   const ok = await verifySingleHeader(input.header, input);
   if (ok) return true;
-  // V-359 — fall through to the prev header (rotation grace). When
+  // Fall through to the prev header (rotation grace). When
   // unset this is a no-op; when set the customer accepts either the
   // new or the old secret's HMAC during the 24h grace window.
   if (input.headerPrev !== undefined) {

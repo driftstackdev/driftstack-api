@@ -123,10 +123,13 @@ describe('W814 cross-SDK README structure parity', () => {
 
   // ─── TS pre-1.0 + Stable-surface-for-API-contract framing ─────
 
-  it("CRITICAL TS README pins 'Stable surface for the API contract; the SDK API may shift before 1.0. Don't pin against an exact version yet' framing. The dual SDK-vs-API stability statement is the load-bearing version-pinning guidance.", () => {
+  it('CRITICAL TS README pins \'Stable surface for the API contract; the SDK API may shift before 1.0. While the SDK is `0.x`, a minor version can change the surface and a patch never does\' framing. The dual SDK-vs-API stability statement is the load-bearing version-pinning guidance. The pin MOVED on 2026-09-20: the second sentence used to be "Don\'t pin against an exact version yet", and api-types\' README said "Pin an exact package version in production" — the same customer, two packages, opposite instructions. The statement is now the RULE both follow, and the-published-packages-give-one-answer-about-version-pinning checks all six documents against it', () => {
     const p = read(TS);
     expect(p).toMatch(
-      /Stable surface for the API contract; the SDK API may shift before 1\.0\. Don't pin against an exact version yet\./,
+      /Stable surface for the API contract; the SDK API may shift before 1\.0\. While the SDK is `0\.x`, a minor version can change the surface and a patch never does\./,
+    );
+    expect(p, 'the retired instruction must not come back').not.toMatch(
+      /Don't pin against an exact version/,
     );
   });
 

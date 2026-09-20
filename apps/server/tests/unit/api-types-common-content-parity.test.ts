@@ -106,7 +106,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
 
   it('ADR-004 locked pricing rationale pinned: two-ladder concurrent-only (supersedes file-127 single-ladder hours-with-overage); pre-launch / no production customers / V-073 migration drops + recreates Postgres enum + re-maps test data', () => {
     expect(body).toMatch(
-      /\/\/ Locked pricing model — two-ladder concurrent-only per ADR-004\s*\/\/ \(supersedes file-127 single-ladder hours-with-overage design;\s*\/\/ pre-launch, no production customers, V-073 migration drops \+\s*\/\/ recreates the Postgres enum and re-maps any existing test data\s*\/\/ from old tier names to new equivalents\)\./,
+      /\/\/ Locked pricing model — two-ladder concurrent-only[^\n]*\s*\/\/ \(supersedes[^\n]*single-ladder hours-with-overage design;\s*\/\/ pre-launch, no production customers,[^\n]*migration drops \+\s*\/\/ recreates the Postgres enum and re-maps any existing test data\s*\/\/ from old tier names to new equivalents\)\./,
     );
   });
 
@@ -175,7 +175,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
       /\*\s*Concurrent session limit per tier — the primary metering primitive\s*\*\s*on paid tiers\. A customer can have up to N sessions in `creating` \/\s*\*\s*`ready` \/ `busy` state simultaneously; creating an \(N\+1\)th triggers\s*\*\s*`concurrency_limit_exceeded` \(HTTP 429\)\./,
     );
     expect(body).toMatch(
-      /\*\s*Locked per ADR-004\. Values mirrored in\s*\*\s*`apps\/marketing-site\/src\/data\/pricing\.ts:API_TIERS` field\s*\*\s*`concurrent`\. `enterprise: 32` is a sentinel floor for the smallest\s*\*\s*custom contract; per-account overrides via the rate-limit-overrides\s*\*\s*path bump real Enterprise customers higher\./,
+      /\*\s*Locked per[^\n]*\. Values mirrored in\s*\*\s*`apps\/marketing-site\/src\/data\/pricing\.ts:API_TIERS` field\s*\*\s*`concurrent`\. `enterprise: 32` is a sentinel floor for the smallest\s*\*\s*custom contract; per-account overrides via the rate-limit-overrides\s*\*\s*path bump real Enterprise customers higher\./,
     );
     expect(body).toMatch(
       /export const TIER_CONCURRENT_SESSION_LIMITS: Record<AccountTier, number> = \{\s*free: 1,\s*solo_manual: 1,\s*team_manual: 3,\s*agency_manual: 8,\s*api_starter: 2,\s*api_builder: 8,\s*api_scale: 24,\s*enterprise: 32,\s*\};/,
@@ -183,17 +183,15 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
   });
 
   it('V-219 TIER_RATE_LIMIT_DEFAULTS framing pinned: anti-abuse not pricing; ADR-004 concurrent-not-per-call; two bucket keys (global + sessions:create); per-account overrides via rate-limit-overrides (V-052) supersede defaults', () => {
-    expect(body).toMatch(
-      /\*\s*V-219 — per-tier rate-limit defaults \(token-bucket capacity \+ refill\)\./,
-    );
+    expect(body).toMatch(/per-tier rate-limit defaults \(token-bucket capacity \+ refill\)\./);
     expect(body).toMatch(
       /\*\s*- `global` — every authenticated `\/v1\/\*` call consumes this bucket\.\s*\*\s*Protects against accidental DDoS \/ runaway scripts\.\s*\*\s*- `sessions:create` — `POST \/v1\/sessions` only\. Lower cap because\s*\*\s*session creation is the most expensive op in the system \(driver\s*\*\s*allocation, archetype hydration, fingerprint pinning\)\./,
     );
     expect(body).toMatch(
-      /\*\s*These are anti-abuse limits, not pricing — per ADR-004, customers\s*\*\s*pay for concurrent sessions, not per-call\./,
+      /\*\s*These are anti-abuse limits, not pricing — per[^\n]*customers\s*\*\s*pay for concurrent sessions, not per-call\./,
     );
     expect(body).toMatch(
-      /Per-account overrides\s*\*\s*via the rate-limit-overrides path \(V-052\) supersede these defaults\./,
+      /Per-account overrides\s*\*\s*via the rate-limit-overrides path[^\n]*supersede these defaults\./,
     );
   });
 
@@ -216,9 +214,9 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
   });
 
   it('V-485 TierFeatures framing pinned: single source of truth for tier-gated capabilities; mirrors marketing-site pricing.ts; consumers (requireTierFeature 403 feature_not_available + customer dashboard conditional UI); add-new-feature instructions', () => {
-    expect(body).toMatch(/\*\s*V-485 — per-tier feature gating registry\./);
+    expect(body).toMatch(/per-tier feature gating registry\./);
     expect(body).toMatch(
-      /\*\s*Single source of truth for "which capabilities does this tier\s*\*\s*unlock\?" Today the server checks `tier === 'free'` \/\s*\*\s*`PROFILES_PER_TIER\[tier\]` \/ `TIER_CONCURRENT_SESSION_LIMITS\[tier\]`\s*\*\s*in scattered call sites; this registry is the central place for\s*\*\s*those plus the AI-agent \+ LLM-billing gates that ship with V-487\+\./,
+      /\*\s*Single source of truth for "which capabilities does this tier\s*\*\s*unlock\?" Today the server checks `tier === 'free'` \/\s*\*\s*`PROFILES_PER_TIER\[tier\]` \/ `TIER_CONCURRENT_SESSION_LIMITS\[tier\]`\s*\*\s*in scattered call sites; this registry is the central place for\s*\*\s*those plus the AI-agent \+ LLM-billing gates that ship with[^\n]*\./,
     );
     expect(body).toMatch(
       /\*\s*Consumers:\s*\*\s*- Server: `requireTierFeature\(tier, key\)` in\s*\*\s*`apps\/server\/src\/lib\/errors-helpers\.ts` throws 403 with\s*\*\s*`feature_not_available` problem-type when the gate fails\.\s*\*\s*- Customer dashboard: read TIER_FEATURES directly to drive\s*\*\s*conditional UI \(e\.g\. hide AI-agent CTA on Personal\)\./,
@@ -276,7 +274,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
       /\*\s*Versioning: every iOS major bump \(iOS 19, iOS 20, \.\.\.\) cycles BOTH\s*\*\s*values\. Apple ships Safari independently of iOS major; the\s*\*\s*Safari version is part of the identifier so we can ship Safari-only\s*\*\s*archetype updates without touching iOS framing\./,
     );
     expect(body).toMatch(
-      /\*\s*V-136: renamed from the prior `iphone16pro_ios26_4_1` identifier\s*\*\s*\(which conflated Safari 26\.4 with a fictional "iOS 26\.4\.1"\) to the\s*\*\s*correct `iphone16pro_ios18_7_safari26_4`\./,
+      /renamed from the prior `iphone16pro_ios26_4_1` identifier\s*\*\s*\(which conflated Safari 26\.4 with a fictional "iOS 26\.4\.1"\) to the\s*\*\s*correct `iphone16pro_ios18_7_safari26_4`\./,
     );
     expect(body).toMatch(/export const LOCKED_ARCHETYPE_ID = 'iphone17_ios18_7_safari26_4';/);
     expect(body).toMatch(
@@ -357,7 +355,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
 
   it('V-174 scope split framing pins legacy admin as customer-only and exact staff authority for /v1/admin/*', () => {
     expect(body).toMatch(
-      /\*\s*V-174 — scope architecture split\. Two new scopes carve up what\s*\*\s*'admin' did pre-V-174:/,
+      /scope architecture split\. Two new scopes carve up what\s*\*\s*'admin' did pre/,
     );
     expect(body).toMatch(
       /\*\s*- `account_owner` — gates customer-account control \(mint API keys,\s*\*\s*revoke API keys, manage subscription, \/v1\/account\/\*\)\. A customer\s*\*\s*logged into their own dashboard has this scope; their personal\s*\*\s*keys can have it\./,
@@ -379,23 +377,23 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     );
     expect(body).not.toMatch(/route handlers always operate against `ctx\.account\.id`/);
     expect(body).toMatch(
-      /\*\s*- `driftstack_internal_admin` — gates Driftstack-staff-only\s*\*\s*operations \(`\/v1\/admin\/\*`: list all accounts, suspend account,\s*\*\s*change tier, force-actions, audit-log read, webhook DLQ\s*\*\s*management\)\. Only the founder \+ Driftstack-internal accounts\s*\*\s*carry this scope\. The exact scope check is the application authority\s*\*\s*boundary; Cloudflare Access SSO on admin\.driftstack\.io \(V-135\) is a\s*\*\s*separate defense-in-depth identity perimeter\./,
+      /\*\s*- `driftstack_internal_admin` — gates Driftstack-staff-only\s*\*\s*operations \(`\/v1\/admin\/\*`: list all accounts, suspend account,\s*\*\s*change tier, force-actions, audit-log read, webhook DLQ\s*\*\s*management\)\. Only the[^\n]*Driftstack-internal accounts\s*\*\s*carry this scope\. The exact scope check is the application authority\s*\*\s*boundary; Cloudflare Access SSO on admin\.driftstack\.io[^\n]*is a\s*\*\s*separate defense-in-depth identity perimeter\./,
     );
     expect(body).toMatch(
-      /\*\s*- `admin` — pre-V-174 customer compatibility alias\. It satisfies\s*\*\s*`account_owner` and customer `admin:X` scopes, but never\s*\*\s*`driftstack_internal_admin`/,
+      /\*\s*- `admin` — pre[^\n]*customer compatibility alias\. It satisfies\s*\*\s*`account_owner` and customer `admin:X` scopes, but never\s*\*\s*`driftstack_internal_admin`/,
     );
     expect(body).toMatch(/cross-account staff authority requires that\s*\*\s*exact scope\./);
   });
 
   it('gui_control scope L-001 framing pinned: gates manual-control plane (tap_at, type_focused, etc.) bypassing behavioral simulation layer; only granted to self-hosted GUI workflow keys; default creation does not include; enterprise gets it explicitly', () => {
     expect(body).toMatch(
-      /\/\/ `gui_control` is the scope that gates the manual-control plane\s*\/\/ \(tap_at, type_focused, etc\.\) — bypasses the behavioral simulation\s*\/\/ layer, only granted to keys for the self-hosted GUI workflow per\s*\/\/ L-001 in docs\/locked-decisions\.md\. Default key creation does not\s*\/\/ include this scope; enterprise-tier accounts get it explicitly\./,
+      /\/\/ `gui_control` is the scope that gates the manual[^\n]*\s*\/\/ \(tap_at, type_focused, etc\.\) — bypasses the behavioral simulation\s*\/\/ layer, only granted to keys for the self-hosted GUI workflow[\s\S]{0,180}?Default key creation does not\s*\/\/ include this scope; enterprise-tier accounts get it explicitly\./,
     );
   });
 
   it('V-481 ApiKeyScope enum: broad (read|write|admin|account_owner|driftstack_internal_admin|gui_control) + granular verb:resource set with backward-compat framing pinned (broad satisfies granular via verb-prefix in requireScope/auth; granular does NOT satisfy broad — narrow keys stay narrow)', () => {
     expect(body).toMatch(
-      /\/\/ V-481 — granular per-resource scopes\. Verb:resource order\.\s*\/\/ Backwards-compat: customer broad scopes \(`read` \/ `write` \/ `admin` \/\s*\/\/ `account_owner`\) satisfy granular checks via requireScope's\s*\/\/ verb-prefix logic in `apps\/server\/src\/lib\/errors-helpers\.ts`\s*\/\/ and `apps\/server\/src\/services\/auth\.ts`\. Granular scopes do\s*\/\/ NOT satisfy broad checks — narrow keys stay narrow\./,
+      /\/\/[^\n]*granular per-resource scopes\. Verb:resource order\.\s*\/\/ Backwards-compat: customer broad scopes \(`read` \/ `write` \/ `admin` \/\s*\/\/ `account_owner`\) satisfy granular checks via requireScope's\s*\/\/ verb-prefix logic in `apps\/server\/src\/lib\/errors-helpers\.ts`\s*\/\/ and `apps\/server\/src\/services\/auth\.ts`\. Granular scopes do\s*\/\/ NOT satisfy broad checks — narrow keys stay narrow\./,
     );
     expect(body).toMatch(
       /export const ApiKeyScopeSchema = z\.enum\(\[\s*'read',\s*'write',\s*'admin',\s*'account_owner',\s*'driftstack_internal_admin',\s*'gui_control',/,

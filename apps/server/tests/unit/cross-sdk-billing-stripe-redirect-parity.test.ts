@@ -54,9 +54,9 @@ describe('W695 cross-SDK V-082 billing Stripe-redirect parity', () => {
     const go = read(GO_BILLING);
     const py = read(PY_BILLING);
 
-    expect(ts).toMatch(/V-082/);
-    expect(go).toMatch(/V-082/);
-    expect(py).toMatch(/V-082/);
+    expect(ts).toMatch(/redirects to\. `createPortalSession` returns a Stripe Customer Portal/);
+    expect(go).toMatch(/redirects to\. CreatePortalSession returns a Stripe Customer Portal/);
+    expect(py).toMatch(/Billing resource — \/v1\/billing/);
   });
 
   it('CRITICAL 3-verb surface pinned across all 3 SDKs — getState + createCheckoutSession + createPortalSession (language-canonical naming; startTrialPack retired 2026-05-27). The 3 verbs cover the customer billing flow; drift to dropping any would break the dashboard or signup flow.', () => {
@@ -152,7 +152,7 @@ describe('W695 cross-SDK V-082 billing Stripe-redirect parity', () => {
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-082`).toMatch(/V-082/);
+      expect(body, `${name} names Stripe`).toMatch(/Stripe/);
       expect(body, `${name} /v1/billing path`).toMatch(/\/v1\/billing/);
       expect(body, `${name} checkout-session`).toMatch(/checkout-session/);
       expect(body, `${name} portal-session`).toMatch(/portal-session/);

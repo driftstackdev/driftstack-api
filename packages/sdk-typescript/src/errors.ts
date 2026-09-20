@@ -62,8 +62,9 @@ export type DriftstackErrorKind =
   | 'invalid_credentials'
   | 'invalid_auth_token'
   | 'email_not_verified'
-  // V-441 — closing problem-type parity with Go + Python.
-  // Q.1.d (2026-05-17) appended `byok_anthropic_required`.
+  // Kinds closing problem-type parity with Go + Python.
+  // `byok_anthropic_required` is raised when a feature needs your own
+  // Anthropic key and the account has not supplied one.
   | 'feature_unavailable'
   | 'mfa_step_up_required'
   | 'byok_anthropic_required'
@@ -278,7 +279,7 @@ export class TierLimitError extends DriftstackError {
    *
    * `recordType` carries the RESOURCE whose cap was reached — "profile"
    * for every producer today. The server calls this field `resource`; the
-   * accessor keeps its published name (see V-815 below).
+   * accessor keeps its published name.
    *
    * Cross-SDK parity: Python exposes `err.current` + `err.limit` +
    * `err.record_type` on QuotaExceededError; Go exposes `err.Current`
@@ -293,14 +294,11 @@ export class TierLimitError extends DriftstackError {
   constructor(p: Problem) {
     super(toOpts('tier_limit', p));
     this.name = 'TierLimitError';
-    // V-815 — the server sends `resource` on the tier-limit problem
-    // (`{ current, limit, resource, tier }`). `record_type` has NEVER been on
-    // the wire: it exists as a `usage_records` column name and in a
-    // hand-written Go SDK test fixture, and reading it here left
-    // `err.recordType` undefined on every tier-limit error the API can
-    // produce. The old key stays as a fallback so a future producer that does
-    // send it still works; the PROPERTY keeps its name because it ships in
-    // 0.1.x and renaming it would break consumers for a spelling.
+    // The server sends the capped resource as `resource`
+    // (`{ current, limit, resource, tier }`). `record_type` is accepted as a
+    // fallback so a producer that sends the older key still populates
+    // `err.recordType`. The PROPERTY keeps its published name because it
+    // shipped in 0.1.x and renaming it would break consumers.
     const ext = p as {
       current?: number;
       limit?: number;
@@ -314,7 +312,7 @@ export class TierLimitError extends DriftstackError {
 }
 
 /**
- * doc-150 item 6 — per-account profile-storage quota reached at session-
+ * Per-account profile-storage quota reached at session-
  * launch. 409 Conflict (reuses the `conflict` kind, like the pair-mode 409s).
  * Extensions carry the byte numbers so consumers can render the overage:
  * `err.usedBytes`, `err.capBytes`, `err.tier`. Only profile-backed launches
@@ -442,7 +440,7 @@ export class InternalError extends DriftstackError {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Auth-flow errors (V-079; SDK normalization V-114)
+// Auth-flow errors (SDK normalization of the server's 401 family)
 // ───────────────────────────────────────────────────────────────────────────
 
 export class EmailAlreadyRegisteredError extends DriftstackError {
@@ -473,9 +471,9 @@ export class EmailNotVerifiedError extends DriftstackError {
   }
 }
 
-// V-441 — typed errors closing TS SDK problem-type parity with Go + Python.
+// Typed errors closing TS SDK problem-type parity with Go + Python.
 
-/** V-353e — operation requires fresh MFA proof (15-minute step-up window).
+/** The operation requires fresh MFA proof (15-minute step-up window).
  *  Customer should call `client.auth.mfaStepUp({ code })` and retry. */
 export class MfaStepUpRequiredError extends DriftstackError {
   constructor(p: Problem) {
@@ -538,7 +536,7 @@ export class BundledLlmConsentRequiredError extends DriftstackError {
   }
 }
 
-// Arc 2 sub-slice 8.10 (v2-#8) — pair-mode takeover lost the lock
+// Pair-mode takeover lost the lock
 // race. The body's `winner_client_id` is surfaced as a typed property
 // so the dashboard can render "user X is taking over".
 export class PairModeConflictError extends DriftstackError {
@@ -550,7 +548,7 @@ export class PairModeConflictError extends DriftstackError {
   }
 }
 
-// Arc 2 sub-slice 8.10 (v2-#8) — invalid pair-mode transition.
+// Invalid pair-mode transition.
 // `from` + `transition` carry the state-machine context.
 export class PairModeStateInvalidTransitionError extends DriftstackError {
   readonly from: string;
@@ -636,11 +634,11 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
   'https://errors.driftstack.dev/conflict': (p) => new ConflictError(p),
   'https://errors.driftstack.dev/concurrency-limit': (p) => new ConcurrencyLimitError(p),
   'https://errors.driftstack.dev/tier-limit': (p) => new TierLimitError(p),
-  // doc-150 item 6 — per-account profile-storage quota (409 at session-launch).
+  // Per-account profile-storage quota (409 at session-launch).
   'https://errors.driftstack.dev/storage-quota-exceeded': (p) => new StorageQuotaExceededError(p),
   // Live pre-launch proxy validation (422 at launch).
   'https://errors.driftstack.dev/proxy-validation-failed': (p) => new ProxyValidationFailedError(p),
-  // A3 finding #7 — single-active-session-per-profile guard (409 at launch).
+  // Single-active-session-per-profile guard (409 at launch).
   'https://errors.driftstack.dev/profile-in-use': (p) => new ProfileInUseError(p),
   'https://errors.driftstack.dev/session-destroyed': (p) => new SessionDestroyedError(p),
   'https://errors.driftstack.dev/session-timeout': (p) => new SessionTimeoutError(p),
@@ -654,16 +652,16 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
   'https://errors.driftstack.dev/invalid-credentials': (p) => new InvalidCredentialsError(p),
   'https://errors.driftstack.dev/invalid-auth-token': (p) => new InvalidAuthTokenError(p),
   'https://errors.driftstack.dev/email-not-verified': (p) => new EmailNotVerifiedError(p),
-  // V-441 — closing problem-type parity with Go + Python.
+  // Kinds closing problem-type parity with Go + Python.
   'https://errors.driftstack.dev/feature-unavailable': (p) => new FeatureUnavailableError(p),
   'https://errors.driftstack.dev/mfa-step-up-required': (p) => new MfaStepUpRequiredError(p),
   'https://errors.driftstack.dev/byok-anthropic-required': (p) => new ByokAnthropicRequiredError(p),
-  // Arc 1 sub-slice 6.8 (v2-#6) — bundled-LLM 402s.
+  // Bundled-LLM 402s.
   'https://errors.driftstack.dev/bundled-llm-budget-exhausted': (p) =>
     new BundledLlmBudgetExhaustedError(p),
   'https://errors.driftstack.dev/bundled-llm-consent-required': (p) =>
     new BundledLlmConsentRequiredError(p),
-  // Arc 2 sub-slice 8.10 (v2-#8) — pair-mode 409s.
+  // Pair-mode 409s.
   'https://errors.driftstack.dev/pair-mode-conflict': (p) => new PairModeConflictError(p),
   'https://errors.driftstack.dev/pair-mode-invalid-transition': (p) =>
     new PairModeStateInvalidTransitionError(p),
@@ -725,7 +723,7 @@ function extensionMembers(p: Problem): Record<string, unknown> {
 }
 
 /**
- * V-489 — `isRetryable(err)` predicate exposed for SDK consumers
+ * The `isRetryable(err)` predicate exposed for SDK consumers
  * who run their own retry/backoff loop instead of the built-in one
  * in `retry.ts`. Returns `true` when a retry stands a reasonable
  * chance of succeeding; `false` when it doesn't.

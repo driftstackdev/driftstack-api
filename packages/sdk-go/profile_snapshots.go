@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// ProfileSnapshot — V-312 immutable point-in-time copy of a saved
+// ProfileSnapshot — an immutable point-in-time copy of a saved
 // profile. The parent profile keeps evolving; the snapshot is frozen.
 type ProfileSnapshot struct {
 	ID              string    `json:"id"`
@@ -41,7 +41,7 @@ type ListProfileSnapshotsQuery struct {
 }
 
 // ProfileSnapshotsResource handles /v1/profiles/:id/snapshots +
-// /v1/profile-snapshots endpoints (V-312).
+// /v1/profile-snapshots endpoints.
 type ProfileSnapshotsResource struct {
 	client *Client
 }
@@ -80,9 +80,8 @@ func (r *ProfileSnapshotsResource) ListForProfile(
 // List returns every snapshot owned by the EFFECTIVE account: the caller's
 // own, or the owner they are acting as via X-Driftstack-Account.
 //
-// V-1121 — this said "the calling account". The handler resolves
-// eff.kind == "team" ? eff.accountId : ctx.account.id, so a team admin acting
-// as an owner lists the OWNER's snapshots.
+// A team admin acting as an owner therefore lists the OWNER's snapshots,
+// not their own.
 func (r *ProfileSnapshotsResource) List(
 	ctx context.Context,
 	query *ListProfileSnapshotsQuery,

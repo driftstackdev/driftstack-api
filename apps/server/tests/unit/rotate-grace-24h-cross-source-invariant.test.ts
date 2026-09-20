@@ -73,7 +73,7 @@ describe('W901 V-296 + V-359 24h rotate-grace cross-source invariant', () => {
 
   it("CRITICAL packages/api-types/src/webhooks.ts pins V-359 24h grace — 'populated only during the 24h rotation grace period'. The 24h matches the V-296 default — both rotation flows use the same window.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
-    expect(p).toMatch(/V-359 — populated only during the 24h rotation grace period/);
+    expect(p).toMatch(/populated only during the 24h rotation grace period/);
     expect(p).toMatch(/Null when no rotation in flight/);
   });
 

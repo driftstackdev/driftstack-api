@@ -46,7 +46,7 @@ describe('W897 audit-log filter parity cross-source invariant', () => {
 
   it("CRITICAL packages/api-types/src/accounts.ts ListAccountAuditLogQuery has V-484 filters — from/to (z.coerce.date) + actor_type (AccountAuditActorTypeSchema) + target_resource_id (1-200). The V-484 anchor + 'additional filters' framing pins the customer filter set.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
-    expect(p).toMatch(/V-484 — additional filters\. ISO 8601 dates for from\/to \(inclusive\)/);
+    expect(p).toMatch(/additional filters\. ISO 8601 dates for from\/to \(inclusive\)/);
     expect(p).toMatch(/from: z\.coerce\.date\(\)\.optional\(\)/);
     expect(p).toMatch(/to: z\.coerce\.date\(\)\.optional\(\)/);
     expect(p).toMatch(/actor_type: AccountAuditActorTypeSchema\.optional\(\)/);
@@ -64,7 +64,7 @@ describe('W897 audit-log filter parity cross-source invariant', () => {
 
   it("CRITICAL packages/api-types/src/admin.ts ListAuditLogQuery has V-521 filters — admin_id + target_id + action + from/to (Iso8601Schema) + target_resource_id (1-200). The V-521 anchor + 'admin-side parity with V-484' framing.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
-    expect(p).toMatch(/V-521 — admin-side parity with the V-484 customer audit-log/);
+    expect(p).toMatch(/admin-side parity with the[^\n]*customer audit-log/);
     expect(p).toMatch(
       /ListAuditLogQuerySchema = z\.object\(\{[\s\S]+?admin_id: z\.string\(\)\.optional\(\)/,
     );

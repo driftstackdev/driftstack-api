@@ -2,7 +2,7 @@
 
 Official TypeScript SDK for the [Driftstack](https://driftstack.io) API.
 
-> **Status:** pre-1.0. Stable surface for the API contract; the SDK API may shift before 1.0. Don't pin against an exact version yet.
+> **Status:** pre-1.0. Stable surface for the API contract; the SDK API may shift before 1.0. While the SDK is `0.x`, a minor version can change the surface and a patch never does.
 
 ## Install
 
@@ -15,6 +15,21 @@ yarn add @driftstack/sdk
 ```
 
 Requires Node.js ≥ 18 (uses native `fetch`). Works in any modern runtime that exposes `fetch` and `node:crypto`.
+
+Both module systems work: `import` gives you the ESM build and `require()` gives
+you the CommonJS one, each with its own type declarations. The package carries
+its own copy of the API contract types, so there is nothing else to install —
+`zod` is the single runtime dependency, and it is shared rather than duplicated,
+so a `ZodError` the SDK throws is the same class your own `zod` catches.
+
+### Versions
+
+Install normally. The line above writes a caret range (`^0.2.0`), and for a
+`0.x` package npm resolves a caret to PATCH releases only — which is what you
+want, because while the SDK is `0.x` a minor version can change the surface and
+a patch never does. Read the [CHANGELOG](CHANGELOG.md) before moving to a new
+minor. Pin an exact version only if you need a byte-for-byte reproducible
+build, and note that your lockfile already gives you one.
 
 ## Quickstart
 
@@ -62,7 +77,7 @@ client.sessions.destroy(id)
 
 client.egress.attachToSession(sessionId, config)  // capability-gated — 503 on every deployment today; no egress backend is wired
 client.egress.getSessionProxy(sessionId)          // capability-gated — 404 unconditionally today (see attachToSession)
-client.egress.listProxies()             // EG-API-1.3 — saved reusable proxy library (metadata only)
+client.egress.listProxies()             // saved reusable proxy library (metadata only)
 client.egress.createProxy(body)         // secret fields are write-only (never echoed back)
 client.egress.updateProxy(id, body)
 client.egress.deleteProxy(id)
@@ -91,9 +106,9 @@ client.profiles.iterate(opts?)
 client.profiles.get(id)
 client.profiles.update(id, body)
 client.profiles.delete(id)
-client.profiles.clone(id, body?)        // V-313 — auto-derives "(copy)" name when omitted
+client.profiles.clone(id, body?)        // auto-derives "(copy)" name when omitted
 
-client.profileSnapshots.capture(profileId, body)            // V-312 — immutable point-in-time copy
+client.profileSnapshots.capture(profileId, body)            // immutable point-in-time copy
 client.profileSnapshots.listForProfile(profileId, query?)
 client.profileSnapshots.list(query?)                        // cross-account
 client.profileSnapshots.iterate(opts?)
@@ -101,7 +116,7 @@ client.profileSnapshots.get(id)
 client.profileSnapshots.restore(id, body)                   // creates a NEW profile
 client.profileSnapshots.delete(id)
 
-client.recipes.create(body)             // AI-B4 — snapshot an agent-session's intent_log
+client.recipes.create(body)             // snapshot an agent-session's intent_log
 client.recipes.list(query?)             // cursor-paginated, newest first
 client.recipes.iterate(opts?)
 client.recipes.get(id)                  // recipe + public intent_log; secret type values omitted
@@ -109,7 +124,7 @@ client.recipes.delete(id)               // recipe management only; no execute me
 
 client.apiKeys.create(body)             // requires admin scope
 client.apiKeys.list()
-client.apiKeys.rotate(id, options?)     // V-296 — 24h grace, plaintext shown once
+client.apiKeys.rotate(id, options?)     // 24h grace, plaintext shown once
 client.apiKeys.revoke(id)               // requires admin scope
 
 client.webhooks.create(body)            // requires admin scope
@@ -118,9 +133,9 @@ client.webhooks.get(id)
 client.webhooks.delete(id)
 client.webhooks.listDeliveries(id, query?)
 client.webhooks.iterateDeliveries(id, opts?)
-client.webhooks.replayDelivery(id)      // V-307 — re-fire a failed/DLQ delivery
+client.webhooks.replayDelivery(id)      // re-fire a failed/DLQ delivery
 
-client.team.invite(email, options?)     // V-298 — invite by email
+client.team.invite(email, options?)     // invite by email
 client.team.listMembers()
 client.team.listInvites()
 client.team.listOwners()                 // owner workspaces this account joined
@@ -129,15 +144,15 @@ client.team.removeMember(membershipId)
 
 client.account.me()                     // calling account's full state
 
-client.legal.documents()                // V-049 — legal-document catalog (ToS/Privacy/DPA/AUP)
+client.legal.documents()                // legal-document catalog (ToS/Privacy/DPA/AUP)
 client.legal.required()                 // documents the account must accept (or re-accept)
 client.legal.accept(body)               // record acceptance of a (key, version, content_hash) tuple
 
-client.auditLog.list(query?)            // V-216 — append-only account event ledger, newest first
+client.auditLog.list(query?)            // append-only account event ledger, newest first
 client.auditLog.iterate(opts?)          // walk every page (compliance bulk-pull)
-client.auditLog.export()                // V-462 — JSON bulk export (GDPR Art. 20, ≤10k rows)
+client.auditLog.export()                // JSON bulk export (GDPR Art. 20, ≤10k rows)
 
-client.emailPreferences.list()          // V-204 — non-critical email opt-out toggles
+client.emailPreferences.list()          // non-critical email opt-out toggles
 client.emailPreferences.set(body)
 client.emailPreferences.optOut(eventType)   // convenience: opt out of a single event type
 client.emailPreferences.optIn(eventType)    // convenience: opt back in
@@ -146,9 +161,9 @@ client.billing.getState()
 client.billing.createCheckoutSession(body)
 client.billing.createPortalSession()
 
-client.cryptoOrders.quote(body)         // V-666 — preview the fiat price (no order)
+client.cryptoOrders.quote(body)         // preview the fiat price (no order)
 client.cryptoOrders.createCheckout(body, opts?)  // mint an order; pass { idempotencyKey } to dedupe
-client.cryptoOrders.list(opts?)         // V-666.BR — filter by status; V-666.BU — cursor-paged
+client.cryptoOrders.list(opts?)         // filter by status; cursor-paged
 client.cryptoOrders.listAll(opts?)      // async-iterate every page (alias: iterate)
 client.cryptoOrders.iterate(opts?)      // cross-SDK synonym for listAll
 client.cryptoOrders.get(orderId)
@@ -158,7 +173,7 @@ client.cryptoOrders.receipt(orderId)    // JSON receipt
 
 client.auth.signup(body)
 client.auth.verifyEmail(body)
-client.auth.login(body)                 // V-353d — returns LoginResponse OR LoginMfaRequiredResponse
+client.auth.login(body)                 // returns LoginResponse OR LoginMfaRequiredResponse
 client.auth.refresh(body)
 client.auth.logout(body)
 client.auth.requestMagicLink(body)
@@ -166,7 +181,7 @@ client.auth.consumeMagicLink(body)
 client.auth.requestPasswordReset(body)
 client.auth.confirmPasswordReset(body)
 
-client.mfa.status()                     // V-353b — MFA enrollment state
+client.mfa.status()                     // MFA enrollment state
 client.mfa.enroll()                     // start TOTP enrollment (returns otpauth_uri + secret)
 client.mfa.verify(body)                 // confirm with first code; returns 10 recovery codes
 client.mfa.disable(body)                // requires fresh step-up proof (see auth.mfaStepUp)
@@ -175,7 +190,7 @@ client.mfa.regenerateRecoveryCodes()    // mint 10 fresh recovery codes (shown o
 client.usage.current()
 ```
 
-Every method is fully typed against the public OpenAPI 3.1 contract sourced from `@driftstack/api-types`. Hover anywhere in your editor to see the request and response shapes.
+Every method is fully typed against the public OpenAPI 3.1 contract. Those types ship inside this package, so hover works in your editor with nothing else installed.
 
 ## Errors
 

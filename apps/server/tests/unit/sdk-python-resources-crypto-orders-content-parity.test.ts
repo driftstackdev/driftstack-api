@@ -29,7 +29,7 @@
 //     self-service cancel-while-pending flow (the only out).
 //   • Per-verb blocks for the 8-verb surface (quote / create_
 //     checkout / list / iterate / get / update_note / cancel /
-//     receipt) — each with V-anchor + wire path + quote(safe='')
+//     receipt) — each with its wire path + quote(safe='')
 //     URL-escape on per-id sub-routes.
 //   • Escape-hatch REMOVAL pinned — the old _post_with_headers /
 //     _apost_with_headers helpers (which late-imported _build_headers +
@@ -55,7 +55,7 @@ describe('W584.B packages/sdk-python/src/driftstack/resources/crypto_orders.py c
 
   it('file exists at canonical path + module docstring V-666 anchor + customer-facing-only framing (admin endpoints NOT exposed here)', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(/^"""Crypto-orders resource — \/v1\/billing\/crypto-\* \(V-666\)\.\n/);
+    expect(body).toMatch(/^"""Crypto-orders resource — \/v1\/billing\/crypto[^\n]*\.\n/);
     expect(body).toMatch(
       /Customer-facing only; admin endpoints aren't exposed here \(use the\s*\nOpenAPI spec at ``\/openapi\.json`` directly\)\./,
     );
@@ -63,13 +63,13 @@ describe('W584.B packages/sdk-python/src/driftstack/resources/crypto_orders.py c
 
   it('V-666.AO Idempotency-Key kwarg framing pinned per-line: kwarg name + header forwarded + "retries don\'t mint duplicate orders" claim. Load-bearing because customers driving the SDK from a retry-on-failure pattern would otherwise mint multiple charges for one intent.', () => {
     expect(body).toMatch(
-      /V-666\.AO — ``create_checkout`` accepts an ``idempotency_key`` keyword\s*\nthat's forwarded as the ``Idempotency-Key`` header so retries don't\s*\nmint duplicate orders\./,
+      /``create_checkout`` accepts an ``idempotency_key`` keyword\s*\nthat's forwarded as the ``Idempotency-Key`` header so retries don't\s*\nmint duplicate orders\./,
     );
   });
 
   it('V-666.BU cursor walker framing — the orders-keyed envelope is pinned + the rationale that iterate() ADAPTS the orders→data shape and DELEGATES to the shared iterate_paginated helper (so it inherits the non-advancing-cursor guard every other list has). Drift to dropping the adapter (handing the raw orders envelope to the data-keyed helper) would silently iterate an empty list.', () => {
     expect(body).toMatch(
-      /V-666\.BU — ``list`` accepts ``cursor`` for cursor-pagination;\s*\n``iterate`` walks every page until ``next_cursor`` is null\. The\s*\nresponse envelope keys its rows off ``orders`` \(not the standard\s*\n``data``\), so iteration adapts the page shape and delegates to the\s*\nshared :func:`iterate_paginated` helper — that way this endpoint gets\s*\nthe same non-advancing-cursor guard as every other list\./,
+      /``list`` accepts ``cursor`` for cursor-pagination;\s*\n``iterate`` walks every page until ``next_cursor`` is null\. The\s*\nresponse envelope keys its rows off ``orders`` \(not the standard\s*\n``data``\), so iteration adapts the page shape and delegates to the\s*\nshared :func:`iterate_paginated` helper — that way this endpoint gets\s*\nthe same non-advancing-cursor guard as every other list\./,
     );
   });
 
@@ -108,13 +108,13 @@ describe('W584.B packages/sdk-python/src/driftstack/resources/crypto_orders.py c
 
   it('Sync quote — V-666.H POST /v1/billing/crypto-checkout/quote. Authoritative fiat-price preview without minting an order.', () => {
     expect(body).toMatch(
-      /def quote\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:\s*\n\s*"""V-666\.H — preview the authoritative fiat price without minting an order\."""\s*\n\s*return self\._http\.request\(\s*\n\s*"POST",\s*\n\s*"\/v1\/billing\/crypto-checkout\/quote",\s*\n\s*json_body=coerce_body\(body\),\s*\n\s*\)/,
+      /def quote\(self, body: dict\[str, Any\]\) -> dict\[str, Any\]:\s*\n[^\n]*[Pp]review the authoritative fiat price without minting an order\."""\s*\n\s*return self\._http\.request\(\s*\n\s*"POST",\s*\n\s*"\/v1\/billing\/crypto-checkout\/quote",\s*\n\s*json_body=coerce_body\(body\),\s*\n\s*\)/,
     );
   });
 
   it('Sync create_checkout — V-666.C POST /v1/billing/crypto-checkout with optional idempotency_key keyword-only kwarg. SINGLE path now (audit 2026-06-23 — the _post_with_headers escape hatch was removed): request(..., extra_headers=({"idempotency-key": key} if key is not None else None)) — the header is conditionally injected. Retry-safety lives in the HTTP layer: a keyed create may retry transient failures safely; a keyless one is sent exactly once (no double-submit). Drift to dropping the conditional would always-send the header (overhead + server dedup confusion) or lose it.', () => {
     expect(body).toMatch(
-      /def create_checkout\(\s*\n\s*self,\s*\n\s*body: dict\[str, Any\],\s*\n\s*\*,\s*\n\s*idempotency_key: str \| None = None,\s*\n\s*\) -> dict\[str, Any\]:\s*\n\s*"""V-666\.C — mint a new crypto order\.\s*\n\s*\n\s*Pass ``idempotency_key`` to dedupe network retries — the server\s*\n\s*returns the original order on replay, never a second one\. With a\s*\n\s*key the HTTP layer is allowed to retry transient failures safely;\s*\n\s*without one this create is sent exactly once \(no double-submit\)\.\s*\n\s*"""/,
+      /def create_checkout\(\s*\n\s*self,\s*\n\s*body: dict\[str, Any\],\s*\n\s*\*,\s*\n\s*idempotency_key: str \| None = None,\s*\n\s*\) -> dict\[str, Any\]:\s*\n[^\n]*[Mm]int a new crypto order\.\s*\n\s*\n\s*Pass ``idempotency_key`` to dedupe network retries — the server\s*\n\s*returns the original order on replay, never a second one\. With a\s*\n\s*key the HTTP layer is allowed to retry transient failures safely;\s*\n\s*without one this create is sent exactly once \(no double-submit\)\.\s*\n\s*"""/,
     );
     expect(body).toMatch(
       /return self\._http\.request\(\s*\n\s*"POST",\s*\n\s*"\/v1\/billing\/crypto-checkout",\s*\n\s*json_body=coerce_body\(body\),\s*\n\s*extra_headers=\(\s*\n\s*\{"idempotency-key": idempotency_key\} if idempotency_key is not None else None\s*\n\s*\),\s*\n\s*\)/,
@@ -123,7 +123,7 @@ describe('W584.B packages/sdk-python/src/driftstack/resources/crypto_orders.py c
 
   it('Sync list — V-666.G/.BR/.BU/.BX GET with 5 keyword-only filters + "newest-first" ordering pinned. Drift to oldest-first would silently invert the customer\'s mental model (most-recent orders first is what dashboards show).', () => {
     expect(body).toMatch(
-      /def list\(\s*\n\s*self,\s*\n\s*\*,\s*\n\s*limit: int \| None = None,\s*\n\s*status: str \| None = None,\s*\n\s*cursor: str \| None = None,\s*\n\s*created_after: str \| None = None,\s*\n\s*created_before: str \| None = None,\s*\n\s*\) -> dict\[str, Any\]:\s*\n\s*"""V-666\.G \/ \.BR \/ \.BU \/ \.BX — list the caller's crypto orders newest-first\."""/,
+      /def list\(\s*\n\s*self,\s*\n\s*\*,\s*\n\s*limit: int \| None = None,\s*\n\s*status: str \| None = None,\s*\n\s*cursor: str \| None = None,\s*\n\s*created_after: str \| None = None,\s*\n\s*created_before: str \| None = None,\s*\n\s*\) -> dict\[str, Any\]:\s*\n[^\n]*[Ll]ist the caller's crypto orders newest-first\."""/,
     );
     expect(body).toMatch(
       /return self\._http\.request\(\s*\n\s*"GET",\s*\n\s*_list_path\(\s*\n\s*limit=limit,\s*\n\s*status=status,\s*\n\s*cursor=cursor,\s*\n\s*created_after=created_after,\s*\n\s*created_before=created_before,\s*\n\s*\),\s*\n\s*\)/,
@@ -132,7 +132,7 @@ describe('W584.B packages/sdk-python/src/driftstack/resources/crypto_orders.py c
 
   it('Sync iterate — V-666.BU now ADAPTS the orders→data envelope in a _fetch closure and DELEGATES to the shared iterate_paginated helper (audit 2026-06-23 — was a hand-rolled _walk loop), so it inherits the non-advancing-cursor guard. CRITICAL invariants: (1) "callers MUST NOT pass cursor" — internal-only handoff; (2) the adapter maps `page.get("orders", [])` onto the helper\'s "data" key (envelope-shape bridge) + forwards next_cursor; (3) the shared helper terminates cleanly on a null/non-advancing cursor (drift to dropping the adapter would iterate an empty list).', () => {
     expect(body).toMatch(
-      /def iterate\(\s*\n\s*self,\s*\n\s*\*,\s*\n\s*limit: int \| None = None,\s*\n\s*status: str \| None = None,\s*\n\s*created_after: str \| None = None,\s*\n\s*created_before: str \| None = None,\s*\n\s*\) -> Iterator\[dict\[str, Any\]\]:\s*\n\s*"""V-666\.BU — lazily walk every order across cursor pages\./,
+      /def iterate\(\s*\n\s*self,\s*\n\s*\*,\s*\n\s*limit: int \| None = None,\s*\n\s*status: str \| None = None,\s*\n\s*created_after: str \| None = None,\s*\n\s*created_before: str \| None = None,\s*\n\s*\) -> Iterator\[dict\[str, Any\]\]:\s*\n[^\n]*[Ll]azily walk every order across cursor pages\./,
     );
     expect(body).toMatch(
       /Yields envelopes one at a time so the caller can break early\.\s*\n\s*Cursor handoff is managed internally; callers MUST NOT pass\s*\n\s*``cursor`` to this method \(use :meth:`list` if you need a\s*\n\s*single page\)\./,
@@ -147,25 +147,25 @@ describe('W584.B packages/sdk-python/src/driftstack/resources/crypto_orders.py c
 
   it("Sync get — V-666.G GET /v1/billing/crypto-orders/{quote(order_id, safe='')} returns single order envelope. URL-escape quotes the order_id with NO safe-chars — drift to safe='/' would let \"abc/../../admin\" traverse into the admin namespace.", () => {
     expect(body).toMatch(
-      /def get\(self, order_id: str\) -> dict\[str, Any\]:\s*\n\s*"""V-666\.G — read a single order envelope\."""\s*\n\s*return self\._http\.request\(\s*\n\s*"GET",\s*\n\s*f"\/v1\/billing\/crypto-orders\/\{quote\(order_id, safe=''\)\}",\s*\n\s*\)/,
+      /def get\(self, order_id: str\) -> dict\[str, Any\]:\s*\n[^\n]*[Rr]ead a single order envelope\."""\s*\n\s*return self\._http\.request\(\s*\n\s*"GET",\s*\n\s*f"\/v1\/billing\/crypto-orders\/\{quote\(order_id, safe=''\)\}",\s*\n\s*\)/,
     );
   });
 
   it('Sync update_note — V-666.Q PATCH /v1/billing/crypto-orders/{quoted_id}. Customer-facing free-text note (drift to admin-only would break the dashboard\'s "add reference" feature). Note is unstructured so PATCH is the right verb — drift to PUT would force full replacement instead of partial update.', () => {
     expect(body).toMatch(
-      /def update_note\(self, order_id: str, body: dict\[str, Any\]\) -> dict\[str, Any\]:\s*\n\s*"""V-666\.Q — update the customer-facing free-text note\."""\s*\n\s*return self\._http\.request\(\s*\n\s*"PATCH",\s*\n\s*f"\/v1\/billing\/crypto-orders\/\{quote\(order_id, safe=''\)\}",\s*\n\s*json_body=coerce_body\(body\),\s*\n\s*\)/,
+      /def update_note\(self, order_id: str, body: dict\[str, Any\]\) -> dict\[str, Any\]:\s*\n[^\n]*[Uu]pdate the customer-facing free-text note\."""\s*\n\s*return self\._http\.request\(\s*\n\s*"PATCH",\s*\n\s*f"\/v1\/billing\/crypto-orders\/\{quote\(order_id, safe=''\)\}",\s*\n\s*json_body=coerce_body\(body\),\s*\n\s*\)/,
     );
   });
 
   it('Sync cancel — V-666.J POST /v1/billing/crypto-orders/{quoted_id}/cancel WITH NO body. CRITICAL: "abandon a pending order (self-service)". This is the ONLY out for non-refundable crypto charges — drift to requiring a body or admin-only access would break the buyer\'s last-resort UX. POST not DELETE because it transitions order state, not deletes the row (audit-log preservation).', () => {
     expect(body).toMatch(
-      /def cancel\(self, order_id: str\) -> dict\[str, Any\]:\s*\n\s*"""V-666\.J — abandon a pending order \(self-service\)\."""\s*\n\s*return self\._http\.request\(\s*\n\s*"POST",\s*\n\s*f"\/v1\/billing\/crypto-orders\/\{quote\(order_id, safe=''\)\}\/cancel",\s*\n\s*\)/,
+      /def cancel\(self, order_id: str\) -> dict\[str, Any\]:\s*\n[^\n]*[Aa]bandon a pending order \(self-service\)\."""\s*\n\s*return self\._http\.request\(\s*\n\s*"POST",\s*\n\s*f"\/v1\/billing\/crypto-orders\/\{quote\(order_id, safe=''\)\}\/cancel",\s*\n\s*\)/,
     );
   });
 
   it('Sync receipt — V-666.M GET /v1/billing/crypto-orders/{quoted_id}/receipt. Returns the JSON receipt (NOT the PDF — PDF download lives elsewhere). JSON is what the dashboard uses for the receipt-detail view; drift to returning a binary blob would break content-negotiation.', () => {
     expect(body).toMatch(
-      /def receipt\(self, order_id: str\) -> dict\[str, Any\]:\s*\n\s*"""V-666\.M — fetch the JSON receipt\."""\s*\n\s*return self\._http\.request\(\s*\n\s*"GET",\s*\n\s*f"\/v1\/billing\/crypto-orders\/\{quote\(order_id, safe=''\)\}\/receipt",\s*\n\s*\)/,
+      /def receipt\(self, order_id: str\) -> dict\[str, Any\]:\s*\n[^\n]*[Ff]etch the JSON receipt\."""\s*\n\s*return self\._http\.request\(\s*\n\s*"GET",\s*\n\s*f"\/v1\/billing\/crypto-orders\/\{quote\(order_id, safe=''\)\}\/receipt",\s*\n\s*\)/,
     );
   });
 

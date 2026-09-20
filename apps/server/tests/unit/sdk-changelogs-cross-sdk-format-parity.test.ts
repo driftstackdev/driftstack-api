@@ -139,14 +139,22 @@ describe('W813 cross-SDK CHANGELOG.md format parity', () => {
     expect(read(GO)).toMatch(/33 tests covering errors, retry, webhook signatures/);
   });
 
-  // ─── Go-specific D-021 hand-written-over-codegen note ─────────
+  // ─── Go-specific hand-written-over-codegen note ───────────────
+  //
+  // The Go CHANGELOG is rendered by pkg.go.dev, so it is customer-facing text
+  // and may not carry the internal ids it used to. The first arm used to require
+  // the heading to read `### Notes (V-026)`; it now pins the heading TOGETHER
+  // WITH the note under it, which is stronger in the way that matters: there are
+  // two `### Notes` headings in this file, and `/### Notes/` alone would be
+  // satisfied by the wrong one.
 
-  it("CRITICAL Go CHANGELOG 'V-026' anchor + 'hand-maintained, not codegen output' + 'oapi-codegen doesn't yet support OpenAPI 3.1 nullable shorthand' + 'Same hand-written-over-codegen call as the TypeScript SDK (D-021)' framing pinned. The cross-decision link D-021 makes the design choice traceable.", () => {
+  it("CRITICAL Go CHANGELOG '### Notes' section carrying 'hand-maintained, not codegen output' + \"oapi-codegen doesn't yet support OpenAPI 3.1 nullable shorthand\" + 'Same hand-written-over-codegen call as the TypeScript SDK' framing pinned. The cross-language link makes the design choice traceable.", () => {
     const p = read(GO);
-    expect(p).toMatch(/### Notes \(V-026\)/);
-    expect(p).toMatch(/Types in `types\.go` are hand-maintained, not codegen output —/);
+    expect(p).toMatch(
+      /### Notes[^\n]*\n\s*- Types in `types\.go` are hand-maintained, not codegen output —/,
+    );
     expect(p).toMatch(/`oapi-codegen` doesn't yet support OpenAPI 3\.1 nullable shorthand/);
-    expect(p).toMatch(/Same hand-written-over-codegen call as the TypeScript SDK \(D-021\)\./);
+    expect(p).toMatch(/Same hand-written-over-codegen call as the TypeScript SDK[^\n]*\./);
   });
 
   // ─── Cross-SDK examples set in changelogs ─────────────────────

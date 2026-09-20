@@ -73,7 +73,7 @@ func bodyOperationTimeout(body any) time.Duration {
 type Client struct {
 	apiKey  string
 	baseURL string
-	// V-326c/V-330 team workspaces — when non-empty, every request carries
+	// Team workspaces — when non-empty, every request carries
 	// X-Driftstack-Account so reads resolve against that owner's workspace
 	// (writes additionally require the admin role, server-enforced).
 	effectiveAccount string
@@ -95,21 +95,21 @@ type Client struct {
 	Profiles         *ProfilesResource
 	ProfileSnapshots *ProfileSnapshotsResource
 	Billing          *BillingResource
-	// V-666 — crypto-checkout / crypto-orders.
+	// Resource for crypto-checkout / crypto-orders.
 	CryptoOrders *CryptoOrdersResource
 	Auth         *AuthResource
 	Account      *AccountResource
-	// V-353b / V-448 — MFA enrollment management.
+	// Resource for MFA enrollment management.
 	Mfa *MfaResource
-	// V-216 / V-449 — append-only customer audit log.
+	// Resource for the append-only customer audit log.
 	AuditLog *AuditLogResource
-	// V-204 / V-449 — email opt-in/opt-out preferences.
+	// Resource for email opt-in/opt-out preferences.
 	EmailPreferences *EmailPreferencesResource
-	// V-049 / V-458 — legal acceptance.
+	// Resource for legal acceptance.
 	Legal *LegalResource
-	// V-298c — Team RBAC. Act on an owner's account via X-Driftstack-Account.
+	// Team RBAC. Act on an owner's account via X-Driftstack-Account.
 	Team *TeamResource
-	// EG-API-1.2/1.3 — customer-configurable egress (planning 133).
+	// Customer-configurable egress.
 	Egress *EgressResource
 	// Agent sessions: create, inspect, control, stream, and close browser-agent work.
 	AgentSessions *AgentSessionsResource
@@ -243,7 +243,7 @@ type requestOptions struct {
 	out    any // pointer the JSON response is decoded into; pass nil for 204.
 	// headers are extra request headers merged on top of the auth +
 	// User-Agent + Content-Type defaults. Resource methods use this
-	// for one-shot needs like Idempotency-Key (V-666.AO).
+	// for one-shot needs like Idempotency-Key.
 	headers map[string]string
 	// eventStream negotiates/decodes the heartbeat-backed terminal response
 	// representation. streamTimeout is its absolute SDK backstop.

@@ -83,12 +83,12 @@ describe('W870 V-353 MFA cross-source invariant', () => {
 
   it('CRITICAL V-353d anchor pinned for login-mfa challenge (alternate login response when account has MFA enrolled).', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
-    expect(p).toMatch(/V-353d — alternate login response when the account has MFA enrolled/);
+    expect(p).toMatch(/alternate login response when the account has MFA enrolled/);
   });
 
   it("CRITICAL V-353e anchor pinned for step-up reauth path. The 'refreshes `mfa_satisfied_at` so step-up-gated routes pass' framing pins the step-up provenance.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
-    expect(p).toMatch(/V-353e — step-up reauth on the existing session/);
+    expect(p).toMatch(/step-up reauth on the existing session/);
     expect(p).toMatch(/refreshes `mfa_satisfied_at` so step-up-gated routes pass/);
   });
 

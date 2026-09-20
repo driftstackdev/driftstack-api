@@ -26,9 +26,9 @@ describe('sdk-python resources/profile_snapshots content parity', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
-  it('Module-level docstring V-312 framing pinned: immutable point-in-time copies. Drift to dropping V-312 would orphan the engineering history; drift to claiming snapshots ARE mutable would break the load-bearing immutability contract pinned by slice 161 docs', () => {
+  it('Module-level docstring framing pinned: immutable point-in-time copies.  The internal ticket anchor is NOT required — this docstring ships inside the PyPI wheel; drift to claiming snapshots ARE mutable would break the load-bearing immutability contract pinned by slice 161 docs', () => {
     expect(body).toMatch(
-      /Profile snapshots resource — \/v1\/profiles\/:id\/snapshots \+\s*\/v1\/profile-snapshots \(V-312\)/,
+      /Profile snapshots resource — \/v1\/profiles\/:id\/snapshots \+\s*\/v1\/profile-snapshots/,
     );
     expect(body).toMatch(/Immutable point-in-time copies of\s*saved profiles\./);
   });

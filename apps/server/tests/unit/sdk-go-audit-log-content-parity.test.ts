@@ -46,25 +46,21 @@ describe('W591.C packages/sdk-go/audit_log.go content parity', () => {
   it("file exists at canonical path + V-216/V-449 AuditLogResource binds /v1/account/audit-log + append-only ledger contract + V-326c team-RBAC X-Driftstack-Account semantics pinned. CRITICAL: a member with read access on the team owner can pull the OWNER's audit log (the load-bearing cross-account read contract).", () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/^package driftstack$/m);
-    expect(body).toMatch(
-      /\/\/ AuditLogResource handles \/v1\/account\/audit-log \(V-216 \/ V-449\)\./,
-    );
-    expect(body).toMatch(
-      /\/\/ Append-only ledger; honors the V-326c X-Driftstack-Account team-RBAC/,
-    );
+    expect(body).toMatch(/\/\/ AuditLogResource handles \/v1\/account\/audit-log[^\n]*\./);
+    expect(body).toMatch(/\/\/ Append-only ledger; honors the[^\n]*X-Driftstack-Account team-RBAC/);
     expect(body).toMatch(/\/\/ header \(a member with read access on the team owner can pull the/);
     expect(body).toMatch(/\/\/ OWNER's audit log\)\./);
     expect(body).toMatch(/^type AuditLogResource struct \{\s*\n\s*client \*Client\s*\n\}/m);
   });
 
   it('AuditLogEntry — V-216 ledger row + V-211 IP/UA-nulled-customer-facing + V-413 caveat about auth-flow events leaking via payload. ActorType inline-comment enum (customer/system/staff) pinned so a drift adding "admin" or any other actor type does not ship unannounced through the SDK shape.', () => {
-    expect(body).toMatch(/\/\/ AuditLogEntry — V-216 single ledger entry\./);
+    expect(body).toMatch(/\/\/ AuditLogEntry[^\n]*single ledger entry\./);
     expect(body).toMatch(
       /\/\/ payload lives in `Payload`; see \/api\/audit-log doc for shapes per/,
     );
     expect(body).toMatch(/\/\/ action type\. IPAddress \+ UserAgent are server-stored fields but/);
-    expect(body).toMatch(/\/\/ nulled in customer-facing responses per V-211 \(see also V-413/);
-    expect(body).toMatch(/\/\/ caveat about auth-flow events leaking via payload\)\./);
+    expect(body).toMatch(/\/\/ nulled in customer-facing responses — with the caveat that an/);
+    expect(body).toMatch(/\/\/ auth-flow event can leak them through its payload\./);
     expect(body).toMatch(
       /^type AuditLogEntry struct \{\s*\n\s*ID\s+string\s+`json:"id"`\s*\n\s*AccountID\s+string\s+`json:"account_id"`\s*\n\s*ActorType\s+string\s+`json:"actor_type"` \/\/ "customer" \| "system" \| "staff"\s*\n\s*ActorAccountID\s+\*string\s+`json:"actor_account_id"`\s*\n\s*ActorKeyID\s+\*string\s+`json:"actor_key_id"`\s*\n\s*Action\s+string\s+`json:"action"`\s*\n\s*TargetResourceID \*string\s+`json:"target_resource_id"`\s*\n\s*Payload\s+map\[string\]interface\{\} `json:"payload"`\s*\n\s*IPAddress\s+\*string\s+`json:"ip_address"`\s*\n\s*UserAgent\s+\*string\s+`json:"user_agent"`\s*\n\s*Timestamp\s+time\.Time\s+`json:"timestamp"`\s*\n\}/m,
     );
@@ -97,7 +93,7 @@ describe('W591.C packages/sdk-go/audit_log.go content parity', () => {
   });
 
   it("AuditLogExportResponse — V-297 GDPR Article 20 portability envelope (5 fields: generated_at + account_id + row_count + truncated + data). Truncated bool invariant: flips to true when older entries weren't returned (10k cap hit). Drift here would silently make truncation invisible to compliance auditors who use the export to verify data portability.", () => {
-    expect(body).toMatch(/\/\/ AuditLogExportResponse — V-297 bulk-export envelope \(GDPR Article/);
+    expect(body).toMatch(/\/\/ AuditLogExportResponse[^\n]*bulk-export envelope \(GDPR Article/);
     expect(body).toMatch(
       /\/\/ 20 portability\)\. Up to 10,000 rows per call; `Truncated` flips to/,
     );
@@ -109,7 +105,7 @@ describe('W591.C packages/sdk-go/audit_log.go content parity', () => {
 
   it('Export — V-462/V-297 GET /v1/account/audit-log/export?format=json single-call JSON bulk-export for compliance portability (up to 10,000 rows). CSV branch INTENTIONALLY not surfaced through the SDK; customers wanting spreadsheet downloads hit /v1/account/audit-log/export?format=csv directly with the bearer. The "format=json" query param is hard-coded so the SDK never accidentally returns binary CSV that customers would have to base64-handle.', () => {
     expect(body).toMatch(/\/\/ Export returns a single-call JSON bulk-export of the calling/);
-    expect(body).toMatch(/\/\/ account's audit log \(V-462 \/ V-297\)\. Designed for compliance/);
+    expect(body).toMatch(/\/\/ account's audit log[^\n]*\. Designed for compliance/);
     expect(body).toMatch(/\/\/ portability requests; up to 10,000 rows\. The CSV branch is not/);
     expect(body).toMatch(
       /\/\/ surfaced through the SDK — hit \/v1\/account\/audit-log\/export\?format=csv/,

@@ -1,6 +1,6 @@
 {
   "name": "@driftstack/sdk",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "Official TypeScript SDK for the Driftstack API",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -8,25 +8,33 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     }
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node ../../scripts/sdk-typescript-harden-sourcemaps.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "@driftstack/api-types": "^0.1.0"
+    "zod": "^3.24.0"
   },
   "repository": {
     "type": "git",
@@ -34,6 +42,7 @@
     "directory": "packages/sdk-typescript"
   },
   "devDependencies": {
+    "@driftstack/api-types": "*",
     "@types/node": "^22.10.0",
     "tsup": "^8.3.5"
   },

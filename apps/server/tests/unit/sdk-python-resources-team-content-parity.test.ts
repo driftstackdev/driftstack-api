@@ -42,7 +42,7 @@ describe('W582.B packages/sdk-python/src/driftstack/resources/team.py content pa
 
   it("file exists at canonical path + module docstring V-298c/V-309f framing + V-298d auth-path-integration-not-yet-permissioning contract. CRITICAL: accepted members can sign in but their membership grants no implicit permissions on the owner's resources until V-298d ships. Drift to dropping this framing would silently widen the auth surface.", () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(/^"""V-298c \/ V-309f — Team RBAC resource\.\n/);
+    expect(body).toMatch(/^[^\n]*Team RBAC resource\.\n/);
     // `resolveEffectiveAccount` (apps/server/src/services/auth.ts) resolves
     // `X-Driftstack-Account: acc_<uuid>` against `ctx.teams` and carries the
     // membership role through, so members DO act on the owner's resources.

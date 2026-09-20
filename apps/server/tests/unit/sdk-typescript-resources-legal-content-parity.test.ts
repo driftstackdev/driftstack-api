@@ -54,11 +54,9 @@ function read(p: string): string {
 describe('W428.B packages/sdk-typescript/src/resources/legal.ts content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + module header V-049/V-458 anchor on the resource line + ToS/Privacy/DPA/AUP 4-document coverage scope', () => {
+  it('file exists at canonical path + module header names /v1/legal/* on the resource line + ToS/Privacy/DPA/AUP 4-document coverage scope', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(
-      /\/\/ LegalResource — typed methods for \/v1\/legal\/\* \(V-049 \/ V-458\)\./,
-    );
+    expect(body).toMatch(/\/\/ LegalResource — typed methods for \/v1\/legal\/[^\n]*\./);
     expect(body).toMatch(
       /\/\/ Customer acceptance of legal documents \(ToS \/ Privacy \/ DPA \/ AUP\)\./,
     );

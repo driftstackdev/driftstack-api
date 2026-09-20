@@ -198,7 +198,7 @@ def _build_headers(
 ) -> dict[str, str]:
     headers = {
         "authorization": f"Bearer {api_key}",
-        # V-326c/V-330 team workspaces — set on every request when the
+        # Team workspaces — set on every request when the
         # client was constructed with effective_account (owner account id).
         **({"x-driftstack-account": effective_account} if effective_account else {}),
         "user-agent": USER_AGENT,
@@ -274,7 +274,7 @@ def _error_from_response_data(
             detail,
             current=_int_or_none(problem.get("current")),
             limit=_int_or_none(problem.get("limit")),
-            # V-815 — the server sends `resource` on the tier-limit problem;
+            # The server sends `resource` on the tier-limit problem;
             # `record_type` was never on the wire, so this was always None. The
             # old key stays as a fallback; the ARGUMENT keeps its published name.
             record_type=_first_str(problem, "resource", "record_type"),
@@ -359,8 +359,8 @@ def _int_or_none(value: Any) -> int | None:
 def _first_str(problem: dict[str, Any], *keys: str) -> str | None:
     """First non-empty string among `keys`, or None.
 
-    V-815 — lets a reader accept the key the server actually sends while
-    keeping an older spelling as a fallback. The tier-limit problem carries
+    Lets a reader accept the key the server actually sends while keeping an
+    older spelling as a fallback. The tier-limit problem carries
     `resource`; `record_type` was read for a long time and never arrived.
     """
     for key in keys:

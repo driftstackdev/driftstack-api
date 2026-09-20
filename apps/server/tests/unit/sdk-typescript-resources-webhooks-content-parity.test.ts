@@ -120,7 +120,7 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
 
   it('V-351 update verb — PATCH /v1/webhooks/${encodeURIComponent(id)}. CRITICAL 3 stacked invariants pinned per-line: (1) "At least one of `url`, `events`, `description`, or `active` must be present" (drift to allowing zero fields lets no-op PATCH succeed silently). (2) "The signing secret is NOT rotated by update; use `rotateSecret` for that" (drift to rotating-on-update would force rotation on every UI tweak). (3) "Disabled endpoints cannot be updated (returns 409)" (after soft-delete the endpoint is read-only). + admin-scope requirement.', () => {
     expect(body).toMatch(
-      /\*\s*V-351 — partial-update a webhook endpoint\. At least one of `url`,\s*\*\s*`events`, `description`, or `active` must be present\. The\s*\*\s*signing secret is NOT rotated by update; use `rotateSecret` for\s*\*\s*that\. Disabled endpoints cannot be updated \(returns 409\)\.\s*\*\s*Requires the `account_owner` scope on the calling key\./,
+      /[Pp]artial-update a webhook endpoint\. At least one of `url`,\s*\*\s*`events`, `description`, or `active` must be present\. The\s*\*\s*signing secret is NOT rotated by update; use `rotateSecret` for\s*\*\s*that\. Disabled endpoints cannot be updated \(returns 409\)\.\s*\*\s*Requires the `account_owner` scope on the calling key\./,
     );
     expect(body).toMatch(
       /update\(id: string, body: UpdateWebhookRequest\): Promise<WebhookEndpoint> \{\s*return this\.http\.request<WebhookEndpoint>\(\{\s*method: 'PATCH',\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}`,\s*body,\s*\}\);\s*\}/,
@@ -149,7 +149,7 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
     // V-1122 — asserted in pieces: the chained form ran from the V-307
     // anchor through the scope sentence, so correcting the scope broke a
     // pin about the verb.
-    expect(body).toMatch(/\*\s*V-307 — replay a webhook delivery\. Resets the delivery to pending/);
+    expect(body).toMatch(/[Rr]eplay a webhook delivery\. Resets the delivery to pending/);
     expect(body).toMatch(/Scoped to the EFFECTIVE account: the delivery/);
     expect(body, 'the calling-account claim must not return').not.toMatch(
       /an endpoint the calling account owns/,
@@ -159,9 +159,9 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
     );
   });
 
-  it('CRITICAL V-359 rotateSecret verb — POST /v1/webhooks/${encodeURIComponent(id)}/rotate-secret. 6-line grace-window claim pinned per-line: fresh plaintext ONCE + 24h via grace_expires_at + Driftstack DUAL-SIGNS every outbound delivery (both new + old HMAC) + customer rolls verifier infra inside the window + admin-scope. Drift to a different window OR dropping dual-sign would silently change rotation semantics customers anchor their verifier-rollout timelines on.', () => {
+  it('CRITICAL rotateSecret verb — POST /v1/webhooks/${encodeURIComponent(id)}/rotate-secret. 6-line grace-window claim pinned per-line: fresh plaintext ONCE + 24h via grace_expires_at + Driftstack DUAL-SIGNS every outbound delivery (both new + old HMAC) + customer rolls verifier infra inside the window + admin-scope. Drift to a different window OR dropping dual-sign would silently change rotation semantics customers anchor their verifier-rollout timelines on.', () => {
     expect(body).toMatch(
-      /\*\s*V-359 — rotate the webhook signing secret\. The fresh plaintext is\s*\*\s*returned ONCE\. The previous secret stays active for 24h\s*\*\s*\(`grace_expires_at`\) during which Driftstack dual-signs every\s*\*\s*outbound delivery \(both the new \+ old HMAC\)\. Roll the new secret\s*\*\s*across your verifier infra inside that window\. Requires the\s*\*\s*`account_owner` scope on the calling key\./,
+      /[Rr]otate the webhook signing secret\. The fresh plaintext is\s*\*\s*returned ONCE\. The previous secret stays active for 24h\s*\*\s*\(`grace_expires_at`\) during which Driftstack dual-signs every\s*\*\s*outbound delivery \(both the new \+ old HMAC\)\. Roll the new secret\s*\*\s*across your verifier infra inside that window\. Requires the\s*\*\s*`account_owner` scope on the calling key\./,
     );
     expect(body).toMatch(
       /rotateSecret\(id: string\): Promise<RotateWebhookSecretResponse> \{\s*return this\.http\.request<RotateWebhookSecretResponse>\(\{\s*method: 'POST',\s*path: `\/v1\/webhooks\/\$\{encodeURIComponent\(id\)\}\/rotate-secret`,\s*body: \{\},\s*\}\);\s*\}/,
@@ -170,7 +170,7 @@ describe('W425.B packages/sdk-typescript/src/resources/webhooks.ts content parit
 
   it("V-356 sendTest verb — POST /v1/webhooks/${encodeURIComponent(id)}/test. CRITICAL: \"Bypasses subscription (the endpoint receives it regardless of which event types it's subscribed to)\" — drift to requiring test.ping in the subscription would break first-time-setup verification (chicken-and-egg). Response carries 3-field shape with `event_type: 'test.ping'` as TS LITERAL type (not `string`) — drift to widening would lose compile-time enforcement that the synthetic event NEVER claims a real event_type from the customer's subscription.", () => {
     expect(body).toMatch(
-      /\*\s*V-356 — send a synthetic `test\.ping` event to the endpoint\.\s*\*\s*Bypasses subscription \(the endpoint receives it regardless of\s*\*\s*which event types it's subscribed to\), so customers can verify\s*\*\s*their handler is reachable \+ signature-valid before depending on\s*\*\s*it for real events\. Returns 202 \+ the synthetic delivery id\.\s*\*\s*Requires the `account_owner` scope on the calling key\./,
+      /[Ss]end a synthetic `test\.ping` event to the endpoint\.\s*\*\s*Bypasses subscription \(the endpoint receives it regardless of\s*\*\s*which event types it's subscribed to\), so customers can verify\s*\*\s*their handler is reachable \+ signature-valid before depending on\s*\*\s*it for real events\. Returns 202 \+ the synthetic delivery id\.\s*\*\s*Requires the `account_owner` scope on the calling key\./,
     );
     expect(body).toMatch(
       /sendTest\(id: string\): Promise<\{\s*delivery_id: string;\s*event_id: string;\s*event_type: 'test\.ping';\s*\}> \{/,

@@ -77,7 +77,7 @@ describe('W590.A packages/sdk-go/api_keys.go content parity', () => {
   });
 
   it("Rotate — V-296 POST /v1/api-keys/{id}/rotate mints a fresh plaintext + sets the OLD key's expires_at to now+24h grace. Both keys work concurrently during the window so customers deploy-then-roll without an outage. Old key auto-revokes at the grace boundary via the existing expires_at-driven auth gate (no separate sweeper; the auth code already checks expires_at on every request). Plaintext-once invariant pinned on Rotate ALSO (not just Create) — both verbs surface plaintext, both must warn.", () => {
-    expect(body).toMatch(/\/\/ Rotate is V-296 — mints a fresh plaintext \+ sets the OLD key's/);
+    expect(body).toMatch(/\/\/ Rotate[^\n]*mints a fresh plaintext \+ sets the OLD key's/);
     expect(body).toMatch(
       /\/\/ expires_at to now \+ 24h grace\. Both keys work concurrently during the/,
     );

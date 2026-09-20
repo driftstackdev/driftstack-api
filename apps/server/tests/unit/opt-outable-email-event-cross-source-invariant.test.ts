@@ -91,8 +91,8 @@ describe('W864 OptOutableEmailEvent cross-source invariant', () => {
 
   it('CRITICAL V-304a anchor pinned for session-success-first; V-304b anchor pinned for billing-renewal-reminder. These distinguish the milestone-trigger emails added after V-202.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
-    expect(p).toMatch(/V-304a — first successful session activation milestone email/);
-    expect(p).toMatch(/V-304b — 7-days-before-renewal reminder/);
+    expect(p).toMatch(/first successful session activation milestone email/);
+    expect(p).toMatch(/7-days-before-renewal reminder/);
   });
 
   it('CRITICAL the api-types inline doc pins the security+financial-emails-never-opt-outable policy. The policy doc is the immutable record of which emails customers cannot disable.', () => {

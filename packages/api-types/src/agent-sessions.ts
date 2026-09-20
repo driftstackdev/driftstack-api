@@ -7,21 +7,14 @@ const AGENT_PAGE_STATE_URL_MAX_LENGTH = 8192;
 const AGENT_PAGE_STATE_TEXT_MAX_LENGTH = 4096;
 
 /**
- * Agent (AI-chat) session resource — the read shape returned by
- * `POST /v1/agent-sessions` (201), `GET /v1/agent-sessions` (each list
- * row), and `GET /v1/agent-sessions/{id}`. It mirrors the apps/server
- * route's `PublicAgentSession` interface field-for-field; a route-parity
- * drift guard pins the two in lockstep so the OpenAPI spec, SDK codegen,
- * and the route serialization can never diverge.
+ * An AI session, as returned by `POST /v1/agent-sessions` (201), by each
+ * row of `GET /v1/agent-sessions`, and by `GET /v1/agent-sessions/{id}`.
  *
- * Before this schema existed the OpenAPI responses for those endpoints
- * were `z.object({})` (empty), leaving the entire AI-chat resource
- * untyped for codegen consumers (Pydantic / Go structs / TS types).
- *
- * `model` is sourced from {@link AgentModelSchema} so a new or renamed
- * Claude model flows through automatically; `livekit` reuses the
- * canonical {@link LiveKitInfoSchema} (auto-populated on create when a
- * Mac with LiveKit credentials is available, absent otherwise).
+ * `model` is one of the values in {@link AgentModelSchema}, so a newly
+ * offered model appears here without a change to this shape. `livekit` is
+ * the live-view connection described by {@link LiveKitInfoSchema}; it is
+ * filled in when the session is created if live view is available, and
+ * absent otherwise.
  */
 export const AgentSessionSchema = z.object({
   id: z.string(),
@@ -29,11 +22,11 @@ export const AgentSessionSchema = z.object({
   driftstack_session_id: z.string().nullable(),
   status: z.string(),
   closed_reason: z.string().nullable(),
-  /** Why the session is still provisioning: a snake_case step token from the
-   *  harness — `vpn_egress_bringing_up`, `vpn_egress_active` (the VPN tunnel is
-   *  up and the browser has not attached yet), `egress_geo_resolving`. Null once
-   *  active or closed, or when the harness reported nothing; absent from servers
-   *  older than 2026-09-10. */
+  /** Which step the session is on while it is still starting, as a
+   *  snake_case token — `vpn_egress_bringing_up`, `vpn_egress_active` (the
+   *  VPN tunnel is up and the browser has not attached yet) or
+   *  `egress_geo_resolving`. Null once the session is active or closed, and
+   *  when no step was reported. Treat an absent key as null. */
   provisioning_detail: z.string().nullable().optional(),
   token_budget_total: z.number().int(),
   token_budget_remaining: z.number().int(),
@@ -64,8 +57,8 @@ export const AgentSessionSchema = z.object({
       fresh: z.boolean(),
     })
     .optional(),
-  /** Latest ownership-validated harness capability state for this live agent
-   * session. Omitted until the worker reports it and on closed sessions. */
+  /** The most recent capability report for this live session. Omitted until
+   * one arrives, and on closed sessions. */
   capability_report: z
     .object({
       timestamp: z.string(),
@@ -89,17 +82,17 @@ export const AgentSessionSchema = z.object({
        *  must not be read as "no HTTP/3" — the two modes above describe the
        *  transport that was CONFIGURED, not what carried. */
       h3_connection_observed: z.boolean().nullable(),
-      /** (o) O2 — HOW MANY HTTP/3 connections the node has seen on this session.
-       *  `null` means NOT REPORTED (an older harness, or none sent yet) and must
-       *  never be read as zero. It is not a nicer form of the flag above: that
-       *  flag is latched and can never return to false, so it can say "h3 was
-       *  reached once" and nothing about whether it still is. This count is
-       *  monotone, so its RATE carries the liveness the flag structurally cannot.
-       *  Optional as well as nullable: an older server sends no key at all. */
+      /** How many HTTP/3 connections this session has made. `null` means NOT
+       *  REPORTED — nothing has been sent yet — and must never be read as
+       *  zero. It is not a nicer form of the flag above: that flag latches on
+       *  and never returns to false, so it says HTTP/3 was reached once and
+       *  nothing about whether it still is. This count only rises, so the rate
+       *  it rises at is what tells you the connection is live. The key may be
+       *  absent as well as null. */
       h3_connection_count: z.number().int().nonnegative().nullable().optional(),
-      /** T-26 — the live exit identity this session's traffic leaves through,
-       *  and the IPs its WebRTC candidates surface. Each is `null` until the box
-       *  reports it (NOT OBSERVED), never read as "no exit". */
+      /** The address this session's traffic currently leaves through, and the
+       *  addresses its WebRTC candidates expose. Each is `null` until it has
+       *  been observed — that means NOT YET KNOWN, never "no exit". */
       exit_ip: z.string().nullable(),
       exit_country: z.string().nullable(),
       exit_timezone: z.string().nullable(),
@@ -107,7 +100,7 @@ export const AgentSessionSchema = z.object({
       observed_at: z.string().nullable(),
     })
     .optional(),
-  /** Latest ownership-validated harness launch/runtime failure. */
+  /** The most recent start-up or runtime failure for this session. */
   error_event: z
     .object({
       timestamp: z.string().min(1).max(64),
@@ -134,25 +127,18 @@ export const AgentSessionSchema = z.object({
 export type AgentSession = z.infer<typeof AgentSessionSchema>;
 
 /**
- * Agent-session live page-state — the body of `GET /v1/agent-sessions/{id}/
- * page-state` (W650 / A3 W1254 / W2730). Distinct from the DRIVER session's
- * `state.page_state` ({@link import('./sessions.js').PageStateSchema}, a 3-state
- * lifecycle): this is the AGENT/simulator view the box reports over the fleet
- * control plane, so it carries the 4th `stalled` state (A3 W2845 — a
- * frozen-but-alive renderer) and the apps/server `SessionPageState` store shape
- * field-for-field.
+ * What the page in an AI session is doing right now — the body of
+ * `GET /v1/agent-sessions/{id}/page-state`.
  *
- * `title` is nullable (NOT optional): the box may emit a title-only change frame
- * on ANY state, and the store always normalizes an absent title to null, so the
- * response key is always present. `tabId` is the forward-compat per-tab
- * attribution (A3 contract pending — see the server PageStateFrameSchema); the
- * store carries it as null until the box sends it, so it's `nullable().optional()`
- * here (older clients that never read it are unaffected).
+ * This is a different thing from a driver session's `state.page_state`
+ * ({@link import('./sessions.js').PageStateSchema}), which has three states.
+ * This one has a fourth, `stalled`: the page is still alive but has stopped
+ * rendering.
  *
- * `error` is the relaxed harness shape (`kind` lenient — A3 emits net|timeout;
- * `http_status` is never emitted, so it's not modelled here). Mirrors the
- * gui-client `AgentPageState` so a later coordinated pass can import this in
- * place of the local interface (gui-client scope — not done here).
+ * `title` is always present and may be null, because a title can change on
+ * its own in any state. `tabId` identifies which tab the state belongs to
+ * and is null until it is reported, so read it as optional. `error`
+ * describes the last failure, if any.
  */
 export const AgentPageStateSchema = z.object({
   state: z.enum(['loading', 'loaded', 'errored', 'stalled']),
@@ -175,8 +161,9 @@ export const AgentPageStateSchema = z.object({
 export type AgentPageState = z.infer<typeof AgentPageStateSchema>;
 
 /**
- * `GET /v1/agent-sessions/{id}/page-state` response envelope: `page_state` is
- * null until the box has reported a frame (or the fleet control plane is absent).
+ * The `GET /v1/agent-sessions/{id}/page-state` response. `page_state` is
+ * null until the session has reported one; that is not an error, only a
+ * session that has nothing to report yet.
  */
 export const AgentPageStateResponseSchema = z.object({
   page_state: AgentPageStateSchema.nullable(),
@@ -184,12 +171,14 @@ export const AgentPageStateResponseSchema = z.object({
 export type AgentPageStateResponse = z.infer<typeof AgentPageStateResponseSchema>;
 
 /**
- * W393 — POST /v1/agent-sessions/:id/resume body. Resume a session the harness
- * auto-paused on a detected bot-challenge (after the customer resolves it).
- * `challenge_id` (optional) correlates to the `session.challenge_detected` the
- * customer is responding to: present → the harness validates it against the
- * active challenge (stale id → the session stays paused); absent → a manual
- * override resume.
+ * The body of `POST /v1/agent-sessions/:id/resume` — resume a session that
+ * was paused automatically when a bot challenge appeared, once you have
+ * solved it.
+ *
+ * Send `challenge_id` with the id from the `session.challenge_detected`
+ * event you are answering: it is checked against the challenge that is
+ * actually active, and an out-of-date id leaves the session paused. Omit it
+ * to resume regardless.
  */
 export const ResumeSessionRequestSchema = z
   .object({
@@ -199,10 +188,9 @@ export const ResumeSessionRequestSchema = z
 export type ResumeSessionRequest = z.infer<typeof ResumeSessionRequestSchema>;
 
 /**
- * W474 — POST /v1/agent-sessions/:id/resume response. The resume is a
- * best-effort dispatch to the node running the session (inert unless the fleet
- * control plane is wired), so the route returns 202 Accepted with the request
- * acknowledgement rather than the post-resume session state.
+ * The `POST /v1/agent-sessions/:id/resume` response. Resuming is a request,
+ * not a result: the route answers 202 Accepted to say the request was
+ * taken, so read the session afterwards to see whether it is running again.
  */
 export const ResumeSessionResponseSchema = z
   .object({

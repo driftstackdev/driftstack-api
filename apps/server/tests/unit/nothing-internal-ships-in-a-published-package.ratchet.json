@@ -1,0 +1,51 @@
+{
+  "_what": "Today's count of internal ticket ids and internal vocabulary in the text that SHIPS, per package, per published artifact, per class. Produced by scripts/scan-shipped-text.mjs.",
+  "_why": "The four SDK release lanes lower these as they rewrite doc comments, READMEs and changelogs. The guard fails when a number RISES, so nothing new leaks while the sweep is in flight, and fails when a real count reaches zero while the entry below still says otherwise, so the ratchet is trimmed in the same change rather than drifting into fiction.",
+  "_how_to_update": "Rebuild the npm dists FIRST (`npm run build -w packages/api-types`, `npm run build -w packages/sdk-typescript`) — the scan reads dist/, which is gitignored, so an unrebuilt dist makes a real edit look like no change. Then run `node scripts/scan-shipped-text.mjs --package <name> --counts-only`, put the new numbers here, in the SAME change as the text edit. When every count for an artifact is zero, delete that artifact entry. When the file is gone entirely the guard asserts zero everywhere — that is the end state.",
+  "_textFiles": "A floor, not a target. It is the number of shipped TEXT files the scan actually opened. A dist that was never built makes the scan read fewer files and report a smaller number, which would otherwise look exactly like progress. api-types DELIBERATELY SHIPS FIVE FEWER FILES than the baseline (108 -> 103): its `files` allowlist now withholds `dist/ai-*` (the unreleased pricing module) and `dist/.tsbuildinfo`. Lowering the floor is what records that decision; raising it back would mean one of them started shipping again.",
+  "_measured": "2026-09-20. api-types re-measured after its sweep (933 -> 3); the three SDK artifacts were re-measured by their own lanes.",
+  "_not_counted_here": "packages/sdk-go/*_test.go — 32 files, 52 ticket-id and 33 internal-vocabulary findings (re-measured 2026-09-20 after the sdk-go sweep). The vocabulary count ROSE from 26: the sweep widened packages/sdk-go/ai_docs_say_what_the_product_does_test.go, the package's own doc guard, to every shipped file, and that guard has to spell the words it forbids in its rule table and its control strings. Those seven are the detector, not prose — but they are in the module zip, so they are counted here rather than quietly exempted. They travel in the module zip and pkg.go.dev renders Example* functions from them. Measured with `node scripts/scan-shipped-text.mjs --package sdk-go --go-tests`; excluded from the ratchet because the release brief scopes the sweep to non-test files.",
+  "packages": {
+    "sdk-typescript": {
+      "npm:@driftstack/sdk": {
+        "files": 10,
+        "textFiles": 10,
+        "ticket-id": 0,
+        "internal-vocabulary": 0
+      }
+    },
+    "api-types": {
+      "npm:@driftstack/api-types": {
+        "files": 103,
+        "textFiles": 103,
+        "ticket-id": 1,
+        "internal-vocabulary": 2,
+        "_remaining": "All three are dist/admin.d.ts:186, compiled from packages/api-types/src/admin.ts, which belongs to the credits workflow and is off-limits to the api-types lane. HAND-OFF: replace `Per V-280 launch-day-runbook + the founder's tier-3 boundary on direct financial actions.` with nothing — the paragraph above it already says what the endpoint does and what it does not do. See the api-types lane report."
+      }
+    },
+    "sdk-python": {
+      "pypi:wheel": {
+        "files": 34,
+        "textFiles": 34,
+        "ticket-id": 0,
+        "internal-vocabulary": 0
+      },
+      "pypi:sdist": {
+        "files": 38,
+        "textFiles": 38,
+        "ticket-id": 0,
+        "internal-vocabulary": 0
+      }
+    },
+    "sdk-go": {
+      "go:module": {
+        "files": 45,
+        "textFiles": 45,
+        "ticket-id": 0,
+        "internal-vocabulary": 0
+      }
+    }
+  },
+  "_zeroed_entries": "sdk-python (two entries), sdk-typescript and sdk-go reached zero on 2026-09-20 and their entries are KEPT at zero rather than deleted. A zeroed entry costs nothing (the guard's `stale` verdict fires only when a count is 0 while the ratchet says otherwise) and it keeps the textFiles FLOOR, which is the only thing standing between 'the sweep finished' and 'the scan read nothing'. Delete the whole file, not the individual entries, when all four packages are clean.",
+  "_method": "Measured with the DERIVED file lists (npmMethod/pythonMethod = 'derived'), which is what the guard runs so its numbers do not depend on which tools a machine happens to have. `npm pack --dry-run` produces the identical npm lists, and `python -m build` the identical Python counts — `--python-method both` prints the comparison."
+}

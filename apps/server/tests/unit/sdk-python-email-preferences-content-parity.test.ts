@@ -26,10 +26,8 @@ describe('sdk-python resources/email_preferences content parity', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
-  it('Module-level docstring framing pinned: V-204 / V-449 anchor + critical-emails-NOT-opt-outable framing. Drift to dropping the V-anchors would orphan the engineering history; drift to weakening the critical-email exclusion would mislead customers about which emails can be opted out of', () => {
-    expect(body).toMatch(
-      /Email preferences resource — \/v1\/account\/email-preferences \(V-204 \/ V-449\)/,
-    );
+  it('Module-level docstring framing pinned: the docstring names the email-preferences route, and the critical-emails-NOT-opt-outable framing stays. Drift to weakening the critical-email exclusion would mislead customers about which emails can be opted out of. The internal ticket anchors are NOT required here — this docstring ships inside the PyPI wheel.', () => {
+    expect(body).toMatch(/Email preferences resource — \/v1\/account\/email-preferences/);
     // S44 2026-07-07 (founder-approved trim) — the critical roster is
     // 3 (the never-wired subscription-cancellation + support-ack
     // templates were deleted outright).

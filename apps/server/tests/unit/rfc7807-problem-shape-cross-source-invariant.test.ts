@@ -126,7 +126,7 @@ describe('W879 RFC 7807 Problem shape cross-source invariant', () => {
 
   it("CRITICAL PROBLEM_TYPES doc comments mention extension-field examples — V-353e MfaStepUpRequired's 'requires_mfa_step_up: true' extension. The example is what teaches future maintainers that catchall fields are part of the contract.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/problem.ts'));
-    expect(p).toMatch(/V-353e — step-up MFA challenge required before this op runs/);
+    expect(p).toMatch(/step-up MFA challenge required before this op runs/);
     expect(p).toMatch(/Returned as 403 with `requires_mfa_step_up: true` extension/);
   });
 

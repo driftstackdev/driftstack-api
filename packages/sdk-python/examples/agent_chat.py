@@ -83,10 +83,20 @@ def print_outcome(resp: dict[str, Any]) -> None:
                 print(f"  ⏸ waiting for approval: {r['category']} ({r['matchedText']!r})")
         if "answer" in resp:
             print(f"Answer: {resp['answer']}")
+        elif "answer_unavailable" in resp:
+            # The task asked for information and none could be produced. The two
+            # never arrive together, and a task that only acts has neither. Open
+            # text: show it, do not match on it.
+            print(f"No answer: {resp['answer_unavailable']}")
         # `ok` alone does not mean finished: a `notice` says why the task is not
         # done yet (send "continue" as the next message when it asks for that).
         if "notice" in resp:
-            print(f"Not finished: {resp['notice']}")
+            # `notice_reason` says the same thing in one word, so an unattended
+            # job can decide without reading English. The list is open: treat a
+            # value you do not recognise the way you treat "question" — show the
+            # sentence and ask a person rather than replying automatically.
+            reason = resp.get("notice_reason", "no reason given")
+            print(f"Not finished ({reason}): {resp['notice']}")
         print("Done." if resp["ok"] and "notice" not in resp else "The task did not finish.")
     elif kind == "clarify":
         print(f"The agent asks: {resp['clarifying_question']} (reply with another message)")

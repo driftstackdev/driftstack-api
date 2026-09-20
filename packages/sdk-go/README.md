@@ -12,6 +12,14 @@ go get github.com/driftstackdev/driftstack-api/packages/sdk-go@latest
 
 Requires Go 1.22+ (the module's `go.mod` declares `go 1.22`; uses `errors.As`, `context.Cancel*`, and the `slices` package).
 
+### Versions
+
+Install normally. The version you `go get` is written into your `go.mod` and
+does not move until you run `go get -u` — which is what you want, because while
+the module is `0.x` a minor version can change the surface and a patch never
+does. Read the CHANGELOG before moving to a new minor. `go.sum` already makes
+the build reproducible, so there is nothing further to pin.
+
 ## Quickstart
 
 ```go
@@ -56,21 +64,21 @@ Every public API endpoint is a typed method on a resource accessor. All take `co
 | `client.Sessions`         | `Create`, `List`, `Get`, `Navigate`, `Interact`, `Wait`, `GetState`, `Capture`, `Extract`, `Search`, `Login`, `Destroy`                                                                                                                         |
 | `client.AgentSessions`    | `Create`, `Get`, `List`, `Iterate`, `Message`, `GetCapture`, `Transcript`, `Stop`, `Close`, `SetMode`, `SetEgress`, `SendInputEvent`, `Takeover`, `Handback`, `LivekitToken`, `Resume` (run AI tasks in a browser — see "Run an AI task" below) |
 | `client.Egress`           | `AttachToSession`, `GetSessionProxy` (**capability-gated — 503/404 on every deployment today; no egress backend is wired**), `ListProxies`, `CreateProxy`, `UpdateProxy`, `DeleteProxy`, `TestProxy` (reusable proxy CRUD)                      |
-| `client.Profiles`         | `Create`, `List`, `Iterate`, `Get`, `Update`, `Delete`, `Clone` (V-313)                                                                                                                                                                         |
-| `client.ProfileSnapshots` | `Capture`, `ListForProfile`, `List`, `Iterate`, `Get`, `Restore`, `Delete` (V-312)                                                                                                                                                              |
+| `client.Profiles`         | `Create`, `List`, `Iterate`, `Get`, `Update`, `Delete`, `Clone`                                                                                                                                                                                 |
+| `client.ProfileSnapshots` | `Capture`, `ListForProfile`, `List`, `Iterate`, `Get`, `Restore`, `Delete`                                                                                                                                                                      |
 | `client.Recipes`          | `Create`, `List`, `Iterate`, `Get`, `Delete` (snapshot and manage an agent-session's intent_log; no execute method)                                                                                                                             |
-| `client.APIKeys`          | `Create`, `List`, `Rotate` (V-296), `Revoke`                                                                                                                                                                                                    |
+| `client.APIKeys`          | `Create`, `List`, `Rotate`, `Revoke`                                                                                                                                                                                                            |
 | `client.Usage`            | `CurrentPeriod`                                                                                                                                                                                                                                 |
-| `client.Webhooks`         | `Create`, `List`, `Get`, `Delete`, `ListDeliveries`, `ReplayDelivery` (V-307)                                                                                                                                                                   |
-| `client.Team`             | `Invite`, `ListMembers`, `ListInvites`, `ListOwners`, `AcceptInvite`, `RemoveMember` (V-298)                                                                                                                                                    |
+| `client.Webhooks`         | `Create`, `List`, `Get`, `Delete`, `ListDeliveries`, `ReplayDelivery`                                                                                                                                                                           |
+| `client.Team`             | `Invite`, `ListMembers`, `ListInvites`, `ListOwners`, `AcceptInvite`, `RemoveMember`                                                                                                                                                            |
 | `client.Billing`          | `GetState`, `CreateCheckoutSession`, `CreatePortalSession`                                                                                                                                                                                      |
-| `client.CryptoOrders`     | `Quote`, `CreateCheckout`, `List`, `Iterate`, `Get`, `UpdateNote`, `Cancel`, `Receipt` (V-666 — crypto checkout orders)                                                                                                                         |
+| `client.CryptoOrders`     | `Quote`, `CreateCheckout`, `List`, `Iterate`, `Get`, `UpdateNote`, `Cancel`, `Receipt` (crypto checkout orders)                                                                                                                                 |
 | `client.Auth`             | `Signup`, `VerifyEmail`, `Login`, `Refresh`, `Logout`, `RequestMagicLink`, `ConsumeMagicLink`, `RequestPasswordReset`, `ConfirmPasswordReset`                                                                                                   |
-| `client.Mfa`              | `Status`, `Enroll`, `Verify`, `Disable`, `RegenerateRecoveryCodes` (V-353b — TOTP MFA enrollment)                                                                                                                                               |
-| `client.Account`          | `Me` (V-385 — full /v1/account/me with slug / region / avatar / mfa / teams)                                                                                                                                                                    |
-| `client.Legal`            | `Documents`, `Required`, `Accept` (V-049 — legal-document catalog + acceptance)                                                                                                                                                                 |
-| `client.AuditLog`         | `List`, `Iterate`, `Export` (V-216 — append-only account event ledger; V-462 export)                                                                                                                                                            |
-| `client.EmailPreferences` | `List`, `Set`, `OptOut`, `OptIn` (V-204 — non-critical email opt-out toggles)                                                                                                                                                                   |
+| `client.Mfa`              | `Status`, `Enroll`, `Verify`, `Disable`, `RegenerateRecoveryCodes` (TOTP MFA enrollment)                                                                                                                                                        |
+| `client.Account`          | `Me` (full /v1/account/me with slug / region / avatar / mfa / teams)                                                                                                                                                                            |
+| `client.Legal`            | `Documents`, `Required`, `Accept` (legal-document catalog + acceptance)                                                                                                                                                                         |
+| `client.AuditLog`         | `List`, `Iterate`, `Export` (append-only account event ledger)                                                                                                                                                                                  |
+| `client.EmailPreferences` | `List`, `Set`, `OptOut`, `OptIn` (non-critical email opt-out toggles)                                                                                                                                                                           |
 
 Discriminated-union builders (`NewTapAction`, `NewSelectorCondition`, etc.) live in `types.go` for `Interact` and `Wait` requests.
 
@@ -295,7 +303,7 @@ go test ./...
 go vet ./...
 ```
 
-The OpenAPI 3.1 spec produced by the server is at `packages/sdk-python/openapi.json`. Types in `types.go` are hand-maintained against it (see V-026 for why we don't run oapi-codegen — current versions don't support OpenAPI 3.1 nullable shorthand).
+The OpenAPI 3.1 spec produced by the server is at `packages/sdk-python/openapi.json`. Types in `types.go` are hand-maintained against it (oapi-codegen is not used: current versions don't support OpenAPI 3.1 nullable shorthand).
 
 ## License
 

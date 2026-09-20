@@ -40,7 +40,7 @@ describe('W433.B packages/api-types/src/cli-authorize.ts content parity', () => 
   const body = read(LIB);
 
   it('V-266 framing pinned: replaces paste-key flow with OAuth-style browser handshake; 4-step rationale', () => {
-    expect(body).toMatch(/\/\/ V-266 — Browser-based CLI \/ GUI authorization flow\./);
+    expect(body).toMatch(/\/\/[^\n]*Browser-based CLI \/ GUI authorization flow\./);
     expect(body).toMatch(
       /\/\/ Replaces the "find your API key in the dashboard, paste it into the\s*\/\/ GUI" flow with an OAuth-style browser handshake:/,
     );

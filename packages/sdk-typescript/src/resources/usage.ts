@@ -24,7 +24,7 @@ export class UsageResource {
   }
 
   /**
-   * V-452 — daily-bucketed usage time series. `days` is 1-90; default
+   * A daily-bucketed usage time series. `days` is 1-90; default
    * 30. Each bucket holds per-record-type totals for that day. Useful
    * for rendering trend charts in customer dashboards.
    */

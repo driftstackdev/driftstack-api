@@ -42,7 +42,7 @@ describe('W592.D packages/sdk-go/legal.go content parity', () => {
   it('file exists at canonical path + LegalResource V-049/V-458 anchor + content-vs-catalog separation invariant ("Document content is served separately on the marketing site; this resource handles the catalog + acceptance machinery") — the architectural rule that keeps legal-doc text OUT of the API surface', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/^package driftstack$/m);
-    expect(body).toMatch(/\/\/ LegalResource handles \/v1\/legal\/\* \(V-049 \/ V-458\)\./);
+    expect(body).toMatch(/\/\/ LegalResource handles \/v1\/legal\/[^\n]*\./);
     expect(body).toMatch(
       /\/\/ Customer acceptance of legal documents \(ToS \/ Privacy \/ DPA \/ AUP\)\./,
     );

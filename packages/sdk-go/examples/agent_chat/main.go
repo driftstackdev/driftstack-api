@@ -194,11 +194,24 @@ func printOutcome(resp *driftstack.AgentMessageResponse, results []driftstack.Ag
 		}
 		if resp.Answer != "" {
 			fmt.Printf("Answer: %s\n", resp.Answer)
+		} else if resp.AnswerUnavailable != "" {
+			// A turn can run cleanly and still have no Answer — the steps ran,
+			// the page could not be read back. Without this branch an
+			// unattended job prints its steps and then nothing, which reads
+			// exactly like an answer nobody bothered to look at.
+			fmt.Printf("No answer: %s\n", resp.AnswerUnavailable)
 		}
 		// OK alone does not mean finished: a Notice says why the task is not
 		// done yet (send "continue" as the next message when it asks for that).
+		// NoticeReason is the one word an unattended job switches on; the
+		// sentence is what a person reads. A reason this example has never
+		// heard of still shows its sentence.
 		if resp.Notice != "" {
-			fmt.Printf("Not finished: %s\n", resp.Notice)
+			reason := resp.NoticeReason
+			if reason == "" {
+				reason = "no reason given"
+			}
+			fmt.Printf("Not finished (%s): %s\n", reason, resp.Notice)
 		}
 		if resp.OK && resp.Notice == "" {
 			fmt.Println("Done.")

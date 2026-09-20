@@ -11,7 +11,7 @@ import { OpenVpnProxyConfigSchema, WireGuardProxyConfigSchema } from './egress.j
 
 export const ProfileIdSchema = PrefixedId('prof');
 
-/**
+/*
  * V-1489 — what a caller may SEND for a profile id, which is broader than what
  * the API returns.
  *
@@ -29,6 +29,7 @@ export const ProfileIdSchema = PrefixedId('prof');
  * expression, so a pattern published from it would advertise a lowercase-only
  * contract the server does not enforce.
  */
+/** The uuid body of a profile id, with or without the `prof_` prefix. */
 export const PROFILE_UUID_BODY =
   '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
 export const PROFILE_ID_INPUT_RE = new RegExp(`^(?:prof_)?${PROFILE_UUID_BODY}$`);
@@ -199,7 +200,7 @@ export const AccountProxyUpdateSchema = z.union([
 ]);
 export type AccountProxyUpdate = z.infer<typeof AccountProxyUpdateSchema>;
 
-/**
+/*
  * (p) 2026-09-16 — the control plane's passive OS fingerprint of a proxy's own
  * TCP stack, as it crosses the wire. ONE declaration, used by BOTH the /test
  * reply (which has carried exactly this shape since N-2) and the /proxies list
@@ -212,6 +213,17 @@ export type AccountProxyUpdate = z.infer<typeof AccountProxyUpdateSchema>;
  * — the cautious value — never as "unstated, so assume it describes the path a
  * website gets". A row measured before those fields existed is normalised to
  * false where it is read, not defaulted to true here.
+ */
+/**
+ * What a proxy's own network stack looks like from the outside — the
+ * operating system a remote server would infer from it. The same shape is
+ * returned by the proxy /test reply and carried on each saved proxy, so one
+ * parser reads both.
+ *
+ * `single_host_vantage` and `web_port_vantage` say whether the reading was
+ * taken over the same path a website's traffic takes. Read a missing or
+ * false value as "this reading does not describe that path", never as an
+ * assurance that it does.
  */
 export const AccountProxyOsFingerprintSchema = z.object({
   os: z.enum(['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown']),
@@ -431,12 +443,13 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
 export type AccountProxyTestResult = z.infer<typeof AccountProxyTestResultSchema>;
 
 /**
- * P-23 — a profile's recent navigation, projected from the account's agent
- * session transcripts. ⛔ This is ACCOUNT ACTIVITY, not "browsing history":
- * ledger decision D-1 keeps the server-side transcript out of the profile's
- * "Clear history" action (that clears the profile's tabs on the device and
- * nothing else), so a customer who clears history and then opens this view
- * still sees these rows. The name is part of the contract, not a label.
+ * A profile's recent navigation, taken from the AI session transcripts on
+ * your account.
+ *
+ * ⛔ This is ACCOUNT ACTIVITY, not the profile's browsing history. A
+ * profile's "Clear history" clears the tabs held on the device and nothing
+ * else, so these rows are still here afterwards. If you need them gone, use
+ * the account data controls rather than clearing the profile.
  */
 export const ProfileActivityEntrySchema = z.object({
   /** ISO-8601 time the navigation was planned. */
@@ -477,13 +490,13 @@ export const ProfileSchema = z.object({
   note: z.string().nullable(),
   last_used_at: Iso8601Schema.nullable(),
   /**
-   * doc-150 item 5 — byte size of this profile's last saved sealed store (the
-   * opaque encrypted browser-state blob). `null` until the profile is first
-   * saved. Surfaced for per-profile storage + an account-wide total; the
-   * per-tier quota (1GB/5GB) is enforced separately (doc-150 item 6).
+   * How many bytes this profile's last saved state took, encrypted. `null`
+   * until the profile has been saved once. Add these up across your profiles
+   * to see what your account is storing; the allowance itself is
+   * `TIER_STORAGE_BYTES_CAP`.
    */
   size_bytes: z.number().int().nonnegative().nullable(),
-  /** doc-150 item 5 — when the sealed store was last saved back. `null` until first saved. */
+  /** When this profile's state was last saved back. `null` until first saved. */
   last_saved_at: Iso8601Schema.nullable(),
   created_at: Iso8601Schema,
   updated_at: Iso8601Schema,

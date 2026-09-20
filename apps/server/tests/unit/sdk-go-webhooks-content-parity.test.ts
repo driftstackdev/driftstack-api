@@ -123,9 +123,7 @@ describe('W593.A packages/sdk-go/webhooks.go content parity', () => {
   });
 
   it('ReplayDelivery — V-307 POST /v1/webhook-deliveries/{deliveryID}/replay with empty struct body + account-scope enforcement framing ("delivery must belong to an endpoint the calling account owns") pinned (drift to dropping the account-scope comment would lose the contract context customers reason about; the server-side enforcement is the actual guard but the SDK comment is the customer-facing contract)', () => {
-    expect(body).toMatch(
-      /\/\/ ReplayDelivery is V-307 — resets a webhook delivery to pending so the/,
-    );
+    expect(body).toMatch(/\/\/ ReplayDelivery[^\n]*resets a webhook delivery to pending so the/);
     expect(body).toMatch(
       /\/\/ worker re-fires it\. Scoped to the EFFECTIVE account: the delivery must/,
     );
@@ -147,7 +145,7 @@ describe('W593.A packages/sdk-go/webhooks.go content parity', () => {
   });
 
   it("RotateWebhookSecretResponse — V-359 5-field struct shape pinned: ID + Secret (plaintext-once) + SecretPrefix + PrevSecretPrefix + GraceExpiresAt (time.Time). Each json tag locked so a Go-SDK regen can't silently drop a field customer verifiers depend on for the dual-sign rollout window.", () => {
-    expect(body).toMatch(/\/\/ RotateWebhookSecretResponse — V-359 secret rotation result\./);
+    expect(body).toMatch(/\/\/ RotateWebhookSecretResponse[^\n]*secret rotation result\./);
     expect(body).toMatch(/\/\/ fresh plaintext is in Secret \(returned ONCE\); during the/);
     expect(body).toMatch(
       /\/\/ GraceExpiresAt window Driftstack dual-signs every outbound delivery/,
@@ -159,9 +157,7 @@ describe('W593.A packages/sdk-go/webhooks.go content parity', () => {
   });
 
   it('RotateSecret — V-359 POST /v1/webhooks/{id}/rotate-secret + 24h dual-sign grace-window invariant ("The previous secret stays active for 24h (GraceExpiresAt) during which Driftstack dual-signs every outbound delivery") + admin-scope on calling key. Drift here would break the customer-facing "roll the new secret across your verifier infra inside that window" contract.', () => {
-    expect(body).toMatch(
-      /\/\/ RotateSecret is V-359 — rotate the webhook signing secret\. The fresh/,
-    );
+    expect(body).toMatch(/\/\/ RotateSecret[^\n]*rotate the webhook signing secret\. The fresh/);
     expect(body).toMatch(
       /\/\/ plaintext is returned ONCE\. The previous secret stays active for 24h/,
     );
@@ -181,7 +177,7 @@ describe('W593.A packages/sdk-go/webhooks.go content parity', () => {
   });
 
   it('SendTestWebhookResponse + SendTest — V-356 POST /v1/webhooks/{id}/test, synthetic test.ping delivery + bypasses subscription (endpoint receives the event regardless of which event types it is subscribed to) + "always test.ping" event-type invariant + returns 202 + admin-scope. Drift here would break customer first-time-setup smoke-tests of their handler+signature verification.', () => {
-    expect(body).toMatch(/\/\/ SendTestWebhookResponse — V-356 synthetic test\.ping delivery/);
+    expect(body).toMatch(/\/\/ SendTestWebhookResponse[^\n]*synthetic test\.ping delivery/);
     expect(body).toMatch(
       /\/\/ receipt\. The endpoint receives the event regardless of which event/,
     );
@@ -189,7 +185,7 @@ describe('W593.A packages/sdk-go/webhooks.go content parity', () => {
     expect(body).toMatch(
       /^type SendTestWebhookResponse struct \{\s*\n\s*DeliveryID string `json:"delivery_id"`\s*\n\s*EventID\s+string `json:"event_id"`\s*\n\s*EventType\s+string `json:"event_type"` \/\/ always "test\.ping"\s*\n\}/m,
     );
-    expect(body).toMatch(/\/\/ SendTest is V-356 — send a synthetic test\.ping event to the/);
+    expect(body).toMatch(/\/\/ SendTest[^\n]*sends a synthetic test\.ping event to the/);
     expect(body).toMatch(/\/\/ endpoint\. Bypasses subscription so customers can verify their/);
     expect(body).toMatch(/\/\/ handler is reachable \+ signature-valid before depending on it for/);
     expect(body).toMatch(/\/\/ real events\. Returns 202 \+ the synthetic delivery id\./);
@@ -202,7 +198,7 @@ describe('W593.A packages/sdk-go/webhooks.go content parity', () => {
   });
 
   it('Update — V-351 PATCH /v1/webhooks/{id} partial update + at-least-one-of-URL/Events/Description/Active 400 invariant + signing-secret-NOT-rotated-by-Update separation-of-concerns + disabled-endpoint-409 invariant + admin-scope. Drift here would break the "use RotateSecret for that" contract that keeps the secret-rotation flow auditable and explicit.', () => {
-    expect(body).toMatch(/\/\/ Update is V-351 — partial-update a webhook endpoint\. At least one/);
+    expect(body).toMatch(/\/\/ Update[^\n]*partial-update a webhook endpoint\. At least one/);
     expect(body).toMatch(
       /\/\/ of URL \/ Events \/ Description \/ Active must be non-nil; otherwise/,
     );

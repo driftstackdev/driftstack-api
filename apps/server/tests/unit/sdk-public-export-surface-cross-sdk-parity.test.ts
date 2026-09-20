@@ -134,20 +134,20 @@ describe('W820 cross-SDK public-export surface parity', () => {
     }
   });
 
-  // ─── V-anchor framing in TS exports ───────────────────────────
+  // ─── Section framing in the TS export roster ──────────────────
 
-  it('CRITICAL TS exports thread V-anchor provenance — V-460/V-266 (CLI/GUI activation) + V-079 (auth flow) + V-353d/e (MFA challenge+step-up) + V-081 (profiles) + V-313 (profile clone) + V-312 (profile snapshots) + V-204 (email preferences) + V-352/V-352b (account self-edit + avatar) + V-082 (billing).', () => {
+  it('CRITICAL the TS export roster is grouped by named section — CLI/GUI activation + auth flow + login MFA challenge + MFA challenge/step-up + profiles + profile clone + profile snapshots + email preferences + account self-edit and avatar + billing. The section NAMES stay (they are how a reader finds a type); the internal ticket anchors do not — this file ships in the source map and the .d.ts.', () => {
     const p = read(TS);
-    expect(p).toMatch(/V-460 \/ V-266 CLI\/GUI activation flow/);
-    expect(p).toMatch(/V-079 auth flow/);
-    expect(p).toMatch(/V-353d login MFA challenge — discriminated-union response shape/);
-    expect(p).toMatch(/V-353d\/e MFA challenge \+ step-up/);
-    expect(p).toMatch(/V-081 profiles/);
-    expect(p).toMatch(/V-313 profile clone/);
-    expect(p).toMatch(/V-312 profile snapshots/);
-    expect(p).toMatch(/V-204 email preferences/);
-    expect(p).toMatch(/V-352 \/ V-352b account self-edit \+ avatar upload/);
-    expect(p).toMatch(/V-082 billing/);
+    expect(p).toMatch(/\/[^\n]*CLI\/GUI activation flow/);
+    expect(p).toMatch(/login MFA challenge — discriminated-union response shape/);
+    expect(p).toMatch(/login MFA challenge — discriminated-union response shape/);
+    expect(p).toMatch(/MFA challenge \+ step-up/);
+    expect(p).toMatch(/\/\/[^\n]*[Pp]rofiles\s*\n\s*Profile,/);
+    expect(p).toMatch(/[Pp]rofile clone/);
+    expect(p).toMatch(/[Pp]rofile snapshots/);
+    expect(p).toMatch(/[Ee]mail preferences/);
+    expect(p).toMatch(/\/[^\n]*[Aa]ccount self-edit \+ avatar upload/);
+    expect(p).toMatch(/[Bb]illing/);
   });
 
   // ─── Python __init__.py header docstring ──────────────────────

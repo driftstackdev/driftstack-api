@@ -40,7 +40,7 @@ describe('W591.B packages/sdk-go/profiles.go content parity', () => {
   it('file exists at canonical path + ProfilesResource V-081 anchor binds /v1/profiles', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/^package driftstack$/m);
-    expect(body).toMatch(/\/\/ ProfilesResource handles \/v1\/profiles endpoints \(V-081\)\./);
+    expect(body).toMatch(/\/\/ ProfilesResource handles \/v1\/profiles endpoints[^\n]*\./);
     expect(body).toMatch(/^type ProfilesResource struct \{\s*\n\s*client \*Client\s*\n\}/m);
   });
 
@@ -119,7 +119,7 @@ describe('W591.B packages/sdk-go/profiles.go content parity', () => {
   });
 
   it('CloneProfileRequest + Clone — V-313 POST /v1/profiles/{id}/clone with nil-body auto-naming. CloneProfileRequest is a 1-field struct (Name with json:"name,omitempty"); when callers pass nil the SDK substitutes an empty struct so the server can auto-derive "(copy)" / "(copy 2)" / ... pattern. Tier-cap + name-conflict checked the same way as Create — so error-handling parity with Create.', () => {
-    expect(body).toMatch(/\/\/ CloneProfileRequest — V-313\./);
+    expect(body).toMatch(/\/\/ CloneProfileRequest[^\n]*\./);
     expect(body).toMatch(/\/\/ auto-derive a "\(copy\)" \/ "\(copy 2\)" \/ \.\.\. name\./);
     expect(body).toMatch(
       /^type CloneProfileRequest struct \{\s*\n\s*Name string `json:"name,omitempty"`\s*\n\}/m,

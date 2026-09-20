@@ -177,18 +177,26 @@ describe('W723 GitHub Actions ci.yml workflow parity', () => {
     expect(c).toMatch(/run: pytest -v/);
   });
 
-  it('CRITICAL the TypeScript SDK build is smoke-tested against the BUILT bundle, with the expectation derived from source. cross-sdk-resource-surface-parity reads src/, so it cannot see a resource that survives compilation but is dropped from the package entry or exports map', () => {
+  it('CRITICAL the TypeScript SDK build is smoke-tested against the BUILT bundle, with the expectation derived from source, and BOTH entry points are loaded. cross-sdk-resource-surface-parity reads src/, so it cannot see a resource that survives compilation but is dropped from the package entry or exports map — and loading one FORMAT sees nothing about the other. Until 2026-09-20 this step loaded only dist/index.js (ESM), whose inner imports resolve under the `import` condition, while dist/index.cjs — the file `main` and the exports `require` condition both point at — threw ERR_PACKAGE_PATH_NOT_EXPORTED on a clean install and nothing in the repository loaded it', () => {
     const c = read(CI);
     expect(c, 'the SDK build smoke step is gone').toMatch(
-      /SDK build smoke \(every source-declared resource survives the build\)/,
+      /SDK build smoke \(every source-declared resource survives the build, in both entry points\)/,
     );
     // Same three properties as the Python side: derived, asserted against the
     // artifact, and floored so an empty extraction cannot pass.
     expect(c, 'the resource list is hand-written rather than derived').toMatch(
       /matchAll\(\/readonly \(\\w\+\)/,
     );
-    expect(c, 'the smoke no longer loads the built bundle').toMatch(
-      /sdk-typescript\/dist\/index\.js/,
+    expect(c, 'the smoke no longer loads the ESM bundle').toMatch(
+      /import\('\.\/packages\/sdk-typescript\/dist\/index\.js'\)/,
+    );
+    expect(c, 'the smoke no longer REQUIRES the CJS bundle — the half that was missing').toMatch(
+      /require\('\.\/packages\/sdk-typescript\/dist\/index\.cjs'\)/,
+    );
+    // Both loads must be CHECKED, not merely performed: an `import()` whose
+    // rejection is unhandled used to be a warning rather than a failure.
+    expect(c, 'the ESM load no longer fails the step when it rejects').toMatch(
+      /catch\(\(e\) => \{ console\.error\(e\); process\.exit\(1\); \}\)/,
     );
     expect(c, 'the source-scan floor is gone, so an empty extraction would pass').toMatch(
       /expected\.length < 15/,

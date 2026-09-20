@@ -1,9 +1,10 @@
 {
   "name": "@driftstack/api-types",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Public API contract types (Zod schemas) for the Driftstack API.",
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -14,6 +15,8 @@
   },
   "files": [
     "dist",
+    "!dist/ai-*",
+    "!dist/.tsbuildinfo",
     "README.md"
   ],
   "publishConfig": {
@@ -25,7 +28,8 @@
     "directory": "packages/api-types"
   },
   "scripts": {
-    "build": "tsc --build",
+    "build": "tsc --build && tsc -p tsconfig.dist-js.json",
+    "build:publish": "npm run build && node ../../scripts/api-types-build-publish.mjs",
     "typecheck": "tsc --build"
   },
   "dependencies": {

@@ -62,7 +62,7 @@ describe('W433.A packages/api-types/src/usage.ts content parity', () => {
 
   it('V-170 daily-bucketed usage series framing: customer-dashboard sparklines + admin-panel account-detail charts; contiguous days incl. zero-usage; to_date exclusive / from_date inclusive', () => {
     expect(body).toMatch(
-      /\*\s*V-170 — daily-bucketed usage series\. Used by customer-dashboard\s*\*\s*\/usage sparklines \+ admin-panel account-detail charts\. Returns one\s*\*\s*bucket per UTC day in `\[from_date, to_date\)`, contiguous \(days with\s*\*\s*zero usage are included as empty `totals: \{\}`\)\. `to_date` is\s*\*\s*exclusive \(typically today's UTC midnight\); `from_date` is inclusive\./,
+      /daily-bucketed usage series\. Used by customer-dashboard\s*\*\s*\/usage sparklines \+ admin-panel account-detail charts\. Returns one\s*\*\s*bucket per UTC day in `\[from_date, to_date\)`, contiguous \(days with\s*\*\s*zero usage are included as empty `totals: \{\}`\)\. `to_date` is\s*\*\s*exclusive \(typically today's UTC midnight\); `from_date` is inclusive\./,
     );
   });
 

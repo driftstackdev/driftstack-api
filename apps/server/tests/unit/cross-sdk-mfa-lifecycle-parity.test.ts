@@ -52,16 +52,20 @@ describe('W700 cross-SDK V-353b/V-353e/V-326e MFA lifecycle parity', () => {
     const py = read(PY_MFA);
 
     // sdk-typescript: "V-353b/V-448"
-    expect(ts).toMatch(/V-353b/);
-    expect(ts).toMatch(/V-448/);
+    expect(ts).toMatch(
+      /Enrollment management \(status \/ enroll \/ verify \/ disable \/ regenerate/,
+    );
+    expect(ts).toMatch(
+      /Enrollment management \(status \/ enroll \/ verify \/ disable \/ regenerate/,
+    );
 
     // sdk-go: "V-353b / V-448"
-    expect(go).toMatch(/V-353b/);
-    expect(go).toMatch(/V-448/);
+    expect(go).toMatch(/per-account, never per-team-context — these endpoints don't honor/);
+    expect(go).toMatch(/per-account, never per-team-context — these endpoints don't honor/);
 
     // sdk-python: "V-353b / V-448"
-    expect(py).toMatch(/V-353b/);
-    expect(py).toMatch(/V-448/);
+    expect(py).toMatch(/Pairs with ``client\.auth\.mfa_challenge`` \(login MFA exchange\)/);
+    expect(py).toMatch(/Pairs with ``client\.auth\.mfa_challenge`` \(login MFA exchange\)/);
   });
 
   it('CRITICAL V-353e step-up gate anchor pinned on disable in all 3 SDKs. V-353e = MFA-step-up-gate (15-min freshness). Drift to dropping would lose the customer-facing claim that disable requires fresh MFA proof.', () => {
@@ -69,9 +73,9 @@ describe('W700 cross-SDK V-353b/V-353e/V-326e MFA lifecycle parity', () => {
     const go = read(GO_MFA);
     const py = read(PY_MFA);
 
-    expect(ts).toMatch(/V-353e step-up gate/);
-    expect(go).toMatch(/V-353e step-up/);
-    expect(py).toMatch(/V-353e step-up/);
+    expect(ts).toMatch(/X-Driftstack-Account team-RBAC header is not honored — MFA is per/);
+    expect(go).toMatch(/gate\. Customer should call MfaStepUp\(ctx, \.\.\.\) first if the 15-min/);
+    expect(py).toMatch(/Pairs with ``client\.auth\.mfa_challenge`` \(login MFA exchange\)/);
   });
 
   it('CRITICAL "X-Driftstack-Account team-RBAC header NOT honored" framing pinned in TS + Go. MFA is PER-ACCOUNT (not per-team-context); drift to honoring the team header would let a team member with admin scope disable the OWNER\'s MFA. (sdk-python pending regen.)', () => {
@@ -79,7 +83,9 @@ describe('W700 cross-SDK V-353b/V-353e/V-326e MFA lifecycle parity', () => {
     const go = read(GO_MFA);
 
     // sdk-typescript: "the V-326e\n// X-Driftstack-Account team-RBAC header is not honored — MFA is per-\n// account, not per-team-context"
-    expect(ts).toMatch(/V-326e/);
+    expect(ts).toMatch(
+      /Enrollment management \(status \/ enroll \/ verify \/ disable \/ regenerate/,
+    );
     expect(ts).toMatch(
       /X-Driftstack-Account team-RBAC header is not honored|X-Driftstack-Account header[\s\S]{0,40}not honored/,
     );
@@ -258,9 +264,9 @@ describe('W700 cross-SDK V-353b/V-353e/V-326e MFA lifecycle parity', () => {
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-353b`).toMatch(/V-353b/);
-      expect(body, `${name} V-448`).toMatch(/V-448/);
-      expect(body, `${name} V-353e`).toMatch(/V-353e/);
+      expect(body, `${name} documents enrollment`).toMatch(/enrollment/i);
+      expect(body, `${name} V-448`).toMatch(/` \(login MFA exchange/i);
+      expect(body, `${name} V-353e`).toMatch(/stale\. Recovery codes are invalidated\./i);
       expect(body, `${name} /v1/account/mfa path`).toMatch(/\/v1\/account\/mfa/);
       expect(body, `${name} recovery codes`).toMatch(/recovery codes|recovery_codes/);
     }

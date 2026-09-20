@@ -37,7 +37,7 @@ function read(p: string): string {
 describe('W581.A packages/sdk-python/src/driftstack/resources/api_keys.py content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + module docstring /v1/api-keys scope (single-line, no V-anchor framing in the docstring — the V-anchors live on the rotate method)', () => {
+  it('file exists at canonical path + module docstring /v1/api-keys scope (single-line — no internal ticket framing anywhere in this module, which ships inside the wheel)', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(/^"""API keys resource — \/v1\/api-keys\."""/);
   });
@@ -64,7 +64,7 @@ describe('W581.A packages/sdk-python/src/driftstack/resources/api_keys.py conten
 
   it('RotateApiKeyResponse — V-296 rotation envelope. INHERITS from CreateApiKeyResponse (NOT BaseModel) so it picks up the plaintext + id fields from the create response, THEN adds rotated_from + grace_period_ends_at. Drift to inheriting from BaseModel would lose the plaintext-once-from-parent invariant. Both new fields are str (timestamps as ISO strings, per Python SDK convention).', () => {
     expect(body).toMatch(/^class RotateApiKeyResponse\(CreateApiKeyResponse\):$/m);
-    expect(body).toMatch(/"""V-296 — response shape for ``POST \/v1\/api-keys\/:id\/rotate``\./);
+    expect(body).toMatch(/[Rr]esponse shape for ``POST \/v1\/api-keys\/:id\/rotate``\./);
     expect(body).toMatch(/Extends ``CreateApiKeyResponse`` with the previous-key reference and/);
     expect(body).toMatch(/the timestamp at which the previous key auto-revokes via the/);
     expect(body).toMatch(/``expires_at``-driven auth gate\./);
@@ -114,7 +114,7 @@ describe('W581.A packages/sdk-python/src/driftstack/resources/api_keys.py conten
     expect(body).toMatch(
       /def rotate\(self, key_id: str, \*, name: str \| None = None\) -> RotateApiKeyResponse:/,
     );
-    expect(body).toMatch(/"""V-296 — rotate an API key with a 24h grace period\./);
+    expect(body).toMatch(/[Rr]otate an API key with a 24h grace period\./);
     expect(body).toMatch(/Mints a fresh plaintext \+ sets the OLD key's ``expires_at`` to/);
     expect(body).toMatch(/``now \+ 24h``\. Both keys work concurrently during the grace/);
     expect(body).toMatch(/window; deploy the new key, then the old key auto-revokes at/);
@@ -152,7 +152,7 @@ describe('W581.A packages/sdk-python/src/driftstack/resources/api_keys.py conten
 
   it('async rotate — V-296 awaited POST twin with short ":meth: cross-ref" docstring (delegates to the sync method\'s full docstring rather than duplicating). Same conditional name-kwarg wiring + same quote-escaped path + same RotateApiKeyResponse return shape.', () => {
     expect(body).toMatch(
-      /async def rotate\(self, key_id: str, \*, name: str \| None = None\) -> RotateApiKeyResponse:\s*\n\s*"""V-296 — async rotate\. See :meth:`ApiKeysResource\.rotate`\."""/,
+      /async def rotate\(self, key_id: str, \*, name: str \| None = None\) -> RotateApiKeyResponse:\s*\n[^\n]*[Aa]sync rotate\. See :meth:`ApiKeysResource\.rotate`\."""/,
     );
     expect(body).toMatch(
       /body: dict\[str, Any\] = \{\}\s*\n\s*if name is not None:\s*\n\s*body\["name"\] = name\s*\n\s*data = await self\._http\.request\(\s*\n\s*"POST",\s*\n\s*f"\/v1\/api-keys\/\{quote\(key_id, safe=''\)\}\/rotate",\s*\n\s*json_body=body,\s*\n\s*\)\s*\n\s*return parse_model\(RotateApiKeyResponse, data\)/,

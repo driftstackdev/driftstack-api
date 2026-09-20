@@ -80,7 +80,7 @@ def _exact_bool(payload: dict[str, Any], key: str) -> bool:
     ``isinstance(True, int)`` is true, so ``bool`` fields must be checked by
     exact type: otherwise a hostile ``1``/``0``/``"false"`` is coerced by
     Pydantic's default lax mode and reaches the customer as a fabricated
-    ``submitted``/``logged_in`` verdict.
+    ``submitted``/``logged_in`` result.
     """
     value = payload[key]
     if type(value) is not bool:

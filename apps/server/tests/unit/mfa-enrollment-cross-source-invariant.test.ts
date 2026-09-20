@@ -50,7 +50,7 @@ describe('W887 V-353b MFA enrollment cross-source invariant', () => {
 
   it("CRITICAL packages/api-types/src/accounts.ts pins V-353b anchor for the MFA section — 'V-353b — MFA (TOTP) enrollment + verify + recovery codes'. The anchor threads the MFA-feature provenance.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
-    expect(p).toMatch(/V-353b — MFA \(TOTP\) enrollment \+ verify \+ recovery codes/);
+    expect(p).toMatch(/MFA \(TOTP\) enrollment \+ verify \+ recovery codes/);
   });
 
   // ─── MfaStatusResponse 4-field shape ─────────────────────────

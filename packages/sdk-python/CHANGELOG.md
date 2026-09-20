@@ -6,269 +6,238 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-20
+
+The release the guide [Run AI tasks from your
+code](https://docs.driftstack.io/guides/run-ai-tasks-from-code/) is written
+against — 0.1.5 cannot run any of its examples, because the AI agent was not
+reachable from it at all.
+
+**Nothing was removed.** Every name 0.1.5 exported, every method, every
+keyword argument and every error class is still here and still means the same
+thing, so upgrading takes no code change. What grew: both clients went from 4
+resources to 19, and `driftstack.__all__` from 22 names to 56. Every addition
+below exists on **both** `Driftstack` and `AsyncDriftstack`. Read **Changed**
+before you upgrade anyway — a few behaviours differ, and one of them changes
+which exception an `except` clause sees.
+
 ### Added
 
-- **A turn that hands back says why in one word** — a `plan-executed` result
-  now carries `notice_reason` beside `notice`: `"step_limit"`, `"time_limit"`,
-  `"budget_low"`, `"no_progress"`, `"repeated_step"`, `"ai_unavailable"`,
-  `"question"` or `"declined"`, exported as the OPEN union
-  `AgentNoticeReason` (`Literal[...] | str`), so a turn that ends a way this
-  SDK has never heard of still type-checks: match the values you know and show
-  `notice` for the rest. The streamed `notice` event carries the same pair.
-  Nothing is removed — `notice` is the sentence it always was.
-- **Fetch a screenshot** — sync and async
-  `agent_sessions.get_capture(id, capture_id)` return the image behind a
+#### Run an AI task end to end
+
+`client.agent_sessions` is new, and is the whole AI surface.
+
+- **Start it, send the task, close it** — `create(body, ...)` opens a
+  session, on a saved profile if you pass one; `message(id, text, ...)` sends
+  the task in plain words and returns what happened; `get(id)`,
+  `list(...)` and `iterate(...)` read sessions back; `close(id)` ends one and
+  saves the profile's sign-in. A new session is `provisioning` until its
+  browser is ready, then `active`.
+- **Every way a turn can end is a named result kind** — `plan-executed` (the
+  steps ran, with `answer` when you asked a question), `clarify` (the agent
+  is asking you something), `refuse` (it will not do this), `stopped`, and a
+  step held for your approval. `answer_unavailable` says why there is no
+  `answer` when you asked for one.
+- **Live progress while it runs** — `message(..., on_step=..., on_event=...)`
+  parses the turn's stream as it arrives: `on_step(step)` gets each step
+  (`{"index", "result"}`) and `on_event(name, data)` every other progress
+  event (`phase`, `plan`, `step_start`, `answer`, `notice`, and any added
+  later). On the async client either callback may be `async def`.
+- **Approve a step, or don't** — a step with real-world consequences (a
+  payment, a message sent, something deleted) pauses the turn and comes back
+  as `confirmation_required`. Send the same task again with
+  `approve_consequential_actions=` to release it; it accepts the step result
+  exactly as it was returned, as well as `{"category", "matched_text"}`
+  dicts, and raises `ValueError` before sending anything if an entry is
+  neither. An unattended job simply never approves.
+- **Stop a task that runs too long** — `stop(id)` asks the running turn to
+  stop; the waiting `message()` then returns kind `stopped` rather than
+  raising.
+- **Screenshots** — `get_capture(id, capture_id)` returns the image behind a
   `capture` step's `captureId` as `{"content_type", "bytes"}` (`image/png` or
   `image/jpeg`). Screenshots are kept only briefly, so fetch one as soon as
   its turn ends; one that is no longer kept raises `NotFoundError`.
-- **Read the transcript** — `agent_sessions.transcript(id, last_event_id=...,
-timeout_s=...)` iterates a session's conversation (an iterator on the sync
-  client, an async iterator on the async one): every entry so far, then each
-  new one as it is written. `last_event_id` resumes after the last `index` you
-  saw; closing the iterator closes the connection. Held to the same 50-minute
-  absolute limit and 8 MiB ceiling as a message, with a read-idle limit a
-  quiet stream survives. Exports `AgentCapture` and `AgentTranscriptEvent`.
-- **More of an AI answer is typed** — `ConflictError.closed_reason` (why a
-  closed session ended, without a second call);
-  `FeatureUnavailableError.stop_unconfirmed` (the one `stop()` 503 worth
-  calling again); and `ByokAnthropicRequiredError.key_rejected` /
-  `.key_source` / `.key_rejected_reason` (Anthropic refused your own key, which
-  key, and why). The generated `plan-executed` model gains `notice` and
-  `answer_unavailable` (why there is no `answer`, when you asked for one).
-- **Live progress for AI tasks** — sync and async
-  `agent_sessions.message(..., on_step=..., on_event=...)` parse the turn's
-  stream as it arrives: `on_step(step)` gets each step
-  (`{"index", "result"}`), `on_event(name, data)` every other progress event
-  (`phase`, `plan`, `step_start`, `answer`, `notice`, and any added later). On
-  the async client a callback may be `async def`. The byte ceiling, the
-  single-terminal rule and the absolute deadline still apply.
-- **`timeout_s=`** on both `message()` methods bounds the whole call
-  (default 50 minutes).
-- **`byok_api_key=`** on both `create()` methods sends your own Anthropic key
-  at create, so an Opus session can be started without a stored key.
-- **Approvals accept the result itself** — `approve_consequential_actions`
-  takes `confirmation_required` step results as returned (`matchedText`) as
-  well as `{"category", "matched_text"}` dicts; an entry with neither raises
-  `ValueError` before anything is sent.
-- **Typed AI refusals** — `ForbiddenError.requires_own_key` / `.model` and
+- **Transcripts** — `transcript(id, last_event_id=..., timeout_s=...)`
+  iterates the session's conversation — an iterator on the sync client, an
+  async iterator on the async one: every entry so far, then each new one as
+  it is written. `last_event_id` resumes after the last `index` you saw, and
+  closing the iterator closes the connection.
+- **Why a turn handed back, in one word** — a `plan-executed` result carries
+  `notice_reason` beside the `notice` sentence: `"step_limit"`,
+  `"time_limit"`, `"budget_low"`, `"no_progress"`, `"repeated_step"`,
+  `"ai_unavailable"`, `"question"` or `"declined"`, exported as the open
+  union `AgentNoticeReason` (`Literal[...] | str`), so an ending this SDK has
+  never heard of still type-checks and still parses — match the ones you know
+  and show `notice` for the rest.
+- **When it is safe to retry a message** — a refusal that did no work leaves
+  its `Idempotency-Key` free: after a 409 whose `turn_in_progress` is set, a
+  429, a 402, a 403 about the plan's AI or the model, or a 502 whose
+  `key_rejected` is false, send the same request again with the **same**
+  `idempotency_key=`. Any other failure gets a new one. One message is one
+  key, always.
+- **Typed refusals you can act on** — `ForbiddenError.requires_own_key` /
+  `.model` (this model needs your own Anthropic key);
   `ConflictError.turn_in_progress`, `.session_status`, `.idempotency_status`,
-  `.ai_control_unavailable`, `.phase`, `.tokens_consumed`, `.usage` and
-  `.partial_results`, read defensively from the problem body.
-- **`examples/agent_chat.py`** rewritten as the complete flow: create, wait
+  `.ai_control_unavailable`, `.phase`, `.tokens_consumed`, `.usage`,
+  `.partial_results` and `.closed_reason` (why a closed session ended,
+  without a second call); `FeatureUnavailableError.stop_unconfirmed` (the one
+  `stop()` 503 worth calling again); and
+  `ByokAnthropicRequiredError.key_rejected` / `.key_source` /
+  `.key_rejected_reason` (your own key was refused, which key, and why).
+- **Send your own Anthropic key** — `byok_api_key=` on `create()`, so a
+  session can run on a model that requires one without storing anything.
+- **Bound the whole call** — `timeout_s=` on `message()` (default 50
+  minutes).
+- **Why a step failed** — a failed step's `Diagnosis.category` explains it,
+  including `"target_unverified"` (the tap was not made because its target
+  could not be checked first — not retryable as the same step; the agent
+  re-plans).
+- **`examples/agent_chat.py`** is the complete flow end to end: create, wait
   until ready, send a task with a fresh idempotency key and live progress,
-  handle every result kind (answer, notice, approvals), close in `finally`.
+  handle every result kind, close in `finally`.
+
+#### Watch one live, or take the wheel
+
+- **`livekit_token(id)`** — a token for the live video view of a running
+  session, so a person can watch it work. Returns `LiveKitInfo`.
+- **`set_mode(id, body)`**, **`takeover(id, client_id)`** and
+  **`handback(id)`** — hand control of a running session between the agent
+  and a person, and hand it back. **`send_input_event(id, body)`** drives it
+  while a person holds it, and **`resume(id)`** picks a session back up.
+- **`set_egress(id, body)`** changes which of your proxies a running session
+  goes out through.
+
+#### The rest of the API
+
+`client.sessions`, `client.api_keys`, `client.usage` and `client.webhooks`
+were the whole client in 0.1.5, and each of the four gained methods:
+`sessions` gained `get` / `iterate` / `extract` (pull structured data off the
+page) / `search` / `login`; `usage` gained `series()` for usage over time;
+`api_keys` gained
+`rotate()` (issue the replacement and keep the old key working for a grace
+window); `webhooks` gained `update()` (partial update — it does not rotate
+the signing secret), `rotate_secret()` (fresh secret shown once, previous one
+valid for 24h, both signatures sent during the window), `send_test()` (a
+synthetic `test.ping` delivery so you can check your handler before depending
+on it), `replay_delivery()` and `iterate_deliveries()`.
+
+And fourteen resources are new:
+
+- **`client.profiles`** — create, list, iterate, get, update, delete, plus
+  `clone(profile_id, body=None)` (pass `None` to let the server name it
+  "(copy)", "(copy 2)", …) and `trim()`.
+- **`client.profile_snapshots`** — immutable point-in-time copies of a
+  profile: `capture`, `list_for_profile`, `list`, `iterate`, `get`,
+  `restore`, `delete`. `restore` creates a NEW profile; the original is never
+  modified.
+- **`client.account`** — `me()` (the full account profile: timezone, slug,
+  region, avatar, whether MFA is enrolled, team memberships),
+  `update_me()`, `upload_avatar()` / `clear_avatar()`,
+  `list_web_sessions()` / `revoke_web_session(id)` /
+  `revoke_all_other_web_sessions()`, and `rate_limits()` for the limits
+  actually in force on your account.
+- **`client.auth`** — sign-up, e-mail verification, log in, magic links,
+  password reset, refresh, log out, and the three-call activation flow a CLI
+  or desktop app uses instead of asking for a pasted key
+  (`cli_authorize_initiate` → open the returned `browser_url` → poll
+  `cli_authorize_exchange`, which delivers the key once, then reports
+  `expired`).
+- **`client.mfa`** — `status`, `enroll`, `verify`, `disable`,
+  `regenerate_recovery_codes`; plus `auth.mfa_challenge()` to exchange a
+  login challenge for a session (the response says whether it was satisfied
+  by `"totp"` or `"recovery"`) and `auth.mfa_step_up()` to refresh the
+  freshness window an operation asked for.
+- **`client.team`** — members, invites, roles, and `list_owners()` for the
+  workspaces your account has joined.
+- **`client.audit_log`** — `list` / `iterate`, and `export()`: a single-call
+  JSON export of your account's audit log, up to 10,000 rows, with
+  `truncated` set when there were more.
+- **`client.billing`** — current state, checkout, and the billing portal.
+- **`client.crypto_orders`** — `quote`, `create_checkout` (takes
+  `idempotency_key=` so a retry cannot mint a second order), `list`,
+  `iterate` (walks every page for you; narrow it with `status`,
+  `created_after`, `created_before`), `get`, `update_note`, `cancel`,
+  `receipt`. Crypto payments are not refundable, and cancelling only works
+  while an order is pending.
+- **`client.egress`** and account proxies — manage saved proxies and route a
+  session's traffic through one with `proxy_id` on create.
+- **`client.archetypes`** — the device archetypes your plan can use.
+- **`client.recipes`** — `create(agent_session_id=, label=, description=)`
+  snapshots a finished agent session's steps and transcript into a recipe you
+  can replay.
+- **`client.email_preferences`** — `list` / `set` / `opt_in` / `opt_out`.
+- **`client.legal`** — record acceptance of a document version.
+
+#### Errors and retries
+
+- **`is_retryable(err)`** is exported, so the predicate the built-in retry
+  loop uses is one you can call yourself.
+- **New error classes**, all importable from `driftstack`:
+  `BadRequestError`, `InternalError`, `FeatureUnavailableError`,
+  `MfaStepUpRequiredError`, `EmailAlreadyRegisteredError`,
+  `InvalidCredentialsError`, `InvalidAuthTokenError`,
+  `EmailNotVerifiedError`, `ByokAnthropicRequiredError`,
+  `ProxyValidationFailedError`, `StorageQuotaExceededError`,
+  `ProfileInUseError`, `BundledLlmConsentRequiredError`,
+  `BundledLlmBudgetExhaustedError`, `PairModeConflictError` and
+  `PairModeStateInvalidTransitionError`.
+- **`verify_webhook_signature` accepts `header_prev=`** — an optional second
+  signature header. You rarely need it: during a rotation grace window both
+  signatures arrive inside the one `x-driftstack-signature` header, which the
+  verifier already checks.
 
 ### Changed
 
-- **Too many AI turns on the included AI is a `RateLimitError` now** — the API
-  answers this refusal as `rate-limited` with `retry_after_seconds: 5` instead
-  of `concurrency-limit`, so `message()` raises `RateLimitError`
-  (`is_retryable` true, `retry_after_seconds` 5) where it raised
-  `ConcurrencyLimitError`. No SDK change is needed to read it, and
-  `ConcurrencyLimitError` still means what it always meant on `create()`: your
-  plan's concurrent-session limit. `intents` on a `plan-executed` result now
-  covers every plan the turn made, not only the first.
-- **Agent-session docstrings** describe what the API does — result kinds, how
-  an approval resumes the paused steps, when an idempotency key may be
-  reused — and no longer mention how the service is built. The README no
-  longer says every resource returns Pydantic models (`agent_sessions`
-  returns dicts), and notes that `ForbiddenError` is a subclass of
-  `AuthError`.
-
-### Added
-
-- **`target_unverified` step diagnosis** — a failed agent step's
-  `Diagnosis.category` can now be `"target_unverified"`: the tap was not
-  made because its target could not be checked first. Not retryable as
-  the same step; the agent re-plans. ⚠️ In an SDK installed **before**
-  this release `Diagnosis.category` is a closed `Literal`, so that SDK
-  raises a pydantic `ValidationError` when it parses a response carrying
-  the new value — upgrade before relying on step diagnoses. From this
-  release on, a newer category no longer needs an upgrade (see Fixed).
+- **Too many AI turns is a `RateLimitError` now.** This refusal answers as
+  `rate-limited` with `retry_after_seconds` 5, so `message()` raises
+  `RateLimitError` where it raised `ConcurrencyLimitError`.
+  `ConcurrencyLimitError` still means exactly what it always meant on
+  `create()`: your plan's limit on sessions running at once.
+- **A generic 400 raises `BadRequestError` now**, not `ValidationError`. A
+  400 that carries field-level issues is still a `ValidationError`. Callers
+  with `except ValidationError` around a generic 400 should switch to
+  `except BadRequestError`; `except DriftstackError` catch-alls and
+  `is_retryable` are unaffected.
+- **The agent-session docstrings describe what the API does** — result kinds,
+  how an approval resumes paused steps, when a key may be reused, the
+  progress event names — and no longer describe how the service is built. The
+  README no longer claims every resource returns a Pydantic model
+  (`agent_sessions` returns dicts) and now says that `ForbiddenError` is a
+  subclass of `AuthError`.
 
 ### Fixed
 
-- **A failure category newer than the SDK no longer breaks parsing** —
-  `Diagnosis.category` is now `Literal[...] | str`. The known categories
-  are still listed for type checkers and editors, and a category the
-  server adds after this SDK was released is kept as a plain string
-  instead of raising a pydantic `ValidationError` on the whole response
-  (`AgentMessageResponse`, `AgentMessageConflictProblem`, `IntentResult`).
-  Treat a value you do not recognise as `"unknown"`. Code that compares
-  `category` against known strings needs no change.
+- **A failure category newer than the SDK no longer breaks parsing.**
+  `Diagnosis.category` is `Literal[...] | str`, so a category the server adds
+  after this release is kept as a plain string. ⚠️ **This is the one reason
+  to upgrade before you need to.** In 0.1.5 the field is a closed `Literal`,
+  so a response carrying a category that SDK has never seen raises a pydantic
+  `ValidationError` for the **whole** response — not just that field. Treat a
+  value you do not recognise as `"unknown"`; code comparing `category`
+  against known strings needs no change.
+- **The account profile matches the full response** — `me()` returns every
+  field the API sends, including the ones added since 0.1.5.
+
+### Pre-1.0 stability
+
+The SDK is pre-1.0. The surface is stable enough to build against, but a
+MINOR bump may still carry additive changes — new methods, new fields, new
+error subclasses. **Patch** releases (0.2.x) are fixes and additive types
+only. Breaking changes that would stop shipping customer code are deferred to
+1.0; until then pin `driftstack-sdk~=0.2.0` rather than an exact version, and
+read this file before bumping.
+
+## [0.1.5] - 2026-05-03
+
+Written on 2026-09-20 from the published wheel: 0.1.5 went to PyPI without a
+CHANGELOG heading of its own.
 
 ### Added
 
-- **Durable agent-turn idempotency** — sync and async
-  `client.agent_sessions.message(..., idempotency_key="…")` forward one
-  caller-reusable `Idempotency-Key` beside SSE/BYOK headers so an ambiguous
-  retry cannot execute browser actions twice.
-- **`client.team.list_owners()`** plus the async mirror — typed access
-  to `GET /v1/team/owners` for owner workspaces the calling account has
-  joined. Returns `TeamOwnersList` / `TeamOwner` and requires broad
-  `read` (or `account_owner`).
-- `BadRequestError` — the generic `bad-request` problem-type (HTTP 400,
-  no field-level issues) now maps to a dedicated `BadRequestError`
-  (subclasses `DriftstackError` directly, a sibling of `ValidationError`),
-  mirroring the TypeScript + Python error surface. Exported from the
-  package top level (`from driftstack import BadRequestError`).
-  `validation-failed` continues to map to `ValidationError`.
-
-### Changed
-
-- **Minor behaviour change:** a generic 400 (`bad-request` problem-type)
-  now raises `BadRequestError` instead of `ValidationError`. Callers with
-  `except ValidationError` around a generic 400 should switch to
-  `except BadRequestError`. `validation-failed` 400s are unaffected, and
-  `except DriftstackError` catch-alls (and `is_retryable`) are unaffected.
-
-### Added
-
-- `proxy_id` on agent-session create (`agent_sessions.create` body) — route
-  the session's egress through one of your account proxies (managed at
-  `/v1/account/me/proxies`). Must be an owned proxy id (unknown / not-owned
-  → 404). Optional; omit for the default egress.
-- `session.profile_save_failed` webhook event (regenerated models) — a
-  profile-backed session's save-back failed at teardown (terminal; the
-  next restore of that profile will be stale). Subscribable; payload
-  carries `session_id`, `profile_id`, `reason`
-  (`serialize_failed|seal_failed|too_large|upload_failed`) and an
-  optional `detail`.
-
-### Added
-
-- **`Session.egress_capability_report`** (Arc 5 EGRESS eg.1.f) —
-  raw harness-emitted event payload as `dict[str, Any] | None`,
-  stored alongside the derived `egress_capabilities` view. Forensics
-  - schema-evolution safety net: surfaces fields the SDK schema
-    doesn't formally know (e.g. harness-side diagnostic counters)
-    without requiring an SDK release. Consumers should prefer
-    `egress_capabilities` for typed access; this is opaque JSON for
-    inspection / observability piping. Regenerated `_generated/
-models.py` via the `scripts/generate.sh` codegen pipeline.
-- **`client.agent_sessions.takeover(agent_session_id, client_id)`** +
-  **`.handback(agent_session_id)`** + async mirrors (v2-#8 Arc 2
-  sub-slice 8.9) — pair-mode state-machine wrappers. Takeover requests
-  a human to take control of a `mode='pair'` agent session (state
-  machine transitions `ai-driving → takeover-pending`, or
-  `takeover-queued` when the runtime is mid-decompose); handback
-  returns control to AI from `human-driving`. Both return
-  `{"pair_mode_state": {"kind": ..., ...}}`. Raises
-  `PairModeStateInvalidTransitionError` (409) on invalid transitions.
-- **`client.recipes.create(agent_session_id=, label=, description=)`**
-  (AI-B4 / Q.5.d) + async mirror — snapshot a finished agent-session's
-  intent_log + transcript into a replayable recipe row. `label` is
-  1..120 chars and `description` is ≤2000 chars after trim. Server
-  assembles `intent_log` by flatMapping the source agent-session's
-  transcript — each plan-executed turn's structured intent array
-  contributes in turn order. Returns the inserted recipe dict
-  including `intent_count`. Read / list / execute / delete are v1.1
-  D2/D3 surfaces. 503 until the deployment wires both `recipesRepo`
-  and `agentSessionsRepo`.
-- **`client.crypto_orders.*`** + async mirror (V-666 Python parity) —
-  customer-facing crypto-checkout surface: `quote(body)`,
-  `create_checkout(body, *, idempotency_key=None)`, `list(*, limit,
-status, cursor, created_after, created_before)`, `iterate(...)`,
-  `get(order_id)`, `update_note(order_id, body)`, `cancel(order_id)`,
-  `receipt(order_id)`. The `Idempotency-Key` header is forwarded
-  through `create_checkout` so retries don't mint duplicate orders.
-  `iterate(...)` is the recommended way to walk every order — cursor
-  handoff is managed internally; pass `status` / `created_after` /
-  `created_before` to narrow the walk. Crypto payments are
-  non-refundable; consult the support team for disputes.
-- **`client.webhooks.send_test(webhook_id)`** + async mirror
-  (V-463 / V-356) — synthetic `test.ping` delivery; bypasses
-  subscription. Returns `{delivery_id, event_id, event_type}`.
-- **`client.webhooks.update(webhook_id, body)`** + async mirror
-  (V-464 / V-351) — partial-update a webhook endpoint
-  (`url`/`events`/`description`/`active`; at least one required).
-  Signing secret is NOT rotated by update — use `rotate_secret`.
-  Disabled endpoints cannot be updated (409).
-- **`client.audit_log.export()`** + async mirror (V-462 / V-297) —
-  single-call JSON bulk-export of the calling account's audit log.
-  Designed for GDPR Article 20 data-portability requests; up to 10,000
-  rows per call; response dict includes `truncated` for the ceiling
-  case. CSV download (browser-driven spreadsheet flow) is intentionally
-  not surfaced through the SDK.
-- **CLI/GUI activation flow** (V-460 / V-266) — three new methods on
-  `client.auth` plus async mirrors: `cli_authorize_initiate`,
-  `cli_authorize_bind`, and `cli_authorize_exchange`. CLI/GUI tools
-  call `cli_authorize_initiate` for a `code` + `browser_url`, open the
-  URL, the user signs in + confirms, and the CLI/GUI polls
-  `cli_authorize_exchange` for one-shot delivery of the plaintext API
-  key. Status discriminator on the exchange response: `pending` /
-  `bound` (with `api_key` + `account_id`) / `expired`.
-- **`client.profile_snapshots`** + **`async_client.profile_snapshots`** —
-  V-312 immutable point-in-time profile copies. Methods: `capture`,
-  `list_for_profile`, `list` (cross-account), `iterate`, `get`,
-  `restore`, `delete`. `restore` creates a NEW profile; the original
-  is never modified.
-- **`client.profiles.clone(profile_id, body=None)`** + async mirror —
-  V-313 profile clone. `None` / empty dict lets the server auto-derive
-  a "(copy)" / "(copy 2)" / ... name; explicit `{"name": ...}` is
-  forwarded verbatim.
-- **`client.webhooks.rotate_secret(webhook_id)`** + async mirror —
-  V-359 webhook signing-secret rotation. Returns dict with the fresh
-  plaintext (shown ONCE), prefixes, and `grace_expires_at`. Previous
-  secret stays active for 24h.
-- **`client.account.me()`** + async mirror (V-434) — V-385 full
-  `/v1/account/me` rich-shape read (15+ fields incl. slug, region,
-  avatar_url, mfa_enrolled, teams). Returns `dict[str, Any]` until
-  the next `scripts/generate.sh` regen pass adds a Pydantic model.
-
-### Regenerated (V-432)
-
-- `_generated/models.py` refreshed against the live OpenAPI spec.
-  Picks up V-148 tier rename (`free`/`starter`/`solo`/`builder`/
-  `scale` → `trial_pack`/`solo_manual`/`team_manual`/`agency_manual`/
-  `api_starter`/`api_builder`/`api_scale`), V-185 + V-359 webhook
-  fields (`prev_secret_prefix`, `rotation_grace_expires_at`,
-  `delivery_counts`), V-169 session purpose field, V-174 expanded
-  scope enum, etc.
-
-### Added typed errors (V-439)
-
-- `FeatureUnavailableError` — endpoint requires infrastructure not
-  configured in this deployment (HTTP 503).
-- `MfaStepUpRequiredError` — V-353e step-up gate; customer should
-  call `client.auth.mfa_step_up(...)` and retry.
-- `InternalError` — unhandled server error.
-
-`PROBLEM_TYPE_TO_ERROR` now covers 24 typed problem URIs.
-
-### Added (V-445)
-
-- **`client.auth.mfa_challenge(body)`** + async mirror — V-353d
-  exchange of login challenge_token for a session via TOTP or
-  recovery code. Response includes `via: "totp" | "recovery"`.
-- **`client.auth.mfa_step_up(body)`** + async mirror — V-353e
-  refresh of `mfa_satisfied_at` (15-minute freshness window). No
-  new session issued. Pair with `MfaStepUpRequiredError` recovery:
-  catch → `mfa_step_up` → retry.
-
-### Added (V-448 / V-449 / V-450) — Account-surface parity
-
-- **`client.mfa`** + async mirror — V-353b MFA enrollment
-  (`status / enroll / verify / disable / regenerate_recovery_codes`).
-- **`client.audit_log`** + async mirror — V-216 audit-log
-  (`list / iterate`).
-- **`client.email_preferences`** + async mirror — V-204 opt-in/
-  opt-out (`list / set / opt_in / opt_out`).
-- **`client.account.update_me(body)`** — V-352 PATCH /me.
-- **`client.account.upload_avatar(body)`** + **`clear_avatar()`** —
-  V-352b.
-- **`client.account.list_web_sessions()`** +
-  **`revoke_web_session(id)`** + **`revoke_all_other_web_sessions()`** —
-  V-355.
-- **`client.account.rate_limits()`** — V-258.
-
-Three-SDK Account-surface parity complete: every `/v1/account/*`
-endpoint registered server-side is now exposed in all three SDKs.
-
-### Notes
-
-- `0.0.1` is the inaugural alpha. Versioning will move to SemVer
-  proper once the SDK is published to PyPI (gated on entity setup).
+- **`LegalAcceptanceRequiredError`** — a 409 that asks you to accept a
+  document version is its own exception now, carrying the pending
+  acceptances (`document_key` + `current_version` for each) as
+  `pending_acceptances`. Exported from the package root.
 
 ## [0.1.4] - 2026-05-03
 
@@ -281,7 +250,7 @@ endpoint registered server-side is now exposed in all three SDKs.
   per-call timeout I supplied" without conflating with downstream
   driver failures. Carries `timeout_ms: int | None` from the
   problem extension. Re-exported at `driftstack.SessionTimeoutError`
-  for convenient `isinstance` checks. See V-044 [control].
+  for convenient `isinstance` checks.
 
   ```python
   from driftstack import SessionTimeoutError
@@ -300,11 +269,9 @@ endpoint registered server-side is now exposed in all three SDKs.
 ### Removed
 
 - `tap.offset` field stripped from the public `InteractAction.tap`
-  shape. Same L-001 vector as `tap_at`: a coordinate primitive on
-  the customer-facing schema lets the customer bypass the
-  behavioral simulation layer. Bounded coordinates are still
-  coordinates. See `docs/locked-decisions.md` L-001 in the
-  control-plane repo and V-042 [control].
+  shape. Same reason as `tap_at`: a coordinate primitive on the
+  customer-facing schema lets the customer bypass the behavioral
+  simulation layer. Bounded coordinates are still coordinates.
 
 ### Migration
 
@@ -329,8 +296,8 @@ client.sessions.interact(
 ```
 
 Coordinate-level addressing for screenshot-driven workflows lives
-on the gui-control plane (separate endpoint gated behind the
-`gui_control` API-key scope), not exposed in this SDK.
+behind a separate endpoint gated by the `gui_control` API-key
+scope, and is not exposed in this SDK.
 
 ## [0.1.2] - 2026-05-03
 
@@ -338,8 +305,9 @@ on the gui-control plane (separate endpoint gated behind the
 
 - Wire-shape regression tests at `tests/test_wire_shape.py` (10
   tests). Locks the canonical JSON shape for `InteractRequest`,
-  `WaitRequest`, `NavigateRequest`. Asserts L-001 rejection of
-  `tap_at` / `type_focused` (these live on the gui-control plane).
+  `WaitRequest`, `NavigateRequest`. Asserts rejection of `tap_at` /
+  `type_focused` (these live behind the `gui_control`-scoped
+  endpoint).
 
 ### Fixed
 
@@ -353,10 +321,9 @@ on the gui-control plane (separate endpoint gated behind the
 
 - Re-cut: `tap_at` and `type_focused` removed from
   `InteractAction`. They were briefly added in 0.1.0+ for the
-  self-hosted GUI's manual-control input forwarding; reverted per
-  L-001. Customer-facing schemas stay intent-only — coordinate
-  primitives bypass the behavioral simulation layer and erode the
-  moat. See V-036 in the control-plane repo. The GUI now uses a
+  self-hosted GUI's manual-control input forwarding, and reverted.
+  Customer-facing schemas stay intent-only — coordinate primitives
+  bypass the behavioral simulation layer. The GUI now uses a
   separate, scope-gated endpoint
   (`/v1/sessions/:id/gui-input`).
 

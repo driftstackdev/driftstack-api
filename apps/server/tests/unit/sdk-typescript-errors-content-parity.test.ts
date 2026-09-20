@@ -90,7 +90,7 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
     expect(body).toMatch(
       /export type DriftstackErrorKind =\s*\|\s*'bad_request'\s*\|\s*'validation'\s*\|\s*'unauthorized'\s*\|\s*'invalid_key'\s*\|\s*'revoked_key'\s*\|\s*'expired_key'\s*\|\s*'forbidden'\s*\|\s*'not_found'\s*\|\s*'conflict'\s*\|\s*'payment_required'\s*\|\s*'rate_limited'\s*\|\s*'concurrency_limit'\s*\|\s*'tier_limit'\s*\|\s*'session_destroyed'\s*\|\s*'session_timeout'\s*\|\s*'legal_acceptance_required'\s*\|\s*'driver_error'\s*\|\s*'driver_not_integrated'\s*\|\s*'internal'\s*\|\s*'email_already_registered'\s*\|\s*'invalid_credentials'\s*\|\s*'invalid_auth_token'\s*\|\s*'email_not_verified'/,
     );
-    expect(body).toMatch(/\/\/ V-441 — closing problem-type parity with Go \+ Python\./);
+    expect(body).toMatch(/\/\/[^\n]*closing problem-type parity with Go \+ Python\./);
     expect(body).toMatch(
       /\|\s*'feature_unavailable'\s*\|\s*'mfa_step_up_required'\s*\|\s*'byok_anthropic_required'\s*\|\s*'proxy_validation_failed'\s*\|\s*'transport';/,
     );
@@ -192,7 +192,7 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
   });
 
   it('Auth-flow 4-class section (V-079; SDK normalization V-114) — EmailAlreadyRegisteredError + InvalidCredentialsError + InvalidAuthTokenError + EmailNotVerifiedError. Section comment pinned. The 4 classes let signup/login/verify-email/magic-link consumers distinguish failure modes for the customer-facing copy.', () => {
-    expect(body).toMatch(/\/\/ Auth-flow errors \(V-079; SDK normalization V-114\)/);
+    expect(body).toMatch(/\/\/ Auth-flow errors[^\n]*SDK normalization/);
     expect(body).toMatch(/this\.name = 'EmailAlreadyRegisteredError';/);
     expect(body).toMatch(/this\.name = 'InvalidCredentialsError';/);
     expect(body).toMatch(/this\.name = 'InvalidAuthTokenError';/);
@@ -201,10 +201,10 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
 
   it('CRITICAL V-441 closing-parity 2 classes — MfaStepUpRequiredError + FeatureUnavailableError. Section comment "V-441 — typed errors closing TS SDK problem-type parity with Go + Python" pinned. MfaStepUpRequiredError JSDoc carries the V-353e 15-minute step-up window remediation hint: "Customer should call `client.auth.mfaStepUp({ code })` and retry." FeatureUnavailableError JSDoc carries the HTTP 503 framing + "e.g. avatar uploads when R2 isn\'t wired" example.', () => {
     expect(body).toMatch(
-      /\/\/ V-441 — typed errors closing TS SDK problem-type parity with Go \+ Python\./,
+      /\/\/[^\n]*[Tt]yped errors closing TS SDK problem-type parity with Go \+ Python\./,
     );
     expect(body).toMatch(
-      /\/\*\* V-353e — operation requires fresh MFA proof \(15-minute step-up window\)\.\s*\*\s*Customer should call `client\.auth\.mfaStepUp\(\{ code \}\)` and retry\. \*\//,
+      /\/[^\n]*operation requires fresh MFA proof \(15-minute step-up window\)\.\s*\*\s*Customer should call `client\.auth\.mfaStepUp\(\{ code \}\)` and retry\. \*\//,
     );
     expect(body).toMatch(
       /\/\*\* Endpoint requires infrastructure not configured in this deployment\s*\*\s*\(e\.g\. avatar uploads when R2 isn't wired\)\. HTTP 503\./,
@@ -288,7 +288,7 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
 
   it('CRITICAL V-489 isRetryable JSDoc — 4-line framing pinned: predicate exposed for "SDK consumers who run their own retry/backoff loop instead of the built-in one in retry.ts." 3 retryable-kinds documented (transport / internal / rate_limited) + non-retryable rationale: 4xx + non-DriftstackError throws. The "any DriftstackError where ... not in the retryable set" framing tells customers this is closed-set.', () => {
     expect(body).toMatch(
-      /\/\*\*\s*\*\s*V-489 — `isRetryable\(err\)` predicate exposed for SDK consumers\s*\*\s*who run their own retry\/backoff loop instead of the built-in one\s*\*\s*in `retry\.ts`\./,
+      /\/\*\*\s*\*\s*[^\n]*`isRetryable\(err\)` predicate exposed for SDK consumers\s*\*\s*who run their own retry\/backoff loop instead of the built-in one\s*\*\s*in `retry\.ts`\./,
     );
     expect(body).toMatch(/Retryable kinds:/);
     expect(body).toMatch(/NOT retryable:/);

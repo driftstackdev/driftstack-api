@@ -1,5 +1,5 @@
 // ProfileSnapshotsResource — typed methods for /v1/profiles/:id/snapshots
-// + /v1/profile-snapshots (V-312). Immutable point-in-time copies of
+// + /v1/profile-snapshots. Immutable point-in-time copies of
 // saved profiles. Capture from a parent profile, list per-profile or
 // across the whole account, restore into a new profile (tier-cap +
 // name-conflict checked the same way as profiles.create), or delete.
@@ -48,9 +48,8 @@ export class ProfileSnapshotsResource {
   }
 
   /** List every snapshot owned by the EFFECTIVE account — your own, or the
-   *  owner you are acting as via `X-Driftstack-Account`. V-1121 — this named
-   *  the caller rather than the effective owner; the handler resolves the team
-   *  header first. */
+   *  owner you are acting as via `X-Driftstack-Account`. The team header is
+   *  resolved first, so a team admin sees the OWNER's snapshots. */
   list(query: PaginationQueryInput = {}): Promise<ProfileSnapshotsListPage> {
     return this.http.request<ProfileSnapshotsListPage>({
       method: 'GET',

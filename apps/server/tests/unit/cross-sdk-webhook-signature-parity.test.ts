@@ -155,7 +155,7 @@ describe('W678 cross-SDK webhook-signature format parity', () => {
     const py = read(PY_WSIG);
 
     // sdk-typescript: V-359 + headerPrev kwarg.
-    expect(ts).toMatch(/V-359/);
+    expect(ts).toMatch(/OPTIONAL fallback for a separately-supplied previous-secret/);
     expect(ts).toMatch(/headerPrev/);
 
     // sdk-go: HeaderPrev field on options.

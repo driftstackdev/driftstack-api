@@ -54,24 +54,24 @@ export class Driftstack {
   readonly usage: UsageResource;
   readonly webhooks: WebhooksResource;
   readonly profiles: ProfilesResource;
-  /** V-312 — immutable point-in-time profile snapshots. */
+  /** Capture and restore immutable point-in-time profile snapshots. */
   readonly profileSnapshots: ProfileSnapshotsResource;
   readonly billing: BillingResource;
-  /** V-666 — crypto-payment orders (customer surface). */
+  /** Create and track crypto-payment orders (customer surface). */
   readonly cryptoOrders: CryptoOrdersResource;
   readonly auth: AuthResource;
   readonly account: AccountResource;
-  /** V-353b — MFA enrollment management. Pairs with `auth.mfaChallenge` + `auth.mfaStepUp`. */
+  /** MFA enrollment management. Pairs with `auth.mfaChallenge` + `auth.mfaStepUp`. */
   readonly mfa: MfaResource;
-  /** V-216 — append-only customer audit log read + iterate. */
+  /** Read and iterate the append-only customer audit log. */
   readonly auditLog: AuditLogResource;
-  /** V-204 — non-critical email opt-in/opt-out preferences. */
+  /** Manage non-critical email opt-in/opt-out preferences. */
   readonly emailPreferences: EmailPreferencesResource;
-  /** V-049 — legal-document acceptance machinery. */
+  /** The legal-document acceptance machinery. */
   readonly legal: LegalResource;
-  /** V-298c — Team RBAC. Act on an owner's account via X-Driftstack-Account. */
+  /** Team RBAC. Act on an owner's account via X-Driftstack-Account. */
   readonly team: TeamResource;
-  /** EG-API-1.2/1.3 — customer-configurable egress (planning 133). */
+  /** Customer-configurable egress: per-session proxy + safeguard settings. */
   readonly egress: EgressResource;
   /** Agent sessions: create, inspect, control, stream, and close browser-agent work. */
   readonly agentSessions: AgentSessionsResource;

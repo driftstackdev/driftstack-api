@@ -32,7 +32,7 @@ describe('W586.C packages/sdk-python/src/driftstack/webhook_signature.py content
     expect(body).toMatch(/Header format \(Stripe-style\): ``t=<unix-seconds>,v1=<hex hmac>``\./);
     expect(body).toMatch(/HMAC = HMAC-SHA256\(``<unix-seconds>\.<raw body>``, ``<secret>``\)\./);
     expect(body).toMatch(/Mirrors :func:`verifyWebhookSignature` from the TypeScript SDK so a/);
-    expect(body).toMatch(/multi-language receiver fleet works against the same wire format\./);
+    expect(body).toMatch(/multi-language receiver[^\n]*works against the same wire format\./);
     expect(body).toMatch(/from driftstack import verify_webhook_signature/);
     expect(body).toMatch(/sig = request\.headers\["x-driftstack-signature"\]/);
     expect(body).toMatch(/ok = verify_webhook_signature\(/);
@@ -104,7 +104,7 @@ describe('W586.C packages/sdk-python/src/driftstack/webhook_signature.py content
     expect(body).toMatch(/constant time\. Returns ``False`` on any failure mode — never/);
     expect(body).toMatch(/raises\./);
     expect(body).toMatch(/``body`` must be the EXACT raw bytes the server signed\./);
-    expect(body).toMatch(/V-359 — ``header_prev`` is an OPTIONAL fallback for a/);
+    expect(body).toMatch(/header_prev`` is an OPTIONAL fallback for a/);
     expect(body).toMatch(/separately-supplied previous-secret signature\. Driftstack does/);
     expect(body).toMatch(/NOT emit a separate header:/);
     expect(body).toMatch(/second ``v1=`` inside the\s*main ``x-driftstack-signature`` header/);

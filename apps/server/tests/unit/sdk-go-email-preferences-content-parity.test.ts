@@ -18,7 +18,7 @@ describe('W592.C packages/sdk-go/email_preferences.go content parity', () => {
 
   it('V-204 EmailPreferencesResource + critical-emails-not-opt-outable rationale + 4 verbs (List default-opted-in + Set PUT + OptOut/OptIn convenience wrappers) pinned', () => {
     expect(body).toMatch(
-      /\/\/ EmailPreferencesResource handles \/v1\/account\/email-preferences \(V-204\)\./,
+      /\/\/ EmailPreferencesResource handles \/v1\/account\/email-preferences[^\n]*\./,
     );
     expect(body).toMatch(
       /\/\/ Per-event opt-in\/opt-out for non-critical emails\. Critical emails/,

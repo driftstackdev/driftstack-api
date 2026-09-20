@@ -65,7 +65,7 @@ export class WebhooksResource {
   }
 
   /**
-   * V-351 — partial-update a webhook endpoint. At least one of `url`,
+   * Partial-update a webhook endpoint. At least one of `url`,
    * `events`, `description`, or `active` must be present. The
    * signing secret is NOT rotated by update; use `rotateSecret` for
    * that. Disabled endpoints cannot be updated (returns 409).
@@ -114,7 +114,7 @@ export class WebhooksResource {
   }
 
   /**
-   * V-307 — replay a webhook delivery. Resets the delivery to pending +
+   * Replay a webhook delivery. Resets the delivery to pending +
    * the worker re-fires it. Scoped to the EFFECTIVE account: the delivery
    * must belong to an endpoint your own account owns, or one owned by the
    * account you are acting as via `X-Driftstack-Account` (replay re-fires,
@@ -130,7 +130,7 @@ export class WebhooksResource {
   }
 
   /**
-   * V-359 — rotate the webhook signing secret. The fresh plaintext is
+   * Rotate the webhook signing secret. The fresh plaintext is
    * returned ONCE. The previous secret stays active for 24h
    * (`grace_expires_at`) during which Driftstack dual-signs every
    * outbound delivery (both the new + old HMAC). Roll the new secret
@@ -146,7 +146,7 @@ export class WebhooksResource {
   }
 
   /**
-   * V-356 — send a synthetic `test.ping` event to the endpoint.
+   * Send a synthetic `test.ping` event to the endpoint.
    * Bypasses subscription (the endpoint receives it regardless of
    * which event types it's subscribed to), so customers can verify
    * their handler is reachable + signature-valid before depending on

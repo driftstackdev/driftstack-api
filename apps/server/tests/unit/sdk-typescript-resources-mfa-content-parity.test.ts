@@ -50,11 +50,9 @@ function read(p: string): string {
 describe('W427.A packages/sdk-typescript/src/resources/mfa.ts content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + module header V-353b/V-448 anchor on the resource line', () => {
+  it('file exists at canonical path + module header names /v1/account/mfa/* on the resource line', () => {
     expect(existsSync(LIB)).toBe(true);
-    expect(body).toMatch(
-      /\/\/ MfaResource — typed methods for \/v1\/account\/mfa\/\* \(V-353b\/V-448\)\./,
-    );
+    expect(body).toMatch(/\/\/ MfaResource — typed methods for \/v1\/account\/mfa\/[^\n]*\./);
   });
 
   it('Enrollment management scope pinned with 5-verb list (status / enroll / verify / disable / regenerate recovery codes) + "Uses the calling web-session bearer". CRITICAL: drift to using an API-key bearer would break the web-session-only MFA enrollment flow (API keys are NOT supposed to enroll/disable MFA on the account).', () => {
@@ -65,13 +63,13 @@ describe('W427.A packages/sdk-typescript/src/resources/mfa.ts content parity', (
 
   it('CRITICAL Per-account-NOT-team-RBAC invariant pinned per-line: "the V-326e X-Driftstack-Account team-RBAC header is not honored — MFA is per-account, not per-team-context." Drift to honoring the header would let a team member with bearer-token access to the owner\'s account ENROLL MFA on the OWNER\'s account, locking the owner out. Silent auth-surface widening.', () => {
     expect(body).toMatch(
-      /the V-326e\s*\/\/ X-Driftstack-Account team-RBAC header is not honored — MFA is per-\s*\/\/ account, not per-team-context\./,
+      /the[^\n]*\s*\/\/ X-Driftstack-Account team-RBAC header is not honored — MFA is per-\s*\/\/ account, not per-team-context\./,
     );
   });
 
   it('Pairs-with-auth navigation breadcrumb pinned: "Pairs with `client.auth.mfaChallenge` (login MFA exchange) + `client.auth.mfaStepUp` (V-353e step-up gate)." Drift to dropping the pairing reference would lose the discoverability link that helps customers find the login-side MFA verbs after they finish enrollment.', () => {
     expect(body).toMatch(
-      /\/\/ Pairs with `client\.auth\.mfaChallenge` \(login MFA exchange\) \+\s*\/\/ `client\.auth\.mfaStepUp` \(V-353e step-up gate\)\./,
+      /\/\/ Pairs with `client\.auth\.mfaChallenge` \(login MFA exchange\) \+\s*\/\/ `client\.auth\.mfaStepUp[^\n]*step-up gate\)\./,
     );
   });
 
@@ -142,7 +140,7 @@ describe('W427.A packages/sdk-typescript/src/resources/mfa.ts content parity', (
 
   it('CRITICAL disable verb — DELETE /v1/account/mfa with MfaDisableRequest body. V-353e step-up gate framing pinned per-line: "Requires fresh MFA proof per V-353e step-up gate (15-minute freshness window) — call `client.auth.mfaStepUp(...)` first if the gate is stale." + "Recovery codes are invalidated." Drift to skipping the step-up check would let MFA be disabled with stale auth — a stolen session 16+ minutes old could disable MFA without re-proving. Drift to NOT invalidating recovery codes on disable would leave them valid for a future re-enroll, defeating the disable-as-reset semantic.', () => {
     expect(body).toMatch(
-      /\*\s*Disable MFA\. Requires fresh MFA proof per V-353e step-up gate\s*\*\s*\(15-minute freshness window\) — call `client\.auth\.mfaStepUp\(\.\.\.\)`\s*\*\s*first if the gate is stale\. Recovery codes are invalidated\./,
+      /\*\s*Disable MFA\. Requires fresh MFA proof per[^\n]*step-up gate\s*\*\s*\(15-minute freshness window\) — call `client\.auth\.mfaStepUp\(\.\.\.\)`\s*\*\s*first if the gate is stale\. Recovery codes are invalidated\./,
     );
     expect(body).toMatch(
       /disable\(body: MfaDisableRequest\): Promise<void> \{\s*return this\.http\.request<void>\(\{\s*method: 'DELETE',\s*path: '\/v1\/account\/mfa',\s*body,\s*\}\);\s*\}/,

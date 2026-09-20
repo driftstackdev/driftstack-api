@@ -18,13 +18,15 @@ function read(p: string): string {
 }
 
 describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => {
-  it('api-types/README.md: @driftstack/api-types pre-1.0 Zod-schemas + TS-types single-source-of-truth + exact pin guidance + 7-section export list + SemVer pre-1.0 rules + MIT pinned', () => {
+  it('api-types/README.md: @driftstack/api-types pre-1.0 Zod-schemas + TS-types single-source-of-truth + 0.x minor-vs-patch guidance + 7-section export list + SemVer pre-1.0 rules + MIT pinned. The pin MOVED on 2026-09-20: this asserted "Pin an exact package version in production", which was one of four published documents giving four different answers — the SDK README said the opposite in the same breath. The guidance is now one answer in every ecosystem\'s terms, and the-published-packages-give-one-answer-about-version-pinning holds all six documents to it', () => {
     const body = read(P('api-types/README.md'));
     expect(body).toMatch(/^# @driftstack\/api-types$/m);
     expect(body).toMatch(/Zod schemas \+ TypeScript types for the public \[Driftstack\]/);
     expect(body).toMatch(/The single source of truth for the API contract/);
     expect(body).toMatch(/the OpenAPI 3\.1 spec is generated from these schemas/);
-    expect(body).toMatch(/\*\*Status:\*\* pre-1\.0\. Pin an exact package version in production/);
+    expect(body).toMatch(
+      /\*\*Status:\*\* pre-1\.0\. While the package is `0\.x`, a minor version can change the surface and a patch never does/,
+    );
     expect(body).toMatch(/^## Install$/m);
     expect(body).toMatch(/^npm install @driftstack\/api-types$/m);
     expect(body).toMatch(/transitive dependency of `@driftstack\/sdk`/);
@@ -39,8 +41,8 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(body).toMatch(
       /\*\*Request \/ response schemas:\*\* `CreateSessionRequest`, `NavigateRequest`/,
     );
-    expect(body).toMatch(/\*\*Auth flow\*\* \(V-079\): `SignupRequest` \/ `SignupResponse`/);
-    expect(body).toMatch(/\*\*Billing\*\* \(V-082\): `CreateCheckoutSessionRequest`/);
+    expect(body).toMatch(/\*\*Auth flow[^\n]*SignupRequest` \/ `SignupResponse`/);
+    expect(body).toMatch(/\*\*Billing[^\n]*CreateCheckoutSessionRequest`/);
     expect(body).toMatch(/\*\*Discriminated unions:\*\* `InteractAction`, `WaitCondition`\./);
     expect(body).toMatch(/\*\*Common shapes:\*\* `Problem` \(RFC 7807 error envelope\)/);
     expect(body).toMatch(
@@ -54,7 +56,7 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(existsSync(P('api-types/README.md'))).toBe(true);
   });
 
-  it('sdk-typescript/README.md: @driftstack/sdk pre-1.0 + Node 18+ native-fetch + Driftstack ctor (apiKey + baseUrl + timeoutMs + retry maxAttempts/initialDelayMs/maxDelayMs) + resource list (sessions + profiles + profileSnapshots V-312 + apiKeys + V-296 rotate) pinned', () => {
+  it('sdk-typescript/README.md: @driftstack/sdk pre-1.0 + Node 18+ native-fetch + Driftstack ctor (apiKey + baseUrl + timeoutMs + retry maxAttempts/initialDelayMs/maxDelayMs) + resource list (sessions + profiles + profileSnapshots capture + apiKeys rotate) pinned', () => {
     const body = read(P('sdk-typescript/README.md'));
     expect(body).toMatch(/^# @driftstack\/sdk$/m);
     expect(body).toMatch(/Official TypeScript SDK for the \[Driftstack\]/);
@@ -78,10 +80,10 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(body).toMatch(/client\.sessions\.navigate\(id, body\)/);
     expect(body).toMatch(/client\.sessions\.capture\(id, body\)/);
     expect(body).toMatch(
-      /client\.profileSnapshots\.capture\(profileId, body\)\s+\/\/ V-312 — immutable point-in-time copy/,
+      /client\.profileSnapshots\.capture\(profileId, body\)\s+\/\/[^\n]*immutable point-in-time copy/,
     );
     expect(body).toMatch(
-      /client\.apiKeys\.rotate\(id, options\?\)\s+\/\/ V-296 — 24h grace, plaintext shown once/,
+      /client\.apiKeys\.rotate\(id, options\?\)\s+\/\/[^\n]*24h grace, plaintext shown once/,
     );
     expect(body).toMatch(/client\.team\.listOwners\(\)/);
     // The two direct browser operations are typed but capability-gated. Listing
@@ -127,12 +129,12 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
       /`client\.Sessions`\s+\| `Create`, `List`, `Get`, `Navigate`, `Interact`, `Wait`, `GetState`, `Capture`, `Extract`, `Search`, `Login`, `Destroy`/,
     );
     expect(body).toMatch(
-      /`client\.Profiles`\s+\| `Create`, `List`, `Iterate`, `Get`, `Update`, `Delete`, `Clone` \(V-313\)/,
+      /`client\.Profiles`\s+\| `Create`, `List`, `Iterate`, `Get`, `Update`, `Delete`, `Clone`/,
     );
     expect(body).toMatch(
-      /`client\.ProfileSnapshots` \| `Capture`, `ListForProfile`, `List`, `Iterate`, `Get`, `Restore`, `Delete` \(V-312\)/,
+      /`client\.ProfileSnapshots` \| `Capture`, `ListForProfile`, `List`, `Iterate`, `Get`, `Restore`, `Delete`/,
     );
-    expect(body).toMatch(/`client\.APIKeys`\s+\| `Create`, `List`, `Rotate` \(V-296\), `Revoke`/);
+    expect(body).toMatch(/`client\.APIKeys`\s+\| `Create`, `List`, `Rotate[^\n]*Revoke`/);
     expect(body).toMatch(/`client\.Team`\s+\|[^\n]*`ListOwners`/);
     expect(existsSync(P('sdk-go/README.md'))).toBe(true);
   });
@@ -163,17 +165,29 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
       /`client\.sessions`\s+\| `create`, `list`, `get`, `navigate`, `interact`, `wait`, `get_state`, `capture`, `extract`, `search`, `login`, `destroy`/,
     );
     expect(body).toMatch(
-      /`client\.profile_snapshots` \| `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete` \(V-312 — immutable point-in-time copies\)/,
+      /`client\.profile_snapshots` \| `capture`, `list_for_profile`, `list`, `iterate`, `get`, `restore`, `delete[^\n]*immutable point-in-time copies\)/,
     );
-    expect(body).toMatch(/`client\.api_keys`\s+\| `create`, `list`, `rotate` \(V-296\), `revoke`/);
+    expect(body).toMatch(/`client\.api_keys`\s+\| `create`, `list`, `rotate[^\n]*revoke`/);
     expect(body).toMatch(
-      /`client\.team`\s+\| `invite`, `list_members`, `list_invites`, `list_owners`, `accept_invite`, `remove_member` \(V-298\)/,
+      /`client\.team`\s+\| `invite`, `list_members`, `list_invites`, `list_owners`, `accept_invite`, `remove_member`/,
     );
-    expect(body).toMatch(/`client\.account`\s+\| `me` \(V-385/);
+    expect(body).toMatch(
+      /`client\.account`\s+\| `me`[^|]*full \/v1\/account\/me with slug \/ region \/ avatar \/ mfa \/ teams/,
+    );
     expect(existsSync(P('sdk-python/README.md'))).toBe(true);
   });
 
-  it('sdk-go/CHANGELOG.md: Keep-a-Changelog 1.1.0 + SemVer 2.0.0 + Unreleased section + V-666 crypto_orders Go-parity Quote/CreateCheckout (V-666.AO Idempotency-Key) + V-463/V-356 SendTest + V-464/V-351 Update + V-462/V-297 AuditLog.Export + V-460/V-266 CliAuthorize 3-method activation flow pinned', () => {
+  // ── The three SDK CHANGELOGs ────────────────────────────────
+  //
+  // 2026-09-20 — these three pins used to quote the `[Unreleased]` prose word
+  // for word, internal ticket ids included: a guard on a CUSTOMER-FACING file
+  // that REQUIRED `(V-463 / V-356)` to appear in it. The 0.2.0 / 0.3.0 release
+  // rewrote those sections for a customer and dated them, so the pins are now
+  // on what each entry CLAIMS — the release heading, the fresh [Unreleased],
+  // and the capabilities a customer would notice losing — and never on an
+  // identifier that only means something inside this repo.
+
+  it('sdk-go/CHANGELOG.md: Keep-a-Changelog 1.1.0 + SemVer 2.0.0 + a fresh [Unreleased] above the dated 0.3.0 entry + the never-tagged 0.2.0 kept as history + migration from the last published tag + team owners + crypto orders (forward-compatible envelopes, non-refundable) + webhook send-test/update + audit-log export (10,000 rows) + the CLI activation flow', () => {
     const body = read(P('sdk-go/CHANGELOG.md'));
     expect(body).toMatch(/^# Changelog$/m);
     expect(body).toMatch(/All notable changes to the Driftstack Go SDK\./);
@@ -181,79 +195,76 @@ describe('W618 packages READMEs + CHANGELOGs + tsconfigs content parity', () => 
     expect(body).toMatch(/\[SemVer\]\(https:\/\/semver\.org\/spec\/v2\.0\.0\.html\)/);
     expect(body).toMatch(/^## \[Unreleased\]$/m);
     expect(body).toMatch(/^### Added$/m);
-    expect(body).toMatch(/client\.Team\.ListOwners\(ctx\)/);
-    expect(body).toMatch(/\*\*`client\.CryptoOrders\.\*`\*\* \(V-666 Go parity\)/);
-    expect(body).toMatch(/`Quote`, `CreateCheckout`/);
-    expect(body).toMatch(/V-666\.AO header/);
+    expect(body).toMatch(/^## \[0\.3\.0\] - 2026-09-20$/m);
+    // The 0.2.0 entry stays as history, and says it never shipped — a customer
+    // on v0.1.6 must not go looking for a tag that was never pushed.
+    expect(body).toMatch(/^## \[0\.2\.0\] - 2026-05-05$/m);
+    expect(body).toMatch(/> ⚠️ \*\*Never tagged\.\*\*/);
+    expect(body).toMatch(/^### Migrating from v0\.1\.6$/m);
+    expect(body).toContain('`ListOwners(ctx)`');
+    expect(body).toContain('**`client.CryptoOrders`**');
+    expect(body).toContain('`Quote`, `CreateCheckout`');
+    expect(body).toMatch(/forward-compatible `map\[string\]any` envelopes/);
     expect(body).toMatch(
-      /Crypto payments\s*are non-refundable; cancellation only works while pending\./,
+      /Crypto payments are not\s*refundable, and cancelling only works while an order is pending\./,
     );
-    expect(body).toMatch(
-      /\*\*`client\.Webhooks\.SendTest\(ctx, webhookID\)`\*\* \(V-463 \/ V-356\)/,
-    );
-    expect(body).toMatch(
-      /\*\*`client\.Webhooks\.Update\(ctx, webhookID, \*UpdateWebhookRequest\)`\*\*/,
-    );
-    expect(body).toMatch(/\(V-464 \/ V-351\)/);
-    expect(body).toMatch(/\*\*`client\.AuditLog\.Export\(ctx\)`\*\* \(V-462 \/ V-297\)/);
-    expect(body).toMatch(/Designed for GDPR\s*\n?\s+Article 20 data-portability requests/);
-    expect(body).toMatch(/up to 10,000 rows per call/);
-    expect(body).toMatch(/\*\*CLI\/GUI activation flow\*\* \(V-460 \/ V-266\)/);
-    expect(body).toMatch(/three new methods on/);
-    expect(body).toMatch(/`client\.Auth`: `CliAuthorizeInitiate`, `CliAuthorizeBind`, and/);
-    expect(body).toMatch(/`CliAuthorizeExchange`/);
+    expect(body).toContain('`SendTest`');
+    expect(body).toMatch(/a synthetic `test\.ping` delivery/);
+    expect(body).toContain('**`client.AuditLog`**');
+    expect(body).toContain('`Export(ctx)`');
+    expect(body).toMatch(/up to 10,000 rows/);
+    expect(body).toContain('`CliAuthorizeInitiate`');
+    expect(body).toContain('`CliAuthorizeExchange`');
     expect(existsSync(P('sdk-go/CHANGELOG.md'))).toBe(true);
   });
 
-  it('sdk-typescript/CHANGELOG.md: Keep-a-Changelog 1.1.0 + SemVer 2.0.0 + Unreleased + V-463/V-356 webhooks.sendTest test.ping + V-464/V-351 webhooks.update + V-462/V-297 auditLog.export GDPR-Art-20 + V-460/V-266 cliAuthorize 3-method flow + V-312 profileSnapshots pinned', () => {
+  it('sdk-typescript/CHANGELOG.md: Keep-a-Changelog 1.1.0 + SemVer 2.0.0 + a fresh [Unreleased] above the dated 0.2.0 entry + the nothing-was-removed claim + team owners + webhook send-test/update + audit-log export (10,000 rows) + the CLI activation flow + profile snapshots', () => {
     const body = read(P('sdk-typescript/CHANGELOG.md'));
     expect(body).toMatch(/^# Changelog$/m);
     expect(body).toMatch(/All notable changes to the Driftstack TypeScript SDK\./);
     expect(body).toMatch(/\[Keep a Changelog\]\(https:\/\/keepachangelog\.com\/en\/1\.1\.0\/\)/);
     expect(body).toMatch(/\[SemVer\]\(https:\/\/semver\.org\/spec\/v2\.0\.0\.html\)/);
     expect(body).toMatch(/^## \[Unreleased\]$/m);
-    expect(body).toMatch(/client\.team\.listOwners\(\)/);
-    expect(body).toMatch(/\*\*`client\.webhooks\.sendTest\(id\)`\*\* \(V-463 \/ V-356\)/);
-    expect(body).toMatch(/synthetic `test\.ping` delivery/);
-    expect(body).toMatch(/\*\*`client\.webhooks\.update\(id, body\)`\*\* \(V-464 \/ V-351\)/);
-    expect(body).toMatch(/\*\*`client\.auditLog\.export\(\)`\*\* \(V-462 \/ V-297\)/);
-    expect(body).toMatch(/GDPR\s*Article 20 data-portability requests/);
-    expect(body).toMatch(/[Uu]p to 10,000 rows per call/);
-    expect(body).toMatch(/\*\*CLI\/GUI activation flow\*\* \(V-460 \/ V-266\)/);
-    expect(body).toMatch(/`client\.auth`: `cliAuthorizeInitiate`, `cliAuthorizeBind`/);
-    expect(body).toMatch(/`cliAuthorizeExchange`/);
-    expect(body).toMatch(/\*\*`client\.profileSnapshots`\*\* — V-312 immutable point-in-time/);
+    expect(body).toMatch(/^## \[0\.2\.0\] - 2026-09-20$/m);
+    // The claim the MINOR makes, in the entry that makes it.
+    expect(body).toMatch(/\*\*Nothing was removed\.\*\*/);
+    expect(body).toContain('`listOwners()`');
+    expect(body).toContain('`sendTest(id)`');
+    expect(body).toMatch(/a synthetic `test\.ping` delivery/);
+    expect(body).toContain('`update(id, body)`');
+    expect(body).toContain('**`client.auditLog`**');
+    expect(body).toContain('`export()`');
+    expect(body).toMatch(/up to 10,000 rows/);
+    expect(body).toContain('`cliAuthorizeInitiate`');
+    expect(body).toContain('`cliAuthorizeExchange`');
+    expect(body).toContain('**`client.profileSnapshots`**');
+    expect(body).toMatch(/immutable point-in-time copies of a/);
     expect(existsSync(P('sdk-typescript/CHANGELOG.md'))).toBe(true);
   });
 
-  it('sdk-python/CHANGELOG.md: Keep-a-Changelog 1.1.0 + SemVer 2.0.0 + Unreleased + V-666 crypto_orders Python parity (quote + create_checkout idempotency_key kwarg + list/iterate + get/cancel/receipt + update_note) + V-463/V-356 send_test async-mirror + V-464/V-351 update + V-462/V-297 audit_log.export + V-460/V-266 cli_authorize_* 3-method flow pinned', () => {
+  it('sdk-python/CHANGELOG.md: Keep-a-Changelog 1.1.0 + SemVer 2.0.0 + a fresh [Unreleased] above the dated 0.2.0 entry + the both-clients claim + team owners + crypto orders (idempotency key, non-refundable) + webhook send-test/update + audit-log export (10,000 rows) + the CLI activation flow', () => {
     const body = read(P('sdk-python/CHANGELOG.md'));
     expect(body).toMatch(/^# Changelog$/m);
     expect(body).toMatch(/All notable changes to the `driftstack` Python SDK\./);
     expect(body).toMatch(/\[Keep a Changelog\]\(https:\/\/keepachangelog\.com\/en\/1\.1\.0\/\)/);
     expect(body).toMatch(/\[SemVer\]\(https:\/\/semver\.org\/spec\/v2\.0\.0\.html\)/);
     expect(body).toMatch(/^## \[Unreleased\]$/m);
-    expect(body).toMatch(/client\.team\.list_owners\(\)/);
-    expect(body).toMatch(
-      /\*\*`client\.crypto_orders\.\*`\*\* \+ async mirror \(V-666 Python parity\)/,
-    );
-    expect(body).toMatch(/`quote\(body\)`,/);
-    expect(body).toMatch(/`create_checkout\(body, \*, idempotency_key=None\)`/);
-    expect(body).toMatch(
-      /`get\(order_id\)`, `update_note\(order_id, body\)`, `cancel\(order_id\)`/,
-    );
-    expect(body).toMatch(/Crypto payments are\s*non-refundable/);
-    expect(body).toMatch(/\*\*`client\.webhooks\.send_test\(webhook_id\)`\*\* \+ async mirror/);
-    expect(body).toMatch(/\(V-463 \/ V-356\)/);
-    expect(body).toMatch(/\*\*`client\.webhooks\.update\(webhook_id, body\)`\*\* \+ async mirror/);
-    expect(body).toMatch(/\(V-464 \/ V-351\)/);
-    expect(body).toMatch(
-      /\*\*`client\.audit_log\.export\(\)`\*\* \+ async mirror \(V-462 \/ V-297\)/,
-    );
-    expect(body).toMatch(/up to 10,000\s*\n?\s+rows per call/);
-    expect(body).toMatch(/\*\*CLI\/GUI activation flow\*\* \(V-460 \/ V-266\)/);
-    expect(body).toMatch(/`client\.auth` plus async mirrors: `cli_authorize_initiate`/);
-    expect(body).toMatch(/`cli_authorize_bind`, and `cli_authorize_exchange`/);
+    expect(body).toMatch(/^## \[0\.2\.0\] - 2026-09-20$/m);
+    expect(body).toMatch(/\*\*Nothing was removed\.\*\*/);
+    // Every addition exists on both clients — the claim a Python customer on
+    // the async client depends on.
+    expect(body).toMatch(/on \*\*both\*\* `Driftstack` and `AsyncDriftstack`/);
+    expect(body).toContain('`list_owners()`');
+    expect(body).toContain('**`client.crypto_orders`**');
+    expect(body).toContain('`idempotency_key=`');
+    expect(body).toMatch(/Crypto payments are not refundable/);
+    expect(body).toContain('`send_test()`');
+    expect(body).toContain('`update()`');
+    expect(body).toContain('**`client.audit_log`**');
+    expect(body).toContain('`export()`');
+    expect(body).toMatch(/up to 10,000 rows/);
+    expect(body).toContain('`cli_authorize_initiate`');
+    expect(body).toContain('`cli_authorize_exchange`');
     expect(existsSync(P('sdk-python/CHANGELOG.md'))).toBe(true);
   });
 

@@ -129,7 +129,7 @@ describe('W895 Session lifecycle schemas cross-source invariant', () => {
 
   it("CRITICAL Session.purpose comment pins V-169 anchor + 'defaults to production_customer' framing. The default-purpose contract matches the server-side purpose-when-omitted behavior.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/sessions.ts'));
-    expect(p).toMatch(/V-169 — harness purpose; defaults to `production_customer`/);
+    expect(p).toMatch(/purpose; defaults to `production_customer`/);
   });
 
   // ─── NavigateRequestInput export ─────────────────────────────

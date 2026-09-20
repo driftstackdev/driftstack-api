@@ -82,12 +82,12 @@ describe('W432.B packages/api-types/src/problem.ts content parity', () => {
   });
 
   it('V-079 auth-flow cluster comment pinned + V-352b FeatureUnavailable rationale + V-353e MfaStepUpRequired flow rationale', () => {
-    expect(body).toMatch(/\/\/ Auth-flow problem types \(V-079\)\./);
+    expect(body).toMatch(/\/\/ Auth-flow problem types[^\n]*\./);
     expect(body).toMatch(
-      /\/\/ V-352b — feature explicitly disabled at deploy-time \(e\.g\. avatar\s*\/\/ upload requires the public R2 bucket; in environments where it\s*\/\/ isn't configured the endpoint returns 503 instead of a misleading\s*\/\/ 404 \/ 500\)\./,
+      /\/\/[^\n]*feature explicitly disabled at deploy-time \(e\.g\. avatar\s*\/\/ upload requires the public R2 bucket; in environments where it\s*\/\/ isn't configured the endpoint returns 503 instead of a misleading\s*\/\/ 404 \/ 500\)\./,
     );
     expect(body).toMatch(
-      /\/\/ V-353e — step-up MFA challenge required before this op runs\.\s*\/\/ Returned as 403 with `requires_mfa_step_up: true` extension\. Client\s*\/\/ collects a fresh 6-digit code, posts to \/v1\/auth\/mfa\/step-up, then\s*\/\/ retries the original request\./,
+      /\/\/[^\n]*step-up MFA challenge required before this op runs\.\s*\/\/ Returned as 403 with `requires_mfa_step_up: true` extension\. Client\s*\/\/ collects a fresh 6-digit code, posts to \/v1\/auth\/mfa\/step-up, then\s*\/\/ retries the original request\./,
     );
   });
 

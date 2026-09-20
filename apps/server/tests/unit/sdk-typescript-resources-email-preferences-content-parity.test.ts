@@ -44,10 +44,10 @@ function read(p: string): string {
 describe('W429.A packages/sdk-typescript/src/resources/email-preferences.ts content parity', () => {
   const body = read(LIB);
 
-  it('file exists at canonical path + module header V-204 anchor on the resource line', () => {
+  it('file exists at canonical path + module header names /v1/account/email-preferences on the resource line', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
-      /\/\/ EmailPreferencesResource — typed methods for \/v1\/account\/email-preferences \(V-204\)\./,
+      /\/\/ EmailPreferencesResource — typed methods for \/v1\/account\/email-preferences[^\n]*\./,
     );
   });
 

@@ -45,7 +45,7 @@ describe('W435.C packages/api-types/src/auth.ts content parity', () => {
       /\/\/ User-facing auth-flow schemas \(signup, verify-email, login, magic-link,\s*\/\/ password-reset, refresh, logout\)\. Distinct from `api-keys\.ts` which covers\s*\/\/ the long-lived API-key issuance flow used by SDK consumers\./,
     );
     expect(body).toMatch(
-      /\/\/ V-079 scaffolding: the SDK does not surface auth flows — these endpoints\s*\/\/ are consumed by the customer dashboard \(browser\) and the onboarding flow\s*\/\/ landing pages\. Schemas live here so admin\/dashboard code can import them\s*\/\/ type-safely without depending on the server package\./,
+      /\/\/[^\n]*scaffolding: the SDK does not surface auth flows — these endpoints\s*\/\/ are consumed by the customer dashboard \(browser\) and the onboarding flow\s*\/\/ landing pages\. Schemas live here so admin\/dashboard code can import them\s*\/\/ type-safely without depending on the server package\./,
     );
   });
 
@@ -123,7 +123,7 @@ describe('W435.C packages/api-types/src/auth.ts content parity', () => {
 
   it('V-353d Login MFA framing pinned: alternate response when MFA enrolled; customer POSTs challenge_token + 6-digit code (or recovery_code) to /v1/auth/mfa/challenge to exchange for real session', () => {
     expect(body).toMatch(
-      /\/\/ V-353d — alternate login response when the account has MFA enrolled\.\s*\/\/ The customer must POST the challenge_token \+ 6-digit code \(or\s*\/\/ recovery code\) to \/v1\/auth\/mfa\/challenge to exchange for the real\s*\/\/ session\./,
+      /\/\/[^\n]*alternate login response when the account has MFA enrolled\.\s*\/\/ The customer must POST the challenge_token \+ 6-digit code \(or\s*\/\/ recovery code\) to \/v1\/auth\/mfa\/challenge to exchange for the real\s*\/\/ session\./,
     );
     expect(body).toMatch(
       /export const LoginMfaRequiredResponseSchema = z\.object\(\{\s*mfa_required: z\.literal\(true\),\s*challenge_token: z\.string\(\),\s*challenge_expires_at: Iso8601Schema,\s*\}\);/,
@@ -137,7 +137,7 @@ describe('W435.C packages/api-types/src/auth.ts content parity', () => {
   });
 
   it('V-353d MfaChallenge: challenge_token + 6-digit code regex /^\\d{6}$/ optional + recovery_code optional + refine "Either code or recovery_code must be provided"; MfaChallengeResponse via enum totp|recovery', () => {
-    expect(body).toMatch(/\/\/ V-353d — POST \/v1\/auth\/mfa\/challenge body\./);
+    expect(body).toMatch(/\/\/[^\n]*POST \/v1\/auth\/mfa\/challenge body\./);
     expect(body).toMatch(
       /export const MfaChallengeRequestSchema = z\s*\.object\(\{\s*challenge_token: z\.string\(\)\.min\(1\),\s*code: z\s*\.string\(\)\s*\.regex\(\/\^\\d\{6\}\$\/, 'Must be a 6-digit code\.'\)\s*\.optional\(\),\s*recovery_code: z\.string\(\)\.min\(1\)\.optional\(\),\s*\}\)\s*\.refine\(\(v\) => v\.code !== undefined \|\| v\.recovery_code !== undefined, \{\s*message: 'Either `code` or `recovery_code` must be provided\.',\s*\}\);/,
     );
@@ -148,7 +148,7 @@ describe('W435.C packages/api-types/src/auth.ts content parity', () => {
 
   it('V-353e step-up reauth framing pinned: bearer-authed existing web session; posts 6-digit (or recovery) code; server refreshes mfa_satisfied_at so step-up-gated routes pass', () => {
     expect(body).toMatch(
-      /\/\/ V-353e — step-up reauth on the existing session\. Caller is bearer-\s*\/\/ authed \(web session\); posts 6-digit \(or recovery\) code; server\s*\/\/ refreshes `mfa_satisfied_at` so step-up-gated routes pass\./,
+      /\/\/[^\n]*step-up reauth on the existing session\. Caller is bearer-\s*\/\/ authed \(web session\); posts 6-digit \(or recovery\) code; server\s*\/\/ refreshes `mfa_satisfied_at` so step-up-gated routes pass\./,
     );
     expect(body).toMatch(
       /export const MfaStepUpRequestSchema = z\s*\.object\(\{\s*code: z\s*\.string\(\)\s*\.regex\(\/\^\\d\{6\}\$\/, 'Must be a 6-digit code\.'\)\s*\.optional\(\),\s*recovery_code: z\.string\(\)\.min\(1\)\.optional\(\),\s*\}\)\s*\.refine\(\(v\) => v\.code !== undefined \|\| v\.recovery_code !== undefined, \{\s*message: 'Either `code` or `recovery_code` must be provided\.',\s*\}\);/,

@@ -124,7 +124,7 @@ describe('W902 CryptoCheckout currency + price-cents cross-source invariant', ()
 
   it("CRITICAL V-666.AU framing — 'customer-facing event source. swept is mapped to expired server-side before serialization so the customer-facing surface only sees four sources'. The swept→expired mapping is what makes the customer event-timeline narrative coherent.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/crypto-orders.ts'));
-    expect(p).toMatch(/V-666\.AU — customer-facing event source/);
+    expect(p).toMatch(/customer-facing event source/);
     expect(p).toMatch(/'swept' is mapped to[\s\S]*?'expired' server-side before serialization/);
     expect(p).toMatch(/surface only sees four sources/);
   });

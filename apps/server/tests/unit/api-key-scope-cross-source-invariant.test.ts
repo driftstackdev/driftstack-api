@@ -97,12 +97,12 @@ describe('W861 ApiKeyScope cross-source invariant', () => {
 
   it('CRITICAL V-174 anchor pinned in api-types/common.ts inline scope-block doc. V-174 split the legacy single admin scope; the anchor threads the migration-policy provenance.', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
-    expect(p).toMatch(/V-174/);
+    expect(p).toMatch(/exact scope\. The enum value remains so stored legacy customer keys parse/);
   });
 
   it("CRITICAL V-481 anchor pinned in api-types/common.ts granular-scope block. The 'verb:resource order' framing + 'Phase 1 schema only' notation are the documentation invariants that future maintainers follow.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
-    expect(p).toMatch(/V-481 — granular per-resource scopes/);
+    expect(p).toMatch(/granular per-resource scopes/);
     expect(p).toMatch(/Verb:resource order/);
   });
 
@@ -136,7 +136,7 @@ describe('W861 ApiKeyScope cross-source invariant', () => {
 
   it("CRITICAL Go SDK APIKeyScope comment pins V-174 framing ('split the legacy single admin scope'). The V-174 anchor threads the migration-policy provenance to Go consumers.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/sdk-go/types.go'));
-    expect(p).toMatch(/V-174 split the legacy single `admin` scope/);
+    expect(p).toMatch(/split the legacy single `admin` scope/);
   });
 
   it('CRITICAL Go SDK does NOT declare V-481 granular scopes as consts. Phase 1 keeps SDK consumers on the broad scopes; granular enforcement is server-side. Drift to declaring granular consts would prematurely pin a contract before Phase 2 helper-level enforcement is in place.', () => {

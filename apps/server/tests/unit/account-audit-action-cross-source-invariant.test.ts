@@ -66,7 +66,7 @@ describe('W863 AccountAuditAction cross-source invariant', () => {
 
   it("CRITICAL V-216 anchor pinned in api-types/accounts.ts. The 'V-216 — customer-facing audit log' inline header threads the audit-trail provenance.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
-    expect(p).toMatch(/V-216 — customer-facing audit log/);
+    expect(p).toMatch(/customer-facing audit log/);
   });
 
   it("CRITICAL AccountAuditActorTypeSchema = z.enum(['customer', 'system', 'staff']). The 3-value actor-type distinguishes user-initiated vs system-emitted vs staff-impersonated audit entries.", () => {

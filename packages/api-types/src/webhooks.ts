@@ -45,7 +45,7 @@ export const WebhookEventTypeSchema = z.enum([
 export type WebhookEventType = z.infer<typeof WebhookEventTypeSchema>;
 
 /**
- * V-356 — events the customer is allowed to subscribe to. Excludes
+ * The events the customer is allowed to subscribe to. Excludes
  * `test.ping`, which is only ever emitted via the explicit test
  * endpoint (subscribing to it would be meaningless — the test
  * endpoint dispatches regardless of subscription).
@@ -89,7 +89,7 @@ export const WebhookEndpointSchema = z.object({
   id: WebhookEndpointIdSchema,
   url: z.string().url(),
   secret_prefix: z.string(),
-  /** V-359 — populated only during the 24h rotation grace period.
+  /** The prior secret's prefix, populated only during the 24h rotation grace period.
    *  Null when no rotation in flight. */
   prev_secret_prefix: z
     .string()
@@ -97,7 +97,7 @@ export const WebhookEndpointSchema = z.object({
     .describe(
       'First chars of the prior signing secret, present only while a rotation is in its grace period. Null means no rotation is in flight, not that no prior secret ever existed.',
     ),
-  /** V-359 — when prev_secret is active, this is the timestamp at
+  /** While prev_secret is active, the timestamp at
    *  which dual-signing stops. Null when no rotation in flight. */
   rotation_grace_expires_at: Iso8601Schema.nullable().describe(
     'When dual-signing stops. Until this timestamp every delivery is signed with both secrets. Null when no rotation is in flight.',
@@ -109,7 +109,7 @@ export const WebhookEndpointSchema = z.object({
   last_success_at: Iso8601Schema.nullable(),
   last_failure_at: Iso8601Schema.nullable(),
   disabled_at: Iso8601Schema.nullable(),
-  /** V-185 — aggregate per-endpoint delivery counts. */
+  /** The aggregate per-endpoint delivery counts. */
   delivery_counts: z.object({
     delivered: z.number().int().nonnegative(),
     failed: z.number().int().nonnegative(),
@@ -124,7 +124,7 @@ export type WebhookEndpoint = z.infer<typeof WebhookEndpointSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 export const CreateWebhookRequestSchema = z.object({
-  /**
+  /*
    * V-1498 — a `regex`, not a `refine`, so the published document carries it.
    *
    * A refine is a runtime predicate JSON Schema cannot express, so the spec
@@ -138,6 +138,8 @@ export const CreateWebhookRequestSchema = z.object({
    * stated reason, and behaviour-preserving: `.url()` still runs first, the
    * message is unchanged, and the accepted set is identical.
    */
+  /** Where deliveries are sent. Must be an `https://` URL — `http://` is
+   *  refused, because a webhook carries your data and its signature. */
   url: z
     .string()
     .url()

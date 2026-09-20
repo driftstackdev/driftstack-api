@@ -1,4 +1,4 @@
-"""Profiles resource — /v1/profiles (V-081).
+"""Profiles resource — /v1/profiles.
 
 Type annotations on request/response bodies use ``dict[str, Any]``
 pending the next ``scripts/generate.sh`` regeneration pass that
@@ -104,8 +104,8 @@ class ProfilesResource:
         would silently do nothing (the server drops it after a presence
         check). If you need customer-controlled egress today, use
         :meth:`AgentSessionsResource.create` with ``proxy_id`` instead --
-        that resource dispatches to the real device fleet and routes
-        traffic through one of your saved account proxies.
+        that resource runs on a real device and routes traffic through
+        one of your saved account proxies.
         """
         return self._http.request(
             "POST",
@@ -114,7 +114,7 @@ class ProfilesResource:
         )
 
     def clone(self, profile_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
-        """V-313 — duplicate a profile. Server auto-derives "(copy)" / "(copy 2)" /
+        """Duplicate a profile. Server auto-derives "(copy)" / "(copy 2)" /
         ... name when ``body["name"]`` is omitted. Tier-cap + name-conflict
         checked the same as ``create``."""
         return self._http.request(
@@ -124,20 +124,20 @@ class ProfilesResource:
         )
 
     def export(self, profile_id: str) -> dict[str, Any]:
-        """V-480 — export this profile as a versioned, metadata-only JSON
+        """Export this profile as a versioned, metadata-only JSON
         envelope. Feed the result to :meth:`import_` (in any account) to mint a
         fresh profile from it."""
         return self._http.request("GET", f"/v1/profiles/{quote(profile_id, safe='')}/export")
 
     def import_(self, body: dict[str, Any]) -> dict[str, Any]:
-        """V-480 — import a profile from a v1 export envelope
+        """Import a profile from a v1 export envelope
         (``{"envelope": ..., "name_override"?: ...}``), minting a fresh profile
         in the EFFECTIVE account — your own, or the owner you are acting as via
         ``X-Driftstack-Account``. ``import`` is a Python keyword, hence ``import_``."""
         return self._http.request("POST", "/v1/profiles/import", json_body=coerce_body(body))
 
     def transfer(self, profile_id: str, body: dict[str, Any]) -> dict[str, Any]:
-        """V-666 — transfer a profile to another account by ``recipient_account_id``
+        """Transfer a profile to another account by ``recipient_account_id``
         (``acc_<uuid>``).
 
         Mints a NEW row in the recipient's account carrying the source's name,
@@ -160,7 +160,7 @@ class ProfilesResource:
         )
 
     def trim(self, profile_id: str) -> dict[str, Any]:
-        """doc-150 §8 — "Clear cache, keep logins". Reclaims a profile's
+        """The "Clear cache, keep logins" action. Reclaims a profile's
         re-fetchable caches (HTTP/media/DOMCache/service-workers) WITHOUT
         touching logins, localStorage, IndexedDB or open tabs — the headline
         reclaim action when an account is over its storage cap. The server
@@ -171,7 +171,7 @@ class ProfilesResource:
         return self._http.request("POST", f"/v1/profiles/{quote(profile_id, safe='')}/trim")
 
     def activity(self, profile_id: str) -> dict[str, Any]:
-        """P-23 — the profile's recent navigation, projected from the account's
+        """The profile's recent navigation, projected from the account's
         agent session transcripts, most recent first. This is ACCOUNT ACTIVITY,
         not browsing history: ``trim(scope="history")`` clears the profile's open
         tabs on the device and does not remove these rows. Bounded — when
@@ -239,7 +239,7 @@ class AsyncProfilesResource:
         await self._http.request("DELETE", f"/v1/profiles/{quote(profile_id, safe='')}/purge")
 
     async def launch(self, profile_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Async mirror — same Slice 2 antidetect launch semantics as sync."""
+        """Async mirror — same antidetect launch semantics as sync."""
         return await self._http.request(
             "POST",
             f"/v1/profiles/{quote(profile_id, safe='')}/launch",
@@ -254,11 +254,11 @@ class AsyncProfilesResource:
         )
 
     async def export(self, profile_id: str) -> dict[str, Any]:
-        """Async mirror — V-480 metadata-only export envelope."""
+        """Async mirror — metadata-only export envelope."""
         return await self._http.request("GET", f"/v1/profiles/{quote(profile_id, safe='')}/export")
 
     async def import_(self, body: dict[str, Any]) -> dict[str, Any]:
-        """Async mirror — V-480 import from a v1 export envelope."""
+        """Async mirror — import from a v1 export envelope."""
         return await self._http.request("POST", "/v1/profiles/import", json_body=coerce_body(body))
 
     async def transfer(self, profile_id: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -273,14 +273,14 @@ class AsyncProfilesResource:
         )
 
     async def trim(self, profile_id: str) -> dict[str, Any]:
-        """Async mirror — doc-150 §8 "Clear cache, keep logins". Reclaims a
+        """Async mirror — "Clear cache, keep logins". Reclaims a
         profile's re-fetchable caches WITHOUT touching logins/localStorage/
         IndexedDB/open tabs. Always 200 with a DISCRIMINATED body; branch on
         ``result["status"]``, not the HTTP code."""
         return await self._http.request("POST", f"/v1/profiles/{quote(profile_id, safe='')}/trim")
 
     async def activity(self, profile_id: str) -> dict[str, Any]:
-        """P-23 — the profile's recent navigation, projected from the account's
+        """The profile's recent navigation, projected from the account's
         agent session transcripts, most recent first. This is ACCOUNT ACTIVITY,
         not browsing history: ``trim(scope="history")`` clears the profile's open
         tabs on the device and does not remove these rows. Bounded — when

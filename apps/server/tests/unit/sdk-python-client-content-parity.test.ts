@@ -101,7 +101,7 @@ describe('W585.A packages/sdk-python/src/driftstack/client.py content parity', (
     );
   });
 
-  it('Sync Driftstack: constructor pinned (api_key + kwarg-only base_url/timeout_s/retry/http_client) + 14 resource accessors with V-NNN comments + close + __enter__ + __exit__ context manager', () => {
+  it('Sync Driftstack: constructor pinned (api_key + kwarg-only base_url/timeout_s/retry/http_client) + the resource accessors, each labelled by what it DOES rather than by a ticket id (this module ships inside the wheel) + close + __enter__ + __exit__ context manager', () => {
     expect(body).toMatch(/^class Driftstack:$/m);
     expect(body).toMatch(/"""Synchronous Driftstack API client\./);
     expect(body).toMatch(/from driftstack import Driftstack/);
@@ -119,25 +119,23 @@ describe('W585.A packages/sdk-python/src/driftstack/client.py content parity', (
     expect(body).toMatch(/self\.usage = UsageResource\(self\._http\)/);
     expect(body).toMatch(/self\.webhooks = WebhooksResource\(self\._http\)/);
     expect(body).toMatch(/self\.profiles = ProfilesResource\(self\._http\)/);
-    expect(body).toMatch(/# V-312 — immutable point-in-time profile snapshots\./);
+    expect(body).toMatch(/#[^\n]*[Ii]mmutable point-in-time profile snapshots\./);
     expect(body).toMatch(/self\.profile_snapshots = ProfileSnapshotsResource\(self\._http\)/);
     expect(body).toMatch(/self\.billing = BillingResource\(self\._http\)/);
-    expect(body).toMatch(/# V-666 — crypto-checkout \/ crypto-orders\./);
+    expect(body).toMatch(/#[^\n]*[Cc]rypto-checkout \/ crypto-orders\./);
     expect(body).toMatch(/self\.crypto_orders = CryptoOrdersResource\(self\._http\)/);
     expect(body).toMatch(/self\.auth = AuthResource\(self\._http\)/);
-    expect(body).toMatch(/# V-385 \/ V-434 — \/v1\/account\/me rich-shape read\./);
+    expect(body).toMatch(/#[^\n]*\/v1\/account\/me rich-shape read\./);
     expect(body).toMatch(/self\.account = AccountResource\(self\._http\)/);
-    expect(body).toMatch(/# V-353b \/ V-448 — MFA enrollment management\./);
+    expect(body).toMatch(/#[^\n]*MFA enrollment management\./);
     expect(body).toMatch(/self\.mfa = MfaResource\(self\._http\)/);
-    expect(body).toMatch(/# V-216 \/ V-449 — audit-log read \+ iterate\./);
+    expect(body).toMatch(/#[^\n]*[Aa]udit-log read \+ iterate\./);
     expect(body).toMatch(/self\.audit_log = AuditLogResource\(self\._http\)/);
-    expect(body).toMatch(/# V-204 \/ V-449 — email preferences\./);
+    expect(body).toMatch(/#[^\n]*[Ee]mail preferences\./);
     expect(body).toMatch(/self\.email_preferences = EmailPreferencesResource\(self\._http\)/);
-    expect(body).toMatch(/# V-049 \/ V-458 — legal acceptance\./);
+    expect(body).toMatch(/#[^\n]*[Ll]egal acceptance\./);
     expect(body).toMatch(/self\.legal = LegalResource\(self\._http\)/);
-    expect(body).toMatch(
-      /# V-298c — Team RBAC\. Act on an owner's account via X-Driftstack-Account\./,
-    );
+    expect(body).toMatch(/#[^\n]*Team RBAC\. Act on an owner's account via X-Driftstack-Account\./);
     expect(body, 'the retracted pending-integration anchor is back').not.toMatch(/V-298d/);
     expect(body).toMatch(/self\.team = TeamResource\(self\._http\)/);
     expect(body).toMatch(/def close\(self\) -> None:\s*\n\s*self\._http\.close\(\)/);

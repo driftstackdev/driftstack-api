@@ -54,9 +54,9 @@ describe('W703 cross-SDK V-079 auth-flow primitives parity', () => {
     const go = read(GO_AUTH);
     const py = read(PY_AUTH);
 
-    expect(ts).toMatch(/V-079/);
-    expect(go).toMatch(/V-079/);
-    expect(py).toMatch(/V-079/);
+    expect(ts).toMatch(/gate\)\. Customers using the auth flow do so from a browser dashboard/);
+    expect(go).toMatch(/These endpoints don't require an API key — they ARE the auth gate\./);
+    expect(py).toMatch(/These endpoints don't require an API key \(they ARE the auth gate\)\./);
   });
 
   it("CRITICAL \"endpoints don't require an API key\" framing pinned in TS + Go. The auth flows ARE the auth gate; drift to dropping would mislead callers about which API-key context applies. This is what tells customers `new Client('')` is valid for auth flows.", () => {
@@ -207,7 +207,7 @@ describe('W703 cross-SDK V-079 auth-flow primitives parity', () => {
   it('CRITICAL V-353d MFA discriminator framing on login pinned in sdk-typescript. The literal `mfa_required: true` is the wire-discriminator that branches the response to the MFA-challenge flow vs. the session-issued flow. Drift to dropping would let dashboards mis-render the next step.', () => {
     const ts = read(TS_AUTH);
 
-    expect(ts).toMatch(/V-353d/);
+    expect(ts).toMatch(/discriminated-union response\. When the account has MFA/);
     expect(ts).toMatch(/mfa_required: true/);
     expect(ts).toMatch(/challenge_token/);
     expect(ts).toMatch(/challenge_expires_at/);
@@ -217,10 +217,10 @@ describe('W703 cross-SDK V-079 auth-flow primitives parity', () => {
     const ts = read(TS_AUTH);
     const go = read(GO_AUTH);
 
-    expect(ts).toMatch(/V-445/);
+    expect(ts).toMatch(/[Rr]efresh `mfa_satisfied_at` on the calling web session/);
     expect(ts).toMatch(/15-minute freshness window/);
 
-    expect(go).toMatch(/V-445/);
+    expect(go).toMatch(/Refresh mfa_satisfied_at on the calling web/);
     expect(go).toMatch(/15-minute freshness window/);
   });
 
@@ -228,15 +228,15 @@ describe('W703 cross-SDK V-079 auth-flow primitives parity', () => {
     const ts = read(TS_AUTH);
     const go = read(GO_AUTH);
 
-    expect(ts).toMatch(/V-460/);
-    expect(ts).toMatch(/V-266/);
+    expect(ts).toMatch(/cli\/authorize confirmation page after the user enters the initiating/);
+    expect(ts).toMatch(/CLI\/GUI activation flow: initiate\./);
     // 3 statuses.
     expect(ts).toMatch(/status: 'pending'/);
     expect(ts).toMatch(/status: 'bound'/);
     expect(ts).toMatch(/status: 'expired'/);
 
-    expect(go).toMatch(/V-460/);
-    expect(go).toMatch(/V-266/);
+    expect(go).toMatch(/by the dashboard's confirm page after the user submits the initiating/);
+    expect(go).toMatch(/by the dashboard's confirm page after the user submits the initiating/);
     expect(go).toMatch(/"pending"/);
     expect(go).toMatch(/"bound"/);
     expect(go).toMatch(/"expired"/);
@@ -260,7 +260,7 @@ describe('W703 cross-SDK V-079 auth-flow primitives parity', () => {
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-079`).toMatch(/V-079/);
+      expect(body, `${name} V-079`).toMatch(/these endpoints don't require an API key /i);
       expect(body, `${name} /v1/auth/signup`).toMatch(/\/v1\/auth\/signup/);
       expect(body, `${name} /password-reset/request`).toMatch(
         /\/v1\/auth\/password-reset\/request/,

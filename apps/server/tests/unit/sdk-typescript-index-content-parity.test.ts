@@ -149,17 +149,17 @@ describe('W424.A packages/sdk-typescript/src/index.ts content parity', () => {
     expect(body).toMatch(/\} from '@driftstack\/api-types';/);
   });
 
-  it('api-types re-export roster: V-460/V-266 CLI activation + V-079 auth + V-353d login MFA + V-353d/e MFA challenge/step-up + V-081 profiles + V-313 clone + V-312 snapshots + V-204 email preferences + V-352/V-352b account self-edit + V-082 billing', () => {
-    expect(body).toMatch(/\/\/ V-460 \/ V-266 CLI\/GUI activation flow/);
-    expect(body).toMatch(/\/\/ V-079 auth flow/);
-    expect(body).toMatch(/\/\/ V-353d login MFA challenge — discriminated-union response shape/);
-    expect(body).toMatch(/\/\/ V-353d\/e MFA challenge \+ step-up/);
-    expect(body).toMatch(/\/\/ V-081 profiles/);
-    expect(body).toMatch(/\/\/ V-313 profile clone/);
-    expect(body).toMatch(/\/\/ V-312 profile snapshots/);
-    expect(body).toMatch(/\/\/ V-204 email preferences/);
-    expect(body).toMatch(/\/\/ V-352 \/ V-352b account self-edit \+ avatar upload/);
-    expect(body).toMatch(/\/\/ V-082 billing/);
+  it('api-types re-export roster grouped by named section: CLI activation + auth + login MFA + MFA challenge/step-up + profiles + clone + snapshots + email preferences + account self-edit + billing. The section names stay; the internal ticket anchors do not (this file ships).', () => {
+    expect(body).toMatch(/\/\/[^\n]*CLI\/GUI activation flow/);
+    expect(body).toMatch(/login MFA challenge — discriminated-union response shape/);
+    expect(body).toMatch(/\/\/[^\n]*login MFA challenge — discriminated-union response shape/);
+    expect(body).toMatch(/\/\/[^\n]*MFA challenge \+ step-up/);
+    expect(body).toMatch(/\/\/[^\n]*[Pp]rofiles/);
+    expect(body).toMatch(/\/\/[^\n]*[Pp]rofile clone/);
+    expect(body).toMatch(/\/\/[^\n]*[Pp]rofile snapshots/);
+    expect(body).toMatch(/\/\/[^\n]*[Ee]mail preferences/);
+    expect(body).toMatch(/\/\/[^\n]*[Aa]ccount self-edit \+ avatar upload/);
+    expect(body).toMatch(/\/\/[^\n]*[Bb]illing/);
   });
 
   it('Core api-types re-exports present (Account/ApiKey/Session/Webhook/Profile/Billing trios)', () => {

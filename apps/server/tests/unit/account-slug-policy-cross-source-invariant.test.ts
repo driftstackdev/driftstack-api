@@ -71,7 +71,7 @@ describe('W874 AccountSlug policy cross-source invariant', () => {
 
   it("CRITICAL V-298a anchor pinned for AccountSlugSchema. The 'URL-safe handle' framing + 'GitHub usernames, Stripe account ids' design-rationale pin the policy provenance.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
-    expect(p).toMatch(/V-298a — slug shape: lowercase a-z \+ 0-9 \+ hyphen/);
+    expect(p).toMatch(/slug shape: lowercase a-z \+ 0-9 \+ hyphen/);
     // The 'URL-safe handle' framing wraps across two JSDoc lines.
     expect(p).toMatch(/standard "URL-safe handle" pattern/);
     expect(p).toMatch(/GitHub usernames, Stripe/);

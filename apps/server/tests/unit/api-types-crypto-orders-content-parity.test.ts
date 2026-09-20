@@ -48,7 +48,7 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
   const body = read(LIB);
 
   it('V-666 framing pinned + 5 customer endpoints listed (POST checkout / GET list / GET one / PATCH note / POST cancel) + non-refundable rationale + cancel halts pending pay window but does NOT refund settled payment', () => {
-    expect(body).toMatch(/\/\/ Crypto-orders flow schemas \(V-666\)\./);
+    expect(body).toMatch(/\/\/ Crypto-orders flow schemas[^\n]*\./);
     expect(body).toMatch(
       /\/\/ Customer-facing endpoints under \/v1\/billing\/crypto-\*:\s*\/\/\s*- POST\s+\/v1\/billing\/crypto-checkout\s+\(mint a new order\)\s*\/\/\s*- GET\s+\/v1\/billing\/crypto-orders\s+\(list caller's orders\)\s*\/\/\s*- GET\s+\/v1\/billing\/crypto-orders\/:id\s+\(one order envelope\)\s*\/\/\s*- PATCH\s+\/v1\/billing\/crypto-orders\/:id\s+\(update customer_note\)\s*\/\/\s*- POST\s+\/v1\/billing\/crypto-orders\/:id\/cancel \(abandon a pending order\)/,
     );
@@ -70,7 +70,7 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
 
   it('V-666.AU CryptoOrderEventSource framing pinned: swept mapped to expired server-side before serialization; customer-facing surface only sees 4 sources (create|ipn|cancel|expired)', () => {
     expect(body).toMatch(
-      /\/\/ V-666\.AU — customer-facing event source\. 'swept' is mapped to\s*\/\/ 'expired' server-side before serialization so the customer-facing\s*\/\/ surface only sees four sources\./,
+      /\/\/[^\n]*customer-facing event source\. 'swept' is mapped to\s*\/\/ 'expired' server-side before serialization so the customer-facing\s*\/\/ surface only sees four sources\./,
     );
     expect(body).toMatch(
       /export const CryptoOrderEventSourceSchema = z\.enum\(\['create', 'ipn', 'cancel', 'expired'\]\);/,
@@ -114,19 +114,19 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
 
   it('CryptoOrderEnvelope: order_id + product + price_cents + price_currency + payment_id nullable + status + customer_note nullable + V-666.AU events array + V-666.AV informational expires_at (null on non-pending) + created/updated_at', () => {
     expect(body).toMatch(
-      /export const CryptoOrderEnvelopeSchema = z\.object\(\{\s*order_id: z\.string\(\),\s*product: z\.string\(\),\s*price_cents: z\.number\(\)\.int\(\),\s*price_currency: z\.string\(\),\s*payment_id: z\.string\(\)\.nullable\(\),\s*status: CryptoOrderStatusSchema,\s*customer_note: z\.string\(\)\.nullable\(\),\s*\/\*\* V-666\.AU — append-only state-transition timeline\. \*\/\s*events: z\.array\(CryptoOrderEventSchema\),\s*\/\*\* V-666\.AV — informational pay-window deadline\. Null on non-pending\. \*\/\s*expires_at: z\.string\(\)\.nullable\(\),\s*created_at: z\.string\(\),\s*updated_at: z\.string\(\),\s*\}\);/,
+      /export const CryptoOrderEnvelopeSchema = z\.object\(\{\s*order_id: z\.string\(\),\s*product: z\.string\(\),\s*price_cents: z\.number\(\)\.int\(\),\s*price_currency: z\.string\(\),\s*payment_id: z\.string\(\)\.nullable\(\),\s*status: CryptoOrderStatusSchema,\s*customer_note: z\.string\(\)\.nullable\(\),\s*\/[^\n]*append-only state-transition timeline\. \*\/\s*events: z\.array\(CryptoOrderEventSchema\),\s*\/[^\n]*informational pay-window deadline\. Null on non-pending\. \*\/\s*expires_at: z\.string\(\)\.nullable\(\),\s*created_at: z\.string\(\),\s*updated_at: z\.string\(\),\s*\}\);/,
     );
   });
 
   it('V-666.BR ListCryptoOrdersQuery + V-666.BU forward cursor (treat as opaque) + V-666.BX created_after/before half-open window ISO 8601; ListCryptoOrdersResponse: orders + next_cursor nullable optional', () => {
     expect(body).toMatch(
-      /\/\/ V-666\.BR — typed query schema for GET \/v1\/billing\/crypto-orders\.\s*\/\/ Customer dashboards \+ SDK consumers can reuse this instead of\s*\/\/ re-declaring the status union inline\./,
+      /\/\/[^\n]*typed query schema for GET \/v1\/billing\/crypto-orders\.\s*\/\/ Customer dashboards \+ SDK consumers can reuse this instead of\s*\/\/ re-declaring the status union inline\./,
     );
     expect(body).toMatch(
-      /export const ListCryptoOrdersQuerySchema = z\.object\(\{\s*limit: z\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.optional\(\),\s*status: CryptoOrderStatusSchema\.optional\(\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\/\*\* V-666\.BX — half-open window on created_at; ISO 8601 strings\. \*\/\s*created_after: z\.string\(\)\.datetime\(\)\.optional\(\),\s*created_before: z\.string\(\)\.datetime\(\)\.optional\(\),\s*\}\);/,
+      /export const ListCryptoOrdersQuerySchema = z\.object\(\{\s*limit: z\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.optional\(\),\s*status: CryptoOrderStatusSchema\.optional\(\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*\/[^\n]*half-open window on created_at; ISO 8601 strings\. \*\/\s*created_after: z\.string\(\)\.datetime\(\)\.optional\(\),\s*created_before: z\.string\(\)\.datetime\(\)\.optional\(\),\s*\}\);/,
     );
     expect(body).toMatch(
-      /\*\s*V-666\.BU — forward cursor; null when there is no further page\.\s*\*\s*Pass back as `\?cursor=` on the next request\. Treat as opaque\./,
+      /forward cursor; null when there is no further page\.\s*\*\s*Pass back as `\?cursor=` on the next request\. Treat as opaque\./,
     );
     expect(body).toMatch(
       /export const ListCryptoOrdersResponseSchema = z\.object\(\{\s*orders: z\.array\(CryptoOrderEnvelopeSchema\),/,
@@ -158,16 +158,14 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
   });
 
   it('V-666.AZ CryptoOrderReceipt framing + shape (order_id + issued_at + status + product + price + payment_id nullable + paid_at nullable + created_at) — JSON/text/PDF variants', () => {
-    expect(body).toMatch(/\/\/ Receipts \(V-666\.AZ — JSON, text, PDF variants\)/);
+    expect(body).toMatch(/\/\/ Receipts[^\n]*JSON, text, PDF variants\)/);
     expect(body).toMatch(
       /export const CryptoOrderReceiptSchema = z\.object\(\{\s*order_id: z\.string\(\),\s*issued_at: z\.string\(\),\s*status: CryptoOrderStatusSchema,\s*product: z\.string\(\),\s*price_cents: z\.number\(\)\.int\(\),\s*price_currency: z\.string\(\),\s*payment_id: z\.string\(\)\.nullable\(\),\s*paid_at: z\.string\(\)\.nullable\(\),\s*created_at: z\.string\(\),\s*\}\);/,
     );
   });
 
   it('V-666.AY AdminCryptoOrderEnvelope framing pinned: extends customer envelope with account_id nullable (pre-signup checkouts) + internal_note (admin-only, never returned on customer surface)', () => {
-    expect(body).toMatch(
-      /\/\/ Admin surface \(V-666\.AY — exposed in OpenAPI for ops integrators\)/,
-    );
+    expect(body).toMatch(/\/\/ Admin surface[^\n]*exposed in OpenAPI for ops integrators\)/);
     expect(body).toMatch(
       /\*\s*Admin envelope adds `account_id` \+ `internal_note` on top of the\s*\*\s*customer envelope\. Same wire shape as the customer one minus\s*\*\s*those two fields\./,
     );

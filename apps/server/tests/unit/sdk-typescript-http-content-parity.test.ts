@@ -74,7 +74,7 @@ describe('W423.B packages/sdk-typescript/src/http.ts content parity', () => {
     expect(body).toContain('/** Default per-request timeout (ms). */');
     expect(body).toContain('timeoutMs?: number;');
     expect(body).toContain('effectiveAccount?: string;');
-    expect(body).toMatch(/V-326c\/V-330 team workspaces/);
+    expect(body).toMatch(/\*[^\n]*[Tt]eam workspaces — when set, every request carries/);
   });
 
   it('CRITICAL RequestOptions method union — 5-verb closed set (GET/POST/DELETE/PUT/PATCH). Drift to widening (HEAD/OPTIONS/TRACE/CONNECT) would let unintended verbs leak into the SDK surface. Drift to `string` type would lose static-checking on verbs.', () => {

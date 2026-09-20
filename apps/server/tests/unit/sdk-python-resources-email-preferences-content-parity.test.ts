@@ -48,7 +48,7 @@ describe('W580.C packages/sdk-python/src/driftstack/resources/email_preferences.
   it('file exists at canonical path + module docstring V-204/V-449 anchor + "Per-event opt-in/opt-out toggles for non-critical customer emails" scope (load-bearing: this is the customer-controlled OPT-OUT surface, not admin-side suppression list)', () => {
     expect(existsSync(LIB)).toBe(true);
     expect(body).toMatch(
-      /^"""Email preferences resource — \/v1\/account\/email-preferences \(V-204 \/ V-449\)\.\n/,
+      /^"""Email preferences resource — \/v1\/account\/email-preferences[^\n]*\.\n/,
     );
     expect(body).toMatch(/Per-event opt-in\/opt-out toggles for non-critical customer emails\./);
   });

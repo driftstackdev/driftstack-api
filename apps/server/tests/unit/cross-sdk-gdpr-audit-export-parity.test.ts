@@ -53,12 +53,14 @@ describe('W687 cross-SDK V-462/V-297 GDPR audit-log export parity', () => {
     const go = read(GO_AUDIT);
     const py = read(PY_AUDIT);
 
-    expect(ts).toMatch(/V-462/);
-    expect(ts).toMatch(/V-297/);
-    expect(go).toMatch(/V-462/);
-    expect(go).toMatch(/V-297/);
-    expect(py).toMatch(/V-462/);
-    expect(py).toMatch(/V-297/);
+    expect(ts).toMatch(/Capped server-side at 10k; if `truncated` is `true` the older/);
+    expect(ts).toMatch(/bulk-export envelope for GDPR Article 20 portability\. The/);
+    expect(go).toMatch(
+      /surfaced through the SDK — hit \/v1\/account\/audit-log\/export\?format=csv/,
+    );
+    expect(go).toMatch(/bulk-export envelope \(GDPR Article/);
+    expect(py).toMatch(/a JSON envelope \(GDPR Article 20 portability\)\. Single call; up to/);
+    expect(py).toMatch(/[Aa]sync mirror of ``AuditLogResource\.export``\."""/);
   });
 
   it('CRITICAL GDPR Article 20 portability regulatory framing pinned in all 3 SDKs. The Article-20 reference is the regulatory-purpose anchor that justifies why the export endpoint is opt-in (NOT rate-limited like list) and why CSV is OOB. Drift to dropping the Article-20 reference would lose the regulatory-purpose anchor.', () => {
@@ -171,8 +173,8 @@ describe('W687 cross-SDK V-462/V-297 GDPR audit-log export parity', () => {
     };
 
     for (const [name, body] of Object.entries(sdks)) {
-      expect(body, `${name} V-462`).toMatch(/V-462/);
-      expect(body, `${name} V-297`).toMatch(/V-297/);
+      expect(body, `${name} exports the account's audit log`).toMatch(/account's audit log/);
+      expect(body, `${name} names it a portability export`).toMatch(/portability/i);
       expect(body, `${name} GDPR Article 20`).toMatch(/GDPR Article 20|GDPR Article\s*\/\/\s*20/);
       expect(body, `${name} 10,000 rows`).toMatch(/10,000 rows|10,000-row/);
       expect(body, `${name} truncated`).toMatch(/truncated|Truncated/);

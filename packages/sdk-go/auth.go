@@ -2,7 +2,7 @@ package driftstack
 
 import "context"
 
-// AuthResource handles /v1/auth/* endpoints (V-079).
+// AuthResource handles /v1/auth/* endpoints.
 //
 // These endpoints don't require an API key — they ARE the auth gate.
 // The SDK still routes them through the same client.do path so users
@@ -147,7 +147,7 @@ func (r *AuthResource) Logout(ctx context.Context, body *LogoutRequest) (*Logout
 	return &out, nil
 }
 
-// MfaChallenge — V-445. Exchange the V-353d login challenge_token
+// MfaChallenge — POST /v1/auth/mfa/challenge. Exchange the login challenge_token
 // for a session via TOTP code or recovery code. Distinguished
 // response carries Via = "totp" | "recovery".
 func (r *AuthResource) MfaChallenge(ctx context.Context, body *MfaChallengeRequest) (*MfaChallengeResponse, error) {
@@ -163,8 +163,8 @@ func (r *AuthResource) MfaChallenge(ctx context.Context, body *MfaChallengeReque
 	return &out, nil
 }
 
-// MfaStepUp — V-445. Refresh mfa_satisfied_at on the calling web
-// session (V-353e step-up gate; 15-minute freshness window). No new
+// MfaStepUp — POST /v1/auth/mfa/step-up. Refresh mfa_satisfied_at on the calling web
+// session (the step-up gate; 15-minute freshness window). No new
 // session issued; returns the new mfa_satisfied_at timestamp.
 func (r *AuthResource) MfaStepUp(ctx context.Context, body *MfaStepUpRequest) (*MfaStepUpResponse, error) {
 	var out MfaStepUpResponse
@@ -179,7 +179,7 @@ func (r *AuthResource) MfaStepUp(ctx context.Context, body *MfaStepUpRequest) (*
 	return &out, nil
 }
 
-// CliAuthorizeInitiate — V-460 / V-266. Start the CLI/GUI activation
+// CliAuthorizeInitiate — step 1 of 3. Start the CLI/GUI activation
 // flow. Returns a one-shot code, device-displayed user_code, and
 // browser_url. The user types that code in the dashboard before
 // CliAuthorizeExchange can return the plaintext API key.
@@ -196,7 +196,7 @@ func (r *AuthResource) CliAuthorizeInitiate(ctx context.Context, body *CliAuthor
 	return &out, nil
 }
 
-// CliAuthorizeBind — V-460 / V-266. Web-session-authenticated. Called
+// CliAuthorizeBind — step 2 of 3. Web-session-authenticated. Called
 // by the dashboard's confirm page after the user submits the initiating
 // device's UserCode and clicks Authorize: mints a scoped API key on the
 // calling account and stages it for delivery via CliAuthorizeExchange.
@@ -213,7 +213,7 @@ func (r *AuthResource) CliAuthorizeBind(ctx context.Context, body *CliAuthorizeB
 	return &out, nil
 }
 
-// CliAuthorizeExchange — V-460 / V-266. Polled by the CLI/GUI.
+// CliAuthorizeExchange — step 3 of 3. Polled by the CLI/GUI.
 // Status discriminator: "pending" (keep polling), "bound" (one-shot
 // delivery; APIKey + AccountID populated), or "expired" (restart
 // the flow).

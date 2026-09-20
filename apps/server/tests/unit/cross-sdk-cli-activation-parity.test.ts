@@ -60,12 +60,12 @@ describe('W686 cross-SDK V-460/V-266 CLI 3-step activation parity', () => {
     const go = read(GO_AUTH);
     const py = read(PY_AUTH);
 
-    expect(ts).toMatch(/V-460/);
-    expect(ts).toMatch(/V-266/);
-    expect(go).toMatch(/V-460/);
-    expect(go).toMatch(/V-266/);
-    expect(py).toMatch(/V-460/);
-    expect(py).toMatch(/V-266/);
+    expect(ts).toMatch(/cli\/authorize confirmation page after the user enters the initiating/);
+    expect(ts).toMatch(/CLI\/GUI activation flow: initiate\./);
+    expect(go).toMatch(/by the dashboard's confirm page after the user submits the initiating/);
+    expect(go).toMatch(/by the dashboard's confirm page after the user submits the initiating/);
+    expect(py).toMatch(/clicks Authorize: mints a scoped API key on the calling account and/);
+    expect(py).toMatch(/clicks Authorize: mints a scoped API key on the calling account and/);
   });
 
   it('CRITICAL 3 wire paths pinned in all 3 SDKs — initiate + bind + exchange. The 3-segment URL pattern (/v1/auth/cli-authorize/{initiate|bind|exchange}) is what the server-side routes match — drift to different paths would silently break every CLI activation flow.', () => {

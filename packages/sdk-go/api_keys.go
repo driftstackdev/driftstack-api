@@ -49,7 +49,7 @@ func (r *APIKeysResource) Revoke(ctx context.Context, keyID string) error {
 	})
 }
 
-// Rotate is V-296 — mints a fresh plaintext + sets the OLD key's
+// Rotate mints a fresh plaintext + sets the OLD key's
 // expires_at to now + 24h grace. Both keys work concurrently during the
 // grace window; deploy the new key, then the old key auto-revokes at
 // the grace boundary via the existing expires_at-driven auth gate.
@@ -63,7 +63,7 @@ func (r *APIKeysResource) Revoke(ctx context.Context, keyID string) error {
 //   - The successor INHERITS that same expires_at. Rotating a key because it
 //     is about to expire does not hand you a longer-lived one.
 //
-// Rotation also DE-ESCALATES (V-775): driftstack_internal_admin is dropped and
+// Rotation also DE-ESCALATES: driftstack_internal_admin is dropped and
 // the legacy admin alias becomes account_owner, which carries the same customer
 // authority. Rotation is an issuance path and must not launder a scope Create
 // would refuse.

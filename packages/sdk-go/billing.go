@@ -2,7 +2,7 @@ package driftstack
 
 import "context"
 
-// BillingResource handles /v1/billing endpoints (V-082).
+// BillingResource handles /v1/billing endpoints.
 //
 // GetState returns the current subscription mirror state.
 // CreateCheckoutSession returns a Stripe Checkout URL the customer

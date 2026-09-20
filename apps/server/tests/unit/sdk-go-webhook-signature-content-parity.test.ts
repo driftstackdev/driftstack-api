@@ -75,9 +75,7 @@ describe('W594.B packages/sdk-go/webhook_signature.go content parity', () => {
   it('V-359 HeaderPrev rotation-grace contract: "passing `header` alone verifies rotation deliveries correctly and this input is rarely needed. When set, VerifyWebhookSignature accepts EITHER `header` OR `HeaderPrev` matching `secret`." The accept-EITHER fallback stays, but the doc now correctly states no separate prev header is emitted.', () => {
     expect(body).toMatch(/\/\/ So passing `header` alone verifies rotation deliveries correctly/);
     expect(body).toMatch(/\/\/ and this input is rarely needed\. When set, VerifyWebhookSignature/);
-    expect(body).toMatch(
-      /\/\/ accepts EITHER `header` OR `HeaderPrev` matching `secret`\. V-359\./,
-    );
+    expect(body).toMatch(/\/\/ accepts EITHER `header` OR `HeaderPrev` matching `secret`\./);
   });
 
   it('VerifyWebhookSignature contract: Stripe-style "t=<unix-seconds>,v1=<hex hmac>" header format + HMAC payload "HMAC-SHA256(<unix-seconds>.<raw body>, <webhook secret>)" + never-panics-returns-false + raw-body-not-re-encoded-JSON warning pinned. Drift to a different payload concatenation would invalidate every existing customer verifier mid-flight.', () => {

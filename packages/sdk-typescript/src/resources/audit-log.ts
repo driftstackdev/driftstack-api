@@ -1,9 +1,9 @@
-// AuditLogResource — typed methods for /v1/account/audit-log (V-216).
+// AuditLogResource — typed methods for /v1/account/audit-log.
 //
 // Append-only event ledger of every account action: api_key lifecycle,
 // session events, profile / webhook config changes, MFA lifecycle,
-// team membership changes, etc. Pairs with V-216 dashboard /audit-log
-// rendering. Read endpoints honor the V-326c X-Driftstack-Account
+// team membership changes, etc. Pairs with the dashboard /audit-log
+// rendering. Read endpoints honor the X-Driftstack-Account
 // team-RBAC header (a member with read access on the team owner can
 // pull the OWNER's audit log).
 
@@ -12,7 +12,7 @@ import type { HttpClient } from '../http.js';
 import { iteratePaginated } from '../pagination.js';
 
 /**
- * V-216 — single audit-log entry shape. The same row also surfaces
+ * A single audit-log entry shape. The same row also surfaces
  * via the export endpoint (CSV / JSON file format). Defined inline
  * here because the lean api-types schema is dashboard-targeted; SDK
  * consumers get the full shape directly.
@@ -22,7 +22,7 @@ export interface AuditLogEntry {
   account_id: string;
   /** 'customer' (a human action), 'system' (server-generated event), or 'staff' (Driftstack support). */
   actor_type: 'customer' | 'system' | 'staff';
-  /** The CALLING account for customer actions (may be a team member acting on the OWNER's log per V-326c). */
+  /** The CALLING account for customer actions (may be a team member acting on the OWNER's log). */
   actor_account_id: string | null;
   actor_key_id: string | null;
   action: string;
@@ -45,7 +45,7 @@ export interface AuditLogQuery extends PaginationQueryInput {
 }
 
 /**
- * V-297 — bulk-export envelope for GDPR Article 20 portability. The
+ * The bulk-export envelope for GDPR Article 20 portability. The
  * SDK exposes the JSON branch (programmatic). Customers wanting a CSV
  * download in a browser hit `/v1/account/audit-log/export?format=csv`
  * directly with their bearer.
@@ -93,7 +93,7 @@ export class AuditLogResource {
   }
 
   /**
-   * V-462 / V-297 — bulk-export the calling account's audit log as a
+   * Bulk-export the calling account's audit log as a
    * JSON envelope. Designed for GDPR Article 20 data-portability
    * requests: a single call, up to 10,000 rows, no pagination.
    * Capped server-side at 10k; if `truncated` is `true` the older
