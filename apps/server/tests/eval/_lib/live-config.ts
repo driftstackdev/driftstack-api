@@ -88,6 +88,21 @@ export const DEFAULT_LIVE_CAPS: LiveSpendCaps = {
   maxUsd: 3,
 };
 export const DEFAULT_LIVE_REPS = 1;
+
+/**
+ * What a NEW aggregator account is allowed, per model, and what to ask for.
+ *
+ * ⛔ MEASURED, NOT GUESSED (2026-09-20). A six-arm comparison through one
+ * OpenRouter key was invalid: 54, 79 and 44 calls across three arms came back
+ * `Rate limit exceeded: new-account-rpm/<model> … new accounts are limited to 20
+ * requests per minute for this model`, each scored `provider_call_failed`. The
+ * eval starts a call every two or three seconds, so it crosses twenty a minute
+ * on its own. `SUGGESTED_PACED_RPM` is that ceiling with headroom, and the two
+ * live HERE rather than in prose so the README's number and the usage sentence
+ * cannot drift from the reason for it.
+ */
+export const AGGREGATOR_NEW_ACCOUNT_RPM = 20;
+export const SUGGESTED_PACED_RPM = 18;
 /** The customer's message, plus one "please continue". A turn plans blind on a
  *  fresh chat, so the second message is where the agent first sees the page
  *  before it plans — leaving it out would measure half the product. */
@@ -109,6 +124,12 @@ export interface LiveConfig {
   reps: number;
   maxTurns: number;
   caps: LiveSpendCaps;
+  /**
+   * EVAL_LIVE_MAX_RPM: provider calls a minute this run may START, or null for
+   * no pacing at all — exactly the behaviour that shipped before the option
+   * existed. The meter enforces it in its fetch gate; see `LivePacing`.
+   */
+  maxRpm: number | null;
   /** Task ids to run, or null for the whole corpus. */
   onlyTasks: ReadonlyArray<string> | null;
   /**
@@ -161,6 +182,8 @@ export const LIVE_HOW_TO_RUN =
   `or, for the provider bake-off, one of ${CHAT_PLANNER_MODELS.map((m) => `${m.qualifiedId} (key in ${m.provider.keyEnvVar})`).join(', ')}), ` +
   `EVAL_LIVE_REPS (default ${String(DEFAULT_LIVE_REPS)}), EVAL_LIVE_MAX_TURNS (default ${String(DEFAULT_LIVE_MAX_TURNS)}), ` +
   `EVAL_LIVE_MAX_USD (default ${String(DEFAULT_LIVE_CAPS.maxUsd)}), EVAL_LIVE_MAX_CALLS (default ${String(DEFAULT_LIVE_CAPS.maxCalls)}), EVAL_LIVE_MAX_TOKENS (default ${String(DEFAULT_LIVE_CAPS.maxTotalTokens)}), ` +
+  `EVAL_LIVE_MAX_RPM (default unset — no pacing; a positive number of provider calls a minute, measured start to start. ` +
+  `A new aggregator account allows ${String(AGGREGATOR_NEW_ACCOUNT_RPM)} requests a minute per model, so use ${String(SUGGESTED_PACED_RPM)} through one; the waiting is reported on its own line and is never inside a call's measured latency), ` +
   `EVAL_LIVE_THINKING (${LIVE_THINKING_POLICIES.join(' | ')}; Claude models only; default the product's own policy), EVAL_LIVE_STRUCTURED (0 sends requests without the reply schema; default the product's own), ` +
   `EVAL_LIVE_DEVICE (${LIVE_DEVICES.join(' | ')}; default current), EVAL_LIVE_TAP_LOOK (on | off; default on), ` +
   'EVAL_LIVE_TASKS (comma-separated task ids), EVAL_REPORT_DIR (where the reports go; default the OS temp directory, and never inside the repository). ' +
@@ -194,6 +217,25 @@ function positiveNumber(env: NodeJS.ProcessEnv, name: string, fallback: number):
   // quietly become the default.
   if (!Number.isFinite(value) || value <= 0) {
     throw new LiveConfigError(`${name} must be a positive number of US dollars`);
+  }
+  return value;
+}
+
+/**
+ * A positive number, or null when the variable is not set at all.
+ *
+ * ⛔ SAME RULE AS EVERY OTHER KNOB, AND FOR A SHARPER REASON. `EVAL_LIVE_MAX_CALLS=1o`
+ * must not quietly become the expensive default; `EVAL_LIVE_MAX_RPM=1o` must not
+ * quietly become NO PACING, because the run that follows looks perfectly healthy
+ * and is measuring the account's rate limit rather than the model. Refusing the
+ * run is the only outcome that tells anyone.
+ */
+function positiveNumberOrNull(env: NodeJS.ProcessEnv, name: string, unit: string): number | null {
+  const raw = env[name];
+  if (raw === undefined || raw.trim().length === 0) return null;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new LiveConfigError(`${name} must be a positive number of ${unit}`);
   }
   return value;
 }
@@ -314,6 +356,7 @@ export function readLiveConfig(env: NodeJS.ProcessEnv = process.env): LiveConfig
       maxTotalTokens: positiveInt(env, 'EVAL_LIVE_MAX_TOKENS', DEFAULT_LIVE_CAPS.maxTotalTokens),
       maxUsd: positiveNumber(env, 'EVAL_LIVE_MAX_USD', DEFAULT_LIVE_CAPS.maxUsd),
     },
+    maxRpm: positiveNumberOrNull(env, 'EVAL_LIVE_MAX_RPM', 'provider calls a minute'),
     onlyTasks:
       onlyRaw === undefined || onlyRaw.length === 0
         ? null

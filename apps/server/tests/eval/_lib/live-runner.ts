@@ -122,7 +122,8 @@ export class LiveRecordingDecomposer implements AgentDecomposer {
     private readonly scrub: (text: string) => string,
     /** How many dispatches the device has received so far. */
     private readonly dispatchCount: () => number = () => 0,
-    /** Told how long each planning call took, in wall-clock ms. */
+    /** Told how long each planning call took — THE MODEL'S time: wall-clock ms
+     *  with any pacing wait taken back out (see `waitedForPacingMs`). */
     private readonly onPlanningLatency: (ms: number) => void = () => undefined,
     /**
      * A value that must NEVER arrive in a call's Anthropic-key slot — on a chat
@@ -132,6 +133,25 @@ export class LiveRecordingDecomposer implements AgentDecomposer {
      * to the wrong company. The harness refuses it outright.
      */
     private readonly forbiddenInAnthropicSlot: string | null = null,
+    /** The same clock the meter and the runtime's turn ceiling read — a live
+     *  run has one. `performance.now()` when nobody injects one. */
+    private readonly now: () => number = () => performance.now(),
+    /**
+     * Milliseconds this run has spent obeying `EVAL_LIVE_MAX_RPM` so far, read
+     * off the meter. Zero for an unpaced run, which is every run that does not
+     * set the variable.
+     *
+     * ⛔ WITHOUT IT A PACED RUN SHOWS THE MODEL A DIFFERENT PAGE. The duration
+     * measured here is credited to the fixture's clock as time the customer's
+     * page went on living while the model thought (`pageAgesWhileModelThinks`),
+     * and the eval has a shipped pair of tests proving that credit decides
+     * pass/fail — "a planning call that took a minute finds the late button
+     * there", against "with no time credited the same plans never see the
+     * button". A wait this harness took to obey a rate limit is not time the
+     * model spent, so it must not age the page; measured 2026-09-20, unsubtracted
+     * it added the whole gap (3.3s at 18 rpm) to every call after the first.
+     */
+    private readonly pacedWaitMsSoFar: () => number = () => 0,
   ) {}
 
   private refuseMisplacedKey(slot: string | undefined): void {
@@ -166,7 +186,8 @@ export class LiveRecordingDecomposer implements AgentDecomposer {
     this.plans.push(record);
     if (record.sawNeedle) this.plannerSawNeedleAt ??= this.dispatchCount();
     let result: DecomposeResult;
-    const startedAt = performance.now();
+    const startedAt = this.now();
+    const pacedBefore = this.pacedWaitMsSoFar();
     try {
       result = await this.inner.decompose(args);
     } catch (err) {
@@ -178,7 +199,14 @@ export class LiveRecordingDecomposer implements AgentDecomposer {
       record.error = this.describe(err);
       throw err;
     } finally {
-      this.onPlanningLatency(performance.now() - startedAt);
+      // ⛔ THE MODEL'S TIME, NOT THE HARNESS'S. Everything the call spent inside
+      // the meter's pacing gate comes back off: it is this run obeying a rate
+      // limit, and crediting it would age the fixture page by the eval's own
+      // waiting. A retrying adapter can take several gaps inside one
+      // `decompose`, so the subtraction is the DELTA across this call, never a
+      // single gap. Unpaced, both readings are 0 and this is the old line.
+      const paced = this.pacedWaitMsSoFar() - pacedBefore;
+      this.onPlanningLatency(Math.max(0, this.now() - startedAt - paced));
     }
     record.result = result.kind;
     if (result.kind === 'plan') {
@@ -333,6 +361,17 @@ export interface LiveRunContext {
   /** Run the executor with the look before a tap switched off — the wire it
    *  sent before the look existed. */
   tapLookOff?: boolean;
+  /**
+   * The runtime's own monotonic clock — the one `MAX_TURN_WALL_CLOCK_MS` is
+   * measured on. Absent is `performance.now()`, which is what a live run uses.
+   *
+   * ⛔ IT IS THE SAME CLOCK THE METER READS, ON PURPOSE. A pacing wait sits
+   * inside the decomposer's fetch, so it is inside a planning call, so it is
+   * inside the turn — the runtime's three-minute ceiling counts it exactly as it
+   * counts a slow model. Handing both the same injected clock is the only way a
+   * keyless test can show that, instead of asserting it in prose.
+   */
+  runtimeNowMs?: () => number;
 }
 
 function tapLooksOf(device: FakeDevice): {
@@ -488,12 +527,15 @@ export async function runLiveTask(
       clock.advance(Math.round((ctx.pageAgesWhileModelThinks ?? ((ms) => ms))(measuredMs)));
     },
     selection.kind === 'claude' ? null : ctx.apiKey,
+    ctx.runtimeNowMs ?? (() => performance.now()),
+    () => ctx.meter.waitedForPacingMs(),
   );
   const runtime = new AgentRuntime({
     decomposer,
     executor,
     sessions,
     archetype: EVAL_ARCHETYPE,
+    ...(ctx.runtimeNowMs !== undefined ? { nowMs: ctx.runtimeNowMs } : {}),
   });
 
   const callsBefore = ctx.meter.records().length;

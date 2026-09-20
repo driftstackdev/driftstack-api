@@ -58,6 +58,10 @@ describe('agent eval — LIVE tier (real planner, real model; never gates)', () 
         reps: config.reps,
         maxTurns: config.maxTurns,
         caps: config.caps,
+        // Null is no pacing at all — the behaviour that shipped before the
+        // option existed. A number spaces the START of one call from the START
+        // of the last, outside each call's own clock.
+        maxRpm: config.maxRpm,
         thinkingPolicy: config.thinkingPolicy,
         structuredOutput: config.structuredOutput,
         devicePredatesTapLook: config.devicePredatesTapLook,

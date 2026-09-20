@@ -33,6 +33,133 @@ export interface LiveSpendCaps {
 
 export type LiveSpendCapName = 'calls' | 'tokens' | 'usd';
 
+/**
+ * The wall clock the meter reads and the sleep it waits on.
+ *
+ * ⛔ ONE CLOCK, BECAUSE A LIVE RUN HAS ONE. In a live run both are the real
+ * ones, and the runtime's own three-minute turn ceiling reads the same
+ * `performance.now()` — which is exactly why pacing can push a turn onto that
+ * ceiling (see `LivePacing`). A test that injected a clock into the meter alone
+ * could not show that interaction at all, so the whole harness takes one of
+ * these and hands it to the meter AND to `AgentRuntime.nowMs`.
+ */
+export interface LiveClock {
+  /** Monotonic milliseconds. */
+  now: () => number;
+  /** Resolves once `ms` have passed on that clock. */
+  sleep: (ms: number) => Promise<void>;
+}
+
+/**
+ * EVAL_LIVE_MAX_RPM — how fast this run may ASK, not how fast the model is.
+ *
+ * ⛔ WHY IT EXISTS, MEASURED 2026-09-20. A six-arm comparison through one
+ * aggregator key was invalid: 54, 79 and 44 calls across three arms came back
+ * `Rate limit exceeded: new-account-rpm/<model> … new accounts are limited to 20
+ * requests per minute for this model`. The report did the right thing with each
+ * one — a failed provider call is never a model failure — but the run had
+ * measured the ACCOUNT'S rate limit rather than the models. The eval starts a
+ * call every two or three seconds, so it crosses twenty a minute by itself.
+ *
+ * ⛔ AND WHAT IT MUST NOT DO: change what is measured. The wait is taken in the
+ * meter's fetch gate AFTER the cap checks and BEFORE the call's own clock
+ * starts, so first-token and total latency are the provider's numbers and
+ * nothing else. What the waiting cost is reported on its own line instead of
+ * being hidden inside the latencies it would otherwise inflate.
+ *
+ * ⛔ TWO CLOCKS OUTSIDE THIS ONE DO SEE THE WAIT, AND BOTH ARE WRITTEN DOWN
+ * RATHER THAN HOPED ABOUT. (a) `AgentRuntime`'s three-minute turn ceiling — the
+ * wait is inside a planning call, so it is inside the turn; the report flags
+ * every turn that ended there while pacing was on. (b) BOTH ADAPTERS' OWN
+ * PER-ATTEMPT ABORT TIMERS. `ClaudeAgentDecomposer` and the chat adapter both
+ * arm `setTimeout(() => ac.abort(), …)` — the idle timer and the streamed total
+ * cap — inside their `callWithRetry`, BEFORE they call this fetch, so the wait
+ * comes out of the budget the provider has to send its headers: at 18 rpm,
+ * 3.334s of a 25s one (the timer is re-armed at the headers, so nothing after
+ * them is affected).
+ * A gap at or above that budget would abort every paced call before it was even
+ * sent — which is why a wait interrupted by `init.signal` gives up at once (see
+ * `sleepUntilAborted`) and why the README states the floor. The FIX for the
+ * shrunk budget is in the adapters, not here: a harness that quietly raised the
+ * product's own timeouts would be measuring a product nobody ships.
+ */
+export interface LivePacing {
+  /** Provider calls a minute this run may START. The meter starts no call
+   *  sooner than `60000 / maxRpm` ms after the PREVIOUS call started. */
+  maxRpm: number;
+  /** Injected so the keyless tests never really sleep. A real timer by default. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/** What the pacing actually cost, for the report's own line. */
+export interface LivePacingTotals {
+  maxRpm: number;
+  waits: number;
+  waitedMs: number;
+}
+
+const REAL_SLEEP = (ms: number): Promise<void> =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/**
+ * The sleep, given up the moment the call it is holding is aborted.
+ *
+ * ⛔ IT RESOLVES ON ABORT, IT DOES NOT REJECT — and that is the whole point.
+ * An abort here must change WHEN the wait ends and nothing else: the call still
+ * goes on to be recorded and forwarded exactly as an unpaced one would be, and
+ * the transport (which was handed the same signal) fails it the same way. A
+ * rejection would make a paced run record one call FEWER than the identical
+ * unpaced run, which is a difference in what the run measured.
+ *
+ * ⛔ AND WITHOUT IT THE WAIT OUTLIVES THE CALL. Both adapters arm their
+ * per-attempt abort timer BEFORE they call this fetch, and `AgentRuntime` hands
+ * the customer's Stop down the same path; a wait that ignored the signal would
+ * sit out the rest of its gap after the call it belongs to was already over.
+ */
+function sleepUntilAborted(
+  sleeping: Promise<void>,
+  signal: AbortSignal | null | undefined,
+): Promise<void> {
+  if (signal === null || signal === undefined) return sleeping;
+  if (signal.aborted) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    const done = (): void => {
+      signal.removeEventListener('abort', done);
+      resolve();
+    };
+    signal.addEventListener('abort', done, { once: true });
+    sleeping.then(done, done);
+  });
+}
+
+/**
+ * The gap a rate implies, in WHOLE MILLISECONDS, ROUNDED UP.
+ *
+ * ⛔ UP, AND INTEGRAL, ON PURPOSE. 60000/18 is 3333.333…, which no floating
+ * point sum reproduces exactly: spacing calls by that value left consecutive
+ * gaps a fraction of an ulp SHORT of it, so the run was — by its own arithmetic
+ * — a hair over the rate it was told to stay under. A rate limit is a ceiling
+ * somebody else enforces, so the rounding has to fail towards being slower.
+ * 3334ms between calls is 17.996 a minute; 3333ms is 18.001, and eighteen was
+ * already the headroom under twenty.
+ */
+export function pacingGapMs(maxRpm: number): number {
+  return Math.ceil(60_000 / maxRpm);
+}
+
+/**
+ * A call the provider refused for RATE LIMITING, as opposed to any other 4xx.
+ *
+ * Read off the recorded call, never off the run's configuration: the point is to
+ * recognise the refusal an aggregator actually sent. A 429 is the status for it;
+ * the message is matched too because an aggregator can wrap the upstream's
+ * refusal in a different status while keeping its words.
+ */
+export function isRateLimitRefusal(call: Pick<MeteredCall, 'status' | 'providerError'>): boolean {
+  if (call.status === 429) return true;
+  return call.providerError !== null && /rate[\s_-]?limit/i.test(call.providerError);
+}
+
 const CAP_SENTENCE: Readonly<Record<LiveSpendCapName, string>> = {
   calls: 'the live eval reached its model-call cap and will start no more provider calls',
   tokens: 'the live eval reached its token cap and will start no more provider calls',
@@ -291,6 +418,15 @@ export class LiveMeter {
   private reached: LiveSpendCapName | null = null;
   private label = 'unlabelled';
   private leakedSecretNames = new Set<string>();
+  /**
+   * The earliest the NEXT call may start, on `now()`'s clock. A slot is
+   * reserved the moment a call passes the caps, so two calls that overlap take
+   * two slots rather than reading the same "previous start" and waiting the
+   * same amount. Null until the first call.
+   */
+  private nextAllowedStartAt: number | null = null;
+  private pacingWaits = 0;
+  private pacingWaitedMs = 0;
 
   constructor(
     private readonly inner: typeof globalThis.fetch,
@@ -302,7 +438,40 @@ export class LiveMeter {
     /** The chat provider's prices, or null for a Claude run (priced from the
      *  registry by the model each request names). */
     private readonly pricing: ChatModelPrices | null = null,
+    /** EVAL_LIVE_MAX_RPM, or null for no pacing at all — which is exactly the
+     *  behaviour this class had before pacing existed. See `LivePacing`. */
+    private readonly pacing: LivePacing | null = null,
   ) {}
+
+  /** What the pacing cost, or null when the run was not paced. */
+  pacingTotals(): LivePacingTotals | null {
+    if (this.pacing === null) return null;
+    return {
+      maxRpm: this.pacing.maxRpm,
+      waits: this.pacingWaits,
+      waitedMs: Math.round(this.pacingWaitedMs),
+    };
+  }
+
+  /** Calls the provider refused for rate limiting — see `isRateLimitRefusal`. */
+  rateLimitRefusals(): number {
+    return this.calls.filter((call) => isRateLimitRefusal(call)).length;
+  }
+
+  /**
+   * Milliseconds this run has spent WAITING to obey its rate, unrounded, as
+   * measured on `now()` — zero when the run is unpaced.
+   *
+   * ⛔ IT EXISTS SO THE WAIT CAN BE SUBTRACTED BACK OUT. The call's own clock
+   * already excludes it, but anything that times a whole PLANNING CALL from the
+   * outside — `LiveRecordingDecomposer`, which credits that duration to the
+   * fixture page as time the customer's page went on living — measures the wait
+   * along with the model. Reading this either side of a call gives exactly what
+   * the harness spent, so what is credited is what the MODEL took.
+   */
+  waitedForPacingMs(): number {
+    return this.pacingWaitedMs;
+  }
 
   /** Stamp the calls that follow with what was running when they were made. */
   setLabel(label: string): void {
@@ -373,6 +542,26 @@ export class LiveMeter {
     if (totals.callsStarted >= this.caps.maxCalls) return this.refuse('calls');
     if (totals.totalTokens >= this.caps.maxTotalTokens) return this.refuse('tokens');
     if (totals.estimatedUsd >= this.caps.maxUsd) return this.refuse('usd');
+    // ⛔ AFTER THE CAPS, SO A CAP ALWAYS WINS. A run at its call cap must refuse
+    // instantly and start nothing — waiting first would spend real minutes to
+    // reach a refusal that was already decided. And BEFORE `startedAt` below, so
+    // the wait is outside the call's own clock: `firstTokenMs` and `totalMs` are
+    // the provider's numbers whether or not this run was paced.
+    //
+    // ⛔ THE SIGNAL IS THE CALL'S OWN, and it is passed in because both adapters
+    // arm their per-attempt abort timer BEFORE they reach this fetch. See
+    // `sleepUntilAborted`: a wait nobody can interrupt outlives the call it
+    // belongs to.
+    //
+    // ⛔ AND NOT EVEN AWAITED WHEN THE RUN IS UNPACED. `await` on an async
+    // method that returns at once still yields a microtask, and the cap check
+    // above and the `calls.push` below were — before pacing existed — one
+    // unbroken synchronous block. Yielding between them would let two
+    // overlapping calls both read the totals from before either was recorded
+    // and both pass a cap that had one call left. Nothing calls this meter
+    // concurrently today; "unset is exactly the behaviour that shipped" should
+    // not depend on that staying true.
+    if (this.pacing !== null) await this.pace(init?.signal);
 
     const bodyText = typeof init?.body === 'string' ? init.body : '';
     for (const [name, value] of this.secrets) {
@@ -443,6 +632,43 @@ export class LiveMeter {
       headers: response.headers,
     });
   };
+
+  /**
+   * Hold this call until `60000 / maxRpm` ms have passed since the previous one
+   * STARTED. A no-op — not even a resolved promise's worth of delay in the
+   * arithmetic — when the run is unpaced.
+   *
+   * ⛔ IT MEASURES FROM START TO START, NOT FROM END TO START. A rate limit
+   * counts requests in a minute, so what has to be spaced is when calls BEGIN.
+   * Spacing from the end of one to the start of the next would add the whole of
+   * every call's own duration on top and pace far slower than asked — a
+   * twenty-second planning call would cost twenty seconds of nothing.
+   */
+  private async pace(signal: AbortSignal | null | undefined): Promise<void> {
+    if (this.pacing === null) return;
+    const gapMs = pacingGapMs(this.pacing.maxRpm);
+    const now = this.now();
+    const startAt = Math.max(now, this.nextAllowedStartAt ?? now);
+    // Reserved BEFORE the await, so an overlapping call queues behind this one.
+    // It stays reserved even if the wait below is cut short by an abort: a slot
+    // spent on a call that never went out only makes the run slower than asked,
+    // and a rate limit is somebody else's ceiling.
+    this.nextAllowedStartAt = startAt + gapMs;
+    const waitMs = startAt - now;
+    if (waitMs <= 0) return;
+    this.pacingWaits += 1;
+    // ⛔ WHAT WAS ACTUALLY WAITED, NOT WHAT WAS ASKED FOR. A real timer
+    // overshoots and an aborted wait stops early, and this number is subtracted
+    // back out of the planning latency credited to the fixture page
+    // (`waitedForPacingMs`) — so an estimate here would leave the difference
+    // credited to the model.
+    const before = this.now();
+    try {
+      await sleepUntilAborted((this.pacing.sleep ?? REAL_SLEEP)(waitMs), signal);
+    } finally {
+      this.pacingWaitedMs += Math.max(0, this.now() - before);
+    }
+  }
 
   private refuse(cap: LiveSpendCapName): never {
     this.reached = cap;

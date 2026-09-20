@@ -15,8 +15,24 @@ import {
   chatPricesOn,
   resolvePlannerModel,
 } from '../../../src/services/agent-planner-providers.js';
-import { LiveConfigError, type LiveThinkingPolicy } from './live-config.js';
-import { LiveMeter, scrubSecrets, type LiveSpendCaps, type MeterTotals } from './live-meter.js';
+import {
+  MAX_MODEL_CALLS_PER_TURN,
+  MAX_TURN_WALL_CLOCK_MS,
+} from '../../../src/services/agent-runtime.js';
+import {
+  AGGREGATOR_NEW_ACCOUNT_RPM,
+  LiveConfigError,
+  SUGGESTED_PACED_RPM,
+  type LiveThinkingPolicy,
+} from './live-config.js';
+import {
+  LiveMeter,
+  pacingGapMs,
+  scrubSecrets,
+  type LiveClock,
+  type LiveSpendCaps,
+  type MeterTotals,
+} from './live-meter.js';
 import { liveSecrets, runLiveTask, type LiveRepReport } from './live-runner.js';
 import { describeLiveReason, type LiveReasonClass } from './live-score.js';
 import { liveSourceStamp, sameSource, type LiveSourceStamp } from './live-source-stamp.js';
@@ -121,6 +137,19 @@ export interface LiveReport {
     /** `stop_reason` → calls. Anything but `end_turn` is worth reading. */
     stopReasons: Readonly<Record<string, number>>;
     errors: ReadonlyArray<string>;
+    /**
+     * Calls the provider refused for RATE LIMITING — see `isRateLimitRefusal`.
+     * ⛔ A run with any of these measured the ACCOUNT, not the models: each one
+     * is scored `provider_call_failed`, which is right, and it is still a hole
+     * in the comparison. `EVAL_LIVE_MAX_RPM` is what prevents them.
+     *
+     * ⛔ NOT NAMED `rateLimited`, deliberately. The report's own shape guard
+     * ("leads with its scope, names both tiers, and reports COUNTS over
+     * repetitions") refuses any field NAMED for a rate, because a live run is
+     * nondeterministic and a field called a rate is one somebody quotes as a
+     * score. This is a COUNT of refusals, so it is named like one.
+     */
+    throttledCalls: number;
     /** The upstreams that served calls, as the aggregator stamped them. Empty
      *  for a wire that does not say. More than one on a pinned run is a
      *  finding: the pin did not hold. */
@@ -129,6 +158,28 @@ export interface LiveReport {
   repsRequested: number;
   maxTurns: number;
   caps: LiveSpendCaps;
+  /**
+   * `EVAL_LIVE_MAX_RPM`, and what it cost — null when the run was not paced.
+   *
+   * ⛔ THE WAITING IS REPORTED, NOT ABSORBED. It sits outside each call's own
+   * clock (see `LivePacing`), so it would otherwise be time nobody could
+   * account for: a run whose seconds do not add up is a run somebody will
+   * explain with a guess.
+   */
+  pacing: {
+    maxRpm: number;
+    waits: number;
+    secondsWaited: number;
+    /**
+     * ⛔ TURNS THAT ENDED ON THE RUNTIME'S THREE-MINUTE CEILING WHILE PACING
+     * WAS ON. The pacing wait is inside the decomposer's fetch, so it is inside
+     * the turn, so `MAX_TURN_WALL_CLOCK_MS` counts it exactly as it counts a
+     * slow model — and a paced run must never be read as "the model ran out of
+     * time". Empty is the required state. See `turnsEndedOnTheWallClock` for
+     * the one ending this cannot see.
+     */
+    turnsEndedOnTheWallClock: ReadonlyArray<string>;
+  } | null;
   /** ⛔ TRUE MEANS THE NUMBERS BELOW COVER ONLY PART OF THE CORPUS. */
   partial: boolean;
   stoppedBecause: string | null;
@@ -216,12 +267,61 @@ export interface LiveSuiteArgs {
   devicePredatesTapLook?: boolean;
   /** See `LiveRunContext.tapLookOff`. */
   tapLookOff?: boolean;
+  /**
+   * `EVAL_LIVE_MAX_RPM` — provider calls a minute the meter may START, measured
+   * start to start. Null or absent is no pacing, which is exactly what this
+   * suite did before the option existed.
+   */
+  maxRpm?: number | null;
+  /**
+   * The wall clock the meter reads, the sleep its pacing waits on, and the
+   * clock the runtime's three-minute turn ceiling is measured against — one
+   * clock, because a live run has one. The real ones when absent; the keyless
+   * tests inject a stand-in so a paced run never really sleeps.
+   */
+  clock?: LiveClock;
   /** See `LiveConfig.thinkingPolicy` / `structuredOutput`. Null or absent is the
    *  product's own default, which is what a run is about unless it says otherwise. */
   thinkingPolicy?: LiveThinkingPolicy | null;
   structuredOutput?: boolean | null;
   runId?: string;
   now?: () => Date;
+}
+
+/**
+ * Every turn the RUNTIME said ended on its three-minute wall clock, named.
+ *
+ * ⛔ WHAT IT CANNOT SEE, SAID OUT LOUD. `AgentRuntime` records `stopped:
+ * 'wall_clock'` only when the loop was going round because the planner said
+ * `continue` — the ending that otherwise shows a customer a column of ticks
+ * over an unfinished task. A loop that was going round to RE-PLAN a failed step
+ * and ran into the same ceiling breaks without naming it, because there the ✗
+ * row is already the message. So an empty list here means "no turn ended on the
+ * clock mid-progress", not "no turn ever met the ceiling"; a paced run with
+ * failing steps still wants its ✗ rows read.
+ *
+ * Structurally typed on purpose: it needs nothing from a repetition but the
+ * loop's own ending, which is also what makes it testable without a live run.
+ */
+export function turnsEndedOnTheWallClock(
+  tasks: ReadonlyArray<{
+    taskId: string;
+    reps: ReadonlyArray<{
+      rep: number;
+      turns: ReadonlyArray<{ turn: number; loop: { stopped: string | null } | null }>;
+    }>;
+  }>,
+): string[] {
+  return tasks.flatMap((task) =>
+    task.reps.flatMap((rep) =>
+      rep.turns
+        .filter((turn) => turn.loop?.stopped === 'wall_clock')
+        .map(
+          (turn) =>
+            `${task.taskId} rep ${String(rep.rep)} message ${String(turn.turn)} ended on the turn's three-minute wall clock`,
+        ),
+    ),
+  );
 }
 
 export interface LiveSuiteResult {
@@ -240,8 +340,11 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
     args.providerFetch ?? globalThis.fetch.bind(globalThis),
     args.caps,
     secrets,
-    undefined,
+    args.clock?.now,
     pricing,
+    args.maxRpm == null
+      ? null
+      : { maxRpm: args.maxRpm, ...(args.clock !== undefined ? { sleep: args.clock.sleep } : {}) },
   );
   const startedAt = (args.now?.() ?? new Date()).toISOString();
   const sourceAtStart = liveSourceStamp();
@@ -267,6 +370,7 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
           : {}),
         ...(args.thinkingPolicy != null ? { thinkingPolicy: args.thinkingPolicy } : {}),
         ...(args.structuredOutput != null ? { structuredOutput: args.structuredOutput } : {}),
+        ...(args.clock !== undefined ? { runtimeNowMs: args.clock.now } : {}),
       });
       const list = byTask.get(task.id) ?? [];
       list.push(result);
@@ -388,11 +492,22 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
       errors: calls.flatMap((c) =>
         c.providerError === null ? [] : [`${c.label} (${c.purpose}): ${c.providerError}`],
       ),
+      throttledCalls: meter.rateLimitRefusals(),
       servedBy: distinct(calls.flatMap((c) => (c.servedBy === null ? [] : [c.servedBy]))),
     },
     repsRequested: args.reps,
     maxTurns: args.maxTurns,
     caps: args.caps,
+    pacing: (() => {
+      const paced = meter.pacingTotals();
+      if (paced === null) return null;
+      return {
+        maxRpm: paced.maxRpm,
+        waits: paced.waits,
+        secondsWaited: Math.round(paced.waitedMs / 100) / 10,
+        turnsEndedOnTheWallClock: turnsEndedOnTheWallClock(tasks),
+      };
+    })(),
     partial: stoppedBecause !== null,
     stoppedBecause,
     spend: {
@@ -459,6 +574,24 @@ export function renderLiveReport(report: LiveReport): string {
   lines.push(
     `  caps  $${String(report.caps.maxUsd)} at list price, ${String(report.caps.maxCalls)} model calls, ${String(report.caps.maxTotalTokens)} tokens — whichever is reached first stops the run`,
   );
+  if (report.pacing !== null) {
+    // ⛔ THE ARITHMETIC, NOT A REASSURANCE. A turn makes at most
+    // MAX_MODEL_CALLS_PER_TURN calls, so it waits at most one gap fewer than
+    // that — and that whole amount comes out of the same three minutes the
+    // runtime gives a turn.
+    const worstPerTurnS =
+      ((MAX_MODEL_CALLS_PER_TURN - 1) * pacingGapMs(report.pacing.maxRpm)) / 1000;
+    lines.push(
+      `  pacing — ${String(report.pacing.waits)} waits, ${report.pacing.secondsWaited.toFixed(1)} seconds waited, to stay under ${String(report.pacing.maxRpm)} requests a minute (EVAL_LIVE_MAX_RPM)`,
+      `  the wait is taken BEFORE each call's own clock starts, so every latency below is the provider's whether or not this run was paced; it is INSIDE the turn, so a turn of ${String(MAX_MODEL_CALLS_PER_TURN)} calls spends up to ${worstPerTurnS.toFixed(1)}s of its ${(MAX_TURN_WALL_CLOCK_MS / 1000).toFixed(0)}s wall clock waiting`,
+    );
+    if (report.pacing.turnsEndedOnTheWallClock.length > 0) {
+      lines.push(
+        `  ⛔ ${String(report.pacing.turnsEndedOnTheWallClock.length)} turn(s) ended on the runtime's ${(MAX_TURN_WALL_CLOCK_MS / 1000).toFixed(0)}s wall clock WHILE PACING WAS ON — read those as "this run's own waiting used the turn's time", NOT as "the model ran out of time". Re-run them faster (a higher EVAL_LIVE_MAX_RPM) before quoting anything about them:`,
+      );
+      for (const detail of report.pacing.turnsEndedOnTheWallClock) lines.push(`      ${detail}`);
+    }
+  }
   lines.push(
     `  reply controls AS SENT — thinking [${report.requestControls.thinkingSent.join(', ')}]; effort [${report.requestControls.effortSent.join(', ')}]; reply schema [${report.requestControls.structuredOutputSent.join(', ')}] (requested policy: ${report.requestControls.requestedThinkingPolicy})`,
   );
@@ -547,6 +680,17 @@ export function renderLiveReport(report: LiveReport): string {
   }
   lines.push('');
   lines.push('every repetition that did not pass:');
+  if (report.provider.throttledCalls > 0) {
+    // ⛔ ONE PLAIN LINE, AT THE TOP, NAMING THE FIX. Each of these is correctly
+    // scored `provider_call_failed` — a failed provider call is never a model
+    // failure — and the sum of them is still a run that measured the account's
+    // rate limit rather than the models. Somebody reading the failures below
+    // has to be told that before they read them.
+    lines.push(
+      `  ⛔ ${String(report.provider.throttledCalls)} provider call(s) were refused for RATE LIMITING. Those repetitions measured this ACCOUNT'S limit, not the model. ` +
+        `Set EVAL_LIVE_MAX_RPM (${String(SUGGESTED_PACED_RPM)} through one aggregator key, whose new-account limit is ${String(AGGREGATOR_NEW_ACCOUNT_RPM)} requests a minute per model) and run them again.`,
+    );
+  }
   for (const task of report.tasks) {
     for (const rep of task.reps) {
       if (rep.outcome === 'pass') continue;

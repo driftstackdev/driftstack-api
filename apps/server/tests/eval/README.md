@@ -146,6 +146,7 @@ EVAL_LIVE=1 TMPDIR=/private/tmp/ds-gate \
 | `EVAL_LIVE_MAX_USD`    | 3                                 | **the dollar cap**: priced per call at the registry's rates, output as output, cache at its own multipliers                                                                              |
 | `EVAL_LIVE_MAX_CALLS`  | 200                               | backstop, enforced in `_lib/live-meter.ts`                                                                                                                                               |
 | `EVAL_LIVE_MAX_TOKENS` | 600000                            | backstop. A token count is **not** a dollar bound: all-output, 600k tokens is $15                                                                                                        |
+| `EVAL_LIVE_MAX_RPM`    | unset (**no pacing**)             | provider calls a minute the meter may **start**, measured start to start. Through one aggregator key use **18** — see below. Malformed refuses the run rather than running unpaced       |
 | `EVAL_LIVE_TASKS`      | all                               | comma-separated task ids                                                                                                                                                                 |
 | `EVAL_LIVE_THINKING`   | the product's own policy          | `disabled` or `adaptive-low` — measure one thinking policy against another through the product's request assembly                                                                        |
 | `EVAL_LIVE_STRUCTURED` | the product's own (on)            | `0` sends requests without the reply schema, to measure the defensive parser on its own                                                                                                  |
@@ -160,6 +161,83 @@ When a cap is reached the run **stops** and the report is marked `partial`; a
 task in flight is `incomplete`, never a failure. A malformed cap is an error, not
 a silent fall back to the expensive default. A model id the registry cannot price
 is priced at the dearest rate it knows, never at zero.
+
+**Pacing (`EVAL_LIVE_MAX_RPM`).** Unset — the default — is no pacing at all,
+byte for byte the behaviour that shipped before the option existed. Set to a
+positive number, the meter starts no provider call sooner than `60000/rpm`
+milliseconds (rounded **up** to whole milliseconds, so the rounding can never
+make a run a hair faster than asked) after the **previous call started** —
+start to start, because a rate limit counts requests in a minute, not gaps
+between them. A malformed value **refuses the run**: a silent fall back here is
+not an expensive run, it is a run that looks perfectly healthy while measuring
+the account's rate limit instead of the model.
+
+⛔ **It must not distort what is measured, and three things make that true.**
+
+- The wait is taken in the meter's fetch gate **after** the cap checks and
+  **before** the call's own clock starts, so `firstTokenMs` and `totalMs` are
+  the provider's numbers whether or not a run was paced. A keyless negative
+  control moves the same wait inside the call's clock and watches that assertion
+  fail.
+- A **cap always beats the pacing**: a run at its call cap refuses instantly and
+  waits for nothing, rather than spending real minutes to reach a refusal that
+  was already decided.
+- The waiting is **reported**, not absorbed — `pacing — N waits, S seconds
+waited, to stay under R requests a minute` in the text header and a `pacing`
+  block in the JSON — because time nobody can account for is time somebody will
+  explain with a guess.
+
+⚠️ **It does change one thing, and the report says so.** The pacing wait sits
+inside the decomposer's fetch, so it is inside a planning call, so it is inside
+the turn — and `AgentRuntime`'s `MAX_TURN_WALL_CLOCK_MS` (180 s, measured on the
+same `performance.now()`) counts it exactly as it counts a slow model. The
+arithmetic: a turn makes at most `MAX_MODEL_CALLS_PER_TURN` (7) calls, so it
+waits at most 6 gaps; at 18 rpm that is 6 × 3,334 ms ≈ **20.0 s of the 180 s**,
+which a healthy turn has room for. The worst case is a turn that would have
+finished at 160.1 s and now crosses 180 s and stops on the wall clock instead —
+so every paced run whose turn ended there is **flagged in the header** with
+"read this as this run's own waiting, NOT as the model running out of time".
+Below about 2 rpm a single turn's waiting exceeds the whole 180 s on its own;
+18 is nowhere near that. The runtime's **no-progress** logic compares pages and
+plans, never durations, so pacing cannot affect it.
+
+⚠️ **And the adapters' own abort timers see the wait too — measured, not
+assumed.** Both planner adapters arm their per-attempt `setTimeout(() =>
+ac.abort(), …)` — the idle timer and the streamed total cap — inside
+`callWithRetry`, **before** they call the meter's fetch
+(`agent-decomposer-claude.ts`, `agent-decomposer-openai-compatible.ts`), and the
+pacing wait is taken inside that fetch. So the wait comes out of the budget the
+provider has to send its **headers** — a 25 s idle timer, of which 18 rpm spends
+3.334 s (13%); the idle timer is re-armed at the headers, so nothing after them
+is affected, and 3.3 s of the 300 s total cap is noise. **The floor that
+matters: at or below about 2.4 rpm the gap reaches the whole 25 s idle budget
+and every paced call is aborted before it is even sent** — a run of nothing but
+network failures with no line anywhere saying why. Stay far above it. Because
+that timer's abort (and the customer's Stop) arrives on the call's own
+`AbortSignal`, a wait holding an aborted call **gives up at once** instead of
+sitting out the rest of its gap; the call is then recorded and forwarded exactly
+as an unpaced one would be, so a paced run never counts one call fewer. Fixing
+the shrunk header budget properly means arming that timer after the transport
+call, in `apps/server/src/services/agent-decomposer-*.ts`; the harness
+deliberately does **not** raise the product's timeouts to compensate, because a
+run against timeouts nobody ships is not a measurement of the product.
+
+⛔ **What the model is shown does not move.** A planning call is also timed from
+the _outside_ by `LiveRecordingDecomposer`, and that duration is credited to the
+fixture's clock as time the customer's page went on living while the model
+thought. The pacing wait is subtracted back out of it (`waitedForPacingMs`), so
+a paced run ages the page by exactly what the model took — which matters because
+the eval has a shipped pair of tests proving that credit decides pass/fail ("a
+planning call that took a minute finds the late button there", against "with no
+time credited the same plans never see the button"). The per-repetition
+`wallClockMs` is the exception on purpose: it is the wall clock, so it does
+include the waiting, and the header's `seconds waited` is what reconciles it.
+
+⚠️ The flag reads `loop.stopped`, which the runtime sets only for a loop going
+round on a planner's `continue`. A loop going round to **re-plan a failed step**
+that meets the same ceiling breaks without naming it (there the ✗ row is already
+the message), so an empty flag list means "no turn ended on the clock
+mid-progress", not "no turn ever met the ceiling".
 
 **Secrets.** The meter forwards request headers untouched and never reads them.
 Every report and every captured error is scrubbed of **every provider key present
@@ -335,6 +413,12 @@ the request re-sent once without it — the report's `reply controls AS SENT` li
 then shows what actually went out, so a wrong guess costs one request and is
 visible, never silent.
 
+Each row here is its **own account with its own request-rate limit**, and none of
+those has been measured — so these commands carry no `EVAL_LIVE_MAX_RPM`. If a
+run meets rate-limit refusals the report says so at the top of its failures
+section and names the variable; set it to whatever that provider allows, the way
+the aggregator section below sets 18.
+
 ```
 EVAL_LIVE=1 EVAL_LIVE_MODEL=openai:gpt-5.6-luna EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
   npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
@@ -442,6 +526,19 @@ one process's environment and nothing else — shell history records the text
 `$(security …)`, never the key. ⛔ Never run `security find-generic-password … -w`
 on its own, and never `echo` it: that prints the key to the terminal.
 
+⛔ **Pace it, or it measures the account and not the models.** A new OpenRouter
+account is limited to **20 requests a minute per model**, and the eval starts a
+call every two or three seconds, so it crosses that by itself. Measured
+2026-09-20: a six-arm comparison through one key was **invalid** — 54, 79 and 44
+of the calls in three arms came back `Rate limit exceeded:
+new-account-rpm/<model> … new accounts are limited to 20 requests per minute for
+this model`. The report did the right thing with every one of them (a failed
+provider call is scored `provider_call_failed` and is never a model failure),
+and the run had still measured the account's rate limit rather than the models.
+So every command below carries **`EVAL_LIVE_MAX_RPM=18`** — the measured ceiling
+with headroom. A run that still meets refusals says so in one line at the top of
+its failures section, naming this variable.
+
 **The full comparison** — the Sonnet 5 row first, as the like-for-like CONTROL
 (the product's default model through the same hop as every challenger, so its
 gap to a direct `claude-sonnet-5` run is the aggregator's own cost in latency
@@ -449,19 +546,19 @@ and caching, not the model's), then the challengers, three repetitions each:
 
 ```
 OPENROUTER_API_KEY="$(security find-generic-password -s OPENROUTER_API_KEY -w)" \
-  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:anthropic/claude-sonnet-5 EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:anthropic/claude-sonnet-5 EVAL_LIVE_REPS=3 EVAL_LIVE_MAX_RPM=18 TMPDIR=/private/tmp/ds-gate \
   npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
 OPENROUTER_API_KEY="$(security find-generic-password -s OPENROUTER_API_KEY -w)" \
-  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:openai/gpt-5.6-luna EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:openai/gpt-5.6-luna EVAL_LIVE_REPS=3 EVAL_LIVE_MAX_RPM=18 TMPDIR=/private/tmp/ds-gate \
   npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
 OPENROUTER_API_KEY="$(security find-generic-password -s OPENROUTER_API_KEY -w)" \
-  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:google/gemini-3.8-flash EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:google/gemini-3.8-flash EVAL_LIVE_REPS=3 EVAL_LIVE_MAX_RPM=18 TMPDIR=/private/tmp/ds-gate \
   npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
 OPENROUTER_API_KEY="$(security find-generic-password -s OPENROUTER_API_KEY -w)" \
-  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:z-ai/glm-5.3-flash EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:z-ai/glm-5.3-flash EVAL_LIVE_REPS=3 EVAL_LIVE_MAX_RPM=18 TMPDIR=/private/tmp/ds-gate \
   npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
 OPENROUTER_API_KEY="$(security find-generic-password -s OPENROUTER_API_KEY -w)" \
-  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:anthropic/claude-haiku-4.5 EVAL_LIVE_REPS=3 TMPDIR=/private/tmp/ds-gate \
+  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:anthropic/claude-haiku-4.5 EVAL_LIVE_REPS=3 EVAL_LIVE_MAX_RPM=18 TMPDIR=/private/tmp/ds-gate \
   npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
 ```
 
@@ -469,7 +566,7 @@ Optional, and dearer — raise the dollar cap for it:
 
 ```
 OPENROUTER_API_KEY="$(security find-generic-password -s OPENROUTER_API_KEY -w)" \
-  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:anthropic/claude-opus-5 EVAL_LIVE_REPS=3 EVAL_LIVE_MAX_USD=5 TMPDIR=/private/tmp/ds-gate \
+  EVAL_LIVE=1 EVAL_LIVE_MODEL=openrouter:anthropic/claude-opus-5 EVAL_LIVE_REPS=3 EVAL_LIVE_MAX_USD=5 EVAL_LIVE_MAX_RPM=18 TMPDIR=/private/tmp/ds-gate \
   npx vitest run --config apps/server/tests/eval/vitest.live.config.ts
 ```
 
