@@ -59,7 +59,18 @@ export function IdleHero({
   gated?: boolean;
 }): JSX.Element {
   return (
-    <div className="ai-hello mx-auto w-full max-w-3xl">
+    <div
+      className="ai-hello mx-auto w-full max-w-3xl"
+      /* Valueless-or-absent (the view's rule — `data-x={false}` renders the
+         STRING "false", which an attribute selector matches). The short tier
+         reads it to take §3.8's trade one step further: the gate card already
+         took the beats' place, and in the 600px-tall window it takes the
+         EXPLAINER's place too, because its own body — "You can explore
+         templates and draft a task now" — is the same orientation sentence for
+         this one state, and without that the first row of templates was sliced
+         through the middle at a scroll position of 0. */
+      data-gated={gated ? '' : undefined}
+    >
       <span className="section-label">New task</span>
       <h1 className="ai-voice ai-voice-xl">
         Describe it. <em>Watch it happen.</em>

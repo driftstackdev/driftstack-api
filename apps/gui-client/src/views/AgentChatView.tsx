@@ -99,6 +99,14 @@ export {
   STOP_AGAIN_LABEL,
 } from './agent-chat/notices';
 
+/** How long `data-ai-fresh` is true for — `ds-ai-bloom`'s own duration in
+ *  index.css (1400ms) plus a frame's grace, so the attribute never leaves
+ *  while the room is still blooming. Kept as a number here rather than read
+ *  from a custom property because it is a lifetime, not a style: this module
+ *  decides when the claim stops being true, and the stylesheet decides how the
+ *  claim looks. */
+const BLOOM_MS = 1500;
+
 // ─── egress: resolve a profile's bound proxy → server proxy_id ─────
 //
 // Egress-leak fix. The AI-browser session-create only ever forwarded `profile_id`
@@ -833,6 +841,25 @@ export function AgentChatView({
       setFresh(false);
     }
   }, [phase]);
+  // ⛔ AND IT IS A MOMENT, NOT A STATE. Until final QA `data-ai-fresh` latched
+  // true for as long as a finished chat stayed open, so the attribute — whose
+  // whole meaning is "this JUST finished" — was still on the view an hour
+  // later, and anything that re-evaluated the rule (a theme flip, a style
+  // recalc, a later stage adding a second selector on it) could replay a
+  // celebration for a task nobody was watching any more. It now clears itself
+  // when the bloom is over.
+  // `ds-ai-bloom` ends at `opacity: 0.66; transform: scale(1)`, which is
+  // exactly what `[data-ai-phase='done'] .ai-aura` says — so dropping the
+  // attribute changes no pixel, it only stops the claim being true. The
+  // reduced-motion baseline clamps the animation to 0.01ms; this timer still
+  // runs, and clearing an attribute nothing is animating is a no-op.
+  useEffect(() => {
+    if (!fresh) return undefined;
+    const handle = setTimeout(() => setFresh(false), BLOOM_MS);
+    return () => {
+      clearTimeout(handle);
+    };
+  }, [fresh]);
 
   // Spec §1's tiers, measured on the VIEW's own box — all five from one
   // observer. `narrow` turns the rail into the 44px strip and the bar into its

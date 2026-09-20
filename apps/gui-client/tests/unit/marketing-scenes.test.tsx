@@ -233,10 +233,14 @@ describe('sceneFromSearch — the only door into a scene, marketing or audit', (
     expect(ALL_SCENES.slice(0, MARKETING_SCENES.length)).toEqual([...MARKETING_SCENES]);
     expect(ALL_SCENES.slice(MARKETING_SCENES.length)).toEqual([...AUDIT_SCENES]);
     expect(new Set(ALL_SCENES).size).toBe(ALL_SCENES.length);
-    // 10 views + the AI view's seven extra STATES (spec §8): the one view whose
-    // states cannot be reached from fixture data alone, and therefore the one
-    // the gates had only ever measured empty.
-    expect(AUDIT_SCENES).toHaveLength(18);
+    // 10 views + the AI view's seven extra STATES (spec §8) + two WINDOWS of
+    // its own: the one view whose states cannot be reached from fixture data
+    // alone, and therefore the one the gates had only ever measured empty.
+    // `audit-agent-chat-small` is the running state at 960x600 (stage 6's
+    // narrow tier); `audit-agent-chat-ended` is the live panel's own terminal
+    // overlay at the same size (stage 7) — the only scene whose screen is the
+    // real `AgentSessionPanel` rather than a drawn page.
+    expect(AUDIT_SCENES).toHaveLength(19);
     for (const name of ALL_SCENES) {
       expect(isAuditScene(name)).toBe(name.startsWith('audit-'));
       const size = sceneSize(name);
@@ -447,23 +451,55 @@ const AUDIT_FORBIDDEN_TEXT =
  */
 const AUDIT_FORBIDDEN_VENDOR = /\b(?:anthropic|openai)\b|\bclaude\b|\bgpt-?\d/i;
 /**
- * ⛔ AND IT IS SCOPED TO THE AI VIEW, WHICH IS NOT A FUDGE — it is the line the
- * product's copy rule actually draws.
+ * ⛔ IT NOW SCANS EVERY AUDIT SCENE, AND THE EXCEPTIONS ARE SENTENCES, NOT
+ * SCENES — the change final QA made, and the reason matters more than the
+ * mechanics.
  *
- * In the AI view a vendor's name says HOW the product is built and answers a
- * question no customer asked; "Read-only — the AI is driving" is the same
- * sentence without it. In SETTINGS the customer is being told which vendor to
- * go and buy a key from, so the name is the whole content of the field (spec D5
- * keeps "your own Anthropic key" in the own-key refusal for exactly that
- * reason). A repo-wide ban would red on that, which is why it is not one.
+ * It used to be scoped to `/^audit-agent-chat/`. That was green by SCENE
+ * COVERAGE rather than by construction: the AI view itself renders "your own
+ * Anthropic key" in two branches (AgentChatView, the bundled-consent refusal
+ * and the budget-exhausted refusal) that no scene reaches, so adding a
+ * budget-exhausted or a consent scene would have reddened this guard on copy
+ * spec D5 explicitly approves. A guard that fails when coverage IMPROVES is a
+ * guard nobody can add a scene next to.
  *
- * ⚠️ ONE OCCURRENCE IN audit-settings IS NOT A BYOK INSTRUCTION AND SHOULD GO:
- * the "AI & billing" section is described as "How the AI chat's Claude usage
- * gets paid for." — the vendor name buys nothing there, and dropping it would
- * let this ban widen to every scene. Left for the owner of that view; recorded
- * here so the scope is a decision and not an oversight.
+ * The line the product's copy rule actually draws is not between views, it is
+ * between SENTENCES. A vendor's name is banned where it says HOW the product is
+ * built and answers a question no customer asked ("Live device — <vendor> plans
+ * each step", the mode strip §10 deleted). It is allowed in the handful of
+ * places where the customer is being told WHOSE KEY TO GO AND BUY, because
+ * there the name is the whole content of the sentence. Those places are listed
+ * below, VERBATIM, and removed before the scan exactly the way
+ * `AUDIT_COPY_LITERALS` removes the support mailto — so a bare "Anthropic"
+ * anywhere else, in any scene, still fails.
+ *
+ * One occurrence did NOT survive the move and was deleted instead: SettingsView
+ * described "AI & billing" as "How the AI chat's Claude usage gets paid for."
+ * That line says who pays; the vendor name bought nothing, and the field below
+ * it is where the customer is actually told whose key to get. Dropping that one
+ * word is what let this widen.
  */
-const VENDOR_SCANNED_SCENES = /^audit-agent-chat/;
+const VENDOR_SCANNED_SCENES = /^audit-/;
+/**
+ * The sentences where naming the model vendor IS the content (spec D5). Removed
+ * verbatim before the vendor scan, per scene-rendered string — never as a
+ * pattern, so "Anthropic" on its own still fails everywhere.
+ *
+ * ⚠️ A NEW ENTRY HERE IS A COPY DECISION, NOT A TEST FIX. Each of these tells a
+ * customer which vendor to go and buy a key from; a sentence that merely
+ * MENTIONS the vendor does not belong here, it belongs deleted.
+ */
+const AUDIT_APPROVED_VENDOR_COPY: ReadonlyArray<string> = [
+  // AgentChatView — the bundled-consent refusal and the budget-exhausted
+  // refusal. Neither is reachable from a current scene; both are why this list
+  // exists rather than a scene scope.
+  'You can use bundled AI usage billed to your account, or your own Anthropic key.',
+  'Raise your monthly limit, or use your own Anthropic key to keep going.',
+  // SettingsView — the BYOK field itself, which audit-settings does render.
+  'Bring your own Anthropic key',
+  'If you add your own Anthropic key, every AI chat uses it instead of bundled usage, and Anthropic bills you directly.',
+  'Test Anthropic key',
+];
 /** Two more pieces of shipped copy: SettingsView's support mailto and the
  *  self-hosted URL field's placeholder (DEFAULT_SETTINGS.baseUrl). Removed
  *  VERBATIM before the scan, so a bare `driftstack.dev` or `localhost`
@@ -497,9 +533,8 @@ function expectAuditPrivacy(
   let hostsSeen = 0;
   if (VENDOR_SCANNED_SCENES.test(name)) {
     for (const raw of readable) {
-      expect(raw, `model-vendor name rendered in scene ${name}`).not.toMatch(
-        AUDIT_FORBIDDEN_VENDOR,
-      );
+      const s = AUDIT_APPROVED_VENDOR_COPY.reduce((acc, lit) => acc.split(lit).join(' '), raw);
+      expect(s, `model-vendor name rendered in scene ${name}`).not.toMatch(AUDIT_FORBIDDEN_VENDOR);
     }
   }
   for (const raw of strings) {

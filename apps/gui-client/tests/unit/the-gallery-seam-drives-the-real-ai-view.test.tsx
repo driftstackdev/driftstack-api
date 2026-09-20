@@ -217,9 +217,18 @@ describe('door 3 — a supplied image replaces the authed capture fetch', () => 
 
 describe('the drawn pages are images, never markup with text in them', () => {
   it('every stand-in a scene supplies renders as one <img> with no text node under it', () => {
-    const withStandIn = AGENT_CHAT_SCENE_KINDS.map((kind) =>
-      agentChatSceneFixture(kind, FROZEN),
-    ).filter((f) => f.standIn !== undefined);
+    // ⛔ `ended` IS DELIBERATELY NOT IN HERE, and the exemption is narrow enough
+    // to be worth stating (stage 7). Every other scene's stand-in is a DRAWING
+    // of a web page, and a drawing must be an image: as DOM its 9px grey type
+    // would be measured as the app's own copy by the text gate. `ended` mounts
+    // the REAL `AgentSessionPanel`, whose overlay IS the app's copy and is
+    // exactly what that gate should measure. The arm below holds the exemption
+    // shut: that scene renders the real panel and no <img> at all, so it cannot
+    // become a hiding place for drawn markup.
+    const drawn = AGENT_CHAT_SCENE_KINDS.filter((k) => k !== 'ended');
+    const withStandIn = drawn
+      .map((kind) => agentChatSceneFixture(kind, FROZEN))
+      .filter((f) => f.standIn !== undefined);
     // Derived, and refused when it derives nothing: a rename that stopped every
     // scene supplying a stand-in would otherwise pass this as a clean run.
     expect(withStandIn.length, 'no scene supplies a stand-in to check').toBeGreaterThanOrEqual(4);
@@ -233,6 +242,27 @@ describe('the drawn pages are images, never markup with text in them', () => {
     }
   });
 
+  it('the ONE scene that is not a drawing mounts the real live panel, and draws nothing of its own', () => {
+    // Stage 7. The panel's own overlays — the terminal recap, the give-up
+    // verdict, the slow-start notice — are the one thing an image cannot stand
+    // in for, and no gate had ever rendered them: they need a token, a room and
+    // a session that ends. This scene hands the real component the `sessionEnded`
+    // value `LiveAutomationPanel` latches from the session poll, which is the
+    // same value by the same route, minus a server.
+    const ended = agentChatSceneFixture('ended', FROZEN);
+    expect(ended.standIn).toBeDefined();
+    const { container, unmount } = render(<div>{ended.standIn}</div>);
+    expect(container.querySelector('[data-component="agent-session-panel"]')).not.toBeNull();
+    // The REAL overlay, with the REAL mapped copy — not a fixture sentence.
+    // `renderer_crashed` is a close reason, and the panel is what turns it into
+    // words; a scene that wrote the words itself would measure nothing.
+    expect(container.textContent ?? '').toContain('Session ended');
+    expect(container.textContent ?? '').toContain('The page stopped unexpectedly');
+    // …and no drawn page smuggled in beside it.
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+    unmount();
+  });
+
   it('and so does the captured screenshot the done scene shows', () => {
     const done = agentChatSceneFixture('done', FROZEN);
     expect(done.captureSrc ?? '').toMatch(/^data:image\/svg\+xml,/);
@@ -244,13 +274,15 @@ describe('the drawn pages are images, never markup with text in them', () => {
 describe('every AI-view state is registered everywhere a scene has to be', () => {
   const sceneNames = AGENT_CHAT_SCENE_KINDS.map((k) => `audit-agent-chat-${k}`);
 
-  it('the eight kinds and the eight scene names are the same eight', () => {
-    // Seven STATES plus `small`, which is the running state at the 960x600
-    // Tauri minimum — a window, not a state. It exists so the narrow tier is
-    // measured by the text gate rather than hand-checked once (stage 6's open
-    // issue); the gate renders each scene at its own declared size and never
-    // passes `?stage=`, so a scene is the only way in.
-    expect(sceneNames.length).toBe(8);
+  it('the nine kinds and the nine scene names are the same nine', () => {
+    // Seven STATES plus two WINDOWS. `small` is the running state at the
+    // 960x600 Tauri minimum; `ended` is the live panel's own terminal overlay
+    // at the same size (stage 7) — the box where its copy actually has to fit.
+    // Both exist so the narrow tier is measured by the text gate rather than
+    // hand-checked once (stage 6's and stage 4's open issues); the gate renders
+    // each scene at its own declared size and never passes `?stage=`, so a
+    // scene is the only way in.
+    expect(sceneNames.length).toBe(9);
     for (const name of sceneNames) {
       expect(AUDIT_SCENES as ReadonlyArray<string>, name).toContain(name);
     }

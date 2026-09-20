@@ -1533,6 +1533,16 @@
   line-height: 18px;
   color: rgb(var(--ink-muted-rgb));
 }
+/* ⛔ THE SEAM IS NEUTRAL, NOT `status-ready` GREEN — final QA, and it is a
+   CORRECTNESS fix rather than a preference. The server re-plans after a step
+   FAILED, so the rail segment this pseudo-element paints runs directly under a
+   red node; in `status-ready` green it told the customer the thing that just
+   went wrong had gone fine. `ink-muted` is the one colour on this rail that
+   claims nothing: a change of course, neither a success nor a fault. The
+   diamond above it already uses the same token for its ring, so the seam now
+   reads as one mark instead of a green line behind a grey node.
+   (The mockup draws it this way too — final/running-dark.png, the segment
+   between "Searched the store" and the running row.) */
 .ai-replan::before {
   content: '';
   position: absolute;
@@ -1541,7 +1551,7 @@
   bottom: -5px;
   width: 2px;
   border-radius: 1px;
-  background: rgb(var(--status-ready-rgb) / 0.5);
+  background: rgb(var(--ink-muted-rgb) / 0.45);
 }
 .ai-replan > * {
   position: relative;
@@ -1875,28 +1885,41 @@
 }
 
 /* ─── 3.8 · idle: a first impression that is composed, not centred ─────── */
+/* ⛔ THE FIRST SCREEN HAS TO FIT, AND UNTIL FINAL QA IT DID NOT. Measured on
+   the real view: the hero was 14px taller than its column at 960x600 and 22px
+   taller at 1280x800 — the two window sizes a customer actually runs — so the
+   BOTTOM ROW OF TEMPLATES was sliced by 4–6px at a scroll position of 0, with
+   macOS overlay scrollbars hidden. Not "there is more below": a card with no
+   bottom edge, touching the composer.
+   The height came back out of the SPACING BETWEEN blocks, never out of the
+   words: nothing here changes a font size, a line count or a line's meaning at
+   the default tier. `[data-ai-large]` (1600x1000, which had 88px to spare)
+   restores every one of these to its old value, so the big window still shows
+   the airy hero and this is a tightening of the small ones rather than a new
+   baseline. Any later edit that adds a line here must re-measure: the test
+   `the-first-screen-fits-the-window-it-opens-in` holds the budget. */
 .ai-hello {
-  padding: 8px 2px 0;
+  padding: 2px 2px 0;
 }
 .ai-hello > h1 {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 .ai-hello > p {
-  margin-top: 10px;
+  margin-top: 9px;
   font-size: 13px;
-  line-height: 20px;
+  line-height: 19px;
   color: rgb(var(--ink-secondary-rgb));
   max-width: 54ch;
 }
 .ai-beats {
-  margin-top: 16px;
+  margin-top: 13px;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   border-top: 1px solid rgb(var(--surface-divider-rgb) / 0.7);
   border-bottom: 1px solid rgb(var(--surface-divider-rgb) / 0.7);
 }
 .ai-beats li {
-  padding: 9px 10px 10px 0;
+  padding: 7px 10px 8px 0;
   font-size: 11.5px;
   line-height: 16px;
   color: rgb(var(--ink-secondary-rgb));
@@ -1915,10 +1938,10 @@
   display: block;
   font-size: 10px;
   color: rgb(var(--accent-text-rgb));
-  margin-bottom: 3px;
+  margin-bottom: 2px;
 }
 .ai-tpl-h {
-  margin: 18px 0 8px;
+  margin: 13px 0 7px;
 }
 .ai-tpl {
   display: grid;
@@ -1932,7 +1955,7 @@
   column-gap: 10px;
   align-content: start;
   text-align: left;
-  padding: 10px 11px;
+  padding: 9px 11px;
   border-radius: 8px;
   background: rgb(var(--surface-raised-rgb));
   box-shadow:
@@ -1974,7 +1997,7 @@
 }
 .ai-tpl-guard {
   display: inline-block;
-  margin-top: 6px;
+  margin-top: 5px;
   font-family: 'Berkeley Mono', 'JetBrains Mono', Menlo, Monaco, Consolas, monospace;
   font-size: 10px;
   line-height: 14px;
@@ -3286,6 +3309,31 @@
     radial-gradient(90% 40% at 20% -8%, rgb(var(--ink-muted-rgb) / 0.16) 0%, rgb(0 0 0 / 0) 70%),
     linear-gradient(180deg, rgb(var(--ai-stage-rgb)), rgb(var(--surface-inset-rgb)));
 }
+/* ⛔ WHEN THE ROOM IS UNLIT, SO IS THE GLASS — final QA.
+   `trouble` lights no disc and `preview` lights no disc, on purpose: neither
+   state may colour anything. But the phone's own placeholder glass kept the
+   accent glow rising from its bottom edge, so in the ONE state where the stage
+   must stay neutral the loudest colour on it was an oxblood wash inside the
+   device — and oxblood and `--status-error` are neighbours on the wheel, which
+   is the same reason the room itself is deliberately not red. Same gradient,
+   same shape, neutral ink at a third of the weight: the glass still reads as
+   glass catching the room, and it says nothing.
+   It is the PHASE that turns this on, never the placeholder's own class, so a
+   lit room (idle, thinking, acting, done) keeps the accent glow the mockup
+   draws. */
+[data-ai-phase='trouble'] .ai-screen-dark,
+[data-ai-phase='trouble'] .ai-screen-off,
+[data-ai-preview] .ai-screen-dark,
+[data-ai-preview] .ai-screen-off {
+  background:
+    radial-gradient(
+      130% 62% at 50% 112%,
+      rgb(var(--ink-muted-rgb) / 0.2) 0%,
+      rgb(var(--ink-muted-rgb) / 0.07) 40%,
+      rgb(0 0 0 / 0) 72%
+    ),
+    linear-gradient(180deg, rgb(var(--ai-stage-rgb)), rgb(var(--surface-inset-rgb)));
+}
 /* the diagonal sheen of a screen catching the room's light */
 .ai-screen-off::before,
 .ai-screen-dark::before {
@@ -3480,6 +3528,14 @@
   gap: 6px;
   min-height: 22px;
   flex: none;
+}
+/* Nothing rendered in it (Stage.tsx derives the attribute from the same three
+   conditions its children are): the reserved band goes back to the phone
+   instead of sitting under it as an empty strip. `min-height` rather than
+   `display: none` — the row is still a flex item, so a later state that fills
+   it does not have to re-create a box. */
+.ai-facts[data-empty] {
+  min-height: 0;
 }
 .ai-facts-note {
   font-size: 10.5px;
@@ -3678,16 +3734,38 @@
   font-size: 12.5px;
 }
 /* …and the first screen takes the same step, so a 1600x1000 window does not
-   show the 1280 hero with more air around it. */
+   show the 1280 hero with more air around it. It ALSO gives back every pixel
+   the base tier gave up in final QA to make 960 and 1280 fit: at 1600 the hero
+   had 88px to spare, so the tightening is not wanted here and the airy rhythm
+   the mockup draws is the one that ships. */
+[data-ai-large] .ai-hello {
+  padding-top: 8px;
+}
+[data-ai-large] .ai-hello > h1 {
+  margin-top: 8px;
+}
 [data-ai-large] .ai-hello > p {
+  margin-top: 10px;
   font-size: 14.5px;
   line-height: 23px;
+}
+[data-ai-large] .ai-beats {
+  margin-top: 16px;
 }
 [data-ai-large] .ai-beats li {
   font-size: 12.5px;
   line-height: 18px;
   padding-top: 12px;
   padding-bottom: 14px;
+}
+[data-ai-large] .ai-beats .ai-beat-n {
+  margin-bottom: 3px;
+}
+[data-ai-large] .ai-tpl-h {
+  margin: 18px 0 8px;
+}
+[data-ai-large] .ai-tpl-guard {
+  margin-top: 6px;
 }
 [data-ai-large] .ai-beats b {
   font-size: 13.5px;
@@ -3728,6 +3806,55 @@
 [data-ai-short] .ai-beats {
   display: none;
 }
+/* The explainer is the hero's biggest soft block (4 lines in the 410px column
+   the 960 window leaves it), and the short tier is where the four cards below
+   it have to survive. One step down the type scale keeps every word and buys
+   the templates their last row back. */
+[data-ai-short] .ai-hello > p {
+  font-size: 12.5px;
+  line-height: 18px;
+}
+/* …and when a gate card stands above it, the explainer goes entirely. The card
+   is 128px in this column and is pure addition here (the beats it was designed
+   to replace are already hidden by the rule above), which is why the no-key
+   first screen at 960x600 sliced its FIRST row of templates rather than its
+   last. With the explainer gone the fold lands between the two rows, where a
+   half-visible card says "there is more below" instead of looking broken.
+   The words are not lost: the gate's own body says what to do next, and the
+   explainer is back the moment the window is one step taller. */
+[data-ai-short] .ai-hello[data-gated] > p {
+  display: none;
+}
+
+/* ⛔ THE BAND JUST ABOVE `short`, WHICH NOTHING MEASURED UNTIL FINAL QA.
+   `short` ends at a view 620px tall and `tall` does not begin until 700, so a
+   window dragged into the ~80px between them lost EVERY saving above while
+   gaining ~60px of room: the label, the beats (83px plus their margin) and the
+   guard tags all came back at once, and the hero went from fitting exactly to
+   overflowing by 41px at 1120x700 and 81px at 1124x660 — the bottom row of
+   templates sliced again, in a band no scene renders. Measured on the real
+   view, both numbers.
+   The condition is NARROW AND NOT TALL, not narrow alone: at 1120x780 the view
+   is narrow and tall, the log has room for the whole hero, and hiding the
+   beats there would take away a block that fits. `:not([data-ai-tall])` is
+   what keeps this to the band that cannot hold them.
+   The beats are what goes, for the same reason `short` drops them: they are
+   the pitch, and the templates under them are the thing a customer can act on.
+   At a width this narrow the three-column strip is the most cramped block on
+   the screen anyway. */
+[data-ai-narrow]:not([data-ai-tall]) .ai-beats {
+  display: none;
+}
+[data-ai-narrow]:not([data-ai-tall]) .ai-tpl-guard {
+  display: none;
+}
+/* …and the gate takes the explainer's place here for the same reason it does
+   in `short`: measured at 1080x660, the no-key hero was 29px over and cut its
+   BOTTOM ROW by 19px; without the explainer it fits. The gate's own body is
+   the orientation sentence in this one state. */
+[data-ai-narrow]:not([data-ai-tall]) .ai-hello[data-gated] > p {
+  display: none;
+}
 [data-ai-short] .ai-tpl-guard {
   display: none;
 }
@@ -3740,6 +3867,92 @@
 [data-ai-short] .ai-answer-say {
   font-size: 1rem;
   line-height: 1.5rem;
+}
+
+/* ═════ the live panel's OWN overlays, in a phone-sized box — stage 7 ═══════
+   (spec §9 stage 7; §0's rejected item 10 measured the box at 209px dark /
+   205px light at the 960x600 minimum window)
+
+   AgentSessionPanel is shared: the simulator gives it a whole window, the AI
+   view used to give it a 300px column, and stage 4 now mounts it INSIDE the
+   drawn iPhone — ~205px across. Its overlays ("Session ended" with its recap
+   and buttons, the give-up verdict, the slow-start notice) were written for
+   the first two and, measured in the third, ran past the bottom of a box whose
+   `overflow: hidden` then cut them with no way to reach what was cut.
+
+   ⛔ A CONTAINER QUERY, NOT A BREAKPOINT AND NOT A PROP.
+     · not a breakpoint: the box is the PHONE's, not the window's. The same
+       panel is 205px wide in a 1600px window, and a `max-width` media query
+       would leave it full-size there and shrink the simulator's own window
+       overlay, which is the opposite of the truth in both cases.
+     · not a prop: two call sites mount this panel and a third could tomorrow;
+       a `compact` prop is right only while everyone remembers to pass it, and
+       the one that forgets is the one that needed it.
+   The container is declared on the panel's own root, so every consumer gets it
+   and none can get it wrong.
+
+   ⚠️ `inline-size`, NEVER `size`. The panel's box is `h-full` + an
+   `aspect-ratio` style: its width is TRANSFERRED from its height, so containing
+   the block axis would collapse it to nothing. Inline-size containment leaves
+   the block axis alone. (Also: `container-type` makes an element the containing
+   block for `position: fixed` DESCENDANTS — this panel has none, every overlay
+   is `absolute inset-0`, and stage 4's `.ai-stage { contain: paint }` already
+   made the stage one. Keep the overlays absolute.)
+
+   320px, not 205: the threshold is where the copy stops fitting, not where this
+   one box happens to land. The 300px column the AI view used before stage 4 is
+   inside it too, which is the point — that column was always this tight. */
+.asp-box {
+  container-type: inline-size;
+  container-name: asp;
+}
+@container asp (max-width: 320px) {
+  .asp-overlay {
+    gap: 6px;
+    padding: 12px 10px;
+    font-size: 12px;
+    line-height: 1.35;
+    /* Nothing is CUT AND UNREACHABLE (the rule scripts/gui-visual-check.mjs
+       applies to every other card in this app): when the copy is taller than
+       the phone's screen it scrolls instead of being clipped. */
+    overflow-y: auto;
+    /* `safe center` keeps a SHORT overlay (the spinner + one sentence) centred
+       and top-anchors a tall one. Without it, centred flex overflow pushes the
+       first line past the scroll origin, where scrolling cannot reach it — the
+       classic version of the very defect this block exists to remove. The plain
+       `center` above it is the fallback for an engine that drops the safe
+       keyword; there the overlay stays centred and scrolls, which is the
+       behaviour we had, not a new one. */
+    justify-content: center;
+    justify-content: safe center;
+  }
+  /* the mark above the headline: 28px of icon is a fifth of this screen */
+  .asp-overlay > svg {
+    width: 20px;
+    height: 20px;
+  }
+  /* Two columns of ~64px of text put "Session length" on two lines and the
+     outcome on five. One column gives each the full width of the screen. */
+  .asp-recap {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .asp-recap > div {
+    padding: 5px 8px;
+    text-align: left;
+  }
+  /* Three side-by-side buttons cannot fit; stacked, each reads at full width
+     and stays a 24px-tall tap target. */
+  .asp-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+  }
+  .asp-actions > button {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
 }
 
 /* ─── Profiles list-view responsive columns (founder 2026-06-16) ──────────

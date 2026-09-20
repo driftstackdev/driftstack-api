@@ -68,22 +68,59 @@ export function useStickToBottom(
 
   useLayoutEffect(() => {
     const el = ref.current;
-    if (el === null || !enabled || !stuck.current) return;
-    const bottom = el.scrollHeight - el.clientHeight;
-    if (anchorSelector !== null) {
-      const all = el.querySelectorAll(anchorSelector);
-      const anchor = all.length > 0 ? all[all.length - 1] : undefined;
-      if (anchor !== undefined) {
-        const top =
-          anchor.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
-        // Only when going to the bottom would carry the anchor off the top.
-        if (top < bottom) {
-          el.scrollTop = Math.max(0, top - ANCHOR_GAP_PX);
-          return;
+    if (el === null || !enabled) return undefined;
+
+    /** Put the log where the caller's options say it belongs. Extracted so the
+     *  observer below can repeat it: the arithmetic must not exist twice. */
+    const apply = (): void => {
+      if (!stuck.current) return;
+      const bottom = el.scrollHeight - el.clientHeight;
+      if (anchorSelector !== null) {
+        const all = el.querySelectorAll(anchorSelector);
+        const anchor = all.length > 0 ? all[all.length - 1] : undefined;
+        if (anchor !== undefined) {
+          const top =
+            anchor.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop;
+          // Only when going to the bottom would carry the anchor off the top.
+          if (top < bottom) {
+            el.scrollTop = Math.max(0, top - ANCHOR_GAP_PX);
+            return;
+          }
         }
       }
-    }
-    el.scrollTop = bottom;
+      el.scrollTop = bottom;
+    };
+
+    apply();
+
+    // ⛔ THE CONTENT SETTLES AFTER THIS EFFECT RUNS, AND UNTIL FINAL QA THAT
+    // SILENTLY LOST THE SCROLL. Measured on the real view (trouble scene,
+    // 1280x800): at the layout effect the log's scrollHeight was exactly its
+    // clientHeight, so `bottom` was 0 and `scrollTop` stayed 0; ~150ms later
+    // the content was 21px taller and nothing moved again, because no
+    // dependency had changed. A customer reopening a failed chat landed at the
+    // TOP of it, with the card that says why it failed cut by 5px at the
+    // bottom edge — the exact opposite of what this hook exists to promise.
+    //
+    // The growth comes from inside a child that is already mounted (a web font
+    // swapping in, a capture thumbnail getting its intrinsic size, a diagnosis
+    // card laying out), so it changes NO dependency and adds NO node. A
+    // ResizeObserver over the scroller AND its element children is what sees
+    // it. Writing `scrollTop` changes no box, so this cannot feed itself.
+    //
+    // It re-subscribes on the caller's own deps, which is when a turn is added
+    // or removed, so a new child is observed as soon as it exists. `stuck` is
+    // still the veto: a customer who has scrolled up is never yanked, here or
+    // anywhere else.
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const observer = new ResizeObserver(() => {
+      apply();
+    });
+    observer.observe(el);
+    for (const child of el.children) observer.observe(child);
+    return () => {
+      observer.disconnect();
+    };
     // ⚠️ The dependency array is the CALLER'S. What "new content" means for this
     // log — a turn count, a streamed step count, the answer — is the caller's
     // statement, not something derivable here, and guessing wrong is either a

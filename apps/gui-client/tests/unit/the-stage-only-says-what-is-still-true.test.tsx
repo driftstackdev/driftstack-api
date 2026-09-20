@@ -241,28 +241,59 @@ describe('the action ring fires for an action, and only for an action', () => {
     expect(pulse?.className).not.toContain('is-firing');
   });
 
-  it('POSITIVE CONTROL — rings once a step has actually landed', () => {
+  // ⛔ PIN MOVED IN FINAL QA, ON PURPOSE — read the reason before restoring it.
+  // This arm used to MOUNT with a step already in `liveSteps` and require the
+  // ring, which made "there are steps" the trigger. That is the shape of a
+  // REOPENED running chat and of a reattach: the step landed before this mount
+  // existed, and the stage flashed a ring for a tap nobody had just made
+  // (stage 4's own review recorded it and could not close it without moving
+  // this arm). The positive control is now the EVENT it was always supposed to
+  // be — a step arriving while the view watches — and the mount case below it
+  // is the arm that was missing.
+  it('POSITIVE CONTROL — rings when a step lands while the view is watching', () => {
+    chatState = baseChat({ sending: true, livePhase: 'Looking at the page…' });
+    const view = render(<AgentChatView />, { wrapper: AgentChatProvider });
+    expect(document.querySelector('.ai-pulse')?.className).not.toContain('is-firing');
+
     chatState = baseChat({
       sending: true,
       liveSteps: [success('Opened the store')],
       liveStepIndex: 1,
       livePhase: 'Looking at the page…',
     });
-    render(<AgentChatView />, { wrapper: AgentChatProvider });
+    view.rerender(<AgentChatView />);
     expect(document.querySelector('.ai-pulse')?.className).toContain('is-firing');
   });
 
+  it('⛔ and rings NOTHING on a mount that merely opened onto a chat with steps', () => {
+    // Reopening a running chat from the rail, or a reattach that adopts a turn
+    // mid-flight: `liveSteps` is already populated on the very first render.
+    // Nothing happened HERE, so nothing may leave the bezel.
+    chatState = baseChat({
+      sending: true,
+      liveSteps: [success('Opened the store'), success('Accepted the cookie banner')],
+      liveStepIndex: 2,
+      livePhase: 'Looking at the page…',
+    });
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
+    expect(document.querySelector('.ai-pulse')?.className).not.toContain('is-firing');
+  });
+
   it('and the ring re-keys per step, so each action gets its own', () => {
-    // A one-shot animation only replays if the element is new. The key is the
-    // step count; two renders at the same count must NOT produce a new element,
-    // or every unrelated re-render would flash a ring.
+    // A one-shot animation only replays if the element is new. Two renders with
+    // no step arriving must NOT produce a new element, or every unrelated
+    // re-render would flash a ring.
+    chatState = baseChat({ sending: true });
+    const view = render(<AgentChatView />, { wrapper: AgentChatProvider });
     chatState = baseChat({
       sending: true,
       liveSteps: [success('Opened the store')],
       liveStepIndex: 1,
     });
-    const view = render(<AgentChatView />, { wrapper: AgentChatProvider });
+    view.rerender(<AgentChatView />);
     const first = document.querySelector('.ai-pulse');
+    expect(first?.className).toContain('is-firing');
+
     chatState = baseChat({
       sending: true,
       liveSteps: [success('Opened the store')],
@@ -280,6 +311,34 @@ describe('the action ring fires for an action, and only for an action', () => {
     view.rerender(<AgentChatView />);
     expect(document.querySelector('.ai-pulse')).not.toBe(first);
     expect(document.querySelector('.ai-pulse')?.className).toContain('is-firing');
+  });
+});
+
+describe('the facts row under the phone is marked empty only when it is', () => {
+  // Final QA. `.ai-facts` carries a 22px `min-height` so the caption above it
+  // does not jump when a fact arrives — and in the states with no fact at all it
+  // was a 22px band of nothing under the phone, the one place `trouble` looked
+  // unfinished. The CSS gives that height back on `[data-empty]`; what has to
+  // hold HERE is that the attribute never disagrees with the row's contents,
+  // because a row marked empty that is not would clip a real fact.
+  it('⛔ marks it empty when a stopped turn on a closed session has nothing to say', () => {
+    chatState = baseChat({ session: CLOSED_SESSION, turns: [finishedTurn(CLOSED_SESSION)] });
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
+    const facts = document.querySelector('.ai-facts');
+    expect(facts).not.toBeNull();
+    expect(facts?.children).toHaveLength(0);
+    expect(facts?.hasAttribute('data-empty')).toBe(true);
+  });
+
+  it('POSITIVE CONTROL — an idle stage has its one line, and is NOT marked empty', () => {
+    // The idle first screen puts "You watch, the AI drives" in this row. If the
+    // attribute were unconditional — or derived from anything other than what
+    // the row renders — this arm is what catches the sentence being collapsed.
+    chatState = baseChat();
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
+    const facts = document.querySelector('.ai-facts');
+    expect(facts?.hasAttribute('data-empty')).toBe(false);
+    expect((facts?.textContent ?? '').trim().length).toBeGreaterThan(0);
   });
 });
 

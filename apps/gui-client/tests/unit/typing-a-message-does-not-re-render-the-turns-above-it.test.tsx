@@ -23,7 +23,7 @@
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { AgentMessageResponse, AgentSession } from '@driftstack/sdk';
+import type { AgentIntentResult, AgentMessageResponse, AgentSession } from '@driftstack/sdk';
 import type * as CaptureThumbnailModule from '../../src/components/CaptureThumbnail';
 import type * as UseAgentChatModule from '../../src/lib/use-agent-chat';
 import type { ChatTurn, UseAgentChatResult } from '../../src/lib/use-agent-chat';
@@ -173,6 +173,17 @@ beforeEach(() => {
   h.upsertChat.mockResolvedValue([]);
 });
 
+/** One landed step of a turn that is still running. `navigate` and not
+ *  `capture`, so nothing inside the LIVE turn renders a thumbnail and the count
+ *  below is only ever the SETTLED turn's. */
+function liveStep(summary: string): AgentIntentResult {
+  return {
+    kind: 'success',
+    intent: { kind: 'navigate', url: 'https://shop.example.com/' },
+    summary,
+  };
+}
+
 describe('typing a message does not re-render the turns above it', () => {
   function renderSettled(): HTMLTextAreaElement {
     chatState = baseChat({ turns: [USER_TURN, settledTurn()] });
@@ -202,5 +213,69 @@ describe('typing a message does not re-render the turns above it', () => {
     const composer = renderSettled();
     fireEvent.change(composer, { target: { value: 'add three items' } });
     expect(composer.value).toBe('add three items');
+  });
+
+  // ⛔ THE OTHER RE-RENDER FIRE-HOSE, AND THE ONE THAT COSTS MORE. A keystroke
+  // is the customer's own pace; a running turn streams a step every few
+  // seconds for up to ~50 minutes, and each one re-renders the view that owns
+  // the transcript. If `TurnRow.memo` stops bailing, every finished turn above
+  // the live one re-renders on every streamed step — a long chat, at exactly
+  // the moment the customer is watching the phone. The keystroke arms above
+  // cannot see this: the view re-renders for a DIFFERENT reason (`liveSteps`,
+  // not `draft`), and stage 4 added a second component (`Stage`) between the
+  // two that now re-renders per step as well.
+  // ⚠️ THE TURNS ARE BUILT ONCE AND REUSED, and that is the whole measurement.
+  // `TurnRow` is `React.memo`, which compares props by identity: handing it a
+  // freshly-built `turn` object on every rerender makes the compare fail for a
+  // reason that has nothing to do with the view, and the arm would then be
+  // measuring the test's own churn. The real hook keeps a settled turn's object
+  // identity across a streamed step — these two constants are that fact.
+  const STREAM_TURNS: ReadonlyArray<ChatTurn> = [USER_TURN, settledTurn()];
+  const STREAMED: ReadonlyArray<ReadonlyArray<AgentIntentResult>> = [
+    [liveStep('Opened the checkout')],
+    [liveStep('Opened the checkout'), liveStep('Filled in the delivery address')],
+    [
+      liveStep('Opened the checkout'),
+      liveStep('Filled in the delivery address'),
+      liveStep('Chose standard shipping'),
+    ],
+  ];
+
+  function renderStreaming(steps: ReadonlyArray<AgentIntentResult>): UseAgentChatResult {
+    return baseChat({
+      turns: STREAM_TURNS,
+      sending: true,
+      livePhase: 'Looking at the page…',
+      liveSteps: steps,
+      liveStepIndex: steps.length === 0 ? null : steps.length,
+    });
+  }
+
+  it('⛔ a streamed step re-renders NO finished turn either', () => {
+    chatState = renderStreaming([]);
+    const view = render(<AgentChatView />, { wrapper: AgentChatProvider });
+    const before = h.thumbRenders.n;
+    expect(before, 'the settled turn rendered its screenshot at all').toBeGreaterThan(0);
+
+    for (const steps of STREAMED) {
+      chatState = renderStreaming(steps);
+      view.rerender(<AgentChatView />);
+    }
+
+    expect(
+      h.thumbRenders.n,
+      'TurnRow.memo no longer bails while a turn streams — an unstable prop is reaching it',
+    ).toBe(before);
+  });
+
+  it('…and the live turn really did advance, so the arm above is not measuring a frozen view', () => {
+    chatState = renderStreaming([]);
+    const view = render(<AgentChatView />, { wrapper: AgentChatProvider });
+    expect(screen.queryByText('Chose standard shipping')).toBeNull();
+    for (const steps of STREAMED) {
+      chatState = renderStreaming(steps);
+      view.rerender(<AgentChatView />);
+    }
+    expect(screen.getByText('Chose standard shipping')).toBeTruthy();
   });
 });

@@ -37,7 +37,14 @@
 // grow a third member.
 
 import { type ReactNode } from 'react';
-import type { AgentIntent, AgentIntentResult, AgentSession, AgentUsage } from '@driftstack/sdk';
+import type {
+  AgentIntent,
+  AgentIntentResult,
+  AgentSession,
+  AgentUsage,
+  LiveKitInfo,
+} from '@driftstack/sdk';
+import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import type { ChatTurn, PendingConfirmation, UseAgentChatResult } from '../lib/use-agent-chat';
 
 /** The states, named for what the customer is doing — not for the hook field
@@ -59,7 +66,8 @@ export type AgentChatSceneKind =
   | 'done'
   | 'trouble'
   | 'stopping'
-  | 'small';
+  | 'small'
+  | 'ended';
 
 export const AGENT_CHAT_SCENE_KINDS: ReadonlyArray<AgentChatSceneKind> = [
   'nokey',
@@ -70,6 +78,7 @@ export const AGENT_CHAT_SCENE_KINDS: ReadonlyArray<AgentChatSceneKind> = [
   'trouble',
   'stopping',
   'small',
+  'ended',
 ];
 
 /** What the live view's token fetch should do for a scene that has no stand-in.
@@ -203,6 +212,50 @@ function productCaptureSvg(): string {
  *  text for what the device is doing. */
 function standInScreen(svg: string): ReactNode {
   return <img src={svgDataUri(svg)} alt="" aria-hidden="true" className="ai-standin" />;
+}
+
+/** The canonical iPhone screen aspect, the same constant `LiveAutomationPanel`
+ *  passes the panel in the app. Declared here rather than imported so the scene
+ *  cannot silently follow a change to the app's private constant. */
+const SCENE_WATCH_ASPECT_RATIO = 402 / 874;
+
+/** Join info shaped exactly like the one the token fetch returns. The host is
+ *  documentation space (it resolves to nothing, which is the point — no scene
+ *  reaches a real stream), and nothing here is rendered: the panel puts
+ *  `ws_url`, `token` and `room` on a WebSocket, never in the DOM. */
+const ENDED_LIVEKIT_INFO: LiveKitInfo = {
+  ws_url: 'wss://live.example.com',
+  room: 'agt_audit_ended',
+  token: 'scene-token',
+  participant_identity: 'watcher',
+  expires_at: '2026-06-15T07:42:00.000Z',
+};
+
+/** ⛔ THE REAL `AgentSessionPanel`, NOT A DRAWING OF IT — and that is the whole
+ *  reason this scene exists. Every other scene mounts an IMAGE in the screen
+ *  (`standInScreen`), which is right when what is being measured is the VIEW
+ *  around the phone. The panel's own overlays are the one thing an image cannot
+ *  stand in for: they are its copy, its buttons and its layout, and until this
+ *  scene no gate had ever rendered them — stage 4 put them in a ~205px box and
+ *  §9 stage 7 makes measuring them there the gate.
+ *
+ *  `sessionEnded` is the prop `LiveAutomationPanel` latches from the session
+ *  poll when a session ends mid-chat; handing it directly is the same value by
+ *  the same route, minus a server. NO `onClose`: the chat surface has no window
+ *  to close, so this renders exactly the branch the app renders. */
+function endedPanelScreen(): ReactNode {
+  return (
+    <AgentSessionPanel
+      info={ENDED_LIVEKIT_INFO}
+      interactive={false}
+      aspectRatio={SCENE_WATCH_ASPECT_RATIO}
+      sessionEnded={{
+        reason: ENDED_REASON_CODE,
+        summary: ENDED_SUMMARY,
+        lastPhase: null,
+      }}
+    />
+  );
 }
 
 // ─── the conversation ────────────────────────────────────────────────────────
@@ -439,6 +492,25 @@ const TROUBLE_STEPS: ReadonlyArray<AgentIntentResult> = [
 
 const INTERRUPTED_REASON =
   'The connection to the browser dropped before the task finished. The steps above are everything that ran.';
+
+/** The `ended` scene's session end, as the three values the panel is given.
+ *
+ *  ⛔ THE CODE IS NOT COPY. `renderer_crashed` is a close reason the server
+ *  sends; the panel turns it into "The page stopped unexpectedly" / "The page in
+ *  this session stopped running and could not be recovered." — and the fact that
+ *  the sentence is NOT written here is the property worth having, because the
+ *  scene then measures the mapping the customer actually gets. It is also the
+ *  near-miss `friendlySessionEndCopy` documents at length (`render_` is not a
+ *  prefix of `renderer_`): a regression that dropped it would show up here as
+ *  the vacant "This session has stopped." rather than as nothing at all.
+ *
+ *  The summary is the device's own host-free sentence, which rides through
+ *  verbatim. It names no host, no port and no internal id — the same bar the
+ *  privacy scan holds every scene string to. */
+const ENDED_REASON_CODE = 'renderer_crashed';
+const ENDED_SUMMARY = 'The page stopped responding while the order page was open.';
+const ENDED_INTERRUPTED_REASON =
+  'The session ended before the task finished. The steps above are everything that ran.';
 
 function turn(id: number, text: string): ChatTurn {
   return { id, role: 'user', text };
@@ -677,6 +749,52 @@ export function agentChatSceneFixture(
           }),
         },
         markers: [TASK, 'Stopping…', 'Search the store'],
+      };
+
+    // ⛔ THE ONE SCENE WHOSE SCREEN IS THE REAL PANEL. Spec §9 stage 7: after
+    // stage 4 `AgentSessionPanel` lives inside the iPhone, ~205px across, and
+    // its own overlays — the ended recap, the give-up verdict, the slow-start
+    // notice — had never been rendered by any gate, in either theme, at any
+    // width. This scene renders the terminal one, which is the only one
+    // reachable from fixture data alone (the other two need a room that
+    // connects and then does not publish). Everything else about the view is
+    // consistent with it: the session is CLOSED, so the stage's chip reads
+    // ENDED, the room goes quiet, and the last turn says what did run.
+    case 'ended':
+      return {
+        apiKey: 'ds_live_example',
+        standIn: endedPanelScreen(),
+        chat: {
+          ...chat,
+          turns: [
+            turn(1, CHECKOUT_TASK),
+            {
+              id: 2,
+              role: 'agent',
+              interrupted: {
+                reason: ENDED_INTERRUPTED_REASON,
+                steps: APPROVAL_STEPS.slice(0, 3),
+              },
+            },
+          ],
+          session: session(now, {
+            id: 'agt_audit_ended',
+            status: 'closed',
+            closed_reason: ENDED_REASON_CODE,
+            closed_at: new Date(now - 12_000).toISOString(),
+          }),
+        },
+        // 'Session ended' and the mapped outcome are the PANEL's own strings:
+        // a marker list that ended on a chat string would let the privacy scan
+        // snapshot the DOM with the screen still black, which is the state
+        // every other scene already measures.
+        markers: [
+          CHECKOUT_TASK,
+          ENDED_INTERRUPTED_REASON,
+          'Session ended',
+          'The page stopped unexpectedly',
+          ENDED_SUMMARY,
+        ],
       };
   }
 }

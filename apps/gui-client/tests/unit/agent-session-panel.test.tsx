@@ -1693,8 +1693,18 @@ describe('AgentSessionPanel overlay UX', () => {
       ],
       ['browser_crashed', null, '(worker exited: <signal 9> & no core written) '],
     ] as const) {
+      // ⛔ `onClose` IS LOAD-BEARING FOR THIS ARM (stage 7), not decoration.
+      // The ordering this test holds — detail AFTER the explanation, BEFORE the
+      // close-and-relaunch instruction — needs that instruction to be on screen,
+      // and it now renders only where there IS a window to close. This is the
+      // standalone simulator's shape; the chat's (no `onClose`, no instruction)
+      // is held in the-live-panel-fits-the-phone-it-is-drawn-in.test.tsx.
       const { container } = render(
-        <AgentSessionPanel info={INFO} sessionEnded={{ reason, summary, lastPhase }} />,
+        <AgentSessionPanel
+          info={INFO}
+          sessionEnded={{ reason, summary, lastPhase }}
+          onClose={() => undefined}
+        />,
       );
       await act(async () => {
         await Promise.resolve();

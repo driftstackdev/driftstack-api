@@ -85,8 +85,10 @@ export function Stage({
   /** Nothing is mounted in the screen: the phone is a product shot, turned
    *  away, with its Dynamic Island drawn in. */
   atRest: boolean;
-  /** How many steps have landed this turn — the pulse re-keys on it, so one
-   *  ring leaves the bezel per action. */
+  /** How many steps have landed this turn. The action ring watches this for
+   *  GROWTH BY ONE (see `ringSeq` below) — the number itself is never the
+   *  trigger, because "there are steps" is true of a mount that only opened
+   *  onto them. */
   steps: number;
   /** The one line the idle stage says about what watching means. */
   idleFact: string;
@@ -107,6 +109,33 @@ export function Stage({
       clearTimeout(handle);
     };
   }, [atRest]);
+
+  // ⛔ ONE RING PER STEP THAT ARRIVED — NOT PER MOUNT THAT HAS STEPS.
+  // Stage 4 gated the ring on `steps > 0`, which closed the common case
+  // (opening the view, reopening a finished chat) and left the one its own
+  // review recorded: a mount whose `liveSteps` are ALREADY populated — a
+  // reopened running chat, a reattach that adopts a turn mid-flight — still
+  // flashed one action ring for a tap that happened before this mount existed.
+  // "There are steps" is a state; "a step landed" is an event, and only the
+  // event may ring.
+  //
+  // `steps === previous + 1` is the event, and the +1 is deliberate: a chat
+  // SWITCH replaces the whole list and jumps the count by an arbitrary delta
+  // (or drops it), which is not a step arriving. `ringSeq` starts at 0 and is
+  // what re-keys the element, so the first ring of a mount is also the first
+  // time the class is on at all.
+  //
+  // In an effect, not during render: effects run after the commit and twice
+  // under StrictMode's simulated remount, where the second run sees the ref
+  // already advanced and does nothing — a ref bumped during render would
+  // count that remount as an action.
+  const previousSteps = useRef(steps);
+  const [ringSeq, setRingSeq] = useState(0);
+  useEffect(() => {
+    const arrived = steps === previousSteps.current + 1;
+    previousSteps.current = steps;
+    if (arrived) setRingSeq((n) => n + 1);
+  }, [steps]);
 
   const starting = stageIsStarting(hud);
   return (
@@ -160,7 +189,7 @@ export function Stage({
 
       <StageFit
         turning={turning}
-        steps={steps}
+        ringSeq={ringSeq}
         sessionId={sessionId}
         collapsed={collapsed}
         onWatchChange={onWatchChange}
@@ -199,7 +228,19 @@ export function Stage({
         </p>
       )}
 
-      <div className="ai-facts">
+      {/* ⛔ `data-empty` IS LOAD-BEARING, NOT A HOOK FOR A TEST. The row has a
+          22px `min-height` so the caption above it does not jump when a fact
+          arrives — and in the two states that have NO fact to show (a stopped
+          turn on a closed session; a session that ended) that min-height was a
+          22px band of nothing under the phone, the one place the `trouble`
+          stage looked unfinished. The attribute says "nothing rendered here",
+          and the CSS gives the height back to the phone. Derived from the same
+          three conditions the children are, so it can never disagree with what
+          is actually in the row. */}
+      <div
+        className="ai-facts"
+        data-empty={starting || place !== null || caption.idle ? undefined : ''}
+      >
         {starting && <span className="ai-facts-note">This usually takes a few seconds.</span>}
         {/* The one line about what watching MEANS belongs to the first
             impression, not to a finished run: "You watch, the AI drives" under
@@ -231,14 +272,17 @@ export function Stage({
  */
 function StageFit({
   turning,
-  steps,
+  ringSeq,
   sessionId,
   collapsed,
   onWatchChange,
   standIn,
 }: {
   turning: boolean;
-  steps: number;
+  /** How many action rings have been EARNED on this mount (see the note on
+   *  `ringSeq` above). 0 means none yet, which is also the state of a mount
+   *  that opened onto a chat which already had steps. */
+  ringSeq: number;
   sessionId: string | null;
   collapsed: boolean;
   onWatchChange: (watch: StageWatch) => void;
@@ -257,16 +301,19 @@ function StageFit({
         </div>
         {/* One ring leaves the bezel PER ACTION (spec §4 item 7). Re-keyed so
             the one-shot replays; nothing listens for its end.
-            ⛔ `is-firing` is gated on there being an action to fire for. With it
-            on unconditionally the ring played once on every MOUNT — opening the
-            view, or reopening a finished chat from the rail, flashed an action
-            ring for a tap that never happened, which is the one thing a ring
-            beside a live video must not do. The element itself is never
-            conditional: it is a sibling of the rig and a slot that came and went
-            is how a video gets remounted. */}
+            ⛔ BOTH THE KEY AND THE CLASS COME FROM `ringSeq`, WHICH COUNTS
+            ARRIVALS, NOT STEPS. Keyed on the step COUNT it replayed for any
+            change in that number, and gated on `steps > 0` it fired once for a
+            mount that merely OPENED onto a chat with steps in it — a ring for a
+            tap that happened before this mount existed, which is the one thing
+            a ring beside a live video must not do. `ringSeq` is 0 until a step
+            actually lands here, so a mount rings nothing and every landing
+            rings exactly once. The element itself is never conditional: it is a
+            sibling of the rig and a slot that came and went is how a video gets
+            remounted. */}
         <div
-          key={`pulse-${String(steps)}`}
-          className={`ai-pulse${steps > 0 ? ' is-firing' : ''}`}
+          key={`pulse-${String(ringSeq)}`}
+          className={`ai-pulse${ringSeq > 0 ? ' is-firing' : ''}`}
           aria-hidden="true"
         />
         <div className="ai-floor" aria-hidden="true" />

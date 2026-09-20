@@ -208,6 +208,13 @@ function auditDefaultSizes(stage: {
     // measures the narrow tier — 44px rail strip, 44px bar, 252px stage — that
     // the other seven, all at the default stage, can never reach.
     'audit-agent-chat-small': { width: 960, height: 600 },
+    // ⛔ ALSO ITS OWN WINDOW, AND FOR THE SAME REASON AS `small`, ONE LAYER IN.
+    // This is the scene whose screen is the REAL AgentSessionPanel (spec §9
+    // stage 7), and what it exists to measure is that panel's overlays in the
+    // ~205px box the 960x600 window gives them. Measured at 1280x800 the screen
+    // is ~340px wide, the compact container query never fires, and the run would
+    // report clean on the layout nobody was worried about.
+    'audit-agent-chat-ended': { width: 960, height: 600 },
     'audit-team': stage,
     // Seven rows measure 860 CSS px in the 1280×800 window's 764 px main area
     // (896 would just fit); 920 keeps the last row in frame when a chip wraps.
@@ -834,6 +841,7 @@ export function auditLoadedMarkers(name: AuditSceneName): ReadonlyArray<string> 
     case 'audit-agent-chat-trouble':
     case 'audit-agent-chat-stopping':
     case 'audit-agent-chat-small':
+    case 'audit-agent-chat-ended':
       // The scene's own fixture strings FIRST, then the two async loads every
       // AI-view scene shares. The order is the point (same reason as
       // audit-proxies below): the fixture chat renders synchronously, so a list
@@ -1362,6 +1370,7 @@ export function AuditScene({ name }: { name: AuditSceneName }): JSX.Element {
     case 'audit-agent-chat-trouble':
     case 'audit-agent-chat-stopping':
     case 'audit-agent-chat-small':
+    case 'audit-agent-chat-ended':
       return <AgentChatStateScene name={name} />;
     case 'audit-team':
       return (

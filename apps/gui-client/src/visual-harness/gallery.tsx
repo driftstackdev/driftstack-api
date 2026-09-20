@@ -95,6 +95,12 @@ export const AUDIT_SCENES = [
   // the narrow tier the redesign invented is measured by the gate instead of
   // hand-checked once. Its stage size is declared in `auditDefaultSizes`.
   'audit-agent-chat-small',
+  // Also a window rather than a state, and the only scene whose SCREEN is the
+  // real AgentSessionPanel rather than a drawn page: the session has ended, so
+  // the panel shows its own terminal overlay, in the ~205px box stage 4 gave it
+  // (spec §9 stage 7). Its stage is 960x600 for that reason — at 1280x800 the
+  // screen is wide enough that the compact layout never comes up.
+  'audit-agent-chat-ended',
   'audit-team',
   'audit-proxies',
 ] as const;

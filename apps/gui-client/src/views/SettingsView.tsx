@@ -1249,7 +1249,12 @@ export function SettingsView(): JSX.Element {
         <SectionHeader
           icon={<IconSparkle />}
           title="AI & billing"
-          description="How the AI chat's Claude usage gets paid for."
+          // The model vendor's name was here and bought nothing: this line says
+          // WHO PAYS, and the field below it is where the customer is told
+          // whose key to go and get. Dropping it is what lets the gallery's
+          // model-vendor ban widen past the AI view (marketing-scenes.test.tsx,
+          // AUDIT_FORBIDDEN_VENDOR).
+          description="How the AI chat's usage gets paid for."
         />
         <div className="mt-4 flex flex-col gap-5">
           <Field label="Bundled AI usage">

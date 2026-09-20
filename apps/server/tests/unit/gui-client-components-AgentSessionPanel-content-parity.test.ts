@@ -8,6 +8,8 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { codeOnly } from './_helpers/code-only.js';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const PAGE = resolve(REPO_ROOT, 'apps/gui-client/src/components/AgentSessionPanel.tsx');
@@ -74,9 +76,35 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
   it('Scale-to-fit container sizing pinned: the panel box is `h-full max-h-full max-w-full` + aspectRatio style (fills available HEIGHT, derives width from the iPhone aspect, centered by the parent), NOT `w-full`. Drift back to w-full re-introduces the stretched-giant view (height = width × 2.17 on a wide window); the <video> object-contain fills the box exactly', () => {
     // No white border (founder 2026-06-23 / A3 W2827): a white rim outlined the
     // object-contain-shrunken view. bg-black + no border → flush in bezel-black.
+    //
+    // ⛔ `asp-box` PREFIXED 2026-09-20 (AI-view stage 7), and the pin follows it
+    // rather than freezing the old string. The class makes this box a CSS
+    // CONTAINER so the panel's own overlays can go compact when it is phone-
+    // sized: stage 4 mounts this component inside the drawn iPhone, 209px (dark)
+    // / 205px (light) at the 960x600 minimum window, where the two-column
+    // "Session ended" recap drew a 78px word inside a 51px card. The sizing
+    // properties this arm exists for are unchanged — `container-type:
+    // inline-size` contains the INLINE axis only, and this box's width has never
+    // come from its contents.
     expect(body).toMatch(
-      /className="relative h-full max-h-full max-w-full overflow-hidden rounded-lg bg-black"/,
+      /className="asp-box relative h-full max-h-full max-w-full overflow-hidden rounded-lg bg-black"/,
     );
+    // Guard the specific regression the inline-size choice avoids: `size`
+    // containment would contain the BLOCK axis too, and this box takes its width
+    // from its HEIGHT and the device aspect — measured on the real simulator
+    // screen host, the box is 227px wide inside a 300px parent, so it is the
+    // aspect that sizes it and block-axis containment would collapse it.
+    //
+    // ⛔ READ AS CODE, NOT AS PROSE (review repair 2026-09-20). This arm first
+    // scanned the RAW file for `container-type`, while the comment beside the
+    // class in AgentSessionPanel.tsx is itself about container queries: one
+    // more word in that comment and this goes red saying "size containment
+    // would collapse the box", which is a guard a doc edit can break and
+    // therefore a guard someone deletes. `codeOnly` is the repo's rule for a
+    // test that searches source as text, and both spellings the defect could
+    // take — a CSS declaration in a Tailwind arbitrary class and the React
+    // `containerType` style property — are still caught.
+    expect(codeOnly(body)).not.toMatch(/container-?[Tt]ype/);
     // Guard the regression: the panel box must NOT carry a white border again.
     expect(body).not.toMatch(/border border-white\/10 bg-black"/);
     expect(body).toMatch(/style=\{\{ aspectRatio: effectiveAspectRatio\.toString\(\) \}\}/);
@@ -160,6 +188,41 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     expect(body).not.toMatch(/automation device|screen capture/);
     expect(body).not.toMatch(/the proxy or connection may be down/);
     expect(body).toMatch(/data-action="retry-launch"/);
+  });
+
+  it('AI-view stage 7: the close-and-relaunch instruction is rendered only where a window exists to close — BOTH the slow-start notice and the terminal overlay gate it on `onClose`. Drift to an ungated string puts "close this window, then relaunch the profile" in front of the chat, which has no window and no profile to relaunch: its session belongs to the chat', () => {
+    // The terminal overlay's clause (gated 2026-09-20; it was unconditional).
+    expect(body).toMatch(
+      /onClose !== undefined &&\s*'Close this window, then relaunch the profile from the main Driftstack window to get a\s*fresh live view\.'/,
+    );
+    // The slow-start notice's clause, which already had the rule. Pinned beside
+    // it so the two cannot drift apart — one gated and one not is how this
+    // defect existed in the first place.
+    expect(body).toMatch(/onClose !== undefined &&\s*' You can also close this window/);
+    // ⛔ The regression guard is the one that matters: no bare occurrence of the
+    // sentence outside a gate. The shape it catches is the one that shipped —
+    // the sentence as a JSX TEXT NODE, i.e. a newline, indentation, then the
+    // words. The gated form survives because a quote stands between the indent
+    // and "Close", and the two positive arms above are what catch an ungating
+    // written some other way. (The comment here used to claim the arm was
+    // `[^{]`; it never was — corrected in review rather than left describing a
+    // regex that is not there.)
+    expect(body).not.toMatch(/\n\s*Close this window, then relaunch the profile/);
+  });
+
+  it('AI-view stage 7: every full-screen overlay carries `asp-overlay` and stays `absolute inset-0`. Drift to dropping the class leaves that overlay outside the phone-width container query (its copy then wraps into a 51px column at the 960x600 window); drift to `fixed` makes it resolve against the 205px container instead of the window', () => {
+    for (const overlay of ['session-ended', 'publisher-state', 'connection-state']) {
+      const m = new RegExp(`data-overlay="${overlay}"[\\s\\S]{0,400}?className="([^"]*)"`).exec(
+        body,
+      );
+      expect(m, `${overlay} has a className`).not.toBeNull();
+      expect(m?.[1], `${overlay} is inside the container query`).toMatch(/\basp-overlay\b/);
+      expect(m?.[1], `${overlay} is absolute, not fixed`).toMatch(/\babsolute inset-0\b/);
+    }
+    // The recap grid and both button rows are the two things that do not fit a
+    // phone column side by side; the query reflows them by these classes.
+    expect(body).toMatch(/data-component="session-end-recap"\s*className="asp-recap grid/);
+    expect(body.match(/className="asp-actions flex flex-wrap/g)).toHaveLength(2);
   });
 
   it("#1 publisher-lost debounce pinned: a track drop (TrackUnsubscribed / ParticipantDisconnected) does NOT flip publisher→'none' instantly — A3's idle frame-pump down-clock + brief SFU re-negotiations drop+re-add the track within ~1-2s, and an instant flip slammed the scary launch-failed alarm over the last good frame ('reconnecting, happens too often'). Within PUBLISHER_LOST_GRACE_MS a CALM 'reconnecting…' pill shows over the last frame (data-overlay=publisher-reconnecting); only if no TrackSubscribed re-arrives does it escalate to 'none'. Regression-guard: do NOT re-introduce the instant `setPublisher((p) => (p === 'publishing' ? 'none' : p))` flip.", () => {

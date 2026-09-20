@@ -150,6 +150,27 @@ describe('AgentChatView Save-as-recipe', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('⛔ …and hands the keyboard back to the button that opened it', () => {
+    // Final QA's keyboard walk. Closing a modal without restoring focus drops a
+    // keyboard user on `<body>`: their next Tab starts again at the top of the
+    // window, several dozen stops away from the bar they were working in. The
+    // view's own comment on `useFocusTrap` promises this ("restore it to the
+    // trigger"); nothing was holding it to the promise.
+    const planTurn: ChatTurn = { id: 2, role: 'agent', response: PLAN_EXECUTED };
+    chatState = baseChat({
+      session: SESSION,
+      turns: [{ id: 1, role: 'user', text: 'open example.com' }, planTurn],
+    });
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
+    const trigger = screen.getByRole('button', { name: 'Save as task' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(document.activeElement, 'the modal did not take the keyboard').not.toBe(trigger);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(document.activeElement, 'Escape dropped the keyboard on the page body').toBe(trigger);
+  });
+
   it('guards a typed draft across backdrop, Escape, and Cancel, then clears it after discard', async () => {
     const planTurn: ChatTurn = { id: 2, role: 'agent', response: PLAN_EXECUTED };
     chatState = baseChat({

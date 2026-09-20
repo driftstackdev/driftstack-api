@@ -1221,7 +1221,14 @@ export function AgentSessionPanel({
       // SMALLER than this box, a white rim outlined the shrunken view. bg-black +
       // no border → the iPhone view sits flush in bezel-black; any object-contain
       // margin reads as bezel, not a light frame.
-      className="relative h-full max-h-full max-w-full overflow-hidden rounded-lg bg-black"
+      // `asp-box` (stage 7) makes this box a CONTAINER, and the overlays below
+      // ask it how wide it is. The stage (§3.4) mounts this same component
+      // inside the drawn iPhone, which at the 960x600 minimum window is ~205px
+      // across — a third of the width the 300px column and the simulator window
+      // ever gave it — and the ended / give-up overlays did not fit. See the
+      // `.asp-box` block in styles/index.css for why it is a container query and
+      // not a prop, and why it is `inline-size` and never `size`.
+      className="asp-box relative h-full max-h-full max-w-full overflow-hidden rounded-lg bg-black"
       style={{ aspectRatio: effectiveAspectRatio.toString() }}
       ref={containerRef}
       onPointerDown={(e) => {
@@ -1322,7 +1329,7 @@ export function AgentSessionPanel({
       {sessionEnded !== null && (
         <div
           data-overlay="session-ended"
-          className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center text-sm text-ink-primary"
+          className="asp-overlay absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/80 px-6 text-center text-sm text-ink-primary"
         >
           <svg
             viewBox="0 0 24 24"
@@ -1342,7 +1349,7 @@ export function AgentSessionPanel({
           <span className="font-medium">Session ended</span>
           <div
             data-component="session-end-recap"
-            className="grid w-full max-w-xs grid-cols-2 gap-2"
+            className="asp-recap grid w-full max-w-xs grid-cols-2 gap-2"
           >
             <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
               <span className="block text-[10px] uppercase tracking-wide text-ink-secondary">
@@ -1379,10 +1386,33 @@ export function AgentSessionPanel({
                 window can't relaunch in place (it holds only the per-session control key,
                 not the account API key/SDK client a fresh session+token needs — that lives
                 in the main app's keychain, and launch is driven from there). So tell the
-                founder exactly where to go: close this window, then relaunch from the main
-                Driftstack window. */}
-            Close this window, then relaunch the profile from the main Driftstack window to get a
-            fresh live view.
+                customer exactly where to go: close this window, then relaunch from the main
+                Driftstack window.
+                ⛔ GATED ON `onClose` (stage 7), for the same reason the slow-start
+                notice's close/relaunch clause already is: AgentChatView mounts this
+                same panel INSIDE the main window, where there is no window to close
+                and no profile to relaunch — the chat owns its own session. Ungated,
+                the ONE sentence telling that customer what to do next named a route
+                their surface cannot offer, and did it in the phone-sized box where it
+                was also the copy most likely to be cut.
+                ⚠️ WHAT SURVIVES THE GATE, EXACTLY — corrected in review, because the
+                first version of this note claimed the explanation "always carries a
+                next step of its own" and it does not. What is guaranteed is that the
+                overlay still says WHAT HAPPENED: every reachable reason renders a real
+                outcome and explanation rather than the vacant fallback, and
+                agent-session-panel.test.tsx's population arm holds that over 18 of them
+                in exactly this shape (no `onClose`). What is NOT guaranteed is a next
+                step: `renderer_crashed` ends "Starting a new session is the quickest
+                way back", but `idle_timeout`, `max_duration`, `customer_closed` and
+                `browser_closed` each explain and stop, so on the chat surface those now
+                end without one. That is the trade spec §9 stage 7 chose — a route that
+                does not exist on this surface is worse than no route — and the chat's
+                own transcript carries the next step when a turn was running. Giving the
+                embedded panel a chat-shaped next step of its own is a copy decision
+                nobody has taken. (Mutation: un-gate it and the embedded arm below
+                reds.) */}
+            {onClose !== undefined &&
+              'Close this window, then relaunch the profile from the main Driftstack window to get a fresh live view.'}
           </span>
           {onClose !== undefined && (
             <button
@@ -1439,7 +1469,7 @@ export function AgentSessionPanel({
             data-overlay="publisher-state"
             data-state={publisher}
             data-slow={publisher !== 'none' && slowStart ? 'true' : 'false'}
-            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 px-6 text-center text-sm text-ink-primary"
+            className="asp-overlay absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 px-6 text-center text-sm text-ink-primary"
           >
             {publisher === 'waiting' || publisher === 'publishing' ? (
               <>
@@ -1494,7 +1524,7 @@ export function AgentSessionPanel({
                       {onClose !== undefined &&
                         ' You can also close this window and relaunch the profile from the main Driftstack window.'}
                     </span>
-                    <div className="flex flex-wrap items-center justify-center gap-2">
+                    <div className="asp-actions flex flex-wrap items-center justify-center gap-2">
                       <button
                         type="button"
                         data-action="retry-launch"
@@ -1546,7 +1576,7 @@ export function AgentSessionPanel({
                   appears. This is usually temporary, so press Retry. If it keeps happening, contact
                   support.
                 </span>
-                <div className="flex flex-wrap items-center justify-center gap-2">
+                <div className="asp-actions flex flex-wrap items-center justify-center gap-2">
                   {/* #59 — a no-stream launch can recover on a fresh connect (the worker
                     was slow, the proxy came back, a transient SFU hiccup), so always
                     offer Retry. It bumps retryNonce → the connect effect re-runs (new
@@ -1594,7 +1624,7 @@ export function AgentSessionPanel({
         <div
           data-overlay="connection-state"
           data-state={state.kind}
-          className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 px-6 text-center text-sm text-ink-primary"
+          className="asp-overlay absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/60 px-6 text-center text-sm text-ink-primary"
         >
           {(state.kind === 'connecting' ||
             state.kind === 'reconnecting' ||
