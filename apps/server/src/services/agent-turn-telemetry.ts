@@ -556,9 +556,12 @@ export type AgentActionProfileVerb = (typeof AGENT_ACTION_PROFILE_VERBS)[number]
  *   true        a profile was resolved for this session. NECESSARY, NOT
  *               SUFFICIENT: it says the human-like path was configured, never
  *               that it ran, and never that the action was undetectable
- *   false       no profile was resolved — a CONFIGURATION fault, on the device
- *               side (see the runbook: its personas file is the first thing to
- *               check). Not a measurement of what the action looked like
+ *   false       no profile was recorded for the session when the step ran — a
+ *               SESSION SET-UP fault on the device side: the step preceded
+ *               the session's assignment, or followed its end (the personas
+ *               file and the profile name both resolve fail-closed, so
+ *               neither is the cause). Not a measurement of what the action
+ *               looked like
  *   unreported  the step produced no usable result to read it from: a failure,
  *               a timeout, a step Stop abandoned in flight, or a device build
  *               that does not send the field
@@ -2097,14 +2100,14 @@ export class AgentTurnTelemetry {
         event: AGENT_TURN_ACTION_PATHS_EVENT,
         ...fields,
       };
-      // A session with NO behaviour profile attached is a configuration fault,
+      // A session with NO behaviour profile attached is a session set-up fault,
       // and the step still SUCCEEDED — so it is a warning even though nothing
       // failed. It is not a statement about how the action looked; see the
       // runbook. Everything else is the ordinary record.
       if (unprofiled) {
         this.deps.logger?.warn?.(
           line,
-          'an agent action ran with NO behaviour profile attached to the session (a configuration fault, not a detectability verdict); see the counts on this line',
+          'an agent action ran with NO behaviour profile attached to the session (a session set-up fault, not a detectability verdict); see the counts on this line',
         );
         return;
       }

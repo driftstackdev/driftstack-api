@@ -532,19 +532,21 @@ groups:
           description: |
             At least one click or typed step was performed by a session the
             device had no behaviour profile for. The step itself will have
-            succeeded, so nothing else reports it. PAGE THE DEVICE TEAM, and
-            ask which device build the box is running: WHICH cause this is
-            depends on it. A build whose persona resolution falls back to a
-            compiled-in default (a missing or invalid personas file, or a
-            profile name it does not recognise) cannot reach `false` that way,
-            so there it is a session with no behaviour profile recorded against
-            it at all; an older build without that fallback does reach `false`
-            from a broken personas file, and degrades every session on the box
-            at once. The runbook lists both. An older device build that does not
-            report the flag reads `unreported`, never `false`. Break the series
-            down by `verb`, and read the per-turn `agent_turn_action_paths`
-            journal lines for the same counts on the box. This is a
-            configuration fact, not a statement about how the action looked.
+            succeeded, so nothing else reports it. The device records a
+            session's profile once, when it processes the session's assignment,
+            and forgets it when the session ends — so this is a step that ran
+            BEFORE the assignment was processed or AFTER the session ended: a
+            session-lifecycle race on the device side, most likely at a slow
+            start. It is NOT a missing personas file and NOT an unknown profile
+            name: the device build resolves both fail-closed to a default.
+            PAGE THE DEVICE TEAM with the session and the time, and check
+            whether the counts cluster at turn starts alongside
+            `intent_session_not_established` retries (the runbook says how).
+            An older device build that does not report the flag reads
+            `unreported`, never `false`. Break the series down by `verb`, and
+            read the per-turn `agent_turn_action_paths` journal lines for the
+            same counts on the box. This is a fact about how the session was set
+            up, not a statement about how the action looked.
 
 # ────────────────────────────────────────────────────────────────────
 # Metric inventory — drift-guard satisfaction

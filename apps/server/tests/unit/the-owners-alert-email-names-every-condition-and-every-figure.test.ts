@@ -93,7 +93,7 @@ describe('the owner’s alert email names every condition the watchdog can raise
 
   it('CRITICAL the email says what the finding is NOT — an owner reading it at 3am must not take it for a measurement of how the action looked', () => {
     const email = renderAgentTurnHealthEmail(NO_PROFILE);
-    expect(email.text).toMatch(/CONFIGURATION fault/);
+    expect(email.text).toMatch(/SESSION SET-UP fault/);
     expect(email.text).toMatch(/necessary, not sufficient/);
   });
 

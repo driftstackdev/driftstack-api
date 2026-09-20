@@ -70,7 +70,7 @@ const SIGNAL_WORDS: Readonly<Record<string, SignalWords>> = {
   no_profile_attached: {
     title: 'AI session ran with no behaviour profile attached',
     meaning:
-      'An AI session acted on a page with no behaviour profile attached to it, which is a CONFIGURATION fault: the device had no profile to work from. It is not a verdict on how the action looked — a profile being attached is necessary, not sufficient. The runbook says what to check first; the counts by action below say how many and which kind.',
+      'An AI session acted on a page with no behaviour profile attached to it, which is a SESSION SET-UP fault on the device side: the step ran before the session’s profile was recorded, or after the session ended. It is not a verdict on how the action looked — a profile being attached is necessary, not sufficient. The runbook says what to check first; the counts by action below say how many and which kind.',
   },
   evaluation_failing: {
     title: 'health watchdog blind',

@@ -220,10 +220,10 @@ and
 (sum(increase(driftstack_agent_action_profile_attached_total[30m])) or vector(0)) >= 1
 ```
 
-**A configuration alert, not a detectability verdict.** The browser reports, on
+**A session set-up alert, not a detectability verdict.** The browser reports, on
 every click and every typed step, whether a **behaviour profile was attached**
-to the session. A session acting with none is misconfigured, and the
-misconfiguration leaves no other trace: the step succeeds, the task finishes,
+to the session. A session acting with none was not fully set up when the step
+ran, and that leaves no other trace: the step succeeds, the task finishes,
 the turn is `completed`, and no rate over outcomes can see it.
 
 ⛔ What it does **not** say: that the action looked mechanical, or that a
@@ -232,19 +232,25 @@ sufficient** — nothing here measures what the browser then did with the profil
 
 **What to check, in order.**
 
-1. **Page the team that owns the browser build — and ask which build the box is
-   running.** The flag is the browser's own answer to "did this session have a
-   profile when the step ran", so the cause is on its side; but WHICH cause
-   depends on the build, and the two are not the same fault.
-2. **On a build whose persona resolution fails closed**, a missing, unloadable
-   or invalid personas file falls back to a compiled-in default profile, and a
-   profile name the browser does not recognise falls back to its base one —
-   neither can produce `false` there. What remains is a session with **no
-   behaviour profile recorded against it at all** when its first action ran: a
-   session-lifecycle fault, not a packaging one.
-3. **On an older build without that fallback**, a missing, empty or malformed
-   personas file _is_ the cause — and it degrades every session on the box at
-   once, so the give-away is a count that is not confined to one session.
+1. **The session had no behaviour profile recorded against it when the step
+   ran.** The browser records a session's profile at exactly one moment — when
+   it processes the session's assignment — and forgets it when the session ends.
+   A step that ran **before** the assignment was processed, or **after** the
+   session ended, finds nothing and reports `false`. That is a session-lifecycle
+   race on the browser side, most likely at a slow start: look for the turn's
+   `intent_session_not_established` retries in the same minute. Page the team
+   that owns the browser build with the session id and the time.
+2. **Not the personas file, and not the profile name.** The build the boxes run
+   (confirmed by its owners, 2026-09-20) resolves personas **fail-closed**: a
+   missing, unloadable or invalid personas file falls back to a compiled-in
+   default profile, and a profile name the browser does not recognise falls
+   back to its base one. Neither can produce `false`. An earlier version of this
+   page named the personas file as the first cause; it was wrong.
+3. **A prediction you can check before paging anyone:** if the cause is the
+   start-up race, `false` and `unreported` counts cluster at the START of turns
+   and travel with `intent_session_not_established` retries. If they are spread
+   evenly through sessions, the cause is one nobody has found yet — say so when
+   you page.
 4. **An older browser build that does not report the flag** reads `unreported`,
    never `false`, so a rising `unreported` share is a different (and much
    smaller) thing: the question is going unanswered, not being answered badly.

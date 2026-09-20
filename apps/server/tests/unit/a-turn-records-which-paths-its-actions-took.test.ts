@@ -172,7 +172,7 @@ describe('one line per turn says which paths the turn’s actions took', () => {
     expect(warned[0]![1]).toMatch(/NO behaviour profile attached to the session/);
     // ⛔ AND IT SAYS WHAT IT IS NOT. An operator reading this line at 3am must
     // not take it for a measurement of how the action looked.
-    expect(warned[0]![1]).toMatch(/configuration fault, not a detectability verdict/);
+    expect(warned[0]![1]).toMatch(/session set-up fault, not a detectability verdict/);
     expect(h.infos.filter(([o]) => o.event === AGENT_TURN_ACTION_PATHS_EVENT)).toHaveLength(0);
   });
 
