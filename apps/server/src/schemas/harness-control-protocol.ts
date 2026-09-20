@@ -1028,25 +1028,30 @@ export const SessionAssignExitIdentitySchema = z
   .strict();
 
 /**
- * ⛔ THE BEHAVIOUR PROFILES THE DEVICE RESOLVES (device team, 2026-09-20). The
- * device reads `behaviorProfile` as a persona NAME (casual | regular |
- * power_user) or as a SPEED on the regular persona (fast | balanced | careful).
- * Anything else is not an error on the wire — it silently falls to the device's
- * fallback, which is how every AI session came to ask for a profile called
- * 'default' that does not exist, for months, with nothing red. The wire schema
- * below stays an open string (a newer device may learn more names, and a
- * decoder must not reject them); what WE send is typed from this list, so a
- * value the device does not know cannot be written down on our side.
+ * ⛔ WHAT THE DEVICE DOES WITH `behaviorProfile` (device team, from their
+ * resolver, 2026-09-20). TWO AXES in one field, and they do NOT combine:
+ *
+ *   1. a PERSONA name (casual | regular | power_user) → that persona;
+ *   2. a SPEED name (fast | balanced | careful) → that speed applied to a
+ *      HARDCODED `regular` base. Sending a speed therefore DISCARDS any persona
+ *      choice while looking like a valid profile. Persona × speed needs a second
+ *      wire field and a resolver change on the device; neither exists;
+ *   3. anything else → the `regular` base, unmodified, without a word.
+ *
+ * Case 3 is how every AI session sent the literal 'default' for months with
+ * nothing red: it named nothing and quietly meant `regular`. Harmless in
+ * behaviour, but a value nobody chose. The wire schema below stays an open
+ * string (a newer device may learn more names, and a decoder must not reject
+ * them); what WE send is typed from these two lists, so a name the device does
+ * not resolve cannot be written down on our side — and the two axes keep
+ * separate names so nobody reads six interchangeable profiles into them.
  */
-export const DEVICE_BEHAVIOR_PROFILES = [
-  'casual',
-  'regular',
-  'power_user',
-  'fast',
-  'balanced',
-  'careful',
-] as const;
-export type DeviceBehaviorProfile = (typeof DEVICE_BEHAVIOR_PROFILES)[number];
+export const DEVICE_PERSONAS = ['casual', 'regular', 'power_user'] as const;
+export const DEVICE_SPEED_MODIFIERS = ['fast', 'balanced', 'careful'] as const;
+export type DevicePersona = (typeof DEVICE_PERSONAS)[number];
+/** A speed on the `regular` base. Choosing one gives up the persona axis. */
+export type DeviceSpeedModifier = (typeof DEVICE_SPEED_MODIFIERS)[number];
+export type DeviceBehaviorProfile = DevicePersona | DeviceSpeedModifier;
 
 export const SessionAssignSchema = z
   .object({

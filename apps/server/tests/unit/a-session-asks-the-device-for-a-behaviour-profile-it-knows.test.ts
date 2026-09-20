@@ -1,10 +1,12 @@
 // ⛔ A SESSION ASKS THE DEVICE FOR A BEHAVIOUR PROFILE IT KNOWS.
 //
-// The device resolves `behaviorProfile` as a persona name (casual | regular |
-// power_user) or as a speed on the regular persona (fast | balanced | careful).
-// A value outside those six is NOT refused — the wire is an open string, so it
-// falls to the device's fallback without a word. That is how every AI session
-// came to send the literal 'default': nothing on either side could go red.
+// The device resolves `behaviorProfile` on TWO AXES that do not combine: a
+// persona name (casual | regular | power_user), or a speed (fast | balanced |
+// careful) applied to a hardcoded `regular` base. Any other value is NOT refused
+// — the wire is an open string, and the device lets it fall through to `regular`
+// without a word. That is how every AI session came to send the literal
+// 'default': it named nothing, meant `regular` by accident, and nothing on
+// either side could go red.
 //
 // Two facts are held here, because either one drifting reopens the hole:
 //   1. every profile a customer can choose is one the device resolves;
@@ -15,25 +17,34 @@
 import { describe, expect, it } from 'vitest';
 import { BehavioralProfileSchema, DEFAULT_BEHAVIORAL_PROFILE } from '@driftstack/api-types';
 import {
-  DEVICE_BEHAVIOR_PROFILES,
+  DEVICE_PERSONAS,
+  DEVICE_SPEED_MODIFIERS,
   SessionAssignSchema,
 } from '../../src/schemas/harness-control-protocol.js';
 import type { SessionDispatchConfig } from '../../src/routes/agent-sessions.js';
 
 describe('the behaviour profile a session asks the device for', () => {
-  it('every profile a customer can choose is one the device resolves', () => {
-    const known = new Set<string>(DEVICE_BEHAVIOR_PROFILES);
+  it('every profile a customer can choose is a PERSONA the device resolves', () => {
+    // Personas, not speeds: a customer who picks a profile is choosing who is
+    // browsing, and a speed name would silently replace that with `regular`.
+    const known = new Set<string>(DEVICE_PERSONAS);
     const unknown = BehavioralProfileSchema.options.filter((p) => !known.has(p));
     expect(unknown).toEqual([]);
   });
 
-  it('the default the server applies is one the device resolves', () => {
-    expect(DEVICE_BEHAVIOR_PROFILES).toContain(DEFAULT_BEHAVIORAL_PROFILE);
+  it('the default the server applies is a persona the device resolves', () => {
+    expect(DEVICE_PERSONAS).toContain(DEFAULT_BEHAVIORAL_PROFILE);
   });
 
-  it("'default' is NOT one of them — the name that was sent for months names nothing", () => {
-    expect(DEVICE_BEHAVIOR_PROFILES as readonly string[]).not.toContain('default');
-    expect(DEVICE_BEHAVIOR_PROFILES as readonly string[]).not.toContain('custom');
+  it('the two axes share no name, so a value can only mean one thing', () => {
+    const personas = new Set<string>(DEVICE_PERSONAS);
+    expect(DEVICE_SPEED_MODIFIERS.filter((s) => personas.has(s))).toEqual([]);
+  });
+
+  it("'default' is on neither axis — the name that was sent for months named nothing", () => {
+    const all: readonly string[] = [...DEVICE_PERSONAS, ...DEVICE_SPEED_MODIFIERS];
+    expect(all).not.toContain('default');
+    expect(all).not.toContain('custom');
   });
 
   it('the dispatch config cannot hold a free string (the type is the guard)', () => {

@@ -946,8 +946,9 @@ export interface AgentSessionsRoutesDeps {
  *  AgentSessionsRoutesDeps.sessionDispatch). */
 export interface SessionDispatchConfig {
   archetype: string;
-  /** One of the profiles the device resolves — never a free string. It was one,
-   *  and the value written into it ('default') named nothing on the device. */
+  /** A persona OR a speed on the regular base (they do not combine — see
+   *  DeviceBehaviorProfile). Never a free string: it was one, and the value
+   *  written into it ('default') named nothing and quietly meant `regular`. */
   behaviorProfile: DeviceBehaviorProfile;
   initialUrl: string;
   /** Operator-default egress for a session that names no `proxy_id`.

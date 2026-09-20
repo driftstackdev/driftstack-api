@@ -3152,14 +3152,13 @@ export async function createProductionDeps(
           // at a different landing URL / proxy.
           sessionDispatch: {
             archetype: 'iphone16pro_ios18_6_safari18_6',
-            // ⛔ A PERSONA THE PHONE KNOWS (2026-09-20). This was the literal
-            // 'default', which is none of the six values the device resolves (a
-            // persona name casual|regular|power_user, or a speed fast|balanced|
-            // careful), so every AI session asked for a behaviour profile that
-            // does not exist and fell to the device's fallback — while ordinary
-            // sessions have always been given a real one ("the harness always gets
-            // a persona", services/sessions.ts). Same default as that path, from
-            // the same constant, until pace modes choose it per session.
+            // ⛔ A PERSONA SOMEBODY CHOSE (2026-09-20). This was the literal
+            // 'default', which is neither a persona nor a speed the device knows.
+            // The device's resolver lets an unknown name fall through to the
+            // `regular` persona, so behaviour does not change with this line —
+            // what changes is that the value is now the one ordinary sessions use,
+            // from the same constant, instead of a string that named nothing and
+            // worked by accident. Pace modes will choose it per session.
             behaviorProfile: DEFAULT_BEHAVIORAL_PROFILE,
             initialUrl: 'https://driftstack.io',
             // From env, or ABSENT. The literal that used to sit here

@@ -6,19 +6,34 @@
 findings (C1–C15) are folded into the text below. Citations were checked against committed code at `dc0f83c86`;
 line numbers drift, names do not.
 
-**Two facts that changed after this was written, both on 2026-09-20:**
+**What the device team answered from their source on 2026-09-20 (early partial delivery of their review; the measured half
+is still owed). Where this section and the text below disagree, this section wins.**
 
-1. §1's open question is answered. The device team confirmed the field is resolved as a persona name or a speed
-   modifier, and `'default'` is neither. `b1a1a2e47` stopped sending it: AI sessions now send
-   `DEFAULT_BEHAVIORAL_PROFILE` (`regular`), and the dispatch config is typed from `DEVICE_BEHAVIOR_PROFILES`.
-2. The device team also corrected a premise used in telemetry: a result's `behavioral` flag means "a persona was
-   attached" (`persona != nil`) — configuration, necessary and not sufficient. For scroll the same predicate selects
-   the flick-planned path over the flat segmented one; BOTH are native touch sequences. Report the path, never alarm
-   on it.
-
-**Open design question this plan leaves to the device team (ask 2):** whether our `pace` should ALSO select their
-speed modifier (`slow → careful`, `medium → balanced`, `fast → fast`) through `SessionAssign.behaviorProfile`. Until
-they say what the modifier scales, every pace keeps the `regular` persona and pace is server-inserted time only.
+1. **§1's alarm is withdrawn.** Their resolver tries a persona name, then a speed name, then falls through to the `regular`
+   base. `'default'` was neither, so every AI session has been getting the `regular` persona all along. `b1a1a2e47` (send
+   `DEFAULT_BEHAVIORAL_PROFILE`, type the dispatch config) is hygiene, not a behaviour change. A session has NO persona only
+   when the node's personas file is missing or empty — a device-side deployment fault.
+2. **Two axes that do not combine (ask 2).** Persona (`casual | regular | power_user`) OR speed (`fast | balanced | careful`)
+   applied to a HARDCODED `regular` base. The speed branch is live, and because AI sessions expose no persona choice, `pace`
+   MAY select it (`slow → careful`, `medium → balanced`, `fast → fast`) without discarding anything — but persona × speed
+   would need a second wire field and a resolver change. Whether to use the speed axis is decided at S7 by measurement, not
+   here. Typed in code as `DEVICE_PERSONAS` / `DEVICE_SPEED_MODIFIERS`.
+3. **Pre-empting a pause (ask 3): not established.** A pause is one cancellable sleep in principle, but no cancel path is
+   proven end to end and the wire has no cancel frame. **The 9 s cap on every server-drawn pause stands.**
+4. **Device-drawn pauses are already bounded (ask 5), just not tightly:** 300 s per pause and a 300 s aggregate per intent,
+   after which pacing is skipped and the action still completes. A caller `max_ms` is being added on their side. Tier B
+   stays default-OFF until it lands — 300 s is a safety net, not a budget.
+5. **Idle 300 s / max-duration 1800 s confirmed current (ask 11).** S11 stands as written.
+6. **Distributions (ask 4) are persona-derived and heavy-tailed:** idle pauses skewed around the persona's mean, decision
+   pauses the persona's inter-action delay × 3.5–6.0, reading by word and image count — so they scale with the speed axis.
+7. ⛔ **NEW, and it changes S6: a frozen session is itself a tell.** The device has an idle-activity option (net-near-zero
+   micro-scrolls interleaved WITHIN a pause, their time subtracted so the duration is unchanged) and it is **OFF by
+   default**. A server-drawn `{duration_ms}` pause is a perfectly still phone for up to 9 s; slow mode would manufacture that
+   shape at volume. **Slow and medium do not ship until idle activity is ON for the nodes that serve AI sessions, or the
+   device offers it per dispatch.** That is a device-side deployment setting; it is an ask, a dependency of S6, and a
+   question the S7 experiment must answer both ways.
+8. The result flag `behavioral` means "a persona was attached" — configuration, necessary and not sufficient. For scroll the
+   same predicate selects the flick-planned path over the flat segmented one; BOTH are native touch. Report, never alarm.
 
 ## 1. The finding that may outrank the feature — and the caveat on it
 
