@@ -190,6 +190,26 @@ function visibleStrings(root: HTMLElement): string[] {
   return out;
 }
 
+/** The strings a viewer READS: every text node, plus the attributes that are
+ *  spoken or surface on hover. Deliberately NOT `value` — a `<select>`'s option
+ *  values are machine identifiers, and banning a vendor name in one would ban
+ *  the wire format rather than the copy. */
+function readableStrings(root: HTMLElement): string[] {
+  const out: string[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    const text = node.textContent ?? '';
+    if (text.trim().length > 0) out.push(text);
+  }
+  for (const el of Array.from(root.querySelectorAll('*'))) {
+    for (const attr of ['title', 'aria-label', 'placeholder', 'alt']) {
+      const v = el.getAttribute(attr);
+      if (v !== null) out.push(v);
+    }
+  }
+  return out;
+}
+
 describe('sceneFromSearch — the only door into a scene, marketing or audit', () => {
   it('maps every known scene name and nothing else', () => {
     for (const name of MARKETING_SCENES) {
@@ -216,7 +236,7 @@ describe('sceneFromSearch — the only door into a scene, marketing or audit', (
     // 10 views + the AI view's seven extra STATES (spec §8): the one view whose
     // states cannot be reached from fixture data alone, and therefore the one
     // the gates had only ever measured empty.
-    expect(AUDIT_SCENES).toHaveLength(17);
+    expect(AUDIT_SCENES).toHaveLength(18);
     for (const name of ALL_SCENES) {
       expect(isAuditScene(name)).toBe(name.startsWith('audit-'));
       const size = sceneSize(name);
@@ -407,6 +427,43 @@ const AUDIT_ALLOWED_HOST =
   /(?:^|\.)example\.com$|^(?:app\.)?driftstack\.io$|^api\.driftstack\.dev$/i;
 const AUDIT_FORBIDDEN_TEXT =
   /nodemaven|oxylabs|protonvpn|mullvad|staging\.driftstack\.dev|localhost/i;
+/**
+ * ⛔ NO MODEL VENDOR IS NAMED IN A RENDERED SCENE (the workflow's copy rule and
+ * spec D5: customer-facing copy says WHAT the product does, never HOW it is
+ * built).
+ *
+ * This could not be added before stage 4, because until stage 4 it would have
+ * failed on SHIPPED COPY: the AI view's mode strip read "Live device — <vendor>
+ * plans each step and runs it on a real iPhone." on every screen, and the seven
+ * AI scenes rendered it faithfully. §10's LIVE chip replaced that sentence with
+ * "Read-only — the AI is driving", and this is the guard that keeps it gone.
+ *
+ * ⚠️ IT SCANS WHAT A CUSTOMER READS, NOT EVERY ATTRIBUTE. The Model picker's
+ * `<option value="claude-sonnet-5">` is a machine identifier on the wire, not a
+ * word on the screen — `readableStrings` therefore skips `value` where
+ * `visibleStrings` includes it, and the two are used for their two different
+ * questions. A vendor name in a `title` or an `aria-label` IS read, because a
+ * customer hears and hovers those.
+ */
+const AUDIT_FORBIDDEN_VENDOR = /\b(?:anthropic|openai)\b|\bclaude\b|\bgpt-?\d/i;
+/**
+ * ⛔ AND IT IS SCOPED TO THE AI VIEW, WHICH IS NOT A FUDGE — it is the line the
+ * product's copy rule actually draws.
+ *
+ * In the AI view a vendor's name says HOW the product is built and answers a
+ * question no customer asked; "Read-only — the AI is driving" is the same
+ * sentence without it. In SETTINGS the customer is being told which vendor to
+ * go and buy a key from, so the name is the whole content of the field (spec D5
+ * keeps "your own Anthropic key" in the own-key refusal for exactly that
+ * reason). A repo-wide ban would red on that, which is why it is not one.
+ *
+ * ⚠️ ONE OCCURRENCE IN audit-settings IS NOT A BYOK INSTRUCTION AND SHOULD GO:
+ * the "AI & billing" section is described as "How the AI chat's Claude usage
+ * gets paid for." — the vendor name buys nothing there, and dropping it would
+ * let this ban widen to every scene. Left for the owner of that view; recorded
+ * here so the scope is a decision and not an oversight.
+ */
+const VENDOR_SCANNED_SCENES = /^audit-agent-chat/;
 /** Two more pieces of shipped copy: SettingsView's support mailto and the
  *  self-hosted URL field's placeholder (DEFAULT_SETTINGS.baseUrl). Removed
  *  VERBATIM before the scan, so a bare `driftstack.dev` or `localhost`
@@ -431,9 +488,20 @@ const AUDIT_NO_HOST_SCENES: ReadonlyArray<string> = ['audit-first-run'];
  *  `member_email: 'ana@example.com'` → `'ana@oxylabs.io'` in auditTeam()
  *  (audit-scenes.tsx) reds the non-StrictMode audit-team arm on
  *  AUDIT_FORBIDDEN_TEXT; a `toContain`-only arm let it through. */
-function expectAuditPrivacy(name: string, strings: ReadonlyArray<string>): void {
+function expectAuditPrivacy(
+  name: string,
+  strings: ReadonlyArray<string>,
+  readable: ReadonlyArray<string> = strings,
+): void {
   let ipsSeen = 0;
   let hostsSeen = 0;
+  if (VENDOR_SCANNED_SCENES.test(name)) {
+    for (const raw of readable) {
+      expect(raw, `model-vendor name rendered in scene ${name}`).not.toMatch(
+        AUDIT_FORBIDDEN_VENDOR,
+      );
+    }
+  }
   for (const raw of strings) {
     const s = AUDIT_COPY_LITERALS.reduce((acc, lit) => acc.split(lit).join(' '), raw);
     expect(s).not.toMatch(AUDIT_FORBIDDEN_TEXT);
@@ -519,7 +587,7 @@ describe('every audit scene — the REAL view, loaded, under the marketing priva
         // PRIVACY — the marketing scan, with the two named copy hosts allowed.
         // For a KNOWN_UNLOADED scene this walks the skeleton; the non-StrictMode
         // arm below scans that scene's LOADED strings with the same function.
-        expectAuditPrivacy(name, strings);
+        expectAuditPrivacy(name, strings, readableStrings(stage));
       } finally {
         restore();
       }
@@ -564,7 +632,7 @@ describe('every audit scene — the REAL view, loaded, under the marketing priva
         const strings = visibleStrings(stage);
         const joined = strings.join('\n');
         for (const marker of markers) expect(joined).toContain(marker);
-        expectAuditPrivacy(name, strings);
+        expectAuditPrivacy(name, strings, readableStrings(stage));
       } finally {
         restore();
       }

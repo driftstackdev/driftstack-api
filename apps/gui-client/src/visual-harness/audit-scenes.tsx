@@ -204,6 +204,10 @@ function auditDefaultSizes(stage: {
     'audit-agent-chat-done': stage,
     'audit-agent-chat-trouble': stage,
     'audit-agent-chat-stopping': stage,
+    // ⛔ THE ONE AI SCENE WITH ITS OWN WINDOW. The Tauri minimum, so the gate
+    // measures the narrow tier — 44px rail strip, 44px bar, 252px stage — that
+    // the other seven, all at the default stage, can never reach.
+    'audit-agent-chat-small': { width: 960, height: 600 },
     'audit-team': stage,
     // Seven rows measure 860 CSS px in the 1280×800 window's 764 px main area
     // (896 would just fit); 920 keeps the last row in frame when a chip wraps.
@@ -829,6 +833,7 @@ export function auditLoadedMarkers(name: AuditSceneName): ReadonlyArray<string> 
     case 'audit-agent-chat-done':
     case 'audit-agent-chat-trouble':
     case 'audit-agent-chat-stopping':
+    case 'audit-agent-chat-small':
       // The scene's own fixture strings FIRST, then the two async loads every
       // AI-view scene shares. The order is the point (same reason as
       // audit-proxies below): the fixture chat renders synchronously, so a list
@@ -1356,6 +1361,7 @@ export function AuditScene({ name }: { name: AuditSceneName }): JSX.Element {
     case 'audit-agent-chat-done':
     case 'audit-agent-chat-trouble':
     case 'audit-agent-chat-stopping':
+    case 'audit-agent-chat-small':
       return <AgentChatStateScene name={name} />;
     case 'audit-team':
       return (

@@ -40,8 +40,17 @@ import { type ReactNode } from 'react';
 import type { AgentIntent, AgentIntentResult, AgentSession, AgentUsage } from '@driftstack/sdk';
 import type { ChatTurn, PendingConfirmation, UseAgentChatResult } from '../lib/use-agent-chat';
 
-/** The seven states, named for what the customer is doing — not for the hook
- *  field that produces them. `audit-agent-chat-<kind>` is the scene name. */
+/** The states, named for what the customer is doing — not for the hook field
+ *  that produces them. `audit-agent-chat-<kind>` is the scene name.
+ *
+ *  ⛔ `small` IS NOT AN EIGHTH STATE, IT IS A WINDOW. It renders the RUNNING
+ *  fixture at the 960x600 Tauri minimum (its stage size is declared in
+ *  `auditDefaultSizes`), because stage 6 left the 44px narrow tier measured by
+ *  nothing: `gui-text-quality.mjs` renders each scene at its OWN declared size
+ *  and never passes `?stage=`, so a whole tier — the strip, the 44px bar, the
+ *  count badge, the flat locked pickers, the 252px stage — was hand-checked
+ *  once and then unguarded. A scene with its own small stage is what puts it in
+ *  CI, and it costs one entry in each of the four registries. */
 export type AgentChatSceneKind =
   | 'nokey'
   | 'planning'
@@ -49,7 +58,8 @@ export type AgentChatSceneKind =
   | 'approval'
   | 'done'
   | 'trouble'
-  | 'stopping';
+  | 'stopping'
+  | 'small';
 
 export const AGENT_CHAT_SCENE_KINDS: ReadonlyArray<AgentChatSceneKind> = [
   'nokey',
@@ -59,6 +69,7 @@ export const AGENT_CHAT_SCENE_KINDS: ReadonlyArray<AgentChatSceneKind> = [
   'done',
   'trouble',
   'stopping',
+  'small',
 ];
 
 /** What the live view's token fetch should do for a scene that has no stand-in.
@@ -191,14 +202,7 @@ function productCaptureSvg(): string {
  *  again would be noise — and the caption under the phone (stage 4) is the real
  *  text for what the device is doing. */
 function standInScreen(svg: string): ReactNode {
-  return (
-    <img
-      src={svgDataUri(svg)}
-      alt=""
-      aria-hidden="true"
-      className="h-full w-auto max-w-full rounded-md object-contain"
-    />
-  );
+  return <img src={svgDataUri(svg)} alt="" aria-hidden="true" className="ai-standin" />;
 }
 
 // ─── the conversation ────────────────────────────────────────────────────────
@@ -398,6 +402,17 @@ const DONE_STEPS: ReadonlyArray<AgentIntentResult> = [
   ok('Captured a screenshot of the product page', CAPTURE_ID),
 ];
 
+/** The captions the server wrote for the checkout plan — one per step, in the
+ *  order they ran, plus the one that never did. */
+const APPROVAL_LABELS: ReadonlyArray<string> = [
+  'Opened the store',
+  'Opened Ridgeline Trail 2 in US size 10',
+  'Added it to the cart',
+  'Opened the checkout and filled in the saved delivery address',
+  'Place the order',
+  'Read the order number',
+];
+
 const APPROVAL_STEPS: ReadonlyArray<AgentIntentResult> = [
   went('https://shop.example.com/checkout', 'Opened the store'),
   ok('Opened Ridgeline Trail 2 in US size 10'),
@@ -461,6 +476,15 @@ export function agentChatSceneFixture(
         markers: [TASK, 'Planning…', 'Starting the live view…'],
       };
 
+    // ⛔ THE SAME FIXTURE AS `running`, AT ANOTHER WINDOW SIZE. It is a window,
+    // not a state (see AgentChatSceneKind): what it measures is the 44px narrow
+    // tier — the rail strip, the 44px bar, the count badge, the flat locked
+    // pickers, the 252px stage and the place chip that moves up into the HUD —
+    // which no gate could see before, because the text gate renders every scene
+    // at its own declared size and `auditDefaultSizes` gave them all 1280x800.
+    // Its stage is 960x600 there, so the default gate run covers it with no
+    // flag and no script edit.
+    case 'small':
     case 'running':
       return {
         apiKey: 'ds_live_example',
@@ -520,6 +544,13 @@ export function agentChatSceneFixture(
                 ok: false,
                 usage: USAGE,
               },
+              // §7 — the server's own captions, kept at settle. Without them
+              // the gated row and the stage caption both fall back to
+              // `humanIntentLabel`, which can only honestly say "Tap something
+              // on the page": it may never name the selector, and the selector
+              // is all the intent carries. The real server sends these, and the
+              // whole point of a scene is to render what a customer sees.
+              plan: { labels: [...APPROVAL_LABELS] },
             },
           ],
           pendingConfirmation: pending(2),
@@ -532,6 +563,7 @@ export function agentChatSceneFixture(
         markers: [
           CHECKOUT_TASK,
           'Opened the checkout and filled in the saved delivery address',
+          'Place the order',
           'Place order · $104.00',
         ],
       };

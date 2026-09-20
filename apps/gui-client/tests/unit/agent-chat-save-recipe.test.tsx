@@ -292,21 +292,56 @@ describe('AgentChatView Save-as-recipe', () => {
   });
 });
 
-describe('AgentChatView live-view toggle (narrow widths)', () => {
-  it('a "Live view" toggle reveals the live pane as an overlay (it is not silently dropped below lg)', () => {
+describe('AgentChatView live-view toggle — it COLLAPSES an inline stage', () => {
+  // ⛔ PIN MOVED IN STAGE 4, DELIBERATELY, AND THIS IS THE WHOLE OF IT.
+  //
+  // What this used to assert: the live pane started with the `hidden` class and
+  // the toggle turned it into a `fixed` slide-over with its own `Close live
+  // view` button. That was the shape of a pane that did not fit — below the
+  // `lg` VIEWPORT breakpoint (1024px, above the 960px Tauri minimum) the
+  // headline feature was hidden outright, and the slide-over was how it was
+  // given back.
+  //
+  // The stage is INLINE at every supported width now (spec §1: 252px at 960,
+  // 500px at 1600), so it starts SHOWING, it is never `fixed`, and the toggle's
+  // only job is to give its room back to the conversation. `Close live view` is
+  // gone with the slide-over that needed it — one control, in the bar, under
+  // its pinned name.
+  it('starts inline and visible, and collapses to `hidden` — never to `fixed`', () => {
     chatState = baseChat({ session: SESSION, turns: [] });
     const { container } = render(<AgentChatView />, { wrapper: AgentChatProvider });
     const pane = container.querySelector('[data-component="ai-automation-live-pane"]');
-    // Closed initially → the pane carries the `hidden` class (no overlay).
-    expect(pane?.className).toContain('hidden');
-    // Toggle it open.
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle live view' }));
-    // Now it's a fixed slide-over (not hidden) with a Close affordance.
-    expect(pane?.className).toContain('fixed');
+    // Showing: no `hidden`, and the toggle says so.
     expect(pane?.className).not.toContain('hidden');
-    expect(screen.getByRole('button', { name: 'Close live view' })).toBeTruthy();
-    // The toggle label flips to Hide.
-    expect(screen.getByRole('button', { name: 'Toggle live view' })).toHaveTextContent('Hide live');
+    expect(pane?.hasAttribute('hidden')).toBe(false);
+    expect(
+      screen.getByRole('button', { name: 'Toggle live view' }).getAttribute('aria-pressed'),
+    ).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle live view' }));
+
+    // Collapsed: the class the pin reads AND the attribute that takes it out of
+    // the accessibility tree and the tab order.
+    expect(pane?.className).toContain('hidden');
+    expect(pane?.hasAttribute('hidden')).toBe(true);
+    // ⛔ NEVER `fixed`. A stage that escaped its column would sit over the
+    // conversation instead of beside it.
+    expect(pane?.className).not.toContain('fixed');
+    expect(
+      screen.getByRole('button', { name: 'Toggle live view' }).getAttribute('aria-pressed'),
+    ).toBe('false');
+
+    // And back, by the same control — the only one there is.
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle live view' }));
+    expect(pane?.className).not.toContain('hidden');
+  });
+
+  it('⛔ the slide-over is gone, and so is the `Close live view` it needed', () => {
+    chatState = baseChat({ session: SESSION, turns: [] });
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
+    expect(screen.queryByRole('button', { name: 'Close live view' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle live view' }));
+    expect(screen.queryByRole('button', { name: 'Close live view' })).toBeNull();
   });
 });
 

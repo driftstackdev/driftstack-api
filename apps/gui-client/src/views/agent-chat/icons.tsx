@@ -214,3 +214,21 @@ export function IconPlus(): JSX.Element {
 export function IconHistory(): JSX.Element {
   return <Glyph d="M3 8a5 5 0 1 0 1.5-3.6 M2.9 2.7v3.2h3.2 M8 5.4V8l1.9 1.4" />;
 }
+
+// ─── stage 4: the stage ────────────────────────────────────────────────────
+//
+// Two more drawings, both `aria-hidden`, both sized by their container. The pin
+// marks WHERE the phone is browsing from — the one fact under the phone that is
+// about the customer's identity rather than about the task. The screen is the
+// mark on the live-view toggle, whose accessible name is the pinned
+// `Toggle live view`; the drawing carries no text and no `<title>`.
+
+export function IconPin(): JSX.Element {
+  return (
+    <Glyph d="M8 1.9a4.4 4.4 0 0 0-4.4 4.4c0 3.3 4.4 7.8 4.4 7.8s4.4-4.5 4.4-7.8A4.4 4.4 0 0 0 8 1.9Z M8 4.8a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z" />
+  );
+}
+
+export function IconScreen(): JSX.Element {
+  return <Glyph d="M4.6 1.9h6.8v12.2H4.6Z M6.9 3.4h2.2" />;
+}

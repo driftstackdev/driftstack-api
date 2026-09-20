@@ -2316,6 +2316,13 @@
   min-height: 0;
   display: flex;
   position: relative;
+  /* ⛔ AN EXPLICIT 0 MAKES THIS A STACKING CONTEXT, which `z-index: auto` did
+     not. Stage 6 left this trap named: the stage's room light, device rim and
+     HUD chips all carry a z-index of their own, and without a context here they
+     would compete in the ROOT context against the rail (3, 41 with its overlay
+     open) and the bar (3). Sealing the children in is one line; raising numbers
+     one at a time is a leak that comes back. */
+  z-index: 0;
 }
 
 /* ─── the bar ──────────────────────────────────────────────────────────── */
@@ -2880,6 +2887,859 @@
 }
 [data-ai-narrow] .ai-select {
   max-width: 118px;
+}
+
+/* ═════ the stage and the layout re-cut — stage 4 (spec §1, §3.4, §4) ══════
+   rail │ deck( bar / stage │ mission ). DOM order = visual order = focus
+   order. The iPhone is the centrepiece: a real device standing in a room whose
+   light says what the AI is doing, with the live stream mounted in its screen.
+
+   ⛔ THE TIERS ARE MEASURED, NOT QUERIED. Spec §1 writes the reflow as
+   `@container aiview (…)`, and the view root cannot be that container:
+   `container-type` makes an element a containing block for `position: fixed`
+   descendants, and the view root holds the save-as-task dialog, the screenshot
+   lightbox and the rail's overlay. `use-view-width.ts` measures the same box
+   with one ResizeObserver and publishes `[data-ai-narrow|wide|short|tall|
+   large]`, which is also the path the two WebViews with no `cq` units at all
+   take. The ONE container query here is `.ai-fit` — the box the phone is sized
+   inside — which has no fixed descendant and needs `100cqh`.
+
+   ⛔ EVERY TEXT RUN SITS ON A REAL `background-color`. The text gate reads
+   nothing else, and a wash over a gradient is measured as the gradient. In the
+   stage that means the chips and the captions carry their own surface, not the
+   room's. */
+
+.ai-view {
+  height: 100%;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+  background: rgb(var(--surface-base-rgb));
+}
+
+/* ─── the stage ────────────────────────────────────────────────────────── */
+/* ALWAYS A DARK ROOM (spec D2, the SimulatorWindow precedent): `data-mode=
+   "dark"` is pinned on the section, so `AgentSessionPanel`'s own overlays —
+   ink-primary on black — resolve to the DARK theme's ink in the light theme
+   too. Dark theme: the room has no walls. Light theme: a recessed well with a
+   hard edge, so it reads as a lit stage rather than a hole in the page.
+
+   `contain: paint` clips every animated thing to this box and `isolation:
+   isolate` makes it a stacking context, so nothing in the room can paint over
+   the bar, the rail or the conversation. */
+.ai-stage {
+  position: relative;
+  z-index: 1;
+  width: 380px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px;
+  color: rgb(var(--ink-primary-rgb));
+  background: rgb(var(--surface-base-rgb));
+  overflow: hidden;
+  contain: paint;
+  isolation: isolate;
+}
+/* Collapsed by "Toggle live view". BOTH the attribute and the class: the
+   attribute takes the stage out of the accessibility tree and the tab order,
+   the class is what `agent-chat-save-recipe` reads. Never `fixed`. */
+.ai-stage[hidden],
+.ai-stage.hidden {
+  display: none;
+}
+.ai-room {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 95% 70% at 50% 48%,
+    rgb(var(--ai-stage-rgb)) 0%,
+    rgb(var(--ai-stage-rgb) / 0.85) 45%,
+    rgb(var(--ai-stage-rgb) / 0) 100%
+  );
+}
+/* the faint grain that gives the room a floor to stand on */
+.ai-room::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgb(255 255 255 / 0.1) 1px, transparent 1.3px);
+  background-size: 20px 20px;
+  background-position: 50% 50%;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, rgb(0 0 0) 0%, transparent 100%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, rgb(0 0 0) 0%, transparent 100%);
+}
+[data-mode='light'] .ai-stage {
+  margin: 10px 0 10px 10px;
+  width: 370px;
+  border-radius: 14px;
+  box-shadow: var(--ai-well-shadow);
+  background: rgb(var(--ai-stage-rgb));
+}
+/* The light theme's well needs a DEEPER centre than its own surface, or the
+   room is one flat rectangle. It is deepened with pure BLACK at an alpha rather
+   than with a second navy: a typed hue here is a hue nobody can re-theme, and
+   `--ai-stage-rgb` (15 23 42 in light) under 55 % black lands within a few
+   points of the mockup's centre while following the token wherever it goes. */
+[data-mode='light'] .ai-stage .ai-room {
+  background: radial-gradient(
+    ellipse 110% 80% at 50% 46%,
+    rgb(0 0 0 / 0.55) 0%,
+    rgb(0 0 0 / 0) 100%
+  );
+}
+
+/* ─── the HUD: one state word, one sentence ────────────────────────────── */
+.ai-hud {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 22px;
+  flex: none;
+  min-width: 0;
+}
+.ai-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  line-height: 1;
+  white-space: nowrap;
+  flex: none;
+  color: rgb(var(--ink-secondary-rgb));
+  background: rgb(var(--surface-raised-rgb));
+  box-shadow: inset 0 0 0 1px rgb(var(--surface-divider-rgb) / 0.55);
+}
+.ai-chip-ico {
+  display: block;
+  font-size: 11px;
+  color: rgb(var(--ink-muted-rgb));
+}
+.ai-chip-state {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  font-size: 10px;
+}
+/* The four tones. Each is a real background-color under real text, because the
+   gate measures nothing else — and each pairs its colour with the WORD, so
+   colour is never the only signal. */
+.ai-chip-live {
+  color: rgb(var(--accent-text-rgb));
+  background: rgb(var(--accent-rgb) / 0.2);
+  box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.5);
+}
+.ai-chip-live .ai-pip {
+  background: rgb(var(--accent-rgb));
+}
+.ai-chip-hold {
+  color: rgb(var(--status-busy-rgb));
+  background: rgb(var(--status-busy-rgb) / 0.16);
+  box-shadow: inset 0 0 0 1px rgb(var(--status-busy-rgb) / 0.5);
+}
+.ai-chip-hold .ai-chip-ico {
+  color: inherit;
+}
+.ai-chip-warm {
+  color: rgb(var(--status-busy-rgb));
+}
+.ai-chip-warm .ai-pip {
+  background: rgb(var(--status-busy-rgb));
+}
+.ai-chip-open .ai-pip.is-ready {
+  background: rgb(var(--status-ready-rgb));
+}
+.ai-chip-quiet {
+  color: rgb(var(--ink-muted-rgb));
+}
+.ai-chip .ai-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: rgb(var(--status-idle-rgb));
+}
+.ai-hud-note {
+  font-size: 10.5px;
+  line-height: 14px;
+  color: rgb(var(--ink-muted-rgb));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+/* The place chip rides up here ONLY in the narrow tier, where the facts row
+   under the phone is gone (spec §1). */
+.ai-facts-inline {
+  display: none;
+  margin-left: auto;
+  /* It may SHRINK — the stage is 252px in the tier this chip lives in, and a
+     chip that cannot shrink is a chip cut off mid-word by `overflow: hidden`
+     with no ellipsis to say so. `title` carries the whole fact. */
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── the box the phone is sized inside ────────────────────────────────── */
+/* The bezel must never letterbox the stream: the device is as wide as the
+   WIDTH allows or as wide as the HEIGHT allows at the iPhone's proportions,
+   whichever is smaller. 2.0943 = 0.932 x 874/402 + 0.068 — the bezel is 3.4 %
+   of `--w` per side, so the device's OUTER height is 2.0943 x its outer width.
+   `--ai-phone-w` is written by `use-device-fit.ts` ONLY where `cq` units do
+   not exist; everywhere else this arithmetic is the browser's. */
+.ai-fit {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  margin: 8px 0;
+  container-type: size;
+  --ai-fit-gx: 36px;
+  --ai-fit-gy: 8px;
+}
+.ai-center {
+  --w: var(
+    --ai-phone-w,
+    min(calc(100cqw - var(--ai-fit-gx)), calc((100cqh - var(--ai-fit-gy)) / 2.0943))
+  );
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+
+/* ─── the device: a frame AROUND the panel, never over it ──────────────── */
+.ai-device {
+  position: relative;
+  width: var(--w);
+  padding: calc(var(--w) * 0.034);
+  border-radius: calc(var(--w) * 0.172);
+  background: linear-gradient(
+    142deg,
+    rgb(var(--surface-divider-rgb)) 0%,
+    rgb(var(--surface-raised-rgb)) 16%,
+    rgb(var(--surface-inset-rgb)) 46%,
+    rgb(var(--surface-raised-rgb)) 78%,
+    rgb(var(--surface-divider-rgb)) 100%
+  );
+  /* the rim ring is the one place the phase's light touches the device */
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.22),
+    inset 0 0 calc(var(--w) * 0.02) rgb(0 0 0 / 0.8),
+    0 0 0 1px rgb(0 0 0 / 0.7),
+    0 0 0 2px rgb(var(--ai-light-rgb) / 0.5),
+    0 calc(var(--w) * 0.1) calc(var(--w) * 0.2) calc(var(--w) * -0.06) rgb(0 0 0 / 0.85),
+    0 0 calc(var(--w) * 0.3) calc(var(--w) * -0.04) rgb(var(--ai-light-rgb) / 0.45);
+}
+/* the product shot: lit from the left, with an edge showing */
+[data-ai-rig='rest'] .ai-device {
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.22),
+    inset 0 0 calc(var(--w) * 0.02) rgb(0 0 0 / 0.8),
+    calc(var(--w) * 0.013) 0 0 0 rgb(var(--surface-raised-rgb)),
+    calc(var(--w) * 0.016) 0 0 0 rgb(0 0 0 / 0.8),
+    calc(var(--w) * -0.1) calc(var(--w) * 0.12) calc(var(--w) * 0.26) calc(var(--w) * -0.06)
+      rgb(0 0 0 / 0.9),
+    0 0 calc(var(--w) * 0.34) calc(var(--w) * -0.04) rgb(var(--ai-light-rgb) / 0.5);
+}
+.ai-key {
+  position: absolute;
+  width: calc(var(--w) * 0.012);
+  min-width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    rgb(var(--surface-divider-rgb)),
+    rgb(var(--surface-raised-rgb))
+  );
+}
+.ai-key.is-l {
+  left: calc(var(--w) * -0.011);
+}
+.ai-key.is-r {
+  right: calc(var(--w) * -0.011);
+  transform: scaleX(-1);
+}
+.ai-key.k1 {
+  top: 17%;
+  height: 3.6%;
+}
+.ai-key.k2 {
+  top: 24%;
+  height: 6.6%;
+}
+.ai-key.k3 {
+  top: 32.5%;
+  height: 6.6%;
+}
+.ai-key.k4 {
+  top: 27%;
+  height: 10.5%;
+}
+/* EXACTLY 402/874, so AgentSessionPanel's own aspect-ratio box fills it and
+   never letterboxes inside the bezel. The corner radius is the device's: the
+   stream is a capture of a screen whose physical corners are round, and
+   squaring it would put a rectangle inside a rounded bezel. */
+.ai-device-screen {
+  position: relative;
+  aspect-ratio: 402 / 874;
+  border-radius: calc(var(--w) * 0.138);
+  overflow: hidden;
+  /* A phone's screen glass is BLACK, not a surface token — the stream is
+     letterboxed against it and any tint would read as a colour cast on the
+     video. Pure black is achromatic, which is what the accent-axis guard
+     allows and what a hex is not. */
+  background: rgb(0 0 0);
+  box-shadow: 0 0 0 calc(var(--w) * 0.022) rgb(0 0 0);
+}
+/* The gallery's stand-in page: a drawn IMAGE mounted where the stream goes, so
+   the gates can measure the running / approval / done states with no device.
+   It fills the screen box exactly, like the video does. */
+.ai-standin {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ai-device-screen > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* The Dynamic Island belongs to the PRODUCT SHOT only: it is drawn when
+   nothing is mounted, and never over a video. Always in the DOM (a sibling
+   that came and went beside the screen is how a video gets remounted). */
+.ai-island {
+  display: none;
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: calc(var(--w) * 0.062);
+  width: calc(var(--w) * 0.275);
+  height: calc(var(--w) * 0.082);
+  margin-left: calc(var(--w) * -0.1375);
+  border-radius: 999px;
+  background: rgb(0 0 0);
+  pointer-events: none;
+}
+[data-ai-rig='rest'] .ai-island {
+  display: block;
+}
+.ai-island::after {
+  content: '';
+  position: absolute;
+  right: 16%;
+  top: 50%;
+  width: 22%;
+  aspect-ratio: 1;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  /* the camera lens: the stage's own two darks, so a re-themed surface takes
+     the island with it rather than leaving a typed navy behind */
+  background: radial-gradient(
+    circle at 35% 35%,
+    rgb(var(--surface-raised-rgb)),
+    rgb(var(--ai-stage-rgb)) 60%
+  );
+}
+
+/* ─── what the view draws INSIDE the screen (never AgentSessionPanel) ──── */
+.ai-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 14px;
+  text-align: center;
+}
+.ai-screen-dark {
+  background:
+    radial-gradient(
+      130% 62% at 50% 112%,
+      rgb(var(--accent-rgb) / 0.46) 0%,
+      rgb(var(--accent-rgb) / 0.14) 40%,
+      rgb(0 0 0 / 0) 72%
+    ),
+    linear-gradient(180deg, rgb(var(--ai-stage-rgb)), rgb(var(--surface-inset-rgb)));
+}
+/* the dark glass of a phone with nothing on it */
+.ai-screen-off {
+  background:
+    radial-gradient(
+      130% 62% at 50% 112%,
+      rgb(var(--accent-rgb) / 0.6) 0%,
+      rgb(var(--accent-rgb) / 0.2) 40%,
+      rgb(0 0 0 / 0) 72%
+    ),
+    radial-gradient(90% 40% at 20% -8%, rgb(var(--ink-muted-rgb) / 0.16) 0%, rgb(0 0 0 / 0) 70%),
+    linear-gradient(180deg, rgb(var(--ai-stage-rgb)), rgb(var(--surface-inset-rgb)));
+}
+/* the diagonal sheen of a screen catching the room's light */
+.ai-screen-off::before,
+.ai-screen-dark::before {
+  content: '';
+  position: absolute;
+  inset: -20% -60%;
+  pointer-events: none;
+  background: linear-gradient(
+    112deg,
+    transparent 38%,
+    rgb(255 255 255 / 0.07) 44%,
+    rgb(255 255 255 / 0.02) 52%,
+    transparent 56%
+  );
+}
+.ai-screen-mark {
+  width: 34%;
+  height: auto;
+  color: rgb(var(--accent-hover-rgb) / 0.32);
+  fill: none;
+}
+.ai-screen-ico {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  color: rgb(var(--accent-rgb));
+  background: rgb(var(--accent-subtle-rgb) / var(--accent-subtle-alpha));
+}
+.ai-screen-ico.is-muted {
+  color: rgb(var(--ink-muted-rgb));
+  background: rgb(var(--surface-inset-rgb));
+}
+.ai-screen-hd {
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  color: rgb(var(--ink-secondary-rgb));
+}
+.ai-screen-say {
+  font-size: 11px;
+  line-height: 15px;
+  color: rgb(var(--ink-muted-rgb));
+}
+.ai-screen-spin {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2.4px solid rgb(var(--accent-rgb) / 0.25);
+  border-top-color: rgb(var(--accent-rgb));
+  animation: ds-ai-spin 900ms linear infinite;
+}
+.ai-screen-retry {
+  margin-top: 2px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgb(var(--ink-secondary-rgb));
+  background: rgb(var(--surface-elevated-rgb));
+  box-shadow: inset 0 0 0 1px rgb(var(--surface-divider-rgb));
+  transition: color var(--ai-dur-quick);
+}
+.ai-screen-retry:hover {
+  color: rgb(var(--ink-primary-rgb));
+}
+
+/* ─── under the phone: what it is doing, in words ──────────────────────── */
+/* It MIRRORS the timeline and never sits over the video. Real text, but NOT a
+   live region: every word of it is already in the log, and announcing it twice
+   is what makes a run unusable without sight. */
+.ai-now {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 20px;
+  margin-bottom: 8px;
+  font-size: 11.5px;
+  line-height: 16px;
+  color: rgb(var(--ink-secondary-rgb));
+  white-space: nowrap;
+  min-width: 0;
+}
+.ai-now-say {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-now-ico {
+  display: block;
+  font-size: 12px;
+  flex: none;
+  color: rgb(var(--ai-light-rgb));
+}
+.ai-now b {
+  font-weight: 500;
+  color: rgb(var(--ink-primary-rgb));
+}
+.ai-now.is-idle {
+  flex-direction: column;
+  gap: 1px;
+  white-space: normal;
+  text-align: center;
+  min-height: 36px;
+}
+.ai-now.is-idle b {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.ai-now-sub {
+  font-size: 11px;
+  color: rgb(var(--ink-muted-rgb));
+}
+
+/* ─── the start-up strip (it replaces the caption while STARTING) ───────── */
+.ai-boot {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 20px;
+  margin-bottom: 8px;
+  font-size: 10.5px;
+  line-height: 16px;
+  color: rgb(var(--ink-muted-rgb));
+  white-space: nowrap;
+}
+.ai-boot li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ai-boot li + li::before {
+  content: '';
+  width: 8px;
+  height: 1px;
+  margin: 0 5px;
+  background: rgb(var(--surface-divider-rgb));
+}
+.ai-boot-b {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 8px;
+  box-shadow: inset 0 0 0 1px rgb(var(--surface-divider-rgb));
+}
+.ai-boot-done {
+  color: rgb(var(--ink-secondary-rgb));
+}
+.ai-boot-done .ai-boot-b {
+  color: rgb(var(--status-ready-rgb));
+  background: rgb(var(--status-ready-rgb) / 0.18);
+  box-shadow: inset 0 0 0 1px rgb(var(--status-ready-rgb) / 0.5);
+}
+.ai-boot-done .ai-boot-b svg {
+  stroke-width: 2.6;
+}
+.ai-boot-active {
+  color: rgb(var(--ink-primary-rgb));
+}
+.ai-boot-active .ai-boot-b {
+  position: relative;
+  box-shadow: inset 0 0 0 1.5px rgb(var(--accent-rgb) / 0.35);
+}
+/* the one ring that turns while a device is coming up (spec §4 item 17) */
+.ai-boot-active .ai-boot-b::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid transparent;
+  border-top-color: rgb(var(--accent-hover-rgb));
+  animation: ds-ai-spin 1100ms linear infinite;
+}
+
+/* ─── the facts row ────────────────────────────────────────────────────── */
+.ai-facts {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 22px;
+  flex: none;
+}
+.ai-facts-note {
+  font-size: 10.5px;
+  line-height: 14px;
+  color: rgb(var(--ink-muted-rgb));
+  text-align: center;
+}
+/* D4 — the address is shown inline only in the wide tier; everywhere else it
+   is in the chip's `title` beside the place and the timezone. */
+.ai-facts-ip {
+  display: none;
+  font-size: 10px;
+  color: rgb(var(--ink-muted-rgb));
+}
+
+/* ─── the mission column ───────────────────────────────────────────────── */
+/* The room spills a little light onto the wall beside it — a STATIC
+   background-image, not a layer, so it costs nothing to paint and nothing to
+   composite. `--ai-spill-alpha` is 0 in the light theme, where the well has a
+   hard edge instead. */
+.ai-mission {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background-color: rgb(var(--surface-base-rgb));
+  background-image: radial-gradient(
+    ellipse 46% 60% at 0% 56%,
+    rgb(var(--ai-light-rgb) / var(--ai-spill-alpha)) 0%,
+    rgb(var(--ai-light-rgb) / 0) 100%
+  );
+}
+/* With the stage collapsed the conversation is alone on the deck: centre it at
+   a readable measure rather than letting a 1600px window set 1300px lines. */
+.ai-stage[hidden] + .ai-mission .ai-log > *,
+.ai-stage[hidden] + .ai-mission .ai-cmd-box,
+.ai-stage[hidden] + .ai-mission .ai-dock {
+  width: 100%;
+  max-width: 760px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ─── the bar's icon button (the live-view toggle) ──────────────────────── */
+.ai-bar-btn-icon {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+}
+.ai-bar-btn-icon[aria-pressed='true'] {
+  color: rgb(var(--ink-primary-rgb));
+  background: rgb(var(--surface-elevated-rgb) / 0.7);
+}
+
+/* ─── the tiers (spec §1) ──────────────────────────────────────────────── */
+/* WIDE — a 1600x1000 window gives the view 1376px. */
+[data-ai-wide] .ai-stage {
+  width: 500px;
+  padding: 16px 24px;
+}
+[data-mode='light'] [data-ai-wide] .ai-stage {
+  width: 488px;
+}
+[data-ai-wide] .ai-log {
+  padding: 26px 40px 16px 44px;
+}
+[data-ai-wide] .ai-log > * {
+  max-width: 720px;
+}
+[data-ai-wide] .ai-facts-ip {
+  display: inline;
+}
+
+/* NARROW — the 960px minimum window gives the view 736px. The stage keeps the
+   phone (it is the feature) and gives up everything around it; the place moves
+   into the HUD row, which is the only line left. */
+[data-ai-narrow] .ai-stage {
+  width: 252px;
+  padding: 8px 8px 10px;
+}
+[data-mode='light'] [data-ai-narrow] .ai-stage {
+  width: 246px;
+  margin: 6px 0 6px 6px;
+  padding: 8px 6px;
+}
+[data-ai-narrow] .ai-fit {
+  margin: 6px 0 0;
+  --ai-fit-gx: 8px;
+  --ai-fit-gy: 4px;
+}
+[data-ai-narrow] .ai-now,
+[data-ai-narrow] .ai-boot,
+[data-ai-narrow] .ai-facts,
+[data-ai-narrow] .ai-hud-note {
+  display: none;
+}
+[data-ai-narrow] .ai-now.is-idle {
+  display: flex;
+  min-height: 18px;
+  margin: 4px 0 0;
+}
+[data-ai-narrow] .ai-now.is-idle .ai-now-sub {
+  display: none;
+}
+[data-ai-narrow] .ai-facts-inline {
+  display: inline-flex;
+}
+[data-ai-narrow] .ai-log {
+  padding: 12px 14px 10px 16px;
+}
+/* The toggle goes: at 252px the stage IS the feature, and a button that
+   removes it leaves a text box on its own in a 736px view.
+
+   ⛔ ONLY WHILE THE STAGE IS SHOWING — `[aria-pressed='true']` is the whole
+   fix, not a flourish. Collapsing is sticky state, and the tier is measured off
+   the window: collapse the stage at 1280x800, resize to the 960x600 Tauri
+   minimum, and an unqualified rule takes away the ONLY control that can bring
+   it back, while the visibility gate keeps the stream torn down. That is the
+   defect this stage exists to remove — the headline feature hidden at a narrow
+   width with no affordance — re-entered through a different door. Hiding a
+   control that says "show me the thing you have taken away" is never right;
+   hiding one that only removes what is already on screen is.
+
+   ⛔ AND `:not(:focus)` IS THE OTHER HALF, for the keyboard. Without it this
+   rule drops focus on the floor at the one width it applies to: collapsed at
+   960x600 the button IS reachable (`aria-pressed="false"`), so a keyboard user
+   Tabs to it and presses Enter — the stage returns, `aria-pressed` flips to
+   true, this rule fires, and the control they were standing on becomes
+   `display: none` mid-activation. `document.activeElement` falls back to
+   `<body>` and they have to Tab from the top of the window to get anywhere.
+   Measured in a browser at 960x600, where it happens, and NOT at 1280x800,
+   where focus stays put. Keeping the button while it holds focus costs one
+   pseudo-class: it leaves when focus does, and because it is the LAST control
+   in the bar the forward Tab target is already focused by the time this rule
+   re-evaluates, so nothing is skipped on the way out. */
+[data-ai-narrow] .ai-bar-btn-icon[aria-pressed='true']:not(:focus) {
+  display: none;
+}
+
+/* TALL — a view with room sets the live turn larger rather than leaving the
+   column half empty. No filler is invented; only the type steps up. */
+[data-ai-tall] .ai-brief p {
+  font-size: 14.5px;
+  line-height: 23px;
+}
+[data-ai-tall] .ai-flight {
+  margin-top: 20px;
+}
+[data-ai-tall] .ai-segs {
+  margin: 12px 0 16px;
+}
+[data-ai-tall] .ai-segs > i {
+  height: 4px;
+}
+[data-ai-tall] .ai-plan:not(.is-settled) > .ai-step {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+[data-ai-tall] .ai-plan:not(.is-settled) > .ai-step .ai-step-label {
+  font-size: 13.5px;
+}
+[data-ai-tall] .ai-replan {
+  padding: 4px 0;
+  font-size: 12px;
+}
+[data-ai-tall] .ai-aside {
+  margin-top: 14px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* LARGE — one more step up the same scale. */
+[data-ai-large] .ai-brief p {
+  font-size: 16px;
+  line-height: 26px;
+}
+[data-ai-large] .ai-voice-lg {
+  font-size: 1.5rem;
+  line-height: 2rem;
+}
+[data-ai-large] .ai-plan:not(.is-settled) > .ai-step .ai-step-label {
+  font-size: 14.5px;
+  line-height: 20px;
+}
+[data-ai-large] .ai-answer-say {
+  font-size: 1.1875rem;
+  line-height: 1.8125rem;
+}
+[data-ai-large] .ai-now {
+  font-size: 12.5px;
+}
+/* …and the first screen takes the same step, so a 1600x1000 window does not
+   show the 1280 hero with more air around it. */
+[data-ai-large] .ai-hello > p {
+  font-size: 14.5px;
+  line-height: 23px;
+}
+[data-ai-large] .ai-beats li {
+  font-size: 12.5px;
+  line-height: 18px;
+  padding-top: 12px;
+  padding-bottom: 14px;
+}
+[data-ai-large] .ai-beats b {
+  font-size: 13.5px;
+}
+[data-ai-large] .ai-tpl {
+  gap: 10px;
+}
+[data-ai-large] .ai-tpl > button {
+  padding: 13px 14px;
+}
+[data-ai-large] .ai-tpl b {
+  font-size: 13.5px;
+  line-height: 19px;
+}
+[data-ai-large] .ai-tpl-desc {
+  font-size: 12.5px;
+  line-height: 18px;
+}
+[data-ai-large] .ai-replan {
+  padding: 6px 0;
+  font-size: 12.5px;
+}
+
+/* SHORT — the 600px-tall minimum window (D6). The hero keeps its headline, the
+   explainer goes, and all four templates stay above the fold. */
+/* ⛔ A DIRECT CHILD, NOT A DESCENDANT. `.ai-hello .section-label:first-child`
+   also matched the "START FROM A TEMPLATE" heading, which is the first child of
+   `.ai-tpl-h` — so the short tier hid the label that tells a customer what the
+   four cards below it ARE, at the one window size where those cards are the
+   whole first screen. The label that goes is the hero's own "NEW TASK". */
+[data-ai-short] .ai-hello > .section-label {
+  display: none;
+}
+[data-ai-short] .ai-voice-xl {
+  font-size: 1.375rem;
+  line-height: 1.75rem;
+}
+[data-ai-short] .ai-beats {
+  display: none;
+}
+[data-ai-short] .ai-tpl-guard {
+  display: none;
+}
+[data-ai-short] .ai-tpl > button {
+  padding: 8px 10px;
+}
+[data-ai-short] .ai-tpl-desc {
+  -webkit-line-clamp: 2;
+}
+[data-ai-short] .ai-answer-say {
+  font-size: 1rem;
+  line-height: 1.5rem;
 }
 
 /* ─── Profiles list-view responsive columns (founder 2026-06-16) ──────────

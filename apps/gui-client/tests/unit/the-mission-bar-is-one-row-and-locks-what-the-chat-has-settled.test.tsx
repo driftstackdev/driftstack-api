@@ -69,7 +69,7 @@ interface BarOver {
   started?: boolean;
   sending?: boolean;
   canSaveRecipe?: boolean;
-  liveOpen?: boolean;
+  stageShown?: boolean;
 }
 
 function renderBar(over: BarOver = {}): void {
@@ -78,7 +78,7 @@ function renderBar(over: BarOver = {}): void {
       chat={over.chat ?? {}}
       sessionState={over.sessionState ?? READY}
       session={over.session ?? null}
-      liveOpen={over.liveOpen ?? false}
+      stageShown={over.stageShown ?? true}
       onToggleLiveView={() => undefined}
       profileId=""
       profiles={[{ id: 'prof_1', name: 'Retail research · DE' }]}
@@ -287,13 +287,41 @@ describe('the AI budget', () => {
   });
 });
 
-describe('the live-view toggle is untouched by this stage', () => {
-  it('keeps the accessible name and the visible text the save-recipe suite pins', () => {
+describe('the live-view toggle says what it will do, and is named for what it is', () => {
+  // ⛔ PIN MOVED IN STAGE 4, DELIBERATELY. This button used to carry the visible
+  // words "Live view" / "Hide live" and to exist only below the `lg` VIEWPORT
+  // breakpoint, where the live pane was hidden outright and this was the only
+  // way to reach it. The stage is INLINE at every supported width now, so the
+  // button has one job left — give the phone's room back to the conversation —
+  // and it is an icon button whose `aria-pressed` says whether the stage is
+  // showing. The ACCESSIBLE NAME is the half that did not move.
+  it('keeps the accessible name `Toggle live view` exactly, at both states', () => {
     renderBar();
-    expect(screen.getByRole('button', { name: 'Toggle live view' }).textContent).toBe('Live view');
+    expect(screen.getByRole('button', { name: 'Toggle live view' })).toBeTruthy();
     cleanup();
-    renderBar({ liveOpen: true });
-    expect(screen.getByRole('button', { name: 'Toggle live view' }).textContent).toBe('Hide live');
+    renderBar({ stageShown: false });
+    expect(screen.getByRole('button', { name: 'Toggle live view' })).toBeTruthy();
+  });
+
+  it('says whether the stage is showing, in `aria-pressed` and in the title', () => {
+    renderBar({ stageShown: true });
+    const shown = screen.getByRole('button', { name: 'Toggle live view' });
+    expect(shown.getAttribute('aria-pressed')).toBe('true');
+    expect(shown.getAttribute('title')).toBe('Hide the live view');
+    cleanup();
+    renderBar({ stageShown: false });
+    const hidden = screen.getByRole('button', { name: 'Toggle live view' });
+    expect(hidden.getAttribute('aria-pressed')).toBe('false');
+    expect(hidden.getAttribute('title')).toBe('Show the live view');
+  });
+
+  it('⛔ carries no visible word of its own — the icon inside is aria-hidden', () => {
+    // The name is `aria-label`; an icon that added a word would make the
+    // button's accessible name something else and break the pinned lookup.
+    renderBar();
+    const btn = screen.getByRole('button', { name: 'Toggle live view' });
+    expect(btn.textContent).toBe('');
+    expect(btn.querySelector('[aria-hidden="true"]')).toBeTruthy();
   });
 });
 

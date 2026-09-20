@@ -157,8 +157,7 @@ describe('door 2 — a stand-in replaces the stream, it does not sit beside it',
       <SettingsContext.Provider value={settingsValue(client)}>
         <LiveAutomationPanel
           sessionId="agt_audit_running"
-          open
-          onClose={() => undefined}
+          visible
           standIn={<img src="data:image/svg+xml,<svg/>" alt="" data-testid="stand-in" />}
         />
       </SettingsContext.Provider>,
@@ -173,7 +172,7 @@ describe('door 2 — a stand-in replaces the stream, it does not sit beside it',
     const { client, livekitToken } = panelClient();
     render(
       <SettingsContext.Provider value={settingsValue(client)}>
-        <LiveAutomationPanel sessionId="agt_audit_running" open onClose={() => undefined} />
+        <LiveAutomationPanel sessionId="agt_audit_running" visible />
       </SettingsContext.Provider>,
     );
     expect(livekitToken).toHaveBeenCalledWith('agt_audit_running');
@@ -245,8 +244,13 @@ describe('the drawn pages are images, never markup with text in them', () => {
 describe('every AI-view state is registered everywhere a scene has to be', () => {
   const sceneNames = AGENT_CHAT_SCENE_KINDS.map((k) => `audit-agent-chat-${k}`);
 
-  it('the seven kinds and the seven scene names are the same seven', () => {
-    expect(sceneNames.length).toBe(7);
+  it('the eight kinds and the eight scene names are the same eight', () => {
+    // Seven STATES plus `small`, which is the running state at the 960x600
+    // Tauri minimum — a window, not a state. It exists so the narrow tier is
+    // measured by the text gate rather than hand-checked once (stage 6's open
+    // issue); the gate renders each scene at its own declared size and never
+    // passes `?stage=`, so a scene is the only way in.
+    expect(sceneNames.length).toBe(8);
     for (const name of sceneNames) {
       expect(AUDIT_SCENES as ReadonlyArray<string>, name).toContain(name);
     }

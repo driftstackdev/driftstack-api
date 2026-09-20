@@ -91,6 +91,10 @@ export const AUDIT_SCENES = [
   'audit-agent-chat-done',
   'audit-agent-chat-trouble',
   'audit-agent-chat-stopping',
+  // Not an eighth STATE — the running state at the 960x600 Tauri minimum, so
+  // the narrow tier the redesign invented is measured by the gate instead of
+  // hand-checked once. Its stage size is declared in `auditDefaultSizes`.
+  'audit-agent-chat-small',
   'audit-team',
   'audit-proxies',
 ] as const;

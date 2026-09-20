@@ -1,23 +1,45 @@
-// The live iPhone watch pane.
+// What is MOUNTED IN THE IPHONE'S SCREEN — and nothing else.
 //
-// Stage 0 of the AI-view rebuild (spec §9): lifted out of AgentChatView.tsx with
-// the DOM byte-identical — the same `<aside data-component="ai-automation-live-
-// pane">`, the same slide-over class string, the same placeholder copy, the same
-// `AgentSessionPanel` props. Only the file it lives in changed. Stage 4 re-cuts
-// this into the Stage; until then it is what shipped.
+// Stage 4 of the AI-view rebuild (spec §3.4). Until now this component was the
+// whole live pane: an `<aside>` with its own header, its own "Live view ·
+// read-only" caption, its own close button and a slide-over that appeared at
+// narrow widths. The stage took all of that over — the frame, the room, the HUD
+// chip, the caption under the phone — and what is left is the one thing only
+// this component can do: turn a session id into a picture.
+//
+// ⛔ IT RETURNS THE SCREEN'S CONTENT, NOT A BOX. `Stage.tsx` owns
+// `.ai-device-screen`, which is the element with the iPhone's aspect ratio and its
+// corner radius. This returns the placeholder, the connecting spinner or
+// `AgentSessionPanel` — always as the screen's only child, never wrapped in a
+// conditional element. A wrapper that appeared and disappeared with the state
+// would REMOUNT the panel, and the panel is a LiveKit room: its connect effect
+// depends on `[ws_url, token, retryNonce]`, so a remount reconnects the room
+// and the customer watches the video go black and come back.
+//   `the-iphone-does-not-remount-when-the-window-does.test.tsx` holds the
+//   identity of both the screen box and the panel across a reflow, a collapse
+//   and a phase change.
+//
+// READ-ONLY by design: AgentSessionPanel is mounted with an explicit
+// `interactive={false}`, so the LK.6.d input-capture is NOT wired — taps /
+// scrolls / keystrokes on this video never reach the device. The agent is the
+// sole driver; the user only watches and cannot interfere by clicking the view.
+// Stated explicitly rather than relying on the prop's default, so the guarantee
+// survives a change to that default (V-859).
 
-import { memo, useEffect, useState, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { type LiveKitInfo } from '@driftstack/sdk';
 import { AgentSessionPanel } from '../../components/AgentSessionPanel';
 import { humanizeError } from '../../lib/humanize-error';
 import { preferTypedEndReason } from '../../lib/session-end-reason';
 import { useSettings } from '../../lib/SettingsContext';
 import { IconPhone } from './icons';
+import type { StageWatch } from './stage-copy';
 
 /** The canonical iPhone screen aspect (402×874 logical ≡ 1206×2622 px) the
  *  simulator locks to. Passing it here keeps the watch pane the same true
  *  device proportions (and reuses AgentSessionPanel's bezel-black letterbox so
- *  there's no white-space border). */
+ *  there's no white-space border). The stage's `.ai-device-screen` box is cut to
+ *  the SAME ratio, so the panel fills it exactly and never letterboxes. */
 const IPHONE_WATCH_ASPECT_RATIO = 402 / 874;
 
 export type WatchState =
@@ -34,45 +56,55 @@ export type WatchState =
 /**
  * Read-only live iPhone view bound to the chat's agent session. When a task is
  * dispatched the chat lazily creates an agent session (useAgentChat) — a normal
- * LiveKit-streamable Driftstack session, exactly like the simulator's. This pane
+ * LiveKit-streamable Driftstack session, exactly like the simulator's. This
  * fetches that session's LiveKit token (POST /v1/agent-sessions/:id/livekit-token
  * via the SDK) and renders the live stream so the user watches the automation
  * drive the phone in realtime.
- *
- * READ-ONLY by design: AgentSessionPanel is mounted with an explicit
- * `interactive={false}`, so the LK.6.d input-capture is NOT wired — taps /
- * scrolls / keystrokes on this video never reach the device. The agent is the
- * sole driver; the user only watches and cannot interfere by clicking the view.
- * Stated explicitly rather than relying on the prop's default, so the guarantee
- * survives a change to that default (V-859).
  */
 // Perf — memoized so a composer-keystroke re-render of AgentChatView (which owns
 // the `draft` state and re-renders ~10+/sec while typing) does NOT reconcile this
-// live-video subtree (LiveKit room + poll + AgentSessionPanel). All three props
-// are referentially stable across such a parent render: `sessionId` and `open` are
-// primitives; `onClose` is a useCallback (closeLiveView) with no deps.
+// live-video subtree (LiveKit room + poll + AgentSessionPanel). Every prop is
+// referentially stable across such a parent render: `sessionId` and `visible`
+// are primitives and `onWatchChange` is a useCallback with no deps.
 export const LiveAutomationPanel = memo(function LiveAutomationPanel({
   sessionId,
-  open,
-  onClose,
+  visible,
+  onWatchChange,
   standIn,
 }: {
   sessionId: string | null;
-  /** Below the lg breakpoint the pane is hidden inline; `open` reveals it as a
-   *  slide-over overlay so a narrower window doesn't silently drop the headline
-   *  'watch the agent' feature. At lg+ the pane is always inline (open ignored). */
-  open: boolean;
-  onClose: () => void;
+  /**
+   * ⛔ THE VISIBILITY GATE (spec §3.4 must-fix). This used to be
+   * `matchMedia('(min-width: 1024px)') || open` — a VIEWPORT breakpoint, which
+   * is wrong twice over: the pane's box is the view's, not the window's, and at
+   * the 960px Tauri minimum it made the headline feature a slide-over. The
+   * stage is now inline at every supported size, so the only reason not to
+   * stream is that the customer collapsed it.
+   *
+   * What the gate BUYS is unchanged and is the reason it still exists:
+   * invisible ⇒ no token fetch, no room, no 5s poll. A hidden WebRTC room ran
+   * for the length of a whole chat before the 2026-07-08 audit found it.
+   */
+  visible: boolean;
+  /**
+   * Reports what the screen is showing, as ONE word, so the stage can light the
+   * room and word the chip without reaching into this component's state.
+   *
+   * ⚠️ MUST BE `useCallback` WITH NO DEPS. It is a prop on a memo'd component
+   * that owns a video element; a fresh identity per parent render defeats the
+   * memo and reconciles the stream on every keystroke.
+   */
+  onWatchChange?: (watch: StageWatch) => void;
   /**
    * GALLERY SEAM (spec §8) — what the screen shows INSTEAD of a live stream.
    * Undefined in the app. A visual-harness scene passes a drawn IMAGE so the
    * running / approval / done states can be rendered and measured without a
-   * fleet device, a LiveKit room or a token: the whole point of the seam is
-   * that the gates see the REAL view in those states, not a replica of it.
+   * device, a LiveKit room or a token: the whole point of the seam is that the
+   * gates see the REAL view in those states, not a replica of it.
    *
    * When it is set NOTHING is fetched — no token, no room, no 5s lifecycle
-   * poll — which is the same promise the visibility gate already makes ("not
-   * visible ⇒ no stream work"), for the same reason.
+   * poll — which is the same promise the visibility gate above makes, for the
+   * same reason.
    */
   standIn?: ReactNode;
 }): JSX.Element {
@@ -85,26 +117,6 @@ export const LiveAutomationPanel = memo(function LiveAutomationPanel({
   // switching chats. Bumping this re-runs the fetch on the Retry button.
   const [retryNonce, setRetryNonce] = useState(0);
 
-  // Only do the expensive work (livekit token fetch → room connect → 5s poll) when the
-  // pane is actually VISIBLE: at lg+ it's always the inline column; below lg it's hidden
-  // until opened. Without this, a narrow window with the pane closed kept a hidden WebRTC
-  // room + poll alive for the whole chat (audit 2026-07-08). matchMedia may be absent in a
-  // test/headless env → default to active so behavior is unchanged there.
-  const [isLg, setIsLg] = useState(
-    () =>
-      typeof window === 'undefined' ||
-      typeof window.matchMedia !== 'function' ||
-      window.matchMedia('(min-width: 1024px)').matches,
-  );
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const onChange = (): void => setIsLg(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-  const active = isLg || open;
-
   useEffect(() => {
     // A stand-in is mounted in the screen: there is nothing to connect to and
     // nothing a Retry could fix, so the whole fetch path is skipped rather than
@@ -113,12 +125,12 @@ export const LiveAutomationPanel = memo(function LiveAutomationPanel({
       setWatch({ kind: 'idle' });
       return undefined;
     }
-    // Pane not visible (narrow window, closed) → don't open a live stream nobody can see.
-    if (!active) {
+    // Collapsed → don't open a live stream nobody can see.
+    if (!visible) {
       setWatch({ kind: 'idle' });
       return undefined;
     }
-    // No session dispatched yet → the placeholder ("Dispatch a task…").
+    // No session dispatched yet → the placeholder.
     if (sessionId === null) {
       setWatch({ kind: 'idle' });
       return undefined;
@@ -149,7 +161,7 @@ export const LiveAutomationPanel = memo(function LiveAutomationPanel({
     return () => {
       cancelled = true;
     };
-  }, [client, sessionId, retryNonce, active, standIn]);
+  }, [client, sessionId, retryNonce, visible, standIn]);
 
   // finding #3 — react to the agent session ending. The token fetch above is
   // one-shot (it only re-runs on a sessionId/client/retry change), so a session
@@ -209,98 +221,90 @@ export const LiveAutomationPanel = memo(function LiveAutomationPanel({
     };
   }, [client, sessionId, watch.kind, sessionEnded]);
 
+  // ─── report upward, ONCE per change ──────────────────────────────────────
+  //
+  // The stage lights the room from this. Reported from an effect rather than
+  // during render (a parent setState in a child's render is a React error), and
+  // guarded by the last value sent so a re-render for any other reason does not
+  // push the same word again and re-render the stage.
+  const reported = useRef<StageWatch | null>(null);
+  const stageWatch: StageWatch =
+    standIn !== undefined
+      ? 'live' // a scene's drawn page IS what the screen is showing
+      : sessionEnded !== null && watch.kind === 'live'
+        ? 'ended'
+        : watch.kind;
+  useEffect(() => {
+    if (reported.current === stageWatch) return;
+    reported.current = stageWatch;
+    onWatchChange?.(stageWatch);
+  }, [stageWatch, onWatchChange]);
+
+  if (standIn !== undefined) return <>{standIn}</>;
   return (
-    <aside
-      data-component="ai-automation-live-pane"
-      // lg+: always an inline right column (flex). Below lg: hidden UNLESS
-      // toggled open, then a fixed full-height slide-over on the right edge so
-      // the feature stays reachable on a narrow window. (audit)
-      className={`w-[300px] shrink-0 flex-col border-l border-surface-divider bg-surface-raised/60 lg:flex ${
-        open
-          ? 'fixed inset-y-0 right-0 z-40 flex shadow-2xl lg:static lg:z-auto lg:shadow-none'
-          : 'hidden'
-      }`}
-    >
-      <div className="flex items-center gap-2 border-b border-surface-divider px-3 py-2.5">
-        <span className="text-xs font-medium text-ink-primary">Live view</span>
-        {/* finding #2 — only claim "the agent is driving" once a stream is actually
-            up. Before that (and in the simulated deployment) say what the pane IS so
-            it doesn't over-promise a live iPhone the deployment can't show. */}
-        <span className="text-2xs text-ink-muted">
-          {watch.kind === 'live' ? 'read-only — the agent is driving' : 'read-only'}
-        </span>
-        {/* Close affordance for the below-lg overlay (no-op visual at lg+ where
-            the pane is a permanent column). */}
-        <button
-          type="button"
-          aria-label="Close live view"
-          onClick={onClose}
-          className="ml-auto rounded px-1 text-sm leading-none text-ink-muted hover:text-ink-primary lg:hidden"
-        >
-          ×
-        </button>
-      </div>
-      <div className="flex flex-1 items-center justify-center overflow-hidden p-3">
-        {standIn ?? (
-          <>
-            {watch.kind === 'idle' && (
-              <WatchPlaceholder
-                title="Nothing running yet"
-                body="Send a task — when a live view is available, it will appear here."
-              />
-            )}
-            {watch.kind === 'loading' && (
-              <div
-                data-component="ai-automation-live-connecting"
-                className="flex flex-col items-center gap-3 text-center text-xs text-ink-muted"
-              >
-                <span
-                  className="h-7 w-7 animate-spin rounded-full border-2 border-surface-divider border-t-accent"
-                  aria-hidden="true"
-                />
-                <span>Starting the live view…</span>
-              </div>
-            )}
-            {/* Simulated deployment: a calm steady-state that mirrors the chat banner.
-            NO Retry (it would 503 forever); this is a deployment capability, not a
-            transient failure the user can act on. */}
-            {watch.kind === 'simulated' && (
-              <WatchPlaceholder
-                title="Live view unavailable"
-                body="Browser actions run in preview mode, so there is no live view."
-                tone="muted"
-              />
-            )}
-            {watch.kind === 'error' && (
-              <WatchPlaceholder
-                title="Live view unavailable"
-                body={watch.message}
-                tone="muted"
-                onRetry={() => setRetryNonce((n) => n + 1)}
-              />
-            )}
-            {watch.kind === 'live' && (
-              // READ-ONLY: `interactive` omitted (defaults false) → no input capture.
-              // coverChromeBand reuses the simulator's bezel-black letterbox so there
-              // is no white-space border around the stream.
-              // finding #3 — sessionEnded latches the chat's agent-session terminal end
-              // so AgentSessionPanel shows its honest "Session ended" overlay instead of
-              // the scary "proxy may be down" / endless-reconnect overlays once a reaped
-              // or worker-closed session leaves this pane holding a dead token.
-              <AgentSessionPanel
-                info={watch.info}
-                interactive={false}
-                coverChromeBand
-                aspectRatio={IPHONE_WATCH_ASPECT_RATIO}
-                sessionEnded={sessionEnded}
-              />
-            )}
-          </>
-        )}
-      </div>
-    </aside>
+    <>
+      {watch.kind === 'idle' && <ScreenIdle />}
+      {watch.kind === 'loading' && (
+        <div data-component="ai-automation-live-connecting" className="ai-screen ai-screen-dark">
+          <span className="ai-screen-spin" aria-hidden="true" />
+          <p className="ai-screen-say">Starting the live view…</p>
+        </div>
+      )}
+      {/* Simulated deployment: a calm steady-state that mirrors the chat banner.
+          NO Retry (it would 503 forever); this is a deployment capability, not a
+          transient failure the user can act on. */}
+      {watch.kind === 'simulated' && (
+        <WatchPlaceholder
+          title="Live view unavailable"
+          body="Browser actions run in preview mode, so there is no live view."
+          tone="muted"
+        />
+      )}
+      {watch.kind === 'error' && (
+        <WatchPlaceholder
+          title="Live view unavailable"
+          body={watch.message}
+          tone="muted"
+          onRetry={() => setRetryNonce((n) => n + 1)}
+        />
+      )}
+      {watch.kind === 'live' && (
+        // READ-ONLY: `interactive` explicitly false → no input capture.
+        // coverChromeBand reuses the simulator's bezel-black letterbox so there
+        // is no white-space border around the stream.
+        // finding #3 — sessionEnded latches the chat's agent-session terminal end
+        // so AgentSessionPanel shows its honest "Session ended" overlay instead of
+        // the scary "proxy may be down" / endless-reconnect overlays once a reaped
+        // or worker-closed session leaves this pane holding a dead token.
+        <AgentSessionPanel
+          info={watch.info}
+          interactive={false}
+          coverChromeBand
+          aspectRatio={IPHONE_WATCH_ASPECT_RATIO}
+          sessionEnded={sessionEnded}
+        />
+      )}
+    </>
   );
 });
+
+/** The dark glass of a phone with nothing on it (spec §3.4): an accent glow
+ *  rising from the bottom edge, a diagonal sheen, a faint sparkle. Purely
+ *  decorative — it says nothing the caption under the phone does not, so it is
+ *  `aria-hidden` and carries no text for the contrast gate to measure. */
+function ScreenIdle(): JSX.Element {
+  return (
+    <div className="ai-screen ai-screen-off" aria-hidden="true">
+      <svg viewBox="0 0 16 16" className="ai-screen-mark" fill="none" stroke="currentColor">
+        <path
+          d="M8 1.75 9.4 5.6 13.25 7 9.4 8.4 8 12.25 6.6 8.4 2.75 7 6.6 5.6Z"
+          strokeWidth={0.8}
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
+}
 
 /** finding #2 — classify a live-view token-fetch failure into the right WATCH
  *  STATE, not just copy. The dominant failure here is the 503/DriverNotIntegrated a
@@ -363,6 +367,10 @@ export function classifyLiveViewError(
   };
 }
 
+/** The copy the screen carries when there is no stream to show. It is drawn
+ *  INSIDE the phone, in the stage's pinned-dark scope, so its ink is the dark
+ *  theme's in both themes — the fix the light-theme live pane has needed since
+ *  the map recorded it. Copy and the `Retry` name are unchanged. */
 export function WatchPlaceholder({
   title,
   body,
@@ -376,23 +384,14 @@ export function WatchPlaceholder({
   onRetry?: () => void;
 }): JSX.Element {
   return (
-    <div className="flex max-w-[14rem] flex-col items-center gap-2 text-center">
-      <span
-        className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-          tone === 'muted' ? 'bg-surface-inset text-ink-muted' : 'bg-accent-subtle text-accent'
-        }`}
-        aria-hidden="true"
-      >
+    <div className="ai-screen ai-screen-dark ai-screen-say-wrap">
+      <span className={`ai-screen-ico${tone === 'muted' ? ' is-muted' : ''}`} aria-hidden="true">
         <IconPhone />
       </span>
-      <p className="text-xs font-medium text-ink-secondary">{title}</p>
-      <p className="text-2xs text-ink-muted">{body}</p>
+      <p className="ai-screen-hd">{title}</p>
+      <p className="ai-screen-say">{body}</p>
       {onRetry !== undefined && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="mt-1 rounded border border-surface-divider px-2 py-1 text-2xs font-medium text-ink-secondary transition-colors hover:text-ink-primary"
-        >
+        <button type="button" onClick={onRetry} className="ai-screen-retry">
           Retry
         </button>
       )}

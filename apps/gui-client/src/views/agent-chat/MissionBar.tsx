@@ -33,7 +33,7 @@ import { type AgentSession } from '@driftstack/sdk';
 import { CHAT_MODELS, NEEDS_OWN_KEY_SUFFIX, modelNeedsOwnKey } from '../../lib/chat-models';
 import type { SessionStateDescriptor } from '../../lib/session-liveness';
 import { type ChatModel } from '../../lib/use-agent-chat';
-import { IconBookmark, IconLock, IconSparkle } from './icons';
+import { IconBookmark, IconLock, IconScreen, IconSparkle } from './icons';
 import { missionPill, type MissionStatusChat, type MissionPillTone } from './mission-status';
 
 /* Written out in full rather than composed, because Tailwind's scanner only
@@ -74,7 +74,7 @@ export function MissionBar({
   chat,
   sessionState,
   session,
-  liveOpen,
+  stageShown,
   onToggleLiveView,
   profileId,
   profiles,
@@ -91,7 +91,8 @@ export function MissionBar({
   chat: MissionStatusChat;
   sessionState: SessionStateDescriptor;
   session: AgentSession | null;
-  liveOpen: boolean;
+  /** Whether the stage is showing (the toggle's `aria-pressed`). */
+  stageShown: boolean;
   onToggleLiveView: () => void;
   profileId: string;
   profiles: ReadonlyArray<{ id: string; name: string }>;
@@ -216,22 +217,29 @@ export function MissionBar({
           </span>
           Save as task
         </button>
-        {/* ⛔ UNCHANGED BY THIS STAGE, ON PURPOSE. Spec §3.3 wants this as an
-            icon button with `aria-pressed` that COLLAPSES an inline stage — but
-            the stage is not inline yet. Below the `lg` breakpoint the live pane
-            is still a slide-over and this button is the only way to open it, so
-            hiding it (as the mockup's narrow tier does) or re-labelling it would
-            take the live view away at exactly the width this stage is buying
-            room at. Its visible text is pinned ('Hide live' after the toggle) in
-            agent-chat-save-recipe. Stage 4 owns the behaviour change and the
-            re-label together. */}
+        {/* ⛔ PIN MOVED IN STAGE 4, DELIBERATELY. This used to carry the visible
+            words "Live view" / "Hide live" and to exist only below the `lg`
+            VIEWPORT breakpoint, where it was the only way to reach a live pane
+            that had been hidden outright. The stage is now INLINE at every
+            supported width, so the button has one job left — give the phone's
+            room back to the conversation — and it is an icon button with
+            `aria-pressed` saying whether the stage is showing. The accessible
+            name is unchanged and still exactly `Toggle live view`; the visible
+            text is gone, so the pin that read `Hide live` moved with it (see
+            the-mission-bar-is-one-row… and agent-chat-save-recipe).
+            Hidden in the narrow tier by CSS: at 960px the stage is 252px of the
+            view and taking it away leaves a text box on its own. */}
         <button
           type="button"
           aria-label="Toggle live view"
+          aria-pressed={stageShown}
           onClick={onToggleLiveView}
-          className="ai-bar-btn ai-bar-btn-quiet lg:hidden"
+          className="ai-bar-btn-icon ai-bar-btn-quiet"
+          title={stageShown ? 'Hide the live view' : 'Show the live view'}
         >
-          {liveOpen ? 'Hide live' : 'Live view'}
+          <span className="ai-bar-btn-i" aria-hidden="true">
+            <IconScreen />
+          </span>
         </button>
       </div>
     </header>

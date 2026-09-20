@@ -57,6 +57,20 @@
 //
 // Usage (repo root):  node scripts/gui-text-quality.mjs [<out-dir>] [--control]
 //                     [--themes=dark,light] [--scenes=proxies,simulator]
+//                     [--stage=960x600]
+//
+// `--stage=<W>x<H>` renders every AUDIT scene in a window of that size, by
+// passing `?stage=` through to the harness (audit-scenes.tsx's
+// `stageOverrideFromSearch`). The audit stage is a FIXED box that ignores the
+// viewport, so without it a 960-wide screenshot of the default stage is a 1280
+// layout CROPPED — and until 2026-09-20 that meant the AI view's whole 44px
+// narrow tier was measured by nothing. Two things then close that hole and they
+// are deliberately both here: `audit-agent-chat-small` is a SCENE with its own
+// 960x600 stage, so the default run covers the narrow tier with no flag; this
+// flag is for asking any scene about any window while working. A scene's
+// declared size is read from the harness WITH the same override applied, so the
+// declared-vs-listed check still holds and a stage that ignored the override
+// still fails.
 //   HARNESS_URL  default http://127.0.0.1:5199/visual-harness.html — when it
 //                does not answer, this script starts `vite --port 5199` from
 //                apps/gui-client itself (as scripts/marketing-screens.mjs does)
@@ -107,6 +121,20 @@ const listArg = (name, all) => {
   return picked;
 };
 const THEMES = listArg('themes', ALL_THEMES);
+/** `--stage=<W>x<H>` → the query the harness reads, or ''. Refused rather than
+ *  ignored when it is not a size: a silently-dropped override would hand back a
+ *  1280 render labelled as whatever was asked for. */
+const STAGE = (() => {
+  const raw = args.find((a) => a.startsWith('--stage='))?.slice('--stage='.length);
+  if (raw === undefined) return '';
+  if (!/^\d{3,4}x\d{3,4}$/.test(raw)) {
+    throw new Error(`--stage must be <W>x<H>, e.g. --stage=960x600 (got ${raw})`);
+  }
+  return raw;
+})();
+/** Appended to every harness URL this run opens, so the scene list and the
+ *  scenes themselves are read at the SAME stage size. */
+const STAGE_QS = STAGE === '' ? '' : `&stage=${STAGE}`;
 const OUT = resolve(
   REPO_ROOT,
   args.find((a) => !a.startsWith('--')) ?? 'apps/gui-client/visual-out/text-quality',
@@ -193,7 +221,7 @@ async function loadSceneList(browser) {
   try {
     // Any `?scene=` value the harness does not know renders the plain state
     // gallery; the import below is what this page is for.
-    await page.goto(`${URL}?scene=__list__`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${URL}?scene=__list__${STAGE_QS}`, { waitUntil: 'domcontentloaded' });
     const res = await page.evaluate(readSceneList, HARNESS_MODULE);
     if (res.error !== undefined) {
       throw new Error(`scene list from ${HARNESS_MODULE}: ${res.error}`);
@@ -462,7 +490,7 @@ async function measureScene(context, entry, theme) {
     // taller audit scene is never clipped by a viewport sized for the default.
     await page.setViewportSize({ width: entry.width + 40, height: entry.height + 40 });
     await page.clock.setFixedTime(new Date(FROZEN_NOW_ISO));
-    await page.goto(`${URL}?scene=${scene}`, { waitUntil: 'networkidle' });
+    await page.goto(`${URL}?scene=${scene}${STAGE_QS}`, { waitUntil: 'networkidle' });
     const stage = page.locator(`[data-scene="${scene}"][data-ready="1"]`);
     await stage.waitFor({ state: 'visible', timeout: 30_000 });
     const declared = await stage.evaluate((el) => ({
@@ -506,6 +534,7 @@ async function main() {
     control: CONTROL,
     minPx: MIN_PX,
     sceneSource: HARNESS_MODULE,
+    stage: STAGE === '' ? null : STAGE,
     scenes: [],
     themes: {},
   };
@@ -521,7 +550,7 @@ async function main() {
     SCENES = listed.filter((s) => picked.includes(s.name));
     report.scenes = SCENES;
     console.log(
-      `scene list: ${listed.length} scene(s) from ${HARNESS_MODULE} (${listed.map((s) => s.name).join(', ')}); measuring ${SCENES.length}`,
+      `scene list: ${listed.length} scene(s) from ${HARNESS_MODULE} (${listed.map((s) => s.name).join(', ')}); measuring ${SCENES.length}${STAGE === '' ? '' : ` at stage ${STAGE}`}`,
     );
     for (const theme of THEMES) {
       const context = await browser.newContext({

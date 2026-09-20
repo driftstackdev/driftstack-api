@@ -50,14 +50,28 @@ import {
 import { listProxies, type ProxyConfig } from '../lib/proxies';
 import { listBindings } from '../lib/profile-bindings';
 import { ensureAccountProxyRow } from '../lib/proxy-server-test';
-import { ApprovalDock, confirmationHost, gatedStepTaps } from './agent-chat/ApprovalDock';
+import {
+  ApprovalDock,
+  confirmationHost,
+  gatedIntent,
+  gatedStepTaps,
+} from './agent-chat/ApprovalDock';
 import { ChatRail } from './agent-chat/ChatRail';
 import { Composer, growComposerToFit } from './agent-chat/Composer';
 import { GateCard, IdleHero } from './agent-chat/IdleHero';
 import { IconEye, IconKey } from './agent-chat/icons';
 import { MissionBar } from './agent-chat/MissionBar';
 import { REATTACHING_NOTICE } from './agent-chat/notices';
+import { humanIntentLabel } from './agent-chat/PlanTimeline';
 import { Stage } from './agent-chat/Stage';
+import {
+  browsingFrom,
+  stageCaption,
+  stageHud,
+  stepsThatRan,
+  type StageSessionState,
+  type StageWatch,
+} from './agent-chat/stage-copy';
 import {
   LiveTurnRow,
   RestoredHistoryDivider,
@@ -67,7 +81,6 @@ import {
 } from './agent-chat/Turn';
 import { missionPhase } from './agent-chat/mission-phase';
 import { liveChatStatus } from './agent-chat/mission-status';
-import { useShortView } from './agent-chat/use-short-view';
 import { useViewTier } from './agent-chat/use-view-width';
 import { useStickToBottom } from './agent-chat/use-stick-to-bottom';
 
@@ -375,17 +388,23 @@ export function AgentChatView({
       clearInterval(handle);
     };
   }, [client, liveSessionId]);
-  // Below the lg breakpoint the live-view pane is hidden inline; this toggles it
-  // as a slide-over so a narrow window can still open it (it used to vanish with
-  // no affordance). Ignored at lg+ where the pane is a permanent column.
-  const [liveOpen, setLiveOpen] = useState(false);
-  const toggleLiveView = useCallback(() => setLiveOpen((v) => !v), []);
-  // Perf — stable onClose so the memoized LiveAutomationPanel (which owns a live
-  // WebRTC video subtree) doesn't reconcile on every composer keystroke. This
-  // component owns the composer `draft` state and re-renders ~10+/sec while the
-  // user types; without a stable handler an inline `() => setLiveOpen(false)`
-  // would defeat the panel's React.memo. setLiveOpen is a stable state setter → no deps.
-  const closeLiveView = useCallback(() => setLiveOpen(false), []);
+  // ⛔ TOGGLE = COLLAPSE (stage 4, spec §3.4). The stage is INLINE at every
+  // supported width now, so there is no slide-over to open and nothing is
+  // hidden by default. What the toggle does is give the phone's room back to
+  // the conversation — and while it is collapsed the panel does no stream work
+  // at all (the visibility gate), which is the promise the old viewport-keyed
+  // gate was making badly.
+  const [stageCollapsed, setStageCollapsed] = useState(false);
+  const toggleLiveView = useCallback(() => setStageCollapsed((v) => !v), []);
+  // What the screen is showing, reported up by the panel. The stage lights the
+  // room from it and the HUD words itself from it.
+  //
+  // ⛔ STABLE IDENTITY. This is a prop on a memo'd component that owns a video
+  // element; this component re-renders ~10+/sec while the customer types, and a
+  // fresh arrow here would reconcile the LiveKit subtree on every keystroke.
+  // `setStageWatch` is a state setter → no deps.
+  const [stageWatch, setStageWatch] = useState<StageWatch>('idle');
+  const onWatchChange = useCallback((w: StageWatch) => setStageWatch(w), []);
 
   // Save-as-recipe — snapshot this chat's executed steps into a replayable
   // recipe. The SDK recipes.create has had zero GUI callers until now; this
@@ -792,23 +811,125 @@ export function AgentChatView({
   // the approval gate promises — while the gate is up NOTHING in the view moves,
   // and "nothing" is a rule the CSS can only apply if it knows the phase.
   const phase = missionPhase(chat);
-  // D6 — measured, not guessed, and false where nothing can measure. It buys the
-  // empty composer's fifth row back for the templates at the 600px-tall minimum.
-  // ⛔ THE VIEW'S BOX, NOT THE COLUMN'S — and it used to be the same box. Stage
-  // 5 measured `columnRef` because the column was full height; stage 6 lifted
-  // the bar out of it into the deck, so the column is now 52px shorter than the
-  // view. Spec §1 writes this tier as `@container aiview (max-height: 620px)` —
-  // the VIEW — so pointing it at the view root keeps the number stage 5
-  // measured (564px at the 960x600 minimum) instead of silently moving the
-  // short tier 52px up the window.
-  const shortView = useShortView(viewRef);
-  // Spec §1's width tiers, measured on the view's own box. `narrow` turns the
-  // rail into the 44px strip and the bar into its 44px form; `wide` only
-  // spells the budget out, and is CSS-only.
+  // ⛔ THE BLOOM PLAYS ONCE, AND ONLY FOR A TASK THIS MOUNT WATCHED FINISH.
+  // `data-ai-fresh` is set when the phase goes acting → done while the view is
+  // mounted; opening a finished chat from the rail must not celebrate someone
+  // else's success a second time (spec §3.1).
+  const wasActing = useRef(false);
+  const [fresh, setFresh] = useState(false);
+  useEffect(() => {
+    if (phase === 'acting' || phase === 'thinking') {
+      wasActing.current = true;
+      setFresh(false);
+      return;
+    }
+    if (phase === 'done' && wasActing.current) {
+      wasActing.current = false;
+      setFresh(true);
+      return;
+    }
+    if (phase !== 'done') {
+      wasActing.current = false;
+      setFresh(false);
+    }
+  }, [phase]);
+
+  // Spec §1's tiers, measured on the VIEW's own box — all five from one
+  // observer. `narrow` turns the rail into the 44px strip and the bar into its
+  // 44px form and shrinks the stage; `short` (D6) buys the empty composer's
+  // fifth row back for the templates and collapses a settled plan; `wide`,
+  // `tall` and `large` only step the type and the spacing up, and are CSS-only.
   const tier = useViewTier(viewRef);
+  const shortView = tier.short;
   // What the chat being worked on is doing, in the words the rail's active row
   // shows (spec §3.2). One derivation, shared by the row and the strip's dot.
   const liveStatus = liveChatStatus(chat);
+
+  // ─── what the stage says ─────────────────────────────────────────────────
+  // ⛔ THE POLL'S RECORD OR THE CHAT'S, WHICHEVER EXISTS — the SAME fallback
+  // `describeAgentSessionState` takes for the bar's pill, and the same one
+  // `place` takes below. Reading `liveSession` alone was a real defect: the 10s
+  // poll answers with `null` until it has run (and after a transient GET
+  // failure), while the session the hook already holds is the one that knows it
+  // was closed. A chat whose only record said `status: 'closed'` therefore lit
+  // the stage as `SESSION OPEN` beside a bar that said `Ended`, and told the
+  // customer "the iPhone is still on this page" about a browser that had shut
+  // — which is exactly the two-derivations-disagreeing failure `stage-copy.ts`
+  // exists to prevent. Pinned in `the-stage-only-says-what-is-still-true`.
+  const sessionRecord = liveSession ?? chat.session;
+  const sessionLifecycle: StageSessionState =
+    chat.session === null
+      ? 'none'
+      : sessionRecord?.status === 'closed'
+        ? 'ended'
+        : // A liveness beat only overrules `status` while it is FRESH — the rule
+          // `session-liveness.ts` states and the reason that file exists.
+          sessionRecord?.status === 'provisioning' ||
+            (sessionRecord?.liveness?.fresh === true &&
+              sessionRecord.liveness.state === 'provisioning')
+          ? 'provisioning'
+          : 'open';
+  // ⛔ "STILL ON THIS PAGE" IS A CLAIM ABOUT A LIVE DEVICE, so it is answered by
+  // the session's STATE, never by `sessionActive` — which means only "a session
+  // object exists on this chat" and stays true for the whole life of a chat
+  // whose device is long gone. Spec §3.4 says the phrase is used "only while
+  // the session is active"; `TurnRow` keeps the looser `sessionActive` because
+  // what it gates ("Continue from here") is about the chat, not the phone.
+  const deviceStillThere = sessionLifecycle === 'open';
+  const gated = chat.pendingConfirmation !== null;
+  const hud = stageHud({
+    preview: !actionsAreLive,
+    watch: stageWatch,
+    session: sessionLifecycle,
+    sending: chat.sending,
+    gated,
+    trouble: phase === 'trouble',
+  });
+  // The gated step's own caption, for "Holding before · <it>". The server's
+  // plan caption wins (§7 keeps it on the settled turn); the intent-derived
+  // label is the fallback, and it NEVER names a selector.
+  //
+  // Derived here rather than in `stage-copy.ts` because it needs both
+  // `gatedIntent` (ApprovalDock) and `humanIntentLabel` (PlanTimeline), and
+  // PlanTimeline already imports from ApprovalDock — a helper that imported
+  // both would close that cycle.
+  const gatedLabel = useMemo((): string | null => {
+    const pending = chat.pendingConfirmation;
+    if (pending === null) return null;
+    const turn = chat.turns.find((t) => t.id === pending.turnId);
+    const response = turn?.response;
+    if (response?.kind === 'plan-executed') {
+      const at = response.results.findIndex((r) => r.kind === 'confirmation_required');
+      const caption = at >= 0 ? turn?.plan?.labels[at] : undefined;
+      if (typeof caption === 'string' && caption.trim() !== '') return caption;
+    }
+    const intent = gatedIntent(chat.turns, pending.turnId);
+    return intent === undefined ? null : humanIntentLabel(intent);
+  }, [chat.pendingConfirmation, chat.turns]);
+  const caption = stageCaption({
+    phase,
+    preview: !actionsAreLive,
+    livePlan: chat.livePlan,
+    liveStepIndex: chat.liveStepIndex,
+    livePhase: chat.livePhase,
+    gatedLabel,
+    stoppedAfter: stepsThatRan(chat.turns),
+    sessionActive: deviceStillThere,
+  });
+  // D4 — where the phone is browsing from, straight off the device's own
+  // capability report. null when it has not said, and then the facts row says
+  // what watching means instead of inventing a place.
+  // ⛔ THE POLL'S COPY OR THE CHAT'S, WHICHEVER EXISTS — the same fallback
+  // `describeAgentSessionState` takes one line above. The 10s poll is what
+  // refreshes the report, but it has not answered on the first frame after a
+  // send, and the session the hook created already carries one.
+  const place = browsingFrom(
+    liveSession?.capability_report ?? chat.session?.capability_report ?? null,
+  );
+  // "Nothing is mounted in the screen" — the ONE thing the rig's turn is keyed
+  // on (spec §4 item 8). Not the phase: a phase key would turn the phone again
+  // on every idle stretch between turns.
+  const rigAtRest = stageWatch === 'idle' && !chat.sending;
 
   function submit(): void {
     const text = draft.trim();
@@ -863,13 +984,20 @@ export function AgentChatView({
     // calm is LITERAL — every infinite animation in the view stops.
     <div
       ref={viewRef}
-      className="flex h-full bg-surface-base"
+      className="ai-view"
       data-ai-phase={phase}
       /* ⛔ VALUELESS OR ABSENT, never `false`. React renders `data-x={false}`
          as the STRING "false", which a `[data-ai-narrow]` selector matches —
          the whole view would wear the strip layout at every width. */
       data-ai-narrow={tier.narrow ? '' : undefined}
       data-ai-wide={tier.wide ? '' : undefined}
+      data-ai-short={tier.short ? '' : undefined}
+      data-ai-tall={tier.tall ? '' : undefined}
+      data-ai-large={tier.large ? '' : undefined}
+      /* The rig turns when this flips, and only then (spec §4 item 8). */
+      data-ai-rig={rigAtRest ? 'rest' : undefined}
+      data-ai-preview={actionsAreLive ? undefined : ''}
+      data-ai-fresh={fresh ? '' : undefined}
     >
       <ChatRail
         chats={chats}
@@ -896,7 +1024,7 @@ export function AgentChatView({
           chat={chat}
           sessionState={sessionState}
           session={chat.session}
-          liveOpen={liveOpen}
+          stageShown={!stageCollapsed}
           onToggleLiveView={toggleLiveView}
           profileId={profileId}
           profiles={profiles}
@@ -913,24 +1041,41 @@ export function AgentChatView({
           }}
         />
         <div className="ai-deck-body">
-          <div
-            ref={columnRef}
-            className="flex h-full min-w-0 flex-1 flex-col"
-            data-component="ai-automation-chat-column"
-          >
-            {/* Honest execution-mode banner — auto-updates with /version
-            agent_execution (#139): shows the live indicator when AI-automation
-            executes for real over the fleet control plane (prod). The PREVIEW
-            half of this strip is now a gate card in the column below (spec §10);
-            stage 4 replaces this live half with the stage's LIVE chip. */}
-            {actionsAreLive && (
-              <div className="border-b border-surface-divider bg-surface-inset px-4 py-1.5">
-                <span className="text-2xs text-ink-muted">
-                  <span className="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-accent align-middle"></span>
-                  Live device — Claude plans each step and runs it on a real iPhone.
-                </span>
-              </div>
-            )}
+          {/* ═════ THE STAGE ═════
+              DOM order = visual order = focus order (spec §1): rail → bar →
+              stage → mission. The stage comes BEFORE the conversation because
+              that is where it sits on screen and because the only focusable
+              thing in it is a `Retry` that belongs to the picture, not to the
+              transcript. It used to be the last child of this row, which put a
+              slide-over's close button after the composer in the tab order.
+              READ-ONLY: `interactive` is explicitly false inside, so no tap,
+              scroll or keystroke on this video ever reaches the device — the
+              AI drives the phone, the customer watches. */}
+          <Stage
+            sessionId={chat.session?.id ?? null}
+            collapsed={stageCollapsed}
+            hud={hud}
+            caption={caption}
+            place={place}
+            watch={stageWatch}
+            session={sessionLifecycle}
+            hasSession={chat.session !== null}
+            atRest={rigAtRest}
+            steps={chat.liveSteps?.length ?? 0}
+            idleFact="You watch, the AI drives — and you can stop it at any time."
+            onWatchChange={onWatchChange}
+            standIn={standIn}
+          />
+
+          <div ref={columnRef} className="ai-mission" data-component="ai-automation-chat-column">
+            {/* ⛔ THE MODE STRIP IS GONE (spec §10). It read "Live device —
+            <vendor> plans each step and runs it on a real iPhone." — a sentence
+            that named how the product is built, repeated on every screen, and
+            was the one piece of shipped copy putting a model vendor's name in
+            front of a customer. The LIVE chip on the stage says the same thing
+            about the live half ("Read-only — the AI is driving") beside the
+            picture it is about, and the PREVIEW half is the gate card below.
+            `marketing-scenes` now bans vendor names in a rendered scene. */}
 
             {/* Transcript */}
             <div ref={logRef} className="ai-log flex-1 overflow-auto px-4 py-4">
@@ -1186,22 +1331,6 @@ export function AgentChatView({
             />
           </div>
           {/* end main column */}
-
-          {/* Live iPhone watch pane (founder 2026-06-24: "a visual iPhone here showing
-          in realtime what is happening" when a task is dispatched). The chat runs
-          against a normal streamable agent session (chat.session.id), the same
-          LiveKit-backed session the simulator streams — so this mirrors the
-          simulator's live-video path: fetch the per-session LiveKit token via the
-          SDK (client.agentSessions.livekitToken), then render <AgentSessionPanel>.
-          READ-ONLY: interactive is left false (the default) so NO tap/scroll/key
-          input is captured here — the agent drives the phone, the user only
-          watches; clicking the view can never interfere with the automation. */}
-          <Stage
-            sessionId={chat.session?.id ?? null}
-            open={liveOpen}
-            onClose={closeLiveView}
-            standIn={standIn}
-          />
         </div>
       </div>
       {/* end deck */}

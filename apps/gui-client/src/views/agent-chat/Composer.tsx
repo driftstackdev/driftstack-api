@@ -239,7 +239,9 @@ export function Composer({
   proxyState: ComposerProxyState;
   sendHeldByAdopt: boolean;
   /** D6 — the view is ≤ 620px tall, so the empty composer gives a row back to
-   *  the templates. Measured, never guessed: see `use-short-view.ts`. */
+   *  the templates. Measured, never guessed: see `use-view-width.ts` (stage 4
+   *  merged `use-short-view.ts` into it, so all five tiers come off one
+   *  observer reading one box). */
   short?: boolean;
   onRetryAdopt: () => void;
   onGoToSettings?: () => void;
