@@ -330,17 +330,24 @@ describe('AgentRuntime — Stop during execution', () => {
     });
     const { runtime, id } = await setup({ decomposer, executor });
     const turn = runtime.runTurn({ agentSessionId: id, userMessage: 'send the form' });
+    // ⛔ THE TAP IS THE THIRD DISPATCH, NOT THE SECOND. The confirmation gate's
+    // commitment arm takes one read-only `get_page_source` before a tap's gate
+    // (services/agent-page-commitment.ts). It is left ON here rather than
+    // switched off: a dispatch exempt from the Stop contract is exactly the
+    // kind of gap that is found later, by someone else.
     await waitFor(() => held.sent.length === 1, 'the navigate');
     held.release(0);
-    await waitFor(() => held.sent.length === 2, 'the tap to be on the wire');
-    await runtime.requestTurnStop(id);
+    await waitFor(() => held.sent.length === 2, 'the commitment arm reading the page');
     held.release(1);
+    await waitFor(() => held.sent.length === 3, 'the tap to be on the wire');
+    await runtime.requestTurnStop(id);
+    held.release(2);
     const result = stopped(await turn);
     expect(result.executor?.results.map((r) => [r.intent.kind, r.kind])).toEqual([
       ['navigate', 'success'],
       ['interact', 'success'],
     ]);
-    expect(held.sent).toHaveLength(2);
+    expect(held.sent).toHaveLength(3);
     expect(result.notice).toMatch(/^Stopped after step 2 of 3, as you asked\./);
   });
 
@@ -768,11 +775,15 @@ describe('AgentRuntime — round 2: the edges a Stop can land on', () => {
     });
     const { runtime, sessions, id } = await setup({ decomposer, executor });
     const turn = runtime.runTurn({ agentSessionId: id, userMessage: 'buy it' });
+    // The tap is the THIRD dispatch: the commitment arm reads the page before
+    // a tap's gate. See the same note above.
     await waitFor(() => device.sent.length === 1, 'the navigate');
     device.release(0);
-    await waitFor(() => device.sent.length === 2, 'the tap');
-    await runtime.requestTurnStop(id);
+    await waitFor(() => device.sent.length === 2, 'the commitment arm reading the page');
     device.release(1);
+    await waitFor(() => device.sent.length === 3, 'the tap');
+    await runtime.requestTurnStop(id);
+    device.release(2);
     const result = await turn;
     expect(result.kind).toBe('plan-executed');
     if (result.kind !== 'plan-executed') throw new Error('narrow');

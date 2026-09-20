@@ -60,6 +60,33 @@ export interface TranscriptEntry {
    * it fails closed instead of replaying an already-applied plan prefix.
    */
   resumeFromIntentIndex?: number;
+  /**
+   * P4 — the commitment arm's turn-scoped state, carried across an approval.
+   *
+   * ⛔ WHY IT IS PERSISTED AT ALL. The arm arms on stakes seen ANYWHERE in the
+   * turn, because a basket page prints the total and the checkout that follows
+   * it often prints no figure of its own. A resume is a NEW turn, so without
+   * this the resumed suffix starts unarmed — and a second commitment in that
+   * suffix, on a page with no figure, would be dispatched with no approval at
+   * all. The prompt count travels with it so the ceiling cannot be reset by
+   * approving once.
+   *
+   * ⛔ AND THE EXTRA-READ ALLOWANCE IS DELIBERATELY NOT HERE. A resume is a new
+   * turn and gets its own. Carrying a spent read allowance across would DISARM
+   * the resumed suffix — a page read that cannot be taken is a gate that falls
+   * back to the caption matcher — and disarming is the one direction a page
+   * must never be able to reach. The prompt count travels, so approving once
+   * cannot reset the ceiling; the read allowance does not, so approving once
+   * cannot spend the gate's eyes.
+   *
+   * ⛔ NOT PROJECTED INTO A RECIPE'S `intent_log`: it is gate bookkeeping, not
+   * a step anybody replays.
+   */
+  commitment?: {
+    sawMoney: boolean;
+    amount?: string;
+    prompts: number;
+  };
 }
 
 /**

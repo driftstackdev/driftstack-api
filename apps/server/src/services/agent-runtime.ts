@@ -42,6 +42,7 @@ import {
   stopRequested,
 } from './agent-executor.js';
 import { intentReplayMayDuplicateEffect } from './agent-intent-result.js';
+import { newCommitmentBudget, type CommitmentBudget } from './agent-page-commitment.js';
 import { TURN_HARD_STOP_MS } from './agent-turn-bounds.js';
 // Values, not just types: a turn runs up to three plan segments and the counts
 // of all of them are the turn's. agent-turn-telemetry.ts imports from here with
@@ -1734,6 +1735,23 @@ function reconstructHaltedPlan(
   return { kind: 'plan', intents: intents.slice(resumeFrom), tokensConsumed: 0 };
 }
 
+/**
+ * P4 — the commitment arming the HALTED turn had reached, for the resume that
+ * approves it. Read from exactly the entry {@link reconstructHaltedPlan} binds
+ * to, so the arming and the plan can never come from different turns.
+ *
+ * Absent — an entry written before this existed, or a turn that saw no stakes —
+ * seeds an empty budget, which is the behaviour the resumed suffix would have
+ * had anyway: it arms itself from its own page reads.
+ */
+function reconstructHaltedCommitment(
+  transcript: ReadonlyArray<TranscriptEntry>,
+): TranscriptEntry['commitment'] | undefined {
+  const pending = transcript.at(-2);
+  if (pending?.role !== 'agent' || pending.awaitingConfirmation !== true) return undefined;
+  return pending.commitment;
+}
+
 function delay(ms: number): Promise<void> {
   if (ms <= 0) return Promise.resolve();
   return new Promise((resolve) => {
@@ -2101,11 +2119,15 @@ export class AgentRuntime {
     sessionId: string,
     shouldContinue: () => Promise<boolean>,
     signal: AbortSignal,
+    /** P4 — the turn's commitment budget; this read arms it like any other. */
+    commitmentBudget?: CommitmentBudget,
   ): Promise<string | undefined> {
     const observeDigest = this.deps.executor.observeDigest?.bind(this.deps.executor);
     if (observeDigest === undefined) return undefined;
     try {
-      return (await observeDigest(sessionId, shouldContinue, signal)) ?? undefined;
+      return (
+        (await observeDigest(sessionId, shouldContinue, signal, commitmentBudget)) ?? undefined
+      );
     } catch {
       return undefined;
     }
@@ -2649,6 +2671,20 @@ export class AgentRuntime {
     // forward caller-supplied preapprovals into a fresh decomposition.
     const verifiedConsequentialApprovals =
       resumePlan !== null ? args.approvedConsequentialActions : undefined;
+    // P4 — ONE commitment budget for the WHOLE TURN: what stakes have been
+    // seen, the commitment arm's extra-read allowance, and how many commitment
+    // prompts it has raised. Built here, before the first page read, because
+    // the read is where a page's stakes are seen.
+    //
+    // ⛔ AND SEEDED FROM THE HALTED TURN ON A RESUME. A resume is a new turn, so
+    // turn-scoped arming would reset — and a checkout that prints no figure of
+    // its own (the total having been on the basket page) would leave a SECOND
+    // commitment in the resumed suffix unarmed, and dispatch it unapproved.
+    // That is a hole this design creates if the seeding is skipped, which is
+    // why it is here and not a follow-up.
+    const commitmentBudget = newCommitmentBudget(
+      resumePlan !== null ? reconstructHaltedCommitment(sessionWithUser.transcript) : undefined,
+    );
     const authorityMayContinue = () => this.authorityStillCurrent(session.id, admission);
     // Hoisted out of the first-plan branch because every LATER segment of the
     // turn plans for the same device and is compared against the same first look.
@@ -2742,7 +2778,8 @@ export class AgentRuntime {
         // here plans blind rather than failing the turn.
         try {
           pageObservation =
-            (await observeDigest(session.id, authorityMayContinue, signal)) ?? undefined;
+            (await observeDigest(session.id, authorityMayContinue, signal, commitmentBudget)) ??
+            undefined;
         } catch {
           pageObservation = undefined;
         }
@@ -3165,6 +3202,9 @@ export class AgentRuntime {
         signal,
         // P3 — the TURN's element-wait ceiling, shared across every run below.
         elementWaitBudget,
+        // P4 — the TURN's commitment budget, for the same reason: arming, the
+        // extra-read allowance and the prompt ceiling are facts about the turn.
+        commitmentBudget,
         // THE TURN'S HARD STOP, as an instant on the same monotonic clock the
         // executor reads. Computed once from the turn's start, so every segment
         // shares the one deadline rather than getting a fresh one each — and so
@@ -3408,7 +3448,12 @@ export class AgentRuntime {
       if (!(await this.authorityStillCurrent(session.id, admission))) break;
       segment += 1;
       emitProgress(args.onProgress, { kind: 'phase', phase: 'reading_page', segment, cause });
-      const pageNow = await this.observeForReplan(session.id, authorityMayContinue, signal);
+      const pageNow = await this.observeForReplan(
+        session.id,
+        authorityMayContinue,
+        signal,
+        commitmentBudget,
+      );
       // B2 — the look is cut short by Stop; the plan call after it must not start.
       if (stopRequested(signal)) {
         stoppedDuring = 'planning';
@@ -3760,6 +3805,18 @@ export class AgentRuntime {
       // first proposed.
       intents: attemptedIntents,
       ...(resumeFromIntentIndex !== undefined ? { resumeFromIntentIndex } : {}),
+      // P4 — the commitment arm's arming rides with the halted plan, so the
+      // resume that approves it is armed exactly as this turn was. Written only
+      // on a halt, which is the only entry a resume may be bound to.
+      ...(resumeFromIntentIndex !== undefined
+        ? {
+            commitment: {
+              sawMoney: commitmentBudget.sawMoney,
+              ...(commitmentBudget.amount !== null ? { amount: commitmentBudget.amount } : {}),
+              prompts: commitmentBudget.prompts,
+            },
+          }
+        : {}),
     };
     const updated = await this.appendTranscriptIfAuthorityRevision(
       session.id,

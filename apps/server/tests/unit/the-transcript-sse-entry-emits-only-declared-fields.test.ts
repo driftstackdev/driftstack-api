@@ -77,6 +77,23 @@ const EMITTED_KEYS = [
   'role',
 ] as const;
 
+/**
+ * Declared on the internal entry and DELIBERATELY REMOVED by the projection,
+ * each with the reason it is not the customer's.
+ *
+ * ⛔ A SECOND LIST, NOT A WIDER FIRST ONE. The point of the frozen set is that
+ * adding a field to the internal type fails here; an internal field that must
+ * not be emitted has to be removed by name in `publicTranscriptEntry` AND said
+ * out loud here, and the removal is asserted below. Quietly adding it to
+ * EMITTED_KEYS would put it on a customer's stream.
+ */
+const STRIPPED_KEYS: ReadonlyMap<string, string> = new Map([
+  [
+    'commitment',
+    "the confirmation gate's turn-scoped arming, persisted so an approval resume is armed as the halted turn was — it carries a figure the server parsed off the page and answers no customer question",
+  ],
+]);
+
 /** An entry with EVERY optional field populated — a partial fixture would let a
  *  field escape the check simply by being absent from the sample. */
 const FULLY_POPULATED: TranscriptEntry = {
@@ -86,6 +103,7 @@ const FULLY_POPULATED: TranscriptEntry = {
   intents: [{ kind: 'navigate', url: 'https://example.test/' }],
   awaitingConfirmation: true,
   resumeFromIntentIndex: 2,
+  commitment: { sawMoney: true, amount: '£12.34', prompts: 1 },
 };
 
 describe('the transcript SSE entry emits only declared fields', () => {
@@ -100,8 +118,21 @@ describe('the transcript SSE entry emits only declared fields', () => {
     const declared = declaredTranscriptEntryKeys();
     expect(declared.length).toBeGreaterThan(3); // the read found the interface, not nothing
     expect(
-      declared.filter((k) => !EMITTED_KEYS.includes(k as (typeof EMITTED_KEYS)[number])),
+      declared.filter(
+        (k) => !EMITTED_KEYS.includes(k as (typeof EMITTED_KEYS)[number]) && !STRIPPED_KEYS.has(k),
+      ),
     ).toEqual([]);
+  });
+
+  it('CRITICAL every key on the STRIPPED list is really removed, and really declared', () => {
+    // A list of exceptions nobody checks is a hole with a comment on it.
+    const declared = declaredTranscriptEntryKeys();
+    const emitted = Object.keys(publicTranscriptEntry(FULLY_POPULATED));
+    for (const [key, why] of STRIPPED_KEYS) {
+      expect(declared, `${key} is not declared on the entry at all`).toContain(key);
+      expect(emitted, `${key} reached the customer's stream (${why})`).not.toContain(key);
+      expect(FULLY_POPULATED, `${key} must be POPULATED in the sample`).toHaveProperty(key);
+    }
   });
 
   it('a field added to the entry does ride along, which is why the list must lead the type', () => {

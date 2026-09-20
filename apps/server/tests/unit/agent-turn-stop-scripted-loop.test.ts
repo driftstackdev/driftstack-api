@@ -144,9 +144,15 @@ describe('scripted: a looping turn stopped mid-loop', () => {
       'Stopped after step 2, as you asked. The steps above are what ran; nothing after them was sent, and the task is not finished.',
     );
     // Two planning calls — the third segment was never asked for — and on the
-    // device: navigate, a look, the tap. Nothing after it.
+    // device: navigate, the look between segments, the confirmation gate's
+    // commitment read before the tap, then the tap. Nothing after it.
+    //
+    // ⛔ TWO `get_page_source`, AND THEY ARE DIFFERENT READS. The first is the
+    // loop's own look, which the planner is shown; the second is the gate's
+    // commitment arm bringing its structural facts up to date before the tap
+    // (services/agent-page-commitment.ts), and nothing from it reaches a prompt.
     expect(planner.calls).toHaveLength(2);
-    expect(device.log).toEqual(['navigate', 'get_page_source', 'click #next']);
+    expect(device.log).toEqual(['navigate', 'get_page_source', 'get_page_source', 'click #next']);
 
     const transcript = (await sessions.get(seed.id))?.transcript ?? [];
     expect(transcript.map((e) => e.role)).toEqual(['user', 'agent']);

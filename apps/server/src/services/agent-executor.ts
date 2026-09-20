@@ -57,6 +57,15 @@ import {
   classifyConsequentialAction,
   type ConsequentialActionCategory,
 } from './agent-consequential-action.js';
+import {
+  COMMITMENT_PROMPT_CEILING,
+  amountValueOf,
+  classifyCommitTap,
+  commitmentReleasedByApproval,
+  selectorKeysForTap,
+  type CommitmentBudget,
+  type PageCommitFacts,
+} from './agent-page-commitment.js';
 import { redactText } from '../lib/redact-url.js';
 import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
 // Type only: the counts' shape and their closed enums live beside the metric
@@ -227,27 +236,39 @@ export function consequentialSignature(
  *
  * Looked up the way the planner may have respelled it: as written, then by the
  * id or test id in its last compound (`button#pay` and `#pay` are one element).
+ *
+ * ⛔ THE KEYS COME FROM ONE PLACE. `selectorKeysForTap` is shared with the
+ * commitment arm's own fact lookup, so the names and the structural facts can
+ * never end up keyed differently for the same tap — a drift nothing would fail
+ * on, and one that would silently leave the newer arm looking at no element.
  */
 function pageLabelForTap(intent: AgentIntent, pageLabels: ReadonlyMap<string, string>): string {
   if (intent.kind !== 'interact' || intent.action !== 'tap' || intent.selector === undefined) {
     return '';
   }
   const found: string[] = [];
-  for (const branch of intent.selector.split(',')) {
-    const selector = branch.trim();
-    const last = selector.split(/[\s>+~]+/).at(-1) ?? '';
-    const id = /#([-\w]+)/.exec(last.replace(/\[[^\]]*\]/g, ''));
-    const testId = /\[data-testid\s*=\s*["']?([^"'\]]+)["']?\]/.exec(last);
-    for (const key of [
-      selector,
-      ...(id !== null ? [`#${id[1] ?? ''}`] : []),
-      ...(testId !== null ? [`[data-testid="${testId[1] ?? ''}"]`] : []),
-    ]) {
-      const label = pageLabels.get(key);
-      if (label !== undefined) found.push(label);
-    }
+  for (const key of selectorKeysForTap(intent.selector)) {
+    const label = pageLabels.get(key);
+    if (label !== undefined) found.push(label);
   }
   return found.join(' ');
+}
+
+/**
+ * P4 — what the executor knows about the page a tap is about to be made on, and
+ * the turn's own commitment budget. Absent for every executor that does not read
+ * pages, which is what keeps the structural arm out of their gate entirely.
+ */
+export interface CommitmentArm {
+  /** The page's structural facts, or null when none could be read. */
+  facts: PageCommitFacts | null;
+  /** The TURN's budget — arming, the read allowance and the prompt ceiling. */
+  budget: CommitmentBudget;
+  /** What the device said the tap target is, from the look before the tap. */
+  targetType?: string;
+  /** Where the device's focus is believed to be — the last control this run
+   *  typed into or tapped — for a key press that submits the focused form. */
+  focusSelector?: string;
 }
 
 /** If `intent` is a consequential action not yet approved, returns the
@@ -275,6 +296,7 @@ export function consequentialHalt(
   approved: Set<string>,
   pageLabels?: ReadonlyMap<string, string>,
   deviceLabels?: ReadonlyArray<string>,
+  commitment?: CommitmentArm,
 ): Extract<IntentResult, { kind: 'confirmation_required' }> | null {
   const withLabels = (labels: ReadonlyArray<string>): AgentIntent => {
     const text = labels.filter((label) => label.length > 0).join(' ');
@@ -296,7 +318,13 @@ export function consequentialHalt(
       ? planned
       : classifyConsequentialAction(withLabels([pageLabel, ...deviceText]));
   if (!v.requiresConfirmation || v.category === undefined || v.matchedText === undefined) {
-    return null;
+    // ⛔ THE COMMITMENT ARM, AND ONLY WHERE THE WORDS SAID NOTHING. Reading it
+    // second is what keeps every halt that happens today byte-identical: the
+    // phrase a halt is raised on, and therefore its approval signature, is
+    // still the phrase one of the fourteen patterns matched. This arm can only
+    // ADD halts — it is never consulted for a tap the words already halt, and
+    // it never releases one.
+    return commitment === undefined ? null : commitmentHalt(intent, approved, commitment);
   }
   const signature = consequentialSignature(v.category, v.matchedText);
   // ⛔ AN APPROVAL RELEASES THE KIND OF ACTION IT WAS GIVEN FOR, NOT THE TAP.
@@ -345,6 +373,68 @@ export function consequentialHalt(
     intent,
     category: v.category,
     matchedText: v.matchedText,
+  };
+}
+
+/**
+ * The commitment arm's half of the gate: a tap whose WORDS say nothing, on a
+ * control the page's own markup says submits a form that commits value, on a
+ * page (or in a turn) with money on the table.
+ *
+ * ⛔ IT RIDES THE EXISTING APPROVAL RAILS. Same `confirmation_required` result,
+ * same two published categories, same `consequentialSignature` echo — the SDKs
+ * and the desktop app switch on nothing new.
+ *
+ * ⛔ AND IT IS BOUNDED, because a page that can raise prompts can farm them. At
+ * most {@link COMMITMENT_PROMPT_CEILING} commitment prompts per turn; past that
+ * the budget is marked and the caller STOPS the turn rather than asking a third
+ * time. A ceiling that keeps asking is a consent treadmill; one that stops is
+ * not. Nothing is dispatched either way.
+ */
+function commitmentHalt(
+  intent: AgentIntent,
+  approved: Set<string>,
+  commitment: CommitmentArm,
+): Extract<IntentResult, { kind: 'confirmation_required' }> | null {
+  const verdict = classifyCommitTap({
+    intent,
+    facts: commitment.facts,
+    budget: commitment.budget,
+    ...(commitment.targetType !== undefined ? { targetType: commitment.targetType } : {}),
+    ...(commitment.focusSelector !== undefined ? { focusSelector: commitment.focusSelector } : {}),
+  });
+  if (verdict === null) return null;
+  const control = verdict.control;
+  const signature = consequentialSignature(verdict.category, verdict.matchedText);
+  if (approved.delete(signature)) {
+    // What the customer said yes to, so the SECOND step of a two-step confirm
+    // is the same decision rather than a second interrogation. Bound to the
+    // destination, the amount, and ⛔ to being a control the approved page was
+    // NOT already offering; see `commitmentReleasedByApproval`.
+    commitment.budget.approved = {
+      category: verdict.category,
+      action: control?.action ?? '',
+      amount: verdict.amount,
+      value: verdict.amount === null ? null : amountValueOf(verdict.amount),
+      siblings: new Set(
+        [...(commitment.facts?.controls.values() ?? [])].map((candidate) => candidate.key),
+      ),
+    };
+    return null;
+  }
+  if (control !== undefined && commitmentReleasedByApproval(commitment.budget, verdict, control)) {
+    return null;
+  }
+  if (commitment.budget.prompts >= COMMITMENT_PROMPT_CEILING) {
+    commitment.budget.overCeiling = true;
+  } else {
+    commitment.budget.prompts += 1;
+  }
+  return {
+    kind: 'confirmation_required',
+    intent,
+    category: verdict.category,
+    matchedText: verdict.matchedText,
   };
 }
 
@@ -440,6 +530,22 @@ export interface ExecuteArgs {
    * private per-run budget, exactly as before.
    */
   elementWaitBudget?: ElementWaitBudget;
+  /**
+   * P4 — the TURN's commitment budget: what stakes it has seen, how many extra
+   * page reads the commitment arm has spent, and how many commitment prompts it
+   * has raised.
+   *
+   * ⛔ OWNED BY THE CALLER FOR THE REASON `elementWaitBudget` IS. Arming has to
+   * span the turn, not the plan: a basket page prints the total and the checkout
+   * that follows it often prints nothing at all, and those are two segments of
+   * one turn. A budget built inside `execute()` would forget the total between
+   * them, and the order button on the second page would be unarmed.
+   *
+   * Omitted → the commitment arm is off and the gate is exactly the caption
+   * matcher, which is what the stub and legacy executors and every pre-existing
+   * caller get.
+   */
+  commitmentBudget?: CommitmentBudget;
   /**
    * The instant, on the executor's own monotonic clock, past which the step loop
    * starts no further step — the turn's HARD stop.
@@ -724,6 +830,13 @@ export interface AgentExecutor {
     shouldContinue?: ExecuteArgs['shouldContinue'],
     /** B2 — same as {@link observe}'s. */
     signal?: AbortSignal,
+    /**
+     * P4 — the TURN's commitment budget. The digest is where a page's stakes
+     * are read, and arming has to span the turn, so the read folds what it
+     * finds into the budget the executor's gate will later judge against.
+     * Omitted → the read is exactly what it was.
+     */
+    commitmentBudget?: CommitmentBudget,
   ): Promise<string | null>;
 }
 

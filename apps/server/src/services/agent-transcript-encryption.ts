@@ -25,6 +25,17 @@ const TranscriptEntrySchema = z
     intents: z.array(AgentIntentSchema).optional(),
     awaitingConfirmation: z.boolean().optional(),
     resumeFromIntentIndex: z.number().int().nonnegative().optional(),
+    // P4 — the commitment arm's arming, so an approval resume is armed as the
+    // halted turn was. Optional throughout: an entry written before this
+    // existed simply has none, and the resumed suffix is armed by its own page
+    // reads exactly as it was.
+    commitment: z
+      .object({
+        sawMoney: z.boolean(),
+        amount: z.string().optional(),
+        prompts: z.number().int().nonnegative(),
+      })
+      .optional(),
   })
   // Preserve additive transcript metadata written by a newer producer instead
   // of making an older reader brick the whole encrypted session.

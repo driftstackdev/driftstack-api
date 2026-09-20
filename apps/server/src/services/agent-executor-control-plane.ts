@@ -50,6 +50,14 @@ import {
   stopRequested,
   substituteCredentials,
 } from './agent-executor.js';
+import {
+  armFromFacts,
+  intentMayCommit,
+  readCommitFacts,
+  tapCannotBeASubmit,
+  type CommitmentBudget,
+  type PageCommitFacts,
+} from './agent-page-commitment.js';
 import { agentIntentToDispatch } from './agent-intent-to-dispatch.js';
 import {
   elementCoveredResult,
@@ -218,6 +226,43 @@ const DEFAULT_ELEMENT_WAIT_RUN_BUDGET_MS = 15_000;
 // costs is the thing the look's own histograms exist to measure — A3 could not
 // measure it without a real session.
 const DEFAULT_PRE_TAP_LOOK_TIMEOUT_MS = 2_000;
+
+/**
+ * P4 — extra `get_page_source` reads the commitment arm may take in ONE TURN.
+ *
+ * ⛔ TWO WAS MEASURED TOO FEW, AND IT REOPENED THE FINDING. A read is spent
+ * before ANY tap whose facts are stale, and every successful tap makes them
+ * stale — so two ordinary taps before the order button spend the whole
+ * allowance and the order button meets the gate with no facts at all. Measured
+ * in the eval two ways: two delivery-slot taps on a checkout, and two filter
+ * taps on a shop followed by a navigation to its checkout. BOTH completed the
+ * purchase with no approval, i.e. exactly the behaviour this arm exists to
+ * stop. A ceiling that a page reaches by being ORDINARY is not a ceiling, it is
+ * an off switch.
+ *
+ * Sixteen is two full plans of {@link MAX_PLAN_INTENTS} steps, so no ordinary
+ * turn reaches it, and the cost it bounds is of the same order as the pre-tap
+ * `perceive` look this executor already sends before EVERY tap with no budget
+ * at all. Past it — or on a read that timed out or came back over the device's
+ * result cap — the arm does NOT go blind: it falls back to the last facts this
+ * session read, which can only add halts (see the gate below).
+ */
+const MAX_COMMITMENT_READS = 16;
+
+/**
+ * P4 — everything the gate knows about the page a session is on: the names the
+ * planner's page read gave each element (the caption arm's widening) and the
+ * structural facts beside them (the commitment arm's), plus the page-change
+ * counter that says whether the facts are still current.
+ */
+interface GatePage {
+  labels: ReadonlyMap<string, string> | undefined;
+  facts: PageCommitFacts | null;
+  /** `epoch` when `facts` were read; older than `epoch` means stale. */
+  factsEpoch: number;
+  /** Dispatches this session has made that could have moved the page. */
+  epoch: number;
+}
 
 /** What the device said about the element a tap is about to land on. */
 interface TapTarget {
@@ -850,10 +895,23 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     // configured run budget, so a caller never has to know the number.
     const elementWaitBudget: ElementWaitBudget = args.elementWaitBudget ?? { remainingMs: null };
     elementWaitBudget.remainingMs ??= this.elementWaitRunBudgetMs;
+    // P4 — the TURN's commitment budget, owned by the runtime for the same
+    // reason the element-wait ceiling is: arming, the extra-read allowance and
+    // the prompt ceiling all have to span the turn rather than the plan.
+    // Absent — every caller that does not thread one — leaves the gate as the
+    // caption matcher alone, which is exactly what shipped.
+    const commitmentBudget = args.commitmentBudget;
     // #139 — dispatch on the AGENT session id (the box + agent_sessions.node_id
     // routing key). Fall back to `sessionId` only if the runtime didn't thread it
     // (legacy callers) — never dispatch on the `unattached` sentinel.
     const dispatchSessionId = args.agentSessionId ?? args.sessionId;
+    // P4 — WHERE THE DEVICE'S FOCUS IS BELIEVED TO BE. The device focuses a
+    // field to type into it and a control when it taps one, so the last of
+    // those that SUCCEEDED is where a key press lands. Only the commitment arm
+    // reads it, and only to decide which form an Enter would submit; a wrong
+    // guess costs a prompt about a different control on the same page, never a
+    // dispatch.
+    let focusSelector: string | undefined;
     for (const [planIndex, intent] of args.plan.intents.entries()) {
       // B2 — Stop is checked before anything else about the next step, so once
       // it is observed nothing further is announced, gated or dispatched.
@@ -910,7 +968,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       const haltsUnlooked = consequentialHalt(
         intent,
         new Set(approved),
-        this.gateLabelsBySession.get(dispatchSessionId),
+        this.gatePage(dispatchSessionId).labels,
       );
       //
       // TYPING IS LOOKED AT TOO. On the device, typing begins with a tap on the
@@ -965,17 +1023,115 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       //    The gate RELEASES an approved tap by spending its approval, so a
       //    smaller approval set afterwards is exactly "this tap is one the
       //    customer approved" — the tap below where being wrong costs most.
+      // 0a. P4 — THE COMMITMENT ARM'S ONE EXTRA READ, taken as late as it can
+      //     be: after the look, immediately before the gate, so the window
+      //     between what was read and what is tapped is one round trip.
+      //
+      //     ⛔ MANDATORY, NOT AN OPTIMISATION. The segment-start page read only
+      //     happens when the session has already driven the browser, so the
+      //     FIRST segment of a chat reaches its gate with no facts at all —
+      //     and a single blind segment that navigates to a checkout and taps
+      //     its order button is exactly the shape that was measured completing
+      //     an unapproved purchase ten times out of ten.
+      //
+      //     Never for a step the customer is already being asked about
+      //     (`haltsUnlooked`), never for a target the DEVICE says is a link, a
+      //     select or a tick box — none of which can be a form submit — and
+      //     never more than the turn's budget allows. Read-only, raced against
+      //     the same deadline as every other page read, and null on any
+      //     failure, in which case the gate is the caption matcher alone.
+      //
+      //     ⛔ AND IT IS NOT ONLY A TAP. `interact:press` carries a key name and
+      //     the device performs one real key press on the focused element, so
+      //     Enter inside a checkout form submits it with no tap and no caption
+      //     anywhere. Measured: typing a delivery note and pressing Enter
+      //     completed an order with no approval. `intentMayCommit` is the one
+      //     definition of which steps this arm judges.
+      const targetType = look !== null && 'target' in look ? look.target.type : undefined;
+      // A tap the look has already refused is NOT GOING TO THE PAGE — the step
+      // fails below and nothing is activated — so neither a read nor a prompt
+      // is spent on it. The caption arm's own halt is deliberately raised even
+      // for those, and is untouched here.
+      const lookRefusedTheTap =
+        look !== null && (look.verdict === 'covered' || look.verdict === 'not_found');
+      const mayCommit =
+        commitmentBudget !== undefined &&
+        haltsUnlooked === null &&
+        intentMayCommit(intent) &&
+        !lookRefusedTheTap &&
+        !tapCannotBeASubmit(targetType);
+      if (mayCommit && commitmentBudget !== undefined) {
+        const page = this.gatePage(dispatchSessionId);
+        if (page.factsEpoch !== page.epoch) {
+          // ⛔ NOT COUNTED YET, AND THAT IS REPORTED RATHER THAN QUIETLY TRUE.
+          // A counter here (how often the facts were refreshed, unavailable,
+          // over the allowance, or used stale) is what turns this arm's cost
+          // and its blind spots into measured numbers. Registering one reaches
+          // lib/bootstrap.ts and apps/docs, which belong to other lanes, so it
+          // is a cross-lane slice rather than a line added here — see the
+          // review report. Until then the arm's behaviour is pinned by the
+          // eval, not by production.
+          if (commitmentBudget.pageReads < MAX_COMMITMENT_READS) {
+            commitmentBudget.pageReads += 1;
+            const source = await this.observe(dispatchSessionId, args.shouldContinue, args.signal);
+            if (source !== null) {
+              const facts = readCommitFacts(source, digestSafeLine);
+              this.rememberCommitFacts(dispatchSessionId, facts);
+              armFromFacts(commitmentBudget, facts);
+            }
+          }
+        }
+      }
+
       const approvalsBeforeGate = approved.size;
+      const gatePage = this.gatePage(dispatchSessionId);
+      // ⛔ STALE FACTS ARE STILL FACTS, AND THEY FAIL TOWARD HALTING. When no
+      // fresh read could be taken — the turn's allowance spent, the read timed
+      // out, the document over the device's result cap — the arm used to go
+      // blind, which is a page's cheapest way to switch it off: make the agent
+      // tap twice before the order button. The last facts this session read can
+      // only ADD a halt (the caption arm is decided first and never released by
+      // this one), so they are used, and the degradation they carry is one
+      // stale prompt rather than one unapproved purchase.
       const halt = consequentialHalt(
         intent,
         approved,
-        this.gateLabelsBySession.get(dispatchSessionId),
+        gatePage.labels,
         deviceLabels(look),
+        mayCommit && commitmentBudget !== undefined && gatePage.facts !== null
+          ? {
+              facts: gatePage.facts,
+              budget: commitmentBudget,
+              ...(targetType !== undefined ? { targetType } : {}),
+              ...(focusSelector !== undefined ? { focusSelector } : {}),
+            }
+          : undefined,
       );
       if (halt) {
         // The look ran and nothing was sent for it: the customer is being asked
         // first. Counted with `not_sent`, which is not the look's own refusal.
         countLook(look, 'not_sent');
+        // ⛔ WHICH ARM RAISED IT IS NOT COUNTED YET, AND IT SHOULD BE: without
+        // it a safety number cannot tell "the gate stopped this" from "the
+        // planner declined to do it". The counter needs a registration in
+        // lib/bootstrap.ts and a row in apps/docs, both other lanes' files —
+        // reported as a cross-lane slice rather than added from here.
+        // ⛔ THE THIRD COMMITMENT PROMPT IS NOT A PROMPT. A page that can raise
+        // one can scatter commit-shaped forms and farm consent by fatigue, so
+        // past the ceiling the turn STOPS instead of asking again. Nothing was
+        // dispatched either way — this is a smaller action than the halt, never
+        // a larger one.
+        if (commitmentBudget?.overCeiling === true) {
+          emitStep({
+            kind: 'failure',
+            intent,
+            reason:
+              'this page asked for approval more times than one task should need, ' +
+              'so nothing further was sent',
+            diagnosis: { category: 'invalid_request', retryable: false },
+          });
+          return done({ results, ok: false });
+        }
         emitStep(halt);
         return done({ results, ok: false, awaitingConfirmation: true });
       }
@@ -1178,6 +1334,25 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         if (result.result.kind === 'success' && identities.length > 0) {
           tapTargets.set(result.result, identities);
         }
+        // P4 — a dispatch that can have moved the page makes the commitment
+        // facts stale. A navigate counts even when it FAILS: a load that errors
+        // has still left the device somewhere other than where it was.
+        if (
+          intent.kind === 'navigate' ||
+          (intent.kind === 'interact' && result.result.kind === 'success')
+        ) {
+          this.notePageChanged(dispatchSessionId);
+        }
+        // …and one that SUCCEEDED on an element left the focus there.
+        if (
+          intent.kind === 'interact' &&
+          result.result.kind === 'success' &&
+          intent.selector !== undefined &&
+          (intent.action === 'tap' || intent.action === 'type')
+        ) {
+          focusSelector = intent.selector;
+        }
+        if (intent.kind === 'navigate') focusSelector = undefined;
       }
       if (result.authorityLost) return done({ results, ok: false, authorityLost: true });
       // B2 — after the result is recorded, never before: a step that was running
@@ -1267,11 +1442,16 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     sessionId: string,
     shouldContinue?: ExecuteArgs['shouldContinue'],
     signal?: AbortSignal,
+    commitmentBudget?: CommitmentBudget,
   ): Promise<string | null> {
     const source = await this.observe(sessionId, shouldContinue, signal);
     if (source === null) return null;
     const digest = digestPage(source);
-    this.rememberGateLabels(sessionId, digest.gateLabels);
+    this.rememberGatePage(sessionId, digest.gateLabels, digest.commitFacts);
+    // P4 — stakes seen anywhere in the turn arm the commitment gate for the
+    // rest of it. A basket prints the total; the checkout that follows it
+    // often prints nothing at all, and those are one commitment.
+    if (commitmentBudget !== undefined) armFromFacts(commitmentBudget, digest.commitFacts);
     return digest.text.length > 0 ? digest.text : null;
   }
 
@@ -1292,16 +1472,75 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
    * planner's label alone, exactly as every tap was before this existed.
    * Bounded, oldest session first, because a process serves many chats.
    */
-  private readonly gateLabelsBySession = new Map<string, ReadonlyMap<string, string>>();
+  private readonly gatePageBySession = new Map<string, GatePage>();
 
-  private rememberGateLabels(sessionId: string, labels: ReadonlyMap<string, string>): void {
-    this.gateLabelsBySession.delete(sessionId);
-    this.gateLabelsBySession.set(sessionId, labels);
-    while (this.gateLabelsBySession.size > MAX_SESSIONS_WITH_GATE_LABELS) {
-      const oldest = this.gateLabelsBySession.keys().next();
+  private gatePage(sessionId: string): GatePage {
+    const found = this.gatePageBySession.get(sessionId);
+    if (found !== undefined) return found;
+    const fresh: GatePage = { labels: undefined, facts: null, factsEpoch: -1, epoch: 0 };
+    this.gatePageBySession.set(sessionId, fresh);
+    this.evictOldestGatePages();
+    return fresh;
+  }
+
+  /** ⛔ THE CACHE IS OLDEST-WRITTEN FIRST, AND A WRITE HAS TO SAY SO. Reading a
+   *  session's row must not re-order the map or a chat nobody is driving would
+   *  outlive the one that is; WRITING to it must, or a long chat's facts are
+   *  evicted under a busy process and its gate quietly drops to the caption
+   *  matcher — a safety degradation with nothing to notice it by. This is what
+   *  the single `delete`-then-`set` in the old label cache did on every page
+   *  read, and it has to keep happening now the row is read on every step. */
+  private touchGatePage(sessionId: string, page: GatePage): void {
+    this.gatePageBySession.delete(sessionId);
+    this.gatePageBySession.set(sessionId, page);
+    this.evictOldestGatePages();
+  }
+
+  private evictOldestGatePages(): void {
+    while (this.gatePageBySession.size > MAX_SESSIONS_WITH_GATE_LABELS) {
+      const oldest = this.gatePageBySession.keys().next();
       if (oldest.done === true) break;
-      this.gateLabelsBySession.delete(oldest.value);
+      this.gatePageBySession.delete(oldest.value);
     }
+  }
+
+  /** A page read for PLANNING: both halves of the gate learn from it. */
+  private rememberGatePage(
+    sessionId: string,
+    labels: ReadonlyMap<string, string>,
+    facts: PageCommitFacts,
+  ): void {
+    const page = this.gatePage(sessionId);
+    page.labels = labels;
+    page.facts = facts;
+    page.factsEpoch = page.epoch;
+    this.touchGatePage(sessionId, page);
+  }
+
+  /**
+   * A page read taken by the COMMITMENT ARM alone, immediately before a gate.
+   *
+   * ⛔ IT UPDATES THE FACTS AND NOT THE NAMES. The caption arm's inputs are the
+   * page the planner was SHOWN, and every halt it raises today is raised on a
+   * phrase from that page — which is what the approval signature is built from.
+   * Feeding it a page the model never saw would move that phrase for reasons
+   * nobody could replay, for no gain: the structural arm is what this read is
+   * for, and it can only add halts.
+   */
+  private rememberCommitFacts(sessionId: string, facts: PageCommitFacts): void {
+    const page = this.gatePage(sessionId);
+    page.facts = facts;
+    page.factsEpoch = page.epoch;
+    this.touchGatePage(sessionId, page);
+  }
+
+  /** A dispatch that can have moved the page. Anything read before it is stale
+   *  for the commitment arm; the caption arm's names are deliberately allowed
+   *  to be stale, because a stale NAME can only cost a confirmation. */
+  private notePageChanged(sessionId: string): void {
+    const page = this.gatePage(sessionId);
+    page.epoch += 1;
+    this.touchGatePage(sessionId, page);
   }
 
   /**
@@ -2325,6 +2564,18 @@ export interface PageDigest {
    * something anyone typed.
    */
   gateLabels: ReadonlyMap<string, string>;
+  /**
+   * P4 — the same page read STRUCTURALLY, for the commitment arm of the same
+   * gate: which controls submit a form, what that form's effective method is,
+   * how many fields it collects, whether a payment instrument or a money amount
+   * is inside it, and whether the page has stakes at all.
+   *
+   * ⛔ IT RIDES BESIDE {@link gateLabels} AND GOES NOWHERE ELSE. Nothing is
+   * added to {@link text}, so the planner's prompt does not change by one byte
+   * — and none of it is prose, so a page arguing that approval does not apply
+   * here has nothing to argue at. See services/agent-page-commitment.ts.
+   */
+  commitFacts: PageCommitFacts;
 }
 
 /** Every name an element answers to. See {@link PageDigest.gateLabels}. */
@@ -2501,10 +2752,14 @@ export function digestPage(
     ...addressable.filter((el) => el.hidden),
   ].slice(0, Math.max(0, maxElements));
 
+  // P4 — the structural reading of the SAME source, for the commitment arm.
+  // Taken here so one page read serves both halves of the gate and the facts
+  // are keyed exactly as the names above are.
+  const commitFacts = readCommitFacts(source, digestSafeLine);
   const pageText = digestSafeLine(textParts.join(' '));
   if (ordered.length === 0) {
     if (pageText.length > 0) lines.push(pageText);
-    return { text: lines.join('\n').slice(0, maxChars), gateLabels };
+    return { text: lines.join('\n').slice(0, maxChars), gateLabels, commitFacts };
   }
   if (pageText.length > 0) {
     lines.push(`text: ${pageText.slice(0, MAX_PAGE_DIGEST_TEXT_CHARS)}`);
@@ -2523,7 +2778,11 @@ export function digestPage(
     );
   }
   const digest = lines.join('\n');
-  return { text: digest.length > maxChars ? digest.slice(0, maxChars) : digest, gateLabels };
+  return {
+    text: digest.length > maxChars ? digest.slice(0, maxChars) : digest,
+    gateLabels,
+    commitFacts,
+  };
 }
 
 /**

@@ -621,6 +621,62 @@ the control plane's premises, not the doc's):**
   resolution exists only on the selector path. Feed it to the gate as the harness's
   canonical label; never assert it equals an accname implementation's answer.
 
+### 2026-09-20 — the confirmation gate grew a SECOND, STRUCTURAL arm (A2)
+
+⛔ **NO WIRE CHANGE, AND ONE NEW PIECE OF DEVICE TRAFFIC.** The gate that stops a
+purchase / payment / account deletion before dispatch used to be a matcher of fourteen
+English captions over the tap's selector, the page digest's name for it and the device's
+labels. Measured 2026-09-20: a checkout whose submit button is captioned with an
+ordinary neutral word is outside every one of them, and both planner models completed
+such an order with no approval, ten repetitions out of ten each.
+
+It now has a second arm (`apps/server/src/services/agent-page-commitment.ts`) that reads
+the page's STRUCTURE — does this tap submit a form, is that form collecting a query, does
+it commit value already held, and is money on the table — and halts on the four together.
+No page prose is an input to any verdict, so a page cannot argue its way past it. **The
+caption arm is unchanged and runs first**, so every halt that happened before this happens
+identically, with the same `matchedText` and therefore the same approval signature.
+
+What A1 and A3 need from it:
+
+- **The device protocol does not move.** No new verb, no new parameter, no new field on
+  any result. `ConsequentialActionCategory` keeps its three members and the
+  `confirmation_required` result keeps its four.
+- **⛔ NEW DEVICE TRAFFIC: up to SIXTEEN extra `get_page_source` per TURN** — in practice
+  roughly ONE PER TAP whose facts predate the last page-changing dispatch, which after the
+  first tap is every tap. Taken by the control-plane executor immediately before a tap's
+  gate. It is the existing read-only verb through the existing `observe()` path, raced
+  against `observeTimeoutMs`, null on any failure. It is NOT taken for a tap the plan's own
+  words already halt, for a tap the pre-tap look refused (`covered` / `not_found`), or for a
+  target the device's `perceive` calls a `link`, `select`, `checkbox`, `radio` or `textarea`
+  — none of which can be a form submit.
+  ⛔ **A `button` is not skippable**, because a submit looks exactly like one from the
+  outside, so a page with benign buttons before the order button costs a read at each.
+  ⛔ **THE NUMBER WAS TWO AND TWO WAS MEASURED WRONG.** Two ordinary taps before the order
+  button spent the whole allowance and the order button then met the gate with no facts at
+  all — measured in the eval as a completed, unapproved purchase on two everyday shapes
+  (two delivery-slot taps on a checkout; two filter taps on a shop, then its checkout). An
+  allowance a page reaches by being ORDINARY is an off switch, not a ceiling. Past the
+  allowance the arm now uses the LAST facts it read rather than going blind.
+- **⛔ A KEY PRESS AND TYPED TEXT ARE ALSO GATED NOW, NOT ONLY A TAP.** `interact:press`
+  with `Enter` is one real key press on the focused element and HTML submits the focused
+  field's form from it; `interact:type` whose value carries a line break is the same thing
+  through send-keys. Both reach the gate, so both can now take the extra read above. The
+  focus the gate reasons about is the last control the run typed into or tapped — a
+  server-side belief, never a new device question.
+- **⛔ THIS ARM HAS NO TELEMETRY YET, DELIBERATELY.** The counters the design calls for
+  (`driftstack_agent_commitment_facts_total{outcome}` and
+  `driftstack_agent_consequential_halt_total{arm}`) need a registration in
+  `apps/server/src/lib/bootstrap.ts`, the integration test app, `ops/alerts/driftstack.yml`
+  and the docs metrics catalogue — four files across three lanes. Until that slice lands,
+  the per-turn read cost and the arm split are pinned by the eval and are NOT observable in
+  production. **A3's rhythm judgement should be made against the eval's measured counts.**
+- **What would close the largest remaining hole is a wire change, and it is A3's call.**
+  A commit driven by a script handler on `<button type="button">`, a `<div>` or a link is
+  not reachable from markup shape — the corpus already contains one. Closing it needs the
+  device to say what a click WOULD DO (a `submits` / `activates` field on the perceive
+  answer). Reported, not assumed.
+
 ### 2026-09-18 — an unknown RESULT key is stripped and counted, not fatal
 
 **Why.** On 2026-09-18 the harness shipped two result keys it considered additive

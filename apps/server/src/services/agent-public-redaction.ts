@@ -34,8 +34,24 @@ export function publicIntentResult(result: IntentResult): IntentResult {
   return intent === result.intent ? result : { ...result, intent };
 }
 
-/** Redact structured intents without changing free-text transcript bodies. */
+/**
+ * Redact structured intents without changing free-text transcript bodies, and
+ * DROP the entry's internal gate bookkeeping.
+ *
+ * ⛔ THIS PROJECTION IS PASS-THROUGH BY DEFAULT, which is why anything internal
+ * has to be removed by name. `commitment` is the confirmation gate's own
+ * turn-scoped arming, persisted on a halted entry so the approval resume is
+ * armed as the halted turn was. It is not an answer, not a step and not
+ * something a customer asked for — and it carries a figure this server parsed
+ * off the page, so emitting it would widen the public surface for nothing.
+ */
 export function publicTranscriptEntry(entry: TranscriptEntry): TranscriptEntry {
-  if (entry.intents === undefined) return entry;
-  return { ...entry, intents: entry.intents.map(publicAgentIntent) };
+  const intents = entry.intents?.map(publicAgentIntent);
+  if (intents === undefined && entry.commitment === undefined) return entry;
+  const projected: TranscriptEntry = {
+    ...entry,
+    ...(intents !== undefined ? { intents } : {}),
+  };
+  delete projected.commitment;
+  return projected;
 }
