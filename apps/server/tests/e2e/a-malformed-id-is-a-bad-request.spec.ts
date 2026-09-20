@@ -689,10 +689,14 @@ test('no id-shaped body field turns a malformed value into a server error', asyn
   // body field behind a deployment flag. Raised only because that route is GENUINELY
   // gated — the bound exists to notice this sweep quietly covering less, so a number
   // moved for an ungated route would be hiding the thing it was written to catch.
+  // ⛔ 11 since 2026-09-20: POST /v1/agent-sessions/{id}/handback now DECLARES the
+  // `client_id` its route always accepted, which adds one id-shaped body field to the
+  // published document — on the agent-session family, behind the same deployment
+  // flag as the egress one above. Genuinely gated, which is the only reason it rises.
   expect(
     gated.length,
     'the deployment-gated share of body fields stays bounded',
-  ).toBeLessThanOrEqual(10);
+  ).toBeLessThanOrEqual(11);
 
   expect(
     serverErrors,

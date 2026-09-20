@@ -170,7 +170,14 @@ test('an operation that declares a bearer token refuses a caller without one', a
   // rather than a bare 404 — genuinely gated, which is the only reason this may rise.
   // And it happened again: the local gate was green and this job went red on the
   // first CI run after the route landed.
-  expect(gated.length, 'the gate-before-auth set stays bounded').toBeLessThanOrEqual(30);
+  //
+  // ⛔ 31 since 2026-09-20: the 31st is GET /v1/agent-sessions/{id}/captures/{captureId},
+  // the screenshot route, PUBLISHED in the spec that day (it had been served and
+  // documented, but left out of the document this sweep walks). It belongs to the
+  // agent-session family, whose disabled twin is the same FeatureUnavailableError
+  // stub, so it is genuinely gated. Third time the local gate was green and this job
+  // red: the e2e job is the only place this census runs.
+  expect(gated.length, 'the gate-before-auth set stays bounded').toBeLessThanOrEqual(31);
   // Measured for THIS population, not borrowed. The sibling id-sweep bounds its
   // unrouted set at twelve, but that sweep walks the 106 single-parameter
   // operations and this one walks all 201 that declare a bearer requirement, so
