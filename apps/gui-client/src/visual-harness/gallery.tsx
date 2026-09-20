@@ -76,7 +76,21 @@ export const AUDIT_SCENES = [
   'audit-settings',
   'audit-first-run',
   'audit-recipes',
+  // The AI view in each state a customer can be in. It is the ONE view whose
+  // states cannot be reached from fixture data alone — a plan running, an
+  // approval waiting, a stop in flight all need a live session and a device on
+  // the other end of a stream — so it is also the one view the gates had only
+  // ever measured EMPTY. The seven below drive the REAL view through the seams
+  // in agent-chat-scenes.tsx (spec §8); the first thing they found was a status
+  // pill at 2.47:1 that had shipped for months.
   'audit-agent-chat',
+  'audit-agent-chat-nokey',
+  'audit-agent-chat-planning',
+  'audit-agent-chat-running',
+  'audit-agent-chat-approval',
+  'audit-agent-chat-done',
+  'audit-agent-chat-trouble',
+  'audit-agent-chat-stopping',
   'audit-team',
   'audit-proxies',
 ] as const;

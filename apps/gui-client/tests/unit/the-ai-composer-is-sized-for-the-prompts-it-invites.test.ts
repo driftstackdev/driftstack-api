@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 /**
@@ -18,8 +18,30 @@ import { resolve } from 'node:path';
  * different size depending on how the customer got there.
  */
 
-const SRC = resolve(__dirname, '../../src/views/AgentChatView.tsx');
+/**
+ * ⛔ REPOINTED 2026-09-19 (AI-view rebuild, stage 0). The composer moved out of
+ * `views/AgentChatView.tsx` into `views/agent-chat/Composer.tsx`, which now owns
+ * BOTH autogrow sites: the onChange handler, and `growComposerToFit` — the one
+ * the view calls when a template fills the box. That is exactly the property
+ * this file guards, so the pin follows the code and no assertion changed.
+ */
+const SRC = resolve(__dirname, '../../src/views/agent-chat/Composer.tsx');
 const body = readFileSync(SRC, 'utf8');
+
+/**
+ * The `max-h-NN` scan below is a NEGATIVE, and a negative over one file is only
+ * as good as that file's reach: a Tailwind `max-h-72` capping the composer from
+ * a sibling in the same folder would read exactly like a clean run. So it scans
+ * the WHOLE view — every file the AI view is built from — rather than the one
+ * that happens to hold the textarea today.
+ */
+const AGENT_CHAT_DIR = resolve(__dirname, '../../src/views/agent-chat');
+const VIEW_SOURCES = [
+  resolve(__dirname, '../../src/views/AgentChatView.tsx'),
+  ...readdirSync(AGENT_CHAT_DIR)
+    .filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
+    .map((f) => resolve(AGENT_CHAT_DIR, f)),
+];
 
 describe('the AI composer is sized for the prompts it invites', () => {
   it('grows through ONE named ceiling, not per-site literals', () => {
@@ -52,11 +74,16 @@ describe('the AI composer is sized for the prompts it invites', () => {
     // reads as harmless. ⚠️ Comments stripped first — the prose above explaining
     // this trap contains the banned token, so a naive negative flags the fix as
     // the defect. Third time today a guard nearly accused its own explanation.
-    const code = body
-      .split('\n')
-      .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line.trim()))
-      .join('\n');
-    expect(code).not.toMatch(/max-h-\d+\b/);
+    // Swept over the WHOLE view, not just the file holding the textarea: a cap
+    // reintroduced one file over would read exactly like a clean run.
+    expect(VIEW_SOURCES.length, 'the view-source sweep derived nothing to scan').toBeGreaterThan(1);
+    for (const file of VIEW_SOURCES) {
+      const code = readFileSync(file, 'utf8')
+        .split('\n')
+        .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line.trim()))
+        .join('\n');
+      expect(code, file).not.toMatch(/max-h-\d+\b/);
+    }
   });
 
   it('the ceiling leaves room for a multi-step task', () => {

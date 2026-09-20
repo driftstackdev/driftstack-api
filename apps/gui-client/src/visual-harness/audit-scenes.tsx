@@ -52,6 +52,13 @@
 //   audit-first-run     FirstRunWizard   welcome step (the wizard's first screen; later steps need a live key check)
 //   audit-recipes       RecipesView      loaded — 3 saved tasks, none selected (detail loads on click)
 //   audit-agent-chat    AgentChatView    idle composer — 3 profiles in the picker, 2 saved chats, no turns
+//   audit-agent-chat-<kind>              the SAME view in each state a customer can be in — nokey,
+//                                         planning, running, approval, done, trouble, stopping. Driven
+//                                         through the three seams of spec §8 (a fixture chat published
+//                                         by the real AgentChatProvider, a drawn IMAGE in the live
+//                                         view's screen, a drawn image for a captured screenshot), so
+//                                         the gates measure the REAL view and not a replica of it.
+//                                         Fixtures live in agent-chat-scenes.tsx.
 //   audit-team          TeamView         loaded — 2 members + 1 pending invite — in the jsdom arm. ⚠️ In the
 //                                         harness (React.StrictMode, main.tsx) the view sits on its skeleton:
 //                                         TeamView's `mountedRef` starts true and its unmount cleanup sets it
@@ -104,7 +111,13 @@ import { SettingsView } from '../views/SettingsView';
 import { FirstRunWizard } from '../views/FirstRunWizard';
 import { RecipesView } from '../views/RecipesView';
 import { AgentChatView } from '../views/AgentChatView';
-import { AgentChatProvider } from '../lib/AgentChatProvider';
+import { AgentChatProvider, type AgentChatContextValue } from '../lib/AgentChatProvider';
+import {
+  AGENT_CHAT_SCENE_KINDS,
+  agentChatSceneFixture,
+  type AgentChatSceneFixture,
+  type AgentChatSceneKind,
+} from './agent-chat-scenes';
 import { TeamView } from '../views/TeamView';
 import { ProxiesView } from '../views/ProxiesView';
 import {
@@ -181,6 +194,16 @@ function auditDefaultSizes(stage: {
     'audit-first-run': stage,
     'audit-recipes': stage,
     'audit-agent-chat': stage,
+    // The seven AI-view states share the default stage: they are compared with
+    // each other and with the mockup, which is drawn at 1280x800. A real window
+    // size is a `?stage=960x600` away (above) and is checked by hand.
+    'audit-agent-chat-nokey': stage,
+    'audit-agent-chat-planning': stage,
+    'audit-agent-chat-running': stage,
+    'audit-agent-chat-approval': stage,
+    'audit-agent-chat-done': stage,
+    'audit-agent-chat-trouble': stage,
+    'audit-agent-chat-stopping': stage,
     'audit-team': stage,
     // Seven rows measure 860 CSS px in the 1280×800 window's 764 px main area
     // (896 would just fit); 920 keeps the last row in frame when a chip wraps.
@@ -763,6 +786,24 @@ export function auditLoadedMarkers(name: AuditSceneName): ReadonlyArray<string> 
       return auditRecipes().map((r) => r.label);
     case 'audit-agent-chat':
       return [...AUDIT_PROFILES.map((p) => p.name), ...auditStoredChats().map((c) => c.title)];
+    case 'audit-agent-chat-nokey':
+    case 'audit-agent-chat-planning':
+    case 'audit-agent-chat-running':
+    case 'audit-agent-chat-approval':
+    case 'audit-agent-chat-done':
+    case 'audit-agent-chat-trouble':
+    case 'audit-agent-chat-stopping':
+      // The scene's own fixture strings FIRST, then the two async loads every
+      // AI-view scene shares. The order is the point (same reason as
+      // audit-proxies below): the fixture chat renders synchronously, so a list
+      // ending on one of its sentences would let the privacy scan snapshot the
+      // DOM before the profile picker and the saved-chat rail had arrived —
+      // green for having read less.
+      return [
+        ...agentChatFixtureFor(name).markers,
+        ...AUDIT_PROFILES.map((p) => p.name),
+        ...auditStoredChats().map((c) => c.title),
+      ];
     case 'audit-team':
       return [
         ...auditTeam().members.map((m) => m.member_email),
@@ -827,6 +868,42 @@ export function buildAuditClient(): DriftstackClient {
     },
   };
   return client as unknown as DriftstackClient;
+}
+
+/** The AI-view state scene `name` stands for, and the fixture that drives it.
+ *  THROWS on a name that is not one of them rather than falling back to the
+ *  idle scene: a silent fallback would render `audit-agent-chat` under a
+ *  different name and the gate would report a state it never measured. */
+export function agentChatFixtureFor(name: AuditSceneName): AgentChatSceneFixture {
+  const kind = AGENT_CHAT_SCENE_KINDS.find(
+    (k: AgentChatSceneKind) => name === `audit-agent-chat-${k}`,
+  );
+  if (kind === undefined) {
+    throw new Error(`visual harness: ${name} is not one of the AI view's state scenes`);
+  }
+  return agentChatSceneFixture(kind, Date.parse(FROZEN_NOW_ISO));
+}
+
+/** The audit client plus the ONE method the live view calls that the shared
+ *  fixture client deliberately does not carry: the stream token.
+ *
+ *  A scene with a stand-in never gets here (the panel skips the whole fetch
+ *  path). The two that do are the states the stand-in cannot express:
+ *  `pending` never settles, which is what "the device is still coming up"
+ *  actually looks like, and `failing` rejects the way a dropped connection
+ *  does, which is the only route to `WatchPlaceholder`'s error copy and its
+ *  `Retry` button — a pinned accessible name that no scene had ever rendered. */
+function buildAgentChatClient(liveToken: AgentChatSceneFixture['liveToken']): DriftstackClient {
+  const base = buildAuditClient() as unknown as { agentSessions: Record<string, unknown> };
+  if (liveToken === undefined) return base as unknown as DriftstackClient;
+  const livekitToken =
+    liveToken === 'pending'
+      ? (): Promise<never> => new Promise<never>(() => undefined)
+      : (): Promise<never> => Promise.reject(new Error('Load failed'));
+  return {
+    ...base,
+    agentSessions: { ...base.agentSessions, livekitToken },
+  } as unknown as DriftstackClient;
 }
 
 // ─── The window-level Tauri stub ─────────────────────────────────────────────
@@ -1063,9 +1140,14 @@ function useTauriStub(fixtures: TauriStubFixtures): void {
 // ─── Compositions ────────────────────────────────────────────────────────────
 
 /** SettingsContext overrides every audit window gets: the fixture client and
- *  the example.com base URL. */
-function useAuditSettings(): Partial<HarnessSettingsValue> {
-  return useMemo(() => ({ settings: auditSettings(), client: buildAuditClient() }), []);
+ *  the example.com base URL. `extra` is merged LAST, for the one view whose
+ *  states differ by what the settings say (the AI view's no-key gate) and by
+ *  what the client answers (the live view's stream token). */
+function useAuditSettings(extra?: Partial<HarnessSettingsValue>): Partial<HarnessSettingsValue> {
+  return useMemo(
+    () => ({ settings: auditSettings(), client: buildAuditClient(), ...extra }),
+    [extra],
+  );
 }
 
 /** The window chrome + the providers the views need (`useToasts` throws
@@ -1074,12 +1156,14 @@ function AuditWindow({
   scene,
   current,
   children,
+  settingsExtra,
 }: {
   scene: AuditSceneName;
   current: Parameters<typeof AppWindow>[0]['current'];
   children: ReactNode;
+  settingsExtra?: Partial<HarnessSettingsValue>;
 }): JSX.Element {
-  const settingsOverrides = useAuditSettings();
+  const settingsOverrides = useAuditSettings(settingsExtra);
   return (
     <AppWindow
       scene={scene}
@@ -1099,6 +1183,7 @@ function StubbedAuditWindow(props: {
   scene: AuditSceneName;
   current: Parameters<typeof AppWindow>[0]['current'];
   children: ReactNode;
+  settingsExtra?: Partial<HarnessSettingsValue>;
 }): JSX.Element {
   const { scene } = props;
   const fixtures = useMemo(() => auditTauriFixtures(scene), [scene]);
@@ -1141,6 +1226,39 @@ function FirstRunScene(): JSX.Element {
         <FirstRunWizard onComplete={noop} />
       </div>
     </SettingsContext.Provider>
+  );
+}
+
+/** The AI view in ONE of its states (spec §8). Everything that differs between
+ *  the seven is data: what the chat hook would be publishing, what the settings
+ *  say, what the screen is showing. The view, its provider, its window and its
+ *  Tauri stub are the same ones `audit-agent-chat` mounts — which is the whole
+ *  point, because a replica would pass the gates on its own copy. */
+function AgentChatStateScene({ name }: { name: AuditSceneName }): JSX.Element {
+  const fixture = useMemo(() => agentChatFixtureFor(name), [name]);
+  const settingsExtra = useMemo<Partial<HarnessSettingsValue>>(
+    () => ({
+      settings: { ...auditSettings(), apiKey: fixture.apiKey },
+      client: buildAgentChatClient(fixture.liveToken),
+    }),
+    [fixture],
+  );
+  // Only the keys this scene actually overrides — the provider keeps its real
+  // `setChatOptions` / `setModel` / `createdAtRef`, so the view's effects run
+  // exactly as they do in the app.
+  const value = useMemo(() => {
+    const v: Partial<AgentChatContextValue> = {};
+    if (fixture.chat !== undefined) v.chat = fixture.chat;
+    if (fixture.standIn !== undefined) v.standIn = fixture.standIn;
+    if (fixture.captureSrc !== undefined) v.captureSrc = fixture.captureSrc;
+    return v;
+  }, [fixture]);
+  return (
+    <StubbedAuditWindow scene={name} current="ai" settingsExtra={settingsExtra}>
+      <AgentChatProvider value={value}>
+        <AgentChatView onGoToSettings={noop} />
+      </AgentChatProvider>
+    </StubbedAuditWindow>
   );
 }
 
@@ -1195,6 +1313,14 @@ export function AuditScene({ name }: { name: AuditSceneName }): JSX.Element {
           </AgentChatProvider>
         </StubbedAuditWindow>
       );
+    case 'audit-agent-chat-nokey':
+    case 'audit-agent-chat-planning':
+    case 'audit-agent-chat-running':
+    case 'audit-agent-chat-approval':
+    case 'audit-agent-chat-done':
+    case 'audit-agent-chat-trouble':
+    case 'audit-agent-chat-stopping':
+      return <AgentChatStateScene name={name} />;
     case 'audit-team':
       return (
         <AuditWindow scene={name} current="team">

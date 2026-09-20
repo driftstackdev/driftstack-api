@@ -16,7 +16,7 @@
 // colour OUT of the CSS, so "lighten it a bit more" (oxblood-300, 2.57:1) goes
 // red on the number, not on a string.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -464,10 +464,14 @@ describe('review — hover states, opacity, and the simulator dark scope', () =>
   it('every text-carrying accent fill in the swept components hovers to the fill token, never the rose', () => {
     // The Launch buttons (table + tile) and "+ New chat" are `bg-accent text-white`
     // with a hover; `hover:bg-accent-hover` back on any of them reds this.
+    // ⛔ REPOINTED 2026-09-19 (AI-view rebuild, stage 0): "+ New chat" moved with
+    // the history rail out of views/AgentChatView.tsx into
+    // views/agent-chat/ChatRail.tsx. The class string is byte-identical; only the
+    // file holding it changed.
     for (const rel of [
       'components/ProfilesTable.tsx',
       'components/ProfilePhoneCard.tsx',
-      'views/AgentChatView.tsx',
+      'views/agent-chat/ChatRail.tsx',
       'views/TeamView.tsx',
     ]) {
       const src = readSrc(rel);
@@ -475,6 +479,31 @@ describe('review — hover states, opacity, and the simulator dark scope', () =>
       // one className: `bg-accent … text-white … hover:bg-accent-hover` (the tile's
       // aria-hidden ✓ selection dot keeps `group-hover:` — a glyph, not copy)
       expect(src, rel).not.toMatch(
+        /bg-accent [^"'`\n]*text-white[^"'`\n]*(?<!group-)hover:bg-accent-hover/,
+      );
+    }
+  });
+
+  it('the rose hover is refused across the WHOLE AI view, not just the file that holds a fill today', () => {
+    // ⛔ The arm above is a per-FILE negative, and repointing it at ChatRail.tsx
+    // (stage 0 of the AI-view rebuild) shrank the AI view's share of that sweep
+    // from one 2,537-line file to a 170-line rail. Everything else the view is
+    // built from — Composer.tsx and ApprovalDock.tsx hold Send and Approve, the
+    // view's other two accent fills by spec §3.2 — went from swept to unswept,
+    // which reads exactly like a clean run. So the population is DERIVED: a file
+    // a later stage adds is covered by the next run without editing this file.
+    const AGENT_CHAT = join(SRC, 'views', 'agent-chat');
+    const AI_VIEW_SOURCES = [
+      join(SRC, 'views', 'AgentChatView.tsx'),
+      ...readdirSync(AGENT_CHAT)
+        .filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
+        .map((f) => join(AGENT_CHAT, f)),
+    ];
+    // A negative over a list that derives nothing is indistinguishable from a
+    // clean run — the whole failure this arm exists to prevent, one level up.
+    expect(AI_VIEW_SOURCES.length, 'the AI-view sweep derived nothing to scan').toBeGreaterThan(5);
+    for (const file of AI_VIEW_SOURCES) {
+      expect(readFileSync(file, 'utf8'), file).not.toMatch(
         /bg-accent [^"'`\n]*text-white[^"'`\n]*(?<!group-)hover:bg-accent-hover/,
       );
     }
@@ -685,7 +714,10 @@ describe('audit-scene follow-ups — the error hue as text, and the saved-chat r
   });
 
   it('the saved-chat rail names a clipped title: the truncating span carries title={c.title}', () => {
-    const src = readSource2('views/AgentChatView.tsx');
+    // ⛔ REPOINTED 2026-09-19 (AI-view rebuild, stage 0): the rail moved out of
+    // views/AgentChatView.tsx into views/agent-chat/ChatRail.tsx. The class
+    // string is byte-identical; only the file holding it changed.
+    const src = readSource2('views/agent-chat/ChatRail.tsx');
     expect(src).toMatch(/className="block truncate text-xs text-ink-primary" title=\{c\.title\}>/);
   });
 });

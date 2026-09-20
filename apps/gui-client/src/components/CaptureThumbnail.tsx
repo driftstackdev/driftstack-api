@@ -35,15 +35,33 @@ export function CaptureThumbnail({
   apiKey,
   sessionId,
   captureId,
+  src,
 }: {
   baseUrl: string;
   apiKey: string | null;
   sessionId: string | null;
   captureId: string;
+  /**
+   * GALLERY SEAM (spec §8) — the image to show INSTEAD of fetching the capture.
+   * Undefined in the app; a visual-harness scene passes a drawn data URI so the
+   * done / trouble scenes reach the state a real capture produces without a
+   * server, an API key or a session. Same `<img>`, same alt text, same classes:
+   * the gates measure the shipped element, not a stand-in of it.
+   */
+  src?: string;
 }): JSX.Element {
-  const [state, setState] = useState<ThumbState>({ kind: 'loading' });
+  const [state, setState] = useState<ThumbState>(
+    src === undefined ? { kind: 'loading' } : { kind: 'ready', url: src },
+  );
 
   useEffect(() => {
+    // A supplied image is the whole answer: no fetch, no object URL, nothing to
+    // revoke. Placed inside the effect rather than around the hook so the hook
+    // order is identical with and without it.
+    if (src !== undefined) {
+      setState({ kind: 'ready', url: src });
+      return undefined;
+    }
     if (sessionId === null) {
       setState({ kind: 'error' });
       return undefined;
@@ -64,7 +82,7 @@ export function CaptureThumbnail({
       cancelled = true;
       if (objectUrl !== null) URL.revokeObjectURL(objectUrl);
     };
-  }, [baseUrl, apiKey, sessionId, captureId]);
+  }, [baseUrl, apiKey, sessionId, captureId, src]);
 
   if (state.kind === 'error') {
     return <span className="mt-1 block text-2xs text-ink-secondary">Screenshot unavailable</span>;

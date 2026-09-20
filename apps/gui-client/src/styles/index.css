@@ -455,6 +455,606 @@
   --accent-subtle-alpha: 0.25;
 }
 
+/* ═══ AI Browser Automation — "The Stage": tokens + motion (spec §2 / §4) ═══
+   Stage 1 of the AI-view rebuild. Nothing in the app wears these classes YET —
+   the components that do arrive in stages 2 and 4 — so this layer is a
+   VOCABULARY, added once, in one place, and measured by
+   tests/unit/the-ai-views-light-is-derived-from-the-accent-axis.test.ts.
+
+   ⛔ PLACEMENT IS LOAD-BEARING. These blocks sit AFTER the three original
+   token blocks ([data-accent='oxblood'], [data-mode='light'],
+   [data-mode='dark']) because theme-token-parity.test.ts reads the FIRST
+   block of each of those selectors, up to its first closing brace. A second
+   block for the same selector appended here adds tokens without moving a
+   single character of what that test measures. For the same reason no value
+   below contains a closing brace, and no mode selector below is qualified by
+   :root or by the html element — the axis has to stay a bare attribute
+   selector so a nested element (the pinned-dark stage) can re-scope it.
+
+   ⛔ COMPOSITE TOKENS THAT READ A MODE VARIABLE LIVE IN [data-mode]. A custom
+   property resolves its var() references where it is DECLARED, not where it is
+   used. The stage is a dark room in BOTH themes (spec D2: it carries
+   data-mode="dark" of its own), so a single declaration on <html> would hand
+   that pinned-dark room the LIGHT theme's status hues — the amber "paused"
+   room would be a dim olive in the light theme and nobody would see it in
+   dark-mode review. Declaring them on every [data-mode] element re-resolves
+   them inside the stage.
+
+   ⛔ NO HUE IS EVER TYPED HERE. Every light, glow, wash and ring below is
+   `rgb(var(--…-rgb) / a)` over a token on the data-accent / data-mode axes, so
+   a second accent would recolour the whole room for free — and the guard test
+   named above fails on a literal. The only numeric colours are NEUTRALS (the
+   room's own surface and the black/white of a shadow), which carry no hue to
+   contradict the accent. */
+[data-accent] {
+  /* motion — named so a component never re-types a curve or a duration */
+  --ai-ease: cubic-bezier(
+    0.22,
+    1,
+    0.36,
+    1
+  ); /* the house easing (ds-touch-dot, ds-keyboard-in), named */
+  --ai-ease-spring: cubic-bezier(
+    0.34,
+    1.56,
+    0.64,
+    1
+  ); /* ONE use: the tick that lands on a finished step */
+  --ai-dur-quick: 160ms; /* hover, press, icon swap */
+  --ai-dur-step: 280ms; /* a step row arriving; the approval dock rising */
+  --ai-dur-settle: 420ms; /* answer card, tense shift, tick */
+  --ai-dur-shift: 600ms; /* the room light changing hue */
+  --ai-dur-turn: 800ms; /* the iPhone turning to face the customer */
+  --ai-dur-pulse: 900ms; /* one action pulse */
+  --ai-dur-breathe: 3400ms; /* thinking */
+  --ai-dur-calm: 9000ms; /* idle drift */
+  /* voice — the one large light line per turn. Weight 300 is used ONLY at
+     >= 18px, where a 400 fallback (Linux/DejaVu) still reads as intended. */
+  --ai-voice-xl: 1.75rem; /* idle headline */
+  --ai-voice-lg: 1.25rem; /* live phase, approval question, refusal headline */
+  --ai-voice-weight: 300;
+  --ai-voice-tracking: -0.018em;
+}
+[data-mode] {
+  /* The room light: three auras, one per meaning. "Trouble" is the ABSENCE of
+     light, never red — oxblood and --status-error-rgb are neighbours, so a red
+     room would read as the brand, not as a fault. */
+  --ai-aura-accent: radial-gradient(
+    closest-side,
+    rgb(var(--accent-rgb) / 0.72) 0%,
+    rgb(var(--accent-rgb) / 0.3) 38%,
+    rgb(var(--accent-rgb) / 0.08) 64%,
+    rgb(var(--accent-rgb) / 0) 80%
+  );
+  --ai-aura-busy: radial-gradient(
+    closest-side,
+    rgb(var(--status-busy-rgb) / 0.5) 0%,
+    rgb(var(--status-busy-rgb) / 0.2) 38%,
+    rgb(var(--status-busy-rgb) / 0.05) 64%,
+    rgb(var(--status-busy-rgb) / 0) 80%
+  );
+  --ai-aura-ready: radial-gradient(
+    closest-side,
+    rgb(var(--status-ready-rgb) / 0.42) 0%,
+    rgb(var(--status-ready-rgb) / 0.16) 38%,
+    rgb(var(--status-ready-rgb) / 0.04) 64%,
+    rgb(var(--status-ready-rgb) / 0) 80%
+  );
+  /* glows — the device rim and the approval dock */
+  --ai-glow-accent:
+    0 0 0 1px rgb(var(--accent-rgb) / 0.7), 0 0 0 4px rgb(var(--accent-rgb) / 0.16),
+    0 0 28px -6px rgb(var(--accent-rgb) / 0.55);
+  --ai-glow-busy:
+    inset 0 0 0 1px rgb(var(--status-busy-rgb) / 0.55), 0 0 0 4px rgb(var(--status-busy-rgb) / 0.1);
+  /* the hairline that draws itself across an answer card's heading */
+  --ai-hairline-accent: linear-gradient(
+    90deg,
+    rgb(var(--accent-rgb) / 0.9),
+    rgb(var(--accent-rgb) / 0)
+  );
+  /* STATE LIGHT — what colour the room is right now. Re-pointed per phase by
+     the rules below (on the view root AND on the stage, so each resolves in
+     its own mode scope). Default: the brand is acting. */
+  --ai-light-rgb: var(--accent-rgb);
+}
+[data-mode='dark'] {
+  --ai-stage-rgb: 5 8 17; /* the room: one stop under surface-inset (neutral, no hue) */
+  --ai-lift: 0 1px 0 rgb(255 255 255 / 0.05) inset, 0 10px 30px -14px rgb(0 0 0 / 0.8);
+  --ai-float: 0 18px 40px -18px rgb(0 0 0 / 0.7);
+  --ai-well-shadow: none;
+  --ai-spill-alpha: 0.1; /* the room's light on the wall beside it — a static paint, dark only */
+}
+[data-mode='light'] {
+  --ai-stage-rgb: 15 23 42; /* the dark theme's surface-base: a lit room, not a hole (spec D2) */
+  --ai-lift:
+    0 1px 0 rgb(255 255 255 / 0.9) inset, 0 8px 22px -14px rgb(var(--ink-primary-rgb) / 0.35);
+  --ai-float: 0 18px 40px -20px rgb(var(--ink-primary-rgb) / 0.45);
+  --ai-well-shadow:
+    0 0 0 1px rgb(var(--ink-primary-rgb) / 0.55),
+    0 18px 40px -22px rgb(var(--ink-primary-rgb) / 0.55);
+  --ai-spill-alpha: 0;
+}
+
+/* ─── the room's colour, per phase (spec §3.1 / §4 rows 1-6) ──────────────
+   Set on BOTH the view root and the stage: each declaration re-resolves in its
+   own mode scope, and the stage is pinned dark. `paused` is amber and
+   perfectly still; `trouble` and `preview` are the absence of light (muted
+   ink), never red. */
+[data-ai-phase='paused'],
+[data-ai-phase='paused'] .ai-stage {
+  --ai-light-rgb: var(--status-busy-rgb);
+}
+[data-ai-phase='done'],
+[data-ai-phase='done'] .ai-stage {
+  --ai-light-rgb: var(--status-ready-rgb);
+}
+[data-ai-phase='trouble'],
+[data-ai-phase='trouble'] .ai-stage,
+[data-ai-preview],
+[data-ai-preview] .ai-stage {
+  --ai-light-rgb: var(--ink-muted-rgb);
+}
+
+/* ─── keyframes: transform and opacity ONLY ───────────────────────────────
+   No layout property, no filter, no backdrop-filter, no colour — those cost a
+   paint or a composite per frame and the 1600x1000 stage is already one
+   full-size layer. Every LOOP rests on its legible still at 0%/100% and every
+   ONE-SHOT ends on its natural state, because the app's global reduced-motion
+   clamp (above) stops an animation on its last frame: the still is therefore
+   not a second set of rules to keep in step, it is the same rule read at a
+   different time. The FOUR pieces whose clamped last frame WOULD be wrong are
+   switched off under reduced motion at the bottom of this section, which says
+   which four and why. (The spec counts five; its fifth is the mockup's tap ring
+   on its drawn page, which the app's still-image stand-in does not have.) */
+@keyframes ds-ai-calm {
+  0%,
+  100% {
+    opacity: 0.46;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.58;
+    transform: scale(1.04);
+  }
+}
+@keyframes ds-ai-breathe {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+@keyframes ds-ai-breathe-soft {
+  0%,
+  100% {
+    opacity: 0.84;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.96;
+    transform: scale(1.03);
+  }
+}
+@keyframes ds-ai-bloom {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  35% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0.66;
+    transform: scale(1);
+  }
+}
+@keyframes ds-ai-pulse {
+  0% {
+    opacity: 0;
+    transform: scale(1, 1);
+  }
+  12% {
+    opacity: 0.95;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.13, 1.062);
+  }
+}
+@keyframes ds-ai-beat {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+@keyframes ds-ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ds-ai-step-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes ds-ai-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ds-ai-draw {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@keyframes ds-ai-tense-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-9px);
+  }
+}
+@keyframes ds-ai-tense-in {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes ds-ai-tick {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes ds-ai-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  60%,
+  100% {
+    transform: translateX(100%);
+  }
+}
+@keyframes ds-ai-fill {
+  0%,
+  100% {
+    transform: scaleX(0.6);
+  }
+  50% {
+    transform: scaleX(0.78);
+  }
+}
+@keyframes ds-ai-ghost {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+@keyframes ds-ai-dock-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes ds-ai-halo {
+  0% {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+}
+
+/* ─── the classes that wear them ──────────────────────────────────────────
+   Plain classes, not Tailwind utilities: the same shape .ds-tap-ring and
+   .animate-keyboard-in already have, and it keeps `max-h-NN`-style utilities
+   out of the AI view (spec §2, pin c). Each class carries the RESTING state as
+   ordinary declarations, so the element is legible before the first frame, in a
+   test with no animation, and under the reduced-motion clamp.
+
+   ⚠️ SCOPE. This is the MOTION AND LIGHT layer only — the room, the pulse, the
+   floor pool and the named animations. The chrome each stage draws (rail, bar,
+   log, step rows, answer card, dock, composer) arrives WITH its component, in
+   stages 2 and 4; putting it here would be a stylesheet nothing wears and
+   nothing measures, which is how two versions of a layout end up in one repo.
+   Everything below is keyed on `--w` (the device width, set by the stage) or on
+   the phase attributes, so none of it paints until the stage exists. */
+
+/* 1-6 · the room light. ONE animated wrapper — so ONE compositor layer
+   breathes — with three discs inside it that only cross-fade. The "light on the
+   wall" beside the stage is a static background-image, not a layer. */
+.ai-aura {
+  position: absolute;
+  inset: -8px -16px;
+  pointer-events: none;
+}
+.ai-aura-disc {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(var(--w) * 2.5);
+  height: calc(var(--w) * 2.8);
+  margin: calc(var(--w) * -1.4) 0 0 calc(var(--w) * -1.25);
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity var(--ai-dur-shift) ease;
+}
+.ai-aura-accent {
+  background: var(--ai-aura-accent);
+}
+.ai-aura-busy {
+  background: var(--ai-aura-busy);
+}
+.ai-aura-ready {
+  background: var(--ai-aura-ready);
+}
+[data-ai-phase='idle'] .ai-aura {
+  opacity: 0.46;
+  animation: ds-ai-calm var(--ai-dur-calm) ease-in-out infinite;
+}
+[data-ai-phase='thinking'] .ai-aura {
+  opacity: 0.6;
+  animation: ds-ai-breathe var(--ai-dur-breathe) ease-in-out infinite;
+}
+[data-ai-phase='acting'] .ai-aura {
+  opacity: 0.84;
+  animation: ds-ai-breathe-soft 2600ms ease-in-out infinite;
+}
+/* paused: amber, and perfectly STILL — the approval moment is literally calm. */
+[data-ai-phase='paused'] .ai-aura {
+  opacity: 0.85;
+}
+[data-ai-phase='done'] .ai-aura {
+  opacity: 0.66;
+}
+/* the bloom plays only when the phase went acting -> done during THIS mount, so
+   reopening a finished chat never celebrates it a second time. */
+[data-ai-phase='done'][data-ai-fresh] .ai-aura {
+  animation: ds-ai-bloom 1400ms var(--ai-ease) 1 both;
+}
+[data-ai-phase='idle'] .ai-aura-accent,
+[data-ai-phase='thinking'] .ai-aura-accent,
+[data-ai-phase='acting'] .ai-aura-accent {
+  opacity: 1;
+}
+[data-ai-phase='paused'] .ai-aura-busy {
+  opacity: 1;
+}
+[data-ai-phase='done'] .ai-aura-ready {
+  opacity: 1;
+}
+/* TROUBLE lights no disc at all: the room goes dim and neutral. Deliberately
+   NOT red — oxblood and --status-error-rgb are neighbours on the wheel, so a
+   red room reads as the brand rather than as a fault. */
+/* PREVIEW is unlit too: nothing here should promise a live iPhone. */
+[data-ai-preview] .ai-aura {
+  opacity: 0;
+  animation: none;
+}
+
+/* 7 · one action pulse per step: a ring exactly the bezel's size that leaves
+   it. One shot, re-keyed by the caller per `onStep` so it replays. */
+.ai-pulse {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--w);
+  height: calc(var(--w) * 2.0943);
+  margin: calc(var(--w) * -1.04715) 0 0 calc(var(--w) * -0.5);
+  border-radius: calc(var(--w) * 0.172);
+  pointer-events: none;
+  opacity: 0;
+  box-shadow:
+    0 0 0 2px rgb(var(--accent-hover-rgb) / 0.8),
+    0 0 36px 8px rgb(var(--accent-rgb) / 0.55);
+}
+.ai-pulse.is-firing {
+  animation: ds-ai-pulse var(--ai-dur-pulse) var(--ai-ease) 1 both;
+}
+
+/* the pool of light the room casts on the floor under the phone — the one
+   place --ai-light-rgb is painted, so the floor changes colour with the phase
+   without a single hue being written here. */
+.ai-floor {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + var(--w) * 1.03);
+  width: calc(var(--w) * 1.5);
+  height: calc(var(--w) * 0.16);
+  margin-left: calc(var(--w) * -0.75);
+  border-radius: 50%;
+  background: radial-gradient(
+    closest-side,
+    rgb(var(--ai-light-rgb) / 0.38),
+    rgb(var(--ai-light-rgb) / 0)
+  );
+  pointer-events: none;
+}
+
+/* 8 · the iPhone turns to face you, once, on the first Send. Keyed on "nothing
+   is mounted in the screen" (data-ai-rig="rest"), never on the phase: a phase
+   key would turn the device again on every idle stretch. */
+.ai-rig {
+  position: relative;
+  transform: none;
+  transition: transform var(--ai-dur-turn) var(--ai-ease);
+}
+[data-ai-rig='rest'] .ai-rig {
+  transform: perspective(1500px) rotateY(-17deg) rotateX(3deg) scale(0.95);
+}
+/* the ONLY will-change in the view, and only for the 800ms the turn lasts. */
+.ai-rig.is-turning {
+  will-change: transform;
+}
+
+/* 9 · a step row arriving. The stagger is opt-in per row (--i), so a streamed
+   step passes --i:0 and only a first plan reveal or a restore cascades. */
+.ai-step-in {
+  animation: ds-ai-step-in var(--ai-dur-step) var(--ai-ease) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+/* 10-11 · the tense shift when the running row lands, and the tick that lands
+   with it — the view's ONE overshoot. */
+.ai-tense-out {
+  animation: ds-ai-tense-out 240ms var(--ai-ease) both;
+}
+.ai-tense-in {
+  display: inline-block;
+  animation: ds-ai-tense-in var(--ai-dur-settle) var(--ai-ease) 70ms both;
+}
+.ai-tick {
+  animation: ds-ai-tick var(--ai-dur-settle) var(--ai-ease-spring) 60ms both;
+}
+
+/* 12 · the running row: an arc that turns, a wash that sweeps it, a segment
+   that breathes. */
+.ai-spin {
+  animation: ds-ai-spin 1100ms linear infinite;
+}
+.ai-sweep {
+  transform: translateX(-100%);
+  animation: ds-ai-sweep 2600ms var(--ai-ease) infinite;
+}
+.ai-fill {
+  transform-origin: left;
+  transform: scaleX(0.6);
+  animation: ds-ai-fill 2600ms ease-in-out infinite;
+}
+
+/* 13 · the beat shared by the orbit core, the LIVE pip, the Running pip and
+   the rail's running dot — ONE rhythm, so they read as one system. */
+.ai-beat {
+  animation: ds-ai-beat 1400ms ease-in-out infinite;
+}
+.ai-beat-slow {
+  animation: ds-ai-beat 1600ms ease-in-out infinite;
+}
+/* …and it stops while a decision is pending: with an approval on screen,
+   nothing in the view moves. */
+[data-ai-phase='paused'] .ai-beat,
+[data-ai-phase='paused'] .ai-beat-slow {
+  animation: none;
+}
+
+/* 14 · the plan skeleton, while thinking with no plan yet. */
+.ai-ghost-bar {
+  animation: ds-ai-ghost 1800ms ease-in-out infinite;
+}
+
+/* 15 · the answer card, and the accent hairline that draws across its head. */
+.ai-rise {
+  animation: ds-ai-rise var(--ai-dur-settle) var(--ai-ease) 120ms both;
+}
+.ai-draw {
+  background: var(--ai-hairline-accent);
+  transform-origin: left;
+  animation: ds-ai-draw 700ms var(--ai-ease) 420ms both;
+}
+
+/* 16 · the approval dock rises once and its halo flashes EXACTLY twice, then
+   rests for good — an alarm that keeps flashing stops being read. */
+.ai-dock-in {
+  animation: ds-ai-dock-in var(--ai-dur-step) var(--ai-ease) both;
+}
+.ai-halo {
+  opacity: 0;
+  animation: ds-ai-halo 1600ms ease-out 200ms 2;
+}
+
+/* 17 · the start-up strip's active beat. */
+.ai-boot-ring {
+  animation: ds-ai-spin 1100ms linear infinite;
+}
+
+/* 18 · hover and press. Nothing here is an ancestor of the composer: its
+   autogrow forces a reflow per keystroke, and an animating ancestor would
+   repaint the whole column on every character. */
+.ai-lift-hover {
+  transition:
+    transform 200ms var(--ai-ease),
+    box-shadow 200ms var(--ai-ease);
+}
+.ai-lift-hover:hover {
+  transform: translateY(-1px);
+}
+.ai-shot-hover {
+  transition: transform 200ms var(--ai-ease);
+}
+.ai-shot-hover:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+
+/* ─── reduced motion: the stills the clamp would get WRONG ────────────────
+   The global clamp at the top of this file ends every animation on its LAST
+   frame. For a loop that rests on its still, and for a one-shot that ends where
+   it belongs, that is exactly right — the still is not a second set of rules to
+   keep in step, it is the same rule read at a different time. Four pieces end
+   somewhere wrong: a wash parked as a bright band at the row's right edge, a
+   pulse ring frozen at full spread, a halo frozen mid-flash, and an outgoing
+   caption sitting on top of the words that replaced it. They are REMOVED, not
+   frozen. (The spec's fifth such piece is the mockup's tap ring on its drawn
+   page; the app's stand-in is a still image and has none.)
+   `display: none` rather than `opacity: 0` so nothing is left to hit-test. */
+@media (prefers-reduced-motion: reduce) {
+  .ai-sweep,
+  .ai-pulse,
+  .ai-halo,
+  .ai-tense-out {
+    display: none !important;
+  }
+  /* and the turn's compositor promotion goes with the turn. */
+  .ai-rig.is-turning {
+    will-change: auto;
+  }
+}
+
 /* ─── Profiles list-view responsive columns (founder 2026-06-16) ──────────
    The list/table must reflow to its OWN available width, not the viewport.
    Viewport breakpoints (md:/lg:) misfire because the table area = viewport

@@ -213,7 +213,10 @@ describe('sceneFromSearch — the only door into a scene, marketing or audit', (
     expect(ALL_SCENES.slice(0, MARKETING_SCENES.length)).toEqual([...MARKETING_SCENES]);
     expect(ALL_SCENES.slice(MARKETING_SCENES.length)).toEqual([...AUDIT_SCENES]);
     expect(new Set(ALL_SCENES).size).toBe(ALL_SCENES.length);
-    expect(AUDIT_SCENES).toHaveLength(10);
+    // 10 views + the AI view's seven extra STATES (spec §8): the one view whose
+    // states cannot be reached from fixture data alone, and therefore the one
+    // the gates had only ever measured empty.
+    expect(AUDIT_SCENES).toHaveLength(17);
     for (const name of ALL_SCENES) {
       expect(isAuditScene(name)).toBe(name.startsWith('audit-'));
       const size = sceneSize(name);
@@ -567,6 +570,32 @@ describe('every audit scene — the REAL view, loaded, under the marketing priva
       }
     });
   }
+
+  it('audit-agent-chat-nokey keeps EXACTLY ONE live region, and it is the API-key gate', async () => {
+    // The uniqueness trap the constraints map records: agent-chat-save-recipe
+    // does `screen.getByRole('status')` with NO name in the idle, no-key state
+    // and expects `data-component="ai-api-key-gate"`. getByRole throws on two
+    // matches, so ANY second role="status" reachable in that state — a status
+    // pill, a live-pane placeholder, a composer caption — breaks a test in
+    // another file. This scene renders exactly that state in a browser, which
+    // is the only place a second one could appear without a unit test noticing.
+    const restore = freezeHarnessClock();
+    try {
+      const { container } = renderAudit('audit-agent-chat-nokey');
+      const stage = container.querySelector<HTMLElement>('[data-scene="audit-agent-chat-nokey"]');
+      expect(stage).not.toBeNull();
+      if (stage === null) return;
+      await waitFor(() =>
+        expect(stage.querySelector('[data-component="ai-api-key-gate"]')).not.toBeNull(),
+      );
+      const statuses = Array.from(stage.querySelectorAll('[role="status"]'));
+      expect(
+        statuses.map((el) => el.getAttribute('data-component') ?? el.tagName.toLowerCase()),
+      ).toEqual(['ai-api-key-gate']);
+    } finally {
+      restore();
+    }
+  });
 
   it('the Tauri stub is on the window only while a stubbed audit scene is mounted', async () => {
     // Before: nothing. A marketing scene never installs it.

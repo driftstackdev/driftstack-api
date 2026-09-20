@@ -33,7 +33,7 @@ import {
   type UseAgentChatResult,
 } from './use-agent-chat';
 
-interface AgentChatContextValue {
+export interface AgentChatContextValue {
   chat: UseAgentChatResult;
   /**
    * Publish the session options the view RESOLVES rather than the customer
@@ -64,9 +64,40 @@ interface AgentChatContextValue {
   setProfileId: (profileId: string) => void;
   /** createdAt per chat id; sticky across view switches for the same reason. */
   createdAtRef: MutableRefObject<Record<string, number>>;
+  /**
+   * GALLERY SEAM (spec §8) — what the live view's screen shows INSTEAD of
+   * fetching a stream token. Undefined everywhere in the app; a visual-harness
+   * scene sets it so the text-quality and privacy gates can measure the running
+   * / approval / done states, which otherwise need a real iPhone on a real
+   * fleet to reach.
+   *
+   * ⛔ It is an IMAGE, not markup with text in it. Text drawn inside the phone
+   * would be measured by the gate as the app's own copy — its 9px floor, its
+   * contrast rule, its truncation rule — and a stand-in web page legitimately
+   * has small grey type on it. `aria-hidden` does not exempt size.
+   */
+  standIn?: ReactNode;
+  /**
+   * GALLERY SEAM (spec §8) — the image every `CaptureThumbnail` in the view
+   * shows INSTEAD of fetching the capture it names. Undefined in the app.
+   *
+   * It is one image for the whole view rather than a lookup by capture id
+   * because a scene has one screenshot in it; a map would be a second thing to
+   * keep in step with the fixture for no state the gates can reach.
+   */
+  captureSrc?: string;
 }
 
 const AgentChatContext = createContext<AgentChatContextValue | null>(null);
+
+/** The override's DEFINED entries only — see the `value` prop below. A plain
+ *  spread of a `Partial` copies its explicit `undefined`s over real values. */
+function definedOnly(
+  override: Partial<AgentChatContextValue> | undefined,
+): Partial<AgentChatContextValue> {
+  if (override === undefined) return {};
+  return Object.fromEntries(Object.entries(override).filter(([, v]) => v !== undefined));
+}
 
 /** Stable comparison for the small, flat options record. */
 function sameOptions(a: UseAgentChatOpts, b: UseAgentChatOpts): boolean {
@@ -78,7 +109,27 @@ function sameOptions(a: UseAgentChatOpts, b: UseAgentChatOpts): boolean {
   );
 }
 
-export function AgentChatProvider({ children }: { children: ReactNode }): JSX.Element {
+export function AgentChatProvider({
+  children,
+  value: override,
+}: {
+  children: ReactNode;
+  /**
+   * GALLERY SEAM (spec §8) — fields to publish INSTEAD of the ones this
+   * provider computes, so a fixture `UseAgentChatResult` can drive the REAL
+   * `AgentChatView` through its real context. Undefined in the app: `App.tsx`
+   * mounts this with children only, and nothing in `src/` outside the visual
+   * harness passes it.
+   *
+   * ⛔ It overrides, it does not replace: the hook below still runs, so a scene
+   * that overrides only `chat` keeps a real `setChatOptions` / `setModel` /
+   * `createdAtRef` and the view's effects behave as they do in the app. And
+   * only DEFINED keys are taken — `{ chat: undefined }` would otherwise publish
+   * a context whose `chat` is missing, and every read in the view would throw
+   * one render later, a long way from the cause.
+   */
+  value?: Partial<AgentChatContextValue>;
+}): JSX.Element {
   const [resolved, setResolved] = useState<UseAgentChatOpts>({});
   // ⛔ FROM THE SHARED CONSTANT, NOT A LITERAL. The app sends its pick on every
   // session it creates, so a literal here overrode the server's default for every
@@ -108,8 +159,9 @@ export function AgentChatProvider({ children }: { children: ReactNode }): JSX.El
       profileId,
       setProfileId,
       createdAtRef,
+      ...definedOnly(override),
     }),
-    [chat, chatId, model, profileId],
+    [chat, chatId, model, profileId, override],
   );
   return <AgentChatContext.Provider value={value}>{children}</AgentChatContext.Provider>;
 }

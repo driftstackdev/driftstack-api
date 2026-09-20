@@ -11,104 +11,68 @@
 // now execute for real on a fleet device (ControlPlaneAgentExecutor over the
 // fleet control plane). The banner reflects /version `agent_execution`: 'live'
 // when the fleet path is wired (prod), 'simulated' only on a stub deployment.
+//
+// ─── what lives where (stage 0 of the AI-view rebuild, spec §9) ───
+//
+// This file used to be ~2,500 lines: the state wiring AND every piece of the
+// picture. The pieces now live in `views/agent-chat/`, one per thing the
+// customer looks at — `ChatRail`, `MissionBar`, `Stage` (over the memo'd
+// `LiveAutomationPanel`), `Turn`, `PlanTimeline`, `AnswerCard`, `ApprovalDock`,
+// `Composer`, `IdleHero`, plus `icons`, `notices` and the pure `mission-phase`.
+// The split moved NO DOM: stage 0's whole proof is that the rendered pixels and
+// the whole suite are unchanged.
+//
+// What stayed here is the wiring that has to be in one place: the chat session
+// from the provider, the egress-proxy resolution, the saved-chat list, the
+// save-as-task dialog, and the effects that keep those in step. And the
+// re-exports below, so nothing that imported `describeResult`,
+// `summariseChatTurn` or a notice constant FROM THIS FILE had to change.
 
-import { Fragment, memo, useCallback, useEffect, useRef, useState } from 'react';
-import { CaptureThumbnail, captureIdOf } from '../components/CaptureThumbnail';
-import {
-  type AgentIntent,
-  type AgentIntentResult,
-  type AgentSession,
-  type AgentMessageResponse,
-  type AgentUsage,
-  type LiveKitInfo,
-} from '@driftstack/sdk';
-import { preferTypedEndReason } from '../lib/session-end-reason';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { type AgentSession } from '@driftstack/sdk';
 import { describeAgentSessionState } from '../lib/session-liveness';
-import type { SessionStateDescriptor } from '../lib/session-liveness';
 import { useSettings } from '../lib/SettingsContext';
 import { useConnectionStatus } from '../lib/use-connection-status';
-import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { useConfirm } from '../components/ConfirmProvider';
 import { useFocusTrap } from '../lib/use-focus-trap';
 import { humanizeError } from '../lib/humanize-error';
 import { useToasts } from '../lib/toasts';
-import { type ChatModel, type ChatTurn, type InterruptedTurn } from '../lib/use-agent-chat';
-import { CHAT_MODELS, NEEDS_OWN_KEY_SUFFIX, modelNeedsOwnKey } from '../lib/chat-models';
+import { modelNeedsOwnKey } from '../lib/chat-models';
 import { DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
 import { useAgentChatSession } from '../lib/AgentChatProvider';
-import { CONNECT_API_KEY_IN_SETTINGS } from '../lib/proxy-check-copy';
-
-/** (l) #8 — the reattach notice: the composer caption, the notice row and the
- *  disabled Send's title all say the same thing. */
-export const REATTACHING_NOTICE = 'Reattaching to the previous session…';
-/**
- * P6 — what the composer says between Stop and the stopped turn actually
- * finishing. Stop frees the composer; the task itself keeps running, and a send
- * during that window is refused. Naming the state is the difference between a
- * customer who waits a moment and a customer who gets an error they did nothing
- * to deserve. Customer-facing copy: it names the TASK, never any part of how
- * this is implemented.
- */
-export const STILL_FINISHING_NOTICE = 'Still finishing the previous task…';
-/**
- * B2 — between pressing Stop and the server ending the turn. The steps that ran
- * stay on screen; the composer comes back the moment the turn's own response
- * says it is over (or, bounded, when that cannot be confirmed).
- */
-export const STOPPING_NOTICE = 'Stopping…';
-/** B2 — offered beside the still-finishing notice when a Stop could not be confirmed. */
-export const STOP_AGAIN_LABEL = 'Try stopping again';
-/** (l) #8 — appended when Enter was pressed during the reattach. */
-export const SEND_HELD_SUFFIX = 'Your message is kept; Send unlocks when it settles.';
-import { DEFAULT_ASSISTANT_TEMPLATES } from '../lib/assistant-templates';
 import {
   loadChats,
   upsertChat,
   deleteChat,
   deriveChatTitle,
-  chatTurnCount,
-  summariseTurn,
   type StoredChat,
-  type TurnSummary,
 } from '../lib/chat-history';
-import { RelativeTime } from '../components/RelativeTime';
 import { listProxies, type ProxyConfig } from '../lib/proxies';
 import { listBindings } from '../lib/profile-bindings';
 import { ensureAccountProxyRow } from '../lib/proxy-server-test';
+import { ApprovalDock } from './agent-chat/ApprovalDock';
+import { ChatRail } from './agent-chat/ChatRail';
+import { Composer, growComposerToFit } from './agent-chat/Composer';
+import { IdleHero } from './agent-chat/IdleHero';
+import { MissionBar } from './agent-chat/MissionBar';
+import { REATTACHING_NOTICE } from './agent-chat/notices';
+import { Stage } from './agent-chat/Stage';
+import { LiveTurnRow, RestoredHistoryDivider, TurnRow, TypingRow } from './agent-chat/Turn';
 
-/** #31 — map a usage model id (e.g. `claude-opus-4-8`) to its human label
- *  ("Opus 4.8") for the per-turn usage badge; falls back to the raw id for a
- *  model not in the picker (older transcript / server-chosen model). */
-/**
- * B2 — one history-rail line for a stored turn, with the stopped turn answered
- * HERE before the shared summariser sees it.
- *
- * `summariseTurn` switches over the response kinds it knows and has no arm for
- * `stopped`, so for a stopped turn it returns nothing at runtime and the rail's
- * `summary.role` throws — taking the chat view down the moment a saved chat that
- * holds a Stop is expanded. Answering it first keeps the rail up whatever that
- * switch knows. Exported for its test.
- */
-export function summariseChatTurn(turn: ChatTurn): TurnSummary {
-  const r = turn.role === 'agent' && turn.interrupted === undefined ? turn.response : undefined;
-  if (r?.kind === 'stopped') {
-    const n = r.results.length;
-    const ran = n === 0 ? 'nothing ran' : `${String(n)} step${n === 1 ? '' : 's'} ran`;
-    const flat = r.notice.replace(/\s+/g, ' ').trim();
-    const notice = flat.length > 60 ? `${flat.slice(0, 60)}\u2026` : flat;
-    return {
-      role: 'agent',
-      headline: `stopped \u2014 ${ran}: ${notice}`,
-      intentCount: n,
-      ok: false,
-    };
-  }
-  return summariseTurn(turn);
-}
-
-function modelLabel(id: string): string {
-  return CHAT_MODELS.find((m) => m.id === id)?.label ?? id;
-}
+// ─── re-exports: the view's public surface is unchanged by the split ───
+//
+// `describeResult` and `summariseChatTurn` have unit tests that import them from
+// HERE, and the notice constants are read by the reattach test the same way.
+// Their bodies moved; the import path did not.
+export { describeResult } from './agent-chat/PlanTimeline';
+export { summariseChatTurn } from './agent-chat/chat-turn-summary';
+export {
+  REATTACHING_NOTICE,
+  SEND_HELD_SUFFIX,
+  STILL_FINISHING_NOTICE,
+  STOPPING_NOTICE,
+  STOP_AGAIN_LABEL,
+} from './agent-chat/notices';
 
 // ─── egress: resolve a profile's bound proxy → server proxy_id ─────
 //
@@ -245,23 +209,6 @@ function formatUsd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-/* Written out in full rather than composed, because Tailwind's scanner only
-   sees class names that appear literally in the source. */
-const STATUS_PILL_TONE: Record<SessionStateDescriptor['tone'], string> = {
-  running: 'bg-accent/15 text-accent-text',
-  starting: 'bg-status-busy/15 text-status-busy',
-  stopping: 'bg-status-idle/15 text-status-idle',
-  ready: 'bg-status-ready/15 text-status-ready',
-  error: 'bg-status-error/15 text-status-error',
-};
-const STATUS_DOT_TONE: Record<SessionStateDescriptor['tone'], string> = {
-  running: 'bg-accent',
-  starting: 'bg-status-busy',
-  stopping: 'bg-status-idle',
-  ready: 'bg-status-ready',
-  error: 'bg-status-error',
-};
-
 export function AgentChatView({
   initialProfileId,
   onGoToSettings,
@@ -344,6 +291,11 @@ export function AgentChatView({
     profileId,
     setProfileId,
     createdAtRef,
+    // GALLERY SEAM (spec §8): both undefined in the app — only a visual-harness
+    // scene ever sets them, so the gates can measure this view in states that
+    // otherwise need a live device on the other end of a stream.
+    standIn,
+    captureSrc,
   } = useAgentChatSession();
   useEffect(() => {
     setChatOptions(proxyId !== undefined ? { proxyId } : {});
@@ -402,6 +354,7 @@ export function AgentChatView({
   // as a slide-over so a narrow window can still open it (it used to vanish with
   // no affordance). Ignored at lg+ where the pane is a permanent column.
   const [liveOpen, setLiveOpen] = useState(false);
+  const toggleLiveView = useCallback(() => setLiveOpen((v) => !v), []);
   // Perf — stable onClose so the memoized LiveAutomationPanel (which owns a live
   // WebRTC video subtree) doesn't reconcile on every composer keystroke. This
   // component owns the composer `draft` state and re-renders ~10+/sec while the
@@ -733,8 +686,7 @@ export function AgentChatView({
       el.focus();
       const end = el.value.length;
       el.setSelectionRange(end, end);
-      el.style.height = 'auto';
-      el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`;
+      growComposerToFit(el);
     });
   }
 
@@ -799,136 +751,26 @@ export function AgentChatView({
         className="flex h-full min-w-0 flex-1 flex-col"
         data-component="ai-automation-chat-column"
       >
-        {/* Header — #139: flex-wrap + min-w-0 so the dense control cluster (live
-            toggle, budget, profile, model, save, new chat) WRAPS to a second row
-            at narrow widths instead of pushing the rightmost buttons off the
-            panel edge (founder: "buttons cut off / run outside the panel"). */}
-        <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-surface-divider px-4 py-2.5">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded bg-accent-subtle text-accent">
-              <IconSparkle />
-            </span>
-            <div className="flex flex-col">
-              <span className="text-sm font-medium text-ink-primary">AI Browser Automation</span>
-              <span className="text-2xs text-ink-muted">natural-language automation</span>
-            </div>
-            {/* V-1611 — this pill reported API-KEY PRESENCE and called it "AI
-                ready": a claim about CONFIGURATION worn as a claim about STATE.
-                A customer with a key and no session, and one with a session
-                running right now, saw the identical pill. The freshest session
-                we hold wins — the poll's copy if it has answered, else the one
-                the chat hook created. */}
-            <span
-              data-component="agent-status-pill"
-              className={`ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-medium ${STATUS_PILL_TONE[sessionState.tone]}`}
-              title={sessionState.title}
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_TONE[sessionState.tone]} ${
-                  sessionState.tone === 'running' ? 'animate-pulse' : ''
-                }`}
-              />
-              {sessionState.label}
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {/* Below lg the live-view pane is hidden; this button reveals it as a
-                slide-over (hidden at lg+, where the pane is always inline). */}
-            <button
-              type="button"
-              aria-label="Toggle live view"
-              onClick={() => setLiveOpen((v) => !v)}
-              className="rounded border border-surface-divider px-2 py-1 text-2xs font-medium text-ink-secondary hover:text-ink-primary lg:hidden"
-            >
-              {liveOpen ? 'Hide live' : 'Live view'}
-            </button>
-            {chat.session !== null && (
-              <BudgetMeter
-                remaining={chat.session.token_budget_remaining}
-                total={chat.session.token_budget_total}
-              />
-            )}
-            <select
-              aria-label="Profile"
-              value={profileId}
-              // Lock once started OR while the FIRST send is in flight: during the
-              // first send `started` is still false (turns.length===0 until the
-              // reply lands), so without `|| chat.sending` the customer could change
-              // the profile after Send — the session is created with the OLD value
-              // while the header shows the new one and the persist writes the new
-              // one, desyncing saved chat metadata from the actual session (audit).
-              disabled={started || chat.sending}
-              onChange={(e) => setProfileId(e.target.value)}
-              className="max-w-[10rem] truncate rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary disabled:opacity-60"
-              title={
-                started || chat.sending
-                  ? 'Profile is locked for this chat — start a new chat to change it'
-                  : 'Which profile the agent works on. Temporary = a throwaway session that saves nothing.'
-              }
-            >
-              <option value="">Temporary profile (saves nothing)</option>
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Model"
-              value={model}
-              // Same first-send race as the Profile select above — lock on
-              // `started || chat.sending` so the model can't change after Send
-              // creates the session with the prior value.
-              disabled={started || chat.sending}
-              onChange={(e) => setModel(e.target.value as ChatModel)}
-              className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs text-ink-secondary disabled:opacity-60"
-              title={
-                started || chat.sending
-                  ? 'Model is locked for the current chat — start a new chat to change it'
-                  : hasOwnKey === false
-                    ? 'Some models run only on your own Anthropic key. Add one in Settings → AI & billing.'
-                    : 'Model'
-              }
-            >
-              {/* An own-key-only model stays IN the list when the account has no
-                  key, only disabled: a reopened chat stored on it must still match
-                  an option, or the select would silently show a different model
-                  from the one the chat ran on. */}
-              {CHAT_MODELS.map((m) => {
-                const needsKey = hasOwnKey === false && modelNeedsOwnKey(m.id);
-                return (
-                  <option key={m.id} value={m.id} disabled={needsKey}>
-                    {needsKey ? `${m.label} ${NEEDS_OWN_KEY_SUFFIX}` : m.label}
-                  </option>
-                );
-              })}
-            </select>
-            <button
-              type="button"
-              onClick={() => {
-                setSaveError(null);
-                setSaveOpen(true);
-              }}
-              disabled={!canSaveRecipe || chat.sending}
-              className="btn-secondary px-2 py-1 text-xs disabled:opacity-50"
-              title={
-                canSaveRecipe
-                  ? 'Save this chat as a task you can run again later'
-                  : 'Run at least one task first, then save it to replay later'
-              }
-            >
-              Save as task
-            </button>
-            <button
-              type="button"
-              onClick={handleNewChat}
-              disabled={!started || chat.sending}
-              className="btn-secondary px-2 py-1 text-xs disabled:opacity-50"
-            >
-              New chat
-            </button>
-          </div>
-        </header>
+        <MissionBar
+          sessionState={sessionState}
+          session={chat.session}
+          liveOpen={liveOpen}
+          onToggleLiveView={toggleLiveView}
+          profileId={profileId}
+          profiles={profiles}
+          onProfileChange={setProfileId}
+          model={model}
+          onModelChange={setModel}
+          hasOwnKey={hasOwnKey}
+          started={started}
+          sending={chat.sending}
+          canSaveRecipe={canSaveRecipe}
+          onSaveAsTask={() => {
+            setSaveError(null);
+            setSaveOpen(true);
+          }}
+          onNewChat={handleNewChat}
+        />
 
         {/* Honest execution-mode banner — auto-updates with /version
             agent_execution (#139): shows the live indicator when AI-automation
@@ -980,7 +822,7 @@ export function AgentChatView({
         {/* Transcript */}
         <div className="flex-1 overflow-auto px-4 py-4">
           {!started ? (
-            <EmptyState onPick={handlePickTemplate} />
+            <IdleHero onPick={handlePickTemplate} />
           ) : (
             <ol
               className="mx-auto flex max-w-3xl flex-col gap-3"
@@ -1006,6 +848,7 @@ export function AgentChatView({
                     sessionId={chat.session?.id ?? chat.restoredSessionId ?? null}
                     baseUrl={settings.baseUrl}
                     apiKey={settings.apiKey}
+                    captureSrc={captureSrc}
                   />
                   {/* Honest history boundary: the turns above were restored from
                       saved history and are NOT in a live agent session. Continuing
@@ -1028,70 +871,17 @@ export function AgentChatView({
                 // Each source is independently optional: a server that sends no
                 // progress falls through to exactly the old spinner.
                 (chat.livePlan !== null || chat.liveSteps.length > 0 || chat.livePhase !== null ? (
-                  // Live progress: render each step as it streams in, so the
-                  // customer watches the agent work instead of waiting on a lone
-                  // spinner until everything is done. The settled turn's full
-                  // response replaces this the moment the turn resolves.
-                  <li className="flex justify-start" aria-live="polite">
-                    <div className="max-w-[85%] rounded-lg rounded-bl-sm border border-surface-divider bg-surface-raised px-3 py-2">
-                      <div className="flex flex-col gap-1.5">
-                        <p className="section-label flex items-center gap-1.5">
-                          {chat.livePhase ?? 'Working…'}
-                          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-status-busy" />
-                        </p>
-                        {/* The answer, the moment the server publishes it —
-                            ahead of the terminal body, which is the only reason
-                            it is streamed. The settled turn renders the same
-                            text a beat later, in the same position. */}
-                        {chat.liveAnswer !== null && (
-                          <p
-                            className="whitespace-pre-wrap text-sm text-ink-primary"
-                            data-testid="live-answer"
-                          >
-                            {chat.liveAnswer}
-                          </p>
-                        )}
-                        {/* Completed steps render in full (screenshots, links,
-                            failures). The rest of the plan sits below them,
-                            greyed, so the customer can see how much is left. */}
-                        <ol className="flex flex-col gap-1">
-                          {chat.liveSteps.map((r, i) => (
-                            <PlanStep
-                              key={i}
-                              result={r}
-                              denied={false}
-                              // Live steps are the in-flight turn — a confirmation there is
-                              // still awaiting a decision, never a resolved approval.
-                              approved={false}
-                              sessionId={chat.session?.id ?? null}
-                              baseUrl={settings.baseUrl}
-                              apiKey={settings.apiKey}
-                            />
-                          ))}
-                        </ol>
-                        {chat.livePlan !== null && (
-                          <ol className="flex flex-col gap-1" data-testid="live-plan">
-                            {chat.livePlan.labels.map((label, i) =>
-                              i < chat.liveSteps.length ? null : (
-                                <li
-                                  key={i}
-                                  data-current={i === chat.liveStepIndex ? 'true' : undefined}
-                                  className={
-                                    i === chat.liveStepIndex
-                                      ? 'text-xs text-ink-primary'
-                                      : 'text-xs text-ink-muted'
-                                  }
-                                >
-                                  {i === chat.liveStepIndex ? '▶ ' : '· '}
-                                  {label}
-                                </li>
-                              ),
-                            )}
-                          </ol>
-                        )}
-                      </div>
-                    </div>
-                  </li>
+                  <LiveTurnRow
+                    livePhase={chat.livePhase}
+                    liveAnswer={chat.liveAnswer}
+                    liveSteps={chat.liveSteps}
+                    livePlan={chat.livePlan}
+                    liveStepIndex={chat.liveStepIndex}
+                    sessionId={chat.session?.id ?? null}
+                    baseUrl={settings.baseUrl}
+                    apiKey={settings.apiKey}
+                    captureSrc={captureSrc}
+                  />
                 ) : (
                   <TypingRow
                     label={
@@ -1111,53 +901,23 @@ export function AgentChatView({
 
         {/* Consequential-action confirmation gate */}
         {chat.pendingConfirmation !== null && (
-          // a11y: announce the "confirm before continuing" gate — a screen-reader user on
-          // the composer must hear that the agent is waiting to run a consequential action
-          // (audit 2026-07-09), or they can't approve/deny something they never knew about.
-          <div role="alert" className="border-t border-status-busy/40 bg-status-busy/10 px-4 py-3">
-            <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-ink-primary">Confirm before continuing</p>
-                <p className="text-xs text-ink-secondary [overflow-wrap:anywhere]">
-                  The agent wants to perform a {categoryLabel(chat.pendingConfirmation.category)}:{' '}
-                  <span className="font-medium text-ink-primary">
-                    “{chat.pendingConfirmation.matchedText}”
-                  </span>
-                </p>
-                <p className="mt-0.5 text-2xs text-ink-muted">
-                  Approve to let this step run, or Deny to stop the task here.
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    chat.deny();
-                    // Deny ends the task (the gated step won't run and nothing after it
-                    // continues); say so instead of leaving the user waiting on a
-                    // continuation that never comes (audit 2026-07-08).
-                    toasts.push({
-                      title: 'Task stopped',
-                      body: 'You denied a step — the task won’t continue. Send a new instruction to keep going.',
-                      tone: 'info',
-                    });
-                  }}
-                  disabled={chat.sending}
-                  className="btn-secondary px-3 py-1 text-xs disabled:opacity-50"
-                >
-                  Deny
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void chat.approve()}
-                  disabled={chat.sending}
-                  className="btn-primary px-3 py-1 text-xs disabled:opacity-50"
-                >
-                  Approve
-                </button>
-              </div>
-            </div>
-          </div>
+          <ApprovalDock
+            category={chat.pendingConfirmation.category}
+            matchedText={chat.pendingConfirmation.matchedText}
+            sending={chat.sending}
+            onDeny={() => {
+              chat.deny();
+              // Deny ends the task (the gated step won't run and nothing after it
+              // continues); say so instead of leaving the user waiting on a
+              // continuation that never comes (audit 2026-07-08).
+              toasts.push({
+                title: 'Task stopped',
+                body: 'You denied a step — the task won’t continue. Send a new instruction to keep going.',
+                tone: 'info',
+              });
+            }}
+            onApprove={() => void chat.approve()}
+          />
         )}
 
         {/* Error */}
@@ -1237,150 +997,18 @@ export function AgentChatView({
         )}
 
         {/* Composer */}
-        <div className="border-t border-surface-divider px-4 py-3">
-          <div className="mx-auto flex max-w-3xl items-end gap-2">
-            <textarea
-              ref={composerRef}
-              aria-label="Message Driftstack AI"
-              rows={COMPOSER_ROWS}
-              value={draft}
-              placeholder="Describe a task in plain English — e.g. “Go to example.com, accept the cookie banner, then search for ‘pricing’ and screenshot the result.”  ⏎ to send · ⇧⏎ for a new line"
-              onChange={(e) => {
-                setDraft(e.target.value);
-                // #139 — LLM-composer feel: grow with the content up to a cap.
-                e.target.style.height = 'auto';
-                e.target.style.height = `${Math.min(e.target.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`;
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  submit();
-                }
-              }}
-              className="form-input max-h-[420px] min-h-[5.5rem] flex-1 resize-none text-sm leading-relaxed"
-            />
-            {chat.sending ? (
-              <button
-                type="button"
-                onClick={() => {
-                  // B2 — Stop reaches the server: the task stops, the steps that
-                  // ran stay in the chat, and the composer returns when the
-                  // server says the turn is over. No toast — the button and the
-                  // caption below say "Stopping…" where the customer is looking.
-                  chat.cancel();
-                }}
-                // Pressing it again changes nothing, so it does not pretend it could.
-                disabled={chat.stopping === true}
-                title={chat.stopping === true ? STOPPING_NOTICE : 'Stop this task'}
-                className="shrink-0 rounded border border-surface-divider px-3 py-2 text-sm hover:bg-surface-elevated disabled:opacity-50"
-              >
-                {chat.stopping === true ? STOPPING_NOTICE : 'Stop'}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={submit}
-                disabled={
-                  draft.trim().length === 0 ||
-                  !aiReady ||
-                  chat.adopting ||
-                  // P6 — the stopped turn is still running, so this send would be
-                  // refused. Holding the button is the honest state; offering it
-                  // and failing is what produced the 409s.
-                  chat.stoppedTurnStillRunning ||
-                  proxyState.kind === 'pending' ||
-                  proxyState.kind === 'blocked'
-                }
-                title={
-                  !aiReady
-                    ? `${CONNECT_API_KEY_IN_SETTINGS} first`
-                    : chat.adopting
-                      ? (chat.adoptError ?? REATTACHING_NOTICE)
-                      : chat.stoppedTurnStillRunning
-                        ? STILL_FINISHING_NOTICE
-                        : proxyState.kind === 'pending'
-                          ? 'Checking this profile’s proxy…'
-                          : proxyState.kind === 'blocked'
-                            ? proxyState.reason
-                            : undefined
-                }
-                className="btn-primary px-3 py-2 text-sm disabled:opacity-50"
-              >
-                Send
-              </button>
-            )}
-          </div>
-          <p className="mx-auto mt-1 flex max-w-3xl items-center gap-2 text-2xs text-ink-muted">
-            {chat.sending && chat.stopping === true ? (
-              <span role="status" data-component="chat-stopping-notice">
-                {STOPPING_NOTICE}
-              </span>
-            ) : chat.stoppedTurnStillRunning ? (
-              // P6 — said in the composer, not only in a hover title. The customer
-              // who pressed Stop is looking right here when they decide whether to
-              // type the next thing.
-              <span
-                role="status"
-                data-component="chat-still-finishing-notice"
-                className="flex flex-wrap items-center gap-2"
-              >
-                <span>{STILL_FINISHING_NOTICE}</span>
-                {/* B2 — a Stop that could not be confirmed is not the last chance
-                    to stop the agent: the customer can ask again from here. */}
-                {chat.stopAgain !== undefined && (
-                  <button
-                    type="button"
-                    onClick={chat.stopAgain}
-                    disabled={chat.stopping === true}
-                    data-component="chat-stop-again"
-                    className="btn-secondary px-2 py-0.5 text-2xs disabled:opacity-50"
-                  >
-                    {chat.stopping === true ? STOPPING_NOTICE : STOP_AGAIN_LABEL}
-                  </button>
-                )}
-              </span>
-            ) : aiReady && chat.adopting ? (
-              // (l) #8 / #12 — the held send says why, here, not only in a hover
-              // title; a reattach that could not be answered offers the retry
-              // (adopt() again on the same session) instead of a dead end.
-              <span
-                role="status"
-                data-component="chat-adopt-notice"
-                data-held={sendHeldByAdopt ? 'true' : 'false'}
-                className="flex flex-wrap items-center gap-2"
-              >
-                <span>
-                  {chat.adoptError ?? REATTACHING_NOTICE}
-                  {sendHeldByAdopt && ` ${SEND_HELD_SUFFIX}`}
-                </span>
-                {chat.adoptError !== null && (
-                  <button
-                    type="button"
-                    onClick={retryAdopt}
-                    className="btn-secondary px-2 py-0.5 text-2xs"
-                  >
-                    Try again
-                  </button>
-                )}
-              </span>
-            ) : aiReady ? (
-              'Enter to send · Shift+Enter for a new line'
-            ) : (
-              <>
-                <span>Not connected — add your API key in Settings to run automations.</span>
-                {onGoToSettings !== undefined && (
-                  <button
-                    type="button"
-                    onClick={onGoToSettings}
-                    className="btn-secondary px-2 py-0.5 text-2xs"
-                  >
-                    Open Settings
-                  </button>
-                )}
-              </>
-            )}
-          </p>
-        </div>
+        <Composer
+          chat={chat}
+          draft={draft}
+          onDraftChange={setDraft}
+          onSubmit={submit}
+          composerRef={composerRef}
+          aiReady={aiReady}
+          proxyState={proxyState}
+          sendHeldByAdopt={sendHeldByAdopt}
+          onRetryAdopt={retryAdopt}
+          onGoToSettings={onGoToSettings}
+        />
       </div>
       {/* end main column */}
 
@@ -1393,10 +1021,11 @@ export function AgentChatView({
           READ-ONLY: interactive is left false (the default) so NO tap/scroll/key
           input is captured here — the agent drives the phone, the user only
           watches; clicking the view can never interfere with the automation. */}
-      <LiveAutomationPanel
+      <Stage
         sessionId={chat.session?.id ?? null}
         open={liveOpen}
         onClose={closeLiveView}
+        standIn={standIn}
       />
 
       {/* Save-as-recipe dialog */}
@@ -1467,1071 +1096,5 @@ export function AgentChatView({
         </div>
       )}
     </div>
-  );
-}
-
-// ─── live iPhone watch pane ───────────────────────────────────────
-
-/** The canonical iPhone screen aspect (402×874 logical ≡ 1206×2622 px) the
- *  simulator locks to. Passing it here keeps the watch pane the same true
- *  device proportions (and reuses AgentSessionPanel's bezel-black letterbox so
- *  there's no white-space border). */
-const IPHONE_WATCH_ASPECT_RATIO = 402 / 874;
-
-type WatchState =
-  | { kind: 'idle' } // no chat session dispatched yet
-  | { kind: 'loading' } // fetching the LiveKit token
-  | { kind: 'live'; info: LiveKitInfo } // token in hand → stream
-  // The deployment runs simulated (no live device driver): the token fetch 503s
-  // with DriverNotIntegrated and ALWAYS will here, so this is a calm STEADY-STATE
-  // that mirrors the chat's "actions are simulated" banner — NOT a transient error,
-  // and Retry would just 503 forever, so it carries no Retry. (finding #2)
-  | { kind: 'simulated' }
-  | { kind: 'error'; message: string }; // transient token fetch failure (Retry-able)
-
-/**
- * Read-only live iPhone view bound to the chat's agent session. When a task is
- * dispatched the chat lazily creates an agent session (useAgentChat) — a normal
- * LiveKit-streamable Driftstack session, exactly like the simulator's. This pane
- * fetches that session's LiveKit token (POST /v1/agent-sessions/:id/livekit-token
- * via the SDK) and renders the live stream so the user watches the automation
- * drive the phone in realtime.
- *
- * READ-ONLY by design: AgentSessionPanel is mounted with an explicit
- * `interactive={false}`, so the LK.6.d input-capture is NOT wired — taps /
- * scrolls / keystrokes on this video never reach the device. The agent is the
- * sole driver; the user only watches and cannot interfere by clicking the view.
- * Stated explicitly rather than relying on the prop's default, so the guarantee
- * survives a change to that default (V-859).
- */
-// Perf — memoized so a composer-keystroke re-render of AgentChatView (which owns
-// the `draft` state and re-renders ~10+/sec while typing) does NOT reconcile this
-// live-video subtree (LiveKit room + poll + AgentSessionPanel). All three props
-// are referentially stable across such a parent render: `sessionId` and `open` are
-// primitives; `onClose` is a useCallback (closeLiveView) with no deps.
-const LiveAutomationPanel = memo(function LiveAutomationPanel({
-  sessionId,
-  open,
-  onClose,
-}: {
-  sessionId: string | null;
-  /** Below the lg breakpoint the pane is hidden inline; `open` reveals it as a
-   *  slide-over overlay so a narrower window doesn't silently drop the headline
-   *  'watch the agent' feature. At lg+ the pane is always inline (open ignored). */
-  open: boolean;
-  onClose: () => void;
-}): JSX.Element {
-  const { client } = useSettings();
-  const [watch, setWatch] = useState<WatchState>({ kind: 'idle' });
-  // The token fetch's common failure is a 503: the chat session has no Mac/
-  // LiveKit worker yet (driver:mock, or the dispatch is still spinning up). The
-  // effect only re-runs on a sessionId/client change, so without a manual retry
-  // the user was stranded on the error with no way to re-attempt short of
-  // switching chats. Bumping this re-runs the fetch on the Retry button.
-  const [retryNonce, setRetryNonce] = useState(0);
-
-  // Only do the expensive work (livekit token fetch → room connect → 5s poll) when the
-  // pane is actually VISIBLE: at lg+ it's always the inline column; below lg it's hidden
-  // until opened. Without this, a narrow window with the pane closed kept a hidden WebRTC
-  // room + poll alive for the whole chat (audit 2026-07-08). matchMedia may be absent in a
-  // test/headless env → default to active so behavior is unchanged there.
-  const [isLg, setIsLg] = useState(
-    () =>
-      typeof window === 'undefined' ||
-      typeof window.matchMedia !== 'function' ||
-      window.matchMedia('(min-width: 1024px)').matches,
-  );
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const onChange = (): void => setIsLg(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, []);
-  const active = isLg || open;
-
-  useEffect(() => {
-    // Pane not visible (narrow window, closed) → don't open a live stream nobody can see.
-    if (!active) {
-      setWatch({ kind: 'idle' });
-      return undefined;
-    }
-    // No session dispatched yet → the placeholder ("Dispatch a task…").
-    if (sessionId === null) {
-      setWatch({ kind: 'idle' });
-      return undefined;
-    }
-    // Defensive: the SDK client (or its livekitToken method) may be absent in a
-    // partial harness / before connect — degrade to a calm error rather than
-    // throwing in render. The real client always carries agentSessions.
-    if (client === null || typeof client.agentSessions?.livekitToken !== 'function') {
-      setWatch({ kind: 'error', message: 'Live view unavailable — not connected.' });
-      return undefined;
-    }
-    let cancelled = false;
-    setWatch({ kind: 'loading' });
-    void client.agentSessions
-      .livekitToken(sessionId)
-      .then((info) => {
-        if (!cancelled) setWatch({ kind: 'live', info });
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        // finding #2 — a 503/DriverNotIntegrated means this deployment has NO live
-        // device driver: the token fetch 503s now and ALWAYS will, so a Retry loops
-        // forever. Surface it as the calm "simulated deployment" steady-state that
-        // mirrors the chat's banner (no Retry), NOT a transient error. A genuine
-        // network/transport failure stays the Retry-able 'error' branch.
-        setWatch(classifyLiveViewError(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [client, sessionId, retryNonce, active]);
-
-  // finding #3 — react to the agent session ending. The token fetch above is
-  // one-shot (it only re-runs on a sessionId/client/retry change), so a session
-  // reaped server-side mid-chat (idle reaper / worker browser closed) left the
-  // pane holding a DEAD token: AgentSessionPanel then fell into its publisher-lost
-  // / disconnected branch and surfaced the scary "Couldn't start the session — the
-  // proxy or connection may be down" overlay, implying broken infra when the
-  // session merely ended normally. Poll the chat's agent-session lifecycle (the
-  // SAME ~5s GET the simulator runs) and latch the terminal end so AgentSessionPanel
-  // shows its honest "Session ended" overlay instead. Only polls while a live
-  // stream is up and stops once ended (a closed session never un-closes).
-  const [sessionEnded, setSessionEnded] = useState<{
-    reason: string | null;
-    summary: string | null;
-    lastPhase: string | null;
-  } | null>(null);
-  // A fresh session id (or no session) clears any prior terminal-end latch.
-  useEffect(() => {
-    setSessionEnded(null);
-  }, [sessionId]);
-  useEffect(() => {
-    if (sessionId === null || watch.kind !== 'live' || sessionEnded !== null) return undefined;
-    if (client === null || typeof client.agentSessions?.get !== 'function') return undefined;
-    let cancelled = false;
-    const poll = (): void => {
-      void client.agentSessions
-        .get(sessionId)
-        .then((s) => {
-          if (cancelled) return;
-          // Terminal when the lifecycle status is 'closed' OR a close timestamp /
-          // reason is set (worker browser closed / destroyed / orphan-swept). A
-          // transient transport drop stays status='active' so the panel's own
-          // bounded reconnect still runs — we only latch a REAL end.
-          const ended =
-            s.status === 'closed' ||
-            (typeof s.closed_at === 'string' && s.closed_at.length > 0) ||
-            (typeof s.closed_reason === 'string' && s.closed_reason.length > 0);
-          // The fine typed reason beats the coarse code (it is emitted alongside
-          // it and would otherwise be shadowed — see preferTypedEndReason), and
-          // A3's host-free sentence rides through verbatim. No phase polling
-          // here, so lastPhase is honestly null: the chat's embedded panel
-          // renders the routeless timeout sentence rather than a guessed route.
-          if (ended)
-            setSessionEnded({
-              reason: preferTypedEndReason(s.error_event?.code, s.closed_reason),
-              summary: s.error_event?.summary ?? null,
-              lastPhase: null,
-            });
-        })
-        .catch(() => undefined); // a transient GET failure is not a terminal end
-    };
-    poll();
-    const handle = setInterval(poll, 5_000);
-    return () => {
-      cancelled = true;
-      clearInterval(handle);
-    };
-  }, [client, sessionId, watch.kind, sessionEnded]);
-
-  return (
-    <aside
-      data-component="ai-automation-live-pane"
-      // lg+: always an inline right column (flex). Below lg: hidden UNLESS
-      // toggled open, then a fixed full-height slide-over on the right edge so
-      // the feature stays reachable on a narrow window. (audit)
-      className={`w-[300px] shrink-0 flex-col border-l border-surface-divider bg-surface-raised/60 lg:flex ${
-        open
-          ? 'fixed inset-y-0 right-0 z-40 flex shadow-2xl lg:static lg:z-auto lg:shadow-none'
-          : 'hidden'
-      }`}
-    >
-      <div className="flex items-center gap-2 border-b border-surface-divider px-3 py-2.5">
-        <span className="text-xs font-medium text-ink-primary">Live view</span>
-        {/* finding #2 — only claim "the agent is driving" once a stream is actually
-            up. Before that (and in the simulated deployment) say what the pane IS so
-            it doesn't over-promise a live iPhone the deployment can't show. */}
-        <span className="text-2xs text-ink-muted">
-          {watch.kind === 'live' ? 'read-only — the agent is driving' : 'read-only'}
-        </span>
-        {/* Close affordance for the below-lg overlay (no-op visual at lg+ where
-            the pane is a permanent column). */}
-        <button
-          type="button"
-          aria-label="Close live view"
-          onClick={onClose}
-          className="ml-auto rounded px-1 text-sm leading-none text-ink-muted hover:text-ink-primary lg:hidden"
-        >
-          ×
-        </button>
-      </div>
-      <div className="flex flex-1 items-center justify-center overflow-hidden p-3">
-        {watch.kind === 'idle' && (
-          <WatchPlaceholder
-            title="Nothing running yet"
-            body="Send a task — when a live view is available, it will appear here."
-          />
-        )}
-        {watch.kind === 'loading' && (
-          <div
-            data-component="ai-automation-live-connecting"
-            className="flex flex-col items-center gap-3 text-center text-xs text-ink-muted"
-          >
-            <span
-              className="h-7 w-7 animate-spin rounded-full border-2 border-surface-divider border-t-accent"
-              aria-hidden="true"
-            />
-            <span>Starting the live view…</span>
-          </div>
-        )}
-        {/* Simulated deployment: a calm steady-state that mirrors the chat banner.
-            NO Retry (it would 503 forever); this is a deployment capability, not a
-            transient failure the user can act on. */}
-        {watch.kind === 'simulated' && (
-          <WatchPlaceholder
-            title="Live view unavailable"
-            body="Browser actions run in preview mode, so there is no live view."
-            tone="muted"
-          />
-        )}
-        {watch.kind === 'error' && (
-          <WatchPlaceholder
-            title="Live view unavailable"
-            body={watch.message}
-            tone="muted"
-            onRetry={() => setRetryNonce((n) => n + 1)}
-          />
-        )}
-        {watch.kind === 'live' && (
-          // READ-ONLY: `interactive` omitted (defaults false) → no input capture.
-          // coverChromeBand reuses the simulator's bezel-black letterbox so there
-          // is no white-space border around the stream.
-          // finding #3 — sessionEnded latches the chat's agent-session terminal end
-          // so AgentSessionPanel shows its honest "Session ended" overlay instead of
-          // the scary "proxy may be down" / endless-reconnect overlays once a reaped
-          // or worker-closed session leaves this pane holding a dead token.
-          <AgentSessionPanel
-            info={watch.info}
-            interactive={false}
-            coverChromeBand
-            aspectRatio={IPHONE_WATCH_ASPECT_RATIO}
-            sessionEnded={sessionEnded}
-          />
-        )}
-      </div>
-    </aside>
-  );
-});
-
-/** finding #2 — classify a live-view token-fetch failure into the right WATCH
- *  STATE, not just copy. The dominant failure here is the 503/DriverNotIntegrated a
- *  chat session returns when the deployment runs simulated (no live device driver):
- *  that NEVER recovers, so a Retry button loops 503 forever. Map it to the calm
- *  `simulated` steady-state (mirrors the chat banner, no Retry). Genuine auth,
- *  session, rate, service, and transport failures stay Retry-able with bounded,
- *  actionable copy. Raw exception text never reaches WatchPlaceholder. */
-function classifyLiveViewError(
-  err: unknown,
-): { kind: 'simulated' } | { kind: 'error'; message: string } {
-  const status = (err as { status?: number } | null)?.status;
-  const msg = err instanceof Error ? err.message : '';
-  if (
-    status === 503 ||
-    /driver\s*not\s*integrated|live driver (?:is )?(?:disabled|not enabled)/i.test(msg)
-  ) {
-    return { kind: 'simulated' };
-  }
-  if (status === 401) {
-    return {
-      kind: 'error',
-      message: 'Your sign-in or API key was not accepted. Check Settings, then retry.',
-    };
-  }
-  if (status === 403) {
-    return {
-      kind: 'error',
-      message:
-        "This live view isn't available for the current session or API key. Start a new session or check Settings, then retry.",
-    };
-  }
-  if (status === 404) {
-    return {
-      kind: 'error',
-      message: 'This live session is no longer available. Start a new session and try again.',
-    };
-  }
-  if (status === 429) {
-    return {
-      kind: 'error',
-      message: 'The server is receiving too many requests. Wait a moment, then retry.',
-    };
-  }
-  if (status !== undefined && status >= 500) {
-    return {
-      kind: 'error',
-      message: 'The live-stream service is temporarily unavailable. Try again shortly.',
-    };
-  }
-  if (/load failed|network|fetch|ECONN|getaddrinfo|timeout|unreachable/i.test(msg)) {
-    return {
-      kind: 'error',
-      message: "Couldn't reach the live-stream server — check your connection, then retry.",
-    };
-  }
-  return {
-    kind: 'error',
-    message: humanizeError(err, 'Could not start the live view. Try again.'),
-  };
-}
-
-function WatchPlaceholder({
-  title,
-  body,
-  tone = 'default',
-  onRetry,
-}: {
-  title: string;
-  body: string;
-  tone?: 'default' | 'muted';
-  /** When set, a small Retry button re-attempts the live-view token fetch. */
-  onRetry?: () => void;
-}): JSX.Element {
-  return (
-    <div className="flex max-w-[14rem] flex-col items-center gap-2 text-center">
-      <span
-        className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-          tone === 'muted' ? 'bg-surface-inset text-ink-muted' : 'bg-accent-subtle text-accent'
-        }`}
-        aria-hidden="true"
-      >
-        <IconPhone />
-      </span>
-      <p className="text-xs font-medium text-ink-secondary">{title}</p>
-      <p className="text-2xs text-ink-muted">{body}</p>
-      {onRetry !== undefined && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="mt-1 rounded border border-surface-divider px-2 py-1 text-2xs font-medium text-ink-secondary transition-colors hover:text-ink-primary"
-        >
-          Retry
-        </button>
-      )}
-    </div>
-  );
-}
-
-function IconPhone(): JSX.Element {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="16"
-      height="16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.4}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <rect x="4.25" y="1.75" width="7.5" height="12.5" rx="1.6" />
-      <path d="M7 3.25h2" />
-    </svg>
-  );
-}
-
-// ─── chat history rail ────────────────────────────────────────────
-
-function ChatRail({
-  chats,
-  activeId,
-  busy,
-  onNew,
-  onSelect,
-  onDelete,
-}: {
-  chats: ReadonlyArray<StoredChat>;
-  activeId: string;
-  busy: boolean;
-  onNew: () => void;
-  onSelect: (c: StoredChat) => void;
-  onDelete: (id: string) => void;
-}): JSX.Element {
-  // Which chats are showing their turn breakdown. Local and deliberately not
-  // persisted: it is a reading position, not a preference.
-  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-  const toggleExpanded = useCallback((id: string): void => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-  }, []);
-  return (
-    <aside className="flex w-52 shrink-0 flex-col border-r border-surface-divider bg-surface-raised/60">
-      <div className="border-b border-surface-divider p-2">
-        <button
-          type="button"
-          onClick={onNew}
-          disabled={busy}
-          title={busy ? 'Finish or stop the current reply first' : undefined}
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-fill-hover disabled:opacity-40"
-        >
-          + New chat
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto p-1.5">
-        {chats.length === 0 ? (
-          <p className="px-2 py-3 text-2xs text-ink-muted">
-            Your chats are saved here so you can pick one back up later.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-0.5">
-            {chats.map((c) => (
-              <li key={c.id}>
-                <div
-                  className={`group flex items-center gap-1 rounded-md px-2 py-1.5 transition-colors ${
-                    c.id === activeId ? 'bg-accent-subtle' : 'hover:bg-surface-elevated'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => onSelect(c)}
-                    disabled={busy}
-                    title={busy ? 'Finish or stop the current reply first' : undefined}
-                    className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
-                  >
-                    <span className="block truncate text-xs text-ink-primary" title={c.title}>
-                      {c.title}
-                    </span>
-                    <span className="block text-2xs text-ink-muted">
-                      {/* V-1611 — the rail showed a title and a timestamp and
-                          discarded the rest. `turns` has been persisted in full
-                          all along, so the count costs nothing to show and is
-                          the first thing that distinguishes two same-named
-                          chats. */}
-                      {chatTurnCount(c) > 0 && (
-                        <>
-                          {chatTurnCount(c)} turn{chatTurnCount(c) === 1 ? '' : 's'}
-                          {' · '}
-                        </>
-                      )}
-                      <RelativeTime
-                        iso={new Date(c.updatedAt).toISOString()}
-                        tooltipPrefix="Updated"
-                      />
-                    </span>
-                  </button>
-                  {c.turns.length > 0 && (
-                    <button
-                      type="button"
-                      aria-expanded={expanded.has(c.id)}
-                      aria-controls={`chat-turns-${c.id}`}
-                      aria-label={`${expanded.has(c.id) ? 'Hide' : 'Show'} what happened in ${c.title}`}
-                      title={expanded.has(c.id) ? 'Hide details' : 'Show what happened'}
-                      onClick={() => toggleExpanded(c.id)}
-                      className="shrink-0 px-1 text-ink-muted transition-colors hover:text-ink-primary"
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={`inline-block transition-transform ${expanded.has(c.id) ? 'rotate-90' : ''}`}
-                      >
-                        ›
-                      </span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    aria-label={`Delete chat ${c.title}`}
-                    title={busy ? 'Finish or stop the current reply first' : 'Delete chat'}
-                    onClick={() => onDelete(c.id)}
-                    disabled={busy}
-                    className="shrink-0 px-1 text-ink-muted opacity-0 transition-opacity hover:text-status-error group-hover:opacity-100 disabled:hover:text-ink-muted"
-                  >
-                    ✕
-                  </button>
-                </div>
-                {expanded.has(c.id) && (
-                  <ol id={`chat-turns-${c.id}`} className="flex flex-col gap-1 py-1 pl-3 pr-1">
-                    {c.turns.map((t) => {
-                      const summary = summariseChatTurn(t);
-                      return (
-                        <li key={t.id} className="flex gap-1.5 text-2xs leading-snug">
-                          <span
-                            aria-hidden="true"
-                            className={`mt-1 h-1 w-1 shrink-0 rounded-full ${
-                              summary.role === 'user'
-                                ? 'bg-ink-muted'
-                                : summary.ok === false
-                                  ? 'bg-status-error'
-                                  : 'bg-accent'
-                            }`}
-                          />
-                          <span
-                            className={
-                              summary.ok === false
-                                ? 'break-words text-status-error'
-                                : 'break-words text-ink-secondary'
-                            }
-                          >
-                            <span className="sr-only">
-                              {summary.role === 'user' ? 'You: ' : 'Agent: '}
-                            </span>
-                            {summary.headline}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </aside>
-  );
-}
-
-// ─── turn rendering ───────────────────────────────────────────────
-
-/** Honest boundary between restored (read-only) history and a fresh session.
- *  Reopening a saved chat does NOT reattach the old agent session — the run-loop
- *  rebuilds context from the server transcript, which for a brand-new session is
- *  empty. So tell the customer plainly that continuing won't carry the above as
- *  memory, instead of pretending it's one seamless conversation. */
-function RestoredHistoryDivider(): JSX.Element {
-  return (
-    <li data-component="ai-chat-restored-history-divider" className="flex items-center gap-2 py-1">
-      <span className="h-px flex-1 bg-surface-divider" aria-hidden="true" />
-      <span className="text-2xs text-ink-muted">
-        Saved history above · continuing starts a new session — the agent won&apos;t remember it
-      </span>
-      <span className="h-px flex-1 bg-surface-divider" aria-hidden="true" />
-    </li>
-  );
-}
-
-// Memoized: the transcript is mapped in the same component that owns the composer
-// `draft` state, so without this EVERY keystroke re-rendered every turn row (input lag
-// in a long chat — audit 2026-07-08). Props are a stable turn ref + a boolean, so memo
-// bails on a keystroke and only the changed/added row re-renders.
-const TurnRow = memo(function TurnRow({
-  turn,
-  denied,
-  approved,
-  sessionId,
-  baseUrl,
-  apiKey,
-}: {
-  turn: ChatTurn;
-  denied: boolean;
-  approved: boolean;
-  sessionId: string | null;
-  baseUrl: string;
-  apiKey: string | null;
-}): JSX.Element {
-  if (turn.role === 'user') {
-    return (
-      <li className="flex justify-end">
-        <div className="max-w-[80%] rounded-lg rounded-br-sm bg-accent-subtle px-3 py-2 text-sm text-ink-primary">
-          {turn.text}
-        </div>
-      </li>
-    );
-  }
-  return (
-    <li className="flex justify-start">
-      <div className="max-w-[85%] rounded-lg rounded-bl-sm border border-surface-divider bg-surface-raised px-3 py-2">
-        {turn.interrupted !== undefined && (
-          <InterruptedTurnBody
-            interrupted={turn.interrupted}
-            sessionId={sessionId}
-            baseUrl={baseUrl}
-            apiKey={apiKey}
-          />
-        )}
-        {turn.response !== undefined && (
-          <AgentResponseBody
-            response={turn.response}
-            denied={denied}
-            approved={approved}
-            sessionId={sessionId}
-            baseUrl={baseUrl}
-            apiKey={apiKey}
-          />
-        )}
-      </div>
-    </li>
-  );
-});
-
-/**
- * B6 — a turn that stopped partway.
- *
- * The steps it DID run are the point: they were dispatched, they were billed,
- * and some of them changed a real page. Clearing them (which is what happened
- * before) both hid that work and made repeating the request look free.
- */
-function InterruptedTurnBody({
-  interrupted,
-  sessionId,
-  baseUrl,
-  apiKey,
-}: {
-  interrupted: InterruptedTurn;
-  sessionId: string | null;
-  baseUrl: string;
-  apiKey: string | null;
-}): JSX.Element {
-  return (
-    <div className="flex flex-col gap-1.5">
-      {interrupted.steps.length > 0 && (
-        <>
-          <p className="section-label">Interrupted — these steps ran</p>
-          <ol className="flex flex-col gap-1">
-            {interrupted.steps.map((r, i) => (
-              <PlanStep
-                key={i}
-                result={r}
-                denied={false}
-                approved={false}
-                sessionId={sessionId}
-                baseUrl={baseUrl}
-                apiKey={apiKey}
-              />
-            ))}
-          </ol>
-        </>
-      )}
-      <p className="text-sm text-status-error">{interrupted.reason}</p>
-    </div>
-  );
-}
-
-/**
- * What a settled turn has to TELL the customer beyond its steps and its answer:
- * that it stopped before the task was finished, or what the agent asked part-way
- * through. Without it a turn that ran out of room shows a column of completed
- * steps and reads as done.
- *
- * Read structurally because the field is newer than the SDK's response type; a
- * server that does not send it yields null and nothing renders. It lives in this
- * file, not beside the chat hook, because a dozen view tests replace that module
- * wholesale and a pure function does not need to be part of what they fake.
- */
-function turnNoticeOf(response: AgentMessageResponse): string | null {
-  if (response.kind !== 'plan-executed' || !('notice' in response)) return null;
-  const notice: unknown = response.notice;
-  return typeof notice === 'string' && notice.trim().length > 0 ? notice : null;
-}
-
-function AgentResponseBody({
-  response,
-  denied,
-  approved,
-  sessionId,
-  baseUrl,
-  apiKey,
-}: {
-  response: AgentMessageResponse;
-  denied: boolean;
-  approved: boolean;
-  sessionId: string | null;
-  baseUrl: string;
-  apiKey: string | null;
-}): JSX.Element {
-  switch (response.kind) {
-    case 'plan-executed':
-      return (
-        <div className="flex flex-col gap-1.5">
-          {/* B1 — the answer the customer actually asked for, above the steps.
-              It was computed, sanitised and billed on every read-back turn and
-              then shown nowhere: asking for an IP returned "✓ navigated ·
-              ✓ captured screenshot" and not the address. The plan below is now
-              supporting detail for it rather than the whole reply. */}
-          {response.answer !== undefined && response.answer.length > 0 && (
-            <p className="whitespace-pre-wrap text-sm text-ink-primary">{response.answer}</p>
-          )}
-          {/* A turn can run every step and still not have finished the task: it
-              reached the limit of what it does in one message, or the agent asked
-              something part-way through. The steps below are all ticks either
-              way, so without this sentence an unfinished task reads as done. */}
-          {turnNoticeOf(response) !== null && (
-            <p className="whitespace-pre-wrap text-sm text-ink-primary" data-testid="turn-notice">
-              {turnNoticeOf(response)}
-            </p>
-          )}
-          {response.results.length === 0 ? (
-            // A plan that executed ZERO steps — the decomposer produced no runnable
-            // browser actions for this request (the #139 "responds without steps" /
-            // "it did nothing" class). Render an honest, actionable message instead of a
-            // bare empty "Plan" heading, which reads as a silent bug (server also now
-            // converts an empty plan to a clarify, so this is defence-in-depth).
-            // ...unless an answer was already rendered above, in which case the
-            // turn plainly did something and this copy would contradict it.
-            response.answer === undefined || response.answer.length === 0 ? (
-              <p className="text-sm text-ink-primary">
-                I couldn’t turn that into browser actions to run. Try rephrasing it as a concrete
-                step — e.g. “go to example.com and take a screenshot.”
-              </p>
-            ) : null
-          ) : (
-            <>
-              <p className="section-label">Plan</p>
-              <ol className="flex flex-col gap-1">
-                {response.results.map((r, i) => (
-                  <PlanStep
-                    key={i}
-                    result={r}
-                    denied={denied}
-                    approved={approved}
-                    sessionId={sessionId}
-                    baseUrl={baseUrl}
-                    apiKey={apiKey}
-                  />
-                ))}
-              </ol>
-            </>
-          )}
-          {response.usage !== undefined && <UsageBadge usage={response.usage} />}
-        </div>
-      );
-    case 'clarify':
-      return (
-        <div className="flex flex-col gap-1.5">
-          <p className="text-sm text-ink-primary">{response.clarifying_question}</p>
-          {response.usage !== undefined && <UsageBadge usage={response.usage} />}
-        </div>
-      );
-    case 'refuse':
-      return (
-        <div className="flex flex-col gap-1.5">
-          <p className="text-sm text-status-error">{response.refuse_reason}</p>
-          {response.usage !== undefined && <UsageBadge usage={response.usage} />}
-        </div>
-      );
-    case 'stopped':
-      // B2 — the customer pressed Stop. The server's sentence says how far the
-      // turn got (and names a step whose outcome it could not confirm); the
-      // steps below are exactly what ran — nothing planned-but-not-run is shown.
-      return (
-        <div className="flex flex-col gap-1.5" data-component="stopped-turn">
-          <p className="whitespace-pre-wrap text-sm text-ink-primary" data-testid="turn-notice">
-            {response.notice}
-          </p>
-          {response.results.length > 0 && (
-            <>
-              <p className="section-label">Steps that ran</p>
-              <ol className="flex flex-col gap-1">
-                {response.results.map((r, i) => (
-                  <PlanStep
-                    key={i}
-                    result={r}
-                    denied={denied}
-                    approved={approved}
-                    sessionId={sessionId}
-                    baseUrl={baseUrl}
-                    apiKey={apiKey}
-                  />
-                ))}
-              </ol>
-            </>
-          )}
-          {response.usage !== undefined && <UsageBadge usage={response.usage} />}
-        </div>
-      );
-    case 'logged-manual':
-      return <p className="text-xs italic text-ink-muted">Logged — no AI reply in manual mode.</p>;
-    default:
-      // Robustness (#14): a persisted chat rehydrated from a newer/older build, or a
-      // server that ships a response.kind this build doesn't know, must not render a
-      // bare empty bubble (an unhandled switch returns undefined → blank React node).
-      // Fall back to a neutral, honest message instead.
-      return <p className="text-sm text-ink-muted">This step can’t be shown in this version.</p>;
-  }
-}
-
-/**
- * Composer autogrow ceiling.
- *
- * Owner 2026-08-31: "the text bar should be larger". The composer opened at 3
- * rows and capped at 288px, which is cramped for the thing it actually asks for
- * — its own placeholder is a two-clause task description, and the task the owner
- * typed ("go to X, create an account with this email, tell me when a code is
- * needed") does not fit in three rows. A prompt box smaller than the prompts it
- * invites reads as a search field.
- *
- * Named because TWO sites grow this textarea — onChange and the restore-focus
- * path — and they were separate literals that could drift apart silently.
- */
-const COMPOSER_MAX_HEIGHT_PX = 420;
-
-/**
- * ⛔ THE CSS CAP MUST MATCH `COMPOSER_MAX_HEIGHT_PX`, and it did not.
- *
- * The textarea carried `max-h-72` — Tailwind for **288px**, the exact value
- * V-2183 believed it had raised. The inline `style.height` could be set to
- * 420px and `max-height: 18rem` still won, so the composer kept stopping at the
- * old height and the fix was invisible to the customer who reported it.
- *
- * Two caps that must agree, expressed in two languages, neither aware of the
- * other — the same drift the shared constant was introduced to prevent, one
- * layer down. Now `max-h-[420px]`, and pinned to this constant by a guard.
- */
-
-/** Rows shown before any typing. */
-const COMPOSER_ROWS = 5;
-
-function PlanStep({
-  result,
-  denied,
-  approved,
-  sessionId,
-  baseUrl,
-  apiKey,
-}: {
-  result: AgentIntentResult;
-  denied: boolean;
-  approved: boolean;
-  sessionId: string | null;
-  baseUrl: string;
-  apiKey: string | null;
-}): JSX.Element {
-  const { glyph, cls, text } = describeResult(result, denied, approved);
-  // doc-132 §5.3 — the server's structured diagnosis (optional; older servers
-  // omit it). Only the retryable hint is surfaced as a chip: the category's
-  // human framing already lives in the reason text, but "worth retrying" vs
-  // "change the request" is a real decision the customer makes per failed step.
-  const retryable = result.kind === 'failure' && result.diagnosis?.retryable === true;
-  // #7 — the screenshot the agent captured on this step (captureIdOf returns one
-  // only for a successful capture on a store-wired server; a failure, a
-  // non-capture step, or an older server all yield undefined and render nothing).
-  const captureId = captureIdOf(result);
-  return (
-    <li className="flex items-start gap-1.5 text-xs">
-      <span className={`mt-px shrink-0 ${cls}`} aria-hidden="true">
-        {glyph}
-      </span>
-      <span className="min-w-0 text-ink-secondary">
-        {text}
-        {retryable && (
-          <span className="ml-1.5 rounded-full bg-status-busy/10 px-1.5 py-px text-2xs text-status-busy">
-            worth retrying
-          </span>
-        )}
-        {captureId !== undefined && (
-          <CaptureThumbnail
-            baseUrl={baseUrl}
-            apiKey={apiKey}
-            sessionId={sessionId}
-            captureId={captureId}
-          />
-        )}
-      </span>
-    </li>
-  );
-}
-
-// Exported so the confirmation-gate past-tense rendering is unit-tested without a
-// component harness — the same pattern as extractPendingConfirmation/adoptionOutcome.
-export function describeResult(
-  result: AgentIntentResult,
-  denied: boolean,
-  approved: boolean,
-): { glyph: string; cls: string; text: string } {
-  switch (result.kind) {
-    case 'success':
-      return { glyph: '✓', cls: 'text-status-ready', text: result.summary };
-    case 'failure':
-      return {
-        glyph: '✗',
-        cls: 'text-status-error',
-        text: `${intentLabel(result.intent)} — ${result.reason}`,
-      };
-    case 'confirmation_required':
-      // A resolved consequential step is no longer waiting: show its outcome, not the
-      // ⏸ busy framing that reads as still awaiting a decision (#135 GUI sweep).
-      // DENIED → skipped/muted; APPROVED → past-tense "approved, ran" (otherwise the
-      // step stayed stuck on "confirmation required" forever after it actually ran).
-      if (denied)
-        return {
-          glyph: '🚫',
-          cls: 'text-ink-muted',
-          text: `${intentLabel(result.intent)} — denied, skipped (“${result.matchedText}”)`,
-        };
-      if (approved)
-        return {
-          glyph: '✓',
-          cls: 'text-status-ready',
-          text: `${intentLabel(result.intent)} — approved, ran (“${result.matchedText}”)`,
-        };
-      return {
-        glyph: '⏸',
-        cls: 'text-status-busy',
-        text: `${intentLabel(result.intent)} — confirmation required (“${result.matchedText}”)`,
-      };
-    default:
-      // Robustness (#14): an unknown result.kind from a newer server / rehydrated chat
-      // must not fall through to `undefined` — PlanStep destructures { glyph, cls, text }
-      // from this and would throw on undefined. Render a neutral, honest step instead.
-      return {
-        glyph: '•',
-        cls: 'text-ink-muted',
-        text: 'This step can’t be shown in this version.',
-      };
-  }
-}
-
-function intentLabel(intent: AgentIntent): string {
-  switch (intent.kind) {
-    case 'navigate':
-      return `navigate ${intent.url}`;
-    case 'interact':
-      return `${intent.action}${intent.selector !== undefined ? ` ${intent.selector}` : ''}`;
-    case 'wait':
-      return `wait (${intent.condition})`;
-    case 'capture':
-      return `capture ${intent.capture}`;
-    case 'scroll':
-      return `scroll ${intent.direction}`;
-    case 'behavioral_pause':
-      return 'pause';
-    default:
-      // Robustness (#14): a newer server (or a rehydrated persisted chat) may carry an
-      // intent.kind this build doesn't model. Surface the raw kind rather than letting
-      // the switch fall through to `undefined`, which would render literal 'undefined —
-      // <reason>' inside describeResult's failure/confirmation text.
-      return (intent as { kind?: string }).kind ?? 'action';
-  }
-}
-
-function UsageBadge({ usage }: { usage: AgentUsage }): JSX.Element {
-  const parts: string[] = [];
-  if (usage.cost_usd_cents !== undefined) parts.push(`$${(usage.cost_usd_cents / 100).toFixed(4)}`);
-  const tokens = (usage.anthropic_input_tokens ?? 0) + (usage.anthropic_output_tokens ?? 0);
-  if (tokens > 0) parts.push(`${tokens} tokens`);
-  if (usage.model !== undefined) parts.push(modelLabel(usage.model));
-  // Nothing customer-meaningful to show (no cost/tokens/model) — render nothing
-  // rather than leaking the internal decomposer_kind enum (journey audit L5).
-  if (parts.length === 0) return <></>;
-  return <span className="mono text-2xs text-ink-muted">{parts.join(' · ')}</span>;
-}
-
-function TypingRow({ label }: { label: string }): JSX.Element {
-  return (
-    <li className="flex justify-start">
-      <div
-        role="status"
-        aria-label={label}
-        className="flex items-center gap-2 rounded-lg rounded-bl-sm border border-surface-divider bg-surface-raised px-3 py-2.5"
-      >
-        <span aria-hidden="true" className="flex items-center gap-1">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted" />
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted [animation-delay:150ms]" />
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ink-muted [animation-delay:300ms]" />
-        </span>
-        {/* Coarse phase so a multi-second run isn't one opaque dot (journey H3):
-            "Starting a session…" while create() is in flight (no session yet),
-            "Working on your request…" once the message is running server-side. */}
-        <span className="text-xs text-ink-muted">{label}</span>
-      </div>
-    </li>
-  );
-}
-
-function EmptyState({ onPick }: { onPick: (text: string) => void }): JSX.Element {
-  return (
-    <div className="mx-auto flex max-w-xl flex-col items-center gap-4 py-12 text-center">
-      <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-subtle text-accent">
-        <IconSparkle />
-      </span>
-      <div className="flex flex-col gap-1">
-        <p className="text-base font-medium text-ink-primary">
-          Start from a template or describe a task
-        </p>
-        <p className="text-sm text-ink-muted">
-          Pick a template below, or describe what you want in plain language. Driftstack plans the
-          steps and runs them on a session — pausing for your approval before anything
-          consequential.
-        </p>
-      </div>
-      <div className="flex w-full flex-col gap-1.5">
-        {DEFAULT_ASSISTANT_TEMPLATES.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => onPick(t.prompt)}
-            className="flex flex-col gap-0.5 rounded-md border border-surface-divider bg-surface-raised px-3 py-2 text-left transition-colors hover:border-accent/50"
-          >
-            <span className="text-xs font-medium text-ink-primary">{t.label}</span>
-            <span className="text-2xs text-ink-muted">{t.description}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function BudgetMeter({ remaining, total }: { remaining: number; total: number }): JSX.Element {
-  const pct = total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
-  return (
-    <div className="flex items-center gap-1.5" title={`${remaining} / ${total} tokens remaining`}>
-      <span className="section-label">budget</span>
-      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-surface-inset">
-        <span
-          className={`block h-full rounded-full ${pct < 15 ? 'bg-status-error' : 'bg-status-ready'}`}
-          style={{ width: `${pct}%` }}
-        />
-      </span>
-      {/* Show the percentage inline — a bare bar with no number read as
-          meaningless (journey audit L5); the hover title keeps the exact ratio. */}
-      <span className="text-2xs tabular-nums text-ink-muted">{Math.round(pct)}%</span>
-    </div>
-  );
-}
-
-function categoryLabel(category: string): string {
-  switch (category) {
-    case 'purchase':
-      return 'purchase';
-    case 'payment':
-      return 'payment';
-    case 'account_deletion':
-      return 'account deletion';
-    default:
-      return category;
-  }
-}
-
-function IconSparkle(): JSX.Element {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      width="14"
-      height="14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.6}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M8 1.75 9.4 5.6 13.25 7 9.4 8.4 8 12.25 6.6 8.4 2.75 7 6.6 5.6Z" />
-      <path d="M12.75 11.25v2.5M11.5 12.5h2.5" />
-    </svg>
   );
 }
