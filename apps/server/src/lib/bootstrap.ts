@@ -240,7 +240,6 @@ import { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import { ProfilesService } from '../services/profiles.js';
 import { ProfileSnapshotsService } from '../services/profile-snapshots.js';
 import { DrizzleProfileSnapshotsRepo } from '../db/profile-snapshots-repo.js';
-import type { AccountTier } from '@driftstack/api-types';
 import { BillingService, type BillingProvider } from '../services/billing.js';
 import { CryptoOrdersService } from '../services/crypto-orders.js';
 import {
@@ -258,6 +257,18 @@ import {
   enqueueNextSessionEventsArchive,
 } from '../services/session-events-archive-job.js';
 import { CryptoTierActivationService } from '../services/crypto-tier-activation.js';
+import { DrizzleCreditLedgerRepo } from '../db/credit-ledger-repo.js';
+import { DrizzleCreditPlanOverridesRepo } from '../db/credit-plan-overrides-repo.js';
+import { DrizzleCreditWindowsRepo } from '../db/credit-windows-repo.js';
+import { CreditGrantsService, creditGrantsRun } from '../services/credit-grants.js';
+import {
+  CREDITS_RECURRING_JOB_TYPES,
+  enqueueNextCreditsCoverageSweep,
+  enqueueNextCreditsExpirySweep,
+  registerCreditsCoverageSweepJob,
+  registerCreditsExpirySweepJob,
+  registerCreditsWindowBoundaryJob,
+} from '../services/credit-grant-jobs.js';
 import { DrizzleCryptoOrdersRepo } from '../db/crypto-orders-repo.js';
 import {
   CryptoEntitlementReconcileSweeper,
@@ -274,6 +285,7 @@ import { NotificationEventBus } from '../services/notification-event-bus.js';
 import { DEFAULT_COST_RATES, DEFAULT_TIER_THRESHOLDS_DERIVED } from './cost-defaults.js';
 import { StripeBillingProvider } from '../services/stripe-billing-provider.js';
 import { StripeApiClient } from './stripe-api.js';
+import { buildStripePriceMaps } from './stripe-billing-facts.js';
 import { validateStripeKeyForLaunch } from './stripe-key-safety.js';
 import { DrizzleBillingRepo } from '../db/billing-repo.js';
 import { buildLegalCatalog } from '../services/legal-catalog.js';
@@ -563,7 +575,13 @@ export async function createProductionDeps(
     );
   }
   const adminAuditRepo = new DrizzleAdminAuditLogRepo(dbHandle);
-  const accountsAdminRepo = new DrizzleAccountsAdminRepo(dbHandle);
+  // The plan an admin set by hand. NULL WHILE DRIFTSTACK_AI_CREDITS_MODE IS OFF,
+  // like every other credits dependency: an admin tier change then ends no
+  // override and writes no contract, which is exactly what it did before.
+  const creditPlanOverridesRepo = creditGrantsRun(config.aiCreditsMode)
+    ? new DrizzleCreditPlanOverridesRepo(dbHandle)
+    : null;
+  const accountsAdminRepo = new DrizzleAccountsAdminRepo(dbHandle, creditPlanOverridesRepo);
   const adminBillingRepo = new DrizzleAdminBillingRepo(dbHandle);
   const rateLimitOverridesRepo = new DrizzleRateLimitOverridesRepo(dbHandle);
   const legalRepo = new DrizzleLegalRepo(dbHandle);
@@ -936,6 +954,20 @@ export async function createProductionDeps(
   const scheduledJobsService = new ScheduledJobsService(scheduledJobsRepo, logger, {
     workerId: `pid-${process.pid.toString()}@${hostname()}-${randomUUID().slice(0, 8)}`,
   });
+
+  // Monthly AI credits, granted from paid coverage. NULL WHILE
+  // DRIFTSTACK_AI_CREDITS_MODE IS OFF (the default), and everything that would
+  // run a grant hangs off this one value: the three billing callers below take
+  // it as they would take null, and the credit jobs are registered only inside
+  // `if (creditGrants !== null)`. So with the mode off nothing new runs at all.
+  const creditGrants = creditGrantsRun(config.aiCreditsMode)
+    ? new CreditGrantsService({
+        ledger: new DrizzleCreditLedgerRepo(dbHandle),
+        windows: new DrizzleCreditWindowsRepo(dbHandle),
+        scheduledJobs: scheduledJobsService,
+        logger,
+      })
+    : null;
 
   // Webhooks first so sessions + api-keys can wire it.
   // V-225 — accountAudit wired for webhook_endpoint.{created,deleted}.
@@ -1792,6 +1824,8 @@ export async function createProductionDeps(
           ? ('no_subscription' as const)
           : billingService.resumeCollectionForAccount(accountId),
     },
+    // Null while AI credits are off; then a tier change does exactly what it did.
+    creditGrants,
   );
 
   // 2026-05-20 — auth-tokens sweeper. Periodic DELETE of stale rows
@@ -1915,21 +1949,32 @@ export async function createProductionDeps(
   // tier resolution. Each (monthly | annual) price id maps back to the
   // same tier; the webhook handler uses this to determine which tier
   // to set on the account when a subscription created/updated event
-  // arrives.
-  const priceToTier: Record<string, AccountTier> = {};
-  if (config.stripe?.tierPrices !== undefined) {
-    for (const [tier, prices] of Object.entries(config.stripe.tierPrices) as Array<
-      [AccountTier, { monthly: string; annual: string }]
-    >) {
-      priceToTier[prices.monthly] = tier;
-      priceToTier[prices.annual] = tier;
-    }
-  }
+  // arrives. `priceToInterval` is built beside it from the same config:
+  // the monthly id bills by the month, the annual id by the year.
+  const { priceToTier, priceToInterval } = buildStripePriceMaps(config.stripe?.tierPrices);
+  // A paid-invoice event that names no subscription line this server can read
+  // is fetched once from Stripe before it is recorded with no period. Needs
+  // only the secret key, so it is wired apart from the billing service below
+  // (which also needs the tier prices). Constructing the client calls nothing.
+  const stripeInvoiceFetcher =
+    config.stripe?.secretKey !== undefined
+      ? new StripeApiClient({
+          secretKey: config.stripe.secretKey,
+          ...(config.stripe.apiVersion !== undefined
+            ? { apiVersion: config.stripe.apiVersion }
+            : {}),
+          logger,
+        })
+      : undefined;
   const stripeWebhooksService = new StripeWebhooksService(
     stripeWebhooksRepo,
     {
       logger,
       priceToTier,
+      priceToInterval,
+      ...(stripeInvoiceFetcher !== undefined ? { invoiceFetcher: stripeInvoiceFetcher } : {}),
+      sentry,
+      creditsRefresher: creditGrants, // null while AI credits are off
     },
     accountLifecycleService, // V-202b — fans out tier_changed audit + email at one call site
     authCache, // invalidate the cached AccountContext on a Stripe-driven tier change (rate-limit tier freshness)
@@ -1978,6 +2023,7 @@ export async function createProductionDeps(
       logger,
       accountLifecycleService,
       authCache,
+      creditGrants, // null while AI credits are off
     ),
     logger,
   });
@@ -2013,6 +2059,7 @@ export async function createProductionDeps(
       logger,
       accountLifecycleService,
       authCache,
+      creditGrants, // null while AI credits are off
     ),
     logger,
   });
@@ -2022,6 +2069,36 @@ export async function createProductionDeps(
     logger, // chain survival: a swallowed tick failure is logged, then re-armed
   });
   await enqueueNextCryptoOrderExpirySweep({ scheduledJobs: scheduledJobsService });
+
+  // Monthly AI credits: the three jobs that grant the next month when the
+  // current one ends, catch an account whose billing event never came, and write
+  // the ledger row for credit whose term has ended (see credit-grant-jobs.ts).
+  //
+  // ⛔ CONDITIONAL ON PURPOSE, unlike the retention sweeps around it. While
+  // DRIFTSTACK_AI_CREDITS_MODE is off `creditGrants` is null, no credit window or
+  // lot can exist, and there is nothing for these to grant or expire: they keep
+  // no promise that applies with the mode off. With it off no handler is
+  // registered and no row is enqueued. The window-boundary job is registered but
+  // not seeded: it is armed per account, when a window is granted.
+  if (creditGrants !== null) {
+    registerCreditsCoverageSweepJob({
+      scheduledJobs: scheduledJobsService,
+      grants: creditGrants,
+      logger,
+    });
+    await enqueueNextCreditsCoverageSweep({ scheduledJobs: scheduledJobsService });
+    registerCreditsExpirySweepJob({
+      scheduledJobs: scheduledJobsService,
+      grants: creditGrants,
+      logger,
+    });
+    await enqueueNextCreditsExpirySweep({ scheduledJobs: scheduledJobsService });
+    registerCreditsWindowBoundaryJob({
+      scheduledJobs: scheduledJobsService,
+      grants: creditGrants,
+      logger,
+    });
+  }
 
   // V-1591 — bound session_events on the 90-day window (archive to R2, then
   // delete). AuditArchiveService has existed since V-163 and had never run:
@@ -2446,6 +2523,7 @@ export async function createProductionDeps(
       logger,
       accountLifecycleService,
       authCache,
+      creditGrants, // null while AI credits are off
     );
     cryptoOrdersService = new CryptoOrdersService({
       repo: cryptoRepo,
@@ -3307,13 +3385,18 @@ export async function createProductionDeps(
             refreshJobChainLiveness({
               repo: scheduledJobsRepo,
               metrics: metricsRegistry,
-              ...(rotationRemindersDisabled || agentTurnHealthWatchdogDisabled
+              ...(rotationRemindersDisabled ||
+              agentTurnHealthWatchdogDisabled ||
+              creditGrants === null
                 ? {
                     notRunHere: new Set([
                       ...(rotationRemindersDisabled ? ROTATION_REMINDER_JOB_TYPES : []),
                       ...(agentTurnHealthWatchdogDisabled
                         ? [AGENT_TURN_HEALTH_WATCHDOG_JOB_TYPE]
                         : []),
+                      // With AI credits off the two credit sweeps are neither
+                      // registered nor enqueued, so they are omitted, not 0.
+                      ...(creditGrants === null ? CREDITS_RECURRING_JOB_TYPES : []),
                     ]),
                   }
                 : {}),

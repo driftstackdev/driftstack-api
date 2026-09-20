@@ -136,6 +136,7 @@ import {
   InMemoryCliAuthorizeStore,
 } from '../../../src/services/cli-authorize.js';
 import { StripeWebhooksService } from '../../../src/services/stripe-webhooks.js';
+import type { CreditsRefresher } from '../../../src/services/credit-grants.js';
 import { ProfilesService } from '../../../src/services/profiles.js';
 import { ProfileSnapshotsService } from '../../../src/services/profile-snapshots.js';
 import { createEmailService } from '../../../src/services/email.js';
@@ -243,6 +244,12 @@ function createRecordingEmailService(realService: EmailService): {
 }
 
 export interface TestAppOptions {
+  /**
+   * What the Stripe webhook service refreshes monthly AI credits through.
+   * Omitted ⇒ none, which is production with AI credits switched off: a billing
+   * event then does nothing more than it always did.
+   */
+  creditsRefresher?: CreditsRefresher;
   /**
    * Readiness probes for `/ready`. Omitted ⇒ none, which is why the route
    * returns 200 with an empty checks array in almost every fixture — and why
@@ -1614,6 +1621,23 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
         price_api_scale_monthly: 'api_scale',
         price_api_scale_annual: 'api_scale',
       },
+      // Production builds this beside priceToTier from the same tier prices:
+      // the monthly id bills by the month, the annual id by the year.
+      priceToInterval: {
+        price_solo_monthly: 'month',
+        price_solo_annual: 'year',
+        price_team_monthly: 'month',
+        price_team_annual: 'year',
+        price_agency_monthly: 'month',
+        price_agency_annual: 'year',
+        price_api_starter_monthly: 'month',
+        price_api_starter_annual: 'year',
+        price_api_builder_monthly: 'month',
+        price_api_builder_annual: 'year',
+        price_api_scale_monthly: 'month',
+        price_api_scale_annual: 'year',
+      },
+      ...(opts.creditsRefresher !== undefined ? { creditsRefresher: opts.creditsRefresher } : {}),
     },
     accountLifecycleService, // V-202b — fans out tier_changed audit + email at one call site
     authCache, // invalidate the cached AccountContext on a Stripe-driven tier change (rate-limit tier freshness)

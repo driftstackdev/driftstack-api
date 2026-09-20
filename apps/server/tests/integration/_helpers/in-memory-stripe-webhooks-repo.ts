@@ -8,6 +8,12 @@ import {
   tierActivationRank,
 } from '../../../src/services/crypto-tier-activation.js';
 import { ACTIVE_SUBSCRIPTION_STATUSES } from '../../../src/db/subscription-status-sets.js';
+import {
+  completeInvoicePayment,
+  type InvoicePaymentOutcome,
+  type InvoicePaymentRecord,
+} from '../../../src/lib/invoice-payment-record.js';
+import type { BillingInterval, PeriodStartSource } from '../../../src/lib/stripe-billing-facts.js';
 
 interface LedgerRow {
   eventId: string;
@@ -37,6 +43,11 @@ interface SubscriptionMirrorRow {
   canceledAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+  // Migration 0129.
+  currentPeriodStart: Date | null;
+  periodStartSource: PeriodStartSource | null;
+  billingInterval: BillingInterval | null;
+  tierSince: Date | null;
 }
 
 interface AccountFacet {
@@ -71,6 +82,8 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
   private readonly subs = new Map<string, SubscriptionMirrorRow>();
   private readonly accounts = new Map<string, AccountFacet>();
   private readonly entitlements = new Map<string, CryptoEntitlementRow>();
+  /** billing_invoice_payments, keyed on the invoice id (its primary key). */
+  private readonly invoicePayments = new Map<string, InvoicePaymentRecord>();
   /**
    * Production writes ONE `accounts.tier` column, so a Stripe/crypto
    * activation is immediately visible to the auth path. This fixture split the
@@ -106,6 +119,44 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
   /** Test seam: read all subscription mirror rows. */
   listSubscriptions(): SubscriptionMirrorRow[] {
     return Array.from(this.subs.values());
+  }
+
+  /** Test seam: a COPY of every recorded paid invoice, in insertion order. */
+  listInvoicePayments(): InvoicePaymentRecord[] {
+    return Array.from(this.invoicePayments.values(), copyInvoicePayment);
+  }
+
+  /**
+   * Test seam: stage a mirror row as it stood BEFORE migration 0129 — no period
+   * start, no interval, no plan-change time — which no interface method can
+   * produce any more and which the period backfill exists to repair.
+   */
+  seedSubscriptionWithoutPeriodStart(args: {
+    accountId: string;
+    stripeSubscriptionId: string;
+    stripePriceId: string;
+    tier: AccountTier;
+    currentPeriodEnd: Date | null;
+    at: Date;
+  }): void {
+    const id = randomUUID();
+    this.subs.set(id, {
+      id,
+      accountId: args.accountId,
+      stripeSubscriptionId: args.stripeSubscriptionId,
+      stripePriceId: args.stripePriceId,
+      tier: args.tier,
+      status: 'active',
+      currentPeriodEnd: args.currentPeriodEnd,
+      cancelAtPeriodEnd: false,
+      canceledAt: null,
+      createdAt: args.at,
+      updatedAt: args.at,
+      currentPeriodStart: null,
+      periodStartSource: null,
+      billingInterval: null,
+      tierSince: null,
+    });
   }
 
   hasEvent(eventId: string): Promise<boolean> {
@@ -158,9 +209,18 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     cancelAtPeriodEnd: boolean;
     canceledAt: Date | null;
     at: Date;
+    currentPeriodStart?: Date | null;
+    billingInterval?: BillingInterval | null;
     /** Test-only: a fixed id so a contract arm can stage an id-decided tie. */
     id?: string;
   }): Promise<{ applied: boolean }> {
+    // Mirrors the Drizzle upsert: the start is written as the event gave it (a
+    // null clears it), a start read from an event is 'stripe', and `tierSince`
+    // moves only when the stored plan differs from the incoming one.
+    const currentPeriodStart = args.currentPeriodStart ?? null;
+    const periodStartSource: PeriodStartSource | null =
+      currentPeriodStart === null ? null : 'stripe';
+    const billingInterval = args.billingInterval ?? null;
     const existing = Array.from(this.subs.values()).find(
       (s) => s.stripeSubscriptionId === args.stripeSubscriptionId,
     );
@@ -185,6 +245,10 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
         cancelAtPeriodEnd: args.cancelAtPeriodEnd,
         canceledAt: args.canceledAt,
         updatedAt: args.at,
+        currentPeriodStart,
+        periodStartSource,
+        billingInterval,
+        tierSince: existing.tier !== args.tier ? args.at : existing.tierSince,
       });
     } else {
       const id = args.id ?? randomUUID();
@@ -200,9 +264,92 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
         canceledAt: args.canceledAt,
         createdAt: args.at,
         updatedAt: args.at,
+        currentPeriodStart,
+        periodStartSource,
+        billingInterval,
+        tierSince: args.at,
       });
     }
     return Promise.resolve({ applied: true });
+  }
+
+  upsertInvoicePayment(
+    args: InvoicePaymentRecord,
+  ): Promise<{ outcome: InvoicePaymentOutcome; linked: boolean }> {
+    const stored = this.invoicePayments.get(args.stripeInvoiceId);
+    if (stored === undefined) {
+      // The foreign key to accounts, which Postgres enforces on this insert.
+      if (!this.accounts.has(args.accountId)) {
+        return Promise.reject(
+          Object.assign(new Error('billing_invoice_payments_account_id_fkey'), { code: '23503' }),
+        );
+      }
+      this.invoicePayments.set(args.stripeInvoiceId, copyInvoicePayment(args));
+      return Promise.resolve({ outcome: 'inserted', linked: args.line !== null });
+    }
+    if (stored.accountId !== args.accountId) {
+      return Promise.resolve({ outcome: 'account_mismatch', linked: false });
+    }
+    // The SAME rule the Drizzle repo applies, imported rather than restated.
+    const completed = completeInvoicePayment(stored, args);
+    if (completed === null) {
+      return Promise.resolve({ outcome: 'unchanged', linked: stored.line !== null });
+    }
+    this.invoicePayments.set(args.stripeInvoiceId, copyInvoicePayment(completed));
+    return Promise.resolve({ outcome: 'completed', linked: completed.line !== null });
+  }
+
+  listSubscriptionsMissingPeriodStart(args: {
+    afterStripeSubscriptionId: string | null;
+    limit: number;
+  }): Promise<
+    Array<{ stripeSubscriptionId: string; stripePriceId: string; currentPeriodEnd: Date | null }>
+  > {
+    const after = args.afterStripeSubscriptionId;
+    const rows = Array.from(this.subs.values())
+      .filter((s) => s.currentPeriodStart === null)
+      .filter((s) => after === null || s.stripeSubscriptionId > after)
+      .sort((a, b) =>
+        a.stripeSubscriptionId < b.stripeSubscriptionId
+          ? -1
+          : a.stripeSubscriptionId > b.stripeSubscriptionId
+            ? 1
+            : 0,
+      )
+      .slice(0, args.limit)
+      .map((s) => ({
+        stripeSubscriptionId: s.stripeSubscriptionId,
+        stripePriceId: s.stripePriceId,
+        currentPeriodEnd: s.currentPeriodEnd,
+      }));
+    return Promise.resolve(rows);
+  }
+
+  fillSubscriptionPeriodStart(args: {
+    stripeSubscriptionId: string;
+    currentPeriodStart: Date;
+    source: PeriodStartSource;
+    billingInterval: BillingInterval | null;
+  }): Promise<{ filled: boolean }> {
+    const existing = Array.from(this.subs.values()).find(
+      (s) => s.stripeSubscriptionId === args.stripeSubscriptionId,
+    );
+    if (existing === undefined || existing.currentPeriodStart !== null) {
+      return Promise.resolve({ filled: false });
+    }
+    if (
+      existing.currentPeriodEnd !== null &&
+      existing.currentPeriodEnd.getTime() <= args.currentPeriodStart.getTime()
+    ) {
+      return Promise.resolve({ filled: false });
+    }
+    this.subs.set(existing.id, {
+      ...existing,
+      currentPeriodStart: args.currentPeriodStart,
+      periodStartSource: args.source,
+      billingInterval: existing.billingInterval ?? args.billingInterval,
+    });
+    return Promise.resolve({ filled: true });
   }
 
   setAccountTier(args: {
@@ -436,4 +583,9 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
   listCryptoEntitlements(): CryptoEntitlementRow[] {
     return Array.from(this.entitlements.values());
   }
+}
+
+/** A stored paid-invoice record never leaves, or enters, the map by reference. */
+function copyInvoicePayment(record: InvoicePaymentRecord): InvoicePaymentRecord {
+  return { ...record, line: record.line === null ? null : { ...record.line } };
 }

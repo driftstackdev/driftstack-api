@@ -101,12 +101,12 @@ describe('W438.A apps/server/src/routes/admin-accounts.ts content parity', () =>
     expect(body).toMatch(/result: `error: \$\{code\}`,/);
   });
 
-  it('POST /:id/tier: driftstack_internal_admin scope; ChangeTierRequest parse; withAudit action "account.tier_changed" with input {tier, reason?}; returns publicAccount', () => {
+  it('POST /:id/tier: driftstack_internal_admin scope; ChangeTierRequest parse; withAudit action "account.tier_changed" with input {tier, reason?, monthly_credits?} — the Enterprise contract figure is audited beside the tier it paid for; returns publicAccount', () => {
     expect(body).toMatch(
       /app\.post<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/admin\/accounts\/:id\/tier',\s*\{\s*preHandler: \[app\.requireScope\('driftstack_internal_admin'\), app\.rateLimit\('global'\)\],\s*\},/,
     );
     expect(body).toMatch(
-      /const updated = await withAudit\(\s*request,\s*'account\.tier_changed',\s*accountId,\s*\{ tier: body\.tier, \.\.\.\(body\.reason \? \{ reason: body\.reason \} : \{\}\) \},\s*\(\) => accountsAdmin\.changeTier\(ctx, accountId, body\.tier\),\s*\);/,
+      /const updated = await withAudit\(\s*request,\s*'account\.tier_changed',\s*accountId,\s*\{\s*tier: body\.tier,\s*\.\.\.\(body\.reason \? \{ reason: body\.reason \} : \{\}\),\s*\.\.\.\(body\.monthly_credits !== undefined\s*\? \{ monthly_credits: body\.monthly_credits \}\s*: \{\}\),\s*\},\s*\(\) =>\s*accountsAdmin\.changeTier\(ctx, accountId, body\.tier, \{\s*\.\.\.\(body\.monthly_credits !== undefined\s*\? \{ monthlyCredits: body\.monthly_credits \}\s*: \{\}\),\s*setByKeyId: ctx\.apiKey\.id,\s*\}\),\s*\);/,
     );
   });
 

@@ -49,6 +49,12 @@ export const ChangeTierRequestSchema = z.object({
   tier: AccountTierSchema,
   /** Optional human-readable reason recorded in the audit row. */
   reason: z.string().max(500).optional(),
+  /**
+   * Whole AI credits a month for an Enterprise agreement. Enterprise is the one
+   * plan with no standard allowance, so an account funded by AI credits cannot
+   * be put on it without this figure; every other tier ignores it.
+   */
+  monthly_credits: z.number().int().min(0).max(10_000_000).optional(),
 });
 export type ChangeTierRequest = z.infer<typeof ChangeTierRequestSchema>;
 

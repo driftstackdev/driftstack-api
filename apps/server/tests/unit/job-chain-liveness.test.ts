@@ -22,9 +22,12 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+import { CREDITS_RECURRING_JOB_TYPES } from '../../src/services/credit-grant-jobs.js';
 import {
   refreshJobChainLiveness,
+  EVENT_STARTED_JOB_TYPES,
   EXPECTED_RECURRING_JOB_TYPES,
+  OFF_BY_DEFAULT_JOB_TYPES,
 } from '../../src/services/job-chain-liveness.js';
 import { MetricsRegistry, METRIC_NAMES } from '../../src/services/metrics-registry.js';
 
@@ -115,6 +118,8 @@ describe('a dead job chain is reported as 0, not as an absent series', () => {
       'auth_tokens.sweep',
       'byok_anthropic.rotation_reminder',
       'cost.recompute_nightly',
+      'credits.coverage_sweep',
+      'credits.expiry_sweep',
       'crypto.entitlement_expiry_sweep',
       'crypto.entitlement_reconcile',
       'crypto.order_expiry_sweep',
@@ -196,9 +201,42 @@ describe('a dead job chain is reported as 0, not as an absent series', () => {
     // by matching an empty set against an empty set.
     expect(declared.size, 'sweeper modules exporting a *_JOB_TYPE constant').toBeGreaterThan(5);
 
+    // A job type that is not a self-re-arming chain is kept off the roster by
+    // NAME, with what starts it. One that is neither on the roster nor named
+    // there fails here, so "not a chain" is a decision and never an omission.
     expect(
-      [...declared].sort(),
+      [...declared].filter((t) => !EVENT_STARTED_JOB_TYPES.has(t)).sort(),
       'job types the server schedules but the liveness roster does not watch (or vice versa):',
     ).toEqual([...EXPECTED_RECURRING_JOB_TYPES].sort());
+
+    const notDeclared = [...EVENT_STARTED_JOB_TYPES.keys()].filter((t) => !declared.has(t));
+    expect(notDeclared, 'event-started job type(s) no service declares any more:').toEqual([]);
+    const onBoth = [...EVENT_STARTED_JOB_TYPES.keys()].filter((t) =>
+      EXPECTED_RECURRING_JOB_TYPES.includes(t),
+    );
+    expect(onBoth, 'both on the roster and excused from it:').toEqual([]);
+    for (const [jobType, why] of EVENT_STARTED_JOB_TYPES) {
+      expect(why.trim().length, `${jobType} must say what starts it`).toBeGreaterThanOrEqual(40);
+    }
+  });
+
+  it('CRITICAL a chain that is off by default is still ON the roster, and is excused from a default boot only by name. Off the roster it would be unwatched once switched on; on it with no excuse, a default boot would read as a dead chain. And the excuse list may not outlive its entries.', () => {
+    for (const [jobType, why] of OFF_BY_DEFAULT_JOB_TYPES) {
+      expect(EXPECTED_RECURRING_JOB_TYPES, `${jobType} must be on the liveness roster`).toContain(
+        jobType,
+      );
+      expect(why.trim().length, `${jobType} must name its switch`).toBeGreaterThanOrEqual(40);
+    }
+    // Bootstrap must omit exactly these from the gauge while their switch is off.
+    const bootstrap = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src', 'lib', 'bootstrap.ts'),
+      'utf8',
+    );
+    expect(bootstrap).toMatch(
+      /\.\.\.\(creditGrants === null \? CREDITS_RECURRING_JOB_TYPES : \[\]\)/,
+    );
+    expect([...CREDITS_RECURRING_JOB_TYPES].sort()).toEqual(
+      [...OFF_BY_DEFAULT_JOB_TYPES.keys()].sort(),
+    );
   });
 });

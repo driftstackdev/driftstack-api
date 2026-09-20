@@ -153,6 +153,12 @@ const ALLOW_LIST: Record<string, string[]> = {
     't.anchorAt',
     't.startsAt',
     't.expiresAt',
+    // credit windows (migration 0130): the CHECK `window_start <= created_at`
+    // ("never created ahead of its start") and the pending-clawbacks index on
+    // `created_at`. Column REFERENCES rendering as identifiers. The windows repo
+    // binds no Date at all: every boundary it passes is microsecond UTC text,
+    // cast to timestamptz by the database.
+    't.createdAt',
   ],
   // MFA monotonic timestamp expressions bind pre-serialized nowIso strings.
   // The remaining Date-looking expressions are Drizzle COLUMN references,
@@ -168,6 +174,14 @@ const ALLOW_LIST: Record<string, string[]> = {
   // column accessor (Drizzle table identifier, renders as SQL at
   // build time, NOT a JS Date interpolation).
   'apps/server/src/db/auth-flows-repo.ts': ['t.consumedAt', 'consumedIso', 'expiredIso'],
+  // credit-windows-repo setWindowLevel binds the level change's `effective_at`.
+  // AUDITED: `CreditWindowLevelChange.effectiveAt` is a `PgInstant`, which is
+  // microsecond UTC TEXT (`YYYY-MM-DDTHH:MM:SS.uuuuuuZ`) drawn by the database
+  // itself in `levelReconciliation` and handed straight back with an explicit
+  // `::timestamptz` cast. A JS Date never exists on that path — the whole point
+  // of `PgInstant` is that a Date would round the boundary to the millisecond
+  // and change the proration. The name is what this guard matches on.
+  'apps/server/src/db/credit-windows-repo.ts': ['change.effectiveAt'],
 };
 
 interface Finding {

@@ -35,6 +35,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+import { EVENT_STARTED_JOB_TYPES } from '../../src/services/job-chain-liveness.js';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SERVICES = resolve(HERE, '..', '..', 'src', 'services');
 
@@ -122,6 +124,35 @@ function helperJobTypes(): Map<string, string> {
   return out;
 }
 
+/** The string each `*_JOB_TYPE` constant holds, from the services' own source. */
+function jobTypeValues(): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const f of readdirSync(SERVICES).filter((n) => n.endsWith('.ts'))) {
+    const src = readFileSync(resolve(SERVICES, f), 'utf8');
+    for (const m of src.matchAll(
+      /export const ([A-Z_]*JOB_TYPE[A-Z_]*)\s*(?::[^=]*)?=\s*'([a-z_.]+)'/g,
+    ))
+      out.set(m[1] ?? '', m[2] ?? '');
+  }
+  return out;
+}
+
+/**
+ * Services files, other than the one that defines it, that call an `enqueue…`
+ * helper. An event-started job has no seed at boot; THIS is its start, and a
+ * helper nobody else calls is a job that never runs.
+ */
+function callersOutsideItsOwnFile(helper: string): string[] {
+  return readdirSync(SERVICES)
+    .filter((n) => n.endsWith('.ts'))
+    .filter((f) => {
+      const src = readFileSync(resolve(SERVICES, f), 'utf8');
+      return (
+        !src.includes(`export async function ${helper}(`) && new RegExp(`\\b${helper}\\(`).test(src)
+      );
+    });
+}
+
 /** Job types bootstrap actually seeds, via the helpers it awaits. */
 function seededJobTypes(): Set<string> {
   const boot = readFileSync(resolve(HERE, '..', '..', 'src', 'lib', 'bootstrap.ts'), 'utf8');
@@ -151,10 +182,14 @@ describe('a recurring sweep re-arms even when its tick throws', () => {
     // the per-request AI diagnostics rows).
     // 16 → 17 with registerAgentTurnHealthWatchdogJob (the AI turn health
     // conditions evaluated from the diagnostics table and sent to Sentry).
+    // 17 → 20 with the three monthly AI credits jobs: the coverage sweep, the
+    // expiry sweep, and the per-account window-boundary job (which re-arms
+    // itself every 5 minutes while the next month is unpaid, so a throwing tick
+    // must not end it either).
     expect(
       helpers.map((h) => h.name).sort(),
       'the register*Job scan came back short — the checks below cover only what it found',
-    ).toHaveLength(17);
+    ).toHaveLength(20);
   });
 
   it('the detector detects — it must flag the broken shape and clear both working ones', () => {
@@ -203,9 +238,36 @@ describe('a recurring sweep re-arms even when its tick throws', () => {
     expect(registered.size, 'job-type registrations found in services/').toBeGreaterThanOrEqual(10);
     expect(seeded.size, 'seed helpers resolved from bootstrap').toBeGreaterThanOrEqual(10);
 
+    // A job started by an EVENT rather than at boot (one row per account, armed
+    // when that account is granted a credit window) has no seed to find. It is
+    // excused by name in job-chain-liveness.ts, and held to the same question
+    // asked another way: something outside its own file must arm it.
+    const values = jobTypeValues();
+    const eventStarted = new Set(
+      [...registered].filter((t) => EVENT_STARTED_JOB_TYPES.has(values.get(t) ?? '')),
+    );
     expect(
-      [...registered].filter((t) => !seeded.has(t)).sort(),
+      [...registered].filter((t) => !seeded.has(t) && !eventStarted.has(t)).sort(),
       'these job types have a registered handler but nothing enqueues a first run, so the chain never starts:',
+    ).toEqual([]);
+
+    const helpersByType = new Map<string, string[]>();
+    for (const [helper, t] of helperJobTypes())
+      helpersByType.set(t, [...(helpersByType.get(t) ?? []), helper]);
+    const neverArmed = [...eventStarted]
+      .filter((t) => (helpersByType.get(t) ?? []).flatMap(callersOutsideItsOwnFile).length === 0)
+      .sort();
+    expect(
+      neverArmed,
+      'event-started job types whose enqueue helper no other service calls, so the job never runs:',
+    ).toEqual([]);
+    expect(
+      [...eventStarted].filter((t) => seeded.has(t)).sort(),
+      'excused as event-started, but bootstrap seeds it: it is a chain, so take it off that list:',
+    ).toEqual([]);
+    expect(
+      [...EVENT_STARTED_JOB_TYPES.keys()].filter((v) => ![...values.values()].includes(v)).sort(),
+      'event-started job types no service declares any more:',
     ).toEqual([]);
 
     expect(

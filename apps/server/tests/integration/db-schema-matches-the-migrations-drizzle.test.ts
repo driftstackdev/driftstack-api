@@ -118,6 +118,17 @@ const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 const MIGRATOR_TABLES = new Set(['__drizzle_migrations']);
 
 /**
+ * EXCLUDE constraints the migrations create. Drizzle cannot express one, so
+ * `schema.ts` documents each beside its table instead, and the index arm leaves
+ * its backing index out of the comparison BY NAME: the database says which
+ * indexes belong to an exclusion constraint, and that set must be exactly this.
+ */
+const EXCLUSION_CONSTRAINTS = new Set([
+  // 0130: an account's credit windows never overlap.
+  'credit_windows_no_overlap',
+]);
+
+/**
  * CHECK constraints the migrations create and `schema.ts` does not declare.
  *
  * MEASURED at 20 of 29. Named individually rather than counted, because the
@@ -427,10 +438,19 @@ describe('the drizzle schema matches the migrated database', () => {
     // not: two partial indexes on the same columns with DIFFERENT predicates
     // agree here. That is this arm's blind spot, stated rather than implied.
     const rows = await client!<
-      { tbl: string; name: string; uniq: boolean; partial: boolean; cols: string[] | null }[]
+      {
+        tbl: string;
+        name: string;
+        uniq: boolean;
+        partial: boolean;
+        excl: boolean;
+        cols: string[] | null;
+      }[]
     >`
       SELECT t.relname AS tbl, c.relname AS name, ix.indisunique AS uniq,
              (ix.indpred IS NOT NULL) AS partial,
+             EXISTS (SELECT 1 FROM pg_constraint pc
+                      WHERE pc.conindid = ix.indexrelid AND pc.contype = 'x') AS excl,
              (SELECT array_agg(a.attname ORDER BY k.ord)
                 FROM unnest(ix.indkey) WITH ORDINALITY AS k(attnum, ord)
                 JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum) AS cols
@@ -444,8 +464,17 @@ describe('the drizzle schema matches the migrated database', () => {
       `${tbl}(${cols.join(',')}) unique=${String(uniq)} partial=${String(partial)}`;
 
     const actual = new Map<string, string[]>();
+    const exclusionBacked: string[] = [];
     for (const row of rows) {
       if (MIGRATOR_TABLES.has(row.tbl)) continue;
+      // The index behind an EXCLUDE constraint is the constraint: drizzle has no
+      // way to declare one, and its range expression has no column to key on
+      // (the key above would read it as an index on the account alone). Which
+      // indexes those are is asked of the database, and held to the names below.
+      if (row.excl) {
+        exclusionBacked.push(row.name);
+        continue;
+      }
       const k = key(row.tbl, row.cols ?? [], row.uniq, row.partial);
       actual.set(k, [...(actual.get(k) ?? []), row.name]);
     }
@@ -524,6 +553,14 @@ describe('the drizzle schema matches the migrated database', () => {
       }
     }
     expect(problems.sort(), 'index(es) that differ between schema and database:').toEqual([]);
+
+    // Both directions: a NEW exclusion constraint fails here until it is named
+    // (and documented beside its table in schema.ts), and a name whose
+    // constraint is gone is reported as stale instead of excusing nothing.
+    expect(
+      exclusionBacked.sort(),
+      'indexes that back an EXCLUDE constraint, which the schema documents rather than declares:',
+    ).toEqual([...EXCLUSION_CONSTRAINTS].sort());
   });
 
   it('CRITICAL every CHECK constraint is either declared or named as knowingly undeclared. A check lives only in the migration that wrote it, so an undeclared one is an invariant the schema does not express — the same shape as the cascade and the idempotency unique this file already found, and the only reason it is debt rather than risk is that the ones that matter are proved unviolatable in code.', async () => {

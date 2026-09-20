@@ -57,6 +57,37 @@ describe('POST /v1/admin/accounts/:id/tier', () => {
     expect(all[0]?.inputPayload).toEqual({ tier: 'api_builder', reason: 'paying customer' });
   });
 
+  it('CRITICAL an Enterprise agreement’s monthly AI credits travel with the tier change and are audited beside it — the figure and the plan it pays for are one decision, and the audit row is where a person later reads what was agreed', async () => {
+    fx = await buildTestApp({ tier: 'solo_manual' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/admin/accounts/${accId(fx)}/tier`,
+      headers: auth(fx),
+      payload: { tier: 'enterprise', reason: 'signed', monthly_credits: 42_000 },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(fx.adminAuditRepo.getAll()[0]?.inputPayload).toEqual({
+      tier: 'enterprise',
+      reason: 'signed',
+      monthly_credits: 42_000,
+    });
+  });
+
+  it('a monthly-credits figure that is not a whole number from 0 to ten million is a 400, and the tier does not move', async () => {
+    fx = await buildTestApp({ tier: 'solo_manual' });
+    for (const bad of [-1, 1.5, 10_000_001]) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: `/v1/admin/accounts/${accId(fx)}/tier`,
+        headers: auth(fx),
+        payload: { tier: 'enterprise', monthly_credits: bad },
+      });
+      expect(res.statusCode, String(bad)).toBe(400);
+    }
+    expect(fx.adminAuditRepo.getAll()).toHaveLength(0);
+  });
+
   it('403 when admin scope is missing', async () => {
     fx = await buildTestApp({ scopes: ['read', 'write'] });
     const res = await fx.app.inject({

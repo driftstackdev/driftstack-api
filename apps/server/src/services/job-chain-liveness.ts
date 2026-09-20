@@ -37,6 +37,8 @@ export const EXPECTED_RECURRING_JOB_TYPES: readonly string[] = [
   'auth_tokens.sweep',
   'byok_anthropic.rotation_reminder',
   'cost.recompute_nightly',
+  'credits.coverage_sweep',
+  'credits.expiry_sweep',
   'crypto.entitlement_expiry_sweep',
   'crypto.entitlement_reconcile',
   'crypto.order_expiry_sweep',
@@ -51,6 +53,32 @@ export const EXPECTED_RECURRING_JOB_TYPES: readonly string[] = [
   'webhook.rotation_reminder',
   'webhook.secret_prev_cleanup',
 ];
+
+/**
+ * Chains on the roster that a DEFAULT deployment does not run, with the switch
+ * that starts them. Bootstrap neither registers nor enqueues them until then, and
+ * lists them in `notRunHere`, so they are omitted from the gauge rather than
+ * reported as dead. They are on the roster because once switched on they are
+ * chains like any other: a dead coverage sweep is customers not getting credits.
+ */
+export const OFF_BY_DEFAULT_JOB_TYPES: ReadonlyMap<string, string> = new Map([
+  ['credits.coverage_sweep', 'runs only while DRIFTSTACK_AI_CREDITS_MODE is shadow or enforce'],
+  ['credits.expiry_sweep', 'runs only while DRIFTSTACK_AI_CREDITS_MODE is shadow or enforce'],
+]);
+
+/**
+ * Job types that are NOT self-re-arming chains, with what starts them. One
+ * pending row per job type is a chain's steady state; for these, NO pending row
+ * is a healthy state too, so a gauge reading 0 would page for nothing. They are
+ * kept off the roster by name and reason, never by omission: the roster test
+ * requires every `*_JOB_TYPE` the server declares to be in one list or the other.
+ */
+export const EVENT_STARTED_JOB_TYPES: ReadonlyMap<string, string> = new Map([
+  [
+    'credits.window_boundary',
+    'one row per ACCOUNT, armed when that account is granted a credit window and due when the window ends; with no windows there are no rows',
+  ],
+]);
 
 // V-784 — the last five entries were absent because those sweeps were not jobs.
 // They ran on bare 24h setInterval timers, so they had no pending row to report

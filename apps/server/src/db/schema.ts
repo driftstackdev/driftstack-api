@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   customType,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -532,6 +533,12 @@ export const passwordResetTokens = pgTable(
 //   - customer.subscription.deleted → set status='canceled'
 //   - invoice.payment_succeeded     → no-op on this table; usage analytics
 //
+// Migration 0129 added the period's START, the billing interval, where the start
+// came from and when the mirrored plan last changed. They are kept for display
+// and for the period backfill. They are NOT what AI credits are granted from:
+// a subscription that says "active" has not necessarily been paid for, so
+// grants read `billing_invoice_payments` below.
+//
 // Status enum tracks Stripe's status verbatim for fidelity.
 export const subscriptionStatus = pgEnum('subscription_status', [
   'incomplete',
@@ -567,13 +574,126 @@ export const subscriptions = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    /** When the current period began, as the subscription event said. NULL when it said nothing. */
+    currentPeriodStart: timestamp('current_period_start', { withTimezone: true }),
+    /** 'month' | 'year' (BILLING_INTERVALS); NULL for a price the configuration does not name. */
+    billingInterval: text('billing_interval'),
+    /** 'stripe' | 'derived' (PERIOD_START_SOURCES); NULL with no start. */
+    periodStartSource: text('period_start_source'),
+    /**
+     * The event time this row's plan last CHANGED. NULL on a row written before
+     * migration 0129 whose plan has not changed since: when it began is unknown.
+     */
+    tierSince: timestamp('tier_since', { withTimezone: true }),
   },
   (t) => [
     uniqueIndex('subscriptions_stripe_id_unique').on(t.stripeSubscriptionId),
     index('subscriptions_account_idx').on(t.accountId),
     index('subscriptions_status_idx').on(t.status),
+    check(
+      'subscriptions_billing_interval',
+      sql`${t.billingInterval} IS NULL OR ${t.billingInterval} IN ('month', 'year')`,
+    ),
+    check(
+      'subscriptions_period_start_source',
+      sql`${t.periodStartSource} IS NULL OR ${t.periodStartSource} IN ('stripe', 'derived')`,
+    ),
+    check(
+      'subscriptions_period_order',
+      sql`${t.currentPeriodStart} IS NULL OR ${t.currentPeriodEnd} IS NULL OR ${t.currentPeriodStart} < ${t.currentPeriodEnd}`,
+    ),
   ],
 );
+
+// billing_invoice_payments — one row per PAID Stripe invoice (migration 0129).
+//
+// A paid invoice is the only evidence that a billing period was paid for: the
+// subscription mirror above turns "active" before the renewal's payment is even
+// attempted. The row is written from `invoice.payment_succeeded` and
+// `invoice.paid`, keyed on the invoice id, BEFORE the receipt email and before
+// the zero-amount return, so a $0 invoice is recorded too. Nothing reads it yet.
+// A row is written only for an invoice that was PAID: the period backfill
+// requires the invoice to say `status: 'paid'` itself, and the webhook refuses
+// one that says it is anything else. No CHECK can hold that (the status is not
+// stored), so every future writer must.
+//
+// The period is the invoice LINE's — never the invoice's own top-level period,
+// which on a renewal describes the period that just ended.
+//   line_kind = 'period'        the subscription's ordinary (non-proration) line
+//   line_kind = 'proration_up'  the positive proration line of a paid plan change
+//   line_kind = NULL            the invoice could not be tied to a subscription
+//                               line: recorded, with no period, covering nothing
+// `line_tier` is NULL for a price the configuration does not name.
+//
+// The CHECKs hold the shape whoever writes: amounts within what was paid, a line
+// named whole or not at all, a period that ends after it starts. No trigger and
+// no EXCLUDE constraint here; everything the migration creates is mirrored below.
+export const billingInvoicePayments = pgTable(
+  'billing_invoice_payments',
+  {
+    stripeInvoiceId: text('stripe_invoice_id').primaryKey(),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    stripeSubscriptionId: text('stripe_subscription_id'),
+    billingReason: text('billing_reason'),
+    amountPaidMinor: bigint('amount_paid_minor', { mode: 'number' }).notNull(),
+    currency: text('currency').notNull(),
+    stripePaymentIntentId: text('stripe_payment_intent_id'),
+    stripeChargeId: text('stripe_charge_id'),
+    /** 'period' | 'proration_up' (BILLING_INVOICE_LINE_KINDS); NULL when no line could be tied. */
+    lineKind: text('line_kind'),
+    lineStripePriceId: text('line_stripe_price_id'),
+    lineTier: accountTier('line_tier'),
+    /** 'month' | 'year' (BILLING_INTERVALS). */
+    lineInterval: text('line_interval'),
+    linePeriodStart: timestamp('line_period_start', { withTimezone: true }),
+    linePeriodEnd: timestamp('line_period_end', { withTimezone: true }),
+    paidAt: timestamp('paid_at', { withTimezone: true }).notNull(),
+    refundedMinor: bigint('refunded_minor', { mode: 'number' }).notNull().default(0),
+    disputedMinor: bigint('disputed_minor', { mode: 'number' }).notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index('billing_invoice_payments_coverage_idx')
+      .on(t.accountId, t.linePeriodStart, t.linePeriodEnd)
+      .where(sql`${t.lineKind} IS NOT NULL`),
+    index('billing_invoice_payments_pi_idx')
+      .on(t.stripePaymentIntentId)
+      .where(sql`${t.stripePaymentIntentId} IS NOT NULL`),
+    index('billing_invoice_payments_charge_idx')
+      .on(t.stripeChargeId)
+      .where(sql`${t.stripeChargeId} IS NOT NULL`),
+    check(
+      'billing_invoice_payments_amounts',
+      sql`${t.amountPaidMinor} >= 0 AND ${t.refundedMinor} BETWEEN 0 AND ${t.amountPaidMinor} AND ${t.disputedMinor} BETWEEN 0 AND ${t.amountPaidMinor}`,
+    ),
+    check(
+      'billing_invoice_payments_line_kind',
+      sql`${t.lineKind} IS NULL OR ${t.lineKind} IN ('period', 'proration_up')`,
+    ),
+    check(
+      'billing_invoice_payments_line_shape',
+      sql`(${t.lineKind} IS NULL) = (${t.lineTier} IS NULL AND ${t.linePeriodStart} IS NULL AND ${t.linePeriodEnd} IS NULL)`,
+    ),
+    check(
+      'billing_invoice_payments_line_period_known',
+      sql`${t.lineKind} IS NULL OR (${t.linePeriodStart} IS NOT NULL AND ${t.linePeriodEnd} IS NOT NULL)`,
+    ),
+    check(
+      'billing_invoice_payments_line_interval',
+      sql`${t.lineInterval} IS NULL OR ${t.lineInterval} IN ('month', 'year')`,
+    ),
+    check(
+      'billing_invoice_payments_period',
+      sql`${t.linePeriodStart} IS NULL OR ${t.linePeriodEnd} > ${t.linePeriodStart}`,
+    ),
+  ],
+);
+
+export type BillingInvoicePaymentRow = typeof billingInvoicePayments.$inferSelect;
 
 // pricing — owner-editable per-tier monthly price (pricing-as-data Phase A).
 // DB source-of-truth for the internal $ values. The PricingService falls back
@@ -3383,7 +3503,12 @@ export const creditLots = pgTable(
     kind: text('kind').notNull(),
     /** 0 included, 1 goodwill, 2 bought — lower is spent first. */
     spendRank: smallint('spend_rank').notNull(),
-    /** The month window of an included lot; its foreign key arrives with that table. */
+    /**
+     * The month window of an included lot (`credit_windows`, declared below).
+     * 0130's `credit_lots_window_fk` keys on the window AND this row's account
+     * (see the table-level `foreignKey` below), so a lot can only name a window
+     * of its own account.
+     */
     windowId: uuid('window_id'),
     grantKey: text('grant_key').notNull(),
     grantedMicro: bigint('granted_micro', { mode: 'number' }).notNull(),
@@ -3406,6 +3531,34 @@ export const creditLots = pgTable(
     index('credit_lots_expiry_idx')
       .on(t.expiresAt)
       .where(sql`${t.remainingMicro} > ${t.heldMicro}`),
+    // A window has at most one monthly lot (0130).
+    uniqueIndex('credit_lots_one_monthly_per_window')
+      .on(t.windowId)
+      .where(sql`${t.kind} = 'monthly'`),
+    // 0130: an included lot names a window of ITS OWN account. The account is
+    // part of the key, which is why this is a table-level foreign key and not a
+    // `.references()` on the column. MATCH SIMPLE, so a lot with no window
+    // (a top-up, an adjustment) satisfies it.
+    //
+    // ⚠️ IT IS THE ONE THING IN THIS FILE `drizzle-kit export` CANNOT REPLAY.
+    // Its target, `credit_windows_id_account_unique`, is declared as a
+    // uniqueIndex, so drizzle emits it AFTER the foreign keys — and applying
+    // that export fails on this statement with "there is no unique constraint
+    // matching given keys for referenced table credit_windows". Measured
+    // 2026-09-19: moving that one CREATE UNIQUE INDEX above this ALTER makes the
+    // whole export apply cleanly, so nothing else in the schema is affected.
+    // Migration 0130 itself is fine — it creates the index first — and no gate
+    // builds a database from the export, so this is latent rather than broken.
+    // The fix, for whichever migration next touches `credit_windows`: declare
+    // the target as a table-level UNIQUE CONSTRAINT (`unique(...)` here,
+    // `CONSTRAINT … UNIQUE ("id", "account_id")` inside the CREATE TABLE). That
+    // also stops the key resting on Postgres accepting a bare unique index as a
+    // foreign-key target, which it does but its documentation does not promise.
+    foreignKey({
+      name: 'credit_lots_window_fk',
+      columns: [t.windowId, t.accountId],
+      foreignColumns: [creditWindows.id, creditWindows.accountId],
+    }).onDelete('cascade'),
     check('credit_lots_kind', sql`${t.kind} IN ('monthly', 'proration', 'adjustment', 'top_up')`),
     check(
       'credit_lots_rank_matches_kind',
@@ -3503,3 +3656,213 @@ export const creditLedger = pgTable(
 );
 
 export type CreditLedgerRow = typeof creditLedger.$inferSelect;
+
+// ───────────────────────────────────────────────────────────────────────────
+// credit_windows / credit_window_level_changes / credit_clawbacks — the month
+// windows included AI credits are granted into (0130)
+// ───────────────────────────────────────────────────────────────────────────
+//
+// A WINDOW is one stretch of time an account's monthly credits belong to: a
+// subscription's paid month, one month of a paid year, a crypto payment's term,
+// or a month of a plan an admin set by hand. `natural_*` is the month it is part
+// of; `window_*` is the part of that month it covers, shorter when an earlier
+// window already covered the start or when what was paid for ends first. Its
+// included credits are the `credit_lots` rows that name it. Written through
+// `credit-windows-repo.ts`, only while AI credits are switched on.
+//
+// ⛔ WHAT DRIZZLE CANNOT EXPRESS — migration 0130 installs it, and the
+// integration tests named below prove it against a real database with raw SQL:
+//
+//   credit_windows_no_overlap          EXCLUDE USING gist (account_id WITH =,
+//                                      tstzrange(window_start, window_end, '[)')
+//                                      WITH &&), on the btree_gist extension
+//     · An account's windows never overlap, so one stretch of time is granted at
+//       most once however many payment sources cover it. Two windows may touch.
+//     · ⛔ Writers insert with ON CONFLICT DO NOTHING and NO conflict target.
+//       Only that form arbitrates an exclusion constraint: with a target naming
+//       the unique index below, an overlapping insert raises 23P01 and aborts
+//       the writer's whole transaction instead of inserting nothing. Drizzle's
+//       `.onConflictDoNothing()` with no argument renders the target-less form.
+//     · Its backing gist index is not declared here: it is not an index the
+//       schema could create, and `db-schema-matches-the-migrations-drizzle` names
+//       it as the one index that belongs to an exclusion constraint.
+//   credit_windows_guard_trigger       BEFORE INSERT OR UPDATE OR DELETE
+//     · INSERT forces `created_at = now()` and `level_seq = 0`, whatever the
+//       statement said. With the `credit_windows_started` CHECK that makes
+//       "never created ahead of its start" a fact about the database clock.
+//     · UPDATE refuses (55000) a change to anything but the level, and a level
+//       change that does not raise `level_seq` by exactly one (or a `level_seq`
+//       change with no level change).
+//     · DELETE only when the account row is gone.
+//   credit_window_level_changes_guard_trigger   BEFORE UPDATE OR DELETE
+//     · Append-only (55000); a row goes only with its window.
+//   credit_clawbacks_guard_trigger     BEFORE UPDATE OR DELETE
+//     · UPDATE refuses (55000) any change to the facts, a pending claim that
+//       rises, and any state move other than applied → reversed. DELETE only
+//       when the account row is gone.
+//
+//   (Every function pins `search_path = public, pg_temp`.)
+//
+// Proved by (integration): `an-accounts-credit-windows-never-overlap`,
+// `a-credit-window-is-never-created-ahead-of-its-start`,
+// `a-credit-window-changes-only-its-level-and-dies-only-with-its-account`,
+// `the-database-refuses-a-malformed-credit-window-level-change-or-clawback`.
+export const creditWindows = pgTable(
+  'credit_windows',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    /** 'stripe_invoice' | 'crypto_entitlement' | 'plan_override'. */
+    source: text('source').notNull(),
+    /** The Stripe invoice id, the crypto order id, or 'override'. */
+    sourceRef: text('source_ref').notNull(),
+    naturalStart: timestamp('natural_start', { withTimezone: true }).notNull(),
+    naturalEnd: timestamp('natural_end', { withTimezone: true }).notNull(),
+    windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+    windowEnd: timestamp('window_end', { withTimezone: true }).notNull(),
+    tier: accountTier('tier').notNull(),
+    /** The monthly level this window is granted at, in microcredits. */
+    levelMicro: bigint('level_micro', { mode: 'number' }).notNull(),
+    /** Rises by one with every level change; forced to 0 on insert. */
+    levelSeq: integer('level_seq').notNull().default(0),
+    /** Forced to now() on insert. */
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('credit_windows_source_month_unique').on(
+      t.accountId,
+      t.source,
+      t.sourceRef,
+      t.naturalStart,
+    ),
+    // The migration says `"window_end" DESC`, which Postgres reads as DESC NULLS
+    // FIRST; drizzle's `.desc()` alone renders DESC NULLS LAST, a different index.
+    index('credit_windows_account_end_idx').on(t.accountId, t.windowEnd.desc().nullsFirst()),
+    // What `credit_lots_window_fk` points at: a window is identified by its id
+    // AND its account, so an included lot can only name a window of its own
+    // account. Redundant as a key — the id alone is the primary key — and there
+    // only so the foreign key can carry the account.
+    uniqueIndex('credit_windows_id_account_unique').on(t.id, t.accountId),
+    check(
+      'credit_windows_source',
+      sql`${t.source} IN ('stripe_invoice', 'crypto_entitlement', 'plan_override')`,
+    ),
+    check('credit_windows_source_ref_length', sql`length(${t.sourceRef}) BETWEEN 1 AND 200`),
+    check(
+      'credit_windows_order',
+      sql`${t.naturalStart} <= ${t.windowStart} AND ${t.windowStart} < ${t.windowEnd} AND ${t.windowEnd} <= ${t.naturalEnd}`,
+    ),
+    check('credit_windows_started', sql`${t.windowStart} <= ${t.createdAt}`),
+    check('credit_windows_level', sql`${t.levelMicro} >= 0 AND ${t.levelMicro} % 1000000 = 0`),
+    check('credit_windows_level_seq', sql`${t.levelSeq} >= 0`),
+  ],
+);
+
+export type CreditWindowRow = typeof creditWindows.$inferSelect;
+
+// One row per change of a window's level. Nothing writes it yet.
+export const creditWindowLevelChanges = pgTable(
+  'credit_window_level_changes',
+  {
+    windowId: uuid('window_id')
+      .notNull()
+      .references(() => creditWindows.id, { onDelete: 'cascade' }),
+    /** The window's `level_seq` after this change; the first change is 1. */
+    seq: integer('seq').notNull(),
+    /** 'plan_change' | 'refund' | 'dispute' | 'dispute_reinstated'. */
+    reason: text('reason').notNull(),
+    fromLevelMicro: bigint('from_level_micro', { mode: 'number' }).notNull(),
+    toLevelMicro: bigint('to_level_micro', { mode: 'number' }).notNull(),
+    effectiveAt: timestamp('effective_at', { withTimezone: true }).notNull(),
+    /** Credits granted (positive) or taken back (negative) for the rest of the window. */
+    deltaMicro: bigint('delta_micro', { mode: 'number' }).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    primaryKey({ columns: [t.windowId, t.seq] }),
+    check('credit_window_level_changes_seq', sql`${t.seq} >= 1`),
+    check(
+      'credit_window_level_changes_reason',
+      sql`${t.reason} IN ('plan_change', 'refund', 'dispute', 'dispute_reinstated')`,
+    ),
+    check(
+      'credit_window_level_changes_levels',
+      sql`${t.fromLevelMicro} >= 0 AND ${t.fromLevelMicro} % 1000000 = 0 AND ${t.toLevelMicro} >= 0 AND ${t.toLevelMicro} % 1000000 = 0`,
+    ),
+    check('credit_window_level_changes_real', sql`${t.fromLevelMicro} <> ${t.toLevelMicro}`),
+    check('credit_window_level_changes_whole', sql`${t.deltaMicro} % 1000000 = 0`),
+  ],
+);
+
+export type CreditWindowLevelChangeRow = typeof creditWindowLevelChanges.$inferSelect;
+
+// One row per refund, dispute or plan change whose credits were taken back, so
+// the same one is applied once. Nothing writes it yet.
+export const creditClawbacks = pgTable(
+  'credit_clawbacks',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    /** 'plan_change' | 'stripe_refund' | 'stripe_dispute' | 'crypto_refund' | 'admin'. */
+    source: text('source').notNull(),
+    sourceRef: text('source_ref').notNull(),
+    targetKey: text('target_key').notNull(),
+    /** A share of what was granted, in parts per million; or `amountMicro`, never both. */
+    fractionPpm: integer('fraction_ppm'),
+    amountMicro: bigint('amount_micro', { mode: 'number' }),
+    /** 'applied' | 'unmatched' | 'reversed'. */
+    state: text('state').notNull(),
+    clawedMicro: bigint('clawed_micro', { mode: 'number' }),
+    /** The shortfall that credits held by running tasks cover; only ever falls. */
+    pendingMicro: bigint('pending_micro', { mode: 'number' }).notNull().default(0),
+    debtMicro: bigint('debt_micro', { mode: 'number' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    uniqueIndex('credit_clawbacks_idempotency_unique').on(t.source, t.sourceRef, t.targetKey),
+    index('credit_clawbacks_pending_idx')
+      .on(t.accountId, t.createdAt)
+      .where(sql`${t.pendingMicro} > 0`),
+    check(
+      'credit_clawbacks_source',
+      sql`${t.source} IN ('plan_change', 'stripe_refund', 'stripe_dispute', 'crypto_refund', 'admin')`,
+    ),
+    check('credit_clawbacks_state', sql`${t.state} IN ('applied', 'unmatched', 'reversed')`),
+    check(
+      'credit_clawbacks_one_measure',
+      sql`(${t.fractionPpm} IS NULL) <> (${t.amountMicro} IS NULL)`,
+    ),
+    check(
+      'credit_clawbacks_fraction',
+      sql`${t.fractionPpm} IS NULL OR ${t.fractionPpm} BETWEEN 1 AND 1000000`,
+    ),
+    check('credit_clawbacks_amount', sql`${t.amountMicro} IS NULL OR ${t.amountMicro} > 0`),
+    check('credit_clawbacks_pending', sql`${t.pendingMicro} >= 0`),
+    check(
+      'credit_clawbacks_applied_shape',
+      sql`(${t.state} IN ('applied', 'reversed')) = (${t.clawedMicro} IS NOT NULL AND ${t.debtMicro} IS NOT NULL AND ${t.targetKey} <> 'unmatched')`,
+    ),
+    // An unmatched record took nothing, so it carries no amounts (the shape above
+    // alone would accept one that does, provided its target says 'unmatched').
+    check(
+      'credit_clawbacks_unmatched_shape',
+      sql`${t.state} <> 'unmatched' OR (${t.clawedMicro} IS NULL AND ${t.debtMicro} IS NULL AND ${t.pendingMicro} = 0)`,
+    ),
+  ],
+);
+
+export type CreditClawbackRow = typeof creditClawbacks.$inferSelect;

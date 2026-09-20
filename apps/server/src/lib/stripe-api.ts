@@ -28,6 +28,12 @@
 //   - POST /v1/checkout/sessions  (subscription mode)
 //   - POST /v1/billing_portal/sessions
 //
+// and three read-only ones, for recording which billing periods were paid for:
+//
+//   - GET  /v1/invoices/:id
+//   - GET  /v1/invoices            (paid invoices since a date, one page)
+//   - GET  /v1/subscriptions/:id
+//
 // New endpoint touches land here as one method per Stripe resource.
 
 import type { Logger } from './logger.js';
@@ -72,6 +78,23 @@ const PAUSE_COLLECTION_BEHAVIOR = 'void';
 
 const DEFAULT_BASE_URL = 'https://api.stripe.com';
 const MAX_STRIPE_RESPONSE_BODY_BYTES = 256 * 1024;
+/**
+ * A page of invoices is many objects, each carrying its lines, so the single-
+ * object cap above would refuse an ordinary page. Still a hard bound: a page
+ * larger than this fails loudly rather than being read.
+ */
+const MAX_STRIPE_LIST_RESPONSE_BODY_BYTES = 4 * 1024 * 1024;
+/** Stripe's own ceiling on `limit` for a list call. */
+const MAX_STRIPE_LIST_PAGE_SIZE = 100;
+
+function malformedResponse(status: number, message: string): StripeApiError {
+  const err: StripeApiError = Object.assign(new Error(message), {
+    status,
+    stripeError: { type: 'malformed_response', message },
+  });
+  err.name = 'StripeApiError';
+  return err;
+}
 
 function parseStripeError(parsed: unknown): StripeApiError['stripeError'] {
   if (typeof parsed !== 'object' || parsed === null) return { type: 'unknown_error' };
@@ -211,7 +234,105 @@ export class StripeApiClient {
     );
   }
 
+  // ── Invoices + subscriptions (read-only) ──────────────────────────────
+
+  /**
+   * One invoice, as Stripe holds it now. Returned as an open object: the caller
+   * reads the few fields it needs and treats anything absent as absent. The
+   * answer must BE the invoice that was asked for, or it is refused — a record
+   * keyed on one invoice id must never be filled from another's body.
+   */
+  async getInvoice(invoiceId: string): Promise<Record<string, unknown>> {
+    const path = `/v1/invoices/${encodeURIComponent(invoiceId)}`;
+    const invoice = await this.get<Record<string, unknown>>(path, {});
+    if (invoice.id !== invoiceId) {
+      throw malformedResponse(200, 'Stripe returned a different invoice than the one requested');
+    }
+    return invoice;
+  }
+
+  /**
+   * One page of invoices in one status, created at or after `createdGte`, newest
+   * first (Stripe's list order). `startingAfter` is the id of the last invoice of
+   * the previous page; `hasMore` says whether another page follows.
+   */
+  async listInvoices(args: {
+    status: 'paid';
+    createdGte: Date;
+    limit: number;
+    startingAfter?: string;
+  }): Promise<{ data: Array<Record<string, unknown>>; hasMore: boolean }> {
+    const limit = Math.min(Math.max(1, Math.trunc(args.limit)), MAX_STRIPE_LIST_PAGE_SIZE);
+    const query: Record<string, string> = {
+      status: args.status,
+      'created[gte]': Math.floor(args.createdGte.getTime() / 1000).toString(),
+      limit: limit.toString(),
+    };
+    if (args.startingAfter !== undefined) query.starting_after = args.startingAfter;
+    const page = await this.get<{ data?: unknown; has_more?: unknown }>(
+      '/v1/invoices',
+      query,
+      MAX_STRIPE_LIST_RESPONSE_BODY_BYTES,
+    );
+    if (!Array.isArray(page.data) || typeof page.has_more !== 'boolean') {
+      throw malformedResponse(200, 'Stripe invoice list was not a list');
+    }
+    const data = page.data.filter(
+      (row): row is Record<string, unknown> => typeof row === 'object' && row !== null,
+    );
+    if (data.length !== page.data.length) {
+      throw malformedResponse(200, 'Stripe invoice list held a non-object entry');
+    }
+    return { data, hasMore: page.has_more };
+  }
+
+  /** One subscription, as Stripe holds it now. Same identity rule as getInvoice. */
+  async getSubscription(subscriptionId: string): Promise<Record<string, unknown>> {
+    const path = `/v1/subscriptions/${encodeURIComponent(subscriptionId)}`;
+    const subscription = await this.get<Record<string, unknown>>(path, {});
+    if (subscription.id !== subscriptionId) {
+      throw malformedResponse(
+        200,
+        'Stripe returned a different subscription than the one requested',
+      );
+    }
+    return subscription;
+  }
+
   // ── Internal request plumbing ─────────────────────────────────────────
+
+  /**
+   * A read. Same authentication, version pin, redirect refusal and timeout as
+   * `post()`; the parameters ride in the query string and there is no body.
+   */
+  private async get<T>(
+    path: string,
+    query: Record<string, string>,
+    maxBodyBytes: number = MAX_STRIPE_RESPONSE_BODY_BYTES,
+  ): Promise<T> {
+    const search = new URLSearchParams(query).toString();
+    const url = `${this.config.baseUrl ?? DEFAULT_BASE_URL}${path}${search.length > 0 ? `?${search}` : ''}`;
+    const auth = `Basic ${Buffer.from(`${this.config.secretKey}:`).toString('base64')}`;
+
+    const ac = new AbortController();
+    const timeoutMs = this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const timer = setTimeout(() => ac.abort(), timeoutMs);
+    // As in post(): the timer is cleared only after the body is read.
+    try {
+      const res = await this.fetchImpl(url, {
+        method: 'GET',
+        headers: {
+          Authorization: auth,
+          'Stripe-Version': this.config.apiVersion ?? DEFAULT_API_VERSION,
+        },
+        redirect: 'error',
+        signal: ac.signal,
+      });
+      return await this.readResponse<T>(res, path, maxBodyBytes);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 
   private async post<T>(
     path: string,
@@ -248,62 +369,71 @@ export class StripeApiClient {
         signal: ac.signal,
       });
 
-      let text: string;
-      try {
-        text = await readBoundedResponseBody(res, MAX_STRIPE_RESPONSE_BODY_BYTES);
-      } catch (err) {
-        if (!(err instanceof ResponseBodyLimitError)) throw err;
-        const stripeError = {
-          type: 'malformed_response',
-          message: `Stripe response exceeded ${MAX_STRIPE_RESPONSE_BODY_BYTES.toString()}-byte limit`,
-        };
-        const apiError: StripeApiError = Object.assign(new Error(stripeError.message), {
-          status: res.status,
-          stripeError,
-        });
-        apiError.name = 'StripeApiError';
-        throw apiError;
-      }
-      let parsed: unknown;
-      try {
-        parsed = text.length === 0 ? {} : JSON.parse(text);
-      } catch {
-        const err: StripeApiError = Object.assign(new Error('Stripe response was not JSON'), {
-          status: res.status,
-          stripeError: { type: 'malformed_response', message: 'Stripe response was not JSON' },
-        });
-        err.name = 'StripeApiError';
-        throw err;
-      }
-
-      if (!res.ok) {
-        // Retain only the provider's documented classification fields. The
-        // free-form upstream message/body must not be copied into an Error:
-        // the global 5xx handler logs escaping errors with their full stack.
-        const stripeError = parseStripeError(parsed);
-        this.config.logger.warn(
-          {
-            component: 'stripe-api',
-            path,
-            status: res.status,
-            stripeErrorType: stripeError.type,
-            stripeErrorCode: stripeError.code,
-          },
-          'Stripe API error',
-        );
-        const err: StripeApiError = Object.assign(
-          new Error(
-            `Stripe ${path} failed: ${stripeError.type}${stripeError.code !== undefined ? ` (${stripeError.code})` : ''}`,
-          ),
-          { status: res.status, stripeError },
-        );
-        err.name = 'StripeApiError';
-        throw err;
-      }
-
-      return parsed as T;
+      return await this.readResponse<T>(res, path, MAX_STRIPE_RESPONSE_BODY_BYTES);
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * Read, bound, parse and classify one response. Shared by `post()` and
+   * `get()`, so a read is held to the same size cap and the same error
+   * normalisation as a write.
+   */
+  private async readResponse<T>(res: Response, path: string, maxBodyBytes: number): Promise<T> {
+    let text: string;
+    try {
+      text = await readBoundedResponseBody(res, maxBodyBytes);
+    } catch (err) {
+      if (!(err instanceof ResponseBodyLimitError)) throw err;
+      const stripeError = {
+        type: 'malformed_response',
+        message: `Stripe response exceeded ${maxBodyBytes.toString()}-byte limit`,
+      };
+      const apiError: StripeApiError = Object.assign(new Error(stripeError.message), {
+        status: res.status,
+        stripeError,
+      });
+      apiError.name = 'StripeApiError';
+      throw apiError;
+    }
+    let parsed: unknown;
+    try {
+      parsed = text.length === 0 ? {} : JSON.parse(text);
+    } catch {
+      const err: StripeApiError = Object.assign(new Error('Stripe response was not JSON'), {
+        status: res.status,
+        stripeError: { type: 'malformed_response', message: 'Stripe response was not JSON' },
+      });
+      err.name = 'StripeApiError';
+      throw err;
+    }
+
+    if (!res.ok) {
+      // Retain only the provider's documented classification fields. The
+      // free-form upstream message/body must not be copied into an Error:
+      // the global 5xx handler logs escaping errors with their full stack.
+      const stripeError = parseStripeError(parsed);
+      this.config.logger.warn(
+        {
+          component: 'stripe-api',
+          path,
+          status: res.status,
+          stripeErrorType: stripeError.type,
+          stripeErrorCode: stripeError.code,
+        },
+        'Stripe API error',
+      );
+      const err: StripeApiError = Object.assign(
+        new Error(
+          `Stripe ${path} failed: ${stripeError.type}${stripeError.code !== undefined ? ` (${stripeError.code})` : ''}`,
+        ),
+        { status: res.status, stripeError },
+      );
+      err.name = 'StripeApiError';
+      throw err;
+    }
+
+    return parsed as T;
   }
 }

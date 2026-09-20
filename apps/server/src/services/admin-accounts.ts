@@ -15,6 +15,7 @@ import type { AccountTier } from '@driftstack/api-types';
 import type { AccountContext } from './auth.js';
 import type { AccountRow } from './auth.js';
 import type { AuthCache } from './auth-cache.js';
+import { refreshCreditsAfter, type CreditsRefresher } from './credit-grants.js';
 import { NotFoundError, requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
 
 export interface ListAccountsArgs {
@@ -35,9 +36,33 @@ export interface ListAccountsPage {
   nextCursor: string | null;
 }
 
+/**
+ * What an admin may send with a tier change beyond the tier itself. Declared
+ * with the repo interface rather than beside its Drizzle implementation, the
+ * same direction as `ListAccountsArgs`: the in-memory double and the production
+ * repo both implement this file.
+ */
+export interface SetAccountTierOptions {
+  /**
+   * Whole credits a month for an Enterprise agreement, written as the account's
+   * `contract` override. Required to put an account that is ON CREDITS onto
+   * Enterprise — that plan has no standard allowance — and ignored for every
+   * other tier and for a legacy account.
+   */
+  readonly monthlyCredits?: number;
+  /** The admin API key that asked, kept on the override for the audit trail. */
+  readonly setByKeyId?: string | null;
+  readonly note?: string;
+}
+
 export interface AccountsAdminRepo {
   findById(id: string): Promise<AccountRow | null>;
-  setTier(id: string, tier: AccountTier, at: Date): Promise<AccountRow | null>;
+  setTier(
+    id: string,
+    tier: AccountTier,
+    at: Date,
+    opts?: SetAccountTierOptions,
+  ): Promise<AccountRow | null>;
   setStatus(
     id: string,
     status: 'active' | 'suspended' | 'deleted',
@@ -125,6 +150,11 @@ export class AccountsAdminService {
      * untrue again, silently, which is why the wiring is asserted in the tests.
      */
     private readonly billing: BillingCollectionPauser | null = null,
+    /**
+     * Grants monthly AI credits from paid coverage. Null while AI credits are
+     * switched off, and then a tier change does exactly what it did.
+     */
+    private readonly credits: CreditsRefresher | null = null,
   ) {}
 
   /**
@@ -208,15 +238,34 @@ export class AccountsAdminService {
     return { today, last_7d, last_30d };
   }
 
+  /**
+   * `opts.monthlyCredits` is the Enterprise contract's figure. The repo refuses
+   * Enterprise without it on an account that is on credits, and writes it as
+   * that account's `contract` override in the same transaction as the tier —
+   * so the plan and the allowance it is worth never exist apart.
+   */
   async changeTier(
     ctx: AccountContext,
     accountId: string,
     newTier: AccountTier,
+    opts: SetAccountTierOptions = {},
   ): Promise<AccountRow> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
-    const updated = await this.repo.setTier(accountId, newTier, new Date());
+    const updated = await this.repo.setTier(accountId, newTier, new Date(), {
+      ...opts,
+      setByKeyId: opts.setByKeyId ?? ctx.apiKey.id,
+    });
     if (!updated) throw new NotFoundError(`Account "${accountId}" not found.`);
     await this.invalidateCache(accountId);
+    // Best-effort, and last: the tier change is committed and must not be failed
+    // by this. A tier grants no credits by itself (only paid coverage does), so
+    // this grants whatever the account was already owed and had not got, and
+    // reconciles the current month against a plan that has just changed.
+    await refreshCreditsAfter(this.credits, accountId, {
+      trigger: 'admin_tier_change',
+      rethrowTransient: false,
+      logger: this.logger,
+    });
     return updated;
   }
 

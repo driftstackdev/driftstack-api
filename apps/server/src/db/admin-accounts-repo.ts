@@ -6,10 +6,14 @@ import type {
   AccountsAdminRepo,
   ListAccountsArgs,
   ListAccountsPage,
+  SetAccountTierOptions,
 } from '../services/admin-accounts.js';
 import type { AccountRow } from '../services/auth.js';
 import type { Database } from './client.js';
-import { accounts } from './schema.js';
+import type { CreditLedgerTx } from './credit-ledger-repo.js';
+import type { DrizzleCreditPlanOverridesRepo } from './credit-plan-overrides-repo.js';
+import { accounts, creditAccounts } from './schema.js';
+import { BadRequestError } from '../lib/errors.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
 
 // V-1245 — the staff account browser's page size, named and exported so the in-memory
@@ -25,7 +29,15 @@ export const ADMIN_ACCOUNTS_PAGE_DEFAULT = 50;
 export const ADMIN_ACCOUNTS_PAGE_MAX = 100;
 
 export class DrizzleAccountsAdminRepo implements AccountsAdminRepo {
-  constructor(private readonly database: Database) {}
+  constructor(
+    private readonly database: Database,
+    /**
+     * Writes the plan an admin set by hand. Null while AI credits are switched
+     * off — there are then no accounts on credits and no overrides to end, so a
+     * tier change does exactly what it always did.
+     */
+    private readonly overrides: DrizzleCreditPlanOverridesRepo | null = null,
+  ) {}
 
   async findById(id: string): Promise<AccountRow | null> {
     const [row] = await this.database.db
@@ -36,13 +48,137 @@ export class DrizzleAccountsAdminRepo implements AccountsAdminRepo {
     return row ? toRow(row) : null;
   }
 
-  async setTier(id: string, tier: AccountTier, at: Date): Promise<AccountRow | null> {
-    const [row] = await this.database.db
-      .update(accounts)
-      .set({ tier, updatedAt: at })
-      .where(eq(accounts.id, id))
-      .returning();
-    return row ? toRow(row) : null;
+  /**
+   * Change an account's tier, in ONE TRANSACTION that locks the account first.
+   *
+   * It used to be a bare UPDATE. A tier is now read by the monthly AI credits
+   * grants — which run under `credit_accounts`' own row lock — so a tier change
+   * racing a refresh could have the refresh read one plan and grant against
+   * another. The lock order here is ACCOUNTS, THEN CREDIT_ACCOUNTS.
+   *
+   * ⛔ THE ACCOUNT ROW IS TAKEN `FOR NO KEY UPDATE`, NOT `FOR UPDATE`, AND THAT
+   * IS WHAT KEEPS THE TWO ORDERS FROM DEADLOCKING. A credit writer does not
+   * touch `accounts` in any statement it writes — but every row it inserts
+   * (a window, a lot, a ledger row, a clawback) carries a FOREIGN KEY to
+   * `accounts`, and Postgres takes a `FOR KEY SHARE` lock on the parent row to
+   * check it. So a refresh that already holds `credit_accounts` still ends up
+   * waiting for this row, and with `FOR UPDATE` — the one strength that
+   * conflicts with `FOR KEY SHARE` — the cycle closes and one side dies with
+   * 40P01 (measured, and guarded by `…-holds-the-account-…`, the arm that says
+   * THE OTHER ORDER DOES NOT DEADLOCK).
+   *
+   * `FOR NO KEY UPDATE` is exactly the strength the `UPDATE` below takes on its
+   * own — `tier` is in no key — and it is no weaker where it matters: it still
+   * conflicts with another tier change (this one and `stripe-webhooks-repo`'s,
+   * which take the same row), and with a DELETE of the account. What it stops
+   * conflicting with is a foreign key pointing AT this row, which was never a
+   * change to it.
+   *
+   * ⛔ A LEGACY ACCOUNT BEHAVES EXACTLY AS IT DID. The credit row is read, not
+   * created: an account that has never been on credits has no row, so the
+   * `FOR UPDATE` matches nothing and neither rule below applies to it.
+   *
+   * Two rules apply to an account on credits (M7):
+   *
+   *   · ENTERPRISE HAS NO PLAN-WIDE ALLOWANCE. Every other plan's monthly
+   *     credits are a number in the entitlement table; Enterprise's is whatever
+   *     the agreement says. Assigning it without that figure would give the
+   *     customer a plan that includes AI and grants nothing, so it is refused
+   *     until `monthlyCredits` is supplied, which is written as the account's
+   *     `contract` override. AN AMENDMENT TO AN AGREEMENT THE ACCOUNT ALREADY
+   *     HAS MOVES THE FIGURE AND NOTHING ELSE: the override is written with
+   *     `upsert`, which REPLACES the row, so the day the credits reset on and
+   *     the own-key permission are carried forward from the contract that is
+   *     standing rather than falling back to their defaults.
+   *   · AN `admin_tier` OVERRIDE ENDS WITH THE TIER IT WAS SET FOR. It is the
+   *     plan an admin assigned by hand; once a different one is assigned it
+   *     would otherwise keep granting the old plan's credits for ever.
+   *
+   * The credits themselves are refreshed by the caller AFTER this commits
+   * (`AccountsAdminService.changeTier`): a grant is idempotent and self-healing,
+   * and a database blink while granting must not undo an admin action that has
+   * already been decided.
+   */
+  async setTier(
+    id: string,
+    tier: AccountTier,
+    at: Date,
+    opts: SetAccountTierOptions = {},
+  ): Promise<AccountRow | null> {
+    return this.database.db.transaction(async (tx) => {
+      // ⛔ `no key update`, NOT `update` — see the note above. `for('update')`
+      // is the one strength that conflicts with the FOR KEY SHARE every credit
+      // writer's foreign key takes on this same row, and the two lock orders
+      // then deadlock. (Kept off the statement itself: the content-parity guard
+      // for this file matches raw source, so a comment inside the pinned span
+      // breaks it.)
+      const [current] = await tx
+        .select({ tier: accounts.tier })
+        .from(accounts)
+        .where(eq(accounts.id, id))
+        .limit(1)
+        .for('no key update');
+      if (current === undefined) return null;
+
+      const [credit] = await tx
+        .select({ billingMode: creditAccounts.billingMode })
+        .from(creditAccounts)
+        .where(eq(creditAccounts.accountId, id))
+        .limit(1)
+        .for('update');
+      const onCredits = credit?.billingMode === 'credits';
+
+      if (onCredits && tier === 'enterprise' && opts.monthlyCredits === undefined) {
+        throw new BadRequestError(
+          'An Enterprise plan has no standard monthly AI credits. Send monthly_credits with the tier change.',
+        );
+      }
+      if (current.tier !== tier) await this.endAdminTierOverride(tx, id);
+      if (onCredits && tier === 'enterprise' && opts.monthlyCredits !== undefined) {
+        if (this.overrides === null) {
+          throw new Error('an Enterprise contract was supplied with no plan-override writer wired');
+        }
+        // ⛔ AN AMENDMENT MOVES THE FIGURE AND NOTHING ELSE. `upsert` REPLACES
+        // the row, so every column this call leaves out goes back to a default:
+        // `anchor_at` to the database's now(), `own_key_allowed` to true, the
+        // note to ''. `anchor_at` is the day of the month the credits reset on
+        // — `coverageCandidatesSql` counts the whole month calendar from it — so
+        // re-anchoring a live agreement mid-month moves the customer's reset day
+        // and hands them a short window at a full month's level; and
+        // `own_key_allowed` is a policy somebody turned off by hand. Only what
+        // THIS change decides moves: the figure, the admin key that asked, and a
+        // note if one was sent. A standing `admin_tier` override is not an
+        // agreement and carries nothing forward — it has just been ended above.
+        const standing = await this.overrides.get(id, tx);
+        const contract = standing !== null && standing.reason === 'contract' ? standing : null;
+        await this.overrides.upsert(
+          {
+            accountId: id,
+            monthlyCredits: opts.monthlyCredits,
+            reason: 'contract',
+            ...(contract === null
+              ? {}
+              : { anchorAt: contract.anchorAt, ownKeyAllowed: contract.ownKeyAllowed }),
+            setByKeyId: opts.setByKeyId ?? null,
+            note: opts.note ?? contract?.note ?? '',
+          },
+          tx,
+        );
+      }
+
+      const [row] = await tx
+        .update(accounts)
+        .set({ tier, updatedAt: at })
+        .where(eq(accounts.id, id))
+        .returning();
+      return row ? toRow(row) : null;
+    });
+  }
+
+  /** No-op when no plan-override writer is wired: there is then no override to end. */
+  private async endAdminTierOverride(tx: CreditLedgerTx, accountId: string): Promise<void> {
+    if (this.overrides === null) return;
+    await this.overrides.endAdminTierOverride(accountId, tx);
   }
 
   async setStatus(

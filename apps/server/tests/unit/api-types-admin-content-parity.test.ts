@@ -65,9 +65,9 @@ describe('W435.B packages/api-types/src/admin.ts content parity', () => {
     );
   });
 
-  it('ChangeTier / SuspendAccount / UnsuspendAccount: tier + audit-row reason max 500 optional', () => {
+  it('ChangeTier / SuspendAccount / UnsuspendAccount: tier + audit-row reason max 500 optional; ChangeTier also carries the optional Enterprise contract figure monthly_credits (0..10,000,000 whole credits), the one plan with no standard allowance', () => {
     expect(body).toMatch(
-      /export const ChangeTierRequestSchema = z\.object\(\{\s*tier: AccountTierSchema,\s*\/\*\* Optional human-readable reason recorded in the audit row\. \*\/\s*reason: z\.string\(\)\.max\(500\)\.optional\(\),\s*\}\);/,
+      /export const ChangeTierRequestSchema = z\.object\(\{\s*tier: AccountTierSchema,\s*\/\*\* Optional human-readable reason recorded in the audit row\. \*\/\s*reason: z\.string\(\)\.max\(500\)\.optional\(\),\s*\/\*\*[\s\S]*?\*\/\s*monthly_credits: z\.number\(\)\.int\(\)\.min\(0\)\.max\(10_000_000\)\.optional\(\),\s*\}\);/,
     );
     expect(body).toMatch(
       /export const SuspendAccountRequestSchema = z\.object\(\{\s*\/\*\* Optional reason recorded in the audit row\. \*\/\s*reason: z\.string\(\)\.max\(500\)\.optional\(\),\s*\}\);/,

@@ -46,6 +46,17 @@ import {
   CREDIT_PLAN_OVERRIDE_REASONS,
 } from '../../src/db/credit-ledger-repo.js';
 import {
+  CREDIT_CLAWBACK_SOURCES,
+  CREDIT_CLAWBACK_STATES,
+  CREDIT_WINDOW_LEVEL_CHANGE_REASONS,
+  CREDIT_WINDOW_SOURCES,
+} from '../../src/db/credit-windows-repo.js';
+import {
+  BILLING_INTERVALS,
+  BILLING_INVOICE_LINE_KINDS,
+  PERIOD_START_SOURCES,
+} from '../../src/lib/stripe-billing-facts.js';
+import {
   AGENT_TURN_DEATH_REASONS,
   AGENT_TURN_PERSISTED_OUTCOMES,
   AGENT_TURN_PERSISTED_STEP_KINDS,
@@ -187,6 +198,16 @@ const SERVER_SIDE_ENUMS: { name: string; values: readonly string[] }[] = [
   { name: 'CREDIT_LEDGER_KINDS', values: CREDIT_LEDGER_KINDS },
   { name: 'CREDIT_LEDGER_ACTORS', values: CREDIT_LEDGER_ACTORS },
   { name: 'CREDIT_PLAN_OVERRIDE_REASONS', values: CREDIT_PLAN_OVERRIDE_REASONS },
+  // Billing periods and paid invoices (0129). BILLING_INTERVALS pairs twice: the
+  // subscription mirror's interval and the paid-invoice line's are one value set.
+  { name: 'BILLING_INTERVALS', values: BILLING_INTERVALS },
+  { name: 'BILLING_INVOICE_LINE_KINDS', values: BILLING_INVOICE_LINE_KINDS },
+  { name: 'PERIOD_START_SOURCES', values: PERIOD_START_SOURCES },
+  // Credit windows, their level history and clawbacks (0130).
+  { name: 'CREDIT_WINDOW_SOURCES', values: CREDIT_WINDOW_SOURCES },
+  { name: 'CREDIT_WINDOW_LEVEL_CHANGE_REASONS', values: CREDIT_WINDOW_LEVEL_CHANGE_REASONS },
+  { name: 'CREDIT_CLAWBACK_SOURCES', values: CREDIT_CLAWBACK_SOURCES },
+  { name: 'CREDIT_CLAWBACK_STATES', values: CREDIT_CLAWBACK_STATES },
 ];
 
 /**
@@ -363,13 +384,24 @@ describe('the database CHECK enumerations agree with the code', () => {
       'AiDebtReasonSchema=credit_ledger_debt_reason',
       'AiSourceSchema=credit_accounts_ai_source',
       'AiSourceSetBySchema=credit_accounts_ai_source_set_by',
+      'BILLING_INTERVALS=billing_invoice_payments_line_interval',
+      'BILLING_INTERVALS=subscriptions_billing_interval',
+      'BILLING_INVOICE_LINE_KINDS=billing_invoice_payments_line_kind',
+      'CREDIT_CLAWBACK_SOURCES=credit_clawbacks_source',
+      // The shape CHECK names two of the three states and the 'unmatched' TARGET
+      // KEY, which spells the third state: the same three words, so it pairs.
+      'CREDIT_CLAWBACK_STATES=credit_clawbacks_applied_shape',
+      'CREDIT_CLAWBACK_STATES=credit_clawbacks_state',
       'CREDIT_LEDGER_ACTORS=credit_ledger_actor',
       'CREDIT_LEDGER_KINDS=credit_ledger_kind',
       'CREDIT_LEDGER_KINDS=credit_ledger_shape',
       'CREDIT_LOT_KINDS=credit_lots_kind',
       'CREDIT_LOT_KINDS=credit_lots_rank_matches_kind',
       'CREDIT_PLAN_OVERRIDE_REASONS=credit_plan_overrides_reason',
+      'CREDIT_WINDOW_LEVEL_CHANGE_REASONS=credit_window_level_changes_reason',
+      'CREDIT_WINDOW_SOURCES=credit_windows_source',
       'CryptoOrderStatusSchema=crypto_orders_status_check',
+      'PERIOD_START_SOURCES=subscriptions_period_start_source',
     ]);
   });
 });

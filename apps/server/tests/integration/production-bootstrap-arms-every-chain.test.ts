@@ -34,7 +34,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createProductionDeps } from '../../src/lib/bootstrap.js';
 import { loadConfig } from '../../src/lib/config.js';
 import { createTestLogger } from '../../src/lib/logger.js';
-import { EXPECTED_RECURRING_JOB_TYPES } from '../../src/services/job-chain-liveness.js';
+import {
+  EXPECTED_RECURRING_JOB_TYPES,
+  OFF_BY_DEFAULT_JOB_TYPES,
+} from '../../src/services/job-chain-liveness.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
@@ -94,7 +97,14 @@ describe('the production dependency graph arms every recurring chain', () => {
       expect(EXPECTED_RECURRING_JOB_TYPES.length, 'roster is populated').toBeGreaterThan(10);
       expect(armed.length, 'the boot enqueued pending work').toBeGreaterThan(10);
 
-      const missing = EXPECTED_RECURRING_JOB_TYPES.filter((t) => !armed.includes(t));
+      // This boots with the environment's defaults, and a chain that is off by
+      // default is not armed by them: excused BY NAME, with its switch, in
+      // job-chain-liveness.ts. That such a chain IS armed once switched on, and
+      // is not while it is off, is proved on a database of its own by
+      // with-ai-credits-off-nothing-new-is-registered-or-written.
+      const missing = EXPECTED_RECURRING_JOB_TYPES.filter(
+        (t) => !armed.includes(t) && !OFF_BY_DEFAULT_JOB_TYPES.has(t),
+      );
       expect(
         missing,
         'chains on the liveness roster with NO pending row after boot — registered but never enqueued, or not wired at all:',

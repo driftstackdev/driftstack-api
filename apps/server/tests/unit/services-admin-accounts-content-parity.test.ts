@@ -71,11 +71,17 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     );
   });
 
-  it('AccountsAdminRepo: 7 methods (findById / setTier / setStatus / list / countByStatus / countByTier / countCreatedSince)', () => {
+  it('AccountsAdminRepo: 7 methods (findById / setTier + SetAccountTierOptions / setStatus / list / countByStatus / countByTier / countCreatedSince)', () => {
     expect(body).toMatch(/export interface AccountsAdminRepo \{/);
     expect(body).toMatch(/findById\(id: string\): Promise<AccountRow \| null>;/);
     expect(body).toMatch(
-      /setTier\(id: string, tier: AccountTier, at: Date\): Promise<AccountRow \| null>;/,
+      /setTier\(\s*id: string,\s*tier: AccountTier,\s*at: Date,\s*opts\?: SetAccountTierOptions,\s*\): Promise<AccountRow \| null>;/,
+    );
+    // The options carry the Enterprise contract's monthly credits. Declared with
+    // the repo interface, not beside the Drizzle repo, so the in-memory double
+    // and the production repo both implement one file.
+    expect(body).toMatch(
+      /export interface SetAccountTierOptions \{[\s\S]*?readonly monthlyCredits\?: number;[\s\S]*?readonly setByKeyId\?: string \| null;[\s\S]*?readonly note\?: string;\s*\}/,
     );
     expect(body).toMatch(
       /setStatus\(\s*id: string,\s*status: 'active' \| 'suspended' \| 'deleted',\s*at: Date,\s*\): Promise<AccountRow \| null>;/,
@@ -118,8 +124,11 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
   it('AccountsAdminService: constructor takes repo + optional authCache + optional sessions reclaimer + optional GDPR Article 17 delete-reclaim trio (web sessions / API keys / webhooks)', () => {
     expect(body).toMatch(/export class AccountsAdminService \{/);
     expect(body).toMatch(
-      /constructor\(\s*private readonly repo: AccountsAdminRepo,\s*private readonly authCache: AuthCache \| null = null,\s*private readonly sessions: SuspendSessionReclaimer \| null = null,\s*private readonly webSessions: DeleteWebSessionReclaimer \| null = null,\s*private readonly apiKeys: DeleteApiKeyReclaimer \| null = null,\s*private readonly webhooks: DeleteWebhookReclaimer \| null = null,[\s\S]*?private readonly logger: \{[\s\S]*?\} \| null = null,[\s\S]*?private readonly billing: BillingCollectionPauser \| null = null,\s*\) \{\}/,
+      /constructor\(\s*private readonly repo: AccountsAdminRepo,\s*private readonly authCache: AuthCache \| null = null,\s*private readonly sessions: SuspendSessionReclaimer \| null = null,\s*private readonly webSessions: DeleteWebSessionReclaimer \| null = null,\s*private readonly apiKeys: DeleteApiKeyReclaimer \| null = null,\s*private readonly webhooks: DeleteWebhookReclaimer \| null = null,[\s\S]*?private readonly logger: \{[\s\S]*?\} \| null = null,[\s\S]*?private readonly billing: BillingCollectionPauser \| null = null,[\s\S]*?private readonly credits: CreditsRefresher \| null = null,\s*\) \{\}/,
     );
+    // The last dependency grants monthly AI credits. Optional and null while AI
+    // credits are switched off, so every existing construction site keeps working
+    // and a tier change then does exactly what it did.
     // V-758 — the pauser is the dependency that makes AUP §5.2 true. Optional so every
     // existing construction site and test double keeps working; when absent, suspension
     // behaves exactly as before.
@@ -186,9 +195,9 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     );
   });
 
-  it('changeTier / suspend / unsuspend: repo update with new Date() at → NotFoundError on null → invalidateCache', () => {
+  it('changeTier (with the Enterprise contract figure and the acting key) / suspend / unsuspend: repo update with new Date() at → NotFoundError on null → invalidateCache', () => {
     expect(body).toMatch(
-      /async changeTier\(\s*ctx: AccountContext,\s*accountId: string,\s*newTier: AccountTier,\s*\): Promise<AccountRow> \{[\s\S]+?const updated = await this\.repo\.setTier\(accountId, newTier, new Date\(\)\);\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);\s*await this\.invalidateCache\(accountId\);\s*return updated;/,
+      /async changeTier\(\s*ctx: AccountContext,\s*accountId: string,\s*newTier: AccountTier,\s*opts: SetAccountTierOptions = \{\},\s*\): Promise<AccountRow> \{[\s\S]+?const updated = await this\.repo\.setTier\(accountId, newTier, new Date\(\), \{\s*\.\.\.opts,\s*setByKeyId: opts\.setByKeyId \?\? ctx\.apiKey\.id,\s*\}\);\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);\s*await this\.invalidateCache\(accountId\);[\s\S]+?await refreshCreditsAfter\(this\.credits, accountId, \{\s*trigger: 'admin_tier_change',\s*rethrowTransient: false,\s*logger: this\.logger,\s*\}\);\s*return updated;/,
     );
     expect(body).toMatch(
       /async suspend\(ctx: AccountContext, accountId: string\): Promise<AccountRow> \{[\s\S]+?const updated = await this\.repo\.setStatus\(accountId, 'suspended', new Date\(\)\);\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);\s*await this\.invalidateCache\(accountId\);/,

@@ -12,6 +12,20 @@
 //      mirror (subscriptions table, accounts.tier, accounts.trial_pack_*)
 //      based on Stripe event payloads.
 //
+//   3. The paid-invoice record — `invoice.payment_succeeded` and
+//      `invoice.paid` write one `billing_invoice_payments` row per invoice,
+//      BEFORE anything a customer can see (the receipt email), so a failed
+//      write aborts the event and Stripe's retry does both, once each.
+//
+//   4. Monthly AI credits — ONLY while AI credits are switched on
+//      (`creditsRefresher` is wired). An applied subscription event and a
+//      recorded paid invoice are what change an account's paid coverage, so
+//      each ends by refreshing that account's credits. It is the LAST thing the
+//      handler does, after every write and email above is done, and it is
+//      idempotent: a transient failure is rethrown so Stripe retries, and the
+//      retry repeats nothing (the receipt is claimed once per event, the paid
+//      invoice is recorded once, a month is granted once).
+//
 // Signature verification is the route's job (it has the raw body); this
 // service receives a verified, parsed event.
 
@@ -19,8 +33,23 @@ import { createHash } from 'node:crypto';
 import type { AccountTier } from '@driftstack/api-types';
 import { isTransientInfraError } from '../lib/transient-error.js';
 import type { Logger } from '../lib/logger.js';
+import type { InvoicePaymentOutcome, InvoicePaymentRecord } from '../lib/invoice-payment-record.js';
+import {
+  reportUnlinkableInvoice,
+  type UnlinkableInvoiceReason,
+} from '../lib/report-unlinkable-invoice.js';
+import type { SentryClient } from '../lib/sentry.js';
+import {
+  invoiceSaysItIsNotPaid,
+  readPaidInvoice,
+  readSubscriptionPeriodStart,
+  type BillingInterval,
+  type PaidInvoiceFacts,
+  type PeriodStartSource,
+} from '../lib/stripe-billing-facts.js';
 import type { AccountLifecycleService } from './account-lifecycle.js';
 import type { AuthCache } from './auth-cache.js';
+import { refreshCreditsAfter, type CreditsRefresher } from './credit-grants.js';
 
 /**
  * Minimal parsed-Stripe-event shape. We don't depend on the `stripe`
@@ -100,7 +129,64 @@ export interface StripeWebhooksRepo {
     cancelAtPeriodEnd: boolean;
     canceledAt: Date | null;
     at: Date;
+    /**
+     * When the current period began, as the event said; null or omitted when it
+     * said nothing. Written as read (a null clears a stored start: the period may
+     * have rolled, and a stale start beside a new end would describe a period
+     * that never existed). A non-null start is recorded as read from Stripe.
+     */
+    currentPeriodStart?: Date | null;
+    /** 'month' | 'year' for a configured price; null or omitted for any other. */
+    billingInterval?: BillingInterval | null;
   }): Promise<{ applied: boolean }>;
+
+  /**
+   * Record one PAID invoice, keyed on the invoice id. Idempotent: a second
+   * sighting of the same invoice (the sibling event, a Stripe retry, the
+   * backfill) never writes a second row and never rewrites a known fact. It may
+   * only COMPLETE the record — tie a row that named no line to its line, add a
+   * payment reference that was absent — and says so in the outcome:
+   *   'inserted'          first sighting, row written
+   *   'completed'         the stored row gained a fact it lacked
+   *   'unchanged'         nothing to add, nothing written
+   *   'account_mismatch'  the invoice is recorded against ANOTHER account;
+   *                       nothing written (a payment is never re-attributed)
+   * `linked` says whether the STORED row names a subscription line once this
+   * call is done — which an earlier sighting may have supplied.
+   */
+  upsertInvoicePayment(
+    args: InvoicePaymentRecord,
+  ): Promise<{ outcome: InvoicePaymentOutcome; linked: boolean }>;
+
+  /**
+   * Period backfill read: subscription mirror rows with no stored period start,
+   * in `stripeSubscriptionId` order, after `afterStripeSubscriptionId` (null =
+   * from the beginning). The id order makes a walk resumable from any row.
+   */
+  listSubscriptionsMissingPeriodStart(args: {
+    afterStripeSubscriptionId: string | null;
+    limit: number;
+  }): Promise<
+    Array<{
+      stripeSubscriptionId: string;
+      stripePriceId: string;
+      currentPeriodEnd: Date | null;
+    }>
+  >;
+
+  /**
+   * Period backfill write: store a period start ONLY where none is stored, and
+   * only one that precedes the stored period end. Never overwrites a start a
+   * webhook wrote. `billingInterval` fills an unknown interval and never
+   * replaces a known one. Returns `{ filled }`: false when the row already had a
+   * start, is gone, or the start would not precede its end.
+   */
+  fillSubscriptionPeriodStart(args: {
+    stripeSubscriptionId: string;
+    currentPeriodStart: Date;
+    source: PeriodStartSource;
+    billingInterval: BillingInterval | null;
+  }): Promise<{ filled: boolean }>;
 
   /**
    * Set the account's `tier` column. Used when subscription state
@@ -262,6 +348,26 @@ export interface StripeWebhooksServiceConfig {
    * free tier).
    */
   cancelDowngradeTier?: AccountTier;
+  /**
+   * Stripe price id → how often it bills. Built beside `priceToTier` from the
+   * same configuration. A price absent from it (a custom contract) records no
+   * interval. Optional: absent means no price is known to bill by any interval.
+   */
+  priceToInterval?: Record<string, BillingInterval>;
+  /**
+   * Reads one invoice from Stripe. Used only when a paid-invoice event names no
+   * subscription line this server can read: the same invoice, fetched at the
+   * API version this server pins, may. Optional — without it such an invoice is
+   * recorded with no period and the alert below fires.
+   */
+  invoiceFetcher?: { getInvoice(invoiceId: string): Promise<Record<string, unknown>> };
+  /** Where the "paid invoice tied to no period" alert goes. Optional. */
+  sentry?: Pick<SentryClient, 'captureMessage'>;
+  /**
+   * Grants monthly AI credits from paid coverage. Null or absent while AI
+   * credits are switched off, and then no event does anything more than it did.
+   */
+  creditsRefresher?: CreditsRefresher | null;
 }
 
 export class StripeWebhooksService {
@@ -305,6 +411,34 @@ export class StripeWebhooksService {
     } catch {
       // Swallow — see method doc.
     }
+  }
+
+  /**
+   * Refresh the account's monthly AI credits after an event that may have
+   * changed what it has paid for. Nothing while AI credits are off.
+   *
+   * ⛔ CALLED LAST, after the handler's own writes and emails. A transient
+   * failure is rethrown: dispatch() lets it through, no ledger row is written,
+   * and Stripe redelivers the event — which then repeats nothing, because every
+   * step before this one applies once. Any other failure is logged, alerted and
+   * swallowed (see `refreshCreditsAfter`): it must not turn a handled event into
+   * a failed one, and the coverage sweep retries the account.
+   *
+   * TWO RACING DELIVERIES GRANT ONCE. dispatch() runs before the idempotency
+   * insert, so both deliveries reach here. The refresh takes the account's
+   * credit lock, so they run one after the other, and the second finds the
+   * first's window over now() and has nothing to grant; behind the lock the
+   * database refuses a second window over the same time (an exclusion
+   * constraint) and a second funding row for the same lot. Proved as a race in
+   * two-refreshes-of-one-account-at-once-grant-the-month-exactly-once.
+   */
+  private refreshCredits(accountId: string): Promise<void> {
+    return refreshCreditsAfter(this.config.creditsRefresher, accountId, {
+      trigger: 'stripe_webhook',
+      rethrowTransient: true,
+      logger: this.config.logger,
+      sentry: this.config.sentry ?? null,
+    });
   }
 
   /**
@@ -379,6 +513,14 @@ export class StripeWebhooksService {
           // processed_stripe_events ledger (duplicate event.id
           // short-circuits in handle() before dispatch).
           await this.handleInvoicePaymentSucceeded(event);
+          return 'handled';
+        case 'invoice.paid':
+          // The sibling of invoice.payment_succeeded: Stripe sends both for a
+          // paid invoice, and this one ALSO for an invoice settled outside a
+          // card payment. It records the payment and nothing else — the receipt
+          // belongs to payment_succeeded alone, because the send-once claim is
+          // keyed on the event id and these are two events.
+          await this.handleInvoicePaid(event);
           return 'handled';
         case 'invoice.payment_failed':
           // S44 2026-07-07 (founder-approved) — payment-failure notice.
@@ -530,6 +672,8 @@ export class StripeWebhooksService {
       cancelAtPeriodEnd,
       canceledAt,
       at,
+      currentPeriodStart: this.readPeriodStart(event, sub, currentPeriodEnd),
+      billingInterval: this.intervalOf(priceId),
     });
 
     // A stale event (an older one processed after a newer one) is skipped
@@ -627,6 +771,7 @@ export class StripeWebhooksService {
     }
 
     this.logEvent(event, `subscription ${status}`);
+    await this.refreshCredits(accountId);
     return 'handled';
   }
 
@@ -652,6 +797,7 @@ export class StripeWebhooksService {
       mappedCancelTier === undefined
         ? ((await this.repo.getAccountTier(accountId)) ?? 'free')
         : 'free';
+    const canceledPeriodEnd = readUnixTimestamp(sub, 'current_period_end');
     const { applied } = await this.repo.upsertSubscription({
       accountId,
       stripeSubscriptionId,
@@ -661,10 +807,12 @@ export class StripeWebhooksService {
       // back out by the tier recompute as a genuine entitlement.
       tier: mappedCancelTier ?? cancelFillerTier,
       status: 'canceled',
-      currentPeriodEnd: readUnixTimestamp(sub, 'current_period_end'),
+      currentPeriodEnd: canceledPeriodEnd,
       cancelAtPeriodEnd: false,
       canceledAt: at,
       at,
+      currentPeriodStart: this.readPeriodStart(event, sub, canceledPeriodEnd),
+      billingInterval: this.intervalOf(priceId),
     });
     // Stale cancel (a newer event already moved the row past this one) —
     // skip the downgrade so the customer keeps the tier the latest event
@@ -793,15 +941,27 @@ export class StripeWebhooksService {
       return;
     }
 
-    if (amountPaid === 0) {
-      this.logEvent(event, 'invoice.payment_succeeded (zero-amount — no receipt)');
-      return;
-    }
-
+    // ⛔ ORDER IS THE GUARANTEE. The paid-invoice row is written HERE: before the
+    // zero-amount return (a $0 invoice was paid too) and before the receipt. If
+    // the write throws, nothing a customer can see has happened yet; a transient
+    // failure is rethrown by dispatch(), no ledger row is written, and Stripe's
+    // retry records the payment and sends the receipt, once each. Moving this
+    // below the emit would let a receipt go out for a payment that was never
+    // recorded, and the retry would then be deduped as already-sent.
     const accountId = await this.repo.findAccountIdFromCustomerOrRef({
       stripeCustomerId,
       clientReferenceId: null,
     });
+    const recorded =
+      accountId !== null && (await this.recordPaidInvoice(event, invoice, accountId));
+
+    if (amountPaid === 0) {
+      this.logEvent(event, 'invoice.payment_succeeded (zero-amount — no receipt)');
+      // A $0 invoice was paid too, and covers its period like any other.
+      if (accountId !== null && recorded) await this.refreshCredits(accountId);
+      return;
+    }
+
     if (accountId === null) {
       this.config.logger.warn(
         { component: 'stripe-webhooks', eventId: event.id, stripeCustomerId },
@@ -825,6 +985,229 @@ export class StripeWebhooksService {
     }
 
     this.logEvent(event, 'invoice.payment_succeeded → billing receipt dispatched');
+    // After the receipt, never before it: see `refreshCredits`.
+    if (recorded) await this.refreshCredits(accountId);
+  }
+
+  /**
+   * `invoice.paid` handler. Records the paid invoice and sends NOTHING: the
+   * receipt is `invoice.payment_succeeded`'s alone. Bails on missing fields or
+   * an unknown customer, as that handler does.
+   */
+  private async handleInvoicePaid(event: StripeEvent): Promise<void> {
+    const invoice = event.data.object;
+    const stripeCustomerId = readString(invoice, 'customer');
+    const amountPaid = readNumber(invoice, 'amount_paid');
+    const currency = readString(invoice, 'currency');
+    const stripeInvoiceId = readString(invoice, 'id');
+
+    if (
+      stripeCustomerId === null ||
+      amountPaid === null ||
+      currency === null ||
+      stripeInvoiceId === null
+    ) {
+      this.config.logger.warn(
+        { component: 'stripe-webhooks', eventId: event.id },
+        'invoice.paid missing required fields; payment not recorded',
+      );
+      this.logEvent(event, 'invoice.paid (missing-fields)');
+      return;
+    }
+
+    const accountId = await this.repo.findAccountIdFromCustomerOrRef({
+      stripeCustomerId,
+      clientReferenceId: null,
+    });
+    if (accountId === null) {
+      this.config.logger.warn(
+        { component: 'stripe-webhooks', eventId: event.id, stripeCustomerId },
+        'invoice.paid references unknown customer; ignoring',
+      );
+      this.logEvent(event, 'invoice.paid (unknown-customer)');
+      return;
+    }
+
+    // The log line says what happened, not what was meant to: an invoice that was
+    // refused (it says it is not paid, its amount is unreadable, it is on record
+    // for another account) raises an alert that sends a person to this log, and
+    // "payment recorded" beside it would be a lie at the worst possible moment.
+    const recorded = await this.recordPaidInvoice(event, invoice, accountId);
+    this.logEvent(
+      event,
+      recorded ? 'invoice.paid → payment recorded' : 'invoice.paid (payment not recorded)',
+    );
+    if (recorded) await this.refreshCredits(accountId);
+  }
+
+  /**
+   * Write the `billing_invoice_payments` row for a paid invoice. Shared by both
+   * paid-invoice events; idempotent on the invoice id, so whichever arrives
+   * second (or a Stripe retry) writes nothing twice.
+   *
+   * The period comes from the invoice's subscription LINE, in either payload
+   * shape — never from the invoice's own top-level period. When the payload
+   * names no line this server can read, the invoice is fetched once and read
+   * again. Still nothing: the payment is recorded with no period, the invoice id
+   * is logged at error, and an alert goes out.
+   *
+   * Throws only what the caller must see: a transient failure (of the write, or
+   * of the fetch), which dispatch() rethrows so Stripe retries the whole event.
+   * A fetch that fails for any other reason is not a reason to lose the record.
+   *
+   * Resolves true when the invoice is on record for this account once the call
+   * returns (written now, completed, or already there); false when it was
+   * refused and nothing was written.
+   */
+  private async recordPaidInvoice(
+    event: StripeEvent,
+    invoice: Record<string, unknown>,
+    accountId: string,
+  ): Promise<boolean> {
+    const maps = {
+      priceToTier: this.config.priceToTier,
+      priceToInterval: this.config.priceToInterval ?? {},
+    };
+    let facts = readPaidInvoice(invoice, maps);
+    const { stripeInvoiceId, currency } = facts;
+    // Both callers have already required these two; this keeps the types honest.
+    if (stripeInvoiceId === null || currency === null) return false;
+
+    // The event's TYPE is this handler's evidence that the invoice was paid, so a
+    // payload with no status is recorded. One whose own invoice says 'open',
+    // 'void', … contradicts its event: nothing is recorded (a row here is what
+    // credits are granted from, and a $0 one counts as covered), and a person is
+    // told. Checked before Stripe is asked anything about it.
+    if (invoiceSaysItIsNotPaid(facts)) {
+      this.alertUnlinkableInvoice(event, stripeInvoiceId, 'not_paid');
+      return false;
+    }
+
+    const amountPaidMinor = facts.amountPaidMinor;
+    if (amountPaidMinor === null) {
+      this.alertUnlinkableInvoice(event, stripeInvoiceId, 'invalid_amount');
+      return false;
+    }
+
+    if (facts.line === null) {
+      facts = await this.readInvoiceAgainFromStripe(event, stripeInvoiceId, facts, maps);
+      // A payload that said nothing about its status may have been answered by
+      // Stripe: the same contradiction, found one step later, is refused the same way.
+      if (invoiceSaysItIsNotPaid(facts)) {
+        this.alertUnlinkableInvoice(event, stripeInvoiceId, 'not_paid');
+        return false;
+      }
+    }
+
+    const { outcome, linked } = await this.repo.upsertInvoicePayment({
+      stripeInvoiceId,
+      accountId,
+      stripeSubscriptionId: facts.stripeSubscriptionId,
+      billingReason: facts.billingReason,
+      amountPaidMinor,
+      currency,
+      stripePaymentIntentId: facts.stripePaymentIntentId,
+      stripeChargeId: facts.stripeChargeId,
+      line: facts.line,
+      paidAt: facts.paidAt ?? eventTime(event),
+    });
+
+    if (outcome === 'account_mismatch') {
+      this.alertUnlinkableInvoice(event, stripeInvoiceId, 'account_mismatch');
+      return false;
+    }
+    // `linked` is the STORED row: an earlier sighting may already have tied this
+    // invoice to its line, and then there is nothing to raise.
+    if (!linked) {
+      this.alertUnlinkableInvoice(
+        event,
+        stripeInvoiceId,
+        facts.unlinkedReason ?? 'no_subscription_line',
+      );
+    } else if (facts.line !== null && facts.line.tier === null) {
+      this.config.logger.warn(
+        { component: 'stripe-webhooks', eventId: event.id, stripeInvoiceId },
+        'paid invoice line price not in priceToTier map; recorded without a plan',
+      );
+    }
+    return true;
+  }
+
+  private async readInvoiceAgainFromStripe(
+    event: StripeEvent,
+    stripeInvoiceId: string,
+    facts: PaidInvoiceFacts,
+    maps: Parameters<typeof readPaidInvoice>[1],
+  ): Promise<PaidInvoiceFacts> {
+    const fetcher = this.config.invoiceFetcher;
+    if (fetcher === undefined) return facts;
+    try {
+      const again = readPaidInvoice(await fetcher.getInvoice(stripeInvoiceId), maps);
+      if (again.stripeInvoiceId !== stripeInvoiceId) return facts;
+      return {
+        ...facts,
+        stripeSubscriptionId: facts.stripeSubscriptionId ?? again.stripeSubscriptionId,
+        billingReason: facts.billingReason ?? again.billingReason,
+        status: facts.status ?? again.status,
+        stripePaymentIntentId: facts.stripePaymentIntentId ?? again.stripePaymentIntentId,
+        stripeChargeId: facts.stripeChargeId ?? again.stripeChargeId,
+        paidAt: facts.paidAt ?? again.paidAt,
+        line: again.line,
+        unlinkedReason: again.unlinkedReason,
+      };
+    } catch (err) {
+      if (isTransientInfraError(err)) throw err;
+      this.config.logger.warn(
+        {
+          component: 'stripe-webhooks',
+          eventId: event.id,
+          stripeInvoiceId,
+          err: err instanceof Error ? { name: err.name } : { value: 'non-error' },
+        },
+        'could not read the invoice from Stripe; recording it as delivered',
+      );
+      return facts;
+    }
+  }
+
+  /** The error log carries the invoice id; the alert carries no identifier at all. */
+  private alertUnlinkableInvoice(
+    event: StripeEvent,
+    stripeInvoiceId: string,
+    reason: UnlinkableInvoiceReason,
+  ): void {
+    this.config.logger.error(
+      { component: 'stripe-webhooks', eventId: event.id, stripeInvoiceId, reason },
+      'paid invoice is tied to no billing period',
+    );
+    reportUnlinkableInvoice(this.config.sentry, { reason, source: 'webhook' });
+  }
+
+  /**
+   * The subscription's period start, in either payload shape. A start that is
+   * not before the period's end is dropped rather than stored: the database
+   * refuses that pair, and a refused mirror write would take the tier update of
+   * the same event down with it.
+   */
+  private readPeriodStart(
+    event: StripeEvent,
+    subscription: Record<string, unknown>,
+    currentPeriodEnd: Date | null,
+  ): Date | null {
+    const start = readSubscriptionPeriodStart(subscription);
+    if (start === null || currentPeriodEnd === null) return start;
+    if (start.getTime() < currentPeriodEnd.getTime()) return start;
+    this.config.logger.warn(
+      { component: 'stripe-webhooks', eventId: event.id },
+      'subscription period start is not before its end; start not stored',
+    );
+    return null;
+  }
+
+  private intervalOf(priceId: string | null): BillingInterval | null {
+    const map = this.config.priceToInterval;
+    if (priceId === null || map === undefined || !Object.hasOwn(map, priceId)) return null;
+    return map[priceId] ?? null;
   }
 
   /**

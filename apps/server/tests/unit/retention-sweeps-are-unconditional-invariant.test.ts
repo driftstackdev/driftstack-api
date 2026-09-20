@@ -68,6 +68,19 @@ const NOT_A_RETENTION_JOB: Record<string, string> = {
     'table is agent_turn_telemetry.prune, which stays unconditional). Gated on ' +
     'DRIFTSTACK_DISABLE_AGENT_TURN_HEALTH_WATCHDOG by design: it is an alert source an ' +
     'operator must be able to silence.',
+  // The three monthly AI credits jobs. Registered only while
+  // DRIFTSTACK_AI_CREDITS_MODE is not off, by design: with it off no credit window
+  // or lot can exist, so there is nothing for them to grant or expire.
+  CreditsCoverageSweepJob:
+    'Grants monthly AI credits to accounts whose paid coverage earns them. It writes ' +
+    'billing records; it deletes and anonymises nothing, so no retention promise depends on it.',
+  CreditsExpirySweepJob:
+    'Writes the ledger row for AI credit whose term has ended. That credit is already ' +
+    'unspendable (every reader checks the term), and the ledger is append-only: nothing is ' +
+    'deleted or anonymised. A billing rule, not a data-retention promise.',
+  CreditsWindowBoundaryJob:
+    "Grants an account's next month of AI credits when its current window ends. Deletes and " +
+    'anonymises nothing, so no retention promise depends on it.',
 };
 
 /**

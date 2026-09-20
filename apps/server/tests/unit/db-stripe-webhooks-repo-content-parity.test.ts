@@ -43,16 +43,17 @@ describe('W446.C apps/server/src/db/stripe-webhooks-repo.ts content parity', () 
     );
   });
 
-  it('imports: and/desc/eq/gt/inArray/isNull/lte/sql from drizzle-orm; AccountTier; StripeWebhooksRepo from services; Database; accounts + cryptoEntitlements + processedStripeEvents + subscriptions schemas', () => {
+  it('imports: and/desc/eq/gt/inArray/isNull/lte/or/sql from drizzle-orm; AccountTier; StripeWebhooksRepo from services; Database; accounts + billingInvoicePayments + cryptoEntitlements + processedStripeEvents + subscriptions schemas', () => {
     expect(body).toMatch(
-      /import \{ and, desc, eq, gt, inArray, isNull, lte, sql \} from 'drizzle-orm';/,
+      /import \{ and, desc, eq, gt, inArray, isNull, lte, or, sql \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
     expect(body).toMatch(
       /import type \{ StripeWebhooksRepo \} from '\.\.\/services\/stripe-webhooks\.js';/,
     );
+    // Migration 0129 — the paid-invoice table joins the import, with its row type.
     expect(body).toMatch(
-      /import \{ accounts, cryptoEntitlements, processedStripeEvents, subscriptions \} from '\.\/schema\.js';/,
+      /import \{\s*accounts,\s*billingInvoicePayments,\s*cryptoEntitlements,\s*processedStripeEvents,\s*subscriptions,\s*type BillingInvoicePaymentRow,\s*\} from '\.\/schema\.js';/,
     );
   });
 
@@ -74,12 +75,12 @@ describe('W446.C apps/server/src/db/stripe-webhooks-repo.ts content parity', () 
     );
   });
 
-  it('upsertSubscription: 8-status enum union (incomplete|incomplete_expired|trialing|active|past_due|canceled|unpaid|paused) Stripe-mirror; onConflictDoUpdate target=stripeSubscriptionId; V-079 event-recency setWhere (updated_at <= excluded.updated_at) gates the conflict UPDATE; updates accountId+stripePriceId+tier+status+currentPeriodEnd+cancelAtPeriodEnd+canceledAt+updatedAt on conflict; .returning() surfaces the {applied} signal', () => {
+  it('upsertSubscription: 8-status enum union (incomplete|incomplete_expired|trialing|active|past_due|canceled|unpaid|paused) Stripe-mirror; onConflictDoUpdate target=stripeSubscriptionId; V-079 event-recency setWhere (updated_at <= excluded.updated_at) gates the conflict UPDATE; updates accountId+stripePriceId+tier+status+currentPeriodEnd+cancelAtPeriodEnd+canceledAt+updatedAt, then the 0129 period columns (currentPeriodStart+periodStartSource+billingInterval) and tierSince — which moves ONLY when the stored tier differs from the incoming one; .returning() surfaces the {applied} signal', () => {
     expect(body).toMatch(
       /status:\s*\| 'incomplete'\s*\| 'incomplete_expired'\s*\| 'trialing'\s*\| 'active'\s*\| 'past_due'\s*\| 'canceled'\s*\| 'unpaid'\s*\| 'paused';/,
     );
     expect(body).toMatch(
-      /\.onConflictDoUpdate\(\{\s*target: subscriptions\.stripeSubscriptionId,\s*setWhere: sql`\$\{subscriptions\.updatedAt\} <= excluded\.updated_at`,\s*set: \{\s*accountId: args\.accountId,\s*stripePriceId: args\.stripePriceId,\s*tier: args\.tier,\s*status: args\.status,\s*currentPeriodEnd: args\.currentPeriodEnd,\s*cancelAtPeriodEnd: args\.cancelAtPeriodEnd,\s*canceledAt: args\.canceledAt,\s*updatedAt: args\.at,\s*\},\s*\}\)\s*\.returning\(\{ id: subscriptions\.id \}\);\s*return \{ applied: result\.length > 0 \};/,
+      /\.onConflictDoUpdate\(\{\s*target: subscriptions\.stripeSubscriptionId,\s*setWhere: sql`\$\{subscriptions\.updatedAt\} <= excluded\.updated_at`,\s*set: \{\s*accountId: args\.accountId,\s*stripePriceId: args\.stripePriceId,\s*tier: args\.tier,\s*status: args\.status,\s*currentPeriodEnd: args\.currentPeriodEnd,\s*cancelAtPeriodEnd: args\.cancelAtPeriodEnd,\s*canceledAt: args\.canceledAt,\s*updatedAt: args\.at,\s*currentPeriodStart,\s*periodStartSource,\s*billingInterval,\s*tierSince: sql`CASE WHEN \$\{subscriptions\.tier\} IS DISTINCT FROM excluded\.tier THEN excluded\.updated_at ELSE \$\{subscriptions\.tierSince\} END`,\s*\},\s*\}\)\s*\.returning\(\{ id: subscriptions\.id \}\);\s*return \{ applied: result\.length > 0 \};/,
     );
   });
 

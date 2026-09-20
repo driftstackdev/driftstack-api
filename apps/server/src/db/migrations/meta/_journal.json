@@ -904,6 +904,20 @@
       "when": 1786665600016,
       "tag": "0128_credit_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1786665600017,
+      "tag": "0129_billing_periods_and_paid_invoices",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1786665600018,
+      "tag": "0130_credit_windows",
+      "breakpoints": true
     }
   ]
 }

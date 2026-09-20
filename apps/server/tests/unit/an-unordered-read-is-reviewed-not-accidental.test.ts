@@ -136,6 +136,53 @@ const REVIEWED_RAW: Array<{ match: string; why: string }> = [
       'health watchdog. One row, one column, and its result is never read — there is no row set ' +
       'whose order could matter',
   },
+  // credit-windows-repo (reviewed 2026-09-19). Five statements, each of which can return AT MOST
+  // ONE ROW, and for four of them a constraint is what says so.
+  {
+    match: 'INSERT INTO credit_windows (account_id, source, source_ref',
+    why:
+      'writeWindow: inserts one window. Its SELECT has no FROM — it is a VALUES row written as a ' +
+      'SELECT only so that it can carry the "contains now()" WHERE',
+  },
+  {
+    match: 'SELECT id FROM credit_windows WHERE account_id = ${accountId}::uuid AND source =',
+    why:
+      'writeWindow: looks one window up by (account, source, source_ref, natural_start), which ' +
+      'is exactly credit_windows_source_month_unique — at most one row',
+  },
+  {
+    match: 'INSERT INTO credit_lots (account_id, kind, spend_rank, window_id, grant_key',
+    why:
+      'ensureMonthlyLot and ensureProrationLot: each inserts one lot, read from one window by ' +
+      'its primary key',
+  },
+  {
+    match: 'SELECT id, granted_micro::text AS granted FROM credit_lots WHERE window_id =',
+    why:
+      "ensureMonthlyLot: a window's monthly lot. credit_lots_one_monthly_per_window (a partial " +
+      'unique index) means at most one row',
+  },
+  // credit-windows-repo, the plan-change writers (reviewed 2026-09-19). Both can return at most
+  // one row, and for both a unique index is what says so.
+  {
+    match: 'SELECT id, granted_micro::text AS granted FROM credit_lots WHERE grant_key =',
+    why:
+      'ensureProrationLot: the lot it just inserted, looked up by its grant key. ' +
+      'credit_lots_grant_key_unique means at most one row',
+  },
+  {
+    match: 'SELECT id, account_id, source, source_ref, target_key, state,',
+    why:
+      'findClawback: one clawback by (source, source_ref, target_key), which is exactly ' +
+      'credit_clawbacks_idempotency_unique — at most one row, and that uniqueness is the ' +
+      'whole reason the read exists',
+  },
+  {
+    match: 'FROM credit_windows WHERE account_id = ${accountId}::uuid AND window_start <= now()',
+    why:
+      'currentWindow: the window containing now(). credit_windows_no_overlap (an exclusion ' +
+      "constraint) means an account's windows never overlap, so one instant is in at most one",
+  },
 ];
 
 describe('V-1201 an unordered read is reviewed, not accidental', () => {

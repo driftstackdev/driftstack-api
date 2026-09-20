@@ -158,12 +158,12 @@ describe('W940 admin-accounts cross-source invariant', () => {
 
   // ─── AccountsAdminRepo 5-method interface ────────────────────
 
-  it('CRITICAL AccountsAdminRepo has 7 methods — findById + setTier + setStatus + list + countByStatus + countByTier + countCreatedSince. The 7-method interface is the storage seam; setTier + setStatus return AccountRow | null (null = row missing).', () => {
+  it('CRITICAL AccountsAdminRepo has 7 methods — findById + setTier + setStatus + list + countByStatus + countByTier + countCreatedSince. The 7-method interface is the storage seam; setTier + setStatus return AccountRow | null (null = row missing). setTier also takes an OPTIONAL SetAccountTierOptions: the Enterprise contract figure travels with the tier it pays for, and an older caller that sends only the three positional arguments still compiles.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/admin-accounts.ts'));
     expect(p).toMatch(/export interface AccountsAdminRepo \{/);
     expect(p).toMatch(/findById\(id: string\): Promise<AccountRow \| null>;/);
     expect(p).toMatch(
-      /setTier\(id: string, tier: AccountTier, at: Date\): Promise<AccountRow \| null>;/,
+      /setTier\(\s*id: string,\s*tier: AccountTier,\s*at: Date,\s*opts\?: SetAccountTierOptions,\s*\): Promise<AccountRow \| null>;/,
     );
     expect(p).toMatch(/setStatus\(/);
     expect(p).toMatch(/list\(args: ListAccountsArgs\): Promise<ListAccountsPage>;/);

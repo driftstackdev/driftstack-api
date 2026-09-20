@@ -1515,7 +1515,15 @@ function buildRegistry(): OpenAPIRegistry {
       params: z.object({ id: prefixedIdParam('acc', 'account') }),
       body: {
         required: true,
-        content: { 'application/json': { schema: ChangeTierRequestSchema } },
+        // ⛔ PUBLISHED WITHOUT `monthly_credits`, ON PURPOSE. The route accepts it
+        // (an Enterprise agreement's monthly figure), but it belongs to a feature
+        // that is built and switched off. This document is public, and nothing
+        // about an unreleased feature is published before it is live. The guard
+        // `nothing-about-an-unreleased-feature-is-in-the-published-spec` holds
+        // this; remove the omit and that guard's entry together at launch.
+        content: {
+          'application/json': { schema: ChangeTierRequestSchema.omit({ monthly_credits: true }) },
+        },
       },
     },
     responses: {

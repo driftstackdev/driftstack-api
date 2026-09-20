@@ -51,6 +51,7 @@ import { TIER_MONTHLY_PRICE_CENTS } from '../lib/cost-defaults.js';
 import type { Logger } from '../lib/logger.js';
 import type { AccountLifecycleService } from './account-lifecycle.js';
 import type { AuthCache } from './auth-cache.js';
+import { refreshCreditsAfter, type CreditsRefresher } from './credit-grants.js';
 import type { CryptoOrderTierActivationIntent, CryptoOrderTierActivator } from './crypto-orders.js';
 import type { StripeWebhooksRepo } from './stripe-webhooks.js';
 
@@ -126,9 +127,32 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
      * Optional + best-effort: a cache failure never fails activation.
      */
     private readonly authCache: AuthCache | null = null,
+    /**
+     * Grants monthly AI credits from paid coverage; a crypto entitlement is one
+     * kind of it. Null while AI credits are switched off, and then activation
+     * and refund do exactly what they did. Best-effort: the entitlement and the
+     * tier are already committed, the IPN's redelivery is a replay that changes
+     * nothing, and the coverage sweep retries a refresh that failed.
+     */
+    private readonly credits: CreditsRefresher | null = null,
   ) {}
 
   async activateTierForPaidOrder(intent: CryptoOrderTierActivationIntent): Promise<void> {
+    // The refresh runs LAST, after the entitlement, the tier and their fan-out —
+    // and also on a replay, which repairs a first delivery whose refresh failed.
+    if (await this.activateEntitlementForPaidOrder(intent)) {
+      await refreshCreditsAfter(this.credits, intent.account_id, {
+        trigger: 'crypto_activation',
+        rethrowTransient: false,
+        logger: this.logger,
+      });
+    }
+  }
+
+  /** Resolves true when the order's entitlement is on record for an account that exists. */
+  private async activateEntitlementForPaidOrder(
+    intent: CryptoOrderTierActivationIntent,
+  ): Promise<boolean> {
     // The checkout route Zod-locks `product` to the six priced tiers, but
     // orders can predate that rule (legacy trial_pack rows) or be seeded by
     // ops tooling — validate defensively and NEVER write an unknown value
@@ -147,7 +171,7 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
         },
         'crypto order paid with a product that is not an activatable tier — tier NOT applied; reconcile manually (integrity alarm)',
       );
-      return;
+      return false;
     }
     const tier = parsed.data;
     // effectiveAt = the paid transition moment (mirrors Stripe's use of the
@@ -184,7 +208,7 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
         },
         'crypto order paid but the account was not found — tier NOT applied (integrity alarm)',
       );
-      return;
+      return false;
     }
 
     if (!entitlementInserted) {
@@ -201,7 +225,7 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
         },
         'crypto order paid — entitlement already recorded for this order (replay); no change',
       );
-      return;
+      return true;
     }
 
     if (applied) {
@@ -237,7 +261,7 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
         },
         'crypto order paid — account tier activated',
       );
-      return;
+      return true;
     }
 
     // Entitlement was recorded but the account tier was NOT raised. Two cases,
@@ -258,7 +282,7 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
         },
         'crypto order paid for the tier the account already holds — entitlement extended',
       );
-      return;
+      return true;
     }
 
     // Lower-tier purchase while the account holds a higher tier (e.g. a Stripe
@@ -278,6 +302,7 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
       },
       'crypto order paid for a LOWER tier than the account currently holds — entitlement recorded as the floor until it expires; account tier unchanged',
     );
+    return true;
   }
 
   /**
@@ -380,6 +405,12 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
         'crypto order refunded — entitlement revoked; account still floored by other valid access, tier unchanged',
       );
     }
+    // The refunded term no longer covers anything. Last, after the tier and its fan-out.
+    await refreshCreditsAfter(this.credits, args.account_id, {
+      trigger: 'crypto_refund',
+      rethrowTransient: false,
+      logger: this.logger,
+    });
     return { revoked: true, previousTier, appliedTier };
   }
 }

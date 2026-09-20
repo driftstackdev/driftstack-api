@@ -46,6 +46,9 @@ const RECURRING_CONSUMERS = [
   'proxy-freshness-job.ts',
   'agent-turn-telemetry-prune-job.ts',
   'agent-turn-health-watchdog.ts',
+  // The two AI credits sweeps, and the per-account window-boundary job, which
+  // re-arms itself the same way (one pending row per account, never two).
+  'credit-grant-jobs.ts',
 ] as const;
 
 describe('recurring scheduled-job successor dedup invariant', () => {

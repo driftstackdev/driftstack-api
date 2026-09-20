@@ -183,8 +183,16 @@ export function registerAdminAccountsRoutes(
         request,
         'account.tier_changed',
         accountId,
-        { tier: body.tier, ...(body.reason ? { reason: body.reason } : {}) },
-        () => accountsAdmin.changeTier(ctx, accountId, body.tier),
+        {
+          tier: body.tier,
+          ...(body.reason ? { reason: body.reason } : {}),
+          ...(body.monthly_credits !== undefined ? { monthly_credits: body.monthly_credits } : {}),
+        },
+        () =>
+          accountsAdmin.changeTier(ctx, accountId, body.tier, {
+            ...(body.monthly_credits !== undefined ? { monthlyCredits: body.monthly_credits } : {}),
+            setByKeyId: ctx.apiKey.id,
+          }),
       );
       return publicAccount(updated);
     },

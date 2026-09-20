@@ -53,7 +53,7 @@ describe('W445.B apps/server/src/db/admin-accounts-repo.ts content parity', () =
       /import \{ AccountTierSchema, type AccountTier \} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
-      /import type \{\s*AccountsAdminRepo,\s*ListAccountsArgs,\s*ListAccountsPage,\s*\} from '\.\.\/services\/admin-accounts\.js';/,
+      /import type \{\s*AccountsAdminRepo,\s*ListAccountsArgs,\s*ListAccountsPage,\s*SetAccountTierOptions,\s*\} from '\.\.\/services\/admin-accounts\.js';/,
     );
     expect(body).toMatch(/import type \{ AccountRow \} from '\.\.\/services\/auth\.js';/);
   });
@@ -64,9 +64,47 @@ describe('W445.B apps/server/src/db/admin-accounts-repo.ts content parity', () =
     );
   });
 
-  it("setTier: update accounts set tier + updatedAt where id returning(); setStatus: same pattern with status enum 'active'|'suspended'|'deleted'", () => {
+  it("setTier: ONE transaction that locks accounts then credit_accounts, refuses Enterprise on a credits account with no contract figure, ends an admin_tier override when the tier changes, then updates accounts set tier + updatedAt returning(); setStatus: bare update with status enum 'active'|'suspended'|'deleted'", () => {
+    // The lock order AND THE STRENGTH are both load-bearing, and the strength
+    // is the one that is easy to get wrong. Every credit writer reaches this
+    // same `accounts` row through a foreign key, which takes FOR KEY SHARE on
+    // it; `for('update')` is the one strength that conflicts with that, so with
+    // it here a refresh holding `credit_accounts` and this change holding
+    // `accounts` deadlock (40P01, measured). `for('no key update')` is what the
+    // UPDATE below takes anyway and still serialises two tier changes. The
+    // deadlock itself is proved in
+    // `an-admin-tier-change-holds-the-account-…`, arm THE OTHER ORDER DOES NOT
+    // DEADLOCK; this pin is what stops the strength drifting back silently.
     expect(body).toMatch(
-      /async setTier\(id: string, tier: AccountTier, at: Date\): Promise<AccountRow \| null> \{\s*const \[row\] = await this\.database\.db\s*\.update\(accounts\)\s*\.set\(\{ tier, updatedAt: at \}\)\s*\.where\(eq\(accounts\.id, id\)\)\s*\.returning\(\);\s*return row \? toRow\(row\) : null;\s*\}/,
+      /async setTier\(\s*id: string,\s*tier: AccountTier,\s*at: Date,\s*opts: SetAccountTierOptions = \{\},\s*\): Promise<AccountRow \| null> \{\s*return this\.database\.db\.transaction\(async \(tx\) => \{/,
+    );
+    expect(body).toMatch(
+      /const \[current\] = await tx\s*\.select\(\{ tier: accounts\.tier \}\)\s*\.from\(accounts\)\s*\.where\(eq\(accounts\.id, id\)\)\s*\.limit\(1\)\s*\.for\('no key update'\);\s*if \(current === undefined\) return null;\s*const \[credit\] = await tx\s*\.select\(\{ billingMode: creditAccounts\.billingMode \}\)\s*\.from\(creditAccounts\)\s*\.where\(eq\(creditAccounts\.accountId, id\)\)\s*\.limit\(1\)\s*\.for\('update'\);\s*const onCredits = credit\?\.billingMode === 'credits';/,
+    );
+    expect(body).toMatch(
+      /if \(onCredits && tier === 'enterprise' && opts\.monthlyCredits === undefined\) \{\s*throw new BadRequestError\(/,
+    );
+    expect(body).toMatch(
+      /if \(current\.tier !== tier\) await this\.endAdminTierOverride\(tx, id\);/,
+    );
+    expect(body).toMatch(
+      /await this\.overrides\.upsert\(\s*\{\s*accountId: id,\s*monthlyCredits: opts\.monthlyCredits,\s*reason: 'contract',/,
+    );
+    // REVIEW B — `upsert` REPLACES the row, so an amendment that names only a
+    // new figure must carry the standing agreement's anchor day and own-key
+    // permission forward by hand. `anchor_at` is what the whole month calendar
+    // is counted from (`coverageCandidatesSql`), so losing it moves the
+    // customer's reset day and pays them a short window at a full month's
+    // level. Measured, and held by the two AMENDMENT arms of
+    // `an-admin-tier-change-holds-the-account-…`.
+    expect(body).toMatch(
+      /const standing = await this\.overrides\.get\(id, tx\);\s*const contract =\s*standing !== null && standing\.reason === 'contract' \? standing : null;/,
+    );
+    expect(body).toMatch(
+      /\.\.\.\(contract === null\s*\? \{\}\s*: \{ anchorAt: contract\.anchorAt, ownKeyAllowed: contract\.ownKeyAllowed \}\),\s*setByKeyId: opts\.setByKeyId \?\? null,\s*note: opts\.note \?\? contract\?\.note \?\? '',/,
+    );
+    expect(body).toMatch(
+      /const \[row\] = await tx\s*\.update\(accounts\)\s*\.set\(\{ tier, updatedAt: at \}\)\s*\.where\(eq\(accounts\.id, id\)\)\s*\.returning\(\);\s*return row \? toRow\(row\) : null;/,
     );
     expect(body).toMatch(
       /async setStatus\(\s*id: string,\s*status: 'active' \| 'suspended' \| 'deleted',\s*at: Date,\s*\): Promise<AccountRow \| null> \{/,

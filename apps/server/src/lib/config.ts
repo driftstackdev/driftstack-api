@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { execSync } from 'node:child_process';
 
+/** What DRIFTSTACK_AI_CREDITS_MODE may say. `off` is the default. */
+export const AI_CREDITS_MODES = ['off', 'shadow', 'enforce'] as const;
+export type AiCreditsMode = (typeof AI_CREDITS_MODES)[number];
+
 const ConfigSchema = z.object({
   nodeEnv: z.enum(['development', 'test', 'production']).default('development'),
   port: z.coerce.number().int().positive().default(3000),
@@ -238,6 +242,13 @@ const ConfigSchema = z.object({
   // deterministic key path. Manual transcript-only turns bypass it. Default 3;
   // tune via AGENT_TURN_MAX_ACCOUNT_INFLIGHT.
   agentTurnMaxAccountInFlight: z.coerce.number().int().positive().default(3),
+  // AI credits, the master switch. `off` (the default) runs nothing new: no
+  // monthly grants, no credit jobs, and billing events do nothing more than they
+  // did. `shadow` and `enforce` both run the monthly grants and their jobs for
+  // every account with paid coverage. Read from DRIFTSTACK_AI_CREDITS_MODE by
+  // `parseAiCreditsMode`, which refuses a value that is none of the three: a
+  // misspelt mode must not read as `off` and say nothing.
+  aiCreditsMode: z.enum(AI_CREDITS_MODES).default('off'),
   // V-079: where the user-facing auth-flow links point. The plaintext
   // single-use token gets appended as `?token=<...>` to each. Defaults
   // are dev-friendly localhost URLs; production sets these to the real
@@ -700,6 +711,22 @@ export function envFlag(raw: string | undefined): boolean {
   return ['true', '1', 'yes', 'on'].includes(raw.trim().toLowerCase());
 }
 
+/**
+ * DRIFTSTACK_AI_CREDITS_MODE, read the way `envFlag` reads a boolean: trimmed and
+ * case-insensitive, because a value pasted out of a secret store often carries a
+ * trailing newline. Unset or blank is `off`. Anything else that is not a mode
+ * REFUSES TO BOOT — a typo here would otherwise run as `off`, silently, in the
+ * one deployment somebody meant to switch on.
+ */
+export function parseAiCreditsMode(raw: string | undefined): AiCreditsMode {
+  const value = (raw ?? '').trim().toLowerCase();
+  if (value === '') return 'off';
+  if ((AI_CREDITS_MODES as readonly string[]).includes(value)) return value as AiCreditsMode;
+  throw new Error(
+    `Refusing to boot: DRIFTSTACK_AI_CREDITS_MODE must be one of ${AI_CREDITS_MODES.join(', ')} (or unset, which is off).`,
+  );
+}
+
 function coerceTrustProxy(raw: string | undefined): boolean | number | string {
   if (raw === undefined || raw.length === 0) return false;
   if (raw === 'true') return true;
@@ -856,6 +883,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     agentUploadMaxAccountInFlightCount: env.AGENT_UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT,
     bundledTurnMaxConcurrency: env.BUNDLED_TURN_MAX_CONCURRENCY,
     agentTurnMaxAccountInFlight: env.AGENT_TURN_MAX_ACCOUNT_INFLIGHT,
+    aiCreditsMode: parseAiCreditsMode(env.DRIFTSTACK_AI_CREDITS_MODE),
     authFlowUrls: deriveAuthFlowUrls(env),
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,

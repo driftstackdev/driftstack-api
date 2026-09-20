@@ -2,12 +2,32 @@
 // ledger + subscription mirror writes + account tier / trial-pack
 // mutations triggered by inbound Stripe events.
 
-import { and, desc, eq, gt, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { AccountTier } from '@driftstack/api-types';
 import type { StripeWebhooksRepo } from '../services/stripe-webhooks.js';
 import { isCryptoTierUpgrade, tierActivationRank } from '../services/crypto-tier-activation.js';
+import {
+  completeInvoicePayment,
+  type InvoicePaymentOutcome,
+  type InvoicePaymentRecord,
+} from '../lib/invoice-payment-record.js';
+import {
+  BILLING_INTERVALS,
+  BILLING_INVOICE_LINE_KINDS,
+  type BillingInterval,
+  type BillingInvoiceLineKind,
+  type PaidInvoiceLine,
+  type PeriodStartSource,
+} from '../lib/stripe-billing-facts.js';
 import type { Database } from './client.js';
-import { accounts, cryptoEntitlements, processedStripeEvents, subscriptions } from './schema.js';
+import {
+  accounts,
+  billingInvoicePayments,
+  cryptoEntitlements,
+  processedStripeEvents,
+  subscriptions,
+  type BillingInvoicePaymentRow,
+} from './schema.js';
 import { ACTIVE_SUBSCRIPTION_STATUSES } from './subscription-status-sets.js';
 
 export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
@@ -100,7 +120,19 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
     cancelAtPeriodEnd: boolean;
     canceledAt: Date | null;
     at: Date;
+    currentPeriodStart?: Date | null;
+    billingInterval?: BillingInterval | null;
   }): Promise<{ applied: boolean }> {
+    // The period start is written as the event gave it, and a start read from an
+    // event is by definition read from Stripe. `tier_since` is the event time of
+    // the last plan CHANGE: set on insert, and on conflict moved only when the
+    // stored plan differs from the incoming one — so an unrelated update (a
+    // payment-method swap, a renewal) leaves it alone. The comparison reads the
+    // STORED row, which is why it is SQL and not a value computed here.
+    const currentPeriodStart = args.currentPeriodStart ?? null;
+    const periodStartSource: PeriodStartSource | null =
+      currentPeriodStart === null ? null : 'stripe';
+    const billingInterval = args.billingInterval ?? null;
     // Event-recency guard. `args.at` is the EVENT time (event.created), the
     // canonical ordering signal — Stripe does not guarantee delivery order
     // and re-delivers failed events for up to 3 days, so a stale / out-of-
@@ -131,6 +163,10 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
         canceledAt: args.canceledAt,
         createdAt: args.at,
         updatedAt: args.at,
+        currentPeriodStart,
+        periodStartSource,
+        billingInterval,
+        tierSince: args.at,
       })
       .onConflictDoUpdate({
         target: subscriptions.stripeSubscriptionId,
@@ -144,10 +180,128 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
           cancelAtPeriodEnd: args.cancelAtPeriodEnd,
           canceledAt: args.canceledAt,
           updatedAt: args.at,
+          currentPeriodStart,
+          periodStartSource,
+          billingInterval,
+          tierSince: sql`CASE WHEN ${subscriptions.tier} IS DISTINCT FROM excluded.tier THEN excluded.updated_at ELSE ${subscriptions.tierSince} END`,
         },
       })
       .returning({ id: subscriptions.id });
     return { applied: result.length > 0 };
+  }
+
+  async upsertInvoicePayment(
+    args: InvoicePaymentRecord,
+  ): Promise<{ outcome: InvoicePaymentOutcome; linked: boolean }> {
+    // INSERT first, and let the primary key arbitrate: two deliveries of one
+    // invoice racing here both try, one row lands, and the loser's DO NOTHING
+    // waits for the winner to commit. Only then is the stored row read — under a
+    // row lock, so two completions cannot interleave — and completed by the one
+    // shared rule. A sighting that adds nothing writes nothing.
+    type Result = { outcome: InvoicePaymentOutcome; linked: boolean };
+    return this.database.db.transaction(async (tx): Promise<Result> => {
+      const inserted = await tx
+        .insert(billingInvoicePayments)
+        .values({
+          stripeInvoiceId: args.stripeInvoiceId,
+          accountId: args.accountId,
+          stripeSubscriptionId: args.stripeSubscriptionId,
+          billingReason: args.billingReason,
+          amountPaidMinor: args.amountPaidMinor,
+          currency: args.currency,
+          stripePaymentIntentId: args.stripePaymentIntentId,
+          stripeChargeId: args.stripeChargeId,
+          ...lineColumns(args.line),
+          paidAt: args.paidAt,
+        })
+        .onConflictDoNothing({ target: billingInvoicePayments.stripeInvoiceId })
+        .returning({ stripeInvoiceId: billingInvoicePayments.stripeInvoiceId });
+      if (inserted.length > 0) return { outcome: 'inserted', linked: args.line !== null };
+
+      const [row] = await tx
+        .select()
+        .from(billingInvoicePayments)
+        .where(eq(billingInvoicePayments.stripeInvoiceId, args.stripeInvoiceId))
+        .for('update')
+        .limit(1);
+      if (row === undefined) {
+        // The conflicting row was removed between the two statements; only an
+        // account deletion does that. Say so rather than report a write.
+        throw new Error('billing_invoice_payments row vanished while it was being recorded');
+      }
+      if (row.accountId !== args.accountId) return { outcome: 'account_mismatch', linked: false };
+
+      const stored = recordOf(row);
+      const completed = completeInvoicePayment(stored, args);
+      if (completed === null) return { outcome: 'unchanged', linked: stored.line !== null };
+      await tx
+        .update(billingInvoicePayments)
+        .set({
+          stripeSubscriptionId: completed.stripeSubscriptionId,
+          billingReason: completed.billingReason,
+          amountPaidMinor: completed.amountPaidMinor,
+          stripePaymentIntentId: completed.stripePaymentIntentId,
+          stripeChargeId: completed.stripeChargeId,
+          ...lineColumns(completed.line),
+        })
+        .where(eq(billingInvoicePayments.stripeInvoiceId, args.stripeInvoiceId));
+      return { outcome: 'completed', linked: completed.line !== null };
+    });
+  }
+
+  async listSubscriptionsMissingPeriodStart(args: {
+    afterStripeSubscriptionId: string | null;
+    limit: number;
+  }): Promise<
+    Array<{ stripeSubscriptionId: string; stripePriceId: string; currentPeriodEnd: Date | null }>
+  > {
+    return this.database.db
+      .select({
+        stripeSubscriptionId: subscriptions.stripeSubscriptionId,
+        stripePriceId: subscriptions.stripePriceId,
+        currentPeriodEnd: subscriptions.currentPeriodEnd,
+      })
+      .from(subscriptions)
+      .where(
+        and(
+          isNull(subscriptions.currentPeriodStart),
+          args.afterStripeSubscriptionId === null
+            ? undefined
+            : gt(subscriptions.stripeSubscriptionId, args.afterStripeSubscriptionId),
+        ),
+      )
+      .orderBy(subscriptions.stripeSubscriptionId)
+      .limit(args.limit);
+  }
+
+  async fillSubscriptionPeriodStart(args: {
+    stripeSubscriptionId: string;
+    currentPeriodStart: Date;
+    source: PeriodStartSource;
+    billingInterval: BillingInterval | null;
+  }): Promise<{ filled: boolean }> {
+    // Only where no start is stored (a webhook's start is never overwritten),
+    // and only a start the period-order CHECK will accept. The interval fills an
+    // unknown one and never replaces a known one.
+    const result = await this.database.db
+      .update(subscriptions)
+      .set({
+        currentPeriodStart: args.currentPeriodStart,
+        periodStartSource: args.source,
+        billingInterval: sql`COALESCE(${subscriptions.billingInterval}, ${args.billingInterval})`,
+      })
+      .where(
+        and(
+          eq(subscriptions.stripeSubscriptionId, args.stripeSubscriptionId),
+          isNull(subscriptions.currentPeriodStart),
+          or(
+            isNull(subscriptions.currentPeriodEnd),
+            gt(subscriptions.currentPeriodEnd, args.currentPeriodStart),
+          ),
+        ),
+      )
+      .returning({ id: subscriptions.id });
+    return { filled: result.length > 0 };
   }
 
   async setAccountTier(args: {
@@ -499,6 +653,68 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
       .set({ expiredProcessedAt: args.at, updatedAt: args.at })
       .where(inArray(cryptoEntitlements.id, args.ids));
   }
+}
+
+/**
+ * The six line columns of a paid-invoice row. With no line, all six are null.
+ * With one, its kind and its period are always set; its price, plan and interval
+ * may each be unknown (a price the configuration does not name).
+ */
+function lineColumns(line: PaidInvoiceLine | null): {
+  lineKind: BillingInvoiceLineKind | null;
+  lineStripePriceId: string | null;
+  lineTier: AccountTier | null;
+  lineInterval: BillingInterval | null;
+  linePeriodStart: Date | null;
+  linePeriodEnd: Date | null;
+} {
+  return {
+    lineKind: line?.kind ?? null,
+    lineStripePriceId: line?.stripePriceId ?? null,
+    lineTier: line?.tier ?? null,
+    lineInterval: line?.interval ?? null,
+    linePeriodStart: line?.periodStart ?? null,
+    linePeriodEnd: line?.periodEnd ?? null,
+  };
+}
+
+/**
+ * A stored row as the record the merge rule speaks. The two text columns are
+ * held to their value sets by CHECK constraints; a value outside them cannot be
+ * stored, and is refused here rather than cast if one ever is.
+ */
+function recordOf(row: BillingInvoicePaymentRow): InvoicePaymentRecord {
+  const kind = BILLING_INVOICE_LINE_KINDS.find((k) => k === row.lineKind) ?? null;
+  if (row.lineKind !== null && kind === null) {
+    throw new Error('billing_invoice_payments.line_kind holds a value outside its set');
+  }
+  const interval = BILLING_INTERVALS.find((i) => i === row.lineInterval) ?? null;
+  if (row.lineInterval !== null && interval === null) {
+    throw new Error('billing_invoice_payments.line_interval holds a value outside its set');
+  }
+  const line: PaidInvoiceLine | null =
+    kind === null || row.linePeriodStart === null || row.linePeriodEnd === null
+      ? null
+      : {
+          kind,
+          stripePriceId: row.lineStripePriceId,
+          tier: row.lineTier,
+          interval,
+          periodStart: row.linePeriodStart,
+          periodEnd: row.linePeriodEnd,
+        };
+  return {
+    stripeInvoiceId: row.stripeInvoiceId,
+    accountId: row.accountId,
+    stripeSubscriptionId: row.stripeSubscriptionId,
+    billingReason: row.billingReason,
+    amountPaidMinor: row.amountPaidMinor,
+    currency: row.currency,
+    stripePaymentIntentId: row.stripePaymentIntentId,
+    stripeChargeId: row.stripeChargeId,
+    line,
+    paidAt: row.paidAt,
+  };
 }
 
 // Reference sql to keep the import live for any future raw-SQL needs.

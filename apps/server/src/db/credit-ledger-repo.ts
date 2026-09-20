@@ -2,9 +2,10 @@
 //
 // The primitives later work builds on, and nothing more: make sure an account
 // has its credit row (and lock it), add a lot, write a ledger row, read the
-// spendable balance, and read the ledger a page at a time. There are no grants
-// from billing here and no reservations; those compose these primitives in
-// their own transactions.
+// spendable balance, read the ledger a page at a time, expire what is left of
+// lots whose term has ended, and repay debt from free credit. There are no
+// grants from billing here and no reservations; those compose these primitives
+// in their own transactions.
 //
 // ⛔ THE DATABASE IS THE AUTHORITY, NOT THIS FILE. A lot is born empty and an
 // account owes nothing until a ledger row says otherwise; a balance column is
@@ -155,8 +156,9 @@ interface LedgerEntryCommon {
 
 /**
  * A ledger row this module writes, one variant per movement. Task charges,
- * proration and refund movements and top-ups are written by the work that owns
- * them, not here.
+ * refund movements and top-ups are written by the work that owns them, not
+ * here; the two proration movements are below because a mid-month plan change
+ * is written through `append` like every other movement (`credit-grants.ts`).
  */
 export type NewCreditLedgerEntry = LedgerEntryCommon &
   (
@@ -170,6 +172,28 @@ export type NewCreditLedgerEntry = LedgerEntryCommon &
     | {
         /** Credits leave a lot unspent. */
         readonly kind: 'expiry';
+        readonly lotId: string;
+        readonly amountMicro: number;
+        readonly reason?: string | null;
+      }
+    | {
+        /**
+         * A mid-month UPGRADE's share of the rest of the window arrives in its
+         * own `proration` lot. Funds that lot exactly as `grant` funds a
+         * monthly one.
+         */
+        readonly kind: 'proration_grant';
+        readonly lotId: string;
+        readonly amountMicro: number;
+        readonly reason?: string | null;
+      }
+    | {
+        /**
+         * A mid-month DOWNGRADE takes back what one lot still holds. Never more
+         * than the lot's free credit: what a running task holds is not taken
+         * (the clawback records that part as a pending claim instead).
+         */
+        readonly kind: 'proration_clawback';
         readonly lotId: string;
         readonly amountMicro: number;
         readonly reason?: string | null;
@@ -233,6 +257,18 @@ export interface CreditLedgerPage {
   readonly entries: readonly CreditLedgerRecord[];
   /** Pass back as `cursor` for the next (older) page; null on the last page. */
   readonly nextCursor: string | null;
+}
+
+/** One lot's unspent, unheld credit leaving it because its term ended. */
+export interface ExpiredCreditLot {
+  readonly lotId: string;
+  readonly expiredMicro: number;
+}
+
+/** Debt paid down from one lot's free credit. */
+export interface CreditDebtRepayment {
+  readonly lotId: string;
+  readonly repaidMicro: number;
 }
 
 /** An idempotency key already used by a different movement on the same account. */
@@ -300,6 +336,22 @@ export function creditLedgerRowFor(entry: NewCreditLedgerEntry): CreditLedgerRow
         kind: 'expiry',
         lotId: entry.lotId,
         lotDeltaMicro: -positiveMicro('an expiry', entry.amountMicro),
+        debtDeltaMicro: 0,
+      };
+    case 'proration_grant':
+      return {
+        ...common,
+        kind: 'proration_grant',
+        lotId: entry.lotId,
+        lotDeltaMicro: positiveMicro('a proration grant', entry.amountMicro),
+        debtDeltaMicro: 0,
+      };
+    case 'proration_clawback':
+      return {
+        ...common,
+        kind: 'proration_clawback',
+        lotId: entry.lotId,
+        lotDeltaMicro: -positiveMicro('a proration clawback', entry.amountMicro),
         debtDeltaMicro: 0,
       };
     case 'adjustment': {
@@ -516,6 +568,111 @@ export class DrizzleCreditLedgerRepo {
   }
 
   /**
+   * Credit that running tasks are holding right now: the sum of `held` over
+   * every one of the account's lots. Unlike `spendableMicro` this counts lots
+   * whose term has already ended, because a task that started before a lot
+   * expired still holds — and may still be charged from — the part it took.
+   *
+   * It is what decides how much of a clawback's shortfall is a PENDING CLAIM
+   * rather than debt: credit a task is holding is credit the account still has,
+   * and the claim is paid out of it when the task settles.
+   */
+  async heldMicro(accountId: string, on: CreditLedgerExecutor = this.database.db): Promise<number> {
+    const [row] = await on
+      .select({ micro: sql<string>`coalesce(sum(${creditLots.heldMicro}), 0)::text` })
+      .from(creditLots)
+      .where(eq(creditLots.accountId, accountId));
+    return exact('held credit', Number(row?.micro ?? '0'));
+  }
+
+  /**
+   * Expire what is left of every lot of this account whose term has ended: one
+   * `expiry` row per lot, for `remaining − held` — never the part a running task
+   * still holds, which that task may yet be charged from. "Ended" is judged on
+   * the DATABASE's clock. One statement, so each lot's amount and its row are
+   * read and written together.
+   *
+   * ⛔ CALL UNDER `lockAccount`. The key is `expiry:<lot>:<n>`, n counting the
+   * lot's expiry rows: a lot whose held part is released after it expired gives
+   * that part up in a second row, which needs a key of its own. Two callers that
+   * both held the lock in turn cannot compute the same n for different amounts;
+   * two that did not could, and the second would silently expire nothing.
+   */
+  async expireDueLots(tx: CreditLedgerTx, accountId: string): Promise<ExpiredCreditLot[]> {
+    const result = await tx.execute<{ lot_id: string; expired: string }>(sql`
+      INSERT INTO credit_ledger (account_id, kind, lot_id, lot_delta_micro, idempotency_key, actor)
+      SELECT l.account_id, 'expiry', l.id, -(l.remaining_micro - l.held_micro),
+             'expiry:' || l.id || ':' || (
+               1 + (SELECT count(*) FROM credit_ledger x WHERE x.lot_id = l.id AND x.kind = 'expiry')),
+             'system'
+        FROM credit_lots l
+       WHERE l.account_id = ${accountId}::uuid
+         AND l.expires_at <= now()
+         AND l.remaining_micro > l.held_micro
+       ORDER BY l.expires_at, l.id
+      ON CONFLICT (account_id, idempotency_key) DO NOTHING
+      RETURNING lot_id, (-lot_delta_micro)::text AS expired`);
+    return rowsOf<{ lot_id: string; expired: string }>(result).map((r) => ({
+      lotId: r.lot_id,
+      expiredMicro: exact('an expired amount', Number(r.expired)),
+    }));
+  }
+
+  /**
+   * Repay the account's debt from its spendable credit, in spend order
+   * (included credits, then goodwill, then bought credits; soonest to expire
+   * first), until the debt is gone or no free credit is left. One
+   * `debt_repayment` row per lot used.
+   *
+   * The database refuses to COMMIT an account that holds debt beside spendable
+   * credit, so every transaction that adds free credit to an account, or debt to
+   * one, ends with this. ⛔ CALL UNDER `lockAccount`: the debt read here is the
+   * locked row's, and the key `debt_repayment:<lot>:<n>` counts the lot's
+   * repayment rows the same way `expireDueLots` counts expiries.
+   */
+  async settleDebtFromFree(tx: CreditLedgerTx, accountId: string): Promise<CreditDebtRepayment[]> {
+    const [account] = await tx
+      .select({ debtMicro: creditAccounts.debtMicro })
+      .from(creditAccounts)
+      .where(eq(creditAccounts.accountId, accountId))
+      .limit(1)
+      .for('update');
+    let owed = exact('credit_accounts.debt_micro', account?.debtMicro ?? 0);
+    if (owed <= 0) return [];
+
+    const lots = await tx.execute<{ id: string; free: string; repayments: string }>(sql`
+      SELECT l.id, (l.remaining_micro - l.held_micro)::text AS free,
+             (SELECT count(*) FROM credit_ledger x
+               WHERE x.lot_id = l.id AND x.kind = 'debt_repayment')::text AS repayments
+        FROM credit_lots l
+       WHERE l.account_id = ${accountId}::uuid
+         AND l.starts_at <= now() AND l.expires_at > now() AND l.revoked_at IS NULL
+         AND l.remaining_micro > l.held_micro
+       ORDER BY l.spend_rank, l.expires_at, l.created_at, l.id
+         FOR UPDATE OF l`);
+    const repaid: CreditDebtRepayment[] = [];
+    for (const lot of rowsOf<{ id: string; free: string; repayments: string }>(lots)) {
+      if (owed <= 0) break;
+      const free = exact('free credit', Number(lot.free));
+      const amount = Math.min(free, owed);
+      const n = exact('a repayment count', Number(lot.repayments)) + 1;
+      await this.append(
+        {
+          accountId,
+          kind: 'debt_repayment',
+          lotId: lot.id,
+          amountMicro: amount,
+          idempotencyKey: `debt_repayment:${lot.id}:${String(n)}`,
+        },
+        tx,
+      );
+      repaid.push({ lotId: lot.id, repaidMicro: amount });
+      owed = owed - amount;
+    }
+    return repaid;
+  }
+
+  /**
    * One page of the account's ledger, newest first. `cursor` is the id of the
    * last entry already seen; the page holds entries older than it.
    */
@@ -550,6 +707,12 @@ export class DrizzleCreditLedgerRepo {
       nextCursor: rows.length > limit && last !== undefined ? last.id : null,
     };
   }
+}
+
+/** The rows of a raw `execute`: postgres-js returns them as the array itself. */
+export function rowsOf<T>(result: unknown): T[] {
+  const rows = (result as { rows?: unknown }).rows;
+  return (Array.isArray(rows) ? rows : (result as unknown[])) as T[];
 }
 
 /**

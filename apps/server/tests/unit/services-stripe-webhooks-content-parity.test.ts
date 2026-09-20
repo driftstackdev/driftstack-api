@@ -173,9 +173,12 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
     expect(body).toMatch(
       /kind: 'billing\.payment_failed',\s*amountCents: amountDue,\s*currency,\s*retryAt,\s*stripeEventId: event\.id,\s*stripeInvoiceId,/,
     );
-    // Zero-amount receipts are noise — pinned skip.
+    // Zero-amount receipts are noise — pinned skip. A $0 invoice was still PAID,
+    // so while AI credits are switched on the skip ends by refreshing the
+    // account's credits (a no-op otherwise), and only then returns: no receipt
+    // is sent on this path either way.
     expect(body).toMatch(
-      /if \(amountPaid === 0\) \{\s*this\.logEvent\(event, 'invoice\.payment_succeeded \(zero-amount — no receipt\)'\);\s*return;/,
+      /if \(amountPaid === 0\) \{\s*this\.logEvent\(event, 'invoice\.payment_succeeded \(zero-amount — no receipt\)'\);\s*\/\/ A \$0 invoice was paid too, and covers its period like any other\.\s*if \(accountId !== null && recorded\) await this\.refreshCredits\(accountId\);\s*return;/,
     );
   });
 

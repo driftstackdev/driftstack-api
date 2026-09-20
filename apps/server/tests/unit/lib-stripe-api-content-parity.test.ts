@@ -167,7 +167,14 @@ describe('W392.A apps/server/src/lib/stripe-api.ts content parity', () => {
   });
 
   it('post() error paths: malformed_response on JSON parse fail + StripeApiError on !res.ok', () => {
-    expect(body).toMatch(/readBoundedResponseBody\(res, MAX_STRIPE_RESPONSE_BODY_BYTES\)/);
+    // The reader is shared by post() and get(), so the cap is its parameter:
+    // post() and a single-object read pass the 256 KiB cap, a list page its own.
+    expect(body).toMatch(/readBoundedResponseBody\(res, maxBodyBytes\)/);
+    expect(body).toMatch(
+      /return await this\.readResponse<T>\(res, path, MAX_STRIPE_RESPONSE_BODY_BYTES\);/,
+    );
+    expect(body).toMatch(/maxBodyBytes: number = MAX_STRIPE_RESPONSE_BODY_BYTES,/);
+    expect(body).toMatch(/const MAX_STRIPE_LIST_RESPONSE_BODY_BYTES = 4 \* 1024 \* 1024;/);
     expect(body).toMatch(/err instanceof ResponseBodyLimitError/);
     expect(body).toMatch(
       /stripeError: \{ type: 'malformed_response', message: 'Stripe response was not JSON' \},/,

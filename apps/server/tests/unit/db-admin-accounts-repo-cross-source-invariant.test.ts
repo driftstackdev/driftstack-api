@@ -64,8 +64,12 @@ describe('W1005 db/admin-accounts-repo cross-source invariant', () => {
   it('CRITICAL 7-method surface — findById + setTier + setStatus + list + countByStatus + countByTier + countCreatedSince. The admin contract covers id-lookup + 2 mutations + paged-list + status-count + tier-distribution + signup-window count.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/admin-accounts-repo.ts'));
     expect(p).toMatch(/async findById\(id: string\): Promise<AccountRow \| null> \{/);
+    // setTier gained a fourth, optional argument with the AI credits work: the
+    // Enterprise contract's monthly figure, which the same transaction writes as
+    // the account's `contract` override. It defaults to {}, so the 7-method
+    // surface is unchanged for every caller that does not send one.
     expect(p).toMatch(
-      /async setTier\(id: string, tier: AccountTier, at: Date\): Promise<AccountRow \| null> \{/,
+      /async setTier\(\s*id: string,\s*tier: AccountTier,\s*at: Date,\s*opts: SetAccountTierOptions = \{\},\s*\): Promise<AccountRow \| null> \{/,
     );
     expect(p).toMatch(/async setStatus\(/);
     expect(p).toMatch(/async list\(args: ListAccountsArgs\): Promise<ListAccountsPage> \{/);
