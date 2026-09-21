@@ -69,7 +69,18 @@ import { DEVICE_SUPPORT } from '../data/capabilities';
 // the assets). The captures are the source of truth for what is SHOWN —
 // the alt text and caption strips describe what is in the picture and
 // nothing more.
-import heroScreen from '../assets/screens/profiles-grid-hero.png';
+// 2026-09-21 — "Bringing The Stage everywhere" §4/§7: the hero now shows the
+// AI view (scene `ai-running`, cropped to `ai-running-hero.png`) — the real,
+// lit iPhone a prospect remembers, mid-task, the plan running beside it. The
+// former hero capture (the profiles grid) moves to §2 "What is Driftstack?",
+// whose Band-B claims ("each iPhone can browse from the country you choose")
+// are what its own caption strip already describes — image AND caption move
+// together, unchanged, so neither is stranded next to text that doesn't
+// match it. `fleetScreen`/`FLEET_ALT` name that relocated pair; `heroScreen`/
+// `HERO_ALT` keep their names for the (now AI) hero slot.
+import heroScreen from '../assets/screens/ai-running-hero.png';
+import fleetScreen from '../assets/screens/profiles-grid-hero.png';
+import aiRunningScreen from '../assets/screens/ai-running.png';
 import simulatorScreen from '../assets/screens/simulator.png';
 import profilesListScreen from '../assets/screens/profiles-list.png';
 import proxiesScreen from '../assets/screens/proxies.png';
@@ -89,11 +100,22 @@ const apiCaps = apiLadder.map((t) => t.concurrent).join(' / ');
 // (Band A: cities spelled out, no protocol jargon). Kept as constants so the
 // parity pin can read them without parsing markup.
 const HERO_ALT =
+  'The Driftstack desktop app, AI Browser Automation view: the AI running a ' +
+  'task on a real iPhone, lit up mid-task, with the six steps it planned ' +
+  'beside it — three already done (opened the store, accepted the cookie ' +
+  'banner, searched the store), the current step highlighted, and two still ' +
+  'to come.';
+const FLEET_ALT =
   'The Driftstack desktop app, Profiles view: eight iPhone profile cards, each a ' +
   'small phone showing its name — amsterdam shopper, tokyo sneakers, london ' +
   'checkout, paris fashion and more — the iPhone it runs as, whether it is Live ' +
   'or Idle, the city it browses from (Amsterdam, Tokyo, Zurich, Berlin, London, ' +
   'Paris), the connection it uses, and a Launch button.';
+const AI_RUNNING_ALT =
+  'The Driftstack desktop app, AI Browser Automation view, mid-task: a real ' +
+  'iPhone lit up in its dark stage, showing a shop’s search results, ' +
+  'beside the mission bar (task title, a Running status, budget remaining, ' +
+  'the profile and model in use) and the six-step plan running alongside it.';
 const SIMULATOR_ALT =
   'A floating device window in the Driftstack desktop app, lifted over the app ' +
   'behind it — the Profiles view, its grid of iPhone profile cards showing ' +
@@ -155,13 +177,17 @@ const PROXIES_ALT =
           </p>
         </div>
 
-        <!-- The fleet: the REAL Profiles view of the desktop app — the
-             literal "command a fleet of real iPhones" visual. A capture of
-             the app's own components (see AppScreen.astro), not a drawing.
-             Band A: the caption strip below it is real copy — cities spelled
-             out, "own connection", no protocol jargon — and stays OUTSIDE
-             the data-contrast-decorative frame so the contrast scanner still
-             reads it. -->
+        <!-- 2026-09-21 — the AI view mid-task: the real, lit iPhone from the
+             desktop app's AI Browser Automation view (scene `ai-running`,
+             cropped to the phone + its plan, `ai-running-hero.png`), the
+             asset a prospect actually remembers, first thing they see. A
+             capture of the app's own components (see AppScreen.astro), not
+             a drawing — `accent` gives it AppScreen's rim-and-room "this one
+             is lit" treatment. The profiles-grid capture this replaced (the
+             literal "command a fleet of real iPhones" visual) moved to §2
+             "What is Driftstack?", together with its own caption strip —
+             see `fleetScreen` there. Headline + intro paragraph above are
+             unchanged copy; only the image changed. -->
         <div class="relative animate-fade-up">
           <AppScreen
             src={heroScreen}
@@ -170,14 +196,6 @@ const PROXIES_ALT =
             accent
             sizes="(min-width: 768px) 552px, calc(100vw - 48px)"
           />
-          <p class="mt-4 text-center font-mono text-[10px] text-tk-ink-3">
-            🇳🇱 Amsterdam · 🇯🇵 Tokyo · 🇩🇪 Berlin · 🇬🇧 London · 🇫🇷 Paris — each on its own connection
-          </p>
-          <div class="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 font-mono text-[10px] text-tk-ink-3">
-            <span><b class="text-tk-ready-text">8 iPhone profiles</b>, ready to launch</span>
-            <span>each with <b class="text-tk-ink-2">its own identity</b></span>
-            <span>each on <b class="text-tk-ready-text">its own connection</b></span>
-          </div>
         </div>
       </div>
     </div>
@@ -209,6 +227,25 @@ const PROXIES_ALT =
         plain="Each iPhone can browse from the country you choose"
         technical="Attach your own proxy or VPN to a profile — SOCKS5, OpenVPN or WireGuard"
       />
+    </div>
+
+    <!-- 2026-09-21 — the fleet visual (profiles-grid) that used to be the
+         hero, relocated here unchanged (image + its own caption strip: cities
+         spelled out, "own connection") because THIS section's own claim —
+         "each iPhone can browse from the country you choose" — is what the
+         caption describes; the hero above now shows the AI view instead. Band
+         A: the caption stays real copy, outside the data-contrast-decorative
+         frame, so the contrast scanner still reads it. -->
+    <div class="relative mt-12">
+      <AppScreen src={fleetScreen} alt={FLEET_ALT} />
+      <p class="mt-4 text-center font-mono text-[10px] text-tk-ink-3">
+        🇳🇱 Amsterdam · 🇯🇵 Tokyo · 🇩🇪 Berlin · 🇬🇧 London · 🇫🇷 Paris — each on its own connection
+      </p>
+      <div class="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 font-mono text-[10px] text-tk-ink-3">
+        <span><b class="text-tk-ready-text">8 iPhone profiles</b>, ready to launch</span>
+        <span>each with <b class="text-tk-ink-2">its own identity</b></span>
+        <span>each on <b class="text-tk-ready-text">its own connection</b></span>
+      </div>
     </div>
   </Section>
 
@@ -332,6 +369,16 @@ const PROXIES_ALT =
         <strong class="text-tk-ink">A job written as code runs without the
         AI agent at all: no AI cost, no AI wait.</strong>
       </p>
+
+      <!-- 2026-09-21 — "the built-in AI agent does it while you watch",
+           illustrated: the same AI view capture as the hero (scene
+           `ai-running`), full frame this time (mission bar included), placed
+           right under the sentence it depicts. Not `accent`: that treatment
+           stays reserved for the hero, the one capture meant to read as lit
+           at first glance. -->
+      <div class="mt-10">
+        <AppScreen src={aiRunningScreen} alt={AI_RUNNING_ALT} />
+      </div>
   </Section>
 
   <!-- ═══ 6 · THE PROOF — "One iPhone among millions." Merges the former

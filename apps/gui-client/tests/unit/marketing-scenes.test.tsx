@@ -228,7 +228,7 @@ describe('sceneFromSearch — the only door into a scene, marketing or audit', (
     expect(sceneFromSearch('?scene=__list__')).toBeNull();
   });
 
-  it('ALL_SCENES is the six marketing scenes, in capture order, then every audit scene', () => {
+  it('ALL_SCENES is the seven marketing scenes, in capture order, then every audit scene', () => {
     // What scripts/gui-text-quality.mjs reads (with sceneSize) — one source.
     expect(ALL_SCENES.slice(0, MARKETING_SCENES.length)).toEqual([...MARKETING_SCENES]);
     expect(ALL_SCENES.slice(MARKETING_SCENES.length)).toEqual([...AUDIT_SCENES]);

@@ -4003,7 +4003,7 @@ describe('every harness scene (ALL_SCENES) renders a ready stage with > 20 text 
     return out;
   };
 
-  it('ALL_SCENES is non-empty, unique, and opens with the six marketing scenes in order', () => {
+  it('ALL_SCENES is non-empty, unique, and opens with the seven marketing scenes in order', () => {
     expect(ALL_SCENES.length).toBeGreaterThan(0);
     expect(new Set(ALL_SCENES).size).toBe(ALL_SCENES.length);
     expect(ALL_SCENES.slice(0, MARKETING_SCENES.length)).toEqual([
@@ -4013,6 +4013,7 @@ describe('every harness scene (ALL_SCENES) renders a ready stage with > 20 text 
       'simulator',
       'billing',
       'command-center',
+      'ai-running',
     ]);
   });
 

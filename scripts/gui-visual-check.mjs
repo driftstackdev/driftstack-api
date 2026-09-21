@@ -1106,10 +1106,23 @@ function measureSimulatorWindow(root, opts) {
     }
     return false;
   };
+  // A single-line text control is not "scrolling" when its value is longer
+  // than its box: that is how an <input> shows a long value everywhere (the
+  // caret moves the text; nothing is cut), and the address bar's URL is
+  // exactly such a value. The first Linux run caught the degraded scene here
+  // — a 307px URL in a 283px bar under DejaVu Sans — which is the control
+  // doing its job, not a layout defect; the same value fits on a Mac by 24px.
+  const isSingleLineTextControl = (el) =>
+    el.tagName === 'TEXTAREA' ||
+    (el.tagName === 'INPUT' &&
+      !['checkbox', 'radio', 'range', 'color', 'file', 'submit', 'button'].includes(
+        (el.getAttribute('type') ?? 'text').toLowerCase(),
+      ));
   const overflowing = [];
   for (const el of root.querySelectorAll('*')) {
     if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) {
       if (clippedByAncestor(el)) continue;
+      if (isSingleLineTextControl(el) && el.scrollHeight <= el.clientHeight + 1) continue;
       overflowing.push({
         label: el.getAttribute('data-component') ?? el.tagName.toLowerCase(),
         className: typeof el.className === 'string' ? el.className.slice(0, 80) : '',

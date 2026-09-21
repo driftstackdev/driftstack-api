@@ -27,6 +27,17 @@
 //     is part of a picture (WCAG 1.4.3 "incidental"). Real copy — captions,
 //     lead paragraphs — sits OUTSIDE this component so the contrast scanner
 //     still sees it.
+//
+// 2026-09-21 — "Bringing The Stage everywhere" §4/§7: every capture now sits
+// in `.app-screen-stage` (styles/base.css), the AI view's own device-in-a-
+// dark-room language (`.ai-stage`/`.ai-room`/`.ai-floor`, apps/gui-client
+// index.css) re-derived in THIS site's own `tk-*` tokens — a plain wrapper
+// around the untouched frame, never `aria-hidden` (that attribute is banned
+// in this file; see the rule above). `accent` (the existing "this one is
+// lit" ring) now ALSO adds `app-screen-stage-lit`: a soft accent-toned pool
+// under the capture, the marketing analogue of the AI view's floor glow —
+// reserved for the one capture on a page that should read as lit, same as
+// the app reserves it for the phone whose state is live.
 import { Picture } from 'astro:assets';
 import type { ImageMetadata } from 'astro';
 
@@ -68,26 +79,28 @@ const widths = [...new Set([480, 768, 960, width, src.width].filter((w) => w <= 
 );
 ---
 
-<div
-  class:list={[
-    'app-screen overflow-hidden rounded-2xl border border-tk-border bg-tk-surface shadow-ambient-lg',
-    accent ? 'ring-1 ring-tk-accent/50 shadow-glow-accent' : '',
-    className,
-  ]}
-  data-contrast-decorative
->
-  <Picture
-    src={src}
-    alt={alt}
-    width={width}
-    height={height}
-    widths={widths}
-    sizes={sizes}
-    formats={['webp']}
-    fallbackFormat="png"
-    loading={priority ? 'eager' : 'lazy'}
-    decoding="async"
-    fetchpriority={priority ? 'high' : 'auto'}
-    class="block h-auto w-full"
-  />
+<div class:list={['app-screen-stage', accent ? 'app-screen-stage-lit' : '']}>
+  <div
+    class:list={[
+      'app-screen overflow-hidden rounded-2xl border border-tk-border bg-tk-surface shadow-ambient-lg',
+      accent ? 'ring-1 ring-tk-accent/50 shadow-glow-accent' : '',
+      className,
+    ]}
+    data-contrast-decorative
+  >
+    <Picture
+      src={src}
+      alt={alt}
+      width={width}
+      height={height}
+      widths={widths}
+      sizes={sizes}
+      formats={['webp']}
+      fallbackFormat="png"
+      loading={priority ? 'eager' : 'lazy'}
+      decoding="async"
+      fetchpriority={priority ? 'high' : 'auto'}
+      class="block h-auto w-full"
+    />
+  </div>
 </div>

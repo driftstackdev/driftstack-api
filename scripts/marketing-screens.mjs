@@ -19,6 +19,12 @@
 //                    the Egress readouts
 //   billing          Usage & cost (CostPanel) in the Billing framing
 //   command-center   the Command Center header band + KPI strip
+//   ai-running       the AI Browser Automation view mid-task — the phone lit
+//                    in its dark stage, the plan running beside it — driven
+//                    through the same fixture seam as the audit-agent-chat-
+//                    running scene (spec §8); also cropped to a hero (the
+//                    phone + plan column, `.ai-deck-body`, excluding the
+//                    chat-history rail and the mission bar's own row)
 //
 // ⛔ PRIVACY: nothing here is a real session, proxy, exit or account — the
 // scenes are fixtures (*.example.com hosts, RFC 5737 TEST-NET exits,
@@ -38,6 +44,7 @@
 // Output (OUT_DIR, default apps/marketing-site/src/assets/screens):
 //   <scene>.png + <scene>.webp     2560×1600 (1280×800 @2x); profiles-list 3600×1760
 //   profiles-grid-hero.png/.webp   the card grid region of profiles-grid @2x
+//   ai-running-hero.png/.webp      the phone + plan region of ai-running @2x
 //   manifest.json                  every file with its pixel size
 //
 // Usage (repo root):  node scripts/marketing-screens.mjs [--verify]
@@ -245,6 +252,40 @@ const SCENES = [
   {
     name: 'command-center',
     guard: { selector: '[data-scene="command-center"] h1', count: 1 },
+  },
+  {
+    // "Bringing The Stage everywhere" §4/§7 — the AI view mid-task: the real,
+    // lit iPhone from the desktop app's AI Browser Automation view, driven
+    // through the same fixture seam as the audit-agent-chat-running scene
+    // (spec §8), in the marketing app-window chrome. Guards prove the phone
+    // is really showing the running page (the stand-in image), the mission
+    // bar's status pill is on screen, and all 6 planned steps rendered — not
+    // an empty or idle stage.
+    name: 'ai-running',
+    // Cropped to `.ai-deck-body` — the phone + the plan/turn column, the
+    // same way `profiles-grid-hero` crops to the tile grid alone and leaves
+    // the view's own header/toolbar out of the hero image. Excludes the
+    // chat-history rail (ChatRail sits OUTSIDE `.ai-deck`) and the mission
+    // bar's row (`.ai-deck-body` is `.ai-deck`'s second child) — what's left
+    // is exactly "the AI running a task on a real iPhone, with the steps it
+    // planned beside it".
+    hero: 'ai-running-hero',
+    heroSelector: '[data-scene="ai-running"] .ai-deck-body',
+    guard: {
+      selector: '[data-scene="ai-running"] [data-component="ai-automation-live-pane"]',
+      count: 1,
+    },
+    also: [
+      { selector: '[data-scene="ai-running"] [data-component="agent-status-pill"]', count: 1 },
+      { selector: '[data-scene="ai-running"] img.ai-standin', count: 1 },
+      // The 3 completed steps (PlanStepList, its own `<ol class="ai-plan">`,
+      // no `data-testid`) plus the 3 still-to-run steps LivePlanList renders
+      // under `data-testid="live-plan"` (labels.length 6 − ranCount 3) — all
+      // 6 planned steps on screen, not just whichever half carries the testid.
+      { selector: '[data-scene="ai-running"] .ai-step', count: 6 },
+    ],
+    fits: '[data-scene="ai-running"] main',
+    fitsY: '[data-scene="ai-running"] main',
   },
 ];
 
@@ -629,8 +670,9 @@ async function renderScene(context, scene) {
     const outputs = [{ file: scene.name, png, width: meta.width, height: meta.height }];
 
     if (scene.hero !== undefined) {
-      const region = await page.locator('[data-scene-region="grid"]').boundingBox();
-      if (region === null) throw new Error(`${scene.name}: no [data-scene-region="grid"] to crop`);
+      const heroSelector = scene.heroSelector ?? '[data-scene-region="grid"]';
+      const region = await page.locator(heroSelector).boundingBox();
+      if (region === null) throw new Error(`${scene.name}: no "${heroSelector}" to crop`);
       // Crop rectangle in CSS px relative to the stage, padded, clamped to it.
       const left = Math.max(0, Math.floor(region.x - box.x - HERO_PAD));
       const top = Math.max(0, Math.floor(region.y - box.y - HERO_PAD));

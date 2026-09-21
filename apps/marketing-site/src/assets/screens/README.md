@@ -18,6 +18,8 @@ so its full-width table (Actions column included) fits in frame — captured at
 | `simulator.{png,webp}`      | 2560×1600 | 1280×800 | the desktop app + the floating device window over it — example shop page, Egress readouts |
 | `billing.{png,webp}`        | 2560×1600 | 1280×800 | Billing — Usage & cost for one billing cycle                                              |
 | `command-center.{png,webp}` | 2560×1600 | 1280×800 | Command Center — header band + KPI strip                                                  |
+| `ai-running.{png,webp}`     | 2560×1600 | 1280×800 | AI Browser Automation, mid-task — the phone lit in its dark stage, the plan beside it     |
+| `ai-running-hero.*`         | 1768×1448 | 884×724  | the phone + plan column alone, cropped from `ai-running` (hero image)                     |
 
 `manifest.json` lists the same sizes (regenerated with the images) — read it
 from a page rather than hard-coding widths.
@@ -93,6 +95,14 @@ Edit the marketing-scene block at the end of
 `MARKETING_TABLE_ROWS` — the same eight profiles, kept equal by the guard —
 `MARKETING_PROXIES` with their fleet verdicts, from which the Proxies header
 tallies are derived, and the `MarketingScene` compositions).
+
+`ai-running` is the one exception: it mounts the real `AgentChatView` through
+the fixture seam spec §8 built for the `audit-agent-chat-*` scenes, so its
+composition (`AiRunningMarketingScene`) lives beside them in
+`apps/gui-client/src/visual-harness/audit-scenes.tsx`, and its fixture data
+(the task, the plan, the running step) is `agent-chat-scenes.tsx`'s `running`
+fixture — the same one `audit-agent-chat-running` uses. `gallery.tsx` only
+registers the name and the `MarketingScene` switch case.
 
 ⛔ The simulator scene is ONE story, and the guard test pins it: the floating
 window IS a session, so the profile its toolbar names must be the profile the

@@ -1472,6 +1472,63 @@ function AgentChatStateScene({ name }: { name: AuditSceneName }): JSX.Element {
   );
 }
 
+/** "Bringing The Stage everywhere" §4/§7 — the AI view mid-task, captured for
+ *  the driftstack.io homepage hero (gallery.tsx's `MarketingScene`, scene
+ *  `ai-running`). NOT a second implementation: the exact `running` fixture,
+ *  Tauri stub and fixture client that drive `AgentChatStateScene` for
+ *  `audit-agent-chat-running` above, through the SAME real `AgentChatView` —
+ *  only the window chrome differs. `AppWindow` (gallery.tsx's marketing
+ *  chrome), never `AuditWindow`: the marketing scenes wear the product's own
+ *  'cloud' title-bar subtitle (AppWindow's default), not the audit scenes'
+ *  'self-hosted' one.
+ *
+ *  `settings.baseUrl` still uses `AUDIT_BASE_URL` rather than the marketing
+ *  default (`FIXTURE_SETTINGS.baseUrl`, the real `driftstack.io`), and —
+ *  unlike `running`'s OTHER seven audit siblings, which leave this probe to
+ *  fall through to a host that merely "answers nothing" — this scene installs
+ *  the version stub UNCONDITIONALLY (`agent_execution: 'live'`, matching a
+ *  running session): `AgentChatView` polls `GET <baseUrl>/version` from a
+ *  mount effect (`useConnectionStatus`), and a capture script has no business
+ *  making even a doomed network request. No scene fixture here ever sets
+ *  `agentExecution`, so this can never race a scene that wants the 'simulated'
+ *  branch instead. */
+export function AiRunningMarketingScene(): JSX.Element {
+  const fixture = useMemo(() => agentChatSceneFixture('running', Date.parse(FROZEN_NOW_ISO)), []);
+  const settingsOverrides = useMemo<Partial<HarnessSettingsValue>>(
+    () => ({
+      settings: { ...auditSettings(), apiKey: fixture.apiKey },
+      client: buildAgentChatClient(fixture.liveToken, fixture.ownKey),
+    }),
+    [fixture],
+  );
+  const fixtures = useMemo(() => auditTauriFixtures(), []);
+  useTauriStub(fixtures);
+  const versionBody = useMemo<VersionStubBody>(
+    () => ({ version: '0.1.68', driver: 'mock', agent_execution: 'live' }),
+    [],
+  );
+  useVersionStub(versionBody);
+  const value = useMemo(() => {
+    const v: Partial<AgentChatContextValue> = {};
+    if (fixture.chat !== undefined) v.chat = fixture.chat;
+    if (fixture.standIn !== undefined) v.standIn = fixture.standIn;
+    if (fixture.captureSrc !== undefined) v.captureSrc = fixture.captureSrc;
+    if (fixture.frameRate !== undefined) v.frameRate = fixture.frameRate;
+    return v;
+  }, [fixture]);
+  return (
+    <AppWindow scene="ai-running" current="ai" settingsOverrides={settingsOverrides}>
+      <ToastProvider>
+        <ConfirmProvider>
+          <AgentChatProvider value={value}>
+            <AgentChatView onGoToSettings={noop} />
+          </AgentChatProvider>
+        </ConfirmProvider>
+      </ToastProvider>
+    </AppWindow>
+  );
+}
+
 /**
  * Wraps `SimulatorStateScene` with the same `data-scene`/`data-ready`/
  * `data-frozen-now`/`data-stage-*`/`style` markers `AuditWindow` (gallery.tsx)

@@ -74,6 +74,24 @@
       "height": 1600,
       "cssWidth": 1280,
       "cssHeight": 800
+    },
+    {
+      "scene": "ai-running",
+      "png": "ai-running.png",
+      "webp": "ai-running.webp",
+      "width": 2560,
+      "height": 1600,
+      "cssWidth": 1280,
+      "cssHeight": 800
+    },
+    {
+      "scene": "ai-running-hero",
+      "png": "ai-running-hero.png",
+      "webp": "ai-running-hero.webp",
+      "width": 1768,
+      "height": 1448,
+      "cssWidth": 884,
+      "cssHeight": 724
     }
   ]
 }

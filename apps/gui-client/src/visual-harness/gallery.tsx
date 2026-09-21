@@ -40,7 +40,7 @@ import type { AgentSessionCapabilityReport } from '../lib/agent-session-control'
 // auditSceneSizes only inside functions (Gallery, sceneSize) — whichever of
 // the two a test imports first, both finish evaluating before either binding
 // is read. The NAMES live here so `ALL_SCENES` is a plain top-level constant.
-import { AuditScene, auditSceneSizes } from './audit-scenes';
+import { AiRunningMarketingScene, AuditScene, auditSceneSizes } from './audit-scenes';
 
 const noop = (): void => undefined;
 
@@ -62,6 +62,12 @@ export const MARKETING_SCENES = [
   'simulator',
   'billing',
   'command-center',
+  // "Bringing The Stage everywhere" §4/§7 — the AI view mid-task (a plan
+  // running, the phone lit, the steps beside it), captured through the same
+  // seam spec §8 built for the audit-agent-chat-* scenes (AiRunningMarketingScene,
+  // audit-scenes.tsx): a stand-in image, no live model call, no network,
+  // *.example.com / RFC 5737 fixtures, the module's frozen clock.
+  'ai-running',
 ] as const;
 export type MarketingSceneName = (typeof MARKETING_SCENES)[number];
 /** Audit scenes — `?scene=audit-<view>`: the REAL view in the same window
@@ -2620,5 +2626,7 @@ export function MarketingScene({ name }: { name: MarketingSceneName }): JSX.Elem
       );
     case 'command-center':
       return <CommandCenterScene />;
+    case 'ai-running':
+      return <AiRunningMarketingScene />;
   }
 }

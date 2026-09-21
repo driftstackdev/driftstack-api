@@ -242,6 +242,70 @@
     }
   }
 
+  /* "Bringing The Stage everywhere" §4/§7 (2026-09-21) — AppScreen.astro's
+     wrapper around every real app capture on the site. The AI view's own
+     device language (`.ai-stage`/`.ai-room`/`.ai-floor`, apps/gui-client
+     index.css — a dark "room" behind the phone, a soft pool of light under
+     it, re-derived here in this site's own tk-* tokens, never imported: the
+     two apps don't share CSS (see docs/internal design-system notes).
+     One component change, every AppScreen instance: how-it-works, use cases,
+     comparison and pricing all get the calm dark room; only `accent`
+     (AppScreen's existing "this one is lit" prop, today just the hero) also
+     gets the pulsing accent pool — the AI view's own discipline of reserving
+     motion for the one thing meant to read as alive, not spreading it across
+     every screenshot on the page. */
+  .app-screen-stage {
+    position: relative;
+    isolation: isolate;
+  }
+  .app-screen-stage::before {
+    content: '';
+    position: absolute;
+    inset: -7%;
+    z-index: -1;
+    border-radius: 28px;
+    pointer-events: none;
+    /* Dark even in the site's light theme (the AI view's D2 rule: a stage is
+       a permanently-dark well) — a fixed black alpha, never a `--bg-rgb` /
+       `--surface-rgb` token, both of which flip with data-mode and would hand
+       this "room" the light theme's near-white surface instead. */
+    background: radial-gradient(ellipse 78% 68% at 50% 42%, rgba(0, 0, 0, 0.4), transparent 72%);
+    filter: blur(30px);
+  }
+  /* The floor-pool light — `.ai-floor`'s "light pooled under the object"
+     idea, scaled to a flat capture. Only the lit stage gets it, and it
+     breathes on the SAME 12s idiom `.hero-glow` already uses on this page —
+     motion only where the site already animates. */
+  .app-screen-stage-lit::after {
+    content: '';
+    position: absolute;
+    left: 14%;
+    right: 14%;
+    bottom: -8%;
+    height: 38%;
+    z-index: -1;
+    border-radius: 9999px;
+    pointer-events: none;
+    background: radial-gradient(ellipse 60% 100% at 50% 100%, var(--glow), transparent 75%);
+    filter: blur(26px);
+    animation: app-screen-glow-pulse 12s ease-in-out infinite;
+  }
+  @keyframes app-screen-glow-pulse {
+    0%,
+    100% {
+      opacity: 0.65;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .app-screen-stage-lit::after {
+      animation: none;
+      opacity: 0.85;
+    }
+  }
+
   /* Code-preview block — monospace, dark inset, syntax-friendly
      foreground tones. */
   .code-preview {

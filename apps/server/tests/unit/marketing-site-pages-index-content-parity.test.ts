@@ -216,26 +216,29 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/secondaryHref="https:\/\/docs\.driftstack\.io"/);
   });
 
-  // 2026-09-11 — the hero visual is a REAL capture of the desktop app's
-  // Profiles view (the owner: "update our marketing website too with these
-  // latest views, as it still has old GUI images"). The hand-drawn fan of
-  // iPhone windows it replaces (S4.5 2026-07-03) had drifted from the app.
+  // 2026-09-11 — the hero visual is a REAL capture of the desktop app (the
+  // owner: "update our marketing website too with these latest views, as it
+  // still has old GUI images"). The hand-drawn fan of iPhone windows it
+  // replaces (S4.5 2026-07-03) had drifted from the app.
+  //
+  // 2026-09-21 — "Bringing The Stage everywhere" §4/§7: the hero capture
+  // changed AGAIN, from the profiles grid to the AI view mid-task (scene
+  // `ai-running`, cropped to `ai-running-hero.png`) — the real, lit iPhone a
+  // prospect actually remembers. Headline, intro paragraph and CTAs are
+  // UNCHANGED copy (only the image + its alt changed); the profiles-grid
+  // capture and its own caption strip moved to §2, verbatim, as their own
+  // arm below — not deleted, not rewritten.
   // What each arm guards, and why reverting the production line reds it:
-  //   • `import heroScreen from '../assets/screens/profiles-grid-hero.png'` +
+  //   • `import heroScreen from '../assets/screens/ai-running-hero.png'` +
   //     `<AppScreen src={heroScreen}` — the hero draws the capture; a return
   //     to markup (or a different scene) fails here.
   //   • `priority` on the hero AppScreen — it is the LCP element; dropping the
   //     prop makes it lazy (the component's default) and the pin reds.
   //   • `alt={HERO_ALT}` + the constant's content — a real alt that says what
-  //     the screen shows (eight profile cards, Live/Idle, cities spelled out).
-  //     A bare alt="" or a marketing slogan as alt fails the content arm.
-  //   • Band A caption strip stays REAL copy OUTSIDE the decorative frame
-  //     (cities spelled out, "own connection", the AA-safe tk-ready-text tone)
-  //     and matches the picture: 8 iPhones (the scene renders 8 cards), each
-  //     on its own connection — the old "all healthy" claim is gone because
-  //     the capture deliberately includes non-healthy states.
+  //     the screen shows (the AI mid-task, the plan beside it, WHAT not HOW —
+  //     no fleet/node/harness/vendor words). A bare alt="" or a slogan fails.
   //   • The fan markup must NOT return (heroFleet / New Tab / market.example).
-  it("Hero fleet visual pinned: 'Command a fleet of real iPhones.' + identity/history/geo triad + 'just people on phones' close + the REAL profiles-grid capture (AppScreen, priority/LCP, real alt) with the Band-A caption strip as real copy outside the decorative frame — the hand-drawn fan is gone", () => {
+  it("Hero AI-view visual pinned: 'Your own real iPhones, in the cloud.' + identity/history/geo triad + 'just people on phones' close (unchanged copy) + the REAL ai-running capture (AppScreen, priority/LCP, real alt) — the hand-drawn fan and the old profiles-grid hero are gone from this slot", () => {
     expect(body).toMatch(/Your own real iPhones, in the cloud\./);
     // 2026-09-16 Band-A readability pass — the identity/history/geo triad
     // survives, in words a first-time visitor can act on: "its own corner
@@ -246,26 +249,38 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     );
     expect(body).not.toMatch(/its own corner of the world/);
     expect(body).toMatch(/they're just\s*people on phones\./);
+    // "by hand, by code, or by AI" — unchanged, and now literally what the
+    // hero image beside it shows.
+    expect(body).toMatch(/Drive them by hand,\s*by code, or by AI\./);
     // the capture, wired through AppScreen as the LCP element
     expect(body).toMatch(/import AppScreen from '\.\.\/components\/AppScreen\.astro'/);
-    expect(body).toMatch(/import heroScreen from '\.\.\/assets\/screens\/profiles-grid-hero\.png'/);
+    expect(body).toMatch(/import heroScreen from '\.\.\/assets\/screens\/ai-running-hero\.png'/);
     expect(body).toMatch(
       /<AppScreen\s+src=\{heroScreen\}\s+alt=\{HERO_ALT\}\s+priority\s+accent\s+sizes="\(min-width: 768px\) 552px, calc\(100vw - 48px\)"\s*\/>/,
     );
-    // a real alt: what the screen shows, cities spelled out (Band A)
+    // a real alt: WHAT the screen shows (Band A / WHAT-not-HOW) — the AI
+    // mid-task, a real iPhone, the plan beside it; never infrastructure
+    // words (fleet/node/harness/control plane/observer/vantage) or "device
+    // internals", never "undetectable", no personal names.
     expect(body).toMatch(
-      /const HERO_ALT =\s*\n\s*'The Driftstack desktop app, Profiles view: eight iPhone profile cards/,
+      /const HERO_ALT =\s*\n\s*'The Driftstack desktop app, AI Browser Automation view: the AI running a ' \+\s*\n\s*'task on a real iPhone, lit up mid-task, with the six steps it planned ' \+\s*\n\s*'beside it/,
     );
-    expect(body).toMatch(
-      /whether it is Live ' \+\s*\n\s*'or Idle, the city it browses from \(Amsterdam, Tokyo, Zurich, Berlin, London, ' \+\s*\n\s*'Paris\)/,
-    );
-    // the caption strip — real copy, matches the picture
-    expect(body).toMatch(
-      /🇳🇱 Amsterdam · 🇯🇵 Tokyo · 🇩🇪 Berlin · 🇬🇧 London · 🇫🇷 Paris — each on its own connection/,
-    );
-    expect(body).toMatch(/<b class="text-tk-ready-text">8 iPhone profiles<\/b>, ready to launch/);
-    expect(body).toMatch(/each with <b class="text-tk-ink-2">its own identity<\/b>/);
-    expect(body).toMatch(/each on <b class="text-tk-ready-text">its own connection<\/b>/);
+    // Scoped to the alt text itself, not the whole page — the file's own
+    // header comments say "Fleet homepage" freely, which is not the hazard
+    // this pin exists to catch (a device-internals word IN THE ALT TEXT a
+    // screen reader speaks).
+    const heroAltDecl = body.match(/const HERO_ALT =[\s\S]*?';/)?.[0];
+    expect(heroAltDecl, 'the HERO_ALT declaration').toBeDefined();
+    expect(heroAltDecl).not.toMatch(/fleet|harness|control plane|observer|vantage/i);
+    expect(heroAltDecl).not.toMatch(/undetectable/i);
+    // the old hero's own caption strip must not be reachable from this slot
+    // any more — it moved to §2 with the picture it describes (own arm below).
+    const heroDiv = body.match(
+      /<div class="relative animate-fade-up">\s*<AppScreen[\s\S]*?<\/div>/,
+    )?.[0];
+    expect(heroDiv, 'the hero AppScreen wrapper div').toBeDefined();
+    expect(heroDiv).not.toMatch(/8 iPhone profiles/);
+    expect(heroDiv).not.toMatch(/🇳🇱 Amsterdam/);
     // the hand-drawn fan and its claims must not return
     expect(body).not.toMatch(/heroFleet/);
     expect(body).not.toMatch(/market\.example\.com/);
@@ -278,6 +293,50 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     // the pre-v2 technical telemetry line must not return above the fold
     expect(body).not.toMatch(/fingerprint coherence <b/);
     expect(body).not.toMatch(/CreepJS/);
+  });
+
+  // 2026-09-21 — the profiles-grid capture the hero used to show, relocated
+  // (image + its own Band-A caption strip, byte-for-byte the same copy) to §2
+  // "What is Driftstack?", whose own claim ("each iPhone can browse from the
+  // country you choose") is what the caption already describes. Not deleted,
+  // not rewritten — moved, per the rule that a capture whose section's copy
+  // refers to it stays on the page.
+  it('relocated fleet visual pinned: the profiles-grid capture + its unchanged caption strip now live in §2, no longer in the hero, and carry no `priority`/`accent` there', () => {
+    expect(body).toMatch(
+      /import fleetScreen from '\.\.\/assets\/screens\/profiles-grid-hero\.png'/,
+    );
+    expect(body).toMatch(
+      /const FLEET_ALT =\s*\n\s*'The Driftstack desktop app, Profiles view: eight iPhone profile cards/,
+    );
+    expect(body).toMatch(
+      /whether it is Live ' \+\s*\n\s*'or Idle, the city it browses from \(Amsterdam, Tokyo, Zurich, Berlin, London, ' \+\s*\n\s*'Paris\)/,
+    );
+    expect(body).toMatch(/<AppScreen src=\{fleetScreen\} alt=\{FLEET_ALT\} \/>/);
+    // the caption strip — real copy, unchanged, matches the picture
+    expect(body).toMatch(
+      /🇳🇱 Amsterdam · 🇯🇵 Tokyo · 🇩🇪 Berlin · 🇬🇧 London · 🇫🇷 Paris — each on its own connection/,
+    );
+    expect(body).toMatch(/<b class="text-tk-ready-text">8 iPhone profiles<\/b>, ready to launch/);
+    expect(body).toMatch(/each with <b class="text-tk-ink-2">its own identity<\/b>/);
+    expect(body).toMatch(/each on <b class="text-tk-ready-text">its own connection<\/b>/);
+    // it sits in §2, not wired as the LCP hero any more
+    expect(body).not.toMatch(/<AppScreen src=\{fleetScreen\}[^>]*\bpriority\b/);
+    expect(body).not.toMatch(/<AppScreen src=\{fleetScreen\}[^>]*\baccent\b/);
+  });
+
+  // 2026-09-21 — §5 "Two ways to drive it" already told a prospect, in
+  // unchanged copy, that "the built-in AI agent does it while you watch" —
+  // until now nothing on the page showed it. The AI-running capture (full
+  // frame, not the hero's crop) sits right under that sentence.
+  it('§5 AI-agent claim now has a real capture beside it: the ai-running scene, not `accent` (reserved for the hero)', () => {
+    expect(body).toMatch(/The built-in AI agent does it while you watch\./);
+    expect(body).toMatch(/import aiRunningScreen from '\.\.\/assets\/screens\/ai-running\.png'/);
+    expect(body).toMatch(
+      /const AI_RUNNING_ALT =\s*\n\s*'The Driftstack desktop app, AI Browser Automation view, mid-task/,
+    );
+    expect(body).toMatch(/<AppScreen src=\{aiRunningScreen\} alt=\{AI_RUNNING_ALT\} \/>/);
+    expect(body).not.toMatch(/<AppScreen src=\{aiRunningScreen\}[^>]*\baccent\b/);
+    expect(body).not.toMatch(/<AppScreen src=\{aiRunningScreen\}[^>]*\bpriority\b/);
   });
 
   // 2026-09-11 — the other GUI depictions on the page are captures too.
