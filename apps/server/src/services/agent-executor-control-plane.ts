@@ -2199,6 +2199,10 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     shouldContinue?: ExecuteArgs['shouldContinue'],
     signal?: AbortSignal,
     onPlanningRead?: (entry: PlanningReadTraceEntry) => void,
+    /** DRIFTSTACK_PLANNING_READ=elements|elements_then_text — see the
+     *  interface doc on {@link AgentExecutor.observeElements}. Default false:
+     *  today's caller (`text` mode's one retry) is unchanged. */
+    primary = false,
   ): Promise<string | null> {
     const startedAt = this.now();
     const settle = (
@@ -2259,7 +2263,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     if (parsed === null || !parsed.success) return settle(null, 'empty');
     const reading = readPerceiveListAnswer(parsed.outputData);
     if (reading === null) return settle(null, 'empty');
-    const { text, gateLabels } = renderElementsForPlanning(reading);
+    const { text, gateLabels } = renderElementsForPlanning(reading, primary);
     this.rememberGateLabelsOnly(sessionId, gateLabels);
     return settle(text, 'ok_elements', {
       chars: text.length,
@@ -4030,6 +4034,22 @@ export const PAGE_SOURCE_TRUNCATED_NOTE =
 export const PAGE_ELEMENTS_ONLY_NOTE =
   "(the page's text could not be read in time; only its controls are listed)";
 
+/**
+ * DRIFTSTACK_PLANNING_READ=elements|elements_then_text — the note appended
+ * instead of {@link PAGE_ELEMENTS_ONLY_NOTE} when a `perceive` LIST read is
+ * the segment's PRIMARY planning read rather than `text` mode's retry of one
+ * that already failed.
+ *
+ * ⛔ WHY A SEPARATE SENTENCE. {@link PAGE_ELEMENTS_ONLY_NOTE} says the page's
+ * text "could not be read in time" — true of a retry, because a full read
+ * already failed. A primary elements read never attempted one; saying so
+ * would tell the planner a read failed when none was made. This sentence
+ * says only what is true here: the digest it is judging "did the goal state
+ * happen" against lists controls, not text — plainly, not apologetically.
+ */
+export const PAGE_ELEMENTS_PRIMARY_NOTE =
+  "(only the page's controls are listed; its text was not read)";
+
 /** One element from a `perceive` LIST read (no `selector`) — the shape
  *  {@link renderElementsForPlanning} renders into digest rows. Read
  *  defensively, like {@link extractPageText}: the wire answer is the SAME
@@ -4090,11 +4110,17 @@ function readPerceiveListAnswer(
  * check into `text` — a name can only ADD a halt to the confirmation gate,
  * never remove one.
  */
-function renderElementsForPlanning(reading: {
-  title: string;
-  elements: PerceiveListElement[];
-  truncated: boolean;
-}): { text: string; gateLabels: ReadonlyMap<string, string> } {
+function renderElementsForPlanning(
+  reading: {
+    title: string;
+    elements: PerceiveListElement[];
+    truncated: boolean;
+  },
+  /** DRIFTSTACK_PLANNING_READ=elements|elements_then_text — see
+   *  {@link PAGE_ELEMENTS_PRIMARY_NOTE}. Default false: today's fallback
+   *  wording, unchanged. */
+  primary = false,
+): { text: string; gateLabels: ReadonlyMap<string, string> } {
   const lines: string[] = [];
   const title = digestSafeLine(visibleText(reading.title).slice(0, 120));
   if (title.length > 0) lines.push(`page: ${title}`);
@@ -4104,7 +4130,7 @@ function renderElementsForPlanning(reading: {
     const row = digestElementRow(el.selector, el.kind, el.label, el.visible ? '' : ' · hidden');
     if (row !== null) lines.push(row);
   }
-  lines.push(PAGE_ELEMENTS_ONLY_NOTE);
+  lines.push(primary ? PAGE_ELEMENTS_PRIMARY_NOTE : PAGE_ELEMENTS_ONLY_NOTE);
   if (reading.truncated) lines.push(PAGE_SOURCE_TRUNCATED_NOTE);
   return { text: lines.join('\n'), gateLabels };
 }

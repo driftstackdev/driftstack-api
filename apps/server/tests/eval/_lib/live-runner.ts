@@ -24,6 +24,7 @@
 
 import { DEFAULT_AGENT_MODEL, type AgentIntent } from '@driftstack/api-types';
 import { AgentRuntime } from '../../../src/services/agent-runtime.js';
+import type { PlanningReadMode } from '../../../src/services/agent-planning-read.js';
 import type { RunTurnResult } from '../../../src/services/agent-runtime.js';
 import { ControlPlaneAgentExecutor } from '../../../src/services/agent-executor-control-plane.js';
 import { createPlannerDecomposer } from '../../../src/services/agent-planner-providers.js';
@@ -375,6 +376,12 @@ export interface LiveRunContext {
    *  sent before the look existed. */
   tapLookOff?: boolean;
   /**
+   * EXPERIMENT SWITCH (S8) — see `LiveConfig.planningRead`. Threaded straight
+   * into the runtime constructor exactly as `AgentRuntimeDeps.planningRead`
+   * takes it. Absent is `text`, the product default.
+   */
+  planningRead?: PlanningReadMode;
+  /**
    * The runtime's own monotonic clock — the one `MAX_TURN_WALL_CLOCK_MS` is
    * measured on. Absent is `performance.now()`, which is what a live run uses.
    *
@@ -553,6 +560,7 @@ export async function runLiveTask(
     sessions,
     archetype: EVAL_ARCHETYPE,
     ...(ctx.runtimeNowMs !== undefined ? { nowMs: ctx.runtimeNowMs } : {}),
+    ...(ctx.planningRead !== undefined ? { planningRead: ctx.planningRead } : {}),
   });
 
   const callsBefore = ctx.meter.records().length;

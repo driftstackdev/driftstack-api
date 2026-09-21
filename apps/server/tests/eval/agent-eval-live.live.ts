@@ -66,6 +66,7 @@ describe('agent eval — LIVE tier (real planner, real model; never gates)', () 
         structuredOutput: config.structuredOutput,
         devicePredatesTapLook: config.devicePredatesTapLook,
         tapLookOff: config.tapLookOff,
+        planningRead: config.planningRead,
         gitSha: gitSha(),
       });
       // Refuses to write if a secret survived scrubbing; returns the scrubbed text.

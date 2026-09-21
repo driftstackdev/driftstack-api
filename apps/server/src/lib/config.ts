@@ -4,6 +4,11 @@ import { execSync } from 'node:child_process';
 // a leaf that imports nothing), so the enum the loader validates and the enum the
 // executor switches on cannot drift into two lists.
 import { AI_PACE_BANDS, type AiPaceBand } from '../services/agent-pace.js';
+// Same reason as the pace bands above: the mode names live beside the switch
+// that reads them (services/agent-planning-read.ts, a leaf that imports
+// nothing), so the enum this loader validates and the enum the runtime
+// switches on cannot drift into two lists.
+import { PLANNING_READ_MODES, type PlanningReadMode } from '../services/agent-planning-read.js';
 
 /** What DRIFTSTACK_AI_CREDITS_MODE may say. `off` is the default. */
 export const AI_CREDITS_MODES = ['off', 'shadow', 'enforce'] as const;
@@ -277,6 +282,26 @@ const ConfigSchema = z.object({
    * band must not read as `fast` and say nothing.
    */
   aiPace: z.enum(AI_PACE_BANDS).default('fast'),
+  /**
+   * EXPERIMENT SWITCH, default OFF — which page-read PRIMES a segment's plan:
+   * `text` (the default, and what an unset DRIFTSTACK_PLANNING_READ parses
+   * to) is today's behaviour, byte for byte: `get_page_source`'s digest is
+   * read first, and the bounded `perceive` list is only the one retry of a
+   * read that came back empty. `elements` flips that order — the element
+   * list is read FIRST, and the text digest is the fallback. `elements_then_text`
+   * reads both and hands the planner both.
+   *
+   * ⛔ NOT A CUSTOMER SETTING, same reason `aiPace` is not one: there is no
+   * API field, no session column and no picker. This is the offline/live-eval
+   * experiment switch that answers whether planning from the element list
+   * keeps or improves plan quality, at what cost — nothing here decides that;
+   * it only lets the question be asked.
+   *
+   * Read from DRIFTSTACK_PLANNING_READ by `parsePlanningReadMode`, which
+   * refuses a value that is none of the three for the reason `parseAiPace`
+   * does: a misspelt mode must not read as `text` and say nothing.
+   */
+  planningRead: z.enum(PLANNING_READ_MODES).default('text'),
   // V-079: where the user-facing auth-flow links point. The plaintext
   // single-use token gets appended as `?token=<...>` to each. Defaults
   // are dev-friendly localhost URLs; production sets these to the real
@@ -777,6 +802,30 @@ export function parseAiPace(raw: string | undefined): AiPaceBand {
   );
 }
 
+/**
+ * DRIFTSTACK_PLANNING_READ, read exactly the way `parseAiPace` reads its band:
+ * trimmed and case-insensitive, because a value pasted out of a secret store
+ * often carries a trailing newline.
+ *
+ * Unset or blank is `text`, which is the planning read this server makes
+ * today — the text digest first, the element list only as its one retry.
+ *
+ * ⛔ A VALUE THAT IS NOT A MODE REFUSES TO BOOT, for the same reason a
+ * misspelt pace band does: the whole point of the flag is to run an
+ * experiment, and an experiment that silently ran the control arm would be
+ * reported as a null result.
+ */
+export function parsePlanningReadMode(raw: string | undefined): PlanningReadMode {
+  const value = (raw ?? '').trim().toLowerCase();
+  if (value === '') return 'text';
+  if ((PLANNING_READ_MODES as readonly string[]).includes(value)) {
+    return value as PlanningReadMode;
+  }
+  throw new Error(
+    `Refusing to boot: DRIFTSTACK_PLANNING_READ must be one of ${PLANNING_READ_MODES.join(', ')} (or unset, which is text — today's planning read, unchanged).`,
+  );
+}
+
 function coerceTrustProxy(raw: string | undefined): boolean | number | string {
   if (raw === undefined || raw.length === 0) return false;
   if (raw === 'true') return true;
@@ -935,6 +984,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     agentTurnMaxAccountInFlight: env.AGENT_TURN_MAX_ACCOUNT_INFLIGHT,
     aiCreditsMode: parseAiCreditsMode(env.DRIFTSTACK_AI_CREDITS_MODE),
     aiPace: parseAiPace(env.DRIFTSTACK_AI_PACE),
+    planningRead: parsePlanningReadMode(env.DRIFTSTACK_PLANNING_READ),
     authFlowUrls: deriveAuthFlowUrls(env),
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,

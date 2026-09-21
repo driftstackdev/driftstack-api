@@ -59,6 +59,7 @@ import {
   type AiPaceBand,
   type PaceBudget,
 } from './agent-pace.js';
+import { type PlanningReadMode } from './agent-planning-read.js';
 // Values, not just types: a turn runs up to three plan segments and the counts
 // of all of them are the turn's. agent-turn-telemetry.ts imports from here with
 // `import type` only, so this edge is one-way at runtime.
@@ -670,6 +671,20 @@ export interface AgentRuntimeDeps {
    * API field, no session column and no customer switch in this slice.
    */
   pace?: AiPaceBand;
+  /**
+   * EXPERIMENT SWITCH (S8), default OFF — DRIFTSTACK_PLANNING_READ. Which
+   * page-read PRIMES a segment's plan: the text digest (`text`, default,
+   * today's behaviour byte for byte) or the bounded `perceive` list of
+   * controls (`elements` primary with a text fallback; `elements_then_text`
+   * reads both). See {@link AgentRuntime.readForPlanning}.
+   *
+   * ⛔ READ ONCE AT CONSTRUCTION, same as `pace` above: `config.planningRead`
+   * (DRIFTSTACK_PLANNING_READ) and from nothing else — there is no API
+   * field, no session column and no customer switch in this slice. The live
+   * eval's own EVAL_LIVE_PLANNING_READ hands the SAME three values to the
+   * SAME runtime constructor, so the arm a report names is the arm that ran.
+   */
+  planningRead?: PlanningReadMode;
   /**
    * Monotonic milliseconds, for the turn's wall-clock ceiling
    * (MAX_TURN_WALL_CLOCK_MS). Defaults to `performance.now()`. Injected so a test
@@ -1979,6 +1994,16 @@ function delay(ms: number): Promise<void> {
   });
 }
 
+/**
+ * DRIFTSTACK_PLANNING_READ=elements_then_text — the short, fixed line that
+ * separates the element list from the text digest in one observation. A
+ * literal this file owns (not page content), so it needs no fence-safety
+ * pass of its own — but it is still worded to say nothing a fence-breaking
+ * page line could exploit, the same discipline the executor's own notes
+ * follow.
+ */
+const PLANNING_READ_TEXT_BOUNDARY = '--- page text follows ---';
+
 export class AgentRuntime {
   // One browser plan at a time per agent session. The production app owns one
   // singleton runtime in one systemd process, so an in-process set is the exact
@@ -1990,6 +2015,10 @@ export class AgentRuntime {
   private readonly activeTurnSessionIds = new Set<string>();
   private readonly activeTurnAccountCounts = new Map<string, number>();
   private readonly maxConcurrentTurnsPerAccount: number;
+  // DRIFTSTACK_PLANNING_READ — read ONCE here, at construction, from
+  // `deps.planningRead`; see the doc on AgentRuntimeDeps.planningRead. `text`
+  // when absent, which is today's planning read, unchanged.
+  private readonly planningReadMode: PlanningReadMode;
   // B2 — the running AI turn of each session, and the controller that stops it.
   // Entered in the same synchronous block that takes the session's turn slot and
   // removed in the same `finally` that frees it, so "is a turn running here" and
@@ -2016,6 +2045,7 @@ export class AgentRuntime {
       throw new Error('maxConcurrentTurnsPerAccount must be a positive safe integer');
     }
     this.maxConcurrentTurnsPerAccount = limit;
+    this.planningReadMode = deps.planningRead ?? 'text';
   }
 
   private nowMs(): number {
@@ -2365,6 +2395,20 @@ export class AgentRuntime {
     /** P4 — the turn's commitment budget; this read arms it like any other. */
     commitmentBudget?: CommitmentBudget,
   ): Promise<string | undefined> {
+    // DRIFTSTACK_PLANNING_READ — `text` (default) takes the UNCHANGED path
+    // below, byte for byte; the other two modes are a wholly separate method,
+    // so nothing about this one's behaviour moves for the default case.
+    if (this.planningReadMode !== 'text') {
+      return this.readForPlanningElementsFirst(
+        this.planningReadMode,
+        sessionId,
+        shouldContinue,
+        signal,
+        turnHardStopAtMs,
+        trace,
+        commitmentBudget,
+      );
+    }
     const observeDigest = this.deps.executor.observeDigest?.bind(this.deps.executor);
     if (observeDigest === undefined) return undefined;
     // T1 — checked before the first attempt: a planning read must never be
@@ -2396,6 +2440,101 @@ export class AgentRuntime {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * DRIFTSTACK_PLANNING_READ=elements|elements_then_text — the element list
+   * (`observeElements`) is asked FIRST, ahead of the text digest: the reverse
+   * of `text` mode's own order in {@link readForPlanning} above.
+   *
+   * `elements` — the text digest is read ONLY when the list came back empty
+   * or refused, with TODAY's budget (the exact `observeDigest` call `text`
+   * mode's own first attempt makes): still one retry, never two attempts of
+   * the same read, with the two reads' roles swapped.
+   *
+   * `elements_then_text` — BOTH are asked, elements first, and the planner is
+   * handed the element list followed by the text digest, joined by
+   * {@link PLANNING_READ_TEXT_BOUNDARY} — DATA inside the fenced
+   * observation, exactly like the executor's own truncation note, never a
+   * change to the planner contract's own wording. Whichever ONE read
+   * succeeds when the other does not is handed on alone, with no boundary to
+   * separate something from nothing.
+   */
+  private async readForPlanningElementsFirst(
+    mode: Exclude<PlanningReadMode, 'text'>,
+    sessionId: string,
+    shouldContinue: () => Promise<boolean>,
+    signal: AbortSignal,
+    turnHardStopAtMs: number,
+    trace: PlanningReadTraceEntry[],
+    commitmentBudget?: CommitmentBudget,
+  ): Promise<string | undefined> {
+    const observeElements = this.deps.executor.observeElements?.bind(this.deps.executor);
+    let elements: string | undefined;
+    if (observeElements !== undefined && this.nowMs() < turnHardStopAtMs) {
+      try {
+        elements =
+          (await observeElements(
+            sessionId,
+            shouldContinue,
+            signal,
+            (entry) => pushBoundedTrace(trace, entry),
+            // This read is the segment's PRIMARY look, not a retry of one
+            // that already failed — see PAGE_ELEMENTS_PRIMARY_NOTE.
+            true,
+          )) ?? undefined;
+      } catch {
+        elements = undefined;
+      }
+    }
+    if (mode === 'elements' && elements !== undefined) return elements;
+    // T2 — Stop is honoured before the text read starts, exactly as `text`
+    // mode honours it between its own two attempts.
+    if (stopRequested(signal)) return mode === 'elements_then_text' ? elements : undefined;
+    const observeDigest = this.deps.executor.observeDigest?.bind(this.deps.executor);
+    let text: string | undefined;
+    if (observeDigest !== undefined && this.nowMs() < turnHardStopAtMs) {
+      try {
+        text =
+          (await observeDigest(sessionId, shouldContinue, signal, commitmentBudget, (entry) =>
+            pushBoundedTrace(trace, entry),
+          )) ?? undefined;
+      } catch {
+        text = undefined;
+      }
+    }
+    if (mode === 'elements') return text;
+    if (elements !== undefined && text !== undefined) {
+      return `${elements}\n${PLANNING_READ_TEXT_BOUNDARY}\n${text}`;
+    }
+    return elements ?? text;
+  }
+
+  /**
+   * DRIFTSTACK_PLANNING_READ — this turn's planning-read MODE, counted onto
+   * `run.actionPaths` on the SAME "closed enum, counts only" line pace's own
+   * bands ride (`pace_pauses_fast/medium/slow` on `agent_turn_action_paths`;
+   * see `AgentActionPathCounts.planningReadModes`).
+   *
+   * `totalReads` is `planningReadTrace.length` at the call site — the turn's
+   * running total, not a per-segment delta — so this is a SET, not an ADD:
+   * safe to call again after a later segment's read without double-counting,
+   * because `this.planningReadMode` cannot change mid-turn (read once at
+   * construction). A no-op while nothing has been read yet.
+   */
+  private withPlanningReadModeCount(run: ExecutorRunResult, totalReads: number): ExecutorRunResult {
+    if (totalReads <= 0) return run;
+    const actionPaths = run.actionPaths ?? emptyAgentActionPathCounts();
+    return {
+      ...run,
+      actionPaths: {
+        ...actionPaths,
+        planningReadModes: {
+          ...actionPaths.planningReadModes,
+          [this.planningReadMode]: totalReads,
+        },
+      },
+    };
   }
 
   /**
@@ -3773,10 +3912,13 @@ export class AgentRuntime {
     // a blind first segment, which the policy reads as "no page read yet"
     // rather than as a page of zero words.
     if (pace !== undefined) pace.pageWordCount = countDigestWords(firstPlanObservation);
-    let executorResult = await runPlan(decomposed, verifiedConsequentialApprovals, {
-      segment: 1,
-      ...(decomposed.status !== undefined ? { status: decomposed.status } : {}),
-    });
+    let executorResult = this.withPlanningReadModeCount(
+      await runPlan(decomposed, verifiedConsequentialApprovals, {
+        segment: 1,
+        ...(decomposed.status !== undefined ? { status: decomposed.status } : {}),
+      }),
+      planningReadTrace.length,
+    );
 
     // ── B1 — LOOK, PLAN AS FAR AS YOU CAN SEE, ACT, LOOK AGAIN — IN ONE TURN ──
     //
@@ -4315,7 +4457,10 @@ export class AgentRuntime {
       lastRunResults = nextRun.results;
       lastRun = nextRun;
       noteRan(nextRun, segment, pageNow);
-      executorResult = mergeExecutorRuns(executorResult, nextRun);
+      executorResult = this.withPlanningReadModeCount(
+        mergeExecutorRuns(executorResult, nextRun),
+        planningReadTrace.length,
+      );
       if (cause === 'replan') replans += 1;
       if (nextRun.stopped === true) stoppedDuring = 'executing';
       if (nextRun.repeatRefused !== undefined) {

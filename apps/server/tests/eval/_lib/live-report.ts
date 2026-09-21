@@ -25,6 +25,7 @@ import {
   SUGGESTED_PACED_RPM,
   type LiveThinkingPolicy,
 } from './live-config.js';
+import type { PlanningReadMode } from '../../../src/services/agent-planning-read.js';
 import {
   LiveMeter,
   pacingGapMs,
@@ -100,6 +101,13 @@ export interface LiveReport {
   device: 'current' | 'predates-tap-look';
   /** Whether the executor looked before each tap (`EVAL_LIVE_TAP_LOOK`). */
   tapLook: 'on' | 'off';
+  /**
+   * EXPERIMENT SWITCH (S8) — which page-read primed the planner
+   * (`EVAL_LIVE_PLANNING_READ`). `text` is the product default; a report run
+   * under `elements` or `elements_then_text` is an A/B of THAT, not of the
+   * product — the header says which, exactly as `device` does for the look.
+   */
+  planningRead: PlanningReadMode;
   /** Who served it: `anthropic`, or the chat provider's id from the table. */
   providerId: string;
   /** How each call was priced for the dollar cap and the spend estimate. */
@@ -302,6 +310,9 @@ export interface LiveSuiteArgs {
   devicePredatesTapLook?: boolean;
   /** See `LiveRunContext.tapLookOff`. */
   tapLookOff?: boolean;
+  /** See `LiveRunContext.planningRead`. Absent is `text`, the product
+   *  default. */
+  planningRead?: PlanningReadMode;
   /**
    * `EVAL_LIVE_MAX_RPM` — provider calls a minute the meter may START, measured
    * start to start. Null or absent is no pacing, which is exactly what this
@@ -400,6 +411,7 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
         ...(args.retryBackoffMs !== undefined ? { retryBackoffMs: args.retryBackoffMs } : {}),
         ...(args.devicePredatesTapLook === true ? { devicePredatesTapLook: true } : {}),
         ...(args.tapLookOff === true ? { tapLookOff: true } : {}),
+        ...(args.planningRead !== undefined ? { planningRead: args.planningRead } : {}),
         ...(args.pageAgesWhileModelThinks !== undefined
           ? { pageAgesWhileModelThinks: args.pageAgesWhileModelThinks }
           : {}),
@@ -512,6 +524,7 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
     model: args.model,
     device: args.devicePredatesTapLook === true ? 'predates-tap-look' : 'current',
     tapLook: args.tapLookOff === true ? 'off' : 'on',
+    planningRead: args.planningRead ?? 'text',
     providerId: selection.kind === 'claude' ? 'anthropic' : selection.row.provider.id,
     pricedAt:
       selection.kind === 'claude'
@@ -616,6 +629,7 @@ export function renderLiveReport(report: LiveReport): string {
   lines.push(
     `  device ${report.device === 'current' ? 'current (answers the look before a tap)' : 'PREDATES the look before a tap (every tap takes the old path)'}`,
     `  look before a tap ${report.tapLook === 'on' ? 'on' : 'OFF (the executor sends the wire it sent before the look existed)'}`,
+    `  planning read ${report.planningRead === 'text' ? 'text (the product default)' : report.planningRead === 'elements' ? 'ELEMENTS first, text on an empty/refused list' : 'ELEMENTS THEN TEXT — both, elements first'}`,
   );
   lines.push(`  priced at ${report.pricedAt}`);
   if (report.routing !== null) {

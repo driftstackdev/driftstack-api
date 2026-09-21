@@ -396,6 +396,20 @@ describe('live tier — the spend cap is enforced in code', () => {
     const lookOn = readLiveConfig({ ...env, EVAL_LIVE_TAP_LOOK: 'on' });
     expect(lookOn.enabled && lookOn.tapLookOff).toBe(false);
     expect(() => readLiveConfig({ ...env, EVAL_LIVE_TAP_LOOK: '0' })).toThrow(LiveConfigError);
+    // DRIFTSTACK_PLANNING_READ's live-eval arm: text by default (the product
+    // default); the other two only by name, and a misspelling is an error
+    // rather than a silent run on the control arm.
+    expect(current.enabled && current.planningRead).toBe('text');
+    const elementsFirst = readLiveConfig({ ...env, EVAL_LIVE_PLANNING_READ: 'elements' });
+    expect(elementsFirst.enabled && elementsFirst.planningRead).toBe('elements');
+    const elementsThenText = readLiveConfig({
+      ...env,
+      EVAL_LIVE_PLANNING_READ: 'elements_then_text',
+    });
+    expect(elementsThenText.enabled && elementsThenText.planningRead).toBe('elements_then_text');
+    expect(() => readLiveConfig({ ...env, EVAL_LIVE_PLANNING_READ: 'dom' })).toThrow(
+      LiveConfigError,
+    );
     expect(() => readLiveConfig({ ...env, EVAL_LIVE_MAX_CALLS: '1o' })).toThrow(LiveConfigError);
     expect(() => readLiveConfig({ ...env, EVAL_LIVE_MAX_TOKENS: '0' })).toThrow(LiveConfigError);
     expect(() => readLiveConfig({ ...env, EVAL_LIVE_MAX_USD: '$3' })).toThrow(LiveConfigError);
@@ -1379,5 +1393,31 @@ describe('live tier — the report says what it is', () => {
     };
     collect(report);
     expect([...keys].filter((key) => /rate|baseline|expected/i.test(key))).toEqual([]);
+  });
+
+  it('the planning-read experiment switch (S8): the report says which arm produced it, and the default arm is the product default', async () => {
+    const { report: defaultReport } = await runLiveSuite(
+      suiteArgs([task('L-READ')], referenceModel('L-READ')).args,
+    );
+    expect(defaultReport.planningRead).toBe('text');
+    expect(renderLiveReport(defaultReport)).toContain('planning read text (the product default)');
+
+    const { report: elementsReport } = await runLiveSuite(
+      suiteArgs([task('L-READ')], referenceModel('L-READ'), { planningRead: 'elements' }).args,
+    );
+    expect(elementsReport.planningRead).toBe('elements');
+    expect(renderLiveReport(elementsReport)).toContain('planning read ELEMENTS first');
+    // A run that measured the SAME task under a DIFFERENT arm is still a
+    // completed run — the switch changes what primes the plan, never whether
+    // one can be made.
+    expect(elementsReport.tasks[0]).toMatchObject({ ran: 1, notRun: 0 });
+
+    const { report: bothReport } = await runLiveSuite(
+      suiteArgs([task('L-READ')], referenceModel('L-READ'), {
+        planningRead: 'elements_then_text',
+      }).args,
+    );
+    expect(bothReport.planningRead).toBe('elements_then_text');
+    expect(renderLiveReport(bothReport)).toContain('planning read ELEMENTS THEN TEXT');
   });
 });

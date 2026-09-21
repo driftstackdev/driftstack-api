@@ -1928,6 +1928,10 @@ export async function createProductionDeps(
     // `pace`, and the dispatch path is what it is today. `medium` and `slow`
     // are the two arms of the offline experiment, not a customer setting.
     pace: config.aiPace,
+    // Experiment switch (default OFF) — DRIFTSTACK_PLANNING_READ. `text` (the
+    // default, and what an unset value parses to) is today's planning read,
+    // byte for byte. See AgentRuntimeDeps.planningRead.
+    planningRead: config.planningRead,
     // Observed on its way through: the usage recorder is the one seam that
     // sees EVERY settled model call of a turn (the turn result carries only the
     // plan's), so telemetry stands in front of it. The inner recorder is called

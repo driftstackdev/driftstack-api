@@ -1005,6 +1005,16 @@ export interface AgentExecutor {
      * the commitment gate from, so there is nothing for it to receive.
      */
     onPlanningRead?: (entry: PlanningReadTraceEntry) => void,
+    /**
+     * DRIFTSTACK_PLANNING_READ=elements|elements_then_text — true when this
+     * call is the segment's PRIMARY planning read rather than `text` mode's
+     * retry of one that already failed. Changes only the one-line note the
+     * rendered observation ends on: a retry says the page's text could not be
+     * read IN TIME (true — a full read already failed); a primary read never
+     * attempted one, so saying so would be an apology for something that did
+     * not happen. Default false — today's retry wording, unchanged.
+     */
+    primary?: boolean,
   ): Promise<string | null>;
 }
 

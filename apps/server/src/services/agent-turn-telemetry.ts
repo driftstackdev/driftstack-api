@@ -44,6 +44,10 @@ import { HARNESS_TAP_REFUSAL_REASONS } from '../schemas/harness-control-protocol
 // nothing), so the counts on this line and the bands the executor switches on
 // can never become two lists.
 import { AI_PACE_BANDS, type AiPaceBand } from './agent-pace.js';
+// Same reason as the pace bands above: the mode roster lives beside the switch
+// that reads them (a leaf that imports nothing), so the counts on this line
+// and the mode the runtime switches on can never become two lists.
+import { PLANNING_READ_MODES, type PlanningReadMode } from './agent-planning-read.js';
 
 // ── closed unions ─────────────────────────────────────────────────────────
 
@@ -915,6 +919,16 @@ export interface AgentActionPathCounts {
   /** Milliseconds of inserted pause this turn — the sum of what was asked for
    *  on the pauses the device answered. */
   pacePausedMs: number;
+  /**
+   * DRIFTSTACK_PLANNING_READ — this turn's planning reads, by the mode that
+   * produced them, on the SAME "closed enum, counts only" line
+   * {@link pacePauses} rides. One mode is ever non-zero: the switch is read
+   * ONCE at construction (process-wide, like {@link AiPaceBand}), so a turn
+   * cannot run two. `text` is the default and what an unset
+   * DRIFTSTACK_PLANNING_READ parses to — a non-zero `planning_read_mode_text`
+   * is the ordinary case, not an alarm, unlike `pace_pauses_fast`.
+   */
+  planningReadModes: Record<PlanningReadMode, number>;
 }
 
 function zeroed<K extends string>(keys: readonly K[]): Record<K, number> {
@@ -939,6 +953,7 @@ export function emptyAgentActionPathCounts(): AgentActionPathCounts {
     haltArms: zeroed(CONSEQUENTIAL_HALT_ARMS),
     pacePauses: zeroed(AI_PACE_BANDS),
     pacePausedMs: 0,
+    planningReadModes: zeroed(PLANNING_READ_MODES),
   };
 }
 
@@ -966,6 +981,7 @@ export function addAgentActionPathCounts(
   addInto(into.haltArms, from.haltArms);
   addInto(into.pacePauses, from.pacePauses);
   into.pacePausedMs += from.pacePausedMs;
+  addInto(into.planningReadModes, from.planningReadModes);
   return into;
 }
 
@@ -1030,6 +1046,13 @@ export function agentActionPathLogFields(counts: AgentActionPathCounts): Record<
     pace_pauses_medium: counts.pacePauses.medium,
     pace_pauses_slow: counts.pacePauses.slow,
     pace_paused_ms: counts.pacePausedMs,
+    // DRIFTSTACK_PLANNING_READ — which mode this turn's planning reads ran
+    // under. `planning_read_mode_text` is the ordinary, expected count on any
+    // default deployment; the other two are only non-zero on a process
+    // running the experiment.
+    planning_read_mode_text: counts.planningReadModes.text,
+    planning_read_mode_elements: counts.planningReadModes.elements,
+    planning_read_mode_elements_then_text: counts.planningReadModes.elements_then_text,
   };
 }
 

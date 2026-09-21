@@ -25,6 +25,10 @@ import {
   resolvePlannerModel,
   type PlannerModelSelection,
 } from '../../../src/services/agent-planner-providers.js';
+import {
+  PLANNING_READ_MODES,
+  type PlanningReadMode,
+} from '../../../src/services/agent-planning-read.js';
 import type { LiveSpendCaps } from './live-meter.js';
 
 /**
@@ -156,6 +160,15 @@ export interface LiveConfig {
    * for at all — this is the "before" of a before/after, on today's bytes.
    */
   tapLookOff: boolean;
+  /**
+   * EXPERIMENT SWITCH (S8) — `EVAL_LIVE_PLANNING_READ`. Which page-read
+   * PRIMES the planner: `text` (the product default, and what an unset
+   * variable resolves to) or the bounded element list (`elements` primary
+   * with a text fallback; `elements_then_text` reads both). Hands the SAME
+   * three values, to the SAME runtime constructor, as
+   * `DRIFTSTACK_PLANNING_READ` — see `AgentRuntimeDeps.planningRead`.
+   */
+  planningRead: PlanningReadMode;
 }
 
 export const LIVE_DEVICES = ['current', 'predates-tap-look'] as const;
@@ -186,6 +199,7 @@ export const LIVE_HOW_TO_RUN =
   `A new aggregator account allows ${String(AGGREGATOR_NEW_ACCOUNT_RPM)} requests a minute per model, so use ${String(SUGGESTED_PACED_RPM)} through one; the waiting is reported on its own line and is never inside a call's measured latency), ` +
   `EVAL_LIVE_THINKING (${LIVE_THINKING_POLICIES.join(' | ')}; Claude models only; default the product's own policy), EVAL_LIVE_STRUCTURED (0 sends requests without the reply schema; default the product's own), ` +
   `EVAL_LIVE_DEVICE (${LIVE_DEVICES.join(' | ')}; default current), EVAL_LIVE_TAP_LOOK (on | off; default on), ` +
+  `EVAL_LIVE_PLANNING_READ (${PLANNING_READ_MODES.join(' | ')}; default text — the product default), ` +
   'EVAL_LIVE_TASKS (comma-separated task ids), EVAL_REPORT_DIR (where the reports go; default the OS temp directory, and never inside the repository). ' +
   'It writes no baseline and pins no outcome.';
 
@@ -337,10 +351,24 @@ export function readLiveConfig(env: NodeJS.ProcessEnv = process.env): LiveConfig
   ) {
     throw new LiveConfigError('EVAL_LIVE_TAP_LOOK must be on or off');
   }
+  const planningReadRaw = env.EVAL_LIVE_PLANNING_READ?.trim();
+  if (
+    planningReadRaw !== undefined &&
+    planningReadRaw.length > 0 &&
+    !(PLANNING_READ_MODES as ReadonlyArray<string>).includes(planningReadRaw)
+  ) {
+    throw new LiveConfigError(
+      `EVAL_LIVE_PLANNING_READ must be one of ${PLANNING_READ_MODES.join(', ')}`,
+    );
+  }
   return {
     thinkingPolicy,
     devicePredatesTapLook: deviceRaw === 'predates-tap-look',
     tapLookOff: tapLookRaw === 'off',
+    planningRead:
+      planningReadRaw === undefined || planningReadRaw.length === 0
+        ? 'text'
+        : (planningReadRaw as PlanningReadMode),
     structuredOutput:
       structuredRaw === undefined || structuredRaw.length === 0 ? null : structuredRaw === '1',
     enabled: true,

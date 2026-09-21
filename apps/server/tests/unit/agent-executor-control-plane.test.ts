@@ -1273,6 +1273,70 @@ describe('ControlPlaneAgentExecutor — P1/T-elements observeElements() renders 
   });
 });
 
+describe('ControlPlaneAgentExecutor — DRIFTSTACK_PLANNING_READ: a PRIMARY read ends on a different, non-apologetic note', () => {
+  it('the RETRY call — `primary` omitted, the default — ends on the unchanged "could not be read in time" note', async () => {
+    const { dispatcher } = mockDispatcher((d) =>
+      okResult(
+        d.intentId,
+        d.sessionId,
+        perceiveListResult([perceiveListElement('#buy', 'Place order')]),
+      ),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const text = await exec.observeElements('agt_1');
+    expect(text?.trimEnd().split('\n').at(-1)).toBe(
+      "(the page's text could not be read in time; only its controls are listed)",
+    );
+  });
+
+  it('⛔ NEGATIVE CONTROL — a PRIMARY call (`primary: true`, DRIFTSTACK_PLANNING_READ=elements|elements_then_text) ends on a DIFFERENT sentence: no full read was attempted, so none is claimed to have failed', async () => {
+    const { dispatcher } = mockDispatcher((d) =>
+      okResult(
+        d.intentId,
+        d.sessionId,
+        perceiveListResult([perceiveListElement('#buy', 'Place order')]),
+      ),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const text = await exec.observeElements('agt_1', undefined, undefined, undefined, true);
+    expect(text?.trimEnd().split('\n').at(-1)).toBe(
+      "(only the page's controls are listed; its text was not read)",
+    );
+    expect(text).not.toContain('could not be read in time');
+  });
+
+  it('a PRIMARY read still records `ok_elements` on the turn trace — the SAME outcome a successful retry reports', async () => {
+    const { dispatcher } = mockDispatcher((d) =>
+      okResult(
+        d.intentId,
+        d.sessionId,
+        perceiveListResult([perceiveListElement('#buy', 'Place order')]),
+      ),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const reports: PlanningReadTraceEntry[] = [];
+    await exec.observeElements('agt_1', undefined, undefined, (e) => reports.push(e), true);
+    expect(reports[0]).toMatchObject({ outcome: 'ok_elements' });
+  });
+
+  it('a PRIMARY call still adds the truncation note after its own note, on its own line', async () => {
+    const { dispatcher } = mockDispatcher((d) =>
+      okResult(
+        d.intentId,
+        d.sessionId,
+        perceiveListResult([perceiveListElement('#buy', 'Place order')], { truncated: true }),
+      ),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const text = await exec.observeElements('agt_1', undefined, undefined, undefined, true);
+    const lines = (text ?? '').split('\n');
+    expect(lines.at(-2)).toBe("(only the page's controls are listed; its text was not read)");
+    expect(lines.at(-1)).toBe(
+      '(the page was longer than could be read; what is listed is the beginning of it)',
+    );
+  });
+});
+
 describe('ControlPlaneAgentExecutor — T4 observeElements() reports each read’s outcome via onPlanningRead', () => {
   it('reports {outcome: "ok_elements", ms, chars, truncated, elements} on a successful read', async () => {
     const { dispatcher } = mockDispatcher((d) =>
