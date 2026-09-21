@@ -348,6 +348,11 @@
               "dns_remote_resolve": {
                 "type": "boolean"
               },
+              "safeguards": {
+                "type": "string",
+                "enum": ["passed", "failed", "unverified"],
+                "description": "Whether every egress safeguard held for this session. Absent (the key is missing entirely, never `null`) on a row written before this field existed — read an absent value as unknown, never as `unverified` and never as `passed`. `passed` — every safeguard check the device reported passed, and the device declared the full set of checks a healthy session reports, so nothing was left unchecked. `failed` — at least one safeguard check did not pass. Stop relying on the session and contact support with the session id. Takes precedence over `unverified` whenever both could apply. `unverified` — we could not establish that every safeguard held: no checks were reported, a declared check never reported back, or the device declared no expected set of checks at all. Nothing is known to have failed, but completeness could not be confirmed either — for anything that matters, treat the session the same way you would `failed`."
+              },
               "warnings": {
                 "type": "array",
                 "items": {
@@ -1640,6 +1645,11 @@
               },
               "dns_remote_resolve": {
                 "type": "boolean"
+              },
+              "safeguards": {
+                "type": "string",
+                "enum": ["passed", "failed", "unverified"],
+                "description": "Whether every egress safeguard held for this session. Absent (the key is missing entirely, never `null`) on a row written before this field existed — read an absent value as unknown, never as `unverified` and never as `passed`. `passed` — every safeguard check the device reported passed, and the device declared the full set of checks a healthy session reports, so nothing was left unchecked. `failed` — at least one safeguard check did not pass. Stop relying on the session and contact support with the session id. Takes precedence over `unverified` whenever both could apply. `unverified` — we could not establish that every safeguard held: no checks were reported, a declared check never reported back, or the device declared no expected set of checks at all. Nothing is known to have failed, but completeness could not be confirmed either — for anything that matters, treat the session the same way you would `failed`."
               },
               "warnings": {
                 "type": "array",
@@ -7500,6 +7510,11 @@
                         "dns_remote_resolve": {
                           "type": "boolean"
                         },
+                        "safeguards": {
+                          "type": "string",
+                          "enum": ["passed", "failed", "unverified"],
+                          "description": "Whether every egress safeguard held for this session. Absent (the key is missing entirely, never `null`) on a row written before this field existed — read an absent value as unknown, never as `unverified` and never as `passed`. `passed` — every safeguard check the device reported passed, and the device declared the full set of checks a healthy session reports, so nothing was left unchecked. `failed` — at least one safeguard check did not pass. Stop relying on the session and contact support with the session id. Takes precedence over `unverified` whenever both could apply. `unverified` — we could not establish that every safeguard held: no checks were reported, a declared check never reported back, or the device declared no expected set of checks at all. Nothing is known to have failed, but completeness could not be confirmed either — for anything that matters, treat the session the same way you would `failed`."
+                        },
                         "warnings": {
                           "type": "array",
                           "items": {
@@ -7815,6 +7830,11 @@
                               },
                               "dns_remote_resolve": {
                                 "type": "boolean"
+                              },
+                              "safeguards": {
+                                "type": "string",
+                                "enum": ["passed", "failed", "unverified"],
+                                "description": "Whether every egress safeguard held for this session. Absent (the key is missing entirely, never `null`) on a row written before this field existed — read an absent value as unknown, never as `unverified` and never as `passed`. `passed` — every safeguard check the device reported passed, and the device declared the full set of checks a healthy session reports, so nothing was left unchecked. `failed` — at least one safeguard check did not pass. Stop relying on the session and contact support with the session id. Takes precedence over `unverified` whenever both could apply. `unverified` — we could not establish that every safeguard held: no checks were reported, a declared check never reported back, or the device declared no expected set of checks at all. Nothing is known to have failed, but completeness could not be confirmed either — for anything that matters, treat the session the same way you would `failed`."
                               },
                               "warnings": {
                                 "type": "array",
@@ -9044,6 +9064,11 @@
                         },
                         "dns_remote_resolve": {
                           "type": "boolean"
+                        },
+                        "safeguards": {
+                          "type": "string",
+                          "enum": ["passed", "failed", "unverified"],
+                          "description": "Whether every egress safeguard held for this session. Absent (the key is missing entirely, never `null`) on a row written before this field existed — read an absent value as unknown, never as `unverified` and never as `passed`. `passed` — every safeguard check the device reported passed, and the device declared the full set of checks a healthy session reports, so nothing was left unchecked. `failed` — at least one safeguard check did not pass. Stop relying on the session and contact support with the session id. Takes precedence over `unverified` whenever both could apply. `unverified` — we could not establish that every safeguard held: no checks were reported, a declared check never reported back, or the device declared no expected set of checks at all. Nothing is known to have failed, but completeness could not be confirmed either — for anything that matters, treat the session the same way you would `failed`."
                         },
                         "warnings": {
                           "type": "array",
@@ -24570,6 +24595,11 @@
                               },
                               "dns_remote_resolve": {
                                 "type": "boolean"
+                              },
+                              "safeguards": {
+                                "type": "string",
+                                "enum": ["passed", "failed", "unverified"],
+                                "description": "Whether every egress safeguard held for this session. Absent (the key is missing entirely, never `null`) on a row written before this field existed — read an absent value as unknown, never as `unverified` and never as `passed`. `passed` — every safeguard check the device reported passed, and the device declared the full set of checks a healthy session reports, so nothing was left unchecked. `failed` — at least one safeguard check did not pass. Stop relying on the session and contact support with the session id. Takes precedence over `unverified` whenever both could apply. `unverified` — we could not establish that every safeguard held: no checks were reported, a declared check never reported back, or the device declared no expected set of checks at all. Nothing is known to have failed, but completeness could not be confirmed either — for anything that matters, treat the session the same way you would `failed`."
                               },
                               "warnings": {
                                 "type": "array",
@@ -57323,6 +57353,11 @@
                         },
                         "dns_remote_resolve": {
                           "type": "boolean"
+                        },
+                        "safeguards": {
+                          "type": "string",
+                          "enum": ["passed", "failed", "unverified"],
+                          "description": "Whether every egress safeguard held for this session. Absent (the key is missing entirely, never `null`) on a row written before this field existed — read an absent value as unknown, never as `unverified` and never as `passed`. `passed` — every safeguard check the device reported passed, and the device declared the full set of checks a healthy session reports, so nothing was left unchecked. `failed` — at least one safeguard check did not pass. Stop relying on the session and contact support with the session id. Takes precedence over `unverified` whenever both could apply. `unverified` — we could not establish that every safeguard held: no checks were reported, a declared check never reported back, or the device declared no expected set of checks at all. Nothing is known to have failed, but completeness could not be confirmed either — for anything that matters, treat the session the same way you would `failed`."
                         },
                         "warnings": {
                           "type": "array",

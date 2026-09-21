@@ -113,4 +113,27 @@ describe('Arc 5 EGRESS eg.6 cross-source invariant', () => {
     expect(read(API_TYPES)).toMatch(/dns_remote_resolve: z\.boolean\(\)/);
     expect(read(SCHEMA)).toMatch(/dns_remote_resolve: boolean;/);
   });
+
+  // 2026-09-21 — the OPTIONAL, ABSENT-capable `safeguards` tri-state field.
+  // Unlike every field above, it must be OPTIONAL everywhere it is declared:
+  // a required field would break parsing of every row written before this
+  // change, since the jsonb column is not migrated.
+  it('the safeguards tri-state field is declared OPTIONAL, identically, across api-types + Drizzle schema + SessionRecord + SessionRepo + SessionsService', () => {
+    const types = read(API_TYPES);
+    expect(types).toMatch(
+      /safeguards:\s*z\s*\.enum\(\['passed', 'failed', 'unverified'\]\)\s*\.optional\(\)/,
+    );
+
+    const schema = read(SCHEMA);
+    expect(schema).toMatch(/safeguards\?: 'passed' \| 'failed' \| 'unverified';/);
+
+    const svc = read(SESSIONS_SVC);
+    const occurrences = svc.match(/safeguards\?: 'passed' \| 'failed' \| 'unverified';/g) ?? [];
+    // SessionRecord.egressCapabilities + SessionRepo.setEgressCapabilityReport
+    // + SessionsService.ingestEgressCapabilityReport all declare it.
+    expect(occurrences.length).toBeGreaterThanOrEqual(3);
+
+    const repo = read(SESSIONS_REPO);
+    expect(repo).toMatch(/safeguards\?: 'passed' \| 'failed' \| 'unverified';/);
+  });
 });

@@ -1470,6 +1470,10 @@ export const sessions = pgTable(
       udp_associate: boolean;
       quic_route: 'proxy' | 'direct' | 'disabled';
       dns_remote_resolve: boolean;
+      // Optional and ABSENT-capable: added after this column already held
+      // rows, so an existing row's jsonb blob carries no `safeguards` key at
+      // all. NOT migrated — see packages/api-types/src/egress.ts.
+      safeguards?: 'passed' | 'failed' | 'unverified';
       warnings: string[];
     }>(),
     // Arc 5 EGRESS eg.1 — RAW harness-emitted event payload, kept

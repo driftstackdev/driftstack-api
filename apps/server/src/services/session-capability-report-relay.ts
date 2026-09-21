@@ -9,7 +9,7 @@ import type { Logger } from '../lib/logger.js';
 import type { CapabilityReport } from '../schemas/harness-control-protocol.js';
 import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import type { SessionCapabilityReportStore } from './session-capability-report-store.js';
-import { missingSafeguardLayers } from './session-capability-report-store.js';
+import { missingSafeguardLayers, safeguardsPassed } from './session-capability-report-store.js';
 import {
   PUBLIC_SAFEGUARD_LAYERS,
   safeToken,
@@ -86,6 +86,9 @@ interface CapabilityReportSessionsService {
       udp_associate: boolean;
       quic_route: 'proxy' | 'disabled';
       dns_remote_resolve: boolean;
+      /** Optional and ABSENT-capable — see `deriveSafeguardsTriState` below and
+       *  the field's doc comment in packages/api-types/src/egress.ts. */
+      safeguards?: 'passed' | 'failed' | 'unverified';
       warnings: string[];
     };
     raw: Record<string, unknown>;
@@ -131,6 +134,54 @@ function deriveWarnings(frame: CapabilityReport): string[] {
   if (frame.streamingState === 'failed') warnings.push('streaming_failed');
   if (frame.egressState === 'dead_proxy') warnings.push('dead_proxy');
   return warnings;
+}
+
+/**
+ * The customer's tri-state answer to "did my egress safeguards hold" for this
+ * report — `passed | failed | unverified`. Deliberately derived from the SAME
+ * frame, in the SAME place, as `deriveWarnings` immediately above: a
+ * `safeguards: 'failed'` report and a `safeguard_failed:<layer>` warning
+ * always come from one fact, not two independently-computed ones that could
+ * start disagreeing.
+ *
+ * Reuses `safeguardsPassed()` and `missingSafeguardLayers()` from
+ * `session-capability-report-store.ts` — the evidence rule pinned by
+ * `safeguards-passed-requires-evidence.test.ts` — rather than restating the
+ * completeness logic a second time.
+ *
+ * ⚠️ STRICTER THAN `safeguardsPassed()` FOR ONE POPULATION, AND DELIBERATELY
+ * SO. `safeguardsPassed()` returns `true` once every REPORTED check passed
+ * even when the device declared no expected set at all — documented there as
+ * "the strongest honest claim available" for the BOOLEAN it feeds
+ * (`safeguards_passed` on the agent-session projection). A customer tri-state
+ * cannot make that same claim: an undeclared expected set means completeness
+ * was never checkable, so THIS function reads `unverified` for exactly the
+ * population where `safeguardsPassed()` reads `true`. The two fields answer
+ * different questions and are allowed to disagree — see the doc comments on
+ * both.
+ *
+ * Exported (unlike `deriveWarnings` above) so integration tests can seed a
+ * realistic `derived.safeguards` value from an actual frame — with or
+ * without a declared expected set — rather than hand-typing a literal that
+ * could silently drift from what this function would really produce.
+ */
+export function deriveSafeguardsTriState(
+  frame: CapabilityReport,
+): 'passed' | 'failed' | 'unverified' {
+  // A known failure is the strongest actionable fact even when completeness
+  // is ALSO unverifiable, so it is checked, and wins, first.
+  if (frame.safeguardChecks.some((check) => !check.passed)) return 'failed';
+  if (
+    frame.safeguardLayersExpected !== undefined &&
+    missingSafeguardLayers(frame).length === 0 &&
+    safeguardsPassed(frame)
+  ) {
+    return 'passed';
+  }
+  // No checks at all, an expected layer that never reported, or no declared
+  // expected set at all: none of these is a failure, but none earns `passed`
+  // either — every one of them is "we cannot confirm completeness".
+  return 'unverified';
 }
 
 const SAFEGUARD_LAYER_UNWORDED_PREFIX = 'safeguard_layer_unworded:';
@@ -399,6 +450,7 @@ export function makeSessionCapabilityReportRelay(
         // The harness proxy chain never installs a local resolver; it forwards
         // hostnames to the upstream proxy (ProxyChain.swift H3.exec.116).
         dns_remote_resolve: true,
+        safeguards: deriveSafeguardsTriState(frame),
         warnings: deriveWarnings(frame),
       },
       raw,

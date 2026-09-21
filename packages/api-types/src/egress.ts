@@ -411,7 +411,7 @@ export type SavedProxyConfig = z.infer<typeof SavedProxyConfigSchema>;
  * It is held in agreement with the mapping function's vocabulary by
  * `apps/server/tests/unit/a-public-egress-warning-cannot-ship-undocumented.test.ts`:
  * a new public code fails that guard until it appears here, in the doc comment
- * above and on the customer docs page. A vocabulary documented in one of the
+ * below and on the customer docs page. A vocabulary documented in one of the
  * three places is a vocabulary that has already drifted.
  */
 const EGRESS_WARNINGS_DESCRIPTION =
@@ -430,6 +430,30 @@ const EGRESS_WARNINGS_DESCRIPTION =
   '`safeguard_failed:browser_integrity` (the check that the session ran the expected browser build did not pass — contact support with the session id); ' +
   '`safeguard_failed:proxy_egress_verification` (the check that traffic actually left through your proxy did not pass — confirm your proxy and contact support with the session id); ' +
   '`safeguard_failed:live_view_capture` (the live view could not be captured; the session’s own browsing is unaffected).';
+
+/**
+ * ⛔ THIS TEXT IS A PUBLISHED SURFACE, not a comment — same contract as
+ * `EGRESS_WARNINGS_DESCRIPTION` above: it becomes the OpenAPI `description`
+ * for `egress_capabilities.safeguards`, reaches the rendered API reference,
+ * the committed `packages/sdk-python/openapi.json` and the generated Pydantic
+ * field description. Held in agreement with the doc comment on
+ * `EgressCapabilitiesSchema` below and the customer docs page by the same
+ * parity guard that holds the warning vocabulary
+ * (`a-public-egress-warning-cannot-ship-undocumented.test.ts`).
+ */
+const EGRESS_SAFEGUARDS_DESCRIPTION =
+  'Whether every egress safeguard held for this session. ' +
+  'Absent (the key is missing entirely, never `null`) on a row written before this field ' +
+  'existed — read an absent value as unknown, never as `unverified` and never as `passed`. ' +
+  '`passed` — every safeguard check the device reported passed, and the device declared the ' +
+  'full set of checks a healthy session reports, so nothing was left unchecked. ' +
+  '`failed` — at least one safeguard check did not pass. Stop relying on the session and ' +
+  'contact support with the session id. Takes precedence over `unverified` whenever both ' +
+  'could apply. ' +
+  '`unverified` — we could not establish that every safeguard held: no checks were reported, ' +
+  'a declared check never reported back, or the device declared no expected set of checks at ' +
+  'all. Nothing is known to have failed, but completeness could not be confirmed either — ' +
+  'for anything that matters, treat the session the same way you would `failed`.';
 
 /**
  * What your proxy turned out to support, reported once a SOCKS5 proxy has
@@ -453,6 +477,27 @@ const EGRESS_WARNINGS_DESCRIPTION =
  *   currently no check of that, and no warning reported when a proxy cannot.
  *   Read it as "remote resolution was requested for this session", not as a
  *   confirmed outcome, until it becomes a real per-proxy measurement.
+ * - `safeguards` — whether every egress safeguard held for this session:
+ *   `passed`, `failed`, or `unverified`. ABSENT (the key is
+ *   missing, not `null`) on a row written before this field existed — an
+ *   absent value must never be read as `unverified`, and still less as
+ *   `passed`. `failed` takes precedence over `unverified` whenever both could
+ *   apply, because a known failure is the strongest actionable fact even when
+ *   completeness is also unverifiable.
+ *
+ *   ⚠️ THIS IS A STRICTER QUESTION than the `safeguards_passed` boolean on the
+ *   agent-session projection (`GET /v1/agent-sessions/{id}`). That boolean
+ *   reads `true` once every safeguard check that DID report has passed, even
+ *   when the device declared no expected set at all — the strongest honest
+ *   claim available from that report alone. `safeguards` additionally
+ *   requires the device to have DECLARED its expected set of checks and the
+ *   reported checks to COVER it, so a session can read
+ *   `safeguards_passed: true` on the agent-session projection and
+ *   `safeguards: "unverified"` here at the same time. Both are correct
+ *   because they answer different questions: "did every check we heard about
+ *   pass" versus "is nothing missing". See the doc comment on
+ *   `safeguards_passed` in `session-capability-report-store.ts` for the
+ *   former.
  * - `warnings` — codes naming anything that did not work as asked for this
  *   session. The full published vocabulary, each with what you can do about
  *   it:
@@ -501,6 +546,15 @@ export const EgressCapabilitiesSchema = z.object({
   udp_associate: z.boolean(),
   quic_route: z.enum(['proxy', 'direct', 'disabled']),
   dns_remote_resolve: z.boolean(),
+  /**
+   * Optional and ABSENT-capable on purpose: a row written before this field
+   * existed carries no `safeguards` key at all, and that absence must never
+   * be defaulted to a value — see `EGRESS_SAFEGUARDS_DESCRIPTION`.
+   */
+  safeguards: z
+    .enum(['passed', 'failed', 'unverified'])
+    .optional()
+    .describe(EGRESS_SAFEGUARDS_DESCRIPTION),
   warnings: z.array(z.string()).default([]).describe(EGRESS_WARNINGS_DESCRIPTION),
 });
 export type EgressCapabilities = z.infer<typeof EgressCapabilitiesSchema>;

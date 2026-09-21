@@ -162,6 +162,10 @@ export interface SessionRecord {
     udp_associate: boolean;
     quic_route: 'proxy' | 'direct' | 'disabled';
     dns_remote_resolve: boolean;
+    /** Optional and ABSENT-capable: a row written before this field existed
+     *  carries no `safeguards` key at all, and that must never be defaulted
+     *  to a value. See packages/api-types/src/egress.ts. */
+    safeguards?: 'passed' | 'failed' | 'unverified';
     warnings: string[];
   } | null;
   /**
@@ -378,6 +382,7 @@ export interface SessionRepo {
       udp_associate: boolean;
       quic_route: 'proxy' | 'direct' | 'disabled';
       dns_remote_resolve: boolean;
+      safeguards?: 'passed' | 'failed' | 'unverified';
       warnings: string[];
     };
     raw: Record<string, unknown>;
@@ -1717,6 +1722,7 @@ export class SessionsService {
       udp_associate: boolean;
       quic_route: 'proxy' | 'direct' | 'disabled';
       dns_remote_resolve: boolean;
+      safeguards?: 'passed' | 'failed' | 'unverified';
       warnings: string[];
     };
     raw: Record<string, unknown>;

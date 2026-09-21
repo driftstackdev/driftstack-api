@@ -98,6 +98,100 @@ function warningsDescriptions(node: unknown, out: string[] = []): string[] {
   return out;
 }
 
+/**
+ * The `egress_capabilities.safeguards` tri-state values (2026-09-21). A
+ * SEPARATE closed vocabulary from `PUBLIC_EGRESS_WARNINGS` — it lives on its
+ * own field — held to the same three documents by the same shape of guard
+ * below, because a field this new drifts exactly the way a code does.
+ */
+const SAFEGUARDS_TRI_STATE_VALUES = ['passed', 'failed', 'unverified'] as const;
+
+/**
+ * Every `description` string the published document attaches to a
+ * `safeguards` property, found the same way `warningsDescriptions` finds
+ * `warnings` above: by walking rather than by naming a path.
+ */
+function safeguardsDescriptions(node: unknown, out: string[] = []): string[] {
+  if (Array.isArray(node)) {
+    for (const item of node) safeguardsDescriptions(item, out);
+    return out;
+  }
+  if (node === null || typeof node !== 'object') return out;
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    if (
+      key === 'safeguards' &&
+      value !== null &&
+      typeof value === 'object' &&
+      typeof (value as Record<string, unknown>).description === 'string'
+    ) {
+      out.push((value as Record<string, unknown>).description as string);
+    }
+    safeguardsDescriptions(value, out);
+  }
+  return out;
+}
+
+describe('every safeguards tri-state value is documented where customers read', () => {
+  const apiTypes = read(API_TYPES);
+  const docsPage = read(DOCS_PAGE);
+
+  it('POSITIVE CONTROL — the matcher does not report a value that does not exist as documented', () => {
+    expect(documents(apiTypes, 'not_a_real_safeguards_value')).toBe(false);
+    expect(documents(docsPage, 'not_a_real_safeguards_value')).toBe(false);
+  });
+
+  it('CRITICAL the api-types doc comment + description documents all three values', () => {
+    const missing = SAFEGUARDS_TRI_STATE_VALUES.filter((v) => !documents(apiTypes, v));
+    expect(missing, 'undocumented in packages/api-types/src/egress.ts').toEqual([]);
+  });
+
+  it('CRITICAL the customer docs page documents all three values', () => {
+    const missing = SAFEGUARDS_TRI_STATE_VALUES.filter((v) => !documents(docsPage, v));
+    expect(missing, 'undocumented in apps/docs/src/pages/api/sessions.md').toEqual([]);
+  });
+
+  it('CRITICAL the LIVE OpenAPI description documents all three values', () => {
+    const descriptions = safeguardsDescriptions(generateOpenApiSpec());
+    expect(
+      descriptions.length,
+      'no safeguards description found in the built spec',
+    ).toBeGreaterThan(0);
+    for (const description of descriptions) {
+      const missing = SAFEGUARDS_TRI_STATE_VALUES.filter((v) => !documents(description, v));
+      expect(missing, 'undocumented in the generated OpenAPI description').toEqual([]);
+    }
+  });
+
+  it('CRITICAL the COMMITTED spec snapshot carries the same description', () => {
+    const descriptions = safeguardsDescriptions(JSON.parse(read(SPEC_SNAPSHOT)));
+    expect(descriptions.length).toBeGreaterThan(0);
+    for (const description of descriptions) {
+      const missing = SAFEGUARDS_TRI_STATE_VALUES.filter((v) => !documents(description, v));
+      expect(
+        missing,
+        'undocumented in packages/sdk-python/openapi.json — re-run `npm run sdk:python:dump-spec`',
+      ).toEqual([]);
+    }
+  });
+
+  it('CRITICAL the GENERATED Python model documents all three values', () => {
+    const models = read(PY_MODELS);
+    const start = models.indexOf('class EgressCapabilities(BaseModel):');
+    expect(start, 'the EgressCapabilities model was renamed or removed').toBeGreaterThan(-1);
+    const after = models.slice(start);
+    const end = after.indexOf('\nclass ', 1);
+    const block = end === -1 ? after : after.slice(0, end);
+
+    expect(block, 'the sliced block does not carry the field').toContain('safeguards:');
+    const missing = SAFEGUARDS_TRI_STATE_VALUES.filter((v) => !documents(block, v));
+    expect(
+      missing,
+      'undocumented in the generated Pydantic docstring — re-run ' +
+        '`bash packages/sdk-python/scripts/generate.sh` after `npm run sdk:python:dump-spec`',
+    ).toEqual([]);
+  });
+});
+
 describe('every published egress warning code is documented where customers read', () => {
   const apiTypes = read(API_TYPES);
   const docsPage = read(DOCS_PAGE);

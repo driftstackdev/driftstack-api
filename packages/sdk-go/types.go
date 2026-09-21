@@ -386,10 +386,15 @@ type Session struct {
 // reports `egress.capability_report`; non-SOCKS5 sessions stay null
 // permanently.
 type EgressCapabilities struct {
-	UDPAssociate     bool     `json:"udp_associate"`
-	QUICRoute        string   `json:"quic_route"` // "proxy" | "direct" | "disabled"
-	DNSRemoteResolve bool     `json:"dns_remote_resolve"`
-	Warnings         []string `json:"warnings"`
+	UDPAssociate     bool   `json:"udp_associate"`
+	QUICRoute        string `json:"quic_route"` // "proxy" | "direct" | "disabled"
+	DNSRemoteResolve bool   `json:"dns_remote_resolve"`
+	// Safeguards is "passed", "failed", or "unverified" — whether every
+	// defence-in-depth egress safeguard held for this session. nil means the
+	// row predates this field (the key was absent on the wire); never treat a
+	// nil Safeguards as "unverified" or "passed".
+	Safeguards *string  `json:"safeguards,omitempty"`
+	Warnings   []string `json:"warnings"`
 }
 
 // CreateSessionRequest. All fields are optional; leave empty to let the

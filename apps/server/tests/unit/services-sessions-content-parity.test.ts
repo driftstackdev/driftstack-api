@@ -84,7 +84,7 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     expect(body).toMatch(/label: string \| null;/);
     expect(body).toMatch(/metadata: Record<string, unknown> \| null;/);
     expect(body).toMatch(
-      /egressCapabilities: \{\s*udp_associate: boolean;\s*quic_route: 'proxy' \| 'direct' \| 'disabled';\s*dns_remote_resolve: boolean;\s*warnings: string\[\];\s*\} \| null;/,
+      /egressCapabilities: \{\s*udp_associate: boolean;\s*quic_route: 'proxy' \| 'direct' \| 'disabled';\s*dns_remote_resolve: boolean;[\s\S]*?safeguards\?: 'passed' \| 'failed' \| 'unverified';\s*warnings: string\[\];\s*\} \| null;/,
     );
     expect(body).toMatch(/lastStateAt: Date \| null;/);
     expect(body).toMatch(/destroyedAt: Date \| null;/);

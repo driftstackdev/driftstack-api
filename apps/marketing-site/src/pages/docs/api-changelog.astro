@@ -22,6 +22,29 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>2026-09</h2>
     <ul>
       <li>
+        <strong>API — a session's <code>egress_capabilities</code> gains a
+        <code>safeguards</code> field.</strong>
+        Alongside <code>udp_associate</code>, <code>quic_route</code> and
+        <code>dns_remote_resolve</code>, a session's
+        <code>egress_capabilities</code> now carries <code>safeguards</code>:
+        <code>passed</code>, <code>failed</code>, or <code>unverified</code>,
+        summarising whether every egress safeguard held.
+        <code>failed</code> means at least one check did not pass;
+        <code>unverified</code> means completeness could not be confirmed
+        even though nothing is known to have failed — treat it the same way
+        you would <code>failed</code> for anything that matters. The field
+        is <strong>absent</strong> (not <code>null</code>) on a session
+        reported before this change; do not read an absent value as
+        <code>unverified</code> or <code>passed</code>. It appears on the
+        same responses as the rest of <code>egress_capabilities</code> —
+        <code>GET /v1/sessions/&#123;id&#125;</code>,
+        <code>GET /v1/sessions</code>, <code>POST /v1/sessions</code>,
+        <code>POST /v1/profiles/&#123;id&#125;/launch</code> and the
+        <code>session.egress_capability_changed</code> webhook. Additive;
+        the SDKs' types include the new field. Reference at
+        <a href="https://docs.driftstack.io/api/sessions/">/api/sessions</a>.
+      </li>
+      <li>
         <strong>API — the proxy test says who measured it, and the
         saved-proxy list carries the same fingerprint fields as the test.</strong>
         A <code>?check=full</code> result from

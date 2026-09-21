@@ -82,6 +82,10 @@ describe('makeSessionCapabilityReportRelay', () => {
         udp_associate: false,
         quic_route: 'disabled',
         dns_remote_resolve: true,
+        // The fixture's one safeguard check failed, so the tri-state reads
+        // `failed` — it takes precedence over `unverified` even though this
+        // fixture also declares no `safeguardLayersExpected`.
+        safeguards: 'failed',
         warnings: [
           'udp_unsupported_by_proxy',
           'safeguard_failed:dns',

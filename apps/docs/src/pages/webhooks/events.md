@@ -195,7 +195,7 @@ Fires when a session using a SOCKS5 proxy reports its proxy
 capabilities. Carries the same shape as the
 `egress_capabilities` field on `GET /v1/sessions/{id}` —
 subscribers can branch on `udp_associate`, `dns_remote_resolve`,
-`quic_route`, or `warnings` without a follow-up GET.
+`quic_route`, `safeguards`, or `warnings` without a follow-up GET.
 
 `warnings` carries the same published codes here as it does on the
 session endpoints, and means the same thing — the full list, with what
@@ -203,6 +203,13 @@ to do about each, is at
 [`/api/sessions`](https://docs.driftstack.io/api/sessions/). Read the
 codes as opaque strings: ignore one you do not recognise, and expect
 new ones to appear without an SDK upgrade.
+
+`safeguards` is `passed`, `failed`, or `unverified` — the same tri-state
+described at
+[`egress_capabilities.safeguards`](https://docs.driftstack.io/api/sessions/#egress_capabilitiessafeguards)
+on the session endpoints. It is **absent** on a payload built from a
+session reported before this field existed; do not treat an absent value
+as `unverified` or `passed`.
 
 Subscribable — add it to your webhook endpoint's `events` array
 to get proxy-health alerts in your own tooling.
@@ -218,6 +225,7 @@ to get proxy-health alerts in your own tooling.
       "udp_associate": true,
       "quic_route": "proxy",
       "dns_remote_resolve": true,
+      "safeguards": "passed",
       "warnings": []
     }
   }

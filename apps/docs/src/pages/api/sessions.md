@@ -109,6 +109,30 @@ Driftstack's own infrastructure rather than your session — build
 identifiers, internal endpoints, internal diagnostics — are not part
 of it and never will be.
 
+### `egress_capabilities.safeguards`
+
+`safeguards` is whether every egress safeguard held for this session:
+`passed`, `failed`, or `unverified`.
+
+The key is **absent entirely** (not present as `null`) on a session reported
+before this field existed. Treat an absent value as unknown — never read it
+as `unverified`, and never as `passed`.
+
+| Value        | What it means                                                                                                                 |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `passed`     | Every safeguard check reported for this session passed, and completeness was confirmed.                                       |
+| `failed`     | At least one safeguard check did not pass. Stop relying on the session and contact support with the session id.               |
+| `unverified` | We could not confirm that every safeguard held — treat the session the same way you would `failed` for anything that matters. |
+
+`failed` takes precedence whenever it and `unverified` could both apply: a
+known failure is the strongest actionable fact even when completeness is
+also unverifiable.
+
+The same list applies wherever `egress_capabilities` appears: `GET
+/v1/sessions/{id}`, `GET /v1/sessions`, `POST /v1/sessions`, `POST
+/v1/profiles/{id}/launch`, and the `session.egress_capability_changed`
+webhook.
+
 ### `egress_capabilities.warnings`
 
 `warnings` is a list of short codes naming anything that did not work

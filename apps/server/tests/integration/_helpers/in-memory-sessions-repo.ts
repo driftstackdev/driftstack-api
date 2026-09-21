@@ -462,6 +462,7 @@ export class InMemorySessionsRepo implements SessionRepo {
       udp_associate: boolean;
       quic_route: 'proxy' | 'direct' | 'disabled';
       dns_remote_resolve: boolean;
+      safeguards?: 'passed' | 'failed' | 'unverified';
       warnings: string[];
     };
     raw: Record<string, unknown>;
