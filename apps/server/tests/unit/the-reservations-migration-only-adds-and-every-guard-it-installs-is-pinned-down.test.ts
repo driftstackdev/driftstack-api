@@ -267,10 +267,19 @@ describe('migration 0131 only adds, and every guard it installs is pinned down',
     // check scoped to 0131 alone would report both as names schema.ts invents.
     // The union is what schema.ts actually has to match; 0132's own guard is
     // `the-credit-gap-migration-changes-exactly-three-guards-and-pins-each-one`.
-    // Read from the files rather than listed here, so a third migration on
-    // these tables joins this comparison by being written, not by being
-    // remembered.
-    const LATER = readFileSync(resolve(DB, 'migrations', '0132_credit_guard_gaps.sql'), 'utf8')
+    //
+    // ⛔ THE LATER MIGRATIONS ARE LISTED HERE BY NAME, so a further one on these
+    // tables joins this comparison by being ADDED to this list — it does not
+    // join itself. This used to say the opposite; 0133 is the migration that
+    // proved it wrong, having been written without appearing here. It
+    // contributes no CHECK and no index (its own guard,
+    // `the-fourth-leg-migration-adds-two-rules-and-changes-nothing-else`, has
+    // the arm that keeps that true), so the counts below are unchanged by it —
+    // which is exactly why a stale list here fails silently and has to be read
+    // as a list.
+    const LATER = ['0132_credit_guard_gaps', '0133_credit_holds_leg_and_shadow_charge']
+      .map((tag) => readFileSync(resolve(DB, 'migrations', `${tag}.sql`), 'utf8'))
+      .join('\n')
       .split('\n')
       .map((line) => line.replace(/--.*$/, ''))
       .join('\n');

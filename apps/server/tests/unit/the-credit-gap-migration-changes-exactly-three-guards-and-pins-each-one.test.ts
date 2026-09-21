@@ -216,7 +216,7 @@ describe('migration 0132 changes exactly three guards, and pins each one', () =>
     expect(body).toContain('"state" = \'open\' AND "mode" = \'enforce\'');
   });
 
-  it('⛔ CRITICAL the lookup LOCKS the task row it reads — `FOR SHARE`, not an unlocked read — and asks by task id alone. Unlocked it answers from the inserting transaction’s snapshot and nothing re-asks, because a statement touching only `credit_reservation_holds` queues no COMMIT-time check: measured, a hold inserted while the task was open committed AFTER a concurrent settlement and landed on a settled task, `held_micro` raised with no path back. Adding the ACCOUNT here would be the opposite mistake — answering, with a different code, a question the composite foreign key already answers first.', () => {
+  it('⛔ CRITICAL the lookup LOCKS the task row it reads — `FOR SHARE`, not an unlocked read — and asks by task id alone. Unlocked it answers from the inserting transaction’s snapshot and, when 0132 was written, nothing re-asked, because a statement touching only `credit_reservation_holds` queued no COMMIT-time check (0133 added that leg): measured, a hold inserted while the task was open committed AFTER a concurrent settlement and landed on a settled task, `held_micro` raised with no path back. Adding the ACCOUNT here would be the opposite mistake — answering, with a different code, a question the composite foreign key already answers first.', () => {
     const from = HOLDS_0132.findIndex((l) => /^PERFORM 1 FROM "credit_reservations"/.test(l));
     const to = HOLDS_0132.findIndex((l) => /^FOR SHARE;$/.test(l));
     expect(from, 'the lookup is there').toBeGreaterThan(-1);
@@ -353,7 +353,7 @@ describe('migration 0132 changes exactly three guards, and pins each one', () =>
     );
   });
 
-  it('the journal applies it last, after 0131, with a later `when`', () => {
+  it('the journal applies it after 0131 and before 0133, each with a later `when`', () => {
     const journal = JSON.parse(
       readFileSync(resolve(DB, 'migrations', 'meta', '_journal.json'), 'utf8'),
     ) as { entries: Array<{ idx: number; when: number; tag: string }> };
@@ -362,7 +362,13 @@ describe('migration 0132 changes exactly three guards, and pins each one', () =>
     expect(journal.entries[at]?.idx).toBe(132);
     expect(journal.entries[at - 1]?.tag).toBe('0131_credit_reservations');
     expect(journal.entries[at]?.when).toBeGreaterThan(journal.entries[at - 1]?.when ?? Infinity);
-    expect(journal.entries, 'it is the last one').toHaveLength(133);
+    // 0133 follows it — the fourth leg of the balance and the shadow charge
+    // rule, both of which 0132's own text says it does not have. Pinned from
+    // BOTH sides so neither a new migration that forgets its journal entry nor
+    // a journal entry with no migration reads as this arm passing.
+    expect(journal.entries[at + 1]?.tag).toBe('0133_credit_holds_leg_and_shadow_charge');
+    expect(journal.entries[at + 1]?.when).toBeGreaterThan(journal.entries[at]?.when ?? Infinity);
+    expect(journal.entries, 'and it is the last one').toHaveLength(134);
   });
 
   it('CRITICAL schema.ts mirrors the CHECK and the index this migration adds, by name, and its prose names the trigger it installs and the guard it relaxes', () => {

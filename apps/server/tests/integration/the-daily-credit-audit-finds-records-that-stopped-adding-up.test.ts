@@ -236,10 +236,11 @@ async function shadowMeasurementCharged(accountId: string, actualMicro: number):
  * ⛔ THE HOLD IS ALWAYS PLACED HONESTLY AND THE TASK IS ENDED AROUND IT, which
  * is a deliberate change of route and not a convenience. Until 0132 this fixture
  * simply inserted the hold after the task had ended, because the database took
- * it: a statement touching only `credit_reservation_holds` fires no COMMIT-time
- * reservation check. 0132's `credit_holds_apply` now refuses a hold whose task
- * is not open and enforced, so that route is closed — which is the repair, not a
- * reason to stop auditing. The state is still REACHABLE by everything the audit
+ * it: at the time, a statement touching only `credit_reservation_holds` queued
+ * no COMMIT-time reservation check. 0132's `credit_holds_apply` now refuses a
+ * hold whose task is not open and enforced, and 0133 added the COMMIT-time leg
+ * over this table as well, so that route is closed twice — which is the repair,
+ * not a reason to stop auditing. The state is still REACHABLE by everything the audit
  * exists for: a guard dropped by a migration that meant to drop something else,
  * a restore from a backup taken mid-transaction, a replication apply. So the
  * hold goes on while the task is genuinely running (every trigger firing,

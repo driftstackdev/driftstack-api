@@ -32,8 +32,10 @@
 //
 //   · A HOLD CANNOT LAND ON A TASK THAT IS SETTLING BESIDE IT. 0132 refuses a
 //     hold whose task is not open and enforced — but a lookup answers from the
-//     asking transaction's snapshot, and a statement touching only
-//     `credit_reservation_holds` queues no COMMIT-time check to ask again. The
+//     asking transaction's snapshot, and when that rule was written a statement
+//     touching only `credit_reservation_holds` queued no COMMIT-time check to
+//     ask again (0133 added one, and it catches the ENFORCED half of this race
+//     a second time; a hold on a SHADOW task is still caught here alone). The
 //     lookup therefore takes `FOR SHARE` on the task row, and the arm below runs
 //     two connections at once to say so: without the lock the hold commits after
 //     the settlement and freezes credit on a lot for ever, which is the state
@@ -391,7 +393,7 @@ describe.skipIf(!RUN_DB_TESTS)(
       expect((await clawbackRow(id)).state).toBe('reversed');
     });
 
-    it('⛔ CRITICAL A HOLD CANNOT LAND ON A TASK THAT IS SETTLING BESIDE IT (0132). The rule is enforced by a lookup inside `credit_holds_apply`, and a lookup answers from the asking transaction’s snapshot: with no row lock a second connection reads “open”, the settlement commits, and the hold commits after it — onto a SETTLED task, with `held_micro` raised and no path back, which is exactly the frozen credit the rule exists to make impossible. Nothing catches it afterwards, because a statement touching only `credit_reservation_holds` queues no COMMIT-time check. `FOR SHARE` makes the two order themselves.', async () => {
+    it('⛔ CRITICAL A HOLD CANNOT LAND ON A TASK THAT IS SETTLING BESIDE IT (0132). The rule is enforced by a lookup inside `credit_holds_apply`, and a lookup answers from the asking transaction’s snapshot: with no row lock a second connection reads “open”, the settlement commits, and the hold commits after it — onto a SETTLED task, with `held_micro` raised and no path back, which is exactly the frozen credit the rule exists to make impossible. When the rule was written nothing caught it afterwards, because a statement touching only `credit_reservation_holds` queued no COMMIT-time check; 0133’s fourth leg now catches the enforced half a second time, and a hold on a SHADOW task still has only this. `FOR SHARE` makes the two order themselves.', async () => {
       const accountId = await newTaskAccount(db());
       const held = await fundedTaskLot(db(), accountId, { credits: 50 });
       // A SECOND lot, so the racing hold and the settlement's release touch

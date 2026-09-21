@@ -3700,6 +3700,13 @@ export type CreditLedgerRow = typeof creditLedger.$inferSelect;
 //       ledger's `debt_incurred` row and NOT the clawback's own record of it, so
 //       M6's "forgive the unrepaid debt it created", read off that row, would
 //       forgive too little. `debt_micro` still cannot move on its own.
+//     · 0133, DOCUMENTATION ONLY: the debt movement and the state move are two
+//       independent permissions, so ONE update doing both — pending → debt in
+//       the same statement as applied → reversed — passes both and is accepted
+//       (measured: applied/pending 6,000,000/debt 0 → reversed/pending 0/debt
+//       6,000,000, in one statement). Permitted and harmless today: nothing in
+//       the server writes `state = 'reversed'` at all, and the pair still sums
+//       to the same amount owed, which is the number M6 reads.
 //
 //   (Every function pins `search_path = public, pg_temp`.)
 //
@@ -3907,16 +3914,24 @@ export type CreditClawbackRow = typeof creditClawbacks.$inferSelect;
 //       settled task is final); a hold on a SHADOW task is credit frozen behind
 //       a measurement that holds nothing and releases nothing. Neither was
 //       caught before: `credit_check_reservation` returns early for shadow, and
-//       no COMMIT-time check fires at all on a statement touching only holds.
+//       UNTIL 0133 no COMMIT-time check fired at all on a statement touching
+//       only holds.
 //       The task is asked about by ID alone — whether it is this ACCOUNT's task
 //       is the composite foreign key's job, and that key answers first (23503).
 //       ⛔ The lookup takes `FOR SHARE` on the task row. Unlocked it answered
 //       from the inserting transaction's snapshot and nothing re-asked, because
-//       a statement touching only holds queues no COMMIT-time check — measured,
+//       a statement touching only holds queued no COMMIT-time check — measured,
 //       two sessions: a hold inserted while the task was open committed AFTER a
 //       concurrent settle, landing on a settled task with `held_micro` raised
 //       and no path back. The row lock makes the hold and the settlement order
 //       themselves, in either order, against the same row.
+//       ⛔ 0133 DOES NOT MAKE THAT LOCK REDUNDANT, and the difference is the
+//       mode. The fourth leg below now re-checks the task from a holds-only
+//       statement, so an extra hold on a settled ENFORCED task is refused at
+//       COMMIT as well as here — no hold can be added and still leave the holds
+//       summing to `reserved_micro`. A hold on a SHADOW task is caught by THIS
+//       lookup and by nothing else: `credit_check_reservation` returns before
+//       the holds leg for a measurement.
 //     · UPDATE takes the hold back off the lot, and ONLY for a release —
 //       `released_at` NULL → an instant, with the amount, the lot, the ACCOUNT
 //       and the TASK unchanged. Every other update is refused (55000). The
@@ -3961,6 +3976,38 @@ export type CreditClawbackRow = typeof creditClawbacks.$inferSelect;
 //       `task_charge` ledger rows — and until 0132 only two of them re-checked
 //       it, so a lone ledger row written after a task settled moved credit off a
 //       lot with nothing asking whether the three still agreed.
+//   credit_holds_reservation_balance   CONSTRAINT TRIGGER AFTER INSERT OR
+//                                      UPDATE ON credit_reservation_holds,
+//                                      DEFERRABLE INITIALLY DEFERRED
+//     · 0133, the FOURTH leg, and the one that had been missing over the very
+//       table its rule is about: the check was queued from the calls, the
+//       reservation and the ledger, and from nothing that touched only the
+//       holds. MEASURED on a database at 0132 — a second hold inserted BY
+//       ITSELF onto an open enforced task committed, leaving `reserved_micro`
+//       50,000,000 against holds of 60,000,000, while an UPDATE of that same
+//       task's `lease_expires_at` then failed at COMMIT with 0131's own message.
+//       The rule was there; no holds statement could reach it. The extra hold
+//       makes the task UNSETTLEABLE (every settlement fails that same check),
+//       so the slot is never freed and the credit is held for ever.
+//     · INSERT **OR UPDATE**, the shape 0131 gives the first two legs. A release
+//       is the only update a hold may take and it moves neither `held_micro` nor
+//       `reserved_micro`, so the UPDATE half can refuse nothing the INSERT half
+//       would not; it is wired because the leg is about the STATEMENT SHAPE.
+//     · It sorts AFTER `credit_holds_debt_vs_free`, deliberately: row triggers
+//       fire in name order and deferred events fire at COMMIT in the order they
+//       were queued, so a release that frees credit beside debt still reports
+//       the debt refusal, which is the one pinned by constraint name.
+//   (inside credit_check_reservation)  0133 also closes the early return for a
+//                                      SHADOW task
+//     · A shadow task holds nothing, so the function returned as soon as it saw
+//       `mode = 'shadow'` — before anything asked whether the ledger had charged
+//       it anyway. MEASURED at 0132: one `task_charge` row naming a shadow
+//       reservation committed and took 7,000,000 µcr off a real lot
+//       (`remaining_micro` 100,000,000 → 93,000,000), because
+//       `credit_ledger_apply` moves credit whichever task the row names. From
+//       0133 a shadow task with a `task_charge` naming it is refused (23514) at
+//       COMMIT, through the ledger trigger above. Scoped to `task_charge`
+//       because `creditLedgerRowFor` sets `reservation_id` on that branch alone.
 //
 // The two partial unique indexes carry rules the columns do not say:
 // `credit_reservations_open_slot_unique` is what makes "at most three enforced
@@ -3983,7 +4030,8 @@ export type CreditClawbackRow = typeof creditClawbacks.$inferSelect;
 // `at-most-three-enforced-tasks-hold-credit-at-once`,
 // `a-hold-moves-held-credit-and-nothing-else-does`,
 // `a-settled-task-is-charged-only-what-it-held`,
-// `a-late-charge-is-refused-an-unsent-call-is-not-billed-and-a-clawback-records-its-debt`.
+// `a-late-charge-is-refused-an-unsent-call-is-not-billed-and-a-clawback-records-its-debt`,
+// `a-holds-only-statement-re-checks-its-task-and-a-measurement-is-never-charged`.
 export const creditReservations = pgTable(
   'credit_reservations',
   {

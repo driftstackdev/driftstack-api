@@ -10,8 +10,11 @@
 //     belongs to the SAME account (the `starts_at` half is H4);
 //   · a hold needs a TASK that is open and enforced (0132) — a hold behind a
 //     settled task, a shadow measurement, or no task at all is credit frozen for
-//     ever, because nothing will ever release it and no COMMIT-time check fires
-//     on a statement that touches only holds;
+//     ever, because nothing will ever release it and, until 0133, no COMMIT-time
+//     check fired on a statement that touches only holds;
+//   · a statement that touches ONLY holds re-checks the task it names (0133,
+//     `credit_holds_reservation_balance`), which is the fourth and last leg of
+//     the balance and the one over the very table the rule is about;
 //   · a hold never exceeds what its lot has left (`credit_lots_held_bounds`);
 //   · `credit_lots.held_micro` moves ONLY through this table's trigger — a
 //     session that writes it directly is refused even if it raises the flag the
@@ -464,7 +467,8 @@ describe.skipIf(!RUN_DB_TESTS)('a hold moves held credit, and nothing else does'
 
     // The same for the task alone: a hold that moves to another reservation as
     // it is released leaves both reservations' holds disagreeing with what they
-    // reserved, and no COMMIT-time check runs on a holds-only statement.
+    // reserved. 0133's fourth leg would now refuse that at COMMIT for the task
+    // it moved TO; the trigger refuses it here, immediately, and names the rule.
     const other = await rawReservation(indebted);
     const swappedTask = await refusal(
       () => db()`UPDATE credit_reservation_holds

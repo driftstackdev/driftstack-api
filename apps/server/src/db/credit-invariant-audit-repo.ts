@@ -158,12 +158,27 @@ export class DrizzleCreditInvariantAuditRepo {
    * hold anything at all — `settleIn` returns before the holds walk for a
    * shadow reservation, so nothing there would ever release it either.
    *
-   * ⛔ AND IT IS REACHABLE TODAY. A statement that touches ONLY
-   * `credit_reservation_holds` fires no COMMIT-time reservation check: both
-   * `credit_check_reservation` triggers hang off `credit_model_calls` and
-   * `credit_reservations`. So the database accepts the row. That is precisely
-   * the kind of state this audit exists for — one the enforcement was meant to
-   * make impossible and does not.
+   * ⛔ AND IT IS STILL REACHABLE — BUT NO LONGER BY AN ORDINARY STATEMENT, and
+   * the difference is worth stating because it is what this audit is now for.
+   * When this check was written a statement touching ONLY
+   * `credit_reservation_holds` fired no COMMIT-time reservation check at all:
+   * the only `credit_check_reservation` triggers hung off `credit_model_calls`
+   * and `credit_reservations`, so the database simply accepted the row. 0132
+   * added a third leg on `credit_ledger`, and 0133 added the fourth,
+   * `credit_holds_reservation_balance`, on this very table — so a hold added to
+   * an ENFORCED task by itself is now refused at COMMIT, because the task's
+   * holds would no longer sum to what it reserved, and 0132's
+   * `credit_holds_apply` lookup refuses a hold whose task is not open and
+   * enforced before that.
+   *
+   * Two routes stay open, which is why this still runs. A hold on a SHADOW task
+   * is judged by neither leg — `credit_check_reservation` returns for a
+   * measurement before it reaches the holds — so only that INSERT-time lookup
+   * stands between it and a frozen lot. And every shape arrives anyway when the
+   * triggers are not firing: a guard dropped by a migration that meant to drop
+   * something else, a restore from a backup taken mid-transaction, a
+   * replication apply. Enforcement narrowing the ways in is not a reason to
+   * stop asking whether the state is there.
    *
    * ⛔ IT IS THE HOLD'S OWN TASK THAT IS ASKED ABOUT, never the account's. A
    * correlation on `account_id` would let a stranded hold hide behind any live
