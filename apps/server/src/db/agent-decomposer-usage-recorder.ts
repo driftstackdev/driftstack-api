@@ -48,6 +48,20 @@ export const POSTED_COST_FIELD = 'cost_usd_cents' as const;
 export const LIST_PRICE_COST_FIELD = 'list_price_cost_millicents' as const;
 
 /**
+ * S11 — the AI-credits task this call was measured against, and the ONLY thing
+ * that says a `credit_model_calls` charge and a usage row's list price belong to
+ * the same turn.
+ *
+ * Named here, beside the other two, because the shadow report reads it out of
+ * `metadata` as a jsonb key and a reader that spells it differently joins
+ * nothing at all — every measured turn would read as having cost zero, and the
+ * ratio §8 gates the cutover on would be a rate over an empty denominator.
+ * `every-usage-row-a-metered-turn-writes-names-its-credits-task` holds the two
+ * spellings against each other.
+ */
+export const CREDIT_RESERVATION_ID_FIELD = 'credit_reservation_id' as const;
+
+/**
  * One call's token counts, split the way the provider bills them.
  *
  * A cache write the provider did not break down by lifetime is priced at the
@@ -193,6 +207,29 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
     const rowMetadata: Record<string, unknown> = {
       ...metadata,
       [LIST_PRICE_COST_FIELD]: listPriceOfCall(args.usage),
+      // S11 — the AI-credits task this call was measured (or, after S12,
+      // charged) against.
+      //
+      // ⛔ ON THE ROW, NOT IN THE AUDIT PAYLOAD, and the two are already
+      // different objects for exactly this kind of reason. `metadata` is what
+      // lands on the CUSTOMER's audit log; until AI credits launch nothing a
+      // customer can read may mention them, and a reservation id on their own
+      // audit row would be the first thing that did.
+      //
+      // ⛔ IT IS THE JOIN THE SHADOW REPORT IS BUILT ON. `credit_model_calls`
+      // records what a call was charged and cannot know the provider's list
+      // price; this row records the list price and cannot know the charge. The
+      // "shadow charge is exactly twice list price" check is a ratio between
+      // them, and without this id it would be a ratio between two populations
+      // that merely overlap — an own-key turn contributes rows here and no
+      // calls there, and the ratio would drift toward whatever the window held.
+      //
+      // Written only when the turn had a meter, so a row from a turn that ran
+      // before credits existed and a row from a turn that ran without them are
+      // the same shape.
+      ...(args.creditReservationId !== undefined
+        ? { [CREDIT_RESERVATION_ID_FIELD]: args.creditReservationId }
+        : {}),
     };
 
     try {

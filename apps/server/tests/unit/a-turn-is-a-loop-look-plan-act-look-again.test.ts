@@ -28,6 +28,7 @@ import {
   MAX_PLANNER_CALLS_PER_TURN,
   MAX_RUNS_OF_ONE_STEP_PER_TURN,
   ALL_TURN_NOTICE_REASONS,
+  TURN_LOOP_STOP_REASONS_NOT_YET_REACHABLE,
   MAX_TURN_WALL_CLOCK_MS,
   REPLAN_MIN_BUDGET_TOKENS,
   TURN_LOOP_STOP_SENTENCES,
@@ -1294,12 +1295,39 @@ describe('B1 — every ending a turn can have says so in one word as well as in 
     // Keyed by the reason type in the source, so a seventh loop ending is a
     // compile error there; this arm is the runtime half — the set of values a
     // program can receive, which every published surface is checked against.
-    const forLoopEndings = Object.values(TURN_NOTICE_REASONS);
-    expect(new Set(forLoopEndings).size, 'one reason per ending, none shared').toBe(
-      Object.keys(TURN_LOOP_STOP_SENTENCES).length,
+    //
+    // ⛔ ONE EXCEPTION, AND IT IS NAMED IN THE SOURCE RATHER THAN HERE. An
+    // ending that EXISTS IN CODE AND CANNOT HAPPEN YET shares the public word of
+    // the ending it is closest to, because a word of its own is published — in
+    // the OpenAPI document, in three SDKs and on two documentation pages — the
+    // moment it exists, and that announces a feature that is switched off. The
+    // set of those is `TURN_LOOP_STOP_REASONS_NOT_YET_REACHABLE`, each entry
+    // carrying what would make it reachable; removing an entry is what makes the
+    // pins below, and the two documentation guards, demand a word of its own.
+    const dark = Object.keys(TURN_LOOP_STOP_REASONS_NOT_YET_REACHABLE);
+    expect(dark, 'endings that cannot happen yet').toEqual(['credits_used']);
+    for (const reason of dark) {
+      expect(
+        Object.keys(TURN_LOOP_STOP_SENTENCES),
+        `${reason} is recorded as dark but is not an ending`,
+      ).toContain(reason);
+    }
+    const reachable = (Object.keys(TURN_NOTICE_REASONS) as TurnLoopStopReason[]).filter(
+      (r) => !dark.includes(r),
     );
+    const forLoopEndings = reachable.map((r) => TURN_NOTICE_REASONS[r]);
+    expect(new Set(forLoopEndings).size, 'one reason per reachable ending, none shared').toBe(
+      reachable.length,
+    );
+    // And a dark ending's borrowed word is one that already exists: it must not
+    // smuggle a new public value in through the side door.
+    for (const reason of dark) {
+      expect(forLoopEndings, `${reason} borrows a word that is already published`).toContain(
+        TURN_NOTICE_REASONS[reason as TurnLoopStopReason],
+      );
+    }
     expect([...ALL_TURN_NOTICE_REASONS].sort()).toEqual(
-      [...new Set([...forLoopEndings, 'question', 'declined'])].sort(),
+      [...new Set([...Object.values(TURN_NOTICE_REASONS), 'question', 'declined'])].sort(),
     );
   });
 
@@ -1316,6 +1344,7 @@ describe('B1 — every ending a turn can have says so in one word as well as in 
       no_progress: /rather than go in circles/,
       repeat_refused: /repeated an action that already ran/,
       planner_unavailable: /could not work out the next ones/,
+      credits_used: /used all the AI credits set aside for it/,
     };
     const WORD_FOR: Record<TurnLoopStopReason, string> = {
       planner_call_limit: 'step_limit',
@@ -1324,6 +1353,9 @@ describe('B1 — every ending a turn can have says so in one word as well as in 
       no_progress: 'no_progress',
       repeat_refused: 'repeated_step',
       planner_unavailable: 'ai_unavailable',
+      // Shared with `budget_floor` on purpose while this ending is dark — see
+      // the arm above and TURN_LOOP_STOP_REASONS_NOT_YET_REACHABLE.
+      credits_used: 'budget_low',
     };
     for (const reason of Object.keys(TURN_LOOP_STOP_SENTENCES) as TurnLoopStopReason[]) {
       expect(

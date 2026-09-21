@@ -222,6 +222,16 @@ const INTENTIONALLY_UNPUBLISHED_OPERATIONS = new Set([
   // the route directly; if the owner wants it in the spec, publish it and raise
   // that ceiling in the same change.
   'GET /v1/admin/agent-turns/summary',
+  // S11 — the AI-credits shadow report and cutover census. Unpublished for the
+  // V-862 reason above AND for a second one that outranks it while the feature
+  // is dark: `nothing-about-an-unreleased-feature-is-in-the-published-spec`
+  // forbids the published document from containing the term "credit" at all, so
+  // publishing either of these would break that guard rather than merely widen
+  // the admin surface. Both are staff-only aggregates with one consumer (the
+  // staff panel) that binds to the route directly. At launch the question
+  // becomes the ordinary V-862 one.
+  'GET /v1/admin/ai-credits/census',
+  'GET /v1/admin/ai-credits/shadow-report',
   'GET /v1/agent-sessions/:p/gui-control-key',
   'GET /v1/auth/oauth/github/callback',
   'GET /v1/auth/oauth/google/callback',
@@ -244,6 +254,8 @@ const INTENTIONALLY_UNPUBLISHED_OPERATIONS = new Set([
 /** Staff operations kept out of the customer-shipped spec. See the arm that reads it. */
 const ADMIN_OPERATIONS_WITHHELD_FROM_THE_CUSTOMER_SPEC: readonly string[] = [
   'GET /v1/admin/agent-turns/summary',
+  'GET /v1/admin/ai-credits/census',
+  'GET /v1/admin/ai-credits/shadow-report',
 ];
 
 describe('published OpenAPI operation ↔ Fastify registration coverage', () => {
@@ -297,7 +309,11 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     // unpublished, see its INTENTIONALLY_UNPUBLISHED_OPERATIONS entry.
     // 262 since B2 registered `POST /v1/agent-sessions/:id/stop` (live route + its
     // disabled twin share one normalized method+path, so +1) — published.
-    expect(routeOperations.size).toBe(262);
+    // 264 since S11 registered `GET /v1/admin/ai-credits/shadow-report` and
+    // `GET /v1/admin/ai-credits/census` — both unpublished, see their
+    // INTENTIONALLY_UNPUBLISHED_OPERATIONS entries, so the published count above
+    // does not move.
+    expect(routeOperations.size).toBe(264);
   });
 
   it('documents the method-specific customer-core contract', () => {

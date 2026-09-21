@@ -31,7 +31,9 @@
 //  · the authority fence before every attempt, and the caller's Stop signal
 //    honoured throughout.
 
+import type { AgentCreditMeter } from './agent-credit-meter.js';
 import {
+  AgentDecomposerCreditsDeniedError,
   requireAgentDecomposerContinuation,
   type AgentDecomposer,
   type AnswerArgs,
@@ -233,6 +235,33 @@ interface ChatUsageParts {
 
 type ChatControl = 'schema' | 'reasoning';
 
+/**
+ * S10 — THIS ADAPTER CANNOT MEASURE ITS OWN REQUESTS, SO IT CANNOT BE ENFORCED.
+ *
+ * §4.5's bound is priced from the request's bytes split at the CACHE MARKERS,
+ * and from the rate card row of the model the task reserved. A chat-completions
+ * endpoint has neither: it carries no explicit cache markers (its caching, where
+ * it exists at all, is automatic and unannounced), and the models reachable
+ * through it are not on the credit rate card. Metering it would mean inventing a
+ * bound, and an invented bound is not a bound — a call could cost several times
+ * what the task committed for it and nothing would notice until the invariant
+ * audit did.
+ *
+ * So:
+ *  · an ENFORCE meter FAILS CLOSED here, before anything is sent. The customer's
+ *    credits fund calls this process can account for, and this one it cannot.
+ *  · a SHADOW meter changes nothing at all (M3): the request goes out exactly as
+ *    it does today and NOTHING is measured — not even a loss, because nothing
+ *    was attempted. Counting a loss here would put a floor under the lost rate
+ *    for every turn on this lane, and M3 names a lost rate of zero as a shadow
+ *    exit criterion.
+ */
+function refuseWhatCannotBeMetered(meter: AgentCreditMeter | undefined): void {
+  if (meter?.kind === 'enforce') {
+    throw new AgentDecomposerCreditsDeniedError('unmetered_provider');
+  }
+}
+
 export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
   readonly target: ChatCompletionsTarget;
   private readonly apiKey: string;
@@ -271,6 +300,7 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
     if (this.apiKey === '') {
       throw new Error(`${this.target.label}: no API key provided`);
     }
+    refuseWhatCannotBeMetered(args.creditMeter);
     const conversation = buildPlannerConversation(args);
     const messages: Array<{ role: string; content: string }> = [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -319,6 +349,7 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
     if (this.apiKey === '') {
       throw new Error(`${this.target.label}: no API key provided`);
     }
+    refuseWhatCannotBeMetered(args.creditMeter);
     const prompt = buildAnswerPrompt(args);
     const messages = [
       { role: 'system', content: prompt.system },

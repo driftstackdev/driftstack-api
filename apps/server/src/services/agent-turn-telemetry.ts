@@ -1254,6 +1254,15 @@ function classifyUnfinishedLoop(
     case undefined:
       return null;
     case 'budget_floor':
+    // S10/L1 — the task used up the AI credits set aside for it. Filed under
+    // the word that is TRUE of it and already exists: the chat's AI allowance
+    // could not cover another call. `death_reason` is a CHECK-constrained
+    // column, so a word of its own is a migration — and it would also be a
+    // second place naming a feature that is switched off. WHICH bound it was is
+    // on the turn result (`loop.stopped`) and in the stopped-unfinished log
+    // line, exactly as it is for the four endings filed under `clarified`.
+    // eslint-disable-next-line no-fallthrough -- both endings are the same death
+    case 'credits_used':
       return { outcome: 'failed', deathReason: 'budget_exhausted' };
     case 'planner_unavailable':
       return { outcome: 'failed', deathReason: 'model_unavailable' };

@@ -25,6 +25,7 @@
  */
 
 import type { AgentModel, ConsequentialActionCategory } from '@driftstack/api-types';
+import type { AgentCreditMeter, AgentCreditRefusalReason } from './agent-credit-meter.js';
 
 export interface TranscriptEntry {
   /** ISO timestamp the entry was created. */
@@ -489,6 +490,16 @@ export interface DecomposeArgs {
    * counted, and the caller accounts for what it can observe.
    */
   signal?: AbortSignal;
+  /**
+   * S10 — what this turn's AI credits allow, asked once per BILLABLE ATTEMPT
+   * (§4.5). See {@link AgentCreditMeter}.
+   *
+   * ⛔ OPTIONAL, AND ITS ABSENCE IS THE PRODUCTION PATH TODAY. Nothing passes
+   * one yet: with it undefined an implementation makes exactly the request it
+   * made before this field existed, byte for byte. A shadow meter is the same
+   * promise for a different reason — it measures and never alters the turn (M3).
+   */
+  creditMeter?: AgentCreditMeter;
 }
 
 /**
@@ -523,6 +534,10 @@ export interface AnswerArgs {
   /** Same cancellation as {@link DecomposeArgs.signal}: the read-back is a model
    *  call too, and a Stop pressed while it streams must end it. */
   signal?: AbortSignal;
+  /** Same per-attempt credit meter as {@link DecomposeArgs.creditMeter}: the
+   *  read-back is a billable attempt like any other, and it is admitted like
+   *  one. A read-back that does not fit is SKIPPED by the runtime, never failed. */
+  creditMeter?: AgentCreditMeter;
 }
 
 /** Internal sentinel used to preserve an authority revocation through the
@@ -548,6 +563,31 @@ export class AgentDecomposerSettledError extends Error {
     this.name = 'AgentDecomposerSettledError';
     this.tokensConsumed = evidence.tokensConsumed;
     this.usage = evidence.usage;
+  }
+}
+
+/**
+ * S10 — this attempt was not admitted against the task's AI credits (§4.5), so
+ * no request went out and nothing was billed.
+ *
+ * ⛔ IT IS NOT A MALFORMED REPLY AND MUST NEVER BE RETRIED AS ONE. The runtime
+ * re-asks a planning call once when the provider answered with something nobody
+ * could read; a refusal here means the provider was never asked. Its message
+ * carries none of the phrases {@link plannerReplyWasMalformed} matches, and the
+ * runtime branches on the CLASS, so a turn that ran out of credits ends saying
+ * so rather than spending its one re-ask learning the same thing again.
+ *
+ * ⛔ AND IT IS NOT HOW A DATABASE FAULT ARRIVES. That is
+ * `AgentCreditMeterUnavailableError`, which is transient and says nothing about
+ * credits: a customer whose database blinked has spent nothing (H5).
+ */
+export class AgentDecomposerCreditsDeniedError extends Error {
+  readonly reason: AgentCreditRefusalReason;
+
+  constructor(reason: AgentCreditRefusalReason) {
+    super(`this task has no AI credits left for the next model call (${reason})`);
+    this.name = 'AgentDecomposerCreditsDeniedError';
+    this.reason = reason;
   }
 }
 

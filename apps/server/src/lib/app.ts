@@ -145,11 +145,13 @@ import { registerOAuthRoutes } from '../routes/oauth.js';
 import { OAuthService, type OAuthStore } from '../services/oauth.js';
 import { registerAdminCostRoutes } from '../routes/admin-cost.js';
 import { registerAdminAgentTurnsRoutes } from '../routes/admin-agent-turns.js';
+import { registerAdminAiCreditsRoutes } from '../routes/admin-ai-credits.js';
 import { registerAdminUsageRoutes } from '../routes/admin-usage.js';
 import { registerAccountCostRoutes } from '../routes/account-cost.js';
 import type { CostMonitoringService } from '../services/cost-monitoring.js';
 import type { AgentTurnTelemetry } from '../services/agent-turn-telemetry.js';
 import type { AgentTurnSummaryService } from '../services/agent-turn-summary.js';
+import type { AiCreditsRuntime } from '../services/ai-credits-runtime.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
 import { registerProfileSnapshotsRoutes } from '../routes/profile-snapshots.js';
 import { registerBillingDisabledRoutes, registerBillingRoutes } from '../routes/billing.js';
@@ -431,6 +433,20 @@ export interface AppDeps {
   agentSessionsRepo?: AgentSessionsRepo;
   /** Durable account-scoped receipts for at-most-once agent message turns. */
   agentTurnReceiptsRepo?: AgentTurnReceiptsRepo;
+  /**
+   * S11 — the AI-credits runtime: this boot's lease-owner id, the reservations
+   * service and the lease keeper, as ONE member (see services/ai-credits-runtime.ts
+   * for why the three may not be passed separately).
+   *
+   * ⛔ ABSENT IS THE PRODUCTION POSTURE. `DRIFTSTACK_AI_CREDITS_MODE` defaults to
+   * `off`, bootstrap then builds none of the three, and every route that would
+   * read this behaves exactly as it did before AI credits existed — no
+   * reservation, no meter, no query. Present with `mode: 'shadow'` the turn is
+   * MEASURED and never changed (M3); `enforce` is S12 and moves no account yet.
+   *
+   * Nothing customer-visible depends on it in any mode.
+   */
+  aiCredits?: AiCreditsRuntime;
   /**
    * Q.1.c — in-memory per-session plaintext BYOK key cache.
    * Wired alongside `agentRuntime`. Route layer stashes decrypted
@@ -1515,6 +1531,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   if (deps.agentTurnSummaryService !== undefined) {
     registerAdminAgentTurnsRoutes(app, { summary: deps.agentTurnSummaryService });
   }
+  // S11 — the staff shadow report and cutover census. Registered exactly when
+  // the credits runtime is wired, which is exactly when the mode is shadow or
+  // enforce: with the mode off (the production default) there is no route here
+  // at all, so a deployment that is dark does not answer for a surface it has
+  // nothing to say about.
+  if (deps.aiCredits !== undefined) {
+    registerAdminAiCreditsRoutes(app, { report: deps.aiCredits.report });
+  }
   registerAdminUsageRoutes(app, {
     usageService: deps.usageService,
     accountsAdminService: deps.accountsAdminService,
@@ -1657,6 +1681,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
               new BundledTurnConcurrencyLimiter(deps.bundledTurnMaxConcurrency ?? undefined),
           }
         : {}),
+      // S11 — the AI-credits runtime. Absent while the mode is off, and the
+      // message route then reserves nothing, meters nothing and queries nothing.
+      ...(deps.aiCredits !== undefined ? { aiCredits: deps.aiCredits } : {}),
       // Arc 2 sub-slice 8.3 (v2-#8) — SSE transcript bus. When
       // wired, GET /v1/agent-sessions/:id/transcript registers as
       // an event stream.

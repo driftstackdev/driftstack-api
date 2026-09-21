@@ -55,6 +55,14 @@ import {
 } from '../services/agent-runtime.js';
 import { consequentialSignature } from '../services/agent-executor.js';
 import type { AgentIntent, DecomposeUsage, TranscriptEntry } from '../services/agent-decomposer.js';
+import type { AgentCreditMeter } from '../services/agent-credit-meter.js';
+import { shadowCreditMeter } from '../services/agent-credit-meter.js';
+import {
+  aiCreditsCounters,
+  withinShadowDeadline,
+  type AiCreditsRuntime,
+} from '../services/ai-credits-runtime.js';
+import { CREDIT_SHADOW_STATEMENT_TIMEOUT_MS } from '../services/credit-reservations.js';
 import {
   publicAgentIntent,
   publicIntentResult,
@@ -676,6 +684,18 @@ export interface AgentSessionsRoutesDeps {
    * capping the overshoot. Omit to keep the unbounded (pre-fix) behaviour.
    */
   bundledTurnConcurrency?: BundledTurnConcurrencyLimiter;
+  /**
+   * S11 — the AI-credits runtime (boot id + reservations + lease keeper), present
+   * only while `DRIFTSTACK_AI_CREDITS_MODE` is shadow or enforce.
+   *
+   * ⛔ ABSENT IS TODAY'S CODE, EXACTLY. Nothing below reserves, meters, queries
+   * or counts without it, so the production default (`off`) leaves every AI turn
+   * byte for byte what it was. Present with `mode: 'shadow'` a legacy bundled
+   * turn is MEASURED beside itself and never changed (M3): no refusal, no
+   * altered request, no thrown error, and nothing the customer can see in any
+   * mode.
+   */
+  aiCredits?: AiCreditsRuntime;
   /**
    * Arc 2 sub-slice 8.3 (v2-#8) — SSE transcript bus. When wired,
    * GET /v1/agent-sessions/:id/transcript registers as an SSE stream;
@@ -2284,6 +2304,7 @@ export function registerAgentSessionsRoutes(
     allowFallbackForUnconfiguredCustomers,
     bundledLlmService,
     bundledTurnConcurrency,
+    aiCredits,
     transcriptEventBus,
     transcriptHeartbeatMs = 30_000,
     transcriptMaxStreamsPerAccount = 10,
@@ -2320,6 +2341,172 @@ export function registerAgentSessionsRoutes(
     sessionUploadMaxLifetimeCount = 500,
     uploadMaxFileBytes = UPLOAD_MAX_FILE_BYTES_DEFAULT,
   } = deps;
+
+  // ─── S11: measuring what a legacy bundled turn would cost in AI credits ───
+  //
+  // ⛔ SHADOW NEVER CHANGES A TURN (M3). Everything below is arranged around
+  // that one sentence: a reservation that could not be taken is simply not
+  // taken, a settle that throws is a counted loss and not an error, and a
+  // database that never answers costs the turn a bounded wait and nothing else.
+  // The customer sees the same bytes in every mode.
+  const creditsCounters = aiCreditsCounters(metrics);
+
+  /** One lost measurement, said out loud. Best-effort: a throwing logger must not
+   *  become the way a shadow fault reaches the customer. */
+  const shadowCreditFault = (err: unknown, message: string): void => {
+    try {
+      app.log.warn(
+        { component: 'agent-session-message', event: 'ai_credits_shadow_lost', err },
+        message,
+      );
+    } catch {
+      /* logging is best-effort */
+    }
+  };
+
+  /**
+   * Is THIS turn one the credits leg would have funded?
+   *
+   * Exactly the legacy BUNDLED leg: the deployment's key, resolved because the
+   * customer consented and has no key of their own. Everything else is out, and
+   * each for its own reason rather than by omission —
+   *
+   *  · a MANUAL note never reaches here at all (it returns above, before any
+   *    provider resource is touched): a human log line calls no model;
+   *  · an IDEMPOTENT REPLAY never reaches here either — the receipt answers in
+   *    `handleAgentMessage` — so a replayed turn cannot open a second
+   *    measurement of a turn that already ran;
+   *  · a DETERMINISTIC deployment calls no model, so there is nothing to price;
+   *  · an OWN-KEY turn (header or stored) is the customer's own spend, which
+   *    credits never touch — measuring it would put their provider bill into
+   *    Driftstack's shadow ledger;
+   *  · the STAGING FALLBACK (`keySource === 'fallback'`) is Driftstack's key
+   *    too, but it is not a leg any account is ever moved off: production
+   *    refuses to boot with it. S12 moves accounts off `bundled`, so `bundled`
+   *    is what the shadow numbers have to be about.
+   *
+   * MOVED accounts are S12's: until then every account is legacy, so the mode
+   * alone decides and the account's `billing_mode` is not read here.
+   */
+  const turnIsMeteredLegacyBundled = (keySource: string): boolean =>
+    aiCredits !== undefined && agentDecomposerKind === 'claude' && keySource === 'bundled';
+
+  /**
+   * Open the measurement for one turn: reserve, tell the keeper this process is
+   * running it, and build the SHADOW meter the runtime hands to every billable
+   * attempt.
+   *
+   * ⛔ NOTHING HERE MAY REACH THE CUSTOMER. Every fault — a reserve that threw,
+   * a database that never answered, a keeper that objected — ends as `null`,
+   * which means "this turn is not measured" and is indistinguishable, to the
+   * turn, from the mode being off. Each fault counts `ai_credits_shadow_lost`
+   * exactly ONCE: a `shadow_lost` outcome was already counted by the
+   * reservations service itself, so it is NOT counted again here.
+   */
+  const openShadowCreditLeg = async (a: {
+    accountId: string;
+    agentSessionId: string;
+    model: string;
+  }): Promise<{ reservationId: string; meter: AgentCreditMeter } | null> => {
+    const credits = aiCredits;
+    if (credits === undefined) return null;
+    const reservationId = randomUUID();
+    try {
+      const reserved = await withinShadowDeadline(
+        () =>
+          credits.reservations.reserve({
+            accountId: a.accountId,
+            reservationId,
+            agentSessionId: a.agentSessionId,
+            // ⛔ NULL, NOT THE CUSTOMER'S Idempotency-Key. `request_key` exists to
+            // stop a second ENFORCED task running under one key (M2); a replay
+            // never reaches this function, and a shadow row that claimed the key
+            // would be the only thing standing between a later enforced task and
+            // its own unique index.
+            idempotencyKey: null,
+            model: a.model,
+            mode: 'shadow',
+            // The SAME boot id the lease keeper holds. A reservation owned by
+            // any other value is renewed by nobody: `renewLeases` filters on
+            // `lease_owner`, so the lease would lapse under the very process
+            // that is still running the turn.
+            bootId: credits.bootId,
+          }),
+        CREDIT_SHADOW_STATEMENT_TIMEOUT_MS,
+      );
+      // Already counted by the service, at the leg it was lost on. Counting it
+      // again here would report two losses for one blink and make the lost rate
+      // — a shadow exit criterion — unreadable.
+      if (reserved.outcome !== 'shadowed') return null;
+      credits.leaseKeeper.add(reservationId);
+      return {
+        reservationId,
+        meter: shadowCreditMeter({
+          reservations: credits.reservations,
+          reservationId,
+          onShadowLost: () => {
+            creditsCounters.onShadowLost('call');
+          },
+        }),
+      };
+    } catch (err) {
+      creditsCounters.onShadowLost('turn');
+      shadowCreditFault(err, 'opening an AI-credit measurement failed — the turn is unaffected');
+      return null;
+    }
+  };
+
+  /**
+   * Close it, in the turn's `finally`, however the turn ended.
+   *
+   * ⛔ THE LIVE-SET REMOVAL IS UNCONDITIONAL (M1). It is in a `finally` of its
+   * own, INSIDE the swallow, because a settle that failed is precisely the case
+   * where leaving the task in the live set does damage: this process would go on
+   * heartbeating its lease for ever, the keeper could never reach it, and the
+   * slot and the credit it holds would be locked away until a restart. A failed
+   * settle must still remove; the database's `max_until` ceiling is the backstop
+   * for everything else.
+   *
+   * ⛔ AND THE REMOVAL IS SWALLOWED TOO, WHICH THE `finally` ALONE DOES NOT DO.
+   * This is the LAST statement of the route's own `finally`, so a throw from it
+   * does not merely lose a measurement — it LEAVES the finally and replaces
+   * whatever the turn was about to answer, turning a 200 (or a typed 409) into a
+   * 500 for a customer who asked for none of this. That is precisely the outcome
+   * M3 forbids, and the open half of this leg already swallows the same fault
+   * (`a keeper that objected` ends as `null` there). `remove` is a `Set.delete`
+   * today and cannot throw; the guard is here because the cost of it ever
+   * throwing is paid by the customer and not by the measurement.
+   *
+   * It does NOT count a second loss. Either the settle above already counted one
+   * for this turn, or the measurement really did settle and only this process's
+   * own bookkeeping failed — in which case nothing was lost, and a `shadow_lost`
+   * increment would put a floor under a rate §8 reads as an exit criterion.
+   */
+  const closeShadowCreditLeg = async (leg: { reservationId: string } | null): Promise<void> => {
+    const credits = aiCredits;
+    if (leg === null || credits === undefined) return;
+    try {
+      await withinShadowDeadline(
+        () => credits.reservations.settle(leg.reservationId, 'completed'),
+        CREDIT_SHADOW_STATEMENT_TIMEOUT_MS,
+      );
+    } catch (err) {
+      creditsCounters.onShadowLost('turn');
+      shadowCreditFault(
+        err,
+        'settling an AI-credit measurement failed — the lease keeper finishes it',
+      );
+    } finally {
+      try {
+        credits.leaseKeeper.remove(leg.reservationId);
+      } catch (err) {
+        shadowCreditFault(
+          err,
+          'handing an AI-credit lease back failed — the lease lapses and the keeper finishes the task',
+        );
+      }
+    }
+  };
 
   // N-2 — read the customer-safe {os, confidence} subset of a session's exit-proxy
   // OS fingerprint off the proxy row, for the capability_report projection. Only a
@@ -5982,6 +6169,11 @@ export function registerAgentSessionsRoutes(
     // one slot on every exit path (the turn throwing, a downstream 502,
     // or a normal return).
     let bundledSlotAcquired = false;
+    // S11 — this turn's AI-credit measurement, once it has one. Declared out
+    // here, beside the slot, because the `finally` below has to be able to close
+    // it however the turn ended — including the paths that throw between opening
+    // it and reaching the runtime.
+    let creditLeg: { reservationId: string; meter: AgentCreditMeter } | null = null;
     if (
       headerByokKey === undefined &&
       cachedByokKey === undefined &&
@@ -6172,6 +6364,19 @@ export function registerAgentSessionsRoutes(
               : resolvedByokKey !== undefined
                 ? 'fallback'
                 : 'none';
+      // S11 — open the measurement HERE: inside the try, so the `finally` closes
+      // it whatever happens next, and BEFORE the refusals below, because a
+      // reservation taken before a preflight throw is exactly the leak M1 is
+      // about. Never through `settleProviderPreflight`: that helper re-asserts
+      // the turn's admission and RE-THROWS, so a shadow measurement routed
+      // through it could end a turn — which is the one thing shadow may not do.
+      if (turnIsMeteredLegacyBundled(keySource)) {
+        creditLeg = await openShadowCreditLeg({
+          accountId: turnAccountId,
+          agentSessionId: req.params.id,
+          model: pre.model,
+        });
+      }
       // The fallback leg is Driftstack's key too, so it refuses exactly what the
       // bundled leg refuses. It is staging-only (production refuses to boot with
       // it), but on staging an account with no key and no consent would otherwise
@@ -6250,6 +6455,11 @@ export function registerAgentSessionsRoutes(
           ...(onStep !== undefined ? { onStep } : {}),
           ...(onProgress !== undefined ? { onProgress } : {}),
           ...(stopWindow !== undefined ? { stopWindow } : {}),
+          // S11 — absent unless this turn opened a measurement. With it absent
+          // the runtime asks nothing and every provider request is byte for byte
+          // what it was; with a SHADOW meter it asks, records, and is answered
+          // in a way that can never change the request (M3).
+          ...(creditLeg !== null ? { creditMeter: creditLeg.meter } : {}),
           keySource,
         });
       } catch (err) {
@@ -6445,6 +6655,12 @@ export function registerAgentSessionsRoutes(
       if (bundledSlotAcquired && bundledTurnConcurrency !== undefined) {
         bundledTurnConcurrency.release(turnAccountId);
       }
+      // S11 — settle this turn's measurement ONCE and hand its lease back,
+      // whatever the turn did and whatever the settle returned (M1). Same
+      // reasoning as the slot above, one resource further down: a task left in
+      // the keeper's live set is renewed for ever by this process and can never
+      // be reached by the sweep that would have finished it.
+      await closeShadowCreditLeg(creditLeg);
     }
   };
 

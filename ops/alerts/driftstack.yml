@@ -548,6 +548,94 @@ groups:
             same counts on the box. This is a fact about how the session was set
             up, not a statement about how the action looked.
 
+  - name: driftstack-ai-credits
+    # The SHADOW ERA's two exit criteria (§8 step 3). Their own group, not the
+    # agent-turns one beside them: those rules are about how well the AI
+    # automation SERVES customers and page the runtime team on a product
+    # regression, while these two are about whether a measurement of a feature
+    # customers cannot yet see is TRUSTWORTHY. Nothing here can page on a
+    # customer-visible problem, because in shadow mode there is no
+    # customer-visible behaviour to have one.
+    #
+    # ⛔ BOTH ARE INERT WHILE THE MODE IS OFF, which is the production default:
+    # the counters are not registered, so the series do not exist and the
+    # `or vector(0)` in each expression reads that as "nothing happened" rather
+    # than firing on absence.
+    rules:
+      - alert: AiCreditsShadowMeasurementLost
+        # A SHADOW-ERA EXIT CRITERION, NOT A STEADY-STATE RATE.
+        #
+        # While DRIFTSTACK_AI_CREDITS_MODE is `shadow`, every legacy bundled turn
+        # is measured beside itself and the measurement may never change the turn
+        # — so a measurement that fails is SWALLOWED, by design. The cost of that
+        # design is that the only trace is this counter. Non-zero does not mean a
+        # customer was affected; it means the numbers the cutover decision will be
+        # made on are an undercount, and the "shadow charge = 2x list price" check
+        # is being computed over a population with holes in it.
+        #
+        # Zero and strict, for the same reason the rule above is: one lost
+        # measurement is the whole finding. The `leg` label says where — `reserve`
+        # (the task's own reservation), `call` (one attempt's plan/admit/sent/
+        # settle, counted once per attempt) or `turn` (the route's own swallow).
+        #
+        # ⛔ INERT WHILE THE MODE IS OFF, which is the production default: the
+        # counter is not even registered, so the series does not exist and
+        # `or vector(0)` keeps this reading as "nothing lost" rather than firing
+        # on absence.
+        expr: |
+          (
+            sum(increase(driftstack_ai_credits_shadow_lost_total[30m])) or vector(0)
+          ) > 0
+        for: 0m
+        labels:
+          severity: warning
+          team: driftstack-runtime
+        annotations:
+          summary: 'An AI-credit shadow measurement was lost'
+          description: |
+            A shadow measurement of a legacy bundled turn failed and was
+            swallowed. The customer's turn was unaffected — that is the
+            guarantee shadow mode makes — but the shadow report now undercounts,
+            so the cutover exit criteria cannot be read as met until this is back
+            at zero. Break the series down by `leg` to see where it fails, then
+            read the `ai_credits_shadow_lost` log lines for the error. A burst on
+            `reserve` usually means the credits tables are slow or a rate card is
+            not in force; a burst on `call` or `turn` usually means the database
+            stopped answering inside the two-second wait the turn allows it.
+
+      - alert: AiCreditsBoundExceeded
+        # THE UPPER BOUND WAS NOT AN UPPER BOUND.
+        #
+        # Every model call is admitted against a bound computed BEFORE it is sent,
+        # and the whole credits design rests on that number being an upper bound
+        # rather than an estimate. This fires when a settled call's measured cost
+        # came out ABOVE it. In shadow that is a measurement error; under enforce
+        # the same call would have been charged less than it cost, every time the
+        # same request shape recurred.
+        #
+        # Zero and strict: a bound that can be exceeded at all is wrong
+        # arithmetic, not a busy period, and one instance is enough to say so.
+        expr: |
+          (
+            sum(increase(driftstack_ai_credits_bound_exceeded_total[30m])) or vector(0)
+          ) > 0
+        for: 0m
+        labels:
+          severity: warning
+          team: driftstack-runtime
+        annotations:
+          summary: 'An AI-credit call cost more than the bound it was admitted under'
+          description: |
+            A settled model call's measured cost passed the upper bound it was
+            admitted under. The charge itself was capped at the bound, so no
+            account was overcharged — the defect is in the bound, and it is the
+            one number the credits design is not allowed to get wrong. Break the
+            series down by `settle_basis`: `provider_usage` means the real token
+            counts exceeded what the request's own bytes predicted, and
+            `partial_usage` means a torn stream was priced at its admitted output
+            ceiling and still came out high. The shadow report's
+            `calls_over_bound` column finds the affected day and model.
+
 # ────────────────────────────────────────────────────────────────────
 # Metric inventory — drift-guard satisfaction
 #

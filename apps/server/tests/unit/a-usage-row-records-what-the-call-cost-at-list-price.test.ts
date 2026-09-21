@@ -281,6 +281,36 @@ describe('the usage row', () => {
     expect(rows[0]!.metadata).toHaveProperty(LIST_PRICE_COST_FIELD, null);
   });
 
+  it('CRITICAL S11 — a metered turn’s row names the AI-credits task it was measured against, so the shadow report can put what the call COST beside what it was CHARGED. Without it the two sides are separate populations: an own-key turn writes a row here and no call there, and "the charge is twice the list price" becomes a statement about whatever the window held.', async () => {
+    const { recorder, rows } = recorderWithCapture();
+    await recorder.record({
+      ...base,
+      usage: SONNET_CALL,
+      keySource: 'bundled',
+      creditReservationId: 'a2f0f1d4-0000-4000-8000-000000000001',
+    });
+    expect(rows[0]!.metadata.credit_reservation_id).toBe('a2f0f1d4-0000-4000-8000-000000000001');
+  });
+
+  it('CRITICAL a turn with no meter writes no credits field at all — the row a deployment with credits off produces is the same shape it has always been', async () => {
+    const { recorder, rows } = recorderWithCapture();
+    await recorder.record({ ...base, usage: SONNET_CALL, keySource: 'bundled' });
+    expect(rows[0]!.metadata).not.toHaveProperty('credit_reservation_id');
+  });
+
+  it('CRITICAL the reservation id stays OFF the customer-visible audit payload, for the same reason the list price does: until AI credits launch, nothing a customer can read may mention them', async () => {
+    const { recorder, rows, auditPayloads } = recorderWithCapture();
+    await recorder.record({
+      ...base,
+      usage: SONNET_CALL,
+      keySource: 'bundled',
+      creditReservationId: 'a2f0f1d4-0000-4000-8000-000000000002',
+    });
+    expect(rows[0]!.metadata).toHaveProperty('credit_reservation_id');
+    expect(auditPayloads).toHaveLength(1);
+    expect(auditPayloads[0]).not.toHaveProperty('credit_reservation_id');
+  });
+
   it('CRITICAL the list-price cost stays OFF the customer-visible audit payload, on bundled and own-key rows alike', async () => {
     const { recorder, rows, auditPayloads } = recorderWithCapture();
     await recorder.record({ ...base, usage: SONNET_CALL, keySource: 'bundled' });

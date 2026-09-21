@@ -268,6 +268,8 @@ import { DrizzleCreditReservationsRepo } from '../db/credit-reservations-repo.js
 import { DrizzleCreditInvariantAuditRepo } from '../db/credit-invariant-audit-repo.js';
 import { CreditGrantsService, creditGrantsRun } from '../services/credit-grants.js';
 import { CreditReservationsService } from '../services/credit-reservations.js';
+import { DrizzleAiCreditsReportRepo } from '../db/ai-credits-report-repo.js';
+import { aiCreditsCounters, type AiCreditsRuntime } from '../services/ai-credits-runtime.js';
 import {
   AiCreditLeaseKeeper,
   CREDIT_LEASE_KEEPER_INTERVAL_MS,
@@ -1052,6 +1054,30 @@ export async function createProductionDeps(
   const creditLeaseOwner = `boot-${randomUUID()}`;
   const creditLedgerRepo = creditGrants === null ? null : new DrizzleCreditLedgerRepo(dbHandle);
   const creditReservationsRepo = creditGrants === null ? null : new DrizzleCreditReservationsRepo();
+  // S11 — the two counters §8's shadow exit criteria are read from. Registered
+  // ONLY when the mode is shadow or enforce, on the same value everything else
+  // credits-related hangs off: a deployment running `off` must not render a
+  // series that names a feature it is not running.
+  //
+  // ⛔ NOTHING COUNTS UNTIL THESE ARE PASSED. `CreditReservationsService` takes
+  // both as dependencies precisely so that the slices that built it could ship
+  // dark without adding a metric to the catalogue; until this line existed a
+  // swallowed shadow reservation and a call that passed its bound were both
+  // invisible, and "0 lost" — the criterion that lets the mode move to enforce —
+  // was unreachable rather than met.
+  if (metricsRegistry !== undefined && creditGrants !== null) {
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.aiCreditsShadowLostTotal,
+      'AI-credit measurements that were swallowed, by the leg they were lost on: reserve, call or turn. A shadow exit criterion — any non-zero value means the shadow numbers undercount what the turns really did.',
+      ['leg'],
+    );
+    metricsRegistry.registerCounter(
+      METRIC_NAMES.aiCreditsBoundExceededTotal,
+      'Settled model calls whose measured cost passed the upper bound they were admitted under, by settle basis. The bound is meant to be an upper bound, never an estimate, so any non-zero value is an arithmetic defect rather than a busy period.',
+      ['settle_basis'],
+    );
+  }
+  const creditCounters = aiCreditsCounters(metricsRegistry);
   const creditReservationsService =
     creditGrants === null || creditLedgerRepo === null || creditReservationsRepo === null
       ? null
@@ -1062,6 +1088,12 @@ export async function createProductionDeps(
           refresher: creditGrants,
           logger,
           sentry,
+          // The §4.4 reserve is the one leg the service loses on its own; the
+          // per-attempt legs are the meter's and are counted there.
+          onShadowLost: () => {
+            creditCounters.onShadowLost('reserve');
+          },
+          onBoundExceeded: creditCounters.onBoundExceeded,
         });
   const creditLeaseKeeper =
     creditLedgerRepo === null ||
@@ -1076,6 +1108,27 @@ export async function createProductionDeps(
           leaseOwner: creditLeaseOwner,
           logger,
         });
+  // S11 — the three as ONE AppDeps member, so a route that has it has a
+  // consistent runtime and cannot be handed a keeper built on a different boot
+  // id than the reservations it is asked to renew. Undefined while the mode is
+  // off, which is the production default and today's code exactly.
+  const aiCredits: AiCreditsRuntime | undefined =
+    creditReservationsService === null ||
+    creditLeaseKeeper === null ||
+    config.aiCreditsMode === 'off'
+      ? undefined
+      : {
+          mode: config.aiCreditsMode,
+          bootId: creditLeaseOwner,
+          reservations: creditReservationsService,
+          leaseKeeper: creditLeaseKeeper,
+          // The staff report's C0 cohort is the only one the database cannot
+          // recognise on its own: "internal" is configuration, not a column.
+          // `effectiveStaffEmails` is the same set the admin bump uses, so the
+          // census counts exactly the accounts this deployment already treats
+          // as its own.
+          report: new DrizzleAiCreditsReportRepo(dbHandle, effectiveStaffEmails),
+        };
 
   // Webhooks first so sessions + api-keys can wire it.
   // V-225 — accountAudit wired for webhook_endpoint.{created,deleted}.
@@ -3798,6 +3851,10 @@ export async function createProductionDeps(
     costMonitoringService,
     agentTurnTelemetry,
     agentTurnSummaryService,
+    // S11 — absent while DRIFTSTACK_AI_CREDITS_MODE is off (the default and the
+    // production posture), which is what keeps the AI turn byte for byte what
+    // it was and the admin credits routes unregistered.
+    ...(aiCredits !== undefined ? { aiCredits } : {}),
     readinessChecks,
     // 2026-05-20 — env-var-controlled escape hatch. Some webview
     // contexts (Tauri custom-scheme pages, certain mobile in-app

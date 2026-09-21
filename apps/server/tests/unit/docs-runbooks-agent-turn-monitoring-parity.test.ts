@@ -55,7 +55,19 @@ describe('AI turn monitoring runbook', () => {
   });
 
   it('the rules file defines exactly these agent-turn alerts — a fifth needs a runbook section, a removed one needs its section gone', () => {
-    const group = alerts.slice(alerts.indexOf('- name: driftstack-agent-turns'));
+    // ⛔ THE SLICE ENDS AT THE NEXT GROUP, not at the end of the file. It used
+    // to run to EOF, so "the agent-turn alerts" meant "every alert from this
+    // group onward" — and the first group appended after it (S11's
+    // driftstack-ai-credits) failed this arm for alerts that are not agent-turn
+    // alerts and have no business in this runbook. The arm's meaning is
+    // unchanged for the group it is about; what changed is that it now reads
+    // only that group.
+    const from = alerts.indexOf('- name: driftstack-agent-turns');
+    expect(from, 'the driftstack-agent-turns group is missing from the rules file').toBeGreaterThan(
+      -1,
+    );
+    const nextGroup = alerts.indexOf('\n  - name: ', from);
+    const group = alerts.slice(from, nextGroup === -1 ? undefined : nextGroup);
     const defined = [...group.matchAll(/- alert: (\w+)/g)].map((m) => m[1]);
     expect(defined).toEqual([...ALERTS]);
   });

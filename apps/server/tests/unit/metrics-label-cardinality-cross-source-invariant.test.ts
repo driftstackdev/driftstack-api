@@ -255,6 +255,15 @@ describe('metric label cardinality', () => {
     // HARNESS_INTENT_NAMES, a closed enum taken from the PENDING DISPATCH, never
     // from the device's frame. The unknown key NAMES it counts are device text
     // and deliberately live in the log line, not in a label.
+    //
+    // `leg` arrived with driftstack_ai_credits_shadow_lost_total: reserve | call
+    // | turn, the three places a shadow measurement can be swallowed, closed as
+    // AiCreditsShadowLostLeg in services/ai-credits-runtime.ts. `settle_basis`
+    // arrived with driftstack_ai_credits_bound_exceeded_total: the
+    // CreditCallSettleBasis union, CHECK-constrained in the database to five
+    // values. Neither counter's emit site passes the reservation, the call or
+    // the account it knows about — those are in the log line, for the same
+    // reason every id on this page is.
     expect(distinct).toEqual([
       'actor_type',
       'arm',
@@ -264,6 +273,7 @@ describe('metric label cardinality', () => {
       'intent',
       'job_type',
       'kind',
+      'leg',
       'limiter',
       'method',
       'model',
@@ -278,6 +288,7 @@ describe('metric label cardinality', () => {
       'result_kind',
       'role',
       'route',
+      'settle_basis',
       'status_class',
       'step_kind',
       'template',

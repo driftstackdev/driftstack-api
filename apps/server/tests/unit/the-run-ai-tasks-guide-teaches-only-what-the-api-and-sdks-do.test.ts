@@ -22,6 +22,7 @@ import { describe, expect, it } from 'vitest';
 import { IntentResultSchema, PROBLEM_TYPES, TIER_FEATURES } from '@driftstack/api-types';
 import {
   ALL_TURN_NOTICE_REASONS,
+  TURN_LOOP_STOP_REASONS_NOT_YET_REACHABLE,
   TURN_LOOP_STOP_SENTENCES,
   TURN_NOTICE_REASONS,
   type TurnLoopStopReason,
@@ -808,7 +809,17 @@ describe('the Run AI tasks guide teaches only what the API and SDKs do', () => {
     // missing two. The set is DERIVED from the copy the runtime actually sends,
     // and the record below is keyed by the reason type, so a seventh reason is
     // a compile error here until both pages say what it asks the reader for.
-    const reasons = Object.keys(TURN_LOOP_STOP_SENTENCES) as TurnLoopStopReason[];
+    // ⛔ AN ENDING THAT CANNOT HAPPEN YET IS NOT TAUGHT, AND ITS ENTRY BELOW
+    // SAYS SO RATHER THAN BEING ABSENT. Teaching it would announce a feature
+    // that is built and switched off; leaving it silently out of the record
+    // would let a real ending go untaught the day someone copied the shape. The
+    // dark set is the runtime's own, so removing an entry there is what makes
+    // this arm demand a documented cause on both pages.
+    const dark = Object.keys(TURN_LOOP_STOP_REASONS_NOT_YET_REACHABLE);
+    expect(dark, 'endings that cannot happen yet').toEqual(['credits_used']);
+    const reasons = (Object.keys(TURN_LOOP_STOP_SENTENCES) as TurnLoopStopReason[]).filter(
+      (r) => !dark.includes(r),
+    );
     expect(reasons.length, 'reasons a turn can hand back for').toBeGreaterThan(3);
 
     const bulletIn = (page: string, pattern: RegExp, what: string): string => {
@@ -835,7 +846,7 @@ describe('the Run AI tasks guide teaches only what the API and SDKs do', () => {
     ];
 
     /** Per reason: a phrase from its OWN sentence, and the cause both pages must name. */
-    const CAUSES: Record<TurnLoopStopReason, { inSentence: RegExp; inDocs: RegExp }> = {
+    const CAUSES: Record<TurnLoopStopReason, { inSentence: RegExp; inDocs: RegExp | null }> = {
       planner_call_limit: {
         inSentence: /more steps than I take in one message/,
         inDocs: /planning rounds/i,
@@ -854,9 +865,14 @@ describe('the Run AI tasks guide teaches only what the API and SDKs do', () => {
         inSentence: /could not work out the next ones/,
         inDocs: /could not work out the next steps/i,
       },
+      // Dark (see above): the sentence exists and is pinned, the docs entry is
+      // the debt that falls due when AI credits ship.
+      credits_used: { inSentence: /used all the AI credits set aside for it/, inDocs: null },
     };
 
-    for (const reason of reasons) {
+    // Every ending's SENTENCE is pinned, dark ones included: the copy exists and
+    // it is what a customer would read the day the feature ships.
+    for (const reason of Object.keys(TURN_LOOP_STOP_SENTENCES) as TurnLoopStopReason[]) {
       const cause = CAUSES[reason];
       // The phrase is anchored to the live copy, so the mapping cannot drift
       // from the sentence it claims to be about.
@@ -864,8 +880,15 @@ describe('the Run AI tasks guide teaches only what the API and SDKs do', () => {
         TURN_LOOP_STOP_SENTENCES[reason],
         `the phrase pinned for ${reason} is in the sentence the runtime sends`,
       ).toMatch(cause.inSentence);
+      expect(
+        cause.inDocs === null,
+        `${reason} is taught on both pages unless it is recorded as not yet reachable`,
+      ).toBe(dark.includes(reason));
+    }
+    for (const reason of reasons) {
+      const cause = CAUSES[reason];
       for (const [label, bullet] of pages) {
-        expect(bullet, `${label} names the cause behind ${reason}`).toMatch(cause.inDocs);
+        expect(bullet, `${label} names the cause behind ${reason}`).toMatch(cause.inDocs!);
       }
     }
 

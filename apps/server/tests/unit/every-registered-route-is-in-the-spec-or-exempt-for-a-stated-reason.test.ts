@@ -67,6 +67,21 @@ const EXEMPT: ReadonlyMap<string, string> = new Map([
     'GET /v1/admin/agent-turns/summary',
     'staff panel only; admin surface in the customer spec may not grow (V-862)',
   ],
+  // S11 — the AI-credits shadow report and cutover census. Staff-only, and
+  // withheld for a second reason on top of V-862: the published document may not
+  // mention AI credits at all while the feature is dark
+  // (`nothing-about-an-unreleased-feature-is-in-the-published-spec` holds the
+  // whole term), so publishing either of these would break that guard rather
+  // than merely widen the admin surface. Both entries are due to be revisited
+  // when credits launch — at which point the question is the ordinary V-862 one.
+  [
+    'GET /v1/admin/ai-credits/shadow-report',
+    'staff panel only; and the published spec may not mention AI credits before launch',
+  ],
+  [
+    'GET /v1/admin/ai-credits/census',
+    'staff panel only; and the published spec may not mention AI credits before launch',
+  ],
   // Inbound receivers — the provider calls us; signature-authenticated.
   ['POST /v1/webhooks/stripe', 'inbound provider webhook receiver'],
   ['POST /v1/webhooks/nowpayments', 'inbound provider webhook receiver'],

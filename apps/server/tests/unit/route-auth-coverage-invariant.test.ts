@@ -646,7 +646,14 @@ describe('all-route caller-authority invariant', () => {
     // B2 — 317 since POST /v1/agent-sessions/:id/stop: the live route (the same
     // controlKeyOrAccountAuth('write') + owner gate as /message) and its disabled
     // 503 twin. Refreshed with violations() proven empty first.
-    expect(routes).toHaveLength(317);
+    // S11 — 319 since the two AI-credits staff reads, GET /v1/admin/ai-credits/
+    // shadow-report and GET /v1/admin/ai-credits/census. Both carry
+    // requireScope('driftstack_internal_admin'), so the structurally-authorized
+    // count below moves WITH them, by two; had either shipped ungated only this
+    // number would have moved. Neither has a disabled twin, for the same reason
+    // GET /v1/admin/agent-turns/summary has none: an unpublished staff surface
+    // has no client that could read a 503 as "disabled" rather than "wrong path".
+    expect(routes).toHaveLength(319);
     // +1 (not +2): only the LIVE network route is structurally authorized; the
     // disabled twin is a stub in DISABLED_EXEMPTIONS. Had the live route shipped
     // ungated, this number would not have moved while the total moved by two.
@@ -660,7 +667,8 @@ describe('all-route caller-authority invariant', () => {
     // 221 since #7's captures read is structurally authorized (its disabled twin is a stub).
     // 222 since GET /v1/admin/agent-turns/summary (requireScope driftstack_internal_admin).
     // 223 since B2's stop route (its disabled twin is a stub, so +1 not +2).
-    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(223);
+    // 225 since S11's two AI-credits staff reads (requireScope driftstack_internal_admin).
+    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(225);
   });
 
   it('every route has structural caller authority or one exact reviewed exemption', () => {

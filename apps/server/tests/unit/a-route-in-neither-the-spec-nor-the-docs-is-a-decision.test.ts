@@ -140,6 +140,14 @@ const UNDOCUMENTED_ROUTES = new Map<string, string>([
     'GET /v1/admin/agent-turns/summary',
     'staff — driftstack_internal_admin; fleet-wide AI turn health, aggregates only. Withheld from the customer-shipped spec because the V-862 ceiling forbids its admin surface growing without a decision; publishing it is that decision, and is reversible from here',
   ],
+  [
+    'GET /v1/admin/ai-credits/census',
+    'staff — driftstack_internal_admin; how many accounts are in each cutover cohort, counts only. Undocumented for a second reason on top of the V-862 ceiling: nothing published may mention AI credits before the feature launches',
+  ],
+  [
+    'GET /v1/admin/ai-credits/shadow-report',
+    'staff — driftstack_internal_admin; per-day per-model shadow charge against real list price, counts and sums only. Undocumented for the same two reasons as the census beside it',
+  ],
   ['GET /v1/internal/atlas-priority/event/:p', 'm2m — internal capture orchestration'],
   ['GET /v1/internal/atlas-priority/queue', 'm2m — internal capture orchestration'],
   ['GET /v1/mac-nodes', 'staff — driftstack_internal_admin, like every /v1/admin surface'],

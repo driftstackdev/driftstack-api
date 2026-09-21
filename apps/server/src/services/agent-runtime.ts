@@ -25,9 +25,11 @@ import type {
 } from './agent-decomposer.js';
 import {
   AgentDecomposerContinuationDeniedError,
+  AgentDecomposerCreditsDeniedError,
   AgentDecomposerSettledError,
   credentialRefsFor,
 } from './agent-decomposer.js';
+import type { AgentCreditMeter, AgentCreditRefusalReason } from './agent-credit-meter.js';
 import type {
   AgentExecutor,
   ElementWaitBudget,
@@ -89,8 +91,11 @@ export interface RunTurnArgs {
    * double-counting BYOK turns. Defaults to 'none' so existing
    * callers (which don't pass keySource) keep recording under the
    * generic 'agent_decomposer' record_type.
+   *
+   * S10 — `'credits'` names a turn funded from the account's AI credits rather
+   * than from a key. Unreachable until a caller passes {@link creditMeter}.
    */
-  keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none';
+  keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none' | 'credits';
   /**
    * P2 — the credentials this session may use to log in, held in memory for the
    * length of this call only.
@@ -148,6 +153,18 @@ export interface RunTurnArgs {
    * `stopped` at its first check. Omitted, the turn makes its own controller.
    */
   stopWindow?: AgentTurnStopWindow;
+  /**
+   * S10 — what this turn's AI credits allow, asked once per BILLABLE ATTEMPT
+   * (§4.5). Threaded to every planner call, every re-plan and the read-back, so
+   * that no model call this turn makes escapes the question.
+   *
+   * ⛔ NOTHING PASSES ONE YET, AND THAT IS THE PRODUCTION PATH. Undefined, every
+   * provider request is byte for byte what it was, no turn can end
+   * `credits_used`, and the two sentences about AI credits in this file are
+   * unreachable. S11 passes a SHADOW meter (which measures and changes nothing,
+   * M3); S12 passes an enforcing one for the accounts that have been moved.
+   */
+  creditMeter?: AgentCreditMeter;
 }
 
 /**
@@ -548,7 +565,17 @@ export interface AgentDecomposerUsageRecorder {
      * second field, not a replacement: the soft cap keeps summing the posted
      * `cost_usd_cents`, and nothing sums the list price yet.
      */
-    keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none';
+    keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none' | 'credits';
+    /**
+     * S11 — the AI-credits reservation this turn's model calls were measured or
+     * charged against (§4.4). Absent on every turn that had no meter, which is
+     * every turn while `DRIFTSTACK_AI_CREDITS_MODE` is off.
+     *
+     * It is written on the ROW and deliberately not on the customer's audit
+     * payload: the report joins `usage_records` to `credit_model_calls` through
+     * it, and until launch nothing a customer can read may mention AI credits.
+     */
+    creditReservationId?: string;
     /**
      * True for the SECOND usage row of a single turn (the #140 read-back).
      *
@@ -967,9 +994,43 @@ export type TurnLoopStopReason =
   | 'planner_call_limit'
   | 'wall_clock'
   | 'budget_floor'
+  /** S10 — the task used up the AI credits set aside for it (§4.5). Unreachable
+   *  until a caller passes a credit meter; see
+   *  {@link TURN_LOOP_STOP_REASONS_NOT_YET_REACHABLE}. */
+  | 'credits_used'
   | 'no_progress'
   | 'repeat_refused'
   | 'planner_unavailable';
+
+/**
+ * Endings that EXIST IN CODE AND CANNOT HAPPEN YET, each with what would make it
+ * reachable.
+ *
+ * ⛔ WHY AN ENDING WOULD EVER BE DARK. Every other ending here is published the
+ * moment it exists: its `notice_reason` goes into the OpenAPI document, into
+ * three SDKs and onto two documentation pages, and guards over each of those
+ * fail until it does. That is right for a turn ending customers can reach — and
+ * it is exactly wrong for one belonging to a feature that is BUILT AND SWITCHED
+ * OFF, because publishing the word announces the feature.
+ *
+ * ⛔ SO A DARK ENDING SHARES THE PUBLIC WORD OF THE ENDING IT IS CLOSEST TO, and
+ * that is a debt, not a design. The sentence a customer would read is its own and
+ * is right; the one-word code beside it belongs to another ending and its
+ * documented advice is only approximately right. The change that makes the
+ * feature live must give it a word of its own, a row in both pages and an entry
+ * in every SDK — and removing it from here is what makes those guards say so.
+ *
+ * The map is keyed by the ending, so an entry cannot name something that is not
+ * one, and the guards read it rather than keeping their own copy.
+ */
+export const TURN_LOOP_STOP_REASONS_NOT_YET_REACHABLE: Readonly<
+  Partial<Record<TurnLoopStopReason, string>>
+> = Object.freeze({
+  credits_used:
+    'nothing passes a credit meter to runTurn: the mode flag defaults to off and no account is ' +
+    'on AI credits. Give this ending its own notice_reason, a documented cause on both pages and ' +
+    'an entry in each SDK, and remove it from here, in the change that makes AI credits live.',
+});
 
 export const TURN_LOOP_STOP_SENTENCES: Readonly<Record<TurnLoopStopReason, string>> = {
   planner_call_limit:
@@ -978,6 +1039,8 @@ export const TURN_LOOP_STOP_SENTENCES: Readonly<Record<TurnLoopStopReason, strin
     'I did the steps above, but this was taking too long for one message, so I stopped before it was finished. Send “continue” and I will carry on from this page.',
   budget_floor:
     'I did the steps above, but there is not enough of this chat’s AI budget left to keep going, so the task is not finished. Start a new chat to carry on.',
+  credits_used:
+    'I did the steps above, but this task used all the AI credits set aside for it, so it is not finished. Send “continue” to carry on.',
   no_progress:
     'I did the steps above, but the page did not change and I was about to try the same thing again, so I stopped rather than go in circles. The task is not finished — tell me what to try differently.',
   repeat_refused:
@@ -1055,6 +1118,14 @@ export const TURN_NOTICE_REASONS: Readonly<Record<TurnLoopStopReason, TurnNotice
   planner_call_limit: 'step_limit',
   wall_clock: 'time_limit',
   budget_floor: 'budget_low',
+  // ⛔ SHARED WITH `budget_floor`, AND ONLY BECAUSE THIS ENDING IS DARK. See
+  // TURN_LOOP_STOP_REASONS_NOT_YET_REACHABLE: a word of its own is a published
+  // word, and AI credits are switched off. `budget_low` is the closest true
+  // thing a program can be told — the chat has no AI allowance left to spend on
+  // this task — and its advice, start a new session, does work here; it is not
+  // the best advice, which is why this is recorded as a debt rather than a
+  // choice. Nothing can reach it today.
+  credits_used: 'budget_low',
   no_progress: 'no_progress',
   repeat_refused: 'repeated_step',
   planner_unavailable: 'ai_unavailable',
@@ -1128,6 +1199,40 @@ export class AgentProviderKeyRejectedError extends Error {
     this.providerStatus = args.providerStatus;
     this.reason = args.reason;
     this.keySource = args.keySource;
+  }
+}
+
+/**
+ * S10 — the turn's FIRST planning call was not admitted against the task's AI
+ * credits (§4.5), so the turn ended before any model call was made.
+ *
+ * ⛔ IT IS A THROW, NOT A TURN RESULT, BECAUSE NO TURN HAPPENED. Nothing was
+ * planned, nothing ran on the page, and there is no transcript entry to hand
+ * back — which is what a `RunTurnResult` is. The route answers it; S12 maps it to
+ * a 402 `ai-credits-exhausted` with §9.6's copy, the same shape
+ * {@link AgentProviderKeyRejectedError} already uses for "the money side said
+ * no". Until then it reaches the route as an unmapped error, which is a 500 —
+ * and that is safe, because nothing passes a credit meter yet.
+ *
+ * ⛔ THE MESSAGE IS FIXED TEXT AND IS NOT CUSTOMER COPY. It names the refusal
+ * the admission gave, so a log says which predicate refused; the sentence the
+ * customer reads is §9.6's and is the route's to choose.
+ *
+ * ⛔ IT CARRIES THE ADMISSION'S REASON AND NOTHING IT CANNOT KNOW. §4.5 asks the
+ * 402 to say `task_too_large` when the reservation was already at the model's
+ * maximum and `balance` otherwise — a distinction drawn from the RESERVATION,
+ * which this layer never sees: `did_not_fit` is true of both. S12 owns that
+ * mapping, reads the reservation, and decides; deciding it here would be
+ * guessing, and the guess that says `task_too_large` tells a customer who could
+ * have topped up that nothing would have helped.
+ */
+export class AgentTurnCreditsExhaustedError extends Error {
+  readonly reason: AgentCreditRefusalReason;
+
+  constructor(reason: AgentCreditRefusalReason) {
+    super(`this task has no AI credits left for its first model call (${reason})`);
+    this.name = 'AgentTurnCreditsExhaustedError';
+    this.reason = reason;
   }
 }
 
@@ -2187,6 +2292,7 @@ export class AgentRuntime {
         tokensConsumed: decomposed.tokensConsumed,
         now: args.now ?? new Date(),
         ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+        ...this.creditReservationOf(args),
         bundledFlatCostAlreadyPosted: true,
       },
       { accountId: session.accountId, agentSessionId: session.id, label: 'replan' },
@@ -2225,6 +2331,7 @@ export class AgentRuntime {
           tokensConsumed: a.evidence.tokensConsumed,
           now: a.args.now ?? new Date(),
           ...(a.args.keySource !== undefined ? { keySource: a.args.keySource } : {}),
+          ...this.creditReservationOf(a.args),
           ...(a.flatChargeAlreadyPosted ? { bundledFlatCostAlreadyPosted: true } : {}),
         },
         { accountId: a.session.accountId, agentSessionId: a.session.id, label: a.label },
@@ -2336,6 +2443,26 @@ export class AgentRuntime {
    * LLM calls, so the monthly sum stays accurate and the concurrency limiter's
    * overshoot stays bounded (its per-turn constant just includes the read-back).
    */
+  /**
+   * S11 — the reservation this turn's model calls are being measured against,
+   * for the usage row to carry. Empty when no meter was passed, which is every
+   * turn today outside shadow mode.
+   *
+   * ⛔ THE ROW IS THE ONLY PLACE THE TWO HALVES MEET. `credit_model_calls` knows
+   * what a call was CHARGED and cannot know what the provider listed it at;
+   * `usage_records` knows the list price and cannot know the charge. The shadow
+   * report's "must be 2.0" is a ratio between them, and this id is what makes it
+   * a ratio over ONE turn's calls rather than over two populations that merely
+   * overlap.
+   */
+  private creditReservationOf(args: Pick<RunTurnArgs, 'creditMeter'>): {
+    creditReservationId?: string;
+  } {
+    return args.creditMeter === undefined
+      ? {}
+      : { creditReservationId: args.creditMeter.reservationId };
+  }
+
   private async recordUsageRowWithRetry(
     recorder: AgentDecomposerUsageRecorder,
     recordArgs: Parameters<AgentDecomposerUsageRecorder['record']>[0],
@@ -2453,6 +2580,8 @@ export class AgentRuntime {
     driftstackSessionId: string | null;
     now: Date;
     keySource: NonNullable<RunTurnArgs['keySource']> | undefined;
+    /** S11 — this turn's meter, for the usage row's credit join. Undefined off shadow. */
+    creditMeter: RunTurnArgs['creditMeter'];
     label: 'decompose' | 'replan';
     err: unknown;
   }): Promise<void> {
@@ -2470,6 +2599,7 @@ export class AgentRuntime {
           tokensConsumed: err.tokensConsumed,
           now: opts.now,
           ...(opts.keySource !== undefined ? { keySource: opts.keySource } : {}),
+          ...this.creditReservationOf(opts),
         },
         {
           accountId: opts.accountId,
@@ -2949,6 +3079,9 @@ export class AgentRuntime {
               shouldContinue: authorityMayContinue,
               // B2 — the provider lane ends the request when this aborts.
               signal,
+              // S10/§4.5 — the adapter asks this before every billable attempt,
+              // the runtime's one re-ask of a malformed reply included.
+              ...(args.creditMeter !== undefined ? { creditMeter: args.creditMeter } : {}),
             }),
           () =>
             this.mayRetryPlannerReply({
@@ -2968,6 +3101,7 @@ export class AgentRuntime {
               driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
               now: args.now ?? new Date(),
               keySource: args.keySource,
+              creditMeter: args.creditMeter,
               label: 'decompose',
               err: discarded,
             });
@@ -2977,6 +3111,15 @@ export class AgentRuntime {
       } catch (err) {
         if (err instanceof AgentDecomposerContinuationDeniedError) {
           return this.interruptedTurnResult(session.id, sessionWithUser, 'decompose');
+        }
+        // S10/§4.5 — THE FIRST PLAN WAS NOT ADMITTED, SO THE TURN ENDS BEFORE
+        // ANY CALL. Read first, because every classification below it would read
+        // it as something it is not: `classifyDecomposerError` falls through to
+        // `transient` and would answer the customer "the AI is briefly
+        // unavailable, send it again" — advice that cannot work and that invites
+        // a retry which is refused the same way.
+        if (err instanceof AgentDecomposerCreditsDeniedError) {
+          throw new AgentTurnCreditsExhaustedError(err.reason);
         }
         if (stopRequested(signal)) {
           // B2 — the customer stopped the turn while its first plan was being
@@ -3020,6 +3163,7 @@ export class AgentRuntime {
                 tokensConsumed: err.tokensConsumed,
                 now: args.now ?? new Date(),
                 ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+                ...this.creditReservationOf(args),
               },
               { accountId: session.accountId, agentSessionId: session.id, label: 'decompose' },
             );
@@ -3105,6 +3249,7 @@ export class AgentRuntime {
           // Arc 1 sub-slice 6.4 (v2-#6) — forward the route-resolved
           // key source so the recorder writes the right record_type.
           ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+          ...this.creditReservationOf(args),
         },
         { accountId: session.accountId, agentSessionId: session.id, label: 'decompose' },
       );
@@ -3663,6 +3808,7 @@ export class AgentRuntime {
               ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
               shouldContinue: authorityMayContinue,
               signal,
+              ...(args.creditMeter !== undefined ? { creditMeter: args.creditMeter } : {}),
             }),
           () =>
             this.mayRetryPlannerReply({
@@ -3684,6 +3830,7 @@ export class AgentRuntime {
               driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
               now: args.now ?? new Date(),
               keySource: args.keySource,
+              creditMeter: args.creditMeter,
               label: 'replan',
               err: discarded,
             });
@@ -3691,6 +3838,21 @@ export class AgentRuntime {
         );
         replanned = replannedOnce.result;
       } catch (err) {
+        // S10/§4.5 — THE TASK RAN OUT OF THE AI CREDITS SET ASIDE FOR IT, part
+        // way through. The steps that ran stand and are published as always; what
+        // this adds is the sentence saying why there are no more.
+        //
+        // ⛔ IT SPEAKS ON BOTH CAUSES, LIKE THE CLOCK AND UNLIKE THE OTHERS. The
+        // continue-only rule exists because after a FAILED step the ✗ row is the
+        // message — and that row says what went wrong with a step, never that the
+        // re-plan which would have recovered from it could not be paid for. Read
+        // before the Stop branch below: a refusal that sent nothing is not a call
+        // cut short, and accounting for it as one would post a usage row for a
+        // request that never went out.
+        if (err instanceof AgentDecomposerCreditsDeniedError) {
+          loopStopped = 'credits_used';
+          break;
+        }
         if (stopRequested(signal)) {
           // B2 — a later segment's plan call cut short by Stop. Its row is kept
           // like every other call's (the turn's flat price is already on the
@@ -4235,6 +4397,7 @@ export class AgentRuntime {
             model: sessionAfter.model,
             shouldContinue: authorityMayContinue,
             signal,
+            ...(args.creditMeter !== undefined ? { creditMeter: args.creditMeter } : {}),
           });
           answerInFlight = false;
           latestReadbackEvidence = {
@@ -4257,6 +4420,7 @@ export class AgentRuntime {
                 tokensConsumed: answer.tokensConsumed,
                 now: args.now ?? new Date(),
                 ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+                ...this.creditReservationOf(args),
                 // Second row of THIS turn — the turn's flat bundled charge was
                 // already posted by the decompose row.
                 bundledFlatCostAlreadyPosted: true,
@@ -4344,6 +4508,17 @@ export class AgentRuntime {
             executor: executorResult,
           });
         }
+        // S10/§4.5 — THE READ-BACK IS SKIPPED, NEVER FAILED. The steps have all
+        // run and been published; a question that cannot be paid for costs the
+        // customer a sentence, not the turn, and the sentence it costs is the
+        // last one in this block.
+        //
+        // ⛔ THE ONE THING IT MUST DO HERE IS UNSET `answerInFlight`. That flag
+        // means "a model call was cut short", and it is what the Stop branch
+        // below reads to post a usage row and debit a turn's second call. The
+        // refusal happened BEFORE anything was sent, so leaving it set would
+        // charge a customer for a request that never left the process.
+        if (error instanceof AgentDecomposerCreditsDeniedError) answerInFlight = false;
         if (stopRequested(signal) && !answerInFlight) {
           // B2 — Stop was pending when something other than the answer call
           // threw: no model call was cut short here, so there is no row to add.
@@ -4402,6 +4577,7 @@ export class AgentRuntime {
                 tokensConsumed: error.tokensConsumed,
                 now: args.now ?? new Date(),
                 ...(args.keySource !== undefined ? { keySource: args.keySource } : {}),
+                ...this.creditReservationOf(args),
                 // Second row of THIS turn — the turn's flat bundled charge was
                 // already posted by the decompose row.
                 bundledFlatCostAlreadyPosted: true,
@@ -4427,9 +4603,14 @@ export class AgentRuntime {
         }
         // Read-back is additive — never fail the turn on it. But P5: it must not
         // be silent either. The plan result still stands; the customer is told
-        // that the answer half did not, instead of being left to guess.
+        // that the answer half did not, instead of being left to guess — and
+        // told WHICH of the two things happened, because "it did not complete"
+        // reads as a fault on a turn where nothing went wrong and the task
+        // simply had nothing left to spend (S10/§4.5).
         readbackUnavailable =
-          'I finished the steps above, but the step that reads the page back and answers did not complete. The steps above are what ran.';
+          error instanceof AgentDecomposerCreditsDeniedError
+            ? 'I finished the steps above, but this task ran out of AI credits before I could answer your question.'
+            : 'I finished the steps above, but the step that reads the page back and answers did not complete. The steps above are what ran.';
       }
     }
 

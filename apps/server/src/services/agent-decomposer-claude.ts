@@ -24,9 +24,22 @@
 //   - Malformed JSON content → throws (the wire is broken; surfacing
 //     a refuse would silently mask the bug).
 
-import { CLAUDE_MODELS, DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
-import { CLAUDE_MODEL_REQUEST_CAPABILITIES } from '@driftstack/api-types';
 import {
+  CLAUDE_MODELS,
+  DEFAULT_AGENT_MODEL,
+  type AgentModel,
+  type ModelCallTokens,
+  type RequestRegionBytes,
+} from '@driftstack/api-types';
+import { CLAUDE_MODEL_REQUEST_CAPABILITIES } from '@driftstack/api-types';
+import type { CreditModelCallPurpose } from '../db/credit-reservations-repo.js';
+import type {
+  AgentCreditCall,
+  AgentCreditMeter,
+  AgentCreditSettlement,
+} from './agent-credit-meter.js';
+import {
+  AgentDecomposerCreditsDeniedError,
   AgentDecomposerSettledError,
   requireAgentDecomposerContinuation,
   type AgentDecomposer,
@@ -490,11 +503,17 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
     // 4. Build the request body. System prompt is constant; messages
     //    interleave the prior transcript so the model sees its own
     //    plans + executor results.
-    const messages = buildMessages(args);
-    const buildBody = (allowed: ReplyControlsAllowed): string =>
+    // ⛔ `let`, BECAUSE RUNG 3 OF THE FIT LADDER REBUILDS IT (§4.5, M4). A plan
+    // call that cannot fit at any allowed output ceiling is asked again with
+    // fewer BYTES of conversation history — the same mechanism as the character
+    // window, measured the way the bound is measured. With no meter this is
+    // written once and never touched, and the request is what it always was.
+    let messages = buildMessages(args);
+    let history = args.history;
+    const buildBody = (allowed: ReplyControlsAllowed, maxTokens: number): string =>
       JSON.stringify({
         model,
-        max_tokens: MAX_OUTPUT_TOKENS,
+        max_tokens: maxTokens,
         ...requestControls(model, this.thinkingPolicy.plan, PLAN_REPLY_SCHEMA, allowed),
         system: buildSystemBlocks(),
         messages,
@@ -513,6 +532,26 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
       args.byokAnthropicApiKey,
       args.shouldContinue,
       args.signal,
+      MAX_OUTPUT_TOKENS,
+      args.creditMeter === undefined
+        ? undefined
+        : {
+            meter: args.creditMeter,
+            purpose: 'plan',
+            model,
+            historyBytes: () => droppableHistoryBytes(messages),
+            trimHistory: (budgetBytes: number): boolean => {
+              // Oldest first, one entry at a time, rebuilding through the same
+              // contract the request is always built from — so a trimmed call is
+              // the call the planner would have made on a shorter session, not a
+              // second way of assembling a prompt.
+              while (droppableHistoryBytes(messages) > budgetBytes && history.length > 1) {
+                history = history.slice(1);
+                messages = buildMessages({ ...args, history });
+              }
+              return droppableHistoryBytes(messages) <= budgetBytes;
+            },
+          },
     );
 
     // 6. Parse the response. Token accounting comes from the API's
@@ -551,10 +590,10 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
     // it would silently do nothing — and the one large part, the observation, is
     // a different page on every call. Marking the observation would pay the 1.25x
     // write on up to ~5k tokens per read-back for an entry no request ever reads.
-    const buildBody = (allowed: ReplyControlsAllowed): string =>
+    const buildBody = (allowed: ReplyControlsAllowed, maxTokens: number): string =>
       JSON.stringify({
         model,
-        max_tokens: ANSWER_MAX_OUTPUT_TOKENS,
+        max_tokens: maxTokens,
         ...requestControls(model, this.thinkingPolicy.answer, ANSWER_REPLY_SCHEMA, allowed),
         system: prompt.system,
         messages: [{ role: 'user', content: prompt.userText }],
@@ -571,6 +610,19 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
       args.byokAnthropicApiKey,
       args.shouldContinue,
       args.signal,
+      ANSWER_MAX_OUTPUT_TOKENS,
+      args.creditMeter === undefined
+        ? undefined
+        : {
+            meter: args.creditMeter,
+            purpose: 'answer',
+            model,
+            // ⛔ A READ-BACK CARRIES NO HISTORY WINDOW (§4.5): the question and
+            // one page. There is nothing it could drop, and asking it to drop
+            // something would be asking it to drop the question.
+            historyBytes: () => 0,
+            trimHistory: () => false,
+          },
     );
     return parseAnswerResponse(response, model);
   }
@@ -600,12 +652,19 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
    */
   private async callConstrained(
     model: AgentModel,
-    buildBody: (allowed: ReplyControlsAllowed) => string,
+    buildBody: (allowed: ReplyControlsAllowed, maxTokens: number) => string,
     apiKey: string,
     shouldContinue: DecomposeArgs['shouldContinue'] | AnswerArgs['shouldContinue'],
     /** The caller's Stop. A cancelled attempt is never a control rejection, so
      *  it leaves this loop at once through the rethrow below. */
     signal: AbortSignal | undefined,
+    /** The output ceiling this kind of call asks for when nothing is in its way. */
+    ceilingTokens: number,
+    /** S10/§4.5 — what this turn's AI credits allow. Undefined meters nothing,
+     *  and the request is then byte for byte what it was before the meter
+     *  existed. A reply-control resend goes round this loop and is admitted
+     *  again, because it is a second billable attempt. */
+    metering: AttemptMetering | undefined,
   ): Promise<unknown> {
     for (;;) {
       const allowed: ReplyControlsAllowed = {
@@ -616,11 +675,18 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
         thinking: !this.thinkingControlRejectedFor.has(model),
       };
       try {
-        return await this.callWithRetry(buildBody(allowed), apiKey, shouldContinue, {
-          streaming: true,
-          signal,
-          model,
-        });
+        return await this.callWithRetry(
+          (maxTokens) => buildBody(allowed, maxTokens),
+          apiKey,
+          shouldContinue,
+          {
+            streaming: true,
+            signal,
+            model,
+            ceilingTokens,
+            metering,
+          },
+        );
       } catch (err) {
         const rejected = rejectedReplyControl(err);
         // Only a control this attempt actually SENT can be what was rejected;
@@ -645,7 +711,9 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
   }
 
   private async callWithRetry(
-    body: string,
+    /** The request body at a given output ceiling. Rendered PER ATTEMPT, because
+     *  admission may lower `max_tokens` or ask for a shorter history (§4.5). */
+    render: (maxTokens: number) => string,
     apiKey: string,
     shouldContinue: DecomposeArgs['shouldContinue'] | AnswerArgs['shouldContinue'],
     /** `streaming` reads an Anthropic SSE body and reassembles the non-streamed
@@ -658,8 +726,17 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
      *  even from a transport that ignores its signal. An aborted call throws
      *  {@link AgentDecomposerCancelledError} — never retried, never another
      *  attempt — carrying the usage `message_start` had already reported, which
-     *  `model` prices. */
-    opts: { streaming?: boolean; signal?: AbortSignal; model?: AgentModel } = {},
+     *  `model` prices.
+     *
+     *  `metering` is §4.5's admission. Undefined leaves every byte, every
+     *  header and every timer exactly as they were. */
+    opts: {
+      streaming?: boolean;
+      signal?: AbortSignal;
+      model?: AgentModel;
+      ceilingTokens: number;
+      metering?: AttemptMetering;
+    },
   ): Promise<unknown> {
     let attempt = 0;
     const signal = opts.signal;
@@ -670,137 +747,244 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
       // This is the last asynchronous boundary before each provider attempt.
       // It runs for the initial call and every loop entered after backoff.
       await requireAgentDecomposerContinuation(shouldContinue);
-      // ⛔ AND AGAIN AFTER IT. The fence is awaited, so a Stop can land while it
-      // runs; the listener below is attached only after this point, and an
-      // already-aborted signal never fires it — so without this check the
-      // request would go out with a transport signal nobody will ever abort:
-      // billed in full and never read. Nothing is awaited between here and the
-      // listener, so no Stop can slip between them.
-      if (isCancelled(signal)) throw new AgentDecomposerCancelledError();
-      let res: Response;
-      // Per-attempt timeout: a hung upstream aborts here rather than hanging
-      // the turn forever. The abort surfaces as a network error in the catch
-      // below (retried once, then thrown → transient-classified refuse).
-      // The body is read INSIDE this try so the abort timer stays armed THROUGH
-      // it — clearing the timer after fetch() (headers) but before res.json()
-      // left the body read unbounded (only undici's ~300s default backstops),
-      // the bug-class fixed in stripe-api bc72ff48.
-      const ac = new AbortController();
-      // A streamed attempt is bounded by SILENCE — an idle timer the reader
-      // re-arms on every chunk — plus an absolute cap that only a stream which
-      // never stops trickling can reach. A non-streamed one keeps the single
-      // total timer it has always had. The idle timer is armed BEFORE the fetch
-      // so an upstream that opens a connection and never sends headers is
-      // covered by the same bound as one that goes quiet mid-body. All of them
-      // abort the same controller, so the catch below treats any of them as the
-      // network failure it is.
-      const attemptTimeoutMs =
-        opts.streaming === true ? this.streamIdleTimeoutMs : this.requestTimeoutMs;
-      let timer = setTimeout(() => ac.abort(), attemptTimeoutMs);
-      const rearmIdle = (awaitingFirstText: boolean): void => {
-        clearTimeout(timer);
-        if (awaitingFirstText) {
-          // See DEFAULT_STREAM_THINKING_IDLE_TIMEOUT_MS: the one phase in which
-          // a healthy call is expected to be quiet.
-          timer = setTimeout(() => ac.abort(), this.streamThinkingIdleTimeoutMs);
-          return;
-        }
-        timer = setTimeout(() => ac.abort(), attemptTimeoutMs);
-      };
-      const capTimer =
-        opts.streaming === true
-          ? setTimeout(() => ac.abort(), this.streamTotalTimeoutMs)
-          : undefined;
-      let bodyText: string;
-      let streamedEnvelope: unknown;
-      // The usage frames seen so far, so a cancelled call can say what it had
-      // already been charged. Filled by the stream reader.
-      const observedUsage: Record<string, unknown> = {};
-      const onCancel = (): void => ac.abort();
-      signal?.addEventListener('abort', onCancel, { once: true });
+      // ⛔ §4.5 — EVERY BILLABLE ATTEMPT IS ADMITTED BEFORE IT IS SENT, AND
+      // THIS IS THE ONLY PLACE A REQUEST IS BUILT. A 5xx retry, a 429 retry, a
+      // reply-control resend (through `callConstrained`) and the runtime's one
+      // re-ask of a malformed plan all arrive here, so each is a separate
+      // admission, a separate call row and a separate settlement — which is what
+      // makes the task's committed total the total of what it may actually spend.
+      //
+      // It sits AFTER the authority fence and BEFORE the post-fence Stop check
+      // on purpose: a Stop that lands while admission runs then ends the attempt
+      // with the call admitted and nothing sent, which the `finally` below
+      // settles `never_sent` at zero charge (§4.6).
+      const { body, call: admitted } = await admitOneAttempt(
+        opts.ceilingTokens,
+        opts.metering,
+        render,
+      );
+      // §4.6 — what this attempt cost, as the one fact known about it right now:
+      // nothing left the process. Every later point that learns more replaces it.
+      let settlement: AgentCreditSettlement = NEVER_SENT;
       try {
-        res = await raceAbort(
-          this.fetchImpl(ANTHROPIC_API_URL, {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              'x-api-key': apiKey,
-              'anthropic-version': ANTHROPIC_VERSION_HEADER,
-              ...(opts.streaming === true ? { accept: 'text/event-stream' } : {}),
-            },
-            body,
-            redirect: 'error',
-            signal: ac.signal,
-          }),
-          signal,
-        );
-        // Only a 2xx event-stream is read as one. A non-2xx carries an ordinary
-        // JSON problem body, and an upstream that ignored `stream: true` answers
-        // with the ordinary envelope — both fall through to the buffered read, so
-        // neither degrades into a "missing text content" protocol error.
-        if (opts.streaming === true && res.ok && isEventStreamResponse(res)) {
-          streamedEnvelope = await readAnthropicStream(res, rearmIdle, observedUsage, signal);
-          bodyText = '';
-        } else {
-          bodyText = await raceAbort(readBoundedBody(res), signal);
-        }
-      } catch (networkErr) {
-        // ⛔ THE CUSTOMER'S STOP OUTRANKS EVERY OTHER READING OF THIS FAILURE.
-        // Whatever the transport made of the abort — an AbortError, a torn
-        // stream, our own race — it is a cancellation: not retried, not a
-        // provider error, and reported with what had already been counted.
-        if (isCancelled(signal)) {
-          throw new AgentDecomposerCancelledError(
-            observedClaudeSpend(observedUsage, opts.model ?? DEFAULT_AGENT_MODEL),
+        // ⛔ AND AGAIN AFTER IT. The fence is awaited, so a Stop can land while it
+        // runs; the listener below is attached only after this point, and an
+        // already-aborted signal never fires it — so without this check the
+        // request would go out with a transport signal nobody will ever abort:
+        // billed in full and never read. Nothing is awaited between here and the
+        // listener, so no Stop can slip between them.
+        if (isCancelled(signal)) throw new AgentDecomposerCancelledError();
+        let res: Response;
+        // Per-attempt timeout: a hung upstream aborts here rather than hanging
+        // the turn forever. The abort surfaces as a network error in the catch
+        // below (retried once, then thrown → transient-classified refuse).
+        // The body is read INSIDE this try so the abort timer stays armed THROUGH
+        // it — clearing the timer after fetch() (headers) but before res.json()
+        // left the body read unbounded (only undici's ~300s default backstops),
+        // the bug-class fixed in stripe-api bc72ff48.
+        const ac = new AbortController();
+        // A streamed attempt is bounded by SILENCE — an idle timer the reader
+        // re-arms on every chunk — plus an absolute cap that only a stream which
+        // never stops trickling can reach. A non-streamed one keeps the single
+        // total timer it has always had. The idle timer is armed BEFORE the fetch
+        // so an upstream that opens a connection and never sends headers is
+        // covered by the same bound as one that goes quiet mid-body. All of them
+        // abort the same controller, so the catch below treats any of them as the
+        // network failure it is.
+        const attemptTimeoutMs =
+          opts.streaming === true ? this.streamIdleTimeoutMs : this.requestTimeoutMs;
+        let timer = setTimeout(() => ac.abort(), attemptTimeoutMs);
+        const rearmIdle = (awaitingFirstText: boolean): void => {
+          clearTimeout(timer);
+          if (awaitingFirstText) {
+            // See DEFAULT_STREAM_THINKING_IDLE_TIMEOUT_MS: the one phase in which
+            // a healthy call is expected to be quiet.
+            timer = setTimeout(() => ac.abort(), this.streamThinkingIdleTimeoutMs);
+            return;
+          }
+          timer = setTimeout(() => ac.abort(), attemptTimeoutMs);
+        };
+        const capTimer =
+          opts.streaming === true
+            ? setTimeout(() => ac.abort(), this.streamTotalTimeoutMs)
+            : undefined;
+        let bodyText: string;
+        let streamedEnvelope: unknown;
+        // The usage frames seen so far, so a cancelled call can say what it had
+        // already been charged. Filled by the stream reader.
+        const observedUsage: Record<string, unknown> = {};
+        // §4.6 — whether this attempt's request left the process. It is the fact
+        // that decides between charging nothing and charging something, and it is
+        // written to the call's own row before the request goes out, so a crash
+        // between the two is priced the same way from either side.
+        let sent = false;
+        // §4.6 — whether the provider has already answered this attempt with a
+        // REJECTION, in either of the two ways it says that: a non-2xx status, or
+        // a 200 event-stream whose first frame is an error. Both are "rejected
+        // rather than served", charged nothing; and both can be followed by a
+        // failure — an error body too large to read, a Stop during that read —
+        // that would otherwise be priced as a transport failure at the whole
+        // bound. Recorded as it arrives, so no later fault can lose it.
+        let providerRejected = false;
+        const onCancel = (): void => ac.abort();
+        signal?.addEventListener('abort', onCancel, { once: true });
+        try {
+          if (admitted !== null) {
+            // §4.5 — its own tiny statement, committed IMMEDIATELY before the
+            // request. False means the task was settled around this call (a lapsed
+            // lease), so the request must not go out: nobody would pay for it.
+            if (!(await admitted.markSent())) {
+              throw new AgentDecomposerCreditsDeniedError('settled');
+            }
+            sent = true;
+            settlement = SENT_WITH_NO_RECORD;
+          }
+          res = await raceAbort(
+            this.fetchImpl(ANTHROPIC_API_URL, {
+              method: 'POST',
+              headers: {
+                'content-type': 'application/json',
+                'x-api-key': apiKey,
+                'anthropic-version': ANTHROPIC_VERSION_HEADER,
+                ...(opts.streaming === true ? { accept: 'text/event-stream' } : {}),
+              },
+              body,
+              redirect: 'error',
+              signal: ac.signal,
+            }),
+            signal,
           );
+          // Only a 2xx event-stream is read as one. A non-2xx carries an ordinary
+          // JSON problem body, and an upstream that ignored `stream: true` answers
+          // with the ordinary envelope — both fall through to the buffered read, so
+          // neither degrades into a "missing text content" protocol error.
+          if (!res.ok) providerRejected = true;
+          if (opts.streaming === true && res.ok && isEventStreamResponse(res)) {
+            streamedEnvelope = await readAnthropicStream(res, rearmIdle, observedUsage, signal);
+            bodyText = '';
+          } else {
+            bodyText = await raceAbort(readBoundedBody(res), signal);
+          }
+        } catch (networkErr) {
+          // A refusal by the credit meter is not a transport failure and must
+          // never buy a second paid attempt at the same refusal. It also outranks
+          // the Stop reading below: the request never went out either way, and
+          // this says WHY.
+          if (networkErr instanceof AgentDecomposerCreditsDeniedError) throw networkErr;
+          // §4.6 — a request that went out and was cut short is settled from the
+          // usage the provider had already stated (`partial_usage`), or, when it
+          // stated none, at its bound (`no_record`). Set here, before every exit
+          // from this catch, so a retry, a rethrow and a cancellation all pay the
+          // same way for the same attempt.
+          if (sent) settlement = settlementFromObserved(observedUsage);
+          // ⛔ A REJECTION THE PROVIDER ALREADY STATED IS NOT A TRANSPORT
+          // FAILURE — AND §4.6 PRICES THOSE DIFFERENTLY. `no_record` is the row
+          // for "sent, no usage AND NO STATUS", and it charges the WHOLE BOUND
+          // (L5, the owner's rule for a request that may have run). An attempt
+          // the provider REJECTED has a status and produced nothing, so it is
+          // `provider_rejected` at zero — whichever of the two ways the status
+          // reached us, and whatever failed afterwards:
+          //  · a 200 event-stream whose first frame is `{"type":"error"}`
+          //    (`AnthropicStreamError` carries the status that frame stands for,
+          //    and the retry policy below already decides from that number);
+          //  · a non-2xx whose body then could not be read, or whose read the
+          //    customer Stopped.
+          // Without this, ONE overloaded provider costs a task nothing when it
+          // answers with a status and two whole bounds when it answers with a
+          // frame — the 529 is retried — for the same event.
+          //
+          // Only while nothing has been observed: a frame that interrupted a
+          // reply already under way is the table's `partial_usage` and stays
+          // one, so the reply the provider did serve is still paid for.
+          if (
+            sent &&
+            settlement.basis === 'no_record' &&
+            (providerRejected || networkErr instanceof AnthropicStreamError)
+          ) {
+            settlement = PROVIDER_REJECTED;
+          }
+          // ⛔ THE CUSTOMER'S STOP OUTRANKS EVERY OTHER READING OF THIS FAILURE.
+          // Whatever the transport made of the abort — an AbortError, a torn
+          // stream, our own race — it is a cancellation: not retried, not a
+          // provider error, and reported with what had already been counted.
+          if (isCancelled(signal)) {
+            throw new AgentDecomposerCancelledError(
+              observedClaudeSpend(observedUsage, opts.model ?? DEFAULT_AGENT_MODEL),
+            );
+          }
+          // Size is a deterministic protocol violation, not a transient network
+          // failure. Do not spend a second request on the same oversized body.
+          if (networkErr instanceof AnthropicResponseTooLargeError) throw networkErr;
+          // A provider error that arrived as a stream FRAME is a status, not a
+          // transport failure, so it gets the status branch's policy rather than
+          // this one's: retry a 429 or a 5xx, let a 4xx escape on the first
+          // attempt. Without this an authentication_error is re-sent once with a
+          // backoff — double the latency of the failure B3 set out to stop paying
+          // twice for — where the identical failure on an HTTP status is not.
+          if (networkErr instanceof AnthropicStreamError) {
+            const retryable = networkErr.status === 429 || networkErr.status >= 500;
+            if (!retryable || attempt >= MAX_RETRIES_5XX) throw networkErr;
+          }
+          if (attempt < MAX_RETRIES_5XX) {
+            attempt++;
+            await abortableSleep(this.retryBackoffMs, signal);
+            await requireAgentDecomposerContinuation(shouldContinue);
+            continue;
+          }
+          throw networkErr;
+        } finally {
+          clearTimeout(timer);
+          if (capTimer !== undefined) clearTimeout(capTimer);
+          signal?.removeEventListener('abort', onCancel);
         }
-        // Size is a deterministic protocol violation, not a transient network
-        // failure. Do not spend a second request on the same oversized body.
-        if (networkErr instanceof AnthropicResponseTooLargeError) throw networkErr;
-        // A provider error that arrived as a stream FRAME is a status, not a
-        // transport failure, so it gets the status branch's policy rather than
-        // this one's: retry a 429 or a 5xx, let a 4xx escape on the first
-        // attempt. Without this an authentication_error is re-sent once with a
-        // backoff — double the latency of the failure B3 set out to stop paying
-        // twice for — where the identical failure on an HTTP status is not.
-        if (networkErr instanceof AnthropicStreamError) {
-          const retryable = networkErr.status === 429 || networkErr.status >= 500;
-          if (!retryable || attempt >= MAX_RETRIES_5XX) throw networkErr;
+
+        if (res.ok) {
+          // An assembled stream is already an envelope object; there is no text to
+          // re-parse. Everything else parses OUTSIDE the try so a malformed-JSON
+          // success body throws (not retried) — same semantics as the prior
+          // res.json().
+          if (streamedEnvelope !== undefined) {
+            if (sent) settlement = settlementFromEnvelope(streamedEnvelope, observedUsage);
+            return streamedEnvelope;
+          }
+          // ⛔ THE SETTLEMENT IS READ FROM THE SAME TEXT, SEPARATELY, so that the
+          // line below stays the one thing this branch does with a buffered body:
+          // a success body nobody can parse must still throw here, unretried, and
+          // a settlement that threw first would turn that into a different error.
+          // It costs one extra parse of at most 64 KiB, on the rare path where an
+          // upstream ignored `stream: true`.
+          if (sent) settlement = settlementFromBufferedBody(bodyText, observedUsage);
+          return JSON.parse(bodyText) as unknown;
         }
-        if (attempt < MAX_RETRIES_5XX) {
+
+        // §4.6 — a non-2xx status arrived before any stream, so the provider
+        // rejected the request rather than serving it: charged nothing.
+        if (sent) settlement = PROVIDER_REJECTED;
+
+        // Retry transient throttles too, not just 5xx: a 429 (rate-limit) is
+        // recoverable with backoff. If the retries still exhaust on a 429,
+        // classifyDecomposerError treats it as transient → the turn degrades to a
+        // retryable refuse (session kept alive), NOT a customer-facing 500.
+        if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES_5XX) {
           attempt++;
           await abortableSleep(this.retryBackoffMs, signal);
           await requireAgentDecomposerContinuation(shouldContinue);
           continue;
         }
-        throw networkErr;
+
+        throw new Error(`Anthropic API ${res.status}: ${bodyText.slice(0, 300)}`);
       } finally {
-        clearTimeout(timer);
-        if (capTimer !== undefined) clearTimeout(capTimer);
-        signal?.removeEventListener('abort', onCancel);
+        // ⛔ IN THE `finally`, SO THAT NO EXIT FROM AN ATTEMPT CAN LEAVE A CALL
+        // OPEN (§4.6). A thrown fetch, a Stop, a rejected status, a retry that
+        // goes round again — each settles the call it admitted before the next
+        // one is admitted. A call left `started` holds its whole BOUND against the
+        // task until the lease keeper finds it ninety seconds later and charges
+        // the customer for a request that may never have gone out.
+        //
+        // `settle` is contracted never to throw, so this cannot replace the
+        // turn's own outcome with a database error.
+        if (admitted !== null) await admitted.settle(settlement);
       }
-
-      if (res.ok) {
-        // An assembled stream is already an envelope object; there is no text to
-        // re-parse. Everything else parses OUTSIDE the try so a malformed-JSON
-        // success body throws (not retried) — same semantics as the prior
-        // res.json().
-        if (streamedEnvelope !== undefined) return streamedEnvelope;
-        return JSON.parse(bodyText) as unknown;
-      }
-
-      // Retry transient throttles too, not just 5xx: a 429 (rate-limit) is
-      // recoverable with backoff. If the retries still exhaust on a 429,
-      // classifyDecomposerError treats it as transient → the turn degrades to a
-      // retryable refuse (session kept alive), NOT a customer-facing 500.
-      if ((res.status === 429 || res.status >= 500) && attempt < MAX_RETRIES_5XX) {
-        attempt++;
-        await abortableSleep(this.retryBackoffMs, signal);
-        await requireAgentDecomposerContinuation(shouldContinue);
-        continue;
-      }
-
-      throw new Error(`Anthropic API ${res.status}: ${bodyText.slice(0, 300)}`);
     }
   }
 }
@@ -882,6 +1066,202 @@ const SYSTEM_CACHE_CONTROL: CacheControl = { type: 'ephemeral', ttl: '1h' };
 // covers that and any brisk follow-up at the cheaper 1.25x write; a slower
 // follow-up still reads the system entry above.
 const CONVERSATION_CACHE_CONTROL: CacheControl = { type: 'ephemeral' };
+
+// ── S10 — WHAT ONE ATTEMPT COSTS AT MOST, AND WHAT IT COST (§4.5, §4.6) ─────
+//
+// ⛔ THE MARKERS ARE DERIVED FROM THE CONSTANTS THE REQUEST IS BUILT FROM, not
+// written out again. A cache marker whose shape changed would otherwise move the
+// wire and leave this splitter matching nothing — and a body with no markers
+// splits entirely into the CHEAPEST region, so the "bound" would stop bounding
+// silently, in the direction that under-charges. Here the two cannot diverge.
+//
+// ⛔ AND PAGE TEXT CANNOT FORGE ONE. Inside a JSON string every quote is
+// backslash-escaped, so a page that renders the marker's own characters into the
+// conversation serializes as `\"cache_control\":...` and does not match. The
+// split is therefore on real markers only, whatever the model is shown.
+const ONE_HOUR_CACHE_MARKER = `"cache_control":${JSON.stringify(SYSTEM_CACHE_CONTROL)}`;
+const FIVE_MINUTE_CACHE_MARKER = `"cache_control":${JSON.stringify(CONVERSATION_CACHE_CONTROL)}`;
+
+/**
+ * The serialized body's bytes, split into §4.5's three regions.
+ *
+ *   R1  everything up to and including the LAST 1-hour marker — the reply
+ *       controls, the tool definitions and the system block — priced at the
+ *       1-hour write rate
+ *   R2  what follows, up to and including the last 5-minute marker
+ *   R3  only what is rendered after the last marker
+ *
+ * ⛔ BYTES, NOT CHARACTERS. Every input token stands for at least one byte of
+ * the UTF-8 sent, whatever the language; a character count would under-count
+ * every multi-byte character and the upper bound would not be one. The three
+ * always sum to the body's own byte length, because the cuts fall on the ASCII
+ * boundaries of a marker.
+ *
+ * A request with no markers — the read-back — is all R3, which is what §4.5 says
+ * of it. A 5-minute marker that somehow preceded the 1-hour one is swallowed
+ * into R1 and priced DEARER, which keeps the bound a bound.
+ */
+export function splitRequestRegionsAtCacheMarkers(body: string): RequestRegionBytes {
+  const oneHour = body.lastIndexOf(ONE_HOUR_CACHE_MARKER);
+  const oneHourEnd = oneHour === -1 ? 0 : oneHour + ONE_HOUR_CACHE_MARKER.length;
+  const fiveMinute = body.lastIndexOf(FIVE_MINUTE_CACHE_MARKER);
+  const fiveMinuteEnd =
+    fiveMinute === -1
+      ? oneHourEnd
+      : Math.max(oneHourEnd, fiveMinute + FIVE_MINUTE_CACHE_MARKER.length);
+  return {
+    oneHourRegionBytes: Buffer.byteLength(body.slice(0, oneHourEnd), 'utf8'),
+    fiveMinuteRegionBytes: Buffer.byteLength(body.slice(oneHourEnd, fiveMinuteEnd), 'utf8'),
+    uncachedRegionBytes: Buffer.byteLength(body.slice(fiveMinuteEnd), 'utf8'),
+  };
+}
+
+/**
+ * How many of a planning request's bytes are conversation history the caller
+ * could drop and still ask the same question.
+ *
+ * Every message but the LAST: the last one carries the customer's task and the
+ * turn-local context, which is the question itself. Text only — the JSON
+ * scaffolding around it is not what dropping an entry removes, and counting it
+ * would claim more is droppable than is.
+ */
+function droppableHistoryBytes(messages: ReadonlyArray<AgentRequestMessage>): number {
+  let bytes = 0;
+  for (let i = 0; i < messages.length - 1; i++) {
+    for (const block of messages[i]!.content) bytes += Buffer.byteLength(block.text, 'utf8');
+  }
+  return bytes;
+}
+
+/** What one call kind tells the meter about itself, for every attempt it makes. */
+interface AttemptMetering {
+  readonly meter: AgentCreditMeter;
+  readonly purpose: CreditModelCallPurpose;
+  readonly model: AgentModel;
+  /** Droppable history in the request as it stands now. */
+  historyBytes: () => number;
+  /** Rebuild inside this many bytes of history; false when it cannot shrink further. */
+  trimHistory: (budgetBytes: number) => boolean;
+}
+
+/**
+ * The ladder can only be climbed a bounded number of times, because every rung
+ * that asks for a rebuild strictly shrinks the request (`fitCall`'s own
+ * guarantee, and `trimHistory` drops at least one entry per round). This is the
+ * backstop for a meter that does not honour that: refuse, never loop.
+ */
+const MAX_FIT_LADDER_ROUNDS = 8;
+
+/**
+ * §4.5 — the request this attempt will send, and the credit call it was
+ * admitted under. `call` is null when nothing meters this turn, which is every
+ * turn today.
+ */
+async function admitOneAttempt(
+  ceilingTokens: number,
+  metering: AttemptMetering | undefined,
+  render: (maxTokens: number) => string,
+): Promise<{ body: string; call: AgentCreditCall | null }> {
+  let body = render(ceilingTokens);
+  if (metering === undefined) return { body, call: null };
+  for (let round = 0; round < MAX_FIT_LADDER_ROUNDS; round++) {
+    const decision = await metering.meter.admit({
+      purpose: metering.purpose,
+      model: metering.model,
+      regions: splitRequestRegionsAtCacheMarkers(body),
+      maxOutputTokens: ceilingTokens,
+      historyBytes: metering.historyBytes(),
+    });
+    if (decision.outcome === 'nothing_to_meter') return { body, call: null };
+    if (decision.outcome === 'refused') {
+      throw new AgentDecomposerCreditsDeniedError(decision.reason);
+    }
+    if (decision.outcome === 'rebuild') {
+      if (!metering.trimHistory(decision.historyByteBudget)) {
+        throw new AgentDecomposerCreditsDeniedError('did_not_fit');
+      }
+      body = render(ceilingTokens);
+      continue;
+    }
+    // ⛔ THE CEILING IT WAS ADMITTED UNDER IS THE CEILING THAT IS SENT. The bound
+    // committed against the task was priced at this number, so sending a higher
+    // one would let the call cost more than the task set aside for it. Rebuilding
+    // at a LOWER ceiling only ever shrinks the body — `max_tokens` is rendered
+    // inside R1, the dearest region — so the bound stays an upper bound.
+    if (decision.call.maxOutputTokens !== ceilingTokens) {
+      body = render(decision.call.maxOutputTokens);
+    }
+    return { body, call: decision.call };
+  }
+  throw new AgentDecomposerCreditsDeniedError('did_not_fit');
+}
+
+/** §4.6 — the request never left this process. Charged nothing. */
+const NEVER_SENT: AgentCreditSettlement = Object.freeze({ basis: 'never_sent' });
+/** §4.6 — it went out and left nothing behind. Charged its whole bound (L5). */
+const SENT_WITH_NO_RECORD: AgentCreditSettlement = Object.freeze({ basis: 'no_record' });
+/** §4.6 — a non-2xx status before any stream. Charged nothing. */
+const PROVIDER_REJECTED: AgentCreditSettlement = Object.freeze({ basis: 'provider_rejected' });
+
+/** §4.6 — a call cut short, from the usage frames it had already produced. */
+function settlementFromObserved(observedUsage: Record<string, unknown>): AgentCreditSettlement {
+  const usage = modelCallTokensFrom(observedUsage);
+  return usage === null ? SENT_WITH_NO_RECORD : { basis: 'partial_usage', usage };
+}
+
+/** §4.6 — a call that finished, from the usage block its envelope carried. */
+function settlementFromEnvelope(
+  envelope: unknown,
+  observedUsage: Record<string, unknown>,
+): AgentCreditSettlement {
+  const record = asRecord(envelope);
+  const usage = record === undefined ? null : modelCallTokensFrom(record.usage);
+  return usage === null
+    ? settlementFromObserved(observedUsage)
+    : { basis: 'provider_usage', usage };
+}
+
+/** The same, for an upstream that answered with a buffered body. */
+function settlementFromBufferedBody(
+  bodyText: string,
+  observedUsage: Record<string, unknown>,
+): AgentCreditSettlement {
+  try {
+    return settlementFromEnvelope(JSON.parse(bodyText) as unknown, observedUsage);
+  } catch {
+    // A 200 whose body is not JSON is a call the provider served and we cannot
+    // read: `no_record`, at the bound — never zero, which would record a paid
+    // call as free.
+    return settlementFromObserved(observedUsage);
+  }
+}
+
+/**
+ * The provider's usage block as the credit ledger prices it — each kind of token
+ * kept apart, because each is billed at its own rate.
+ *
+ * Null when there is no usage block or it cannot be read. Null is "cannot say",
+ * never zero: a settlement of zero tokens would record a paid call as free.
+ * `parseAnthropicUsage` and `splitCacheWrites` are the same readers the usage row
+ * and the token debit already use, so a call cannot be priced two ways.
+ */
+function modelCallTokensFrom(usage: unknown): ModelCallTokens | null {
+  const record = asRecord(usage);
+  if (record === undefined || Object.keys(record).length === 0) return null;
+  try {
+    const parts = parseAnthropicUsage({ usage: record });
+    const { write5m, write1h } = splitCacheWrites(parts);
+    return {
+      uncachedInput: parts.inputTokens,
+      output: parts.outputTokens,
+      cacheRead: parts.cacheReadInputTokens,
+      cacheWrite5m: write5m,
+      cacheWrite1h: write1h,
+    };
+  } catch {
+    return null;
+  }
+}
 
 function buildSystemBlocks(): AgentRequestTextBlock[] {
   return [{ type: 'text', text: SYSTEM_PROMPT, cache_control: SYSTEM_CACHE_CONTROL }];

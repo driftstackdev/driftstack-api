@@ -52,7 +52,12 @@ describe('services/agent-runtime content parity', () => {
     expect(body).toMatch(
       /\* Arc 1 sub-slice 6\.4 \(v2-#6\) — which leg of the route's\s*\*\s+resolution chain produced `byokApiKey`\. The usage recorder\s*\*\s+writes a distinct record_type for 'bundled' so the soft-cap\s*\*\s+sweep \(sub-slice 6\.5\) can sum bundled-only spend without\s*\*\s+double-counting BYOK turns\./,
     );
-    expect(body).toMatch(/keySource\?: 'header' \| 'cached' \| 'bundled' \| 'fallback' \| 'none';/);
+    // S10 added a SIXTH source, `'credits'` — a turn funded from the account's
+    // AI credits rather than from a key. Unreachable until a caller passes a
+    // credit meter; the five that existed are unchanged and still in order.
+    expect(body).toMatch(
+      /keySource\?: 'header' \| 'cached' \| 'bundled' \| 'fallback' \| 'none' \| 'credits';/,
+    );
   });
 
   it('RunTurnResult internal/public discriminants include plan/clarify/refuse, session/account concurrency, closed, and manual paths', () => {

@@ -177,7 +177,10 @@ describe('services/agent-decomposer-claude content parity', () => {
 
   it("6.c / #15 per-model rate sourcing pinned: imports CLAUDE_MODELS + DEFAULT_AGENT_MODEL from @driftstack/api-types; makeClaudeUsage looks up CLAUDE_MODELS[model] for the per-call cost (replacing the hardcoded Opus PER_MTOK consts). + 'If a rate is wrong, historical rows keep their recorded cost (we don't recompute), so the audit trail stays internally consistent even when the rate-table drifts.' framing — pinned so the registry-sourced-rate + no-recompute-on-drift contract stay documented", () => {
     expect(body).toMatch(
-      /import \{ CLAUDE_MODELS, DEFAULT_AGENT_MODEL, type AgentModel \} from '@driftstack\/api-types';/,
+      // S10 widened the import (the bound's region split and the settlement's
+      // token counts are api-types shapes); the three names this pin is about
+      // are still the ones the per-model rate is read through.
+      /import \{\s*CLAUDE_MODELS,\s*DEFAULT_AGENT_MODEL,\s*type AgentModel,[\s\S]{0,200}?\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/const rate = CLAUDE_MODELS\[model\];/);
     expect(body).toMatch(/const model = args\.model \?\? DEFAULT_AGENT_MODEL;/);
@@ -417,7 +420,12 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toMatch(
       /streamedEnvelope = await readAnthropicStream\(res, rearmIdle, observedUsage, signal\);/,
     );
-    expect(body).toMatch(/if \(streamedEnvelope !== undefined\) return streamedEnvelope;/);
+    // S10 (§4.6): the assembled envelope is still returned unparsed, and the
+    // settlement is read off it on the way past. The pin keeps BOTH halves —
+    // "an assembled stream is returned as it is" and "nothing re-parses it".
+    expect(body).toMatch(
+      /if \(streamedEnvelope !== undefined\) \{\s*if \(sent\) settlement = settlementFromEnvelope\(streamedEnvelope, observedUsage\);\s*return streamedEnvelope;\s*\}/,
+    );
     // Body read INSIDE the try (bug-class fix bc72ff48 — reading after the
     // clearTimeout left res.json() unbounded); the reader itself is byte-bounded
     // and its errors propagate into retry. Parse stays OUTSIDE so a malformed
@@ -463,7 +471,10 @@ describe('services/agent-decomposer-claude content parity', () => {
       (
         body.match(
           // MOVED 2026-09-18 (B2): the caller's Stop signal is the fifth argument.
-          /await this\.callConstrained\(\s*model,\s*buildBody,\s*args\.byokAnthropicApiKey,\s*args\.shouldContinue,\s*args\.signal,\s*\)/g,
+          // MOVED AGAIN (S10): the output ceiling and the per-attempt credit
+          // meter follow it. The first five arguments — and the fact that BOTH
+          // sites hand over `args.shouldContinue` — are what this pin is about.
+          /await this\.callConstrained\(\s*model,\s*buildBody,\s*args\.byokAnthropicApiKey,\s*args\.shouldContinue,\s*args\.signal,\s*[A-Z_]+,\s*args\.creditMeter === undefined/g,
         ) ?? []
       ).length,
     ).toBe(2);
@@ -475,14 +486,25 @@ describe('services/agent-decomposer-claude content parity', () => {
     // same: no attempt reaches the provider without the caller's authority check.
     // So the pin is now "exactly one site, it passes `shouldContinue`, and no
     // other `callWithRetry(buildBody(…))` exists that could skip it".
+    // MOVED AGAIN (S10): the body is no longer built once and handed over. It is
+    // rendered PER ATTEMPT, because §4.5's admission may lower `max_tokens` or
+    // ask for a shorter history before the request goes out — so what crosses
+    // this boundary is the renderer, not the string. What the pin protects is
+    // unchanged: exactly one provider-call site, it passes `shouldContinue`, and
+    // no second `callWithRetry` exists that could skip the fence.
     expect(
       (
         body.match(
-          /await this\.callWithRetry\(buildBody\(allowed\), apiKey, shouldContinue, \{/g,
+          /await this\.callWithRetry\(\s*\(maxTokens\) => buildBody\(allowed, maxTokens\),\s*apiKey,\s*shouldContinue,\s*\{/g,
         ) ?? []
       ).length,
     ).toBe(1);
-    expect((body.match(/this\.callWithRetry\(buildBody\(/g) ?? []).length).toBe(1);
+    expect((body.match(/this\.callWithRetry\(/g) ?? []).length).toBe(1);
+    // ⛔ AND THE ADMISSION IS INSIDE IT, ONCE, so every attempt that reaches the
+    // provider — a 5xx retry, a 429 retry, a reply-control resend, the runtime's
+    // one re-ask of a malformed plan — is admitted first (§4.5, S10).
+    expect((body.match(/await admitOneAttempt\(/g) ?? []).length).toBe(1);
+    expect(body).toMatch(/if \(admitted !== null\) await admitted\.settle\(settlement\);/);
   });
 
   it('validated usage survives strict plan and answer codec failures without raw content', () => {

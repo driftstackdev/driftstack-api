@@ -201,7 +201,12 @@ describe('/v1/admin route authorization invariant', () => {
     // and that no admin route changed since `8dad6e4f6` — the count itself had
     // gone stale earlier. 69 with GET /v1/admin/agent-turns/summary (AI turn
     // health, aggregates only), which carries the same internal-admin scope.
-    expect(routes).toHaveLength(69);
+    // 71 with S11's GET /v1/admin/ai-credits/shadow-report and
+    // /v1/admin/ai-credits/census — the shadow-era exit-criteria report and the
+    // cutover cohort census, both aggregates over the whole deployment and both
+    // on the same internal-admin scope. Refreshed with the gating arm below
+    // proven green at the new count.
+    expect(routes).toHaveLength(71);
     expect(routes.length).toBeGreaterThanOrEqual(60);
   });
 

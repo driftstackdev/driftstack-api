@@ -574,4 +574,30 @@ export const METRIC_NAMES = {
   // newer arms are decorative, which is the thing this change most needs to be
   // able to find out.
   agentConsequentialHaltTotal: 'driftstack_agent_consequential_halt_total',
+  // ── AI credits, while they are being measured rather than charged ─────────
+  //
+  // Both are SHADOW-ERA EXIT CRITERIA, not steady-state dashboards (§8 step 3):
+  // the mode may only move from shadow to enforce while each has stayed at zero,
+  // so the reading that matters is "still nothing", and any non-zero value is
+  // the signal.
+  //
+  // ⛔ NEITHER IS ON THE CUSTOMER-FACING METRICS PAGE, and that is deliberate
+  // while the feature is dark — see the withheld roster in
+  // docs-metrics-content-parity. They are registered at boot ONLY when the mode
+  // is shadow or enforce, so a deployment running `off` does not render a series
+  // that names a feature it is not running.
+  //
+  // A shadow measurement that was swallowed, by the `leg` it was lost on:
+  // `reserve` (the task's §4.4 reservation), `call` (one attempt's plan / admit /
+  // mark-sent / settle, counted ONCE for the attempt — M3) or `turn` (the route's
+  // own swallow around the whole shadow leg). Non-zero means the shadow numbers
+  // are an UNDERCOUNT of what the turn really did, so the 2.0 ratio below is
+  // being computed over a population with holes in it.
+  aiCreditsShadowLostTotal: 'driftstack_ai_credits_shadow_lost_total',
+  // A settled call whose measured cost passed the upper bound it was admitted
+  // under (§4.6), by the `settle_basis` that priced it. The bound is supposed to
+  // be an upper bound, never an estimate (M4): a single increment means the
+  // bound arithmetic is wrong for some real request shape, and under enforce the
+  // same call would have been charged less than it cost.
+  aiCreditsBoundExceededTotal: 'driftstack_ai_credits_bound_exceeded_total',
 } as const;

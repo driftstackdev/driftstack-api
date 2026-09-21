@@ -36,6 +36,12 @@ const SERVER_SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', 
 const NOT_PUBLIC_API: Record<string, string> = {
   '/v1/admin/agent-turns/summary':
     'Staff panel only. Withheld from the customer-shipped spec because its admin surface may not grow (V-862); publishing it is the owner’s decision.',
+  '/v1/admin/ai-credits/shadow-report':
+    'Staff panel only, and withheld for a second reason on top of V-862: the published document may ' +
+    'not mention AI credits at all before the feature launches (nothing-about-an-unreleased-feature-' +
+    'is-in-the-published-spec holds the whole term).',
+  '/v1/admin/ai-credits/census':
+    'Staff panel only; withheld for the same two reasons as the shadow report beside it.',
   '/v1/internal/atlas-priority/event-status': 'Internal control-plane surface; not customer API.',
   '/v1/internal/atlas-priority/event/{id}': 'Internal control-plane surface; not customer API.',
   '/v1/internal/atlas-priority/probe-signature':

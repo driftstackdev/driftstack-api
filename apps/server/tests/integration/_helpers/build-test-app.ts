@@ -28,6 +28,7 @@ import {
 } from '../../../src/services/agent-runtime.js';
 import { DeterministicAgentDecomposer } from '../../../src/services/agent-decomposer-deterministic.js';
 import type { AgentDecomposer, DecomposeUsage } from '../../../src/services/agent-decomposer.js';
+import type { AiCreditsRuntime } from '../../../src/services/ai-credits-runtime.js';
 import { StubAgentExecutor } from '../../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.js';
 import { InMemoryAgentTurnReceiptsRepo } from '../../../src/services/agent-turn-receipts.js';
@@ -526,6 +527,18 @@ export interface TestAppOptions {
    */
   bundledTurnMaxConcurrency?: number;
   /**
+   * S11 — the AI-credits runtime, as `AppDeps` takes it. Omitted (the default)
+   * is the production posture with `DRIFTSTACK_AI_CREDITS_MODE=off`: no
+   * reservation, no meter, no query, and every AI turn byte for byte what it
+   * was.
+   *
+   * Passed WHOLE rather than assembled from flags, deliberately: a test that
+   * needs a hanging reserve or a throwing settle builds exactly that runtime,
+   * and a fixture option per fault would be a second, drifting description of
+   * the same object.
+   */
+  aiCredits?: AiCreditsRuntime;
+  /**
    * Wires the active BYOKAnthropicService (backed by
    * InMemoryBYOKAnthropicRepo) so the GET/PUT/DELETE byok-anthropic
    * routes register their real handlers instead of the 503
@@ -684,7 +697,7 @@ export interface TestAppFixture {
     usage: DecomposeUsage;
     tokensConsumed: number;
     now: Date;
-    keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none';
+    keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none' | 'credits';
   }>;
   /**
    * Arc 1 sub-slice 6.5 (v2-#6) — exposed when `enableBundledLlm` is
@@ -1157,6 +1170,21 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     'Consequential halts by the arm that raised one.',
     ['arm'],
   );
+  // S11 — the two AI-credit shadow counters. Registered UNCONDITIONALLY here,
+  // unlike bootstrap (which registers them only when the mode is on): a fixture
+  // that wires a credits runtime would otherwise emit into an unregistered
+  // counter, `inc` would throw, the guarded call site would swallow it, and the
+  // test would read a flat zero as "this never happens".
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.aiCreditsShadowLostTotal,
+    'AI-credit measurements that were swallowed, by the leg they were lost on.',
+    ['leg'],
+  );
+  metricsRegistry.registerCounter(
+    METRIC_NAMES.aiCreditsBoundExceededTotal,
+    'Settled model calls whose measured cost passed the bound they were admitted under.',
+    ['settle_basis'],
+  );
   // Wired unconditionally, as bootstrap does: an in-memory writer, so a test
   // can read back exactly the rows a turn left behind.
   const agentTurnTelemetryRepo = new InMemoryAgentTurnTelemetryRepo();
@@ -1336,7 +1364,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     usage: DecomposeUsage;
     tokensConsumed: number;
     now: Date;
-    keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none';
+    keySource?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none' | 'credits';
   }> = [];
 
   // V-295d — outbound incident broadcasts. Recording fetcher captures
@@ -1891,6 +1919,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ...(opts.agentDecomposerKind === undefined
       ? {}
       : { agentDecomposerKind: opts.agentDecomposerKind }),
+    // S11 — absent unless the test asked for it, exactly as bootstrap leaves it
+    // absent while the mode is off.
+    ...(opts.aiCredits === undefined ? {} : { aiCredits: opts.aiCredits }),
     ...(opts.enableAgentRuntime === true
       ? (() => {
           const agentSessionsRepo = new InMemoryAgentSessionsRepo();
