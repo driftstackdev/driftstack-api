@@ -17,7 +17,10 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { LazyStore } from '@tauri-apps/plugin-store';
-import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import type { ContextType, PointerEvent as ReactPointerEvent, ReactNode } from 'react';
+import { SettingsContext, SettingsProvider } from '../lib/SettingsContext';
+import { AgentChatProvider, type AgentChatContextValue } from '../lib/AgentChatProvider';
+import { SimulatorAgentChat } from './simulator-chat/SimulatorAgentChat';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import {
@@ -1005,6 +1008,19 @@ const DEVICE_LOGICAL_WIDTH = 402;
 // the open width at the historical 300 so nothing changes when a pane is open.
 const RAIL_W = 48; // always added — the rail is docked beside the phone at all times
 const PANE_W = 252; // added only while a pane is open (RAIL_W + PANE_W === old DRAWER_W)
+// Round-2 stage B (design brief §2, coordinator round 2, the owner's "Love it!"
+// on the mockup) — the Session pane opens WIDER than every other pane while it
+// is showing the Agent/Pair conversation (mission line, Turn thread,
+// ApprovalDock, Composer): the AI view's own components ported into the
+// drawer, which need the AI view's own reading width, not the narrow
+// controls-list width every other pane keeps. `simSessionPaneWide` below is
+// the one place that decides WHEN the wider width applies; every window-sizing
+// site (`drawerExtraRef`, read by `fitWindow`/`resetToActualSize`/
+// `refitForDrawer`) reads its answer, so the window always grows to the right
+// by exactly this amount, the same way it already does for the 252px pane —
+// the phone's own box is never touched (design brief: "the window may grow to
+// the right… its width is not sacred, the phone's box is").
+const CONVO_PANE_W = 512;
 const DRAWER_TRANSITION_MS = 200;
 
 // Approach B drawer (founder 2026-06-24) — the section ids for the icon rail +
@@ -1964,6 +1980,7 @@ export function SessionControlSection({
   onHandback,
   onComposerChange,
   onSendMessage,
+  hideComposer = false,
 }: {
   mode: SessionMode | null;
   manualInputAvailable?: boolean | null;
@@ -1986,6 +2003,15 @@ export function SessionControlSection({
   onHandback: () => void;
   onComposerChange: (v: string) => void;
   onSendMessage: () => void;
+  /** Round-2 stage B — true when the caller is rendering the wide Agent/Pair
+   *  conversation panel BELOW this section instead (mission line, Turn
+   *  thread, ApprovalDock, the AI view's own Composer) — that panel's own
+   *  composer replaces this one-line box, so drawing both would show two
+   *  send controls for one conversation. Defaults to false: every existing
+   *  caller (and every test of this component in isolation) keeps today's
+   *  inline composer unchanged. SimulatorWindow's own render is the one
+   *  caller that ever passes true. */
+  hideComposer?: boolean;
 }): JSX.Element {
   // One source of truth for the caption + the take-over/hand-back verb: the
   // pair_mode_state.kind carries 'human' when the human holds the pair lock.
@@ -2116,9 +2142,11 @@ export function SessionControlSection({
           </span>
         </button>
       )}
-      {/* "Tell the agent" composer — only when the agent is in the loop (ai/pair),
-          panel-only so it never collides with the on-screen keyboard. */}
-      {(mode === 'ai' || mode === 'pair') && (
+      {/* "Tell the agent" composer — only when the agent is in the loop (ai/pair)
+          AND the caller has not replaced it with the wide conversation panel's
+          own Composer below (hideComposer) — panel-only so it never collides
+          with the on-screen keyboard. */}
+      {(mode === 'ai' || mode === 'pair') && !hideComposer && (
         <form
           aria-busy={messageBusy}
           className="mx-3 mt-1.5 flex items-center gap-1 rounded-lg bg-black/40 px-2 py-1 ring-1 ring-white/10"
@@ -3928,8 +3956,36 @@ function simulatorGalleryManualInputWait(
   }
 }
 
+/** The public component. Round-2 stage B — the drawer's Agent/Pair
+ *  conversation is the AI view's own `useAgentChat` hook (Turn/ApprovalDock/
+ *  Composer all read it directly), so this window now needs the two
+ *  providers that hook depends on: `SettingsContext` (the SDK client +
+ *  base URL/API key) and `AgentChatProvider` (the hook itself, plus the
+ *  gallery-seam `standIn`/`captureSrc`/`frameRate` it can publish). Both are
+ *  mounted HERE, self-contained, rather than pushed up into `main.tsx` or
+ *  onto every test that renders this component, for two reasons:
+ *
+ *   1. The real app and every existing/new unit test that renders a bare
+ *      `<SimulatorWindow />` get a REAL, gracefully-degrading provider tree
+ *      for free — `SettingsProvider`'s own `loadSettings()` failure path
+ *      already falls back to `DEFAULT_SETTINGS`, so this never throws where
+ *      the old component didn't.
+ *   2. A harness scene that needs FIXTURE chat/settings data (spec §8, the
+ *      same seam `audit-scenes.tsx` built for the AI view) passes it as a
+ *      PROP — `settingsOverride`/`agentChatOverride` below — exactly like
+ *      `standIn` already does, instead of wrapping this component in its own
+ *      copy of the providers (which the inner `AgentChatProvider` would then
+ *      shadow, making an outer override invisible).
+ *
+ *  ⛔ `data-mode`/`data-accent` are NEVER set from the loaded settings here:
+ *  `SettingsContext.tsx`'s own theme-application effect skips this window by
+ *  name (see its header) — this window's chrome is a PERMANENTLY DARK scope
+ *  in both app themes, main.tsx pins it before React mounts, and nothing in
+ *  this file may override that. */
 export function SimulatorWindow({
   standIn,
+  settingsOverride,
+  agentChatOverride,
 }: {
   /**
    * GALLERY SEAM ("Bringing The Stage everywhere" stage 1, spec §8's `standIn`
@@ -3943,6 +3999,66 @@ export function SimulatorWindow({
    * any use for — travels as a prop, matching `Stage`'s own `standIn`).
    */
   standIn?: ReactNode;
+  /** GALLERY SEAM (round-2 stage B) — a full `SettingsContext` value for a
+   *  harness scene's fixture (the same shape `audit-scenes.tsx`'s
+   *  `HarnessSettingsValue` publishes for the AI view). Undefined everywhere
+   *  in the app and in every existing test: the real, network/keychain-backed
+   *  `SettingsProvider` mounts instead, which already degrades to
+   *  `DEFAULT_SETTINGS` (no key, `localhost:3000`) when it cannot load. */
+  settingsOverride?: ContextType<typeof SettingsContext>;
+  /** GALLERY SEAM (round-2 stage B) — passed straight through to the inner
+   *  `AgentChatProvider`'s own `value` override (spec §8: "it overrides, it
+   *  does not replace" — the real hook still runs underneath). Undefined
+   *  everywhere in the app: only an `audit-simulator-agent-*`/`-pair` scene
+   *  publishes a fixture `chat` this way. Its `chat.session.mode` /
+   *  `chat.session.pair_mode_state.kind` — when present — are ALSO what
+   *  decide the Mode switch/take-over row's fixture state below
+   *  (`controlModeOverride`/`pairKindOverride`): one fixture object, not two
+   *  that could disagree. */
+  agentChatOverride?: Partial<AgentChatContextValue>;
+} = {}): JSX.Element {
+  const fixtureSession = agentChatOverride?.chat?.session ?? null;
+  const controlModeOverride = isSessionMode(fixtureSession?.mode) ? fixtureSession.mode : undefined;
+  const pairKindOverride =
+    fixtureSession !== null ? (fixtureSession.pair_mode_state?.kind ?? null) : undefined;
+  const inner = (
+    <AgentChatProvider value={agentChatOverride}>
+      <SimulatorWindowInner
+        standIn={standIn}
+        controlModeOverride={controlModeOverride}
+        pairKindOverride={pairKindOverride}
+      />
+    </AgentChatProvider>
+  );
+  return settingsOverride !== undefined ? (
+    <SettingsContext.Provider value={settingsOverride}>{inner}</SettingsContext.Provider>
+  ) : (
+    <SettingsProvider>{inner}</SettingsProvider>
+  );
+}
+
+/** `SessionMode` narrowing without importing `isMode` from
+ *  `agent-session-control.ts` (that one is module-private) — the fixture
+ *  session's `mode` is a wider SDK string union, and only these three values
+ *  ever mean anything to this window's own Mode switch. */
+function isSessionMode(v: string | undefined): v is SessionMode {
+  return v === 'ai' || v === 'manual' || v === 'pair';
+}
+
+function SimulatorWindowInner({
+  standIn,
+  controlModeOverride,
+  pairKindOverride,
+}: {
+  standIn?: ReactNode;
+  /** Round-2 stage B gallery seam — see `SimulatorWindow`'s own doc comment.
+   *  `undefined` in the app and in every test that does not pass
+   *  `agentChatOverride` to the outer component. */
+  controlModeOverride?: SessionMode;
+  /** Round-2 stage B gallery seam, alongside `controlModeOverride`. `null` is
+   *  a real fixture value (no pair state); `undefined` means "no override —
+   *  read the real `pairKind` state below". */
+  pairKindOverride?: string | null;
 } = {}): JSX.Element {
   // The session is held in state so the separate Simulator app's RELAUNCH path
   // can switch it in place: the single-instance handler emits a `ds-session`
@@ -4904,7 +5020,14 @@ export function SimulatorWindow({
   const [drawerMounted, setDrawerMounted] = useState(false);
   const drawerExtraRef = useRef(0);
   const drawerPanelRef = useRef<HTMLDivElement | null>(null);
-  drawerExtraRef.current = RAIL_W + (paneOpen ? PANE_W : 0);
+  // Round-2 stage B — `drawerExtraRef.current`'s actual assignment moved below
+  // `effectiveControlMode` (this function's mode reconciliation, which itself
+  // needs `manualInputControl` state declared further down this component):
+  // every reader of this ref (`fitWindow`/`resetToActualSize`/`refitForDrawer`,
+  // all closures called from an effect or a handler, never synchronously
+  // during THIS render) only ever runs after the render function has returned,
+  // so the assignment is correct wherever it sits in the body — see that
+  // later comment for the width rule itself.
 
   // Keep the panel mounted for one transition after close, then remove it. Native
   // `inert` prevents its closing controls from receiving focus/events during that
@@ -10144,8 +10267,54 @@ export function SimulatorWindow({
   // "Manual/Pair/Agent" label) and the Session pane's caption read the SAME
   // value, so they can't disagree. Not `??` — see the call site's own note
   // on why `controlMode`'s nullable type makes `??` unsafe here.
+  //
+  // Round-2 stage B — a THIRD, explicit tier ahead of both: `controlModeOverride`
+  // (from the outer `SimulatorWindow`'s `agentChatOverride.chat.session.mode`,
+  // an `audit-simulator-agent-*`/`-pair` scene only). One reconciliation rule,
+  // ordered — the mission-axis fixture (this session really is 'ai'/'pair' in
+  // that scene) outranks the connectivity-axis fixture (`galleryFixture`, which
+  // hardcodes 'manual' for its own unrelated `live`/`degraded`/etc. scenes),
+  // which outranks the real control-plane read. NOTES.md §4 asked for exactly
+  // this: `data-mission` (what the agent is doing) and `data-sim-state` (is the
+  // stream healthy) are two axes, reconciled on purpose, never silently merged.
   const effectiveControlMode: SessionMode | null =
-    galleryFixture !== null ? galleryFixture.controlMode : controlMode;
+    controlModeOverride ?? (galleryFixture !== null ? galleryFixture.controlMode : controlMode);
+  // Same reconciliation as `effectiveControlMode`, for the take-over row's
+  // caption/verb (`SessionControlSection`'s own `humanDriving`). No
+  // `galleryFixture` tier here — the connectivity-axis fixture never modelled
+  // pair ownership; only the mission-axis one does.
+  const effectivePairKind = pairKindOverride !== undefined ? pairKindOverride : pairKind;
+  // Round-2 stage B — the ONE place that decides the Session pane's width
+  // (design brief §2, coordinator round 2: "Agent/Pair get the wide
+  // conversation panel; Manual keeps today's controls-list width"). Every
+  // window-sizing site reads `drawerExtraRef.current`, assigned right below
+  // from this — see that ref's own declaration for why the assignment lives
+  // here rather than beside it.
+  const sessionPaneWide =
+    activePane === 'session' && (effectiveControlMode === 'ai' || effectiveControlMode === 'pair');
+  drawerExtraRef.current = RAIL_W + (paneOpen ? (sessionPaneWide ? CONVO_PANE_W : PANE_W) : 0);
+  // Widen/narrow the window when the OPEN Session pane's width changes
+  // underneath it — switching the Mode switch into/out of Agent/Pair while
+  // the pane is already open grows or shrinks the drawer by
+  // `CONVO_PANE_W − PANE_W` with no rail click at all, which the pane-open/
+  // close effect above (keyed on `paneOpen`, declared long before
+  // `effectiveControlMode`'s own dependencies exist — see `sessionPaneWide`'s
+  // declaration comment) cannot also key on. A SEPARATE effect, not a shared
+  // dependency list: nothing is opening or closing here, so this always sizes
+  // like an open (no CSS transition to wait out). SKIPS the initial mount for
+  // the same reason the pane-open/close effect does — `resetToActualSize`
+  // already owns first sizing, and racing it with a second `win.setSize`
+  // reproduces the "started off really small" regression.
+  const didInitialSessionPaneWidthRef = useRef(false);
+  useEffect(() => {
+    if (info === null) return;
+    if (!didInitialSessionPaneWidthRef.current) {
+      didInitialSessionPaneWidthRef.current = true;
+      return;
+    }
+    if (!paneOpen) return; // width is moot while the pane itself is collapsed
+    refitForDrawer();
+  }, [sessionPaneWide, paneOpen, info]);
 
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-transparent">
@@ -11045,10 +11214,13 @@ export function SimulatorWindow({
                   ref={drawerPanelRef}
                   data-component="sim-drawer-panel"
                   data-state={paneOpen ? 'open' : 'closed'}
+                  data-wide={sessionPaneWide ? '' : undefined}
                   aria-hidden={!paneOpen}
                   className={`flex shrink-0 flex-col overflow-hidden border-white/[0.12] transition-[width,opacity,border-color] duration-200 ease-out motion-reduce:transition-none ${
                     paneOpen
-                      ? 'w-[252px] border-l opacity-100'
+                      ? sessionPaneWide
+                        ? 'w-[512px] border-l opacity-100'
+                        : 'w-[252px] border-l opacity-100'
                       : 'pointer-events-none w-0 border-l border-transparent opacity-0'
                   }`}
                 >
@@ -11288,7 +11460,7 @@ export function SimulatorWindow({
                           sessionOver={
                             sessionEnded !== null || manualInputControl.lifecycleTerminal
                           }
-                          pairKind={pairKind}
+                          pairKind={effectivePairKind}
                           action={controlAction}
                           composerText={composerText}
                           controlError={controlError}
@@ -11298,7 +11470,17 @@ export function SimulatorWindow({
                           onHandback={onHandback}
                           onComposerChange={setComposerText}
                           onSendMessage={onSendMessage}
+                          hideComposer={sessionPaneWide}
                         />
+                        {/* Round-2 stage B — the real Agent/Pair conversation,
+                          below the Mode switch/take-over row: one source of
+                          truth (the AI view's own `useAgentChat` hook), see
+                          SimulatorAgentChat.tsx's own header. Manual mode
+                          keeps today's pane unchanged — nothing renders here. */}
+                        {sessionPaneWide &&
+                          (effectiveControlMode === 'ai' || effectiveControlMode === 'pair') && (
+                            <SimulatorAgentChat sessionId={sessionId} mode={effectiveControlMode} />
+                          )}
                       </section>
                     )}
 

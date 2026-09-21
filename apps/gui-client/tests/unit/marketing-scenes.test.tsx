@@ -250,7 +250,11 @@ describe('sceneFromSearch — the only door into a scene, marketing or audit', (
     // `?scene=simulator` mirror below is not proof of the live component's
     // pixels), one per session-state light: connecting, live & healthy,
     // degraded/reconnecting, ended (simulator-scenes.tsx).
-    expect(AUDIT_SCENES).toHaveLength(26);
+    // 26 → 30: round-2 stage B (design brief §2, the owner's "Love it!" on the
+    // mockup) — the drawer's real Agent/Pair conversation panel, one fixture
+    // scene per mockup `?state=`: agent-running, agent-approval, agent-done,
+    // pair (simulator-scenes.tsx's mission-axis seam).
+    expect(AUDIT_SCENES).toHaveLength(30);
     for (const name of ALL_SCENES) {
       expect(isAuditScene(name)).toBe(name.startsWith('audit-'));
       const size = sceneSize(name);

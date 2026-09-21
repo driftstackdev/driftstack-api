@@ -122,6 +122,7 @@ import { TeamView } from '../views/TeamView';
 import { ProxiesView } from '../views/ProxiesView';
 import {
   SIMULATOR_SCENE_SIZE,
+  SIMULATOR_SCENE_SIZE_WIDE,
   SimulatorStateScene,
   simulatorSceneLoadedMarker,
   type SimulatorSceneKind,
@@ -250,6 +251,15 @@ function auditDefaultSizes(stage: {
     'audit-simulator-live': SIMULATOR_SCENE_SIZE,
     'audit-simulator-degraded': SIMULATOR_SCENE_SIZE,
     'audit-simulator-ended': SIMULATOR_SCENE_SIZE,
+    // Round-2 stage B — the Session pane opens to the WIDE Agent/Pair
+    // conversation width here (330 + CONVO_PANE_W, not + PANE_W), so the
+    // window this scene shows is wider than the four above — the same
+    // "shows the restyle at the size it actually ships at" reasoning,
+    // simulator-scenes.tsx's own `SIMULATOR_SCENE_SIZE_WIDE`.
+    'audit-simulator-agent-running': SIMULATOR_SCENE_SIZE_WIDE,
+    'audit-simulator-agent-approval': SIMULATOR_SCENE_SIZE_WIDE,
+    'audit-simulator-agent-done': SIMULATOR_SCENE_SIZE_WIDE,
+    'audit-simulator-pair': SIMULATOR_SCENE_SIZE_WIDE,
   };
 }
 
@@ -912,6 +922,14 @@ export function auditLoadedMarkers(name: AuditSceneName): ReadonlyArray<string> 
       return [simulatorSceneLoadedMarker('degraded')];
     case 'audit-simulator-ended':
       return [simulatorSceneLoadedMarker('ended')];
+    case 'audit-simulator-agent-running':
+      return [simulatorSceneLoadedMarker('agent-running')];
+    case 'audit-simulator-agent-approval':
+      return [simulatorSceneLoadedMarker('agent-approval')];
+    case 'audit-simulator-agent-done':
+      return [simulatorSceneLoadedMarker('agent-done')];
+    case 'audit-simulator-pair':
+      return [simulatorSceneLoadedMarker('pair')];
   }
 }
 
@@ -1671,5 +1689,13 @@ export function AuditScene({ name }: { name: AuditSceneName }): JSX.Element {
       return <SimulatorGalleryStage name={name} kind="degraded" />;
     case 'audit-simulator-ended':
       return <SimulatorGalleryStage name={name} kind="ended" />;
+    case 'audit-simulator-agent-running':
+      return <SimulatorGalleryStage name={name} kind="agent-running" />;
+    case 'audit-simulator-agent-approval':
+      return <SimulatorGalleryStage name={name} kind="agent-approval" />;
+    case 'audit-simulator-agent-done':
+      return <SimulatorGalleryStage name={name} kind="agent-done" />;
+    case 'audit-simulator-pair':
+      return <SimulatorGalleryStage name={name} kind="pair" />;
   }
 }

@@ -148,6 +148,15 @@ export const AUDIT_SCENES = [
   'audit-simulator-live',
   'audit-simulator-degraded',
   'audit-simulator-ended',
+  // Round-2 stage B (design brief §2, the owner's "Love it!" on the mockup)
+  // — the drawer's real Agent/Pair conversation panel, driven through the
+  // SAME `<SimulatorWindow>` seam as the four above, plus the mission-axis
+  // fixture seam simulator-scenes.tsx adds (`agentChatOverride`/
+  // `settingsOverride`). Named for the mockup's own `?state=` values.
+  'audit-simulator-agent-running',
+  'audit-simulator-agent-approval',
+  'audit-simulator-agent-done',
+  'audit-simulator-pair',
 ] as const;
 export type AuditSceneName = (typeof AUDIT_SCENES)[number];
 export type SceneName = MarketingSceneName | AuditSceneName;

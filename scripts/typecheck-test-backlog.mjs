@@ -48,7 +48,13 @@ const BACKLOG = [
   // clipboard teardown via Reflect.deleteProperty — so no new debt entered the backlog.
   // 88 → 87 on 2026-09-11: the Phase-B rewrite of profile-phone-card.test.tsx removed its one
   // pre-existing error; the ratchet is two-sided, so the pin follows the measurement DOWN.
-  { project: 'apps/gui-client/tsconfig.test.json', pinned: 87, minTestFiles: 200 },
+  // 87 → 85 on 2026-09-21 (simulator round-2 stage B): rewriting
+  // simulator-window-control-actions.test.tsx's two composer tests for the
+  // new chat-hook send path removed their `el?.disabled` reads off a bare
+  // `Element` (TS2339 × 2) — no debt introduced, so the ratchet follows the
+  // measurement down, exactly as this gate's own output demanded: "type
+  // errors fell to 85 (pinned 87). Lower the pin in this same change."
+  { project: 'apps/gui-client/tsconfig.test.json', pinned: 85, minTestFiles: 200 },
   // W-12, 2026-08-26 — every `packages/*` suite was transpiled by vitest and
   // typechecked by NOTHING: each package's `tsconfig.json` includes only
   // `src/**/*`, and five of them additionally `exclude` tests. Measured at 50

@@ -198,3 +198,74 @@ describe('the four simulator gallery scenes — every surface agrees with data-s
     expect('connecting…').toMatch(CONNECTING_WORD);
   });
 });
+
+// ─── round-2 stage B — the mission-axis scenes ──────────────────────────────
+//
+// NOTES.md §4 named the risk this block exists to close: `data-mission` (the
+// AI view's own idea, compressed into the drawer's new mission line) and
+// `data-sim-state` (the connectivity axis the block above already checks) are
+// TWO axes, reconciled once and explicitly (simulator-scenes.tsx's
+// `simulatorSceneSimState` + SimulatorWindow.tsx's `controlModeOverride`
+// precedence), never silently merged. Every mission scene rides the SAME
+// healthy `data-sim-state="live"` — proven first, below — and carries its OWN
+// mission word/sentence on TOP of it; the two must never disagree, and the
+// mission word of one scene must never leak into another's.
+
+const MISSION_WORD: Record<'agent-running' | 'agent-approval' | 'agent-done' | 'pair', string> = {
+  'agent-running': 'Running',
+  'agent-approval': 'Paused',
+  'agent-done': 'Done',
+  pair: 'Pair',
+};
+const MISSION_CASES: ReadonlyArray<{ name: AuditSceneName; kind: keyof typeof MISSION_WORD }> = [
+  { name: 'audit-simulator-agent-running', kind: 'agent-running' },
+  { name: 'audit-simulator-agent-approval', kind: 'agent-approval' },
+  { name: 'audit-simulator-agent-done', kind: 'agent-done' },
+  { name: 'audit-simulator-pair', kind: 'pair' },
+];
+
+describe('the four mission-axis scenes — a live connectivity state, PLUS its own mission word, never confused', () => {
+  for (const { name, kind } of MISSION_CASES) {
+    it(`${name}: data-sim-state="live" (the connectivity axis) and the mission chip reads "${MISSION_WORD[kind]}" (the mission axis) — never each other's word`, async () => {
+      const { container } = render(<AuditScene name={name} />);
+      const stage = container.querySelector<HTMLElement>(`[data-scene="${name}"]`);
+      expect(stage).not.toBeNull();
+      if (stage === null) return;
+
+      const markers = auditLoadedMarkers(name);
+      const last = markers[markers.length - 1] ?? '';
+      await waitFor(() => expect(text(stage)).toContain(last), { timeout: 5_000 });
+
+      // The connectivity axis: this session's stream really is live (the
+      // agent is genuinely driving a connected phone), same as `audit-
+      // simulator-live` above — the SAME `[data-component="simulator-shell"]`
+      // attribute the four scenes above assert, proving the two axes share
+      // one shell rather than a mission scene inventing a second one.
+      const shell = stage.querySelector('[data-component="simulator-shell"]');
+      expect(shell, 'simulator-shell not found').not.toBeNull();
+      expect(shell?.getAttribute('data-sim-state')).toBe('live');
+
+      // The mission axis: the NEW chip, inside the conversation panel, never
+      // the drawer's pinned status strip (a DIFFERENT pill this same file's
+      // block above already covers under its own name).
+      const panel = stage.querySelector('[data-component="simulator-agent-chat"]');
+      expect(panel, `${name}: the wide Agent/Pair panel did not mount`).not.toBeNull();
+      const chip = panel?.querySelector('.ai-chip-state');
+      expect(chip, `${name}: no mission chip in the panel`).not.toBeNull();
+      expect(chip?.textContent?.trim()).toBe(MISSION_WORD[kind]);
+
+      // Never a DIFFERENT scene's mission word.
+      for (const other of Object.values(MISSION_WORD)) {
+        if (other === MISSION_WORD[kind]) continue;
+        expect(chip?.textContent?.trim(), `${name} must not read another scene's word`).not.toBe(
+          other,
+        );
+      }
+    });
+  }
+
+  it("VACUITY CONTROL — the four mission words are actually distinct (a detector that can't tell them apart would pass vacuously)", () => {
+    const words = Object.values(MISSION_WORD);
+    expect(new Set(words).size).toBe(words.length);
+  });
+});

@@ -1147,12 +1147,21 @@ function measureSimulatorWindow(root, opts) {
 
 /** One Phase E cell: scene x theme, at the scene's own declared (native)
  *  size — never `?stage=`, which only accepts W>=640 and this scene's real
- *  width (582) is below that on purpose (the drawer-open width, not a
- *  marketing canvas). `size` is discovered once by the caller (off the
- *  harness's own module, like `readAiSceneNames` does for the scene list) so
- *  the viewport this sets is never a second copy of the literal to drift from
- *  SIMULATOR_SCENE_SIZE. Mirrors measureAiCell's readiness protocol otherwise. */
-async function measureSimulatorCell(context, scene, expectedState, theme, size) {
+ *  width (582/842) is below that on purpose (the drawer-open width, not a
+ *  marketing canvas). `size` is discovered PER SCENE by the caller (off the
+ *  harness's own module's `simulatorSceneSize`, like `readAiSceneNames` does
+ *  for the scene list) so the viewport this sets is never a second copy of a
+ *  literal to drift from SIMULATOR_SCENE_SIZE/_WIDE.
+ *
+ *  round-2 stage B — `kind` (the scene name's own suffix) and `expectedSimState`
+ *  (what `data-sim-state` should read) are now TWO arguments, not one: a
+ *  mission-axis kind like `agent-running` names the scene's WORD, but its
+ *  `data-sim-state` is `live` — the two axes NOTES.md §4 asks to reconcile
+ *  explicitly rather than assume a scene's own name suffix IS its connectivity
+ *  state. `kind` still keys `simulatorSceneLoadedMarker`; `expectedSimState`
+ *  is what `measureSimulatorWindow` compares `data-sim-state` against.
+ *  Mirrors measureAiCell's readiness protocol otherwise. */
+async function measureSimulatorCell(context, scene, kind, expectedSimState, theme, size) {
   const page = await context.newPage();
   const problems = [];
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
@@ -1177,7 +1186,7 @@ async function measureSimulatorCell(context, scene, expectedState, theme, size) 
     }));
     if (declared.width !== size.width || declared.height !== size.height) {
       throw new Error(
-        `${scene}: the stage declares ${declared.width}x${declared.height} but SIMULATOR_SCENE_SIZE is ${size.width}x${size.height}`,
+        `${scene}: the stage declares ${declared.width}x${declared.height} but simulatorSceneSize(${kind}) is ${size.width}x${size.height}`,
       );
     }
     await page.evaluate((mode) => {
@@ -1188,7 +1197,7 @@ async function measureSimulatorCell(context, scene, expectedState, theme, size) 
     const applied = await page.evaluate(() => document.documentElement.dataset.mode);
     if (applied !== theme) throw new Error(`${scene}: data-mode is ${applied}, wanted ${theme}`);
     const res = await stage.evaluate(measureSimulatorWindow, {
-      expectedState,
+      expectedState: expectedSimState,
       minLeaves: MIN_SIMULATOR_TEXT_LEAVES,
     });
     const marker = await page.evaluate(
@@ -1196,7 +1205,7 @@ async function measureSimulatorCell(context, scene, expectedState, theme, size) 
         import(/* @vite-ignore */ '/src/visual-harness/simulator-scenes.tsx').then((m) =>
           m.simulatorSceneLoadedMarker(name),
         ),
-      expectedState,
+      kind,
     );
     const text = (await stage.evaluate((el) => el.textContent ?? '')) ?? '';
     if (!text.includes(marker)) {
@@ -1221,7 +1230,8 @@ async function measureSimulatorCell(context, scene, expectedState, theme, size) 
 async function runSimulatorSweep(browser, report) {
   const listPage = await browser.newPage();
   let names;
-  let size;
+  let sizeOf;
+  let simStateOf;
   try {
     await listPage.goto(`${URL}?scene=__list__`, { waitUntil: 'domcontentloaded' });
     const res = await listPage.evaluate(readAiSceneNames, {
@@ -1230,11 +1240,23 @@ async function runSimulatorSweep(browser, report) {
     });
     if (res.error !== undefined) throw new Error(`simulator scene list: ${res.error}`);
     names = res.names;
-    size = await listPage.evaluate(() =>
-      import(/* @vite-ignore */ '/src/visual-harness/simulator-scenes.tsx').then(
-        (m) => m.SIMULATOR_SCENE_SIZE,
-      ),
+    // round-2 stage B — PER-KIND, not the single `SIMULATOR_SCENE_SIZE` this
+    // sweep used to fetch once for every scene: a mission-axis kind's window
+    // opens at the WIDE conversation width (`SIMULATOR_SCENE_SIZE_WIDE`), and
+    // `simulatorSceneSize`/`simulatorSceneSimState` are the harness's own
+    // single source for which size/connectivity-state a kind gets — see
+    // simulator-scenes.tsx's own header on the two-axis reconciliation.
+    const kinds = names.map((scene) => scene.slice(SIMULATOR_SCENE_PREFIX.length + 1));
+    const fns = await listPage.evaluate(
+      (ks) =>
+        import(/* @vite-ignore */ '/src/visual-harness/simulator-scenes.tsx').then((m) => ({
+          sizes: Object.fromEntries(ks.map((k) => [k, m.simulatorSceneSize(k)])),
+          simStates: Object.fromEntries(ks.map((k) => [k, m.simulatorSceneSimState(k)])),
+        })),
+      kinds,
     );
+    sizeOf = fns.sizes;
+    simStateOf = fns.simStates;
   } finally {
     await listPage.close();
   }
@@ -1243,25 +1265,30 @@ async function runSimulatorSweep(browser, report) {
       `no scene in ${HARNESS_MODULE} starts with ${SIMULATOR_SCENE_PREFIX} — refusing to report a clean simulator sweep over nothing`,
     );
   }
-  if (
-    size === undefined ||
-    !Number.isFinite(size.width) ||
-    !Number.isFinite(size.height) ||
-    size.width <= 0 ||
-    size.height <= 0
-  ) {
-    throw new Error(
-      `simulator-scenes.tsx SIMULATOR_SCENE_SIZE did not resolve to a real size (got ${JSON.stringify(size)})`,
-    );
+  for (const scene of names) {
+    const kind = scene.slice(SIMULATOR_SCENE_PREFIX.length + 1);
+    const size = sizeOf[kind];
+    if (
+      size === undefined ||
+      !Number.isFinite(size.width) ||
+      !Number.isFinite(size.height) ||
+      size.width <= 0 ||
+      size.height <= 0
+    ) {
+      throw new Error(
+        `simulator-scenes.tsx simulatorSceneSize(${kind}) did not resolve to a real size (got ${JSON.stringify(size)})`,
+      );
+    }
   }
   const context = await browser.newContext({ deviceScaleFactor: 2, reducedMotion: 'reduce' });
   let violations = 0;
   try {
     for (const scene of names) {
-      // audit-simulator-<state> — the state IS the scene's own suffix.
-      const expectedState = scene.slice(SIMULATOR_SCENE_PREFIX.length + 1);
+      const kind = scene.slice(SIMULATOR_SCENE_PREFIX.length + 1);
+      const expectedSimState = simStateOf[kind];
+      const size = sizeOf[kind];
       for (const theme of SIMULATOR_THEMES) {
-        const res = await measureSimulatorCell(context, scene, expectedState, theme, size);
+        const res = await measureSimulatorCell(context, scene, kind, expectedSimState, theme, size);
         violations += res.violations.length;
         report.simulatorWindows.push({ scene, theme, ...res });
         process.stdout.write(

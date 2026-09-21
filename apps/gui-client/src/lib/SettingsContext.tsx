@@ -24,6 +24,18 @@ import { buildClient, type DriftstackClient } from './client';
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type DriftstackSettings } from './settings';
 import { initTelemetry } from './telemetry';
 
+/** Stage B — `SimulatorWindow` now self-mounts a real `SettingsProvider`
+ *  (see that file's own header), so this provider runs inside the popped-out
+ *  window too. `main.tsx` computes the identical check inline (it has to run
+ *  before any React import); this copy is for the one effect below that must
+ *  never touch that window's pinned-dark chrome. */
+function isSimulatorWindow(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('window') === 'simulator'
+  );
+}
+
 interface SettingsContextValue {
   settings: DriftstackSettings;
   loading: boolean;
@@ -102,7 +114,21 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
   // Fleet theme axes (2026-06-12 rework) — apply mode + accent to the
   // document root so the token layer (styles/index.css) flips the whole
   // GUI. Runs on load and on every settings change; cheap + idempotent.
+  //
+  // ⛔ NEVER in the popped-out simulator window. That window is a PERMANENTLY
+  // DARK chrome scope (main.tsx pins `data-mode="dark"`/`data-accent="oxblood"`
+  // on it directly, before React mounts — `theme-token-parity.test.ts` proves
+  // every mode token it uses fails on #1d1e24 at the light value and passes at
+  // the dark one) in BOTH app themes: only the desktop backdrop behind the
+  // popped-out window changes with the customer's theme, never the window's
+  // own chrome. `SimulatorWindow` now self-mounts a real `SettingsProvider`
+  // (Stage B — the drawer's Agent/Pair conversation needs the same chat hook
+  // the AI view uses) so this effect runs there too; left unguarded, a
+  // customer on the light theme would see the loaded (non-default) settings
+  // flip the simulator's bezel/drawer to light tokens the instant they
+  // resolved, silently breaking that pin.
   useEffect(() => {
+    if (isSimulatorWindow()) return;
     document.documentElement.dataset.mode = settings.themeMode;
     document.documentElement.dataset.accent = settings.themeAccent;
   }, [settings.themeMode, settings.themeAccent]);
