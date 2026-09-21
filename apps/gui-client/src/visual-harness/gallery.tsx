@@ -14,6 +14,16 @@ import { CostPanel } from '../components/CostPanel';
 import { SkeletonRows } from '../components/Skeleton';
 import { ProxyForm } from '../views/ProxiesView';
 import { DeviceToolbar } from '../views/SimulatorWindow';
+import {
+  IconChat,
+  IconCookie,
+  IconDownload,
+  IconGlobe,
+  IconRecordDot,
+  IconSignal,
+  IconSliders,
+  IconUpload,
+} from '../views/agent-chat/icons';
 import { Kpi } from '../views/CommandCenterView';
 import { TierBadge } from '../components/TierBadge';
 import { VPN_NOT_STORED_CHECK_NOTICE } from '../lib/proxy-check-copy';
@@ -1996,13 +2006,13 @@ function SimRailButton({
   label,
   title,
   active = false,
-  children,
+  icon,
 }: {
   pane: string;
   label: string;
   title: string;
   active?: boolean;
-  children: ReactNode;
+  icon: ReactNode;
 }): JSX.Element {
   return (
     <button
@@ -2015,19 +2025,14 @@ function SimRailButton({
         active ? 'bg-accent/20 text-accent-text ring-1 ring-accent/40' : 'text-ink-secondary'
       }`}
     >
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        {children}
-      </svg>
+      {/* Round 2: the real rail's icons (index.css/SimulatorWindow.tsx) moved
+          to the AI view's 16-unit/`.ai-i` vocabulary — mirrored here (NOTES.md
+          §3: "any bezel or drawer markup change here must land in the mirror
+          in the same commit"). `.ai-i` is `width/height:1em`, so this 18px
+          span reproduces the old `<svg width="18" height="18">`'s optical size. */}
+      <span className="text-[18px] leading-none" aria-hidden="true">
+        {icon}
+      </span>
       <span
         aria-hidden="true"
         // The size divergence must not also change the WORDS. MEASURED in the
@@ -2234,28 +2239,29 @@ function SimulatorScene(): JSX.Element {
                 aria-label="Drawer sections"
                 className="flex w-12 shrink-0 flex-col items-center gap-1 border-l border-white/[0.12] py-2"
               >
-                <SimRailButton pane="session" label="Session" title="Session">
-                  <circle cx="12" cy="12" r="3.2" />
-                  <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
-                </SimRailButton>
-                <SimRailButton pane="controls" label="Controls" title="Controls">
-                  <path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h13M21 18h-1" />
-                  <circle cx="16" cy="6" r="2" />
-                  <circle cx="8" cy="12" r="2" />
-                  <circle cx="19" cy="18" r="2" />
-                </SimRailButton>
+                <SimRailButton pane="session" label="Session" title="Session" icon={<IconChat />} />
+                <SimRailButton
+                  pane="controls"
+                  label="Controls"
+                  title="Controls"
+                  icon={<IconSliders />}
+                />
                 {/* The ACTIVE one — the pane beside it is Diagnostics. An
                     inactive rail beside an open pane is another impossible
                     state. */}
-                <SimRailButton pane="diagnostics" label="Health" title="Diagnostics" active>
-                  <path d="M3 12h4l2-6 4 12 2-6h6" />
-                </SimRailButton>
-                <SimRailButton pane="cookies" label="Cookies" title="Cookies">
-                  <path d="M12 3a9 9 0 1 0 9 9 3 3 0 0 1-3-3 3 3 0 0 1-3-3 3 3 0 0 1-3-3z" />
-                  <circle cx="9" cy="11" r="0.6" />
-                  <circle cx="13" cy="15" r="0.6" />
-                  <circle cx="16" cy="11.5" r="0.6" />
-                </SimRailButton>
+                <SimRailButton
+                  pane="diagnostics"
+                  label="Health"
+                  title="Diagnostics"
+                  active
+                  icon={<IconSignal />}
+                />
+                <SimRailButton
+                  pane="cookies"
+                  label="Cookies"
+                  title="Cookies"
+                  icon={<IconCookie />}
+                />
                 {/* Network is a CONDITIONAL entry in the shipped rail since
                     2026-09-16 (SimulatorWindow visibleSimDrawerPanes): it is
                     withheld until the session has reported a request, so an
@@ -2265,22 +2271,25 @@ function SimulatorScene(): JSX.Element {
                     scene of a session that has reported nothing would simply
                     omit this button and close the gap; the rest of the rail is
                     unchanged either way. */}
-                <SimRailButton pane="network" label="Network" title="Network">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M3 12h18M12 3v18M5 6.5c2 1.4 12 1.4 14 0M5 17.5c2-1.4 12-1.4 14 0" />
-                </SimRailButton>
-                <SimRailButton pane="files" label="Files" title="Files">
-                  <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
-                  <path d="M12 15V4M8 8l4-4 4 4" />
-                </SimRailButton>
-                <SimRailButton pane="downloads" label="Downloads" title="Downloads">
-                  <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
-                  <path d="M12 4v11M8 11l4 4 4-4" />
-                </SimRailButton>
-                <SimRailButton pane="recording" label="Record" title="Recording">
-                  <circle cx="12" cy="12" r="9" />
-                  <circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none" />
-                </SimRailButton>
+                <SimRailButton
+                  pane="network"
+                  label="Network"
+                  title="Network"
+                  icon={<IconGlobe />}
+                />
+                <SimRailButton pane="files" label="Files" title="Files" icon={<IconUpload />} />
+                <SimRailButton
+                  pane="downloads"
+                  label="Downloads"
+                  title="Downloads"
+                  icon={<IconDownload />}
+                />
+                <SimRailButton
+                  pane="recording"
+                  label="Record"
+                  title="Recording"
+                  icon={<IconRecordDot />}
+                />
                 {/* The always-reachable Stop, pinned to the rail's bottom under
                     its separator — the real rail draws it whenever a session is
                     bound, and this window is a bound, running session. */}

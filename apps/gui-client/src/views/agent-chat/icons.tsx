@@ -5,6 +5,8 @@
 // aria-hidden. Nothing here reads state; they are drawings, and keeping them in
 // one file is what lets the view files below be read in one screen.
 
+import type { ReactNode } from 'react';
+
 export function IconPhone(): JSX.Element {
   return (
     <svg
@@ -64,6 +66,27 @@ function Glyph({ d, fill = false }: { d: string; fill?: boolean }): JSX.Element 
       aria-hidden="true"
     >
       <path d={d} />
+    </svg>
+  );
+}
+
+/** Same drawing surface as `Glyph`, for the handful of icons below that need
+ *  more than one path (a filled dot inside a stroked ring, dot-crumbs drawn
+ *  as zero-length round-capped strokes, …) — identical viewBox/stroke/cap/
+ *  join, so mixing the two never reads as two icon sets. */
+function GlyphNode({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      className="ai-i"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {children}
     </svg>
   );
 }
@@ -238,4 +261,70 @@ export function IconScreen(): JSX.Element {
  *  beside it is the measurement, and the bars do not move with it. */
 export function IconSignal(): JSX.Element {
   return <Glyph d="M3.4 9.9v3.2 M8 6.6v6.5 M12.6 3.3v9.8" />;
+}
+
+// ─── stage 7: the simulator drawer's rail (round 2) ────────────────────────
+//
+// Six more drawings, all `aria-hidden`, all sized by their container — the
+// simulator window's popped-out drawer rail (`SimulatorWindow.tsx`) used a
+// separate, hand-rolled 24-unit/1.8-stroke set; this replaces it with the
+// same 16-unit/1.5-stroke vocabulary as everything above (`IconGlobe` and
+// `IconSignal` above are reused as-is for two more of the rail's panes —
+// network and diagnostics/health). Labels, order, tooltips, aria-labels,
+// click handlers and keyboard behaviour are all unchanged: these are
+// drawings only, swapped in `SIM_PANE_ICON` (SimulatorWindow.tsx).
+
+/** Session — a speech bubble (round 2 becomes the AI conversation panel in
+ *  this pane; a bubble reads that intent better than the old control dial). */
+export function IconChat(): JSX.Element {
+  return (
+    <Glyph d="M2.6 3.6h10.8a.9.9 0 0 1 .9.9v5.4a.9.9 0 0 1-.9.9H7.3L4.2 13.9v-3.1H2.6a.9.9 0 0 1-.9-.9V4.5a.9.9 0 0 1 .9-.9Z" />
+  );
+}
+
+/** Controls — an equalizer (two sliders, each with its own knob). */
+export function IconSliders(): JSX.Element {
+  return (
+    <GlyphNode>
+      <path d="M2.4 5.3h4.2 M9.8 5.3h3.8 M2.4 10.7h7.4 M12.4 10.7h1" />
+      <circle cx="8" cy="5.3" r="1.7" />
+      <circle cx="10.6" cy="10.7" r="1.7" />
+    </GlyphNode>
+  );
+}
+
+/** Cookies — a bitten disc with crumb dots (drawn as zero-length,
+ *  round-capped strokes, the same "point as a dot" trick a stroke-only
+ *  vocabulary needs since there is no fill to draw a small circle with). */
+export function IconCookie(): JSX.Element {
+  return (
+    <GlyphNode>
+      <path d="M13.4 7.7A5.4 5.4 0 1 1 8.3 2.6a1.8 1.8 0 0 0 1.8 1.8 1.8 1.8 0 0 0 1.8 1.8 1.8 1.8 0 0 0 1.5 1.5Z" />
+      <path d="M6.2 7.1h.01 M8.6 9.6h.01 M10.4 6.9h.01" />
+    </GlyphNode>
+  );
+}
+
+/** Files — an upload tray. */
+export function IconUpload(): JSX.Element {
+  return (
+    <Glyph d="M2.6 11.4v1.7a.9.9 0 0 0 .9.9h9a.9.9 0 0 0 .9-.9v-1.7 M8 9.7V2.6 M5.2 5.4 8 2.6l2.8 2.8" />
+  );
+}
+
+/** Downloads — a download tray (the upload tray's arrow, reversed). */
+export function IconDownload(): JSX.Element {
+  return (
+    <Glyph d="M2.6 11.4v1.7a.9.9 0 0 0 .9.9h9a.9.9 0 0 0 .9-.9v-1.7 M8 2.6v7.1 M5.2 6.9 8 9.7l2.8-2.8" />
+  );
+}
+
+/** Recording — a record disc (a stroked ring, a filled centre). */
+export function IconRecordDot(): JSX.Element {
+  return (
+    <GlyphNode>
+      <circle cx="8" cy="8" r="5.4" />
+      <circle cx="8" cy="8" r="2.1" fill="currentColor" stroke="none" />
+    </GlyphNode>
+  );
 }

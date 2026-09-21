@@ -67,6 +67,16 @@ import { OsReadout } from '../components/OsReadout';
 import { IOSKeyboard } from '../components/IOSKeyboard';
 import { SimulatorRecordingPane } from '../components/SimulatorRecordingPane';
 import {
+  IconChat,
+  IconCookie,
+  IconDownload,
+  IconGlobe,
+  IconRecordDot,
+  IconSignal,
+  IconSliders,
+  IconUpload,
+} from './agent-chat/icons';
+import {
   createLiveFpsStore,
   LiveFpsSubscriber,
   type LiveFpsStore,
@@ -1799,66 +1809,24 @@ function LabeledControl({
   );
 }
 
-/** Approach B icon rail (founder 2026-06-24, APPROVED). Hand-rolled inline
- *  stroke-SVG glyphs (viewBox 0 0 24 24, currentColor — no icon-font dependency,
- *  mirroring the existing LabeledControl / chevron SVG idiom) — one per drawer
- *  section. */
-const SIM_PANE_ICONS: Record<SimDrawerPane, JSX.Element> = {
-  // Session — a control dial.
-  session: (
-    <>
-      <circle cx="12" cy="12" r="3.2" />
-      <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
-    </>
-  ),
-  // Controls — sliders.
-  controls: (
-    <>
-      <path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h13M21 18h-1" />
-      <circle cx="16" cy="6" r="2" />
-      <circle cx="8" cy="12" r="2" />
-      <circle cx="19" cy="18" r="2" />
-    </>
-  ),
-  // Diagnostics — a pulse/activity line.
-  diagnostics: <path d="M3 12h4l2-6 4 12 2-6h6" />,
-  // Cookies — a cookie with bites + chips.
-  cookies: (
-    <>
-      <path d="M12 3a9 9 0 1 0 9 9 3 3 0 0 1-3-3 3 3 0 0 1-3-3 3 3 0 0 1-3-3z" />
-      <circle cx="9" cy="11" r="0.6" />
-      <circle cx="13" cy="15" r="0.6" />
-      <circle cx="16" cy="11.5" r="0.6" />
-    </>
-  ),
-  // Network — a globe with latitude/longitude lines (devtools network idiom).
-  network: (
-    <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M3 12h18M12 3v18M5 6.5c2 1.4 12 1.4 14 0M5 17.5c2-1.4 12-1.4 14 0" />
-    </>
-  ),
-  // Files — an upload tray.
-  files: (
-    <>
-      <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
-      <path d="M12 15V4M8 8l4-4 4 4" />
-    </>
-  ),
-  // Downloads — a download tray.
-  downloads: (
-    <>
-      <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
-      <path d="M12 4v11M8 11l4 4 4-4" />
-    </>
-  ),
-  // Recording — a record disc.
-  recording: (
-    <>
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none" />
-    </>
-  ),
+/** The drawer rail's icon set (round 2 — owner: "also icons, can we change it
+ *  to look better only?"). Was hand-rolled inline stroke-SVG (viewBox 0 0 24
+ *  24, 1.8 stroke, founder 2026-06-24 APPROVED) drawn ad hoc per pane; now
+ *  the SAME 16-unit/1.5-stroke drawings the AI view's conversation column
+ *  uses (`./agent-chat/icons` — `IconGlobe`/`IconSignal` reused as-is,
+ *  the other five extended into that file rather than adding an icon-font
+ *  dependency). LOOK only: `DrawerRailButton` below still renders one glyph
+ *  per `SimDrawerPane` at the same 18px optical size, same position, same
+ *  active/hover treatment — only the drawing inside changed. */
+const SIM_PANE_ICON: Record<SimDrawerPane, JSX.Element> = {
+  session: <IconChat />,
+  controls: <IconSliders />,
+  diagnostics: <IconSignal />,
+  cookies: <IconCookie />,
+  network: <IconGlobe />,
+  files: <IconUpload />,
+  downloads: <IconDownload />,
+  recording: <IconRecordDot />,
 };
 const SIM_PANE_TITLES: Record<SimDrawerPane, string> = {
   session: 'Session',
@@ -1914,19 +1882,12 @@ function DrawerRailButton({
           : 'text-ink-secondary hover:bg-white/10 hover:text-ink-primary'
       }`}
     >
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-      >
-        {SIM_PANE_ICONS[pane]}
-      </svg>
+      {/* `.ai-i` (index.css) is `width/height: 1em` — the wrapping span's
+          18px font-size is the rail icon's optical size, unchanged from the
+          old hand-rolled `<svg width="18" height="18">`. */}
+      <span className="text-[18px] leading-none" aria-hidden="true">
+        {SIM_PANE_ICON[pane]}
+      </span>
       <span
         data-component={`sim-rail-label-${pane}`}
         aria-hidden="true"
@@ -3184,7 +3145,7 @@ function IosStatusBar({ timeZone }: { timeZone?: string }): JSX.Element {
           faint top-rim highlight + soft outer shadow seat it as recessed glass. */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute left-1/2 top-1/2 h-[32px] w-[120px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.06),0_1px_2px_rgba(0,0,0,0.6)]"
+        className="sim-island pointer-events-none absolute left-1/2 top-1/2 h-[32px] w-[120px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-black shadow-[inset_0_1px_1.5px_rgba(255,255,255,0.06),0_1px_2px_rgba(0,0,0,0.6)]"
       />
       <span className="pointer-events-none text-[14px] font-semibold tracking-tight tabular-nums">
         {time}
@@ -10369,20 +10330,47 @@ export function SimulatorWindow({
               className="sim-device relative flex min-h-0 min-w-0 flex-1 flex-col rounded-b-[2.75rem] p-[10px]"
             >
               {/* The room's light (design brief §2/§3 proposal 2) — one small
-                  breathing glow behind the bezel, reusing the AI view's own
-                  `ds-ai-calm`/`ds-ai-breathe`/`ds-ai-breathe-soft` keyframes by
-                  name (index.css explains why there is no separate floor pool
-                  here: the bezel already fills the transparent window
-                  edge-to-edge). `aria-hidden`: purely decorative, like
-                  `.ai-aura`. */}
+                breathing glow behind the bezel, reusing the AI view's own
+                `ds-ai-calm`/`ds-ai-breathe`/`ds-ai-breathe-soft` keyframes by
+                name (index.css explains why there is no separate floor pool
+                here: the bezel already fills the transparent window
+                edge-to-edge). `aria-hidden`: purely decorative, like
+                `.ai-aura`. */}
               <div className="sim-aura" aria-hidden="true" />
+              {/* Side buttons (round-2 frame) — a mute/ring switch + two volume
+                  keys on the left, one power/side button on the right.
+                  `aria-hidden` + CSS `pointer-events: none`: purely decorative,
+                  ported from the AI view's `.ai-key`. Lives INSIDE
+                  `.sim-device` (index.css's own comment on `.sim-key` explains
+                  why: fully contained by the SAME `overflow:hidden` that
+                  already contains `.sim-aura` above, so nothing here can ever
+                  inflate an ancestor's `scrollWidth` the way a sibling-shell
+                  version measurably did — see
+                  `simulator-window-frame-round-2.test.tsx`). Rendered
+                  UNCONDITIONALLY, every render, in this fixed order, same as
+                  `.sim-aura` beside it — the one thing that would remount
+                  `simulator-screen` (and the `AgentSessionPanel`/video inside
+                  it) on a state change that has nothing to do with the frame
+                  is a sibling's presence changing shape across a re-render,
+                  and a span that is always here never does that. */}
+              <span className="sim-key is-l k1" aria-hidden="true" />
+              <span className="sim-key is-l k2" aria-hidden="true" />
+              <span className="sim-key is-l k3" aria-hidden="true" />
+              <span className="sim-key is-r k4" aria-hidden="true" />
               {/* Screen — status strip on top (with the dynamic island), the live
                 video BELOW it (never overlapped). NOT a drag region except the
-                strip itself (taps on the video control the device). */}
+                strip itself (taps on the video control the device).
+                `z-[1]` (round-2 frame): explicit, ABOVE `.sim-device`'s new
+                `::before`/`::after` glass-sheen pseudo-elements (z-index 0)
+                and `.sim-aura` (z-index -1) regardless of DOM order — the
+                opaque screen box painting on top is what makes the sheen
+                "provably invisible over the video regardless of a stacking
+                mistake" (mockup NOTES.md §1.3). No coordinate/size change:
+                z-index never affects layout. */}
               <div
                 data-tauri-drag-region="false"
                 data-component="simulator-screen"
-                className="relative flex flex-1 flex-col overflow-hidden rounded-[2.1rem] bg-black shadow-[inset_0_0_0_1px_rgba(0,0,0,0.9),inset_0_0_12px_rgba(0,0,0,0.55)]"
+                className="relative z-[1] flex flex-1 flex-col overflow-hidden rounded-[2.1rem] bg-black shadow-[inset_0_0_0_1px_rgba(0,0,0,0.9),inset_0_0_12px_rgba(0,0,0,0.55)]"
               >
                 <IosStatusBar timeZone={displayTimezone} />
                 {/* Cold-switch blank (W3020 + #116): while a tab switch is in flight
