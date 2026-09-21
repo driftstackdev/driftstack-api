@@ -117,7 +117,7 @@ function aiLabel(tier: AccountTier): string {
     <!-- Free-tier note — replaced with the real current-plan summary
          client-side when the account already has an active/trialing
          subscription (see the inline script's applySubscriptionState). -->
-    <div class="mt-8 rounded-lg border border-tk-border bg-tk-surface p-6" data-plan-note>
+    <div class="mt-8 rounded-lg border border-tk-border bg-tk-surface p-6 shadow-lift" data-plan-note>
       <h2 class="flex items-center gap-2 text-xl font-semibold text-tk-ink">
         <span class="flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -140,7 +140,7 @@ function aiLabel(tier: AccountTier): string {
     <div class="mt-10 grid gap-4 md:grid-cols-2">
       {
         TIERS.map((t) => (
-          <div class="relative rounded-lg border border-tk-border bg-tk-surface p-5 hover:border-tk-accent/30 transition-colors">
+          <div class="tk-liftable relative rounded-lg border border-tk-border bg-tk-surface p-5 shadow-lift hover:border-tk-accent/30 transition-colors">
             <div class="flex items-center justify-between">
               <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">{t.ladder}</p>
               <div class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 text-tk-accent ring-1 ring-tk-accent/30">

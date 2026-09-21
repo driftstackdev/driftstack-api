@@ -36,11 +36,18 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         hard-coded brand-red radials are retired; ambience follows the
         data-accent axis at low alpha). */}
     <div
-      class="relative -mx-6 -mt-10 mb-6 overflow-hidden px-6 pb-8 pt-10"
+      class="relative isolate -mx-6 -mt-10 mb-6 overflow-hidden px-6 pb-8 pt-10 [contain:paint]"
       aria-hidden="true"
     >
+      {/* Stage 1 (2026-09-21) — the room. Same static --accent-soft wash as
+          before, now with a slow breathing cadence (tk-room, base.css) so
+          the header reads as a lit surface rather than a fixed image —
+          the dashboard's own re-derivation of the AI view's "state is
+          drawn as light" idea (design brief §1.1), scoped to this app's
+          own tokens. transform/opacity only; reduced-motion gets a static
+          still, not a frozen mid-pulse frame. */}
       <div
-        class="absolute inset-0 -z-10"
+        class="tk-room absolute inset-0 -z-10"
         style="background: radial-gradient(ellipse 60% 80% at 0% 0%, var(--accent-soft), transparent 70%);"
       ></div>
       <header class="relative flex flex-wrap items-center justify-between gap-4">
@@ -242,21 +249,21 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         </div>
       </div>
       <div class="mt-5 grid gap-3 sm:grid-cols-3">
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
+        <div class="tk-liftable rounded-lg border border-tk-border bg-tk-surface p-4 shadow-lift">
           <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Profile encryption</p>
           <p class="mt-1.5 text-sm font-semibold text-tk-ink">Encrypted in storage</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
             Profiles are stored encrypted and are only decrypted while a session on your account is using them.
           </p>
         </div>
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
+        <div class="tk-liftable rounded-lg border border-tk-border bg-tk-surface p-4 shadow-lift">
           <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Account binding</p>
           <p class="mt-1.5 text-sm font-semibold text-tk-ink">Locked to your account</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
             Each encrypted value is tied to your account and, when it belongs to a saved record, to that exact record — so it can't be moved somewhere else and read.
           </p>
         </div>
-        <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
+        <div class="tk-liftable rounded-lg border border-tk-border bg-tk-surface p-4 shadow-lift">
           <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Credential audit</p>
           <p class="mt-1.5 text-sm font-semibold text-tk-ink">Changes are logged</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
@@ -286,7 +293,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           href="https://github.com/driftstackdev/driftstack-api/releases/latest"
           target="_blank"
           rel="noopener noreferrer"
-          class="group rounded-lg border border-tk-border bg-tk-surface p-4 hover:border-tk-accent/40 hover:bg-tk-surface/80"
+          class="tk-liftable group rounded-lg border border-tk-border bg-tk-surface p-4 shadow-lift hover:border-tk-accent/40 hover:bg-tk-surface/80"
         >
           <div class="flex items-center gap-2">
             <span class="flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 text-tk-accent">
@@ -302,7 +309,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         </a>
         <a
           href="/team/"
-          class="group rounded-lg border border-tk-border bg-tk-surface p-4 hover:border-tk-accent/40 hover:bg-tk-surface/80"
+          class="tk-liftable group rounded-lg border border-tk-border bg-tk-surface p-4 shadow-lift hover:border-tk-accent/40 hover:bg-tk-surface/80"
         >
           <div class="flex items-center gap-2">
             <span class="flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 text-tk-accent">
@@ -318,7 +325,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         </a>
         <a
           href="/api-keys/"
-          class="group rounded-lg border border-tk-border bg-tk-surface p-4 hover:border-tk-accent/40 hover:bg-tk-surface/80"
+          class="tk-liftable group rounded-lg border border-tk-border bg-tk-surface p-4 shadow-lift hover:border-tk-accent/40 hover:bg-tk-surface/80"
         >
           <div class="flex items-center gap-2">
             <span class="flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 text-tk-accent">
@@ -337,7 +344,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           href="https://docs.driftstack.io/quickstart/"
           target="_blank"
           rel="noopener noreferrer"
-          class="group rounded-lg border border-tk-border bg-tk-surface p-4 hover:border-tk-accent/40 hover:bg-tk-surface/80"
+          class="tk-liftable group rounded-lg border border-tk-border bg-tk-surface p-4 shadow-lift hover:border-tk-accent/40 hover:bg-tk-surface/80"
         >
           <div class="flex items-center gap-2">
             <span class="flex h-8 w-8 items-center justify-center rounded-md bg-tk-accent/10 text-tk-accent">
@@ -723,8 +730,17 @@ const ARCHETYPE_LABELS = Object.fromEntries(
                 ' · started ' +
                 escapeHtml(fmtIsoDay(s.created_at)) +
                 '</p></div>' +
+                // Stage 1 (2026-09-21) — data-tk-state drives the state-light
+                // pip (base.css: [data-tk-state]::before) alongside this
+                // existing colour+word badge; only creating/busy/ready ever
+                // reach here (the `active` filter above already drops
+                // destroyed/errored), which is exactly the state set
+                // base.css defines a light for. Colour is still never the
+                // only signal — the text label right after it is unchanged.
                 '<span class="rounded-full px-2 py-1 text-xs font-medium uppercase tracking-wide ' +
                 (STATUS_BADGE_CLASS[s.status] || STATUS_BADGE_CLASS.ready) +
+                '" data-tk-state="' +
+                escapeHtml(s.status || 'ready') +
                 '">' +
                 escapeHtml(s.status || '—') +
                 '</span></li>'

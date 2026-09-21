@@ -114,6 +114,11 @@ export default {
         // data-mode block).
         ambient: 'var(--shadow-ambient)',
         'ambient-lg': 'var(--shadow-ambient-lg)',
+        // Stage-1 visual upgrade (2026-09-21) — two derived steps above
+        // ambient, for cards that had no elevation at all (see base.css's
+        // --shadow-lift/--shadow-float comment for the full rationale).
+        lift: 'var(--shadow-lift)',
+        float: 'var(--shadow-float)',
       },
       backgroundImage: {
         'glow-radial-red':

@@ -42,6 +42,14 @@
 @layer base {
   :root {
     /* Fleet rework: color-scheme follows the data-mode axis (token layer below). */
+    /* 2026-09-21 — stage-1 visual upgrade (customer-dashboard re-derivation of
+       the desktop AI view's language into this app's own tk- token system;
+       see docs.internal design brief §4). --tk-ease is the one shared easing
+       curve for every new lift/breathe motion this stage adds — mirrors the
+       AI view's single `--ai-ease` convention (one curve, reused, never a
+       one-off per component). Mode/accent-independent, so it lives here
+       rather than in the [data-mode]/[data-accent] blocks below. */
+    --tk-ease: cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   /* Fleet v2 — global keyboard-focus ring (GUI a11y parity). Utility
@@ -530,6 +538,16 @@
      ambient shadows (they work on light surfaces). */
   --shadow-ambient: 0 1px 2px rgb(15 16 20 / 0.04), 0 10px 28px -18px rgb(15 16 20 / 0.12);
   --shadow-ambient-lg: 0 2px 4px rgb(15 16 20 / 0.05), 0 24px 56px -24px rgb(15 16 20 / 0.2);
+  /* 2026-09-21 — stage-1: two derived elevation steps above --shadow-ambient,
+     for cards that had NO shadow at all before this stage (home's quick
+     actions + trust tiles, Team's member/invite lists, Select-a-tier's
+     pricing cards). --shadow-lift is the resting state; --shadow-float is
+     the hover/lifted state — same two-step composition as --shadow-ambient
+     (a hairline + a soft drop), just a little deeper so newly-elevated
+     cards read as intentionally raised rather than a copy of the ambient
+     tier already used everywhere else. */
+  --shadow-lift: 0 1px 2px rgb(15 16 20 / 0.05), 0 14px 32px -16px rgb(15 16 20 / 0.16);
+  --shadow-float: 0 2px 6px rgb(15 16 20 / 0.07), 0 22px 44px -18px rgb(15 16 20 / 0.24);
 }
 [data-mode='dark'] {
   color-scheme: dark;
@@ -587,6 +605,12 @@
      + a true-black drop for overlap depth. */
   --shadow-ambient: inset 0 1px 0 rgb(255 255 255 / 0.05), 0 10px 28px -18px rgb(0 0 0 / 0.7);
   --shadow-ambient-lg: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 24px 56px -24px rgb(0 0 0 / 0.85);
+  /* 2026-09-21 — stage-1 (see the light-mode block above for the full
+     rationale). Dark keeps the lit-top-rim + true-black-drop composition
+     --shadow-ambient already uses (flat gray shadows are a no-op on the
+     near-black bg — S20) at two deeper steps. */
+  --shadow-lift: inset 0 1px 0 rgb(255 255 255 / 0.06), 0 14px 32px -16px rgb(0 0 0 / 0.78);
+  --shadow-float: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 22px 44px -18px rgb(0 0 0 / 0.88);
 }
 
 /* ── AA-safe accent-toned TEXT (Fleet v2 2026-07-03; S21 dashboard port
@@ -618,4 +642,116 @@
 }
 [data-mode='light'][data-accent='teal'] {
   --accent-text: #0c7d69;
+}
+
+/* ── Stage 1 visual upgrade (2026-09-21) — re-deriving the desktop AI
+   view's language (docs.internal design brief §1/§4) inside this app's
+   own tk- token system. The dashboard does NOT share the AI view's CSS —
+   nothing below imports or references `.ai-*` / `--ai-*`; every device is
+   rebuilt from tk- tokens already defined above. Three pieces, each
+   additive and scoped by class/attribute so nothing here changes any
+   existing selector's behaviour:
+     1. .tk-room       — a breathing backdrop wash (the AI view's "room is
+                          lit, not just labelled" idea, §1.1).
+     2. .tk-liftable    — hover elevation using --shadow-lift/--shadow-float.
+     3. [data-tk-state] — a state-light variable + pip (the AI view's single
+                          --ai-light-rgb idea, §1.1/§1.4): colour is set
+                          once per state and re-read by fill + halo + breathe
+                          together, and colour is NEVER the only signal — every
+                          call site keeps its existing text/word label. */
+
+/* 1. Room backdrop. Applied to the existing static --accent-soft radial
+   gradient behind the home page's header — turns it into a slow, wide
+   breathing wash instead of a fixed image, the same "idle" cadence class
+   as the AI view's calm 9s drift (§1.8), scaled to a page ambience rather
+   than a device rim. transform+opacity only; the wrapping element supplies
+   isolation/containment (see index.astro) so this paints on its own layer. */
+@keyframes tk-room-breathe {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.045);
+  }
+}
+.tk-room {
+  animation: tk-room-breathe 9s var(--tk-ease) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tk-room {
+    animation: none;
+    opacity: 0.85;
+  }
+}
+
+/* 2. Hover elevation. Resting shadow is set by the call site (either the
+   existing --shadow-ambient or the new --shadow-lift); this class only
+   supplies the hover step + the transition, so it composes with either. */
+.tk-liftable {
+  transition:
+    transform 220ms var(--tk-ease),
+    box-shadow 220ms var(--tk-ease);
+}
+.tk-liftable:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-float);
+}
+
+/* 3. State-light pip. --tk-state-rgb is the one variable each state sets;
+   the pip's fill, its resting halo and its breathing keyframe all read the
+   SAME variable, so one attribute recolors all three together (mirrors the
+   AI view's --ai-light-rgb, §1.1). 'busy'/'creating' breathe (something is
+   actively happening); 'ready' is a calm steady halo (connected, not
+   idle-nothing, not actively working — AI view's "paused is perfectly
+   still" idea applied to a steady-state rather than a pause); no
+   'errored'/'destroyed' tone is defined because both call sites that use
+   this today (home's Active sessions list) already filter those statuses
+   out before render — a session row is never shown in a state this system
+   has no light for. Every consumer keeps its own text label alongside the
+   pip; the pip is reinforcement, never the only signal. */
+[data-tk-state='busy'] {
+  --tk-state-rgb: var(--busy-rgb);
+}
+[data-tk-state='creating'] {
+  --tk-state-rgb: var(--accent-rgb);
+}
+[data-tk-state='ready'] {
+  --tk-state-rgb: var(--ready-rgb);
+}
+[data-tk-state]::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 9999px;
+  vertical-align: middle;
+  background: rgb(var(--tk-state-rgb, var(--ink-3-rgb)));
+  box-shadow: 0 0 0 3px rgb(var(--tk-state-rgb, var(--ink-3-rgb)) / 0.22);
+}
+@keyframes tk-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--tk-state-rgb, var(--ink-3-rgb)) / 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgb(var(--tk-state-rgb, var(--ink-3-rgb)) / 0);
+  }
+}
+[data-tk-state='busy']::before,
+[data-tk-state='creating']::before {
+  animation: tk-breathe 2.6s var(--tk-ease) infinite;
+}
+[data-tk-state='creating']::before {
+  animation-duration: 1.8s;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-tk-state='busy']::before,
+  [data-tk-state='creating']::before {
+    animation: none;
+    box-shadow: 0 0 0 3px rgb(var(--tk-state-rgb, var(--ink-3-rgb)) / 0.3);
+  }
 }
