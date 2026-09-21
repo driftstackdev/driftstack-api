@@ -194,10 +194,13 @@ function auditDefaultSizes(stage: {
     'audit-first-run': stage,
     'audit-recipes': stage,
     'audit-agent-chat': stage,
-    // The seven AI-view states share the default stage: they are compared with
-    // each other and with the mockup, which is drawn at 1280x800. A real window
-    // size is a `?stage=960x600` away (above) and is checked by hand.
+    // The AI-view states share the default stage: they are compared with each
+    // other and with the mockup, which is drawn at 1280x800. A real window size
+    // is a `?stage=960x600` away (above), and scripts/gui-visual-check.mjs
+    // renders every one of them at 960x600, 1024x640 AND this default stage,
+    // in both themes.
     'audit-agent-chat-nokey': stage,
+    'audit-agent-chat-preview': stage,
     'audit-agent-chat-planning': stage,
     'audit-agent-chat-running': stage,
     'audit-agent-chat-approval': stage,
@@ -215,6 +218,12 @@ function auditDefaultSizes(stage: {
     // is ~340px wide, the compact container query never fires, and the run would
     // report clean on the layout nobody was worried about.
     'audit-agent-chat-ended': { width: 960, height: 600 },
+    // The two refusals that name a model vendor (copy spec D5). Default stage:
+    // what they exist to put on screen is a docked banner and, for `budget`, a
+    // mission bar whose model picker is marking own-key-only models — both of
+    // which are compared with the other states at the size the others use.
+    'audit-agent-chat-consent': stage,
+    'audit-agent-chat-budget': stage,
     'audit-team': stage,
     // Seven rows measure 860 CSS px in the 1280×800 window's 764 px main area
     // (896 would just fit); 920 keeps the last row in frame when a chip wraps.
@@ -834,6 +843,7 @@ export function auditLoadedMarkers(name: AuditSceneName): ReadonlyArray<string> 
     case 'audit-agent-chat':
       return [...AUDIT_PROFILES.map((p) => p.name), ...auditStoredChats().map((c) => c.title)];
     case 'audit-agent-chat-nokey':
+    case 'audit-agent-chat-preview':
     case 'audit-agent-chat-planning':
     case 'audit-agent-chat-running':
     case 'audit-agent-chat-approval':
@@ -842,6 +852,8 @@ export function auditLoadedMarkers(name: AuditSceneName): ReadonlyArray<string> 
     case 'audit-agent-chat-stopping':
     case 'audit-agent-chat-small':
     case 'audit-agent-chat-ended':
+    case 'audit-agent-chat-consent':
+    case 'audit-agent-chat-budget':
       // The scene's own fixture strings FIRST, then the two async loads every
       // AI-view scene shares. The order is the point (same reason as
       // audit-proxies below): the fixture chat renders synchronously, so a list
@@ -942,17 +954,128 @@ export function agentChatFixtureFor(name: AuditSceneName): AgentChatSceneFixture
  *  actually looks like, and `failing` rejects the way a dropped connection
  *  does, which is the only route to `WatchPlaceholder`'s error copy and its
  *  `Retry` button — a pinned accessible name that no scene had ever rendered. */
-function buildAgentChatClient(liveToken: AgentChatSceneFixture['liveToken']): DriftstackClient {
-  const base = buildAuditClient() as unknown as { agentSessions: Record<string, unknown> };
-  if (liveToken === undefined) return base as unknown as DriftstackClient;
-  const livekitToken =
-    liveToken === 'pending'
-      ? (): Promise<never> => new Promise<never>(() => undefined)
-      : (): Promise<never> => Promise.reject(new Error('Load failed'));
-  return {
-    ...base,
-    agentSessions: { ...base.agentSessions, livekitToken },
-  } as unknown as DriftstackClient;
+function buildAgentChatClient(
+  liveToken: AgentChatSceneFixture['liveToken'],
+  ownKey: AgentChatSceneFixture['ownKey'],
+): DriftstackClient {
+  const base = buildAuditClient() as unknown as {
+    agentSessions: Record<string, unknown>;
+    account: Record<string, unknown>;
+  };
+  let built = base;
+  if (liveToken !== undefined) {
+    const livekitToken =
+      liveToken === 'pending'
+        ? (): Promise<never> => new Promise<never>(() => undefined)
+        : (): Promise<never> => Promise.reject(new Error('Load failed'));
+    built = { ...built, agentSessions: { ...built.agentSessions, livekitToken } };
+  }
+  if (ownKey !== undefined) {
+    // The shared fixture says `has_key: true`, which is why the mission bar has
+    // never marked an own-key-only model or shown the sentence that says where
+    // to get a key. A scene that wants that state says so; nothing else changes.
+    const metadata: ByokAnthropicKeyMetadata = ownKey
+      ? auditAccountAi().byok
+      : { has_key: false, set_at: null, last_used_at: null };
+    built = {
+      ...built,
+      account: { ...built.account, getByokAnthropicKey: () => Promise.resolve(metadata) },
+    };
+  }
+  return built as unknown as DriftstackClient;
+}
+
+// ─── The window-level `/version` stub (the AI view's preview branch) ─────────
+
+/** The one answer the stub gives, as the server's own envelope shape. */
+interface VersionStubBody {
+  version: string;
+  driver: 'mock';
+  agent_execution: 'live' | 'simulated';
+}
+
+type FetchLike = typeof fetch;
+interface StubbedFetch {
+  (input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  __auditVersionStub?: FetchLike;
+}
+
+/**
+ * Answer `GET <AUDIT_BASE_URL>/version` from a fixture and pass everything else
+ * through.
+ *
+ * ⛔ WHY A NETWORK STUB AND NOT A PROP. `preview` is not a field the AI view
+ * takes: it is `useConnectionStatus(settings.baseUrl).agentExecution ===
+ * 'simulated'`, read from a real `fetch` of `/version`. Teaching the view a
+ * prop so a scene could set it would make the scene a replica of the view — the
+ * exact thing spec §8's seams exist to avoid — and the derivation (including
+ * "null means live", which is a deliberate decision about a probe gap) would go
+ * unmeasured. This is the same choice, for the same reason, as the Tauri stub
+ * above: one choke point, our own marker on it, never installed over something
+ * that is not ours, removed a microtask after unmount so a StrictMode remount
+ * does not see a window without it.
+ *
+ * The response is a STRUCTURAL double rather than a real `Response`: the
+ * bounded JSON reader takes that path explicitly (a double with no `body`
+ * property uses `json()`), and it is the one shape that behaves the same in the
+ * browser and in the jsdom arms of tests/unit/marketing-scenes.test.tsx.
+ */
+let pendingFetchRestore: object | null = null;
+
+export function installVersionStub(body: VersionStubBody): void {
+  if (typeof window === 'undefined') return;
+  pendingFetchRestore = null;
+  const current = window.fetch as StubbedFetch;
+  const original: FetchLike = current.__auditVersionStub ?? current;
+  const stub: StubbedFetch = (input, init) => {
+    const url =
+      typeof input === 'string' ? input : input instanceof URL ? input.href : String(input.url);
+    if (url === `${AUDIT_BASE_URL}/version`) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: { get: () => null },
+        json: () => Promise.resolve(body),
+      } as unknown as Response);
+    }
+    return original(input, init);
+  };
+  stub.__auditVersionStub = original;
+  window.fetch = stub;
+}
+
+export function scheduleVersionStubRemoval(): void {
+  if (typeof window === 'undefined') return;
+  const token = {};
+  pendingFetchRestore = token;
+  queueMicrotask(() => {
+    if (pendingFetchRestore !== token) return;
+    pendingFetchRestore = null;
+    const current = window.fetch as StubbedFetch;
+    if (current.__auditVersionStub !== undefined) window.fetch = current.__auditVersionStub;
+  });
+}
+
+export function isAuditVersionStubInstalled(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (window.fetch as StubbedFetch).__auditVersionStub !== undefined;
+}
+
+/** Install in the RENDER phase, like the Tauri stub: `useConnectionStatus`
+ *  probes from a mount effect, and a child's effects run before this
+ *  component's. */
+function useVersionStub(body: VersionStubBody | null): void {
+  useState(() => {
+    if (body !== null) installVersionStub(body);
+    return null;
+  });
+  useEffect(() => {
+    if (body === null) return undefined;
+    installVersionStub(body);
+    return () => {
+      scheduleVersionStubRemoval();
+    };
+  }, [body]);
 }
 
 // ─── The window-level Tauri stub ─────────────────────────────────────────────
@@ -1288,10 +1411,18 @@ function AgentChatStateScene({ name }: { name: AuditSceneName }): JSX.Element {
   const settingsExtra = useMemo<Partial<HarnessSettingsValue>>(
     () => ({
       settings: { ...auditSettings(), apiKey: fixture.apiKey },
-      client: buildAgentChatClient(fixture.liveToken),
+      client: buildAgentChatClient(fixture.liveToken, fixture.ownKey),
     }),
     [fixture],
   );
+  const versionBody = useMemo<VersionStubBody | null>(
+    () =>
+      fixture.agentExecution === undefined
+        ? null
+        : { version: '0.1.68', driver: 'mock', agent_execution: fixture.agentExecution },
+    [fixture],
+  );
+  useVersionStub(versionBody);
   // Only the keys this scene actually overrides — the provider keeps its real
   // `setChatOptions` / `setModel` / `createdAtRef`, so the view's effects run
   // exactly as they do in the app.
@@ -1300,6 +1431,7 @@ function AgentChatStateScene({ name }: { name: AuditSceneName }): JSX.Element {
     if (fixture.chat !== undefined) v.chat = fixture.chat;
     if (fixture.standIn !== undefined) v.standIn = fixture.standIn;
     if (fixture.captureSrc !== undefined) v.captureSrc = fixture.captureSrc;
+    if (fixture.frameRate !== undefined) v.frameRate = fixture.frameRate;
     return v;
   }, [fixture]);
   return (
@@ -1363,6 +1495,7 @@ export function AuditScene({ name }: { name: AuditSceneName }): JSX.Element {
         </StubbedAuditWindow>
       );
     case 'audit-agent-chat-nokey':
+    case 'audit-agent-chat-preview':
     case 'audit-agent-chat-planning':
     case 'audit-agent-chat-running':
     case 'audit-agent-chat-approval':
@@ -1371,6 +1504,8 @@ export function AuditScene({ name }: { name: AuditSceneName }): JSX.Element {
     case 'audit-agent-chat-stopping':
     case 'audit-agent-chat-small':
     case 'audit-agent-chat-ended':
+    case 'audit-agent-chat-consent':
+    case 'audit-agent-chat-budget':
       return <AgentChatStateScene name={name} />;
     case 'audit-team':
       return (

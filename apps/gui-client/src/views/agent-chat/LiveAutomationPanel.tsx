@@ -70,6 +70,7 @@ export const LiveAutomationPanel = memo(function LiveAutomationPanel({
   sessionId,
   visible,
   onWatchChange,
+  onVideoEl,
   standIn,
 }: {
   sessionId: string | null;
@@ -95,6 +96,28 @@ export const LiveAutomationPanel = memo(function LiveAutomationPanel({
    * memo and reconciles the stream on every keystroke.
    */
   onWatchChange?: (watch: StageWatch) => void;
+  /**
+   * Hands the live `<video>` element up to the stage, so the HUD's frame-rate
+   * chip can measure the picture this panel is painting (spec §3.4's `30 fps`;
+   * `lib/use-presented-frame-rate.ts` does the measuring).
+   *
+   * ⛔ IT IS A HAND-UP, NOT A HAND-OVER. Nothing above this component renders,
+   * styles, or writes to the element — the measurement only observes it, for
+   * the reason this file's header gives twice over: the panel is a LiveKit
+   * room, and anything that remounts the element reconnects it and the customer
+   * watches the video go black and come back.
+   *
+   * It is `AgentSessionPanel`'s OWN `onVideoEl` prop (Night-arc I), forwarded
+   * unchanged. Round C's review recorded the chip as unbuildable because "the
+   * panel exposes no such hook"; the hook was already there and only this one
+   * line of plumbing was missing, so nothing inside `AgentSessionPanel` changes
+   * for the chip to exist.
+   *
+   * ⚠️ MUST BE `useCallback` WITH NO DEPS, like `onWatchChange` above and for
+   * the same reason — it is a prop on a memo'd component that owns a video
+   * element. `Stage.tsx` passes a stable one.
+   */
+  onVideoEl?: (el: HTMLVideoElement | null) => void;
   /**
    * GALLERY SEAM (spec §8) — what the screen shows INSTEAD of a live stream.
    * Undefined in the app. A visual-harness scene passes a drawn IMAGE so the
@@ -282,6 +305,7 @@ export const LiveAutomationPanel = memo(function LiveAutomationPanel({
           coverChromeBand
           aspectRatio={IPHONE_WATCH_ASPECT_RATIO}
           sessionEnded={sessionEnded}
+          onVideoEl={onVideoEl}
         />
       )}
     </>

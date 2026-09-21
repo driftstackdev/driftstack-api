@@ -232,3 +232,10 @@ export function IconPin(): JSX.Element {
 export function IconScreen(): JSX.Element {
   return <Glyph d="M4.6 1.9h6.8v12.2H4.6Z M6.9 3.4h2.2" />;
 }
+
+/** Three rising bars — the frame-rate chip's mark, as the mockup draws it. A
+ *  drawing of "a signal is arriving", never a measurement of one: the number
+ *  beside it is the measurement, and the bars do not move with it. */
+export function IconSignal(): JSX.Element {
+  return <Glyph d="M3.4 9.9v3.2 M8 6.6v6.5 M12.6 3.3v9.8" />;
+}

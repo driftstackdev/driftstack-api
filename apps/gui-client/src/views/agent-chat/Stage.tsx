@@ -32,9 +32,10 @@
 // light theme instead of near-black on black. In the light theme the room is
 // drawn as a recessed well with a hard edge rather than a hole in the page.
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
-import { IconCheck, IconPause, IconPin, IconTap } from './icons';
+import { usePresentedFrameRate } from '../../lib/use-presented-frame-rate';
+import { IconCheck, IconPause, IconPin, IconSignal, IconTap } from './icons';
 import { LiveAutomationPanel } from './LiveAutomationPanel';
 import { useDeviceFit } from './use-device-fit';
 import {
@@ -68,6 +69,7 @@ export function Stage({
   idleFact,
   onWatchChange,
   standIn,
+  frameRate,
 }: {
   sessionId: string | null;
   /** The customer collapsed the live view (Toggle live view). The section is
@@ -94,6 +96,19 @@ export function Stage({
   idleFact: string;
   onWatchChange: (watch: StageWatch) => void;
   standIn?: ReactNode;
+  /**
+   * GALLERY SEAM (spec §8) — the frame rate to SHOW instead of measuring one.
+   * Undefined in the app, always. A scene mounts a drawn page in the screen and
+   * a picture presents no frames, so the gallery cannot measure the chip into
+   * existence; without this the one state the chip lives in would be the one
+   * state no gate can see.
+   *
+   * ⛔ IT DISABLES THE MEASUREMENT RATHER THAN RACING IT: with a value here no
+   * callback is armed and no interval runs (`video` below goes null), so a
+   * scene stays a still picture for the screenshot gates and the number on
+   * screen has exactly one source.
+   */
+  frameRate?: number;
 }): JSX.Element {
   // ⛔ The turn's `will-change` exists only while the turn does (spec §4 item 8:
   // "0 elements with will-change at rest"). It is added when `atRest` FLIPS,
@@ -137,6 +152,29 @@ export function Stage({
     if (arrived) setRingSeq((n) => n + 1);
   }, [steps]);
 
+  // ─── the frame-rate chip ─────────────────────────────────────────────────
+  //
+  // ⛔ THE ELEMENT IS HELD, NEVER RENDERED FROM HERE. `AgentSessionPanel` hands
+  // its `<video>` up through `LiveAutomationPanel`; this only reads it. The
+  // setter is a state setter (stable identity, no deps) because it is a prop on
+  // a memo'd component that owns a LiveKit room, and it fires twice in the life
+  // of a stream — once with the element, once with null — so holding it in
+  // state costs two renders per session rather than one per frame.
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
+  const onVideoEl = useCallback((el: HTMLVideoElement | null) => {
+    setVideoEl(el);
+  }, []);
+  const measured = usePresentedFrameRate({
+    video: frameRate === undefined ? videoEl : null,
+    live: watch === 'live',
+  });
+  // A fixture outranks the measurement and both are gated on the SAME
+  // condition, so the gallery cannot show the chip in a state the app would
+  // not. Null in every state that has no honest number: no element, no frame
+  // API on this WebView, the first two seconds of a stream, a frozen picture,
+  // and every state that is not a live stream at all.
+  const fps = frameRate ?? measured;
+  const showFps = watch === 'live' && fps !== null;
   const starting = stageIsStarting(hud);
   return (
     <section
@@ -185,6 +223,12 @@ export function Stage({
             {place.short}
           </span>
         )}
+        {/* The same fact, in the tier where the row below has gone. It is a
+            SECOND ELEMENT rather than a moved one, exactly as the place chip
+            above is: one of the two is `display: none` at every width, and a
+            node that moved between parents on a resize would take its
+            measurement's element with it. */}
+        {showFps && <FrameRateChip fps={fps} narrowOnly />}
       </div>
 
       <StageFit
@@ -193,6 +237,7 @@ export function Stage({
         sessionId={sessionId}
         collapsed={collapsed}
         onWatchChange={onWatchChange}
+        onVideoEl={onVideoEl}
         standIn={standIn}
       />
 
@@ -235,17 +280,25 @@ export function Stage({
           22px band of nothing under the phone, the one place the `trouble`
           stage looked unfinished. The attribute says "nothing rendered here",
           and the CSS gives the height back to the phone. Derived from the same
-          three conditions the children are, so it can never disagree with what
-          is actually in the row. */}
+          FOUR conditions the children are — the frame-rate chip is the fourth,
+          and a row holding only that chip is not an empty row — so it can never
+          disagree with what is actually in the row. */}
       <div
         className="ai-facts"
-        data-empty={starting || place !== null || caption.idle ? undefined : ''}
+        data-empty={starting || place !== null || caption.reassure || showFps ? undefined : ''}
       >
         {starting && <span className="ai-facts-note">This usually takes a few seconds.</span>}
         {/* The one line about what watching MEANS belongs to the first
             impression, not to a finished run: "You watch, the AI drives" under
-            a stopped task reads as a promise about something that is over. */}
-        {!starting && place === null && caption.idle && (
+            a stopped task reads as a promise about something that is over.
+            ⛔ `caption.reassure`, NOT `caption.idle`. They were one boolean and
+            they answer two questions; the `preview` scene, the first thing ever
+            to render that state, put "You watch, the AI drives — and you can
+            stop it at any time." directly under "Browser actions run in preview
+            mode, so there is no live view." `data-empty` above reads the same
+            flag, so the preview row now reports itself empty and gives its 22px
+            back to the phone instead of leaving a band of nothing. */}
+        {!starting && place === null && caption.reassure && (
           <span className="ai-facts-note">{idleFact}</span>
         )}
         {!starting && place !== null && (
@@ -257,8 +310,49 @@ export function Stage({
             {place.ip !== null && <span className="ai-facts-ip mono">{place.ip}</span>}
           </span>
         )}
+        {!starting && showFps && <FrameRateChip fps={fps} />}
       </div>
     </section>
+  );
+}
+
+/**
+ * `30 fps` — how many frames of the live picture the customer is being shown.
+ *
+ * ⛔ IT IS RENDERED ONLY WHEN IT HAS BEEN MEASURED. There is no placeholder, no
+ * dash and no remembered value: `Stage` passes a number or renders nothing at
+ * all, because the one thing a readout beside a live video must never do is
+ * print a plausible figure nobody measured. See `use-presented-frame-rate.ts`.
+ *
+ * ⛔ IT IS `aria-hidden`, and that is the same rule the live clock follows
+ * (spec §5: clocks are not live regions and additionally carry `aria-hidden`).
+ * Nothing here is inside an `aria-live` region — the HUD and the facts row are
+ * plain spans by design — but a leaf that rewrites itself once a second is
+ * still noise to a screen reader moving through the stage, and it says nothing
+ * the state chip beside it does not: whether the customer is watching a live
+ * picture is announced by the log and by the chip's own word, in words.
+ *
+ * ⚠️ THE CONSEQUENCE, WRITTEN DOWN: `scripts/gui-text-quality.mjs` exempts
+ * anything under `aria-hidden="true"` from its CONTRAST check (it still
+ * measures size and truncation). The chip therefore carries no new colour of
+ * its own — it is the bare `.ai-chip`, ink and surface identical to the place
+ * chip beside it, which the gate DOES measure in both themes on this same
+ * surface. Its contrast is the place chip's contrast, by construction.
+ */
+function FrameRateChip({ fps, narrowOnly }: { fps: number; narrowOnly?: boolean }): JSX.Element {
+  return (
+    <span
+      className={`ai-chip ai-fps${narrowOnly === true ? ' ai-fps-inline' : ''}`}
+      aria-hidden="true"
+    >
+      <span className="ai-chip-ico">
+        <IconSignal />
+      </span>
+      {/* ONE text node. Two (`{fps} fps`) would split the reading in the DOM,
+          and the loaded-state markers the privacy scan and the every-scene
+          arm wait on are substring matches over the text nodes as they stand. */}
+      {`${String(fps)} fps`}
+    </span>
   );
 }
 
@@ -276,6 +370,7 @@ function StageFit({
   sessionId,
   collapsed,
   onWatchChange,
+  onVideoEl,
   standIn,
 }: {
   turning: boolean;
@@ -286,6 +381,9 @@ function StageFit({
   sessionId: string | null;
   collapsed: boolean;
   onWatchChange: (watch: StageWatch) => void;
+  /** Passed straight through to the panel — see the note where the stage
+   *  creates it. Stable, like `onWatchChange`. */
+  onVideoEl: (el: HTMLVideoElement | null) => void;
   standIn?: ReactNode;
 }): JSX.Element {
   const fitRef = useRef<HTMLDivElement>(null);
@@ -333,6 +431,7 @@ function StageFit({
                 sessionId={sessionId}
                 visible={!collapsed}
                 onWatchChange={onWatchChange}
+                onVideoEl={onVideoEl}
                 standIn={standIn}
               />
             </div>

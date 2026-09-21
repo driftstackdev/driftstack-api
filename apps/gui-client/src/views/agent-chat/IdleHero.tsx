@@ -51,10 +51,20 @@ export function IdleHero({
    */
   preview?: boolean;
   /**
-   * A gate card stands above the hero (no API key). Spec §3.8: the card TAKES
-   * THE BEATS' PLACE, so the first screen still ends at the templates instead
-   * of pushing them below the fold — the card already answers "what do I do
-   * next", which is the beats' job, and it is the more urgent answer.
+   * A gate card stands above the hero. Spec §3.8: the card TAKES THE BEATS'
+   * PLACE, so the first screen still ends at the templates instead of pushing
+   * them below the fold — the card already answers "what do I do next", which
+   * is the beats' job, and it is the more urgent answer.
+   *
+   * ⛔ EITHER CARD, NOT JUST THE API-KEY ONE. Spec §3.8 names two gates and so
+   * does the test that guards this ("no API key, or a preview deployment"), but
+   * until the `preview` scene existed nothing had ever rendered the second one:
+   * a preview deployment got the card AND kept the explainer, and at the
+   * 960x600 minimum that first screen was 21px over and cut its bottom row of
+   * templates. In preview the two sentences say the same thing anyway — the
+   * card's "browser actions are not carried out on a real iPhone yet" is the
+   * explainer's last clause — so the short tier drops the explainer and loses
+   * no fact.
    */
   gated?: boolean;
 }): JSX.Element {
@@ -107,7 +117,17 @@ export function IdleHero({
             </span>
             <span>
               <b>{t.label}</b>
-              <span className="ai-tpl-desc">{t.description}</span>
+              {/* The description CLAMPS to two lines in the short tier (the
+                  mockup's own 960x600 idle frame draws it with an ellipsis), so
+                  it carries the sentence whole in a `title` — spec §7's rule,
+                  "ellipsis-clipped text always has a title". The attribute is
+                  unconditional because the clamp is a CSS tier the markup
+                  cannot see, and a tooltip that repeats text the eye already
+                  reads costs nothing; a clipped sentence with no way back costs
+                  a customer the one thing the card promises not to do. */}
+              <span className="ai-tpl-desc" title={t.description}>
+                {t.description}
+              </span>
               {t.guard !== undefined && <span className="ai-tpl-guard">{t.guard}</span>}
             </span>
           </button>
@@ -149,14 +169,27 @@ export function GateCard({
       data-component={component}
       className="ai-card ai-gate mx-auto w-full max-w-3xl"
     >
+      {/* ⛔ FOUR DIRECT GRID CHILDREN, NOT A WRAPPED PAIR — and the flattening
+          is the whole repair, not a tidy-up. The title and the body used to sit
+          inside one `<span>` occupying the middle column, so BOTH of them were
+          as narrow as the narrowest thing in that column allowed: 198px at the
+          960x600 minimum, where the title wrapped to two lines and the body to
+          three, and the card stood 105.5px tall above a first screen that had
+          52px less room than it needed. As grid AREAS they can be placed apart,
+          which is what `[data-ai-short] .ai-gate` does — the title spans across
+          the button's column and fits on one line (measured: 250px of text in a
+          347px row), the body keeps its own column beside the button. The
+          default tier's areas reproduce the old two-row stack exactly, so the
+          1280x800 card is byte-for-byte the layout the mockup draws.
+          Nothing a test reads moved: the `role`, the `data-component`, the text
+          content and the action button's accessible name are all where they
+          were. */}
       <span className="ai-card-ico" aria-hidden="true">
         {icon}
       </span>
-      <span>
-        <span className="ai-gate-title">{title}</span>
-        <span className="ai-gate-body">{body}</span>
-      </span>
-      {action}
+      <span className="ai-gate-title">{title}</span>
+      <span className="ai-gate-body">{body}</span>
+      {action !== undefined && <span className="ai-gate-act">{action}</span>}
     </div>
   );
 }

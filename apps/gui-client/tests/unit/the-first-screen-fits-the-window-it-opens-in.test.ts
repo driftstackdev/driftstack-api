@@ -54,6 +54,20 @@ function rule(selector: string): string {
   return m[2] ?? '';
 }
 
+/** The declaration block of a rule whose selector LIST contains `selector`.
+ *  `rule()` above only finds a block whose selector stands ALONE on its line,
+ *  and the gate-card re-cut deliberately shares one block between the two tiers
+ *  a gate card can appear in — a lookup that missed would read as "has no such
+ *  declaration", which every `toContain` arm would report as a plain failure and
+ *  every `not.toContain` arm would report as a PASS. Throws on a miss. */
+function ruleInGroup(selector: string): string {
+  for (const m of CSS.matchAll(/(^|\n)([^{}]+)\{([^}]*)\}/g)) {
+    const selectors = (m[2] ?? '').split(',').map((x) => x.trim());
+    if (selectors.includes(selector)) return m[3] ?? '';
+  }
+  throw new Error(`no CSS rule group containing ${selector}`);
+}
+
 /** One line of the budget: the selector, the property, what it must say now,
  *  and what it said before final QA measured the overflow. */
 interface Budget {
@@ -197,5 +211,134 @@ describe('a gate card takes the explainer’s place rather than pushing the temp
     expect(CSS).not.toMatch(/\n\[data-ai-short\] \.ai-hello > p \{[^}]*display: none/);
     // …and the tier still shrinks it, which is the saving the UNGATED hero made.
     expect(rule('[data-ai-short] .ai-hello > p')).toContain('font-size: 12.5px;');
+  });
+});
+
+/**
+ * ⛔ AND THE GATED FIRST SCREEN STILL DID NOT FIT. Final QA left it 52px over at
+ * the 960x600 minimum and recorded the number rather than closing it: two cards
+ * in the bottom row cut at 41.5px of 82, no bottom edge, touching the composer.
+ * Re-measured on the real view in a browser at the start of this stage, both
+ * themes: `.ai-log` scrollHeight 395 against clientHeight 343.
+ *
+ * The 52px came back in five moves, all of them spacing or wrapping — no font
+ * size went down, no sentence was shortened, no block was dropped. After them,
+ * measured in the same browser in both themes: 960x600 fits with 4.3px to
+ * spare, 1024x640 with 59.3, 1120x700 with 112.3, 1280x800 with 13.5.
+ *
+ * The same jsdom limit applies as above: there is no layout engine here, so
+ * this file holds the BUDGET and scripts/gui-visual-check.mjs holds the
+ * MEASUREMENT — it renders the three first-screen scenes at 960x600 and
+ * 1024x640 and 1280x800 in both themes and fails on a first screen that wants
+ * to scroll.
+ *
+ * NEGATIVE CONTROL: restore any one `was` value below and its arm reds.
+ */
+const GATED_BUDGET: ReadonlyArray<Budget> = [
+  // The template heading keeps its words and its type; the air around a
+  // two-word label is what goes.
+  { selector: '[data-ai-short] .ai-tpl-h', now: 'margin: 8px 0 5px;', was: 'margin: 13px 0 7px;' },
+  // …and the headline sits one step closer to whatever is above it.
+  { selector: '[data-ai-short] .ai-hello > h1', now: 'margin-top: 4px;', was: 'margin-top: 6px;' },
+  // 10px of dead space under the last row of templates is what turned a fit
+  // into an overflow. The TOP padding stays — the gate card needs the air.
+  {
+    selector: '[data-ai-narrow][data-ai-short] .ai-log',
+    now: 'padding-bottom: 6px;',
+    was: 'padding-bottom: 10px;',
+  },
+];
+
+describe('the gated first screen fits the minimum window too', () => {
+  it.each(GATED_BUDGET)(
+    'holds $now on $selector — one of the five the 960x600 gated fit was bought with, not the $was before it',
+    ({ selector, now, was }: Budget) => {
+      const block = rule(selector);
+      expect(block, `${selector} lost the value the gated fit was measured with`).toContain(now);
+      expect(block, `${selector} is back at its pre-fix value`).not.toContain(was);
+    },
+  );
+
+  it('⛔ the gate card gives its TITLE the action’s column, so it fits on one line', () => {
+    // The biggest single move: 18.7 of the 52px. "Connect your API key to run
+    // automations" is 250px of text and the card's middle column is 198px at
+    // 960x600, so the title wrapped to two lines; spanning the button's column
+    // gives it 347px and one line. Both tiers a gate card can appear in — the
+    // 600px-tall minimum and the narrow-and-not-tall band above it.
+    const block = ruleInGroup('[data-ai-short] .ai-gate');
+    expect(block).toContain("'ico title title'");
+    expect(block).toContain("'ico body act'");
+    expect(ruleInGroup('[data-ai-narrow]:not([data-ai-tall]) .ai-gate')).toBe(block);
+    // …and the padding and the margin under it, worth 8px more.
+    expect(block).toContain('padding: 8px 12px;');
+    expect(block).toContain('margin-bottom: 10px;');
+  });
+
+  it('⛔ POSITIVE CONTROL — the default tier still stacks title over body, as the mockup draws it', () => {
+    // Without this arm the re-cut could become the baseline and the 1280x800
+    // card — which the mockup draws with a two-line title and the body beside
+    // the icon — would quietly change with no measurement behind it.
+    const base = rule('.ai-gate');
+    expect(base).toContain("'ico title act'");
+    expect(base).toContain("'ico body act'");
+    expect(base).toContain('padding: 10px 12px;');
+    expect(base).toContain('margin-bottom: 14px;');
+  });
+
+  it('⛔ the template descriptions really clamp — the rule that was inert for three stages', () => {
+    // `-webkit-line-clamp` does nothing outside a `-webkit-box` with a vertical
+    // orient and a hidden overflow. The declaration had been there since the
+    // short tier was written and the descriptions went on wrapping to three
+    // lines: 16px of the 52. The mockup's own 960x600 idle frame draws them
+    // with an ellipsis, so the clamp is what the design asked for.
+    const block = rule('[data-ai-short] .ai-tpl-desc');
+    expect(block).toContain('-webkit-line-clamp: 2;');
+    expect(block).toContain('display: -webkit-box;');
+    expect(block).toContain('-webkit-box-orient: vertical;');
+    expect(block).toContain('overflow: hidden;');
+  });
+
+  it('…and the clipped sentence is still reachable, because the span carries it as a title', () => {
+    // Spec §7: ellipsis-clipped text always has a `title`. A clamp with no way
+    // back to the words is the one thing a card promising "no purchases" must
+    // not do. Source-read with comments stripped — the file's own prose says
+    // `title=` while explaining it.
+    const hero = readFileSync(resolve(__dirname, '../../src/views/agent-chat/IdleHero.tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(hero).toMatch(/<span className="ai-tpl-desc" title=\{t\.description\}>/);
+  });
+
+  it('⛔ and the empty composer rests one row shorter while a gate card is on the screen', () => {
+    // Measured at the DEFAULT 1280x800 window, not the minimum: the gated
+    // composer's caption wraps to a second line in its foot (+7px) and the
+    // no-key first screen was 7px over there — the bottom row of templates cut
+    // for the one customer who has not connected a key yet. Style only, exactly
+    // as D6 did it for a short window; `rows={COMPOSER_ROWS}` is still 5.
+    expect(rule(".ai-cmd[data-rest='idle'][data-gated] .ai-cmd-input")).toContain(
+      '--ai-rest-rows: 4;',
+    );
+    // Valueless-or-absent, or every connected customer gets the shorter box.
+    const composer = readFileSync(
+      resolve(__dirname, '../../src/views/agent-chat/Composer.tsx'),
+      'utf8',
+    )
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(composer).toMatch(/const gatedAttr = aiReady \? undefined : '';/);
+    expect(composer).toContain('data-gated={gatedAttr}');
+  });
+
+  it('⛔ and BOTH gate cards take the beats’ place — not just the API-key one', () => {
+    // Spec §3.8 names two gates and this file's sibling test says so in its
+    // header ("no API key, or a preview deployment"), but until the `preview`
+    // scene existed nothing had ever rendered the second: a preview deployment
+    // got the card AND kept the explainer, and at 960x600 that first screen was
+    // 21px over. `gated` is "a gate card stands above the hero", so it is true
+    // for both.
+    const view = readFileSync(resolve(__dirname, '../../src/views/AgentChatView.tsx'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    expect(view).toMatch(/gated=\{!aiReady \|\| !actionsAreLive\}/);
   });
 });

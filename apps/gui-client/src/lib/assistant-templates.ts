@@ -68,7 +68,7 @@ export const DEFAULT_ASSISTANT_TEMPLATES: readonly AssistantTemplate[] = [
   {
     id: 'add-to-cart',
     label: 'Add to cart (stop before paying)',
-    description: 'Shop a product into the cart — never checks out.',
+    description: 'Fill a cart, then stop before checkout.',
     icon: 'cart',
     guard: 'stops before paying',
     prompt:

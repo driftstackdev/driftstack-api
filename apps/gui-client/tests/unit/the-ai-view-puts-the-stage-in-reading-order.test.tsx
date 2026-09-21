@@ -11,11 +11,16 @@
 //   1. THE ORDER, because a keyboard user reads the view in it.
 //   2. ⛔ THE CONTAINER-QUERY TRAP. Spec §1 writes the reflow as
 //      `@container aiview (…)`. `container-type` makes an element a containing
-//      block for `position: fixed` DESCENDANTS — and the view root holds the
-//      save-as-task dialog, the screenshot lightbox and the rail's overlay, all
-//      `fixed inset-0`. Declaring the container on the view would silently
-//      shrink two modal backdrops to the view they sit in. The tiers are
-//      MEASURED instead (`use-view-width.ts`), which is also the path the two
+//      block for `position: fixed` DESCENDANTS, and the view root still holds
+//      one: the save-as-task dialog's `fixed inset-0` backdrop. Declaring the
+//      container on the view would silently shrink it to the view it sits in.
+//      ⛔ THE COUNT IS ONE, NOT THREE, AND BOTH CORRECTIONS ARE MEASURED. The
+//      screenshot lightbox was the second and is now portalled to
+//      `document.body` — see `the-full-size-screenshot-is-a-dialog-not-a-line-
+//      in-the-transcript`. The rail's narrow-tier overlay was never the third:
+//      `[data-ai-narrow] .ai-rail[data-open] .ai-rail-panel` is `position:
+//      absolute`, so no container declared on the view can change where it
+//      lands. The tiers are MEASURED anyway (`use-view-width.ts`), the path the two
 //      WebViews with no `cq` units at all take; the one container query left is
 //      `.ai-fit`, which has no fixed descendant and needs `100cqh`.
 //   3. THE STAGE IS A DARK ROOM IN BOTH THEMES (spec D2). `AgentSessionPanel`'s

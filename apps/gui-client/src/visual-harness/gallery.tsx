@@ -85,6 +85,15 @@ export const AUDIT_SCENES = [
   // pill at 2.47:1 that had shipped for months.
   'audit-agent-chat',
   'audit-agent-chat-nokey',
+  // ⛔ THE DEPLOYMENT THAT PLANS BUT DOES NOT ACT. `preview` is a real product
+  // state — the view derives it from the server's own `/version` answer and
+  // stamps `data-ai-preview` — and for three stages it was the one state with
+  // CSS written for it, a second branch of customer copy behind it, and NO
+  // scene: the unlit-glass rule and IdleHero's preview explainer had never been
+  // rendered by a gate, in either theme. Round C found it when a vendor-name
+  // negative control injected into that explainer stayed green because nothing
+  // reached the line.
+  'audit-agent-chat-preview',
   'audit-agent-chat-planning',
   'audit-agent-chat-running',
   'audit-agent-chat-approval',
@@ -101,6 +110,14 @@ export const AUDIT_SCENES = [
   // (spec §9 stage 7). Its stage is 960x600 for that reason — at 1280x800 the
   // screen is wide enough that the compact layout never comes up.
   'audit-agent-chat-ended',
+  // ⛔ THE TWO BRANCHES THAT MAY NAME A MODEL VENDOR (copy spec D5: the
+  // customer is being told whose key to go and buy). They exist so the privacy
+  // scan's vendor ban is an ALLOWLIST BY CONSTRUCTION rather than a ban that
+  // happens to be green because nothing renders the sanctioned sentences —
+  // marketing-scenes.test.tsx now requires each approved sentence to be reached
+  // by the scene that is allowed to say it.
+  'audit-agent-chat-consent',
+  'audit-agent-chat-budget',
   'audit-team',
   'audit-proxies',
 ] as const;

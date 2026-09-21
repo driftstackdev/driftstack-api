@@ -141,6 +141,21 @@ export interface StageCaption {
   icon: 'tap' | 'pause' | 'check' | null;
   /** The two-line, centred idle form. */
   idle: boolean;
+  /**
+   * May the stage's one sentence about what WATCHING MEANS ("You watch, the AI
+   * drives — and you can stop it at any time.") follow this caption?
+   *
+   * ⛔ IT IS NOT THE SAME QUESTION AS `idle`, AND IT USED TO BE. One boolean
+   * answered two: "draw the centred two-line block" (a look) and "the promise
+   * about watching still holds" (a fact). They agree in every state but one —
+   * PREVIEW, which is a resting caption whose whole content is that there is
+   * nothing to watch — and the `preview` scene showed the consequence the day
+   * it existed: "Live view unavailable · Browser actions run in preview mode,
+   * so there is no live view." with "You watch, the AI drives" underneath it.
+   * Splitting them also lets the facts row mark itself EMPTY in preview, which
+   * `idle` was keeping it from doing (see `data-empty` in Stage).
+   */
+  reassure: boolean;
 }
 
 export interface CaptionInput {
@@ -169,6 +184,8 @@ export function stageCaption(input: CaptionInput): StageCaption {
       body: 'Browser actions run in preview mode, so there is no live view.',
       icon: null,
       idle: true,
+      // There is no iPhone here to watch and nothing running to stop.
+      reassure: false,
     };
   }
   const phase = input.phase ?? 'idle';
@@ -179,6 +196,7 @@ export function stageCaption(input: CaptionInput): StageCaption {
       subject: label ?? 'the next step',
       icon: 'pause',
       idle: false,
+      reassure: false,
     };
   }
   if (phase === 'acting' || phase === 'thinking') {
@@ -191,6 +209,7 @@ export function stageCaption(input: CaptionInput): StageCaption {
       subject: label ?? 'Working…',
       icon: 'tap',
       idle: false,
+      reassure: false,
     };
   }
   if (phase === 'done') {
@@ -199,6 +218,7 @@ export function stageCaption(input: CaptionInput): StageCaption {
       subject: input.sessionActive === true ? 'the iPhone is still on this page' : '',
       icon: 'check',
       idle: false,
+      reassure: false,
     };
   }
   if (phase === 'trouble') {
@@ -209,6 +229,7 @@ export function stageCaption(input: CaptionInput): StageCaption {
       subject: input.sessionActive === true ? 'the iPhone is still on this page' : '',
       icon: null,
       idle: false,
+      reassure: false,
     };
   }
   return {
@@ -217,6 +238,7 @@ export function stageCaption(input: CaptionInput): StageCaption {
     body: 'Send a task and a real iPhone appears here, live.',
     icon: null,
     idle: true,
+    reassure: true,
   };
 }
 

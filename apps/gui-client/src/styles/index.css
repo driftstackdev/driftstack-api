@@ -1715,13 +1715,43 @@
   gap: 8px;
   flex-wrap: wrap;
 }
-/* the lightbox the figure opens */
+/* the full-size screenshot, inside the dialog the figure opens */
+/* ⛔ THE CAP KNOWS ABOUT THE FOOTER UNDER IT. `82vh` alone sizes the picture as
+   if it were the dialog's only child, and it is not: the panel is a flex column
+   of picture + 12px gap + the 36px caption row, inside a backdrop that pads 32px
+   top and bottom. At the Tauri MINIMUM window (600px tall) the sum overflowed
+   the panel's own `max-h-full` box and the caption row only stayed on screen
+   because the backdrop's bottom padding happened to absorb it — a 2px margin,
+   measured, at the one window size a customer is guaranteed to be able to reach.
+   The second term is that chrome (32 + 32 + 12 + 36, plus 8px of air), so the
+   whole dialog fits at every height; 82vh still wins at every ordinary one and
+   the picture at 1280x800 is unchanged. */
 .ai-lightbox-img {
   display: block;
-  max-height: 82vh;
+  max-height: min(82vh, calc(100vh - 120px));
   max-width: 100%;
   border-radius: 12px;
   background: rgb(var(--surface-inset-rgb));
+  box-shadow: var(--ai-float);
+}
+/* the same box, WHILE THE PICTURE IS STILL COMING.
+   ⛔ A PERCENTAGE HEIGHT HERE IS ZERO. The skeleton wore `h-full w-full`, which
+   is right inside `.ai-shot-frame` (definite width + aspect-ratio) and is
+   nothing at all inside the dialog's panel — a flex column sized by its own
+   children. Measured in a browser: 226x0, so opening the full-size view drew a
+   caption pill with an empty space above it until the bytes landed. In the app
+   that is EVERY open, because the dialog mounts its own thumbnail with no
+   cached blob and only a gallery scene supplies a ready `src`.
+   It takes the picture's cap and the device's ratio (the same 402/874 the card's
+   frame uses), so the image arrives into the box the skeleton was holding
+   instead of the dialog jumping under the pointer. */
+.ai-lightbox-wait {
+  display: block;
+  height: min(82vh, calc(100vh - 120px));
+  max-width: 100%;
+  aspect-ratio: 402 / 874;
+  border-radius: 12px;
+  background: rgb(var(--surface-elevated-rgb));
   box-shadow: var(--ai-float);
 }
 
@@ -1855,9 +1885,21 @@
   flex-wrap: wrap;
   align-items: center;
 }
+/* ⛔ NAMED AREAS, BECAUSE THE TITLE AND THE BODY HAVE TO BE PLACEABLE APART.
+   The default tier below is the mockup's card and nothing about it moved: icon
+   column, one stacked title-over-body column, action on the right, both the
+   icon and the action centred across the two rows. What the areas buy is the
+   short tier (further down), where the title takes the action's column so it
+   fits on ONE line instead of two — measured on the real view at the 960x600
+   minimum, that one change is 18.7 of the 52px the gated first screen was
+   over. With title and body inside one wrapper span, as they were until now,
+   the two could only ever be as wide as the narrower of them needed. */
 .ai-gate {
   display: grid;
   grid-template-columns: 28px 1fr auto;
+  grid-template-areas:
+    'ico title act'
+    'ico body act';
   column-gap: 11px;
   align-items: center;
   padding: 10px 12px;
@@ -1868,20 +1910,31 @@
     var(--ai-lift);
 }
 .ai-gate .ai-card-ico {
+  grid-area: ico;
   color: rgb(var(--status-busy-rgb));
   background: rgb(var(--status-busy-rgb) / 0.13);
 }
 .ai-gate-title {
+  grid-area: title;
   display: block;
   font-size: 12.5px;
   font-weight: 600;
   color: rgb(var(--ink-primary-rgb));
 }
 .ai-gate-body {
+  grid-area: body;
   display: block;
   font-size: 11.5px;
   line-height: 16px;
   color: rgb(var(--ink-secondary-rgb));
+}
+/* The action's own wrapper, so the button keeps its own classes and the grid
+   still has something to place. A gate with no action leaves the area empty —
+   the preview card, which is a standing fact and has no button. */
+.ai-gate-act {
+  grid-area: act;
+  display: flex;
+  align-items: center;
 }
 
 /* ─── 3.8 · idle: a first impression that is composed, not centred ─────── */
@@ -2257,6 +2310,16 @@
   --ai-rest-rows: 5;
 }
 .ai-cmd[data-rest='idle'][data-short] .ai-cmd-input {
+  --ai-rest-rows: 4;
+}
+/* …and the same four when a GATE CARD is on the first screen. Measured at the
+   default 1280x800 window: the gated composer's caption wraps to a second line
+   in the foot (+7px) and the no-key first screen was 7px over its column, so
+   the bottom row of templates was cut for the one customer who has not
+   connected a key yet. The box is not disabled here — "You can explore
+   templates and draft a task now" is the promise — it simply rests one row
+   shorter while the screen above it is doing the explaining. */
+.ai-cmd[data-rest='idle'][data-gated] .ai-cmd-input {
   --ai-rest-rows: 4;
 }
 .ai-cmd-foot {
@@ -3050,6 +3113,24 @@
   letter-spacing: 0.08em;
   font-size: 10px;
 }
+/* The dot itself, and the tone it wears when nothing else has claimed it.
+   ⛔ IT MUST STAY ABOVE THE TONES. It used to sit BELOW them, and two of the
+   four tone rules were dead because of it: `.ai-chip-live .ai-pip` and
+   `.ai-chip-warm .ai-pip` are (0,2,0) exactly like `.ai-chip .ai-pip`, so the
+   later rule won and every dot in the HUD painted `--status-idle` grey. Only
+   `.ai-chip-open .ai-pip.is-ready` survived, on (0,3,0). Measured in the
+   running scene before this move: the LIVE dot computed rgb(107 114 128) in
+   BOTH themes where the mockup draws rgb(164 58 75) — the accent — and the
+   STARTING dot the same grey where the tone says amber. The dot is the view's
+   one "this is live" signal, so it read as idle for as long as a task ran.
+   Base first, tones after: a fifth tone added later cannot fall into it. */
+.ai-chip .ai-pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: rgb(var(--status-idle-rgb));
+}
 /* The four tones. Each is a real background-color under real text, because the
    gate measures nothing else — and each pairs its colour with the WORD, so
    colour is never the only signal. */
@@ -3081,13 +3162,6 @@
 .ai-chip-quiet {
   color: rgb(var(--ink-muted-rgb));
 }
-.ai-chip .ai-pip {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex: none;
-  background: rgb(var(--status-idle-rgb));
-}
 .ai-hud-note {
   font-size: 10.5px;
   line-height: 14px;
@@ -3097,6 +3171,29 @@
   text-overflow: ellipsis;
   min-width: 0;
 }
+/* `30 fps` — the one number on this stage that is MEASURED rather than
+   repeated from the chat (spec §3.4; src/lib/use-presented-frame-rate.ts).
+
+   ⛔ IT DELIBERATELY CARRIES NO COLOUR OF ITS OWN. It is the bare `.ai-chip`,
+   so its ink and its surface are the place chip's, which
+   `scripts/gui-text-quality.mjs` measures in both themes on this same surface —
+   and that is the only contrast proof available here, because the chip is
+   `aria-hidden` (the ticking-number rule) and that gate exempts aria-hidden
+   text from its contrast check while still measuring its size.
+
+   TABULAR FIGURES because the digits change once a second: with proportional
+   ones a rate moving between 29 and 30 would change the chip's width and nudge
+   the row it is centred in, every second, for the length of a task. */
+.ai-fps {
+  font-variant-numeric: tabular-nums;
+}
+/* The frame rate's narrow-tier copy, beside the place chip in the HUD — the
+   same door `.ai-facts-inline` below uses, for the same reason: at 252px the
+   facts row under the phone is gone and this is the only line left. */
+.ai-fps-inline {
+  display: none;
+}
+
 /* The place chip rides up here ONLY in the narrow tier, where the facts row
    under the phone is gone (spec §1). */
 .ai-facts-inline {
@@ -3649,6 +3746,33 @@
 [data-ai-narrow] .ai-facts-inline {
   display: inline-flex;
 }
+[data-ai-narrow] .ai-fps-inline {
+  display: inline-flex;
+}
+/* ⛔ ONE AUTO MARGIN, ON THE STATE CHIP — NOT ONE PER FACT. The 236px HUD reads
+   left to right as "what the stage is doing", then the facts about it hard
+   against the right edge. `.ai-facts-inline { margin-left: auto }` did that on
+   its own while the place chip was the ONLY thing after the state chip, and it
+   stopped being enough the moment a second fact joined it: `place` is null
+   until the device's capability report lands (browsingFrom() returns null until
+   the 10s poll answers), and in that window the frame-rate chip is the only
+   trailing child and carries no auto margin of its own.
+   Measured at 960x600 before this rule, with the place chip removed exactly as
+   `place === null` renders it: the chip sat at x=338.7 — flush against LIVE,
+   with 106px of empty room to its right — and jumped to x=444.5 when the place
+   arrived, seconds later, in the same session.
+   So the margin goes on the state chip's RIGHT, where it is the single auto
+   margin whatever follows it, and the place chip's own is cancelled here: two
+   auto margins SHARE the free space between them instead of pushing the group.
+   Narrow tier only, and a direct child of the HUD only — in the wide tier
+   `.ai-hud-note` sits between the two and an auto margin would shove that
+   sentence to the right edge. */
+[data-ai-narrow] .ai-hud > .ai-chip-state {
+  margin-right: auto;
+}
+[data-ai-narrow] .ai-hud > .ai-facts-inline {
+  margin-left: 0;
+}
 [data-ai-narrow] .ai-log {
   padding: 12px 14px 10px 16px;
 }
@@ -3855,13 +3979,86 @@
 [data-ai-narrow]:not([data-ai-tall]) .ai-hello[data-gated] > p {
   display: none;
 }
+
+/* ⛔ AND IT STILL DID NOT FIT. Final QA left the gated first screen 52px over
+   its column at the 960x600 minimum and said so: two cards in the bottom row
+   cut at 41.5px of 82, no bottom edge, touching the composer. Measured again
+   at the start of this stage on the real view, both themes: `.ai-log`
+   scrollHeight 395 against clientHeight 343.
+   The 52px comes back in four moves, and the rule every one of them obeys is
+   the rule the hero budget above obeys — SPACING AND WRAPPING ONLY. No font
+   size goes down, no sentence is shortened, no block is dropped: the gate
+   card, the headline, the template heading and all four cards are all still
+   on screen, in that order.
+     1 · the gate card's title spans the action's column (−18.7)
+     2 · the template descriptions really clamp to two lines (−16)
+     3 · the template heading's margins (−7)
+     4 · the gate card's padding and its margin under (−8)
+     5 · the headline's top margin (−2)
+   = 51.7, with the log's own bottom padding (−4) making the fit rather than
+   the tie. The budget is COLLECTIVE, like the hero's: no single line here is
+   "the" fix, and `the-first-screen-fits-the-window-it-opens-in` holds each of
+   them so none can drift back quietly. The measurement itself is a gate —
+   scripts/gui-visual-check.mjs renders these scenes at 960x600, 1024x640 and
+   1280x800 in both themes and fails on a first screen that wants to scroll.
+   (1280x800 was added in review of this stage: it is the window the app opens
+   at, and the THINNEST of the three — 13.5px of slack for the gated screen
+   against 4.25 at the minimum.) */
+
+/* 1 + 4 · THE GATE CARD IN A WINDOW THAT CANNOT SPARE A LINE. `title title`
+   gives the headline the action's column too: "Connect your API key to run
+   automations" is 250px of text, which wraps to two lines in the 198px middle
+   column and fits on ONE in the 347px span (37.5px → 18.75px). The body keeps
+   its own column beside the button, where it reads as the sentence the button
+   is about. Both tiers, because both are "a gate card is standing above a hero
+   that has no room": `short` is the 600px-tall minimum and the band above it is
+   the one `:not([data-ai-tall])` covers. */
+[data-ai-short] .ai-gate,
+[data-ai-narrow]:not([data-ai-tall]) .ai-gate {
+  grid-template-areas:
+    'ico title title'
+    'ico body act';
+  padding: 8px 12px;
+  margin-bottom: 10px;
+}
+
+/* 3 · the template heading. It keeps its words and its type; what goes is the
+   air around a two-word label. */
+[data-ai-short] .ai-tpl-h {
+  margin: 8px 0 5px;
+}
+
+/* 5 · and the headline sits one step closer to whatever is above it. */
+[data-ai-short] .ai-hello > h1 {
+  margin-top: 4px;
+}
+
+/* The log's own bottom padding, in the tier where four template cards end the
+   screen: 10px of dead space under the last row is what turns a fit into an
+   overflow. The top stays as it is — the gate card needs the air above it. */
+[data-ai-narrow][data-ai-short] .ai-log {
+  padding-bottom: 6px;
+}
+
 [data-ai-short] .ai-tpl-guard {
   display: none;
 }
 [data-ai-short] .ai-tpl > button {
   padding: 8px 10px;
 }
+/* 2 · ⛔ THIS CLAMP WAS INERT, AND HAD BEEN SINCE IT WAS WRITTEN. `.ai-tpl-desc`
+   is `display: block`, and `-webkit-line-clamp` does nothing outside a
+   `-webkit-box` with a vertical orient and a hidden overflow — so the rule read
+   as a decision that had been taken while the descriptions went on wrapping to
+   three lines. Measured at 960x600: two of the four cards were 82px instead of
+   66px, 16px of the 52px the gated first screen was over. The mockup's own
+   960x600 idle frame draws these with an ellipsis, so the clamp is what the
+   design asked for and this is the line that makes it true.
+   The sentence is not lost: IdleHero puts it on the span's `title`. */
 [data-ai-short] .ai-tpl-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
   -webkit-line-clamp: 2;
 }
 [data-ai-short] .ai-answer-say {

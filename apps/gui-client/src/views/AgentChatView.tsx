@@ -337,11 +337,15 @@ export function AgentChatView({
     profileId,
     setProfileId,
     createdAtRef,
-    // GALLERY SEAM (spec §8): both undefined in the app — only a visual-harness
-    // scene ever sets them, so the gates can measure this view in states that
-    // otherwise need a live device on the other end of a stream.
+    // GALLERY SEAM (spec §8): all three undefined in the app — only a
+    // visual-harness scene ever sets them, so the gates can measure this view in
+    // states that otherwise need a live device on the other end of a stream.
+    // `frameRate` is the third: the HUD's chip is measured off the live
+    // <video> in the app, and a scene's screen holds a drawn page that presents
+    // no frames to measure.
     standIn,
     captureSrc,
+    frameRate,
   } = useAgentChatSession();
   useEffect(() => {
     setChatOptions(proxyId !== undefined ? { proxyId } : {});
@@ -1092,6 +1096,7 @@ export function AgentChatView({
             idleFact="You watch, the AI drives — and you can stop it at any time."
             onWatchChange={onWatchChange}
             standIn={standIn}
+            frameRate={frameRate}
           />
 
           <div ref={columnRef} className="ai-mission" data-component="ai-automation-chat-column">
@@ -1143,7 +1148,12 @@ export function AgentChatView({
                   preview={!actionsAreLive}
                   // §3.8: the gate card above takes the beats' place, so the first
                   // screen still ends at the templates rather than below the fold.
-                  gated={!aiReady}
+                  // EITHER card — the no-key gate or the preview one. Both are
+                  // rendered right above this hero and both answer "what do I do
+                  // next"; the preview deployment kept its explainer as well and
+                  // was 21px over at the 960x600 minimum until the `preview`
+                  // scene measured it.
+                  gated={!aiReady || !actionsAreLive}
                 />
               ) : (
                 <ol
@@ -1268,11 +1278,33 @@ export function AgentChatView({
 
             {/* Error */}
             {chat.error !== null && chat.error.kind === 'bundled_llm_consent' && (
-              <div className="border-t border-accent/40 bg-accent-subtle px-4 py-3">
+              /* `data-component` so a gate can TELL that a banner is docked.
+                 scripts/gui-visual-check.mjs asserts the idle first screen never
+                 scrolls at 960x600, 1024x640 and 1280x800; a docked banner
+                 takes ~130px out of the log, which is a different promise from
+                 spec §3.8's,
+                 so the gate reports that cell's overflow as a measurement rather
+                 than failing on it. Without a hook it would have to know the two
+                 scene names by heart. */
+              <div
+                data-component="ai-llm-banner"
+                className="border-t border-accent/40 bg-accent-subtle px-4 py-3"
+              >
                 <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-ink">{chat.error.message}</p>
-                    <p className="mt-0.5 text-2xs text-ink-muted">
+                    {/* ⛔ `ink-secondary`, NOT `ink-muted` — the two AI-credit
+                        banners are the same element and this one sits on the
+                        accent-tinted surface, where the muted token measured
+                        4.41:1 in the light theme against a 4.5 bar. Found the
+                        day `audit-agent-chat-consent` existed: this is shipped
+                        copy in a branch no scene had ever reached, so the text
+                        gate had never rendered it. `ink-secondary` measures
+                        5.16:1 on the same background. The budget banner below
+                        takes the same token: its own surface passes either way,
+                        and two sibling banners disagreeing about which ink a
+                        sub-line uses is how the first one drifted. */}
+                    <p className="mt-0.5 text-2xs text-ink-secondary">
                       {bundledLlmEnabled
                         ? 'Enabled — send your message again to continue.'
                         : 'You can use bundled AI usage billed to your account, or your own Anthropic key.'}
@@ -1304,11 +1336,14 @@ export function AgentChatView({
               </div>
             )}
             {chat.error !== null && chat.error.kind === 'bundled_llm_budget' && (
-              <div className="border-t border-status-error/40 bg-status-error/10 px-4 py-3">
+              <div
+                data-component="ai-llm-banner"
+                className="border-t border-status-error/40 bg-status-error/10 px-4 py-3"
+              >
                 <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-medium text-ink">{chat.error.message}</p>
-                    <p className="mt-0.5 text-2xs text-ink-muted">
+                    <p className="mt-0.5 text-2xs text-ink-secondary">
                       {chat.error.spentCents !== undefined && chat.error.capCents !== undefined
                         ? `You've used ${formatUsd(chat.error.spentCents)} of your ${formatUsd(chat.error.capCents)} monthly limit.`
                         : 'Raise your monthly limit, or use your own Anthropic key to keep going.'}

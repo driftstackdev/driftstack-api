@@ -39,7 +39,14 @@ import {
   agentChatSceneFixture,
 } from '../../src/visual-harness/agent-chat-scenes';
 import { AUDIT_SCENES, sceneSize } from '../../src/visual-harness/gallery';
-import { agentChatFixtureFor, auditLoadedMarkers } from '../../src/visual-harness/audit-scenes';
+import {
+  AUDIT_BASE_URL,
+  agentChatFixtureFor,
+  auditLoadedMarkers,
+  installVersionStub,
+  isAuditVersionStubInstalled,
+  scheduleVersionStubRemoval,
+} from '../../src/visual-harness/audit-scenes';
 
 vi.mock('../../src/lib/agent-session-control', () => ({
   fetchAgentCapture: vi.fn(() => Promise.resolve(null)),
@@ -274,15 +281,23 @@ describe('the drawn pages are images, never markup with text in them', () => {
 describe('every AI-view state is registered everywhere a scene has to be', () => {
   const sceneNames = AGENT_CHAT_SCENE_KINDS.map((k) => `audit-agent-chat-${k}`);
 
-  it('the nine kinds and the nine scene names are the same nine', () => {
-    // Seven STATES plus two WINDOWS. `small` is the running state at the
-    // 960x600 Tauri minimum; `ended` is the live panel's own terminal overlay
-    // at the same size (stage 7) — the box where its copy actually has to fit.
-    // Both exist so the narrow tier is measured by the text gate rather than
+  it('the twelve kinds and the twelve scene names are the same twelve', () => {
+    // Ten STATES plus two WINDOWS. `small` is the running state at the 960x600
+    // Tauri minimum; `ended` is the live panel's own terminal overlay at the
+    // same size (stage 7) — the box where its copy actually has to fit. Both
+    // exist so the narrow tier is measured by the text gate rather than
     // hand-checked once (stage 6's and stage 4's open issues); the gate renders
     // each scene at its own declared size and never passes `?stage=`, so a
     // scene is the only way in.
-    expect(sceneNames.length).toBe(9);
+    //
+    // ⛔ 9 → 12 IN THIS STAGE, AND EACH OF THE THREE CLOSES A NAMED GAP:
+    // `preview` is the deployment that plans but does not act — a real product
+    // state that had CSS and a second branch of customer copy written for it and
+    // no scene, so neither gate had ever rendered either; `consent` and `budget`
+    // are the two refusals that may name a model vendor (copy spec D5), which is
+    // what turns the privacy scan's vendor ban from green-by-coverage into an
+    // allowlist that is PROVED to be reached.
+    expect(sceneNames.length).toBe(12);
     for (const name of sceneNames) {
       expect(AUDIT_SCENES as ReadonlyArray<string>, name).toContain(name);
     }
@@ -316,19 +331,192 @@ describe('every AI-view state is registered everywhere a scene has to be', () =>
     expect(() => agentChatFixtureFor('audit-proxies')).toThrow(/state scenes/);
   });
 
-  it('only the no-key scene withholds the API key, and only it omits a chat override', () => {
+  it('only the no-key scene withholds the API key, and only the two idle deployments omit a chat override', () => {
     // The no-key state is reachable from settings alone, and it has to STAY
     // that way: it is the state `getByRole('status')` is pinned against with no
     // name, and a fixture chat could quietly add a second live region.
+    //
+    // `preview` omits the chat for the same reason and a different cause: it is
+    // a property of the DEPLOYMENT (the server's own `/version` answer), not of
+    // a turn, so the honest scene is the first screen of a preview install with
+    // the real hook publishing its real empty state. Its seam is the `/version`
+    // stub in audit-scenes.tsx, not a fixture chat — which is why the API key
+    // assertion below still separates it from `nokey`.
+    const withoutChat: ReadonlyArray<string> = ['nokey', 'preview'];
     for (const kind of AGENT_CHAT_SCENE_KINDS) {
       const fixture = agentChatSceneFixture(kind, FROZEN);
       if (kind === 'nokey') {
         expect(fixture.apiKey).toBeNull();
-        expect(fixture.chat).toBeUndefined();
       } else {
         expect(fixture.apiKey, kind).not.toBeNull();
+      }
+      if (withoutChat.includes(kind)) {
+        expect(fixture.chat, kind).toBeUndefined();
+      } else {
         expect(fixture.chat, kind).toBeDefined();
       }
     }
+  });
+
+  it('⛔ the preview scene is the ONLY one that answers /version, and it answers `simulated`', () => {
+    // The fourth seam (see `agentExecution` in agent-chat-scenes.tsx). Every
+    // other scene must leave it undefined: the audit base URL answers nothing,
+    // which is how `agent_execution: null` — "an older server, or a probe that
+    // has not landed yet, is treated as LIVE" — stays the default the other
+    // eleven scenes are measured under. A second scene quietly setting it would
+    // move a deliberate decision for every state it touched.
+    const answering = AGENT_CHAT_SCENE_KINDS.filter(
+      (k) => agentChatSceneFixture(k, FROZEN).agentExecution !== undefined,
+    );
+    expect(answering).toEqual(['preview']);
+    expect(agentChatSceneFixture('preview', FROZEN).agentExecution).toBe('simulated');
+  });
+
+  it('⛔ and the own-key account belongs to the scene whose model picker is UNLOCKED', () => {
+    // `hasOwnKey === false` only reaches a customer through the model picker,
+    // and the picker is locked the moment a chat has a session — so a scene that
+    // set `ownKey: false` beside a session would carry the fixture and render
+    // none of the copy it exists for. `consent` has no session; it is the one
+    // that can show "Some models run only on your own Anthropic key." and the
+    // "(needs your own key)" options.
+    const ownKeyFalse = AGENT_CHAT_SCENE_KINDS.filter(
+      (k) => agentChatSceneFixture(k, FROZEN).ownKey === false,
+    );
+    expect(ownKeyFalse).toEqual(['consent']);
+    expect(agentChatSceneFixture('consent', FROZEN).chat?.session ?? null).toBeNull();
+  });
+});
+
+/**
+ * ⛔ THE FOURTH SEAM'S LIFECYCLE, WHICH NOTHING READ (added in review of
+ * gallery-coverage-and-the-minimum-window).
+ *
+ * The other three doors are props: they exist only while a scene passes them
+ * and the app cannot see them. This one is a WINDOW-LEVEL `fetch` wrapper — the
+ * only seam in the harness that mutates something global — and the case for it
+ * being safe is entirely in how it installs and comes back out: it never stacks
+ * over itself, it delegates every other URL to the original, and it restores a
+ * MICROTASK after unmount rather than synchronously, so React StrictMode's
+ * mount → unmount → mount never leaves the window unstubbed between the two
+ * mounts.
+ *
+ * Every one of those is a claim in a comment, and the three functions that make
+ * them true — `installVersionStub`, `scheduleVersionStubRemoval`,
+ * `isAuditVersionStubInstalled` — were exported and called by nothing outside
+ * their own file (grep-verified: the last had no caller at all). A seam that
+ * touches `window` and has no test is the one to write a test for first.
+ */
+describe('the /version stub installs over window.fetch and gets back out of the way', () => {
+  const VERSION_URL = `${AUDIT_BASE_URL}/version`;
+  const BODY = {
+    version: '0.1.68',
+    driver: 'mock' as const,
+    agent_execution: 'simulated' as const,
+  };
+
+  /** Restores whatever `window.fetch` was before the arm, whatever it did. */
+  function withFetchRestored(run: () => Promise<void>): Promise<void> {
+    const original = window.fetch;
+    return run().finally(() => {
+      window.fetch = original;
+    });
+  }
+
+  /** A stand-in for the REAL `window.fetch`, so "delegated to the original" is
+   *  an observation and not an assumption. It records the URLs it was handed
+   *  and answers 204 — a status the stub never produces, so the two answers
+   *  cannot be confused. Typed as `fetch` itself rather than cast at each use:
+   *  a double the type system accepts is the one that catches a signature
+   *  change in the wrapper. */
+  function fetchUnderneath(seen: string[]): typeof fetch {
+    const stand: typeof fetch = (input) => {
+      seen.push(input instanceof URL ? input.href : typeof input === 'string' ? input : input.url);
+      const answer: Pick<Response, 'ok' | 'status'> = { ok: true, status: 204 };
+      return Promise.resolve(answer as Response);
+    };
+    return stand;
+  }
+
+  it('answers only its own URL and hands everything else to the fetch it replaced', async () => {
+    await withFetchRestored(async () => {
+      const seen: string[] = [];
+      const underneath = fetchUnderneath(seen);
+      window.fetch = underneath;
+      installVersionStub(BODY);
+      expect(isAuditVersionStubInstalled()).toBe(true);
+
+      const answered = await window.fetch(VERSION_URL);
+      expect(answered.ok).toBe(true);
+      // The shape `readBoundedDiagnosticJson` takes for a double with no `body`.
+      expect(await answered.json()).toEqual(BODY);
+      // …and it did NOT reach the fetch underneath.
+      expect(seen).toEqual([]);
+
+      // Anything else is the original's, unchanged.
+      const passed = await window.fetch('https://api.example.com/v1/profiles');
+      expect(passed.status).toBe(204);
+      expect(seen).toEqual(['https://api.example.com/v1/profiles']);
+    });
+  });
+
+  it('never stacks: installing twice still leaves exactly one wrapper over the real fetch', async () => {
+    // The only arm here that is wholly synchronous — the stack, if there were
+    // one, would already exist by the third install. `withFetchRestored` still
+    // owns the restore, so it keeps the promise shape the other three need.
+    await withFetchRestored(() => {
+      const underneath = fetchUnderneath([]);
+      window.fetch = underneath;
+      installVersionStub(BODY);
+      installVersionStub(BODY);
+      installVersionStub(BODY);
+      // One unwrap has to reach the ORIGINAL, not another stub. A stack would
+      // still answer correctly and would grow by one on every StrictMode
+      // remount — the failure mode that hides until something leaks.
+      const unwrapped = (window.fetch as unknown as { __auditVersionStub?: unknown })
+        .__auditVersionStub;
+      expect(unwrapped).toBe(underneath);
+      return Promise.resolve();
+    });
+  });
+
+  it('puts the original back a microtask after the scene goes away', async () => {
+    await withFetchRestored(async () => {
+      const underneath = fetchUnderneath([]);
+      window.fetch = underneath;
+      installVersionStub(BODY);
+      scheduleVersionStubRemoval();
+      // Deliberately still installed on this tick — that IS the design.
+      expect(isAuditVersionStubInstalled()).toBe(true);
+      await Promise.resolve();
+      expect(isAuditVersionStubInstalled()).toBe(false);
+      expect(window.fetch).toBe(underneath);
+    });
+  });
+
+  it('⛔ survives a StrictMode remount, where the cleanup runs before the second mount', async () => {
+    await withFetchRestored(async () => {
+      const underneath = fetchUnderneath([]);
+      window.fetch = underneath;
+      // React 18 StrictMode, in order: setup, cleanup, setup — all synchronous,
+      // and the removal is queued in the middle of it. If the queued removal
+      // did not check that a later install had cancelled it, the window would
+      // lose its stub one microtask into the SECOND mount and the view's
+      // /version probe would go to the real network with nobody watching.
+      installVersionStub(BODY);
+      scheduleVersionStubRemoval();
+      installVersionStub(BODY);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(isAuditVersionStubInstalled()).toBe(true);
+      expect(await (await window.fetch(VERSION_URL)).json()).toEqual(BODY);
+      // NEGATIVE CONTROL for the arm above: without that second install the
+      // same two microtasks DO take it away, so the arm is measuring the
+      // cancel and not just "removal is slow".
+      scheduleVersionStubRemoval();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(isAuditVersionStubInstalled()).toBe(false);
+      expect(window.fetch).toBe(underneath);
+    });
   });
 });

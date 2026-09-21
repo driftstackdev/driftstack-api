@@ -199,6 +199,31 @@ describe('the caption under the phone mirrors the timeline', () => {
     expect(c.body).toBe('Browser actions run in preview mode, so there is no live view.');
   });
 
+  it('⛔ …and preview does not carry the promise about watching, though it LOOKS idle', () => {
+    // `idle` and `reassure` used to be one boolean answering two questions: a
+    // LOOK (the centred two-line block) and a FACT (the stage's one sentence
+    // about what watching means — "You watch, the AI drives — and you can stop
+    // it at any time."). They agree in every state but this one, and the
+    // `preview` scene — the first thing ever to render it — printed that
+    // promise directly under "Browser actions run in preview mode, so there is
+    // no live view."
+    const preview = stageCaption({ preview: true });
+    expect(preview.idle, 'preview still draws the centred idle block').toBe(true);
+    expect(preview.reassure, 'there is no iPhone here to watch and nothing to stop').toBe(false);
+  });
+
+  it('POSITIVE CONTROL — the resting caption is still the one that carries it', () => {
+    // Without this, "reassure: false everywhere" would pass the arm above and
+    // delete the sentence from the first screen it was written for.
+    const resting = stageCaption({});
+    expect(resting.idle).toBe(true);
+    expect(resting.reassure).toBe(true);
+    // …and no caption that is not the resting one carries it.
+    for (const phase of ['acting', 'thinking', 'paused', 'done', 'trouble'] as const) {
+      expect(stageCaption({ phase }).reassure, phase).toBe(false);
+    }
+  });
+
   it('stepsThatRan reads the LAST agent turn, and nothing else', () => {
     const turns: ReadonlyArray<ChatTurn> = [
       agentTurn(1, [success('a'), success('b')]),

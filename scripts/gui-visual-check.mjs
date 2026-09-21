@@ -59,10 +59,54 @@
 //      max-height), overflows its box, and every row is reachable by scrolling
 //      INSIDE the menu — a fixed box cannot be scrolled into view by the grid.
 //      `menu-short-<width>.png`.
+//
+// ─── PHASE D (2026-09-21) — THE AI VIEW AT THE WINDOWS A CUSTOMER REALLY RUNS ─
+// A second, independent sweep in the same run, and the only MEASUREMENT of a
+// claim three review rounds could only hold as stylesheet text: every
+// `audit-agent-chat*` scene, at 960x600 (the Tauri minimum), 1024x640 (the
+// tightest tier pair, reachable only through `--stage=` until now) and
+// 1280x800 (the window the app opens at, and the THINNEST of the three — see
+// AI_WINDOWS), in BOTH themes, asserting:
+//   D1. the window itself never scrolls, in either axis;
+//   D2. the four ROWS that have to hold their contents side by side —
+//       `.ai-bar`, `.ai-hud`, `.ai-facts`, `.ai-cmd-foot` — do not overflow
+//       sideways (a clipped number beside a live video is a WRONG number);
+//   D3. THE FIRST SCREEN NEVER SCROLLS. Spec §3.8, verbatim: a gate card "takes
+//       the three beats' place so the first screen never scrolls". Any scene
+//       showing the idle hero (`.ai-hello`) must have `.ai-log` scrollHeight <=
+//       clientHeight. Measured at the start of this stage, the gated screen was
+//       52px over at 960x600 in both themes and cut its bottom row of template
+//       cards; final QA recorded the number and could not close it.
+//       ⛔ A scene with a DOCKED BANNER (`[data-component="ai-llm-banner"]`) is
+//       held to a DIFFERENT promise, not to none. The banner takes ~120px out
+//       of the log and §3.8 never promised to fit one, so the plain rule above
+//       does not apply — but the bound that replaces it says what the banner
+//       is allowed to cost: THE BANNER'S OWN HEIGHT, and no more. Overflow
+//       beyond that is the hero being too tall, which IS §3.8's promise and
+//       which the same hero's banner-less cells (`audit-agent-chat`) are
+//       measured against at the same windows.
+//       Measured on this tree, `audit-agent-chat-consent`, both themes:
+//         960x600   over 83  · banner 121
+//         1024x640  over 25  · banner 121
+//         1280x800  over 113 · banner 121   ← the tightest, 8px of room
+//         1600x1000 over 0   · banner 101
+//       AI_BANNER_ALLOWANCE below is the documented tolerance on top of that
+//       8px, and the reason it is not zero.
+//       ⚠️ This replaced an UNBOUNDED exemption (added in review of the stage
+//       that wrote this phase). Its defence was that the number is printed and
+//       so cannot go quiet — but a printed number in a 78-cell log is quiet,
+//       and a cell that can never fail is a cell nobody re-reads.
+//   D4. a cell that measured fewer than MIN_AI_PROBES elements is itself a
+//       violation: an empty page must not pass as a clean one.
+// The scene list is READ FROM THE HARNESS (`ALL_SCENES`), like the text gate's,
+// so an AI scene added to the gallery is measured by the next run with no edit
+// here — and the run REFUSES a list with no AI scene in it.
+//
 // Output: `shot-<state>-<width>.png` per card, `shot-sheet-<width>.png` (the
-// MAX card with its sheet open), `menu-<pos>-<width>.png`, and `report.json`
-// in OUT_DIR. Exit 1 on any violation (each printed), exit 0 only on a full
-// clean sweep.
+// MAX card with its sheet open), `menu-<pos>-<width>.png`, `ai-<scene>-
+// <W>x<H>-<theme>.png` for every Phase D cell that has a violation, and
+// `report.json` in OUT_DIR. Exit 1 on any violation (each printed), exit 0 only
+// on a full clean sweep.
 //
 // Usage (repo root): `node scripts/gui-visual-check.mjs`
 //   HARNESS_URL  default http://127.0.0.1:5199/visual-harness.html — when it
@@ -114,6 +158,56 @@ const MIN_STATES = 8;
 /** Phase C — the sheet pass must find at least this many probes INSIDE the
  *  sheet (exit-row + a handful of `data-fact` rows on the emptiest card). */
 const MIN_SHEET_PROBES = 4;
+
+// ─── Phase D constants ───────────────────────────────────────────────────────
+/** The harness module the scene list comes from — the same one the text gate
+ *  reads, so the two gates can never disagree about what exists. */
+const HARNESS_MODULE = '/src/visual-harness/gallery.tsx';
+/** Every scene whose name starts with this is the AI view in some state. */
+const AI_SCENE_PREFIX = 'audit-agent-chat';
+/** The instant every scene renders at (gallery.tsx's frozen clock). */
+const FROZEN_NOW_ISO = '2026-06-15T06:42:00.000Z';
+/** The windows. 960x600 is `tauri.conf.json`'s minimum — the smallest window a
+ *  customer can make. 1024x640 was named "the tightest bar" by stage 6 and has
+ *  been reachable only through `--stage=` ever since.
+ *
+ *  ⛔ AND 1280x800, THE ONE THE APP ACTUALLY OPENS AT (added in review of the
+ *  stage that wrote this phase). Leaving it out looked safe — a wider, taller
+ *  window is where everything has the most room — and the stage that built this
+ *  sweep disproved it in its own diff: the no-key first screen was 7px OVER at
+ *  1280x800 while fitting everywhere else, because the gated composer's caption
+ *  wraps to a second line in a column that only gets WIDER on the way down. The
+ *  overflow was found by hand, fixed, and then left to no instrument.
+ *  It is also the THINNEST cell of the three, which is the opposite of the
+ *  intuition: measured on this tree, the idle first screen has 8.0px of slack
+ *  at 1280x800 against 38.0 at 960x600, and the no-key one 13.5 against 4.25.
+ *  8px is inside the range this file's own header warns a CI runner's fonts can
+ *  move, and until now nothing would have said so. */
+const AI_WINDOWS = (process.env.AI_WINDOWS ?? '960x600,1024x640,1280x800')
+  .split(',')
+  .map((w) => w.trim().split('x').map(Number))
+  .filter(([w, h]) => Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0);
+const AI_THEMES = (process.env.AI_THEMES ?? 'dark,light').split(',').map((t) => t.trim());
+/** `AI_SCENES=audit-agent-chat-nokey` narrows the sweep to those scenes while
+ *  working (and for a negative control on one cell). Empty = every AI scene the
+ *  harness lists. It can only NARROW: a name the harness does not list is an
+ *  error, never a silently empty run. */
+const AI_SCENE_FILTER = (process.env.AI_SCENES ?? '')
+  .split(',')
+  .map((x) => x.trim())
+  .filter((x) => x !== '');
+/** The rows that must hold their contents side by side. */
+const AI_ROWS = ['.ai-bar', '.ai-hud', '.ai-facts', '.ai-cmd-foot'];
+/** How much MORE than its own height a docked banner may push the first screen
+ *  down (D3). Not zero, because the two numbers are measured off text laid out
+ *  by the same fonts and move together but not in lockstep, and the tightest
+ *  cell today leaves 8px: a CI runner whose fonts wrap the hero one line
+ *  earlier than the banner would red on a difference that is not a regression.
+ *  Not large either — at 24 the rule still catches an extra line of hero (~18px
+ *  at this type scale) and everything bigger. */
+const AI_BANNER_ALLOWANCE = 24;
+/** A cell measuring fewer than this saw a page that had not rendered. */
+const MIN_AI_PROBES = 3;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -536,6 +630,232 @@ function openMenuCount() {
   return document.querySelectorAll('[data-component="card-actions-menu"][data-open="true"]').length;
 }
 
+// ─── Phase D — the AI view at the windows a customer really runs ─────────────
+
+/** Runs INSIDE the page: the harness's scene list, so an AI scene added to the
+ *  gallery is measured here without anyone editing this file. */
+async function readAiSceneNames({ modulePath, prefix }) {
+  const m = await import(/* @vite-ignore */ modulePath);
+  const names = m.ALL_SCENES;
+  if (!Array.isArray(names)) return { error: `ALL_SCENES is not an array (${typeof names})` };
+  return { names: names.filter((n) => typeof n === 'string' && n.startsWith(prefix)) };
+}
+
+/** Runs INSIDE the page, over one scene's stage root. Pure measurement: every
+ *  number it reports is read off the browser's own layout, and every rule it
+ *  applies is in the Phase D block of this file's header. */
+function measureAiWindow(root, opts) {
+  const { rows, minProbes } = opts;
+  const round = (n) => Math.round(n * 100) / 100;
+  const violations = [];
+  const measured = [];
+  let probed = 0;
+
+  // D1 — the window itself.
+  if (root.scrollWidth > root.clientWidth + 1) {
+    violations.push({
+      kind: 'window-scrolls-sideways',
+      scrollWidth: root.scrollWidth,
+      clientWidth: root.clientWidth,
+    });
+  }
+  if (root.scrollHeight > root.clientHeight + 1) {
+    violations.push({
+      kind: 'window-scrolls-down',
+      scrollHeight: root.scrollHeight,
+      clientHeight: root.clientHeight,
+    });
+  }
+  probed += 1;
+
+  // D2 — the rows that hold their contents side by side.
+  for (const sel of rows) {
+    for (const el of root.querySelectorAll(sel)) {
+      probed += 1;
+      const over = el.scrollWidth - el.clientWidth;
+      measured.push({ row: sel, over, width: round(el.getBoundingClientRect().width) });
+      if (over > 1) {
+        violations.push({
+          kind: 'row-overflows-sideways',
+          row: sel,
+          over,
+          scrollWidth: el.scrollWidth,
+          clientWidth: el.clientWidth,
+          text: (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 60),
+        });
+      }
+    }
+  }
+
+  // D3 — the first screen.
+  const hero = root.querySelector('.ai-hello');
+  const log = root.querySelector('.ai-log');
+  const banner = root.querySelector('[data-component="ai-llm-banner"]');
+  let firstScreen = null;
+  if (hero !== null && log !== null) {
+    probed += 1;
+    const over = log.scrollHeight - log.clientHeight;
+    // The room left under the last block, which is what a reviewer wants when
+    // the answer is "it fits": a fit with 0.4px to spare is not the same
+    // finding as one with 40px, and `scrollHeight` cannot tell them apart
+    // (it never reports less than `clientHeight`).
+    const last = log.lastElementChild;
+    const padBottom = parseFloat(getComputedStyle(log).paddingBottom) || 0;
+    const slack =
+      last === null
+        ? null
+        : round(
+            log.getBoundingClientRect().bottom - padBottom - last.getBoundingClientRect().bottom,
+          );
+    // What the docked banner itself occupies — the budget it is allowed to
+    // cost the first screen, read off the banner rather than written down, so
+    // a banner that grows a line brings its own allowance with it.
+    const bannerHeight = banner === null ? null : round(banner.getBoundingClientRect().height);
+    firstScreen = {
+      over,
+      slack,
+      scrollHeight: log.scrollHeight,
+      clientHeight: log.clientHeight,
+      banner: banner !== null,
+      bannerHeight,
+    };
+    if (banner === null) {
+      if (over > 0) violations.push({ kind: 'first-screen-scrolls', over, slack });
+    } else if (bannerHeight !== null && over > bannerHeight + opts.bannerAllowance) {
+      // The hero is too tall on its own — the banner is not what did this.
+      violations.push({
+        kind: 'first-screen-scrolls-past-its-banner',
+        over,
+        bannerHeight,
+        allowance: opts.bannerAllowance,
+        excess: round(over - bannerHeight - opts.bannerAllowance),
+      });
+    }
+  }
+
+  // D4 — an empty page must not pass as a clean one.
+  if (probed < minProbes) {
+    violations.push({ kind: 'too-few-probes', probed, minProbes });
+  }
+  return { violations, measured, firstScreen, probed };
+}
+
+/** One Phase D cell: scene x window x theme. */
+async function measureAiCell(context, scene, width, height, theme) {
+  const page = await context.newPage();
+  const problems = [];
+  page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
+  try {
+    await page.setViewportSize({ width: width + 40, height: height + 40 });
+    await page.clock.setFixedTime(new Date(FROZEN_NOW_ISO));
+    await page.goto(`${URL}?scene=${scene}&stage=${width}x${height}`, {
+      waitUntil: 'networkidle',
+    });
+    const stage = page.locator(`[data-scene="${scene}"][data-ready="1"]`);
+    await stage.waitFor({ state: 'visible', timeout: 30_000 });
+    // The stage is a FIXED box that ignores the viewport, so a run whose
+    // `?stage=` was dropped would silently measure a 1280 layout and report it
+    // as 960. Read the size back off the DOM rather than trusting the URL.
+    const declared = await stage.evaluate((el) => ({
+      width: Number(el.getAttribute('data-stage-width')),
+      height: Number(el.getAttribute('data-stage-height')),
+    }));
+    if (declared.width !== width || declared.height !== height) {
+      throw new Error(
+        `${scene}: the stage declares ${declared.width}x${declared.height} but this cell asked for ${width}x${height} — the ?stage= override did not reach it`,
+      );
+    }
+    await page.evaluate((mode) => {
+      document.documentElement.dataset.mode = mode;
+    }, theme);
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(700);
+    const applied = await page.evaluate(() => document.documentElement.dataset.mode);
+    if (applied !== theme) throw new Error(`${scene}: data-mode is ${applied}, wanted ${theme}`);
+    const res = await stage.evaluate(measureAiWindow, {
+      rows: AI_ROWS,
+      minProbes: MIN_AI_PROBES,
+      bannerAllowance: AI_BANNER_ALLOWANCE,
+    });
+    if (problems.length > 0) {
+      throw new Error(
+        `${scene} [${width}x${height} ${theme}]: the page reported errors:\n  ${problems.join('\n  ')}`,
+      );
+    }
+    if (res.violations.length > 0) {
+      const shot = `${OUT}/ai-${scene}-${width}x${height}-${theme}.png`;
+      await page.screenshot({ path: shot });
+      res.shot = shot;
+    }
+    return res;
+  } finally {
+    await page.close();
+  }
+}
+
+/** The whole Phase D sweep. Returns the rows for the report and the violation
+ *  count; throws rather than reporting clean when the list has no AI scene. */
+async function runAiWindowSweep(browser, report) {
+  const listPage = await browser.newPage();
+  let names;
+  try {
+    await listPage.goto(`${URL}?scene=__list__`, { waitUntil: 'domcontentloaded' });
+    const res = await listPage.evaluate(readAiSceneNames, {
+      modulePath: HARNESS_MODULE,
+      prefix: AI_SCENE_PREFIX,
+    });
+    if (res.error !== undefined) throw new Error(`AI scene list: ${res.error}`);
+    names = res.names;
+  } finally {
+    await listPage.close();
+  }
+  if (names.length === 0) {
+    throw new Error(
+      `no scene in ${HARNESS_MODULE} starts with ${AI_SCENE_PREFIX} — refusing to report a clean AI sweep over nothing`,
+    );
+  }
+  if (AI_SCENE_FILTER.length > 0) {
+    const unknown = AI_SCENE_FILTER.filter((n) => !names.includes(n));
+    if (unknown.length > 0) {
+      throw new Error(
+        `AI_SCENES names ${unknown.join(', ')}, which the harness does not list (has: ${names.join(', ')})`,
+      );
+    }
+    names = names.filter((n) => AI_SCENE_FILTER.includes(n));
+  }
+  const context = await browser.newContext({ deviceScaleFactor: 2, reducedMotion: 'reduce' });
+  let violations = 0;
+  try {
+    for (const scene of names) {
+      for (const [width, height] of AI_WINDOWS) {
+        for (const theme of AI_THEMES) {
+          const res = await measureAiCell(context, scene, width, height, theme);
+          violations += res.violations.length;
+          report.aiWindows.push({ scene, width, height, theme, ...res });
+          const fs = res.firstScreen;
+          const fit =
+            fs === null
+              ? 'no first screen'
+              : `first screen ${fs.over > 0 ? `OVER by ${fs.over}` : `fits (${String(fs.slack)}px spare)`}` +
+                (fs.banner
+                  ? ` · banner docked (${String(fs.bannerHeight)}px, budget ${String((fs.bannerHeight ?? 0) + AI_BANNER_ALLOWANCE)})`
+                  : '');
+          process.stdout.write(
+            `${scene.padEnd(30)} ${String(width)}x${String(height)} ${theme.padEnd(5)} → ` +
+              `${fit} · ${res.violations.length} violation(s)${res.violations.length > 0 ? '  ✗' : ''}\n`,
+          );
+          for (const viol of res.violations) {
+            process.stdout.write(`      ai: ${JSON.stringify(viol)}\n`);
+          }
+        }
+      }
+    }
+  } finally {
+    await context.close();
+  }
+  return violations;
+}
+
 async function main() {
   if (WIDTHS.length === 0) throw new Error('WIDTHS resolved to nothing');
   await mkdir(OUT, { recursive: true });
@@ -549,6 +869,7 @@ async function main() {
     regionBudget: REGION_BUDGET,
     cards: [],
     menus: [],
+    aiWindows: [],
   };
   let violationCount = 0;
   const opts = {
@@ -975,6 +1296,12 @@ async function main() {
       }
       await page.close();
     }
+    // Phase D — the AI view at the windows a customer really runs. Same run,
+    // same browser, its own contexts; see the block in this file's header.
+    process.stdout.write(
+      `\nAI view — ${AI_WINDOWS.map(([w, h]) => `${String(w)}x${String(h)}`).join(' / ')} in ${AI_THEMES.join(' + ')}\n`,
+    );
+    violationCount += await runAiWindowSweep(browser, report);
   } finally {
     await browser.close();
     if (started !== null) started.kill();
@@ -982,7 +1309,8 @@ async function main() {
   report.violations = violationCount;
   await writeFile(`${OUT}/report.json`, JSON.stringify(report, null, 1));
   process.stdout.write(
-    `\n${report.cards.length} card measurements across ${WIDTHS.join('/')}px → ${violationCount} violation(s); report ${OUT}/report.json\n`,
+    `\n${report.cards.length} card measurements across ${WIDTHS.join('/')}px and ` +
+      `${report.aiWindows.length} AI-view cells → ${violationCount} violation(s); report ${OUT}/report.json\n`,
   );
   if (violationCount > 0) process.exit(1);
 }

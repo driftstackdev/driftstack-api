@@ -86,6 +86,19 @@ export interface AgentChatContextValue {
    * keep in step with the fixture for no state the gates can reach.
    */
   captureSrc?: string;
+  /**
+   * GALLERY SEAM (spec §8) — the frame rate the live view's HUD chip SHOWS,
+   * instead of measuring one off the video element. Undefined in the app: the
+   * chip's number always comes from `lib/use-presented-frame-rate.ts` there.
+   *
+   * ⛔ A SCENE CANNOT MEASURE A PICTURE. Every scene mounts a drawn page in the
+   * phone's screen (`standIn`), and a still image presents no frames, so
+   * without this the chip would be absent from the only state it exists in and
+   * both gates would measure a stage that has never shown it. The value is a
+   * FIXTURE and is labelled as one where it is written, in the scene file —
+   * never in the DOM, where a customer would read it.
+   */
+  frameRate?: number;
 }
 
 const AgentChatContext = createContext<AgentChatContextValue | null>(null);

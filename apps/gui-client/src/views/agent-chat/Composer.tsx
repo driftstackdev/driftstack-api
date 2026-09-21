@@ -277,9 +277,24 @@ export function Composer({
   // ⛔ Rendered only when TRUE. `data-short={false}` renders as the string
   // 'false', which a valueless `[data-short]` selector still matches.
   const shortAttr = short === true ? '' : undefined;
+  // ⛔ THE SAME TRADE AS `short`, FOR A DIFFERENT REASON — and the reason is
+  // measured. With no API key a GATE CARD stands at the top of the first
+  // screen, and the composer's own caption ("Not connected — add your API key
+  // in Settings to run automations." plus its button) wraps to a second line in
+  // the foot: at the default 1280x800 window that made the first screen 7px
+  // taller than its column, so a customer who has not connected a key yet —
+  // the only customer who ever sees this state — was the one whose bottom row
+  // of templates was cut. An empty box that cannot be sent yet is the block on
+  // this screen with a row to spare, exactly as D6 decided for a short window.
+  // Style only: `rows={COMPOSER_ROWS}` is still 5, and a view that is BOTH
+  // gated and short is unchanged (both rules say four).
+  // Valueless-or-absent, the view's rule — `data-gated={false}` renders the
+  // string 'false', which `[data-gated]` matches, and every connected customer
+  // would get the shorter box.
+  const gatedAttr = aiReady ? undefined : '';
 
   return (
-    <div className="ai-cmd" data-rest={rest} data-short={shortAttr}>
+    <div className="ai-cmd" data-rest={rest} data-short={shortAttr} data-gated={gatedAttr}>
       <div className="ai-cmd-box">
         <span className="ai-cmd-caret mono" aria-hidden="true">
           ›

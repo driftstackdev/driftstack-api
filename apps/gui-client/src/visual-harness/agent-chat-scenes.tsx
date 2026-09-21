@@ -1,4 +1,4 @@
-// The AI view's seven extra audit scenes — every state a customer can be in.
+// The AI view's extra audit scenes — every state a customer can be in.
 //
 // WHY THIS EXISTS. `audit-agent-chat` renders the view with no turns and no
 // session, so until now the text-quality gate (scripts/gui-text-quality.mjs)
@@ -45,6 +45,7 @@ import type {
   LiveKitInfo,
 } from '@driftstack/sdk';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
+import { NEEDS_OWN_KEY_SUFFIX } from '../lib/chat-models';
 import type { ChatTurn, PendingConfirmation, UseAgentChatResult } from '../lib/use-agent-chat';
 
 /** The states, named for what the customer is doing — not for the hook field
@@ -60,6 +61,7 @@ import type { ChatTurn, PendingConfirmation, UseAgentChatResult } from '../lib/u
  *  CI, and it costs one entry in each of the four registries. */
 export type AgentChatSceneKind =
   | 'nokey'
+  | 'preview'
   | 'planning'
   | 'running'
   | 'approval'
@@ -67,10 +69,13 @@ export type AgentChatSceneKind =
   | 'trouble'
   | 'stopping'
   | 'small'
-  | 'ended';
+  | 'ended'
+  | 'consent'
+  | 'budget';
 
 export const AGENT_CHAT_SCENE_KINDS: ReadonlyArray<AgentChatSceneKind> = [
   'nokey',
+  'preview',
   'planning',
   'running',
   'approval',
@@ -79,6 +84,8 @@ export const AGENT_CHAT_SCENE_KINDS: ReadonlyArray<AgentChatSceneKind> = [
   'stopping',
   'small',
   'ended',
+  'consent',
+  'budget',
 ];
 
 /** What the live view's token fetch should do for a scene that has no stand-in.
@@ -97,7 +104,31 @@ export interface AgentChatSceneFixture {
   apiKey: string | null;
   standIn?: ReactNode;
   captureSrc?: string;
+  /** The HUD's frame rate, as a FIXTURE — see SCENE_FRAME_RATE. */
+  frameRate?: number;
   liveToken?: LiveTokenBehaviour;
+  /**
+   * What `GET <baseUrl>/version` should answer for `agent_execution`.
+   *
+   * ⛔ THE FOURTH SEAM, AND THE ONLY ONE THAT IS A NETWORK ANSWER. `preview` is
+   * not a field on the chat hook and not a setting: `AgentChatView` derives it
+   * from `useConnectionStatus(baseUrl).agentExecution`, which is a real `fetch`
+   * of `/version`. Every other scene leaves this undefined and the base URL
+   * answers nothing, which is how `null` (→ treated as live) stays the default.
+   * The scene that wants the preview branch says so here and audit-scenes.tsx
+   * installs a window-level `fetch` stub for exactly that one URL — the same
+   * shape, and the same reason, as its Tauri stub: drive the real hook through
+   * the real code path rather than teach the view a fixture it does not have.
+   */
+  agentExecution?: 'live' | 'simulated';
+  /**
+   * What `account.getByokAnthropicKey()` reports. Undefined = the shared audit
+   * fixture's `has_key: true`. `false` is the account that has NOT bought its
+   * own key, which is the only way the mission bar renders the sentence that
+   * tells a customer whose key to go and get (copy spec D5) — the sanctioned
+   * vendor mention that no scene reached until now.
+   */
+  ownKey?: boolean;
   /** Fixture strings that must be READ BACK off the render for the scene to
    *  count as loaded — see auditLoadedMarkers. Scene-specific ones first; the
    *  async ones (profiles, saved chats) are appended by the caller, so the wait
@@ -218,6 +249,25 @@ function standInScreen(svg: string): ReactNode {
  *  passes the panel in the app. Declared here rather than imported so the scene
  *  cannot silently follow a change to the app's private constant. */
 const SCENE_WATCH_ASPECT_RATIO = 402 / 874;
+
+/**
+ * ⛔ A FIXTURE, NOT A MEASUREMENT — and this is the only place that says so.
+ *
+ * In the app the HUD's chip is measured off the live `<video>`
+ * (`lib/use-presented-frame-rate.ts`): `requestVideoFrameCallback` counts the
+ * frames the compositor was handed, over a two-second window. A scene mounts a
+ * DRAWN PAGE in the phone's screen, and a still image presents no frames — so
+ * there is nothing here to measure and the seam supplies the number instead.
+ *
+ * It is written as a fixture HERE, in the scene's own source, and nowhere the
+ * customer can read it: the chip renders `30 fps` and no tooltip, no caption
+ * and no label explains where the number came from, because in the app it came
+ * from the picture in front of them.
+ *
+ * 30 rather than 60: it is what the mockup draws, and it is the rate the device
+ * stream actually runs at.
+ */
+const SCENE_FRAME_RATE = 30;
 
 /** Join info shaped exactly like the one the token fetch returns. The host is
  *  documentation space (it resolves to nothing, which is the point — no scene
@@ -530,6 +580,30 @@ export function agentChatSceneFixture(
       // fixture chat could quietly add a second one.
       return { apiKey: null, markers: ['Connect your API key to run automations'] };
 
+    // ⛔ A DEPLOYMENT THAT PLANS BUT DOES NOT ACT — the state the redesign wrote
+    // CSS and a second explainer for and no scene had ever rendered. Round C
+    // found it the hard way: a vendor-name negative control injected into
+    // IdleHero's PREVIEW sentence stayed green, because nothing reached the
+    // line. What this scene puts under the gates, all of it for the first time:
+    // the preview gate card, the preview explainer, `[data-ai-preview]`'s
+    // unlit-glass rule on the screen, and the stage's PREVIEW chip.
+    //
+    // No chat override and no stand-in: preview is a property of the
+    // DEPLOYMENT, not of a turn, so the honest scene is the first screen of a
+    // preview install. `agentExecution` is the seam (see the field's note) —
+    // the view's own `/version` probe answers 'simulated' and the real
+    // derivation does the rest.
+    case 'preview':
+      return {
+        apiKey: 'ds_live_example',
+        agentExecution: 'simulated',
+        markers: [
+          'Preview mode',
+          'The AI plans each step, but browser actions are not carried out on a real iPhone yet.',
+          'In preview mode they are not carried out on a real iPhone yet.',
+        ],
+      };
+
     case 'planning':
       return {
         apiKey: 'ds_live_example',
@@ -561,6 +635,11 @@ export function agentChatSceneFixture(
       return {
         apiKey: 'ds_live_example',
         standIn: standInScreen(shopListingSvg()),
+        // The HUD chip, in the one state it exists in — and in BOTH windows,
+        // because `small` shares this fixture: the narrow tier is where the
+        // chip moves up into the HUD row, and that copy would otherwise be
+        // measured by nothing.
+        frameRate: SCENE_FRAME_RATE,
         chat: {
           ...chat,
           turns: [turn(1, TASK)],
@@ -594,6 +673,11 @@ export function agentChatSceneFixture(
           // is the label — what a customer reads — and never the glyph.
           'Open the best-rated pair under $120',
           'Screenshot the product page',
+          // The HUD's measured chip. A marker rather than a bare fixture field:
+          // the chip renders only while the screen is showing a live picture,
+          // so if that gate ever stopped opening for a scene, the state scenes
+          // would quietly stop carrying it and every gate would keep passing.
+          `${String(SCENE_FRAME_RATE)} fps`,
         ],
       };
 
@@ -794,6 +878,103 @@ export function agentChatSceneFixture(
           'Session ended',
           'The page stopped unexpectedly',
           ENDED_SUMMARY,
+        ],
+      };
+
+    // ⛔ THE TWO REFUSALS THAT NAME A VENDOR, AND WHY THEY ARE SCENES NOW.
+    // `AgentChatView` renders "…or your own Anthropic key" in exactly two
+    // branches, and copy spec D5 sanctions both: they are the sentences that
+    // tell a customer WHOSE KEY TO GO AND BUY, which is the one thing a vendor
+    // name can be the whole content of. Until now no scene reached either, so
+    // the privacy scan's vendor ban was green by COVERAGE rather than by
+    // construction — a guard that would have reddened the moment anybody added
+    // the scene. These two scenes are that moment, and marketing-scenes.test.tsx
+    // now proves each sanctioned sentence is REACHED by the scene that is
+    // allowed to say it, instead of carrying an allowlist nothing renders.
+    //
+    // The first send of a deployment whose AI features were never switched on:
+    // the hero is still on screen (nothing ran), and the banner is docked above
+    // the composer because it is the only in-app way to switch them on.
+    case 'consent':
+      return {
+        apiKey: 'ds_live_example',
+        // ⛔ THE OWN-KEY ACCOUNT LIVES ON THIS SCENE, NOT ON `budget`, AND THE
+        // REASON IS THE MISSION BAR. `hasOwnKey === false` only reaches the
+        // screen through the model picker, and the picker is LOCKED the moment
+        // a chat has a session — so the scene that has to render "Some models
+        // run only on your own Anthropic key. Add one in Settings → AI &
+        // billing." and the "(needs your own key)" options is the one with no
+        // session, which is this one. It is also the coherent account for this
+        // refusal: bundled usage was never switched on and no key was bought.
+        ownKey: false,
+        chat: {
+          ...chat,
+          error: {
+            message:
+              "This deployment's AI features need a quick one-time setup before your first message.",
+            kind: 'bundled_llm_consent',
+          },
+        },
+        markers: [
+          "This deployment's AI features need a quick one-time setup before your first message.",
+          'You can use bundled AI usage billed to your account, or your own Anthropic key.',
+          'Enable AI features',
+          // The picker's own-key marking, which no scene had ever shown.
+          `Opus 5 ${NEEDS_OWN_KEY_SUFFIX}`,
+        ],
+      };
+
+    // …and the month's bundled budget is gone, on an account that has NOT
+    // bought its own key. Both halves matter and both are deliberate:
+    //   · no `spentCents`/`capCents` — a server that does not report the two
+    //     numbers is the ONLY route to "Raise your monthly limit, or use your
+    //     own Anthropic key to keep going."; with them the banner shows the
+    //     arithmetic instead and names nobody. The branch that names a vendor
+    //     is the branch that has nothing else to say.
+    //   · the account's own key is left as the shared fixture's, because the
+    //     mission bar here is LOCKED (this chat has a session) and could not
+    //     render the own-key sentence whatever the account said — that half is
+    //     the `consent` scene's, which has no session and an unlocked picker.
+    case 'budget':
+      return {
+        apiKey: 'ds_live_example',
+        standIn: standInScreen(shopListingSvg()),
+        chat: {
+          ...chat,
+          turns: [
+            turn(1, TASK),
+            {
+              id: 2,
+              role: 'agent',
+              response: {
+                kind: 'plan-executed',
+                session: session(now, { id: 'agt_audit_budget' }),
+                intents: DONE_STEPS.map((r) => r.intent),
+                results: DONE_STEPS,
+                ok: true,
+                answer: ANSWER,
+                usage: USAGE,
+              },
+            },
+          ],
+          // The follow-up that was refused is NOT a turn: a refused send puts
+          // the message back in the composer (`lastSendKeptMessage`), so the
+          // transcript ends on the answer that did land and the banner is the
+          // only thing that says the next one did not.
+          error: {
+            message: "You've reached this month's AI spending limit.",
+            kind: 'bundled_llm_budget',
+          },
+          session: session(now, {
+            id: 'agt_audit_budget',
+            liveness: { state: 'idle', fresh: true },
+            capability_report: capabilityReport(now),
+          }),
+        },
+        markers: [
+          "You've reached this month's AI spending limit.",
+          'Raise your monthly limit, or use your own Anthropic key to keep going.',
+          'Raise my limit',
         ],
       };
   }

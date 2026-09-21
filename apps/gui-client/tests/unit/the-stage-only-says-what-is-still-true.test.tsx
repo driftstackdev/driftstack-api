@@ -24,6 +24,9 @@
 // the phone is on the page, and a step that really landed still rings. A fix
 // that just deleted both sentences would pass an arms-only version of this file.
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { AgentIntent, AgentIntentResult, AgentSession } from '@driftstack/sdk';
@@ -279,6 +282,48 @@ describe('the action ring fires for an action, and only for an action', () => {
     expect(document.querySelector('.ai-pulse')?.className).not.toContain('is-firing');
   });
 
+  it('⛔ …including a mount with EXACTLY ONE step — the count the two-step arm cannot see', () => {
+    // THE BOUNDARY, and it is the whole reason this arm exists beside the one
+    // above. The ring fires on `steps === previous + 1`, and `previous` is
+    // seeded `useRef(steps)` — seeded `useRef(0)` instead, a mount with TWO
+    // steps still rings nothing (2 !== 0 + 1) and the arm above stays green,
+    // while a mount with ONE rings for a tap that happened before this mount
+    // existed. That is the exact defect stage 4's review recorded and could not
+    // construct a case for; one step is the case.
+    //
+    // NEGATIVE CONTROL: change `useRef(steps)` to `useRef(0)` in Stage.tsx and
+    // ONLY this arm reds.
+    chatState = baseChat({
+      sending: true,
+      liveSteps: [success('Opened the store')],
+      liveStepIndex: 1,
+      livePhase: 'Looking at the page…',
+    });
+    render(<AgentChatView />, { wrapper: AgentChatProvider });
+    expect(document.querySelector('.ai-pulse')?.className).not.toContain('is-firing');
+  });
+
+  it('⛔ …and under StrictMode, which is how the harness and every dev build mount it', () => {
+    // The effect that counts arrivals runs, cleans up and runs AGAIN under
+    // StrictMode's simulated remount. The second run must see the ref already
+    // advanced and do nothing — a ref bumped during RENDER would count that
+    // remount as an action, and every arm above renders without StrictMode and
+    // would never see it. One step again, for the same boundary reason.
+    chatState = baseChat({
+      sending: true,
+      liveSteps: [success('Opened the store')],
+      liveStepIndex: 1,
+      livePhase: 'Looking at the page…',
+    });
+    render(
+      <StrictMode>
+        <AgentChatView />
+      </StrictMode>,
+      { wrapper: AgentChatProvider },
+    );
+    expect(document.querySelector('.ai-pulse')?.className).not.toContain('is-firing');
+  });
+
   it('and the ring re-keys per step, so each action gets its own', () => {
     // A one-shot animation only replays if the element is new. Two renders with
     // no step arriving must NOT produce a new element, or every unrelated
@@ -353,5 +398,61 @@ describe('nothing in the stage is a live region — it duplicates the log', () =
     const stage = screen.getByRole('region', { name: 'Live view' });
     expect(stage.querySelectorAll('[aria-live]')).toHaveLength(0);
     expect(stage.querySelectorAll('[role="status"], [role="alert"]')).toHaveLength(0);
+  });
+});
+
+// ─── the colour half of the same claim ──────────────────────────────────────
+
+/** Comments stripped, so prose about a rule can never stand in for the rule. */
+const CSS = readFileSync(resolve(__dirname, '../../src/styles/index.css'), 'utf8').replace(
+  /\/\*[\s\S]*?\*\//g,
+  '',
+);
+
+/** One rule's declarations, by exact selector. Throws when the selector is
+ *  gone, so a rename reds here instead of passing as "it no longer says it". */
+function pipRule(selector: string): string {
+  const escaped = selector.replace(/[.[\]*'()+:]/g, (c) => `\\${c}`);
+  const match = new RegExp(`(^|\\n)${escaped} \\{([^}]*)\\}`).exec(CSS);
+  if (match === null) throw new Error(`no CSS rule for ${selector}`);
+  return match[2] ?? '';
+}
+
+/** Where a rule starts in the stylesheet. Two rules of EQUAL specificity are
+ *  decided by this and nothing else, which is the whole of the defect below. */
+function pipRuleAt(selector: string): number {
+  const escaped = selector.replace(/[.[\]*'()+:]/g, (c) => `\\${c}`);
+  const match = new RegExp(`(^|\\n)${escaped} \\{`).exec(CSS);
+  if (match === null) throw new Error(`no CSS rule for ${selector}`);
+  return match.index;
+}
+
+describe('the dot in the chip agrees with the word beside it', () => {
+  it('paints the live dot in the accent rather than the idle grey', () => {
+    // ⛔ THE WORD SAID LIVE AND THE COLOUR SAID IDLE, IN BOTH THEMES.
+    // `.ai-chip-live .ai-pip` and `.ai-chip .ai-pip` have the SAME specificity
+    // (0,2,0), and the generic one used to come LAST, so it won: every dot in
+    // the HUD painted `--status-idle`. Measured in the running scene before the
+    // repair — the dot computed rgb(107 114 128) in dark AND light where the
+    // mockup draws rgb(164 58 75), the accent — and the STARTING chip's dot was
+    // the same grey where its tone says amber. Only
+    // `.ai-chip-open .ai-pip.is-ready` was unaffected, because (0,3,0) beats
+    // source order. The file's own comment says "each pairs its colour with the
+    // WORD, so colour is never the only signal"; two of the four pairs were not
+    // being made at all.
+    //
+    // The repair is the cascade, not a specificity hack: the base rule moved
+    // ABOVE the tones, where a fifth tone added later cannot fall into it.
+    // jsdom lays out no stylesheet, so this arm holds the mechanism — the order
+    // — and the browser measurement is in the stage report.
+    expect(pipRuleAt('.ai-chip .ai-pip')).toBeLessThan(pipRuleAt('.ai-chip-live .ai-pip'));
+    expect(pipRuleAt('.ai-chip .ai-pip')).toBeLessThan(pipRuleAt('.ai-chip-warm .ai-pip'));
+    // …and each rule still says what it is for. An order that was right over
+    // two empty rules would be worth nothing.
+    expect(pipRule('.ai-chip-live .ai-pip')).toContain('background: rgb(var(--accent-rgb))');
+    expect(pipRule('.ai-chip-warm .ai-pip')).toContain('background: rgb(var(--status-busy-rgb))');
+    // POSITIVE CONTROL — the dot a chip with no tone of its own still wears,
+    // which is the one thing the generic rule was right about.
+    expect(pipRule('.ai-chip .ai-pip')).toContain('background: rgb(var(--status-idle-rgb))');
   });
 });

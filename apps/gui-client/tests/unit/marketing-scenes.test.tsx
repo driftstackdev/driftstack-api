@@ -233,14 +233,19 @@ describe('sceneFromSearch — the only door into a scene, marketing or audit', (
     expect(ALL_SCENES.slice(0, MARKETING_SCENES.length)).toEqual([...MARKETING_SCENES]);
     expect(ALL_SCENES.slice(MARKETING_SCENES.length)).toEqual([...AUDIT_SCENES]);
     expect(new Set(ALL_SCENES).size).toBe(ALL_SCENES.length);
-    // 10 views + the AI view's seven extra STATES (spec §8) + two WINDOWS of
+    // 10 views + the AI view's ten extra STATES (spec §8) + two WINDOWS of
     // its own: the one view whose states cannot be reached from fixture data
     // alone, and therefore the one the gates had only ever measured empty.
     // `audit-agent-chat-small` is the running state at 960x600 (stage 6's
     // narrow tier); `audit-agent-chat-ended` is the live panel's own terminal
     // overlay at the same size (stage 7) — the only scene whose screen is the
     // real `AgentSessionPanel` rather than a drawn page.
-    expect(AUDIT_SCENES).toHaveLength(19);
+    // 19 → 22: `audit-agent-chat-preview` (the deployment that plans but does
+    // not act — CSS and a second branch of customer copy that no scene had ever
+    // rendered), and `audit-agent-chat-consent` / `-budget`, the two refusals
+    // that may name a model vendor and that make the ban below an allowlist
+    // proved to be REACHED rather than one nothing renders.
+    expect(AUDIT_SCENES).toHaveLength(22);
     for (const name of ALL_SCENES) {
       expect(isAuditScene(name)).toBe(name.startsWith('audit-'));
       const size = sceneSize(name);
@@ -481,24 +486,59 @@ const AUDIT_FORBIDDEN_VENDOR = /\b(?:anthropic|openai)\b|\bclaude\b|\bgpt-?\d/i;
  */
 const VENDOR_SCANNED_SCENES = /^audit-/;
 /**
- * The sentences where naming the model vendor IS the content (spec D5). Removed
- * verbatim before the vendor scan, per scene-rendered string — never as a
- * pattern, so "Anthropic" on its own still fails everywhere.
+ * The sentences where naming the model vendor IS the content (spec D5), AND THE
+ * SCENES THAT MAY SAY THEM. Removed verbatim before the vendor scan — never as
+ * a pattern, so "Anthropic" on its own still fails everywhere, and never
+ * globally, so a sentence sanctioned in Settings does not quietly license the
+ * same words in the AI view.
+ *
+ * ⛔ AN ALLOWLIST BY CONSTRUCTION, WHICH IS WHAT THIS STAGE CHANGED. The list
+ * used to be flat and every scene got every exemption. It passed — but only
+ * because NOTHING RENDERED the two AgentChatView sentences: no scene reached the
+ * bundled-consent refusal or the budget-exhausted one, so the entries were
+ * unfalsifiable and so was the ban around them. "Green" then meant "the scan
+ * read nothing", which is the best-looking failure there is.
+ * Two things close it: `audit-agent-chat-consent` and `audit-agent-chat-budget`
+ * now RENDER those branches, and the arm
+ * "every sanctioned sentence is really on screen in the scene that may say it"
+ * REQUIRES each entry to be reached by every scene listed on it. An exemption
+ * nobody renders is now a red test, not a quiet pass.
  *
  * ⚠️ A NEW ENTRY HERE IS A COPY DECISION, NOT A TEST FIX. Each of these tells a
  * customer which vendor to go and buy a key from; a sentence that merely
  * MENTIONS the vendor does not belong here, it belongs deleted.
  */
-const AUDIT_APPROVED_VENDOR_COPY: ReadonlyArray<string> = [
-  // AgentChatView — the bundled-consent refusal and the budget-exhausted
-  // refusal. Neither is reachable from a current scene; both are why this list
-  // exists rather than a scene scope.
-  'You can use bundled AI usage billed to your account, or your own Anthropic key.',
-  'Raise your monthly limit, or use your own Anthropic key to keep going.',
+interface ApprovedVendorCopy {
+  /** The sentence, exactly as the view renders it. */
+  text: string;
+  /** Every scene allowed to say it — and required to. */
+  scenes: ReadonlyArray<string>;
+}
+const AUDIT_APPROVED_VENDOR_COPY: ReadonlyArray<ApprovedVendorCopy> = [
+  // AgentChatView — the bundled-consent refusal. The customer is being told
+  // what the alternative to bundled usage IS, which is a vendor's key.
+  {
+    text: 'You can use bundled AI usage billed to your account, or your own Anthropic key.',
+    scenes: ['audit-agent-chat-consent'],
+  },
+  // AgentChatView — the budget-exhausted refusal, in the branch that has no
+  // spend figures to show and therefore nothing else to offer.
+  {
+    text: 'Raise your monthly limit, or use your own Anthropic key to keep going.',
+    scenes: ['audit-agent-chat-budget'],
+  },
+  // AgentChatView / MissionBar — why a model in the picker is unselectable.
+  {
+    text: 'Some models run only on your own Anthropic key. Add one in Settings → AI & billing.',
+    scenes: ['audit-agent-chat-consent'],
+  },
   // SettingsView — the BYOK field itself, which audit-settings does render.
-  'Bring your own Anthropic key',
-  'If you add your own Anthropic key, every AI chat uses it instead of bundled usage, and Anthropic bills you directly.',
-  'Test Anthropic key',
+  { text: 'Bring your own Anthropic key', scenes: ['audit-settings'] },
+  {
+    text: 'If you add your own Anthropic key, every AI chat uses it instead of bundled usage, and Anthropic bills you directly.',
+    scenes: ['audit-settings'],
+  },
+  { text: 'Test Anthropic key', scenes: ['audit-settings'] },
 ];
 /** Two more pieces of shipped copy: SettingsView's support mailto and the
  *  self-hosted URL field's placeholder (DEFAULT_SETTINGS.baseUrl). Removed
@@ -532,8 +572,13 @@ function expectAuditPrivacy(
   let ipsSeen = 0;
   let hostsSeen = 0;
   if (VENDOR_SCANNED_SCENES.test(name)) {
+    // Only the sentences THIS scene is allowed to say are removed. A sentence
+    // sanctioned in Settings is still a finding in the AI view and the other
+    // way round — the line the copy rule draws is between sentences, and a
+    // sentence only means what it means where it is rendered.
+    const allowed = AUDIT_APPROVED_VENDOR_COPY.filter((a) => a.scenes.includes(name));
     for (const raw of readable) {
-      const s = AUDIT_APPROVED_VENDOR_COPY.reduce((acc, lit) => acc.split(lit).join(' '), raw);
+      const s = allowed.reduce((acc, a) => acc.split(a.text).join(' '), raw);
       expect(s, `model-vendor name rendered in scene ${name}`).not.toMatch(AUDIT_FORBIDDEN_VENDOR);
     }
   }
@@ -673,6 +718,70 @@ describe('every audit scene — the REAL view, loaded, under the marketing priva
       }
     });
   }
+
+  it('⛔ every sanctioned vendor sentence is really on screen in the scene that may say it', async () => {
+    // THE ARM THAT MAKES THE ALLOWLIST A CONSTRUCTION RATHER THAN A HOPE.
+    // Before this stage, two of the six entries named sentences no scene
+    // rendered: the scan read nothing, removed nothing, and reported clean. An
+    // exemption that nothing exercises cannot fail, and neither can the ban
+    // around it — so the entry is now a CLAIM about a scene, and this is where
+    // the claim is checked. Delete a sanctioned sentence from the view and this
+    // reds; move it to a different branch and it reds; add an entry for a
+    // sentence nobody renders and it reds.
+    //
+    // Self-contained on purpose: it renders the scenes itself rather than
+    // recording what the loop above happened to see, so running this arm alone
+    // proves the same thing running the file does.
+    const byScene = new Map<string, string[]>();
+    for (const approved of AUDIT_APPROVED_VENDOR_COPY) {
+      expect(approved.scenes.length, `${approved.text}: no scene may say it`).toBeGreaterThan(0);
+      for (const scene of approved.scenes) {
+        expect(AUDIT_SCENES as ReadonlyArray<string>, approved.text).toContain(scene);
+        byScene.set(scene, [...(byScene.get(scene) ?? []), approved.text]);
+      }
+    }
+    for (const [scene, texts] of byScene) {
+      const restore = freezeHarnessClock();
+      try {
+        const { container, unmount } = render(
+          <AuditScene name={scene as (typeof AUDIT_SCENES)[number]} />,
+        );
+        const stage = container.querySelector<HTMLElement>(`[data-scene="${scene}"]`);
+        expect(stage).not.toBeNull();
+        if (stage === null) return;
+        const markers = auditLoadedMarkers(scene as (typeof AUDIT_SCENES)[number]);
+        await waitFor(
+          () => expect(visibleStrings(stage).join('\n')).toContain(markers[markers.length - 1]),
+          { timeout: 5_000 },
+        );
+        // `readableStrings` — the same reader the scan uses, so a sentence that
+        // only lives in a `value` (a machine identifier) cannot satisfy this.
+        const joined = readableStrings(stage).join('\n');
+        for (const text of texts) {
+          expect(joined, `${scene}: sanctioned sentence "${text}" is not rendered`).toContain(text);
+        }
+        unmount();
+      } finally {
+        restore();
+      }
+    }
+  });
+
+  it('⛔ and a scene that is NOT on an entry keeps the ban — the exemption does not travel', () => {
+    // The other half of "by construction". `expectAuditPrivacy` is called with
+    // a scene name and the strings it rendered, so the check is: the same
+    // sentence, offered under a scene that is not on its list, still fails.
+    // Without this the per-scene filter could be deleted and every arm above
+    // would stay green, because each scene really does render only its own.
+    const sanctioned = AUDIT_APPROVED_VENDOR_COPY[0];
+    expect(sanctioned).toBeDefined();
+    if (sanctioned === undefined) return;
+    const strings = [sanctioned.text, 'https://api.example.com'];
+    // Its own scene: allowed.
+    expect(() => expectAuditPrivacy(sanctioned.scenes[0] ?? '', strings, strings)).not.toThrow();
+    // Any other audit scene: still a finding.
+    expect(() => expectAuditPrivacy('audit-recipes', strings, strings)).toThrow(/anthropic/i);
+  });
 
   it('audit-agent-chat-nokey keeps EXACTLY ONE live region, and it is the API-key gate', async () => {
     // The uniqueness trap the constraints map records: agent-chat-save-recipe

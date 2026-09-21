@@ -585,13 +585,21 @@ function turnNoticeOf(response: AgentMessageResponse): string | null {
 }
 
 /** The last screenshot a turn captured, hoisted into the answer card when there
- *  is one. Returns undefined when nothing was captured. */
-function hoistedCapture(results: ReadonlyArray<AgentIntentResult>): string | undefined {
+ *  is one, WITH the 1-based step it came from. Returns undefined when nothing
+ *  was captured.
+ *
+ *  The step number is here rather than at the card because this is the loop
+ *  that already knows it: the card is handed a capture id and has no way back
+ *  to the row it was lifted out of. It names the full-size dialog ("Screenshot
+ *  from step 4"), so a customer who opens two of them can tell them apart. */
+function hoistedCapture(
+  results: ReadonlyArray<AgentIntentResult>,
+): { id: string; step: number } | undefined {
   for (let i = results.length - 1; i >= 0; i -= 1) {
     const r = results[i];
     if (r === undefined || r.kind !== 'success') continue;
     const id = r.captureId;
-    if (id !== undefined && id !== '') return id;
+    if (id !== undefined && id !== '') return { id, step: i + 1 };
   }
   return undefined;
 }
@@ -787,7 +795,8 @@ function PlanExecutedBody({
         <AnswerCard
           answer={answer}
           host={answerHost(results)}
-          captureId={capture}
+          captureId={capture?.id}
+          captureStep={capture?.step}
           sessionId={sessionId}
           baseUrl={baseUrl}
           apiKey={apiKey}
@@ -844,7 +853,7 @@ function PlanExecutedBody({
               baseUrl={baseUrl}
               apiKey={apiKey}
               captureSrc={captureSrc}
-              hoistedCaptureId={capture}
+              hoistedCaptureId={capture?.id}
               stagger
               lastRow={later <= 0}
               planLabels={plan?.labels}
