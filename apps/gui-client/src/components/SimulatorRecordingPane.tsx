@@ -133,7 +133,10 @@ export function SimulatorRecordingPane({
               <div
                 key={recording.id}
                 data-component="sim-recording-row"
-                className="flex items-center gap-2.5 rounded-lg border border-white/[0.10] bg-black/20 px-2.5 py-2"
+                // `ai-lift-hover` (index.css) — the same small hover lift every
+                // clickable row/thumbnail gets elsewhere in the restyled app
+                // (design brief §2 proposal 4).
+                className="ai-lift-hover flex items-center gap-2.5 rounded-lg border border-white/[0.10] bg-black/20 px-2.5 py-2"
               >
                 <span
                   aria-hidden="true"

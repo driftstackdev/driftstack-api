@@ -3946,15 +3946,41 @@ describe('every harness scene (ALL_SCENES) renders a ready stage with > 20 text 
    *  that holds `nav[aria-label="Primary"]`, NOT every `<aside>` (AgentChatView's
    *  saved-chat rail and RecordingsView's recording rail are asides of the
    *  VIEW, and the fixture rows they carry are exactly what the markers below
-   *  look for) — and the TitleBar's drag regions. */
-  const chromeRoots = (root: HTMLElement): HTMLElement[] => [
-    ...Array.from(root.querySelectorAll<HTMLElement>('aside')).filter(
+   *  look for). Drag regions are handled separately by `isDragRegion` below,
+   *  not by a root list — see its own comment for why. */
+  const chromeRoots = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll<HTMLElement>('aside')).filter(
       (a) => a.querySelector('nav[aria-label="Primary"]') !== null,
-    ),
-    ...Array.from(root.querySelectorAll<HTMLElement>('[data-tauri-drag-region]')),
-  ];
+    );
+  /**
+   * Tauri's drag-region attribute is INHERITED down the tree until the
+   * NEAREST descendant sets it again — exactly like `-webkit-app-region` in
+   * Electron: `="false"` on a button inside a `true` toolbar opts that one
+   * button back OUT, it does not stop being nested in a chrome element.
+   *
+   * ⛔ A fixed "true roots" list (what this used to be —
+   * `querySelectorAll('[data-tauri-drag-region]')`, `.contains()`-checked
+   * against every element) cannot express that: it does not distinguish
+   * `="false"` from the true kind (attribute PRESENCE, not value), so it
+   * swallowed every opt-out too — and cannot express a nested opt-BACK-IN
+   * either, so even fixing the value check would still have marked
+   * SimulatorWindow's whole `simulator-device` bezel (a true region) as
+   * chrome, screen and terminal overlay included, because `.contains()`
+   * cannot see the `="false"` on `simulator-screen` partway down. Added for
+   * the simulator's own gallery scenes ("Bringing The Stage everywhere" stage
+   * 1) — the one component in the app that opts interactive descendants back
+   * OUT of a `true` ancestor at all (its screen, its drawer, its buttons);
+   * every other drag-region user (TitleBar.tsx, IOSKeyboard.tsx) is a single
+   * thin, content-free, never-nested strip, so `.closest()` resolving to the
+   * nearest attribute-bearing ancestor was always the correct answer there
+   * too — it just never had a nested override to get wrong.
+   */
+  const isDragRegion = (el: HTMLElement): boolean => {
+    const nearest = el.closest<HTMLElement>('[data-tauri-drag-region]');
+    return nearest !== null && nearest.getAttribute('data-tauri-drag-region') !== 'false';
+  };
   const inChrome = (roots: ReadonlyArray<HTMLElement>, el: HTMLElement): boolean =>
-    roots.some((r) => r.contains(el));
+    roots.some((r) => r.contains(el)) || isDragRegion(el);
   /** Every string a viewer could read off the elements OUTSIDE the chrome: own
    *  text nodes (each on its own — textContent glues siblings), the surfacing
    *  attributes, and input values. */
@@ -4017,7 +4043,18 @@ describe('every harness scene (ALL_SCENES) renders a ready stage with > 20 text 
           () => {
             const leaves = ownTextLeaves(stage);
             const roots = chromeRoots(stage);
-            expect(roots.length, `${name}: chrome roots found`).toBeGreaterThan(0);
+            // A sanity check that chrome-detection itself is working (not
+            // vacuously — "everything reads as outside chrome" is also what a
+            // BROKEN detector looks like), not a claim every scene has a
+            // Sidebar: the simulator scenes are their own chrome-less OS
+            // window (no `AppWindow`, so `roots` — Sidebar asides — is
+            // legitimately empty) and prove the detector the other way, via a
+            // real drag region (`isDragRegion` above, checked separately from
+            // `roots` for exactly this reason).
+            expect(
+              roots.length > 0 || stage.querySelector('[data-tauri-drag-region]') !== null,
+              `${name}: chrome roots found`,
+            ).toBe(true);
             expect(leaves.length, `${name}: text leaves`).toBeGreaterThan(20);
             expect(
               leaves.filter((el) => !inChrome(roots, el)).length,

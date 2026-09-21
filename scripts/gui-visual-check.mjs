@@ -290,6 +290,36 @@ const AI_FONT_STRESS_EM = Number(process.env.AI_FONT_STRESS_EM ?? '0.045');
  *  the floor and far above "the selector matched nothing". */
 const MIN_STRESSED_NODES = 40;
 
+// ─── Phase E constants — "Bringing The Stage everywhere" stage 1 ─────────────
+/** Every scene whose name starts with this is the simulator window in some
+ *  session state (simulator-scenes.tsx). */
+const SIMULATOR_SCENE_PREFIX = 'audit-simulator';
+/** Themes to sweep, same knob shape as AI_THEMES. */
+const SIMULATOR_THEMES = (process.env.SIMULATOR_THEMES ?? 'dark,light')
+  .split(',')
+  .map((t) => t.trim());
+/**
+ * ⛔ NOT the AI view's AI_WINDOWS (960x600 / 1024x640 / 1280x800), and that
+ * omission is deliberate, not an oversight — measured, not assumed:
+ * `SimulatorWindow.tsx`'s root is `h-screen w-screen`, a whole dedicated OS
+ * window Rust always resizes to fit its content exactly (never wider than the
+ * phone + drawer need) — there is no CSS cap on the bezel's width, because
+ * production never needs one. Screenshotting this scene at 1280x800 proved
+ * that directly: the phone stays phone-shaped and flush at the left edge,
+ * with the REST of the 1280px width painted as a plain black void — not a
+ * page error, not cut content, just a window size that never occurs on a
+ * real desktop. Adding a max-width to fix the picture at a size nothing ever
+ * requests would be exactly the "coordinate" change design brief §2 and this
+ * repo's build instructions rule out for this stage. So this sweep runs the
+ * scene at the ONE size that is real: `SIMULATOR_SCENE_SIZE` from
+ * simulator-scenes.tsx (582x718 — the drawer-open width the real app already
+ * resizes itself to; see that file's own comment on the arithmetic), read
+ * off the DOM rather than duplicated as a literal here so the two can never
+ * drift apart. A human wanting the 960x600/1280x800 pictures anyway can still
+ * take them by hand (`&stage=960x600`) — this sweep's job is a real gate, not
+ * every picture. */
+const MIN_SIMULATOR_TEXT_LEAVES = 15;
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function harnessUp(url) {
@@ -1031,6 +1061,211 @@ async function runAiWindowSweep(browser, report) {
   return violations;
 }
 
+// ─── Phase E — the simulator window's own gallery scenes ─────────────────────
+// (design brief §2, §5 stage 1). A REAL page load of `<SimulatorWindow>`, in
+// both themes, at the one size that occurs in production (see
+// SIMULATOR_SCENE_PREFIX's own comment for why not the AI view's three
+// windows): no page error, the declared stage size actually reached the DOM
+// (the `?stage=` mistake Phase D already guards against — the same class of
+// silent-1280-measured-as-960 bug), the scene's own loaded-state marker
+// (simulatorSceneLoadedMarker) on screen, `[data-sim-state]` set to exactly
+// the state the scene names, and nothing scrolling in either axis (the same
+// "nothing is CUT AND UNREACHABLE" rule this whole file polices elsewhere).
+
+/** Runs INSIDE the page. Pure measurement, no DOM knowledge beyond the two
+ *  attributes every audit scene already carries and the one this stage adds. */
+function measureSimulatorWindow(root, opts) {
+  const { expectedState, minLeaves } = opts;
+  const shell = root.querySelector('[data-component="simulator-shell"]');
+  const violations = [];
+  if (shell === null) {
+    violations.push({ kind: 'no-simulator-shell' });
+    return { violations, simState: null, leaves: 0, overflow: null };
+  }
+  const simState = shell.getAttribute('data-sim-state');
+  if (simState !== expectedState) {
+    violations.push({ kind: 'wrong-sim-state', simState, expectedState });
+  }
+  // Nothing may scroll — the popped-out window has no scrollbar in the app.
+  // "Clipped by an ANCESTOR" is not scrolling — CSS overflow clipping applies
+  // to every descendant, not just direct children, so an element whose own
+  // style is visible can still be invisible past a grandparent's
+  // `overflow:hidden` (measured case: sim-drawer-status's close button
+  // carries a deliberate `-mr-1` so its ✕ sits flush with the drawer's edge —
+  // 4px of intentional negative-margin overhang, always contained by
+  // `sim-drawer-panel`'s own `overflow-hidden` two levels up; nothing ever
+  // scrolled or was cut, it just used to be double-clipped when these rows
+  // were `truncate`, which also happens to set `overflow:hidden`).
+  const clipsDescendants = (el) => {
+    const s = getComputedStyle(el);
+    return s.overflow === 'hidden' || s.overflowX === 'hidden' || s.overflowY === 'hidden';
+  };
+  const clippedByAncestor = (el) => {
+    for (let n = el; n !== null && n !== root; n = n.parentElement) {
+      if (clipsDescendants(n)) return true;
+    }
+    return false;
+  };
+  const overflowing = [];
+  for (const el of root.querySelectorAll('*')) {
+    if (el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1) {
+      if (clippedByAncestor(el)) continue;
+      overflowing.push({
+        label: el.getAttribute('data-component') ?? el.tagName.toLowerCase(),
+        className: typeof el.className === 'string' ? el.className.slice(0, 80) : '',
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      });
+    }
+  }
+  if (overflowing.length > 0) {
+    violations.push({ kind: 'scrolls', elements: overflowing.slice(0, 8) });
+  }
+  const leaves = Array.from(root.querySelectorAll('*')).filter((el) =>
+    Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent ?? '').trim() !== ''),
+  ).length;
+  if (leaves < minLeaves) {
+    violations.push({ kind: 'too-few-text-leaves', leaves, minLeaves });
+  }
+  return { violations, simState, leaves, overflow: overflowing };
+}
+
+/** One Phase E cell: scene x theme, at the scene's own declared (native)
+ *  size — never `?stage=`, which only accepts W>=640 and this scene's real
+ *  width (582) is below that on purpose (the drawer-open width, not a
+ *  marketing canvas). `size` is discovered once by the caller (off the
+ *  harness's own module, like `readAiSceneNames` does for the scene list) so
+ *  the viewport this sets is never a second copy of the literal to drift from
+ *  SIMULATOR_SCENE_SIZE. Mirrors measureAiCell's readiness protocol otherwise. */
+async function measureSimulatorCell(context, scene, expectedState, theme, size) {
+  const page = await context.newPage();
+  const problems = [];
+  page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
+  try {
+    const stage = page.locator(`[data-scene="${scene}"][data-ready="1"]`);
+    await page.clock.setFixedTime(new Date(FROZEN_NOW_ISO));
+    // Viewport EXACTLY `size`, no +40 margin (unlike measureAiCell's fixed-size
+    // stage box) — SimulatorWindow.tsx's root is h-screen/w-screen, so it fills
+    // the ACTUAL browser viewport, not the wrapper div's declared style width/
+    // height. A +40 margin here made the vh/vw content overflow ITS OWN
+    // wrapper by exactly 40px on both axes — a measurement-script artifact
+    // (caught by this very "nothing scrolls" check), not a product defect: a
+    // real customer's OS window IS the viewport, with no such margin either.
+    // Before navigation — a resize after paint would not re-run the layout
+    // this reads.
+    await page.setViewportSize({ width: size.width, height: size.height });
+    await page.goto(`${URL}?scene=${scene}`, { waitUntil: 'networkidle' });
+    await stage.waitFor({ state: 'visible', timeout: 30_000 });
+    const declared = await stage.evaluate((el) => ({
+      width: Number(el.getAttribute('data-stage-width')),
+      height: Number(el.getAttribute('data-stage-height')),
+    }));
+    if (declared.width !== size.width || declared.height !== size.height) {
+      throw new Error(
+        `${scene}: the stage declares ${declared.width}x${declared.height} but SIMULATOR_SCENE_SIZE is ${size.width}x${size.height}`,
+      );
+    }
+    await page.evaluate((mode) => {
+      document.documentElement.dataset.mode = mode;
+    }, theme);
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(700);
+    const applied = await page.evaluate(() => document.documentElement.dataset.mode);
+    if (applied !== theme) throw new Error(`${scene}: data-mode is ${applied}, wanted ${theme}`);
+    const res = await stage.evaluate(measureSimulatorWindow, {
+      expectedState,
+      minLeaves: MIN_SIMULATOR_TEXT_LEAVES,
+    });
+    const marker = await page.evaluate(
+      (name) =>
+        import(/* @vite-ignore */ '/src/visual-harness/simulator-scenes.tsx').then((m) =>
+          m.simulatorSceneLoadedMarker(name),
+        ),
+      expectedState,
+    );
+    const text = (await stage.evaluate((el) => el.textContent ?? '')) ?? '';
+    if (!text.includes(marker)) {
+      res.violations.push({ kind: 'marker-missing', marker });
+    }
+    if (problems.length > 0) {
+      throw new Error(`${scene} [${theme}]: the page reported errors:\n  ${problems.join('\n  ')}`);
+    }
+    if (res.violations.length > 0) {
+      const shot = `${OUT}/sim-${scene}-${theme}.png`;
+      await page.screenshot({ path: shot });
+      res.shot = shot;
+    }
+    return { ...res, declared };
+  } finally {
+    await page.close();
+  }
+}
+
+/** The whole Phase E sweep. Returns the violation count; throws rather than
+ *  reporting clean when the list has no simulator scene. */
+async function runSimulatorSweep(browser, report) {
+  const listPage = await browser.newPage();
+  let names;
+  let size;
+  try {
+    await listPage.goto(`${URL}?scene=__list__`, { waitUntil: 'domcontentloaded' });
+    const res = await listPage.evaluate(readAiSceneNames, {
+      modulePath: HARNESS_MODULE,
+      prefix: SIMULATOR_SCENE_PREFIX,
+    });
+    if (res.error !== undefined) throw new Error(`simulator scene list: ${res.error}`);
+    names = res.names;
+    size = await listPage.evaluate(() =>
+      import(/* @vite-ignore */ '/src/visual-harness/simulator-scenes.tsx').then(
+        (m) => m.SIMULATOR_SCENE_SIZE,
+      ),
+    );
+  } finally {
+    await listPage.close();
+  }
+  if (names.length === 0) {
+    throw new Error(
+      `no scene in ${HARNESS_MODULE} starts with ${SIMULATOR_SCENE_PREFIX} — refusing to report a clean simulator sweep over nothing`,
+    );
+  }
+  if (
+    size === undefined ||
+    !Number.isFinite(size.width) ||
+    !Number.isFinite(size.height) ||
+    size.width <= 0 ||
+    size.height <= 0
+  ) {
+    throw new Error(
+      `simulator-scenes.tsx SIMULATOR_SCENE_SIZE did not resolve to a real size (got ${JSON.stringify(size)})`,
+    );
+  }
+  const context = await browser.newContext({ deviceScaleFactor: 2, reducedMotion: 'reduce' });
+  let violations = 0;
+  try {
+    for (const scene of names) {
+      // audit-simulator-<state> — the state IS the scene's own suffix.
+      const expectedState = scene.slice(SIMULATOR_SCENE_PREFIX.length + 1);
+      for (const theme of SIMULATOR_THEMES) {
+        const res = await measureSimulatorCell(context, scene, expectedState, theme, size);
+        violations += res.violations.length;
+        report.simulatorWindows.push({ scene, theme, ...res });
+        process.stdout.write(
+          `${scene.padEnd(28)} ${theme.padEnd(5)} → state=${String(res.simState)} leaves=${String(res.leaves)} ` +
+            `declared=${String(res.declared.width)}x${String(res.declared.height)} · ${res.violations.length} violation(s)${res.violations.length > 0 ? '  ✗' : ''}\n`,
+        );
+        for (const viol of res.violations) {
+          process.stdout.write(`      sim: ${JSON.stringify(viol)}\n`);
+        }
+      }
+    }
+  } finally {
+    await context.close();
+  }
+  return violations;
+}
+
 async function main() {
   if (WIDTHS.length === 0) throw new Error('WIDTHS resolved to nothing');
   await mkdir(OUT, { recursive: true });
@@ -1047,6 +1282,7 @@ async function main() {
     aiWindows: [],
     aiFontStressEm: AI_FONT_STRESS_EM,
     aiFontStress: [],
+    simulatorWindows: [],
   };
   let violationCount = 0;
   const opts = {
@@ -1479,6 +1715,11 @@ async function main() {
       `\nAI view — ${AI_WINDOWS.map(([w, h]) => `${String(w)}x${String(h)}`).join(' / ')} in ${AI_THEMES.join(' + ')}\n`,
     );
     violationCount += await runAiWindowSweep(browser, report);
+    // Phase E — the simulator window's own gallery scenes. Same run, same
+    // browser; see the block above runSimulatorSweep for why its windows
+    // differ from Phase D's.
+    process.stdout.write(`\nSimulator window — ${SIMULATOR_THEMES.join(' + ')}\n`);
+    violationCount += await runSimulatorSweep(browser, report);
   } finally {
     await browser.close();
     if (started !== null) started.kill();
@@ -1488,7 +1729,8 @@ async function main() {
   process.stdout.write(
     `\n${report.cards.length} card measurements across ${WIDTHS.join('/')}px and ` +
       `${report.aiWindows.length} AI-view cells (+${report.aiFontStress.length} re-measured at ` +
-      `+${String(AI_FONT_STRESS_EM)}em of font stress) → ${violationCount} violation(s); report ${OUT}/report.json\n`,
+      `+${String(AI_FONT_STRESS_EM)}em of font stress) and ${report.simulatorWindows.length} ` +
+      `simulator-window cells → ${violationCount} violation(s); report ${OUT}/report.json\n`,
   );
   if (violationCount > 0) process.exit(1);
 }

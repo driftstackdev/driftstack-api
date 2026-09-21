@@ -16,7 +16,7 @@
 
 /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import {
   RoomEvent,
@@ -145,6 +145,29 @@ export interface AgentSessionPanelProps {
   /** P1a — invoked by the terminal "Session ended" overlay's Close button. The
    *  simulator wires this to closing the floating-iPhone window. */
   onClose?: () => void;
+  /**
+   * GALLERY SEAM ("Bringing The Stage everywhere" stage 1, spec §8's `standIn`
+   * pattern applied one level down). Undefined everywhere in the app, always —
+   * `SimulatorWindow`'s own gallery fixture is the only caller that ever sets
+   * it, and it never mounts this panel with a `sessionId`/query that would
+   * make the app itself pass one.
+   *
+   * ⛔ IT PINS THE CONNECTION STATE, IT DOES NOT INVENT NEW COPY. `state` /
+   * `publisher` / `firstFramePainted` are seeded as this render's initial
+   * values (see the `useState` calls below) and the connect effect returns
+   * before it creates a Room — so every overlay below (connecting /
+   * reconnecting / disconnected / the publisher-wait spinner) renders with
+   * its EXACT existing JSX and copy for whichever values the fixture chose.
+   * A gallery scene therefore measures the real overlay text, not an
+   * invented mirror of it. `standIn` replaces ONLY the `<video>` element —
+   * every overlay stays a sibling of it exactly as it is live.
+   */
+  gallery?: {
+    state: LivekitConnectionState;
+    publisher: 'waiting' | 'publishing' | 'none';
+    firstFramePainted?: boolean;
+    standIn: ReactNode;
+  };
 }
 
 /** #1 — grace window after the SFU drops the video track (TrackUnsubscribed /
@@ -583,6 +606,7 @@ export function AgentSessionPanel({
   sessionEnded = null,
   switching = false,
   onClose,
+  gallery,
 }: AgentSessionPanelProps): JSX.Element {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Wave 2 recap — the terminal poll currently exposes only the close reason (no
@@ -633,7 +657,14 @@ export function AgentSessionPanel({
   const [ripples, setRipples] = useState<
     Array<{ id: number; x: number; y: number; authorityEpoch: number }>
   >([]);
-  const [state, setState] = useState<LivekitConnectionState>({ kind: 'idle' });
+  // A primitive, not the object itself, in the connect effect's deps below —
+  // mirrors why that effect depends on `info.ws_url`/`info.token` rather than
+  // `info`: an inline `gallery={{...}}` at a call site is a fresh reference
+  // every render, and depending on the object would reconnect-thrash a LIVE
+  // panel (never true in the app, since it never passes `gallery` at all) or
+  // needlessly re-run a fixture's no-op effect on every parent render.
+  const isGalleryFixture = gallery !== undefined;
+  const [state, setState] = useState<LivekitConnectionState>(gallery?.state ?? { kind: 'idle' });
   // Box aspect = the `aspectRatio` prop, which the simulator drives with the LIVE
   // CONTENT aspect (videoW/videoH) — the SAME value its window-sizing math uses to
   // size the screen-host (P1b). So box == host == <video>, and the video fills the
@@ -685,7 +716,9 @@ export function AgentSessionPanel({
   // W617 — track whether a video track ever arrived; 'waiting' →
   // 'publishing' on TrackSubscribed, 'waiting' → 'none' on timeout after
   // connect. 'none' renders the honest no-worker overlay.
-  const [publisher, setPublisher] = useState<'waiting' | 'publishing' | 'none'>('waiting');
+  const [publisher, setPublisher] = useState<'waiting' | 'publishing' | 'none'>(
+    gallery?.publisher ?? 'waiting',
+  );
   const publisherRef = useRef(publisher);
   publisherRef.current = publisher;
   // A3 UX audit ww5k0xkmx (cold-start blank pane) — 'publishing' flips on
@@ -697,7 +730,7 @@ export function AgentSessionPanel({
   // setPublisher('waiting') so a Retry/reconnect gets the hold again. Once true it
   // stays true for the connection (mid-session drops keep the calmer
   // reconnecting-pill path over the last good frame — deliberate).
-  const [firstFramePainted, setFirstFramePainted] = useState(false);
+  const [firstFramePainted, setFirstFramePainted] = useState(gallery?.firstFramePainted ?? false);
   // Item 2 — true once SLOW_START_NOTICE_MS has passed with the room connected and
   // still no painted frame. Purely a COPY flag: it swaps the reassuring sentence for
   // an honest "this is taking longer than expected" one and offers the actions that
@@ -862,6 +895,12 @@ export function AgentSessionPanel({
   }, [sessionEnded]);
 
   useEffect(() => {
+    // GALLERY SEAM — a fixture never creates a Room: no WebRTC, no network, no
+    // signal socket. `state`/`publisher`/`firstFramePainted` are already seeded
+    // from `gallery` above and nothing here ever changes them again, so the
+    // panel sits at exactly the values the fixture chose for the life of the
+    // mount (see the prop's doc comment for why that is the whole point).
+    if (isGalleryFixture) return undefined;
     let cancelled = false;
     const room = createLivekitRoom();
     // Expose the room to the input-capture hook (simulator control). Cleared
@@ -1078,7 +1117,7 @@ export function AgentSessionPanel({
     // only reads ws_url + token, so the captured `info` staying put is safe.
     // `retryNonce` re-runs the effect on a manual Reconnect (intentional, not a
     // render-thrash — it changes only on the button click).
-  }, [info.ws_url, info.token, retryNonce]);
+  }, [info.ws_url, info.token, retryNonce, isGalleryFixture]);
 
   // Adaptive receiver jitter buffer (founder 2026-07-03: "streaming sometimes
   // majorly unresponsive … loss 2.4%, jitter 18ms, freezes 43 … tapping does
@@ -1267,28 +1306,37 @@ export function AgentSessionPanel({
         window.setTimeout(() => setRipples((prev) => prev.filter((r) => r.id !== id)), 500);
       }}
     >
-      <video
-        ref={handleVideoRef}
-        autoPlay
-        playsInline
-        muted
-        className="h-full w-full object-contain"
-        aria-label="Agent session live video stream"
-        onLoadedMetadata={(e) => {
-          // The stream's real pixel dimensions — the archetype's true screen
-          // resolution. Adopt the aspect + tell the parent (the simulator
-          // window resizes itself to match).
-          const el = e.currentTarget;
-          if (el.videoWidth > 0 && el.videoHeight > 0) {
-            // Real dims drive the parent's window resize (the FIRST-frame fit). Later
-            // intrinsic changes reach the parent via the `resize` listener effect above,
-            // so a steady-state aspect that settles after this first frame still re-fits
-            // the screen-host. This does NOT change the panel's own box aspect (that's the
-            // `aspectRatio` prop the simulator drives — see effectiveAspectRatio).
-            onVideoDimensions?.(el.videoWidth, el.videoHeight);
-          }
-        }}
-      />
+      {/* GALLERY SEAM — a fixture replaces ONLY this element. Every overlay
+          below (tab-switching / session-ended / publisher-state /
+          connection-state) is untouched — it is a sibling of the video today
+          and stays a sibling of the fixture image, reading the exact same
+          `state`/`publisher`/`sessionEnded` values as always. */}
+      {gallery !== undefined ? (
+        <>{gallery.standIn}</>
+      ) : (
+        <video
+          ref={handleVideoRef}
+          autoPlay
+          playsInline
+          muted
+          className="h-full w-full object-contain"
+          aria-label="Agent session live video stream"
+          onLoadedMetadata={(e) => {
+            // The stream's real pixel dimensions — the archetype's true screen
+            // resolution. Adopt the aspect + tell the parent (the simulator
+            // window resizes itself to match).
+            const el = e.currentTarget;
+            if (el.videoWidth > 0 && el.videoHeight > 0) {
+              // Real dims drive the parent's window resize (the FIRST-frame fit). Later
+              // intrinsic changes reach the parent via the `resize` listener effect above,
+              // so a steady-state aspect that settles after this first frame still re-fits
+              // the screen-host. This does NOT change the panel's own box aspect (that's the
+              // `aspectRatio` prop the simulator drives — see effectiveAspectRatio).
+              onVideoDimensions?.(el.videoWidth, el.videoHeight);
+            }
+          }}
+        />
+      )}
       {/* Optimistic tap ripples (#124) — sit above the <video> (z-15) but below
           every terminal/reconnecting overlay (z-20+), so they never draw over a
           "Session ended" / "Switching…" state. */}

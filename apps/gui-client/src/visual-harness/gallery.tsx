@@ -120,6 +120,18 @@ export const AUDIT_SCENES = [
   'audit-agent-chat-budget',
   'audit-team',
   'audit-proxies',
+  // The simulator window's own device/room/state-light restyle ("Bringing The
+  // Stage everywhere" stage 1, design brief §2, §5 stage 1) — the REAL
+  // `<SimulatorWindow>`, not the hand-built `?scene=simulator` mirror below,
+  // driven through the query + `standIn` seam SimulatorWindow.tsx itself
+  // defines (simulator-scenes.tsx). Four of the five states a customer's
+  // popped-out device can be in — connecting, live & healthy,
+  // degraded/reconnecting, ended — reached with no live network call, the same
+  // discipline as the AI view's own `audit-agent-chat-*` scenes.
+  'audit-simulator-connecting',
+  'audit-simulator-live',
+  'audit-simulator-degraded',
+  'audit-simulator-ended',
 ] as const;
 export type AuditSceneName = (typeof AUDIT_SCENES)[number];
 export type SceneName = MarketingSceneName | AuditSceneName;
@@ -2105,13 +2117,30 @@ function SimulatorScene(): JSX.Element {
         // the capture script's fits / fitsY guards are there to catch.
         <div
           data-component="scene-simulator-window"
+          // "Bringing The Stage everywhere" stage 1 — this mirror shows the
+          // window mid RUNNING session (DeviceToolbar `running`, below), so its
+          // state light is `live`: the same `[data-sim-state]`/`--sim-light-rgb`
+          // idea index.css gives the real `simulator-device`, applied here to
+          // the mirror's own outer ring (`.sim-aura` behind it is the room glow;
+          // NOT `.sim-device` itself — this box also fills for the flat toolbar/
+          // drawer chrome the real component keeps as separate elements, so it
+          // keeps its own `bg-[#1d1e24]` rather than the phone's metal gradient).
+          data-sim-state="live"
           // The real simulator-shell scopes its fixed-dark chrome to the dark
           // tokens in both themes (SimulatorWindow.tsx); the scene's window does
           // the same so the light-theme measurement is of the chrome as shipped.
           data-mode="dark"
-          className="absolute bottom-6 right-6 z-20 flex flex-col overflow-hidden rounded-[16px] bg-[#1d1e24] shadow-[0_30px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.12]"
-          style={{ width: phoneW + railW + paneW }}
+          className="absolute bottom-6 right-6 z-20 flex flex-col overflow-hidden rounded-[16px] bg-[#1d1e24]"
+          style={{
+            width: phoneW + railW + paneW,
+            // The outer glow's blur/spread MUST track `.sim-device`'s own (index.css)
+            // — coordinator round 2: the rim read as a hairline because this figure
+            // was too tight. Kept in lockstep with the real recipe's measured value.
+            boxShadow:
+              '0 30px 80px rgba(0,0,0,0.55), inset 0 0 0 1px rgb(var(--sim-light-rgb) / 0.5), 0 0 85px -11px rgb(var(--sim-light-rgb) / 0.45)',
+          }}
         >
+          <div className="sim-aura" aria-hidden="true" />
           <DeviceToolbar
             deviceName="iPhone 17"
             profileName="tokyo sneakers"
@@ -2188,8 +2217,12 @@ function SimulatorScene(): JSX.Element {
                 inside the window overflows. */}
             <aside
               data-component="simulator-drawer"
-              className="flex shrink-0 flex-row bg-[#1d1e24] text-[11.5px]"
+              // `relative` + the glow div below mirror SimulatorWindow.tsx's real
+              // drawer exactly (coordinator round 2 — the room's light has to leak
+              // into the chrome beside the phone too, not just above it).
+              className="relative flex shrink-0 flex-row bg-[#1d1e24] text-[11.5px]"
             >
+              <div className="sim-drawer-glow" aria-hidden="true" />
               <nav
                 data-component="sim-drawer-rail"
                 aria-label="Drawer sections"
@@ -2271,6 +2304,17 @@ function SimulatorScene(): JSX.Element {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1 space-y-0.5">
+                      {/* The headline pill — mirrors the real strip's own
+                          `.ai-chip`-style treatment (design brief §2 proposal 3,
+                          SimulatorWindow.tsx `simChip`). This window is running,
+                          so the ready-toned "LIVE" pill, same as the real one at
+                          `data-sim-state="live"`. */}
+                      <div className="flex items-center gap-1.5 pb-0.5">
+                        <span className="ai-chip ai-chip-state sim-chip-halo ai-chip-open">
+                          <i className="ai-pip is-ready" aria-hidden="true" />
+                          LIVE
+                        </span>
+                      </div>
                       {/* The real strip's own shape: mode · link state · route,
                           then fps · rtt · 🌍 proxy · timezone (SimulatorWindow.tsx
                           "sim-drawer-status"). It used to read a ws tick and

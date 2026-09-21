@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { LazyStore } from '@tauri-apps/plugin-store';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import {
@@ -29,6 +29,7 @@ import {
   sendActivateTab,
   RoomEvent,
   type Room,
+  type LivekitConnectionState,
 } from '../lib/livekit';
 import { ReliableInputCongestedError } from '../lib/livekit-input-congestion';
 import {
@@ -124,7 +125,11 @@ import {
   manualInputCapabilityFromFlag,
   manualInputCapabilityOf,
 } from '../lib/manual-input-capability';
-import { describeManualInputWait, type ManualInputWait } from '../lib/manual-input-wait';
+import {
+  describeManualInputWait,
+  MANUAL_INPUT_WAIT_COPY,
+  type ManualInputWait,
+} from '../lib/manual-input-wait';
 import { pageErrorCopy, pageErrorInfoEqual, type PageErrorInfo } from '../lib/page-error-copy';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import { downloadBlob, downloadJson, downloadResponse } from '../lib/download';
@@ -1582,8 +1587,21 @@ export function DeviceToolbar({
       <div
         onPointerDown={startToolbarDrag}
         data-component="simulator-toolbar"
-        className="flex h-[34px] w-full items-center gap-2 rounded-t-[16px] bg-[#1d1e24] px-3 ring-1 ring-white/[0.12] shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_-1px_0_rgba(0,0,0,0.45)]"
+        // `relative` is new — purely a positioning CONTEXT for the glow
+        // below (`position:relative` with no offset moves nothing and
+        // resizes nothing); every existing coordinate, control and hit
+        // target on this bar is untouched.
+        className="relative flex h-[34px] w-full items-center gap-2 rounded-t-[16px] bg-[#1d1e24] px-3 ring-1 ring-white/[0.12] shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_-1px_0_rgba(0,0,0,0.45)]"
       >
+        {/* The room's light, leaking up from the phone into the toolbar
+            strip above it (design brief §2, coordinator round 2 — the light
+            has to live in the chrome AROUND the device since the phone fills
+            the window). `--sim-light-rgb` reaches here by ordinary CSS
+            inheritance from `data-sim-state` on `simulator-shell`, an
+            ancestor — no prop threading needed. z-index:-1 (index.css) sits
+            it between this bar's own background and its buttons/text, never
+            over them. */}
+        <div className="sim-toolbar-glow" aria-hidden="true" />
         {/* Left — window controls. The window is BORDERLESS (the iPhone look),
             so these ARE the only close/minimize affordance. */}
         <div data-tauri-drag-region="false" className="flex items-center gap-2">
@@ -1886,7 +1904,11 @@ function DrawerRailButton({
       aria-label={title}
       aria-pressed={active}
       onClick={() => onSelect(pane)}
-      className={`group relative flex h-10 w-11 flex-col items-center justify-center gap-0.5 rounded-lg transition-colors ${
+      // `ai-lift-hover` (index.css) — the same small hover lift every clickable
+      // row/thumbnail gets elsewhere in the restyled app (design brief §2
+      // proposal 4); purely a hover transform, additive to the existing
+      // colour transition.
+      className={`group relative flex h-10 w-11 flex-col items-center justify-center gap-0.5 rounded-lg transition-colors ai-lift-hover ${
         active
           ? 'bg-accent/20 text-accent-text ring-1 ring-accent/40'
           : 'text-ink-secondary hover:bg-white/10 hover:text-ink-primary'
@@ -1908,7 +1930,12 @@ function DrawerRailButton({
       <span
         data-component={`sim-rail-label-${pane}`}
         aria-hidden="true"
-        className="max-w-[42px] truncate text-[7.5px] font-medium leading-none tracking-tight"
+        // 9px is the app-wide text-size floor (scripts/gui-text-quality.mjs);
+        // this rail was the one place still under it, invisible until
+        // "Bringing The Stage everywhere" stage 1 gave it a real gallery scene
+        // to measure (design brief §5 stage 1 — no scene mounted the real
+        // SimulatorWindow before this one).
+        className="max-w-[42px] truncate text-[9px] font-medium leading-none tracking-tight"
       >
         {railLabel}
       </span>
@@ -3742,13 +3769,259 @@ export function CookiesPane({
   );
 }
 
-export function SimulatorWindow(): JSX.Element {
+/**
+ * GALLERY SEAM — maps a `galleryPhase` to the connection/publisher values
+ * `AgentSessionPanel`'s own `gallery` prop expects (see that prop's doc
+ * comment: it PINS these, it does not invent new overlay copy — the real
+ * "Connecting to the live stream…" / "Connection dropped — reconnecting…"
+ * JSX renders unchanged for whichever values are chosen here). `degraded`
+ * reuses `'reconnecting'`, the SAME connection state a real dropped-then-
+ * recovering session passes through, rather than inventing a distinct
+ * "degraded" vocabulary the panel has no copy for. `ended` only needs to be
+ * non-connecting — the terminal "Session ended" overlay is drawn from
+ * `sessionEnded` (a separate, already-existing prop), not from this.
+ */
+function agentPanelGalleryFixture(
+  phase: 'connecting' | 'live' | 'degraded' | 'ended',
+  standInEl: ReactNode,
+): {
+  state: LivekitConnectionState;
+  publisher: 'waiting' | 'publishing' | 'none';
+  firstFramePainted?: boolean;
+  standIn: ReactNode;
+} {
+  switch (phase) {
+    case 'live':
+      return {
+        state: { kind: 'connected' },
+        publisher: 'publishing',
+        firstFramePainted: true,
+        standIn: standInEl,
+      };
+    case 'degraded':
+      return {
+        state: { kind: 'reconnecting' },
+        publisher: 'publishing',
+        firstFramePainted: true,
+        standIn: standInEl,
+      };
+    case 'ended':
+      return { state: { kind: 'disconnected' }, publisher: 'none', standIn: standInEl };
+    case 'connecting':
+      return { state: { kind: 'connecting' }, publisher: 'waiting', standIn: standInEl };
+  }
+}
+
+/** The one page the `live`/`degraded` fixtures show — the SAME shop page
+ *  `standInScreen(shopListingSvg())` draws in the screen, named in words so
+ *  the tab/address bar agree with the picture instead of describing a
+ *  different page than the one on screen. `*.example.com`, invented query —
+ *  never a real destination. */
+const SIM_GALLERY_PAGE_URL = 'https://shop.example.com/search?q=trail+running+shoes';
+const SIM_GALLERY_PAGE_TITLE = 'trail running shoes – Example Outfitters';
+
+/**
+ * GALLERY SEAM — every OTHER chrome surface that normally derives from a
+ * live session: the toolbar's live dot, the tab strip + address bar's page,
+ * the drawer's mode/transport/fps/latency facts, and the Session pane's mode
+ * caption. Companion to `agentPanelGalleryFixture` (the phone SCREEN's own
+ * seam) — together they cover every surface a customer's eye crosses.
+ *
+ * ⛔ NEVER a fake `sessionId`, NEVER a network call. Every field here is a
+ * DISPLAY value substituted at the exact JSX site that would otherwise read
+ * the real (permanently idle, since no session ever opens in gallery mode)
+ * state — the same "fixture outranks the measurement" rule `Stage.tsx` uses
+ * for its own frame-rate chip. One state per scene, every surface agrees:
+ * `connecting` leaves every field at the same "nothing yet" value the real
+ * app shows before a session opens (null/false/''), so nothing here needs to
+ * invent connecting-flavoured copy — the existing "Connecting…" strings
+ * already read correctly from those real defaults. `live` is the one state
+ * every surface must actively agree is live. `degraded` reuses `live`'s page
+ * (a transient drop does not blank the browser) but its OWN transport
+ * reading. `ended` leaves the page blank too — `manualInputWait`'s existing,
+ * REAL "session ended" / "this session has ended" copy (lib/manual-input-
+ * wait.ts) already reads off `sessionEnded`/`lifecycleTerminal`, which the
+ * 'ended' fixture already seeds correctly (see `sessionEnded`'s own
+ * useState above), so no override is needed there at all.
+ */
+interface SimulatorGalleryFixture {
+  /** DeviceToolbar's two booleans. */
+  toolbarRunning: boolean;
+  toolbarConnecting: boolean;
+  /** The seed tab's initial page — '' leaves the tab/address bar at their
+   *  real "nothing loaded" look (New Tab / the locked connecting placeholder). */
+  pageUrl: string;
+  pageTitle: string;
+  /** BrowserBar's lock — true unlocks the address bar to show `pageUrl`. */
+  canNavigate: boolean;
+  /** SessionControlSection's `mode` + `manualInputAvailable`, AND
+   *  sim-drawer-status's own "Manual/Pair/Agent" word — one value, two
+   *  readers, so they can't disagree the way the AI turn's phase/chip do. */
+  controlMode: SessionMode | null;
+  manualInputAvailable: boolean | undefined;
+  /** sim-drawer-status's transport + numbers. `transport: null` reads
+   *  "connecting…" (the real fallback, `connecting` only); `'reconnecting'`
+   *  is a fixture-only word `degraded` uses so it never claims the same
+   *  "direct" a healthy session shows; `'ended'` reads a plain "—" so a
+   *  closed session's drawer does not claim to still be "connecting" (the
+   *  coordinator's "everything reads ended" — a session that ended is not
+   *  mid-connect). fps/latency `null` reads "measuring…" (the real
+   *  fallback) — connecting/ended have nothing to measure yet/any more. */
+  transport: 'direct' | 'reconnecting' | 'ended' | null;
+  fps: number | null;
+  latencyMs: number | null;
+}
+function simulatorGalleryFixtureFor(
+  phase: 'connecting' | 'live' | 'degraded' | 'ended',
+): SimulatorGalleryFixture {
+  switch (phase) {
+    case 'connecting':
+      return {
+        toolbarRunning: false,
+        toolbarConnecting: true,
+        pageUrl: '',
+        pageTitle: '',
+        canNavigate: false,
+        controlMode: null,
+        manualInputAvailable: undefined,
+        transport: null,
+        fps: null,
+        latencyMs: null,
+      };
+    case 'live':
+      return {
+        toolbarRunning: true,
+        toolbarConnecting: false,
+        pageUrl: SIM_GALLERY_PAGE_URL,
+        pageTitle: SIM_GALLERY_PAGE_TITLE,
+        canNavigate: true,
+        controlMode: 'manual',
+        manualInputAvailable: true,
+        transport: 'direct',
+        fps: 60,
+        latencyMs: 38,
+      };
+    case 'degraded':
+      return {
+        toolbarRunning: false,
+        toolbarConnecting: true,
+        pageUrl: SIM_GALLERY_PAGE_URL,
+        pageTitle: SIM_GALLERY_PAGE_TITLE,
+        canNavigate: false,
+        controlMode: 'manual',
+        manualInputAvailable: true,
+        transport: 'reconnecting',
+        fps: 60,
+        latencyMs: 38,
+      };
+    case 'ended':
+      return {
+        toolbarRunning: false,
+        toolbarConnecting: false,
+        pageUrl: '',
+        pageTitle: '',
+        canNavigate: false,
+        controlMode: 'manual',
+        manualInputAvailable: true,
+        transport: 'ended',
+        fps: null,
+        latencyMs: null,
+      };
+  }
+}
+
+/**
+ * The gallery mirror of `manualInputWait` (lib/manual-input-wait.ts) — the
+ * SAME "fixture outranks the measurement" rule every other gallery surface
+ * above follows, closing one more contradiction the coordinator's round-2
+ * screenshots caught: `manualInputWait` is normally derived from the REAL
+ * transport/session-read inputs (`room !== null`, `connState`, …), which stay
+ * at their gallery-inert defaults in every fixture phase except `ended`
+ * (whose `sessionEnded` IS seeded — `manualInputWaitGroup` checks that
+ * first) — so `degraded` computed the SAME 'stream' group as `connecting`
+ * ("connecting…") one render away from the reconnecting overlay
+ * (AgentSessionPanel's own gallery `state`, wired separately) already saying
+ * "Connection dropped — reconnecting…", and the toolbar's own pill read
+ * "CONNECTING…" in both scenes alike.
+ *
+ * Reuses `MANUAL_INPUT_WAIT_COPY` verbatim — never new copy — so the
+ * sentence/chip/placeholder are byte-identical to what the real derivation
+ * would produce for a genuinely reconnecting/connecting/ended session; only
+ * WHICH group applies is fixture-picked, exactly like `simChip` below.
+ */
+function simulatorGalleryManualInputWait(
+  phase: 'connecting' | 'live' | 'degraded' | 'ended',
+): ManualInputWait | null {
+  switch (phase) {
+    case 'connecting':
+      return { group: 'stream', ...MANUAL_INPUT_WAIT_COPY.stream };
+    case 'live':
+      // Nothing unmet: `running` is already true, so DeviceToolbar shows its
+      // "Live" pulse regardless (it never reads this prop), and `canNavigate`
+      // is already true, so BrowserBar's connecting pill never mounts either.
+      return null;
+    case 'degraded':
+      return { group: 'stream-reconnecting', ...MANUAL_INPUT_WAIT_COPY['stream-reconnecting'] };
+    case 'ended':
+      return { group: 'ended', ...MANUAL_INPUT_WAIT_COPY.ended };
+  }
+}
+
+export function SimulatorWindow({
+  standIn,
+}: {
+  /**
+   * GALLERY SEAM ("Bringing The Stage everywhere" stage 1, spec §8's `standIn`
+   * pattern) — an IMAGE mounted in the device's screen instead of a live
+   * LiveKit stream. Undefined everywhere in the app: `main.tsx` mounts
+   * `<SimulatorWindow />` with no props, always — only a visual-harness scene
+   * passes one, alongside `?fixture=connecting|live|degraded|ended` in the
+   * window's own opening query (see `galleryPhase` below for why the PHASE
+   * travels through the query, matching how a real launch already hands this
+   * window its session identity, while the image — which no real launch has
+   * any use for — travels as a prop, matching `Stage`'s own `standIn`).
+   */
+  standIn?: ReactNode;
+} = {}): JSX.Element {
   // The session is held in state so the separate Simulator app's RELAUNCH path
   // can switch it in place: the single-instance handler emits a `ds-session`
   // event (instead of re-navigating, which would reload + tear down the live
   // Room), and the listener below re-parses the payload exactly like the initial
   // location.search and updates this state.
   const [query, setQuery] = useState<SessionQuery>(() => infoFromQuery());
+
+  // GALLERY SEAM ("Bringing The Stage everywhere" stage 1) — a visual-harness
+  // scene mounts this window with `?fixture=connecting|live|degraded|ended` in
+  // its INITIAL query so the popped-out device renders a session state it did
+  // not reach over the network: no control-plane polling (every poll below
+  // already guards on `sessionId === ''`, and the fixture scene's query omits
+  // `session=` on purpose — `info !== null` from `ws`/`token` is what renders
+  // the device chrome, per the `info === null` branch further down), no
+  // LiveKit room (AgentSessionPanel's own `gallery` prop, wired where it
+  // mounts), and no diagnostics flight-recorder store (gated just below —
+  // it only ever writes a crash-report file nobody screenshots).
+  // Captured ONCE at mount (a lazy initializer, exactly like `query` above)
+  // because `safeSimulatorSearch` (an effect further down) rewrites the
+  // visible URL to a minimal `window`/`session`/`cg` set before paint — a
+  // later read of `window.location.search` would already have lost it.
+  // `null` — always, in the app: no real launch path ever sets `fixture=`.
+  const [galleryPhase] = useState<'connecting' | 'live' | 'degraded' | 'ended' | null>(() => {
+    const raw = new URLSearchParams(window.location.search).get('fixture');
+    return raw === 'connecting' || raw === 'live' || raw === 'degraded' || raw === 'ended'
+      ? raw
+      : null;
+  });
+  const isGalleryFixture = galleryPhase !== null;
+  // GALLERY SEAM — the rest of the chrome's fixture (toolbar/tab/address bar/
+  // drawer facts/Session pane), computed once from the same `galleryPhase`.
+  // `undefined` always in the app. See `SimulatorGalleryFixture`'s own doc
+  // comment for the full seam.
+  const galleryFixture = galleryPhase !== null ? simulatorGalleryFixtureFor(galleryPhase) : null;
+  // GALLERY SEAM — `manualInputWait`'s own fixture (see
+  // `simulatorGalleryManualInputWait`'s doc comment for the contradiction
+  // this closes). `null` always in the app, same as `galleryFixture`.
+  const galleryManualInputWait =
+    galleryPhase !== null ? simulatorGalleryManualInputWait(galleryPhase) : null;
 
   // P-25 — the freeze instrument, mounted on the thread that actually freezes.
   //
@@ -3785,6 +4058,11 @@ export function SimulatorWindow(): JSX.Element {
   const censusRoomRef = useRef<Room | null>(null);
 
   useEffect(() => {
+    // GALLERY SEAM — a fixture scene writes no crash-report file: it is a
+    // static picture, nothing can stall, and the store's filename
+    // ('diagnostics-simulator.json') is not one the visual-harness's Tauri
+    // stub answers (that stub's known store list is the app's real stores).
+    if (isGalleryFixture) return undefined;
     const store = new LazyStore(SIMULATOR_FLIGHT_STORE_FILE);
     const deps = browserStallCensusDeps({
       tabCount: () => censusTabCountRef.current,
@@ -3812,7 +4090,9 @@ export function SimulatorWindow(): JSX.Element {
       stopWatch();
       void recorder.stop();
     };
-  }, []);
+    // `isGalleryFixture` never changes after mount (captured once, see its own
+    // declaration above) — listed for lint completeness, not because it re-runs.
+  }, [isGalleryFixture]);
   const {
     info,
     deviceName,
@@ -4205,7 +4485,13 @@ export function SimulatorWindow(): JSX.Element {
   // W2 — also carries A3's host-free `summary` (verbatim) and the DERIVED
   // `lastPhase` (see SessionEndedState / derivedLastPhase); both call sites below
   // populate all three.
-  const [sessionEnded, setSessionEnded] = useState<SessionEndedState | null>(null);
+  // GALLERY SEAM — the 'ended' fixture scene seeds this directly (the terminal
+  // poll that would normally latch it never runs — sessionId is '' in that
+  // scene's query, see `galleryPhase` above). Every other fixture phase stays
+  // `null`, matching the real "not yet ended" default.
+  const [sessionEnded, setSessionEnded] = useState<SessionEndedState | null>(() =>
+    galleryPhase === 'ended' ? { reason: 'customer_closed', summary: null, lastPhase: null } : null,
+  );
   // Live mirror of sessionEnded for the data-channel onData callback (its effect closes
   // over a stale value and doesn't re-subscribe per session-end). Finding #3 — a late
   // page_state frame the box pushes as it tears down (or one still buffered in LiveKit)
@@ -4639,7 +4925,15 @@ export function SimulatorWindow(): JSX.Element {
   // restore). Hover tooltips on the rail (title=) cover discoverability that the old
   // auto-open-Controls used to. selectPane still persists the choice for the session,
   // but the window always starts collapsed (rail-only).
-  const [activePane, setActivePane] = useState<SimDrawerPane | null>(null);
+  // GALLERY SEAM — a fixture scene opens the drawer to its default "Session"
+  // pane so the headline chip (`.ai-chip`, design brief §2 proposal 3) is
+  // actually on screen: it lives inside `sim-drawer-panel`, which — for every
+  // real customer, correctly — renders nothing until the rail is clicked (see
+  // "on a fresh open NOTHING is expanded" above). `galleryPhase` is null
+  // always in the app, so this changes nothing there.
+  const [activePane, setActivePane] = useState<SimDrawerPane | null>(() =>
+    galleryPhase !== null ? 'session' : null,
+  );
   // Extra window width contributed by the docked drawer. Kept current every render
   // (like landscapeRef) so the window-sizing closures (fitWindow / resetToActualSize
   // / the onResized aspect-lock / refitForDrawer) ALWAYS read the live value without
@@ -5545,7 +5839,18 @@ export function SimulatorWindow(): JSX.Element {
   // Seed a single tab + make it active in one initializer pass so they share an id
   // (no set-during-render). The seed tab's url is empty until liveUrl/page_state fills
   // it (synced by the effect below) — there's always exactly one tab on mount.
-  const seedTabRef = useRef<SimTab>({ id: makeTabId(), url: '', scrollY: 0, title: '' });
+  // GALLERY SEAM — the `live`/`degraded` fixtures seed the tab with the SAME
+  // page `standInScreen(shopListingSvg())` draws in the screen, so the tab
+  // strip's title and the address bar's url agree with the picture. `''` for
+  // `connecting`/`ended` leaves the real "New Tab" / locked-placeholder look,
+  // which already reads correctly for both (see `SimulatorGalleryFixture`'s
+  // own doc comment for `ended` specifically).
+  const seedTabRef = useRef<SimTab>({
+    id: makeTabId(),
+    url: galleryFixture?.pageUrl ?? '',
+    scrollY: 0,
+    title: galleryFixture?.pageTitle ?? '',
+  });
   // Latched true the first time this window authors or learns a real tab space
   // (open / close / tabListRestore). Until then it holds only the seed id it
   // minted, which a reattached box has never heard of — see
@@ -8161,6 +8466,15 @@ export function SimulatorWindow(): JSX.Element {
   // Reset to a clean slate on every sessionId change (controlMode=null is the safe
   // non-manual default; refreshControl re-fetches the real mode right after).
   useEffect(() => {
+    // GALLERY SEAM — this whole effect runs on the FIRST mount too (every
+    // effect does), and it would silently overwrite every fixture-seeded
+    // initializer below (tabs/seedTabRef, sessionEnded, liveTitle, …) with
+    // its own "clean slate" a beat after paint — the fixture would flash on
+    // then vanish. None of what it resets means anything without a real
+    // session (no recording, no control channel, no tabs the box ever
+    // reported): the individual useState initializers ARE the fixture's
+    // clean slate here, so this effect has nothing to do.
+    if (isGalleryFixture) return;
     // Finalize any in-flight recording BEFORE the new session takes over — else the 1fps
     // loop keeps capturing the NEW session's screen into the OLD recording (cross-session
     // capture) and the Record dot reads OFF, stranding the user with no stop (audit #2).
@@ -8199,7 +8513,9 @@ export function SimulatorWindow(): JSX.Element {
     // P1a — a fresh/relaunched session starts NON-terminal; clear any prior
     // "Session ended" state so the new session's first frame isn't covered by the
     // old session's terminal overlay (in-place relaunch swaps sessionId without
-    // remount, so this state would otherwise carry over).
+    // remount, so this state would otherwise carry over). Gallery mode never
+    // reaches this line (see the guard at the top of this effect) — the
+    // 'ended' fixture's seeded `sessionEnded` is untouched.
     setSessionEnded(null);
     setLiveUrl('');
     setPageLoading(false);
@@ -8260,7 +8576,14 @@ export function SimulatorWindow(): JSX.Element {
     // Drop every logical activation owner, sibling request id, retry timer and
     // affordance. None may survive into the replacement session/Room.
     clearAllActivationRetries();
-  }, [sessionId, stopRecording, clearNotice, clearAllActivationRetries, updateManualInputControl]);
+  }, [
+    sessionId,
+    stopRecording,
+    clearNotice,
+    clearAllActivationRetries,
+    updateManualInputControl,
+    isGalleryFixture,
+  ]);
   // Control-channel load state for the panel caption (founder 2026-06-18: the
   // mode toggle was stuck "Connecting…" forever when getAgentSession failed and
   // the error was swallowed). null = no error; a classified message = the last
@@ -8394,33 +8717,39 @@ export function SimulatorWindow(): JSX.Element {
   // Reads the SAME render-time state `humanInputEnabled` reads (and the binding the
   // predicate reads), so the sentence cannot claim a wait the bar has already unlocked.
   // It loosens NOTHING: `canNavigate` above is still the only gate.
-  const manualInputWait = describeManualInputWait({
-    sessionId,
-    roomPresent: room !== null,
-    roomBound: roomBinding?.sessionId === sessionId && roomBinding.room === room,
-    connState,
-    publisherState,
-    // ⛔ The device's OWN answer about its video. Without it the chip promises a
-    // screen "on the way" while the overlay two inches up already says the device
-    // could not start its video — an absence rendered over a verdict we hold.
-    streamingState: streamingHealth,
-    authorityCurrent: manualInputControl.sessionId === sessionId,
-    mode: controlMode,
-    modeConfirmed: controlModeConfirmed,
-    lifecycleConfirmed: manualInputControl.lifecycleConfirmed,
-    // ⛔ Every control-read rejection blanks modeConfirmed/lifecycleConfirmed AND
-    // raises this — and the failing paths do not retry (the 5s poll keeps failing
-    // on an expired key; refreshControl only re-runs when a pane opens). Without
-    // this flag the bar says "checking this session's status…" forever about a
-    // check nobody is running, next to the pane's own "Retry".
-    controlReadFailed: controlLinkUnreachable || controlError !== null,
-    lifecycleTerminal: manualInputControl.lifecycleTerminal,
-    lifecycleStatus: manualInputControl.lifecycleStatus,
-    manualInputAvailable,
-    mutationPending: manualInputControl.mutationPending,
-    controlActionPending: controlAction !== null,
-    sessionEnded: sessionEnded !== null,
-  });
+  // GALLERY SEAM — fixture outranks the measurement here too (see
+  // `simulatorGalleryManualInputWait`'s doc comment). The real call below
+  // still only runs (and its inputs only evaluate) when NOT a gallery
+  // fixture, via the ternary's short-circuit.
+  const manualInputWait = isGalleryFixture
+    ? galleryManualInputWait
+    : describeManualInputWait({
+        sessionId,
+        roomPresent: room !== null,
+        roomBound: roomBinding?.sessionId === sessionId && roomBinding.room === room,
+        connState,
+        publisherState,
+        // ⛔ The device's OWN answer about its video. Without it the chip promises a
+        // screen "on the way" while the overlay two inches up already says the device
+        // could not start its video — an absence rendered over a verdict we hold.
+        streamingState: streamingHealth,
+        authorityCurrent: manualInputControl.sessionId === sessionId,
+        mode: controlMode,
+        modeConfirmed: controlModeConfirmed,
+        lifecycleConfirmed: manualInputControl.lifecycleConfirmed,
+        // ⛔ Every control-read rejection blanks modeConfirmed/lifecycleConfirmed AND
+        // raises this — and the failing paths do not retry (the 5s poll keeps failing
+        // on an expired key; refreshControl only re-runs when a pane opens). Without
+        // this flag the bar says "checking this session's status…" forever about a
+        // check nobody is running, next to the pane's own "Retry".
+        controlReadFailed: controlLinkUnreachable || controlError !== null,
+        lifecycleTerminal: manualInputControl.lifecycleTerminal,
+        lifecycleStatus: manualInputControl.lifecycleStatus,
+        manualInputAvailable,
+        mutationPending: manualInputControl.mutationPending,
+        controlActionPending: controlAction !== null,
+        sessionEnded: sessionEnded !== null,
+      });
   // ⛔ The ONE condition under which any surface may say "the phone has not
   // reported". The tri-state alone is NOT that condition: 'unreported' is also
   // true of every healthy session before the room is up, before the session is
@@ -9817,6 +10146,46 @@ export function SimulatorWindow(): JSX.Element {
 
   const pageLoadAdvisory = pageLoadStalled ?? pageLoadTimeout;
 
+  // Session-state light (design brief §2, proposals 1-3): the SAME "state is
+  // drawn as light" idea the AI view's `--ai-light-rgb` gives a turn's phase,
+  // applied here to a connection's health. REAL derivation first — this is
+  // not gallery-only — `galleryPhase` only overrides it so a scene can show a
+  // state a live window may take minutes (or a dropped proxy) to actually
+  // reach. Read by `[data-sim-state]` in index.css, which recolours the
+  // bezel's rim + glow and the drawer's headline chip together.
+  const simStateReal: 'connecting' | 'live' | 'degraded' | 'ended' =
+    sessionEnded !== null
+      ? 'ended'
+      : connState === 'reconnecting' || connState === 'disconnected' || connState === 'error'
+        ? 'degraded'
+        : streamLiveNow
+          ? 'live'
+          : 'connecting';
+  const simState = galleryPhase ?? simStateReal;
+  // The drawer's headline pill (design brief §2 proposal 3) — the SAME four
+  // `.ai-chip` tones the AI view's HUD already draws (index.css), chosen so
+  // the chip's OWN hardcoded token matches `--sim-light-rgb`'s mapping for
+  // the same state (connecting/manual=accent, live=ready, degraded=busy,
+  // ended=muted — see index.css's own [data-sim-state] block), not by which
+  // tone merely "sounds right": `.ai-chip-warm` reads `--status-busy-rgb`,
+  // which is the DEGRADED colour, not connecting's — picking it for
+  // `connecting` would have painted an accent-lit rim beside a busy-toned
+  // chip, the exact kind of disagreement this stage exists to remove.
+  const simChip: { label: string; toneClass: string; pipReady: boolean } =
+    simState === 'live'
+      ? { label: 'LIVE', toneClass: 'ai-chip-open', pipReady: true }
+      : simState === 'degraded'
+        ? { label: 'RECONNECTING', toneClass: 'ai-chip-hold', pipReady: false }
+        : simState === 'ended'
+          ? { label: 'ENDED', toneClass: 'ai-chip-quiet', pipReady: false }
+          : { label: 'CONNECTING', toneClass: 'ai-chip-live', pipReady: false };
+  // GALLERY SEAM — the drawer's mode word (also sim-drawer-status's own
+  // "Manual/Pair/Agent" label) and the Session pane's caption read the SAME
+  // value, so they can't disagree. Not `??` — see the call site's own note
+  // on why `controlMode`'s nullable type makes `??` unsafe here.
+  const effectiveControlMode: SessionMode | null =
+    galleryFixture !== null ? galleryFixture.controlMode : controlMode;
+
   return (
     <div className="flex h-screen w-screen items-center justify-center bg-transparent">
       <LiveLatencyBridge room={room} enabled={room !== null} store={latencyStore} />
@@ -9870,6 +10239,12 @@ export function SimulatorWindow(): JSX.Element {
         <div
           data-mode="dark"
           data-component="simulator-shell"
+          // "State is light" (design brief §2/§3): recolours the bezel's rim +
+          // ambient glow (`.sim-device`/`.sim-aura`, index.css) and the
+          // drawer's headline chip together from one attribute, the same
+          // one-variable-many-readers idea `data-ai-phase`/`--ai-light-rgb`
+          // use for the AI view. See `simState` above for the derivation.
+          data-sim-state={simState}
           className="flex h-full w-full flex-col"
         >
           <DeviceToolbar
@@ -9882,19 +10257,21 @@ export function SimulatorWindow(): JSX.Element {
             // otherwise the toolbar reads "Live" while the screen says the session
             // stopped (the exact "running after the browser closed" confusion).
             running={
-              sessionId !== '' &&
-              sessionEnded === null &&
-              connState === 'connected' &&
-              publisherState === 'publishing' &&
-              // A blank/failed capture still publishes a track, so the transport
-              // signals above stay true while the screen shows "Video unavailable";
-              // require the capability verdict too so "Live" agrees with the overlay.
-              !streamingUnavailable
+              galleryFixture?.toolbarRunning ??
+              (sessionId !== '' &&
+                sessionEnded === null &&
+                connState === 'connected' &&
+                publisherState === 'publishing' &&
+                // A blank/failed capture still publishes a track, so the transport
+                // signals above stay true while the screen shows "Video unavailable";
+                // require the capability verdict too so "Live" agrees with the overlay.
+                !streamingUnavailable)
             }
             connecting={
-              sessionId !== '' &&
-              sessionEnded === null &&
-              !(connState === 'connected' && publisherState === 'publishing')
+              galleryFixture?.toolbarConnecting ??
+              (sessionId !== '' &&
+                sessionEnded === null &&
+                !(connState === 'connected' && publisherState === 'publishing'))
             }
             keyboardVisible={keyboardVisible}
             onToggleKeyboard={toggleKeyboard}
@@ -9949,7 +10326,7 @@ export function SimulatorWindow(): JSX.Element {
           )}
           {browserMode && (
             <BrowserBar
-              canNavigate={canNavigate}
+              canNavigate={galleryFixture?.canNavigate ?? canNavigate}
               vpnTunnelUp={vpnTunnelUp}
               wait={manualInputWait}
               onNavigate={onNavigate}
@@ -9978,12 +10355,27 @@ export function SimulatorWindow(): JSX.Element {
           <div data-component="simulator-body" className="flex min-h-0 w-full flex-1 flex-row">
             {/* Device body — the bezel. data-tauri-drag-region makes the frame a
               window-drag handle; the inner screen overrides it so taps reach the
-              device. flex-1 fills the width left of the drawer. */}
+              device. flex-1 fills the width left of the drawer.
+              `sim-device` (index.css) is the AI view's `.ai-device` recipe —
+              same six-layer box-shadow shape, token-driven — in place of the
+              old hand-rolled hex gradient + flat shadow_2xl + neutral ring;
+              its state-coloured rim/glow read `--sim-light-rgb`, set by
+              `data-sim-state` on `simulator-shell` above. Structural/sizing
+              utilities (rounded-b-[2.75rem], p-[10px], flex-1, …) are
+              untouched — this is a pure paint swap, no coordinate moved. */}
             <div
               data-tauri-drag-region
               data-component="simulator-device"
-              className="relative flex min-h-0 min-w-0 flex-1 flex-col rounded-b-[2.75rem] bg-gradient-to-b from-[#1b1c20] via-[#0d0e11] to-[#08090b] p-[10px] shadow-2xl ring-1 ring-white/[0.12]"
+              className="sim-device relative flex min-h-0 min-w-0 flex-1 flex-col rounded-b-[2.75rem] p-[10px]"
             >
+              {/* The room's light (design brief §2/§3 proposal 2) — one small
+                  breathing glow behind the bezel, reusing the AI view's own
+                  `ds-ai-calm`/`ds-ai-breathe`/`ds-ai-breathe-soft` keyframes by
+                  name (index.css explains why there is no separate floor pool
+                  here: the bezel already fills the transparent window
+                  edge-to-edge). `aria-hidden`: purely decorative, like
+                  `.ai-aura`. */}
+              <div className="sim-aura" aria-hidden="true" />
               {/* Screen — status strip on top (with the dynamic island), the live
                 video BELOW it (never overlapped). NOT a drag region except the
                 strip itself (taps on the video control the device). */}
@@ -10392,6 +10784,14 @@ export function SimulatorWindow(): JSX.Element {
                 >
                   <AgentSessionPanel
                     info={info}
+                    // GALLERY SEAM — see `agentPanelGalleryFixture`'s doc comment
+                    // and `AgentSessionPanel`'s own `gallery` prop. `undefined`
+                    // (the panel's real live-Room path) at every real launch.
+                    gallery={
+                      galleryPhase === null
+                        ? undefined
+                        : agentPanelGalleryFixture(galleryPhase, standIn)
+                    }
                     // P1b — the panel box uses the LIVE content aspect (videoW/videoH)
                     // so it == the screen-host == the <video>: no double object-contain,
                     // no bottom-black band. The content-only fork publishes the web
@@ -10578,9 +10978,17 @@ export function SimulatorWindow(): JSX.Element {
                  (over the phone edge) past the rail and were being CLIPPED here (founder:
                  "still don't see hoverable icon"). The rail + panel children are
                  fixed-width and self-clip (the panel is its own overflow-hidden), so the
-                 aside doesn't need to clip — dropping it lets the tooltips show. */
-              className="flex shrink-0 flex-row border-l border-white/[0.12] bg-[#1d1e24] text-[11.5px]"
+                 aside doesn't need to clip — dropping it lets the tooltips show.
+                 `relative` is new (a positioning context only, like the toolbar above)
+                 and changes nothing about that clipping decision. */
+              className="relative flex shrink-0 flex-row border-l border-white/[0.12] bg-[#1d1e24] text-[11.5px]"
             >
+              {/* The room's light, leaking sideways from the phone into the drawer
+                  column (design brief §2, coordinator round 2). Same
+                  `--sim-light-rgb` inheritance as the toolbar glow; z-index:0 (index.css)
+                  so it paints above this aside's own flat background but below the
+                  rail/panel's normal-flow content — never over a control. */}
+              <div className="sim-drawer-glow" aria-hidden="true" />
               {/* The RAIL — always visible. Top: one icon per section (the active one
                 highlighted only while its pane is open). Bottom: a separator + the
                 red End-session button so a true Stop is reachable even when
@@ -10632,7 +11040,8 @@ export function SimulatorWindow(): JSX.Element {
                       <span aria-hidden="true">
                         {controlAction?.kind === 'end' ? <ControlActionSpinner /> : '◼'}
                       </span>
-                      <span aria-hidden="true" className="text-[7.5px] font-medium leading-none">
+                      {/* 9px floor (see sim-rail-label-* above for the same fix). */}
+                      <span aria-hidden="true" className="text-[9px] font-medium leading-none">
                         End
                       </span>
                     </button>
@@ -10666,20 +11075,97 @@ export function SimulatorWindow(): JSX.Element {
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1 space-y-0.5">
-                            <div className="truncate">
+                            {/* Headline state, as an `.ai-chip`-style pill — ONE
+                                word, reused byte-for-byte from the AI view's own
+                                HUD device (design brief §1.4/§2 proposal 3; see
+                                index.css's "the drawer's headline state" section
+                                for the tone mapping). The mode/link/transport
+                                line right below is now its SENTENCE — unchanged
+                                text and colour logic, just no longer carrying
+                                the state word alone. The fps/latency/egress line
+                                further down is untouched: demoted by staying
+                                small and secondary, not deleted.
+                                `sim-chip-halo` is the one addition: the small
+                                room-light halo around the pill (coordinator
+                                round 2, §2 — "let the drawer's headline chip
+                                carry the same light as a subtle halo"). */}
+                            <div className="flex items-center gap-1.5 pb-0.5">
+                              <span
+                                className={`ai-chip ai-chip-state sim-chip-halo ${simChip.toneClass}`}
+                              >
+                                <i
+                                  className={`ai-pip${simChip.pipReady ? ' is-ready' : ''}`}
+                                  aria-hidden="true"
+                                />
+                                {simChip.label}
+                              </span>
+                            </div>
+                            {/* `break-words`, not `truncate` — Finding #4's own
+                                fix (the Diagnostics pane's Transport row,
+                                below) applies here too: the ~212px usable
+                                drawer width clips this line's content off-
+                                screen with no `title` to recover it from,
+                                which "Bringing The Stage everywhere" stage 1's
+                                new gallery scene is the first thing to ever
+                                measure. Same tokens, same text, nothing
+                                hidden — matches the harness mirror's own
+                                `break-words` choice (gallery.tsx), made for
+                                exactly this reason before this scene existed
+                                to prove it. */}
+                            <div className="break-words">
                               <span className="text-white/90">
-                                {controlMode !== null
-                                  ? controlMode === 'ai'
+                                {effectiveControlMode !== null
+                                  ? effectiveControlMode === 'ai'
                                     ? 'Agent'
-                                    : controlMode === 'pair'
+                                    : effectiveControlMode === 'pair'
                                       ? 'Pair'
                                       : 'Manual'
                                   : '…'}
                               </span>
                               <span className="text-white/30"> · </span>
-                              <span>{info ? 'connected' : 'not connected'}</span>
+                              {/* ⛔ GALLERY SEAM — closes the ONE contradiction
+                                  `theme-token-parity`/state-agreement tests did
+                                  not catch until a rendered scene was actually
+                                  read: `info` is only ever null in the EMPTY-
+                                  window branch above (no ws/token at all) —
+                                  reached here, it is unconditionally truthy, so
+                                  this word said "connected" in EVERY fixture
+                                  phase including `connecting`, one word before
+                                  the same line's own "connecting…". Reuses
+                                  `galleryFixture.transport` (already the fact
+                                  this line's next word reads) rather than a new
+                                  field: 'direct'/'reconnecting' both mean the
+                                  session's link is up (only its media differs),
+                                  null/'ended' mean it is not. */}
+                              <span>
+                                {galleryFixture !== null
+                                  ? galleryFixture.transport === 'direct' ||
+                                    galleryFixture.transport === 'reconnecting'
+                                    ? 'connected'
+                                    : 'not connected'
+                                  : info
+                                    ? 'connected'
+                                    : 'not connected'}
+                              </span>
                               <span className="text-white/30"> · </span>
-                              {conn.transport !== null ? (
+                              {/* GALLERY SEAM — `galleryFixture.transport` reads
+                                  the SAME three words a real reading would
+                                  ('direct' / a locked placeholder / a fixture-
+                                  only 'reconnecting…' `degraded` uses so it
+                                  never claims the healthy 'direct' word), never
+                                  the real (always-null in gallery mode, since
+                                  no room ever connects) `conn.transport`. */}
+                              {galleryFixture !== null ? (
+                                galleryFixture.transport === 'direct' ? (
+                                  <span className="text-ink-secondary">direct</span>
+                                ) : galleryFixture.transport === 'reconnecting' ? (
+                                  <span className="text-status-busy">reconnecting…</span>
+                                ) : galleryFixture.transport === 'ended' ? (
+                                  <span className="text-white/50">—</span>
+                                ) : (
+                                  <span className="text-white/50">connecting…</span>
+                                )
+                              ) : conn.transport !== null ? (
                                 <span
                                   className={
                                     conn.transport === 'udp' && conn.relayed !== true
@@ -10695,35 +11181,62 @@ export function SimulatorWindow(): JSX.Element {
                                 <span className="text-white/50">connecting…</span>
                               )}
                             </div>
-                            <div className="truncate">
-                              <LiveFpsSubscriber store={fpsStore}>
-                                {(fps) => (fps !== null ? <span>{fps}fps · </span> : null)}
-                              </LiveFpsSubscriber>
-                              <LiveLatencySubscriber store={latencyStore}>
-                                {(latency) =>
-                                  latency.rttMs !== null ? (
-                                    <span
-                                      className={
-                                        latency.rttMs < 150
-                                          ? 'text-ink-secondary'
-                                          : 'text-amber-300'
-                                      }
-                                    >
-                                      {latency.rttMs}ms
-                                    </span>
-                                  ) : conn.rttMs !== null ? (
-                                    <span
-                                      className={
-                                        conn.rttMs < 150 ? 'text-ink-secondary' : 'text-amber-300'
-                                      }
-                                    >
-                                      {conn.rttMs}ms
+                            <div className="break-words">
+                              {/* GALLERY SEAM — fixture fps/latency numbers,
+                                  bypassing LiveFpsSubscriber/LiveLatencySubscriber
+                                  entirely (their stores never populate in gallery
+                                  mode: LiveConnectionStatsBridge/room stay null/
+                                  disabled by design — no live network call). Same
+                                  markup, same "measuring…" fallback word the real
+                                  path uses, so `connecting`/`ended` (fps: null)
+                                  read exactly as they already correctly did. */}
+                              {galleryFixture !== null ? (
+                                <>
+                                  {galleryFixture.fps !== null && (
+                                    <span>{galleryFixture.fps}fps · </span>
+                                  )}
+                                  {galleryFixture.latencyMs !== null ? (
+                                    <span className="text-ink-secondary">
+                                      {galleryFixture.latencyMs}ms
                                     </span>
                                   ) : (
                                     <span className="text-white/50">measuring…</span>
-                                  )
-                                }
-                              </LiveLatencySubscriber>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  <LiveFpsSubscriber store={fpsStore}>
+                                    {(fps) => (fps !== null ? <span>{fps}fps · </span> : null)}
+                                  </LiveFpsSubscriber>
+                                  <LiveLatencySubscriber store={latencyStore}>
+                                    {(latency) =>
+                                      latency.rttMs !== null ? (
+                                        <span
+                                          className={
+                                            latency.rttMs < 150
+                                              ? 'text-ink-secondary'
+                                              : 'text-amber-300'
+                                          }
+                                        >
+                                          {latency.rttMs}ms
+                                        </span>
+                                      ) : conn.rttMs !== null ? (
+                                        <span
+                                          className={
+                                            conn.rttMs < 150
+                                              ? 'text-ink-secondary'
+                                              : 'text-amber-300'
+                                          }
+                                        >
+                                          {conn.rttMs}ms
+                                        </span>
+                                      ) : (
+                                        <span className="text-white/50">measuring…</span>
+                                      )
+                                    }
+                                  </LiveLatencySubscriber>
+                                </>
+                              )}
                               {proxyLabel !== '' && (
                                 <span className="text-white/60">
                                   {' · 🌍 '}
@@ -10771,8 +11284,17 @@ export function SimulatorWindow(): JSX.Element {
                           Session
                         </div>
                         <SessionControlSection
-                          mode={controlMode}
-                          manualInputAvailable={manualInputAvailable}
+                          mode={effectiveControlMode}
+                          // Not `??` — `manualInputAvailable` is `boolean |
+                          // undefined`, and the 'connecting' fixture's own
+                          // value is `undefined` (a real, meaningful fixture
+                          // choice, not "no override") — `??` would silently
+                          // fall through to the real value there.
+                          manualInputAvailable={
+                            galleryFixture !== null
+                              ? galleryFixture.manualInputAvailable
+                              : manualInputAvailable
+                          }
                           // The liveness the capability prop above cannot carry: a
                           // closed session has no report to be undefined ABOUT.
                           sessionOver={
@@ -11464,7 +11986,7 @@ export function SimulatorWindow(): JSX.Element {
                                         title="Save this file to your machine"
                                         disabled={downloadingName !== null}
                                         onClick={() => onDownloadFile(d.name)}
-                                        className="shrink-0 rounded-md border border-white/15 bg-white/5 px-2 py-1 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
+                                        className="ai-lift-hover shrink-0 rounded-md border border-white/15 bg-white/5 px-2 py-1 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
                                       >
                                         {downloadingName === d.name ? 'Saving…' : '⬇ Save'}
                                       </button>

@@ -140,14 +140,18 @@ export interface AgentChatSceneFixture {
 
 /** An SVG drawing as an `<img>` source. Percent-encoded rather than base64 so
  *  the source in this file is the thing a reviewer reads, while the DOM still
- *  carries one opaque attribute value with no readable text in it. */
-function svgDataUri(svg: string): string {
+ *  carries one opaque attribute value with no readable text in it.
+ *  Exported: the simulator's own gallery scene (simulator-scenes.tsx, "Bringing
+ *  The Stage everywhere" stage 1) reuses this + `shopListingSvg`/`standInScreen`
+ *  below rather than drawing a second fixture page — the same phone, the same
+ *  seam, two different chrome. */
+export function svgDataUri(svg: string): string {
   return `data:image/svg+xml,${encodeURIComponent(svg.replace(/\s+/g, ' ').trim())}`;
 }
 
 /** The shop listing the AI is working on — what a customer sees on the phone
  *  while a task runs. 402x874 is the iPhone screen the stream really carries. */
-function shopListingSvg(): string {
+export function shopListingSvg(): string {
   const card = (x: number, y: number, fill: string, shoe: string, name: string, price: string) => `
     <g>
       <rect x="${String(x)}" y="${String(y)}" width="176" height="150" rx="10" fill="${fill}"/>
@@ -241,7 +245,7 @@ function productCaptureSvg(): string {
  *  a picture of the page the log already describes in words, so announcing it
  *  again would be noise — and the caption under the phone (stage 4) is the real
  *  text for what the device is doing. */
-function standInScreen(svg: string): ReactNode {
+export function standInScreen(svg: string): ReactNode {
   return <img src={svgDataUri(svg)} alt="" aria-hidden="true" className="ai-standin" />;
 }
 

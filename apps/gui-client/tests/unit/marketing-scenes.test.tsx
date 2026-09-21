@@ -245,7 +245,12 @@ describe('sceneFromSearch — the only door into a scene, marketing or audit', (
     // rendered), and `audit-agent-chat-consent` / `-budget`, the two refusals
     // that may name a model vendor and that make the ban below an allowlist
     // proved to be REACHED rather than one nothing renders.
-    expect(AUDIT_SCENES).toHaveLength(22);
+    // 22 → 26: "Bringing The Stage everywhere" stage 1 — the simulator window's
+    // own restyle needed a REAL fixture-driven scene (the hand-built
+    // `?scene=simulator` mirror below is not proof of the live component's
+    // pixels), one per session-state light: connecting, live & healthy,
+    // degraded/reconnecting, ended (simulator-scenes.tsx).
+    expect(AUDIT_SCENES).toHaveLength(26);
     for (const name of ALL_SCENES) {
       expect(isAuditScene(name)).toBe(name.startsWith('audit-'));
       const size = sceneSize(name);
@@ -551,8 +556,25 @@ const AUDIT_COPY_LITERALS: ReadonlyArray<string> = [
 ];
 /** The wizard is the one scene without the window chrome (it draws its own
  *  TitleBar), so no base URL reaches its DOM — its positive control is the
- *  welcome heading in auditLoadedMarkers, not a host. */
-const AUDIT_NO_HOST_SCENES: ReadonlyArray<string> = ['audit-first-run'];
+ *  welcome heading in auditLoadedMarkers, not a host.
+ *
+ *  The four simulator scenes never navigate (no `session=` in their fixture
+ *  query, deliberately — see simulator-scenes.tsx's header comment on why
+ *  that is what keeps every control-plane poll from firing): the browser
+ *  bar's address field has no `liveUrl` to show and stays on its own
+ *  "address bar unlocks once the device is live" placeholder in every one of
+ *  the four states, and the phone's screen content is an IMAGE (`standIn`),
+ *  never DOM text a scanner can read — the same reason the AI view's own
+ *  standIn scenes carry no host in the phone either. Their positive control
+ *  is the state chip's word (auditLoadedMarkers / simulatorSceneLoadedMarker),
+ *  not a host. */
+const AUDIT_NO_HOST_SCENES: ReadonlyArray<string> = [
+  'audit-first-run',
+  'audit-simulator-connecting',
+  'audit-simulator-live',
+  'audit-simulator-degraded',
+  'audit-simulator-ended',
+];
 
 /** The marketing privacy scan over an audit scene's rendered strings, with the
  *  named copy hosts allowed: nothing forbidden, every public IPv4 on TEST-NET,

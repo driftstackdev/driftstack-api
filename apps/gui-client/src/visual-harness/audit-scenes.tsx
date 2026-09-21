@@ -121,6 +121,12 @@ import {
 import { TeamView } from '../views/TeamView';
 import { ProxiesView } from '../views/ProxiesView';
 import {
+  SIMULATOR_SCENE_SIZE,
+  SimulatorStateScene,
+  simulatorSceneLoadedMarker,
+  type SimulatorSceneKind,
+} from './simulator-scenes';
+import {
   AppWindow,
   FIXTURE_ACCOUNT,
   FIXTURE_SETTINGS,
@@ -229,6 +235,21 @@ function auditDefaultSizes(stage: {
     // (896 would just fit); 920 keeps the last row in frame when a chip wraps.
     // A look at a real window size passes ?stage= instead (above).
     'audit-proxies': { width: SCENE_WIDTH, height: 920 },
+    // ⛔ ALL FOUR ARE THEIR OWN WINDOW, LIKE `audit-agent-chat-small`/`-ended`
+    // above, and for the SAME reason: `SimulatorWindow.tsx`'s root is
+    // `h-screen w-screen` — it fills a dedicated OS window (src-tauri/
+    // tauri.conf.json's simulator `.inner_size(330.0, 718.0)`), not a box
+    // inside a page, and nothing in its CSS caps the bezel's width — that cap
+    // is the coordinate work the design brief's stage 1 explicitly rules out
+    // ("no coordinates, no hit targets"), so it stays Rust's job. The default
+    // 1280×800 stage would stretch the device edge-to-edge with the phone-
+    // shaped video flush in one corner — not what a customer's window ever
+    // looks like. `SIMULATOR_SCENE_SIZE` is the window's own real open size,
+    // so this scene shows the restyle at the size it actually ships at.
+    'audit-simulator-connecting': SIMULATOR_SCENE_SIZE,
+    'audit-simulator-live': SIMULATOR_SCENE_SIZE,
+    'audit-simulator-degraded': SIMULATOR_SCENE_SIZE,
+    'audit-simulator-ended': SIMULATOR_SCENE_SIZE,
   };
 }
 
@@ -883,6 +904,14 @@ export function auditLoadedMarkers(name: AuditSceneName): ReadonlyArray<string> 
         ...auditProxies().flatMap((p) => [p.label, `${p.host}:${String(p.port)}`]),
         auditFreshExitIp(),
       ];
+    case 'audit-simulator-connecting':
+      return [simulatorSceneLoadedMarker('connecting')];
+    case 'audit-simulator-live':
+      return [simulatorSceneLoadedMarker('live')];
+    case 'audit-simulator-degraded':
+      return [simulatorSceneLoadedMarker('degraded')];
+    case 'audit-simulator-ended':
+      return [simulatorSceneLoadedMarker('ended')];
   }
 }
 
@@ -1443,6 +1472,58 @@ function AgentChatStateScene({ name }: { name: AuditSceneName }): JSX.Element {
   );
 }
 
+/**
+ * Wraps `SimulatorStateScene` with the same `data-scene`/`data-ready`/
+ * `data-frozen-now`/`data-stage-*`/`style` markers `AuditWindow` (gallery.tsx)
+ * gives every OTHER audit scene, so the generic "is its declared stage,
+ * reaches its loaded state" test (marketing-scenes.test.tsx) can find this one
+ * too. NOT `AuditWindow` itself — see `AuditScene`'s own comment on why the
+ * simulator gets no app chrome. `FROZEN_NOW_ISO`/`SCENE_WIDTH`/`SCENE_HEIGHT`
+ * already flow through this file's existing cycle with gallery.tsx (header
+ * comment above); this reads them the same way every other scene here does —
+ * inside a function body, never at module top level.
+ */
+function SimulatorGalleryStage({
+  name,
+  kind,
+}: {
+  name: AuditSceneName;
+  kind: SimulatorSceneKind;
+}): JSX.Element {
+  // `auditSceneSizes()`, not the bare constant: it applies the SAME `?stage=`
+  // override every other audit scene respects (marketing-scenes.test.tsx
+  // checks `size).toEqual(auditSceneSizes()[name])` for every scene, this one
+  // included), so `&stage=960x600` by hand reports what it actually rendered
+  // rather than silently claiming 330x718 regardless. SIMULATOR_SCENE_SIZE is
+  // still the value with no override — that's what `auditDefaultSizes` (this
+  // file, above) returns for these four names.
+  const size = auditSceneSizes()[name];
+  // `RecordingsProvider` (required — SimulatorWindow throws without it, and
+  // simulator-scenes.tsx mounts it for exactly that reason) calls
+  // `loadIndex()` on mount, which calls `ensureDir()` UNCONDITIONALLY —
+  // outside any try/catch, unlike every other disk read in that module. In a
+  // plain browser tab (no Tauri) that throws past React entirely: a real
+  // `pageerror` the visual/text-quality gates fail hard on, invisible in the
+  // jsdom suite (an unhandled rejection there is not a jsdom test failure).
+  // Every OTHER scene that reaches `RecordingsProvider` already has this
+  // covered by `StubbedAuditWindow`'s Tauri stub; this scene mounts no
+  // `AuditWindow` at all (see `AuditScene`'s own comment), so it installs the
+  // SAME stub itself, directly.
+  useTauriStub(auditTauriFixtures());
+  return (
+    <div
+      data-scene={name}
+      data-ready="1"
+      data-frozen-now={FROZEN_NOW_ISO}
+      data-stage-width={size.width}
+      data-stage-height={size.height}
+      style={{ width: size.width, height: size.height }}
+    >
+      <SimulatorStateScene kind={kind} />
+    </div>
+  );
+}
+
 export function AuditScene({ name }: { name: AuditSceneName }): JSX.Element {
   switch (name) {
     case 'audit-sessions':
@@ -1519,5 +1600,19 @@ export function AuditScene({ name }: { name: AuditSceneName }): JSX.Element {
           <ProxiesView />
         </StubbedAuditWindow>
       );
+    // ⛔ NOT wrapped in AuditWindow/StubbedAuditWindow, unlike every case above.
+    // Those give a scene the desktop app's OWN chrome (TitleBar + Sidebar) as
+    // the backdrop a view normally sits inside; SimulatorWindow IS a whole
+    // separate, chrome-less, transparent OS window (no title bar, no sidebar —
+    // see its own header comment). Wrapping it in the app's chrome would be
+    // measuring a window that doesn't exist. See simulator-scenes.tsx.
+    case 'audit-simulator-connecting':
+      return <SimulatorGalleryStage name={name} kind="connecting" />;
+    case 'audit-simulator-live':
+      return <SimulatorGalleryStage name={name} kind="live" />;
+    case 'audit-simulator-degraded':
+      return <SimulatorGalleryStage name={name} kind="degraded" />;
+    case 'audit-simulator-ended':
+      return <SimulatorGalleryStage name={name} kind="ended" />;
   }
 }

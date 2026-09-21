@@ -4343,3 +4343,248 @@
     margin-left: 0.25rem;
   }
 }
+
+/* ═════ The simulator window — "Bringing The Stage everywhere", stage 1 ═════
+   The popped-out device window (SimulatorWindow.tsx) shares the AI view's
+   phone primitive (AgentSessionPanel) and even its central instinct — a
+   permanently-dark shell regardless of theme — but it never got the tokens,
+   the room, or the state-as-light treatment (design brief §2). This section
+   gives it those, reusing the AI view's own recipe rather than inventing a
+   second one: the SAME six-layer box-shadow shape as `.ai-device` (§1.2), the
+   SAME `ds-ai-calm`/`ds-ai-breathe`/`ds-ai-breathe-soft` keyframes as `.ai-aura`
+   (§1.1, reused by NAME — no new keyframe is declared here), and the SAME four
+   `.ai-chip` tones as the AI view's HUD (§1.4) for the drawer's headline state.
+
+   ⛔ WHAT IS DELIBERATELY DIFFERENT FROM `.ai-*`, AND WHY:
+   · No `--w`-driven sizing. The AI view's phone SHRINKS to fit a stage box; the
+     simulator's OS window is resized (Rust) to fit the phone, so the device's
+     apparent size barely varies — fixed px in the shadow recipe below is the
+     honest match for that, not a missing scale factor.
+   · No separate `.ai-floor` pool. `simulator-device` already fills its window
+     edge-to-edge (bottom-rounded bezel flush with the window's bottom edge) —
+     there is no floor beneath it to cast a pool onto. The "light pooled under
+     the object" idea is folded into `.sim-aura`'s own gradient instead (denser
+     toward its lower edge), rather than adding a second element with nowhere
+     honest to sit.
+   · `.sim-aura` sits INSIDE `.sim-device` (its first child, negative inset,
+     z-index -1) rather than as a stage-level sibling: the OS window is
+     `transparent: true` and sized close to the bezel itself (330×718,
+     `min_inner_size` 280×560 — tauri.conf), so there is no spare stage-sized
+     box to paint a room into. A small negative inset lets the glow bleed a few
+     px past the bezel into the SAME transparent margin the shipped
+     `shadow-2xl` it replaces already bled into — verified on screen, not
+     assumed (see the stage-1 build's screenshots).
+
+   State light: `--sim-light-rgb`, set by `[data-sim-state]` on
+   `simulator-shell` (SimulatorWindow.tsx) — connecting = accent (the brand
+   is "in progress"), live & healthy = ready (calm, good), degraded /
+   reconnecting = busy (needs attention), ended / error = muted ink (absence
+   of light, never red — the same "trouble is never red" rule as the AI view,
+   because oxblood already means "the brand" in this palette). It recolors the
+   device rim + glow AND the drawer's headline chip together, the same
+   one-variable-many-readers idea `--ai-light-rgb` uses. */
+[data-sim-state='connecting'] {
+  --sim-light-rgb: var(--accent-rgb);
+}
+[data-sim-state='live'] {
+  --sim-light-rgb: var(--status-ready-rgb);
+}
+[data-sim-state='degraded'] {
+  --sim-light-rgb: var(--status-busy-rgb);
+}
+[data-sim-state='ended'] {
+  --sim-light-rgb: var(--ink-muted-rgb);
+}
+
+/* the bezel: same six-layer shape as `.ai-device` (inset highlight, inset
+   shadow, a black ring, a state-coloured ring at .5 alpha, a drop shadow, a
+   state-coloured glow at .45 alpha) — token-driven, no hex, so it recolours
+   with the accent axis and the session-state axis for free. Structural/sizing
+   Tailwind utilities (rounded-b-[2.75rem], p-[10px], flex-1, …) stay on the
+   element in SimulatorWindow.tsx; this class replaces only the old
+   `bg-gradient-to-b from-[#1b1c20] via-[#0d0e11] to-[#08090b] shadow-2xl
+   ring-1 ring-white/[0.12]` paint. */
+.sim-device {
+  position: relative;
+  /* Clips `.sim-aura`'s negative-inset bleed to the bezel's own box — an
+     `overflow` never clips the element's OWN box-shadow (a separate paint
+     layer), so the rim ring + outer glow below still bleed past the edge
+     exactly as drawn; only the aura DIV (a child) is contained. Without this
+     `.sim-device`'s scrollWidth/Height measured larger than its clientWidth/
+     Height (the -14px inset on all sides), which is not a real scrollbar —
+     nothing pans, nothing is cut — but it is indistinguishable from one to a
+     generic "nothing scrolls" check, and Phase E (scripts/gui-visual-check.mjs)
+     runs exactly that check on this element. */
+  overflow: hidden;
+  background: linear-gradient(
+    142deg,
+    rgb(var(--surface-divider-rgb)) 0%,
+    rgb(var(--surface-raised-rgb)) 16%,
+    rgb(var(--surface-inset-rgb)) 46%,
+    rgb(var(--surface-raised-rgb)) 78%,
+    rgb(var(--surface-divider-rgb)) 100%
+  );
+  /* The outer glow's spread is MEASURED against `.ai-device`, not eyeballed:
+     that recipe reads `0 0 calc(var(--w) * 0.3) calc(var(--w) * -0.04)
+     rgb(var(--ai-light-rgb) / 0.45)` — at the AI view's own default `--w`
+     (~283px, the 1280×800 tier — spec §1's table), that is a 85px blur on a
+     -11px spread. This bezel's own width (330px closed, minus the 48px rail
+     that is always docked beside it) is ~282px — the SAME scale — so it
+     takes the SAME two numbers rather than the arbitrary 44px/-10px a first
+     pass eyeballed, which is roughly HALF the AI view's blur and read as a
+     hairline at a glance for exactly that reason. */
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.22),
+    inset 0 0 8px rgb(0 0 0 / 0.8),
+    0 0 0 1px rgb(0 0 0 / 0.7),
+    0 0 0 2px rgb(var(--sim-light-rgb) / 0.5),
+    0 18px 34px -10px rgb(0 0 0 / 0.85),
+    0 0 85px -11px rgb(var(--sim-light-rgb) / 0.45);
+  /* NO box-shadow transition — matching `.ai-device` exactly (BUILD-SPEC §0's
+     own defect table: "box-shadow transition on the device | Removed; the rim
+     colour snaps under the 600ms aura cross-fade"). A box-shadow transition
+     repaints every frame — not a compositor-only property — so the AI view
+     snaps the rim colour instantly and lets `.ai-aura`'s OPACITY cross-fade
+     (a compositor property) carry the 600ms hue shift instead. `.sim-aura`
+     below does the same: its own opacity transition is the thing that eases. */
+}
+/* the room's light, folded into one glow behind the device rather than a
+   separate stage + floor (see the section header for why). Denser toward the
+   lower-left, the same "lit from the left, with an edge showing" idea
+   `[data-ai-rig='rest'] .ai-device` uses for the AI view's own product shot. */
+.sim-aura {
+  position: absolute;
+  inset: -14px;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.55;
+  background: radial-gradient(
+    ellipse 85% 65% at 42% 62%,
+    rgb(var(--sim-light-rgb) / 0.55) 0%,
+    rgb(var(--sim-light-rgb) / 0.22) 45%,
+    rgb(var(--sim-light-rgb) / 0) 76%
+  );
+  transition: opacity var(--ai-dur-shift) ease;
+}
+/* Motion is keyed to MEANING, same discipline as the AI view's phase list
+   (§1.8): connecting breathes slow and wide like idle drift (something is
+   starting, no urgency yet); live & healthy breathes soft like the AI view's
+   "acting" (calm, alive, working); degraded/reconnecting breathes faster and
+   tighter like "thinking" (this needs attention); ended is perfectly still —
+   nothing is happening any more. All three reused keyframes already rest on a
+   legible still at 0%/100%, so the app's blanket reduced-motion clamp (top of
+   this file) freezes each one correctly with no extra override needed here —
+   unlike the AI view's sweep/pulse/halo/tense-out, which are asymmetric
+   one-shots and need an explicit `display: none` under reduced motion, these
+   three loops do not. */
+[data-sim-state='connecting'] .sim-aura {
+  animation: ds-ai-calm var(--ai-dur-calm) ease-in-out infinite;
+}
+[data-sim-state='live'] .sim-aura {
+  opacity: 0.7;
+  animation: ds-ai-breathe-soft 2600ms ease-in-out infinite;
+}
+[data-sim-state='degraded'] .sim-aura {
+  animation: ds-ai-breathe var(--ai-dur-breathe) ease-in-out infinite;
+}
+[data-sim-state='ended'] .sim-aura {
+  opacity: 0.3;
+}
+
+/* ─── the room, continued: the light leaks past the bezel into the chrome
+   AROUND it ─────────────────────────────────────────────────────────────
+   The phone fills the window by design (§ above — there is no stage-sized
+   box to paint a second `.ai-stage`-style room into), so the room has to
+   live in the toolbar strip ABOVE the device and the drawer column BESIDE
+   it: a soft pool the SAME `--sim-light-rgb` paints, reading as light
+   spilling off the bezel rather than a second, disconnected glow. Neither
+   may cover the phone screen or the video element — both sit on chrome that
+   is structurally a SIBLING of the device (simulator-toolbar-wrap and
+   simulator-drawer are outside simulator-body's device branch), so there is
+   no DOM path from either to the screen to cover it even by mistake.
+   Transform/opacity only, one compositor layer each, no infinite loop (this
+   is a spillover wash, not a second aura — `.sim-aura` already carries the
+   room's breathing rhythm) — a plain opacity transition is trivially safe
+   under the reduced-motion clamp with nothing to override. */
+.sim-toolbar-glow {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0.55;
+  background: radial-gradient(
+    ellipse 46% 130% at 50% 100%,
+    rgb(var(--sim-light-rgb) / 0.55) 0%,
+    rgb(var(--sim-light-rgb) / 0.2) 55%,
+    rgb(var(--sim-light-rgb) / 0) 85%
+  );
+  transition: opacity var(--ai-dur-shift) ease;
+}
+.sim-drawer-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background: radial-gradient(
+    ellipse 70% 60% at 0% 45%,
+    rgb(var(--sim-light-rgb) / 0.5) 0%,
+    rgb(var(--sim-light-rgb) / 0.16) 45%,
+    rgb(var(--sim-light-rgb) / 0) 78%
+  );
+  transition: opacity var(--ai-dur-shift) ease;
+}
+/* `ended` dims both, matching `.sim-aura`'s own quieter rest for the same
+   state — the room goes dim and neutral, never red (index.css's own
+   `--sim-light-rgb` mapping already carries that rule; this only lowers how
+   much of it shows). */
+[data-sim-state='ended'] .sim-toolbar-glow,
+[data-sim-state='ended'] .sim-drawer-glow {
+  opacity: 0.22;
+}
+
+/* ─── the drawer's headline state: `.ai-chip`-style pills, reused byte-for-
+   byte for the chip's own paint, PLUS one small halo added around it (below)
+   ──────────────────────────────────────────────────────────────────────
+   `sim-drawer-status` (design brief §2 proposal 3) packed mode/link/transport
+   onto one dense mono line with no hierarchy. The headline now reads through
+   the SAME four tones `.ai-chip-live`/`-hold`/`-warm`/`-quiet` already draw for
+   the AI view's HUD (§1.4: colour is never the only signal — the word is
+   always there too), chosen straight from `[data-sim-state]` so the chip and
+   the bezel's rim glow agree. The raw fps/latency/egress line underneath is
+   UNCHANGED mono text — demoted by staying small and secondary, not deleted.
+
+   Mapping (SimulatorWindow.tsx's `simChip()`), all FOUR existing tones, zero
+   new chip CSS: connecting → `.ai-chip-warm` ("in progress", same tone
+   Stage.tsx's own STARTING chip uses); live & healthy → `.ai-chip-open` with
+   `.ai-pip.is-ready` (calm ready-green dot, neutral ink text — the AI view's
+   own "SESSION OPEN" tone); degraded/reconnecting → `.ai-chip-hold` (busy,
+   needs attention); ended/error → `.ai-chip-quiet` (muted, nothing to see). */
+
+/* The one thing added TO the chip (not inside it): a subtle outward halo,
+   stacked alongside `.ai-chip-state` on the same span, so the pill itself
+   carries a little of the room's light the way the AI view's own HUD chip
+   sits inside a lit stage — the simulator's chip has no stage around it to
+   borrow that from, so this gives it its own small one. Token-driven
+   (`--sim-light-rgb`).
+
+   ⛔ NOT "added to the chip's existing box-shadow" — same-specificity single
+   classes (`.ai-chip-live`/`-hold`/`-warm`/`-quiet` vs `.sim-chip-halo`) on
+   one element don't merge a shared property, the later declaration in the
+   compiled sheet wins outright, and this rule is declared after all four
+   tones. So the inset ring here is written in `--sim-light-rgb` itself
+   rather than `--surface-divider-rgb`: for the two tones that already carry
+   their own inset ring (`.ai-chip-live`, `.ai-chip-hold`), `theme-token-
+   parity.test.ts` proves that tone's identity token IS `--sim-light-rgb`
+   for the matching `data-sim-state`, so this replacement paints the exact
+   same colour the tone rule would have — nothing is lost, only the outer
+   glow layer is new. For the two tones with no box-shadow of their own
+   (`.ai-chip-open`, `.ai-chip-quiet`) there is nothing to replace; this adds
+   the ring for the first time. */
+.sim-chip-halo {
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--sim-light-rgb) / 0.5),
+    0 0 14px -2px rgb(var(--sim-light-rgb) / 0.55);
+}

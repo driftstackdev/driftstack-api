@@ -805,3 +805,167 @@ describe('audit-scene follow-ups — the error hue as text, and the saved-chat r
     ).toBeLessThan(4.5);
   });
 });
+
+// ─── "Bringing The Stage everywhere" stage 1 — the simulator bezel/room/chip
+// restyle. Repoints the pins a hand-rolled-hex era left behind: the bezel used
+// to be `bg-gradient-to-b from-[#1b1c20] via-[#0d0e11] to-[#08090b] shadow-2xl
+// ring-1 ring-white/[0.12]` on `simulator-device` — no test in this file (or
+// anywhere else — checked by repo-wide grep before this change) ever pinned
+// those three hex stops specifically, so there was nothing to migrate FROM;
+// what these arms lock in is that the REPLACEMENT is token-based, the same
+// property this file polices for every other surface. ────────────────────────
+describe('"Bringing The Stage everywhere" stage 1 — the simulator device is token-based, not hex', () => {
+  const readSource3 = (rel: string): string => readFileSync(join(SRC, rel), 'utf8');
+
+  it('simulator-device carries no literal hex — it wears .sim-device, the token-driven recipe', () => {
+    const src = readSource3('views/SimulatorWindow.tsx');
+    expect(src).toContain('data-component="simulator-device"');
+    expect(src).toContain('className="sim-device relative flex min-h-0 min-w-0 flex-1 flex-col');
+    // the exact hex-gradient/flat-shadow/neutral-ring the restyle replaced —
+    // reverting to any of it reds this line before anything else can (the
+    // `className="sim-device relative …` pin just above already proves
+    // `ring-white/[0.12]` is gone from THIS element; the toolbar, a different
+    // element out of this stage's scope, legitimately still wears that ring).
+    expect(src).not.toContain('from-[#1b1c20]');
+    expect(src).not.toContain('via-[#0d0e11]');
+    expect(src).not.toContain('to-[#08090b]');
+  });
+
+  it('.sim-device / .sim-aura carry no literal hue — only rgb(var(--…-rgb) / a) over a token, like every other .ai-*/.sim-* paint in this file', () => {
+    // Mirrors the accent-axis guard's own rule for `.ai-*` (see
+    // the-ai-views-light-is-derived-from-the-accent-axis.test.ts): a hue typed
+    // directly into the rim/glow/aura stops working the moment a second accent
+    // exists, and no contrast gate would notice (both would pass AA).
+    const deviceRule = /\.sim-device\s*\{([^}]*)\}/.exec(CSS)?.[1] ?? '';
+    const auraRule = /\.sim-aura\s*\{([^}]*)\}/.exec(CSS)?.[1] ?? '';
+    expect(deviceRule, '.sim-device rule not found in index.css').not.toBe('');
+    expect(auraRule, '.sim-aura rule not found in index.css').not.toBe('');
+    for (const [label, rule] of [
+      ['.sim-device', deviceRule],
+      ['.sim-aura', auraRule],
+    ] as const) {
+      expect(rule, label).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+      // Every rgb()/rgba() literal channel triple in these two rules is a pure
+      // NEUTRAL (black or white — the inset highlight, the ring's black layer,
+      // never a typed colour); every HUE comes from `--sim-light-rgb` or a
+      // surface token.
+      const numericRgb = [...rule.matchAll(/rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/gi)];
+      for (const m of numericRgb) {
+        const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])];
+        expect(
+          [r, g, b].every((c) => c === r) || (r === 0 && g === 0 && b === 0),
+          `${label}: rgb(${String(r)} ${String(g)} ${String(b)}) is a literal hue, not a neutral`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('--sim-light-rgb: connecting/manual = accent, live & healthy = ready, degraded/reconnecting = busy, ended/error = muted — the four session-state tones, one variable, read by the rim, the glow AND the drawer chip', () => {
+    expect(tokenBlock("data-sim-state='connecting'")).toContain(
+      '--sim-light-rgb: var(--accent-rgb);',
+    );
+    expect(tokenBlock("data-sim-state='live'")).toContain(
+      '--sim-light-rgb: var(--status-ready-rgb);',
+    );
+    expect(tokenBlock("data-sim-state='degraded'")).toContain(
+      '--sim-light-rgb: var(--status-busy-rgb);',
+    );
+    expect(tokenBlock("data-sim-state='ended'")).toContain(
+      '--sim-light-rgb: var(--ink-muted-rgb);',
+    );
+    // Never red: oxblood (the brand, `--accent-rgb`) and `--status-error-rgb`
+    // are neighbours on the wheel — the same "trouble is the ABSENCE of light,
+    // never red" rule the AI view's own `--ai-light-rgb` follows.
+    expect(CSS).not.toMatch(
+      /\[data-sim-state='ended'\]\s*\{[^}]*--sim-light-rgb:\s*var\(--status-error-rgb\)/,
+    );
+  });
+
+  it("the drawer headline reuses the AI view's own four .ai-chip tones (no new chip CSS) — mapped from data-sim-state, and each tone's OWN token agrees with --sim-light-rgb's mapping for the same state", () => {
+    const src = readSource3('views/SimulatorWindow.tsx');
+    expect(src).toContain("{ label: 'LIVE', toneClass: 'ai-chip-open', pipReady: true }");
+    expect(src).toContain("{ label: 'RECONNECTING', toneClass: 'ai-chip-hold', pipReady: false }");
+    expect(src).toContain("{ label: 'ENDED', toneClass: 'ai-chip-quiet', pipReady: false }");
+    expect(src).toContain("{ label: 'CONNECTING', toneClass: 'ai-chip-live', pipReady: false }");
+    // The pill lives inside sim-drawer-status's own headline, above the
+    // untouched mode/link/transport sentence and the demoted-not-deleted
+    // fps/latency/egress line. `sim-chip-halo` is the room-light halo added
+    // in coordinator round 2 (§2) — stacked alongside the tone class, not
+    // replacing it.
+    expect(src).toContain('className={`ai-chip ai-chip-state sim-chip-halo ${simChip.toneClass}`}');
+    // ⛔ REGRESSION GUARD for the exact bug this mapping once had: a tone
+    // class was picked because its NAME sounded right ("warm" for
+    // "connecting"), not because its own token matched --sim-light-rgb's
+    // mapping for that state — `.ai-chip-warm` reads `--status-busy-rgb`,
+    // the DEGRADED colour, which would have painted an accent-lit rim
+    // beside a busy-toned chip. Reads each tone's real CSS rule and cross-
+    // checks its token against the [data-sim-state] block above, so a
+    // future "sounds right" swap reds here instead of only looking wrong.
+    // The FOUR identity tokens `--sim-light-rgb` ever resolves to — never a
+    // derived/contrast token like `--accent-text-rgb` (the AI view's own
+    // "accent as TEXT, for contrast" variant, which a naive "first rgb(var())
+    // in the rule" match would grab instead, since `.ai-chip-live`'s `color`
+    // declares that one before its `background`/`box-shadow` declare the
+    // identity `--accent-rgb`).
+    const IDENTITY_TOKENS = [
+      '--accent-rgb',
+      '--status-busy-rgb',
+      '--status-ready-rgb',
+      '--ink-muted-rgb',
+    ];
+    const chipToneToken = (toneClass: string): string => {
+      const rule = new RegExp(`\\.${toneClass}\\s*\\{([^}]*)\\}`).exec(CSS)?.[1] ?? '';
+      const found = IDENTITY_TOKENS.find((t) => rule.includes(`var(${t})`));
+      if (found === undefined) {
+        throw new Error(`.${toneClass} names none of ${IDENTITY_TOKENS.join(', ')} in index.css`);
+      }
+      return found;
+    };
+    const simStateToken = (state: string): string => {
+      const rule = tokenBlock(`data-sim-state='${state}'`);
+      const m = /--sim-light-rgb:\s*var\((--[a-z-]+-rgb)\)/.exec(rule);
+      if (m === null)
+        throw new Error(`[data-sim-state='${state}'] has no --sim-light-rgb var() in index.css`);
+      return m[1] ?? '';
+    };
+    expect(chipToneToken('ai-chip-live')).toBe(simStateToken('connecting'));
+    expect(chipToneToken('ai-chip-hold')).toBe(simStateToken('degraded'));
+    expect(chipToneToken('ai-chip-quiet')).toBe(simStateToken('ended'));
+    // `.ai-chip-open` colours only its pip (`.ai-chip-open .ai-pip.is-ready`),
+    // not the chip's own text/background (design brief §1.4 — the AI view's
+    // own "SESSION OPEN" tone is deliberately calm, not a full ready-green
+    // wash) — its cross-check reads the PIP rule, the one place it carries
+    // the ready token at all.
+    const openPipRule = /\.ai-chip-open \.ai-pip\.is-ready\s*\{([^}]*)\}/.exec(CSS)?.[1] ?? '';
+    expect(openPipRule).toContain(`rgb(var(${simStateToken('live')}))`);
+  });
+
+  it('data-sim-state is real derivation FIRST — the fixture only overrides it, the same "fixture outranks the measurement" rule Stage.tsx uses for its frame-rate chip', () => {
+    const src = readSource3('views/SimulatorWindow.tsx');
+    expect(src).toContain('const simState = galleryPhase ?? simStateReal;');
+    expect(src).toContain("sessionEnded !== null\n      ? 'ended'");
+  });
+
+  it('.sim-aura only ever plays ds-ai-calm / ds-ai-breathe / ds-ai-breathe-soft — no new keyframe, so it inherits their already-proven reduced-motion safety instead of needing its own still', () => {
+    // the-ai-views-light-is-derived-from-the-accent-axis.test.ts already proves
+    // these three rest on a legible, non-zero opacity at both 0% and 100% (every
+    // ds-ai-* loop does) — that proof is BY NAME, so a new keyframe here would
+    // silently escape it. `.sim-aura` reusing them BY NAME is what design brief
+    // §2/§6 asks for ("reuse the keyframe, don't write a new one") and it is
+    // also what makes a dedicated reduced-motion override for this element
+    // unnecessary: the global blanket clamp (top of this file) already freezes
+    // each of the three correctly, exactly as it does for `.ai-aura`.
+    const animationLines = [...CSS.matchAll(/\[data-sim-state='\w+'\]\s*\.sim-aura\s*\{([^}]*)\}/g)]
+      .map((m) => m[1] ?? '')
+      .filter((body) => body.includes('animation'));
+    expect(
+      animationLines.length,
+      'no [data-sim-state] .sim-aura rule sets animation',
+    ).toBeGreaterThan(0);
+    for (const body of animationLines) {
+      expect(body).toMatch(/animation:\s*ds-ai-(calm|breathe|breathe-soft)\b/);
+    }
+    // No keyframe named ds-sim-* (or similar) was introduced for this stage.
+    expect(CSS).not.toMatch(/@keyframes\s+ds-sim-/);
+  });
+});

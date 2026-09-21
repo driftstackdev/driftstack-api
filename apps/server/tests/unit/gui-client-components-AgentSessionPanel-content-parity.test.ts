@@ -153,7 +153,11 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     // Connection-identity deps (+ retryNonce for the manual Reconnect), not the
     // whole info object / callback identity. retryNonce only changes on the
     // Reconnect button click, so it can't cause render-driven reconnect-thrash.
-    expect(body).toMatch(/\}, \[info\.ws_url, info\.token, retryNonce\]\);/);
+    // The gallery fixture flag is a fourth dependency: it is constant for the
+    // life of a mounted panel (it comes from the page URL), so it can never
+    // re-run the effect at runtime — the thrash this pin exists to prevent needs
+    // a value that CHANGES per render, which the identity below still excludes.
+    expect(body).toMatch(/\}, \[info\.ws_url, info\.token, retryNonce, isGalleryFixture\]\);/);
     expect(body).not.toMatch(/\}, \[info, onStateChange\]\);/);
     // onStateChange flows through a latest-value ref, decoupled from the effect.
     expect(body).toMatch(/const onStateChangeRef = useRef\(onStateChange\);/);
@@ -162,8 +166,10 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
 
   it("W617 no-publisher detection: NO_PUBLISHER_TIMEOUT_MS = 30_000 module export (raised from 10s so a COLD worker spawn — fresh browser fork → page load → LiveKit join — doesn't prematurely flip to the 'no video' message right as the stream appears, founder's first real launch 2026-06-18); publisher tri-state ('waiting' → 'publishing' on TrackSubscribed video, 'waiting' → 'none' on post-connect timeout); the 'none' overlay offers the parent's onNoPublisher fallback (open-polling-viewer button) — pinned for the founder-hit connected-but-empty-room black screen (no browser worker publishing)", () => {
     expect(body).toMatch(/export const NO_PUBLISHER_TIMEOUT_MS = 30_000;/);
+    // The initial value is 'waiting' unless a gallery fixture says otherwise
+    // (the harness renders the real panel in a chosen state without a room).
     expect(body).toMatch(
-      /const \[publisher, setPublisher\] = useState<'waiting' \| 'publishing' \| 'none'>\('waiting'\);/,
+      /const \[publisher, setPublisher\] = useState<'waiting' \| 'publishing' \| 'none'>\(\s*gallery\?\.publisher \?\? 'waiting',?\s*\);/,
     );
     // Publisher transitions go through the effect-local `setP` writer, which
     // also mirrors into publisherRef and notifies onPublisher.
