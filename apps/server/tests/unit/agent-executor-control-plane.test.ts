@@ -8,6 +8,7 @@ import {
   DRAWN_GAP_MIN_FACTOR,
   ControlPlaneAgentExecutor,
   extractPageText,
+  extractPageTruncated,
   type IntentDispatcher,
 } from '../../src/services/agent-executor-control-plane.js';
 import type { ExecuteArgs } from '../../src/services/agent-executor.js';
@@ -17,6 +18,7 @@ import {
 } from '../../src/services/harness-control-codec.js';
 import type { AgentIntent } from '@driftstack/api-types';
 import type { IntentDispatch } from '../../src/schemas/harness-control-protocol.js';
+import type { PlanningReadTraceEntry } from '../../src/services/agent-turn-telemetry.js';
 
 function planArgs(intents: AgentIntent[], sessionId = 'ses_x'): ExecuteArgs {
   return { sessionId, plan: { kind: 'plan', intents, tokensConsumed: 0 } };
@@ -299,10 +301,22 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       i < 2 ? failResult(d.intentId, 'intent_webdriver_failed') : okResult(d.intentId),
     );
     const { sleep, calls } = instantSleep();
+    // ⛔ THE GENERATOR IS INJECTED, so the inequality below is a property of the
+    // executor and not of luck. With the default per-process generator this
+    // arm failed on CI once in a few hundred runs: two draws from a band of a
+    // few hundred whole milliseconds CAN coincide, and then a true statement
+    // about the executor read as a red. Two draws that sit at opposite ends of
+    // the unit interval prove the executor draws twice and maps each draw
+    // through the band; whether two random draws differ is the generator's
+    // business, and `a-drawn-gap-is-bounded-and-two-of-them-are-not-equal`
+    // holds that half with a seeded sequence of its own.
+    const draws = [0.1, 0.9];
+    let drawn = 0;
     const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
       maxRetries: 2,
       retryDelayMs: 400,
       sleep,
+      makeRandom: () => () => draws[drawn++ % draws.length]!,
     });
     const res = await exec.execute(planArgs([{ kind: 'capture', capture: 'screenshot' }]));
     expect(res.ok).toBe(true);
@@ -323,6 +337,9 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
       expect(gap).toBeLessThanOrEqual(Math.round(400 * DRAWN_GAP_MAX_FACTOR));
     }
     expect(calls[0]).not.toBe(calls[1]);
+    // The two draws landed where they were sent: low draw, short gap; high
+    // draw, long gap — the executor mapped each through the band in order.
+    expect(calls[0]!).toBeLessThan(calls[1]!);
   });
 
   it('re-checks the lifecycle after retry backoff and does not mint or dispatch another attempt', async () => {
@@ -810,5 +827,212 @@ describe('ControlPlaneAgentExecutor — #140 observe() + extractPageText (read-a
     expect(extractPageText({})).toBeNull();
     expect(extractPageText(null)).toBeNull();
     expect(extractPageText(42)).toBeNull();
+  });
+
+  it('extractPageTruncated reads the device’s `truncated` flag; anything else is `false`, never a guess', () => {
+    expect(extractPageTruncated({ source: 'x', truncated: true })).toBe(true);
+    expect(extractPageTruncated({ source: 'x', truncated: false })).toBe(false);
+    expect(extractPageTruncated({ source: 'x' })).toBe(false);
+    expect(extractPageTruncated('raw string, no flag to read')).toBe(false);
+    expect(extractPageTruncated(null)).toBe(false);
+    expect(extractPageTruncated(42)).toBe(false);
+  });
+});
+
+describe('ControlPlaneAgentExecutor — T1 observeDigest() has its own, larger planning budget', () => {
+  it('races against planningObserveTimeoutMs, NOT observeTimeoutMs (the read-back’s)', async () => {
+    const dispatcher: IntentDispatcher = {
+      dispatch: () => new Promise<ParsedIntentResult>(() => {}), // never resolves
+    };
+    const calls: number[] = [];
+    const sleep = (ms: number): Promise<void> => {
+      calls.push(ms);
+      return Promise.resolve();
+    };
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+      observeTimeoutMs: 10_000,
+      planningObserveTimeoutMs: 25_000,
+      sleep,
+    });
+    expect(await exec.observeDigest('agt_1')).toBeNull();
+    expect(calls).toContain(25_000);
+    expect(calls).not.toContain(10_000);
+  });
+
+  it('observe() (the read-back) is unchanged: still races against observeTimeoutMs alone', async () => {
+    const dispatcher: IntentDispatcher = {
+      dispatch: () => new Promise<ParsedIntentResult>(() => {}), // never resolves
+    };
+    const calls: number[] = [];
+    const sleep = (ms: number): Promise<void> => {
+      calls.push(ms);
+      return Promise.resolve();
+    };
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+      observeTimeoutMs: 10_000,
+      planningObserveTimeoutMs: 25_000,
+      sleep,
+    });
+    expect(await exec.observe('agt_1')).toBeNull();
+    expect(calls).toContain(10_000);
+    expect(calls).not.toContain(25_000);
+  });
+
+  it('planningObserveTimeoutMs defaults to PLANNING_OBSERVE_TIMEOUT_MS (25s) when not set', async () => {
+    const dispatcher: IntentDispatcher = {
+      dispatch: () => new Promise<ParsedIntentResult>(() => {}), // never resolves
+    };
+    const calls: number[] = [];
+    const sleep = (ms: number): Promise<void> => {
+      calls.push(ms);
+      return Promise.resolve();
+    };
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), { sleep });
+    expect(await exec.observeDigest('agt_1')).toBeNull();
+    expect(calls).toContain(25_000);
+  });
+});
+
+describe('ControlPlaneAgentExecutor — T3 observeDigest() says when the page source was truncated', () => {
+  it('appends the truncation note, on its own line, when the device says `truncated: true`', async () => {
+    const { dispatcher } = mockDispatcher((d) =>
+      okResult(d.intentId, d.sessionId, {
+        source: '<html><body><button id="a">Buy</button></body></html>',
+        truncated: true,
+      }),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const digest = await exec.observeDigest('agt_1');
+    expect(digest).not.toBeNull();
+    expect(digest).toMatch(
+      /\(the page was longer than could be read; what is listed is the beginning of it\)$/,
+    );
+  });
+
+  it('does NOT append the note when `truncated: false`', async () => {
+    const { dispatcher } = mockDispatcher((d) =>
+      okResult(d.intentId, d.sessionId, {
+        source: '<html><body><button id="a">Buy</button></body></html>',
+        truncated: false,
+      }),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const digest = await exec.observeDigest('agt_1');
+    expect(digest).not.toBeNull();
+    expect(digest).not.toMatch(/longer than could be read/);
+  });
+
+  it('does NOT append the note when the device sends no `truncated` field at all', async () => {
+    const { dispatcher } = mockDispatcher((d) =>
+      okResult(d.intentId, d.sessionId, {
+        source: '<html><body><button id="a">Buy</button></body></html>',
+      }),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const digest = await exec.observeDigest('agt_1');
+    expect(digest).not.toMatch(/longer than could be read/);
+  });
+
+  it('is DATA inside the observation, not a prompt change: it survives on a digest that is otherwise empty', async () => {
+    // A source with no recognisable interactive markup and no visible text
+    // still degrades to null (see digestPage) — the note is appended only
+    // when there IS a digest to append it to, exactly like every other
+    // best-effort addition here.
+    const { dispatcher } = mockDispatcher((d) =>
+      okResult(d.intentId, d.sessionId, { source: '   ', truncated: true }),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    expect(await exec.observeDigest('agt_1')).toBeNull();
+  });
+});
+
+describe('ControlPlaneAgentExecutor — T4 observeDigest() reports each read’s outcome via onPlanningRead', () => {
+  it('reports {ms, outcome: "ok", chars, truncated} on a successful, truncated read', async () => {
+    const { dispatcher } = mockDispatcher((d) =>
+      okResult(d.intentId, d.sessionId, {
+        source: '<html><body><button id="a">Buy</button></body></html>',
+        truncated: true,
+      }),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const reports: PlanningReadTraceEntry[] = [];
+    const digest = await exec.observeDigest('agt_1', undefined, undefined, undefined, (e) =>
+      reports.push(e),
+    );
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ outcome: 'ok', truncated: true });
+    expect(reports[0]?.chars).toBeGreaterThan(0);
+    expect(reports[0]?.ms).toBeGreaterThanOrEqual(0);
+    expect(digest).not.toBeNull();
+  });
+
+  it('reports outcome "empty" when the device answers with nothing usable', async () => {
+    const { dispatcher } = mockDispatcher((d) => failResult(d.intentId, 'result_too_large'));
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const reports: PlanningReadTraceEntry[] = [];
+    await exec.observeDigest('agt_1', undefined, undefined, undefined, (e) => reports.push(e));
+    expect(reports).toEqual([
+      { ms: expect.any(Number), outcome: 'empty', chars: 0, truncated: false },
+    ]);
+  });
+
+  it('reports outcome "timeout" when the deadline wins the race', async () => {
+    const dispatcher: IntentDispatcher = {
+      dispatch: () => new Promise<ParsedIntentResult>(() => {}), // never resolves
+    };
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds(), {
+      planningObserveTimeoutMs: 5_000,
+      sleep: () => Promise.resolve(),
+    });
+    const reports: PlanningReadTraceEntry[] = [];
+    await exec.observeDigest('agt_1', undefined, undefined, undefined, (e) => reports.push(e));
+    expect(reports).toEqual([
+      { ms: expect.any(Number), outcome: 'timeout', chars: 0, truncated: false },
+    ]);
+  });
+
+  it('reports outcome "stopped" when Stop has already fired', async () => {
+    const { dispatcher } = mockDispatcher((d) =>
+      okResult(d.intentId, d.sessionId, { source: 'x' }),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const controller = new AbortController();
+    controller.abort();
+    const reports: PlanningReadTraceEntry[] = [];
+    await exec.observeDigest('agt_1', undefined, controller.signal, undefined, (e) =>
+      reports.push(e),
+    );
+    expect(reports).toEqual([
+      { ms: expect.any(Number), outcome: 'stopped', chars: 0, truncated: false },
+    ]);
+  });
+
+  it('reports outcome "refused" when shouldContinue says no', async () => {
+    const { dispatcher } = mockDispatcher((d) =>
+      okResult(d.intentId, d.sessionId, { source: 'x' }),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const reports: PlanningReadTraceEntry[] = [];
+    await exec.observeDigest(
+      'agt_1',
+      () => Promise.resolve(false),
+      undefined,
+      undefined,
+      (e) => reports.push(e),
+    );
+    expect(reports).toEqual([
+      { ms: expect.any(Number), outcome: 'refused', chars: 0, truncated: false },
+    ]);
+  });
+
+  it('a throwing onPlanningRead callback never affects the returned digest (diagnostics only)', async () => {
+    const { dispatcher } = mockDispatcher((d) =>
+      okResult(d.intentId, d.sessionId, { source: '<button id="a">Buy</button>' }),
+    );
+    const exec = new ControlPlaneAgentExecutor(dispatcher, seqIds());
+    const digest = await exec.observeDigest('agt_1', undefined, undefined, undefined, () => {
+      throw new Error('a broken diagnostics sink');
+    });
+    expect(digest).not.toBeNull();
   });
 });

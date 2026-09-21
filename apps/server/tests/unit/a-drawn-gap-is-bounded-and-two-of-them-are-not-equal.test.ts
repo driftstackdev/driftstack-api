@@ -131,8 +131,31 @@ describe('R9 — drawGapMs: a drawn gap is inside a band nobody widens', () => {
 });
 
 describe('R9 — two retries of one step are not equally spaced', () => {
+  // ⛔ THESE TWO ARMS DRAW FROM A SEEDED GENERATOR, NOT THE DEFAULT ONE. Each
+  // asserts that consecutive draws from a band of a few hundred whole
+  // milliseconds are unequal, and with the default per-process generator that
+  // is true only with probability: two draws coincide about once in every few
+  // hundred runs, and a true statement about the executor then reads as a red
+  // on CI (it did, 2026-09-21, in the executor's own retry arm). A fixed
+  // sequence proves the same thing every time; the DEFAULT derivation is held
+  // separately below, where the property asserted is that two SESSIONS differ.
+  const seeded = (seed: number): (() => number) => {
+    let state = seed >>> 0;
+    return () => {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let t = state;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+
   it('CRITICAL the general retry budget produces gaps that differ, inside the band', async () => {
-    const gaps = await gapsFor({ sessionId: 'agt_r9_a', code: 'intent_webdriver_failed' });
+    const gaps = await gapsFor({
+      sessionId: 'agt_r9_a',
+      code: 'intent_webdriver_failed',
+      makeRandom: () => seeded(11),
+    });
     expect(gaps).toHaveLength(2); // the default two retries
     const low = Math.round(RETRY_DELAY_MS * DRAWN_GAP_MIN_FACTOR);
     const high = Math.round(RETRY_DELAY_MS * DRAWN_GAP_MAX_FACTOR);
@@ -147,6 +170,7 @@ describe('R9 — two retries of one step are not equally spaced', () => {
     const gaps = await gapsFor({
       sessionId: 'agt_r9_b',
       code: 'intent_session_not_established',
+      makeRandom: () => seeded(23),
     });
     // Eight cold-start gaps, then the step falls through to the GENERAL retry
     // budget (the failure is still classified retryable), which spends its own
