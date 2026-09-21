@@ -622,15 +622,28 @@ describe('a typed step on a device with the rule', () => {
     });
     const res = await run(executor(d.dispatcher), [TYPE]);
     expect(res.ok).toBe(true);
-    // ⛔ THE TWO INSERTED VERBS ARE R5's RELOCATION BEAT, and this arm is where
-    // the corpus first saw it: the look says the field is outside the viewport,
-    // so a scroll and a drawn dwell go in front of the typing. ⚠️ AND THERE IS
-    // NO SECOND `perceive` HERE, which is the beat's other rule showing: this
-    // fixture's device answers nothing but perceive/send_keys/wait_for, so both
-    // inserted dispatches FAIL, the beat reports that it did not happen, and no
-    // re-look is taken. A beat that fails is a beat that did not happen — the
-    // step goes on to do exactly what it did before the beat existed, which is
-    // the rest of this expectation, unchanged.
+    // The executor as it SHIPS: the relocation beat is built and switched off, so
+    // nothing is inserted in front of typing into a field the look placed outside
+    // the viewport.
+    expect(d.sent.map((s) => s.name)).toEqual(['perceive', 'send_keys', 'wait_for', 'send_keys']);
+    expect(paramsOf(d.sent, 'send_keys')).toEqual([TYPED_CHECKED, TYPED_CHECKED]);
+  });
+
+  it('with the relocation beat switched ON the same arm gains a scroll and a drawn dwell, and a beat that fails did not happen', async () => {
+    const d = device({
+      looks: [{ ...OFFSCREEN, type: 'input' }],
+      keys: (call) => (call === 1 ? refused('target_not_resolved') : { kind: 'ok' }),
+    });
+    const res = await run(executor(d.dispatcher, { relocationBeat: true }), [TYPE]);
+    expect(res.ok).toBe(true);
+    // ⛔ THE TWO INSERTED VERBS ARE R5's RELOCATION BEAT: the look says the field
+    // is outside the viewport, so a scroll and a drawn dwell go in front of the
+    // typing. ⚠️ AND THERE IS NO SECOND `perceive` HERE, which is the beat's other
+    // rule showing: this fixture's device answers nothing but
+    // perceive/send_keys/wait_for, so both inserted dispatches FAIL, the beat
+    // reports that it did not happen, and no re-look is taken. The step then does
+    // exactly what it does with the beat off — the rest of this expectation is
+    // the case above, unchanged.
     expect(d.sent.map((s) => s.name)).toEqual([
       'perceive',
       'scroll',
