@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { execSync } from 'node:child_process';
+// The band names live beside the policy that spends them (services/agent-pace.ts,
+// a leaf that imports nothing), so the enum the loader validates and the enum the
+// executor switches on cannot drift into two lists.
+import { AI_PACE_BANDS, type AiPaceBand } from '../services/agent-pace.js';
 
 /** What DRIFTSTACK_AI_CREDITS_MODE may say. `off` is the default. */
 export const AI_CREDITS_MODES = ['off', 'shadow', 'enforce'] as const;
@@ -249,6 +253,30 @@ const ConfigSchema = z.object({
   // `parseAiCreditsMode`, which refuses a value that is none of the three: a
   // misspelt mode must not read as `off` and say nothing.
   aiCreditsMode: z.enum(AI_CREDITS_MODES).default('off'),
+  /**
+   * AI pace, the master switch, and it is DEFAULT OFF — `fast` is what every
+   * turn does today, byte for byte: no inserted pause, no draw, no extra clock
+   * read. `medium` and `slow` make the executor insert bounded, server-drawn
+   * `{duration_ms}` pauses between steps, for EVERY turn this process runs.
+   *
+   * ⛔ PROCESS-WIDE BY DESIGN, AND NOT A CUSTOMER SETTING. There is no API
+   * field, no session column and no picker: this exists so the three-band
+   * offline experiment can run one band per process and compare them. A
+   * customer-facing `pace` is a later slice and a different decision.
+   *
+   * ⚠️ WHY IT IS OFF. The device team reported (2026-09-20) that the phone's
+   * idle-activity option — micro-scrolls interleaved WITHIN a pause — is OFF by
+   * default, so a server-drawn pause is a perfectly still phone for its whole
+   * duration, and a phone that is perfectly still across a long pause is itself
+   * a tell. Until idle activity is on for the nodes serving AI sessions, or the
+   * device offers it per dispatch, the slower bands are ours to measure, not a
+   * product promise.
+   *
+   * Read from DRIFTSTACK_AI_PACE by `parseAiPace`, which refuses a value that
+   * is none of the three for the reason `parseAiCreditsMode` does: a misspelt
+   * band must not read as `fast` and say nothing.
+   */
+  aiPace: z.enum(AI_PACE_BANDS).default('fast'),
   // V-079: where the user-facing auth-flow links point. The plaintext
   // single-use token gets appended as `?token=<...>` to each. Defaults
   // are dev-friendly localhost URLs; production sets these to the real
@@ -727,6 +755,28 @@ export function parseAiCreditsMode(raw: string | undefined): AiCreditsMode {
   );
 }
 
+/**
+ * DRIFTSTACK_AI_PACE, read exactly the way `parseAiCreditsMode` reads its mode
+ * and `envFlag` reads a boolean: trimmed and case-insensitive, because a value
+ * pasted out of a secret store often carries a trailing newline.
+ *
+ * Unset or blank is `fast`, which is the dispatch path this server has today —
+ * not "a fast setting", but the policy inserting nothing at all.
+ *
+ * ⛔ A VALUE THAT IS NOT A BAND REFUSES TO BOOT. `DRIFTSTACK_AI_PACE=slo` must
+ * not run as `fast` in the one deployment somebody meant to switch on: the
+ * whole point of the flag is to run an experiment, and an experiment that
+ * silently ran the control arm would be reported as a null result.
+ */
+export function parseAiPace(raw: string | undefined): AiPaceBand {
+  const value = (raw ?? '').trim().toLowerCase();
+  if (value === '') return 'fast';
+  if ((AI_PACE_BANDS as readonly string[]).includes(value)) return value as AiPaceBand;
+  throw new Error(
+    `Refusing to boot: DRIFTSTACK_AI_PACE must be one of ${AI_PACE_BANDS.join(', ')} (or unset, which is fast — the pacing policy inserting nothing).`,
+  );
+}
+
 function coerceTrustProxy(raw: string | undefined): boolean | number | string {
   if (raw === undefined || raw.length === 0) return false;
   if (raw === 'true') return true;
@@ -884,6 +934,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     bundledTurnMaxConcurrency: env.BUNDLED_TURN_MAX_CONCURRENCY,
     agentTurnMaxAccountInFlight: env.AGENT_TURN_MAX_ACCOUNT_INFLIGHT,
     aiCreditsMode: parseAiCreditsMode(env.DRIFTSTACK_AI_CREDITS_MODE),
+    aiPace: parseAiPace(env.DRIFTSTACK_AI_PACE),
     authFlowUrls: deriveAuthFlowUrls(env),
     dashboardOrigin: env.DASHBOARD_ORIGIN,
     mfaEncryptionKey: env.MFA_ENCRYPTION_KEY,

@@ -51,6 +51,14 @@ import {
   type CommitmentBudget,
 } from './agent-page-commitment.js';
 import { TURN_HARD_STOP_MS } from './agent-turn-bounds.js';
+import {
+  countDigestWords,
+  isPacedBand,
+  newPaceBudget,
+  paceSegmentBudgetMs,
+  type AiPaceBand,
+  type PaceBudget,
+} from './agent-pace.js';
 // Values, not just types: a turn runs up to three plan segments and the counts
 // of all of them are the turn's. agent-turn-telemetry.ts imports from here with
 // `import type` only, so this edge is one-way at runtime.
@@ -635,6 +643,18 @@ export interface AgentRuntimeDeps {
   /** Per-owner-account AI turns allowed concurrently across distinct agent
    *  sessions. Manual transcript-only turns do not consume a slot. Default 3. */
   maxConcurrentTurnsPerAccount?: number;
+  /**
+   * S6 — the pace band EVERY turn this process runs uses. Default `fast`, which
+   * is the policy inserting nothing: no budget object is built, `ExecuteArgs.pace`
+   * is never set, and the executor's step loop takes one undefined check.
+   *
+   * ⛔ PROCESS-WIDE, NOT PER SESSION, AND THAT IS THE REQUIREMENT. The three-band
+   * offline experiment compares whole runs under one band each; a per-session
+   * knob would let two bands interleave inside one comparison. Wired from
+   * `config.aiPace` (DRIFTSTACK_AI_PACE) and from nothing else — there is no
+   * API field, no session column and no customer switch in this slice.
+   */
+  pace?: AiPaceBand;
   /**
    * Monotonic milliseconds, for the turn's wall-clock ceiling
    * (MAX_TURN_WALL_CLOCK_MS). Defaults to `performance.now()`. Injected so a test
@@ -2928,6 +2948,21 @@ export class AgentRuntime {
     const commitmentBudget = newCommitmentBudget(
       resumePlan !== null ? reconstructHaltedCommitment(sessionWithUser.transcript) : undefined,
     );
+    /**
+     * S6 — the TURN's pace state, or undefined on `fast`.
+     *
+     * ⛔ UNDEFINED IS THE WHOLE OF FAST. Not a band with zero in its table: no
+     * object, so `ExecuteArgs.pace` is never set, so the executor takes no
+     * draw and reads no extra clock. One extra draw with the flag off would
+     * shift every later retry gap in the turn, which is a behaviour change.
+     *
+     * ⛔ ONE PER TURN, for the reason the element-wait and commitment budgets
+     * are: a turn runs up to three segments, and a budget rebuilt per segment
+     * would be three budgets — which is exactly the taper that keeps inserted
+     * time from ever reaching the turn's reserve.
+     */
+    const band: AiPaceBand = this.deps.pace ?? 'fast';
+    const pace: PaceBudget | undefined = isPacedBand(band) ? newPaceBudget(band) : undefined;
     const authorityMayContinue = () => this.authorityStillCurrent(session.id, admission);
     // Hoisted out of the first-plan branch because every LATER segment of the
     // turn plans for the same device and is compared against the same first look.
@@ -3479,6 +3514,19 @@ export class AgentRuntime {
       if (!announcedExecuting) {
         emitProgress(args.onProgress, { kind: 'phase', phase: 'starting_browser' });
       }
+      // S6 — THE TAPER, RE-SEEDED FOR THIS SEGMENT AND NOWHERE ELSE.
+      // `(remaining − reserve) × f` with f < 1, clamped at zero and at the
+      // per-segment cap, so inserted time approaches the reserve and can never
+      // consume it: a turn runs out of PAUSE budget before it runs out of
+      // clock, and when it does the segment simply runs at fast. The one place
+      // `MAX_TURN_WALL_CLOCK_MS` meets the pace arithmetic.
+      if (pace !== undefined) {
+        pace.segmentRemainingMs = paceSegmentBudgetMs({
+          band: pace.band,
+          elapsedMs: this.nowMs() - turnStartedAtMs,
+          turnWallClockMs: MAX_TURN_WALL_CLOCK_MS,
+        });
+      }
       return await this.deps.executor.execute({
         onStepStart: (_intent, index): void => {
           // The first dispatch is the real end of the warm-up, so `executing`
@@ -3522,6 +3570,9 @@ export class AgentRuntime {
         // shares the one deadline rather than getting a fresh one each — and so
         // a per-pace value later changes this expression and nothing else.
         turnHardStopAtMs: turnStartedAtMs + TURN_HARD_STOP_MS,
+        // S6 — the turn's pace state, absent on `fast`. See the comment above
+        // the construction of `pace`.
+        ...(pace !== undefined ? { pace } : {}),
         // P2 — the VALUES, to the executor only. Resolved into the dispatch and
         // nowhere else; the results this returns still carry the placeholders.
         ...(args.credentials !== undefined ? { credentials: args.credentials } : {}),
@@ -3563,6 +3614,13 @@ export class AgentRuntime {
         },
       });
     }
+    // S6 — READING TIME FOLLOWS THE PAGE, NOT THE STEP NUMBER. The digest the
+    // planner was shown for this segment is the only page-sized number the
+    // server has without spending another dispatch, and it is already bounded
+    // (MAX_PAGE_DIGEST_CHARS), so the reading band is bounded with it. Null on
+    // a blind first segment, which the policy reads as "no page read yet"
+    // rather than as a page of zero words.
+    if (pace !== undefined) pace.pageWordCount = countDigestWords(firstPlanObservation);
     let executorResult = await runPlan(decomposed, verifiedConsequentialApprovals, {
       segment: 1,
       ...(decomposed.status !== undefined ? { status: decomposed.status } : {}),
@@ -3782,6 +3840,10 @@ export class AgentRuntime {
         segment,
         plannerCallsRemaining: Math.max(0, MAX_PLANNER_CALLS_PER_TURN - plannerCalls - 1),
         stepsSoFar: describeStepsSoFar(executorResult),
+        // How much of the turn's wall clock is left when this segment is
+        // planned. See TurnProgress.msRemaining for why it is carried and not
+        // yet rendered.
+        msRemaining: Math.max(0, MAX_TURN_WALL_CLOCK_MS - (this.nowMs() - turnStartedAtMs)),
       };
       let replanned: DecomposeResult;
       try {
@@ -4068,6 +4130,10 @@ export class AgentRuntime {
       // said what each tap lands on — against the steps of EARLIER segments
       // only: `ranSteps` gains this segment's steps after it has run.
       const ranBeforeThisSegment = [...ranSteps];
+      // S6 — the page THIS segment was planned against (see the first segment's
+      // note). The runtime has just read it for the re-plan, so later segments
+      // get a real reading size with no extra device call.
+      if (pace !== undefined) pace.pageWordCount = countDigestWords(pageNow);
       const nextRun = await runPlan(
         { ...replanned, intents: suffix, declaredCommitments: segmentDeclarations },
         undefined,

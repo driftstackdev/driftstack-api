@@ -273,6 +273,22 @@ export interface TurnProgress {
   /** One line per step that has already run this turn, oldest first, in the
    *  transcript's own `✓ … / ✗ …` form. */
   stepsSoFar: ReadonlyArray<string>;
+  /**
+   * How many milliseconds of the turn's wall-clock ceiling remain when this
+   * segment is planned.
+   *
+   * ⛔ CARRIED, AND NOT YET RENDERED INTO THE PROMPT. A planner that knows the
+   * clock can plan a smaller final segment instead of one it cannot finish —
+   * the highest-value single mitigation for "a slow turn feels broken" — but
+   * the block that turns a `TurnProgress` into prompt text lives in the frozen
+   * planner contract, and the slice that threaded this one deliberately changes
+   * no byte of the prompt, so that the effect of pace stays attributable to
+   * pace. Whoever renders it owns the prompt change and its own eval.
+   *
+   * Optional so every existing caller and test that builds a `TurnProgress` by
+   * hand keeps compiling and keeps meaning what it meant.
+   */
+  msRemaining?: number;
 }
 
 /**

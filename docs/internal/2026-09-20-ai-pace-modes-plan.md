@@ -130,6 +130,163 @@ decided or built; `pace` is still a design.
    `lib/bootstrap.ts`, which was outside that lane. §7's prerequisite list should
    pick this up.
 
+## 0b-2. ⛔ WHAT S6 BUILT (2026-09-21) — THE POLICY, ITS BUDGET, AND THE FLAG
+
+**S6 is built, Tier A only, behind a default-off server flag. Nothing customer-facing
+moved: no API field, no session column, no migration, no OpenAPI, no SDK, no desktop
+change, no customer copy.** §3's policy table, §4's arithmetic and §9's nine tests are
+now code; the rest of this document is still a design.
+
+1. **The flag is `DRIFTSTACK_AI_PACE`** — `fast` | `medium` | `slow`, parsed in
+   `lib/config.ts` beside `parseAiCreditsMode` and by the same rules (trimmed,
+   case-insensitive, unset or blank is `fast`, **anything else refuses to boot** so a
+   typo cannot run the control arm and be reported as a null result). It reaches
+   `AgentRuntime` through `config.aiPace` and selects the band for **every turn of the
+   process**, which is what S7's three-band comparison needs. `config` is its only
+   source — there is deliberately no per-session input.
+
+2. **`fast` is the policy inserting NOTHING, and it is expressed as an absent object.**
+   `PacedBand = Exclude<AiPaceBand, 'fast'>`, so no table below has a `fast` row to fill
+   in wrongly; the runtime builds no budget and threads no `ExecuteArgs.pace`, and the
+   step loop's whole cost with the flag off is one `!== undefined` check — no draw, no
+   clock read, no dispatch, no telemetry write. ⛔ **Proved twice:**
+   `fast-dispatches-exactly-what-it-dispatches-today` compares the wire byte for byte,
+   and the offline eval's twelve task reports (verbs, per-dispatch gaps, simulated device
+   time, outcomes) are **byte-identical to HEAD** with the flag off. The same dump with
+   the band forced to `slow` differs on five of twelve tasks — so the differential has
+   teeth. C11's "compare against the POST-audit baseline" is what this does: the
+   comparison is the same executor with `pace` absent.
+
+3. **The insertion point is §3's corrected C2 ordering**, in
+   `agent-executor-control-plane.ts`: Stop → authority → Stop → substitute →
+   `haltsUnlooked` → **pace** → Stop again → look → gate → `onStepStart` → dispatch. A
+   step the plan's own words halt gets no beat, and **so does a step the PLANNER
+   DECLARED a commitment** — the one late signal available at that point, used to narrow
+   C2's stated residual rather than to widen it. The residual itself is unchanged and
+   written down in the test: a halt raised ONLY by the device's labels or the structural
+   arm is decided after this point, so such a step did get a beat.
+
+4. **It reuses the R5 beat seam** (`beatFrame` + `sendBeat`) rather than building a
+   second dispatch path, exactly as §0b item 2 asked. An inserted pause never enters
+   `results`, `onStep`, `onStepStart`, the planner's step history, `tapTargets` or the
+   segment's `ok`; its failure — including a throw from the dispatcher — is swallowed;
+   Stop abandons it; it is refused past the turn's hard stop, **and the hard stop is
+   asked AGAIN after it returns** (see §0b-3 finding 1 — asking only before it was not
+   enough, and the review fixed it). The relocation beat's own gap at §0b item 2 is
+   untouched and still open.
+
+5. **The constants, in `services/agent-pace.ts`, with their derivations beside them.**
+   `PACE_FRACTION {medium .25, slow .45}`, `PACE_SEGMENT_CAP_MS {12k, 30k}`,
+   `PACE_STEP_CAP_MS {4k, 9k}`, `PACE_TURN_RESERVE_MS 45k`, `PACE_MIN_PAUSE_MS 250`.
+   The taper is §4's formula with `MAX_TURN_WALL_CLOCK_MS` passed in (the module is a
+   leaf — the executor, the runtime and the config loader all read it, and any import
+   between them would be a cycle). Two derivations are new and worth reading:
+   · **`READING_MS_PER_WORD` is derived from the digest cap**, not chosen — ⛔ **and it
+   is derived against the BASE CEILING, not against the per-step cap; the first version
+   of this line compared the wrong two numbers and §0b-3 finding 2 corrected it.** The
+   planner's digest is capped at `MAX_PAGE_DIGEST_CHARS` (4,000), so at ~6 chars/word the
+   largest page this server can see is ≤667 words; the executor hands a draw
+   `min(base, paceBaseCeilingMs(band, DRAWN_GAP_MAX_FACTOR))` = cap/1.45, i.e. 6,206 ms
+   (slow) and 2,758 ms (medium). So the rate is `{medium: 4, slow: 9}`: 667×9 = 6,003 and
+   667×4 = 2,668, both under their ceiling. The cap therefore stays a BOUND instead of
+   becoming the usual answer, AND reading time follows the page across the whole digest
+   range instead of flattening at its top.
+   · **`paceBaseCeilingMs` lowers the base so a draw can never REACH the per-step cap.**
+   Clamping at the cap would pile every long page onto one exact number — the cap
+   would manufacture the constant the drawn band exists to remove. For the same reason
+   a pause bigger than what the segment has left is **refused, never trimmed**: a
+   remainder is a constant in disguise.
+
+6. **`msRemaining` is threaded onto `TurnProgress`** and filled by the runtime. ⛔ **It
+   is NOT rendered into the prompt** — that block lives in the frozen planner contract,
+   and S6 changes no byte of the prompt so that pace's effect stays attributable. Whoever
+   renders it owns the prompt change and its own eval.
+
+7. **Telemetry: on the existing `agent_turn_action_paths` line, as counts.**
+   `pace_pauses_{fast,medium,slow}` and `pace_paused_ms`. Counted by BAND rather than
+   carrying a band name because that line is numbers only, and `pace_pauses_fast` is
+   therefore an **alarm row that must always read zero**. ⛔ **S2 was not built**, so
+   there is no `pace`/`paused_ms` column, no `paused_ms` subtracted out of
+   `executing_ms`, and no new metric series — adding one would have forced an edit to the
+   public metrics page, which this slice may not touch. S7 still needs S2.
+
+8. ⚠️ **WHY THERE IS NO CUSTOMER SWITCH, IN THE OPTION'S OWN DOC COMMENT.** The device
+   team's 2026-09-20 answer stands: the phone's idle-activity option is **off by
+   default**, so a server-drawn `{duration_ms}` pause is a perfectly still phone for its
+   whole duration, and a phone that is perfectly still across a long pause is itself a
+   tell. Until idle activity is on for the nodes serving AI sessions, or the device
+   offers it per dispatch, slow and medium are **ours to measure, not a product
+   promise**. That sentence is in `config.ts`, in `agent-pace.ts`, and in the three env
+   templates.
+
+9. **Deliberately NOT built in S6, and each for a stated reason:** §3's beat 4 (splitting
+   a long scroll) — it is not a pause, it changes a customer step's own dispatch, and
+   "same verbs, same order with the flag off" is easier to keep true without it; every
+   Tier B shape; and any `pace` the customer can set.
+
+## 0b-3. ⛔ WHAT THE S6 REVIEW FOUND AND REPAIRED (2026-09-21, turn safety + rhythm lens)
+
+Two defects, each with a failing test written before the repair, and both fixed in the
+files S6 already owned. Arms were added to the S6 test files rather than to new ones, so
+the suite pin moves by the nine files S6 added and no more.
+
+1. ⛔⛔ **A BEAT COULD CARRY THE TURN PAST ITS HARD STOP AND THE STEP BEHIND IT STILL
+   DISPATCHED — the claim TTL's own premise, broken.** `agent-turn-bounds.ts` composes
+   the longest turn the constants permit as hard stop + **ONE** dispatch deadline +
+   read-back + answer stream, and names what makes that true: "`runIntent` asks this same
+   hard stop before starting another attempt, which is what leaves exactly one dispatch
+   past the deadline. Move that check and this number stops being true." `runIntent`
+   deliberately does **not** refuse its FIRST attempt — its comment says a null result is
+   "a step the loop above has just admitted past this same deadline" — so the premise is
+   that **nothing sits between the step loop's hard-stop check and the step's own first
+   dispatch**. The pacing beat sits exactly there, and `behavioral_pause` is a
+   `SINGLE_CAP_LONG_INTENT` with a 315,000 ms correlator deadline. A device that stops
+   answering therefore turned one beat into 315 s, after which the pre-tap look AND the
+   step's own dispatch still went out: a second dispatch deadline past the hard stop, in
+   a tail whose 120,000 ms TTL margin is documented as explicitly **not** cover for one
+   ("⛔ WHAT IT IS NOT: cover for another dispatch").
+   ⚠️ **Asking the hard stop BEFORE sending was not the same as not adding a dispatch past
+   the deadline**, and S6's own report claimed it was. It proves the beat may START; the
+   beat then owns the wire for as long as the device holds it.
+   **Fix:** ask the hard stop AGAIN after the beat returns, exactly as Stop already was,
+   and return `hardStopped` between steps — the beat settled, the step was never
+   announced, so the "never cut off" invariant holds as it does at the top of the loop.
+   Reachable without a pathological fixture: the budget is seeded once per segment, so a
+   segment that starts at elapsed 130 s carries a live budget into a step loop that runs
+   to the 300 s hard stop. Tests: two arms in
+   `pace-runs-out-of-budget-before-a-turn-runs-out-of-clock` (the red one, and a negative
+   control with the hard stop still ahead, which runs both steps).
+
+2. ⛔ **THE READING RATE CLEARED A NUMBER THE CODE NEVER COMPARES AGAINST, so every long
+   page drew the same base.** `READING_MS_PER_WORD = 12` was derived as `667 × 12 =
+8,004 < PACE_STEP_CAP_MS.slow (9,000)` — but the executor never hands a draw the raw
+   base. It hands `min(base, paceBaseCeilingMs(band, DRAWN_GAP_MAX_FACTOR))`, which is
+   `cap / 1.45`: **6,206 ms on slow and 2,758 ms on medium**. The derivation omitted the
+   very factor `paceBaseCeilingMs` exists to apply, so the base saturated at **518 words
+   on slow and 230 words on medium** — and 230 words is a small page. That is
+   `paceBaseCeilingMs`'s own stated failure ("clamping … piles every long page onto one
+   exact number") reintroduced one level down, on exactly the pages the reading beat is
+   for, while §7's primary falsifiable claim ("reading time correlates with word count")
+   was certified by a sweep of [20, 100, 250, 500] words that never reached the plateau —
+   precision without recall.
+   **Fix:** `READING_MS_PER_WORD` is now per band, `{medium: 4, slow: 9}`, derived against
+   each band's own ceiling (667×9 = 6,003 ≤ 6,206; 667×4 = 2,668 ≤ 2,758). Not a second
+   knob: it is one derivation run against two ceilings, and slow reading longer than
+   medium is what the bands mean. Tests: a containment arm that recomputes
+   `maxDigestWords × rate ≤ paceBaseCeilingMs(band, DRAWN_GAP_MAX_FACTOR)` for every paced
+   band, a monotonicity sweep to the top of the digest range in both bands, and a floor
+   control; the original derivation arm now asserts the consequence it was reaching for
+   (`maxWords × rate × 1.45 < cap`).
+
+**Re-verified after the repairs, by the reviewer, in a scratch copy of HEAD:** the offline
+eval's FULL ORDERED WIRE with the flag off — every dispatch with its params, every sleep in
+order, the generator draw count, the simulated clock, the step list, the turn kind and the
+answer, across all 18 tasks — is **byte-identical to HEAD** (md5 38249029e51dbd8ccc9989be5e1706a2
+on both trees). ⚠️ This is a stronger comparison than a `TaskReport` diff: `RhythmReport.verbs`
+is a sorted SET, so a report comparison cannot see a reordering. Negative control: the same dump
+with the band forced to `slow` differs on 142 lines, inserts 11 `{duration_ms}` pauses and takes
+57 generator draws against the flag-off run's 4.
+
 ⛔ **AND ONE THING THIS PLAN SAID THAT IS NOW WRONG IN A SMALL WAY.** §7 says
 "Fast is defined as _the policy inserting nothing_, so the dispatch path is
 byte-identical to today". That was written before R5 and R9. The dispatch path

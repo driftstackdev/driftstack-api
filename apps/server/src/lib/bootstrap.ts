@@ -1911,6 +1911,12 @@ export async function createProductionDeps(
       return undefined;
     },
     maxConcurrentTurnsPerAccount: config.agentTurnMaxAccountInFlight,
+    // S6 — the pace band every turn this process runs. `fast` (the default, and
+    // what an unset DRIFTSTACK_AI_PACE parses to) is the policy inserting
+    // nothing: the runtime builds no budget, the executor is threaded no
+    // `pace`, and the dispatch path is what it is today. `medium` and `slow`
+    // are the two arms of the offline experiment, not a customer setting.
+    pace: config.aiPace,
     // Observed on its way through: the usage recorder is the one seam that
     // sees EVERY settled model call of a turn (the turn result carries only the
     // plan's), so telemetry stands in front of it. The inner recorder is called

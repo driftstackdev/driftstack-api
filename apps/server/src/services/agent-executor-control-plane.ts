@@ -72,6 +72,14 @@ import {
 } from './agent-intent-result.js';
 import { TURN_READ_BACK_TIMEOUT_MS } from './agent-turn-bounds.js';
 import {
+  PACE_MIN_PAUSE_MS,
+  PACE_STEP_CAP_MS,
+  paceBaseCeilingMs,
+  paceBeatFor,
+  type PaceBudget,
+  type PaceStepShape,
+} from './agent-pace.js';
+import {
   agentActionOutcomeOf,
   emptyAgentActionPathCounts,
   recordAgentActionProfileAttached,
@@ -436,6 +444,52 @@ const RELOCATION_PAUSE_CAP_MS = 2_500;
  *  own persona shape to a scroll; this only decides roughly how far. */
 const RELOCATION_SCROLL_MIN_PX = 240;
 const RELOCATION_SCROLL_MAX_PX = 1_200;
+
+/**
+ * S6 — a plan step as the PACE POLICY needs to see it.
+ *
+ * ⛔ THE SHAPE, AND NOTHING ELSE. No selector, no URL, no typed value, no
+ * label: the policy decides on the kind of step a site is about to see, and
+ * nothing a page or a model wrote reaches it. That is what keeps a hostile page
+ * from being able to steer the rhythm it is being shown.
+ *
+ * `swipe` reads as `scroll` because that is what a site sees; anything the
+ * union grows later reads as `other`, which the policy treats as an ordinary
+ * site-visible step rather than as a special case it has not been taught.
+ */
+function paceStepShapeOf(
+  intent: ExecuteArgs['plan']['intents'][number] | undefined,
+): PaceStepShape {
+  if (intent === undefined) return 'other';
+  switch (intent.kind) {
+    case 'navigate':
+      return 'navigate';
+    case 'wait':
+      return 'wait';
+    case 'capture':
+      return 'capture';
+    case 'scroll':
+      return 'scroll';
+    case 'behavioral_pause':
+      return 'pause';
+    case 'interact':
+      switch (intent.action) {
+        case 'tap':
+          return 'tap';
+        case 'type':
+          return 'type';
+        case 'press':
+          return 'press';
+        case 'scroll':
+        case 'swipe':
+          return 'scroll';
+        default:
+          return 'other';
+      }
+    default:
+      return 'other';
+  }
+}
 
 /**
  * P4 — extra `get_page_source` reads the commitment arm may take in ONE TURN.
@@ -1127,7 +1181,15 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       Object.values(actionPaths.commitmentFacts).some((n) => n > 0) ||
       Object.values(actionPaths.haltArms).some((n) => n > 0);
     const done = (run: ExecutorRunResult): ExecutorRunResult =>
-      actionPaths.actions > 0 || actionPaths.scrolls > 0 || actionPaths.looks > 0 || anyGateCount()
+      actionPaths.actions > 0 ||
+      actionPaths.scrolls > 0 ||
+      actionPaths.looks > 0 ||
+      // A segment can insert pauses in front of navigates and captures and
+      // dispatch no action, no scroll and no look — and those are exactly the
+      // turns a pace experiment reads. Zero with the flag off, so this
+      // condition is unchanged on every default deployment.
+      actionPaths.pacePausedMs > 0 ||
+      anyGateCount()
         ? { ...run, actionPaths }
         : run;
     /**
@@ -1164,6 +1226,12 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     // throwing/slow onStep must never abort or block the run.
     const emitStep = (r: IntentResult): void => {
       results.push(r);
+      // C8 — the customer has now seen a step THIS TURN, so a pacing beat is
+      // allowed in front of the next one. Recorded on the turn-scoped budget
+      // rather than read off `results`, because a turn runs up to three
+      // segments and `results` starts empty in each of them. One property read
+      // when pace is off, and never a draw.
+      if (args.pace !== undefined) args.pace.anyStepEmitted = true;
       try {
         args.onStep?.(r, results.length - 1);
       } catch {
@@ -1267,6 +1335,82 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         new Set(approved),
         this.gatePage(dispatchSessionId).labels,
       );
+
+      // ── S6 — THE PACING BEAT, AND WHERE IT IS ALLOWED TO BE ──────────
+      //
+      // ⛔ HERE, AND NOWHERE ELSE, AND THE ORDERING IS THE WHOLE DESIGN. Two
+      // rules look compatible and are not: "never between the look and the tap
+      // it vouches for" (seconds there let a banner appear over a control the
+      // look has already cleared) and "never in front of a screen waiting for
+      // the customer to approve something". The gate runs AFTER the look, so
+      // "after the gate" IS "between the look and the tap". The one ordering
+      // that satisfies both uses the precheck the code already has:
+      // `haltsUnlooked` classifies the plan's own words before any device round
+      // trip, so a step the customer is about to be asked about is known here —
+      // and gets no beat at all.
+      //
+      // ⚠️ STATED RESIDUAL, not discovered later: a halt raised ONLY by the
+      // device's labels or by the structural arm is decided after this point,
+      // so such a step did get a beat in front of it. It is a pause on a page
+      // the run was already reading; nothing was committed, and the approval
+      // prompt itself is unchanged. The planner's own DECLARATION is the one
+      // late signal available here, and it is honoured below rather than left
+      // to widen the residual.
+      //
+      // ⛔ AND NOTHING IS INSERTED BEFORE THE FIRST STEP THE CUSTOMER SEES.
+      // `time_to_first_progress_ms` is the metric the repo names after a real
+      // customer complaint ("it never shows thinking progress"); a policy that
+      // could push it out would be trading a number somebody already asked us
+      // to fix for one nobody has measured.
+      //
+      // ⛔ WITH NO `pace` THIS IS ONE UNDEFINED CHECK. No draw, no clock read,
+      // no allocation — which is what makes "the flag off is today, byte for
+      // byte" a property rather than an intention, since one extra draw would
+      // shift every later retry gap in the turn.
+      if (args.pace !== undefined) {
+        const paced = await this.pacingBeat({
+          sessionId: dispatchSessionId,
+          pace: args.pace,
+          step: paceStepShapeOf(intent),
+          // The previous PLAN step, not the previous step that ran: rhythm is
+          // about what the site just saw, and a step that failed or was skipped
+          // still happened in the customer's step list. Read positionally so no
+          // second piece of mutable loop state can drift from the plan.
+          previous: planIndex === 0 ? null : paceStepShapeOf(args.plan.intents[planIndex - 1]),
+          halted: haltsUnlooked !== null,
+          declared: declaredByIndex.has(planIndex),
+          counts: actionPaths,
+          shouldContinue: args.shouldContinue,
+          signal: args.signal,
+          turnHardStopAtMs: args.turnHardStopAtMs,
+        });
+        if (paced === 'stopped') return done({ results, ok: false, stopped: true });
+        if (paced === 'authority_lost') return done({ results, ok: false, authorityLost: true });
+        // Stop is asked AGAIN after the beat. Seconds passed inside it, and
+        // nothing may be looked at or dispatched for a turn that was stopped
+        // while it waited.
+        if (stopRequested(args.signal)) return done({ results, ok: false, stopped: true });
+        // ⛔ AND SO IS THE HARD STOP, FOR THE SAME REASON AND A SHARPER ONE.
+        // Asking it BEFORE the beat only proves the beat may start; the beat
+        // then OWNS the wire for as long as the device holds it, and a
+        // `behavioral_pause` is a SINGLE_CAP_LONG_INTENT whose correlator
+        // deadline is 315 s. Without this second ask, a device that stops
+        // answering turns one beat into 315 s and the look and the step's own
+        // first dispatch still go out behind it — because `runIntent`
+        // deliberately never refuses a FIRST attempt, on the premise that
+        // "the loop above has just admitted this step past the same deadline".
+        // The beat is what makes that premise false, so the beat is what has
+        // to re-establish it: `agent-turn-bounds.ts` composes the longest turn
+        // as hard stop + ONE dispatch deadline, and says in its own words that
+        // moving this check is what stops that number being true. The claim
+        // TTL's margin is documented as explicitly NOT cover for a second one.
+        //
+        // Nothing is cut short: the beat settled, the step was never announced,
+        // so this returns between steps exactly as the top of the loop does.
+        if (args.turnHardStopAtMs !== undefined && this.now() >= args.turnHardStopAtMs) {
+          return done({ results, ok: false, hardStopped: true });
+        }
+      }
       //
       // TYPING IS LOOKED AT TOO. On the device, typing begins with a tap on the
       // field to focus it (IntentExecutor's tap-to-focus), so a cover over a
@@ -2083,6 +2227,131 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   }
 
   /**
+   * S6 — ONE INSERTED PACING PAUSE, drawn by this server inside a band this
+   * server owns.
+   *
+   * ⛔ IT IS NOT A STEP, AND THAT IS THE DECISIVE PROPERTY. It never enters
+   * `plan.intents`, `results`, `onStep`, `onStepStart`, the step history the
+   * planner sees, `tapTargets` or the segment's `ok`; the no-progress guard and
+   * `sameStep`'s deep equality never see one; and the planner therefore never
+   * learns to imitate them. It reuses the beat seam R5 already built rather
+   * than adding a second dispatch path — there is exactly one place in this
+   * file where something is sent off the books, and this is a caller of it.
+   *
+   * ⛔ ITS FAILURE IS SWALLOWED. A pause that fails is a pause that did not
+   * happen, never a step that failed: routed through `runIntent` a dropped
+   * frame on a pause would land in `results`, flip `ok`, trip halt-on-first-
+   * failure and change which branch the turn loop takes — a pause, which
+   * changes nothing on the page, ending the customer's segment.
+   *
+   * ⛔ TIER A ONLY: a `{duration_ms}` THIS SERVER DREW. Never
+   * `{kind:'decision'}`, never a reading pause with `image_count`, never a bare
+   * `{}` — those durations come out of the device's own catalogue, which is not
+   * in this repo and has no ceiling param on the wire, so they cannot sit inside
+   * a budget, a taper, or the Stop-latency argument the per-step cap rests on.
+   * The server bounds only what the server draws.
+   *
+   * ⛔ AND THE BAND IS DRAWN, NEVER SET. A constant dwell is a signature of its
+   * own: three pace modes shipped as three constants would be three cluster
+   * centroids, not a defence. Both draws — whether to pause, and how long —
+   * come from the session's own generator, so two sessions running one task do
+   * not share a rhythm and one session keeps its own.
+   *
+   * Returns what happened, so the caller can end the run on a Stop or a lost
+   * authority and treat everything else as "no pause, carry on".
+   */
+  private async pacingBeat(args: {
+    sessionId: string;
+    pace: PaceBudget;
+    step: PaceStepShape;
+    previous: PaceStepShape | null;
+    /** The plan's own words already halt this step: the customer is being
+     *  asked, and nothing waits in front of the screen that asks them. */
+    halted: boolean;
+    /** The planner DECLARED this step a commitment. It is very likely to meet
+     *  an approval prompt a few lines below, and this is the only late signal
+     *  available at the insertion point — so it narrows the stated residual
+     *  rather than being left to widen it. */
+    declared: boolean;
+    counts: AgentActionPathCounts;
+    shouldContinue: ExecuteArgs['shouldContinue'];
+    signal: AbortSignal | undefined;
+    turnHardStopAtMs: number | undefined;
+  }): Promise<'paused' | 'skipped' | 'stopped' | 'authority_lost'> {
+    const pace = args.pace;
+    if (args.halted || args.declared) return 'skipped';
+    // C8 — never before the first step the customer sees in this turn.
+    if (!pace.anyStepEmitted) return 'skipped';
+    // The budget is spent (or was never seeded). The turn carries on at fast:
+    // pace degrades, it never fails.
+    if (!(pace.segmentRemainingMs >= PACE_MIN_PAUSE_MS)) return 'skipped';
+    if (stopRequested(args.signal)) return 'stopped';
+    // The turn is over. A beat is the most skippable thing in the system, so it
+    // is the first thing the deadline takes — and unlike the relocation beat,
+    // this one is asked BEFORE it sends anything, so the hard stop's premise
+    // (one dispatch in flight past the deadline) is not weakened by pace.
+    if (args.turnHardStopAtMs !== undefined && this.now() >= args.turnHardStopAtMs) {
+      return 'skipped';
+    }
+    if (!(await executionMayContinue(args.shouldContinue))) return 'authority_lost';
+
+    const random = this.randomFor(args.sessionId);
+    // ⛔ THE DECISION TO PAUSE IS ITSELF A DRAW. Pausing after EVERY page
+    // arrival is a regular rhythm even when every duration differs.
+    const beat = paceBeatFor({
+      band: pace.band,
+      step: args.step,
+      previous: args.previous,
+      pageWordCount: pace.pageWordCount,
+      chance: boundedUnit(random),
+    });
+    if (beat === null) return 'skipped';
+    // ⛔ THE BASE IS LOWERED SO THE CAP IS NEVER REACHED. Clamping a draw at the
+    // per-step cap would pile every long page onto one exact number — the cap
+    // would manufacture the constant the drawn band exists to remove. See
+    // `paceBaseCeilingMs`.
+    const base = Math.min(beat.baseMs, paceBaseCeilingMs(pace.band, DRAWN_GAP_MAX_FACTOR));
+    const ms = drawGapMs(base, random);
+    // ⛔ REFUSED, NOT TRIMMED TO WHAT IS LEFT. A pause cut down to the budget's
+    // remainder is a constant in disguise: every turn would end with the same
+    // shaped last beat, and the remainder is a number the policy did not draw.
+    if (ms < PACE_MIN_PAUSE_MS || ms > pace.segmentRemainingMs) return 'skipped';
+    // Unreachable by the ceiling above, and asserted rather than assumed: the
+    // 9 s cap is what keeps an inserted pause under the 15 s grace a Stop gives
+    // an in-flight step, and an injected generator must not be able to move it.
+    if (ms > PACE_STEP_CAP_MS[pace.band]) return 'skipped';
+
+    const mapped = agentIntentToDispatch({ kind: 'behavioral_pause', duration_ms: ms });
+    // ⛔ THE VERB ON THE WIRE IS A LITERAL, NOT `mapped.intentName` — the rule
+    // `waitForElement` and the relocation beat both follow, and what
+    // `the-control-plane-never-dispatches-a-verb-it-does-not-hard-code` pins.
+    if (!mapped.ok || mapped.intentName !== 'behavioral_pause') return 'skipped';
+    const frame = this.beatFrame((intentId) =>
+      serializeIntentDispatch({
+        sessionId: args.sessionId,
+        intentId,
+        intentName: 'behavioral_pause',
+        params: mapped.params,
+      }),
+    );
+    if (frame === null) return 'skipped';
+    // ⛔ DEBITED BEFORE THE ANSWER, AND DELIBERATELY. The device has been asked
+    // to hold for `ms` whatever it answers, so a device that fails every pause
+    // must not be a way to keep asking for more of them: the taper has to bound
+    // what was REQUESTED. The telemetry below counts only what was answered,
+    // which is the other question.
+    pace.segmentRemainingMs = Math.max(0, pace.segmentRemainingMs - ms);
+    const sent = await this.sendBeat(frame, args.signal);
+    if (sent === 'stopped') return 'stopped';
+    if (sent !== 'sent') return 'skipped';
+    pace.insertedPauses += 1;
+    pace.pausedMs += ms;
+    args.counts.pacePauses[pace.band] += 1;
+    args.counts.pacePausedMs += ms;
+    return 'paused';
+  }
+
+  /**
    * One inserted dispatch, off the books.
    *
    * ⛔ EVERY FAILURE IS SWALLOWED, including a throw from the dispatcher, which
@@ -2866,7 +3135,17 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
 // indexes, where the first sixty in document order are the header, the primary
 // nav and the start of the content — the part a plan targets.
 const MAX_SESSIONS_WITH_GATE_LABELS = 512;
-const MAX_PAGE_DIGEST_CHARS = 4_000;
+/**
+ * The cap on the digest the planner is shown.
+ *
+ * ⛔ EXPORTED FOR ONE REASON, and it is a derivation rather than a convenience:
+ * the pace policy's reading rate (`READING_MS_PER_WORD`) is chosen so that the
+ * LARGEST digest this server can produce still draws a base under the slow
+ * band's per-step cap — so the cap stays a bound instead of becoming the usual
+ * answer. `reading-time-follows-the-page-not-the-step-number` recomputes that
+ * from this number rather than repeating it.
+ */
+export const MAX_PAGE_DIGEST_CHARS = 4_000;
 const MAX_PAGE_DIGEST_ELEMENTS = 60;
 // WHAT THE PAGE SAYS, beside what can be tapped on it. A turn is now a loop that
 // has to decide "is the goal state reached?", and that is almost never readable

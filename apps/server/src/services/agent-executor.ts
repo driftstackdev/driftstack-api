@@ -78,6 +78,8 @@ import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
 // that emits them. Erased at build time, so this is not a runtime cycle with
 // agent-turn-telemetry.ts (which imports IntentResult from here, also as a type).
 import type { AgentActionPathCounts } from './agent-turn-telemetry.js';
+// Type only, and from a leaf that imports nothing: see ExecuteArgs.pace.
+import type { PaceBudget } from './agent-pace.js';
 
 // Re-exported: the transcript sanitiser below is this module's contract, and
 // its bound is only correct because of this helper.
@@ -655,6 +657,29 @@ export interface ExecuteArgs {
    * every pre-existing caller get.
    */
   turnHardStopAtMs?: number;
+  /**
+   * S6 — the TURN's pace state: which band this process is running, what this
+   * segment may still spend on inserted pauses, the page it was planned
+   * against, and what it has spent so far.
+   *
+   * ⛔ ABSENT IS THE WHOLE OF `fast`, AND THAT IS THE POINT. Omitted — which is
+   * every caller that is not the runtime under a non-default
+   * `DRIFTSTACK_AI_PACE`, and the runtime itself on every default deployment —
+   * the executor takes no draw, reads no extra clock, dispatches nothing extra
+   * and writes no pace telemetry. `fast-dispatches-exactly-what-it-dispatches-
+   * today` holds the dispatch sequence byte for byte across that boundary.
+   *
+   * ⛔ OWNED BY THE CALLER, for the reason {@link elementWaitBudget} and
+   * {@link commitmentBudget} are: a turn runs up to three plans, and a budget
+   * rebuilt per run would be three budgets — which would break the taper that
+   * keeps inserted time from ever reaching the turn's reserve.
+   *
+   * ⛔ TIER A ONLY. Every pause it produces is a `{duration_ms}` the SERVER
+   * drew inside a band the server owns. The type cannot express a device-drawn
+   * shape, which is how "the server bounds only what the server draws" is
+   * enforced rather than remembered.
+   */
+  pace?: PaceBudget;
   /**
    * Live-progress hook (step streaming). Called once per intent AS its result
    * lands — BEFORE the whole run finishes — so a streaming caller can surface

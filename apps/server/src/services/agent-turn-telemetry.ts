@@ -40,6 +40,10 @@ import type { IntentResult } from './agent-executor.js';
 import { ApiError } from '../lib/errors.js';
 import { METRIC_NAMES, type MetricsRegistry } from './metrics-registry.js';
 import { HARNESS_TAP_REFUSAL_REASONS } from '../schemas/harness-control-protocol.js';
+// The band roster lives beside the policy that spends it (a leaf that imports
+// nothing), so the counts on this line and the bands the executor switches on
+// can never become two lists.
+import { AI_PACE_BANDS, type AiPaceBand } from './agent-pace.js';
 
 // ── closed unions ─────────────────────────────────────────────────────────
 
@@ -804,6 +808,34 @@ export interface AgentActionPathCounts {
    */
   commitmentFacts: Record<CommitmentFactsOutcome, number>;
   haltArms: Record<ConsequentialHaltArmLabel, number>;
+  /**
+   * S6 — INSERTED PACING PAUSES, BY BAND, and the milliseconds they held.
+   *
+   * ⛔ A COUNT PER BAND RATHER THAN THE BAND'S NAME, because this line is
+   * numbers only (`agentActionPathLogFields` returns `Record<string, number>`
+   * and `a-turn-records-which-paths-its-actions-took` holds the emitted line to
+   * exactly that). A band is a closed three-value enum, so counting by band is
+   * the same shape as `scrollPaths` and `verdicts` beside it, and it carries
+   * the label without opening a free-text field on a line whose whole
+   * discipline is that it has none.
+   *
+   * ⛔ AND `fast` IS THE ALARM ROW, not a decoration. Fast is defined as the
+   * policy inserting NOTHING, so a non-zero `pace_pauses_fast` is not a
+   * measurement — it is a bug, and it is the one this slice's central claim
+   * ("the flag off is today, byte for byte") fails silently without. It is
+   * cheaper to carry a row that should always read zero than to discover later
+   * that nothing was watching it.
+   *
+   * ⛔ PAUSE TIME IS NOT WORK, AND THESE TWO ARE WHAT KEEP IT SEPARABLE. Every
+   * inserted millisecond also lands inside the turn row's `executing_ms`, where
+   * it is indistinguishable from a slow page. Subtracting it there is a column
+   * and a migration (S2/S7); until then, `pace_paused_ms` on this line is the
+   * number that says how much of `executing_ms` was this policy and not the web.
+   */
+  pacePauses: Record<AiPaceBand, number>;
+  /** Milliseconds of inserted pause this turn — the sum of what was asked for
+   *  on the pauses the device answered. */
+  pacePausedMs: number;
 }
 
 function zeroed<K extends string>(keys: readonly K[]): Record<K, number> {
@@ -826,6 +858,8 @@ export function emptyAgentActionPathCounts(): AgentActionPathCounts {
     nextActions: zeroed(PRE_TAP_LOOK_NEXT_ACTIONS),
     commitmentFacts: zeroed(COMMITMENT_FACTS_OUTCOMES),
     haltArms: zeroed(CONSEQUENTIAL_HALT_ARMS),
+    pacePauses: zeroed(AI_PACE_BANDS),
+    pacePausedMs: 0,
   };
 }
 
@@ -851,6 +885,8 @@ export function addAgentActionPathCounts(
   addInto(into.nextActions, from.nextActions);
   addInto(into.commitmentFacts, from.commitmentFacts);
   addInto(into.haltArms, from.haltArms);
+  addInto(into.pacePauses, from.pacePauses);
+  into.pacePausedMs += from.pacePausedMs;
   return into;
 }
 
@@ -909,6 +945,12 @@ export function agentActionPathLogFields(counts: AgentActionPathCounts): Record<
     halt_arm_caption: counts.haltArms.caption,
     halt_arm_structure: counts.haltArms.structure,
     halt_arm_declared: counts.haltArms.declared,
+    // S6 — inserted pacing pauses. `pace_pauses_fast` is an ALARM and must
+    // always read zero: fast is defined as the policy inserting nothing.
+    pace_pauses_fast: counts.pacePauses.fast,
+    pace_pauses_medium: counts.pacePauses.medium,
+    pace_pauses_slow: counts.pacePauses.slow,
+    pace_paused_ms: counts.pacePausedMs,
   };
 }
 
@@ -2192,7 +2234,19 @@ export class AgentTurnTelemetry {
     try {
       const counts = collector.actionPaths();
       if (counts === undefined) return;
-      if (counts.actions === 0 && counts.scrolls === 0 && counts.looks === 0) return;
+      // ⛔ AND A TURN THAT ONLY PACED HAS SOMETHING TO SAY. A segment can insert
+      // pauses in front of navigates and captures and dispatch no action, no
+      // scroll and no look at all; dropping the line there would hide exactly
+      // the turns a pace experiment is reading. Zero when the flag is off, so
+      // this condition is unchanged on every default deployment.
+      if (
+        counts.actions === 0 &&
+        counts.scrolls === 0 &&
+        counts.looks === 0 &&
+        counts.pacePausedMs === 0
+      ) {
+        return;
+      }
       this.deps.profileAttachmentWindow?.observeTurn(counts);
       const fields = agentActionPathLogFields(counts);
       const unprofiled = unprofiledActionCount(counts) > 0;

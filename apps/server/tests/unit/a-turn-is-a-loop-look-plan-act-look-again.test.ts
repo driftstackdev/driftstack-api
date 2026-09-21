@@ -284,7 +284,19 @@ describe('B1 — a segment that says `continue` is followed by a look and anothe
       segment: 2,
       plannerCallsRemaining: MAX_PLANNER_CALLS_PER_TURN - 2,
       stepsSoFar: ['✓ did navigate', '✓ did wait'],
+      // S6 — how much of the turn's three-minute ceiling is left when this
+      // segment is planned, so a planner near the end can choose to finish
+      // rather than explore. ⛔ CARRIED AND NOT YET RENDERED: the block that
+      // turns a TurnProgress into prompt text is in the frozen planner
+      // contract, and the slice that threaded this deliberately changed no
+      // byte of the prompt. Matched as "a number in range" rather than pinned
+      // to a value, because this harness uses a real monotonic clock and a
+      // pinned figure would be a flake.
+      msRemaining: expect.any(Number) as number,
     });
+    const left = h.seen[1]?.turnProgress?.msRemaining ?? -1;
+    expect(left).toBeGreaterThan(0);
+    expect(left).toBeLessThanOrEqual(MAX_TURN_WALL_CLOCK_MS);
     // A `continue` is not a failure, and must not be described to the planner as one.
     expect(h.seen[1]?.priorFailure).toBeUndefined();
     // Every call in the turn is planned against the SAME history, which is what
