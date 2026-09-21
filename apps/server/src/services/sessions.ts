@@ -57,6 +57,10 @@ import {
 } from '../drivers/types.js';
 import type { GUIInputRequest } from '../schemas/gui-input.js';
 import {
+  customerSafeEgressCapabilities,
+  unmappedEgressWarnings,
+} from './customer-safe-egress-warnings.js';
+import {
   BadRequestError,
   ConcurrencyLimitError,
   ConflictError,
@@ -451,6 +455,14 @@ export interface SessionsServiceDeps {
    */
   logger?: {
     error?: (obj: Record<string, unknown>, msg: string) => void;
+    /**
+     * Also used to report an internal egress warning code with no public
+     * mapping, which is dropped from the `session.egress_capability_changed`
+     * payload. Optional like `error` above: a response and a webhook both go
+     * out whether or not anyone is listening — see
+     * `services/customer-safe-egress-warnings.ts`.
+     */
+    warn?: (obj: Record<string, unknown>, msg: string) => void;
   } | null;
 }
 
@@ -1712,13 +1724,32 @@ export class SessionsService {
     const updated = await this.deps.repo.setEgressCapabilityReport(args);
     if (updated === null) return null;
     if (this.deps.webhooks) {
+      // ⛔ THE WEBHOOK IS A PUBLIC SURFACE AND IT IS NOT FED BY `publicSession()`.
+      // `args.derived` is the INTERNAL warning vocabulary — the same list that
+      // was just persisted — and sending it here would publish
+      // `safeguard_failed:<device-supplied layer>` to every subscribed endpoint
+      // while `GET /v1/sessions/:id` showed the mapped one. The payload is
+      // documented as "the same shape as the `egress_capabilities` field on GET
+      // /v1/sessions/{id}", so it must be the same VALUES too.
+      //
+      // ⚠️ MAPPED HERE, NOT BEFORE THE PERSIST. The row above keeps the
+      // internal codes: operators read them on GET /v1/admin/sessions, and the
+      // public mapping is a READ so old rows are covered on the way out.
+      const publicEgress = customerSafeEgressCapabilities(args.derived);
+      if (publicEgress.unmapped.length > 0) {
+        const warn = this.deps.logger?.warn;
+        unmappedEgressWarnings.record(
+          publicEgress.unmapped,
+          warn === undefined ? undefined : { warn: (obj, msg) => warn(obj, msg) },
+        );
+      }
       try {
         await this.deps.webhooks.enqueueEvent(
           updated.accountId,
           'session.egress_capability_changed',
           {
             session_id: `ses_${updated.id}`,
-            egress_capabilities: args.derived,
+            egress_capabilities: publicEgress.capabilities,
           },
         );
       } catch {

@@ -37,6 +37,11 @@ import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { parseProfileId } from '../lib/profile-id.js';
 import { consumeEffectiveOwnerRateLimit } from '../middleware/rate-limit.js';
 import { customerSafeEgressCapabilityReport } from '../services/customer-safe-egress-capability-report.js';
+import {
+  customerSafeEgressCapabilities,
+  unmappedEgressWarnings,
+  type EgressWarningLogger,
+} from '../services/customer-safe-egress-warnings.js';
 
 /**
  * Resolves the effective account for a live driver operation and enforces
@@ -81,7 +86,30 @@ function prefixId(prefix: string, uuid: string): string {
   return `${prefix}_${uuid}`;
 }
 
-function publicSession(s: SessionRecord): Record<string, unknown> {
+/**
+ * ⛔ THE SINGLE ECHO SITE for all four public session responses — `GET
+ * /v1/sessions/:id`, `GET /v1/sessions`, `POST /v1/sessions` and `POST
+ * /v1/profiles/:id/launch` — which is why both customer-safety mappers belong
+ * here and nowhere else.
+ *
+ * `logger` is REQUIRED-BY-CONVENTION rather than by the type: an unmapped
+ * egress warning code is dropped whether or not anyone is listening, and a
+ * response must not fail because a logger was missing. Every call site in this
+ * file passes `request.log`, so the report carries the request id.
+ *
+ * ⚠️ NOT `.map(publicSession)`. Array.prototype.map passes (item, index,
+ * array), so a bare reference here would hand the element INDEX to `logger`
+ * and call `.warn` on a number. The list route wraps it in an arrow for that
+ * reason.
+ */
+function publicSession(s: SessionRecord, logger?: EgressWarningLogger): Record<string, unknown> {
+  // Migration 0045's derived view, mapped from the INTERNAL warning vocabulary
+  // to the closed PUBLIC one on the way out (services/customer-safe-egress-
+  // warnings.ts). Stored rows are not migrated — old and new rows map alike
+  // because the mapping is a read, and the staff-only admin route below still
+  // returns the internal codes.
+  const egress = customerSafeEgressCapabilities(s.egressCapabilities);
+  if (egress.unmapped.length > 0) unmappedEgressWarnings.record(egress.unmapped, logger);
   return {
     id: prefixId('ses', s.id),
     account_id: prefixId('acc', s.accountId),
@@ -91,10 +119,16 @@ function publicSession(s: SessionRecord): Record<string, unknown> {
     purpose: s.purpose,
     label: s.label,
     metadata: s.metadata,
-    // Migration 0045 — harness-reported egress capabilities. null until
+    // Migration 0045 — device-reported egress capabilities. null until
     // SOCKS5 handshake completes or for non-SOCKS5 sessions. Cross-agent
     // contract shape: { udp_associate, quic_route, warnings[] }.
-    egress_capabilities: s.egressCapabilities,
+    //
+    // ⛔ `warnings` IS MAPPED, NOT ECHOED. The stored list is the internal
+    // vocabulary — it carries `safeguard_failed:<layer>`, where `<layer>` is
+    // 64 free characters straight off a device, and codes that name our own
+    // mechanisms. The mapping above reduces it to a CLOSED public vocabulary;
+    // anything unrecognised is dropped and reported rather than published.
+    egress_capabilities: egress.capabilities,
     // Arc 5 EGRESS eg.1 — migration 0054 harness-emitted payload. Null until
     // the harness emits; opaque JSON record. Consumers should prefer
     // `egress_capabilities` for typed access.
@@ -318,7 +352,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
           .touch({ id: profileBareId, accountId: ownerAccountId, at: new Date() })
           .catch(() => undefined);
       }
-      return reply.code(201).send(publicSession(created));
+      return reply.code(201).send(publicSession(created, request.log));
     },
   );
 
@@ -407,7 +441,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
           .touch({ id: profileId, accountId: ownerAccountId, at: new Date() })
           .catch(() => undefined);
       }
-      return reply.code(201).send(publicSession(created));
+      return reply.code(201).send(publicSession(created, request.log));
     },
   );
 
@@ -432,7 +466,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         ...(effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {}),
       });
       return {
-        data: page.items.map(publicSession),
+        data: page.items.map((s) => publicSession(s, request.log)),
         has_more: page.nextCursor !== null,
         next_cursor: page.nextCursor,
       };
@@ -619,7 +653,7 @@ export function registerSessionRoutes(app: FastifyInstance, opts: SessionRoutesO
         id,
         effective.kind === 'team' ? { effectiveAccountId: effective.accountId } : {},
       );
-      return publicSession(session);
+      return publicSession(session, request.log);
     },
   );
 

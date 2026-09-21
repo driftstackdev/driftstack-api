@@ -147,14 +147,23 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     );
   });
 
-  it('publicSession mapper: 13 fields wire (id ses_ + account_id acc_ + api_key_id key_ + status + archetype + purpose + label + metadata + egress_capabilities (migration 0045) + egress_capability_report ALLOWLISTED through customerSafeEgressCapabilityReport + 4 timestamps incl. nullable last_state_at/destroyed_at)', () => {
-    // ⛔ THE ALLOWLIST CALL IS PART OF THE PIN, NOT DECORATION. This field used
-    // to be `s.egressCapabilityReport` — the device's whole capabilityReport
-    // frame echoed verbatim, so declaring a key on the harness schema published
-    // it to customers the same day. This mapper is the SINGLE echo site behind
-    // all four public session responses, so a revert here re-opens all four.
+  it('publicSession mapper: 13 fields wire (id ses_ + account_id acc_ + api_key_id key_ + status + archetype + purpose + label + metadata + egress_capabilities MAPPED through customerSafeEgressCapabilities (migration 0045) + egress_capability_report ALLOWLISTED through customerSafeEgressCapabilityReport + 4 timestamps incl. nullable last_state_at/destroyed_at)', () => {
+    // ⛔ BOTH CUSTOMER-SAFETY CALLS ARE PART OF THE PIN, NOT DECORATION.
+    //
+    // `egress_capability_report` used to be `s.egressCapabilityReport` — the
+    // device's whole capabilityReport frame echoed verbatim, so declaring a key
+    // on the wire schema published it to customers the same day.
+    //
+    // `egress_capabilities` used to be `s.egressCapabilities` — the INTERNAL
+    // warning vocabulary, which carries `safeguard_failed:<layer>` where the
+    // layer is 64 free characters chosen by the device, plus codes naming our
+    // own mechanisms. `customerSafeEgressCapabilities` reduces it to a closed
+    // published vocabulary.
+    //
+    // This mapper is the SINGLE echo site behind all four public session
+    // responses, so a revert of either call re-opens all four.
     expect(body).toMatch(
-      /function publicSession\(s: SessionRecord\): Record<string, unknown> \{\s*return \{\s*id: prefixId\('ses', s\.id\),\s*account_id: prefixId\('acc', s\.accountId\),\s*api_key_id: prefixId\('key', s\.apiKeyId\),\s*status: s\.status,\s*archetype: s\.archetype,\s*purpose: s\.purpose,\s*label: s\.label,\s*metadata: s\.metadata,[\s\S]*?egress_capabilities: s\.egressCapabilities,[\s\S]*?egress_capability_report: customerSafeEgressCapabilityReport\(s\.egressCapabilityReport\),\s*created_at: s\.createdAt\.toISOString\(\),\s*updated_at: s\.updatedAt\.toISOString\(\),\s*last_state_at: s\.lastStateAt \? s\.lastStateAt\.toISOString\(\) : null,\s*destroyed_at: s\.destroyedAt \? s\.destroyedAt\.toISOString\(\) : null,\s*\};\s*\}/,
+      /function publicSession\(s: SessionRecord, logger\?: EgressWarningLogger\): Record<string, unknown> \{[\s\S]*?const egress = customerSafeEgressCapabilities\(s\.egressCapabilities\);[\s\S]*?unmappedEgressWarnings\.record\(egress\.unmapped, logger\);\s*return \{\s*id: prefixId\('ses', s\.id\),\s*account_id: prefixId\('acc', s\.accountId\),\s*api_key_id: prefixId\('key', s\.apiKeyId\),\s*status: s\.status,\s*archetype: s\.archetype,\s*purpose: s\.purpose,\s*label: s\.label,\s*metadata: s\.metadata,[\s\S]*?egress_capabilities: egress\.capabilities,[\s\S]*?egress_capability_report: customerSafeEgressCapabilityReport\(s\.egressCapabilityReport\),\s*created_at: s\.createdAt\.toISOString\(\),\s*updated_at: s\.updatedAt\.toISOString\(\),\s*last_state_at: s\.lastStateAt \? s\.lastStateAt\.toISOString\(\) : null,\s*destroyed_at: s\.destroyedAt \? s\.destroyedAt\.toISOString\(\) : null,\s*\};\s*\}/,
     );
   });
 
@@ -215,7 +224,9 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
       // restores that, so it is pinned alongside the ownership framing.
       /created = await service\.create\(ctx, bodyWithProfile, \{\s*effectiveAccountId: ownerAccountId,\s*effectiveTier: ownerTier,\s*\.\.\.\(profileBinding !== null \? \{ inheritedProfileArchetype: true \} : \{\}\),[\s\S]{0,220}?\.\.\.\(profileBareId !== undefined \? \{ profileId: profileBareId \} : \{\}\),\s*\}\);/,
     );
-    expect(body).toMatch(/return reply\.code\(201\)\.send\(publicSession\(created\)\);/);
+    expect(body).toMatch(
+      /return reply\.code\(201\)\.send\(publicSession\(created, request\.log\)\);/,
+    );
   });
 
   it('profile-backed creates explicitly preserve stored legacy archetypes while direct creates stay registry-gated', () => {
@@ -234,7 +245,7 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
       /\/\/ V-326d — honors X-Driftstack-Account: a team member with a valid\s*\/\/ membership on the requested owner sees the owner's sessions\.\s*\/\/ Without the header \(or with the caller's own account id\), behaves\s*\/\/ identically to pre-V-326d\./,
     );
     expect(body).toMatch(
-      /return \{\s*data: page\.items\.map\(publicSession\),\s*has_more: page\.nextCursor !== null,\s*next_cursor: page\.nextCursor,\s*\};/,
+      /return \{\s*data: page\.items\.map\(\(s\) => publicSession\(s, request\.log\)\),\s*has_more: page\.nextCursor !== null,\s*next_cursor: page\.nextCursor,\s*\};/,
     );
   });
 

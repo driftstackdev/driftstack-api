@@ -197,6 +197,13 @@ capabilities. Carries the same shape as the
 subscribers can branch on `udp_associate`, `dns_remote_resolve`,
 `quic_route`, or `warnings` without a follow-up GET.
 
+`warnings` carries the same published codes here as it does on the
+session endpoints, and means the same thing — the full list, with what
+to do about each, is at
+[`/api/sessions`](https://docs.driftstack.io/api/sessions/). Read the
+codes as opaque strings: ignore one you do not recognise, and expect
+new ones to appear without an SDK upgrade.
+
 Subscribable — add it to your webhook endpoint's `events` array
 to get proxy-health alerts in your own tooling.
 

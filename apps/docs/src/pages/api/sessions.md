@@ -106,8 +106,43 @@ as `additionalProperties` and its contents may gain or lose keys
 without notice, so read individual keys defensively and do not
 depend on any one of them being present. Fields that describe
 Driftstack's own infrastructure rather than your session — build
-identifiers, internal endpoints, harness diagnostics — are not part
+identifiers, internal endpoints, internal diagnostics — are not part
 of it and never will be.
+
+### `egress_capabilities.warnings`
+
+`warnings` is a list of short codes naming anything that did not work
+as asked for this session. Read them as **opaque strings**: a code you
+do not recognise should be ignored rather than treated as fatal, and a
+new code can appear without an SDK upgrade. The field's type never
+changes — it stays `string[]`.
+
+These are the codes the API publishes, and what you can do about each:
+
+| Code                                         | What it means                                                                                        | What to do                                                                            |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `udp_unsupported_by_proxy`                   | Your proxy refused the SOCKS5 UDP ASSOCIATE command, so QUIC cannot travel through it.               | Use a proxy that carries UDP if you need HTTP/3.                                      |
+| `quic_disabled_fallback_http2`               | QUIC was switched off when the session was created, so traffic used HTTP/2 over TCP.                 | Nothing, unless you wanted HTTP/3 — then create the session with QUIC enabled.        |
+| `quic_unavailable`                           | QUIC was asked for but could not be used for this session, and traffic fell back to HTTP/2 over TCP. | Retry on a new session if HTTP/3 matters to you.                                      |
+| `dns_remote_resolve_unsupported_by_proxy`    | Your proxy could not resolve host names on its side, so lookups fell back to local resolution.       | Use a proxy that resolves names, or accept local lookups for this one.                |
+| `dead_proxy`                                 | Your proxy stopped answering while the session was running.                                          | Check that it is reachable before starting another session.                           |
+| `streaming_blank`                            | The live view of the session produced no picture. The session itself kept running.                   | Reopen the live view, or read the session's results without it.                       |
+| `streaming_failed`                           | The live view of the session stopped.                                                                | Start a new session if you need to watch it.                                          |
+| `safeguards_unverified`                      | We could not confirm that every egress safeguard ran for this session.                               | Treat the session's egress as unverified; start a new session if that matters to you. |
+| `safeguard_failed`                           | An egress safeguard did not pass.                                                                    | Stop relying on the session's egress and contact support with the session id.         |
+| `safeguard_failed:direct_internet_block`     | The check that nothing leaves the session outside your proxy did not pass.                           | Stop relying on the session's egress and contact support with the session id.         |
+| `safeguard_failed:browser_integrity`         | The check that the session ran the expected browser build did not pass.                              | Contact support with the session id.                                                  |
+| `safeguard_failed:proxy_egress_verification` | The check that the session's traffic actually left through your proxy did not pass.                  | Confirm your proxy is working, and contact support with the session id.               |
+| `safeguard_failed:live_view_capture`         | The live view of the session could not be captured.                                                  | Nothing — the session's own browsing is unaffected.                                   |
+
+Every safeguard code starts with `safeguard_failed`, so matching on
+that prefix catches all of them in one branch, including any added
+later.
+
+The same list applies wherever `egress_capabilities` appears: `GET
+/v1/sessions/{id}`, `GET /v1/sessions`, `POST /v1/sessions`, `POST
+/v1/profiles/{id}/launch`, and the
+`session.egress_capability_changed` webhook.
 
 ## Create
 

@@ -48,6 +48,16 @@ function publicSession(s: SessionRecord): Record<string, unknown> {
     purpose: s.purpose,
     label: s.label,
     metadata: s.metadata,
+    // ⛔ THE INTERNAL WARNING VOCABULARY, DELIBERATELY. The public mapper in
+    // `routes/sessions.ts` runs this object through
+    // `customerSafeEgressCapabilities`, which reduces `warnings` to a closed
+    // published set: `safeguard_failed:screen_recording` becomes
+    // `safeguard_failed:live_view_capture`, three "we could not check" codes
+    // become one, and an unclassified code is dropped. Here it stays whole,
+    // because "the screen-recording check failed" and "a safeguard failed" send
+    // an operator to different places, and an unclassified code is exactly what
+    // an operator opened this page to find. Persisted rows are NOT migrated, so
+    // this is a read of what was actually written.
     egress_capabilities: s.egressCapabilities,
     // Arc 5 EGRESS eg.1.l — the FULL harness-emitted payload, for admin
     // forensics (migration 0054).

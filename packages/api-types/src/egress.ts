@@ -396,6 +396,38 @@ export type SavedProxyConfig = z.infer<typeof SavedProxyConfigSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
+ * ⛔ THIS TEXT IS A PUBLISHED SURFACE, not a comment. It becomes the OpenAPI
+ * `description` for `egress_capabilities.warnings` (the spec is generated from
+ * this schema), so it reaches the rendered API reference, the committed
+ * `packages/sdk-python/openapi.json` and the Pydantic field description
+ * generated from that.
+ *
+ * It is held in agreement with the mapping function's vocabulary by
+ * `apps/server/tests/unit/a-public-egress-warning-cannot-ship-undocumented.test.ts`:
+ * a new public code fails that guard until it appears here, in the doc comment
+ * above and on the customer docs page. A vocabulary documented in one of the
+ * three places is a vocabulary that has already drifted.
+ */
+const EGRESS_WARNINGS_DESCRIPTION =
+  'Codes naming anything that did not work as asked for this session. ' +
+  'Read them as opaque strings: a code you do not recognise is ignored rather than fatal, ' +
+  'and a new code can appear without an SDK upgrade. ' +
+  'Published vocabulary, with what you can do about each: ' +
+  '`udp_unsupported_by_proxy` (the proxy refused UDP, so QUIC cannot travel through it — use a UDP-capable proxy if you need HTTP/3); ' +
+  '`quic_disabled_fallback_http2` (QUIC was switched off for this session, so traffic used HTTP/2 over TCP — create the session with QUIC enabled if you wanted it); ' +
+  '`quic_unavailable` (QUIC was asked for but could not be used, and traffic fell back to HTTP/2 — retry on a new session if HTTP/3 matters); ' +
+  '`dns_remote_resolve_unsupported_by_proxy` (the proxy could not resolve names on its side, so lookups fell back to local resolution — use a proxy that resolves names, or accept local lookups); ' +
+  '`dead_proxy` (the proxy stopped answering mid-session — check it is reachable before starting another); ' +
+  '`streaming_blank` (the live view produced no picture; the session itself kept running — reopen the view); ' +
+  '`streaming_failed` (the live view stopped — start a new session if you need to watch it); ' +
+  '`safeguards_unverified` (we could not confirm every egress safeguard ran — treat the egress as unverified and start a new session if that matters); ' +
+  '`safeguard_failed` (an egress safeguard did not pass — stop relying on the session and contact support with the session id); ' +
+  '`safeguard_failed:direct_internet_block` (the check that nothing leaves outside your proxy did not pass — contact support with the session id); ' +
+  '`safeguard_failed:browser_integrity` (the check that the session ran the expected browser build did not pass — contact support with the session id); ' +
+  '`safeguard_failed:proxy_egress_verification` (the check that traffic actually left through your proxy did not pass — confirm your proxy and contact support with the session id); ' +
+  '`safeguard_failed:live_view_capture` (the live view could not be captured; the session’s own browsing is unaffected).';
+
+/**
  * What your proxy turned out to support, reported once a SOCKS5 proxy has
  * been wired up for the session and returned on GET /v1/sessions/{id}.
  *
@@ -415,23 +447,62 @@ export type SavedProxyConfig = z.infer<typeof SavedProxyConfigSchema>;
  *   has none, the warning below is reported and the session falls back to
  *   local resolution, or refuses to egress, according to your safeguard
  *   settings.
- * - `warnings` — codes naming anything the proxy could not do:
+ * - `warnings` — codes naming anything that did not work as asked for this
+ *   session. The full published vocabulary, each with what you can do about
+ *   it:
  *     - `udp_unsupported_by_proxy` — the proxy answered UDP ASSOCIATE with
- *       a non-success reply.
+ *       a non-success reply, so QUIC cannot travel through it. Use a proxy
+ *       that supports UDP if you need HTTP/3.
  *     - `quic_disabled_fallback_http2` — QUIC was switched off when the
- *       session was created, so there was no QUIC to route.
+ *       session was created, so there was no QUIC to route. Nothing to do
+ *       unless you wanted HTTP/3, in which case create the session with QUIC
+ *       enabled.
+ *     - `quic_unavailable` — QUIC was asked for but could not be used for
+ *       this session, and traffic fell back to HTTP/2 over TCP. Retry on a
+ *       new session if HTTP/3 matters to you.
  *     - `dns_remote_resolve_unsupported_by_proxy` — the proxy answered an
  *       ATYP DOMAINNAME request with a non-success reply, so lookups fell
- *       back to local resolution.
+ *       back to local resolution. Use a proxy that resolves names on its
+ *       side, or accept local lookups for this proxy.
+ *     - `dead_proxy` — the proxy stopped answering while the session was
+ *       running. Check that it is reachable before starting another session.
+ *     - `streaming_blank` — the live view of the session produced no
+ *       picture. The session itself kept running; reopen the view, or read
+ *       the session's results without it.
+ *     - `streaming_failed` — the live view of the session stopped. Start a
+ *       new session if you need to watch it.
+ *     - `safeguards_unverified` — we could not confirm that every egress
+ *       safeguard ran for this session. Treat the session's egress as
+ *       unverified and start a new session if that matters to you.
+ *     - `safeguard_failed` — an egress safeguard did not pass. Stop relying
+ *       on the session's egress and contact support with the session id.
+ *     - `safeguard_failed:direct_internet_block` — the check that nothing
+ *       leaves the session outside your proxy did not pass. Stop relying on
+ *       the session's egress and contact support with the session id.
+ *     - `safeguard_failed:browser_integrity` — the check that the session
+ *       ran the expected browser build did not pass. Contact support with
+ *       the session id.
+ *     - `safeguard_failed:proxy_egress_verification` — the check that the
+ *       session's traffic actually left through your proxy did not pass.
+ *       Confirm your proxy is working and contact support with the session
+ *       id.
+ *     - `safeguard_failed:live_view_capture` — the live view of the session
+ *       could not be captured. The session's own browsing is unaffected.
  *
  * Read `warnings` as opaque strings: a code you do not recognise is passed
  * through verbatim rather than rejected, so a new one can appear without an
- * SDK upgrade.
+ * SDK upgrade. The array's type does not change when a code is added.
+ *
+ * The list above is the whole published vocabulary: a code outside it is not
+ * sent at all rather than passed along, so you will not receive a string this
+ * page does not describe unless the list itself grows. Match on the exact
+ * string, or on the `safeguard_failed:` prefix if you want every safeguard
+ * failure in one branch.
  */
 export const EgressCapabilitiesSchema = z.object({
   udp_associate: z.boolean(),
   quic_route: z.enum(['proxy', 'direct', 'disabled']),
   dns_remote_resolve: z.boolean(),
-  warnings: z.array(z.string()).default([]),
+  warnings: z.array(z.string()).default([]).describe(EGRESS_WARNINGS_DESCRIPTION),
 });
 export type EgressCapabilities = z.infer<typeof EgressCapabilitiesSchema>;

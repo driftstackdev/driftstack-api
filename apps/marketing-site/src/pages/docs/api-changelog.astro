@@ -19,6 +19,46 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       caller to update before the documented sunset date.
     </p>
 
+    <h2>2026-09</h2>
+    <ul>
+      <li>
+        <strong>API — <code>egress_capabilities.warnings</code> now has a
+        published list of codes.</strong>
+        The <code>warnings</code> list on a session's
+        <code>egress_capabilities</code> is now drawn from a documented
+        set of codes, each with what you can do about it, at
+        <a href="https://docs.driftstack.io/api/sessions/">/api/sessions</a>.
+        The field's type is unchanged (<code>string[]</code>) and it still
+        appears on the same responses — <code>GET /v1/sessions/&#123;id&#125;</code>,
+        <code>GET /v1/sessions</code>, <code>POST /v1/sessions</code>,
+        <code>POST /v1/profiles/&#123;id&#125;/launch</code> and the
+        <code>session.egress_capability_changed</code> webhook — so no SDK
+        upgrade is needed. Keep reading the codes as opaque strings: ignore
+        one you do not recognise, and expect new ones to appear.
+        <br />
+        Two strings changed. The code that reported QUIC as unavailable
+        for a session was never documented and named one of our internal
+        mechanisms; it is now sent as <code>quic_unavailable</code>.
+        Safeguard codes that
+        previously carried an internal check name after the colon — a value
+        that was never documented and never guaranteed — now carry one of a
+        published set (<code>safeguard_failed:direct_internet_block</code>,
+        <code>safeguard_failed:browser_integrity</code>,
+        <code>safeguard_failed:proxy_egress_verification</code>,
+        <code>safeguard_failed:live_view_capture</code>), or the bare
+        <code>safeguard_failed</code> where none applies; codes reporting
+        that a safeguard could not be confirmed are sent as one
+        <code>safeguards_unverified</code>. If you match on the
+        <code>safeguard_failed</code> prefix rather than on the whole
+        string, nothing changes for you.
+        <br />
+        This applies to webhook deliveries you replay as well: a delivery
+        recorded before this change is re-sent with the published codes, not
+        the ones it was first sent with. Replay it for the event, not for a
+        byte-for-byte copy of the original request.
+      </li>
+    </ul>
+
     <h2>2026-05</h2>
     <ul>
       <li>

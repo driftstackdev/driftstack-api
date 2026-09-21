@@ -21,6 +21,10 @@ import { METRIC_NAMES } from './metrics-registry.js';
 import { redactText } from '../lib/redact-url.js';
 import { signWebhookPayload } from '../lib/webhook-signing.js';
 import { ssrfGuardedFetch } from '../lib/ssrf-guarded-fetch.js';
+import {
+  customerSafeWebhookPayload,
+  unmappedEgressWarnings,
+} from './customer-safe-egress-warnings.js';
 import type { WebhookDeliveryRow, WebhookEndpointRow, WebhooksRepo } from './webhooks.js';
 
 export interface WebhookWorkerConfig {
@@ -348,7 +352,29 @@ export class WebhookDeliveryWorker {
       return { kind: 'dlq', delivery };
     }
 
-    const body = JSON.stringify(delivery.payload);
+    // ⛔ THE LAST HOP IS WHERE "MAP ON THE WAY OUT" HAS TO HAPPEN for a webhook.
+    // `delivery.payload` is a SERIALIZED COPY written at enqueue time, not a
+    // value re-derived per read like `sessions.egress_capabilities` — so a
+    // `session.egress_capability_changed` row enqueued before the public
+    // vocabulary landed still holds the INTERNAL list, device-supplied
+    // `safeguard_failed:<layer>` and all. Three paths re-send exactly that row:
+    // the customer's own `POST /v1/webhook-deliveries/:id/replay`, an operator's
+    // admin replay (which posts to the CUSTOMER's endpoint), and the ordinary
+    // retry of a row that was pending when the mapping deployed. Mapping at the
+    // enqueue call site reaches none of them; this reaches all three, and stands
+    // as the second line for a future enqueue path that forgets to map.
+    //
+    // Unchanged by default: any other event type comes back as the same
+    // reference and is serialized byte-identically.
+    const safe = customerSafeWebhookPayload(delivery.eventType, delivery.payload);
+    if (safe.unmapped.length > 0) {
+      unmappedEgressWarnings.record(safe.unmapped, {
+        warn: (obj, msg) => {
+          this.config.logger.warn(obj, msg);
+        },
+      });
+    }
+    const body = JSON.stringify(safe.payload);
     // v2-#20 — Honour the rotation grace window. When the customer
     // rotates via POST /v1/webhooks/:id/rotate-secret, the old secret
     // is parked at `secretPrev` with `secretPrevExpiresAt` = now +
