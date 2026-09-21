@@ -84,6 +84,11 @@ const NOT_REGISTERED_IN_MEMORY: Record<string, string> = {
   'GET /v1/admin/atlas-priority/queue': 'atlas-priority surface is registered only when enabled',
   'GET /v1/admin/atlas-priority/event/:id':
     'atlas-priority surface is registered only when enabled',
+  // Registered only while DRIFTSTACK_AI_CREDITS_MODE is not off, which the default
+  // fixture is. Their refusal of a customer key is NOT left unproven: it is called,
+  // with the surface switched on, in only-a-staff-key-can-read-the-ai-credits-report.
+  'GET /v1/admin/ai-credits/census': 'registered only while the AI credits mode is not off',
+  'GET /v1/admin/ai-credits/shadow-report': 'registered only while the AI credits mode is not off',
 };
 
 /**
@@ -113,6 +118,8 @@ const EXPECTED_STAFF_ROUTES: readonly string[] = [
   'POST /v1/admin/accounts/:id/unsuspend',
   'GET /v1/admin/accounts/:id/usage',
   'GET /v1/admin/agent-turns/summary',
+  'GET /v1/admin/ai-credits/census',
+  'GET /v1/admin/ai-credits/shadow-report',
   'GET /v1/admin/api-keys',
   'POST /v1/admin/api-keys/:id/revoke',
   'GET /v1/admin/atlas-priority/event/:id',
