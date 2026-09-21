@@ -1556,7 +1556,15 @@ export const ErrorEventSchema = ErrorEventPayloadSchema.transform((frame, ctx) =
 });
 export type HarnessErrorEvent = z.infer<typeof ErrorEventSchema>;
 
-const CapabilityReportPayloadSchema = z.object({
+// ⛔ EXPORTED SO THE KEY SET IS CHECKABLE, not because anything parses with it.
+// `customer-safe-egress-capability-report.ts` classifies EVERY key below as a
+// customer observation or as operator infrastructure, and the allowlist guard
+// (`tests/unit/a-new-device-key-is-private-by-default.test.ts`) reads the shape
+// from HERE rather than from a hand-copied list — a hand list is exactly what
+// goes stale the day this object grows a key, and a stale list fails open by
+// publishing the new key. Parsers keep using `CapabilityReportSchema` below,
+// which adds the byte bound.
+export const CapabilityReportPayloadSchema = z.object({
   type: z.literal('capabilityReport'),
   sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   timestamp: z.string().min(1).max(64),
@@ -1681,11 +1689,20 @@ const CapabilityReportPayloadSchema = z.object({
    * that has since landed — the one case where `webkitForkBuild` beside it is
    * both unchanged and wrong about this session.
    *
-   * ⛔ OPERATOR-ONLY, AND THE RELAY ENFORCES THAT. This frame's whole body minus
-   * `type` is persisted as `egress_capability_report` and echoed verbatim on the
-   * PUBLIC `GET /v1/sessions/:id`, so declaring a key here is enough to publish
-   * it. `session-capability-report-relay.ts` destructures this one out of `raw`
-   * before the ingest for that reason; see the comment there.
+   * ⛔ OPERATOR-ONLY, AND THE EDGE ENFORCES THAT — NOT THE RELAY. This frame's
+   * whole body minus `type` is persisted as `egress_capability_report`, and it
+   * USED to be echoed verbatim on the PUBLIC `GET /v1/sessions/:id`, so
+   * declaring a key here was by itself enough to publish it. The relay answered
+   * that by destructuring this ONE key out of `raw` before the ingest — a
+   * denylist of one, which left `webkitForkBuild` beside it on the customer API
+   * and cost the stored row a measurement it should keep.
+   *
+   * ⚠️ THAT DESTRUCTURE IS GONE (2026-09-21) AND NOTHING HERE PROTECTS THE KEY.
+   * The relay now stores the whole frame and the guarantee lives at the EDGE:
+   * `services/customer-safe-egress-capability-report.ts` allowlists what
+   * `publicSession()` echoes, so this key — and any key added below — is private
+   * until someone classifies it there (and this file's key set is total over
+   * that map, so an unclassified addition does not compile).
    *
    * Same leniency + decoder contract as the heartbeat's copy.
    */

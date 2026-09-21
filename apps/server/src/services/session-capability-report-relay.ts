@@ -305,25 +305,37 @@ export function makeSessionCapabilityReportRelay(
     // was measured — it feeds quic_route (a routing flag), never the customer's
     // "measured QUIC" verdict.
     const quicViaProxy = frame.transportModeActive === 'h2-and-h3' && frame.h3InterposeLoaded;
-    // ⛔ `raw` IS A PUBLIC API RESPONSE BODY, WHICH IS NOT OBVIOUS FROM HERE.
-    // It is persisted as `sessions.egress_capability_report` and echoed verbatim
-    // by `publicSession()` on GET /v1/sessions/:id — an opaque passthrough, so
-    // every key this schema declares becomes a customer-visible field the moment
-    // it is declared, with no allowlist in between. That is the leak-by-default
-    // shape `customerSafeCapabilityReport` was written to close on the other
-    // projection, and this spread is the hole it does not cover.
+    // ⛔ `raw` IS STORED IN FULL, AND THAT IS NOW THE DELIBERATE CHOICE.
     //
-    // `webkitFrameworkSha256` is a digest of OUR fork's frameworks: it identifies
-    // the fleet's deploy, tells a customer nothing about their own session, and is
-    // exactly the operator-internal vocabulary that must not cross. Destructured
-    // out by name rather than filtered by a rule, so removing it is a deliberate
-    // act a reviewer can see — and so a future key is not silently covered by a
-    // predicate nobody re-reads.
+    // It used to be a leak: this blob is persisted as
+    // `sessions.egress_capability_report` and WAS echoed verbatim by
+    // `publicSession()` on the public sessions API, so declaring a key on the
+    // schema published it. The fix is at the EDGE, not here —
+    // `customerSafeEgressCapabilityReport` (services/customer-safe-egress-
+    // capability-report.ts) allowlists the four public responses, so an unknown
+    // key from the device is private by default.
     //
-    // `webkitForkBuild` beside it is NOT removed: it has ridden this blob since
-    // before this change, so stripping it now would be a breaking removal from a
-    // published response, which is a separate decision with a deprecation window.
-    const { type: _type, webkitFrameworkSha256: _webkitFrameworkSha256, ...raw } = frame;
+    // ⚠️ SO THE BY-NAME DELETION OF `webkitFrameworkSha256` THAT USED TO SIT HERE
+    // IS GONE, ON PURPOSE. It was a denylist of one: it protected against the
+    // single key somebody had already thought of, left `webkitForkBuild` beside
+    // it on the customer API, and cost the stored row a measurement it is the
+    // only durable holder of. A row filtered on the way in is a worse forensic
+    // record than the frame we received, with no way to get it back.
+    //
+    // ⛔ AND IT IS THE STORED ROW, NOT THE DRIFT REPORT, THAT THE DELETION COST.
+    // `computeFleetBuildDrift` reads `capabilityReportStore.entries()` (see
+    // routes/mac-nodes-register.ts), and `store.set(frame, …)` above is handed
+    // the WHOLE frame — so the drift report always had the measured digest and
+    // the deletion never touched it. What the deletion actually removed is the
+    // only copy that outlives the process: the store is an in-memory Map bounded
+    // at 5,000 entries. Worth stating precisely, because "the drift report needs
+    // it" is a claim a future reader can check against the drift report and find
+    // false, and then discard the real reason with it.
+    //
+    // Store everything; publish an allowlist.
+    //
+    // Only `type` is dropped: it names the wire envelope, not the session.
+    const { type: _type, ...raw } = frame;
     await sessionsService.ingestEgressCapabilityReport({
       sessionId: session.driftstackSessionId,
       derived: {

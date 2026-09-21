@@ -147,9 +147,14 @@ describe('W437.A apps/server/src/routes/sessions.ts content parity', () => {
     );
   });
 
-  it('publicSession mapper: 13 fields wire (id ses_ + account_id acc_ + api_key_id key_ + status + archetype + purpose + label + metadata + egress_capabilities (migration 0045) + egress_capability_report (Arc 5 EGRESS eg.1 migration 0054) + 4 timestamps incl. nullable last_state_at/destroyed_at)', () => {
+  it('publicSession mapper: 13 fields wire (id ses_ + account_id acc_ + api_key_id key_ + status + archetype + purpose + label + metadata + egress_capabilities (migration 0045) + egress_capability_report ALLOWLISTED through customerSafeEgressCapabilityReport + 4 timestamps incl. nullable last_state_at/destroyed_at)', () => {
+    // ⛔ THE ALLOWLIST CALL IS PART OF THE PIN, NOT DECORATION. This field used
+    // to be `s.egressCapabilityReport` — the device's whole capabilityReport
+    // frame echoed verbatim, so declaring a key on the harness schema published
+    // it to customers the same day. This mapper is the SINGLE echo site behind
+    // all four public session responses, so a revert here re-opens all four.
     expect(body).toMatch(
-      /function publicSession\(s: SessionRecord\): Record<string, unknown> \{\s*return \{\s*id: prefixId\('ses', s\.id\),\s*account_id: prefixId\('acc', s\.accountId\),\s*api_key_id: prefixId\('key', s\.apiKeyId\),\s*status: s\.status,\s*archetype: s\.archetype,\s*purpose: s\.purpose,\s*label: s\.label,\s*metadata: s\.metadata,[\s\S]*?egress_capabilities: s\.egressCapabilities,[\s\S]*?egress_capability_report: s\.egressCapabilityReport,\s*created_at: s\.createdAt\.toISOString\(\),\s*updated_at: s\.updatedAt\.toISOString\(\),\s*last_state_at: s\.lastStateAt \? s\.lastStateAt\.toISOString\(\) : null,\s*destroyed_at: s\.destroyedAt \? s\.destroyedAt\.toISOString\(\) : null,\s*\};\s*\}/,
+      /function publicSession\(s: SessionRecord\): Record<string, unknown> \{\s*return \{\s*id: prefixId\('ses', s\.id\),\s*account_id: prefixId\('acc', s\.accountId\),\s*api_key_id: prefixId\('key', s\.apiKeyId\),\s*status: s\.status,\s*archetype: s\.archetype,\s*purpose: s\.purpose,\s*label: s\.label,\s*metadata: s\.metadata,[\s\S]*?egress_capabilities: s\.egressCapabilities,[\s\S]*?egress_capability_report: customerSafeEgressCapabilityReport\(s\.egressCapabilityReport\),\s*created_at: s\.createdAt\.toISOString\(\),\s*updated_at: s\.updatedAt\.toISOString\(\),\s*last_state_at: s\.lastStateAt \? s\.lastStateAt\.toISOString\(\) : null,\s*destroyed_at: s\.destroyedAt \? s\.destroyedAt\.toISOString\(\) : null,\s*\};\s*\}/,
     );
   });
 

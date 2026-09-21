@@ -49,10 +49,20 @@ function publicSession(s: SessionRecord): Record<string, unknown> {
     label: s.label,
     metadata: s.metadata,
     egress_capabilities: s.egressCapabilities,
-    // Arc 5 EGRESS eg.1.l — raw harness-emitted payload for admin
-    // forensics (migration 0054). Customer-facing surface added the
-    // field in eg.1.c; the admin route's separate publicSession()
-    // needs the same propagation.
+    // Arc 5 EGRESS eg.1.l — the FULL harness-emitted payload, for admin
+    // forensics (migration 0054).
+    //
+    // ⛔ DELIBERATELY UNFILTERED, AND THAT IS THE ONE PLACE IT IS. The public
+    // mapper in `routes/sessions.ts` now runs this blob through
+    // `customerSafeEgressCapabilityReport`, so a key the device adds is private
+    // by default out there. Here it stays whole: the build strings
+    // (`webkitForkBuild`, `webkitFrameworkSha256`), the safeguard details, the
+    // upstream endpoint and the streaming counters are exactly what an operator
+    // is looking at this page to see, and a filtered admin view would send them
+    // to the database instead. This route is staff-only —
+    // `requireScope('driftstack_internal_admin')`, which authenticates first (see
+    // middleware/auth.ts) and admits only that exact closed scope — so "admin"
+    // here is enforced, not assumed.
     egress_capability_report: s.egressCapabilityReport,
     created_at: s.createdAt.toISOString(),
     updated_at: s.updatedAt.toISOString(),

@@ -92,9 +92,22 @@ the record (status changes, metadata writes).
 its proxy capabilities (and stay `null` for non-proxied sessions).
 When populated, `egress_capabilities` is the typed view —
 `{ udp_associate, quic_route, warnings[] }` — and
-`egress_capability_report` is the raw report. Prefer
-`egress_capabilities` for typed access; treat both as nullable on
-every read.
+`egress_capability_report` carries the additional observations the
+device made about **your** session: the proxy's declared
+capabilities and geography, the transport that was requested and the
+one that was active, whether a real HTTP/3 connection was observed,
+the exit IP / country / timezone the session presents, the IPs a
+WebRTC handshake would surface, and the live streaming and egress
+state. Prefer `egress_capabilities` for typed access; treat both as
+nullable on every read.
+
+`egress_capability_report` is an **opaque object**: it is documented
+as `additionalProperties` and its contents may gain or lose keys
+without notice, so read individual keys defensively and do not
+depend on any one of them being present. Fields that describe
+Driftstack's own infrastructure rather than your session — build
+identifiers, internal endpoints, harness diagnostics — are not part
+of it and never will be.
 
 ## Create
 

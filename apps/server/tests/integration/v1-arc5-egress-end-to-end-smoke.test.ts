@@ -9,6 +9,13 @@
 //     → GET /v1/sessions/:id returns both derived + raw fields (eg.1.c)
 //     → audit row + SDK + dashboard all consume the SAME source-of-truth
 //
+// ⚠️ UPDATED 2026-09-21 — THE LAST HOP IS NO LONGER VERBATIM. `publicSession()`
+// used to echo the stored blob exactly, which made DECLARING a key on the
+// harness schema enough to publish it to customers. The public echo is now an
+// allowlist (`customerSafeEgressCapabilityReport`), so this smoke asserts the
+// split it created: the FULL payload at rest (what operators and the fleet
+// drift report read) and the customer-safe subset on the response.
+//
 // What's NOT in scope (gated on cross-agent):
 //   - eg.2 WebSocket control-plane listener (Agent 1 harness side)
 //   - eg.2-side validation of the harness wire envelope
@@ -73,11 +80,14 @@ describe('Arc 5 EGRESS eg.8 — end-to-end capability_report smoke', () => {
       warnings: ['udp_unsupported_by_proxy', 'dns_remote_resolve_unsupported_by_proxy'],
     };
     const raw = {
-      udp_associate: false,
-      quic_route: 'disabled',
-      dns_remote_resolve: false,
-      warnings: ['udp_unsupported_by_proxy', 'dns_remote_resolve_unsupported_by_proxy'],
+      // Customer observations about their own session.
+      proxyKind: 'socks5',
+      proxyUdpSupported: false,
+      transportModeActive: 'h2-only',
+      // Forensics. `fork_pid` and a build string are precisely the vocabulary
+      // that must never cross — they say HOW, about OUR machines.
       harness_diagnostic: { rtt_ms: 47, hop_count: 4, fork_pid: 12345 },
+      webkitForkBuild: '4410edcd9',
     };
     const updated = await svc.ingestEgressCapabilityReport({
       sessionId: internalId,
@@ -110,16 +120,23 @@ describe('Arc 5 EGRESS eg.8 — end-to-end capability_report smoke', () => {
     expect(getRes.statusCode).toBe(200);
     const body = getRes.json<{
       egress_capabilities: typeof derived;
-      egress_capability_report: typeof raw;
+      egress_capability_report: Record<string, unknown>;
     }>();
     expect(body.egress_capabilities).toEqual(derived);
-    expect(body.egress_capability_report).toEqual(raw);
-    // Forensics field survives the round-trip (the chief value-prop
-    // of the eg.1 raw-vs-derived split).
-    expect(body.egress_capability_report.harness_diagnostic).toMatchObject({
-      rtt_ms: 47,
-      hop_count: 4,
+    // The CUSTOMER half: only the allowlisted observations about their own
+    // session. The forensics do not cross — not the diagnostic block, and not
+    // the build string that named one of our checkouts on this very response.
+    expect(body.egress_capability_report).toEqual({
+      proxyKind: 'socks5',
+      proxyUdpSupported: false,
+      transportModeActive: 'h2-only',
     });
+    expect(body.egress_capability_report).not.toHaveProperty('harness_diagnostic');
+    expect(body.egress_capability_report).not.toHaveProperty('webkitForkBuild');
+    // The OPERATOR half, already asserted at step 3 above: `updated
+    // .egressCapabilityReport` equals `raw` in full. That pairing is the whole
+    // claim — filter at the edge, not at rest — and each half alone is
+    // satisfiable by deleting the column or by deleting the filter.
   });
 
   it('idempotent: second ingest overwrites both columns AND fires another webhook (customers see every change, even if same payload)', async () => {

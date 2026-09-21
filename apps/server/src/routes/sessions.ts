@@ -36,6 +36,7 @@ import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
 import { parseProfileId } from '../lib/profile-id.js';
 import { consumeEffectiveOwnerRateLimit } from '../middleware/rate-limit.js';
+import { customerSafeEgressCapabilityReport } from '../services/customer-safe-egress-capability-report.js';
 
 /**
  * Resolves the effective account for a live driver operation and enforces
@@ -94,10 +95,21 @@ function publicSession(s: SessionRecord): Record<string, unknown> {
     // SOCKS5 handshake completes or for non-SOCKS5 sessions. Cross-agent
     // contract shape: { udp_associate, quic_route, warnings[] }.
     egress_capabilities: s.egressCapabilities,
-    // Arc 5 EGRESS eg.1 — migration 0054 raw harness-emitted payload.
-    // Null until the harness emits; opaque JSON record. Consumers
-    // should prefer `egress_capabilities` for typed access.
-    egress_capability_report: s.egressCapabilityReport,
+    // Arc 5 EGRESS eg.1 — migration 0054 harness-emitted payload. Null until
+    // the harness emits; opaque JSON record. Consumers should prefer
+    // `egress_capabilities` for typed access.
+    //
+    // ⛔ ALLOWLISTED, NOT ECHOED. This used to be `s.egressCapabilityReport` —
+    // the device's whole frame, verbatim — so declaring a key on
+    // `CapabilityReportPayloadSchema` published it here the same day, with
+    // nothing in between. `customerSafeEgressCapabilityReport` makes an unknown
+    // key PRIVATE by default and is the ONE implementation: this mapper is the
+    // single echo site behind all four public session responses (GET
+    // /v1/sessions/:id, GET /v1/sessions, POST /v1/sessions, POST
+    // /v1/profiles/:id/launch). The FULL frame is still stored, and the
+    // admin-only GET /v1/admin/sessions still returns it — the filter belongs at
+    // the edge, not at rest.
+    egress_capability_report: customerSafeEgressCapabilityReport(s.egressCapabilityReport),
     created_at: s.createdAt.toISOString(),
     updated_at: s.updatedAt.toISOString(),
     last_state_at: s.lastStateAt ? s.lastStateAt.toISOString() : null,

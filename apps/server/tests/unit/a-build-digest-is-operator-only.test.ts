@@ -3,20 +3,30 @@
 // customer nothing about their own session, and it must not appear on any
 // customer-visible surface.
 //
-// ⛔ THERE ARE TWO WAYS OUT OF THIS FRAME AND ONLY ONE OF THEM HAS AN ALLOWLIST.
+// ⛔ THERE ARE TWO WAYS OUT OF THIS FRAME, AND BOTH NOW HAVE AN ALLOWLIST.
 //   1. `SessionCapabilityReportStore` → `customerSafeCapabilityReport()` → the
 //      agent-session read. That path has an explicit allowlist, and its header
 //      says why: assigning the whole record used to make every internal field
 //      public in the same commit that added it.
 //   2. The relay's `const { type, ...raw } = frame` spread →
-//      `sessions.egress_capability_report` → echoed VERBATIM by `publicSession()`
-//      on the public GET /v1/sessions/:id. That path has NO allowlist at all: it
-//      is an opaque passthrough, so declaring a key in the schema is by itself
-//      enough to publish it.
+//      `sessions.egress_capability_report` → `publicSession()` on the public
+//      sessions API. That path had NO allowlist: it was an opaque passthrough,
+//      so declaring a key in the schema was by itself enough to publish it.
 //
-// Path 2 is the one that is not obvious from either file, so it is the one these
-// arms exist for. Both are covered, because a field kept out of one and not the
-// other is still public.
+// ⚠️ UPDATED 2026-09-21 — PATH 2 IS NOW FILTERED AT THE EDGE, AND THAT MOVED
+// WHAT THIS FILE ASSERTS. The relay used to destructure `webkitFrameworkSha256`
+// out of `raw` by name. That was a denylist of one: it stopped the single key
+// somebody had already thought of, left `webkitForkBuild` beside it on the
+// customer API, and cost the stored row the measured digest AT REST — the only
+// copy that outlives the process. (NOT the fleet drift report, which reads
+// `capabilityReportStore.entries()` and was handed the whole frame all along;
+// saying otherwise invites a reader to check the drift report, find the claim
+// false, and throw out the real reason with it.)
+// So the relay now stores the WHOLE frame and
+// `customerSafeEgressCapabilityReport` allowlists the four public responses.
+// The arms below assert the new shape: stored in full, absent from the public
+// echo. Both paths are still covered, because a field kept out of one and not
+// the other is still public.
 
 import { describe, expect, it, vi } from 'vitest';
 import type { Logger } from '../../src/lib/logger.js';
@@ -26,6 +36,7 @@ import {
   SessionCapabilityReportStore,
   customerSafeCapabilityReport,
 } from '../../src/services/session-capability-report-store.js';
+import { customerSafeEgressCapabilityReport } from '../../src/services/customer-safe-egress-capability-report.js';
 
 const FRAMEWORKS = 'wc:4410edcd9abc,wk:1122334455aa,jsc:99887766ddee';
 
@@ -78,22 +89,51 @@ function relayWith(store: SessionCapabilityReportStore, ingest: (args: unknown) 
 }
 
 describe('a measured framework digest never reaches a customer', () => {
-  it('CRITICAL it is stripped from the raw blob the PUBLIC sessions API echoes', async () => {
-    // Fails without the destructure in the relay: declaring the key on the schema
-    // is enough, on its own, to add a field to GET /v1/sessions/:id.
+  it('CRITICAL the blob PERSISTED for operators keeps both build strings — filter at the edge, not at rest', async () => {
+    // ⛔ THE INVERSION. This arm used to assert the OPPOSITE: that the relay
+    // deleted `webkitFrameworkSha256` by name before storage. It is asserted the
+    // other way now because filtering at rest was the wrong place — the fleet
+    // drift report reads the measured digest off the stored row, and a row
+    // filtered on the way in is a worse forensic record than the frame we
+    // received, with no way to get it back. Only `type` is dropped: it names the
+    // wire envelope, not the session.
     const store = new SessionCapabilityReportStore();
     const ingest = vi.fn((_args: unknown) => Promise.resolve());
     relayWith(store, ingest)(report(), 'mac-macstadium-us-001');
     await vi.waitFor(() => expect(ingest).toHaveBeenCalledTimes(1));
 
     const persisted = ingest.mock.calls[0]?.[0] as { raw: Record<string, unknown> };
-    expect(persisted.raw).not.toHaveProperty('webkitFrameworkSha256');
-    // The rest of the blob is untouched — this is a removal of ONE key, not a
-    // new filter that quietly narrows a published payload.
+    expect(persisted.raw).toHaveProperty('webkitFrameworkSha256', FRAMEWORKS);
     expect(persisted.raw).toHaveProperty('webkitForkBuild', '4410edcd9');
     expect(persisted.raw).toHaveProperty('archetypeId');
     expect(persisted.raw).toHaveProperty('sessionId', 'agt_1');
     expect(persisted.raw).not.toHaveProperty('type');
+  });
+
+  it('CRITICAL neither build string survives the PUBLIC echo of that same stored blob', async () => {
+    // The guarantee moved from the relay to the edge, so this is where it is
+    // now proved: the exact bytes the relay persists, run through the one filter
+    // every public session response uses.
+    const store = new SessionCapabilityReportStore();
+    const ingest = vi.fn((_args: unknown) => Promise.resolve());
+    relayWith(store, ingest)(report(), 'mac-macstadium-us-001');
+    await vi.waitFor(() => expect(ingest).toHaveBeenCalledTimes(1));
+    const persisted = ingest.mock.calls[0]?.[0] as { raw: Record<string, unknown> };
+
+    const published = customerSafeEgressCapabilityReport(persisted.raw);
+    expect(published).not.toHaveProperty('webkitFrameworkSha256');
+    // ⭐ AND `webkitForkBuild` GOES TOO. It rode this blob for months because
+    // removing it was treated as a breaking change to a published response —
+    // but the field is declared OPAQUE (`additionalProperties: {}`) in the
+    // OpenAPI document, and the route's own comment tells consumers to prefer
+    // the typed `egress_capabilities`, so narrowing what is inside it is not a
+    // schema break. It names one of our checkouts; nothing customer-visible
+    // says HOW.
+    expect(published).not.toHaveProperty('webkitForkBuild');
+    // VACUITY CONTROL — the filter still publishes. Without this the two arms
+    // above pass against a function that returns an empty object.
+    expect(published).toHaveProperty('proxyKind', 'socks5');
+    expect(published).toHaveProperty('archetypeId');
   });
 
   it('CRITICAL the customer-safe projection carries none of the three build fields', () => {
