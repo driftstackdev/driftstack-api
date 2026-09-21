@@ -155,7 +155,11 @@ export function makeSessionCapabilityReportRelay(
       return;
     }
 
-    store.set(frame);
+    // The node id is carried into the store because the frame does not have one:
+    // the ownership gate immediately above is the only place that knows which
+    // device this report belongs to, and the operator drift report has to compare
+    // a session's frameworks against its DEVICE's current heartbeat.
+    store.set(frame, reportingNodeId);
 
     // T-26 — stop-on-exit-IP-change enforcement, control-plane side only: the
     // harness already emits the exit IP on the capabilityReport it sends, so no
@@ -301,7 +305,25 @@ export function makeSessionCapabilityReportRelay(
     // was measured — it feeds quic_route (a routing flag), never the customer's
     // "measured QUIC" verdict.
     const quicViaProxy = frame.transportModeActive === 'h2-and-h3' && frame.h3InterposeLoaded;
-    const { type: _type, ...raw } = frame;
+    // ⛔ `raw` IS A PUBLIC API RESPONSE BODY, WHICH IS NOT OBVIOUS FROM HERE.
+    // It is persisted as `sessions.egress_capability_report` and echoed verbatim
+    // by `publicSession()` on GET /v1/sessions/:id — an opaque passthrough, so
+    // every key this schema declares becomes a customer-visible field the moment
+    // it is declared, with no allowlist in between. That is the leak-by-default
+    // shape `customerSafeCapabilityReport` was written to close on the other
+    // projection, and this spread is the hole it does not cover.
+    //
+    // `webkitFrameworkSha256` is a digest of OUR fork's frameworks: it identifies
+    // the fleet's deploy, tells a customer nothing about their own session, and is
+    // exactly the operator-internal vocabulary that must not cross. Destructured
+    // out by name rather than filtered by a rule, so removing it is a deliberate
+    // act a reviewer can see — and so a future key is not silently covered by a
+    // predicate nobody re-reads.
+    //
+    // `webkitForkBuild` beside it is NOT removed: it has ridden this blob since
+    // before this change, so stripping it now would be a breaking removal from a
+    // published response, which is a separate decision with a deprecation window.
+    const { type: _type, webkitFrameworkSha256: _webkitFrameworkSha256, ...raw } = frame;
     await sessionsService.ingestEgressCapabilityReport({
       sessionId: session.driftstackSessionId,
       derived: {

@@ -1824,6 +1824,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.fleetControlRegistry !== undefined
         ? { controlRegistry: deps.fleetControlRegistry }
         : {}),
+      // A3 2026-09-19 — the per-SESSION half of the build-drift report: which
+      // frameworks a live session was actually spawned from, so a device
+      // redeployed under it can be named. Wired from the same store the
+      // agent-session read uses; absent → the device half still reports and
+      // finding (d) simply has nothing to compare.
+      ...(deps.sessionCapabilityReportStore !== undefined
+        ? { capabilityReportStore: deps.sessionCapabilityReportStore }
+        : {}),
     });
   }
   // LK.3 — per-Mac LiveKit JWT mint endpoint. Same gate as LK.2 plus

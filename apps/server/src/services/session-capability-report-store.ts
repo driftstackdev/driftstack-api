@@ -81,6 +81,30 @@ export interface SessionCapabilityReport {
    * empty-array defect above.
    */
   streaming_health: NonNullable<CapabilityReport['streamingHealth']> | null;
+  /**
+   * A3 2026-09-19 ~19:10Z — build identity for THIS session, declared and measured.
+   *
+   * `webkit_fork_build` is the node's declared checkout; A3 measured it naming a
+   * checkout 20 commits behind the real build. `webkit_framework_sha256` is the
+   * raw `wc:…,wk:…,jsc:…` string measured at the spawn path — the frameworks this
+   * session is actually running. Kept RAW: the decoder
+   * (`fleet-build-drift.decodeWebkitFrameworkSha256`) is the single place that
+   * decides whether a value is readable, and a store that pre-parsed would have
+   * to invent a second opinion about a malformed value.
+   *
+   * `reporting_node_id` is the node the ownership gate already matched this frame
+   * against. It is here because the drift report has to compare a SESSION's
+   * frameworks with its DEVICE's current heartbeat, and the frame itself carries
+   * no node id — the relay knows it, and nothing downstream could reconstruct it.
+   *
+   * ⛔ OPERATOR-ONLY. All three are excluded from `CustomerSafeCapabilityReport`
+   * below by name. A build digest is fleet-internal: it identifies our deploy, not
+   * the customer's session, and it is exactly the kind of field the allowlist
+   * header warns becomes public by accident.
+   */
+  webkit_fork_build: string | null;
+  webkit_framework_sha256: string | null;
+  reporting_node_id: string | null;
 }
 
 /**
@@ -99,7 +123,15 @@ export interface SessionCapabilityReport {
  */
 export type CustomerSafeCapabilityReport = Omit<
   SessionCapabilityReport,
-  'streaming_health' | 'interpose_image_loaded'
+  // A3 2026-09-19 — the three build-identity fields are fleet-internal: they name
+  // OUR deploy, not the customer's session. Omitted here AND stripped from the
+  // raw frame in the relay, because this type only governs the agent-session
+  // projection while the relay's `raw` spread reaches the public sessions API.
+  | 'streaming_health'
+  | 'interpose_image_loaded'
+  | 'webkit_fork_build'
+  | 'webkit_framework_sha256'
+  | 'reporting_node_id'
 > & {
   /**
    * N-2 — the customer-safe subset {os, confidence, at} of the exit proxy's cached
@@ -205,7 +237,15 @@ export class SessionCapabilityReportStore {
 
   constructor(private readonly maxEntries = 5_000) {}
 
-  set(frame: CapabilityReport): void {
+  /**
+   * `reportingNodeId` is OPTIONAL so every existing caller (and every test fake)
+   * keeps compiling and keeps meaning what it meant — an omitted node id stores
+   * null, which the drift report reads as "this session cannot be attributed to a
+   * device" and therefore never compares. A required parameter would have made
+   * the absent case unrepresentable and pushed callers into passing a placeholder,
+   * which is how a session gets attributed to the wrong device.
+   */
+  set(frame: CapabilityReport, reportingNodeId?: string): void {
     this.map.delete(frame.sessionId);
     this.map.set(frame.sessionId, {
       timestamp: frame.timestamp,
@@ -261,6 +301,13 @@ export class SessionCapabilityReportStore {
       safeguards_passed: safeguardsPassed(frame),
       // `?? null` and never `?? {}` — see the field doc. Absent stays absent.
       streaming_health: frame.streamingHealth ?? null,
+      // A3 2026-09-19 — declared + measured build identity, both kept RAW. `?? null`
+      // preserves absent-until-measured exactly as every field above: a harness
+      // that predates the key, and one whose framework files could not be read,
+      // both arrive with nothing, and neither may render as a digest.
+      webkit_fork_build: frame.webkitForkBuild ?? null,
+      webkit_framework_sha256: frame.webkitFrameworkSha256 ?? null,
+      reporting_node_id: reportingNodeId ?? null,
     });
     if (this.map.size > this.maxEntries) {
       const oldest = this.map.keys().next().value;
@@ -270,6 +317,22 @@ export class SessionCapabilityReportStore {
 
   get(sessionId: string): SessionCapabilityReport | null {
     return this.map.get(sessionId) ?? null;
+  }
+
+  /**
+   * Every live report, for the OPERATOR fleet drift report.
+   *
+   * ⛔ A SNAPSHOT, NOT A VIEW. The array is built at call time so a caller
+   * iterating it cannot observe the map mutating under a concurrently arriving
+   * frame, and cannot reach the live map to mutate it. The store stays the only
+   * writer, which is the same posture the relay's ownership gate depends on.
+   *
+   * Returns the internal record, NOT the customer-safe projection: this feeds an
+   * admin-scoped surface, and the projection deliberately drops the three build
+   * fields the drift report exists to read.
+   */
+  entries(): { sessionId: string; report: SessionCapabilityReport }[] {
+    return [...this.map.entries()].map(([sessionId, report]) => ({ sessionId, report }));
   }
 
   delete(sessionId: string): void {

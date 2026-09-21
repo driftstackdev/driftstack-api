@@ -65,13 +65,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             <th class="px-4 py-3">Health</th>
             <th class="px-4 py-3">Uptime</th>
             <th class="px-4 py-3">Harness</th>
+            <th class="px-4 py-3">WebKit build</th>
             <th class="px-4 py-3">Last seen</th>
             <th class="px-4 py-3">Controls</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100" data-list="fleet">
           <tr>
-            <td colspan="12" class="px-4 py-8 text-center text-sm text-tk-ink-3">
+            <td colspan="13" class="px-4 py-8 text-center text-sm text-tk-ink-3">
               Live fleet state is unavailable until loaded.
             </td>
           </tr>
@@ -79,6 +80,24 @@ const apiBaseUrl = resolveApiBaseUrl();
       </table>
     </div>
     <p class="mt-3 text-xs text-tk-ink-3" data-field="footnote"></p>
+
+    <!--
+      A3 2026-09-19 — declared vs MEASURED build identity. The `harnessVersion`
+      and `webkitForkBuild` strings in the table are typed at deploy time and were
+      both observed naming something the device is not running; the digests beside
+      them are read off the bytes. This section lists the contradictions, because a
+      per-row badge can say "this device disagrees" but only a finding can say WITH
+      WHOM, and which of the three frameworks moved.
+    -->
+    <section class="mt-8 hidden" data-section="build-drift">
+      <h2 class="text-sm font-semibold text-tk-ink">Build drift</h2>
+      <p class="mt-1 text-xs text-tk-ink-3">
+        Devices whose <strong>declared</strong> build does not match what they
+        <strong>measured</strong>. A declared version is typed at deploy; a digest is read off the
+        running file.
+      </p>
+      <ul class="mt-3 space-y-2 text-xs text-tk-ink-2" data-list="build-drift"></ul>
+    </section>
   </div>
 
   <script is:inline define:vars={{ apiBaseUrl }}>
@@ -88,6 +107,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       const banner = root.querySelector('[data-banner]');
       const tbody = root.querySelector('[data-list="fleet"]');
       const footnote = root.querySelector('[data-field="footnote"]');
+      const driftSection = root.querySelector('[data-section="build-drift"]');
+      const driftList = root.querySelector('[data-list="build-drift"]');
       const liveDot = root.querySelector('[data-live-dot]');
       const liveLabel = root.querySelector('[data-live-label]');
       const refreshBtn = root.querySelector('[data-refresh]');
@@ -227,6 +248,102 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         return value;
       }
+      // ── Build drift (A3 2026-09-19) ───────────────────────────────────
+      // The three shapes the server sends for a measured value. Validated as
+      // SHAPES only: whether a digest is well-formed is the server's judgement
+      // (`fleet-build-drift.ts` owns the 12-lowercase-hex rule) and a second copy
+      // of that rule here would be free to disagree with the one that computed
+      // the findings. What this must not do is render an unbounded string.
+      const DIGEST_STATES = ['absent', 'unreadable', 'measured'];
+      const FRAMEWORK_KEYS = ['wc', 'wk', 'jsc'];
+      function isDigestValue(value) {
+        if (!isRecord(value) || DIGEST_STATES.indexOf(value.state) === -1) return false;
+        if (value.state === 'measured') return isBoundedString(value.sha256, 1, 64);
+        if (value.state === 'unreadable') return isBoundedString(value.raw, 0, 256);
+        return true;
+      }
+      function isFrameworksValue(value) {
+        if (!isRecord(value) || DIGEST_STATES.indexOf(value.state) === -1) return false;
+        if (value.state === 'unreadable') return isBoundedString(value.raw, 0, 256);
+        if (value.state === 'absent') return true;
+        if (!isRecord(value.parts)) return false;
+        for (const key of FRAMEWORK_KEYS) {
+          const part = value.parts[key];
+          if (!isRecord(part)) return false;
+          if (part.state === 'missing') continue;
+          if (part.state !== 'measured' || !isBoundedString(part.sha256, 1, 64)) return false;
+        }
+        return true;
+      }
+      function isStringArray(value, max, maxLen) {
+        return (
+          Array.isArray(value) &&
+          value.length <= max &&
+          value.every((item) => isBoundedString(item, 1, maxLen))
+        );
+      }
+      /**
+       * `undefined` means the control plane did not report drift at all (an older
+       * server). That is NOT "no drift" and is never rendered as a clean fleet —
+       * the section says it was not reported. A drift block that IS present but
+       * malformed fails the whole load, exactly like a malformed row: a half-read
+       * safety report is worse than a visible error, because the half that was
+       * dropped is the half nobody knows to look for.
+       */
+      function parseBuildDrift(value) {
+        if (value === undefined) return null;
+        if (
+          !isRecord(value) ||
+          !Array.isArray(value.devices) ||
+          !Array.isArray(value.findings) ||
+          value.devices.length > 10_000 ||
+          value.findings.length > 10_000
+        ) {
+          throw new Error('Invalid live fleet response.');
+        }
+        const byDevice = new Map();
+        for (const device of value.devices) {
+          if (
+            !isRecord(device) ||
+            !isBoundedString(device.deviceId, 1, 256) ||
+            !(
+              device.declaredHarnessVersion === null ||
+              isBoundedString(device.declaredHarnessVersion, 0, 256)
+            ) ||
+            !(
+              device.declaredWebkitForkBuild === null ||
+              isBoundedString(device.declaredWebkitForkBuild, 0, 256)
+            ) ||
+            !isDigestValue(device.harnessBinary) ||
+            !isFrameworksValue(device.frameworks) ||
+            !isStringArray(device.flags, 16, 64)
+          ) {
+            throw new Error('Invalid live fleet response.');
+          }
+          byDevice.set(device.deviceId, device);
+        }
+        const findingsByDevice = new Map();
+        for (const finding of value.findings) {
+          if (
+            !isRecord(finding) ||
+            !isBoundedString(finding.code, 1, 64) ||
+            !isBoundedString(finding.detail, 1, 4096) ||
+            !isBoundedString(finding.declaredField, 1, 64) ||
+            !(finding.declaredValue === null || isBoundedString(finding.declaredValue, 0, 256)) ||
+            !isStringArray(finding.deviceIds, 10_000, 256) ||
+            !isStringArray(finding.sessionIds, 10_000, 256) ||
+            !isStringArray(finding.frameworks, 8, 16)
+          ) {
+            throw new Error('Invalid live fleet response.');
+          }
+          for (const deviceId of finding.deviceIds) {
+            const list = findingsByDevice.get(deviceId);
+            if (list) list.push(finding);
+            else findingsByDevice.set(deviceId, [finding]);
+          }
+        }
+        return { byDevice, findingsByDevice, findings: value.findings };
+      }
       function parseFleetPage(value) {
         if (!isRecord(value) || !Array.isArray(value.data) || value.data.length > 10_000) {
           throw new Error('Invalid live fleet response.');
@@ -336,6 +453,67 @@ const apiBaseUrl = resolveApiBaseUrl();
           out.push(pill('mem ' + mp, 'bg-red-50 text-red-700'));
         return out.length > 0 ? out.join(' ') : pill('ok', 'bg-emerald-50 text-emerald-700');
       }
+      // ── Build-drift rendering ─────────────────────────────────────────
+      // ⛔ THREE OUTCOMES, THREE WORDS, AND NONE OF THEM IS A DIGEST. A device
+      // that sent nothing reads "not reported" and one that sent nonsense reads
+      // "unreadable": they are different problems (an old build or an unreadable
+      // file, versus a device saying something wrong) and an operator chasing the
+      // second must not be sent looking for the first. Neither may ever render as
+      // a dash beside a confident declared version — that is the exact shape that
+      // let a stale `harnessVersion` pass for a year.
+      function fmtDigest(digest) {
+        if (!digest) return '—';
+        if (digest.state === 'measured') return digest.sha256;
+        if (digest.state === 'unreadable') return 'unreadable';
+        return 'not reported';
+      }
+      function fmtFrameworks(frameworks) {
+        if (!frameworks) return '—';
+        if (frameworks.state === 'unreadable') return 'unreadable';
+        if (frameworks.state === 'absent') return 'not reported';
+        return FRAMEWORK_KEYS.map((key) => {
+          const part = frameworks.parts[key];
+          return key + ':' + (part.state === 'measured' ? part.sha256 : 'absent');
+        }).join(' ');
+      }
+      // Operator vocabulary, deliberately: this page is staff-only and the words
+      // have to name the fleet's own concepts, not a customer-safe paraphrase.
+      const DRIFT_BADGES = {
+        harness_binary_drift: { text: 'binary drift', cls: 'bg-red-50 text-red-700' },
+        webkit_framework_drift: { text: 'framework drift', cls: 'bg-red-50 text-red-700' },
+        measured_digest_missing: { text: 'unverified', cls: 'bg-amber-50 text-amber-700' },
+        session_framework_drift: { text: 'redeployed under session', cls: 'bg-red-50 text-red-700' },
+      };
+      /**
+       * Badges for one device, restricted to findings about ONE declared field.
+       *
+       * The split is read off the server's own `declaredField`, never re-derived
+       * here: the control plane already decided whether a device's missing digest
+       * is about its harness or its frameworks, and a second rule in the panel
+       * would be free to put the badge on the wrong column.
+       */
+      function driftBadges(drift, deviceId, declaredField) {
+        if (!drift) return '';
+        const findings = drift.findingsByDevice.get(deviceId) || [];
+        const seen = [];
+        const out = [];
+        for (const finding of findings) {
+          if (finding.declaredField !== declaredField) continue;
+          if (seen.indexOf(finding.code) !== -1) continue;
+          seen.push(finding.code);
+          const badge = DRIFT_BADGES[finding.code];
+          out.push(
+            '<span class="rounded-full px-2 py-0.5 text-xs ' +
+              (badge ? badge.cls : 'bg-tk-hover text-tk-ink-3') +
+              '" title="' +
+              escapeHtml(finding.detail) +
+              '">' +
+              escapeHtml(badge ? badge.text : finding.code) +
+              '</span>',
+          );
+        }
+        return out.length > 0 ? '<div class="mt-1 flex flex-wrap gap-1">' + out.join('') + '</div>' : '';
+      }
       function boolBadge(value, onText, offText, unknownText) {
         if (value === null || value === undefined) {
           return (
@@ -353,7 +531,49 @@ const apiBaseUrl = resolveApiBaseUrl();
           '</span>'
         );
       }
-      function rowHtml(n) {
+      /**
+       * The findings list under the table.
+       *
+       * ⛔ THREE STATES AND NEVER TWO. A control plane that reported no drift
+       * block at all says so — it is an older server, and "we did not ask" must
+       * not render as "we asked and the fleet is clean". An empty findings list
+       * IS a clean answer and says so. A non-empty one lists every contradiction
+       * in the server's own words, including which framework moved and what the
+       * data cannot distinguish.
+       */
+      function renderBuildDrift(drift) {
+        if (!driftSection || !driftList) return;
+        driftSection.classList.remove('hidden');
+        if (!drift) {
+          driftList.innerHTML =
+            '<li class="text-tk-ink-3">This control plane does not report build drift. That is not the same as no drift — it has not been checked.</li>';
+          return;
+        }
+        if (drift.findings.length === 0) {
+          driftList.innerHTML =
+            '<li class="text-tk-ink-3">No device contradicts its own declared build.</li>';
+          return;
+        }
+        driftList.innerHTML = drift.findings
+          .map((finding) => {
+            const badge = DRIFT_BADGES[finding.code];
+            return (
+              '<li class="rounded-md border border-tk-border px-3 py-2">' +
+              '<span class="rounded-full px-2 py-0.5 text-xs ' +
+              (badge ? badge.cls : 'bg-tk-hover text-tk-ink-3') +
+              '">' +
+              escapeHtml(badge ? badge.text : finding.code) +
+              '</span> ' +
+              '<span class="ml-1">' +
+              escapeHtml(finding.detail) +
+              '</span>' +
+              '</li>'
+            );
+          })
+          .join('');
+      }
+      function rowHtml(n, drift) {
+        const device = drift ? drift.byDevice.get(n.id) : null;
         return (
           '<tr>' +
           '<td class="px-4 py-3"><div class="font-medium text-tk-ink">' +
@@ -390,8 +610,29 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<td class="px-4 py-3 text-tk-ink-2">' +
           escapeHtml(fmtUptime(n.last_heartbeat && n.last_heartbeat.uptimeSeconds)) +
           '</td>' +
-          '<td class="px-4 py-3 font-mono text-xs text-tk-ink-3">' +
+          // Harness: the DECLARED version (typed at deploy) above the MEASURED
+          // digest of the binary actually executing. Both, always — the whole
+          // point is that the operator can see them disagree.
+          '<td class="px-4 py-3 text-xs text-tk-ink-3">' +
+          '<div class="font-mono">' +
           escapeHtml((n.last_heartbeat && n.last_heartbeat.harnessVersion) || '—') +
+          '</div>' +
+          '<div class="font-mono text-tk-ink-3" title="Measured sha256 prefix of the running harness binary">' +
+          escapeHtml(device ? fmtDigest(device.harnessBinary) : '—') +
+          '</div>' +
+          driftBadges(drift, n.id, 'harnessVersion') +
+          '</td>' +
+          // WebKit: the DECLARED fork build (from this device's latest capability
+          // report) above the MEASURED per-framework digests from its latest
+          // heartbeat — i.e. what the NEXT session on this device would load.
+          '<td class="px-4 py-3 text-xs text-tk-ink-3">' +
+          '<div class="font-mono">' +
+          escapeHtml((device && device.declaredWebkitForkBuild) || '—') +
+          '</div>' +
+          '<div class="font-mono text-tk-ink-3" title="Measured WebCore / WebKit / JavaScriptCore digests at the spawn path">' +
+          escapeHtml(device ? fmtFrameworks(device.frameworks) : '—') +
+          '</div>' +
+          driftBadges(drift, n.id, 'webkitForkBuild') +
           '</td>' +
           '<td class="px-4 py-3">' +
           freshnessBadge(n.last_seen_at) +
@@ -438,8 +679,12 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!token) {
           if (tbody)
             tbody.innerHTML =
-              '<tr><td colspan="12" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in as a staff admin to view the fleet.</td></tr>';
+              '<tr><td colspan="13" class="px-4 py-8 text-center text-sm text-tk-ink-3">Sign in as a staff admin to view the fleet.</td></tr>';
           if (footnote) footnote.textContent = '';
+          // Signed out: nothing was checked, so the drift section stays hidden
+          // rather than showing an empty (i.e. clean-looking) list.
+          if (driftSection) driftSection.classList.add('hidden');
+          if (driftList) driftList.innerHTML = '';
           hideBanner();
           if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           return Promise.resolve(false);
@@ -464,12 +709,14 @@ const apiBaseUrl = resolveApiBaseUrl();
           .then((body) => {
             if (generation !== loadGeneration) return;
             const rows = parseFleetPage(body);
+            const drift = parseBuildDrift(body && body.build_drift);
+            renderBuildDrift(drift);
             if (tbody) {
               if (rows.length === 0) {
                 tbody.innerHTML =
-                  '<tr><td colspan="12" class="px-4 py-8 text-center text-sm text-tk-ink-3">No fleet nodes registered yet. Start a Mac worker (harness with DRIFTSTACK_ENABLE_DRIVE_BRIDGE=1) and it will appear here once it registers.</td></tr>';
+                  '<tr><td colspan="13" class="px-4 py-8 text-center text-sm text-tk-ink-3">No fleet nodes registered yet. Start a Mac worker (harness with DRIFTSTACK_ENABLE_DRIVE_BRIDGE=1) and it will appear here once it registers.</td></tr>';
               } else {
-                tbody.innerHTML = rows.map(rowHtml).join('');
+                tbody.innerHTML = rows.map((n) => rowHtml(n, drift)).join('');
               }
             }
             if (footnote) {
@@ -491,8 +738,14 @@ const apiBaseUrl = resolveApiBaseUrl();
             // W604 discipline: never leave fabricated rows; show honest state.
             if (tbody)
               tbody.innerHTML =
-                '<tr><td colspan="12" class="px-4 py-8 text-center text-sm text-tk-ink-3">Could not load fleet nodes. Resolve the error above and retry.</td></tr>';
+                '<tr><td colspan="13" class="px-4 py-8 text-center text-sm text-tk-ink-3">Could not load fleet nodes. Resolve the error above and retry.</td></tr>';
             if (footnote) footnote.textContent = '';
+            // W604 discipline applies to the drift report too: a failed load must
+            // not leave the previous findings on screen, where they would read as
+            // current — and an empty list would read as a fleet that just came
+            // back clean. Hide it; the banner above says why.
+            if (driftSection) driftSection.classList.add('hidden');
+            if (driftList) driftList.innerHTML = '';
             if (msg === 'forbidden') {
               showBanner(
                 'Access denied — staff admin scope required. You are signed in as a customer account.',

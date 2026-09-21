@@ -59,6 +59,20 @@ export interface FleetNodeHeartbeatSnapshot {
   busiestCorePercent?: number;
   diskFreePercent?: number;
   harnessVersion?: string;
+  /**
+   * A3 2026-09-19 — the MEASURED build identity beside the DECLARED
+   * `harnessVersion` above, kept as the device sent it.
+   *
+   * ⛔ RAW, NOT DECODED. `fleet-build-drift.ts` owns the only definition of a
+   * readable digest; a snapshot that stored a parsed shape would need a second
+   * opinion about a malformed value, and a malformed value written into a typed
+   * column is how "unreadable" becomes indistinguishable from "absent" three
+   * months later. This is jsonb, so no migration: the snapshot is overwritten
+   * whole every beat and an older row simply lacks the keys.
+   */
+  harnessBinarySha256?: string;
+  /** `wc:<12hex>,wk:<12hex>,jsc:<12hex>` — what the NEXT session on this node loads. */
+  webkitFrameworkSha256?: string;
 }
 
 export interface FleetNodeDetail {

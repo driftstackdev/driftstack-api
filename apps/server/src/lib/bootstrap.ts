@@ -3183,6 +3183,19 @@ export async function createProductionDeps(
                   ...(frame.harnessVersion !== undefined && {
                     harnessVersion: frame.harnessVersion,
                   }),
+                  // A3 2026-09-19 — the MEASURED digests beside the DECLARED
+                  // `harnessVersion` above. Persisted in the same jsonb snapshot,
+                  // so no column and no migration; an older node's beat simply
+                  // lacks the keys and the drift report reads that as absent.
+                  // Spread-when-defined like every field above: an absent key must
+                  // never be written as null, because null is a value and "we were
+                  // told nothing" is not.
+                  ...(frame.harnessBinarySha256 !== undefined && {
+                    harnessBinarySha256: frame.harnessBinarySha256,
+                  }),
+                  ...(frame.webkitFrameworkSha256 !== undefined && {
+                    webkitFrameworkSha256: frame.webkitFrameworkSha256,
+                  }),
                 };
                 await drizzleFleetNodesRepo.recordHeartbeat(frame.macNodeId, snapshot);
                 // V-1742 — the worker ships its latest fault on every beat so an

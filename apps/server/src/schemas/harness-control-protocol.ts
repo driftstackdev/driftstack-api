@@ -1472,6 +1472,51 @@ const HeartbeatPayloadSchema = z.object({
   diskFreePercent: HeartbeatPercentSchema.optional(),
   /** Harness build identity (e.g. git sha) — "Harness version" column (A3 W2189). */
   harnessVersion: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
+  /**
+   * A3 2026-09-19 ~18:45Z (device `88d2d0da2`) — the MEASURED identity of the
+   * running automation executable: `shasum -a 256 <binary> | cut -c1-12`.
+   *
+   * ⛔ IT EXISTS BECAUSE `harnessVersion` ABOVE IS DECLARED. That value comes
+   * from the node's env, typed at deploy, and A3 OBSERVED it naming a commit the
+   * binary was not built from. A declared string cannot detect its own staleness;
+   * a digest of the bytes that are actually executing cannot go stale, and two
+   * different builds never share one.
+   *
+   * OPTIONAL + omit-when-nil on the producer, and nil ONLY when the executable
+   * could not be read. So ABSENT is genuinely ambiguous — an older harness that
+   * predates the key, or a running one that could not read its own file — and the
+   * drift report says so rather than picking one. See `fleet-build-drift.ts`.
+   *
+   * ⚠️ SHAPE IS NOT VALIDATED HERE, DELIBERATELY. `.catch(undefined)` on a bounded
+   * string means a hostile or garbage value can never delete a heartbeat (the
+   * `streamingState`/`permission_denied` lesson three hundred lines down), and the
+   * 12-lowercase-hex test lives in the decoder, which can distinguish a bounded
+   * string that is not a digest (UNREADABLE — the node said something we cannot
+   * trust) from a key that never arrived (ABSENT). A regex here would collapse
+   * those two into one silence. A value that is not even a bounded string does
+   * degrade to ABSENT; it is never trusted either way.
+   */
+  harnessBinarySha256: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional().catch(undefined),
+  /**
+   * A3 2026-09-19 ~19:10Z (device `4410edcd9`) — `wc:<12hex>,wk:<12hex>,jsc:<12hex>`:
+   * the MEASURED sha256 prefixes of WebCore, WebKit and JavaScriptCore at the fork's
+   * spawn path, with the literal `absent` for a framework that is not there.
+   *
+   * ⛔ ON A HEARTBEAT THIS IS A FORECAST, NOT A HISTORY. It is what the NEXT session
+   * on this node would load. The same key on a `capabilityReport` is what THAT
+   * session was actually spawned from, and the two can legitimately disagree — a
+   * redeploy under a live session is exactly that disagreement, which is why the
+   * drift report flags it rather than assuming one of them is wrong.
+   *
+   * The declared `webkitForkBuild` on the capability report names a checkout A3
+   * measured at 20 commits behind the real build, so it has the same staleness
+   * problem `harnessVersion` has. Per-framework parts are what make the answer
+   * actionable: A3 measured the box's JavaScriptCore five days older than its
+   * WebCore, and one combined digest could only have said "something moved".
+   *
+   * Same leniency + decoder contract as `harnessBinarySha256` above.
+   */
+  webkitFrameworkSha256: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional().catch(undefined),
 });
 
 export const HeartbeatSchema = HeartbeatPayloadSchema.transform((frame, ctx) => {
@@ -1625,6 +1670,26 @@ const CapabilityReportPayloadSchema = z.object({
   safeguardLayersExpected: z.array(z.string().min(1).max(64)).max(16).optional(),
   archetypeId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   webkitForkBuild: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
+  /**
+   * A3 2026-09-19 ~19:10Z — the MEASURED twin of `webkitForkBuild` above, same
+   * `wc:<12hex>,wk:<12hex>,jsc:<12hex>` string as on the heartbeat, but read at
+   * the moment THIS session was spawned: the frameworks it is actually running.
+   *
+   * ⛔ ITS DISAGREEMENT WITH THE HEARTBEAT IS A SIGNAL, NOT AN ERROR. The
+   * heartbeat's copy is what the NEXT session would load, so a session whose
+   * frameworks differ from its node's current beat was spawned before a redeploy
+   * that has since landed — the one case where `webkitForkBuild` beside it is
+   * both unchanged and wrong about this session.
+   *
+   * ⛔ OPERATOR-ONLY, AND THE RELAY ENFORCES THAT. This frame's whole body minus
+   * `type` is persisted as `egress_capability_report` and echoed verbatim on the
+   * PUBLIC `GET /v1/sessions/:id`, so declaring a key here is enough to publish
+   * it. `session-capability-report-relay.ts` destructures this one out of `raw`
+   * before the ingest for that reason; see the comment there.
+   *
+   * Same leniency + decoder contract as the heartbeat's copy.
+   */
+  webkitFrameworkSha256: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional().catch(undefined),
   // W-29 — the UPSTREAM this session's egress actually uses, `host:port`.
   //
   // Why it rides the frame rather than being joined control-plane side: the QUIC

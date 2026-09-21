@@ -62,6 +62,15 @@ describe('SessionCapabilityReportStore', () => {
       // ⛔ null, not an object of zeroes: absent means the node never reported,
       // which must never render as a healthy stream (V-2188).
       streaming_health: null,
+      // A3 2026-09-19 — declared + measured build identity for THIS session, and
+      // the device that reported it. ⛔ null on every one, for the same
+      // absent-until-measured reason as the fields above: this fixture carries no
+      // `webkitForkBuild` and no `webkitFrameworkSha256`, and the caller passed no
+      // reporting node, so the session is UNATTRIBUTED rather than attributed to a
+      // placeholder. The drift report compares none of these when they are null.
+      webkit_fork_build: null,
+      webkit_framework_sha256: null,
+      reporting_node_id: null,
     });
 
     store.set(

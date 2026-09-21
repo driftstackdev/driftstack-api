@@ -21,6 +21,11 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
+import type { SessionCapabilityReportStore } from '../services/session-capability-report-store.js';
+import {
+  computeFleetBuildDrift,
+  type FleetBuildDriftSessionInput,
+} from '../services/fleet-build-drift.js';
 import { encryptLivekitSecret } from '../lib/livekit-secret-encryption.js';
 import {
   BadRequestError,
@@ -107,6 +112,14 @@ export interface RegisterMacNodesRoutesDeps {
    *  have LiveKit yet not be connected, which is exactly when dispatch
    *  logs "fleet node not connected". */
   controlRegistry?: FleetControlRegistry;
+  /** A3 2026-09-19 — when wired, GET /v1/mac-nodes reports `build_drift`: the
+   *  measured harness-binary and WebKit-framework digests beside the declared
+   *  `harnessVersion` / `webkitForkBuild`, plus the devices and sessions that
+   *  contradict each other. The store supplies the per-SESSION half (which
+   *  frameworks a live session was actually spawned from); without it the
+   *  device half is still reported and finding (d) simply has nothing to
+   *  compare — it is never reported as "no drift". */
+  capabilityReportStore?: SessionCapabilityReportStore;
 }
 
 export function registerMacNodesRoutes(
@@ -320,6 +333,47 @@ export function registerMacNodesRoutes(
     },
     async (_req, reply) => {
       const nodes = await repo.listActive();
+      // A3 2026-09-19 — DECLARED vs MEASURED build identity across the fleet.
+      //
+      // ⛔ THE JOIN IS DONE HERE AND THE VERDICT IS NOT. Assembling the inputs
+      // needs the repo, the store and the node_id→row-id mapping; deciding what
+      // contradicts what needs none of them. `computeFleetBuildDrift` is pure so
+      // the decision is unit-testable without a database, and so two operators
+      // reading the same snapshot cannot get two answers.
+      //
+      // Sessions are keyed on the node's HUMAN id (the ownership-gated relay
+      // stores the `iss` the frame authenticated as) while the panel keys rows on
+      // the fleet_nodes uuid, so the map below is the only place the two
+      // identities meet. A session whose node id matches no active row is DROPPED
+      // rather than given a synthetic device: attributing a session to the wrong
+      // device would invent a redeploy that never happened.
+      const deviceIdByNodeId = new Map<string, string>();
+      for (const n of nodes) {
+        if (n.nodeId !== null) deviceIdByNodeId.set(n.nodeId, n.id);
+      }
+      const sessions: FleetBuildDriftSessionInput[] = [];
+      for (const entry of deps.capabilityReportStore?.entries() ?? []) {
+        const nodeId = entry.report.reporting_node_id;
+        if (nodeId === null) continue;
+        const deviceId = deviceIdByNodeId.get(nodeId);
+        if (deviceId === undefined) continue;
+        sessions.push({
+          sessionId: entry.sessionId,
+          deviceId,
+          declaredWebkitForkBuild: entry.report.webkit_fork_build,
+          webkitFrameworkSha256: entry.report.webkit_framework_sha256,
+          observedAt: entry.report.timestamp,
+        });
+      }
+      const buildDrift = computeFleetBuildDrift({
+        devices: nodes.map((n) => ({
+          deviceId: n.id,
+          declaredHarnessVersion: n.lastHeartbeat?.harnessVersion ?? null,
+          harnessBinarySha256: n.lastHeartbeat?.harnessBinarySha256 ?? null,
+          webkitFrameworkSha256: n.lastHeartbeat?.webkitFrameworkSha256 ?? null,
+        })),
+        sessions,
+      });
       return reply.code(200).send({
         data: nodes.map((n) => ({
           id: n.id,
@@ -341,6 +395,15 @@ export function registerMacNodesRoutes(
               ? null
               : n.nodeId !== null && deps.controlRegistry.get(n.nodeId) !== undefined,
         })),
+        // A3 2026-09-19 — the declared-vs-measured build report, admin-scoped
+        // like everything else on this route. `devices` is keyed by the same `id`
+        // the rows above carry, so the panel joins without a second identity.
+        //
+        // A SIBLING OF `data`, NOT A FIELD ON EACH ROW: every finding is about a
+        // RELATION between devices (two claiming one version, a session against
+        // its device), and a per-row copy of a cross-row fact would have to be
+        // either duplicated or arbitrarily assigned to one side.
+        build_drift: buildDrift,
       });
     },
   );
