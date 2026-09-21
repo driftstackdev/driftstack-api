@@ -954,7 +954,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<div data-deliveries="' +
           escapeHtml(e.id) +
           '" class="hidden mt-4 border-t border-tk-border pt-4">' +
-          '<p class="text-sm text-tk-ink-3">Loading deliveries…</p>' +
+          deliverySkeleton() +
           '</div>' +
           '</li>'
         );
@@ -1020,6 +1020,32 @@ const apiBaseUrl = resolveApiBaseUrl();
         return status;
       }
 
+      // 2026-09-21 (stage 2) — the delivery log's loading state was a bare
+      // "Loading…" paragraph, the one loading state in the app that isn't a
+      // pulsing skeleton (audit-log's row skeleton, this same page's own
+      // endpoint-list skeleton). Shaped like deliveryRow() below (a status
+      // pill + two meta fields) so the skeleton doesn't jump size against
+      // the real rows that replace it.
+      function deliverySkeletonRow() {
+        return (
+          '<li class="flex items-start justify-between gap-3 py-2 text-sm" aria-hidden="true">' +
+          '<div class="min-w-0 flex-1">' +
+          '<div class="flex flex-wrap items-center gap-2">' +
+          '<span class="skeleton inline-block h-4 w-16"></span>' +
+          '<span class="skeleton inline-block h-3 w-24"></span>' +
+          '<span class="skeleton inline-block h-3 w-20"></span>' +
+          '</div></div></li>'
+        );
+      }
+      function deliverySkeleton() {
+        return (
+          '<ul class="divide-y divide-tk-border" aria-busy="true">' +
+          deliverySkeletonRow() +
+          deliverySkeletonRow() +
+          '</ul>'
+        );
+      }
+
       function deliveryRow(d) {
         const statusBadge =
           'inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium uppercase tracking-wide ';
@@ -1041,7 +1067,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               escapeHtml(d.id) +
               '" class="text-xs text-tk-accent-text hover:underline">Replay</button>';
         return (
-          '<li class="flex items-start justify-between gap-3 py-2 text-sm">' +
+          '<li class="-mx-2 flex items-start justify-between gap-3 rounded-md px-2 py-2 text-sm transition-colors hover:bg-tk-hover">' +
           '<div class="min-w-0 flex-1">' +
           '<div class="flex flex-wrap items-center gap-2">' +
           '<span class="' +
@@ -1150,8 +1176,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         deliveriesSeq.set(endpointId, seq);
         const queryParts = ['limit=20'];
         if (status) queryParts.push('status=' + encodeURIComponent(status));
-        container.innerHTML =
-          buildFilterBar(endpointId, status) + '<p class="text-sm text-tk-ink-3">Loading…</p>';
+        container.innerHTML = buildFilterBar(endpointId, status) + deliverySkeleton();
         const sel = container.querySelector('[data-deliveries-filter]');
         if (sel) {
           sel.addEventListener('change', () => {

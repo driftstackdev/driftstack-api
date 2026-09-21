@@ -122,11 +122,21 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     );
   });
 
-  it('CRITICAL Capture breakdown by-kind section pinned — Screenshots + DOM snapshots. The 2-row dl threads the same totals as the combined tile.', () => {
+  it('CRITICAL Capture breakdown by-kind section pinned — Screenshots + DOM snapshots. The 2-row dl threads the same totals as the combined tile. 2026-09-21 (stage 2) — the dt/dd pair was restyled to the AI-view soft-headline-figure/hard-fact hierarchy (dt: small mono/uppercase label; dd: font-light tabular-nums figure), so this pin follows the label text + data-stat wiring, not the exact class list.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/<dt class="text-sm text-tk-ink-3">Screenshots<\/dt>/);
-    expect(p).toMatch(/<dt class="text-sm text-tk-ink-3">Page snapshots<\/dt>/);
+    expect(p).toMatch(
+      /<dt class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Screenshots<\/dt>/,
+    );
+    expect(p).toMatch(
+      /<dt class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Page snapshots<\/dt>/,
+    );
+    expect(p).toMatch(
+      /<dd class="text-xl font-light tabular-nums text-tk-ink" data-stat="screenshot_capture">/,
+    );
+    expect(p).toMatch(
+      /<dd class="text-xl font-light tabular-nums text-tk-ink" data-stat="state_capture">/,
+    );
   });
 
   it('CRITICAL neutral-placeholder SSG framing pinned. 2026-06-24 — the fabricated deterministic sin()+seed mockSeries generator was removed (it shipped invented numbers to every customer); the SSG sparklines paint a flat baseline (FLAT_PATH) until the live series replaces them, and tiles render an em-dash placeholder.', () => {

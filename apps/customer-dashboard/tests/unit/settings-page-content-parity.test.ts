@@ -92,7 +92,7 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
       /profileHydrated = true;\s*profileUnavailableReason = '';\s*syncProfileControls\(\)/,
     );
     expect(body).toMatch(
-      /showBanner\('Sign in to see live preferences \+ recent activity\.'\);\s*if \(typeof window\.dashboardHydrated === 'function'\) \{\s*window\.dashboardHydrated\(\);\s*\}\s*return;/,
+      /showBanner\('Sign in to see live preferences \+ recent activity\.'\);\s*callDashboardHydrated\(\);\s*return;/,
     );
   });
 

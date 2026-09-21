@@ -1932,11 +1932,44 @@ const EMAIL_EVENTS = [
         });
       }
 
+      // 2026-09-21 (stage 2) — measured in a real browser (not assumed):
+      // this page's own two calls to window.dashboardHydrated() were both
+      // silent no-ops. DashboardLayout defines window.dashboardHydrated in
+      // its OWN <script>, which sits after </main> — after every slotted
+      // page's inline <script>, this one included — in document order.
+      // A parser-blocking <script> runs synchronously as the HTML parser
+      // reaches it, and even a queueMicrotask callback queued from inside
+      // it still runs before the parser advances to that later <script>,
+      // so both the old synchronous call below and the old
+      // queueMicrotask(...) wrapper found window.dashboardHydrated
+      // undefined every single time and silently did nothing — this page
+      // reveals ONLY via the layout's 1200ms safety-cap timer, on every
+      // load, regardless of how fast the network actually is. Confirmed by
+      // instrumenting a real dev-server load (negative control: reverted
+      // this fix, re-measured, restored it): reveal landed at ~1224ms
+      // here vs. ~20-136ms on pages that gate the same call behind an
+      // async fetch (e.g. billing.astro), where the network round-trip
+      // alone outlasts the rest of the document's parse. DOMContentLoaded
+      // fires only after the whole document — every parser-blocking
+      // script included — has run, so by then window.dashboardHydrated is
+      // guaranteed to exist; deferring to it (or calling immediately if
+      // parsing has somehow already finished) fixes both call sites
+      // without touching the shared layout script other pages already
+      // rely on.
+      function callDashboardHydrated() {
+        function fire() {
+          if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', fire, { once: true });
+        } else {
+          fire();
+        }
+      }
+
       if (!token) {
         showBanner('Sign in to see live preferences + recent activity.');
-        if (typeof window.dashboardHydrated === 'function') {
-          window.dashboardHydrated();
-        }
+        callDashboardHydrated();
         return;
       }
 
@@ -1944,15 +1977,11 @@ const EMAIL_EVENTS = [
       loadBundledLlm();
       loadByokAnthropic();
       // 2026-05-21 — opacity-gate signal. Three loaders fire in parallel
-      // without returning promises (legacy shape). Fire the reveal in
-      // a microtask so the first paint happens after the network
-      // requests are scheduled; far better UX than waiting the 1200ms
-      // safety cap. Fields populate as each request resolves.
-      queueMicrotask(function () {
-        if (typeof window.dashboardHydrated === 'function') {
-          window.dashboardHydrated();
-        }
-      });
+      // without returning promises (legacy shape). Fire the reveal as
+      // soon as the document is ready (see callDashboardHydrated above)
+      // rather than waiting the 1200ms safety cap. Fields populate as
+      // each request resolves.
+      callDashboardHydrated();
     })();
   </script>
 </DashboardLayout>

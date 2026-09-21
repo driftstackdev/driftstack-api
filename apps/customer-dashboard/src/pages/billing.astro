@@ -70,6 +70,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </div>
         <span
           data-field="sub-status-badge"
+          data-tk-state="muted"
           class:list={[
             'inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wide',
             STATUS_BADGE_CLASS.no_subscription,
@@ -246,6 +247,22 @@ const apiBaseUrl = resolveApiBaseUrl();
       const BADGE_TONE_CLASSES = Array.from(
         new Set(Object.values(STATUS_BADGE_CLASS).flatMap((c) => c.split(' '))),
       );
+      // 2026-09-21 (stage 2) — the badge's [data-tk-state] pip (base.css):
+      // active/trialing read as the calm "ready" light (connected, good
+      // news), past_due/unpaid/incomplete read as the "busy" light
+      // (breathing — needs attention), and every other status (canceled,
+      // incomplete_expired, paused, no_subscription, and the 503/network
+      // "unavailable" fallback) gets no light at all rather than borrowing
+      // a colour that would misstate the account's health. The badge TEXT
+      // is still the authoritative signal — this only reinforces it, same
+      // as the session-state pip stage 1 added on the home page.
+      const STATE_LIGHT = {
+        active: 'ready',
+        trialing: 'ready',
+        past_due: 'busy',
+        unpaid: 'busy',
+        incomplete: 'busy',
+      };
       function setStatusBadge(text, toneKey) {
         setText('sub-status-badge', text);
         const el = root.querySelector('[data-field="sub-status-badge"]');
@@ -253,6 +270,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         el.classList.remove(...BADGE_TONE_CLASSES);
         const toneClass = STATUS_BADGE_CLASS[toneKey] || STATUS_BADGE_CLASS.no_subscription;
         el.classList.add(...toneClass.split(' '));
+        el.setAttribute('data-tk-state', STATE_LIGHT[toneKey] || 'muted');
       }
 
       function fmtIso(iso) {

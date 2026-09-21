@@ -278,17 +278,25 @@
      additive — the recipes above keep their names so existing pages
      restyle without markup churn. */
 
-  /* Panel — the blueprint's content card (tables, charts, plan box). */
+  /* Panel — the blueprint's content card (tables, charts, plan box).
+     2026-09-21 (stage 2) — promoted from shadow-ambient to shadow-lift
+     (the stage-1 report's own "stage 2 candidate") so the home page's
+     panels read at the same depth as the quick-action + trust cards
+     stage 1 already lifted, instead of one step behind them. Neither
+     class ever nests inside another shadowed surface in this app (both
+     are top-level grid children on index.astro), so this can't out-lift
+     a parent. */
   .panel {
-    @apply rounded-card border border-tk-border bg-tk-surface p-[18px] shadow-ambient;
+    @apply rounded-card border border-tk-border bg-tk-surface p-[18px] shadow-lift;
   }
   .panel-title {
     @apply mb-3.5 flex items-center gap-2 text-sm font-semibold text-tk-ink;
   }
 
-  /* Stat card — the blueprint's KPI tiles. */
+  /* Stat card — the blueprint's KPI tiles. 2026-09-21 (stage 2) — see the
+     .panel comment above; same promotion, same rationale. */
   .stat-card {
-    @apply rounded-card border border-tk-border bg-tk-surface p-4 shadow-ambient;
+    @apply rounded-card border border-tk-border bg-tk-surface p-4 shadow-lift;
   }
   .stat-label {
     @apply mb-2 flex items-center gap-1.5 text-xs font-semibold text-tk-ink-3;
@@ -754,4 +762,69 @@
     animation: none;
     box-shadow: 0 0 0 3px rgb(var(--tk-state-rgb, var(--ink-3-rgb)) / 0.3);
   }
+}
+
+/* ── Stage 2 visual upgrade (2026-09-21) — closing the gap the stage-1
+   report named as its own "stage 2 candidates". .stat-card/.panel were
+   promoted to --shadow-lift above (see their comments). Two more
+   devices here, both additive and scoped by class/attribute:
+     1. .tk-well              — the first-run-wizard "stage well" idea
+                                 (design brief §3): a raised card gets a
+                                 light pooled at its own top-left corner,
+                                 breathing by opacity only. Applied to the
+                                 .auth-card wrapper on the pages a new or
+                                 returning customer meets first (login,
+                                 signup, verify-email, reset-password) —
+                                 .auth-card's existing shadow-ambient-lg
+                                 (already the deepest shadow token) is
+                                 "the lift", and .auth-card::before already
+                                 supplies the hairline rim; this adds only
+                                 the pooled light, the one piece missing.
+     2. [data-tk-state='muted'] — extends stage 1's state-light vocabulary
+                                 (§1.1's --ai-light-rgb idea) with the
+                                 "absence of light" tone, for a state that
+                                 earns no light at all (a cancelled/paused
+                                 subscription) rather than borrowing
+                                 ready/busy's colours for news that is
+                                 neither good nor urgent. Same value the
+                                 pip already falls back to by default;
+                                 named explicitly so a call site can opt in
+                                 on purpose and a test can pin it. */
+
+/* 1. Auth "well". Reuses .hero-glow's own opacity-only keyframe
+   (hero-glow-pulse) at .tk-room's 9s/--tk-ease idle cadence, so this
+   reads as the same closed motion vocabulary stage 1 established rather
+   than a one-off. isolation:isolate gives the ::after its own stacking
+   context so z-index:-1 stays behind the card's own opaque surface
+   (peeking out only past its rounded corners) instead of behind the
+   whole page. */
+.tk-well {
+  position: relative;
+  isolation: isolate;
+}
+.tk-well::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -20%;
+  left: -20%;
+  width: 60%;
+  height: 60%;
+  border-radius: 9999px;
+  background: radial-gradient(circle, var(--glow), transparent 70%);
+  filter: blur(36px);
+  pointer-events: none;
+  animation: hero-glow-pulse 9s var(--tk-ease) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tk-well::after {
+    animation: none;
+    opacity: 0.8;
+  }
+}
+
+/* 2. State-light: the absence-of-light tone (see the section comment
+   above). */
+[data-tk-state='muted'] {
+  --tk-state-rgb: var(--ink-3-rgb);
 }

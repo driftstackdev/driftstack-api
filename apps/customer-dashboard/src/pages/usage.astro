@@ -78,7 +78,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
             </svg>
           </span>
         </div>
-        <p class="mt-3 text-3xl font-semibold text-tk-ink" data-stat="session_minute">
+        <p class="mt-3 text-3xl font-light tabular-nums text-tk-ink" data-stat="session_minute">
           {PLACEHOLDER_STAT}
         </p>
         <svg
@@ -104,7 +104,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
             </svg>
           </span>
         </div>
-        <p class="mt-3 text-3xl font-semibold text-tk-ink" data-stat="navigate">
+        <p class="mt-3 text-3xl font-light tabular-nums text-tk-ink" data-stat="navigate">
           {PLACEHOLDER_STAT}
         </p>
         <svg
@@ -130,7 +130,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
             </svg>
           </span>
         </div>
-        <p class="mt-3 text-3xl font-semibold text-tk-ink" data-stat="interact">
+        <p class="mt-3 text-3xl font-light tabular-nums text-tk-ink" data-stat="interact">
           {PLACEHOLDER_STAT}
         </p>
         <svg
@@ -156,7 +156,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
             </svg>
           </span>
         </div>
-        <p class="mt-3 text-3xl font-semibold text-tk-ink" data-stat="captures_total">
+        <p class="mt-3 text-3xl font-light tabular-nums text-tk-ink" data-stat="captures_total">
           {PLACEHOLDER_STAT}
         </p>
         <svg
@@ -252,15 +252,15 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
         </div>
       </div>
       <dl class="mt-6 grid gap-6 md:grid-cols-2">
-        <div class="flex justify-between border-b border-tk-border pb-3">
-          <dt class="text-sm text-tk-ink-3">Screenshots</dt>
-          <dd class="font-mono text-sm text-tk-ink" data-stat="screenshot_capture">
+        <div class="flex items-baseline justify-between border-b border-tk-border pb-3">
+          <dt class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Screenshots</dt>
+          <dd class="text-xl font-light tabular-nums text-tk-ink" data-stat="screenshot_capture">
             {PLACEHOLDER_STAT}
           </dd>
         </div>
-        <div class="flex justify-between border-b border-tk-border pb-3">
-          <dt class="text-sm text-tk-ink-3">Page snapshots</dt>
-          <dd class="font-mono text-sm text-tk-ink" data-stat="state_capture">
+        <div class="flex items-baseline justify-between border-b border-tk-border pb-3">
+          <dt class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Page snapshots</dt>
+          <dd class="text-xl font-light tabular-nums text-tk-ink" data-stat="state_capture">
             {PLACEHOLDER_STAT}
           </dd>
         </div>
