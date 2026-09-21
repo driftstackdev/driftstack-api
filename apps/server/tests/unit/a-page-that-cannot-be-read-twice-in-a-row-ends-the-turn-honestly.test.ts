@@ -9,8 +9,14 @@
 // This file proves the fix, at the RUNTIME level (the executor's half — its
 // own, larger planning budget and the truncation note — is proven directly
 // against ControlPlaneAgentExecutor in agent-executor-control-plane.test.ts):
-//   (a) a planning read that yields nothing is retried ONCE, and a second
-//       success is used to plan the segment;
+//   (a) a planning read that yields nothing is retried ONCE — via a DIFFERENT
+//       method, `observeElements` (`get_page_source` cannot be bounded, so
+//       the retry is a bounded `perceive` list instead; see
+//       agent-executor-control-plane.test.ts for the row shape and the note
+//       sentence that read renders) — and a second success is used to plan
+//       the segment;
+//   (a2) an executor with no `observeElements` at all gets no retry: one
+//        failed planning read, not a broken one;
 //   (b) TWO CONSECUTIVE blind segments end the turn honestly instead of
 //       guessing forever — a new sentence, a new notice reason, and (via the
 //       SAME telemetry classifier production reads) a `page_load_failed`
@@ -71,17 +77,25 @@ interface Harness {
   runs: ExecuteArgs[];
   seen: DecomposeArgs[];
   observeDigestCalls: number;
+  observeElementsCalls: number;
 }
 
 function harness(): Harness {
-  return { runs: [], seen: [], observeDigestCalls: 0 };
+  return { runs: [], seen: [], observeDigestCalls: 0, observeElementsCalls: 0 };
 }
 
 /**
- * Runs every step green (unless `fails` says otherwise) and answers
- * `observeDigest` from `reads`, indexed by the 1-based call number across the
- * WHOLE turn (retries included, so a segment whose read is retried once
- * consumes two entries). A call past the end of `reads` returns null.
+ * Runs every step green (unless `fails` says otherwise) and answers the
+ * runtime's planning read from `reads`, indexed by the 1-based call number
+ * across the WHOLE turn (retries included, so a segment whose read is
+ * retried once consumes two entries) — REGARDLESS of which method consumed
+ * the entry: the FIRST attempt of every `readForPlanning` call is
+ * `observeDigest`; the RETRY, when one is sent, is `observeElements`. A call
+ * past the end of `reads` returns null.
+ *
+ * `withElements: false` omits `observeElements` from the returned executor
+ * entirely, for (a2) — proving a retry is only ever sent when the executor
+ * can do one.
  */
 function executorWithReads(
   h: Harness,
@@ -89,8 +103,14 @@ function executorWithReads(
   opts: {
     fails?: (intent: AgentIntent) => IntentResult | null;
     onExecute?: (run: number) => void;
+    withElements?: boolean;
   } = {},
 ): AgentExecutor {
+  let cursor = 0;
+  const nextRead = (): string | null => {
+    cursor += 1;
+    return reads[cursor - 1] ?? null;
+  };
   return {
     execute: (args: ExecuteArgs): Promise<ExecutorRunResult> => {
       h.runs.push(args);
@@ -108,9 +128,16 @@ function executorWithReads(
     },
     observeDigest: (): Promise<string | null> => {
       h.observeDigestCalls += 1;
-      const v = reads[h.observeDigestCalls - 1];
-      return Promise.resolve(v ?? null);
+      return Promise.resolve(nextRead());
     },
+    ...(opts.withElements === false
+      ? {}
+      : {
+          observeElements: (): Promise<string | null> => {
+            h.observeElementsCalls += 1;
+            return Promise.resolve(nextRead());
+          },
+        }),
     observe: (): Promise<string | null> => Promise.resolve('read-back text'),
   };
 }
@@ -154,36 +181,71 @@ async function makeRuntime(
 }
 
 describe('T2 — a page that cannot be read twice in a row ends the turn honestly', () => {
-  it('(a) a planning read that times out is retried ONCE, and the second success is used to plan the next segment', async () => {
+  it('(a) a planning read that times out is retried ONCE — via observeElements, not a second observeDigest — and the second success is used to plan the next segment', async () => {
     const h = harness();
     // Segment 1 has no prior browser work (fresh session), so it plans blind
     // by design — no read is even attempted. Segment 2's read is what is
-    // retried: attempt 1 -> null, attempt 2 -> a real digest.
+    // retried: attempt 1 (observeDigest) -> null, attempt 2 (observeElements)
+    // -> a real answer.
     const { turn } = await makeRuntime(h, {
       plans: [segment([NAV], 'continue'), segment([WAIT], 'done')],
-      executor: executorWithReads(h, [null, 'page: create account — email, password, submit']),
+      executor: executorWithReads(h, [
+        null,
+        'page: create account\n#email · input · "Email"\n(the page\'s text could not be read in time; only its controls are listed)',
+      ]),
     });
 
     const result = await turn('go to driftstack.io and create an account');
 
     if (result.kind !== 'plan-executed') throw new Error('type narrow');
-    expect(h.observeDigestCalls).toBe(2); // one retry, no more
+    expect(h.observeDigestCalls).toBe(1); // the FIRST attempt only
+    expect(h.observeElementsCalls).toBe(1); // the retry — a DIFFERENT method
     expect(h.seen).toHaveLength(2);
-    // The SECOND (retried) read's text is what the segment was actually
-    // planned against.
-    expect(h.seen[1]?.observation).toBe('page: create account — email, password, submit');
-    // A retried-but-successful read is not a "blind" segment at all.
+    // The RETRIED read's text is what the segment was actually planned
+    // against.
+    expect(h.seen[1]?.observation).toBe(
+      'page: create account\n#email · input · "Email"\n(the page\'s text could not be read in time; only its controls are listed)',
+    );
+    // A retried-but-successful read is not a "blind" segment at all — even
+    // though it came from `observeElements`, not `observeDigest`. `loop`
+    // omits `blindSegments` entirely when the count is 0 (see agent-runtime.ts).
+    expect(result.loop?.blindSegments).toBeUndefined();
     expect(result.loop?.stopped).toBeUndefined();
     expect(result.notice).toBeUndefined();
+  });
+
+  it('(a2) an executor with no observeElements gets NO retry at all — one failed read, not a broken one', async () => {
+    const h = harness();
+    // Segment 2's FIRST attempt fails; there is no `observeElements` on this
+    // executor, so readForPlanning must not try to call it — the segment
+    // simply plans blind, same as if the (single) attempt had failed before
+    // this feature existed at all.
+    const { turn } = await makeRuntime(h, {
+      plans: [segment([NAV], 'continue'), segment([SHOT], 'done')],
+      executor: executorWithReads(h, [null, 'should never be read — no observeElements exists'], {
+        withElements: false,
+      }),
+    });
+
+    const result = await turn('go to driftstack.io and create an account');
+
+    if (result.kind !== 'plan-executed') throw new Error('type narrow');
+    expect(h.observeDigestCalls).toBe(1);
+    expect(h.observeElementsCalls).toBe(0);
+    expect(h.seen).toHaveLength(2);
+    expect(result.loop?.stopped).toBeUndefined(); // one blind segment, not two consecutive
   });
 
   it('(b) TWO CONSECUTIVE blind segments stop the turn with `page_unreadable`, the exact sentence, the public reason, and — via the classifier production reads — `page_load_failed`', async () => {
     const h = harness();
     const { turn } = await makeRuntime(h, {
       // Segment 1: fresh session, no prior work — plans blind, exempt.
-      // Segment 2's read fails BOTH attempts (blind #1, not yet consecutive).
-      // Segment 3's read fails BOTH attempts (blind #2, consecutive with #1)
-      // — the turn must stop BEFORE segment 3 is ever planned.
+      // Segment 2's read fails BOTH attempts — observeDigest, then the retry
+      // observeElements (blind #1, not yet consecutive). Segment 3's read
+      // fails BOTH attempts the same way (blind #2, consecutive with #1) —
+      // the turn must stop BEFORE segment 3 is ever planned. A perceive that
+      // ALSO fails leaves the existing behaviour exactly as it was before
+      // this build: blind once, then (consecutively) page_unreadable.
       plans: [segment([NAV], 'continue'), segment([WAIT], 'continue'), segment([SHOT], 'done')],
       executor: executorWithReads(h, [null, null, null, null]),
     });
@@ -194,7 +256,8 @@ describe('T2 — a page that cannot be read twice in a row ends the turn honestl
     // Segment 3's planner call never happened: the turn stopped first.
     expect(h.seen).toHaveLength(2);
     expect(h.runs).toHaveLength(2);
-    expect(h.observeDigestCalls).toBe(4); // 2 attempts × 2 blind segments
+    expect(h.observeDigestCalls).toBe(2); // the FIRST attempt of each segment's read
+    expect(h.observeElementsCalls).toBe(2); // the retry of each — also failed
     expect(result.loop?.stopped).toBe('page_unreadable');
     expect(result.notice).toBe(TURN_LOOP_STOP_SENTENCES.page_unreadable);
     expect(result.notice).toBe(
@@ -306,8 +369,9 @@ describe('T2 — a page that cannot be read twice in a row ends the turn honestl
 
     if (result.kind !== 'plan-executed') throw new Error('type narrow');
     expect(jumped).toBe(true); // the hook actually fired
-    // The read never started: nothing was dispatched for it.
+    // The read never started: nothing was dispatched for it, by either method.
     expect(h.observeDigestCalls).toBe(0);
+    expect(h.observeElementsCalls).toBe(0);
     // Segment 2 was still planned (blind) — this is NOT `page_unreadable`
     // (segment 1 is exempt, so this is a single blind segment) and NOT
     // `wall_clock` either (the earlier, smaller bound never fired: the jump

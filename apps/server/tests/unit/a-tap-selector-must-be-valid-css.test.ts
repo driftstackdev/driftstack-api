@@ -75,6 +75,25 @@ describe('a tap selector must be valid CSS', () => {
     }
   });
 
+  it('accepts the selector the device itself produces for a control inside an open shadow root', () => {
+    // The device lists a page's controls with a ` >>> ` between shadow
+    // boundaries; its own click/send_keys/fill_form resolve it. A validator
+    // that only knew CSS refused it — and because Playwright's `>>` chaining is
+    // refused (correctly), three chevrons were refused by containing two. Each
+    // segment is CSS and is validated as such.
+    expect(validateCssSelector('#app >>> button.primary')).toEqual({ ok: true });
+    expect(
+      validateCssSelector('div#root > my-widget:nth-of-type(2) >>> form >>> input[name="q"]'),
+    ).toEqual({ ok: true });
+    // A bad segment is still refused for its own reason.
+    expect(validateCssSelector("#app >>> button:has-text('Buy')").ok).toBe(false);
+    // Playwright's two-chevron chaining is still not CSS.
+    expect(validateCssSelector('#app >> button').ok).toBe(false);
+    // An empty segment is not a path the device would emit.
+    expect(validateCssSelector('#app >>> ').ok).toBe(false);
+    expect(validateCssSelector(' >>> button').ok).toBe(false);
+  });
+
   it('refuses an empty selector with a reason', () => {
     expect(validateCssSelector('   ').ok).toBe(false);
     expect(validateCssSelector('   ').reason).toMatch(/empty/);

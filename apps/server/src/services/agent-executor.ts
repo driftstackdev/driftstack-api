@@ -975,6 +975,37 @@ export interface AgentExecutor {
      */
     onPlanningRead?: (entry: PlanningReadTraceEntry) => void,
   ): Promise<string | null>;
+
+  /**
+   * P1/T-elements — the RUNTIME's one retry of a planning read that yielded
+   * nothing, when {@link observeDigest} is the one that yielded it.
+   * `get_page_source` (what {@link observeDigest} dispatches) cannot be
+   * bounded by a deadline — the device serialises the ENTIRE live DOM before
+   * anything returns, all-or-nothing — so retrying it again would only race
+   * the same unbounded read a second time. This is a DIFFERENT, IN-PAGE
+   * bounded read instead: `perceive` with no `selector` (a capped listing of
+   * the page's controls), rendered into the same row shape `observeDigest`'s
+   * digest produces for its elements, but carrying no page TEXT.
+   *
+   * OPTIONAL and feature-detected exactly like {@link observeDigest}: an
+   * executor without it (a hand-written test double, or a device build that
+   * predates the bounded list form) simply gets no retry — one failed
+   * planning read, not a broken one. Returns null on any failure; this read
+   * is additive and must never fail a turn.
+   */
+  observeElements?(
+    sessionId: string,
+    shouldContinue?: ExecuteArgs['shouldContinue'],
+    /** B2 — same as {@link observe}'s. */
+    signal?: AbortSignal,
+    /**
+     * T1/T4 — same contract as {@link observeDigest}'s: best-effort
+     * diagnostics only, folded into the turn's bounded trace. No commitment
+     * budget parameter — an element list carries no structural facts to arm
+     * the commitment gate from, so there is nothing for it to receive.
+     */
+    onPlanningRead?: (entry: PlanningReadTraceEntry) => void,
+  ): Promise<string | null>;
 }
 
 /**

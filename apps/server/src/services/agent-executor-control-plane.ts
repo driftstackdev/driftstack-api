@@ -2166,6 +2166,109 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   }
 
   /**
+   * P1/T-elements — THE RETRY `agent-runtime.ts`'s `readForPlanning` sends
+   * when the full read ({@link observeDigest}) yielded nothing.
+   * `get_page_source` cannot be bounded — the device serialises the ENTIRE
+   * live DOM before anything returns, all-or-nothing, so a slow page cannot
+   * be capped by a char count or a deadline (that IS why the first read
+   * timed out). What the device offers, bounded IN-PAGE, is `perceive` in
+   * LIST form (no `selector`): up to `max_elements` elements, visible ones
+   * prioritised once the page has more than that, open shadow roots pierced,
+   * roles normalised. Capped at {@link MAX_PAGE_DIGEST_ELEMENTS} — this
+   * fallback never shows the planner more controls than a healthy
+   * {@link observeDigest} read would have — and raced against the SAME
+   * {@link planningObserveTimeoutMs} budget, with the same Stop / authority
+   * discipline as {@link observeCore}: the caller (`readForPlanning`) has
+   * already asked the turn's hard stop before allowing this call to start.
+   *
+   * Carries NO page TEXT: {@link PAGE_ELEMENTS_ONLY_NOTE} says so, on its own
+   * line, so the planner judges "is the goal state reached" knowing what is
+   * missing rather than silently guessing from controls alone.
+   *
+   * The gate-label cache is updated from these elements too (see
+   * {@link rememberGateLabelsOnly}) — the caption arm must still see a
+   * purchase's name when this is the only read a segment got — but the
+   * commitment arm's FACTS are left exactly where the last full read left
+   * them: a `perceive` list has no structural reading of the page (no form,
+   * no method, no payment instrument) to arm from.
+   *
+   * Best-effort, like every planning read: null on any failure.
+   */
+  async observeElements(
+    sessionId: string,
+    shouldContinue?: ExecuteArgs['shouldContinue'],
+    signal?: AbortSignal,
+    onPlanningRead?: (entry: PlanningReadTraceEntry) => void,
+  ): Promise<string | null> {
+    const startedAt = this.now();
+    const settle = (
+      text: string | null,
+      outcome: PlanningReadOutcome,
+      extra: { chars?: number; truncated?: boolean; elements?: number } = {},
+    ): string | null => {
+      try {
+        onPlanningRead?.({
+          ms: Math.max(0, this.now() - startedAt),
+          outcome,
+          chars: extra.chars ?? 0,
+          truncated: extra.truncated ?? false,
+          ...(extra.elements !== undefined ? { elements: extra.elements } : {}),
+        });
+      } catch {
+        /* diagnostics only — must never affect planning */
+      }
+      return text;
+    };
+    if (stopRequested(signal)) return settle(null, 'stopped');
+    if (!(await executionMayContinue(shouldContinue))) return settle(null, 'refused');
+    let dispatch: IntentDispatch;
+    try {
+      dispatch = serializeIntentDispatch({
+        sessionId,
+        intentId: this.genIntentId(),
+        intentName: 'perceive',
+        params: { max_elements: MAX_PAGE_DIGEST_ELEMENTS },
+      });
+    } catch {
+      // A dispatch that could not even be built produced nothing to read —
+      // the same class as an answer that decoded to nothing.
+      return settle(null, 'empty');
+    }
+    if (stopRequested(signal)) return settle(null, 'stopped');
+    if (!(await executionMayContinue(shouldContinue))) return settle(null, 'refused');
+    // Bound the read latency exactly as observeCore does, against the SAME
+    // planning budget: this is the runtime's one retry of a read that already
+    // yielded nothing, not a second, independent budget.
+    const answered = this.dispatcher
+      .dispatch(dispatch)
+      .then((parsed): { kind: 'dispatched'; parsed: ParsedIntentResult } => ({
+        kind: 'dispatched',
+        parsed,
+      }))
+      .catch((): { kind: 'dispatched'; parsed: null } => ({ kind: 'dispatched', parsed: null }));
+    const timedOut = this.sleep(this.planningObserveTimeoutMs).then((): { kind: 'timeout' } => ({
+      kind: 'timeout',
+    }));
+    // B2 — Stop cuts the read short: it only reads, so a late answer is
+    // harmlessly dropped, exactly as observeCore's read is.
+    const raced = await raceAbort(Promise.race([answered, timedOut]), signal);
+    if (raced.aborted) return settle(null, 'stopped');
+    if (!(await executionMayContinue(shouldContinue))) return settle(null, 'refused');
+    if (raced.value.kind === 'timeout') return settle(null, 'timeout');
+    const parsed = raced.value.parsed;
+    if (parsed === null || !parsed.success) return settle(null, 'empty');
+    const reading = readPerceiveListAnswer(parsed.outputData);
+    if (reading === null) return settle(null, 'empty');
+    const { text, gateLabels } = renderElementsForPlanning(reading);
+    this.rememberGateLabelsOnly(sessionId, gateLabels);
+    return settle(text, 'ok_elements', {
+      chars: text.length,
+      truncated: reading.truncated,
+      elements: reading.elements.length,
+    });
+  }
+
+  /**
    * What the page last SHOWN TO THE PLANNER calls each of its elements, per
    * session, for the confirmation gate in {@link execute}. See
    * {@link PageDigest.gateLabels} for why the gate needs it.
@@ -2241,6 +2344,27 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     const page = this.gatePage(sessionId);
     page.facts = facts;
     page.factsEpoch = page.epoch;
+    this.touchGatePage(sessionId, page);
+  }
+
+  /**
+   * P1/T-elements — a page read by {@link observeElements} alone: the RETRY,
+   * when the full read that would normally call {@link rememberGatePage} came
+   * back with nothing.
+   *
+   * ⛔ IT UPDATES THE NAMES AND NOT THE FACTS — the mirror image of
+   * {@link rememberCommitFacts}. A `perceive` list carries no structural
+   * reading of the page (no form, no method, no payment instrument), so there
+   * is nothing here for the commitment arm to arm from; leaving `facts` and
+   * `factsEpoch` untouched means the gate keeps judging by whatever the last
+   * full read found, which can only add halts, never drop one. The caption
+   * arm DOES need these names: a tap the planner aims at an element this read
+   * is the only page-read of, on a purchase-labelled selector, must still
+   * halt for confirmation.
+   */
+  private rememberGateLabelsOnly(sessionId: string, labels: ReadonlyMap<string, string>): void {
+    const page = this.gatePage(sessionId);
+    page.labels = labels;
     this.touchGatePage(sessionId, page);
   }
 
@@ -3284,7 +3408,11 @@ const MAX_SESSIONS_WITH_GATE_LABELS = 512;
  * from this number rather than repeating it.
  */
 export const MAX_PAGE_DIGEST_CHARS = 4_000;
-const MAX_PAGE_DIGEST_ELEMENTS = 60;
+// Exported: the RETRY (see {@link ControlPlaneAgentExecutor.observeElements})
+// caps its bounded `perceive` list at the SAME number, so the planner is never
+// shown more controls from a fallback read than a healthy one would have given
+// it.
+export const MAX_PAGE_DIGEST_ELEMENTS = 60;
 // WHAT THE PAGE SAYS, beside what can be tapped on it. A turn is now a loop that
 // has to decide "is the goal state reached?", and that is almost never readable
 // off the controls: a form that went through says so in a heading, a rejected
@@ -3389,6 +3517,29 @@ export function digestSafeLine(text: string): string {
     .replace(DIGEST_FENCE_WORDS, (word) => (word.includes('_') ? word.replace(/_/g, ' ') : ' '))
     .replace(/ {2,}/g, ' ')
     .trim();
+}
+
+/**
+ * One digest ROW, exactly as {@link digestPage} renders one of its interactive
+ * elements — factored out so a read that did not come from a page source (the
+ * `perceive` list {@link ControlPlaneAgentExecutor.observeElements} renders)
+ * produces the BYTE-FOR-BYTE same shape, not a hand-copied near-duplicate that
+ * can silently drift from it. `null` when the selector fails the fence-safety
+ * check, exactly as {@link digestPage}'s own loop skips such a row rather than
+ * let it reach the planner altered.
+ */
+function digestElementRow(
+  selector: string,
+  kind: string,
+  label: string,
+  flags = '',
+): string | null {
+  const safeSelector = digestSafeLine(selector);
+  if (safeSelector !== selector) return null;
+  const safeLabel = digestSafeLine(label);
+  return safeLabel.length > 0
+    ? `${safeSelector} · ${kind} · "${safeLabel}"${flags}`
+    : `${safeSelector} · ${kind}${flags}`;
 }
 
 const BASIC_ENTITIES: Readonly<Record<string, string>> = {
@@ -3799,14 +3950,8 @@ export function digestPage(
     const flags = `${el.inDialog ? ' · in dialog' : ''}${el.hidden ? ' · hidden' : ''}`;
     // A selector that had to be CHANGED to be safe no longer addresses anything,
     // and a row the plan cannot target is not worth its place in the budget.
-    const selector = digestSafeLine(el.selector);
-    if (selector !== el.selector) continue;
-    const label = digestSafeLine(el.text);
-    lines.push(
-      label.length > 0
-        ? `${selector} · ${el.kind} · "${label}"${flags}`
-        : `${selector} · ${el.kind}${flags}`,
-    );
+    const row = digestElementRow(el.selector, el.kind, el.text, flags);
+    if (row !== null) lines.push(row);
   }
   const digest = lines.join('\n');
   return {
@@ -3870,3 +4015,96 @@ export function extractPageTruncated(outputData: unknown): boolean {
  */
 export const PAGE_SOURCE_TRUNCATED_NOTE =
   '(the page was longer than could be read; what is listed is the beginning of it)';
+
+/**
+ * P1/T-elements — appended, on its OWN line, after a page shown to the
+ * planner from a `perceive` LIST read rather than a full page read — see
+ * {@link ControlPlaneAgentExecutor.observeElements}. `get_page_source`
+ * carries the page's TEXT (what {@link digestPage}'s `text:` line is built
+ * from); a perceive list carries none, only its controls — so the planner has
+ * to be told plainly that what it is judging "did the goal state happen"
+ * against is narrower than usual, without touching the contract's own wording
+ * around the fenced observation (this line lives INSIDE it, like
+ * {@link PAGE_SOURCE_TRUNCATED_NOTE}).
+ */
+export const PAGE_ELEMENTS_ONLY_NOTE =
+  "(the page's text could not be read in time; only its controls are listed)";
+
+/** One element from a `perceive` LIST read (no `selector`) — the shape
+ *  {@link renderElementsForPlanning} renders into digest rows. Read
+ *  defensively, like {@link extractPageText}: the wire answer is the SAME
+ *  `PerceiveResultSchema` a by-selector look uses, so it also carries fields
+ *  (`hit`, `occluded`, `tap_point`, …) this path never reads. */
+interface PerceiveListElement {
+  selector: string;
+  kind: string;
+  label: string;
+  visible: boolean;
+}
+
+/** A `perceive` LIST answer, read. `null` when the payload has no `elements`
+ *  array at all — a drifted frame, the same class of failure `observeCore`
+ *  reports as `empty`. An answer WITH an elements array but zero elements in
+ *  it is not that: the device looked and found no controls, which is still an
+ *  answer the planner can act on. */
+function readPerceiveListAnswer(
+  outputData: unknown,
+): { title: string; elements: PerceiveListElement[]; truncated: boolean } | null {
+  const value = recordOf(recordOf(outputData)?.value);
+  if (value === null) return null;
+  const rawElements = Array.isArray(value.elements) ? value.elements : null;
+  if (rawElements === null) return null;
+  const elements: PerceiveListElement[] = [];
+  for (const raw of rawElements) {
+    const el = recordOf(raw);
+    if (el === null || typeof el.selector !== 'string') continue;
+    const state = recordOf(el.state);
+    elements.push({
+      selector: el.selector,
+      kind: typeof el.type === 'string' ? el.type : 'other',
+      label: typeof el.label === 'string' ? el.label : '',
+      visible: state?.visible === true,
+    });
+  }
+  return {
+    title: typeof value.title === 'string' ? value.title : '',
+    elements,
+    truncated: value.truncated === true,
+  };
+}
+
+/**
+ * P1/T-elements — a `perceive` LIST answer, rendered for planning: the SAME
+ * row shape {@link digestPage} produces for its elements (via the SHARED
+ * {@link digestElementRow}), preceded by `page: <title>` when a title came
+ * back — exactly {@link digestPage}'s own title line — and followed by
+ * {@link PAGE_ELEMENTS_ONLY_NOTE}. Never null: a read that reached here
+ * already succeeded (see {@link ControlPlaneAgentExecutor.observeElements}),
+ * and even a page with no interactive elements at all is an answer, not a
+ * failure — the same "degrades rather than disappears" rule {@link digestPage}
+ * itself follows.
+ *
+ * `gateLabels` rides beside the text for the SAME reason
+ * {@link PageDigest.gateLabels} does: recorded for EVERY element the device
+ * named, independent of whether that element's row survived the fence-safety
+ * check into `text` — a name can only ADD a halt to the confirmation gate,
+ * never remove one.
+ */
+function renderElementsForPlanning(reading: {
+  title: string;
+  elements: PerceiveListElement[];
+  truncated: boolean;
+}): { text: string; gateLabels: ReadonlyMap<string, string> } {
+  const lines: string[] = [];
+  const title = digestSafeLine(visibleText(reading.title).slice(0, 120));
+  if (title.length > 0) lines.push(`page: ${title}`);
+  const gateLabels = new Map<string, string>();
+  for (const el of reading.elements) {
+    if (el.label.length > 0) gateLabels.set(el.selector, el.label.slice(0, 400));
+    const row = digestElementRow(el.selector, el.kind, el.label, el.visible ? '' : ' · hidden');
+    if (row !== null) lines.push(row);
+  }
+  lines.push(PAGE_ELEMENTS_ONLY_NOTE);
+  if (reading.truncated) lines.push(PAGE_SOURCE_TRUNCATED_NOTE);
+  return { text: lines.join('\n'), gateLabels };
+}

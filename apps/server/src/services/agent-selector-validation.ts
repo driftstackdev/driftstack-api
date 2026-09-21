@@ -122,9 +122,41 @@ export interface SelectorVerdict {
 /**
  * PURE. Exported so the rule is unit-testable without a dispatch or a harness.
  */
+/**
+ * The device's own shadow-piercing combinator. When the device lists a page's
+ * controls (`perceive` in list form), an element inside an OPEN shadow root gets
+ * a selector whose segments are joined by ` >>> `, which the device's click,
+ * send_keys and fill_form resolve segment by segment. It is NOT CSS: no
+ * document.querySelector parses it, and it must never be handed to anything but
+ * the device's own verbs. Here each segment is validated as the CSS it is, so a
+ * selector the device itself produced is not refused as "not CSS" — which is
+ * what happened by construction before this existed, because Playwright's
+ * two-chevron chaining (`>>`) is refused below and three chevrons contain two.
+ */
+export const DEVICE_SHADOW_COMBINATOR = ' >>> ';
+const DEVICE_SHADOW_SPLIT = /\s*>>>\s*/;
+
 export function validateCssSelector(selector: string): SelectorVerdict {
   const trimmed = selector.trim();
   if (trimmed.length === 0) return { ok: false, reason: 'the selector is empty' };
+
+  // A device-produced shadow path: validate every segment on its own. A segment
+  // that is empty (`a >>> `, ` >>> a`, `a >>>>>> b`) is not a path the device
+  // would ever emit and is refused like any other malformed selector.
+  if (trimmed.includes('>>>')) {
+    const segments = trimmed.split(DEVICE_SHADOW_SPLIT);
+    for (const segment of segments) {
+      if (segment.length === 0) {
+        return {
+          ok: false,
+          reason: `"${clip(trimmed)}" has an empty segment beside the shadow combinator`,
+        };
+      }
+      const verdict = validateCssSelector(segment);
+      if (!verdict.ok) return verdict;
+    }
+    return { ok: true };
+  }
 
   // XPath is a locator, just not the one this dispatch declares.
   if (trimmed.startsWith('/') || trimmed.startsWith('(/')) {

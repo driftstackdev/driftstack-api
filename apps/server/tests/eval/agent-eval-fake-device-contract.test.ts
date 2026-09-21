@@ -20,7 +20,7 @@ import {
 } from '../../src/schemas/harness-control-protocol.js';
 import { serializeIntentDispatch } from '../../src/services/harness-control-codec.js';
 import { FakeDevice, ONE_PIXEL_PNG_B64 } from './_lib/fake-device.js';
-import { EVAL_SITES, type FixturePage, type SiteMap } from './_lib/page-model.js';
+import { EVAL_SITES, siteOf, type FixturePage, type SiteMap } from './_lib/page-model.js';
 import { VirtualClock } from './_lib/virtual-clock.js';
 
 function makeDevice(startUrl = 'about:blank', sites: SiteMap = EVAL_SITES) {
@@ -302,5 +302,147 @@ describe('agent eval — the fake device answers the harness contract', () => {
         }),
       ),
     ).rejects.toThrow(/no model for harness intent "login"/);
+  });
+});
+
+// ── P1/T-elements — perceive WITHOUT a selector now lists unconditionally ──
+//
+// The runtime's retry when the full page read yields nothing
+// (agent-runtime.ts readForPlanning → ControlPlaneAgentExecutor
+// .observeElements) sends exactly this dispatch — `perceive` with no
+// `selector` — on EVERY device, not only one old enough to predate
+// perceive-by-selector. Before this, the fake THREW on it (nothing in the
+// product sent it); now it must answer, schema-valid, on both device ages.
+describe('agent eval — perceive with NO selector always lists the page', () => {
+  const LIST_PAGE: FixturePage = {
+    url: 'https://list.test/controls',
+    title: 'Controls',
+    body:
+      '<a id="one" href="/1">One</a>' +
+      '<a id="two" href="/2">Two</a>' +
+      '<button id="hidden-btn" hidden>Hidden button</button>' +
+      '<input id="hidden-input" style="display:none">',
+    loadMs: 0,
+    settleMs: 0,
+  };
+
+  function listDevice(predatesTapLook: boolean) {
+    const clock = new VirtualClock();
+    const device = new FakeDevice({
+      sites: siteOf([LIST_PAGE]),
+      startUrl: LIST_PAGE.url,
+      clock,
+      predatesTapLook,
+    });
+    const send = (params: Record<string, unknown>) =>
+      device.dispatcher.dispatch(
+        serializeIntentDispatch({
+          sessionId: 'agt_eval',
+          intentId: 'int_perceive',
+          intentName: 'perceive',
+          params,
+        }),
+      );
+    return { device, send };
+  }
+
+  it.each([
+    ['a current device', false],
+    ['a device that predates perceive-by-selector', true],
+  ])(
+    '%s: answers with a schema-valid page listing, not a throw',
+    async (_label, predatesTapLook) => {
+      const { send } = listDevice(predatesTapLook);
+      const result = await send({ max_elements: 10 });
+      expect(result.success).toBe(true);
+      expect(HARNESS_INTENT_RESULT_SCHEMAS.perceive.safeParse(result.outputData).success).toBe(
+        true,
+      );
+      const value = (result.outputData as { value: Record<string, unknown> }).value;
+      expect(value.resolved_by).toBeUndefined(); // never on a list answer
+      // max_elements (10) covers the whole page, visible AND hidden alike.
+      const selectors = (value.elements as Array<{ selector: string }>).map((e) => e.selector);
+      expect(selectors).toEqual(['#one', '#two', '#hidden-btn', '#hidden-input']);
+    },
+  );
+
+  it('visible-first ordering, hidden elements included (not dropped), truncated/total_matched over the FULL population', async () => {
+    const { send } = listDevice(false);
+    const capped = await send({ max_elements: 2 });
+    const value = (
+      capped.outputData as {
+        value: {
+          elements: Array<{ selector: string; state: { visible: boolean } }>;
+          truncated: boolean;
+          total_matched: number;
+        };
+      }
+    ).value;
+    // Two visible links come first — cap of 2 leaves both hidden controls out.
+    expect(value.elements.map((e) => e.selector)).toEqual(['#one', '#two']);
+    expect(value.elements.every((e) => e.state.visible)).toBe(true);
+    // The FULL population is 4 (2 visible + 2 hidden), so truncated is true and
+    // total_matched counts all of them — not just the visible ones.
+    expect(value.truncated).toBe(true);
+    expect(value.total_matched).toBe(4);
+  });
+
+  it('a cap wide enough for everything lists the hidden controls too, AFTER the visible ones, marked not visible', async () => {
+    const { send } = listDevice(false);
+    const all = await send({ max_elements: 10 });
+    const value = (
+      all.outputData as {
+        value: {
+          elements: Array<{
+            selector: string;
+            state: { visible: boolean };
+            position_summary: string;
+          }>;
+          truncated: boolean;
+        };
+      }
+    ).value;
+    expect(value.elements.map((e) => e.selector)).toEqual([
+      '#one',
+      '#two',
+      '#hidden-btn',
+      '#hidden-input',
+    ]);
+    expect(value.elements.map((e) => e.state.visible)).toEqual([true, true, false, false]);
+    expect(value.elements.map((e) => e.position_summary)).toEqual([
+      'in view',
+      'in view',
+      'not rendered',
+      'not rendered',
+    ]);
+    expect(value.truncated).toBe(false);
+  });
+
+  it('⛔ NEGATIVE CONTROL — a page with NOTHING hidden proves the ordering assertion is not vacuous: an all-visible page is unaffected', async () => {
+    const ALL_VISIBLE: FixturePage = {
+      url: 'https://list.test/plain',
+      title: 'Plain',
+      body: '<a id="one" href="/1">One</a><a id="two" href="/2">Two</a>',
+      loadMs: 0,
+      settleMs: 0,
+    };
+    const clock = new VirtualClock();
+    const device = new FakeDevice({
+      sites: siteOf([ALL_VISIBLE]),
+      startUrl: ALL_VISIBLE.url,
+      clock,
+    });
+    const result = await device.dispatcher.dispatch(
+      serializeIntentDispatch({
+        sessionId: 'agt_eval',
+        intentId: 'int_perceive',
+        intentName: 'perceive',
+        params: {},
+      }),
+    );
+    const value = (result.outputData as { value: { truncated: boolean; total_matched: number } })
+      .value;
+    expect(value.truncated).toBe(false);
+    expect(value.total_matched).toBe(2);
   });
 });

@@ -152,21 +152,25 @@ describe('scripted: a looping turn stopped mid-loop', () => {
     // device: navigate, the look between segments, the confirmation gate's
     // commitment read before the tap, then the tap. Nothing after it.
     //
-    // ⛔ THREE `get_page_source`, AND THEY ARE NOT ALL THE SAME READ. This
-    // fake's `sleep` resolves synchronously, so it always beats the real
+    // ⛔ `get_page_source`, THEN `perceive`, THEN `get_page_source` AGAIN —
+    // THREE DISPATCHES, AND THEY ARE NOT ALL THE SAME READ. This fake's
+    // `sleep` resolves synchronously, so it always beats the real
     // (multi-microtask) dispatch in observe()'s internal race — which is what
-    // makes the loop's own look fail here rather than succeed. T2 retries a
-    // failed planning read ONCE, so that is two `get_page_source` for the
-    // SAME look (attempt + retry, both losing the same race); the THIRD is
+    // makes the loop's own look fail here rather than succeed. T2/P1-elements
+    // retries a failed planning read ONCE, but with a DIFFERENT dispatch:
+    // `get_page_source` cannot be bounded, so the retry is a bounded
+    // `perceive` list instead — and it loses the SAME synchronous race the
+    // first attempt did. The THIRD dispatch, back to `get_page_source`, is
     // the gate's commitment arm bringing its structural facts up to date
     // before the tap (services/agent-page-commitment.ts) — since the loop's
-    // look never remembered fresh facts, the gate still takes its own read —
-    // and nothing from any of the three reaches a prompt but the loop's.
+    // look never remembered fresh facts (both its attempts timed out), the
+    // gate still takes its own read — and nothing from any of the three
+    // reaches a prompt but the loop's.
     expect(planner.calls).toHaveLength(2);
     expect(device.log).toEqual([
       'navigate',
       'get_page_source',
-      'get_page_source',
+      'perceive',
       'get_page_source',
       'click #next',
     ]);

@@ -262,7 +262,20 @@ export const AGENT_TURN_PERSISTED_STEP_KINDS: readonly AgentTurnStepKind[] =
  * customer message, no URL — the same discipline `agentActionPathLogFields`
  * holds itself to, for the same reason (this line is what an operator greps).
  */
-export const PLANNING_READ_OUTCOMES = ['ok', 'timeout', 'refused', 'empty', 'stopped'] as const;
+// `ok_elements` — the ONE retry, when it succeeds: `get_page_source` cannot be
+// bounded (the device serialises the whole live DOM before it can answer at
+// all), so the retry is a bounded `perceive` list instead, and it earns its
+// own outcome rather than being folded into `ok` — a support read of this
+// line needs to tell "the retry found the page's controls" from "the FIRST
+// read succeeded", because the two mean different things about the site.
+export const PLANNING_READ_OUTCOMES = [
+  'ok',
+  'ok_elements',
+  'timeout',
+  'refused',
+  'empty',
+  'stopped',
+] as const;
 export type PlanningReadOutcome = (typeof PLANNING_READ_OUTCOMES)[number];
 
 /** One planning read — the look between segments the planner is shown, NOT
@@ -271,10 +284,17 @@ export interface PlanningReadTraceEntry {
   /** Wall time this ONE attempt took, ms. */
   ms: number;
   outcome: PlanningReadOutcome;
-  /** Length of the text handed to the planner. 0 on every outcome but `ok`. */
+  /** Length of the text handed to the planner. 0 on every outcome but `ok`
+   *  and `ok_elements`. */
   chars: number;
-  /** Whether the device said its `get_page_source` answer was truncated. */
+  /** Whether the device said its answer was truncated — `get_page_source`'s
+   *  `truncated`, or `perceive`'s (on `ok_elements`). */
   truncated: boolean;
+  /** How many elements a `perceive` list read returned. Present ONLY on
+   *  `ok_elements` — the full-page read this entry might otherwise describe
+   *  carries no element count, so its absence is itself informative: which
+   *  kind of read this was. */
+  elements?: number;
 }
 
 /** One dispatched (or halted-before-dispatch) step, as it contributes to the
@@ -2245,10 +2265,11 @@ export class AgentTurnTelemetry {
       //
       // T4 — `trace`, on this SAME line rather than a new event: the ordered
       // step verbs (with duration + ok/failed), the planning reads (with
-      // outcome + duration + chars + truncated), the planner call count, and
-      // how many segments were planned blind. Bounded, numbers/closed-enums
-      // only — see AgentTurnDiagnosticTrace. Undefined turns log exactly the
-      // line they always did.
+      // outcome + duration + chars + truncated, and `elements` on an
+      // `ok_elements` read), the planner call count, and how many segments
+      // were planned blind. Bounded, numbers/closed-enums only — see
+      // AgentTurnDiagnosticTrace. Undefined turns log exactly the line they
+      // always did.
       const trace = collector.diagnosticTrace();
       this.deps.logger?.warn?.(
         {

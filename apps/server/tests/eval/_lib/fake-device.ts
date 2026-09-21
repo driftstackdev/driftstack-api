@@ -1019,15 +1019,24 @@ export class FakeDevice {
    * point is the page's origin and the hit test finds the page, as on a real
    * device. Read-only and deterministic: nothing here changes the page.
    *
-   * perceive WITHOUT a selector — the page listing — is not modelled: nothing in
-   * the product sends it, so a request for it means the mapper gained a caller
-   * this corpus has never measured, and that must be loud.
+   * perceive WITHOUT a selector — the page listing — IS modelled: the
+   * runtime's ONE retry of a planning read that yielded nothing
+   * (agent-runtime.ts `readForPlanning` → `ControlPlaneAgentExecutor
+   * .observeElements`) sends exactly this, unconditionally — not only from a
+   * device old enough to predate perceive-by-selector. See
+   * {@link perceivePageListing}.
    */
   private doPerceive(params: Record<string, unknown>): DeviceOutcome {
     const selector = params.selector;
+    if (selector === undefined) {
+      this.cost(PERCEIVE_BY_SELECTOR_MS);
+      return this.perceivePageListing(
+        typeof params.max_elements === 'number' ? params.max_elements : 200,
+      );
+    }
     if (typeof selector !== 'string') {
       throw new Error(
-        'fake device models perceive only for one selector — a page-listing perceive reached it',
+        `fake device models perceive's selector as a string or absent, got ${JSON.stringify(selector)}`,
       );
     }
     if (params.strategy !== undefined && params.strategy !== 'css') {
@@ -1133,35 +1142,53 @@ export class FakeDevice {
     };
   }
 
-  /** An older device's perceive: the selector is ignored and the rendered
-   *  controls are listed — capped by `max_elements`, which it does honour —
-   *  with no `resolved_by` and none of the new fields. */
+  /**
+   * The page listing: every control in the document, capped at
+   * `max_elements` — which it does honour — with no `resolved_by` and none
+   * of the perceive-by-selector-only fields.
+   *
+   * ⛔ VISIBLE-FIRST, NOT VISIBLE-ONLY. A page hidden by markup (a collapsed
+   * menu, an unopened tab) is still part of what the device would report —
+   * "visible elements prioritised when over the cap" only means something if
+   * hidden ones are candidates at all — so the full population (rendered AND
+   * not) is what `truncated` / `total_matched` describe, and the ordering
+   * puts what can actually be tapped NOW ahead of what cannot, exactly the
+   * rule `digestPage`'s own element ordering follows for the same reason.
+   */
   private perceivePageListing(maxElements: number): DeviceOutcome {
     const controls = Array.from(
       this.dom.document.querySelectorAll('a, button, input, select, textarea'),
-    ).filter((element) => isRendered(element));
-    const listed = controls.slice(0, Math.max(1, Math.min(200, maxElements)));
+    );
+    const ordered = [
+      ...controls.filter((element) => isRendered(element)),
+      ...controls.filter((element) => !isRendered(element)),
+    ];
+    const cap = Math.max(1, Math.min(200, maxElements));
+    const listed = ordered.slice(0, cap);
     return {
       ok: true,
       output: {
         value: {
           url: this.currentUrl,
           title: this.dom.document.title,
-          elements: listed.map((element, index) => ({
-            id: index,
-            type: perceiveTypeOf(element),
-            label: perceiveLabelOf(element, this.dom.document),
-            selector: canonicalSelectorOf(element),
-            bounds: this.boundsOf(element),
-            state: {
-              visible: true,
-              enabled: !element.hasAttribute('disabled'),
-              focused: this.focused === element,
-            },
-            position_summary: 'in view',
-          })),
-          truncated: controls.length > listed.length,
-          total_matched: controls.length,
+          elements: listed.map((element, index) => {
+            const rendered = isRendered(element);
+            return {
+              id: index,
+              type: perceiveTypeOf(element),
+              label: perceiveLabelOf(element, this.dom.document),
+              selector: canonicalSelectorOf(element),
+              bounds: rendered ? this.boundsOf(element) : { x: 0, y: 0, width: 0, height: 0 },
+              state: {
+                visible: rendered,
+                enabled: !element.hasAttribute('disabled'),
+                focused: this.focused === element,
+              },
+              position_summary: rendered ? 'in view' : 'not rendered',
+            };
+          }),
+          truncated: ordered.length > listed.length,
+          total_matched: ordered.length,
         },
       },
     };

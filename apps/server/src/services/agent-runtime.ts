@@ -2325,10 +2325,17 @@ export class AgentRuntime {
    * hard stop had not yet been reached, so it can only push the clock past it
    * by its own budget. See agent-turn-bounds.ts.
    *
-   * T2 — ONE IMMEDIATE RETRY of a read that yielded nothing.
-   * `get_page_source` is read-only, so asking again is safe; Stop and the
-   * hard stop are honoured BETWEEN the two attempts, exactly as they are
-   * before the first.
+   * T2/P1-elements — ONE IMMEDIATE RETRY of a read that yielded nothing, but
+   * NOT a second attempt at the same read. `get_page_source` (what the FIRST
+   * attempt, `observeDigest`, dispatches) is the W3C Get Page Source
+   * endpoint: the device serialises the ENTIRE live DOM before anything
+   * returns, all-or-nothing, so a page slow enough to have lost the first
+   * race would just as likely lose a second. The retry is a bounded, IN-PAGE
+   * read instead — `observeElements`, a `perceive` list capped at
+   * `max_elements` — feature-detected exactly like `observeDigest`: an
+   * executor without it simply gets no retry. Stop and the hard stop are
+   * honoured BETWEEN the two attempts, exactly as they were when both were
+   * `observeDigest`.
    *
    * T4 — every attempt (up to two) is folded into `trace`, bounded.
    */
@@ -2343,27 +2350,35 @@ export class AgentRuntime {
   ): Promise<string | undefined> {
     const observeDigest = this.deps.executor.observeDigest?.bind(this.deps.executor);
     if (observeDigest === undefined) return undefined;
-    const attempt = async (): Promise<string | undefined> => {
-      // T1 — checked before EVERY attempt (the first and the retry alike): a
-      // planning read must never be the thing that starts after the turn's
-      // hard stop has already passed.
-      if (this.nowMs() >= turnHardStopAtMs) return undefined;
+    // T1 — checked before the first attempt: a planning read must never be
+    // the thing that starts after the turn's hard stop has already passed.
+    if (this.nowMs() < turnHardStopAtMs) {
+      let first: string | undefined;
       try {
-        return (
+        first =
           (await observeDigest(sessionId, shouldContinue, signal, commitmentBudget, (entry) =>
             pushBoundedTrace(trace, entry),
-          )) ?? undefined
-        );
+          )) ?? undefined;
       } catch {
-        return undefined;
+        first = undefined;
       }
-    };
-    const first = await attempt();
-    if (first !== undefined) return first;
+      if (first !== undefined) return first;
+    }
     // T2 — Stop is honoured before the retry is sent; the hard stop is
-    // honoured inside `attempt` itself, on both calls alike.
+    // asked again below, exactly as it was before the first attempt.
     if (stopRequested(signal)) return undefined;
-    return attempt();
+    const observeElements = this.deps.executor.observeElements?.bind(this.deps.executor);
+    if (observeElements === undefined) return undefined;
+    if (this.nowMs() >= turnHardStopAtMs) return undefined;
+    try {
+      return (
+        (await observeElements(sessionId, shouldContinue, signal, (entry) =>
+          pushBoundedTrace(trace, entry),
+        )) ?? undefined
+      );
+    } catch {
+      return undefined;
+    }
   }
 
   /**
