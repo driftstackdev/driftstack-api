@@ -1611,7 +1611,24 @@ async function main() {
         }
         await page.waitForTimeout(100);
         await card.getByRole('button', { name: 'More actions' }).click();
-        await page.waitForTimeout(200);
+        // The menu fades in over 150 ms. The rule is that it BECOMES fully
+        // visible, not that it does so inside a fixed delay: on the Linux
+        // runner, with the lit cards' animations sharing the paint budget, a
+        // 200 ms wait measured the fade mid-way and reported the menu as
+        // invisible. Wait for the transition itself, bounded, then measure.
+        await page
+          .waitForFunction(
+            () => {
+              const open = document.querySelector(
+                '[data-component="card-actions-menu"][data-open="true"]',
+              );
+              return open !== null && getComputedStyle(open).opacity === '1';
+            },
+            undefined,
+            { timeout: 2000 },
+          )
+          .catch(() => undefined);
+        await page.waitForTimeout(50);
         const measured = await card.evaluate(measureOpenMenu, opts);
         const shot = `${OUT}/menu-${which}-${width}.png`;
         await page.screenshot({ path: shot, fullPage: false });

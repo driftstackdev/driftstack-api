@@ -4840,6 +4840,11 @@
 }
 .pf-card[data-card-light='live'] .pf-screen::after {
   animation: ds-pf-breathe 2600ms ease-in-out infinite;
+  /* One compositor layer per LIVE card, and none for the rest: the breath is
+     opacity on a promoted layer, so it costs no repaint of the card beneath
+     it. Without this the Linux runner repainted the gradient every frame and
+     the card's menu fade fell behind the visual gate's clock. */
+  will-change: opacity;
 }
 /* the floor: light pooled on the page under a lit card */
 .pf-floor {
