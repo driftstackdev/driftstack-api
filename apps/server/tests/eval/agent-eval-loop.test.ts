@@ -100,6 +100,7 @@ async function runLoopTask(
       retryDelayMs: EVAL_RETRY_DELAY_MS,
       sessionEstablishRetryDelayMs: EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
       observeTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
+      planningObserveTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
       sleep: clock.sleep,
       // Fixed, so a sequence assertion here is about traffic shape rather
       // than about which numbers the draws produced.
@@ -188,7 +189,20 @@ describe('LOOP-FLOW — search → result → detail, as ONE customer message', 
     const result = executed(run.result);
     expect(result.executor.ok).toBe(true);
     expect(run.device.url()).toBe('https://gearfinder.test/p/ember-mini');
-    expect(result.loop).toEqual({ segments: 4, plannerCalls: 4, replans: 0, finalStatus: 'done' });
+    // T4 — three ADDITIVE `planningReads` entries since this pin was written
+    // (one per re-plan's look, all successful): diagnostic-only, so `ms` and
+    // `chars` are asserted loosely and the count/outcome/truncated exactly.
+    expect(result.loop).toEqual({
+      segments: 4,
+      plannerCalls: 4,
+      replans: 0,
+      finalStatus: 'done',
+      planningReads: [
+        { ms: expect.any(Number), outcome: 'ok', chars: expect.any(Number), truncated: false },
+        { ms: expect.any(Number), outcome: 'ok', chars: expect.any(Number), truncated: false },
+        { ms: expect.any(Number), outcome: 'ok', chars: expect.any(Number), truncated: false },
+      ],
+    });
     expect(result.notice).toBeUndefined();
     // ⛔ THE LOOK IS REAL. Each later segment was handed the page the device was
     // actually on, through the product's own digest — and it carried what that

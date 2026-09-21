@@ -254,6 +254,65 @@ export type AgentTurnStepKind = (typeof AGENT_TURN_STEP_KINDS)[number];
 export const AGENT_TURN_PERSISTED_STEP_KINDS: readonly AgentTurnStepKind[] =
   AGENT_TURN_STEP_KINDS.filter((kind) => kind !== 'none');
 
+/**
+ * T4 — bounded per-turn diagnostics for an turn that stopped UNFINISHED,
+ * folded into the SAME `agent_turn_stopped_unfinished` log line (never a new
+ * event — see the `trace` field built in {@link AgentTurnTelemetry}). Closed
+ * vocabulary, numbers and booleans only: no page text, no selector, no
+ * customer message, no URL — the same discipline `agentActionPathLogFields`
+ * holds itself to, for the same reason (this line is what an operator greps).
+ */
+export const PLANNING_READ_OUTCOMES = ['ok', 'timeout', 'refused', 'empty', 'stopped'] as const;
+export type PlanningReadOutcome = (typeof PLANNING_READ_OUTCOMES)[number];
+
+/** One planning read — the look between segments the planner is shown, NOT
+ *  the read-back at the end — as it contributes to the turn's trace. */
+export interface PlanningReadTraceEntry {
+  /** Wall time this ONE attempt took, ms. */
+  ms: number;
+  outcome: PlanningReadOutcome;
+  /** Length of the text handed to the planner. 0 on every outcome but `ok`. */
+  chars: number;
+  /** Whether the device said its `get_page_source` answer was truncated. */
+  truncated: boolean;
+}
+
+/** One dispatched (or halted-before-dispatch) step, as it contributes to the
+ *  turn's trace. `verb` is the intent kind ALONE — never a selector, a URL or
+ *  typed text, which is why this is safe on a log line greppable by anyone
+ *  who can reach the box's logs. */
+export interface AgentStepTraceEntry {
+  verb: AgentTurnStepKind;
+  ms: number;
+  ok: boolean;
+}
+
+/** How many entries of EACH array in the trace are kept at most. A turn that
+ *  spent its whole clock retrying still logs ONE bounded line, not one line
+ *  per attempt. */
+export const AGENT_TURN_TRACE_MAX_ENTRIES = 40;
+
+/** Append `entry`, dropping the OLDEST once the bound is reached: the most
+ *  recent attempts are what a support read wants for a turn that was still
+ *  failing when the log line was written. */
+export function pushBoundedTrace<T>(
+  into: T[],
+  entry: T,
+  max: number = AGENT_TURN_TRACE_MAX_ENTRIES,
+): void {
+  into.push(entry);
+  while (into.length > max) into.shift();
+}
+
+/** The bounded diagnostic trace on `agent_turn_stopped_unfinished` — see
+ *  {@link AgentTurnTelemetry}; nothing else reads it. */
+export interface AgentTurnDiagnosticTrace {
+  steps: ReadonlyArray<AgentStepTraceEntry>;
+  reads: ReadonlyArray<PlanningReadTraceEntry>;
+  plannerCalls: number;
+  blindSegments: number;
+}
+
 export const AGENT_TURN_TRANSPORTS = ['stream', 'json'] as const;
 export type AgentTurnTransport = (typeof AGENT_TURN_TRANSPORTS)[number];
 
@@ -1308,6 +1367,19 @@ function classifyUnfinishedLoop(
       return { outcome: 'failed', deathReason: 'budget_exhausted' };
     case 'planner_unavailable':
       return { outcome: 'failed', deathReason: 'model_unavailable' };
+    // T2 — the turn stopped because TWO CONSECUTIVE segments could not be
+    // read to plan against, not because a step failed or the planner
+    // declined. `death_reason` is a CHECK-constrained column and this is a
+    // NEW way for a turn to die, so — like `budget_floor`/`credits_used`
+    // above — it is filed under the closest existing word that is TRUE of
+    // it: the page could not be loaded/read in time to act on it, which is
+    // exactly what `page_load_failed` already means for a single step's
+    // failure. `outcome: 'failed'` (not `clarified`) for the same reason
+    // those two are `failed`: this is the turn's OWN infrastructure unable to
+    // do its job, not a step failing or the planner choosing to hand back.
+    // No migration: the value already exists in AGENT_TURN_DEATH_REASONS.
+    case 'page_unreadable':
+      return { outcome: 'failed', deathReason: 'page_load_failed' };
     case 'planner_call_limit':
     case 'wall_clock':
     case 'no_progress':
@@ -1753,6 +1825,32 @@ class Collector implements AgentTurnTelemetryCollector {
     return executor?.actionPaths;
   }
 
+  /**
+   * T4 — the bounded diagnostic trace for `agent_turn_stopped_unfinished`:
+   * the step verbs the executor ran (with their durations and ok/failed),
+   * the planning reads the runtime made (with their outcomes), the planner
+   * call count, and how many segments were planned blind. Undefined when
+   * there is nothing to say — a refusal, a clarification, a turned-away
+   * request, or a turn that finished with neither steps nor reads to report.
+   */
+  diagnosticTrace(): AgentTurnDiagnosticTrace | undefined {
+    if (this.result?.kind !== 'plan-executed') return undefined;
+    const steps = this.result.executor.stepTrace;
+    const reads = this.result.loop?.planningReads;
+    if (
+      (steps === undefined || steps.length === 0) &&
+      (reads === undefined || reads.length === 0)
+    ) {
+      return undefined;
+    }
+    return {
+      steps: (steps ?? []).slice(-AGENT_TURN_TRACE_MAX_ENTRIES),
+      reads: (reads ?? []).slice(-AGENT_TURN_TRACE_MAX_ENTRIES),
+      plannerCalls: this.result.loop?.plannerCalls ?? 0,
+      blindSegments: this.result.loop?.blindSegments ?? 0,
+    };
+  }
+
   observeResult(result: RunTurnResult): void {
     this.result = result;
     // The runtime has returned, so its last phase is over NOW. What the route
@@ -2144,6 +2242,14 @@ export class AgentTurnTelemetry {
       // ended the turn (see classifyUnfinishedLoop); this line is where an
       // operator reads it until a migration gives it a column value. The reason
       // is one of a fixed set of identifiers — never page or customer text.
+      //
+      // T4 — `trace`, on this SAME line rather than a new event: the ordered
+      // step verbs (with duration + ok/failed), the planning reads (with
+      // outcome + duration + chars + truncated), the planner call count, and
+      // how many segments were planned blind. Bounded, numbers/closed-enums
+      // only — see AgentTurnDiagnosticTrace. Undefined turns log exactly the
+      // line they always did.
+      const trace = collector.diagnosticTrace();
       this.deps.logger?.warn?.(
         {
           component: 'agent-turn-telemetry',
@@ -2151,6 +2257,7 @@ export class AgentTurnTelemetry {
           stopped: stoppedAt,
           outcome: row.outcome,
           model_calls: row.modelCalls,
+          ...(trace !== undefined ? { trace } : {}),
         },
         'an agent turn stopped at a loop bound with its task unfinished',
       );

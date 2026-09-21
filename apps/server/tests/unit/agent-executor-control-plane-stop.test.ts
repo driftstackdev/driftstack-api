@@ -347,7 +347,15 @@ describe('ControlPlaneAgentExecutor — Stop', () => {
     await held.whenSent(1);
     held.release(0);
     const result = await run;
-    expect(result).toEqual({ results: [expect.objectContaining({ kind: 'success' })], ok: true });
+    // T4 — one new, ADDITIVE field since this pin was written: a bounded
+    // per-step trace (verb + duration + ok/failed), attached whenever at
+    // least one step ran. It changes nothing about Stop's own behaviour,
+    // which is the property this test is really pinning.
+    expect(result).toEqual({
+      results: [expect.objectContaining({ kind: 'success' })],
+      ok: true,
+      stepTrace: [{ verb: 'navigate', ms: expect.any(Number), ok: true }],
+    });
   });
 });
 

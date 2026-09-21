@@ -1357,6 +1357,7 @@ describe('B1 — every ending a turn can have says so in one word as well as in 
       repeat_refused: /repeated an action that already ran/,
       planner_unavailable: /could not work out the next ones/,
       credits_used: /used all the AI credits set aside for it/,
+      page_unreadable: /could not read the page to plan the next step/,
     };
     const WORD_FOR: Record<TurnLoopStopReason, string> = {
       planner_call_limit: 'step_limit',
@@ -1365,6 +1366,7 @@ describe('B1 — every ending a turn can have says so in one word as well as in 
       no_progress: 'no_progress',
       repeat_refused: 'repeated_step',
       planner_unavailable: 'ai_unavailable',
+      page_unreadable: 'page_unreadable',
       // Shared with `budget_floor` on purpose while this ending is dark — see
       // the arm above and TURN_LOOP_STOP_REASONS_NOT_YET_REACHABLE.
       credits_used: 'budget_low',

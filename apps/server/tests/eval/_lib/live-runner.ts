@@ -492,6 +492,7 @@ export async function runLiveTask(
       retryDelayMs: EVAL_RETRY_DELAY_MS,
       sessionEstablishRetryDelayMs: EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
       observeTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
+      planningObserveTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
       sleep: clock.sleep,
       deadline: clock.deadline,
       ...(ctx.tapLookOff === true ? { preTapLookTimeoutMs: 0 } : {}),

@@ -70,7 +70,7 @@ import {
   intentResultToCustomer,
   tapRefusalOf,
 } from './agent-intent-result.js';
-import { TURN_READ_BACK_TIMEOUT_MS } from './agent-turn-bounds.js';
+import { PLANNING_OBSERVE_TIMEOUT_MS, TURN_READ_BACK_TIMEOUT_MS } from './agent-turn-bounds.js';
 import {
   PACE_MIN_PAUSE_MS,
   PACE_STEP_CAP_MS,
@@ -82,6 +82,7 @@ import {
 import {
   agentActionOutcomeOf,
   emptyAgentActionPathCounts,
+  pushBoundedTrace,
   recordAgentActionProfileAttached,
   recordAgentScrollPath,
   recordCommitmentFacts,
@@ -90,10 +91,13 @@ import {
   recordPreTapLook,
   recordTapUnoccludedCheck,
   type AgentActionPathCounts,
+  type AgentStepTraceEntry,
   type CommitmentFactsOutcome,
   type AgentActionProfileVerb,
   type AgentProfileAttached,
   type AgentScrollPath,
+  type PlanningReadOutcome,
+  type PlanningReadTraceEntry,
   type PreTapLookNextAction,
   type PreTapLookOutcome,
   type PreTapLookResolver,
@@ -154,6 +158,11 @@ export interface AutoRetryOptions {
    *  own per-intent budget is the full 30s; this shorter cap bounds the latency a
    *  hung/slow box can add to a turn whose plan ALREADY succeeded. Default 10000. */
   observeTimeoutMs?: number;
+  /** T1 — the PLANNING read's own budget (ms): the look between segments the
+   *  planner is shown, as opposed to {@link observeTimeoutMs}'s look at the
+   *  very end. See PLANNING_OBSERVE_TIMEOUT_MS in agent-turn-bounds.ts for why
+   *  it is a separate, larger number. Default 25000. */
+  planningObserveTimeoutMs?: number;
   /** P3 — how long ONE step may wait for a selector that was not on the page
    *  yet. See {@link DEFAULT_ELEMENT_APPEAR_WAIT_MS} for where the number comes
    *  from. 0 disables the element wait and restores the pre-P3 behaviour. */
@@ -237,6 +246,10 @@ const DEFAULT_SESSION_ESTABLISH_RETRY_DELAY_MS = 1500;
 // be running: the cross-process stop claim's TTL is derived from all four, and
 // a second copy of this number here is the one that would drift.
 const DEFAULT_OBSERVE_TIMEOUT_MS = TURN_READ_BACK_TIMEOUT_MS;
+// T1 — the PLANNING read's own, larger budget. Same reason as the read-back's:
+// the number lives in agent-turn-bounds.ts beside the other bounds on how long
+// a turn can still be running, so a second copy here is the one that drifts.
+const DEFAULT_PLANNING_OBSERVE_TIMEOUT_MS = PLANNING_OBSERVE_TIMEOUT_MS;
 
 // ── P3 patience ──────────────────────────────────────────────────────
 // WHY A SEPARATE BUDGET FROM `retryDelayMs`. `intent_element_not_found` is not a
@@ -1058,6 +1071,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   private readonly sessionEstablishMaxRetries: number;
   private readonly sessionEstablishRetryDelayMs: number;
   private readonly observeTimeoutMs: number;
+  private readonly planningObserveTimeoutMs: number;
   private readonly elementAppearWaitMs: number;
   private readonly elementWaitRunBudgetMs: number;
   private readonly sleep: (ms: number) => Promise<void>;
@@ -1096,6 +1110,10 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       opts.sessionEstablishRetryDelayMs ?? DEFAULT_SESSION_ESTABLISH_RETRY_DELAY_MS,
     );
     this.observeTimeoutMs = Math.max(0, opts.observeTimeoutMs ?? DEFAULT_OBSERVE_TIMEOUT_MS);
+    this.planningObserveTimeoutMs = Math.max(
+      0,
+      opts.planningObserveTimeoutMs ?? DEFAULT_PLANNING_OBSERVE_TIMEOUT_MS,
+    );
     // ⛔ CLAMPED TO WHAT THE DEVICE CAN ACTUALLY BE ASKED FOR. `wait_for` takes
     // whole SECONDS, so the mapper drops a sub-second timeout and the device
     // falls back to its own 30s default — a setting of 500ms would have bought
@@ -1180,18 +1198,30 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     const anyGateCount = (): boolean =>
       Object.values(actionPaths.commitmentFacts).some((n) => n > 0) ||
       Object.values(actionPaths.haltArms).some((n) => n > 0);
-    const done = (run: ExecutorRunResult): ExecutorRunResult =>
-      actionPaths.actions > 0 ||
-      actionPaths.scrolls > 0 ||
-      actionPaths.looks > 0 ||
-      // A segment can insert pauses in front of navigates and captures and
-      // dispatch no action, no scroll and no look — and those are exactly the
-      // turns a pace experiment reads. Zero with the flag off, so this
-      // condition is unchanged on every default deployment.
-      actionPaths.pacePausedMs > 0 ||
-      anyGateCount()
-        ? { ...run, actionPaths }
-        : run;
+    // T4 — ONE ENTRY PER STEP THIS RUN ATTEMPTED (dispatched or halted before
+    // dispatch): its verb, how long it took, and whether it succeeded. Bounded
+    // the same way the turn's diagnostic trace is everywhere else — see
+    // AGENT_TURN_TRACE_MAX_ENTRIES — because a run whose whole clock went into
+    // retries must still log one bounded line, not one line per attempt.
+    const stepTrace: AgentStepTraceEntry[] = [];
+    const done = (run: ExecutorRunResult): ExecutorRunResult => {
+      let out = run;
+      if (
+        actionPaths.actions > 0 ||
+        actionPaths.scrolls > 0 ||
+        actionPaths.looks > 0 ||
+        // A segment can insert pauses in front of navigates and captures and
+        // dispatch no action, no scroll and no look — and those are exactly the
+        // turns a pace experiment reads. Zero with the flag off, so this
+        // condition is unchanged on every default deployment.
+        actionPaths.pacePausedMs > 0 ||
+        anyGateCount()
+      ) {
+        out = { ...out, actionPaths };
+      }
+      if (stepTrace.length > 0) out = { ...out, stepTrace };
+      return out;
+    };
     /**
      * R5 — looks taken for the CURRENT step before the one that decides it. A
      * relocation beat is followed by a fresh look, so one tap can cost two, and
@@ -1220,12 +1250,26 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         roundTripMs: record.roundTripMs,
       });
     };
+    // T4 — when THIS step (the current iteration of the loop below) started,
+    // so `emitStep` can time it. Reset at the top of every iteration; read
+    // here rather than passed as a parameter because `emitStep` is called
+    // from several branches of one iteration (halts, gate refusals, a
+    // dispatched result) and every one of them is "how long did this step
+    // take", never a second step.
+    let stepStartedAt = this.now();
     // Record a result AND surface it as live progress in one place, so every
     // push (halt / unmappable / dispatched) streams to a subscribed caller as it
     // lands rather than only in the final ExecutorRunResult. Best-effort: a
     // throwing/slow onStep must never abort or block the run.
     const emitStep = (r: IntentResult): void => {
       results.push(r);
+      // T4 — the verb is the intent's own kind: never a selector, a URL or
+      // typed text, so this is safe on a log line an operator greps.
+      pushBoundedTrace(stepTrace, {
+        verb: r.intent.kind,
+        ms: Math.max(0, this.now() - stepStartedAt),
+        ok: r.kind === 'success',
+      });
       // C8 — the customer has now seen a step THIS TURN, so a pacing beat is
       // allowed in front of the next one. Recorded on the turn-scoped budget
       // rather than read off `results`, because a turn runs up to three
@@ -1278,6 +1322,9 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     // dispatch.
     let focusSelector: string | undefined;
     for (const [planIndex, intent] of args.plan.intents.entries()) {
+      // T4 — this step's clock starts now, before anything about it is
+      // decided; `emitStep` reads it back whichever branch below ends it.
+      stepStartedAt = this.now();
       // B2 — Stop is checked before anything else about the next step, so once
       // it is observed nothing further is announced, gated or dispatched.
       if (stopRequested(args.signal)) return done({ results, ok: false, stopped: true });
@@ -1960,19 +2007,42 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   }
 
   /**
-   * #140 read-and-report — dispatch a `get_page_source` against the live session
-   * and return its text for the answer pass. Best-effort: any failure (no
-   * session, dispatch error, over-cap `result_too_large`, empty source) returns
-   * null so the runtime falls back to the plan result — the read-back never fails
-   * a turn. Uses the same dispatcher + fresh intentId as a normal intent.
+   * #140/T1 — dispatch a `get_page_source` against the live session, raced
+   * against `timeoutMs`. Shared core for {@link observe} (the read-back) and
+   * {@link observeDigest} (planning) — they differ only in which budget they
+   * race against and what they do with the text, so the race, the Stop/
+   * authority checks and the outcome classification live here exactly once.
+   *
+   * The OUTCOME is classified as one of PLANNING_READ_OUTCOMES: `stopped`
+   * (Stop observed before or during the read), `refused` (`shouldContinue`
+   * said no), `timeout` (the race's deadline won), `empty` (the dispatch
+   * settled with nothing usable — no session, a device error, or a source
+   * that decoded to nothing), or `ok`. Never throws.
    */
-  async observe(
+  private async observeCore(
     sessionId: string,
-    shouldContinue?: ExecuteArgs['shouldContinue'],
-    signal?: AbortSignal,
-  ): Promise<string | null> {
-    if (stopRequested(signal)) return null;
-    if (!(await executionMayContinue(shouldContinue))) return null;
+    shouldContinue: ExecuteArgs['shouldContinue'] | undefined,
+    signal: AbortSignal | undefined,
+    timeoutMs: number,
+  ): Promise<{
+    text: string | null;
+    truncated: boolean;
+    ms: number;
+    outcome: PlanningReadOutcome;
+  }> {
+    const startedAt = this.now();
+    const settle = (
+      text: string | null,
+      outcome: PlanningReadOutcome,
+      truncated = false,
+    ): { text: string | null; truncated: boolean; ms: number; outcome: PlanningReadOutcome } => ({
+      text,
+      truncated,
+      ms: Math.max(0, this.now() - startedAt),
+      outcome,
+    });
+    if (stopRequested(signal)) return settle(null, 'stopped');
+    if (!(await executionMayContinue(shouldContinue))) return settle(null, 'refused');
     let dispatch: IntentDispatch;
     try {
       dispatch = serializeIntentDispatch({
@@ -1982,49 +2052,117 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         params: {},
       });
     } catch {
-      return null;
+      // A dispatch that could not even be built produced nothing to read —
+      // the same class as a source that decoded to nothing.
+      return settle(null, 'empty');
     }
-    if (stopRequested(signal)) return null;
-    if (!(await executionMayContinue(shouldContinue))) return null;
-    // Bound the read-back latency: the plan already succeeded + was recorded, so
-    // a hung box must not stretch the turn to the full 30s dispatch budget. Race
-    // the dispatch against a shorter deadline; on timeout we return null (no
-    // answer, plan result stands). get_page_source is read-only, so a late
-    // in-flight response we've stopped awaiting is harmlessly dropped.
+    if (stopRequested(signal)) return settle(null, 'stopped');
+    if (!(await executionMayContinue(shouldContinue))) return settle(null, 'refused');
+    // Bound the read latency: race the dispatch against `timeoutMs`. On
+    // timeout we return null (no answer, the caller falls back). get_page_source
+    // is read-only, so a late in-flight response we've stopped awaiting is
+    // harmlessly dropped. Each branch is TAGGED so the winner of the race can
+    // be told apart from a dispatch that itself settled with nothing.
     const observed = this.dispatcher
       .dispatch(dispatch)
-      .then((parsed) => (parsed.success ? extractPageText(parsed.outputData) : null))
-      .catch(() => null);
-    const timedOut = this.sleep(this.observeTimeoutMs).then((): string | null => null);
+      .then((parsed): { kind: 'dispatched'; text: string | null; truncated: boolean } =>
+        parsed.success
+          ? {
+              kind: 'dispatched',
+              text: extractPageText(parsed.outputData),
+              truncated: extractPageTruncated(parsed.outputData),
+            }
+          : { kind: 'dispatched', text: null, truncated: false },
+      )
+      .catch((): { kind: 'dispatched'; text: string | null; truncated: boolean } => ({
+        kind: 'dispatched',
+        text: null,
+        truncated: false,
+      }));
+    const timedOut = this.sleep(timeoutMs).then((): { kind: 'timeout' } => ({ kind: 'timeout' }));
     // B2 — Stop cuts the read short for the same reason the deadline may: the
     // page is only being read, so a late answer is harmlessly dropped.
     const raced = await raceAbort(Promise.race([observed, timedOut]), signal);
-    if (raced.aborted) return null;
-    if (!(await executionMayContinue(shouldContinue))) return null;
-    return raced.value;
+    if (raced.aborted) return settle(null, 'stopped');
+    if (!(await executionMayContinue(shouldContinue))) return settle(null, 'refused');
+    if (raced.value.kind === 'timeout') return settle(null, 'timeout');
+    return settle(
+      raced.value.text,
+      raced.value.text !== null ? 'ok' : 'empty',
+      raced.value.truncated,
+    );
   }
 
   /**
-   * P1 — the same read as {@link observe}, digested for PLANNING rather than for
-   * answering. One dispatch, then {@link summarizePageForPlanning}; null
-   * whenever observe() returns null, so a page that cannot be read degrades to
-   * "plan without it" exactly as before.
+   * #140 read-and-report — dispatch a `get_page_source` against the live session
+   * and return its text for the answer pass. Best-effort: any failure (no
+   * session, dispatch error, over-cap `result_too_large`, empty source) returns
+   * null so the runtime falls back to the plan result — the read-back never fails
+   * a turn. Uses the same dispatcher + fresh intentId as a normal intent.
+   *
+   * T1 — races against {@link observeTimeoutMs} (`TURN_READ_BACK_TIMEOUT_MS`),
+   * UNCHANGED from before the planning read got its own, larger budget: this is
+   * the read at the very end that only improves an already-succeeded plan
+   * result, not the one between segments the planner is shown.
+   */
+  async observe(
+    sessionId: string,
+    shouldContinue?: ExecuteArgs['shouldContinue'],
+    signal?: AbortSignal,
+  ): Promise<string | null> {
+    const outcome = await this.observeCore(
+      sessionId,
+      shouldContinue,
+      signal,
+      this.observeTimeoutMs,
+    );
+    return outcome.text;
+  }
+
+  /**
+   * P1/T1 — the same read as {@link observe}, digested for PLANNING rather
+   * than for answering, and raced against its OWN, larger budget
+   * ({@link planningObserveTimeoutMs}). One dispatch, then
+   * {@link summarizePageForPlanning}; null whenever the read produced nothing,
+   * so a page that cannot be read degrades to "plan without it" exactly as
+   * before.
+   *
+   * T3 — when the device says its `get_page_source` answer was truncated, the
+   * digest handed back carries one extra line saying so: DATA inside the
+   * observation, not a prompt change.
    */
   async observeDigest(
     sessionId: string,
     shouldContinue?: ExecuteArgs['shouldContinue'],
     signal?: AbortSignal,
     commitmentBudget?: CommitmentBudget,
+    onPlanningRead?: (entry: PlanningReadTraceEntry) => void,
   ): Promise<string | null> {
-    const source = await this.observe(sessionId, shouldContinue, signal);
-    if (source === null) return null;
-    const digest = digestPage(source);
+    const read = await this.observeCore(
+      sessionId,
+      shouldContinue,
+      signal,
+      this.planningObserveTimeoutMs,
+    );
+    try {
+      onPlanningRead?.({
+        ms: read.ms,
+        outcome: read.outcome,
+        chars: read.text?.length ?? 0,
+        truncated: read.truncated,
+      });
+    } catch {
+      /* diagnostics only — must never affect planning */
+    }
+    if (read.text === null) return null;
+    const digest = digestPage(read.text);
     this.rememberGatePage(sessionId, digest.gateLabels, digest.commitFacts);
     // P4 — stakes seen anywhere in the turn arm the commitment gate for the
     // rest of it. A basket prints the total; the checkout that follows it
     // often prints nothing at all, and those are one commitment.
     if (commitmentBudget !== undefined) armFromFacts(commitmentBudget, digest.commitFacts);
-    return digest.text.length > 0 ? digest.text : null;
+    if (digest.text.length === 0) return null;
+    return read.truncated ? `${digest.text}\n${PAGE_SOURCE_TRUNCATED_NOTE}` : digest.text;
   }
 
   /**
@@ -3708,3 +3846,27 @@ export function extractPageText(outputData: unknown): string | null {
   }
   return null;
 }
+
+/**
+ * T3 — whether the device said its `get_page_source` answer was truncated
+ * (`GetPageSourceResultSchema`: `{ source, truncated }` in
+ * harness-control-protocol.ts). `extractPageText` above ignores this field on
+ * purpose (it is a defensive multi-shape reader for the TEXT alone); this is
+ * its sibling for the ONE flag. Defaults to `false` — a raw-string payload (no
+ * `truncated` field to read) and a missing/malformed flag both mean "nothing
+ * said this was cut short", never "assume the worst".
+ */
+export function extractPageTruncated(outputData: unknown): boolean {
+  if (typeof outputData !== 'object' || outputData === null) return false;
+  return (outputData as Record<string, unknown>).truncated === true;
+}
+
+/**
+ * T3 — appended, on its OWN line, after the digest handed to the planner when
+ * (and only when) the device said its `get_page_source` answer was truncated.
+ * DATA inside the observation, not a prompt change: the planner contract's
+ * wording around the fenced observation is untouched, and this line lives
+ * INSIDE what the fence encloses.
+ */
+export const PAGE_SOURCE_TRUNCATED_NOTE =
+  '(the page was longer than could be read; what is listed is the beginning of it)';

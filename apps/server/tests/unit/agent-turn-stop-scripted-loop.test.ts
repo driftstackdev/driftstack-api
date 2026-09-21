@@ -116,8 +116,13 @@ describe('scripted: a looping turn stopped mid-loop', () => {
         preTapLookTimeoutMs: 0,
         // Backoffs are instant; the in-flight grace never runs out, so the tap's
         // own answer — not a race against a zero-length timer — decides its row.
+        // ⛔ EXACT, NOT `>=`: T1 gave the planning read its OWN, larger budget
+        // (PLANNING_OBSERVE_TIMEOUT_MS, 25s) — bigger than this grace period —
+        // for a reason that has nothing to do with Stop. `>=` would hold ITS
+        // race open forever too, making the loop's own look lose to a timer
+        // that never fires in real life, not to a genuine 25s wait.
         sleep: (ms) =>
-          ms >= STOP_IN_FLIGHT_GRACE_MS ? new Promise<void>(() => undefined) : Promise.resolve(),
+          ms === STOP_IN_FLIGHT_GRACE_MS ? new Promise<void>(() => undefined) : Promise.resolve(),
       }),
       sessions,
       archetype: 'iphone17_ios18_7_safari26_4',
@@ -147,12 +152,24 @@ describe('scripted: a looping turn stopped mid-loop', () => {
     // device: navigate, the look between segments, the confirmation gate's
     // commitment read before the tap, then the tap. Nothing after it.
     //
-    // ⛔ TWO `get_page_source`, AND THEY ARE DIFFERENT READS. The first is the
-    // loop's own look, which the planner is shown; the second is the gate's
-    // commitment arm bringing its structural facts up to date before the tap
-    // (services/agent-page-commitment.ts), and nothing from it reaches a prompt.
+    // ⛔ THREE `get_page_source`, AND THEY ARE NOT ALL THE SAME READ. This
+    // fake's `sleep` resolves synchronously, so it always beats the real
+    // (multi-microtask) dispatch in observe()'s internal race — which is what
+    // makes the loop's own look fail here rather than succeed. T2 retries a
+    // failed planning read ONCE, so that is two `get_page_source` for the
+    // SAME look (attempt + retry, both losing the same race); the THIRD is
+    // the gate's commitment arm bringing its structural facts up to date
+    // before the tap (services/agent-page-commitment.ts) — since the loop's
+    // look never remembered fresh facts, the gate still takes its own read —
+    // and nothing from any of the three reaches a prompt but the loop's.
     expect(planner.calls).toHaveLength(2);
-    expect(device.log).toEqual(['navigate', 'get_page_source', 'get_page_source', 'click #next']);
+    expect(device.log).toEqual([
+      'navigate',
+      'get_page_source',
+      'get_page_source',
+      'get_page_source',
+      'click #next',
+    ]);
 
     const transcript = (await sessions.get(seed.id))?.transcript ?? [];
     expect(transcript.map((e) => e.role)).toEqual(['user', 'agent']);

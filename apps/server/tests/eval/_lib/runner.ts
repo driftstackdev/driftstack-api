@@ -129,6 +129,7 @@ export async function runEvalTask(task: EvalTask): Promise<TaskReport> {
       retryDelayMs: EVAL_RETRY_DELAY_MS,
       sessionEstablishRetryDelayMs: EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
       observeTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
+      planningObserveTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
       sleep: clock.sleep,
       deadline: clock.deadline,
       // Fixed per TASK, so the corpus is reproducible; see `evalRandom`.

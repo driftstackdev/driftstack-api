@@ -279,6 +279,7 @@ type AgentMessageResponse struct {
 	//	"no_progress"    the page stopped changing and the next step would repeat; ask a person
 	//	"repeated_step"  the next step would repeat an action that already ran; check, then "continue"
 	//	"ai_unavailable" the next steps could not be worked out just now; send "continue" to try again
+	//	"page_unreadable" the page could not be read to plan the next step; send "continue" to try again
 	//	"question"       the agent asked you something part-way; Notice is the question, answer it
 	//	"declined"       the agent stopped rather than carry on; a person should decide
 	//

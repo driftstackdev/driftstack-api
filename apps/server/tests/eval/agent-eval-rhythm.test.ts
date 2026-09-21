@@ -264,6 +264,7 @@ async function runOneStep(
       retryDelayMs: EVAL_RETRY_DELAY_MS,
       sessionEstablishRetryDelayMs: EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
       observeTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
+      planningObserveTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
       sleep: clock.sleep,
       deadline: clock.deadline,
       // No element wait, so the retries are the only thing between the two

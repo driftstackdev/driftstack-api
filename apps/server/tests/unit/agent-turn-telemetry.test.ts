@@ -1527,4 +1527,142 @@ describe('agent turn telemetry — a turn the LOOP stopped short is not a comple
     const line = warnings.find((w) => w.event === 'agent_turn_stopped_unfinished');
     expect(line).toMatchObject({ stopped: 'planner_call_limit', outcome: 'clarified' });
   });
+
+  it('T2 — a turn that stopped because two segments could not be read is `failed`/`page_load_failed`', () => {
+    expect(
+      classify(
+        planExecuted(allGreen, {
+          loop: { segments: 3, plannerCalls: 3, replans: 0, stopped: 'page_unreadable' },
+        }),
+      ),
+    ).toMatchObject({ outcome: 'failed', deathReason: 'page_load_failed' });
+  });
+
+  it('T4 — the SAME `agent_turn_stopped_unfinished` line carries a bounded `trace`: step verbs+durations+ok, planning-read outcomes, planner calls, blind segments — and no page text', async () => {
+    const warnings: Array<Record<string, unknown>> = [];
+    const telemetry = new AgentTurnTelemetry({
+      writer: new CapturingWriter(),
+      metrics: newRegistry(),
+      nowMs: () => 0,
+      wallClock: () => new Date('2026-09-18T00:00:00Z'),
+      logger: { warn: (obj) => warnings.push(obj) },
+    });
+    const c = telemetry.begin({ agentSessionId: 'ags_1', transport: 'stream' });
+    c.observeResult(
+      planExecuted(
+        allGreen,
+        {
+          loop: {
+            segments: 3,
+            plannerCalls: 3,
+            replans: 0,
+            stopped: 'page_unreadable',
+            blindSegments: 2,
+            planningReads: [
+              { ms: 25_000, outcome: 'timeout', chars: 0, truncated: false },
+              { ms: 30, outcome: 'empty', chars: 0, truncated: false },
+            ],
+          },
+        },
+        {
+          stepTrace: [
+            { verb: 'navigate', ms: 120, ok: true },
+            { verb: 'interact', ms: 80, ok: true },
+          ],
+        },
+      ),
+    );
+    c.finish({ status: 200, body: { kind: 'plan-executed' } });
+    await telemetry.flush();
+    const line = warnings.find((w) => w.event === 'agent_turn_stopped_unfinished');
+    expect(line).toBeDefined();
+    const trace = (line as Record<string, unknown>).trace as {
+      steps: unknown[];
+      reads: unknown[];
+      plannerCalls: number;
+      blindSegments: number;
+    };
+    expect(trace).toBeDefined();
+    expect(trace.plannerCalls).toBe(3);
+    expect(trace.blindSegments).toBe(2);
+    expect(trace.reads).toEqual([
+      { ms: 25_000, outcome: 'timeout', chars: 0, truncated: false },
+      { ms: 30, outcome: 'empty', chars: 0, truncated: false },
+    ]);
+    expect(trace.steps).toEqual([
+      { verb: 'navigate', ms: 120, ok: true },
+      { verb: 'interact', ms: 80, ok: true },
+    ]);
+    // NO page text, NO selectors, NO customer message, NO url anywhere on the
+    // line: it is closed enums and numbers only.
+    const serialised = JSON.stringify(line);
+    expect(serialised).not.toMatch(/https?:\/\//);
+    expect(serialised).not.toMatch(/#go|example\.test/);
+  });
+
+  it('T4 — the trace is BOUNDED: more entries than the cap still logs only the cap, on both arrays', async () => {
+    const warnings: Array<Record<string, unknown>> = [];
+    const telemetry = new AgentTurnTelemetry({
+      writer: new CapturingWriter(),
+      metrics: newRegistry(),
+      nowMs: () => 0,
+      wallClock: () => new Date('2026-09-18T00:00:00Z'),
+      logger: { warn: (obj) => warnings.push(obj) },
+    });
+    const c = telemetry.begin({ agentSessionId: 'ags_1', transport: 'stream' });
+    const manyReads = Array.from({ length: 60 }, (_, i) => ({
+      ms: i,
+      outcome: 'ok' as const,
+      chars: 10,
+      truncated: false,
+    }));
+    const manySteps = Array.from({ length: 60 }, (_, i) => ({
+      verb: 'wait' as const,
+      ms: i,
+      ok: true,
+    }));
+    c.observeResult(
+      planExecuted(
+        allGreen,
+        {
+          loop: {
+            segments: 3,
+            plannerCalls: 3,
+            replans: 0,
+            stopped: 'page_unreadable',
+            planningReads: manyReads,
+          },
+        },
+        { stepTrace: manySteps },
+      ),
+    );
+    c.finish({ status: 200, body: { kind: 'plan-executed' } });
+    await telemetry.flush();
+    const line = warnings.find((w) => w.event === 'agent_turn_stopped_unfinished');
+    const trace = (line as Record<string, unknown>).trace as { steps: unknown[]; reads: unknown[] };
+    expect(trace.steps.length).toBeLessThanOrEqual(40);
+    expect(trace.reads.length).toBeLessThanOrEqual(40);
+  });
+
+  it('a turn with nothing to trace (no steps, no reads) logs the line with no `trace` field', async () => {
+    const warnings: Array<Record<string, unknown>> = [];
+    const telemetry = new AgentTurnTelemetry({
+      writer: new CapturingWriter(),
+      metrics: newRegistry(),
+      nowMs: () => 0,
+      wallClock: () => new Date('2026-09-18T00:00:00Z'),
+      logger: { warn: (obj) => warnings.push(obj) },
+    });
+    const c = telemetry.begin({ agentSessionId: 'ags_1', transport: 'stream' });
+    c.observeResult(
+      planExecuted(allGreen, {
+        loop: { segments: 6, plannerCalls: 6, replans: 0, stopped: 'planner_call_limit' },
+      }),
+    );
+    c.finish({ status: 200, body: { kind: 'plan-executed' } });
+    await telemetry.flush();
+    const line = warnings.find((w) => w.event === 'agent_turn_stopped_unfinished');
+    expect(line).toBeDefined();
+    expect((line as Record<string, unknown>).trace).toBeUndefined();
+  });
 });

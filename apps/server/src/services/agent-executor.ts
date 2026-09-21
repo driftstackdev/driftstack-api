@@ -77,7 +77,11 @@ import { sliceWithoutSplittingSurrogate } from '../lib/bounded-text.js';
 // Type only: the counts' shape and their closed enums live beside the metric
 // that emits them. Erased at build time, so this is not a runtime cycle with
 // agent-turn-telemetry.ts (which imports IntentResult from here, also as a type).
-import type { AgentActionPathCounts } from './agent-turn-telemetry.js';
+import type {
+  AgentActionPathCounts,
+  AgentStepTraceEntry,
+  PlanningReadTraceEntry,
+} from './agent-turn-telemetry.js';
 // Type only, and from a leaf that imports nothing: see ExecuteArgs.pace.
 import type { PaceBudget } from './agent-pace.js';
 
@@ -227,6 +231,19 @@ export interface ExecutorRunResult {
    * driver path), which simply report nothing.
    */
   actionPaths?: AgentActionPathCounts;
+  /**
+   * T4 — ONE ENTRY PER STEP THIS RUN ATTEMPTED (dispatched or halted before
+   * dispatch): its verb, how long it took, and whether it succeeded. Bounded
+   * (see AGENT_TURN_TRACE_MAX_ENTRIES) and accumulated at the SAME sites as
+   * {@link actionPaths}, for the same reason: production has no metrics
+   * scraper, and this is the durable, greppable record of what a turn's steps
+   * actually were when it stopped with its task unfinished
+   * (`agent_turn_stopped_unfinished`). Never page text, never a selector.
+   *
+   * ⛔ NOT PUBLIC, for the same reason `actionPaths` is not: this is server
+   * evidence, not a field an IntentResult carries to the customer.
+   */
+  stepTrace?: ReadonlyArray<AgentStepTraceEntry>;
 }
 
 /** Stable signature of a consequential action, for the approve → re-run carry
@@ -947,6 +964,16 @@ export interface AgentExecutor {
      * Omitted → the read is exactly what it was.
      */
     commitmentBudget?: CommitmentBudget,
+    /**
+     * T1/T4 — told the outcome of THIS read: how long it took, whether it
+     * succeeded, how many characters it produced, and whether the device said
+     * its answer was truncated. Best-effort diagnostics only — the runtime
+     * folds these into the turn's bounded `agent_turn_stopped_unfinished`
+     * trace; a throwing callback is swallowed, the same way a throwing
+     * `onStep` is. OPTIONAL, and appended last, so an executor built before
+     * this existed (every hand-written test fake) still satisfies the type.
+     */
+    onPlanningRead?: (entry: PlanningReadTraceEntry) => void,
   ): Promise<string | null>;
 }
 

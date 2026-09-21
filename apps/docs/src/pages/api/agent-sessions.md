@@ -396,7 +396,8 @@ How to read a `plan-executed` turn:
   limit — about three minutes of work, the planning rounds it may make, too
   little token budget left, going in circles, or a next step that would have
   repeated an action that already ran — or it could not work out the next
-  steps, or the agent asked you something part-way. It is one sentence saying
+  steps, or it could not read the page to plan the next step, or the agent
+  asked you something part-way. It is one sentence saying
   which, and what it needs from you. Most ask you to send "continue", and the
   agent carries on from the current page; the token-budget one asks you to
   start a new session instead (its sentence calls that a new chat), and the
@@ -406,16 +407,17 @@ How to read a `plan-executed` turn:
 - `notice_reason` is that same ending in one word, present whenever `notice` is
   and never without it, so a program can branch without reading the sentence:
 
-  | `notice_reason`  | What happened                                                                             | What to do                                               |
-  | ---------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-  | `step_limit`     | The task needs more steps than one message runs.                                          | Send "continue".                                         |
-  | `time_limit`     | The message was taking too long.                                                          | Send "continue".                                         |
-  | `budget_low`     | Too little of the session's token budget is left.                                         | Start a new session and carry on there.                  |
-  | `no_progress`    | The page stopped changing and the next step would have repeated one that changed nothing. | Ask a person; `notice` asks what to try differently.     |
-  | `repeated_step`  | The next step would have repeated an action that already ran, which could do it twice.    | Check the page, then send "continue" only if it is safe. |
-  | `ai_unavailable` | The next steps could not be worked out just now.                                          | Send "continue" to try again.                            |
-  | `question`       | The agent asked you something part-way; `notice` is the question.                         | Answer it as the next message.                           |
-  | `declined`       | The agent stopped rather than carry on.                                                   | Ask a person. "continue" will not change the answer.     |
+  | `notice_reason`   | What happened                                                                             | What to do                                               |
+  | ----------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+  | `step_limit`      | The task needs more steps than one message runs.                                          | Send "continue".                                         |
+  | `time_limit`      | The message was taking too long.                                                          | Send "continue".                                         |
+  | `budget_low`      | Too little of the session's token budget is left.                                         | Start a new session and carry on there.                  |
+  | `no_progress`     | The page stopped changing and the next step would have repeated one that changed nothing. | Ask a person; `notice` asks what to try differently.     |
+  | `repeated_step`   | The next step would have repeated an action that already ran, which could do it twice.    | Check the page, then send "continue" only if it is safe. |
+  | `ai_unavailable`  | The next steps could not be worked out just now.                                          | Send "continue" to try again.                            |
+  | `page_unreadable` | Could not read the page to plan the next step.                                            | Send "continue" to try again.                            |
+  | `question`        | The agent asked you something part-way; `notice` is the question.                         | Answer it as the next message.                           |
+  | `declined`        | The agent stopped rather than carry on.                                                   | Ask a person. "continue" will not change the answer.     |
 
   The list is **open** — a turn may one day end a way that is not in it — so
   treat a value you do not recognise, and an older server that sends `notice`

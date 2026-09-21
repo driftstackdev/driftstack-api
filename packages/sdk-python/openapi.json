@@ -4923,6 +4923,7 @@
                       "no_progress",
                       "repeated_step",
                       "ai_unavailable",
+                      "page_unreadable",
                       "question",
                       "declined"
                     ]
@@ -4931,7 +4932,7 @@
                     "type": "string"
                   }
                 ],
-                "description": "Why the turn ended, in one word, whenever `notice` is present — never without it. `step_limit`: the task needs more steps than one message runs; send \"continue\". `time_limit`: the message was taking too long; send \"continue\". `budget_low`: too little of the session’s AI budget is left; start a new session. `no_progress`: the page stopped changing and the next step would repeat one that changed nothing; a person should say what to try instead. `repeated_step`: the next step would have repeated an action that already ran, which could do it twice; check the page, then send \"continue\" if it is safe. `ai_unavailable`: the next steps could not be worked out just now; send \"continue\" to try again. `question`: the agent asked you something part-way; `notice` is the question, and your answer is the next message. `declined`: the agent stopped rather than carry on; a person should decide what to do. Treat it as an OPEN string: match the values you know, and show `notice` for any other."
+                "description": "Why the turn ended, in one word, whenever `notice` is present — never without it. `step_limit`: the task needs more steps than one message runs; send \"continue\". `time_limit`: the message was taking too long; send \"continue\". `budget_low`: too little of the session’s AI budget is left; start a new session. `no_progress`: the page stopped changing and the next step would repeat one that changed nothing; a person should say what to try instead. `repeated_step`: the next step would have repeated an action that already ran, which could do it twice; check the page, then send \"continue\" if it is safe. `ai_unavailable`: the next steps could not be worked out just now; send \"continue\" to try again. `page_unreadable`: the page could not be read to plan the next step; send \"continue\" to try again. `question`: the agent asked you something part-way; `notice` is the question, and your answer is the next message. `declined`: the agent stopped rather than carry on; a person should decide what to do. Treat it as an OPEN string: match the values you know, and show `notice` for any other."
               },
               "usage": {
                 "$ref": "#/components/schemas/AgentMessageUsage"

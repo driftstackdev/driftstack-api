@@ -115,6 +115,8 @@ CanonicalModifier = Literal["cmd", "ctrl", "shift", "option"]
 #:   ``"continue"`` if it is safe.
 #: - ``"ai_unavailable"`` — the next steps could not be worked out just now.
 #:   Send ``"continue"`` to try again.
+#: - ``"page_unreadable"`` — the page could not be read to plan the next step.
+#:   Send ``"continue"`` to try again.
 #: - ``"question"`` — the agent asked you something part-way. ``notice`` is the
 #:   question; send your answer as the next message.
 #: - ``"declined"`` — the agent stopped rather than carry on. A person should
@@ -131,6 +133,7 @@ AgentNoticeReason = (
         "no_progress",
         "repeated_step",
         "ai_unavailable",
+        "page_unreadable",
         "question",
         "declined",
     ]

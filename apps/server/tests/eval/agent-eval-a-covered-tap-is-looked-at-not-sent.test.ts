@@ -289,6 +289,7 @@ async function runTurn(
       retryDelayMs: EVAL_RETRY_DELAY_MS,
       sessionEstablishRetryDelayMs: EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
       observeTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
+      planningObserveTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
       sleep: clock.sleep,
       // Fixed, so a sequence assertion here is about traffic shape rather
       // than about which numbers the draws produced.

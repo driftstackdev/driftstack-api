@@ -868,6 +868,10 @@ describe('the Run AI tasks guide teaches only what the API and SDKs do', () => {
       // Dark (see above): the sentence exists and is pinned, the docs entry is
       // the debt that falls due when AI credits ship.
       credits_used: { inSentence: /used all the AI credits set aside for it/, inDocs: null },
+      page_unreadable: {
+        inSentence: /could not read the page to plan the next step/,
+        inDocs: /could not read the page/i,
+      },
     };
 
     // Every ending's SENTENCE is pinned, dark ones included: the copy exists and
@@ -945,6 +949,7 @@ describe('the Run AI tasks guide teaches only what the API and SDKs do', () => {
       no_progress: /ask a person/i,
       question: /answer it/i,
       declined: /ask a person/i,
+      page_unreadable: /send "continue"/i,
     };
 
     for (const [label, page] of [

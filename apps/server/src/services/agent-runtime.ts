@@ -62,7 +62,13 @@ import {
 // Values, not just types: a turn runs up to three plan segments and the counts
 // of all of them are the turn's. agent-turn-telemetry.ts imports from here with
 // `import type` only, so this edge is one-way at runtime.
-import { addAgentActionPathCounts, emptyAgentActionPathCounts } from './agent-turn-telemetry.js';
+import {
+  addAgentActionPathCounts,
+  AGENT_TURN_TRACE_MAX_ENTRIES,
+  emptyAgentActionPathCounts,
+  pushBoundedTrace,
+  type PlanningReadTraceEntry,
+} from './agent-turn-telemetry.js';
 import type {
   AgentSessionAuthoritySnapshot,
   AgentSessionRecord,
@@ -429,6 +435,15 @@ export type RunTurnResult =
         /** Whether the planner handed back with a QUESTION or a REFUSAL — they
          *  are different outcomes for a turn, and telemetry says which. */
         handedBackKind?: 'clarify' | 'refuse';
+        /** T4 — how many segments of this turn were planned BLIND (a planning
+         *  read, retried once, still produced nothing) — the first segment of
+         *  a chat with no page open yet does not count. Diagnostic only. */
+        blindSegments?: number;
+        /** T4 — every planning read this turn made (the first segment's look,
+         *  and every re-plan's, retries included), bounded — see
+         *  AGENT_TURN_TRACE_MAX_ENTRIES. Diagnostic only: folded into
+         *  `agent_turn_stopped_unfinished`'s `trace` and read nowhere else. */
+        planningReads?: ReadonlyArray<PlanningReadTraceEntry>;
       };
     }
   | {
@@ -1020,7 +1035,15 @@ export type TurnLoopStopReason =
   | 'credits_used'
   | 'no_progress'
   | 'repeat_refused'
-  | 'planner_unavailable';
+  | 'planner_unavailable'
+  /** T2 — two CONSECUTIVE segments of this turn could not be read to plan
+   *  against (a planning read yielded nothing, retried once, still nothing).
+   *  Distinct from `planner_unavailable`: the model could very likely have
+   *  answered, the turn simply refused to ask it a second time blind rather
+   *  than risk guessing its way through the rest of the page. The FIRST
+   *  segment of a chat with no page open yet is never blind in this sense —
+   *  see the runtime's segment loop. */
+  | 'page_unreadable';
 
 /**
  * Endings that EXIST IN CODE AND CANNOT HAPPEN YET, each with what would make it
@@ -1067,6 +1090,8 @@ export const TURN_LOOP_STOP_SENTENCES: Readonly<Record<TurnLoopStopReason, strin
     'I did the steps above, but my next steps would have repeated an action that already ran, which could do it twice, so I stopped. Check the page, and send “continue” if it is safe to carry on.',
   planner_unavailable:
     'I did the steps above, but could not work out the next ones just now, so the task is not finished. Send “continue” to try again.',
+  page_unreadable:
+    'I did the steps above, but I could not read the page to plan the next step, so I stopped rather than guess. Send “continue” to try again.',
 };
 
 /**
@@ -1081,17 +1106,34 @@ export const TURN_LOOP_STOP_SENTENCES: Readonly<Record<TurnLoopStopReason, strin
 export const TURN_RAN_OUT_OF_TIME_BEFORE_ANY_STEP_SENTENCE =
   'This was taking too long for one message and I stopped before doing anything on the page, so nothing has changed. Send “continue” and I will try again.';
 
+/**
+ * T2 — the same protection as {@link TURN_RAN_OUT_OF_TIME_BEFORE_ANY_STEP_SENTENCE},
+ * for `page_unreadable`. In practice this should be UNREACHABLE: the
+ * consecutive-blind-segment counter in the runtime's segment loop only starts
+ * once a page has been navigated to or a step has run (a first segment with no
+ * page yet is never counted as blind), so a turn cannot reach two consecutive
+ * blind segments with zero steps behind it. Kept anyway, the same way the
+ * wall-clock one is: "I did the steps above" must never be sent over zero
+ * steps, whatever future change to the counting rule might otherwise make
+ * that briefly true.
+ */
+export const TURN_COULD_NOT_READ_THE_PAGE_BEFORE_ANY_STEP_SENTENCE =
+  'I could not read the page to plan a first step, so I stopped before doing anything, and nothing has changed. Send “continue” to try again.';
+
 /** The closing sentence for an ending, given how many steps the turn ran. */
 export function turnLoopStopSentence(reason: TurnLoopStopReason, stepsRan: number): string {
   if (reason === 'wall_clock' && stepsRan === 0) {
     return TURN_RAN_OUT_OF_TIME_BEFORE_ANY_STEP_SENTENCE;
   }
+  if (reason === 'page_unreadable' && stepsRan === 0) {
+    return TURN_COULD_NOT_READ_THE_PAGE_BEFORE_ANY_STEP_SENTENCE;
+  }
   return TURN_LOOP_STOP_SENTENCES[reason];
 }
 
 /**
- * B1 — the same six endings, plus the two hand-backs, in ONE WORD a program can
- * branch on: the public `notice_reason` beside the `notice` sentence.
+ * B1 — the same seven endings, plus the two hand-backs, in ONE WORD a program
+ * can branch on: the public `notice_reason` beside the `notice` sentence.
  *
  * The sentence is for a person. It is prose, it is the only thing that says what
  * the turn actually needs, and it is deliberately not a code — which left an
@@ -1127,7 +1169,9 @@ export type TurnNoticeReason =
   /** The AI asked you something part-way. Answer it as the next message. */
   | 'question'
   /** The AI declined to carry on part-way. A person should decide what to do. */
-  | 'declined';
+  | 'declined'
+  /** The page could not be read to plan the next step. Send "continue" to try again. */
+  | 'page_unreadable';
 
 /**
  * Every loop ending's public reason. Keyed by {@link TurnLoopStopReason}, so a
@@ -1149,6 +1193,7 @@ export const TURN_NOTICE_REASONS: Readonly<Record<TurnLoopStopReason, TurnNotice
   no_progress: 'no_progress',
   repeat_refused: 'repeated_step',
   planner_unavailable: 'ai_unavailable',
+  page_unreadable: 'page_unreadable',
 };
 
 /**
@@ -1156,7 +1201,7 @@ export const TURN_NOTICE_REASONS: Readonly<Record<TurnLoopStopReason, TurnNotice
  * the three SDKs and the two documentation pages can ask "is each of these
  * accounted for?" instead of keeping their own copy of the list.
  *
- * Keyed by the type, so a ninth value cannot be added without appearing here,
+ * Keyed by the type, so a tenth value cannot be added without appearing here,
  * and every guard that reads this fails until it is documented everywhere.
  * Two of them are not loop endings: a turn hands back part-way to ask a
  * `question` or because it `declined` to carry on.
@@ -1170,6 +1215,7 @@ const EVERY_TURN_NOTICE_REASON: Readonly<Record<TurnNoticeReason, true>> = {
   ai_unavailable: true,
   question: true,
   declined: true,
+  page_unreadable: true,
 };
 
 export const ALL_TURN_NOTICE_REASONS: readonly TurnNoticeReason[] = Object.keys(
@@ -1607,6 +1653,18 @@ export function mergeExecutorRuns(
               first.actionPaths ?? emptyAgentActionPathCounts(),
             ),
             second.actionPaths ?? emptyAgentActionPathCounts(),
+          ),
+        }
+      : {}),
+    // T4 — the step trace of BOTH segments, CONCATENATED (not summed: each
+    // entry is one step, in order) and bounded the same way every other trace
+    // array is, for the same reason `actionPaths` is summed rather than taken
+    // from the second run alone: a re-planned segment's steps are real steps
+    // the turn took, not steps the merge should forget.
+    ...(first.stepTrace !== undefined || second.stepTrace !== undefined
+      ? {
+          stepTrace: [...(first.stepTrace ?? []), ...(second.stepTrace ?? [])].slice(
+            -AGENT_TURN_TRACE_MAX_ENTRIES,
           ),
         }
       : {}),
@@ -2254,28 +2312,58 @@ export class AgentRuntime {
   }
 
   /**
-   * P1 — read the page for a RE-PLAN. Best-effort: perceiving improves the next
-   * plan, it is not a precondition for making one, so an executor that cannot
-   * observe, or an observation that fails, simply re-plans blind — which is
-   * still strictly better than stopping, because the model at least learns which
-   * step failed and why.
+   * P1/T1/T2 — read the page for PLANNING: the first segment's look, or a
+   * re-plan's. Best-effort: perceiving improves the next plan, it is not a
+   * precondition for making one, so an executor that cannot observe, or a
+   * read that fails, simply plans blind — which is still strictly better
+   * than stopping, because the model at least learns which step failed and
+   * why. (Two CONSECUTIVE blind segments end the turn instead — see the
+   * segment loop's `page_unreadable` handling.)
+   *
+   * T1 — `turnHardStopAtMs` is asked BEFORE the read is allowed to start, and
+   * again before the retry: a planning read that starts at all proves the
+   * hard stop had not yet been reached, so it can only push the clock past it
+   * by its own budget. See agent-turn-bounds.ts.
+   *
+   * T2 — ONE IMMEDIATE RETRY of a read that yielded nothing.
+   * `get_page_source` is read-only, so asking again is safe; Stop and the
+   * hard stop are honoured BETWEEN the two attempts, exactly as they are
+   * before the first.
+   *
+   * T4 — every attempt (up to two) is folded into `trace`, bounded.
    */
-  private async observeForReplan(
+  private async readForPlanning(
     sessionId: string,
     shouldContinue: () => Promise<boolean>,
     signal: AbortSignal,
+    turnHardStopAtMs: number,
+    trace: PlanningReadTraceEntry[],
     /** P4 — the turn's commitment budget; this read arms it like any other. */
     commitmentBudget?: CommitmentBudget,
   ): Promise<string | undefined> {
     const observeDigest = this.deps.executor.observeDigest?.bind(this.deps.executor);
     if (observeDigest === undefined) return undefined;
-    try {
-      return (
-        (await observeDigest(sessionId, shouldContinue, signal, commitmentBudget)) ?? undefined
-      );
-    } catch {
-      return undefined;
-    }
+    const attempt = async (): Promise<string | undefined> => {
+      // T1 — checked before EVERY attempt (the first and the retry alike): a
+      // planning read must never be the thing that starts after the turn's
+      // hard stop has already passed.
+      if (this.nowMs() >= turnHardStopAtMs) return undefined;
+      try {
+        return (
+          (await observeDigest(sessionId, shouldContinue, signal, commitmentBudget, (entry) =>
+            pushBoundedTrace(trace, entry),
+          )) ?? undefined
+        );
+      } catch {
+        return undefined;
+      }
+    };
+    const first = await attempt();
+    if (first !== undefined) return first;
+    // T2 — Stop is honoured before the retry is sent; the hard stop is
+    // honoured inside `attempt` itself, on both calls alike.
+    if (stopRequested(signal)) return undefined;
+    return attempt();
   }
 
   /**
@@ -2970,7 +3058,28 @@ export class AgentRuntime {
     // the resolver exists to supersede — so a recovered turn planned its second
     // half for a different phone than its first.)
     let turnArchetype = this.deps.archetype;
+    // T1 — computed ONCE from the top of the turn, exactly like the instant
+    // the executor is handed for the step loop's own hard stop: every
+    // planning read this turn makes is asked this SAME deadline.
+    const turnHardStopAtMs = turnStartedAtMs + TURN_HARD_STOP_MS;
+    // T2 — whether THIS executor can read the page at all. An executor that
+    // never implements `observeDigest` (the stub, a test double built before
+    // this existed) has always planned every segment blind — that is not a
+    // NEW problem this turn discovered, so it must never trip `page_unreadable`.
+    // Only an executor that DOES support reading, and then fails to produce
+    // one twice running, has hit the new ending.
+    const executorCanRead = this.deps.executor.observeDigest !== undefined;
     let firstPlanObservation: string | undefined;
+    /** T4 — every planning read this turn makes (first segment + every
+     *  re-plan, retries included), bounded — folded into the unfinished-turn
+     *  diagnostic trace. */
+    const planningReadTrace: PlanningReadTraceEntry[] = [];
+    // T2 — whether the segment just planned (the first one, below, or the
+    // last iteration of the loop) was planned BLIND, and the running total.
+    // Declared here (not inside the first-plan branch) so the loop below —
+    // a different lexical scope — can read and update the SAME variables.
+    let previousSegmentPlannedBlind = false;
+    let blindSegmentsCount = 0;
     /**
      * P1 — planning calls whose reply nobody could read and which were asked
      * again. Counted against the turn's own planner/model caps below, and
@@ -3053,22 +3162,33 @@ export class AgentRuntime {
       const hasPriorBrowserWork = sessionWithUser.transcript.some(
         (entry) => entry.intents !== undefined && entry.intents.length > 0,
       );
-      const observeDigest = this.deps.executor.observeDigest?.bind(this.deps.executor);
       let pageObservation: string | undefined;
-      if (hasPriorBrowserWork && observeDigest !== undefined) {
+      if (hasPriorBrowserWork && executorCanRead) {
         emitProgress(args.onProgress, { kind: 'phase', phase: 'reading_page' });
         // Best-effort by the same rule as the read-back: perceiving is an
         // improvement to planning, never a precondition for it, so a failure
-        // here plans blind rather than failing the turn.
-        try {
-          pageObservation =
-            (await observeDigest(session.id, authorityMayContinue, signal, commitmentBudget)) ??
-            undefined;
-        } catch {
-          pageObservation = undefined;
-        }
+        // here plans blind rather than failing the turn. T1/T2 — hard-stop
+        // checked first, one retry of an empty read; see readForPlanning.
+        pageObservation = await this.readForPlanning(
+          session.id,
+          authorityMayContinue,
+          signal,
+          turnHardStopAtMs,
+          planningReadTrace,
+          commitmentBudget,
+        );
       }
       firstPlanObservation = pageObservation;
+      // T2 — the FIRST segment of a chat with no page open yet is NOT blind in
+      // this sense: `hasPriorBrowserWork` (or `executorCanRead`) being false
+      // means there was provably nothing to read, which is not the same fact
+      // as "tried and failed". Only when a read was actually attempted and
+      // still came back empty does the consecutive-blind count start.
+      previousSegmentPlannedBlind =
+        executorCanRead && hasPriorBrowserWork && pageObservation === undefined;
+      // T4 — total segments this turn planned blind (for ANY reason a read
+      // was attempted and failed — not only the ones that were consecutive).
+      if (previousSegmentPlannedBlind) blindSegmentsCount += 1;
       // B2 — never START a model call after Stop: the look above may have been
       // what the customer was watching when they pressed it.
       if (stopRequested(signal)) {
@@ -3821,10 +3941,12 @@ export class AgentRuntime {
       if (!(await this.authorityStillCurrent(session.id, admission))) break;
       segment += 1;
       emitProgress(args.onProgress, { kind: 'phase', phase: 'reading_page', segment, cause });
-      const pageNow = await this.observeForReplan(
+      const pageNow = await this.readForPlanning(
         session.id,
         authorityMayContinue,
         signal,
+        turnHardStopAtMs,
+        planningReadTrace,
         commitmentBudget,
       );
       // B2 — the look is cut short by Stop; the plan call after it must not start.
@@ -3832,6 +3954,20 @@ export class AgentRuntime {
         stoppedDuring = 'planning';
         break;
       }
+      // T2 — TWO CONSECUTIVE blind segments end the turn, BEFORE the planner
+      // is asked again. Speaks on BOTH causes, like the clock and unlike the
+      // ones above it: the row a failed step left says what went wrong with
+      // THAT step, and says nothing about the turn having been unable to read
+      // the page at all going into the segment that would have recovered
+      // from it. Gated on `executorCanRead`: an executor that never supports
+      // reading has always planned blind, and that is not this ending.
+      const thisSegmentPlannedBlind = executorCanRead && pageNow === undefined;
+      if (thisSegmentPlannedBlind) blindSegmentsCount += 1;
+      if (executorCanRead && thisSegmentPlannedBlind && previousSegmentPlannedBlind) {
+        loopStopped = 'page_unreadable';
+        break;
+      }
+      previousSegmentPlannedBlind = thisSegmentPlannedBlind;
       for (const done of ranSteps) {
         if (done.pageAfter === undefined && done.segment === segment - 1) done.pageAfter = pageNow;
       }
@@ -4787,6 +4923,10 @@ export class AgentRuntime {
               ...(plannerHandedBackKind !== undefined
                 ? { handedBackKind: plannerHandedBackKind }
                 : {}),
+              // T4 — diagnostic-only, folded into `agent_turn_stopped_unfinished`'s
+              // `trace` and read nowhere else.
+              ...(blindSegmentsCount > 0 ? { blindSegments: blindSegmentsCount } : {}),
+              ...(planningReadTrace.length > 0 ? { planningReads: planningReadTrace } : {}),
             },
           }
         : {}),
