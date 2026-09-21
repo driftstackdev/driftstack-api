@@ -16,6 +16,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+// jsdom ships no typings in this workspace, so the import is `any`. If
+// `@types/jsdom` is ever installed this directive turns unused and says so.
+// @ts-expect-error — no declaration file for 'jsdom' in this workspace
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
 import { installAdminDeadline } from './admin-test-runtime';
@@ -50,16 +53,13 @@ function setUpDom(
     pretendToBeVisual: true,
   });
   const { window } = dom;
-  // @ts-expect-error — jsdom global is loose
   if (typeof window.Response !== 'function') window.Response = Response;
-  // @ts-expect-error — jsdom global is loose
   window.fetch = (input: string, init: RequestInit | undefined) =>
     Promise.resolve().then(() => route({ url: String(input), init }));
   window.localStorage.setItem('ds_web_session_token', 'staff-tok');
   installAdminDeadline(window);
   const pageScript = scriptBodies.find((s) => s.includes('data-page="admin-fleet"'));
   if (!pageScript) throw new Error('admin fleet inline script not found');
-  // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
   return { window: window as JSDOM['window'] };
 }
