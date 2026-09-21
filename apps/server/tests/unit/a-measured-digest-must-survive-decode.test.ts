@@ -110,6 +110,34 @@ describe('the measured build digests survive decode', () => {
     expect(beat.data.webkitFrameworkSha256).toBe('wc:x');
   });
 
+  it('CRITICAL the device’s STATUS TOKENS reach the decoder verbatim', () => {
+    // ⛔ THE HOP THAT MAKES FINDING (c)'s NEW SENTENCES POSSIBLE. The device team
+    // (2026-09-21) sends `unreadable` / `nopath` in these same fields rather than
+    // adding keys, so the tokens are only distinguishable downstream if the
+    // schema passes the raw string through untouched. The day someone "tightens"
+    // either field with a 12-hex regex, every token degrades to `undefined` — and
+    // an undefined key is ABSENT, which is the two-way hedge the tokens exist to
+    // replace. That failure is silent: the beat still parses, the report still
+    // renders, and the finding just quietly gets vaguer.
+    const beat = HeartbeatSchema.safeParse(
+      heartbeat({
+        harnessBinarySha256: 'nopath',
+        webkitFrameworkSha256: 'wc:4410edcd9abc,wk:unreadable,jsc:99887766ddee',
+      }),
+    );
+    expect(beat.success).toBe(true);
+    if (!beat.success) return;
+    expect(beat.data.harnessBinarySha256).toBe('nopath');
+    expect(beat.data.webkitFrameworkSha256).toBe('wc:4410edcd9abc,wk:unreadable,jsc:99887766ddee');
+
+    const report = CapabilityReportSchema.safeParse(
+      capabilityReport({ webkitFrameworkSha256: 'wc:unreadable,wk:unreadable,jsc:unreadable' }),
+    );
+    expect(report.success).toBe(true);
+    if (!report.success) return;
+    expect(report.data.webkitFrameworkSha256).toBe('wc:unreadable,wk:unreadable,jsc:unreadable');
+  });
+
   it('CRITICAL a value that is not even a bounded string degrades to ABSENT, not fatal', () => {
     const beat = HeartbeatSchema.safeParse(
       heartbeat({ harnessBinarySha256: 12345, webkitFrameworkSha256: 'w'.repeat(5000) }),

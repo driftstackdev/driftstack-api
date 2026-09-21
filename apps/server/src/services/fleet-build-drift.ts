@@ -40,6 +40,41 @@ export const WEBKIT_FRAMEWORK_LABELS: Readonly<Record<WebkitFrameworkKey, string
 export const WEBKIT_FRAMEWORK_MISSING_LITERAL = 'absent';
 
 /**
+ * ⛔ STATUS TOKENS ARE THE DEVICE SPEAKING, NOT MALFORMED INPUT.
+ *
+ * The device team (2026-09-21) sends these in the SAME fields as a digest,
+ * because the fields already exist and their protocol is additive. They are the
+ * device saying WHY it has no digest to give:
+ *   • `unreadable` — there was a file and it could not be read.
+ *   • `nopath`     — there was no path to read in the first place.
+ *
+ * Before this, both arrived as "a value that is not a digest" and were hedged
+ * with the same two-way sentence as a key that never arrived at all. They are
+ * evidence, and a finding may now name them.
+ *
+ * ⛔ THE TOKEN `unreadable` AND THE CLASSIFICATION "COULD NOT PARSE" ARE TWO
+ * DIFFERENT FACTS AND MUST NEVER SHARE A NAME. The token is the DEVICE's report
+ * about its OWN file — specific, and actionable at the device. "Could not parse"
+ * is OUR verdict about a value we did not expect at all, which could equally be
+ * a device bug, a truncated frame or a value from a future protocol. That is why
+ * the state below is `unreadable-value` and never `unreadable`: anywhere the
+ * bare word `unreadable` appears in this file it is the device's word, always.
+ */
+export const HARNESS_BINARY_STATUS_TOKENS = ['unreadable', 'nopath'] as const;
+export type HarnessBinaryStatusToken = (typeof HARNESS_BINARY_STATUS_TOKENS)[number];
+
+/**
+ * Per-part status tokens inside the framework triple.
+ *
+ * `absent` is NOT one of these: it is a MEASUREMENT (the device looked and the
+ * framework is not there) and stays a readable part that compares unequal to a
+ * digest. `unreadable` is the device failing to look, which is comparable to
+ * nothing.
+ */
+export const WEBKIT_FRAMEWORK_STATUS_TOKENS = ['unreadable'] as const;
+export type WebkitFrameworkStatusToken = (typeof WEBKIT_FRAMEWORK_STATUS_TOKENS)[number];
+
+/**
  * ⛔ TWELVE LOWERCASE HEX, ANCHORED, AND NOTHING ELSE. The device produces these
  * with `shasum -a 256 <file> | cut -c1-12`, so uppercase, a full 64-char digest,
  * a `sha256:` prefix or a trailing newline are all values this repo did not ask
@@ -49,22 +84,43 @@ export const WEBKIT_FRAMEWORK_MISSING_LITERAL = 'absent';
  */
 const SHA256_PREFIX_12 = /^[0-9a-f]{12}$/;
 
+/** How many hex characters of the sha256 the device actually sends. */
+export const SHA256_PREFIX_LENGTH = 12;
+
 /**
- * A measured digest as it arrived, classified.
+ * ⛔ SAID OUT LOUD IN EVERY COMPARISON FINDING, because an operator reading
+ * "different binaries (aaaaaaaaaaaa, bbbbbbbbbbbb)" cannot otherwise tell
+ * whether these are whole digests. They are 12 hex characters — 48 bits — of a
+ * sha256, and every verdict here is a comparison of PREFIXES. Two prefixes that
+ * differ prove the files differ; two that match are strong evidence and not a
+ * proof, and a finding that does not say which of those it is invites the
+ * stronger reading.
+ */
+const DIGEST_PREFIX_SENTENCE =
+  `Each digest is the first ${SHA256_PREFIX_LENGTH} hex characters of the file's sha256, and the ` +
+  `comparison is of those prefixes.`;
+
+/**
+ * A measured digest as it arrived, classified. FOUR answers, never three.
  *
- * ⛔ `absent` AND `unreadable` ARE NOT THE SAME ANSWER and must never be merged.
- *   • `absent` — the key was not on the frame. The producer omits it when nil,
- *     and nil means the file could not be read; but a harness built before the
- *     key existed also sends nothing. Those two are INDISTINGUISHABLE from here,
- *     and `describeMissingDigest` below says exactly that rather than guessing.
- *   • `unreadable` — the key WAS there and its value is not a digest this repo
- *     can compare. That is a third, distinguishable state: something is wrong at
- *     the device, we know it, and the raw text is kept so an operator can see
- *     what arrived. It is never compared and never trusted.
+ * ⛔ NO TWO OF THESE MAY EVER BE MERGED.
+ *   • `absent` — the key was not on the frame at all. A harness built before the
+ *     key existed sends nothing, and so does one that failed before it could
+ *     produce a status. Those two are INDISTINGUISHABLE from here, and
+ *     `describeMissingDigest` below says exactly that rather than guessing. This
+ *     is the only state that still hedges, and it hedges because it must.
+ *   • `device-status` — the key was there and carried a token the device
+ *     documented (`unreadable`, `nopath`). The device TOLD us why there is no
+ *     digest; a finding names the reason and hedges nothing. Never compared.
+ *   • `unreadable-value` — the key was there and its value is neither a digest
+ *     nor a token we know. Something is wrong we cannot name, so the raw text is
+ *     kept for the operator. Never compared, never trusted.
+ *   • `measured` — twelve lowercase hex. The only state anything is compared on.
  */
 export type MeasuredDigest =
   | { readonly state: 'absent' }
-  | { readonly state: 'unreadable'; readonly raw: string }
+  | { readonly state: 'device-status'; readonly status: HarnessBinaryStatusToken }
+  | { readonly state: 'unreadable-value'; readonly raw: string }
   | { readonly state: 'measured'; readonly sha256: string };
 
 /**
@@ -77,9 +133,29 @@ export type FrameworkDigest =
   | { readonly state: 'missing' }
   | { readonly state: 'measured'; readonly sha256: string };
 
+/**
+ * ⛔ A PER-PART STATUS TOKEN TAKES THE WHOLE TRIPLE OUT OF EVERY COMPARISON, and
+ * `device-status` names WHICH parts carried it.
+ *
+ * It could not be a `FrameworkDigest` state instead, because then two devices
+ * whose JavaScriptCore is unreadable would have to either compare EQUAL (a
+ * fabricated agreement between two devices nobody measured) or compare UNEQUAL
+ * to a hashed one (a fabricated drift finding). Neither is a thing we know. The
+ * device told us it could not look; the honest answer is that this device is
+ * outside the comparison, and finding (c) says why in the device's own words.
+ *
+ * Keeping the affected keys is what makes the report actionable: "the device
+ * could not read JavaScriptCore" sends an operator to one file.
+ */
 export type MeasuredFrameworks =
   | { readonly state: 'absent' }
-  | { readonly state: 'unreadable'; readonly raw: string }
+  | {
+      readonly state: 'device-status';
+      readonly status: WebkitFrameworkStatusToken;
+      /** Which frameworks carried the token, in `WEBKIT_FRAMEWORK_KEYS` order. */
+      readonly frameworks: readonly WebkitFrameworkKey[];
+    }
+  | { readonly state: 'unreadable-value'; readonly raw: string }
   | {
       readonly state: 'measured';
       readonly parts: Readonly<Record<WebkitFrameworkKey, FrameworkDigest>>;
@@ -94,7 +170,13 @@ export type MeasuredFrameworks =
 export function decodeHarnessBinarySha256(raw: string | undefined | null): MeasuredDigest {
   if (raw === undefined || raw === null) return { state: 'absent' };
   if (SHA256_PREFIX_12.test(raw)) return { state: 'measured', sha256: raw };
-  return { state: 'unreadable', raw };
+  // ⛔ BY NAME, AND ONLY BY NAME. A token is recognised because the device team
+  // documented that exact word, not because the value "looks like a status" —
+  // a prefix or case-insensitive match here would silently promote a device bug
+  // ("UNREADABLE\n", "no-path") into a confident finding about its filesystem.
+  const status = HARNESS_BINARY_STATUS_TOKENS.find((token) => token === raw);
+  if (status !== undefined) return { state: 'device-status', status };
+  return { state: 'unreadable-value', raw };
 }
 
 /**
@@ -111,23 +193,36 @@ export function decodeHarnessBinarySha256(raw: string | undefined | null): Measu
 export function decodeWebkitFrameworkSha256(raw: string | undefined | null): MeasuredFrameworks {
   if (raw === undefined || raw === null) return { state: 'absent' };
   const segments = raw.split(',');
-  if (segments.length !== WEBKIT_FRAMEWORK_KEYS.length) return { state: 'unreadable', raw };
+  if (segments.length !== WEBKIT_FRAMEWORK_KEYS.length) return { state: 'unreadable-value', raw };
   const parts: Partial<Record<WebkitFrameworkKey, FrameworkDigest>> = {};
+  // Collected in `WEBKIT_FRAMEWORK_KEYS` order because the loop runs in it —
+  // the report must not reorder with the device's segment order.
+  const statusParts: WebkitFrameworkKey[] = [];
   for (let index = 0; index < WEBKIT_FRAMEWORK_KEYS.length; index += 1) {
     const expectedKey = WEBKIT_FRAMEWORK_KEYS[index] as WebkitFrameworkKey;
     const segment = segments[index] as string;
     // `indexOf`, not `split(':')`: a value containing a colon must be REJECTED
     // rather than silently truncated to its first field.
     const separator = segment.indexOf(':');
-    if (separator === -1) return { state: 'unreadable', raw };
-    if (segment.slice(0, separator) !== expectedKey) return { state: 'unreadable', raw };
+    if (separator === -1) return { state: 'unreadable-value', raw };
+    if (segment.slice(0, separator) !== expectedKey) return { state: 'unreadable-value', raw };
     const value = segment.slice(separator + 1);
     if (value === WEBKIT_FRAMEWORK_MISSING_LITERAL) {
       parts[expectedKey] = { state: 'missing' };
       continue;
     }
-    if (!SHA256_PREFIX_12.test(value)) return { state: 'unreadable', raw };
+    if (WEBKIT_FRAMEWORK_STATUS_TOKENS.some((token) => token === value)) {
+      statusParts.push(expectedKey);
+      continue;
+    }
+    if (!SHA256_PREFIX_12.test(value)) return { state: 'unreadable-value', raw };
     parts[expectedKey] = { state: 'measured', sha256: value };
+  }
+  if (statusParts.length > 0) {
+    // One part the device could not read makes the whole triple uncomparable —
+    // the same "fails together" rule as a malformed part, for the same reason.
+    // What is DIFFERENT is that we now know why, and can say so.
+    return { state: 'device-status', status: 'unreadable', frameworks: statusParts };
   }
   return {
     state: 'measured',
@@ -172,7 +267,12 @@ export type FleetBuildDriftCode =
   | 'webkit_framework_drift'
   /** (c) A device declares a version but has no measured digest to check it against. */
   | 'measured_digest_missing'
-  /** (d) A live session's frameworks differ from its device's current heartbeat. */
+  /**
+   * (d) A live session's frameworks differ from its device's current heartbeat,
+   * and the two observations are far enough apart that the device's 300 s cache
+   * cannot explain it. NAMES THREE POSSIBLE CAUSES AND ASSERTS NONE: it used to
+   * assert a redeploy, which was one of three readings of the same evidence.
+   */
   | 'session_framework_drift';
 
 export interface FleetBuildDriftFinding {
@@ -200,6 +300,19 @@ export interface FleetBuildDriftDeviceInput {
   readonly harnessBinarySha256?: string | null;
   /** Raw `webkitFrameworkSha256` from the latest heartbeat — what the NEXT session loads. */
   readonly webkitFrameworkSha256?: string | null;
+  /**
+   * The heartbeat's OWN timestamp (`beatAt`), ISO, as the device stamped it.
+   *
+   * ⛔ THE DEVICE'S CLOCK, NOT THE CONTROL PLANE'S RECEIPT TIME. It is compared
+   * against a capability report's `timestamp`, which the same device stamped
+   * from the same clock; pairing one device clock against a control-plane
+   * arrival time would fold network and queue delay into a measurement whose
+   * whole job is to decide whether a five-minute cache can explain a gap.
+   *
+   * Absent (an older snapshot, or no beat yet) means finding (d) has no time
+   * basis for this device and does not fire. That is deliberate: see below.
+   */
+  readonly heartbeatAt?: string | null;
 }
 
 export interface FleetBuildDriftSessionInput {
@@ -210,7 +323,13 @@ export interface FleetBuildDriftSessionInput {
   readonly declaredWebkitForkBuild?: string | null;
   /** Raw `webkitFrameworkSha256` — what THIS session was spawned from. */
   readonly webkitFrameworkSha256?: string | null;
-  /** The report's own timestamp, used only to pick a device's latest declaration. */
+  /**
+   * The capability report's own timestamp (the device's clock).
+   *
+   * Two jobs, and they are separate: it picks a device's LATEST declaration, and
+   * it is one half of finding (d)'s time basis. Absent, the declaration still
+   * sorts (below every report that has one) but (d) does not fire.
+   */
   readonly observedAt?: string | null;
 }
 
@@ -239,6 +358,39 @@ export interface FleetBuildDrift {
   readonly findings: readonly FleetBuildDriftFinding[];
 }
 
+/**
+ * ⛔ (C) THE PER-DEVICE REDEPLOY NOTE IS NOT IMPLEMENTED, AND THAT IS THE ANSWER.
+ *
+ * The note asked for is: "frameworks redeployed; daemon still running the
+ * earlier binary until it restarts". It is a real and useful fact — the device
+ * team confirmed (2026-09-21) that `harnessBinarySha256` is hashed ONCE per
+ * daemon process and cached for its lifetime, while the heartbeat's
+ * `webkitFrameworkSha256` is refreshed within 300 s, so after a redeploy without
+ * a restart the two legitimately describe different deploys.
+ *
+ * Saying it needs TWO observations of ONE device: a framework digest that
+ * CHANGED beside a binary digest that did NOT. The control plane holds one.
+ *
+ * MEASURED 2026-09-21, not assumed:
+ *   • `fleet_nodes.last_heartbeat` is a single jsonb column, overwritten whole
+ *     by `DrizzleFleetNodesRepo.recordHeartbeat` on every beat (migration 0083).
+ *     The previous value does not survive the next beat, and there is no
+ *     heartbeat-history table anywhere in `apps/server/src/db/migrations`.
+ *   • `SessionCapabilityReportStore` is an in-memory `Map` keyed by session id.
+ *     It carries framework digests and never the harness binary digest, so it
+ *     cannot supply the "and the binary did NOT change" half at all.
+ *
+ * A note written from one sample would fire on any device whose heartbeat
+ * frameworks differ from some session's — which is exactly the unfounded
+ * redeploy claim finding (d) was just narrowed to stop making. So this file
+ * claims nothing, the Fleet page labels the two fields for what they are
+ * instead, and the requirement below is recorded where the next reader is.
+ */
+export const FLEET_BUILD_DRIFT_REDEPLOY_NOTE_REQUIRES =
+  'a stored previous value per device: the last harnessBinarySha256 and webkitFrameworkSha256 ' +
+  'with the time each was first seen at its current value. The control plane keeps one ' +
+  'overwritten heartbeat row per device, so it cannot see either field change.';
+
 /** A declared value is only a group key when it actually says something. */
 function declared(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null;
@@ -259,13 +411,32 @@ function declared(value: string | null | undefined): string | null {
 function describeMissingDigest(
   digest: MeasuredDigest | MeasuredFrameworks,
   what: string,
+  /** The file the digest is OF, for the status sentence: "its executable". */
+  subject: string,
   declaredField: string,
   declaredValue: string,
 ): string {
-  if (digest.state === 'unreadable') {
+  if (digest.state === 'device-status') {
+    // The device named the reason, so this sentence names it too. No hedge: the
+    // two-way "we cannot tell an old build from a failure" below exists only for
+    // a key that never arrived, and reusing it here would throw away the one
+    // piece of evidence this whole token exists to carry.
+    const named =
+      'frameworks' in digest
+        ? digest.frameworks.map((key) => WEBKIT_FRAMEWORK_LABELS[key]).join(', ')
+        : subject;
+    const reason = digest.status === 'nopath' ? `had no path to read` : `could not read`;
+    return (
+      `declares ${declaredField} ${declaredValue} and the device reports it ${reason} ${named}, ` +
+      `so the declared value cannot be checked. That is the device's own status, not a value this ` +
+      `control plane failed to parse`
+    );
+  }
+  if (digest.state === 'unreadable-value') {
     return (
       `declares ${declaredField} ${declaredValue} and sent a ${what} value that is not a digest ` +
-      `(${JSON.stringify(digest.raw)}); it is recorded as unreadable and compared against nothing`
+      `and not a status the device documented (${JSON.stringify(digest.raw)}); it is recorded as ` +
+      `an unreadable value and compared against nothing`
     );
   }
   return (
@@ -277,6 +448,66 @@ function describeMissingDigest(
 
 function sorted(values: Iterable<string>): string[] {
   return [...values].sort();
+}
+
+/**
+ * The device re-hashes its frameworks on a file-stat change or every 300 s
+ * (device team, 2026-09-21), so ANY framework digest we hold — on a heartbeat
+ * or in a capability report — can be up to one lifetime old at the moment it
+ * was stamped.
+ */
+export const WEBKIT_FRAMEWORK_CACHE_LIFETIME_MS = 300_000;
+
+/**
+ * ⛔ TWO CACHE LIFETIMES, AND THE SECOND ONE IS NOT PADDING.
+ *
+ * A session's framework value and its device's are each drawn from that 300 s
+ * cache, so each is somewhere in a 300 s window ending at its own timestamp. Two
+ * such windows can still overlap when the timestamps are up to 300 s apart —
+ * which means a disagreement between them is fully explained by cache skew and
+ * says nothing about the device. Only past 600 s are the two windows certainly
+ * disjoint, and only then does the disagreement describe the world rather than
+ * our sampling.
+ *
+ * Before this gate, finding (d) fired on ANY difference and asserted a redeploy.
+ * Every session spawned in the five minutes around a legitimate refresh was a
+ * false positive wearing a confident cause.
+ */
+export const SESSION_FRAMEWORK_DRIFT_MIN_GAP_MS = 2 * WEBKIT_FRAMEWORK_CACHE_LIFETIME_MS;
+
+/**
+ * ⛔ AN EXPLICIT ZONE, OR IT IS NOT A TIME BASIS.
+ *
+ * `Date.parse` reads an ISO date-time carrying NO offset as the parsing
+ * PROCESS's local time (ES2015+), and a date-only string as UTC. So a pair where
+ * one side ends in `Z` and the other does not is silently shifted by the
+ * SERVER's UTC offset — up to 14 hours — and that is exactly how a 600-second
+ * gate fabricates a gap and hangs three confident causes off it. It is not
+ * hypothetical: the frame schema bounds `timestamp` as `z.string().min(1).max(64)`
+ * and never validates its shape, so the two sides really can be spelled
+ * differently.
+ *
+ * The whole reason finding (d) pairs `beatAt` with a report's `timestamp` is
+ * that ONE device clock stamped both. A value whose zone this control plane had
+ * to guess is not that value, so it is no time basis at all.
+ */
+const TIMESTAMP_WITH_EXPLICIT_ZONE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+/**
+ * An ISO timestamp as epoch ms, or null when there is no usable time.
+ *
+ * ⛔ NULL, NEVER 0 OR NaN. This feeds a "is the gap bigger than 600 s" test, and
+ * a `Date.parse` NaN propagated into that comparison makes it false — which
+ * reads as "recent enough, do not fire" and is the RIGHT answer by accident for
+ * the wrong reason. The caller must be able to tell "no time basis" from "a time
+ * basis that says no", because only the first is a gap in our data.
+ */
+function epochMs(iso: string | null | undefined): number | null {
+  if (typeof iso !== 'string') return null;
+  const trimmed = iso.trim();
+  if (trimmed === '' || !TIMESTAMP_WITH_EXPLICIT_ZONE.test(trimmed)) return null;
+  const ms = Date.parse(trimmed);
+  return Number.isFinite(ms) ? ms : null;
 }
 
 /**
@@ -340,6 +571,7 @@ export function computeFleetBuildDrift(input: {
     declaredHarnessVersion: declared(device.declaredHarnessVersion),
     harnessBinary: decodeHarnessBinarySha256(device.harnessBinarySha256),
     frameworks: decodeWebkitFrameworkSha256(device.webkitFrameworkSha256),
+    heartbeatAtMs: epochMs(device.heartbeatAt),
   }));
 
   function flag(deviceId: string, code: FleetBuildDriftCode): void {
@@ -402,7 +634,7 @@ export function computeFleetBuildDrift(input: {
       detail:
         `${deviceIds.length} devices declare harnessVersion ${declaredValue} but are running ` +
         `${distinct.size} different binaries (${listDigests(sorted(distinct), ', ')}). The declared value ` +
-        `cannot be right for all of them.`,
+        `cannot be right for all of them. ${DIGEST_PREFIX_SENTENCE}`,
     });
   }
 
@@ -436,6 +668,14 @@ export function computeFleetBuildDrift(input: {
     if (differing.length === 0) continue;
     const deviceIds = sorted(measured.map((device) => device.deviceId));
     for (const deviceId of deviceIds) flag(deviceId, 'webkit_framework_drift');
+    // ⛔ "THE OTHER FRAMEWORKS MATCH" IS A CLAIM, AND WITH ALL THREE DIFFERING
+    // THERE IS NO OTHER FRAMEWORK FOR IT TO BE TRUE OF. An operator reads it as
+    // "only part of the checkout moved" and goes looking for the part that did
+    // not — a trip that does not exist. Said only when there is a remainder.
+    const allFrameworksDiffer = differing.length === WEBKIT_FRAMEWORK_KEYS.length;
+    const scopeSentence = allFrameworksDiffer
+      ? `All three frameworks differ, so the declared value describes none of them.`
+      : `The other frameworks match, so the declared value is wrong about exactly these.`;
     const named = differing
       .map(
         (key) =>
@@ -454,8 +694,7 @@ export function computeFleetBuildDrift(input: {
       frameworks: differing,
       detail:
         `${deviceIds.length} devices declare webkitForkBuild ${declaredValue} but their measured ` +
-        `frameworks differ: ${named}. The other frameworks match, so the declared value is wrong ` +
-        `about exactly these.`,
+        `frameworks differ: ${named}. ${scopeSentence} ${DIGEST_PREFIX_SENTENCE}`,
     });
   }
 
@@ -482,6 +721,7 @@ export function computeFleetBuildDrift(input: {
         detail: `${device.deviceId} ${describeMissingDigest(
           device.harnessBinary,
           'harness binary digest',
+          'its executable',
           'harnessVersion',
           device.declaredHarnessVersion,
         )}.`,
@@ -500,6 +740,7 @@ export function computeFleetBuildDrift(input: {
         detail: `${device.deviceId} ${describeMissingDigest(
           device.frameworks,
           'framework digest',
+          'its frameworks',
           'webkitForkBuild',
           forkBuild,
         )}.`,
@@ -520,10 +761,21 @@ export function computeFleetBuildDrift(input: {
     const device = deviceById.get(session.deviceId);
     if (device === undefined) continue;
     const sessionFrameworks = decodeWebkitFrameworkSha256(session.webkitFrameworkSha256);
-    // Only measured-against-measured. An absent or unreadable value on either
-    // side is a gap in the evidence, not a disagreement, and reporting it as one
-    // would put a redeploy verdict on a device nobody measured.
+    // Only measured-against-measured. An absent, status-bearing or unparsable
+    // value on either side is a gap in the evidence, not a disagreement, and
+    // reporting it as one would put a verdict on a device nobody measured.
     if (sessionFrameworks.state !== 'measured' || device.frameworks.state !== 'measured') continue;
+    // ⛔ NO TIME BASIS, NO FINDING. Both halves of this comparison come out of a
+    // 300 s cache, so without both timestamps there is no way to tell a real
+    // disagreement from two samples taken inside one refresh window — and a
+    // finding that cannot tell those apart is a coin flip with a cause attached.
+    const sessionAtMs = epochMs(session.observedAt);
+    if (device.heartbeatAtMs === null || sessionAtMs === null) continue;
+    const gapMs = Math.abs(device.heartbeatAtMs - sessionAtMs);
+    // Absolute, not signed: a heartbeat stamped BEFORE the report separates the
+    // two observations just as much as one stamped after, and the question this
+    // gate asks is only whether the sampling windows can overlap.
+    if (gapMs <= SESSION_FRAMEWORK_DRIFT_MIN_GAP_MS) continue;
     const differing: WebkitFrameworkKey[] = [];
     const named: string[] = [];
     for (const key of WEBKIT_FRAMEWORK_KEYS) {
@@ -538,18 +790,39 @@ export function computeFleetBuildDrift(input: {
     }
     if (differing.length === 0) continue;
     flag(device.deviceId, 'session_framework_drift');
+    // ⛔ THE DECLARED FORK BUILD IS OPTIONAL ON A CAPABILITY REPORT, so the
+    // closing sentence cannot presume one. It used to say "this session's
+    // declared webkitForkBuild cannot describe both…" on a session that declared
+    // nothing at all — a verdict on a field that never arrived.
+    const declaredForkBuild = declared(session.declaredWebkitForkBuild);
     sessionFindings.push({
       code: 'session_framework_drift',
       declaredField: 'webkitForkBuild',
-      declaredValue: declared(session.declaredWebkitForkBuild),
+      declaredValue: declaredForkBuild,
       deviceIds: [device.deviceId],
       sessionIds: [session.sessionId],
       frameworks: differing,
+      // ⛔ CAUSE 1 SAYS "BETWEEN THE TWO OBSERVATIONS", NEVER "AFTER THIS
+      // SESSION WAS SPAWNED". The gate is an ABSOLUTE distance, so this finding
+      // also fires when the heartbeat is the OLDER of the two — and there the
+      // replacement happened BEFORE the session was spawned. The old wording
+      // named an order the data does not establish, and named the wrong one on
+      // half the arms it fires for.
       detail:
-        `session ${session.sessionId} was spawned from frameworks its device ${device.deviceId} ` +
-        `no longer reports: ${named.join('; ')}. The device was redeployed under a live session, ` +
-        `so this session's declared webkitForkBuild describes neither what it runs nor what the ` +
-        `device would load next.`,
+        `session ${session.sessionId} reports frameworks its device ${device.deviceId} does not: ` +
+        `${named.join('; ')}. The two observations are ${Math.round(gapMs / 1000)} seconds apart, ` +
+        `longer than the two ${WEBKIT_FRAMEWORK_CACHE_LIFETIME_MS / 1000}-second caches they are ` +
+        `drawn from, so refresh timing alone does not explain it. Three things can, and this ` +
+        `report cannot tell them apart: the device's frameworks on disk were replaced between the ` +
+        `two observations; this session resolves its framework path differently from the ` +
+        `device (an override), so the two were never the same file; or one of the two timestamps ` +
+        `is wrong and the gap is not real. ${
+          declaredForkBuild === null
+            ? `This session declared no webkitForkBuild, so there is no declared build here to ` +
+              `check either measurement against.`
+            : `Whichever it is, this session's declared webkitForkBuild cannot describe both what ` +
+              `it runs and what the device would load next.`
+        }`,
     });
   }
   sessionFindings.sort((a, b) =>

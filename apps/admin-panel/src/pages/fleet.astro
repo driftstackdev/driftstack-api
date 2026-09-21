@@ -93,8 +93,24 @@ const apiBaseUrl = resolveApiBaseUrl();
       <h2 class="text-sm font-semibold text-tk-ink">Build drift</h2>
       <p class="mt-1 text-xs text-tk-ink-3">
         Devices whose <strong>declared</strong> build does not match what they
-        <strong>measured</strong>. A declared version is typed at deploy; a digest is read off the
-        running file.
+        <strong>measured</strong>. A declared version is typed at deploy; a digest is the first 12
+        hex characters of the file's sha256, and every comparison here is of those prefixes.
+      </p>
+      <!--
+        The honest statement of what this section cannot do. A device redeployed
+        without a daemon restart legitimately shows a running binary from the
+        EARLIER deploy beside frameworks from the newer one — a fact worth
+        showing, and not drift. Saying so per device needs a previous value to
+        compare against, and the control plane keeps one overwritten heartbeat
+        row per device (fleet_nodes.last_heartbeat), so it cannot see either
+        field change. Printed rather than left implicit, because the alternative
+        that was on the table was a note inferred from one sample.
+      -->
+      <p class="mt-1 text-xs text-tk-ink-3">
+        A device redeployed without a daemon restart keeps running the earlier binary while its
+        frameworks on disk have already moved. That is expected, not drift — but this page cannot
+        tell you when it happened: the control plane stores one heartbeat per device and no
+        previous value to compare against.
       </p>
       <ul class="mt-3 space-y-2 text-xs text-tk-ink-2" data-list="build-drift"></ul>
     </section>
@@ -254,17 +270,45 @@ const apiBaseUrl = resolveApiBaseUrl();
       // (`fleet-build-drift.ts` owns the 12-lowercase-hex rule) and a second copy
       // of that rule here would be free to disagree with the one that computed
       // the findings. What this must not do is render an unbounded string.
-      const DIGEST_STATES = ['absent', 'unreadable', 'measured'];
+      //
+      // ⛔ `unreadable-value` IS OUR VERDICT; `device-status` IS THE DEVICE'S.
+      // The device now sends status TOKENS (`unreadable`, `nopath`) in the digest
+      // fields, and the old state name `unreadable` meant the opposite thing —
+      // "we could not parse what arrived". One word for two facts on one screen
+      // is how an operator chases the wrong file, so the server renamed its
+      // classification and this page follows.
+      //
+      // ⚠️ THE OLD NAME STAYS ACCEPTED, and only accepted — never rendered with
+      // its own wording. The panel is on Cloudflare Pages and the control plane
+      // is on Hetzner; they do not deploy in the same instant, and a state name
+      // this validator rejects does not degrade the drift section, it fails the
+      // WHOLE Fleet page load. An older server's `unreadable` meant exactly what
+      // `unreadable-value` means now, so it renders as that and nothing is lost.
+      const DIGEST_STATES = [
+        'absent',
+        'device-status',
+        'unreadable-value',
+        'unreadable',
+        'measured',
+      ];
       const FRAMEWORK_KEYS = ['wc', 'wk', 'jsc'];
+      const FRAMEWORK_LABELS = { wc: 'WebCore', wk: 'WebKit', jsc: 'JavaScriptCore' };
+      function isUnparsableState(state) {
+        return state === 'unreadable-value' || state === 'unreadable';
+      }
       function isDigestValue(value) {
         if (!isRecord(value) || DIGEST_STATES.indexOf(value.state) === -1) return false;
         if (value.state === 'measured') return isBoundedString(value.sha256, 1, 64);
-        if (value.state === 'unreadable') return isBoundedString(value.raw, 0, 256);
+        if (isUnparsableState(value.state)) return isBoundedString(value.raw, 0, 256);
+        if (value.state === 'device-status') return isBoundedString(value.status, 1, 32);
         return true;
       }
       function isFrameworksValue(value) {
         if (!isRecord(value) || DIGEST_STATES.indexOf(value.state) === -1) return false;
-        if (value.state === 'unreadable') return isBoundedString(value.raw, 0, 256);
+        if (isUnparsableState(value.state)) return isBoundedString(value.raw, 0, 256);
+        if (value.state === 'device-status') {
+          return isBoundedString(value.status, 1, 32) && isStringArray(value.frameworks, 8, 16);
+        }
         if (value.state === 'absent') return true;
         if (!isRecord(value.parts)) return false;
         for (const key of FRAMEWORK_KEYS) {
@@ -454,22 +498,44 @@ const apiBaseUrl = resolveApiBaseUrl();
         return out.length > 0 ? out.join(' ') : pill('ok', 'bg-emerald-50 text-emerald-700');
       }
       // ── Build-drift rendering ─────────────────────────────────────────
-      // ⛔ THREE OUTCOMES, THREE WORDS, AND NONE OF THEM IS A DIGEST. A device
-      // that sent nothing reads "not reported" and one that sent nonsense reads
-      // "unreadable": they are different problems (an old build or an unreadable
-      // file, versus a device saying something wrong) and an operator chasing the
-      // second must not be sent looking for the first. Neither may ever render as
-      // a dash beside a confident declared version — that is the exact shape that
-      // let a stale `harnessVersion` pass for a year.
+      // ⛔ FOUR OUTCOMES, FOUR DIFFERENT SENTENCES, AND NONE OF THEM IS A DIGEST.
+      // They are four different problems and an operator sent to the wrong one
+      // wastes the trip:
+      //   • "not reported"          — nothing arrived. Could be an old build,
+      //                               could be a failure; the finding says so.
+      //   • "device could not read" — the DEVICE told us, by name. Go to the box.
+      //   • "device had no path"    — the device told us there was nothing to read.
+      //   • "unreadable value"      — something arrived that we cannot read at
+      //                               all. That is OUR verdict, not the device's,
+      //                               and it is a different investigation.
+      // ⛔ None of them may render as a bare dash beside a confident declared
+      // version — that is the exact shape that let a stale `harnessVersion` pass
+      // for a year.
+      const DIGEST_STATUS_WORDS = {
+        unreadable: 'device could not read it',
+        nopath: 'device had no path',
+      };
+      function statusWords(status) {
+        return DIGEST_STATUS_WORDS[status] || 'device status: ' + status;
+      }
       function fmtDigest(digest) {
         if (!digest) return '—';
         if (digest.state === 'measured') return digest.sha256;
-        if (digest.state === 'unreadable') return 'unreadable';
+        if (digest.state === 'device-status') return statusWords(digest.status);
+        if (isUnparsableState(digest.state)) return 'unreadable value';
         return 'not reported';
       }
       function fmtFrameworks(frameworks) {
         if (!frameworks) return '—';
-        if (frameworks.state === 'unreadable') return 'unreadable';
+        if (frameworks.state === 'device-status') {
+          // Which frameworks, by name — the whole point of a per-part digest is
+          // that the answer sends an operator to one file rather than three.
+          const named = frameworks.frameworks
+            .map((key) => FRAMEWORK_LABELS[key] || key)
+            .join(', ');
+          return statusWords(frameworks.status) + ': ' + named;
+        }
+        if (isUnparsableState(frameworks.state)) return 'unreadable value';
         if (frameworks.state === 'absent') return 'not reported';
         return FRAMEWORK_KEYS.map((key) => {
           const part = frameworks.parts[key];
@@ -482,7 +548,15 @@ const apiBaseUrl = resolveApiBaseUrl();
         harness_binary_drift: { text: 'binary drift', cls: 'bg-red-50 text-red-700' },
         webkit_framework_drift: { text: 'framework drift', cls: 'bg-red-50 text-red-700' },
         measured_digest_missing: { text: 'unverified', cls: 'bg-amber-50 text-amber-700' },
-        session_framework_drift: { text: 'redeployed under session', cls: 'bg-red-50 text-red-700' },
+        // ⛔ NOT "redeployed under session", WHICH THIS BADGE USED TO SAY. The
+        // server narrowed finding (d) to stop asserting a redeploy: the same
+        // evidence also fits a session resolving its framework path differently
+        // from its device, or a wrong timestamp. A badge that names one of three
+        // causes is a verdict the finding underneath it refuses to make.
+        session_framework_drift: {
+          text: 'session ≠ device frameworks',
+          cls: 'bg-red-50 text-red-700',
+        },
       };
       /**
        * Badges for one device, restricted to findings about ONE declared field.
@@ -613,11 +687,22 @@ const apiBaseUrl = resolveApiBaseUrl();
           // Harness: the DECLARED version (typed at deploy) above the MEASURED
           // digest of the binary actually executing. Both, always — the whole
           // point is that the operator can see them disagree.
+          //
+          // ⛔ THE MEASURED LINE IS LABELLED BECAUSE THE TWO DIGESTS IN THIS ROW
+          // ANSWER DIFFERENT QUESTIONS AND LOOK IDENTICAL. The device team
+          // (2026-09-21): the harness binary is hashed ONCE per daemon process
+          // and cached for its lifetime — it is what this daemon is RUNNING, and
+          // it does not move after a redeploy until the daemon restarts. The
+          // frameworks below are re-hashed within 300 s — they are what the NEXT
+          // session would load. Unlabelled, a device redeployed without a restart
+          // reads as two digests disagreeing about "which deploy", which is a
+          // true and useful fact that looks exactly like a fault.
           '<td class="px-4 py-3 text-xs text-tk-ink-3">' +
           '<div class="font-mono">' +
           escapeHtml((n.last_heartbeat && n.last_heartbeat.harnessVersion) || '—') +
           '</div>' +
-          '<div class="font-mono text-tk-ink-3" title="Measured sha256 prefix of the running harness binary">' +
+          '<div class="mt-1 text-xs text-tk-ink-3">running binary (fixed until the daemon restarts)</div>' +
+          '<div class="font-mono text-tk-ink-3">' +
           escapeHtml(device ? fmtDigest(device.harnessBinary) : '—') +
           '</div>' +
           driftBadges(drift, n.id, 'harnessVersion') +
@@ -625,11 +710,24 @@ const apiBaseUrl = resolveApiBaseUrl();
           // WebKit: the DECLARED fork build (from this device's latest capability
           // report) above the MEASURED per-framework digests from its latest
           // heartbeat — i.e. what the NEXT session on this device would load.
+          //
+          // ⛔ A DASH HERE WAS A LIE OF OMISSION. The declared fork build ONLY
+          // ever rides a capability report, so an idle device has none — not
+          // because anything is missing or stale, but because nothing has spawned
+          // to declare it. A dash reads as "we should have this and do not" and
+          // sent operators looking for a broken device. The measured frameworks
+          // beside it ride the heartbeat and are there the whole time: two facts
+          // with two provenances, which is exactly why they stay two labelled
+          // things rather than one "build" column.
           '<td class="px-4 py-3 text-xs text-tk-ink-3">' +
           '<div class="font-mono">' +
-          escapeHtml((device && device.declaredWebkitForkBuild) || '—') +
+          escapeHtml(
+            (device && device.declaredWebkitForkBuild) ||
+              (device ? 'arrives with a session' : '—'),
+          ) +
           '</div>' +
-          '<div class="font-mono text-tk-ink-3" title="Measured WebCore / WebKit / JavaScriptCore digests at the spawn path">' +
+          '<div class="mt-1 text-xs text-tk-ink-3">frameworks on disk (next session; refreshed within 5 minutes)</div>' +
+          '<div class="font-mono text-tk-ink-3">' +
           escapeHtml(device ? fmtFrameworks(device.frameworks) : '—') +
           '</div>' +
           driftBadges(drift, n.id, 'webkitForkBuild') +

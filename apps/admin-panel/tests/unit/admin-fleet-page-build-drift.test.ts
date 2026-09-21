@@ -143,7 +143,7 @@ describe('admin fleet page — declared vs measured build identity', () => {
     expect(text).toContain(`jsc:${C}`);
   });
 
-  it('CRITICAL "not reported" and "unreadable" stay distinguishable on screen', async () => {
+  it('CRITICAL "not reported" and "unreadable value" stay distinguishable on screen', async () => {
     // They are different problems. An operator chasing a device that SENT
     // something wrong must not be sent looking for one that sent nothing.
     const { window } = setUpDom(loadBuiltPage(), () =>
@@ -154,8 +154,8 @@ describe('admin fleet page — declared vs measured build identity', () => {
             driftDevice({ harnessBinary: { state: 'absent' }, frameworks: { state: 'absent' } }),
             driftDevice({
               deviceId: NODE_TWO_ID,
-              harnessBinary: { state: 'unreadable', raw: 'NOT-A-DIGEST' },
-              frameworks: { state: 'unreadable', raw: 'wc:x' },
+              harnessBinary: { state: 'unreadable-value', raw: 'NOT-A-DIGEST' },
+              frameworks: { state: 'unreadable-value', raw: 'wc:x' },
             }),
           ],
           findings: [],
@@ -166,7 +166,159 @@ describe('admin fleet page — declared vs measured build identity', () => {
     await flush();
     const text = window.document.body.textContent ?? '';
     expect(text).toContain('not reported');
-    expect(text).toContain('unreadable');
+    expect(text).toContain('unreadable value');
+  });
+
+  // ── (A) STATUS TOKENS ON SCREEN ───────────────────────────────────────
+  it('CRITICAL the DEVICE’s status and OUR parse failure read as different things', async () => {
+    // The device now sends `unreadable` / `nopath` as tokens, and the panel used
+    // to print the bare word "unreadable" for a value it could not parse. One
+    // word for two facts on one screen sends an operator to the wrong box: "the
+    // device could not read its file" is a trip to that machine, "we cannot read
+    // what it sent" is a protocol problem.
+    const { window } = setUpDom(loadBuiltPage(), () =>
+      json({
+        data: [fleetNode(), fleetNode({ id: NODE_TWO_ID, display_name: 'mac-002' })],
+        build_drift: {
+          devices: [
+            driftDevice({
+              harnessBinary: { state: 'device-status', status: 'unreadable' },
+              frameworks: {
+                state: 'device-status',
+                status: 'unreadable',
+                frameworks: ['jsc'],
+              },
+            }),
+            driftDevice({
+              deviceId: NODE_TWO_ID,
+              harnessBinary: { state: 'device-status', status: 'nopath' },
+              frameworks: { state: 'unreadable-value', raw: 'wc:x' },
+            }),
+          ],
+          findings: [],
+        },
+      }),
+    );
+    win = window;
+    await flush();
+    const text = window.document.body.textContent ?? '';
+    expect(text).toContain('device could not read it');
+    expect(text).toContain('device had no path');
+    expect(text).toContain('unreadable value');
+    // A per-part status names the framework, so the operator opens one file.
+    expect(text).toContain('JavaScriptCore');
+  });
+
+  it('CRITICAL an OLDER control plane’s `unreadable` still loads the page', async () => {
+    // ⚠️ The panel is on Cloudflare Pages and the control plane is on Hetzner;
+    // they do not deploy in the same instant. A state name this validator
+    // rejects does not degrade the drift section — it fails the WHOLE Fleet page
+    // load, table included. The old name meant what `unreadable-value` means
+    // now, so it renders as that and the operator loses nothing.
+    const { window } = setUpDom(loadBuiltPage(), () =>
+      json({
+        data: [fleetNode()],
+        build_drift: {
+          devices: [driftDevice({ harnessBinary: { state: 'unreadable', raw: 'NOT-A-DIGEST' } })],
+          findings: [],
+        },
+      }),
+    );
+    win = window;
+    await flush();
+    const text = window.document.body.textContent ?? '';
+    expect(text, 'the page must still load').not.toContain('Could not load fleet nodes');
+    expect(text).toContain('unreadable value');
+  });
+
+  // ── (D) THE TWO MEASURED FIELDS ARE LABELLED FOR WHAT THEY ARE ────────
+  it('CRITICAL each measured digest says which question it answers', async () => {
+    // Device team, 2026-09-21: the harness binary is hashed once per daemon
+    // process and does not move after a redeploy until the daemon restarts; the
+    // frameworks are re-hashed within 300 s and are what the NEXT session loads.
+    // Unlabelled, a device redeployed without a restart looks like two digests
+    // disagreeing about which deploy is live — a true and useful fact wearing
+    // the appearance of a fault.
+    const { window } = setUpDom(loadBuiltPage(), () =>
+      json({ data: [fleetNode()], build_drift: { devices: [driftDevice()], findings: [] } }),
+    );
+    win = window;
+    await flush();
+    const text = window.document.body.textContent ?? '';
+    expect(text).toContain('running binary (fixed until the daemon restarts)');
+    expect(text).toContain('frameworks on disk (next session; refreshed within 5 minutes)');
+    // …and the section says what it cannot tell, rather than implying it can.
+    // Whitespace-collapsed because this sentence is static markup and wraps in
+    // the source, so the DOM keeps the author's newlines inside it.
+    const flat = text.replace(/\s+/g, ' ');
+    expect(flat).toContain('redeployed without a daemon restart keeps running the earlier binary');
+    expect(flat).toContain('no previous value to compare against');
+  });
+
+  it('CRITICAL an idle device’s declared fork build says it ARRIVES, not a bare dash', async () => {
+    // The declared fork build only ever rides a capability report. A dash read
+    // as "we should have this and do not" and sent operators looking for a
+    // broken device; nothing is broken, nothing has spawned.
+    const { window } = setUpDom(loadBuiltPage(), () =>
+      json({
+        data: [fleetNode()],
+        build_drift: {
+          devices: [driftDevice({ declaredWebkitForkBuild: null })],
+          findings: [],
+        },
+      }),
+    );
+    win = window;
+    await flush();
+    const text = window.document.body.textContent ?? '';
+    expect(text).toContain('arrives with a session');
+    // The MEASURED frameworks are still there — they ride the heartbeat, and an
+    // idle device has them. Two facts, two provenances, two labelled cells.
+    expect(text).toContain(`wc:${A}`);
+  });
+
+  it('NEGATIVE CONTROL — a device that HAS a declared fork build still shows it', async () => {
+    // Without this, "arrives with a session" could be printed unconditionally
+    // and every arm above would still pass.
+    const { window } = setUpDom(loadBuiltPage(), () =>
+      json({ data: [fleetNode()], build_drift: { devices: [driftDevice()], findings: [] } }),
+    );
+    win = window;
+    await flush();
+    const text = window.document.body.textContent ?? '';
+    expect(text).toContain('4410edcd9');
+    expect(text).not.toContain('arrives with a session');
+  });
+
+  it('CRITICAL the session-vs-device badge no longer asserts a redeploy', async () => {
+    // The server narrowed finding (d) to name three causes and pick none. A
+    // badge reading "redeployed under session" would put back, in the one place
+    // an operator actually looks, the verdict the finding underneath refuses.
+    const { window } = setUpDom(loadBuiltPage(), () =>
+      json({
+        data: [fleetNode()],
+        build_drift: {
+          devices: [driftDevice({ flags: ['session_framework_drift'] })],
+          findings: [
+            {
+              code: 'session_framework_drift',
+              declaredField: 'webkitForkBuild',
+              declaredValue: '4410edcd9',
+              deviceIds: [NODE_ONE_ID],
+              sessionIds: ['agt_live'],
+              frameworks: ['jsc'],
+              detail:
+                'session agt_live reports frameworks its device does not: JavaScriptCore. Three things can cause it.',
+            },
+          ],
+        },
+      }),
+    );
+    win = window;
+    await flush();
+    const text = window.document.body.textContent ?? '';
+    expect(text).toContain('session ≠ device frameworks');
+    expect(text).not.toContain('redeployed under session');
   });
 
   it('CRITICAL a drift finding is listed in full, naming WHICH framework moved', async () => {
@@ -291,7 +443,7 @@ describe('a hostile device cannot inject markup into the operator page', () => {
           devices: [
             driftDevice({
               declaredWebkitForkBuild: HOSTILE_FORK,
-              harnessBinary: { state: 'unreadable', raw: HOSTILE_RAW },
+              harnessBinary: { state: 'unreadable-value', raw: HOSTILE_RAW },
               flags: ['measured_digest_missing'],
             }),
           ],

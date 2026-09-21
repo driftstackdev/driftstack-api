@@ -27,12 +27,19 @@ const B = 'bbbbbbbbbbbb';
 const C = 'cccccccccccc';
 const D = 'dddddddddddd';
 
+// The device's OWN beat timestamp. Finding (d) compares it against a capability
+// report's `timestamp` (the same device clock), so both fixtures below carry a
+// real time rather than leaving the route to invent one.
+const BEAT_AT = '2026-09-19T19:10:00.000Z';
+
 interface NodeFixture {
   id: string;
   nodeId: string | null;
   harnessVersion?: string;
   harnessBinarySha256?: string;
   webkitFrameworkSha256?: string;
+  /** Overrides `beatAt` on the snapshot; `null` removes it entirely. */
+  beatAt?: string | null;
 }
 
 function fakeRepo(nodes: NodeFixture[]): DrizzleFleetNodesRepo {
@@ -48,7 +55,7 @@ function fakeRepo(nodes: NodeFixture[]): DrizzleFleetNodesRepo {
           registeredAt: new Date('2026-09-01T00:00:00Z'),
           lastSeenAt: new Date('2026-09-19T19:10:00Z'),
           lastHeartbeat: {
-            beatAt: '2026-09-19T19:10:00.000Z',
+            ...(n.beatAt === null ? {} : { beatAt: n.beatAt ?? BEAT_AT }),
             cpuPercent: 10,
             memoryPercent: 20,
             activeSessionCount: 1,
@@ -118,8 +125,13 @@ interface DriftBody {
       deviceId: string;
       declaredHarnessVersion: string | null;
       declaredWebkitForkBuild: string | null;
-      harnessBinary: { state: string; sha256?: string; raw?: string };
-      frameworks: { state: string; parts?: Record<string, { state: string; sha256?: string }> };
+      harnessBinary: { state: string; sha256?: string; raw?: string; status?: string };
+      frameworks: {
+        state: string;
+        status?: string;
+        frameworks?: string[];
+        parts?: Record<string, { state: string; sha256?: string }>;
+      };
       flags: string[];
     }[];
     findings: {
@@ -171,6 +183,9 @@ describe('GET /v1/mac-nodes reports declared-vs-measured build drift', () => {
     const store = new SessionCapabilityReportStore();
     store.set(
       capabilityReport('agt_live', {
+        // 15 minutes before the beat — clear of the two 300 s caches, so the
+        // disagreement is about the world and not about when we looked.
+        timestamp: '2026-09-19T18:55:00.000Z',
         webkitForkBuild: '4410edcd9',
         webkitFrameworkSha256: `wc:${A},wk:${B},jsc:${C}`,
       }),
@@ -189,6 +204,98 @@ describe('GET /v1/mac-nodes reports declared-vs-measured build drift', () => {
     expect(finding?.frameworks, 'JavaScriptCore is the one that moved').toEqual(['jsc']);
     // The declared fork build comes from that same capability report.
     expect(body.build_drift.devices[0]?.declaredWebkitForkBuild).toBe('4410edcd9');
+    await app.close();
+  });
+
+  it('CRITICAL the route supplies the time basis (d) needs, from the DEVICE clock', async () => {
+    // ⛔ THE ONLY HOP THAT CAN SILENTLY DISARM FINDING (d). The gate lives in the
+    // pure function and is tested there; what only the route can get wrong is
+    // forwarding `beatAt` at all. Drop it and (d) stops firing for every device
+    // in the fleet, forever, with no error anywhere — the report simply reports
+    // less. Same fleet, same digests, same session: with a beat time it fires,
+    // and the arm below proves the gap is what decides it.
+    const store = new SessionCapabilityReportStore();
+    store.set(
+      capabilityReport('agt_live', {
+        timestamp: '2026-09-19T18:55:00.000Z',
+        webkitFrameworkSha256: `wc:${A},wk:${B},jsc:${C}`,
+      }),
+      'mac-001',
+    );
+    const withBeat = await buildHarness(
+      fakeRepo([
+        { id: UUID_ONE, nodeId: 'mac-001', webkitFrameworkSha256: `wc:${A},wk:${B},jsc:${D}` },
+      ]),
+      store,
+    );
+    expect((await list(withBeat)).build_drift.findings.map((f) => f.code)).toContain(
+      'session_framework_drift',
+    );
+    await withBeat.close();
+
+    const withoutBeat = await buildHarness(
+      fakeRepo([
+        {
+          id: UUID_ONE,
+          nodeId: 'mac-001',
+          webkitFrameworkSha256: `wc:${A},wk:${B},jsc:${D}`,
+          beatAt: null,
+        },
+      ]),
+      store,
+    );
+    expect(
+      (await list(withoutBeat)).build_drift.findings,
+      'no time basis is not a quiet pass — it is no finding',
+    ).toEqual([]);
+    await withoutBeat.close();
+  });
+
+  it('NEGATIVE CONTROL — a session inside two cache lifetimes of the beat is NOT flagged', async () => {
+    // The device sets a session's framework value once at spawn from the same
+    // 300 s cache the heartbeat reads. Two samples that close prove nothing, and
+    // the route must not be quietly bypassing the gate the function applies.
+    const store = new SessionCapabilityReportStore();
+    store.set(
+      capabilityReport('agt_live', {
+        timestamp: '2026-09-19T19:05:00.000Z',
+        webkitFrameworkSha256: `wc:${A},wk:${B},jsc:${C}`,
+      }),
+      'mac-001',
+    );
+    const app = await buildHarness(
+      fakeRepo([
+        { id: UUID_ONE, nodeId: 'mac-001', webkitFrameworkSha256: `wc:${A},wk:${B},jsc:${D}` },
+      ]),
+      store,
+    );
+    expect((await list(app)).build_drift.findings).toEqual([]);
+    await app.close();
+  });
+
+  it('CRITICAL a device status token reaches the report as a STATUS, not as nonsense', async () => {
+    // The device team will send `unreadable` / `nopath` in the digest fields.
+    // The route must carry the raw value through untouched for the decoder to
+    // classify; a route that normalised or dropped it would hand the operator
+    // back the two-way hedge the token exists to replace.
+    const app = await buildHarness(
+      fakeRepo([
+        {
+          id: UUID_ONE,
+          nodeId: 'mac-001',
+          harnessVersion: '88d2d0da2',
+          harnessBinarySha256: 'nopath',
+        },
+      ]),
+    );
+    const body = await list(app);
+    expect(body.build_drift.devices[0]?.harnessBinary).toEqual({
+      state: 'device-status',
+      status: 'nopath',
+    });
+    const finding = body.build_drift.findings.find((f) => f.code === 'measured_digest_missing');
+    expect(finding?.detail).toContain('had no path to read its executable');
+    expect(finding?.detail, 'the device told us; do not hedge').not.toContain('cannot tell');
     await app.close();
   });
 

@@ -371,6 +371,12 @@ export function registerMacNodesRoutes(
           declaredHarnessVersion: n.lastHeartbeat?.harnessVersion ?? null,
           harnessBinarySha256: n.lastHeartbeat?.harnessBinarySha256 ?? null,
           webkitFrameworkSha256: n.lastHeartbeat?.webkitFrameworkSha256 ?? null,
+          // The DEVICE's own beat timestamp, not `lastSeenAt` (the control
+          // plane's receipt time). Finding (d) compares it against a capability
+          // report's `timestamp`, which the same device stamped from the same
+          // clock; pairing a device clock against a CP arrival time would fold
+          // network and queue delay into a 600-second threshold.
+          heartbeatAt: n.lastHeartbeat?.beatAt ?? null,
         })),
         sessions,
       });
