@@ -90,6 +90,62 @@ describe('V-1012 codeOnly strips comments and nothing else', () => {
     expect(codeOnly('/* a */ const keep = 1; /* b */')).toContain('const keep = 1');
   });
 
+  it('CRITICAL a template literal that nests another inside ${} does not end at the inner backtick. It did: the template’s prose was then scanned as code, the first apostrophe in it opened a string that never closed, and every comment below it in the file survived.', () => {
+    const src = [
+      'const detail =',
+      "  `the device's frameworks differ. ${",
+      '    declared === null',
+      '      ? `This session declared no build.`',
+      "      : `This session's build cannot describe both.`",
+      '  }`;',
+      '// a comment below the template',
+      'const after = 1;',
+    ].join('\n');
+    const out = codeOnly(src);
+    expect(out).not.toContain('a comment below the template');
+    expect(out).toContain('const after = 1;');
+    // The template's own text is code-as-data and is kept, prose and all.
+    expect(out).toContain("This session's build cannot describe both.");
+    expect(out.split('\n')).toHaveLength(src.split('\n').length);
+  });
+
+  it('inside ${} the scan is code again: a comment there is a comment, an object literal’s brace does not end the expression, and a // in the template’s text is not a comment', () => {
+    const src = [
+      'const a = `see https://example.com/x ${',
+      '  // prose inside the expression',
+      "  label({ name: 'n', unit: '}' }) /* and a block */",
+      '} done`;',
+      '// trailing prose',
+      'const b = 2;',
+    ].join('\n');
+    const out = codeOnly(src);
+    expect(out).toContain('https://example.com/x');
+    expect(out).not.toContain('prose inside the expression');
+    expect(out).not.toContain('and a block');
+    expect(out).not.toContain('trailing prose');
+    expect(out).toContain("label({ name: 'n', unit: '}' })");
+    expect(out).toContain('} done`;');
+    expect(out).toContain('const b = 2;');
+  });
+
+  it('a division after a non-null assertion is a division. Read as a regex opener it swallowed the rest of a template expression — `${Math.floor(total! / 12)}/mo` — up to the next slash in the prose.', () => {
+    const src = [
+      'const m = `${Math.floor(r.annualUsd! / 12)}/mo`;',
+      '// prose after',
+      'const per = total! / 12; // per month, in plain code',
+      'const ok = !/^x/.test(s); // and a prefix ! still lets a regex follow',
+      "const q = '/*';",
+      'const c = 3;',
+    ].join('\n');
+    const out = codeOnly(src);
+    expect(out).not.toContain('prose after');
+    expect(out).not.toContain('per month');
+    expect(out).toContain('const per = total! / 12;');
+    expect(out).not.toContain('still lets a regex follow');
+    expect(out).toContain('const ok = !/^x/.test(s);');
+    expect(out).toContain('const c = 3;');
+  });
+
   it('CRITICAL across every server source file, no import statement is lost. An import line is unambiguously code, so losing one means the stripper ate past a comment — which is how a guard silently starts asserting over an empty file.', () => {
     expect(files.length, 'no server sources walked').toBeGreaterThanOrEqual(100);
     const lost: string[] = [];

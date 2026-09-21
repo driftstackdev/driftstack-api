@@ -28,6 +28,18 @@
 // regex opener from a division sign needs the previous token, so that is what the
 // `regexAllowedAfter` check below does.
 //
+// Template literals have to be modelled as well, and as what they are: a string
+// that can hold CODE. A first version treated a backtick like any other quote and
+// closed the "string" at the next backtick, which is right until a template nests
+// one inside `${ … }` — `${ ok ? `yes` : `no` }`. There the inner backtick closed
+// the outer template, the template's PROSE was scanned as code, the first
+// apostrophe in that prose ("the device's") opened a string that never closed,
+// and every comment in the rest of the file survived. `services/fleet-build-drift.ts`
+// was the first file to do it. So a template is scanned as text up to `${`, the
+// expression inside is scanned as code (comments in it ARE comments, braces are
+// counted so an object literal does not end it), and the matching `}` returns to
+// the template's text.
+//
 // `code-only-strips-comments-not-code.test.ts` asserts both directions over every
 // server source file: no import statement may be lost, and no whole-line comment
 // may survive. Both of those failed against real files during this commit, which
@@ -51,6 +63,11 @@ export function codeOnly(src: string): string {
   let out = '';
   let inBlock = false;
   let quote: string | null = null;
+  // Inside the TEXT of a template literal (between the backticks, outside `${}`).
+  let inTemplate = false;
+  // One entry per `${` that is still open: the depth of `{` opened inside that
+  // expression, so its own closing `}` can be told from an object literal's.
+  const templateExpressions: number[] = [];
   let prevSignificant: string | null = null;
 
   for (let i = 0; i < src.length; i += 1) {
@@ -72,6 +89,30 @@ export function codeOnly(src: string): string {
       continue;
     }
 
+    if (inTemplate) {
+      out += ch;
+      if (ch === '\\') {
+        if (i + 1 < src.length) {
+          out += src[i + 1] as string;
+          i += 1;
+        }
+        continue;
+      }
+      if (ch === '`') {
+        inTemplate = false;
+        prevSignificant = '`';
+        continue;
+      }
+      if (ch === '$' && next === '{') {
+        out += '{';
+        i += 1;
+        inTemplate = false;
+        templateExpressions.push(0);
+        prevSignificant = '{';
+      }
+      continue;
+    }
+
     if (quote !== null) {
       out += ch;
       if (ch === '\\') {
@@ -86,10 +127,36 @@ export function codeOnly(src: string): string {
       continue;
     }
 
-    if (ch === "'" || ch === '"' || ch === '`') {
+    if (ch === '`') {
+      inTemplate = true;
+      out += ch;
+      prevSignificant = ch;
+      continue;
+    }
+
+    if (ch === "'" || ch === '"') {
       quote = ch;
       out += ch;
       prevSignificant = ch;
+      continue;
+    }
+
+    // Braces only matter inside a template's `${ … }`: the `}` that balances the
+    // `${` hands the scan back to the template's text.
+    if (templateExpressions.length > 0 && (ch === '{' || ch === '}')) {
+      const top = templateExpressions.length - 1;
+      const depth = templateExpressions[top] as number;
+      out += ch;
+      if (ch === '{') {
+        templateExpressions[top] = depth + 1;
+        prevSignificant = ch;
+      } else if (depth === 0) {
+        templateExpressions.pop();
+        inTemplate = true;
+      } else {
+        templateExpressions[top] = depth - 1;
+        prevSignificant = ch;
+      }
       continue;
     }
 
@@ -131,7 +198,12 @@ export function codeOnly(src: string): string {
     }
 
     out += ch;
-    if (!/\s/.test(ch)) prevSignificant = ch;
+    if (ch === '!' && next !== '=' && /[\w$)\]]/.test(src[i - 1] ?? '')) {
+      // A POSTFIX `!` (non-null assertion) ends a value, so a `/` after it divides:
+      // `total! / 12`. A prefix `!` follows an operator, a bracket or a space, and
+      // a regex may follow that one: `!/re/.test(x)`.
+      prevSignificant = ')';
+    } else if (!/\s/.test(ch)) prevSignificant = ch;
   }
 
   return out;
