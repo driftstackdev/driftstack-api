@@ -20,6 +20,7 @@
 // was refused" proves nothing alone: a device that refuses everything produces
 // that observation too.
 
+import { agentIntentToDispatch } from '../../src/services/agent-intent-to-dispatch.js';
 import { describe, expect, it } from 'vitest';
 import type { HarnessIntentName } from '../../src/schemas/harness-control-protocol.js';
 import { summarizePageForPlanning } from '../../src/services/agent-executor-control-plane.js';
@@ -55,7 +56,20 @@ function makeDevice(sites: SiteMap, extra: Partial<FakeDeviceOptions> = {}) {
 function selectorPredicate(selector: string): string {
   return `const element = deepQuery(${JSON.stringify(selector)}); if (element === null) return false; return true;`;
 }
-const IDLE_PREDICATE = "const key = Symbol.for('idle-settle.v1'); return true;";
+/**
+ * R7 — built by the PRODUCT MAPPER rather than typed here. The settle is
+ * recognised by its shape now (see `classifyWaitPredicate`), and a hand-written
+ * copy of that shape would drift from the mapper the first time the predicate
+ * moved — which is exactly the failure `agent-eval-wait-discriminator` exists to
+ * catch, so this file must not reproduce it.
+ */
+const IDLE_PREDICATE = (() => {
+  const mapped = agentIntentToDispatch({ kind: 'wait', condition: 'idle' });
+  if (!mapped.ok || typeof mapped.params.predicate !== 'string') {
+    throw new Error('the mapper stopped producing a settle predicate');
+  }
+  return mapped.params.predicate;
+})();
 
 describe('DOM-backed device — selectors resolve the way a browser resolves them', () => {
   it('every valid spelling of the same element lands on it, not just the one a fixture author typed', async () => {

@@ -7,7 +7,13 @@
 import { createContext, runInContext, runInNewContext } from 'node:vm';
 import { describe, expect, it, vi } from 'vitest';
 import type { AgentIntent } from '@driftstack/api-types';
-import { agentIntentToDispatch } from '../../src/services/agent-intent-to-dispatch.js';
+import {
+  SETTLE_CEILING_APPLIES_WITHIN_MS,
+  SETTLE_CEILING_MS,
+  SETTLE_QUIET_MS,
+  SETTLE_TIMEOUT_SECONDS,
+  agentIntentToDispatch,
+} from '../../src/services/agent-intent-to-dispatch.js';
 import { HARNESS_INTENT_PARAM_SCHEMAS } from '../../src/schemas/harness-control-protocol.js';
 
 describe('agentIntentToDispatch — clean 1:1 mappings', () => {
@@ -334,7 +340,7 @@ describe('agentIntentToDispatch — typed unsupported', () => {
     expect(r.reason).toMatch(/requires a value/);
   });
 
-  it('#139 wait:idle → wait_for with a bounded DOM/resource/font quiet window', () => {
+  it('#139/R7 wait:idle → wait_for with a STATELESS load/resource/font quiet window', () => {
     // The decomposer inserts an idle-settle after navigate; it must map to a real
     // wait_for predicate, not halt the plan (which lost the following screenshot).
     const r = agentIntentToDispatch({ kind: 'wait', condition: 'idle' });
@@ -343,86 +349,235 @@ describe('agentIntentToDispatch — typed unsupported', () => {
     expect(r.intentName).toBe('wait_for');
     expect(r.params.predicate).toEqual(expect.any(String));
     expect(r.params.predicate).toContain("document.readyState !== 'complete'");
-    expect(r.params.predicate).toContain('now - state.lastActivity >= 500');
-    expect(r.params.predicate).toContain('now - state.readySince >= 3000');
+    expect(r.params.predicate).toContain("performance.getEntriesByType('navigation')");
+    expect(r.params.predicate).toContain('loadEventEnd');
+    expect(r.params.predicate).toContain(`now - loadEnd >= ${String(SETTLE_CEILING_MS)}`);
+    expect(r.params.predicate).toContain(`now - latest >= ${String(SETTLE_QUIET_MS)}`);
     expect(r.params.predicate).toContain("document.fonts.status === 'loaded'");
     expect(r.params.predicate).toContain("performance.getEntriesByType('resource')");
   });
 
-  it('wait:idle predicate waits for quiet, extends on DOM/resource activity, cleans up, and has a 3s ceiling', () => {
+  /**
+   * R7 — evaluate the SETTLE predicate against a fake page.
+   *
+   * `navigation` and `resource` come from the same accessor the real one does,
+   * so a predicate that stopped asking for either fails here rather than in
+   * production.
+   */
+  function settleContext(opts: {
+    readyState: string;
+    loadEventEnd: number | null;
+    fonts?: { status: string };
+    resources: Array<{ responseEnd: number }>;
+    nowRef: { value: number };
+  }): { evaluate: () => boolean; document: { readyState: string; fonts?: { status: string } } } {
     const r = agentIntentToDispatch({ kind: 'wait', condition: 'idle' });
-    expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('narrow');
     const predicate = String(r.params.predicate);
-    let now = 1_000;
-    let mutationCallback: (() => void) | undefined;
-    let disconnects = 0;
-    const resources: Array<{ responseEnd: number }> = [];
-    const document = {
-      readyState: 'loading',
-      documentElement: {},
-      fonts: { status: 'loading' },
+    const document: { readyState: string; fonts?: { status: string } } = {
+      readyState: opts.readyState,
+      ...(opts.fonts !== undefined ? { fonts: opts.fonts } : {}),
     };
-    class TestMutationObserver {
-      constructor(callback: () => void) {
-        mutationCallback = callback;
-      }
-      observe(): void {}
-      disconnect(): void {
-        disconnects += 1;
-      }
-    }
     const context = createContext({
       document,
-      MutationObserver: TestMutationObserver,
       performance: {
-        now: () => now,
-        getEntriesByType: () => resources,
+        now: () => opts.nowRef.value,
+        getEntriesByType: (type: string) =>
+          type === 'navigation'
+            ? opts.loadEventEnd === null
+              ? []
+              : [{ loadEventEnd: opts.loadEventEnd }]
+            : opts.resources,
       },
     });
-    const evaluate = () => runInContext(`(function () { ${predicate} })()`, context) as boolean;
+    return {
+      evaluate: () => runInContext(`(function () { ${predicate} })()`, context) as boolean,
+      document,
+    };
+  }
 
-    expect(evaluate()).toBe(false); // loading never settles
+  it('R7 wait:idle settles on a quiet window after the load event, and has a 3s ceiling', () => {
+    const nowRef = { value: 1_000 };
+    const resources: Array<{ responseEnd: number }> = [];
+    const fonts = { status: 'loading' };
+    const { evaluate, document } = settleContext({
+      readyState: 'loading',
+      loadEventEnd: 1_000,
+      fonts,
+      resources,
+      nowRef,
+    });
+
+    expect(evaluate(), 'a loading document never settles').toBe(false);
     document.readyState = 'complete';
-    expect(evaluate()).toBe(false); // starts the post-complete window
-    document.fonts.status = 'loaded';
-    now = 1_400;
-    mutationCallback?.();
-    now = 1_899;
-    expect(evaluate()).toBe(false);
-    now = 1_900;
-    expect(evaluate()).toBe(true); // 500ms after the last DOM mutation
-    expect(disconnects).toBe(1);
+    nowRef.value = 1_400;
+    expect(evaluate(), 'fonts still loading').toBe(false);
+    fonts.status = 'loaded';
+    expect(evaluate(), '400ms is not the 500ms quiet window').toBe(false);
+    nowRef.value = 1_500;
+    expect(evaluate(), '500ms after the load event with nothing moving').toBe(true);
 
-    now = 2_000;
-    expect(evaluate()).toBe(false); // success deleted state; a new wait starts fresh
-    // Resource Timing is start-ordered, so the final entry need not have the
-    // latest completion. The predicate takes a bounded max, not array.at(-1).
-    resources.push({ responseEnd: 2_400 }, { responseEnd: 2_200 });
-    now = 2_899;
-    expect(evaluate()).toBe(false);
-    now = 2_900;
-    expect(evaluate()).toBe(true); // resource completion also extends quiet
-    expect(disconnects).toBe(2);
+    // ⛔ STATELESS: asking twice at the same instant gives the same answer. The
+    // old predicate DELETED its state on the success return, so a second poll
+    // after a success started a fresh window and answered false — which is how
+    // a page could hold the wait open by making that state unwritable.
+    expect(evaluate()).toBe(true);
 
-    document.fonts.status = 'loading';
-    now = 3_000;
-    expect(evaluate()).toBe(false);
-    now = 5_999;
-    mutationCallback?.();
-    expect(evaluate()).toBe(false);
-    now = 6_000;
-    mutationCallback?.();
-    expect(evaluate()).toBe(true); // live page/font cannot exceed the 3s ceiling
-    expect(disconnects).toBe(3);
+    // Resource Timing is START-ordered, so the final entry need not be the last
+    // to finish: the bounded max, not `array.at(-1)`.
+    resources.push({ responseEnd: 1_900 }, { responseEnd: 1_700 });
+    nowRef.value = 2_399;
+    expect(evaluate(), 'a resource that completed at 1900 extends the quiet window').toBe(false);
+    nowRef.value = 2_400;
+    expect(evaluate()).toBe(true);
+
+    // The ceiling wins over a page that never goes quiet.
+    fonts.status = 'loading';
+    resources.push({ responseEnd: 3_500 });
+    nowRef.value = 3_999;
+    expect(evaluate(), 'still inside the 3s ceiling, and the page is still moving').toBe(false);
+    nowRef.value = 4_000;
+    expect(evaluate(), '3s past loadEventEnd is settled whatever the page is doing').toBe(true);
   });
 
-  it('#139 wait:idle carries timeout_seconds when timeoutMs ≥ 1s', () => {
-    const r = agentIntentToDispatch({ kind: 'wait', condition: 'idle', timeoutMs: 5000 });
-    expect(r.ok).toBe(true);
-    if (!r.ok) throw new Error('narrow');
-    expect(r.params.predicate).toEqual(expect.any(String));
-    expect(r.params.timeout_seconds).toBe(5);
+  it('CRITICAL R7 a settle long after the load event is decided by the QUIET WINDOW, not by the ceiling', () => {
+    // ⛔ THE REGRESSION THIS ARM EXISTS FOR. The ceiling is "three seconds since
+    // this wait began", and a stateless predicate has only `loadEventEnd` to
+    // measure from. Compared without a bound, a settle after a tap that changes
+    // the view WITHOUT a navigation — a same-document route change, a "load
+    // more" — finds a load event minutes old and returns true on its first poll
+    // whatever the page is doing. That is not a stricter settle; it is no
+    // settle. The corpus cannot see it: the fake device models a settle by the
+    // fixture's own `settleMs` and never evaluates this source.
+    const nowRef = { value: 60_000 };
+    const resources = [{ responseEnd: 59_900 }];
+    const { evaluate } = settleContext({
+      readyState: 'complete',
+      loadEventEnd: 1_000,
+      fonts: { status: 'loaded' },
+      resources,
+      nowRef,
+    });
+    expect(
+      evaluate(),
+      'a page that fetched 100ms ago is not settled, however old its load event is',
+    ).toBe(false);
+    nowRef.value = 60_399;
+    expect(evaluate(), 'still inside the quiet window').toBe(false);
+    nowRef.value = 60_400;
+    expect(evaluate(), 'and it settles on the quiet window, the way it always did').toBe(true);
+
+    // The bound is the span a settle that BEGAN at the load event could still be
+    // polling — so the case the ceiling exists for is untouched (asserted in the
+    // arm above), and this is where it stops applying.
+    expect(SETTLE_CEILING_APPLIES_WITHIN_MS).toBe(
+      SETTLE_CEILING_MS + SETTLE_TIMEOUT_SECONDS * 1000,
+    );
+    const atTheEdge = { value: 1_000 + SETTLE_CEILING_APPLIES_WITHIN_MS };
+    const edge = settleContext({
+      readyState: 'complete',
+      loadEventEnd: 1_000,
+      fonts: { status: 'loading' },
+      resources: [{ responseEnd: atTheEdge.value - 10 }],
+      nowRef: atTheEdge,
+    });
+    expect(edge.evaluate(), 'past the bound the ceiling no longer answers for the page').toBe(
+      false,
+    );
+    atTheEdge.value -= 1;
+    const inside = settleContext({
+      readyState: 'complete',
+      loadEventEnd: 1_000,
+      fonts: { status: 'loading' },
+      resources: [{ responseEnd: atTheEdge.value - 10 }],
+      nowRef: atTheEdge,
+    });
+    expect(inside.evaluate(), 'one millisecond inside it, the ceiling still does').toBe(true);
+  });
+
+  it('R7 ⛔ WHAT IS LOST, asserted: a DOM-only change with no network does not extend the window', () => {
+    // Named honestly rather than left to be discovered. The old MutationObserver
+    // extended the quiet window when script mutated the document without
+    // fetching anything; a stateless predicate cannot see that, because a
+    // mutation leaves no timestamp a later poll can read. The settle can
+    // therefore return true while such a page is still moving. Bounded by the
+    // same ceiling either way, and the step after it fails on its own selector
+    // with a clearer reason than "the page never settled".
+    const nowRef = { value: 1_600 };
+    const { evaluate } = settleContext({
+      readyState: 'complete',
+      loadEventEnd: 1_000,
+      fonts: { status: 'loaded' },
+      resources: [],
+      nowRef,
+    });
+    expect(evaluate()).toBe(true);
+  });
+
+  it('R7 a complete document with no navigation entry and no resources settles at once', () => {
+    // The chosen degradation on a browsing context without Navigation Timing:
+    // there is nothing left to wait for, so the settle is what the plan did
+    // before a settle existed. ⛔ Never a silent 30s stall — the timeout is
+    // always sent (see below).
+    const nowRef = { value: 5_000 };
+    const { evaluate } = settleContext({
+      readyState: 'complete',
+      loadEventEnd: null,
+      fonts: { status: 'loaded' },
+      resources: [],
+      nowRef,
+    });
+    expect(evaluate()).toBe(true);
+  });
+
+  it('R7 with no navigation entry but a live resource, the quiet window still applies', () => {
+    const nowRef = { value: 5_000 };
+    const { evaluate } = settleContext({
+      readyState: 'complete',
+      loadEventEnd: null,
+      fonts: { status: 'loaded' },
+      resources: [{ responseEnd: 4_800 }],
+      nowRef,
+    });
+    expect(evaluate(), '200ms since the last resource is not quiet').toBe(false);
+    nowRef.value = 5_300;
+    expect(evaluate()).toBe(true);
+  });
+
+  it('R7 a page with no `fonts` at all is not held open by the font test', () => {
+    const nowRef = { value: 2_000 };
+    const { evaluate } = settleContext({
+      readyState: 'complete',
+      loadEventEnd: 1_000,
+      resources: [],
+      nowRef,
+    });
+    expect(evaluate()).toBe(true);
+  });
+
+  it('⛔ R7 wait:idle ALWAYS carries its own timeout — the device default never bounds a settle', () => {
+    // Omitting the field handed the wait to the device's 30s default: a third
+    // of the turn's whole wall clock, and what a page could make the old
+    // stateful predicate spend by making its global unwritable.
+    const bare = agentIntentToDispatch({ kind: 'wait', condition: 'idle' });
+    expect(bare.ok).toBe(true);
+    if (!bare.ok) throw new Error('narrow');
+    expect(bare.params.timeout_seconds).toBe(SETTLE_TIMEOUT_SECONDS);
+
+    // A sub-second request cannot buy LESS than the ceiling the predicate
+    // itself can reach — asking for 1s would guarantee a timeout on any page
+    // that needs the ceiling.
+    const tiny = agentIntentToDispatch({ kind: 'wait', condition: 'idle', timeoutMs: 100 });
+    expect(tiny.ok).toBe(true);
+    if (!tiny.ok) throw new Error('narrow');
+    expect(tiny.params.timeout_seconds).toBe(SETTLE_TIMEOUT_SECONDS);
+
+    // A longer one is obeyed: the planner is asking about a page, not falling
+    // through to a number nobody chose.
+    const longer = agentIntentToDispatch({ kind: 'wait', condition: 'idle', timeoutMs: 12_000 });
+    expect(longer.ok).toBe(true);
+    if (!longer.ok) throw new Error('narrow');
+    expect(longer.params.timeout_seconds).toBe(12);
   });
 
   it('capture:pdf → unsupported (no harness pdf intent)', () => {
@@ -463,6 +618,7 @@ describe('agentIntentToDispatch — produced params satisfy the harness contract
     { kind: 'interact', action: 'type', selector: '#a', value: 'v' },
     { kind: 'interact', action: 'scroll' },
     { kind: 'wait', condition: 'selector_visible', selector: '#a', timeoutMs: 3000 },
+    { kind: 'wait', condition: 'idle' },
     { kind: 'capture', capture: 'screenshot' },
     { kind: 'capture', capture: 'dom_snapshot' },
   ];
@@ -501,42 +657,62 @@ describe('P-3 — the generated wait predicate names nobody and outlives nothing
     }
   });
 
-  it('CRITICAL a page that never completes never gets a document-wide MutationObserver', () => {
-    // The observer used to be installed ABOVE the readyState gate and is only
-    // disconnected on the SUCCESS return, so a page stuck before `complete` kept a
-    // subtree observer (and the global) for its whole lifetime. It bought nothing
-    // there: the pre-complete branch resets `lastActivity` on every poll anyway.
+  it('CRITICAL R7 the settle WRITES NOTHING into the page — no global, no symbol, no observer', () => {
+    // ⛔ THE THREE THINGS THE OLD STATE GAVE A PAGE, all of them properties of
+    // keeping state in the page rather than of the name it was kept under:
+    //   1. A constant, product-wide membership test —
+    //      `Object.getOwnPropertySymbols(globalThis).some((s) => s.description
+    //      === 'idle-settle.v1')` — readable during the wait and after it on
+    //      every failure path, and identical in every session of every customer.
+    //   2. A denial of service the PAGE chose: making that property getter-only
+    //      made the assignment ineffective, so the predicate returned false for
+    //      ever and the wait burned its whole timeout.
+    //   3. A leaked document-wide MutationObserver per poll, when the getter
+    //      returned a fresh object each time.
+    // Asserted three ways: on the source, on a frozen global, and on a global
+    // whose every write throws.
     const r = agentIntentToDispatch({ kind: 'wait', condition: 'idle' });
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('narrow');
     const predicate = String(r.params.predicate);
+    expect(predicate).not.toContain('Symbol.for');
+    expect(predicate).not.toContain('globalThis');
+    expect(predicate).not.toContain('MutationObserver');
 
-    let constructed = 0;
-    class TestMutationObserver {
-      constructor() {
-        constructed += 1;
-      }
-      observe(): void {}
-      disconnect(): void {}
-    }
-    const document = { readyState: 'loading', documentElement: {}, fonts: { status: 'loading' } };
+    // …and the OBSERVABLE half of the same property: the page's global namespace
+    // is byte-for-byte what it was, after as many polls as a real wait makes.
+    let now = 4_000;
     const context = createContext({
-      document,
-      MutationObserver: TestMutationObserver,
-      performance: { now: () => 1_000, getEntriesByType: () => [] },
+      document: { readyState: 'complete', fonts: { status: 'loaded' } },
+      performance: {
+        now: () => now,
+        getEntriesByType: (type: string) =>
+          type === 'navigation' ? [{ loadEventEnd: 1_000 }] : [],
+      },
     });
-    // Poll repeatedly while the document stays loading, as a real wait would.
-    for (let i = 0; i < 5; i += 1) {
-      expect(runInContext(`(function () { ${predicate} })()`, context)).toBe(false);
-    }
-    expect(constructed, 'no observer may be installed before readyState complete').toBe(0);
+    const globalShape = (): string =>
+      String(
+        runInContext(
+          'Object.getOwnPropertyNames(globalThis).sort().join(",") + "|" + Object.getOwnPropertySymbols(globalThis).map((s) => String(s.description)).sort().join(",")',
+          context,
+        ),
+      );
+    const before = globalShape();
+    const evaluate = () => runInContext(`(function () { ${predicate} })()`, context) as boolean;
+    for (let poll = 0; poll < 20; poll += 1) expect(evaluate()).toBe(true);
+    expect(globalShape(), 'the settle left something on the page for a site to read').toBe(before);
+    // The symbol half stated on its own, because that is the exact tell: one
+    // line of page script used to answer "is this browser one of theirs?".
+    expect(before.endsWith('|')).toBe(true);
 
-    // Control: once the document completes, the instrument DOES arm — otherwise
-    // this arm would pass against a predicate that never observes at all.
-    document.readyState = 'complete';
-    runInContext(`(function () { ${predicate} })()`, context);
-    runInContext(`(function () { ${predicate} })()`, context);
-    expect(constructed).toBe(1);
+    // ⛔ NON-VACUITY, and it is the load-bearing half. The same harness DOES see
+    // a false when the page is not settled — and it sees it on EVERY poll,
+    // which the old stateful predicate could not do once a page made its state
+    // unwritable. So the arm above is not passing because the predicate is
+    // inert.
+    now = 1_100;
+    for (let poll = 0; poll < 20; poll += 1) expect(evaluate()).toBe(false);
+    expect(globalShape()).toBe(before);
   });
 
   it('CRITICAL selector_visible reaches into open shadow roots, as the native wait does', () => {

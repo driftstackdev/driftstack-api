@@ -29,6 +29,7 @@
 // Every branch here is written so that removing the behaviour fails it.
 
 import { describe, expect, it } from 'vitest';
+import type { ElementWaitBudget } from '../../src/services/agent-executor.js';
 import type { AgentIntent } from '@driftstack/api-types';
 import {
   ControlPlaneAgentExecutor,
@@ -304,6 +305,11 @@ function executor(dispatcher: IntentDispatcher, opts: AutoRetryOptions = {}) {
   let n = 0;
   return new ControlPlaneAgentExecutor(dispatcher, () => `int_${String((n += 1))}`, {
     sleep: () => Promise.resolve(),
+    // R8/R9/R5 — a fixed draw, so a sequence assertion here is about the SHAPE
+    // of the traffic and never about which numbers came out. The draws
+    // themselves are the subject of
+    // `a-drawn-gap-is-bounded-and-two-of-them-are-not-equal.test.ts`.
+    makeRandom: () => () => 0.5,
     ...opts,
   });
 }
@@ -531,30 +537,59 @@ describe('the look before a tap — clear, covered, not found', () => {
     ).toBe('element_click_intercepted');
   });
 
-  it('NOTHING RESOLVES: the element wait runs first, then the step fails not-found with no tap', async () => {
-    const device = scriptedDevice(() => ({ kind: 'answer', output: lookAnswer(null) }), {
-      waitFor: 'never',
-    });
+  it('R8 NOTHING RESOLVES: the patience window is spent as spaced LOOKS, then the step fails not-found with no tap', async () => {
+    const device = scriptedDevice(() => ({ kind: 'answer', output: lookAnswer(null) }));
     const res = await run(executor(device.dispatcher), [TAP]);
-    // Looked, waited for it once, gave up — and never sent the click.
-    expect(names(device.sent)).toEqual(['perceive', 'wait_for']);
+    // ⛔ THE SHAPE IS THE FINDING. It used to be `['perceive', 'wait_for']`,
+    // and that one `wait_for` cost ~20 evenly spaced `querySelectorAll('*')`
+    // walks over the page's whole tree — the device polls the predicate every
+    // 250 ms and the walk runs on every light-DOM miss. The same patience is
+    // now four selector resolutions the device does for itself.
+    expect(names(device.sent)).toEqual(['perceive', 'perceive', 'perceive', 'perceive']);
+    expect(names(device.sent)).not.toContain('wait_for');
     const step = res.results[0];
     if (step?.kind !== 'failure') throw new Error('expected a failure');
     expect(step.diagnosis).toEqual({ category: 'element_not_found', retryable: true });
     expect(step.reason).toBe('no element on the page matched this selector');
   });
 
-  it('NOTHING RESOLVES YET: a control that renders late is waited for, looked at again, and tapped', async () => {
-    const device = scriptedDevice(
-      (_params, call) =>
-        call === 1
-          ? { kind: 'answer', output: lookAnswer(null) }
-          : { kind: 'answer', output: lookAnswer({}) },
-      { waitFor: 'appears' },
+  it('R8 NOTHING RESOLVES YET: a control that renders late is looked at again and tapped, with no further looks', async () => {
+    const device = scriptedDevice((_params, call) =>
+      call === 1
+        ? { kind: 'answer', output: lookAnswer(null) }
+        : { kind: 'answer', output: lookAnswer({}) },
     );
     const res = await run(executor(device.dispatcher), [TAP]);
     expect(res.ok).toBe(true);
-    expect(names(device.sent)).toEqual(['perceive', 'wait_for', 'perceive', 'click']);
+    // The re-look that finds it ENDS the patience: the remaining window is not
+    // spent, exactly as a `wait_for` returned the moment the element rendered.
+    expect(names(device.sent)).toEqual(['perceive', 'perceive', 'click']);
+  });
+
+  it('R8 ⛔ MUTATION ARM: with the patience window disabled, the SAME page never re-looks', async () => {
+    // `elementAppearWaitMs: 0` is the pre-P3 executor: no patience at all. If
+    // this arm ever shows a second look, the arms above are being met by
+    // something other than the patience window.
+    const device = scriptedDevice((_params, call) =>
+      call === 1
+        ? { kind: 'answer', output: lookAnswer(null) }
+        : { kind: 'answer', output: lookAnswer({}) },
+    );
+    const res = await run(executor(device.dispatcher, { elementAppearWaitMs: 0 }), [TAP]);
+    // One look, nothing resolved, no patience to spend → the tap goes ahead and
+    // meets the click's own element-not-found handling.
+    expect(names(device.sent)).toEqual(['perceive', 'click']);
+    expect(res.ok).toBe(true);
+  });
+
+  it('R8 the patience window is debited ONCE and bounds the whole run, as it always did', async () => {
+    const device = scriptedDevice(() => ({ kind: 'answer', output: lookAnswer(null) }));
+    const budget: ElementWaitBudget = { remainingMs: null };
+    await run(executor(device.dispatcher), [TAP], { elementWaitBudget: budget });
+    // 15_000 run ceiling − one 5_000 window. The looks inside it are free of
+    // the budget: the window is what was spent.
+    expect(budget.remainingMs).toBe(10_000);
+    expect(device.sent.filter((sent) => sent.name === 'perceive')).toHaveLength(4);
   });
 
   it('NOTHING RESOLVES and no wait is left in the turn’s budget: the tap goes ahead, and the click’s own retries still apply', async () => {
@@ -571,13 +606,21 @@ describe('the look before a tap — clear, covered, not found', () => {
     expect(res.ok).toBe(true);
   });
 
-  it('the wait says it APPEARED yet the second look still finds nothing: the tap goes ahead, with no second wait', async () => {
-    const device = scriptedDevice(() => ({ kind: 'answer', output: lookAnswer(null) }), {
-      waitFor: 'appears',
-    });
-    const res = await run(executor(device.dispatcher), [TAP]);
-    expect(names(device.sent)).toEqual(['perceive', 'wait_for', 'perceive', 'click']);
-    expect(res.ok).toBe(true);
+  it('R8 the patience is spent ONCE per step — a second step gets its own window, a re-look never a second one', async () => {
+    // The old shape could take a second wait through a look/wait/look loop;
+    // this one cannot, because the re-looks ARE the window. Two steps, two
+    // windows, four looks each.
+    const device = scriptedDevice(() => ({ kind: 'answer', output: lookAnswer(null) }));
+    const budget: ElementWaitBudget = { remainingMs: null };
+    await run(
+      executor(device.dispatcher),
+      [TAP, { kind: 'interact', action: 'tap', selector: '#second' }],
+      { elementWaitBudget: budget },
+    );
+    // The first step fails not-found, which halts the plan — so exactly one
+    // window is spent and exactly four looks were sent.
+    expect(budget.remainingMs).toBe(10_000);
+    expect(names(device.sent)).toEqual(['perceive', 'perceive', 'perceive', 'perceive']);
   });
 });
 
@@ -591,9 +634,29 @@ describe('the look before a tap — the answers that are NOT a reason to withhol
         hit: null,
       }),
     }));
-    const res = await run(executor(device.dispatcher), [TAP]);
-    expect(names(device.sent)).toEqual(['perceive', 'click']);
+    const res = await run(executor(device.dispatcher, { relocationBeat: true }), [TAP]);
+    // R5, turned ON for this arm (it ships default off — see `relocationBeat`
+    // on the executor's options). A relocation beat is ATTEMPTED (scroll toward
+    // the target, a drawn dwell). This device implements neither verb, so both come back failed,
+    // the beat reports that nothing happened, and the tap goes ahead exactly as
+    // it did before the beat existed — which is the property that matters: an
+    // inserted beat can never be the reason a step did not run.
+    expect(names(device.sent)).toEqual(['perceive', 'scroll', 'behavioral_pause', 'click']);
     expect(res.results[0]?.kind).toBe('success');
+    // ⛔ And nothing the beat did reached the customer's step list.
+    expect(res.results).toHaveLength(1);
+
+    // The DEFAULT executor (the beat is off unless asked for): no beat at all.
+    const plain = scriptedDevice(() => ({
+      kind: 'answer',
+      output: lookAnswer({
+        occluded: true,
+        occlusion_reason: 'tap_point_outside_viewport',
+        hit: null,
+      }),
+    }));
+    await run(executor(plain.dispatcher), [TAP]);
+    expect(names(plain.sent)).toEqual(['perceive', 'click']);
   });
 
   it('NOTHING HIT: no evidence either way, so the tap goes ahead', async () => {

@@ -17,7 +17,11 @@
 
 import { describe, expect, it } from 'vitest';
 import type { AgentIntent } from '@driftstack/api-types';
-import { agentIntentToDispatch } from '../../src/services/agent-intent-to-dispatch.js';
+import {
+  SETTLE_TIMEOUT_SECONDS,
+  agentIntentToDispatch,
+} from '../../src/services/agent-intent-to-dispatch.js';
+import { HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS } from '../../src/schemas/harness-control-protocol.js';
 import { UnknownWaitPredicateError, classifyWaitPredicate } from './_lib/fake-device.js';
 
 function predicateFor(intent: Extract<AgentIntent, { kind: 'wait' }>): string {
@@ -65,7 +69,46 @@ describe('agent eval — the wait_for discriminator still matches what the mappe
       selector: '.reply.top',
     });
     expect(idle).not.toContain('const element = deepQuery(');
-    expect(selectorWait).not.toContain("Symbol.for('idle-settle.v1')");
+    // R7 — the settle is told apart by SHAPE now, so exclusivity is the
+    // selector wait not carrying that shape. It reads none of the three.
+    expect(selectorWait).not.toContain('document.readyState');
+    expect(selectorWait).not.toContain('loadEventEnd');
+    expect(selectorWait).not.toContain('document.fonts');
+  });
+
+  it('⛔ R7: the settle keeps NO page-world state — no global, no symbol, no observer', () => {
+    // The whole finding, asserted on the OUTPUT so no future edit can put it
+    // back quietly. The old predicate kept its poll-to-poll state on
+    // `globalThis[Symbol.for('idle-settle.v1')]`, which gave a page a constant
+    // product-wide membership test, a way to stall the wait for its full
+    // timeout by making that property getter-only, and a leaked document-wide
+    // MutationObserver per poll.
+    const idle = predicateFor({ kind: 'wait', condition: 'idle' });
+    expect(idle).not.toContain('Symbol.for');
+    expect(idle).not.toContain('globalThis');
+    expect(idle).not.toContain('MutationObserver');
+    // Nothing is written into the page at all, so there is nothing to delete.
+    expect(idle).not.toContain('delete ');
+    // Non-vacuity: the predicate really is the settle and really does read the
+    // three things it is recognised by.
+    expect(classifyWaitPredicate(idle)).toEqual({ kind: 'idle' });
+  });
+
+  it('⛔ R7: a settle always names its own timeout, so the device default never bounds one', () => {
+    // Omitting `timeout_seconds` handed the wait to the device's own 30s
+    // default — a third of the turn's whole wall clock, and the thing a page
+    // could make it spend by stalling the old stateful predicate.
+    const mapped = agentIntentToDispatch({ kind: 'wait', condition: 'idle' });
+    expect(mapped.ok).toBe(true);
+    if (!mapped.ok) throw new Error('narrow');
+    expect(mapped.params.timeout_seconds).toBe(SETTLE_TIMEOUT_SECONDS);
+    expect(SETTLE_TIMEOUT_SECONDS).toBeLessThan(HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS);
+    // A planner that names a LONGER one is still obeyed: it is asking about a
+    // page, not falling through to a number nobody chose.
+    const longer = agentIntentToDispatch({ kind: 'wait', condition: 'idle', timeoutMs: 20_000 });
+    expect(longer.ok).toBe(true);
+    if (!longer.ok) throw new Error('narrow');
+    expect(longer.params.timeout_seconds).toBe(20);
   });
 
   it('NEGATIVE CONTROL: a predicate matching neither branch throws rather than defaulting to satisfied', () => {
@@ -85,18 +128,21 @@ describe('agent eval — the wait_for discriminator still matches what the mappe
   });
 
   it('⛔ states plainly what this harness can NOT say about either predicate', () => {
-    // Neither predicate is ever EXECUTED here. The shadow-DOM-piercing visibility
-    // walk and the idle-settle MutationObserver are matched as text and never
-    // run, so a green eval is entirely compatible with both being broken on the
-    // real fork. This assertion exists so that limitation is written next to the
-    // instrument rather than only in a report someone may not read.
+    // Neither predicate is ever EXECUTED here. The shadow-DOM-piercing
+    // visibility walk and the settle's timing reads are matched as TEXT and
+    // never run, so a green eval is entirely compatible with both being broken
+    // on the real fork — and with the settle being observable on it, which it
+    // is. This assertion exists so that limitation is written next to the
+    // instrument rather than only in a report someone may not read. What DOES
+    // execute both predicates is `agent-intent-to-dispatch.test.ts`, against a
+    // fake DOM.
     const idle = predicateFor({ kind: 'wait', condition: 'idle' });
     const selectorWait = predicateFor({
       kind: 'wait',
       condition: 'selector_visible',
       selector: '#x',
     });
-    expect(idle).toContain('MutationObserver');
+    expect(idle).toContain('document.fonts');
     expect(selectorWait).toContain('checkVisibility');
     expect(typeof idle).toBe('string');
     expect(typeof selectorWait).toBe('string');

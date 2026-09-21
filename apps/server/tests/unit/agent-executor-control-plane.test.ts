@@ -4,6 +4,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  DRAWN_GAP_MAX_FACTOR,
+  DRAWN_GAP_MIN_FACTOR,
   ControlPlaneAgentExecutor,
   extractPageText,
   type IntentDispatcher,
@@ -309,7 +311,18 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
     expect(got).toHaveLength(3); // attempt 0 + 2 retries, last one succeeded
     // Each retry got a fresh intentId (a distinct dispatch to correlate).
     expect(new Set(got.map((d) => d.intentId)).size).toBe(3);
-    expect(calls).toEqual([400, 400]); // backoff before each of the 2 retries
+    // ⛔ R9 — THE GAPS ARE DRAWN, SO THE ASSERTION IS ABOUT THE BAND AND THE
+    // INEQUALITY, not about a number. It used to be `[400, 400]`: an identical
+    // action re-firing at exactly +400 ms, twice, which a site that induces one
+    // cheap failure reads off two timestamps. Both halves matter — the band,
+    // because a budget nobody bounds is not a budget, and the inequality,
+    // because "were these two spacings identical" is the whole detector.
+    expect(calls).toHaveLength(2); // one backoff before each of the 2 retries
+    for (const gap of calls) {
+      expect(gap).toBeGreaterThanOrEqual(Math.round(400 * DRAWN_GAP_MIN_FACTOR));
+      expect(gap).toBeLessThanOrEqual(Math.round(400 * DRAWN_GAP_MAX_FACTOR));
+    }
+    expect(calls[0]).not.toBe(calls[1]);
   });
 
   it('re-checks the lifecycle after retry backoff and does not mint or dispatch another attempt', async () => {
@@ -539,7 +552,10 @@ describe('ControlPlaneAgentExecutor — doc-132 §5.3 auto-retry of transient fa
 
       expect(res.ok).toBe(true);
       expect(got.map((dispatch) => dispatch.intentId)).toEqual(['int_1', 'int_2']);
-      expect(calls).toEqual([25]);
+      // R9 — drawn around the configured delay; see the band assertion above.
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toBeGreaterThanOrEqual(Math.round(25 * DRAWN_GAP_MIN_FACTOR));
+      expect(calls[0]).toBeLessThanOrEqual(Math.round(25 * DRAWN_GAP_MAX_FACTOR));
     },
   );
 

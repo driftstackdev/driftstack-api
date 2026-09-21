@@ -42,6 +42,8 @@ import {
   EVAL_RETRY_DELAY_MS,
   EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
   EVAL_TOKEN_BUDGET,
+  countsAsElapsedBrowsingTime,
+  evalRandom,
 } from './_lib/runner.js';
 import { VirtualClock } from './_lib/virtual-clock.js';
 
@@ -271,9 +273,7 @@ async function runTurn(
   device: FakeDevice;
   priorFailures: Array<string | undefined>;
 }> {
-  const clock = new VirtualClock(
-    new Set([EVAL_RETRY_DELAY_MS, EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS]),
-  );
+  const clock = new VirtualClock(countsAsElapsedBrowsingTime);
   const device = new FakeDevice({
     sites: site.pages,
     startUrl: 'about:blank',
@@ -290,6 +290,9 @@ async function runTurn(
       sessionEstablishRetryDelayMs: EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
       observeTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
       sleep: clock.sleep,
+      // Fixed, so a sequence assertion here is about traffic shape rather
+      // than about which numbers the draws produced.
+      makeRandom: () => evalRandom('eval-fixture'),
       deadline: clock.deadline,
       ...(opts.look ? {} : { preTapLookTimeoutMs: 0 }),
     },

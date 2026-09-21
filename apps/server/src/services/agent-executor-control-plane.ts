@@ -176,6 +176,43 @@ export interface AutoRetryOptions {
   metrics?: MetricsRegistry;
   /** Monotonic ms, for the look's round trip. Default `performance.now`. */
   now?: () => number;
+  /**
+   * R9/R8/R5 — WHERE EVERY SERVER-DRAWN GAP COMES FROM, per session.
+   *
+   * ⛔ INJECTED, AND PER SESSION, for two independent reasons. Injected, because
+   * a drawn gap is otherwise untestable: no assertion can say "these two gaps
+   * differ, and these two sessions differ" against a source a test cannot fix.
+   * Per session, because a single process-wide generator would still give two
+   * concurrent sessions an interleaved sequence neither of them owns, and the
+   * property being defended is precisely that two sessions do not share a
+   * rhythm. The default is seeded from the session id AND a per-process salt, so
+   * the sequence is stable inside a session, different between sessions, and not
+   * derivable by a site from an id it can see.
+   *
+   * ⛔ IT CHANGES NOTHING ABOUT WHAT IS ALLOWED. Every budget, ceiling and
+   * deadline is unchanged; this decides only WHEN, inside bounds nothing here
+   * widens. See {@link drawGapMs} for the bound on a single draw.
+   */
+  makeRandom?: (sessionId: string) => () => number;
+  /**
+   * R5 — whether a tap the look says is outside the viewport gets a relocation
+   * beat (a scroll toward it, a drawn pause, and a fresh look) before it is
+   * sent.
+   *
+   * ⛔ DEFAULT OFF, AND DELIBERATELY (2026-09-21). The beat is built and tested,
+   * and its own review said why it is not ready to meet a real page: its scroll
+   * distance is drawn with no idea how far the target is, so two consecutive
+   * scrolls — the first unrelated to the target — may be a NEW pattern in
+   * exchange for the one it removes; it does not pass through the step loop's
+   * hard-stop check, so it breaks the premise the Stop-claim lifetime is
+   * derived from; its scroll and pause are counted in no telemetry; no task in
+   * the eval corpus has an off-screen tap, so production would be the first
+   * place it was measured; and whether the device's scroll is a real touch
+   * sequence here is a question the device team has not answered yet. Absent or
+   * `false` is the pre-R5 executor exactly. Turn it on per construction (the
+   * tests do) until those five are closed; then flip the default in one line.
+   */
+  relocationBeat?: boolean;
 }
 
 const DEFAULT_MAX_RETRIES = 2;
@@ -233,6 +270,173 @@ const DEFAULT_ELEMENT_WAIT_RUN_BUDGET_MS = 15_000;
 // measure it without a real session.
 const DEFAULT_PRE_TAP_LOOK_TIMEOUT_MS = 2_000;
 
+// ── R9/R8/R5 — entropy, and the gaps drawn from it ───────────────────
+//
+// ⛔ WHY THIS EXISTS AT ALL. Every gap this executor chose was a CONSTANT. A
+// retryable failure re-fired the identical action at exactly +400 ms, twice; the
+// first intent of a new session re-fired at exactly +1500 ms, eight times. A
+// site that can induce one cheap failure — a single 500 on a resource the step
+// depends on — reads both numbers off two timestamps in under a second, with no
+// page instrumentation of any kind. And because they were the same numbers in
+// every session of every customer, they also linked two sessions that shared
+// nothing else.
+//
+// ⛔ WHAT A DRAW REMOVES, AND WHAT IT DOES NOT. It removes the EQUALITY of two
+// gaps — the quantity a detector actually computes, since "were these two
+// spacings identical" needs no model of what the spacing should be. It does NOT
+// hide the gap, and a drawn gap is still a machine's gap: the distribution is
+// narrow, it is ours, and a page timing enough of them can still describe it.
+// Nothing here may be described as undetectable.
+//
+// ⛔ WHAT IT DELIBERATELY DOES NOT TOUCH. The device's own `wait_for` poll
+// interval (a fixed 250 ms) is the device team's to change, not ours — and A3's
+// argument against jittering a single fixed-mean interval stands on its own
+// terms (a jittered fixed mean is a fatter peak, not the absence of one). The
+// argument here is a different one: it is about two spacings being EXACTLY
+// EQUAL, and about two sessions sharing a sequence, both of which a decorrelated
+// per-attempt draw destroys outright.
+//
+// ⛔ AND THE BOUNDS DO NOT MOVE. The multiplier below is capped, so the longest
+// gap this executor can draw is a fixed multiple of the constant it replaces.
+// That matters to one piece of arithmetic outside this file: the stop claim's
+// TTL is composed in `agent-turn-bounds.ts` as hard stop + ONE dispatch deadline
+// + read-back + answer stream, and the tail past the hard stop is really that
+// dispatch deadline PLUS the retry gap that follows it, because `runIntent`
+// sleeps the gap and then asks the hard stop. The gap was never a term in that
+// sum; with this cap the unmodelled tail grows from 1,500 ms to
+// {@link DRAWN_GAP_MAX_FACTOR} × 1,500 ms = 2,175 ms, against a 120,000 ms
+// margin on the TTL. Re-derived, not assumed — see
+// `a-drawn-gap-is-bounded-and-two-of-them-are-not-equal.test.ts`.
+export const DRAWN_GAP_MIN_FACTOR = 0.55;
+export const DRAWN_GAP_MAX_FACTOR = 1.45;
+
+/**
+ * One drawn gap, in ms, around `baseMs`.
+ *
+ * ⛔ THE CLAMP IS NOT DEFENSIVE TIDYING. `random` is injected, and a source that
+ * returns NaN, a negative, or a number above 1 would turn a bounded backoff into
+ * an unbounded sleep inside a customer's turn — the one failure mode a "gap"
+ * must not have. An unusable draw is read as the middle of the band, which is
+ * today's behaviour exactly, rather than as a number nobody chose.
+ */
+export function drawGapMs(baseMs: number, random: () => number): number {
+  if (!(baseMs > 0)) return 0;
+  let u: number;
+  try {
+    u = random();
+  } catch {
+    u = 0.5;
+  }
+  if (!Number.isFinite(u) || u < 0 || u >= 1) u = 0.5;
+  const factor = DRAWN_GAP_MIN_FACTOR + (DRAWN_GAP_MAX_FACTOR - DRAWN_GAP_MIN_FACTOR) * u;
+  return Math.max(1, Math.round(baseMs * factor));
+}
+
+/** One draw in [0, 1), with the same clamp `drawGapMs` applies and for the same
+ *  reason: an injected source that answers NaN must not widen a bound. */
+function boundedUnit(random: () => number): number {
+  let u: number;
+  try {
+    u = random();
+  } catch {
+    u = 0.5;
+  }
+  return Number.isFinite(u) && u >= 0 && u < 1 ? u : 0.5;
+}
+
+/**
+ * A small, fast, DETERMINISTIC generator — mulberry32. Not a CSPRNG and not
+ * claimed to be one: what it has to be is stable for a seed (so a test can fix
+ * it and a session keeps one rhythm) and uncorrelated between seeds (so two
+ * sessions do not). It is never used for anything a secret depends on.
+ */
+function mulberry32(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** FNV-1a over a string. Used only to turn an id into a seed. */
+function hashToSeed(text: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+/**
+ * ⛔ THE SALT IS WHY A SITE CANNOT REPRODUCE THE SEQUENCE FROM AN ID IT CAN SEE.
+ * A session id reaches the device and may reach a page in some future feature;
+ * seeding only from it would make every gap in the session predictable to anyone
+ * holding that string. One per process, never logged, never on the wire.
+ */
+const PROCESS_GAP_SALT = randomUUID();
+
+/** The default per-session generator. Stable within a session, different
+ *  between sessions, and not derivable from a public id. */
+function defaultSessionRandom(sessionId: string): () => number {
+  return mulberry32(hashToSeed(`${PROCESS_GAP_SALT}:${sessionId}`));
+}
+
+// ── R8 — the patience window, spent as looks rather than as one long wait ──
+//
+// ⛔ WHAT THE OLD SHAPE COST. When the look resolved nothing, the executor spent
+// its whole patience on ONE 5 s `wait_for`, and that wait's predicate — on a
+// light-DOM miss, which during such a wait is the guaranteed case — called
+// `document.querySelectorAll('*')` and read up to 2,000 `shadowRoot`s on every
+// one of the device's 250 ms polls. Twenty evenly spaced full-tree walks: a
+// `PerformanceObserver({entryTypes:['longtask']})` sees them with no prototype
+// patching at all, and their spacing is machine-exact.
+//
+// ⛔ WHAT REPLACES IT. Two or three further LOOKS, spaced by drawn gaps that sum
+// to exactly the same window. `perceive` is a verb this executor already sends
+// before every tap, so the page sees no pattern it was not already seeing; the
+// device resolves the selector through its own shadow-piercing resolver, so the
+// reach is at least what the walk had; and the walk, the `checkVisibility` call
+// and the `getComputedStyle` ancestor climb leave the page entirely on this
+// path. Three looks in five seconds is not twenty walks in five seconds — but it
+// is still three selector resolutions a page can see, and it is not claimed to
+// be fewer than that.
+//
+// ⛔ THE SUM IS EXACTLY THE WINDOW, and that is deliberate: the LAST look lands
+// where the old wait's timeout landed, so nothing downstream sees a shorter or
+// longer patience than the budget it was debited for. Only the looks BETWEEN
+// move.
+export const ELEMENT_APPEAR_RELOOKS = 3;
+/** The shortest a drawn re-look gap may be, so three looks cannot collapse into
+ *  one burst when the draws come out low. */
+const MIN_RELOOK_GAP_MS = 250;
+
+// ── R5 — the beat before a tap the look could not see ────────────────
+//
+// ⛔ WHAT IT IS FOR. A control below the fold used to be tapped with no
+// re-location pause at all: the click's own scroll runs as an invisible
+// sub-step of the touch, so the viewport settles and the finger lands on the
+// target within milliseconds of each other — on a phone, the highest-weight
+// feature a detector has. This puts a scroll and a drawn dwell where a person's
+// are, and then LOOKS AGAIN, so the look that authorises the tap is taken after
+// the beat rather than before it.
+//
+// ⛔ IT IS NOT A PLAN STEP AND NOT A STEP. It never enters `results`, never
+// reaches `onStep`/`onStepStart`, never reaches the step history the planner
+// sees, and never touches the segment's `ok`. Its failure is swallowed: a beat
+// that fails is a beat that did not happen, and a dropped frame on it must
+// never fail the customer's step.
+const RELOCATION_PAUSE_BASE_MS = 900;
+/** Nothing this executor draws may hold a rented phone longer than this. */
+const RELOCATION_PAUSE_CAP_MS = 2_500;
+/** The shortest and longest flick the beat will ask for. The device applies its
+ *  own persona shape to a scroll; this only decides roughly how far. */
+const RELOCATION_SCROLL_MIN_PX = 240;
+const RELOCATION_SCROLL_MAX_PX = 1_200;
+
 /**
  * P4 — extra `get_page_source` reads the commitment arm may take in ONE TURN.
  *
@@ -284,6 +488,14 @@ interface TapTarget {
    *  from the label text only on a device without the rule (see
    *  `readPerceiveAnswer`). */
   hitIsOwnLabel?: true;
+  /**
+   * R5 — which way the target sits outside the viewport, read off the element's
+   * own `bounds.y`, so the relocation beat's scroll goes TOWARD it rather than
+   * always down. Set only on an `outside_viewport` verdict, and absent when the
+   * device sent no usable bounds — in which case the beat picks the direction
+   * the overwhelming majority of below-fold targets need and says so.
+   */
+  offscreen?: 'above' | 'below';
 }
 
 /** perceive element types a tap ACTIVATES as a control of its own. A hit of
@@ -496,14 +708,23 @@ function readPerceiveAnswer(outputData: unknown): PerceiveReading {
   }
   const reason = el.occlusion_reason;
   switch (reason) {
-    case 'tap_point_outside_viewport':
+    case 'tap_point_outside_viewport': {
+      // R5 — the device's bounds are viewport-relative, so a negative `y` is a
+      // target scrolled off the TOP. Read here, where the raw element is still
+      // in hand; `bounds` is required by the element schema, so an absent or
+      // non-numeric `y` is a drifted frame and leaves the direction unstated
+      // rather than guessed in the record.
+      const y = bounds?.y;
+      const offscreen: 'above' | 'below' | undefined =
+        typeof y === 'number' && Number.isFinite(y) ? (y < 0 ? 'above' : 'below') : undefined;
       return {
         kind: 'resolved',
         verdict: 'outside_viewport',
         resolvedBy,
-        target,
+        target: offscreen !== undefined ? { ...target, offscreen } : target,
         ownLabelVerdict,
       };
+    }
     case 'nothing_hit':
       return { kind: 'resolved', verdict: 'unverified', resolvedBy, target, ownLabelVerdict };
     case 'hit_is_not_target_or_descendant':
@@ -614,6 +835,15 @@ function unoccludedCheckFor(
   look: PreTapLook | null,
   releasedApproval: boolean,
   ownLabelVerdict: boolean,
+  /**
+   * R5 — a relocation beat ran for this tap, so the look above was taken AFTER
+   * a scroll this side chose and BEFORE the click's own scroll to a randomised
+   * band. That is the same reason `outside_viewport` carries the check: the
+   * look's point is not where the tap lands. Keeping it is explicit here
+   * because the post-beat look often reads `clear`, which would otherwise have
+   * quietly removed the check the beat was built around.
+   */
+  relocated = false,
 ): UnoccludedCheck | null {
   // The verb on the wire decides, not the plan's action, and a raw-coordinate
   // click is refused with the parameter — the mapper never emits one, and the
@@ -622,11 +852,13 @@ function unoccludedCheckFor(
     case 'click':
       if (!deviceCheckCanVouchFor(look, ownLabelVerdict)) return null;
       if (releasedApproval) return { verb: 'click', why: 'consequential' };
-      if (look?.verdict === 'outside_viewport') return { verb: 'click', why: 'outside_viewport' };
+      if (relocated || look?.verdict === 'outside_viewport') {
+        return { verb: 'click', why: 'outside_viewport' };
+      }
       return null;
     case 'send_keys':
       if (!ownLabelVerdict) return null;
-      if (look?.verdict === 'outside_viewport') {
+      if (relocated || look?.verdict === 'outside_viewport') {
         return { verb: 'send_keys', why: 'outside_viewport' };
       }
       return null;
@@ -780,6 +1012,14 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
   private readonly deadline: (ms: number) => { elapsed: Promise<void>; cancel: () => void };
   private readonly metrics: MetricsRegistry | undefined;
   private readonly now: () => number;
+  private readonly makeRandom: (sessionId: string) => () => number;
+  private readonly relocationBeatEnabled: boolean;
+  /**
+   * One generator per session, so a session keeps ONE rhythm and two sessions
+   * keep different ones. Bounded and oldest-first for the same reason
+   * {@link gatePageBySession} is: a process serves many chats.
+   */
+  private readonly randomBySession = new Map<string, () => number>();
 
   constructor(
     private readonly dispatcher: IntentDispatcher,
@@ -841,6 +1081,27 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       });
     this.metrics = opts.metrics;
     this.now = opts.now ?? (() => performance.now());
+    this.makeRandom = opts.makeRandom ?? defaultSessionRandom;
+    this.relocationBeatEnabled = opts.relocationBeat === true;
+  }
+
+  /** The session's own generator, created on first use. */
+  private randomFor(sessionId: string): () => number {
+    const found = this.randomBySession.get(sessionId);
+    if (found !== undefined) return found;
+    const fresh = this.makeRandom(sessionId);
+    this.randomBySession.set(sessionId, fresh);
+    while (this.randomBySession.size > MAX_SESSIONS_WITH_GATE_LABELS) {
+      const oldest = this.randomBySession.keys().next();
+      if (oldest.done === true) break;
+      this.randomBySession.delete(oldest.value);
+    }
+    return fresh;
+  }
+
+  /** One drawn gap for this session, around `baseMs`. */
+  private drawnGap(sessionId: string, baseMs: number): number {
+    return drawGapMs(baseMs, this.randomFor(sessionId));
   }
 
   async execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
@@ -869,8 +1130,20 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       actionPaths.actions > 0 || actionPaths.scrolls > 0 || actionPaths.looks > 0 || anyGateCount()
         ? { ...run, actionPaths }
         : run;
+    /**
+     * R5 — looks taken for the CURRENT step before the one that decides it. A
+     * relocation beat is followed by a fresh look, so one tap can cost two, and
+     * both are real device round trips a page saw. They are counted with the
+     * SAME `then` as the deciding look, which is what `then` means: what the
+     * executor did next with the step the look was for.
+     */
+    let earlierLooks: PreTapLook[] = [];
     /** Emit one look, now that what the executor did next is known. */
     const countLook = (look: PreTapLook | null, then: PreTapLookNextAction): void => {
+      for (const earlier of earlierLooks.splice(0)) emitLook(earlier, then);
+      emitLook(look, then);
+    };
+    const emitLook = (look: PreTapLook | null, then: PreTapLookNextAction): void => {
       const record = look !== null && 'record' in look ? look.record : undefined;
       if (record === undefined) return;
       actionPaths.looks += 1;
@@ -1004,6 +1277,13 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // only: `send_keys` params carry the text beside the locator, and the look
       // reads the locator alone.
       let look: PreTapLook | null = null;
+      // A step's own looks only. Cleared here so a look counted for the last
+      // step can never be re-emitted against this one.
+      earlierLooks = [];
+      // R5 — set when a relocation beat ran for this step, so the tap keeps the
+      // device's own check at the real tap point even though the look after the
+      // beat may now say `clear`. See `unoccludedCheckFor`.
+      let relocated = false;
       if (
         haltsUnlooked === null &&
         intent.kind === 'interact' &&
@@ -1024,6 +1304,75 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         if (look.verdict === 'stopped') return done({ results, ok: false, stopped: true });
         if (look.verdict === 'authority_lost') {
           return done({ results, ok: false, authorityLost: true });
+        }
+        // ⛔ R5 — THE BEAT BEFORE A TAP THE LOOK COULD NOT SEE. A scroll toward
+        // the target and a drawn dwell, and then a FRESH look: the look that
+        // authorises the tap is taken after the beat, never before it, so the
+        // seconds the dwell spends cannot be seconds in which a banner appeared
+        // over a tap already vouched for. Nothing here enters `results` or the
+        // step history; see `relocationBeat`.
+        if (this.relocationBeatEnabled && look.verdict === 'outside_viewport') {
+          const beat = await this.relocationBeat(
+            dispatchSessionId,
+            look.target,
+            args.shouldContinue,
+            args.signal,
+            args.turnHardStopAtMs,
+          );
+          if (beat === 'stopped') {
+            countLook(look, 'not_sent');
+            return done({ results, ok: false, stopped: true });
+          }
+          if (beat === 'authority_lost') {
+            countLook(look, 'not_sent');
+            return done({ results, ok: false, authorityLost: true });
+          }
+          if (beat === 'beaten') {
+            relocated = true;
+            const after = await this.lookBeforeTap(
+              dispatchSessionId,
+              mapped.params,
+              args.shouldContinue,
+              elementWaitBudget,
+              args.signal,
+              // The step's patience window is spent (or was never owed); a
+              // second look at the same step must not debit a second one.
+              true,
+            );
+            if (after.verdict === 'stopped') {
+              countLook(look, 'not_sent');
+              return done({ results, ok: false, stopped: true });
+            }
+            if (after.verdict === 'authority_lost') {
+              countLook(look, 'not_sent');
+              return done({ results, ok: false, authorityLost: true });
+            }
+            // ⛔ THE BEAT MAY NOT REFUSE A TAP THE LOOK HAD ALREADY LET
+            // THROUGH. `covered` is a verdict about the tap point AT THE
+            // SCROLL POSITION THIS BEAT CHOSE — and the beat's scroll distance
+            // is drawn without knowing how far the target actually is, so it
+            // can easily leave the target under a sticky header that the
+            // click's own scroll (to a randomised band this side cannot
+            // reproduce) would never have put it under. Letting that end the
+            // step would make an inserted beat the reason a customer's tap
+            // failed, which is the one thing a beat must never be: before this
+            // beat existed the same look said `outside_viewport` and the tap
+            // went with `require_unoccluded`, which is the DEVICE checking the
+            // real tap point after its own scroll — the authority for exactly
+            // this question. So the pre-beat look stays the deciding one and
+            // the check stays on; the post-beat look is still counted, because
+            // it was a real round trip a page saw.
+            //
+            // ⚠️ It cannot answer `not_found` here (this look is told the
+            // step's patience is spent, so nothing-resolved returns `fallback`,
+            // which refuses nothing). `covered` is the whole set.
+            if (after.verdict === 'covered') {
+              earlierLooks.push(after);
+            } else {
+              earlierLooks.push(look);
+              look = after;
+            }
+          }
         }
       }
 
@@ -1350,6 +1699,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         look,
         releasedApproval,
         this.sessionsWithOwnLabelVerdict.has(dispatchSessionId),
+        relocated,
       );
       const dispatchParams =
         unoccludedCheck !== null ? { ...mapped.params, require_unoccluded: true } : mapped.params;
@@ -1631,6 +1981,144 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
    * out — is 'absent': the caller then surfaces the original element-not-found
    * failure, which is the honest reading in all of them.
    */
+  /**
+   * R5 — THE BEAT BEFORE A TAP THE LOOK COULD NOT SEE: a scroll toward the
+   * target and a drawn dwell, after which the caller LOOKS AGAIN.
+   *
+   * ⛔ WHY IT EXISTS. `perceive` never scrolls, so a control below the fold
+   * comes back `tap_point_outside_viewport`, and the executor's only answer was
+   * to ask the device to check the real tap point (`require_unoccluded`, which
+   * is right and is kept). The click's own scroll then runs as an invisible
+   * sub-step of the touch: the viewport settles and the finger lands on the
+   * target within milliseconds of each other, with no re-location pause
+   * anywhere. On a phone that is the highest-weight feature a detector has.
+   * This puts a scroll and a dwell where a person's are.
+   *
+   * ⛔ WHAT IT DOES NOT DO. It does not place the target precisely, and it is
+   * not a substitute for the click's own scroll — which still runs, to a
+   * randomised band this side cannot reproduce. It makes that scroll a smaller
+   * movement and puts a real gap in front of the touch. It does not make the
+   * tap look human; nothing measured here says what the device then did.
+   *
+   * ⛔ IT IS NOT A STEP. Nothing it dispatches enters `results`, `onStep`,
+   * `onStepStart`, the step history the planner sees, `tapTargets` or the
+   * segment's `ok`, and ITS FAILURE IS SWALLOWED — a beat that fails is a beat
+   * that did not happen. A dropped frame on an inserted pause must never fail
+   * the customer's step, which is the whole reason it has its own path rather
+   * than going through `runIntent`.
+   *
+   * ⛔ WHERE IT IS ALLOWED TO RUN. Only after the look, only on
+   * `outside_viewport`, and never in front of a step the gate would halt: the
+   * look itself is taken only when the plan's own words do not halt the step
+   * (`haltsUnlooked`), so a purchase the customer has not approved never gets a
+   * beat in front of the screen that asks them. ⚠️ Stated residual, the same one
+   * the pace plan records: a halt raised ONLY by the device's labels or by the
+   * structural arm is decided after this, so such a step did get a beat. It is a
+   * scroll and a pause on a page the run was already reading; nothing was
+   * committed.
+   *
+   * Returns whether anything was actually sent, so the caller only re-looks when
+   * there is something new to see.
+   */
+  private async relocationBeat(
+    sessionId: string,
+    target: TapTarget,
+    shouldContinue: ExecuteArgs['shouldContinue'],
+    signal: AbortSignal | undefined,
+    turnHardStopAtMs: number | undefined,
+  ): Promise<'beaten' | 'skipped' | 'stopped' | 'authority_lost'> {
+    if (stopRequested(signal)) return 'stopped';
+    // The turn is over. A beat is the most skippable thing in the system, so it
+    // is the first thing the deadline takes.
+    if (turnHardStopAtMs !== undefined && this.now() >= turnHardStopAtMs) return 'skipped';
+    if (!(await executionMayContinue(shouldContinue))) return 'authority_lost';
+    const random = this.randomFor(sessionId);
+    // TOWARD the target: the device's bounds are viewport-relative, so a
+    // negative `y` is a target scrolled off the top. With no usable bounds the
+    // direction is down — where the overwhelming majority of below-fold targets
+    // are — and that guess is named rather than hidden.
+    const direction = target.offscreen === 'above' ? 'up' : 'down';
+    const distance = Math.round(
+      RELOCATION_SCROLL_MIN_PX +
+        (RELOCATION_SCROLL_MAX_PX - RELOCATION_SCROLL_MIN_PX) * boundedUnit(random),
+    );
+    const scroll = agentIntentToDispatch({
+      kind: 'scroll',
+      direction,
+      amount_px: distance,
+    });
+    // ⛔ THE VERB ON THE WIRE IS A LITERAL, NOT `mapped.intentName` — the same
+    // rule `waitForElement` follows, and what
+    // `the-control-plane-never-dispatches-a-verb-it-does-not-hard-code` pins.
+    // The mapper is used for the PARAMS and is only ASKED to agree on the verb.
+    if (!scroll.ok || scroll.intentName !== 'scroll') return 'skipped';
+    const scrollFrame = this.beatFrame((intentId) =>
+      serializeIntentDispatch({ sessionId, intentId, intentName: 'scroll', params: scroll.params }),
+    );
+    if (scrollFrame === null) return 'skipped';
+    const scrolled = await this.sendBeat(scrollFrame, signal);
+    if (scrolled === 'stopped') return 'stopped';
+    if (stopRequested(signal)) return 'stopped';
+    if (!(await executionMayContinue(shouldContinue))) return 'authority_lost';
+    // ⛔ DRAWN AND CAPPED. A constant dwell is a signature of its own, and an
+    // uncapped one holds a rented phone. The cap is this side's, not the
+    // device's 300 s protocol limit.
+    const pauseMs = Math.min(RELOCATION_PAUSE_CAP_MS, drawGapMs(RELOCATION_PAUSE_BASE_MS, random));
+    const pause = agentIntentToDispatch({ kind: 'behavioral_pause', duration_ms: pauseMs });
+    if (!pause.ok || pause.intentName !== 'behavioral_pause') {
+      return scrolled === 'sent' ? 'beaten' : 'skipped';
+    }
+    const pauseFrame = this.beatFrame((intentId) =>
+      serializeIntentDispatch({
+        sessionId,
+        intentId,
+        intentName: 'behavioral_pause',
+        params: pause.params,
+      }),
+    );
+    if (pauseFrame === null) return scrolled === 'sent' ? 'beaten' : 'skipped';
+    const paused = await this.sendBeat(pauseFrame, signal);
+    if (paused === 'stopped') return 'stopped';
+    return scrolled === 'sent' || paused === 'sent' ? 'beaten' : 'skipped';
+  }
+
+  /**
+   * One inserted dispatch, off the books.
+   *
+   * ⛔ EVERY FAILURE IS SWALLOWED, including a throw from the dispatcher, which
+   * the port's contract says cannot happen and which this must survive anyway:
+   * the whole point of the seam is that an inserted beat can never be the reason
+   * a customer's step failed. Stop abandons it at once — a scroll and a pause
+   * leave the page in a state everybody can describe.
+   */
+  private async sendBeat(
+    dispatch: IntentDispatch,
+    signal: AbortSignal | undefined,
+  ): Promise<'sent' | 'failed' | 'stopped'> {
+    if (stopRequested(signal)) return 'stopped';
+    try {
+      const raced = await raceAbort(this.dispatcher.dispatch(dispatch), signal);
+      if (raced.aborted) return 'stopped';
+      return raced.value.success ? 'sent' : 'failed';
+    } catch {
+      return 'failed';
+    }
+  }
+
+  /**
+   * Serialise one inserted dispatch. ⛔ THE VERB IS THE CALLER'S LITERAL and is
+   * never computed here — see `sendBeat`'s callers and
+   * `the-control-plane-never-dispatches-a-verb-it-does-not-hard-code`. Null on
+   * an encode error, which a beat treats as "it did not happen".
+   */
+  private beatFrame(build: (intentId: string) => IntentDispatch): IntentDispatch | null {
+    try {
+      return build(this.genIntentId());
+    } catch {
+      return null;
+    }
+  }
+
   private async waitForElement(
     sessionId: string,
     selector: string,
@@ -1728,6 +2216,12 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     shouldContinue: ExecuteArgs['shouldContinue'],
     elementWaitBudget: ElementWaitBudget,
     signal: AbortSignal | undefined,
+    /**
+     * R5 — this step has already spent its element-wait window, so this look
+     * must not spend a second one. Set on the look taken AFTER a relocation
+     * beat: it is a second look at the same step, not a second step.
+     */
+    elementWaitAlreadySpent = false,
   ): Promise<PreTapLook> {
     const selector = dispatchParams.value;
     const strategy = perceiveStrategyFor(dispatchParams.strategy);
@@ -1757,6 +2251,11 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       };
     }
     let waitedForElement = false;
+    // R8 — the step's patience window and how many looks are left to spend it
+    // on. Both stay zero until the FIRST look resolves nothing, so a step whose
+    // element is there pays nothing and debits nothing, exactly as before.
+    let patienceRemainingMs = 0;
+    let relooksLeft = 0;
     for (;;) {
       const answer = await this.perceiveOnce(sessionId, selector, strategy, shouldContinue, signal);
       if (answer.kind === 'stopped') return { verdict: 'stopped' };
@@ -1800,14 +2299,6 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         roundTripMs: answer.kind === 'timed_out' ? this.preTapLookTimeoutMs : answer.roundTripMs,
         answeredAt,
       };
-      // A `not_found` that is about to be waited on is not the look's verdict
-      // yet; it is counted when the look ends, so one tap is one outcome.
-      const willWait =
-        reading.kind === 'nothing_resolved' &&
-        !waitedForElement &&
-        this.elementAppearWaitMs > 0 &&
-        elementWaitBudget.remainingMs !== null &&
-        elementWaitBudget.remainingMs >= this.elementAppearWaitMs;
       if (reading.kind === 'no_usable_answer') {
         return {
           verdict: 'fallback',
@@ -1819,31 +2310,38 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       if (reading.kind === 'resolved') {
         return { verdict: reading.verdict, target: reading.target, waitedForElement, record };
       }
-      // Nothing resolves and there is no wait to spend: the tap goes ahead and
-      // meets the click's own element-not-found handling, retries included.
-      if (!willWait) return { verdict: 'fallback', waitedForElement, record };
-      waitedForElement = true;
-      elementWaitBudget.remainingMs =
-        (elementWaitBudget.remainingMs ?? 0) - this.elementAppearWaitMs;
-      // The wait is on the SELECTOR as the plan wrote it, through the same
-      // visibility predicate the click's own wait uses.
-      const appeared = await this.waitForElement(
-        sessionId,
-        selector,
-        this.elementAppearWaitMs,
-        shouldContinue,
-        signal,
-      );
-      if (appeared === 'stopped') return { verdict: 'stopped' };
-      if (appeared === 'authority_lost') return { verdict: 'authority_lost' };
-      if (appeared === 'absent') {
+      // ⛔ NOTHING RESOLVED. This is where the step's patience is spent, and
+      // R8 changed HOW rather than how much: the window is the same
+      // `elementAppearWaitMs` debited from the same run-wide budget, but it is
+      // spent as spaced LOOKS instead of one `wait_for` whose predicate walked
+      // the whole tree on every 250 ms device poll. See ELEMENT_APPEAR_RELOOKS.
+      if (!waitedForElement) {
+        const mayWait =
+          !elementWaitAlreadySpent &&
+          this.elementAppearWaitMs > 0 &&
+          elementWaitBudget.remainingMs !== null &&
+          elementWaitBudget.remainingMs >= this.elementAppearWaitMs;
+        // Nothing resolves and there is no patience to spend: the tap goes
+        // ahead and meets the click's own element-not-found handling, retries
+        // included.
+        if (!mayWait) return { verdict: 'fallback', waitedForElement, record };
+        waitedForElement = true;
+        elementWaitBudget.remainingMs =
+          (elementWaitBudget.remainingMs ?? 0) - this.elementAppearWaitMs;
+        patienceRemainingMs = this.elementAppearWaitMs;
+        relooksLeft = ELEMENT_APPEAR_RELOOKS;
+      }
+      if (relooksLeft <= 0) {
+        // The window is spent and the selector still resolves to nothing —
+        // which is where the click's own path stops too (a failed wait ends the
+        // step unretried).
         return {
           verdict: 'not_found',
           waitedForElement,
           record: {
             outcome: 'not_found',
-            // The device resolved the selector and found nothing, twice: that
-            // is still `none`, not "no answer".
+            // The device resolved the selector and found nothing, every time:
+            // that is `none`, not "no answer".
             resolvedBy: 'none',
             deviceMs: answer.kind === 'answered' ? answer.deviceMs : null,
             roundTripMs: answer.kind === 'answered' ? answer.roundTripMs : null,
@@ -1851,8 +2349,34 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
           },
         };
       }
-      // Appeared: look again, once — `waitedForElement` stops a second wait.
+      const gap = this.drawRelookGap(sessionId, patienceRemainingMs, relooksLeft);
+      relooksLeft -= 1;
+      patienceRemainingMs = Math.max(0, patienceRemainingMs - gap);
+      // B2 — waiting for an element changes nothing on the page, so Stop
+      // abandons the gap at once, exactly as it abandoned the `wait_for`.
+      const waited = await raceAbort(this.sleep(gap), signal);
+      if (waited.aborted) return { verdict: 'stopped' };
+      if (!(await executionMayContinue(shouldContinue))) return { verdict: 'authority_lost' };
+      // …and look again.
     }
+  }
+
+  /**
+   * R8 — one gap between two re-looks, drawn, with the window closing EXACTLY.
+   *
+   * ⛔ THE LAST GAP IS NOT DRAWN, AND THAT IS THE POINT. The final look has to
+   * land where the old single `wait_for` timed out, or the patience a step
+   * actually gets would differ from the patience its budget was debited for —
+   * and a budget that does not describe what was spent is worse than a coarse
+   * one. So the last gap is whatever is left of the window and only the gaps
+   * BETWEEN move. The floor keeps three looks from collapsing into one burst
+   * when the draws come out low.
+   */
+  private drawRelookGap(sessionId: string, remainingMs: number, looksLeft: number): number {
+    if (looksLeft <= 1) return Math.max(0, remainingMs);
+    const drawn = this.drawnGap(sessionId, remainingMs / looksLeft);
+    const ceiling = Math.max(MIN_RELOOK_GAP_MS, remainingMs - (looksLeft - 1) * MIN_RELOOK_GAP_MS);
+    return Math.min(Math.max(drawn, MIN_RELOOK_GAP_MS), ceiling);
   }
 
   /**
@@ -2224,7 +2748,15 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       ) {
         establishAttempt++;
         // B2 — a backoff Stop may cut short; the loop top then returns.
-        await raceAbort(this.sleep(this.sessionEstablishRetryDelayMs), signal);
+        // R9 — DRAWN, not the constant. Eight cold-start retries at exactly
+        // +1500 ms is the cheapest fingerprint in the system: a site that
+        // answers the first intent of a new session slowly gets eight identical
+        // spacings for free. Each draw is independent of the last, so no two are
+        // equal and the sequence is not shared with another session.
+        await raceAbort(
+          this.sleep(this.drawnGap(sessionId, this.sessionEstablishRetryDelayMs)),
+          signal,
+        );
         continue;
       }
 
@@ -2309,7 +2841,11 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         retryAttempt < this.maxRetries;
       if (!shouldRetry) return { result, authorityLost: false };
       retryAttempt++;
-      await raceAbort(this.sleep(this.retryDelayMs), signal);
+      // R9 — DRAWN. The identical action re-firing at exactly +400 ms, twice, is
+      // a confirmed fingerprint from one induced failure. The budget is
+      // unchanged: at most `maxRetries` attempts, each gap bounded by
+      // {@link DRAWN_GAP_MAX_FACTOR} × this delay.
+      await raceAbort(this.sleep(this.drawnGap(sessionId, this.retryDelayMs)), signal);
     }
   }
 }

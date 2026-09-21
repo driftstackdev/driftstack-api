@@ -395,6 +395,9 @@ export type RunTurnResult =
         segments: number;
         plannerCalls: number;
         replans: number;
+        /** P1 — planning calls whose reply was unreadable and was asked again.
+         *  Absent when none were. */
+        plannerRetries?: number;
         finalStatus?: PlanStatus;
         stopped?: TurnLoopStopReason;
         handedBack?: boolean;
@@ -2391,6 +2394,99 @@ export class AgentRuntime {
     }
   }
 
+  /**
+   * P1 — may one more PLANNING call be made right now, for a reply nobody could
+   * read?
+   *
+   * ⛔ EVERY BOUND THE TURN ALREADY HAS, ASKED AGAIN. A retry is an ordinary
+   * call: it counts against the planner-call cap and the model-call cap, it runs
+   * on the turn's wall clock, and it may not start past the turn's hard stop.
+   * `callsSoFar` counts the calls made BEFORE the attempt that just failed, so
+   * the `+ 2` is that attempt plus the retry.
+   *
+   * ⛔ THE MODEL-CALL BOUND RESERVES THE ANSWER'S CALL, the same way the re-plan
+   * loop's own guard does (`MAX_MODEL_CALLS_PER_TURN - 1`). A retry that ate the
+   * read-back's call would turn "the plan was unreadable" into "the customer got
+   * no answer", which is a worse trade than failing the turn.
+   */
+  private async mayRetryPlannerReply(gate: {
+    turnStartedAtMs: number;
+    plannerCallsSoFar: number;
+    modelCallsSoFar: number;
+    signal: AbortSignal | undefined;
+    authorityMayContinue: () => Promise<boolean>;
+  }): Promise<boolean> {
+    if (stopRequested(gate.signal)) return false;
+    const now = this.nowMs();
+    if (now - gate.turnStartedAtMs >= MAX_TURN_WALL_CLOCK_MS) return false;
+    if (now >= gate.turnStartedAtMs + TURN_HARD_STOP_MS) return false;
+    if (gate.plannerCallsSoFar + 2 > MAX_PLANNER_CALLS_PER_TURN) return false;
+    if (gate.modelCallsSoFar + 2 > MAX_MODEL_CALLS_PER_TURN - 1) return false;
+    // ⛔ AND CONTROL MUST STILL BE OURS. The unreadable reply may well have
+    // arrived after the admitted controller was replaced — that is exactly the
+    // race `authority loss wins over a late fatal provider rejection` pins — and
+    // a retry there would start a provider call on a turn the successor owns,
+    // charge it to this session, and replace a typed 409 with whatever came
+    // back. Fails closed: a store that cannot answer does not authorise a call.
+    try {
+      if (!(await gate.authorityMayContinue())) return false;
+    } catch {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * P1 — pay for the reply that is about to be thrown away.
+   *
+   * ⛔ A SETTLED CALL IS BILLABLE WHETHER OR NOT WE COULD USE IT, and a retry is
+   * the one place that is easy to forget: the turn goes on to succeed, so
+   * nothing downstream would ever notice the missing row. Same shape as the
+   * SettledError branches that already exist for a call that ends the turn.
+   * A non-settled malformed reply (the chat-completions lane, which cannot fill
+   * in a Claude-shaped usage block) carries no accounting evidence and records
+   * none — unchanged from today, and named rather than silent.
+   */
+  private async accountForDiscardedPlanReply(opts: {
+    accountId: string;
+    agentSessionId: string;
+    driftstackSessionId: string | null;
+    now: Date;
+    keySource: NonNullable<RunTurnArgs['keySource']> | undefined;
+    label: 'decompose' | 'replan';
+    err: unknown;
+  }): Promise<void> {
+    const err = opts.err;
+    if (!(err instanceof AgentDecomposerSettledError)) return;
+    if (this.deps.usageRecorder !== undefined) {
+      await this.recordUsageRowWithRetry(
+        this.deps.usageRecorder,
+        {
+          accountId: opts.accountId,
+          driftstackSessionId: opts.driftstackSessionId,
+          agentSessionId: opts.agentSessionId,
+          decomposeResultKind: 'refuse',
+          usage: err.usage,
+          tokensConsumed: err.tokensConsumed,
+          now: opts.now,
+          ...(opts.keySource !== undefined ? { keySource: opts.keySource } : {}),
+        },
+        {
+          accountId: opts.accountId,
+          agentSessionId: opts.agentSessionId,
+          label: opts.label,
+        },
+      );
+    }
+    if (err.tokensConsumed > 0) {
+      try {
+        await this.debitTokensIfActive(opts.agentSessionId, err.tokensConsumed);
+      } catch {
+        /* debit best-effort — the spend is already on its usage row above */
+      }
+    }
+  }
+
   async runTurn(args: RunTurnArgs): Promise<RunTurnResult> {
     const session = await this.deps.sessions.get(args.agentSessionId);
     if (session === null) {
@@ -2710,6 +2806,12 @@ export class AgentRuntime {
     // half for a different phone than its first.)
     let turnArchetype = this.deps.archetype;
     let firstPlanObservation: string | undefined;
+    /**
+     * P1 — planning calls whose reply nobody could read and which were asked
+     * again. Counted against the turn's own planner/model caps below, and
+     * reported on the turn's `loop` line so a retried turn is visible as one.
+     */
+    let plannerRetries = 0;
     let decomposed: DecomposeResult;
     if (resumePlan !== null) {
       decomposed = resumePlan;
@@ -2818,24 +2920,60 @@ export class AgentRuntime {
         // The customer is now staring at three dots for however long the model
         // takes. Say what is happening before the call, not after it.
         emitProgress(args.onProgress, { kind: 'phase', phase: 'planning' });
-        decomposed = await this.deps.decomposer.decompose({
-          task: args.userMessage,
-          archetype: turnArchetype,
-          history: sessionWithUser.transcript,
-          budgetTokensRemaining: sessionWithUser.tokenBudgetRemaining,
-          ...(pageObservation !== undefined ? { observation: pageObservation } : {}),
-          // P2 — NAMES ONLY. The values go to the executor, never here.
-          ...(args.credentials !== undefined
-            ? { credentialRefs: credentialRefsFor(args.credentials) }
-            : {}),
-          // 6.c / #15 — the session's picked Claude 4.x model drives the
-          // Anthropic call + the per-model cost-to-serve rate.
-          model: sessionWithUser.model,
-          ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
-          shouldContinue: authorityMayContinue,
-          // B2 — the provider lane ends the request when this aborts.
-          signal,
-        });
+        // P1 — ONE IMMEDIATE RETRY OF A REPLY NOBODY COULD READ. Measured live
+        // 2026-09-20: 2 of 170 turns on the production default model died here,
+        // and the customer saw a turn that never started. Planning has no side
+        // effects, so the same request may be asked again — once, counted, and
+        // inside every bound the turn already has. ⛔ The phase is NOT emitted a
+        // second time: the telemetry recorder classifies a turn's death by how
+        // many `planning` phases it entered, so a second event would re-file
+        // every retried turn's death as a re-plan. The retry is reported on the
+        // turn's `loop` line instead (`plannerRetries`) — see the note there for
+        // why it is not a metric.
+        const planned = await planWithOneRetryOnMalformedReply(
+          () =>
+            this.deps.decomposer.decompose({
+              task: args.userMessage,
+              archetype: turnArchetype,
+              history: sessionWithUser.transcript,
+              budgetTokensRemaining: sessionWithUser.tokenBudgetRemaining,
+              ...(pageObservation !== undefined ? { observation: pageObservation } : {}),
+              // P2 — NAMES ONLY. The values go to the executor, never here.
+              ...(args.credentials !== undefined
+                ? { credentialRefs: credentialRefsFor(args.credentials) }
+                : {}),
+              // 6.c / #15 — the session's picked Claude 4.x model drives the
+              // Anthropic call + the per-model cost-to-serve rate.
+              model: sessionWithUser.model,
+              ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
+              shouldContinue: authorityMayContinue,
+              // B2 — the provider lane ends the request when this aborts.
+              signal,
+            }),
+          () =>
+            this.mayRetryPlannerReply({
+              turnStartedAtMs,
+              // Calls made BEFORE the attempt that just failed: on the first
+              // plan of a turn, only the retries already spent.
+              plannerCallsSoFar: plannerRetries,
+              modelCallsSoFar: plannerRetries,
+              signal,
+              authorityMayContinue,
+            }),
+          async (discarded) => {
+            plannerRetries += 1;
+            await this.accountForDiscardedPlanReply({
+              accountId: session.accountId,
+              agentSessionId: session.id,
+              driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
+              now: args.now ?? new Date(),
+              keySource: args.keySource,
+              label: 'decompose',
+              err: discarded,
+            });
+          },
+        );
+        decomposed = planned.result;
       } catch (err) {
         if (err instanceof AgentDecomposerContinuationDeniedError) {
           return this.interruptedTurnResult(session.id, sessionWithUser, 'decompose');
@@ -3257,7 +3395,10 @@ export class AgentRuntime {
     // Every provider call this TURN has made so far, against
     // MAX_MODEL_CALLS_PER_TURN. An approval resume makes none (it replays a plan
     // the customer already reviewed), so it starts at zero there.
-    let modelCalls = resumePlan === null ? 1 : 0;
+    // P1 — a retried planning call is a real call and is counted as one, so a
+    // turn that retried has fewer of both left for its segments. It is never a
+    // free call.
+    let modelCalls = (resumePlan === null ? 1 : 0) + plannerRetries;
     // The planning calls among them, against MAX_PLANNER_CALLS_PER_TURN.
     let plannerCalls = modelCalls;
 
@@ -3499,22 +3640,56 @@ export class AgentRuntime {
       };
       let replanned: DecomposeResult;
       try {
-        replanned = await this.deps.decomposer.decompose({
-          task: args.userMessage,
-          archetype: turnArchetype,
-          history: sessionWithUser.transcript,
-          budgetTokensRemaining: postDebitSession.tokenBudgetRemaining,
-          model: sessionWithUser.model,
-          turnProgress,
-          ...(cause === 'replan' ? { priorFailure: describeExecutorStop(executorResult) } : {}),
-          ...(pageNow !== undefined ? { observation: pageNow } : {}),
-          ...(args.credentials !== undefined
-            ? { credentialRefs: credentialRefsFor(args.credentials) }
-            : {}),
-          ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
-          shouldContinue: authorityMayContinue,
-          signal,
-        });
+        // P1 — the SAME one retry as the first plan, for the same reason: a
+        // later segment's prompt carries untrusted page text, which is the input
+        // most able to steer a model into content the codec refuses, so this is
+        // the MORE likely site for an unreadable reply rather than the less.
+        // Every bound is re-asked with the counters as they stand, so a retry
+        // here can never take the last planner call or the read-back's.
+        const replannedOnce = await planWithOneRetryOnMalformedReply(
+          () =>
+            this.deps.decomposer.decompose({
+              task: args.userMessage,
+              archetype: turnArchetype,
+              history: sessionWithUser.transcript,
+              budgetTokensRemaining: postDebitSession.tokenBudgetRemaining,
+              model: sessionWithUser.model,
+              turnProgress,
+              ...(cause === 'replan' ? { priorFailure: describeExecutorStop(executorResult) } : {}),
+              ...(pageNow !== undefined ? { observation: pageNow } : {}),
+              ...(args.credentials !== undefined
+                ? { credentialRefs: credentialRefsFor(args.credentials) }
+                : {}),
+              ...(args.byokApiKey !== undefined ? { byokAnthropicApiKey: args.byokApiKey } : {}),
+              shouldContinue: authorityMayContinue,
+              signal,
+            }),
+          () =>
+            this.mayRetryPlannerReply({
+              turnStartedAtMs,
+              plannerCallsSoFar: plannerCalls,
+              modelCallsSoFar: modelCalls,
+              signal,
+              authorityMayContinue,
+            }),
+          async (discarded) => {
+            // The discarded attempt is a call: counted here, paid for below, and
+            // gone from what the rest of the turn may spend.
+            modelCalls += 1;
+            plannerCalls += 1;
+            plannerRetries += 1;
+            await this.accountForDiscardedPlanReply({
+              accountId: session.accountId,
+              agentSessionId: session.id,
+              driftstackSessionId: sessionWithUser.driftstackSessionId ?? null,
+              now: args.now ?? new Date(),
+              keySource: args.keySource,
+              label: 'replan',
+              err: discarded,
+            });
+          },
+        );
+        replanned = replannedOnce.result;
       } catch (err) {
         if (stopRequested(signal)) {
           // B2 — a later segment's plan call cut short by Stop. Its row is kept
@@ -4187,6 +4362,28 @@ export class AgentRuntime {
           });
           return await stopBeforeAnswer('answering', debitedAfterAbort ?? sessionAfter);
         }
+        // ⛔ P1 DELIBERATELY STOPS AT THE PLAN CALL, and this is where that was
+        // decided. The plan call and this one are both "the provider answered
+        // and we could not read it", but three things differ and all three
+        // point the same way:
+        //   · CONSEQUENCE. An unreadable PLAN reply ends the turn before
+        //     anything happens, or truncates it mid-task. An unreadable ANSWER
+        //     reply costs the customer a sentence on a turn whose steps have all
+        //     already run and been reported — the fallback is the plan result,
+        //     which is a real outcome, not a failure.
+        //   · THERE IS ALREADY A RECOVERY HERE, and it is aimed at the measured
+        //     fault: `recoverAnswerText` keeps the words when only their JSON
+        //     wrapper is broken (an unescaped quote inside a quoted page line —
+        //     three read-backs in one live run, 2026-09-18). The residual
+        //     population after that is different and smaller than the plan
+        //     call's.
+        //   · PRICE. The turn's work is done and charged; a retry here buys a
+        //     second provider call for a turn that already succeeded, and would
+        //     be spending the call the model-call cap reserves for exactly this
+        //     phase.
+        // If the same reasoning ever does hold here — say the recovery is
+        // removed, or measurement shows this class killing answers at the plan
+        // call's rate — the seam to reuse is `planWithOneRetryOnMalformedReply`.
         if (error instanceof AgentDecomposerSettledError) {
           latestReadbackEvidence = {
             usage: error.usage,
@@ -4314,12 +4511,29 @@ export class AgentRuntime {
       ...(turnNoticeReason !== undefined ? { noticeReason: turnNoticeReason } : {}),
       // Only a turn whose planner spoke the loop, or that went round at all,
       // reports it: a legacy single-plan turn returns exactly what it always did.
-      ...(plannerSpeaksLoop || segment > 1
+      // …and a turn that retried a planning call reports the loop line even when
+      // it never went round, because that retry is the only place the count can
+      // be read.
+      ...(plannerSpeaksLoop || segment > 1 || plannerRetries > 0
         ? {
             loop: {
               segments: segment,
               plannerCalls,
               replans,
+              // P1 — planning calls whose reply nobody could read and which were
+              // asked again. ⛔ ON THIS LINE RATHER THAN ON A COUNTER, and the
+              // reason is a boundary rather than a preference: a registered
+              // metric needs a `registerCounter` in `lib/bootstrap.ts` (the
+              // `emitted-metrics-are-registered` guard checks exactly that), and
+              // an emit with no registration records NOTHING while looking
+              // healthy. Bootstrap is outside this lane, so the count rides the
+              // turn's own line — which `agent-turn-telemetry` already reads for
+              // `stopped` and `handedBackKind`. ⚠️ Stated plainly: the turn
+              // telemetry ROW's `modelCalls` counts `planning` PHASES entered
+              // and a retry deliberately emits none, so the row undercounts a
+              // retried turn's calls by exactly this number until that counter
+              // exists.
+              ...(plannerRetries > 0 ? { plannerRetries } : {}),
               ...(lastStatus !== undefined ? { finalStatus: lastStatus } : {}),
               ...(loopStopped !== undefined ? { stopped: loopStopped } : {}),
               ...(plannerHandedBack !== undefined ? { handedBack: true } : {}),
@@ -4350,6 +4564,113 @@ export class AgentRuntime {
  *   - Any non-Error throw (defensive: treat as fatal so it surfaces
  *     to Sentry rather than masquerading as a customer-facing refuse)
  */
+/**
+ * P1 — one planning call, with ONE immediate retry of a reply nobody could read.
+ *
+ * ⛔ NEVER A FREE CALL. The retry is a real provider call and is counted like
+ * one: the caller's `onDiscardedReply` records the wasted call's usage row and
+ * debits its tokens before the second attempt is made, and the gate below
+ * refuses the retry when it would not fit inside the turn's existing planner-call
+ * cap, model-call cap, wall clock or hard stop. Nothing here widens a bound.
+ *
+ * ⛔ THE SAME REQUEST, IMMEDIATELY. No prompt change, no backoff, no different
+ * model: the only thing that differs is the sample. A backoff would spend the
+ * customer's clock on a fault that is not a throttle, and a changed prompt would
+ * make the two attempts two different measurements.
+ *
+ * ⛔ A SECOND FAILURE THROWS THE SECOND ERROR, so the turn ends exactly as it
+ * ends today, on the reply that actually ended it.
+ */
+async function planWithOneRetryOnMalformedReply(
+  decompose: () => Promise<DecomposeResult>,
+  gate: () => Promise<boolean>,
+  onDiscardedReply: (err: unknown) => Promise<void>,
+): Promise<{ result: DecomposeResult; retries: number }> {
+  let retries = 0;
+  for (;;) {
+    try {
+      return { result: await decompose(), retries };
+    } catch (err) {
+      if (retries >= MAX_MALFORMED_PLAN_RETRIES) throw err;
+      if (!plannerReplyWasMalformed(err)) throw err;
+      if (!(await gate())) throw err;
+      await onDiscardedReply(err);
+      retries += 1;
+    }
+  }
+}
+
+/**
+ * P1 — the PROVIDER ANSWERED AND WE COULD NOT READ IT: a reply that is not valid
+ * JSON, is JSON of the wrong shape, names a result kind nothing knows, or stops
+ * mid-sentence at the output ceiling.
+ *
+ * ⛔ ONE REGEX, TWO READERS, ON PURPOSE. {@link classifyDecomposerError} calls
+ * this class fatal and {@link plannerReplyWasMalformed} calls it retryable-once,
+ * and those two answers have to be about the SAME set. A second copy of the
+ * pattern would agree on the day it was written and drift the first time a new
+ * message is added to one of them — and the drift would show as a turn that
+ * either retries a 4xx or fails a reply it could have re-asked for.
+ */
+const MALFORMED_PROVIDER_REPLY_RE =
+  /missing text content|not valid JSON|not a JSON object|response (?:envelope|content|usage|field .+ exceeded \d+ characters)|unknown result kind|intents (?:was not an array|exceeded \d+ entries)|missing clarifyingQuestion|missing refuseReason|response body exceeded \d+ bytes/i;
+
+/**
+ * P1 — whether a thrown planner error is a reply we PAID FOR and could not read,
+ * as opposed to a refused key, a rate limit, or a network fault.
+ *
+ * ⛔ WHY THIS IS THE RETRYABLE SET AND NOTHING WIDER. Planning has NO SIDE
+ * EFFECTS — no dispatch has been sent, nothing on the page has moved — so
+ * asking the same question again cannot do anything twice. That reasoning does
+ * not extend to a 4xx (the request is wrong; re-sending it is wrong again), to a
+ * 429 (already handled as transient, with backoff, inside the adapter), or to a
+ * rejected key. Those all keep exactly the handling they had.
+ *
+ * ⛔ MEASURED, NOT SUPPOSED. Live 2026-09-20, 2 of 170 turns on the production
+ * default model died here — one ran away to the 8,192-token output ceiling and
+ * one was simply malformed — and a cheaper model did it 6 times in 170. The
+ * customer saw a turn that never started.
+ *
+ * ⛔ IT DOES NOT COVER THE ANSWER CALL, and that is a decision rather than an
+ * oversight. See the note at the read-back's own catch.
+ */
+export function plannerReplyWasMalformed(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  // A rejected key can carry a body that QUOTES one of these phrases, and a
+  // status classified before this one must stay classified that way.
+  if (PROVIDER_STATUS_REPLY_RE.test(err.message)) return false;
+  return MALFORMED_PROVIDER_REPLY_RE.test(err.message);
+}
+
+/**
+ * P1 — "the provider answered with a STATUS", in either lane's spelling.
+ *
+ * ⛔ IT IS NOT NAMED FOR ONE PROVIDER, AND THAT IS THE POINT. The screen above
+ * used to read `/Anthropic API \d\d\d/`, which is how the Claude lane spells a
+ * status — while the malformed-reply set it screens is NOT Anthropic-only: the
+ * OpenAI-compatible lane throws `<label> response envelope was not a JSON
+ * object` and friends through the same classifier, and its statuses are
+ * `<label> API <status>: <the provider's own words>`
+ * (`openRouterStatusMessage`). So a 400 from that lane whose BODY quoted one of
+ * those phrases — a provider describing a `response_format` it refused, say —
+ * read as "a reply we could not parse" and bought a second paid call on a
+ * request that was wrong the first time. Both spellings are one shape, and this
+ * matches the shape.
+ *
+ * ⚠️ It stays a screen on the MESSAGE, which is what both lanes give this layer;
+ * a typed status would be better and is not what these errors carry.
+ */
+const PROVIDER_STATUS_REPLY_RE = /\bAPI \d{3}\b/;
+
+/**
+ * P1 — how many times ONE planning call may be re-asked after a reply nobody
+ * could read. One. A second malformed reply fails the turn exactly as today,
+ * with today's customer sentence: two in a row is a model that is not going to
+ * produce a plan for this input, and a third call spends the customer's budget
+ * to learn it again.
+ */
+export const MAX_MALFORMED_PLAN_RETRIES = 1;
+
 export function classifyDecomposerError(err: unknown): 'transient' | 'fatal' {
   if (!(err instanceof Error)) return 'fatal';
   const msg = err.message;
@@ -4364,12 +4685,9 @@ export function classifyDecomposerError(err: unknown): 'transient' | 'fatal' {
   if (/Anthropic API (429|408|425)/.test(msg)) return 'transient';
   // Anthropic 4xx → fatal (credential / validation / bad-request)
   if (/Anthropic API 4\d\d/.test(msg)) return 'fatal';
-  // Malformed Anthropic response → fatal
-  if (
-    /missing text content|not valid JSON|not a JSON object|response (?:envelope|content|usage|field .+ exceeded \d+ characters)|unknown result kind|intents (?:was not an array|exceeded \d+ entries)|missing clarifyingQuestion|missing refuseReason|response body exceeded \d+ bytes/i.test(
-      msg,
-    )
-  ) {
+  // Malformed Anthropic response → fatal. Same set P1 retries ONCE before
+  // getting here; see MALFORMED_PROVIDER_REPLY_RE.
+  if (MALFORMED_PROVIDER_REPLY_RE.test(msg)) {
     return 'fatal';
   }
   // Missing API key configuration → fatal (route should have caught

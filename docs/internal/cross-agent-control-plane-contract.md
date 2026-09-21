@@ -621,6 +621,172 @@ the control plane's premises, not the doc's):**
   resolution exists only on the selector path. Feed it to the gate as the harness's
   canonical label; never assert it equals an accname implementation's answer.
 
+### 2026-09-20 (later) — FOUR CONTROL-PLANE STEALTH FIXES. NO WIRE CHANGE; THREE CHANGES TO WHAT THE DEVICE SEES (A2)
+
+⛔ **NO NEW VERB, NO NEW PARAMETER, NO NEW RESULT FIELD.** Everything below is the
+control plane choosing different verbs, different timing, or different script
+text inside the vocabulary that already exists. A3 and A1 need to know about it
+because it changes the TRAFFIC and, in one case, the SCRIPT this side puts in the
+page's main world.
+
+**1. The idle settle's predicate is now STATELESS, and it always carries its own
+timeout (audit R7).** It used to keep poll-to-poll state on
+`globalThis[Symbol.for('idle-settle.v1')]`, which — because `executeScript`
+compiles in the page's main world — gave a page three things:
+
+- a constant, product-wide membership test
+  (`Object.getOwnPropertySymbols(globalThis).some((s) => s.description ===
+'idle-settle.v1')`), readable during the wait and after it on every failure
+  path, and identical in every session of every customer;
+- a denial of service it chose: making that property getter-only made the
+  assignment ineffective, so the predicate returned false for ever — and with no
+  `timeout_seconds` from the planner the device's own 30 s default applied.
+  Thirty seconds of a rented phone per navigate, inside a 180 s turn;
+- a leaked document-wide `MutationObserver` per poll when the getter returned a
+  fresh object each time.
+
+The predicate now reads `document.readyState`, the navigation entry's
+`loadEventEnd`, the newest 64 resource `responseEnd`s and `document.fonts.status`
+— same 500 ms quiet window, same 3 s ceiling, now measured from `loadEventEnd`
+rather than from stored state. **No global, no symbol, no observer, nothing to
+clean up on any path.** ⚠️ It is still main-world JS through replaceable
+accessors, on your poll cadence: this removes the constant name, the stall and
+the leak, and it is not a claim that the wait is unobservable.
+
+⛔ **WHAT IS LOST, said plainly: DOM-only mutation activity with no network.** A
+hydration pass over data already in hand no longer extends the quiet window, so a
+settle can now return true while such a page is still moving. Network activity
+between polls is still seen (Resource Timing entries persist).
+
+⛔ **AND THE CEILING ONLY MEANS WHAT IT USED TO WHILE THE LOAD EVENT IS THIS
+WAIT'S OWN** (corrected in review, same day, before any of this shipped). The old
+ceiling was "three seconds since THIS wait first saw the document complete",
+which needed stored state; `loadEventEnd` is the same instant only for the settle
+a navigate inserts. For a settle after a tap that changes the view WITHOUT a
+navigation — a same-document route change, a "load more" — an unbounded
+`now - loadEventEnd >= 3 s` is true on the first poll however busy the page is,
+which would have made every such settle a no-op that still reported success. So
+the ceiling is claimed only while `now - loadEventEnd` is under ceiling + the
+timeout we send (8 s); past that the quiet window decides, which is the right
+answer for a page that loaded long ago. ⚠️ Residual, named: a settle dispatched
+between 3 s and 8 s after its page's load event still reads the ceiling as
+reached, and statelessly the two cases cannot be told apart. The case the ceiling
+exists for keeps exactly the behaviour it had.
+
+⛔ **AND EVERY SETTLE NOW SENDS `timeout_seconds: 5`** (ceiling + margin) instead
+of omitting the field. Your 30 s default is no longer what bounds an AI settle.
+
+**2. On a look that resolves NOTHING, the patience window is spent as spaced
+`perceive` re-looks instead of one 5 s `wait_for` (audit R8).**
+⛔ **THIS CHANGES YOUR TRAFFIC MIX.** Where you used to see one `wait_for` whose
+predicate ran `document.querySelectorAll('*')` and read up to 2,000
+`shadowRoot`s on every one of your 250 ms polls — ~20 evenly spaced full-tree
+walks, visible to a `PerformanceObserver({entryTypes:['longtask']})` with no
+prototype patching at all — you now see **up to three further `perceive` calls
+for the same selector**, spaced by server-drawn gaps that sum to exactly the same
+5 s window. The last re-look lands where the old timeout landed.
+
+- The run-wide element-wait budget is unchanged (15 s per turn, debited 5 s per
+  step that spends the window) and so are the hard-stop checks.
+- `wait_for` is still used for this on the path where no usable look exists (a
+  device that predates perceive-by-selector, or a look that timed out).
+- ⚠️ A SEMANTIC DIFFERENCE WORTH KNOWING: the old wait tested RENDERED
+  VISIBILITY; `perceive` resolves first-match-in-document-order, visible or not.
+  A control that is present but `display:none` now resolves, gets the verdict
+  machinery's `unverified`, and the tap goes ahead to fail with the device's own
+  "not interactable" — instead of the wait burning 5 s and reporting "no element
+  matched". We think that is the more honest answer; tell us if it is not.
+- ⛔ **AND IT COSTS LATENCY, MEASURED RATHER THAN ESTIMATED** (review, same day,
+  on the eval fixture whose control renders 2,500 ms after load — the device's
+  own wait resolved at the instant of the render, so this is the full size of the
+  change): the tap used to be sent at 2,560 ms; over three seeds it is now sent
+  at 2,974 / 3,144 / 3,723 ms, i.e. **+0.4 s to +1.2 s**, and the worst case is
+  one whole re-look gap (~2.4 s) for a control that renders just after a look.
+  A poll sees a late render within 250 ms; three looks in five seconds see it
+  within a gap. If your answer to question 3 below is that `perceive` is cheap,
+  the lever is MORE re-looks (or a front-loaded spacing), not a wider window.
+
+**3. A tap the look says is OUTSIDE THE VIEWPORT can get a scroll, a drawn
+pause, and a FRESH look before it (audit R5) — ⛔ BUILT, AND SWITCHED OFF BY
+DEFAULT (2026-09-21).** Nothing below reaches a device until the option
+`relocationBeat` is turned on, and it stays off until five things are closed:
+the scroll distance must use how far the target is (today it is drawn blind, so
+two scrolls in a row — the first unrelated to the target — may be a new pattern
+in exchange for the one removed); the beat must pass the step loop's hard-stop
+check (it does not, which breaks the premise the Stop-claim lifetime is derived
+from); its scroll and pause must be counted in the action-path telemetry; the
+eval corpus needs an off-screen tap (it has none, so production would be the
+first place this was measured); and the device team's answer to question 6
+below (is this scroll a real touch sequence?). What it sends WHEN ON: up to
+two extra dispatches plus one extra `perceive` per off-screen tap\*\* — one
+`scroll {direction, distance_px}` toward the target (direction read from the
+element's own `bounds.y`, distance drawn in 240–1,200 px) and one
+`behavioral_pause {duration_ms}` drawn and capped at 2,500 ms.
+
+- ⛔ `require_unoccluded` IS KEPT, and deliberately kept even when the re-look
+  now reads `clear`: the look's point is still not where the tap lands, because
+  the click scrolls again to a randomised band this side cannot reproduce.
+- ⛔ THE BEAT IS NOT A STEP. It never enters the turn's results, the customer's
+  step list, the step history the planner sees, or the segment's verdict, and
+  **its failure is swallowed** — a beat that fails is a beat that did not happen,
+  and a dropped frame on it must never fail a customer's step. Stop abandons it
+  at once.
+- It is never sent in front of a step the plan's own words already halt for
+  customer approval (no look is taken for those either). ⚠️ Stated residual: a
+  halt raised only by the device's labels or by the structural arm is decided
+  after the beat, so such a step did get a scroll and a pause first. Nothing was
+  committed.
+
+**4. Every gap this side draws is now DRAWN, not constant (audit R9).** The
+retryable-failure backoff (was exactly +400 ms, twice) and the cold-start
+establish backoff (was exactly +1500 ms, eight times) are drawn per attempt from
+a per-session generator, inside a band of 0.55×–1.45× the old constant. Budgets,
+attempt counts and deadlines are unchanged; only WHEN moves.
+
+- The seed is the session id mixed with a per-process salt, so it is stable
+  within a session, different between sessions, and not derivable by a site from
+  an id it can see.
+- ⛔ **WE HAVE NOT TOUCHED YOUR `wait_for` POLL INTERVAL.** The fixed 250 ms is
+  yours to change, and A3's argument against jittering a single fixed-mean
+  interval stands on its own terms. The argument here is a different one — two
+  spacings being EXACTLY EQUAL, and two sessions sharing a sequence — and it is
+  device Q5, unchanged.
+
+**⛔ NONE OF THIS IS A CLAIM THAT ANYTHING IS HIDDEN.** Two byte-identical JS
+predicates still run in the page's main world on every session; three `perceive`
+calls in five seconds is fewer walks than twenty, not zero reads; and a drawn gap
+is still a machine's gap. What each change removes is named above, and what it
+does not remove is named beside it.
+
+**Questions this raises for the device team** — each answerable by one
+measurement, and none blocking:
+
+1. **Does a stateless settle change what your `wait_for` must evaluate?** The
+   predicate no longer writes to the page, so nothing needs cleaning up if a wait
+   is abandoned mid-poll. Is there anything on your side that depended on the
+   old one leaving state behind (a fast-path, a dedup, a cache)?
+2. **Is our predicate evaluated in strict mode?** It no longer matters for the
+   old failure (there is no assignment left to be a silent no-op or a TypeError),
+   but it still decides how a throw inside the predicate surfaces.
+3. **Does `perceive` cost you materially less than a `wait_for` poll?** We have
+   traded ~20 predicate evaluations for ≤3 selector resolutions per missing
+   element; if a `perceive` is the more expensive call on your side, say so and
+   we will re-tune the number of re-looks rather than the window.
+4. **On an off-screen tap we now send `scroll` then `behavioral_pause` then
+   `perceive` then `click`.** Does your click's own scroll become a no-op (or a
+   shorter flick) when the target is already in view, and does the persona treat
+   a scroll it did not plan as part of the same gesture sequence?
+5. **Is `scroll {direction, distance_px}` with no `start_x`/`start_y` a real
+   `touchstart → touchmove* → touchend` with momentum decay?** The relocation
+   beat is only worth its two dispatches if it is. We have the look's
+   `tap_point` in hand and can supply a swipe origin free if you want one.
+6. **Is `{duration_ms: N}` held for exactly N?** If it is exact, the one beat we
+   now insert has no variance of its own beyond the one we draw, and we would
+   rather know than assume.
+7. **Do you want the settle to send a SHORTER timeout than 5 s?** We picked
+   ceiling + margin; if your poll cadence plus round trip makes 5 s tight on a
+   slow node, name the number.
+
 ### 2026-09-20 — the confirmation gate grew a SECOND, STRUCTURAL arm (A2)
 
 ⛔ **NO WIRE CHANGE, AND ONE NEW PIECE OF DEVICE TRAFFIC.** The gate that stops a

@@ -33,17 +33,25 @@ export class VirtualClock {
 
   constructor(
     /**
-     * Durations (ms) that count toward the reported simulated time.
+     * Which sleeps count toward the reported simulated time.
      *
-     * ⚠️ THE EXECUTOR USES `sleep` FOR THREE DIFFERENT THINGS and only two of
-     * them are elapsed browsing time: the retry backoff, the cold-start
-     * establish backoff, and the read-back DEADLINE. The deadline is a race
-     * timer — it measures how long we are willing to wait, not time the device
-     * spent — and counting it would add a flat 10s to every read-back task.
-     * Selecting by duration is only sound while the three configured values are
-     * distinct, which `agent-eval-scorer.test.ts` asserts directly.
+     * ⚠️ THE EXECUTOR USES `sleep` FOR SEVERAL DIFFERENT THINGS and not all of
+     * them are elapsed browsing time. The retry backoff, the cold-start
+     * establish backoff and R8's re-look gaps are; the read-back DEADLINE is
+     * not — it measures how long we are willing to wait, not time the device
+     * spent, and counting it would add a flat 10s to every read-back task.
+     *
+     * ⛔ A PREDICATE, NOT A SET OF EXACT DURATIONS, since R9. The retry and
+     * cold-start gaps are DRAWN now, so no exact value identifies them, and a
+     * set that no longer matched would have silently stopped counting real
+     * elapsed time — the simulated-time figure would have fallen with no test
+     * going red. The caller states what it is EXCLUDING instead, which is the
+     * short, closed list.
+     *
+     * A bare `new VirtualClock()` counts nothing, which is what a caller that
+     * does not read `countedSleepMs()` wants.
      */
-    private readonly countedDurations: ReadonlySet<number> = new Set<number>(),
+    private readonly countsAsElapsed: (ms: number) => boolean = () => false,
   ) {}
 
   now(): number {
@@ -56,14 +64,14 @@ export class VirtualClock {
     if (ms > 0) this.nowMs += ms;
   }
 
-  /** Total ms of COUNTED sleeps observed so far (see `countedDurations`). */
+  /** Total ms of COUNTED sleeps observed so far (see `countsAsElapsed`). */
   countedSleepMs(): number {
     return this.counted;
   }
 
   /** The injected `AutoRetryOptions.sleep`. Bound so it can be passed by value. */
   readonly sleep = (ms: number): Promise<void> => {
-    if (this.countedDurations.has(ms)) this.counted += ms;
+    if (this.countsAsElapsed(ms)) this.counted += ms;
     return new Promise<void>((resolve) => {
       this.seq += 1;
       this.pending.push({ deadline: this.nowMs + Math.max(0, ms), seq: this.seq, resolve });

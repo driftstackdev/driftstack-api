@@ -11,6 +11,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  DRAWN_GAP_MAX_FACTOR,
+  DRAWN_GAP_MIN_FACTOR,
   ControlPlaneAgentExecutor,
   type IntentDispatcher,
 } from '../../src/services/agent-executor-control-plane.js';
@@ -113,6 +115,19 @@ function args(intents: AgentIntent[], signal: AbortSignal): ExecuteArgs {
 const flush = async (): Promise<void> => {
   for (let i = 0; i < 10; i += 1) await Promise.resolve();
 };
+
+/**
+ * R9 — a pending sleep that is one drawn gap around `baseMs`.
+ *
+ * ⛔ NOT `toContain(baseMs)`. The gaps are drawn now, so a pin on the constant
+ * would fail on a working executor; a pin on "some sleep is pending" would pass
+ * on one that slept for the wrong reason. The band is the honest middle.
+ */
+function pendingGapInBand(pending: readonly number[], baseMs: number): boolean {
+  const low = Math.round(baseMs * DRAWN_GAP_MIN_FACTOR);
+  const high = Math.round(baseMs * DRAWN_GAP_MAX_FACTOR);
+  return pending.some((ms) => ms >= low && ms <= high);
+}
 
 describe('ControlPlaneAgentExecutor — Stop', () => {
   it('CRITICAL a Stop observed between steps dispatches nothing more, and the run says it stopped', async () => {
@@ -254,8 +269,10 @@ describe('ControlPlaneAgentExecutor — Stop', () => {
       errorCode: 'intent_dispatch_error',
     }));
     await flush();
-    // Proof it is in the backoff, not finished: the retry delay is pending.
-    expect(clock.pending()).toContain(400);
+    // Proof it is in the backoff, not finished: a retry gap is pending. ⛔ R9 —
+    // THE GAP IS DRAWN, so the proof is that a pending sleep sits inside the
+    // band around the configured delay, not that it equals it.
+    expect(pendingGapInBand(clock.pending(), 400)).toBe(true);
     controller.abort();
     const result = await run;
     expect(result.stopped).toBe(true);
@@ -287,7 +304,7 @@ describe('ControlPlaneAgentExecutor — Stop', () => {
       errorCode: 'intent_session_not_established',
     }));
     await flush();
-    expect(clock.pending()).toContain(1_500);
+    expect(pendingGapInBand(clock.pending(), 1_500)).toBe(true);
     controller.abort();
     const result = await run;
     expect(result.stopped).toBe(true);

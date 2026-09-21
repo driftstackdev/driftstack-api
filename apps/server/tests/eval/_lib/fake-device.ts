@@ -140,6 +140,18 @@ export interface DispatchRecord {
   errorMessage?: string;
   /** Simulated device time this single dispatch consumed. */
   deviceMs: number;
+  /**
+   * R11 — WHEN this dispatch was made, on the injected clock, taken at the same
+   * instant `deviceMs` starts from.
+   *
+   * ⛔ WITHOUT IT NO SPACING CAN BE ASSERTED AT ALL. The log recorded what was
+   * sent and what it cost, and nothing about the gaps BETWEEN — so an eval
+   * could say a pause was present and never that two actions were machine-
+   * equally spaced, which is the quantity a detector actually computes. Read
+   * off the clock, never off `deviceMs` sums: an assertion that re-derives the
+   * timeline from the costs would agree with itself.
+   */
+  atMs: number;
   /** For a `perceive` for one selector: what the device answered about a tap
    *  there — device-side truth a scorer may read, since a tap the look refused
    *  leaves no failed click in this log. */
@@ -239,6 +251,25 @@ export interface FakeDeviceOptions {
    * `focus_tap_unoccluded_checked: false`.
    */
   sendKeysFocusesByScript?: boolean;
+  /**
+   * R11 — what the device reports in the `behavioral` flag on every result that
+   * carries one. Default TRUE, which is what this device always hardcoded.
+   *
+   * ⛔ WHY IT HAD TO BECOME AN OPTION. `behavioral: true` on every result meant
+   * the fixture could not tell a persona path from a plain one at all — so an
+   * assertion that "the AI's actions ran through the behavioural path" was true
+   * by construction here and said nothing about production. With `false`
+   * available, an eval criterion that reads the flag has a failing case, which
+   * is the only thing that makes the passing case evidence.
+   *
+   * ⚠️ IT IS A CONFIGURATION FACT, NOT A QUALITY ONE, on the real device too:
+   * `true` says a profile was attached, never that what the device then did
+   * looked human. For `scroll` the same flag names WHICH implementation ran
+   * (the flick-planned path or the flat segmented one) — both native touch — so
+   * `false` there is a different statement from `false` on a click. Neither is
+   * an alarm; see the control-plane contract.
+   */
+  behavioral?: boolean;
 }
 
 /**
@@ -272,7 +303,27 @@ export class FixtureError extends Error {
 export type WaitPredicateKind = { kind: 'selector_visible'; selector: string } | { kind: 'idle' };
 
 const DEEP_QUERY_RE = /const element = deepQuery\(("(?:[^"\\]|\\.)*")\);/;
-const IDLE_SENTINEL = "Symbol.for('idle-settle.v1')";
+/**
+ * R7 — THE SETTLE IS RECOGNISED BY ITS SHAPE, NOT BY A MARKER.
+ *
+ * ⛔ WHY THE MARKER HAD TO GO, AND WHY IT COULD NOT BE REPLACED BY ANOTHER ONE.
+ * The settle used to be identified here by the literal
+ * `Symbol.for('idle-settle.v1')` — which was also how a PAGE identified it: one
+ * constant, product-wide string in the page's own global namespace, readable
+ * during the wait and after it. Removing it from the product removed this
+ * discriminator with it, and inventing a fresh constant for the device to match
+ * on would have put the same tell back on the wire under a new spelling.
+ *
+ * ⛔ SO THIS MATCHES WHAT THE SETTLE IS ABOUT, in the page's own vocabulary: it
+ * reads the document's ready state, the navigation entry's load event, and the
+ * font loading status. Those are DOM APIs every page uses, not names anybody
+ * chose, so requiring all three identifies the settle without there being a
+ * product string to identify. All three, deliberately: any one of them alone is
+ * ordinary page code, and the NEGATIVE CONTROL in
+ * `agent-eval-wait-discriminator.test.ts` is a one-line `readyState` predicate
+ * that must still THROW rather than be read as a settle.
+ */
+const SETTLE_SHAPE = ['document.readyState', 'loadEventEnd', 'document.fonts'] as const;
 
 export class UnknownWaitPredicateError extends Error {
   constructor(message: string) {
@@ -283,7 +334,7 @@ export class UnknownWaitPredicateError extends Error {
 
 export function classifyWaitPredicate(predicate: string): WaitPredicateKind {
   const selectorMatch = DEEP_QUERY_RE.exec(predicate);
-  const looksIdle = predicate.includes(IDLE_SENTINEL);
+  const looksIdle = SETTLE_SHAPE.every((marker) => predicate.includes(marker));
   if (selectorMatch !== null && looksIdle) {
     throw new UnknownWaitPredicateError(
       'wait predicate matched BOTH discriminators — the mapper changed and the device cannot tell the two waits apart',
@@ -319,6 +370,7 @@ export class FakeDevice {
   private readonly elementOccludedCode: boolean;
   private readonly predatesOwnLabelVerdict: boolean;
   private readonly sendKeysFocusesByScript: boolean;
+  private readonly behavioralFlag: boolean;
 
   private currentUrl: string;
   private currentPage: FixturePage;
@@ -354,6 +406,7 @@ export class FakeDevice {
       this.predatesTapLook ||
       this.predatesRequireUnoccluded;
     this.sendKeysFocusesByScript = opts.sendKeysFocusesByScript === true;
+    this.behavioralFlag = opts.behavioral !== false;
     this.currentUrl = opts.startUrl;
     // A device that starts ON a fixture page shows that page; one that starts
     // anywhere else (about:blank) shows an empty document.
@@ -445,6 +498,7 @@ export class FakeDevice {
             ...(outcome.message === undefined ? {} : { errorMessage: outcome.message }),
           }),
       deviceMs,
+      atMs: before,
       urlBefore,
       urlAfter: this.currentUrl,
       ...(dispatch.intentName === 'perceive' && outcome.ok
@@ -578,7 +632,10 @@ export class FakeDevice {
     const lateCover = this.coverAfterScroll(found.element);
     if (lateCover !== null) {
       this.activate(lateCover, selector);
-      return { ok: true, output: { clicked: selector, behavioral: true, activated: true } };
+      return {
+        ok: true,
+        output: { clicked: selector, behavioral: this.behavioralFlag, activated: true },
+      };
     }
     // A tap point on a link (any interactive content) written INSIDE the
     // control's own label activates the link, not the control — whatever the
@@ -586,14 +643,23 @@ export class FakeDevice {
     const labelHit = this.ownLabelHitAt(found.element);
     if (labelHit !== null && labelHit.interactive !== null) {
       this.activate(labelHit.interactive, selector);
-      return { ok: true, output: { clicked: selector, behavioral: true, activated: true } };
+      return {
+        ok: true,
+        output: { clicked: selector, behavioral: this.behavioralFlag, activated: true },
+      };
     }
     // Replaced between the look and the tap: the tap lands where it was.
     if (this.declares(this.currentPage.detachedAtTap, found.element)) {
-      return { ok: true, output: { clicked: selector, behavioral: true, activated: false } };
+      return {
+        ok: true,
+        output: { clicked: selector, behavioral: this.behavioralFlag, activated: false },
+      };
     }
     this.activate(found.element, selector);
-    return { ok: true, output: { clicked: selector, behavioral: true, activated: true } };
+    return {
+      ok: true,
+      output: { clicked: selector, behavioral: this.behavioralFlag, activated: true },
+    };
   }
 
   /**
@@ -791,7 +857,7 @@ export class FakeDevice {
         typed_into: selector,
         length: text.length,
         truncated: false,
-        behavioral: true,
+        behavioral: this.behavioralFlag,
         ...(this.predatesOwnLabelVerdict ? {} : { focus_tap_unoccluded_checked: focusTapChecked }),
       },
     };
@@ -1157,7 +1223,7 @@ export class FakeDevice {
         scrolled_measured: true,
         flicks: 1,
         steps: 2,
-        behavioral: true,
+        behavioral: this.behavioralFlag,
         distance_capped: false,
       },
     };
@@ -1172,7 +1238,10 @@ export class FakeDevice {
           : DEFAULT_PAUSE_MS;
     this.cost(pausedMs);
     this.sync();
-    return { ok: true, output: { paused_ms: pausedMs, capped: false, behavioral: true } };
+    return {
+      ok: true,
+      output: { paused_ms: pausedMs, capped: false, behavioral: this.behavioralFlag },
+    };
   }
 
   /**

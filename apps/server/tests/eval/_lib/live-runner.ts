@@ -56,6 +56,7 @@ import {
   EVAL_RETRY_DELAY_MS,
   EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
   EVAL_TOKEN_BUDGET,
+  countsAsElapsedBrowsingTime,
 } from './runner.js';
 import type { EvalPlannerTier } from './scripted-decomposer.js';
 import type { AnswerExtractionCheck } from './score.js';
@@ -454,9 +455,7 @@ export async function runLiveTask(
   ctx: LiveRunContext,
 ): Promise<LiveRepReport> {
   const startedAt = performance.now();
-  const clock = new VirtualClock(
-    new Set([EVAL_RETRY_DELAY_MS, EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS]),
-  );
+  const clock = new VirtualClock(countsAsElapsedBrowsingTime);
   const fixtureErrors: string[] = [];
   const device = new FakeDevice({
     sites: task.site.pages,

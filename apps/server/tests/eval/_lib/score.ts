@@ -241,10 +241,189 @@ export interface TaskReport {
   indexSpaceAnomalies: ReadonlyArray<string>;
   simulatedDeviceMs: number;
   wallClockMs: number;
+  /** R11 — what the run looked like ON THE WIRE. See {@link RhythmReport}. */
+  rhythm: RhythmReport;
   rationale: string;
 }
 
 /** Everything the runner observed about one turn. Pure input to the scorer. */
+/**
+ * R11 — WHAT THE RUN LOOKED LIKE ON THE WIRE, as opposed to what was planned.
+ *
+ * ⛔ EVERY FIELD IS READ OFF `device.dispatches()` AND NONE OFF THE PLAN. The
+ * criterion this replaces counted the typed plan, so both of its conjuncts were
+ * constants that could not vary with anything the agent or the device did — it
+ * was measuring what we typed. `report.byHarnessIntent` has the same problem by
+ * construction: it is computed from plan steps, which is why the suite can
+ * assert `perceive` is undefined there while the device sees one before every
+ * tap.
+ *
+ * ⛔ AND IT MEASURES RHYTHM AND ORDER, NOT QUALITY. Nothing here says a run
+ * looked human; it says whether every tap was looked at first, whether the
+ * dispatched vocabulary stayed inside the ten, whether a tap carried
+ * coordinates, how dense the human beats were, and whether two spacings were
+ * machine-equal. Those are properties the control plane owns. What the device
+ * did with each verb is the device team's measurement, not this one's.
+ */
+export interface RhythmReport {
+  /** Every distinct harness verb this run actually dispatched. */
+  verbs: string[];
+  /** Dispatched `click`/`send_keys` attempts. */
+  actions: number;
+  /**
+   * Actions with no `perceive` for the same locator before them, each with the
+   * reason the scan could not match one. ⛔ THE RUN NAMES THE FALLBACK rather
+   * than the number being silently non-zero: "some taps were unlooked" is not a
+   * finding anybody can act on.
+   */
+  unlooked: Array<{ verb: string; locator: string; why: string }>;
+  /** ⛔ A tap that carries a point is a tap no human interaction produced. */
+  clicksCarryingCoordinates: number;
+  /** ⛔ The look sends a locator and nothing else; a typed value must never be
+   *  in one. */
+  perceivesCarryingAValue: number;
+  /** Human beats dispatched: pauses and scrolls, inserted or planned. */
+  beats: number;
+  /** Actions a site sees: navigates and taps. */
+  siteActions: number;
+  /** `beats / siteActions`, or null when the run touched nothing. */
+  beatDensity: number | null;
+  /** ms between consecutive dispatches, in order. */
+  gaps: number[];
+  /**
+   * The gaps between RE-dispatches of one identical (verb, locator) — the
+   * quantity a site that induces one cheap failure reads. Machine-equal
+   * spacings here are the fingerprint R9 removed.
+   */
+  repeatGaps: number[];
+}
+
+/** Verbs the control plane is allowed to put on the wire. Independent of the
+ *  source scan in `the-control-plane-never-dispatches-a-verb-it-does-not-hard-
+ *  code`: this one is about what a RUN actually sent. */
+export const RHYTHM_ALLOWED_VERBS: ReadonlySet<string> = new Set<string>([
+  'behavioral_pause',
+  'click',
+  'get_page_source',
+  'navigate',
+  'perceive',
+  'press_key',
+  'screenshot',
+  'scroll',
+  'send_keys',
+  'wait_for',
+]);
+
+const RHYTHM_ACTION_VERBS: ReadonlySet<string> = new Set(['click', 'send_keys']);
+const RHYTHM_BEAT_VERBS: ReadonlySet<string> = new Set(['behavioral_pause', 'scroll']);
+
+function locatorOf(record: DispatchRecord): string {
+  const value = record.params.value;
+  return typeof value === 'string' ? value : '';
+}
+
+function perceiveSelectorOf(record: DispatchRecord): string {
+  const selector = record.params.selector;
+  return typeof selector === 'string' ? selector : '';
+}
+
+export function rhythmOf(dispatches: ReadonlyArray<DispatchRecord>): RhythmReport {
+  const verbs = [...new Set(dispatches.map((d) => d.intentName))].sort();
+  const unlooked: RhythmReport['unlooked'] = [];
+  let actions = 0;
+  let clicksCarryingCoordinates = 0;
+  let perceivesCarryingAValue = 0;
+  let beats = 0;
+  let siteActions = 0;
+
+  for (const [index, record] of dispatches.entries()) {
+    if (RHYTHM_BEAT_VERBS.has(record.intentName)) beats += 1;
+    if (record.intentName === 'navigate' || record.intentName === 'click') siteActions += 1;
+    if (record.intentName === 'click') {
+      const params = record.params;
+      if (params.x !== undefined || params.y !== undefined || params.point !== undefined) {
+        clicksCarryingCoordinates += 1;
+      }
+    }
+    if (record.intentName === 'perceive' && typeof record.params.text === 'string') {
+      perceivesCarryingAValue += 1;
+    }
+    if (!RHYTHM_ACTION_VERBS.has(record.intentName)) continue;
+    actions += 1;
+    const locator = locatorOf(record);
+    // Scan backwards for the look. ⛔ WHAT MAY SIT BETWEEN, and why each is
+    // allowed: ONE `wait_for` (the audit's own allowance — a control that
+    // renders late is waited for after the look); an inserted beat (R5's
+    // scroll and dwell sit between the first look and the second); and an
+    // EARLIER ATTEMPT OF THIS SAME ACTION (a retry re-dispatches without a
+    // fresh look, by design — the look's answer has not gone stale in 400 ms).
+    let waitsSeen = 0;
+    let matched: string | null = null;
+    for (let back = index - 1; back >= 0; back -= 1) {
+      const earlier = dispatches[back];
+      if (earlier === undefined) break;
+      if (earlier.intentName === 'perceive') {
+        matched =
+          perceiveSelectorOf(earlier) === locator
+            ? null
+            : `the nearest look was for ${perceiveSelectorOf(earlier) || '(no selector)'}`;
+        break;
+      }
+      if (earlier.intentName === 'wait_for') {
+        waitsSeen += 1;
+        if (waitsSeen > 1) {
+          matched = 'more than one wait sits between the look and the action';
+          break;
+        }
+        continue;
+      }
+      if (RHYTHM_BEAT_VERBS.has(earlier.intentName)) continue;
+      // ⛔ A READ-ONLY PAGE READ MAY SIT HERE, and does, once per tap whose
+      // facts predate the last page-changing dispatch: the confirmation gate's
+      // structural arm takes one immediately before it judges. It touches
+      // nothing and cannot invalidate the look.
+      if (earlier.intentName === 'get_page_source') continue;
+      if (earlier.intentName === record.intentName && locatorOf(earlier) === locator) continue;
+      matched = `a ${earlier.intentName} sits between this action and any look`;
+      break;
+    }
+    if (matched === null && !dispatches.slice(0, index).some((d) => d.intentName === 'perceive')) {
+      matched = 'no look was dispatched before this action at all';
+    }
+    if (matched !== null) unlooked.push({ verb: record.intentName, locator, why: matched });
+  }
+
+  const gaps: number[] = [];
+  for (let index = 1; index < dispatches.length; index += 1) {
+    const previous = dispatches[index - 1];
+    const current = dispatches[index];
+    if (previous === undefined || current === undefined) continue;
+    gaps.push(current.atMs - (previous.atMs + previous.deviceMs));
+  }
+
+  const lastSeen = new Map<string, DispatchRecord>();
+  const repeatGaps: number[] = [];
+  for (const record of dispatches) {
+    const key = `${record.intentName}:${locatorOf(record)}`;
+    const previous = lastSeen.get(key);
+    if (previous !== undefined) repeatGaps.push(record.atMs - (previous.atMs + previous.deviceMs));
+    lastSeen.set(key, record);
+  }
+
+  return {
+    verbs,
+    actions,
+    unlooked,
+    clicksCarryingCoordinates,
+    perceivesCarryingAValue,
+    beats,
+    siteActions,
+    beatDensity: siteActions === 0 ? null : beats / siteActions,
+    gaps,
+    repeatGaps,
+  };
+}
+
 export interface TurnObservation {
   task: EvalTask;
   /** The tier of the decomposer the runner built for this turn, reported by the
@@ -1072,6 +1251,7 @@ export function scoreTurn(obs: TurnObservation): TaskReport {
     indexSpaceAnomalies: obs.indexSpaceAnomalies,
     simulatedDeviceMs: obs.simulatedDeviceMs,
     wallClockMs: obs.wallClockMs,
+    rhythm: rhythmOf(obs.dispatches),
     rationale: obs.task.rationale,
   };
 }

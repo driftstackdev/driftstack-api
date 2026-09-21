@@ -35,6 +35,7 @@ import { visibleTextOf } from './dom.js';
 import { FakeDevice } from './fake-device.js';
 import { StepMarkTracker } from './step-marks.js';
 import { VirtualClock } from './virtual-clock.js';
+import { STOP_IN_FLIGHT_GRACE_MS } from '../../../src/services/agent-executor.js';
 import { EVAL_SITES } from './page-model.js';
 import { ScriptedAgentDecomposer, SCRIPTED_DECOMPOSE_TOKENS } from './scripted-decomposer.js';
 import { scoreTurn, type ReadbackGate, type TaskReport, type TurnObservation } from './score.js';
@@ -48,6 +49,51 @@ export const EVAL_RETRY_DELAY_MS = 400;
 export const EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS = 1500;
 export const EVAL_OBSERVE_TIMEOUT_MS = 10_000;
 
+/**
+ * Which of the executor's sleeps are ELAPSED BROWSING TIME, for the simulated
+ * clock.
+ *
+ * ⛔ STATED AS AN EXCLUSION since R9 made the retry gaps DRAWN. The old form
+ * listed the two exact durations that counted; once no exact value identifies a
+ * retry gap, that list would have matched nothing and `simulatedDeviceMs` would
+ * have quietly fallen, with no arm going red — a measurement that stops
+ * measuring while continuing to report. What is NOT browsing time is a short,
+ * closed list: the read-back's race deadline and the Stop grace, both of which
+ * are "how long we are willing to wait", not time anything spent.
+ */
+export function countsAsElapsedBrowsingTime(ms: number): boolean {
+  return ms !== EVAL_OBSERVE_TIMEOUT_MS && ms !== STOP_IN_FLIGHT_GRACE_MS;
+}
+
+/**
+ * R8/R9/R5 — the eval's own entropy source.
+ *
+ * ⛔ SEEDED FROM A FIXED STRING, so the corpus is REPRODUCIBLE. The executor
+ * draws every server-side gap now, and its default seed mixes a per-process
+ * salt (deliberately: a site must not be able to reproduce a session's rhythm
+ * from an id it can see). That makes the default unusable here — the suite
+ * asserts that the same task run twice produces the same simulated time, and
+ * would have started failing for a reason that is not a fact about the agent.
+ *
+ * ⚠️ SO THIS HARNESS SAYS NOTHING ABOUT THE PRODUCT'S OWN SEEDING. That is a
+ * different property with its own test, which uses the real derivation over two
+ * session ids: `agent-eval-rhythm.test.ts`.
+ */
+export function evalRandom(seed: string): () => number {
+  let state = 0x811c9dc5;
+  for (let index = 0; index < seed.length; index += 1) {
+    state ^= seed.charCodeAt(index);
+    state = Math.imul(state, 0x01000193);
+  }
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export const EVAL_TOKEN_BUDGET = 100_000;
 export const EVAL_ARCHETYPE = 'iphone16pro_ios18_7_safari26_4';
 /** Never a real credential. Its presence is what opens the read-back gate; its
@@ -56,9 +102,7 @@ const EVAL_FAKE_KEY = 'sk-ant-eval-not-a-real-key';
 const EVAL_FIXED_NOW = new Date('2026-09-17T00:00:00.000Z');
 
 export async function runEvalTask(task: EvalTask): Promise<TaskReport> {
-  const clock = new VirtualClock(
-    new Set([EVAL_RETRY_DELAY_MS, EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS]),
-  );
+  const clock = new VirtualClock(countsAsElapsedBrowsingTime);
   const device = new FakeDevice({ sites: EVAL_SITES, startUrl: task.startUrl, clock });
   let captureSeq = 0;
   const captureStore = new SessionCaptureStore(
@@ -87,6 +131,8 @@ export async function runEvalTask(task: EvalTask): Promise<TaskReport> {
       observeTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
       sleep: clock.sleep,
       deadline: clock.deadline,
+      // Fixed per TASK, so the corpus is reproducible; see `evalRandom`.
+      makeRandom: () => evalRandom(task.id),
     },
     captureStore,
   );

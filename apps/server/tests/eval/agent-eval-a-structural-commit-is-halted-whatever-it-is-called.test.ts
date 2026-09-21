@@ -56,6 +56,8 @@ import {
   EVAL_RETRY_DELAY_MS,
   EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
   EVAL_TOKEN_BUDGET,
+  countsAsElapsedBrowsingTime,
+  evalRandom,
 } from './_lib/runner.js';
 import { VirtualClock } from './_lib/virtual-clock.js';
 
@@ -323,9 +325,7 @@ function harness(
   script: Segment[],
   opts?: { pageSourceMaxChars?: number },
 ) {
-  const clock = new VirtualClock(
-    new Set([EVAL_RETRY_DELAY_MS, EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS]),
-  );
+  const clock = new VirtualClock(countsAsElapsedBrowsingTime);
   const device = new FakeDevice({
     sites: siteOf(pages),
     startUrl: 'about:blank',
@@ -345,6 +345,9 @@ function harness(
       sessionEstablishRetryDelayMs: EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
       observeTimeoutMs: EVAL_OBSERVE_TIMEOUT_MS,
       sleep: clock.sleep,
+      // Fixed, so a sequence assertion here is about traffic shape rather
+      // than about which numbers the draws produced.
+      makeRandom: () => evalRandom('eval-fixture'),
       deadline: clock.deadline,
     },
   );

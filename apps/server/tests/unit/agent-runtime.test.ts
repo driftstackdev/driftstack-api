@@ -1474,9 +1474,15 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
           userMessage: 'open https://example.com',
         }),
       ).rejects.toBe(settled);
-      expect(usageRows).toHaveLength(1);
+      // ⛔ P1 — TWO ROWS AND TWO DEBITS, because there were two calls. An
+      // unreadable PLAN reply is retried once (planning has no side effects),
+      // and a retried call is never a free call: the discarded attempt is
+      // billed before the second one is made. A turn that ends on the second
+      // unreadable reply still ends exactly as it did, on the same error.
+      expect(usageRows).toHaveLength(2);
       expect(usageRows[0]).toMatchObject({ tokensConsumed: 40 });
-      expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(99_960);
+      expect(usageRows[1]).toMatchObject({ tokensConsumed: 40 });
+      expect((await sessions.get(seed.id))?.tokenBudgetRemaining).toBe(99_920);
       expect((await sessions.get(seed.id))?.transcript).toHaveLength(1);
     });
   });
@@ -2548,7 +2554,11 @@ describe('AgentRuntime.runTurn — per-session in-flight gate', () => {
       decomposer: {
         decompose: () => {
           calls += 1;
-          if (calls === 1) {
+          // ⛔ TWICE, not once. P1 retries ONE unreadable planning reply, so a
+          // single rejection no longer fails the turn — and this arm is about
+          // the session gate being released when a turn DOES throw, not about
+          // how many replies it takes to get there.
+          if (calls <= 2) {
             return Promise.reject(new Error('Anthropic response is not valid JSON'));
           }
           return Promise.resolve({

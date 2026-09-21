@@ -41,6 +41,45 @@ import {
 import { selectorImpliesSensitiveInput } from './agent-sensitive-input.js';
 import { validateCssSelector } from './agent-selector-validation.js';
 
+/**
+ * R7 — the settle's own ceiling, measured from the navigation's `loadEventEnd`.
+ * Past it the page is called settled however much it is still doing, so an
+ * animated or live page cannot hold a plan open.
+ */
+export const SETTLE_CEILING_MS = 3_000;
+
+/** R7 — how long the page must be quiet (no load, no resource completing, fonts
+ *  loaded) before a settle says yes. */
+export const SETTLE_QUIET_MS = 500;
+
+/**
+ * R7 — what a settle ASKS the device for, in whole seconds, so the device's own
+ * 30s `HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS` is never what bounds it.
+ *
+ * The ceiling above plus a margin for the device round trip and its own poll
+ * cadence. ⛔ IT IS A CEILING ON OUR PATIENCE, NOT A PROMISE ABOUT THE PAGE: a
+ * settle that times out is non-fatal (the executor's `wait` exemption to
+ * halt-on-first-failure), so the cost of being wrong here is a few seconds, and
+ * the cost of omitting it was thirty.
+ */
+export const SETTLE_TIMEOUT_SECONDS = Math.ceil((SETTLE_CEILING_MS + 2_000) / 1000);
+
+/**
+ * R7 — how far past a page's `loadEventEnd` the ceiling above still describes
+ * THIS wait.
+ *
+ * ⛔ IT EXISTS BECAUSE A STATELESS PREDICATE CANNOT KNOW WHEN ITS WAIT BEGAN.
+ * The ceiling asks "have we been waiting three seconds", and the only instant a
+ * stateless reader shares with the poll before it is the load event. For the
+ * settle a navigate inserts they are the same instant; for a settle after a
+ * same-document transition they are not, and an unbounded comparison would call
+ * every such page settled on the first poll — the settle would stop settling
+ * while still reporting success. So the ceiling is only claimed inside the span
+ * a settle that began AT the load event could still be polling: the ceiling plus
+ * the timeout every settle sends.
+ */
+export const SETTLE_CEILING_APPLIES_WITHIN_MS = SETTLE_CEILING_MS + SETTLE_TIMEOUT_SECONDS * 1000;
+
 export type AgentIntentDispatch =
   | { ok: true; intentName: HarnessIntentName; params: Record<string, unknown> }
   | { ok: false; reason: string };
@@ -324,149 +363,167 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       // #139 — the decomposer reliably inserts a `wait{condition:idle}` settle
       // step after a navigate ("let the page finish loading"). `readyState`
       // alone is insufficient for SPAs: it is commonly already `complete` while
-      // hydration, web fonts, late resources, and DOM-driven layout are moving.
-      // Keep a tiny page-local observer state across the harness's wait_for
-      // polls and require a human-sized 500ms quiet window. A 3s post-complete
-      // ceiling prevents animated/live pages from stalling the plan forever.
+      // hydration, web fonts and late resources are still moving. So the settle
+      // requires a human-sized 500ms quiet window after the load event, with a
+      // 3s ceiling so an animated/live page cannot stall the plan forever.
       // Previously this returned ok:false → the executor HALTED the whole plan on
       // the settle step, so a "navigate then screenshot" plan lost its screenshot.
-      // ⛔ P-3 (2026-09-06) — TWO corrections to this predicate, both A2-only.
       //
-      // 1. THE KEY CARRIED THE COMPANY NAME. It was
-      //    `Symbol.for('driftstack.agent.wait.idle.v1')`, assigned on `globalThis`.
-      //    `Object.getOwnPropertySymbols(globalThis).map((s) => s.description)` reads
-      //    that string out in one line — a product-branded global on a page the
-      //    product exists to browse anonymously. Whether page script can actually see
-      //    it depends on which JS world the harness evaluates the predicate in, which
-      //    is A3's question and still open; the brand is wrong under BOTH answers, so
-      //    it is not gated on the answer. The key is now neutral: it says what the
-      //    state is for and names nobody.
+      // ⛔ WHERE IT RUNS, and it is not behind a world boundary. A3 established
+      // (V-2026-09-04, and they corrected their own earlier answer) that
+      // `WebDriverClient.waitFor` polls by calling `executeScript(predicate)`, and
+      // every `executeScript` compiles in the PAGE'S MAIN WORLD through
+      // page-replaceable built-ins. So everything this touches is observable to a
+      // page that instruments itself. Per wait variant:
       //
-      // 2. THE OBSERVER OUTLIVED THE WAIT. The MutationObserver was installed ABOVE
-      //    the readyState gate, and the only `disconnect()` is on the success return
-      //    below. A page that never reaches `readyState === 'complete'` inside the
-      //    wait window therefore kept a document-wide subtree observer AND the global
-      //    for the rest of its life. It bought nothing there either: the pre-complete
-      //    branch already resets `lastActivity` on every poll, so mutations before
-      //    `complete` are not information. Installed after the gate, the leak is
-      //    bounded by the 3s post-complete ceiling like every other path.
-      //
-      // ✅ ANSWERED by A3 2026-09-06, so the "should this exist at all" question is
-      // now settled rather than open. The native JS-free form
-      // (`WaitForParamsSchema` → `{ for: { selector, appears } }`) compiles to
-      // `!!deepQuerySelector(arguments[0]) === arguments[1]` in `IntentExecutor` —
-      // EXISTENCE ONLY, no display / visibility / opacity / zero-area test.
-      // `docs/locked-decisions.md:29` is literal, not shorthand. So switching to it
-      // would regress `6d1d80ee6` ("wait for rendered selectors"), and the predicate
-      // stays.
-      //
-      // ⛔⛔ RETRACTION, same day. An earlier version of this comment said the
-      // predicate runs in the WEBDRIVER world "whose global object page script does
-      // not share", reasoned from the `/session/<id>/execute/sync` endpoint. THAT IS
-      // FALSE and A3 corrected it: `WebDriverClient.waitFor` polls by calling
-      // `executeScript(predicate)`, and V-2026-09-04 established first-hand that
-      // every `executeScript` compiles in the PAGE'S MAIN WORLD, through
-      // page-replaceable built-ins. So this predicate runs where a site's own
-      // overrides apply, and everything it touches is observable:
-      //
-      // Per wait variant, as of A3's 2026-09-06 revision (they corrected their own
-      // first answer, so this table is the one to trust):
-      //
-      //   {seconds}      no script at all                      safe
-      //   {url_matches}  native `GET /url` since `2b3ae7793`   safe — and it was
-      //                                                        OBSERVABLE before
-      //                                                        that commit
+      //   {seconds}      no script at all                      carries none
+      //   {url_matches}  native `GET /url` since `2b3ae7793`   carries none
       //   {selector}     main-world JS                         OBSERVABLE
       //   {text}         main-world JS                         OBSERVABLE
-      //   this predicate main-world JS                         OBSERVABLE by
-      //                                                        construction
+      //   this predicate main-world JS                         OBSERVABLE
       //
-      // For `{selector}`: a page that has replaced `Document.prototype.querySelector`
-      // sees the call, with our selector string, on every poll. For `{text}`:
-      // `document.body.innerText` is an `HTMLElement` prototype accessor a page can
-      // redefine, and it forces a style/layout flush, so it is observable by timing
-      // even without an override — and there is NO native equivalent for it at all.
+      // ⛔⛔ R7 (2026-09-20) — THIS PREDICATE IS NOW STATELESS, and that is the
+      // whole change. It used to keep its poll-to-poll state on
+      // `globalThis[Symbol.for('idle-settle.v1')]`, which gave a page three
+      // things it should never have had:
       //
-      // ⚠️ So the de-branding above was NECESSARY, not merely prudent — the old
-      // `Symbol.for('driftstack.…')` was reachable from page script, not hidden
-      // behind a world boundary. Nothing here may be described as "not observable".
+      //   1. A CONSTANT, PRODUCT-WIDE MEMBERSHIP TEST. One line —
+      //      `Object.getOwnPropertySymbols(globalThis).some((s) => s.description
+      //      === 'idle-settle.v1')` — answered "is this browser one of theirs?"
+      //      during the wait AND after it on every failure path, since the key was
+      //      deleted only on the success return. It was also a join key: the same
+      //      string in every session of every customer.
+      //   2. A DENIAL OF SERVICE THE PAGE CHOSE. Making that property getter-only
+      //      made `root[key] = state` ineffective, so `readySince` reset on every
+      //      poll and the predicate returned false for ever — and with no timeout
+      //      from the planner the device's own `HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_
+      //      SECONDS` (30) applied. Thirty seconds of a rented phone per navigate,
+      //      at the page's choosing, inside a 180s turn.
+      //   3. A LEAKED OBSERVER PER POLL. A getter returning a fresh object each
+      //      poll drove the install branch every poll: a new document-wide
+      //      `MutationObserver`, never disconnected.
       //
-      // ⛔ AND THE OBVIOUS FIX IS BLOCKED, so do not plan around it. Moving the
-      // selector wait onto the native WebDriver element endpoint is the structurally
-      // right answer and it is NOT AVAILABLE: W3165 (2026-09-05) measured that this
-      // fork's `findElement` returns "no such element" for EVERY locator strategy,
-      // xpath included — which is also why the tap and type paths carry script
-      // fallbacks (they are working around a broken endpoint, not reaching into
-      // shadow DOM). Routing there "with a script fallback" would be worse than
-      // today: two round-trips per poll and the identical page-world entry. It
-      // becomes a small change the day the fork's find-element is fixed.
+      // All three were properties of KEEPING STATE IN THE PAGE. Reading the same
+      // facts out of interfaces the page already computes for itself removes them
+      // outright rather than renaming them: there is no global, no symbol, no
+      // observer, and nothing to clean up on any path. `document.readyState`, the
+      // navigation entry's `loadEventEnd`, the newest resource `responseEnd` and
+      // `document.fonts.status` are all read-only reads of things the page has
+      // anyway. ⚠️ They are still main-world reads through replaceable accessors:
+      // a page that has replaced `performance.getEntriesByType` still sees the
+      // call, on the device's own poll cadence. This removes the constant name,
+      // the stall and the leak. It does not make the wait unobservable, and
+      // nothing here may be described as such.
       //
-      // ⚠️ This walk is not free either: on a light-DOM miss it calls
-      // `document.querySelectorAll('*')`, a LOUDER pattern than a single
-      // `querySelector`, repeating on every poll of a wait that has not resolved.
-      // A3 reviewed it and said keep it — it closes a real reach gap and the native
-      // path is not coming to rescue it. A comment that admits the cost is worth
-      // more than trading reach for quiet.
+      // ⛔ WHAT IS LOST, said plainly: DOM-ONLY MUTATION ACTIVITY WITH NO NETWORK.
+      // The old `MutationObserver` extended the quiet window when script mutated
+      // the document without fetching anything (a hydration pass over data already
+      // in hand, a JS animation). A stateless predicate cannot see that — a
+      // mutation leaves no timestamp for a later poll to read — so the settle can
+      // now return true while such a page is still moving, where before it would
+      // have waited to the 3s ceiling. Network activity BETWEEN polls is still
+      // seen, because Resource Timing entries persist. No task in the eval corpus
+      // depends on the lost case: the fake device models a settle by the fixture's
+      // own `settleMs` and never evaluates this source (see
+      // `agent-eval-wait-discriminator.test.ts`, which says so next to the
+      // instrument). The real-page cost is bounded by the ceiling either way: at
+      // worst the settle ends up to 3s early on a purely DOM-driven hydration, and
+      // the step after it fails on its own selector with a clearer reason.
       //
-      // ⭐ A3's larger finding, which is theirs: the tell is the CADENCE, not the
-      // call. `pollIntervalMs` is a fixed 250 ms with no jitter, so an instrumented
-      // page sees the same selector at a machine-perfect interval — something no
-      // page's own code does, findable with a counter and a timestamp array.
-      // Deliberately NOT fixed with jitter: a jittered fixed-mean poll is a fatter
-      // peak, not the absence of one, and picking a distribution to defeat a
-      // detector nobody has measured is tuning against a hypothesis. Tracked on
-      // ledger row P-3.
+      // ⛔ AND IT ALWAYS ASKS FOR ITS OWN TIMEOUT (see below). The 30s device
+      // default is never what bounds a settle now, whoever is on the other end.
+      //
+      // ⛔ THE NATIVE JS-FREE FORM IS STILL NOT AVAILABLE FOR THIS. A3 answered
+      // 2026-09-06: `{ for: { selector, appears } }` compiles to
+      // `!!deepQuerySelector(arguments[0]) === arguments[1]` — EXISTENCE ONLY. The
+      // script-free `{ for: { seconds } }` form carries no script at all, but it
+      // is a sleep, not a settle: it would wait a fixed time whatever the page is
+      // doing, which is both slower on a fast page and a constant of its own.
+      // Named as the alternative that was considered, not as one that was missed.
+      //
+      // ⭐ A3's larger finding, which is theirs and is unchanged by this: the tell
+      // is the CADENCE, not the call. `pollIntervalMs` is a fixed 250 ms with no
+      // jitter, so an instrumented page sees the same reads at a machine-perfect
+      // interval. That interval is the device's to change, not ours (device Q5).
       //
       // `return …;` — the box waitFor evaluates the predicate as a function body
       // (see selector_visible above); a bare expression yields undefined.
       const predicate = [
-        "const key = Symbol.for('idle-settle.v1');",
-        'const root = globalThis;',
+        // Nothing before the load event can be settled, and this is the cheapest
+        // read of the three, so it is first.
+        "if (document.readyState !== 'complete') return false;",
         'const now = performance.now();',
-        'let state = root[key];',
-        "if (state === undefined || state.document !== document || typeof state.lastActivity !== 'number') {",
-        'state = { document, lastActivity: now, readySince: null, observer: null };',
-        'root[key] = state;',
-        '}',
-        "if (document.readyState !== 'complete') {",
-        'state.readySince = null;',
-        'state.lastActivity = now;',
-        'return false;',
-        '}',
-        // Installed only once the document is complete — see correction 2 above.
-        "if (state.observer === null && typeof MutationObserver === 'function' && document.documentElement !== null) {",
-        'state.observer = new MutationObserver(() => { state.lastActivity = performance.now(); });',
-        'state.observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });',
-        '}',
-        'if (state.readySince === null) {',
-        'state.readySince = now;',
-        'state.lastActivity = now;',
-        'return false;',
-        '}',
+        // Every step is feature-guarded: this string is evaluated verbatim on
+        // whatever the page happens to be, and a TypeError here does not fail the
+        // wait honestly — it fails it as a timeout, which reads as "the page never
+        // settled". A predicate that can throw is a predicate that lies.
+        "const entries = typeof performance.getEntriesByType === 'function' ? performance.getEntriesByType('navigation') : null;",
+        'const navigation = entries !== null && entries.length > 0 ? entries[0] : null;',
+        'const loadEnd =',
+        "navigation !== null && navigation !== undefined && typeof navigation.loadEventEnd === 'number' && navigation.loadEventEnd > 0",
+        '? navigation.loadEventEnd',
+        ': null;',
+        // ⛔ THE CEILING IS MEASURED FROM THE LOAD EVENT, AND IT ONLY MEANS WHAT
+        // IT USED TO WHILE THAT LOAD EVENT IS THIS WAIT'S OWN. The old ceiling
+        // was "three seconds since THIS wait first saw the document complete",
+        // which needed stored state. A stateless reader has only one shared
+        // instant to measure from — `loadEventEnd` — and for the settle a
+        // navigate inserts, the two are the same instant.
+        //
+        // ⛔ THEY ARE NOT THE SAME INSTANT FOR A SETTLE THAT COMES LATER, and an
+        // unbounded `now - loadEnd >= ceiling` would therefore NO-OP EVERY ONE OF
+        // THEM: a settle after a tap that changes the view without a navigation
+        // (a same-document route change, a "load more") finds a load event
+        // minutes old and returns true on its FIRST poll, whatever the page is
+        // doing — which is not a stricter settle, it is no settle at all. So the
+        // ceiling is claimed only while the load event is recent enough that a
+        // settle STARTING at it could still be polling now: ceiling + the
+        // timeout every settle sends. Past that, the quiet window below decides,
+        // which is the right answer for a page that loaded long ago.
+        //
+        // ⚠️ THE RESIDUAL, NAMED: a settle dispatched between the ceiling and
+        // that bound after its page's load event still reads the ceiling as
+        // already reached. Statelessly the two cases are indistinguishable —
+        // nothing in the page records when this wait began — and the bound is
+        // chosen so the case the settle exists for (immediately after a
+        // navigate) keeps exactly the behaviour it had.
+        `if (loadEnd !== null && now - loadEnd >= ${String(SETTLE_CEILING_MS)} && now - loadEnd < ${String(SETTLE_CEILING_APPLIES_WITHIN_MS)}) return true;`,
+        // The newest network completion, bounded the way the old one was: the
+        // entries are START-ordered, so the last entry need not be the latest to
+        // finish, and a page with thousands of resources must not be walked whole.
+        'let latest = loadEnd !== null ? loadEnd : 0;',
         "if (typeof performance.getEntriesByType === 'function') {",
         "const resources = performance.getEntriesByType('resource');",
-        'let latestResourceEnd = 0;',
         'for (let index = Math.max(0, resources.length - 64); index < resources.length; index += 1) {',
         'const responseEnd = resources[index].responseEnd;',
-        "if (typeof responseEnd === 'number' && Number.isFinite(responseEnd)) latestResourceEnd = Math.max(latestResourceEnd, responseEnd);",
+        "if (typeof responseEnd === 'number' && Number.isFinite(responseEnd)) latest = Math.max(latest, responseEnd);",
         '}',
-        'state.lastActivity = Math.max(state.lastActivity, latestResourceEnd);',
         '}',
+        // A document that is `complete` with no navigation entry and no resources
+        // has nothing left to wait for, and `latest` is 0 — so the quiet test
+        // below passes at once. That is the degradation this branch chooses on a
+        // browsing context without Navigation Timing: settle immediately, which is
+        // exactly what the plan did before a settle existed at all. It is never a
+        // silent 30s stall, because the timeout below is always sent.
         "const fontsReady = !('fonts' in document) || document.fonts.status === 'loaded';",
-        'const quiet = now - state.lastActivity >= 500;',
-        'const ceilingReached = now - state.readySince >= 3000;',
-        'if ((!fontsReady || !quiet) && !ceilingReached) return false;',
-        "if (state.observer !== null && typeof state.observer.disconnect === 'function') state.observer.disconnect();",
-        'delete root[key];',
-        'return true;',
+        `return fontsReady && now - latest >= ${String(SETTLE_QUIET_MS)};`,
       ].join(' ');
       const params: Record<string, unknown> = {
         predicate,
       };
-      if (intent.timeoutMs !== undefined) {
-        const seconds = Math.ceil(intent.timeoutMs / 1000);
-        if (seconds >= 1) params.timeout_seconds = seconds;
-      }
+      // ⛔ A SETTLE ALWAYS NAMES ITS OWN TIMEOUT. Omitting the field handed the
+      // wait to `HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS` — thirty seconds — which
+      // is not a number anyone here chose and is a third of the turn's whole wall
+      // clock. The ceiling above is 3s, so ceiling + margin is what a settle can
+      // honestly need; a planner that names a longer one is still obeyed, because
+      // it is asking about a specific page rather than falling through to a
+      // default. A settle that times out stays NON-FATAL exactly as today (the
+      // executor's `wait` exemption to halt-on-first-failure).
+      const requested =
+        intent.timeoutMs !== undefined
+          ? Math.ceil(intent.timeoutMs / 1000)
+          : SETTLE_TIMEOUT_SECONDS;
+      params.timeout_seconds = Math.max(SETTLE_TIMEOUT_SECONDS, requested);
       return { ok: true, intentName: 'wait_for', params };
     }
   }

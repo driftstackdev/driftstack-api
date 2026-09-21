@@ -8,6 +8,11 @@
 // a completion failure.
 
 import { describe, expect, it } from 'vitest';
+import {
+  DRAWN_GAP_MAX_FACTOR,
+  DRAWN_GAP_MIN_FACTOR,
+} from '../../src/services/agent-executor-control-plane.js';
+import { STOP_IN_FLIGHT_GRACE_MS } from '../../src/services/agent-executor.js';
 import type { AgentIntent, FailureDiagnosis } from '@driftstack/api-types';
 import type { IntentResult } from '../../src/services/agent-executor.js';
 import { READBACK_MIN_BUDGET_TOKENS, READ_INTENT_RE } from '../../src/services/agent-runtime.js';
@@ -26,6 +31,7 @@ import {
   EVAL_RETRY_DELAY_MS,
   EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
   EVAL_TOKEN_BUDGET,
+  countsAsElapsedBrowsingTime,
 } from './_lib/runner.js';
 import { SCRIPTED_DECOMPOSE_TOKENS, type ObservedAnswerPath } from './_lib/scripted-decomposer.js';
 import { answerFromPage } from './_lib/answer-rule.js';
@@ -58,6 +64,9 @@ function dispatch(overrides: Partial<DispatchRecord> = {}): DispatchRecord {
     params: {},
     success: true,
     deviceMs: 100,
+    // R11 — when on the injected clock. A synthetic record needs one too, or a
+    // rhythm read off it would be about a timeline nobody set.
+    atMs: 0,
     urlBefore: 'about:blank',
     urlAfter: 'https://hello.test/',
     ...overrides,
@@ -1068,16 +1077,35 @@ describe('agent eval — the scorer has its own controls', () => {
     expect(complaints[0]).toContain('element_click_intercepted');
   });
 
-  it('the clock can only classify sleeps while the three executor sleep budgets stay distinct', () => {
-    // The virtual clock decides which sleeps are elapsed browsing time by their
-    // DURATION. That is sound exactly while these three differ; if two ever
-    // collide, the simulated-time figure silently absorbs a read-back deadline.
-    const durations = [
+  it('R9 the clock classifies sleeps by EXCLUSION now, because a drawn gap has no exact value', () => {
+    // ⛔ THIS ARM USED TO GUARD THE OPPOSITE PROPERTY, and the property it
+    // guarded stopped existing. The clock used to count a sleep when its
+    // duration was one of two exact constants, which was sound only while the
+    // three configured budgets differed — so this asserted they did. R9 draws
+    // the retry gaps, so NO exact value identifies one, and an inclusion list
+    // would have matched nothing while continuing to report a number. The
+    // classification is an exclusion now, and this is its test.
+    //
+    // A drawn retry gap counts, at both ends of its band and in between.
+    for (const gap of [
+      Math.round(EVAL_RETRY_DELAY_MS * DRAWN_GAP_MIN_FACTOR),
       EVAL_RETRY_DELAY_MS,
-      EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS,
-      EVAL_OBSERVE_TIMEOUT_MS,
-    ];
-    expect(new Set(durations).size).toBe(durations.length);
+      Math.round(EVAL_RETRY_DELAY_MS * DRAWN_GAP_MAX_FACTOR),
+      Math.round(EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS * DRAWN_GAP_MIN_FACTOR),
+      Math.round(EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS * DRAWN_GAP_MAX_FACTOR),
+    ]) {
+      expect(countsAsElapsedBrowsingTime(gap), `${String(gap)}ms is real elapsed time`).toBe(true);
+    }
+    // The two race timers do not: they measure how long we are willing to wait.
+    expect(countsAsElapsedBrowsingTime(EVAL_OBSERVE_TIMEOUT_MS)).toBe(false);
+    expect(countsAsElapsedBrowsingTime(STOP_IN_FLIGHT_GRACE_MS)).toBe(false);
+    // ⛔ AND THE EXCLUSION IS STILL ONLY SOUND WHILE NO DRAWN GAP CAN LAND ON
+    // ONE OF THOSE TWO VALUES. That is the residual the old arm was really
+    // about, restated against the new mechanism.
+    for (const base of [EVAL_RETRY_DELAY_MS, EVAL_SESSION_ESTABLISH_RETRY_DELAY_MS]) {
+      expect(Math.round(base * DRAWN_GAP_MAX_FACTOR)).toBeLessThan(STOP_IN_FLIGHT_GRACE_MS);
+      expect(Math.round(base * DRAWN_GAP_MAX_FACTOR)).toBeLessThan(EVAL_OBSERVE_TIMEOUT_MS);
+    }
   });
 
   it('the read-back gate constants are IMPORTED from the runtime, not copied here', () => {

@@ -1,6 +1,8 @@
 # AI pace modes (slow / medium / fast) — plan of record
 
-**Status:** design, reviewed adversarially, NOT built. Read-only work: nothing here was run.
+**Status:** design, reviewed adversarially. ⛔ **PARTLY OVERTAKEN 2026-09-20 (later): `pace` itself is still
+unbuilt, but three of its prerequisites and one of its §4 defects were built by the audit work — read §0b
+BEFORE §3 and §4, which were written against a repo that no longer exists in those places.**
 **Origin:** the owner's idea, 2026-09-20 — a slower AI does more reading and pausing, a faster one less.
 **How this was produced:** three independent designs, a judged synthesis, then an adversarial critic whose fifteen
 findings (C1–C15) are folded into the text below. Citations were checked against committed code at `dc0f83c86`;
@@ -34,6 +36,107 @@ is still owed). Where this section and the text below disagree, this section win
    question the S7 experiment must answer both ways.
 8. The result flag `behavioral` means "a persona was attached" — configuration, necessary and not sufficient. For scroll the
    same predicate selects the flick-planned path over the flat segmented one; BOTH are native touch. Report, never alarm.
+
+## 0b. ⛔ WHAT HAS SINCE BEEN BUILT, AND WHAT IT MEANS FOR THIS PLAN (2026-09-20, later — A2)
+
+**Status change: this document is no longer entirely unbuilt.** Four control-plane
+stealth fixes from the audit landed on the same seams pace modes were designed to
+ride on, so three of this plan's prerequisites now EXIST and one of its defects is
+closed. Nothing about the customer model, the policy table or the bands has been
+decided or built; `pace` is still a design.
+
+1. **The randomness seam exists (C10 is closed).** `AutoRetryOptions.makeRandom:
+(sessionId) => () => number` is injected into `ControlPlaneAgentExecutor` the
+   way `now` and `sleep` already are, with one generator per session. The default
+   seeds from the session id mixed with a **per-process salt**, which is stronger
+   than "hashed with a server secret" in the one way that matters (a site holding
+   a public session id cannot reproduce the sequence) and weaker in another
+   (**the sequence is not reproducible across processes or restarts**). Every
+   test that needs determinism injects the seam; the eval injects a fixed
+   per-task seed for exactly this reason, and says so. ⛔ If a future pace mode
+   needs a session's rhythm to survive a process restart, the salt is the thing
+   to revisit — it is one expression in one place.
+   Bounds: `drawGapMs(base, random)` returns `base × [0.55, 1.45)`, clamped, and
+   an unusable draw reads as the middle of the band rather than widening it.
+
+2. **The `dispatchPacingPause()` seam exists, in the smallest honest version
+   (§3's C3 requirements, met).** It is called `relocationBeat` /`sendBeat` and it
+   serialises its dispatches directly, so `{duration_ms}` is reachable without
+   touching the published intent union. It honours Stop by abandoning at once, it
+   is refused past the turn's hard stop, and **it swallows every failure** — the
+   beat never touches `results`, `onStep`, `onStepStart`, the step history the
+   planner sees, `tapTargets` or the segment's `ok`. Today it has exactly one
+   caller (audit R5: a scroll and a drawn dwell before a tap the look says is
+   outside the viewport, followed by a fresh look). **Reuse it; do not build a
+   second one.**
+   ⛔ Two things it does NOT yet do, and pace needs both: it takes no per-segment
+   or per-turn BUDGET (each beat is capped individually at 2,500 ms and that is
+   all), and it is not driven by a policy table — the one caller decides for
+   itself. §4's `PACE_FRACTION` / `PACE_SEGMENT_CAP_MS` / `PACE_STEP_CAP_MS`
+   arithmetic is still entirely unbuilt.
+   ⛔ And it does NOT satisfy C8: the relocation beat can precede the turn's
+   first emitted step, because an off-screen tap can be the first step of a
+   segment. Pace's own beats must keep the "never before the first emitted step"
+   rule; this one is not evidence that the rule is enforced anywhere.
+   ⛔⛔ **AND EVERY BEAT IS A DISPATCH, WHICH §4's BOUND ARITHMETIC DOES NOT
+   MODEL — read this before adding a second caller.** `agent-turn-bounds.ts`
+   composes the longest turn as hard stop + **ONE** dispatch deadline +
+   read-back + answer stream, and its comment says so in those words: "`runIntent`
+   asks this same hard stop before starting another attempt, which is what leaves
+   exactly one dispatch past the deadline. Move that check and this number stops
+   being true." An inserted beat does not go through `runIntent`: a beat that
+   starts one millisecond before the hard stop sends a `scroll` and a
+   `behavioral_pause`, and BOTH are 315,000 ms dispatch deadlines
+   (`scroll` is in `FENCED_COMPOSITE_INTENTS`, `behavioral_pause` in
+   `SINGLE_CAP_LONG_INTENTS`), with a second `perceive` and the step's own
+   dispatch behind them. A device that stops answering can therefore hold a turn
+   ~630 s past the hard stop that the claim TTL's 120,000 ms margin was sized
+   for. It is bounded — nothing is unbounded here — and it is bounded by a number
+   nobody chose for this.
+   ⛔ **`a-drawn-gap-is-bounded-and-two-of-them-are-not-equal.test.ts` re-derives
+   the TTL for the drawn GAP only** (+675 ms, comfortably inside the margin) and
+   concludes "the composition does not gain a term". That conclusion is about the
+   gap, not about the beat; pace multiplies beats, so pace is the change that
+   must settle this. The three ways out, in the order they cost least: send the
+   dwell as the scroll's own `pause_after_ms` so a beat is ONE dispatch;
+   give inserted dispatches their own short correlator deadline (that file is
+   outside the AI lane); or add the term and accept that the derived TTL then
+   approaches the 30-minute reservation window a second guard pins.
+
+3. **§4's "defect that exists today" is FIXED.** `turnHardStopAtMs` is threaded
+   from the runtime into the executor as an INSTANT (not a duration, for the
+   reason the element-wait budget is shared), checked at the top of the step loop
+   and again before a step's own retry budget starts another dispatch. The
+   "~40 minutes inside one segment" path is closed. `TURN_HARD_STOP_MS` is a
+   single constant in `agent-turn-bounds.ts` — which is where §4's per-mode value
+   would replace one expression, exactly as that file's comment anticipates.
+
+4. **A settle now always sends its own `timeout_seconds` (audit R7).** §4's bound
+   arithmetic assumed the device default applied where the planner named no
+   timeout; it no longer does. An AI settle asks for 5 s (the predicate's own 3 s
+   ceiling plus margin), so the 30 s default is not a term in any pace budget.
+
+5. **A planning call may now be made TWICE (P1), and it spends the same budget.**
+   A planner reply the content codec cannot read (not valid JSON, wrong shape, or
+   cut off at the output ceiling — measured live at 2 of 170 turns on the
+   production default model) is asked again ONCE, immediately, with the same
+   request. §3 lists "6 planner calls, 7 model calls" among the things identical
+   in all three modes; that is still true, but a turn that retried has **one
+   fewer segment available**, and the retry is billed and debited like any other
+   call. It is reported on the turn's `loop` line as `plannerRetries`. ⚠️ It is
+   NOT on the turn telemetry ROW, whose `modelCalls` counts `planning` PHASES
+   entered — a retry deliberately emits no second phase, because the recorder
+   classifies a turn's death by how many it saw. Registering a counter needs
+   `lib/bootstrap.ts`, which was outside that lane. §7's prerequisite list should
+   pick this up.
+
+⛔ **AND ONE THING THIS PLAN SAID THAT IS NOW WRONG IN A SMALL WAY.** §7 says
+"Fast is defined as _the policy inserting nothing_, so the dispatch path is
+byte-identical to today". That was written before R5 and R9. The dispatch path
+already differs from the pre-audit one — an off-screen tap now carries a scroll
+and a pause, and every retry gap is drawn — and those are NOT pace. So C11's
+enforcement has to compare `fast` against the **post-audit** baseline, not
+against the pre-audit one, or it will fail on changes pace did not make.
 
 ## 1. The finding that may outrank the feature — and the caveat on it
 
@@ -122,8 +225,8 @@ It is never added to `plan.intents`, never enters `results`, never reaches `emit
 
 ### Randomness: seam, seed, bounds (C10)
 
-- ⛔ **`opts.random` is injected**, the same way `opts.now` already is (`agent-executor-control-plane.ts:690`). Without a seam, none of §7's non-uniformity tests can be written.
-- **Seed = the session id hashed with a server secret.** Stable within a session (the same "person" does not read at different speeds page to page), distinct across sessions (two sessions on one account running one task must not emit the same interval sequence — a cross-session timing correlation is a stronger tell than any single pause), and not derivable by a site from a public id.
+- ✅ **BUILT 2026-09-20 (later).** `opts.makeRandom` is injected, the same way `opts.now` already is, with one generator per session. Without a seam, none of §7's non-uniformity tests could be written; they can be now, and three of them are (`a-drawn-gap-is-bounded-and-two-of-them-are-not-equal.test.ts`, `agent-eval-rhythm.test.ts`).
+- **Seed = the session id hashed with a per-process salt** (✅ built; the plan said "a server secret", and the shipped default is a per-process `randomUUID` — see §0b item 1 for what that buys and what it costs). Stable within a session (the same "person" does not read at different speeds page to page), distinct across sessions (two sessions on one account running one task must not emit the same interval sequence — a cross-session timing correlation is a stronger tell than any single pause), and not derivable by a site from a public id.
 - **The decision to pause is itself a draw.** Pausing after _every_ navigate is a regular rhythm even when every duration differs. Hence the probabilistic frequencies, over the two places a person always hesitates: a long page, and a commitment.
 - **Reading time is proportional to CONTENT, not to position.** Falsifiable, and the primary correctness test (§7).
 - **Bounded by three ceilings, all ours:** `PACE_STEP_CAP_MS`, the per-segment budget, the §4 taper. The 300,000 ms device cap (`harness-control-protocol.ts:63-67`) is a protocol limit, not a policy; if `capped` ever fires on a policy pause that is an alert, not a metric.
@@ -140,6 +243,9 @@ The confirmation gate and every approval; the pre-tap look and its 2 s deadline;
 `MAX_TURN_WALL_CLOCK_MS = 180_000` (`agent-runtime.ts:890`) runs on a real monotonic clock from the top of the turn (`:597-604`), so every millisecond a device spends inside a pause counts — but it is checked **only at the top of the loop** (`:3315-3318`), and its own comment says so, and even anticipates pacing: "six segments of eight steps, each with its human pacing and its element waits, is minutes… this bounds when the turn stops STARTING work" (`:884-890`).
 
 **The executor's step loop has no time check at all.** So eight steps each pausing near the 300 s device cap, each with a 315 s dispatch deadline (`harness-dispatch-correlator.ts:59-64,:75-87` — `behavioral_pause` is in `SINGLE_CAP_LONG_INTENTS`), is **~40 minutes inside one segment** before the loop reaches the bound that would have refused segment 2. Reachable today by a planner-requested pause.
+
+✅ **FIXED 2026-09-20 — see §0b item 3.** The description below is kept because it
+is the reasoning the fix rests on, not because the defect is still open.
 
 **Fix, shippable alone, and it does not violate the "never cut off" invariant.** The runtime declines to cut a segment because "abandoning a plan halfway leaves dispatched actions in an unknown state". Stopping **between** steps leaves nothing in flight — exactly what the existing Stop check at `:726-733` already does, returning `{results, ok:false, stopped:true}`. Add `turnHardStopAtMs` beside it, with a truthful reason.
 
@@ -269,7 +375,7 @@ Docstring: _"Slow reads pages and pauses between actions; it holds your session 
 
 | Claim                            | How it is proved                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| "Fast is unchanged"              | Regression, not discovery. `paused_ms` exactly 0 on every fast turn (non-zero is a bug alarm); dispatch sequence byte-identical to the pre-pace baseline (C11); median `duration_ms` / `steps_succeeded` match on the same task mix.                                                                                                                                                                                                                                                         |
+| "Fast is unchanged"              | Regression, not discovery. `paused_ms` exactly 0 on every fast turn (non-zero is a bug alarm); dispatch sequence byte-identical to the **post-audit** baseline (C11 — ⛔ see §0b: R5 and R9 already moved the dispatch path, and they are not pace); median `duration_ms` / `steps_succeeded` match on the same task mix.                                                                                                                                                                    |
 | "Slow does not cost completions" | **The flip criterion.** Share of turns ending in `loop_stopped_reason ∈ {wall_clock, no_progress}`, by band, on the eval set. **Flip to `medium` only if medium's unfinished share is within noise of fast's; if medium raises it at all, `PACE_FRACTION.medium` is too large.**                                                                                                                                                                                                             |
 | "The budget is honoured"         | `paused_ms_total ≤ budget` per turn, per band. Directly checkable — **and only checkable at all for Tier A** (C1).                                                                                                                                                                                                                                                                                                                                                                           |
 | "Slow is non-uniform"            | Unit tests over the fixture corpus via the injected RNG seam (C10), 30 runs per band, no site or device: (i) no two runs share an interval sequence; (ii) reading time correlates with page word count and **not** with step index; (iii) no spike at any single value — which is what a server constant produces; (iv) two sessions differ, one session is stable across its own pages. **These are the only thing standing between this feature and a fixed delay with a marketing name.** |
@@ -280,6 +386,14 @@ Docstring: _"Slow reads pages and pauses between actions; it holds your session 
 **What the customer sees while watching.** The elapsed clock is the honest headline, and inserted pauses appear as **quiet beats between steps, not numbered steps** — which requires the `pace` stream event of prerequisite 4, because without it the desktop clock silently adds pause time to the next step (C7). The app's existing discipline is that its step times are "OBSERVED, not reported", drawing no clock at all rather than honest-looking zeros — **and none of that is committed yet**. Pace rides on that work; it must not invent its own clock, and it must not land on top of it mid-flight.
 
 ## 8. Asks of the device team
+
+⛔ **SEVEN MORE WERE ADDED 2026-09-20 (later)**, in
+`docs/internal/cross-agent-control-plane-contract.md` under "FOUR CONTROL-PLANE
+STEALTH FIXES" — they are about the settle's stateless predicate, the `perceive`
+re-looks that replaced a `wait_for` on a miss, and the scroll+pause before an
+off-screen tap. Ask 4 below (the pause distributions) and contract question 6
+(is `{duration_ms: N}` held for exactly N?) are the same question asked twice;
+answer it once.
 
 1. **What does `behaviorProfile: 'default'` resolve to in your resolver today, given we hard-code that literal on every AI session and it is none of the six names your contract documents?** — _No wire change if it resolves sanely; if it is the inert fallback, an immediate correction of the constant and this whole plan re-sequences behind a bug fix._
 2. **Is the speed-modifier branch (`fast|balanced|careful` on the `regular` base) live after W17/W18, and does it scale typing cadence, flick speed and touch dwell, or only your own idle draws?** — _No wire change; it decides whether `SessionAssign.behaviorProfile` can carry pace directly._
