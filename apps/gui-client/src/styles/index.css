@@ -4744,3 +4744,120 @@
    nothing further to declare here. It already tracks `--sim-light-rgb`, so
    it dims/mutes on `[data-sim-state='ended']` for free, the same way the
    rim and the outer glow do, with no separate opacity rule needed. */
+
+/* ═════ the Profiles card as a stage — redesign round 2 ════════════════════
+   The AI view drew the phone's state as light and gave every surface one lift;
+   the simulator window followed. The Profiles grid is the product's front
+   door, and its cards were flat: an inline slate gradient, a static identity
+   wash, a hairline ring, state only in a text pill. Here the card wears the
+   same devices, re-expressed on the card's own scale:
+
+   · `data-card-light` on the card is ONE variable read by the rim, the glow
+     under the screen and the floor pool — the `--sim-light-rgb` idea. live =
+     ready, launching/testing = accent (something is happening), a broken proxy
+     = busy (attention), idle = none (the card RESTS: no light, no motion).
+   · `.pf-screen` is a dark glass stage in BOTH themes (the AI view's room
+     rule): a slate gradient, an inset rim, and — only with a light — a pool
+     rising from the bottom edge in the state colour.
+   · only a LIVE card breathes, and only its pool (one compositor layer per
+     live card, none for the rest — a grid of twenty idle cards animates
+     nothing). The keyframe is `ds-ai-breathe-soft` BY NAME, so the global
+     reduced-motion clamp stills it like every other breath.
+   · every colour is a token on the mode/accent axes; the only literals are
+     the stage's own neutral darks and the black/white of a shadow (the same
+     rule `.ai-stage` and `.sim-device` follow, and the same guard reads it).
+   Nothing here moves a box: the card's padding, radius, the 220px screen and
+   the fixed body rows are exactly what the layout gates measured before. */
+.pf-card {
+  --pf-light-rgb: 0 0 0;
+  --pf-light-alpha: 0;
+  background: linear-gradient(180deg, rgb(20 28 47), rgb(12 19 34));
+  /* The shadow is written into Tailwind's OWN shadow slot, not box-shadow: the
+     card's selected state is a `ring-2` (a box-shadow layer Tailwind composes
+     from `--tw-ring-shadow` + `--tw-shadow`), and a plain box-shadow here
+     would erase it — the exact regression the card's frame test pins. The
+     hover utility sets the same slot with higher specificity, so the deepening
+     hover shadow still wins on hover. */
+  --tw-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05), 0 10px 30px -14px rgb(0 0 0 / 0.8),
+    0 0 0 1px rgb(var(--pf-light-rgb) / calc(var(--pf-light-alpha) * 0.55)),
+    0 0 0 4px rgb(var(--pf-light-rgb) / calc(var(--pf-light-alpha) * 0.12)),
+    0 16px 34px -16px rgb(var(--pf-light-rgb) / calc(var(--pf-light-alpha) * 0.45));
+  --tw-shadow-colored: var(--tw-shadow);
+  transition:
+    transform 150ms var(--ai-ease),
+    box-shadow var(--ai-dur-shift) var(--ai-ease);
+}
+.pf-card[data-card-light='live'] {
+  --pf-light-rgb: var(--status-ready-rgb);
+  --pf-light-alpha: 1;
+}
+.pf-card[data-card-light='busy'] {
+  --pf-light-rgb: var(--accent-rgb);
+  --pf-light-alpha: 1;
+}
+.pf-card[data-card-light='attention'] {
+  --pf-light-rgb: var(--status-busy-rgb);
+  --pf-light-alpha: 0.8;
+}
+/* the screen: glass in a dark room, whatever the window's theme */
+.pf-screen {
+  background: linear-gradient(165deg, rgb(27 33 48), rgb(6 8 16) 72%);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    inset 0 12px 26px -18px rgb(0 0 0 / 0.9);
+}
+/* the pool of light under the glass, rising from the bottom edge */
+.pf-screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  border-radius: inherit;
+  background: radial-gradient(
+    120% 90% at 50% 118%,
+    rgb(var(--pf-light-rgb) / 0.55) 0%,
+    rgb(var(--pf-light-rgb) / 0.16) 42%,
+    transparent 72%
+  );
+  opacity: var(--pf-light-alpha);
+  transition: opacity var(--ai-dur-shift) var(--ai-ease);
+}
+/* The breath is OPACITY ONLY. `ds-ai-breathe-soft` also scales, and a scaled
+   layer inside the screen's overflow grew its scroll box by a pixel — the
+   card gate read it as clipped content and a displaced dock. Opacity is a
+   compositor property and moves no box; the global reduced-motion clamp
+   stills it like every other animation. */
+@keyframes ds-pf-breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.66;
+  }
+}
+.pf-card[data-card-light='live'] .pf-screen::after {
+  animation: ds-pf-breathe 2600ms ease-in-out infinite;
+}
+/* the floor: light pooled on the page under a lit card */
+.pf-floor {
+  position: absolute;
+  left: 50%;
+  bottom: -8px;
+  width: 78%;
+  height: 30px;
+  margin-left: -39%;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: -1;
+  filter: blur(2px);
+  background: radial-gradient(
+    closest-side,
+    rgb(var(--pf-light-rgb) / 0.5),
+    rgb(var(--pf-light-rgb) / 0)
+  );
+  opacity: var(--pf-light-alpha);
+  transition: opacity var(--ai-dur-shift) var(--ai-ease);
+}

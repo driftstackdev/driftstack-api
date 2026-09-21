@@ -2170,6 +2170,18 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
 
   const pill = healthPill(p);
   const mode = capsMode(p);
+  // Round 2 — the ONE light the card wears (`.pf-card[data-card-light]`):
+  // live = ready; launching or testing = accent (something is happening);
+  // a proxy that failed its last test = attention; otherwise the card rests
+  // with no light and no motion. Colour is never the only signal: the health
+  // pill, the dock's label and the status row say the same thing in words.
+  const cardLight: 'live' | 'busy' | 'attention' | 'idle' = p.running
+    ? 'live'
+    : p.launching || p.testing
+      ? 'busy'
+      : mode === 'repair'
+        ? 'attention'
+        : 'idle';
   const chips = visibleChips(p, contentWidth);
   // Mode C has no SOCKS5 verdict, but the row's standing facts (a tunnel carries
   // UDP; why the OS stack cannot be read) are still true before any test — they
@@ -2404,20 +2416,24 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       // composes with every shadow utility; running = a mint frame visible
       // from across the grid. Focus: a solid ring at 2px offset (the global
       // 40%-alpha outline composited to 1.4:1 — invisible).
-      className={`group relative cursor-pointer rounded-[24px] border p-1.5 transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_18px_40px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base ${
+      className={`pf-card group relative cursor-pointer rounded-[24px] border p-1.5 transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_18px_40px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base ${
         p.selected
           ? 'border-accent-hover ring-2 ring-accent-hover/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_30px_rgba(0,0,0,0.35)]'
           : p.running
             ? 'border-status-ready/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_30px_rgba(0,0,0,0.35)]'
             : 'border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_30px_rgba(0,0,0,0.35)]'
       }`}
-      style={{ background: 'linear-gradient(180deg,#141c2f,#0c1322)' }}
+      // Round 2 — the card's state as ONE light (see `.pf-card` in index.css):
+      // the rim, the pool under the glass and the floor read this attribute.
+      data-card-light={cardLight}
     >
+      {/* the floor: light pooled on the page under a lit card */}
+      <span aria-hidden="true" data-component="card-floor" className="pf-floor" />
       {/* SCREEN — a FIXED 220px of glass (Phase B: no aspect ratio, so the
           card's height depends on neither its width nor its state). */}
       <div
         data-component="phone-screen"
-        className="relative flex h-[220px] min-w-0 flex-col overflow-hidden rounded-[17px] bg-surface-raised"
+        className="pf-screen relative flex h-[220px] min-w-0 flex-col overflow-hidden rounded-[17px] bg-surface-raised"
       >
         {/* F3 — inline note editor overlay. Floats over the screen so it never
             reshapes the card; stops propagation so typing/saving never toggles
@@ -3344,7 +3360,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             type="button"
             className={`h-[30px] min-w-0 flex-1 truncate whitespace-nowrap rounded-[10px] px-1 py-0 text-center text-[12px] font-semibold leading-[30px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised ${
               p.running
-                ? 'bg-status-ready/[0.18] text-status-ready enabled:hover:bg-status-ready/25 disabled:opacity-50'
+                ? 'bg-status-ready text-surface-base enabled:hover:brightness-110 disabled:opacity-50'
                 : p.launching
                   ? 'cursor-progress bg-ink-muted/15 text-ink-secondary'
                   : 'bg-accent text-white shadow-[0_3px_10px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.18)] enabled:hover:bg-accent-fill-hover disabled:opacity-50'

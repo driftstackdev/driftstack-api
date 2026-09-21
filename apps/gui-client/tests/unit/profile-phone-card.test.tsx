@@ -3200,9 +3200,21 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
     expect(classes(article())).not.toContain('hover:shadow-xl');
     expect(classes(article())).not.toContain('border-[#0a0d12]');
     expect(classes(article())).not.toContain('transition-all');
-    expect(article().getAttribute('style')).toContain('180deg');
+    // Round 2 — the slate gradient moved from an inline style into `.pf-card`
+    // (index.css), where the card's state light lives beside it; the article
+    // carries the class and no inline background. The gradient itself is
+    // pinned from the stylesheet so the frame cannot quietly go flat.
+    expect(article().getAttribute('style')).toBeNull();
+    expect(classes(article())).toContain('pf-card');
+    expect(article().getAttribute('data-card-light')).toBe('idle');
+    const css = readFileSync(resolve(__dirname, '../../src/styles/index.css'), 'utf8');
+    const pfCard = css.slice(css.indexOf('.pf-card {'), css.indexOf('.pf-card[data-card-light='));
+    expect(pfCard).toContain('linear-gradient(180deg');
+    expect(pfCard).toContain('--tw-shadow:');
+    expect(pfCard).not.toMatch(/^\s*box-shadow:/m);
     rerender(<ProfilePhoneCard {...props({ running: true })} />);
     expect(classes(article())).toContain('border-status-ready/35');
+    expect(article().getAttribute('data-card-light')).toBe('live');
     rerender(<ProfilePhoneCard {...props({ selected: true })} />);
     expect(classes(article())).toEqual(
       expect.arrayContaining([
@@ -3369,7 +3381,7 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
     expect(thumb.style.backgroundColor).toBe(probe.style.backgroundColor);
     cleanup();
   });
-  it('the dock: a white/6% hairline; Launch is a 30px 12px block titled with a sentence; live → mint tint, launching → the neutral busy button at FULL opacity (only launchDisabled dims); ⋯ is a borderless white/6% fill; both wear the solid focus ring', () => {
+  it('the dock: a white/6% hairline; Launch is a 30px 12px block titled with a sentence; live → solid ready, launching → the neutral busy button at FULL opacity (only launchDisabled dims); ⋯ is a borderless white/6% fill; both wear the solid focus ring', () => {
     const { container, rerender } = render(<ProfilePhoneCard {...props()} />);
     const dock = byComponent(container, 'card-dock') as HTMLElement;
     expect(classes(dock)).toContain('border-white/[0.06]');
@@ -3400,9 +3412,14 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
     expect(classes(more)).not.toContain('border');
     expect(classes(more)).not.toContain('border-surface-divider');
     rerender(<ProfilePhoneCard {...props({ running: true })} />);
+    // Round 2 — the live button is SOLID ready with the surface colour as its
+    // ink (the AI view's own status stamp), not a tint with ready-coloured
+    // text: the tint measured 4.4:1 in the light theme once the card wore its
+    // stage, and the mockup draws it solid anyway.
     expect(classes(launch())).toEqual(
-      expect.arrayContaining(['bg-status-ready/[0.18]', 'text-status-ready']),
+      expect.arrayContaining(['bg-status-ready', 'text-surface-base']),
     );
+    expect(classes(launch())).not.toContain('bg-status-ready/[0.18]');
     expect(classes(launch())).not.toContain('border');
     expect(launch().getAttribute('title')).toBe('Open the running session');
     rerender(<ProfilePhoneCard {...props({ busy: true, launching: true })} />);

@@ -562,6 +562,14 @@ function measureCard(article, opts) {
       invisibleCount += 1;
       continue;
     }
+    // The floor light under a lit card is decoration that lives OUTSIDE the
+    // card on purpose (light pooled on the page, like the AI view's floor): no
+    // text, aria-hidden, no pointer events, nothing a customer can lose. It is
+    // the one element allowed past the card's edge; everything else still is not.
+    if (el.getAttribute('data-component') === 'card-floor') {
+      skipped += 1;
+      continue;
+    }
     probed += 1;
     const inScroller = sheetBody !== null && sheetBody !== el && sheetBody.contains(el);
     const reachTop = inScroller ? sb.top - sheetBody.scrollTop : a.top;
