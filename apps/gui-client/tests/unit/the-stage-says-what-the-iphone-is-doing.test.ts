@@ -294,7 +294,8 @@ describe('where the phone is browsing from is derived, never invented', () => {
     });
     expect(p?.label).toBe('Browsing from Berlin, DE');
     // The narrow tier has no facts row, so the place rides up beside the state
-    // chip in a 252px stage — where the preposition is what gets cut off.
+    // chip in the narrow stage (238px since 2026-09-21) — where the preposition is
+    // what gets cut off.
     expect(p?.short).toBe('Berlin, DE');
     expect(p?.detail).toBe('Browsing from Berlin, DE · 203.0.113.24 · Europe/Berlin');
     expect(p?.ip).toBe('203.0.113.24');

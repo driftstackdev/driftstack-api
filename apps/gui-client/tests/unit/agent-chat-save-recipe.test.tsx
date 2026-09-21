@@ -323,7 +323,7 @@ describe('AgentChatView live-view toggle — it COLLAPSES an inline stage', () =
   // headline feature was hidden outright, and the slide-over was how it was
   // given back.
   //
-  // The stage is INLINE at every supported width now (spec §1: 252px at 960,
+  // The stage is INLINE at every supported width now (spec §1: 238px at 960,
   // 500px at 1600), so it starts SHOWING, it is never `fixed`, and the toggle's
   // only job is to give its room back to the conversation. `Close live view` is
   // gone with the slide-over that needed it — one control, in the bar, under

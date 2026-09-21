@@ -560,7 +560,8 @@ function renderStage(overrides: { watch?: StageWatch; frameRate?: number } = {})
 describe('the stage shows the frame rate only where there is a live picture', () => {
   it('shows it in both tiers at once, one of them hidden by the tier CSS', () => {
     // Two elements rather than one moved between parents: the facts row under
-    // the phone is gone at 252px and the fact rides up into the HUD, which is
+    // the phone is gone in the narrow stage (238px since 2026-09-21) and the fact
+    // rides up into the HUD, which is
     // the treatment the place chip beside it already has.
     renderStage({ frameRate: 30 });
     const chips = document.querySelectorAll('.ai-fps');

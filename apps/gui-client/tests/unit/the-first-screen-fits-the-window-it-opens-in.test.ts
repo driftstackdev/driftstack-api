@@ -91,22 +91,28 @@ interface Budget {
 const HERO_BUDGET: ReadonlyArray<Budget> = [
   { selector: '.ai-hello', now: 'padding: 2px 2px 0;', was: 'padding: 8px 2px 0;' },
   { selector: '.ai-hello > h1', now: 'margin-top: 6px;', was: 'margin-top: 8px;' },
-  { selector: '.ai-beats', now: 'margin-top: 13px;', was: 'margin-top: 16px;' },
+  // ⛔ 2026-09-21 — five of these were cut a second step for the LINUX defect
+  // (run 35567350180; see `the-first-screen-survives-the-fonts-it-did-not-ship`
+  // for the mechanism). `was` names the value THIS round replaced, not the
+  // pre-QA one: the whole chain is in the stylesheet's own comments, and `now`
+  // is the arm that actually binds — a rule has one `margin-top`, so any other
+  // value fails `toContain` whatever `was` says.
+  { selector: '.ai-beats', now: 'margin-top: 10px;', was: 'margin-top: 13px;' },
   {
     selector: '.ai-beats li',
-    now: 'padding: 7px 10px 8px 0;',
-    was: 'padding: 9px 10px 10px 0;',
+    now: 'padding: 6px 10px 6px 0;',
+    was: 'padding: 7px 10px 8px 0;',
   },
   { selector: '.ai-beats .ai-beat-n', now: 'margin-bottom: 2px;', was: 'margin-bottom: 3px;' },
-  { selector: '.ai-tpl-h', now: 'margin: 13px 0 7px;', was: 'margin: 18px 0 8px;' },
+  { selector: '.ai-tpl-h', now: 'margin: 12px 0 8px;', was: 'margin: 13px 0 7px;' },
   { selector: '.ai-tpl-guard', now: 'margin-top: 5px;', was: 'margin-top: 6px;' },
   // ⛔ ADDED IN REVIEW — the two the builder's report counted in the nine and
   // the table did not hold. The card padding is worth 4px of the 1280 budget
   // (two rows × 2px) and the explainer's top margin 1px; both were free to
   // drift back with every arm in this file green, which is the one thing a
   // budget guard may not allow.
-  { selector: '.ai-tpl > button', now: 'padding: 9px 11px;', was: 'padding: 10px 11px;' },
-  { selector: '.ai-hello > p', now: 'margin-top: 9px;', was: 'margin-top: 10px;' },
+  { selector: '.ai-tpl > button', now: 'padding: 8px 11px;', was: 'padding: 9px 11px;' },
+  { selector: '.ai-hello > p', now: 'margin-top: 8px;', was: 'margin-top: 9px;' },
 ];
 
 describe('the first screen fits the window it opens in', () => {
@@ -140,6 +146,10 @@ describe('the first screen fits the window it opens in', () => {
     expect(rule('[data-ai-large] .ai-hello')).toContain('padding-top: 8px;');
     expect(rule('[data-ai-large] .ai-hello > h1')).toContain('margin-top: 8px;');
     expect(rule('[data-ai-large] .ai-beats')).toContain('margin-top: 16px;');
+    // …including the two line boxes the 2026-09-21 cut took back off two 10px
+    // labels: at 1600 they are inline again, in the hero's own 24px leading.
+    expect(rule('[data-ai-large] .ai-hello > .section-label')).toContain('display: inline;');
+    expect(rule('[data-ai-large] .ai-tpl-h')).toContain('line-height: 24px;');
     expect(rule('[data-ai-large] .ai-beats li')).toContain('padding-top: 12px;');
     expect(rule('[data-ai-large] .ai-beats .ai-beat-n')).toContain('margin-bottom: 3px;');
     expect(rule('[data-ai-large] .ai-tpl-h')).toContain('margin: 18px 0 8px;');
@@ -237,15 +247,24 @@ describe('a gate card takes the explainer’s place rather than pushing the temp
 const GATED_BUDGET: ReadonlyArray<Budget> = [
   // The template heading keeps its words and its type; the air around a
   // two-word label is what goes.
-  { selector: '[data-ai-short] .ai-tpl-h', now: 'margin: 8px 0 5px;', was: 'margin: 13px 0 7px;' },
+  { selector: '[data-ai-short] .ai-tpl-h', now: 'margin: 6px 0 5px;', was: 'margin: 8px 0 5px;' },
   // …and the headline sits one step closer to whatever is above it.
-  { selector: '[data-ai-short] .ai-hello > h1', now: 'margin-top: 4px;', was: 'margin-top: 6px;' },
+  { selector: '[data-ai-short] .ai-hello > h1', now: 'margin-top: 2px;', was: 'margin-top: 4px;' },
+  // 2026-09-21 — the hero's own top padding and the air inside each card, at
+  // the one window where the four cards ARE the first screen.
+  { selector: '[data-ai-short] .ai-hello', now: 'padding-top: 0;', was: 'padding-top: 2px;' },
+  { selector: '[data-ai-short] .ai-tpl', now: 'gap: 6px;', was: 'gap: 8px;' },
+  {
+    selector: '[data-ai-short] .ai-tpl > button',
+    now: 'padding: 6px 10px;',
+    was: 'padding: 8px 10px;',
+  },
   // 10px of dead space under the last row of templates is what turned a fit
   // into an overflow. The TOP padding stays — the gate card needs the air.
   {
     selector: '[data-ai-narrow][data-ai-short] .ai-log',
-    now: 'padding-bottom: 6px;',
-    was: 'padding-bottom: 10px;',
+    now: 'padding-bottom: 4px;',
+    was: 'padding-bottom: 6px;',
   },
 ];
 
@@ -259,30 +278,39 @@ describe('the gated first screen fits the minimum window too', () => {
     },
   );
 
-  it('⛔ the gate card gives its TITLE the action’s column, so it fits on one line', () => {
-    // The biggest single move: 18.7 of the 52px. "Connect your API key to run
-    // automations" is 250px of text and the card's middle column is 198px at
+  it('⛔ the gate card gives its TITLE the action’s column — at EVERY tier since 2026-09-21', () => {
+    // The biggest single move of the 52px: 18.7 of it. "Connect your API key to
+    // run automations" is 250px of text and the card's middle column is 198px at
     // 960x600, so the title wrapped to two lines; spanning the button's column
-    // gives it 347px and one line. Both tiers a gate card can appear in — the
-    // 600px-tall minimum and the narrow-and-not-tall band above it.
-    const block = ruleInGroup('[data-ai-short] .ai-gate');
-    expect(block).toContain("'ico title title'");
-    expect(block).toContain("'ico body act'");
-    expect(ruleInGroup('[data-ai-narrow]:not([data-ai-tall]) .ai-gate')).toBe(block);
-    // …and the padding and the margin under it, worth 8px more.
-    expect(block).toContain('padding: 8px 12px;');
-    expect(block).toContain('margin-bottom: 10px;');
-  });
-
-  it('⛔ POSITIVE CONTROL — the default tier still stacks title over body, as the mockup draws it', () => {
-    // Without this arm the re-cut could become the baseline and the 1280x800
-    // card — which the mockup draws with a two-line title and the body beside
-    // the icon — would quietly change with no measurement behind it.
+    // gives it 347px and one line.
+    //
+    // ⛔ AND THE DEFAULT TIER NOW DOES IT TOO, which reverses the arm that used
+    // to stand here. It held the base tier at 'ico title act' for mockup
+    // fidelity, and run 35567350180 showed what that cost: the base column is
+    // 316px at 1280x800 — one line for a 250px title on a Mac, TWO under a
+    // 14%-wider face, and 19px of growth above a first screen holding four
+    // cards. The two tiers therefore agree, and the declaration lives once, in
+    // the base rule the tight tiers inherit.
     const base = rule('.ai-gate');
-    expect(base).toContain("'ico title act'");
+    expect(base).toContain("'ico title title'");
     expect(base).toContain("'ico body act'");
+    expect(base).not.toContain("'ico title act'");
     expect(base).toContain('padding: 10px 12px;');
     expect(base).toContain('margin-bottom: 14px;');
+  });
+
+  it('…and the two tight tiers keep only the padding they bought, in one shared block', () => {
+    // Worth 8px on top of the span. Shared between the 600px-tall minimum and
+    // the narrow-and-not-tall band above it, because both are "a gate card is
+    // standing above a hero that has no room"; `toBe` holds them identical so
+    // one cannot drift.
+    const block = ruleInGroup('[data-ai-short] .ai-gate');
+    expect(block).toContain('padding: 7px 12px;');
+    expect(block).toContain('margin-bottom: 8px;');
+    expect(ruleInGroup('[data-ai-narrow]:not([data-ai-tall]) .ai-gate')).toBe(block);
+    // The areas moved to the base rule above; a copy left here would be a
+    // second place for the decision to live and a first place for it to rot.
+    expect(block).not.toContain('grid-template-areas');
   });
 
   it('⛔ the template descriptions really clamp — the rule that was inert for three stages', () => {

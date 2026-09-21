@@ -98,6 +98,76 @@
 //       and a cell that can never fail is a cell nobody re-reads.
 //   D4. a cell that measured fewer than MIN_AI_PROBES elements is itself a
 //       violation: an empty page must not pass as a clean one.
+//   D5. ⛔ THE FONT-STRESS PASS (2026-09-21) — D3 AGAIN, WITH THE RUNNER'S
+//       TEXT WIDTHS. Everything above measures the fonts THIS MACHINE has, and
+//       run 35567350180 proved that is not the measurement that matters:
+//       `GUI render gates (Linux)` went red on main with six first-screen
+//       violations that no Mac could see.
+//       ⛔ THE MECHANISM, because a stress pass built on a guess emulates the
+//       wrong thing. Nothing in this repo ships a font file: `tailwind.config
+//       .ts` names `Geist Sans` and `Berkeley Mono` and there is no `@font-face`
+//       and no woff2 anywhere in `apps/gui-client`, so BOTH stacks fall through
+//       to whatever the OS has. On a maintainer's Mac that is `-apple-system`
+//       → San Francisco. On the runner, `fc-list` (the workflow records it, and
+//       the run's log has it) lists no Geist, no Roboto, no Segoe UI — so the
+//       sans falls all the way to `sans-serif` → DEJAVU SANS, which sets ~9-12%
+//       WIDER at the same px size. And every line-height on the first screen is
+//       pinned in px (13/19, 11.5/16, 12.5/17 …), so none of the growth was
+//       taller lines: ALL of it was PROSE TAKING ONE MORE LINE. Three blocks
+//       did it, and the CI numbers are the sum of them, to the pixel:
+//         the hero explainer  3 → 4 lines  +19px  (idle / preview / consent)
+//         the API-key gate's body  3 → 4   +16px  (nokey)
+//         both at once, at 1280x800        +35px  (nokey)
+//       ⛔ THE EMULATION IS ADDITIVE LETTER-SPACING, NOT A BIGGER FONT. The two
+//       obvious levers are both wrong here:
+//         · a taller fallback family cannot be shared — the intersection of
+//           this Mac's families and the runner's is empty (no DejaVu here, no
+//           Verdana there), so the pass would measure a different thing per
+//           host;
+//         · `font-size-adjust` scales the USED FONT SIZE, and with it every
+//           `ch`, `em` and `ex` length in the layout. The hero explainer is
+//           `max-width: 54ch`: its column would grow by exactly the factor its
+//           text grew by and the line count would not move — which is the
+//           opposite of the runner, where the text is ~12% wider and `ch` (the
+//           advance of "0") only ~1%. Measured: at the value that reproduces
+//           the pre-fix CI numbers it matched 9 of 12 cells; after the fix it
+//           reported the explainer STILL at three lines where DejaVu takes
+//           four. An instrument that cannot see the block that caused the
+//           outage is not the instrument.
+//       Letter-spacing adds advance per character and touches NOTHING else —
+//       not the font size, not the line-height, not `ch`. That is precisely how
+//       the runner's font differs from this one. It is applied element by
+//       element from a snapshot (`stressFirstScreenText` below) so a run that
+//       already sets its own tracking — the headline's -0.022em, the guard
+//       tags', the section labels' — gets the stress ON TOP of it rather than
+//       instead of it.
+//       ⛔ THE FACTOR IS DERIVED FROM THE CI RUN, NOT CHOSEN. Sweeping it
+//       against the PRE-FIX tree (restored from HEAD, then restored back and
+//       `cmp`-ed), `AI_FONT_STRESS_EM` reproduces run 35567350180's Phase D
+//       numbers EXACTLY in 11 of the 12 first-screen cells, including all six
+//       that failed and their over-by numbers:
+//         idle    960x600  slack 38     | 1024x640 slack 78    | 1280x800 OVER 11
+//         nokey   960x600  OVER 12      | 1024x640 slack 44.25 | 1280x800 OVER 21
+//         preview 960x600  slack 42.25  | 1024x640 slack 82.25 | 1280x800 slack 35.25
+//         consent 960x600  over 97 ✗    | 1024x640 over 43     | 1280x800 over 132
+//       The one miss is `consent` at 960x600, where the emulation wraps the
+//       DOCKED BANNER one line earlier than DejaVu does (banner 135 against
+//       121) and so reports over 97 where CI reported 83. Both are inside the
+//       banner budget, so the VERDICT agrees in 12 of 12 — but the number does
+//       not, and that is what a per-character approximation of a proportional
+//       face costs. Any value in 0.036em–0.050em reproduces the same twelve
+//       verdicts; 0.045 is the middle of that band rather than an edge of it.
+//       ⛔ ON THE RUNNER THIS PASS IS STRICTER THAN THE RUNNER, NEVER LAXER:
+//       there the 0.045em lands on top of DejaVu, which is ~0.045em past San
+//       Francisco already. Measured locally at 0.090em — the Mac equivalent of
+//       the runner running this pass — every banner-less cell still fits, the
+//       thinnest by 18px. So the workflow stays green and the pass keeps its
+//       teeth on both hosts.
+//       COST, MEASURED ON THIS MACHINE rather than estimated: the pass
+//       re-renders ONLY the cells that reported a first screen in the plain
+//       sweep — 24 of the 78 — and an AI cell costs 1.56s (two narrowed runs,
+//       12 cells in 47s and 48 in 103s: 36 more cells for 56s). So the stress
+//       pass is ~37s, and the whole gate went from ~200s to 237s.
 // The scene list is READ FROM THE HARNESS (`ALL_SCENES`), like the text gate's,
 // so an AI scene added to the gallery is measured by the next run with no edit
 // here — and the run REFUSES a list with no AI scene in it.
@@ -208,6 +278,17 @@ const AI_ROWS = ['.ai-bar', '.ai-hud', '.ai-facts', '.ai-cmd-foot'];
 const AI_BANNER_ALLOWANCE = 24;
 /** A cell measuring fewer than this saw a page that had not rendered. */
 const MIN_AI_PROBES = 3;
+/** D5 — how much advance the font-stress pass adds PER CHARACTER, in em, on top
+ *  of whatever tracking each run already carries. Derived from run
+ *  35567350180 against the pre-fix tree, not chosen: see the D5 block in this
+ *  file's header for the twelve cells it reproduces and the 0.036–0.050 band
+ *  it is the middle of. Overridable so the band can be re-swept, and the value
+ *  actually used is printed with the pass. */
+const AI_FONT_STRESS_EM = Number(process.env.AI_FONT_STRESS_EM ?? '0.045');
+/** A stress run that reached almost nothing measured the plain layout and said
+ *  it was stressed. Every AI scene has hundreds of elements; 40 is far below
+ *  the floor and far above "the selector matched nothing". */
+const MIN_STRESSED_NODES = 40;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -740,8 +821,34 @@ function measureAiWindow(root, opts) {
   return { violations, measured, firstScreen, probed };
 }
 
+/** Runs INSIDE the page. Widens every text run in the document by `em` of
+ *  advance per character — the one thing the runner's font does that this
+ *  machine's does not (see D5).
+ *
+ *  ⛔ TWO PASSES, and the order is the whole correctness. `letter-spacing`
+ *  INHERITS, so a single walk that reads `getComputedStyle(el).letterSpacing`
+ *  and writes it back would read its own writes: a child of a node already
+ *  stressed would inherit the stressed value, add the delta again, and the
+ *  inflation would compound with depth — deep runs would get several times the
+ *  stress and shallow ones once, which is not any font. Snapshot every
+ *  element's own resolved value first, then write.
+ *
+ *  Returns what it touched so a cell that stressed nothing cannot pass as a
+ *  cell that was stressed and still fitted. */
+function stressFirstScreenText(em) {
+  const snapshot = [];
+  for (const el of document.querySelectorAll('*')) {
+    const cs = getComputedStyle(el);
+    const own = cs.letterSpacing === 'normal' ? 0 : parseFloat(cs.letterSpacing) || 0;
+    const size = parseFloat(cs.fontSize) || 0;
+    snapshot.push([el, own + em * size]);
+  }
+  for (const [el, px] of snapshot) el.style.letterSpacing = `${String(px)}px`;
+  return snapshot.length;
+}
+
 /** One Phase D cell: scene x window x theme. */
-async function measureAiCell(context, scene, width, height, theme) {
+async function measureAiCell(context, scene, width, height, theme, stress = null) {
   const page = await context.newPage();
   const problems = [];
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
@@ -772,6 +879,18 @@ async function measureAiCell(context, scene, width, height, theme) {
     await page.waitForTimeout(700);
     const applied = await page.evaluate(() => document.documentElement.dataset.mode);
     if (applied !== theme) throw new Error(`${scene}: data-mode is ${applied}, wanted ${theme}`);
+    let stressedNodes = null;
+    if (stress !== null) {
+      // D5. Applied after `document.fonts.ready` and the theme, so the values
+      // snapshotted are the ones the cell was about to be measured with.
+      stressedNodes = await page.evaluate(stressFirstScreenText, stress.em);
+      if (!Number.isFinite(stressedNodes) || stressedNodes < MIN_STRESSED_NODES) {
+        throw new Error(
+          `${scene} [${String(width)}x${String(height)} ${theme}]: the font stress touched ${String(stressedNodes)} element(s), fewer than ${String(MIN_STRESSED_NODES)} — a page that was not stressed must not report as one that was`,
+        );
+      }
+      await page.waitForTimeout(250);
+    }
     const res = await stage.evaluate(measureAiWindow, {
       rows: AI_ROWS,
       minProbes: MIN_AI_PROBES,
@@ -782,8 +901,16 @@ async function measureAiCell(context, scene, width, height, theme) {
         `${scene} [${width}x${height} ${theme}]: the page reported errors:\n  ${problems.join('\n  ')}`,
       );
     }
+    if (stress !== null) {
+      res.stressEm = stress.em;
+      res.stressedNodes = stressedNodes;
+      // Same rule, a different reading of it — so a reader of the log or the
+      // report can never mistake one for the other.
+      for (const viol of res.violations) viol.kind = `${viol.kind}-under-font-stress`;
+    }
     if (res.violations.length > 0) {
-      const shot = `${OUT}/ai-${scene}-${width}x${height}-${theme}.png`;
+      const prefix = stress === null ? 'ai' : 'ai-stress';
+      const shot = `${OUT}/${prefix}-${scene}-${width}x${height}-${theme}.png`;
       await page.screenshot({ path: shot });
       res.shot = shot;
     }
@@ -825,6 +952,10 @@ async function runAiWindowSweep(browser, report) {
   }
   const context = await browser.newContext({ deviceScaleFactor: 2, reducedMotion: 'reduce' });
   let violations = 0;
+  /** The cells the stress pass re-renders: the ones that HAVE a first screen,
+   *  found by measuring rather than by a list here, so a scene that grows one
+   *  is stressed by the next run with no edit. */
+  const firstScreenCells = [];
   try {
     for (const scene of names) {
       for (const [width, height] of AI_WINDOWS) {
@@ -832,6 +963,7 @@ async function runAiWindowSweep(browser, report) {
           const res = await measureAiCell(context, scene, width, height, theme);
           violations += res.violations.length;
           report.aiWindows.push({ scene, width, height, theme, ...res });
+          if (res.firstScreen !== null) firstScreenCells.push({ scene, width, height, theme });
           const fs = res.firstScreen;
           const fit =
             fs === null
@@ -848,6 +980,49 @@ async function runAiWindowSweep(browser, report) {
             process.stdout.write(`      ai: ${JSON.stringify(viol)}\n`);
           }
         }
+      }
+    }
+
+    // D5 — the same cells again, with the runner's text widths.
+    if (firstScreenCells.length === 0) {
+      throw new Error(
+        'no Phase D cell reported a first screen — refusing to report a clean font-stress pass over nothing',
+      );
+    }
+    if (!Number.isFinite(AI_FONT_STRESS_EM) || AI_FONT_STRESS_EM <= 0) {
+      throw new Error(
+        `AI_FONT_STRESS_EM is ${String(process.env.AI_FONT_STRESS_EM)} — a stress of zero measures the plain layout twice`,
+      );
+    }
+    process.stdout.write(
+      `\nfont stress — +${String(AI_FONT_STRESS_EM)}em of advance per character ` +
+        `(the ubuntu runner's DejaVu Sans, derived from run 35567350180; see D5), ` +
+        `${String(firstScreenCells.length)} first-screen cell(s)\n`,
+    );
+    for (const cell of firstScreenCells) {
+      const res = await measureAiCell(context, cell.scene, cell.width, cell.height, cell.theme, {
+        em: AI_FONT_STRESS_EM,
+      });
+      violations += res.violations.length;
+      report.aiFontStress.push({ ...cell, ...res });
+      const fs = res.firstScreen;
+      // A cell whose first screen disappeared under the stress is measuring
+      // something else; the plain pass found one here.
+      if (fs === null) {
+        violations += 1;
+        res.violations.push({ kind: 'first-screen-lost-under-font-stress' });
+      }
+      const fit =
+        fs === null
+          ? 'THE FIRST SCREEN VANISHED UNDER STRESS'
+          : `first screen ${fs.over > 0 ? `OVER by ${String(fs.over)}` : `fits (${String(fs.slack)}px spare)`}` +
+            (fs.banner ? ` · banner docked (${String(fs.bannerHeight)}px)` : '');
+      process.stdout.write(
+        `${cell.scene.padEnd(30)} ${String(cell.width)}x${String(cell.height)} ${cell.theme.padEnd(5)} ` +
+          `stressed → ${fit} · ${String(res.violations.length)} violation(s)${res.violations.length > 0 ? '  ✗' : ''}\n`,
+      );
+      for (const viol of res.violations) {
+        process.stdout.write(`      stress: ${JSON.stringify(viol)}\n`);
       }
     }
   } finally {
@@ -870,6 +1045,8 @@ async function main() {
     cards: [],
     menus: [],
     aiWindows: [],
+    aiFontStressEm: AI_FONT_STRESS_EM,
+    aiFontStress: [],
   };
   let violationCount = 0;
   const opts = {
@@ -1310,7 +1487,8 @@ async function main() {
   await writeFile(`${OUT}/report.json`, JSON.stringify(report, null, 1));
   process.stdout.write(
     `\n${report.cards.length} card measurements across ${WIDTHS.join('/')}px and ` +
-      `${report.aiWindows.length} AI-view cells → ${violationCount} violation(s); report ${OUT}/report.json\n`,
+      `${report.aiWindows.length} AI-view cells (+${report.aiFontStress.length} re-measured at ` +
+      `+${String(AI_FONT_STRESS_EM)}em of font stress) → ${violationCount} violation(s); report ${OUT}/report.json\n`,
   );
   if (violationCount > 0) process.exit(1);
 }

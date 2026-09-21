@@ -102,7 +102,7 @@ export function IdleHero({
           </li>
           <li>
             <span className="ai-beat-n mono">03</span>
-            <b>It asks first</b>Nothing is bought, paid or deleted without you.
+            <b>It asks first</b>It pauses before buying, paying or deleting.
           </li>
         </ol>
       )}

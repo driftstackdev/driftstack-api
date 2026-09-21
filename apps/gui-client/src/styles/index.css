@@ -1897,8 +1897,19 @@
 .ai-gate {
   display: grid;
   grid-template-columns: 28px 1fr auto;
+  /* ⛔ 'title title', AT EVERY TIER SINCE 2026-09-21 — not just the two tight
+     ones. The short tier gave the headline the action's column because it
+     could not afford a second line of it; the Linux run proved the base tier
+     cannot either. "Connect your API key to run automations" is 250px of text
+     and the middle column is 316px at 1280x800: one line on a Mac, TWO the
+     moment a 14 %-wider face renders it, and the card grows 19px above a first
+     screen that has to hold four cards below it. Spanning costs nothing where
+     it already fitted (a left-aligned single line looks the same in a wider
+     box) and removes the wrap where it did not. The button now centres on the
+     body row rather than across both; with the body three lines tall and the
+     title one, that is where the eye already put it. */
   grid-template-areas:
-    'ico title act'
+    'ico title title'
     'ico body act';
   column-gap: 11px;
   align-items: center;
@@ -1951,28 +1962,43 @@
    the airy hero and this is a tightening of the small ones rather than a new
    baseline. Any later edit that adds a line here must re-measure: the test
    `the-first-screen-fits-the-window-it-opens-in` holds the budget. */
+/* ⛔ AND THE RHYTHM UNDER IT WAS RE-CUT ON 2026-09-21, for the Linux defect
+   above. Every value below is still on this file's own spacing scale and every
+   one of them is restored by `[data-ai-large]`, exactly as the 2026-09-20
+   tightening was: what changed is that the base tier now carries ~45px of
+   SPARE, measured, instead of 8 — enough for the extra line the runner's font
+   costs and the one after it. No font size moved, no sentence changed, no
+   block was dropped. The numbers are in `the-first-screen-fits-the-window-it-
+   opens-in`, and the gate re-measures them under a font-stress pass. */
 .ai-hello {
   padding: 2px 2px 0;
+}
+/* A 10px label does not need a 24px line box. `.section-label` is an inline
+   span, so it inherits the hero's 24px leading and carries 12px of dead air it
+   draws nothing in; as a block it is its own 14px. Nothing moves except the
+   air. (`[data-ai-large]` puts the air back — see the large tier.) */
+.ai-hello > .section-label {
+  display: block;
 }
 .ai-hello > h1 {
   margin-top: 6px;
 }
 .ai-hello > p {
-  margin-top: 9px;
+  margin-top: 8px;
   font-size: 13px;
   line-height: 19px;
   color: rgb(var(--ink-secondary-rgb));
   max-width: 54ch;
 }
 .ai-beats {
-  margin-top: 13px;
+  margin-top: 10px;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   border-top: 1px solid rgb(var(--surface-divider-rgb) / 0.7);
   border-bottom: 1px solid rgb(var(--surface-divider-rgb) / 0.7);
 }
 .ai-beats li {
-  padding: 7px 10px 8px 0;
+  padding: 6px 10px 6px 0;
   font-size: 11.5px;
   line-height: 16px;
   color: rgb(var(--ink-secondary-rgb));
@@ -1993,8 +2019,12 @@
   color: rgb(var(--accent-text-rgb));
   margin-bottom: 2px;
 }
+/* The heading is one 10px label too, and the 24px line box it sat in was 10px
+   of nothing above four cards that needed them. The margins keep the air the
+   mockup draws around it; only the box shrinks to the label. */
 .ai-tpl-h {
-  margin: 13px 0 7px;
+  margin: 12px 0 8px;
+  line-height: 14px;
 }
 .ai-tpl {
   display: grid;
@@ -2008,7 +2038,7 @@
   column-gap: 10px;
   align-content: start;
   text-align: left;
-  padding: 9px 11px;
+  padding: 8px 11px;
   border-radius: 8px;
   background: rgb(var(--surface-raised-rgb));
   box-shadow:
@@ -3013,10 +3043,23 @@
    `contain: paint` clips every animated thing to this box and `isolation:
    isolate` makes it a stacking context, so nothing in the room can paint over
    the bar, the rail or the conversation. */
+/* ⛔ 344, NOT 380 — THE STAGE GIVES WAY BEFORE THE WORDS DO (2026-09-21).
+   Run 35567350180 red-lined the first screen on ubuntu because the runner's
+   sans is DejaVu Sans, ~14 % wider than the San Francisco a Mac resolves, and
+   every line-height in the hero is pinned in px: the whole of the overflow was
+   PROSE TAKING ONE MORE LINE in a column that was too narrow for it. The
+   column is what had to grow, and the only thing beside it is the room.
+   THE DRAWING DOES NOT SHRINK BY ONE PIXEL. `.ai-center` sizes the phone as
+   `min(100cqw - 36px, (100cqh - 8px) / 2.0943)`, and at 1280x800 the second
+   term wins: 275px, from a container 584px tall. The phone stays 275 for any
+   stage down to 344 (312 of container, 312 - 36 = 276 > 275) — so what this
+   gives the mission column is the EMPTY ROOM beside the device, measured, not
+   the device. Below 344 the first term would start winning and the iPhone —
+   the feature — would be the thing paying, which is the wrong order. */
 .ai-stage {
   position: relative;
   z-index: 1;
-  width: 380px;
+  width: 344px;
   flex: none;
   display: flex;
   flex-direction: column;
@@ -3057,9 +3100,11 @@
   -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, rgb(0 0 0) 0%, transparent 100%);
   mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, rgb(0 0 0) 0%, transparent 100%);
 }
+/* The light well is inset by its own 10px margin, so it is 10 narrower than
+   the dark stage for the same 344px footprint (see the rule above). */
 [data-mode='light'] .ai-stage {
   margin: 10px 0 10px 10px;
-  width: 370px;
+  width: 334px;
   border-radius: 14px;
   box-shadow: var(--ai-well-shadow);
   background: rgb(var(--ai-stage-rgb));
@@ -3715,12 +3760,15 @@
 /* NARROW — the 960px minimum window gives the view 736px. The stage keeps the
    phone (it is the feature) and gives up everything around it; the place moves
    into the HUD row, which is the only line left. */
+/* …and the same trade at the narrow tier: at 960x600 the phone is 214px wide
+   and height-bound too ((452 - 4) / 2.0943), so 238 is the narrowest stage
+   that still draws it full size. 14px to the mission column, free. */
 [data-ai-narrow] .ai-stage {
-  width: 252px;
+  width: 238px;
   padding: 8px 8px 10px;
 }
 [data-mode='light'] [data-ai-narrow] .ai-stage {
-  width: 246px;
+  width: 232px;
   margin: 6px 0 6px 6px;
   padding: 8px 6px;
 }
@@ -3885,8 +3933,12 @@
 [data-ai-large] .ai-beats .ai-beat-n {
   margin-bottom: 3px;
 }
+[data-ai-large] .ai-hello > .section-label {
+  display: inline;
+}
 [data-ai-large] .ai-tpl-h {
   margin: 18px 0 8px;
+  line-height: 24px;
 }
 [data-ai-large] .ai-tpl-guard {
   margin-top: 6px;
@@ -4015,36 +4067,42 @@
    the one `:not([data-ai-tall])` covers. */
 [data-ai-short] .ai-gate,
 [data-ai-narrow]:not([data-ai-tall]) .ai-gate {
-  grid-template-areas:
-    'ico title title'
-    'ico body act';
-  padding: 8px 12px;
-  margin-bottom: 10px;
+  padding: 7px 12px;
+  margin-bottom: 8px;
 }
 
 /* 3 · the template heading. It keeps its words and its type; what goes is the
    air around a two-word label. */
 [data-ai-short] .ai-tpl-h {
-  margin: 8px 0 5px;
+  margin: 6px 0 5px;
+}
+/* The 600px-tall window is where the four cards ARE the first screen: the
+   hero's own top padding and the air inside each card are what the gate card
+   above them needs, and neither is a word. */
+[data-ai-short] .ai-hello {
+  padding-top: 0;
+}
+[data-ai-short] .ai-tpl {
+  gap: 6px;
 }
 
 /* 5 · and the headline sits one step closer to whatever is above it. */
 [data-ai-short] .ai-hello > h1 {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 /* The log's own bottom padding, in the tier where four template cards end the
    screen: 10px of dead space under the last row is what turns a fit into an
    overflow. The top stays as it is — the gate card needs the air above it. */
 [data-ai-narrow][data-ai-short] .ai-log {
-  padding-bottom: 6px;
+  padding-bottom: 4px;
 }
 
 [data-ai-short] .ai-tpl-guard {
   display: none;
 }
 [data-ai-short] .ai-tpl > button {
-  padding: 8px 10px;
+  padding: 6px 10px;
 }
 /* 2 · ⛔ THIS CLAMP WAS INERT, AND HAD BEEN SINCE IT WAS WRITTEN. `.ai-tpl-desc`
    is `display: block`, and `-webkit-line-clamp` does nothing outside a

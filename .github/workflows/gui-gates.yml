@@ -14,6 +14,20 @@
 # under DejaVu Sans Mono with no title — and the geometry gate and the control
 # held, so it now runs on push as well: a text width that only clips under the
 # runner's fonts is a defect the maintainers' Macs never show.
+#
+# ⛔ AND ON 2026-09-21 IT FOUND THE SECOND ONE, WHICH IS WHY THIS FILE MATTERS
+# MORE THAN ITS SIZE SUGGESTS. Run 35567350180 red-lined Phase D with six
+# first-screen violations: the AI view's idle hero fitted only with macOS font
+# metrics, and a Linux customer got a first screen that scrolled. The layout was
+# rebuilt to carry the difference, and `scripts/gui-visual-check.mjs` grew a
+# FONT-STRESS pass (D5) that re-measures the first screen with the runner's text
+# widths emulated, so the same defect is catchable on a Mac before it gets here.
+# The step below runs the gate exactly as it did — the pass is inside the same
+# entry point on purpose, so there is no second command to add on one host and
+# forget on the other. THE FACTOR IT USES WAS DERIVED FROM THIS WORKFLOW'S OWN
+# NUMBERS: if the font stack changes (a self-hosted woff2, a different runner
+# image), the `fc-list` step below and a fresh run of this workflow are what
+# re-derive it. Do not tune it on a Mac.
 name: GUI render gates (Linux)
 
 on:
