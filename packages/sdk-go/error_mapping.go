@@ -51,8 +51,6 @@ var problemTypeToFactory = map[string]func(base apiError, problem map[string]any
 	"https://errors.driftstack.dev/proxy-validation-failed": buildProxyValidationFailed,
 	// Single-active-session-per-profile guard (409 at launch).
 	"https://errors.driftstack.dev/profile-in-use": buildProfileInUse,
-	// AI credits (402), dark until launch.
-	"https://errors.driftstack.dev/ai-credits-exhausted": buildAiCreditsExhausted,
 }
 
 // errorFromResponse parses an HTTP response body as RFC 7807
@@ -342,36 +340,6 @@ func buildBundledLlmConsentRequired(base apiError, _ map[string]any, _ string) e
 	return &BundledLlmConsentRequiredError{apiError: base}
 }
 
-func buildAiCreditsExhausted(base apiError, problem map[string]any, _ string) error {
-	reason, _ := problem["reason"].(string)
-	if reason == "" {
-		reason = "balance"
-	}
-	debtReason, _ := problem["debt_reason"].(string)
-	resetsAt, _ := problem["resets_at"].(string)
-	available := 0
-	if v, ok := problem["available_credits"].(float64); ok {
-		available = int(v)
-	}
-	required := 0
-	if v, ok := problem["required_credits"].(float64); ok {
-		required = int(v)
-	}
-	debtCredits := 0
-	if v, ok := problem["debt_credits"].(float64); ok {
-		debtCredits = int(v)
-	}
-	return &AiCreditsExhaustedError{
-		apiError:         base,
-		Reason:           reason,
-		DebtReason:       debtReason,
-		AvailableCredits: available,
-		RequiredCredits:  required,
-		DebtCredits:      debtCredits,
-		ResetsAt:         resetsAt,
-	}
-}
-
 func buildPairModeConflict(base apiError, problem map[string]any, _ string) error {
 	winner := ""
 	if v, ok := problem["winner_client_id"].(string); ok {
@@ -406,7 +374,6 @@ var (
 	_ error = (*ByokAnthropicRequiredError)(nil)
 	_ error = (*BundledLlmBudgetExhaustedError)(nil)
 	_ error = (*BundledLlmConsentRequiredError)(nil)
-	_ error = (*AiCreditsExhaustedError)(nil)
 	_ error = (*PairModeConflictError)(nil)
 	_ error = (*PairModeStateInvalidTransitionError)(nil)
 	_ error = (*RateLimitError)(nil)

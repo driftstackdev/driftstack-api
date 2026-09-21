@@ -69,9 +69,6 @@ export type DriftstackErrorKind =
   | 'mfa_step_up_required'
   | 'byok_anthropic_required'
   | 'proxy_validation_failed'
-  // A moved account's turn could not be funded from its AI credits. Dark
-  // until AI credits launch.
-  | 'ai_credits_exhausted'
   | 'transport';
 
 export class DriftstackError extends Error {
@@ -268,7 +265,7 @@ export class ConcurrencyLimitError extends DriftstackError {
   /** True when this 429 is the AI-turn concurrency limit (at most 3 AI tasks
    *  running at once) rather than the session-concurrency one; the
    *  title/detail differ accordingly ("AI task limit reached"). Dark until
-   *  AI credits launch. */
+   *  the moved-account AI billing rail launches. */
   readonly aiTasksInFlight: boolean | undefined;
   constructor(p: Problem) {
     super(toOpts('concurrency_limit', p));
@@ -545,52 +542,6 @@ export class BundledLlmConsentRequiredError extends DriftstackError {
   }
 }
 
-/**
- * 402 — a MOVED account's turn could not be funded from its AI credits.
- * `reason` tells the three shapes apart:
- *
- * - `'balance'` — nothing left to spend; `availableCredits` / `requiredCredits`
- *   say how far short. `resetsAt`, when present, is when the next grant lands.
- * - `'debt'` — the account owes credits back (`debtReason` `'payment_reversed'`
- *   or `'plan_change'`) and spends nothing until it is repaid.
- * - `'task_too_large'` — this one request would not fit even at the model's
- *   maximum reservation. Shortening the request is the only fix; topping up
- *   would not have helped.
- *
- * Distinct from {@link BundledLlmBudgetExhaustedError}: that type is the
- * LEGACY monthly soft cap and never applies once an account is moved onto
- * credits.
- */
-export class AiCreditsExhaustedError extends DriftstackError {
-  readonly reason: 'balance' | 'debt' | 'task_too_large' | (string & {});
-  readonly debtReason: 'payment_reversed' | 'plan_change' | (string & {}) | undefined;
-  readonly availableCredits: number | undefined;
-  readonly requiredCredits: number | undefined;
-  readonly debtCredits: number | undefined;
-  /** ISO-8601, when known. */
-  readonly resetsAt: string | undefined;
-  constructor(p: Problem) {
-    super(toOpts('ai_credits_exhausted', p));
-    this.name = 'AiCreditsExhaustedError';
-    const ext = p as {
-      reason?: unknown;
-      debt_reason?: unknown;
-      available_credits?: unknown;
-      required_credits?: unknown;
-      debt_credits?: unknown;
-      resets_at?: unknown;
-    };
-    this.reason = typeof ext.reason === 'string' ? ext.reason : 'balance';
-    this.debtReason = typeof ext.debt_reason === 'string' ? ext.debt_reason : undefined;
-    this.availableCredits =
-      typeof ext.available_credits === 'number' ? ext.available_credits : undefined;
-    this.requiredCredits =
-      typeof ext.required_credits === 'number' ? ext.required_credits : undefined;
-    this.debtCredits = typeof ext.debt_credits === 'number' ? ext.debt_credits : undefined;
-    this.resetsAt = typeof ext.resets_at === 'string' ? ext.resets_at : undefined;
-  }
-}
-
 // Pair-mode takeover lost the lock
 // race. The body's `winner_client_id` is surfaced as a typed property
 // so the dashboard can render "user X is taking over".
@@ -720,8 +671,6 @@ const TYPE_TO_CTOR: Record<string, (p: Problem) => DriftstackError> = {
   'https://errors.driftstack.dev/pair-mode-conflict': (p) => new PairModeConflictError(p),
   'https://errors.driftstack.dev/pair-mode-invalid-transition': (p) =>
     new PairModeStateInvalidTransitionError(p),
-  // AI credits (402), dark until launch.
-  'https://errors.driftstack.dev/ai-credits-exhausted': (p) => new AiCreditsExhaustedError(p),
 };
 
 /**

@@ -968,6 +968,37 @@ export const AiCreditsExhaustedExtensionsSchema = z.object({
 });
 export type AiCreditsExhaustedExtensions = z.infer<typeof AiCreditsExhaustedExtensionsSchema>;
 
+/**
+ * Problem types for AI credits — dark until launch.
+ *
+ * This is the credits counterpart to `PROBLEM_TYPES` in `problem.ts`, kept in
+ * a SEPARATE roster on purpose: this module's files are withheld from the
+ * npm tarball unconditionally (see this file's own header + `package.json`'s
+ * `files`), and `build:publish` drops it from the barrel, so nothing that
+ * lives here ships. `PROBLEM_TYPES` itself ships in full — every SDK mapper,
+ * the docs error-codes page and the errors.driftstack.dev site all derive
+ * from it, and all of them publish. Putting a dark entry in PROBLEM_TYPES
+ * therefore puts it on every one of those published surfaces; keeping it here
+ * instead means there is nothing to leak.
+ *
+ * Sent only to accounts moved onto AI credits (plan §8) — the CP-side feature
+ * flag stays off in production until launch, so in practice nobody sees this
+ * today.
+ *
+ * At launch: each entry here moves into `PROBLEM_TYPES` and the three SDK
+ * error-mapping tables, in ONE change. The guard in
+ * `a-dark-problem-type-reaches-no-published-surface-before-launch.test.ts`
+ * fails from the moment that move is only partly done — a member that is
+ * simultaneously in both rosters, or reachable on a published surface, is not
+ * a valid intermediate state.
+ */
+export const AI_CREDITS_PROBLEM_TYPES = {
+  AiCreditsExhausted: 'https://errors.driftstack.dev/ai-credits-exhausted',
+} as const;
+
+export type AiCreditsProblemType =
+  (typeof AI_CREDITS_PROBLEM_TYPES)[keyof typeof AI_CREDITS_PROBLEM_TYPES];
+
 /** Credits on one message turn's usage block. */
 export const TurnCreditsUsageSchema = z.object({
   source: AiSourceSchema,

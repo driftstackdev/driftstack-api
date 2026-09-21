@@ -107,34 +107,35 @@ function pricingIdentifiers(): string[] {
  * keeps this at zero — and would fail if this list named a file that is now
  * clean.
  *
- * S12 ADDS `['dist/problem.d.ts', 'dist/problem.js']`, A DIFFERENT SHAPE OF
- * LEAK FROM THE admin.d.ts ONE ABOVE. That one was a field on a schema and was
- * closeable by moving the field into the withheld module; this one is the
- * `ai-credits-exhausted` problem-type URI itself
- * (`PROBLEM_TYPES.AiCreditsExhausted`, `packages/api-types/src/problem.ts`),
- * and it cannot move into `ai-credits.ts` the same way: `PROBLEM_TYPES` is the
+ * S12 ADDED `['dist/problem.d.ts', 'dist/problem.js']`, A DIFFERENT SHAPE OF
+ * LEAK FROM THE admin.d.ts ONE ABOVE — CLOSED. That one was a field on a
+ * schema and was closeable by moving the field into the withheld module;
+ * this one was the `ai-credits-exhausted` problem-type URI itself, and S12
+ * had put it in `PROBLEM_TYPES` (`packages/api-types/src/problem.ts`), the
  * single source of truth three OTHER guards read directly from `problem.ts`'s
  * SOURCE (`cross-sdk-problem-type-roster-source-parity.test.ts`,
  * `cross-sdk-problem-type-parity.test.ts`, and each SDK's own error-mapping
- * table), all of them already true dark-feature guards in their own right
- * (the roster test asserts a 33-entry `PROBLEM_TYPES`; none of them check
- * whether the feature has launched). Splitting the constant would trade one
- * proven guard family for an unproven one two slices before launch was ever
- * asked for.
+ * table) — so it could not be moved into `ai-credits.ts` the way the admin.ts
+ * field was, without breaking those.
  *
- * What DOES stay true: `build:publish` (`scripts/api-types-build-publish.mjs`)
- * still REFUSES a real release while this URI is anywhere in what ships — its
- * `creditsMentions` scan is not scoped to `ai-credits.*` either, so it catches
- * this file exactly as it would catch the admin.ts leak. This ratchet is the
- * ORDINARY `npm run build` shape, which nobody packs or publishes; the
- * publish-shape build is a separate, deliberate step no fixture here runs.
- * Closing this hand-off means either the feature has launched (the term is
- * allowed to ship) or a later slice finds a way to keep the URI reachable at
- * runtime without it appearing in generated `.js`/`.d.ts` text — not a
- * comment rewrite, which is exactly the trap this file's own header warns
- * against.
+ * It closed by giving the credits roster its OWN constant instead of sharing
+ * `PROBLEM_TYPES`: `AI_CREDITS_PROBLEM_TYPES` in `ai-credits.ts` — a module
+ * this package's `files` already withholds unconditionally, so anything
+ * declared only there ships nowhere. `PROBLEM_TYPES` dropped the entry
+ * entirely (back to its pre-S12 32), the three SDK error-mapping tables lost
+ * their `ai_credits_exhausted` branch (an unmapped 402 of this type falls
+ * back to each SDK's generic problem error, which still surfaces every
+ * extension field), and every docs/error-site guard that used to carry a
+ * `WITHHELD_UNTIL_LAUNCH` exemption for this one slug lost it — the slug
+ * is no longer a member of the roster those pages compare against, so there
+ * is nothing left to exempt.
+ * `a-dark-problem-type-reaches-no-published-surface-before-launch.test.ts`
+ * now pins the invariant that made this hand-off closeable: no member of
+ * `AI_CREDITS_PROBLEM_TYPES` may ever be a member of `PROBLEM_TYPES` at the
+ * same time, or reachable on any published surface, while the server can
+ * still construct and send it.
  */
-const KNOWN_LEAK_HANDOFF: readonly string[] = ['dist/problem.d.ts', 'dist/problem.js'];
+const KNOWN_LEAK_HANDOFF: readonly string[] = [];
 
 describe('the published api-types withholds the unreleased pricing', () => {
   const packed = npmShippedFilesViaPack(PKG_DIR);

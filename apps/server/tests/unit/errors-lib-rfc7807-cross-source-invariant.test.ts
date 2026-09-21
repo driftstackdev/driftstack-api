@@ -194,8 +194,11 @@ describe('W965 errors lib RFC 7807 cross-source invariant', () => {
       // ProblemSchema is now a VALUE import too: `toProblem` derives the
       // reserved RFC 7807 member names from `ProblemSchema.shape` rather than
       // restating them, so a member added to the schema is protected with no
-      // second list to keep in step.
-      /import \{\s*PROBLEM_TYPES,\s*ProblemSchema,\s*type AiDebtReason,\s*type Problem,\s*type ProblemType,\s*\} from '@driftstack\/api-types';/,
+      // second list to keep in step. AI_CREDITS_PROBLEM_TYPES is the dark
+      // credits roster (SEPARATE from PROBLEM_TYPES) that AiCreditsExhaustedError
+      // reads its type URI from — see
+      // a-dark-problem-type-reaches-no-published-surface-before-launch.test.ts.
+      /import \{\s*AI_CREDITS_PROBLEM_TYPES,\s*PROBLEM_TYPES,\s*ProblemSchema,\s*type AiDebtReason,\s*type Problem,\s*type ProblemType,\s*\} from '@driftstack\/api-types';/,
     );
   });
 

@@ -63,8 +63,6 @@ const REQUIRED_ALL_ENTRIES = [
   'PairModeStateInvalidTransitionError',
   'ProfileInUseError',
   'ProxyValidationFailedError',
-  // S12 — AI credits (402), dark until launch.
-  'AiCreditsExhaustedError',
   // Customer-facing return-type pydantic models (re-exported so
   // callers can annotate handlers without deep-importing via
   // driftstack.resources.*).

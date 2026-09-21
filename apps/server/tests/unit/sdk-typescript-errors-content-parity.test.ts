@@ -92,7 +92,7 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
     );
     expect(body).toMatch(/\/\/[^\n]*closing problem-type parity with Go \+ Python\./);
     expect(body).toMatch(
-      /\|\s*'feature_unavailable'\s*\|\s*'mfa_step_up_required'\s*\|\s*'byok_anthropic_required'\s*\|\s*'proxy_validation_failed'[\s\S]*?\|\s*'ai_credits_exhausted'\s*\|\s*'transport';/,
+      /\|\s*'feature_unavailable'\s*\|\s*'mfa_step_up_required'\s*\|\s*'byok_anthropic_required'\s*\|\s*'proxy_validation_failed'\s*\|\s*'transport';/,
     );
   });
 

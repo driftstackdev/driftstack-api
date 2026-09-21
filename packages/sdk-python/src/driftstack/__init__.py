@@ -17,7 +17,6 @@ from __future__ import annotations
 from driftstack._version import __version__
 from driftstack.client import AsyncDriftstack, Driftstack
 from driftstack.errors import (
-    AiCreditsExhaustedError,
     AuthError,
     BadRequestError,
     BundledLlmBudgetExhaustedError,
@@ -113,7 +112,6 @@ __all__ = [
     "PairModeStateInvalidTransitionError",
     "ProfileInUseError",
     "ProxyValidationFailedError",
-    "AiCreditsExhaustedError",
     "LiveKitInfo",
     "AgentCapture",
     "AgentNoticeReason",

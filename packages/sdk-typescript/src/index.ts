@@ -127,7 +127,6 @@ export {
   DriftstackError,
   type DriftstackErrorKind,
   isRetryable,
-  AiCreditsExhaustedError,
   AuthError,
   BadRequestError,
   BundledLlmBudgetExhaustedError,

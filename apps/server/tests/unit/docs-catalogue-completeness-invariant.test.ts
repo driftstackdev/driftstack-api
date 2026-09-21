@@ -54,24 +54,6 @@ function allCustomerDocText(): string {
 
 const PROBLEM_TYPE_RE = /errors\.driftstack\.dev\/([a-z0-9-]+)/g;
 
-/**
- * Slugs withheld from the public error reference until their feature
- * launches — same pattern as `docs-metrics-content-parity.test.ts`'s map of
- * the same name, kept local to this file because each catalogue's page and
- * source are different pairs.
- *
- * `ai-credits-exhausted` (S12): AI credits are built and dark
- * (`DRIFTSTACK_AI_CREDITS_MODE` defaults to off and no account is on them).
- * Document it, and remove this entry, in the change that makes credits live.
- */
-const WITHHELD_UNTIL_LAUNCH = new Map<string, string>([
-  [
-    'ai-credits-exhausted',
-    'AI credits are built and dark (DRIFTSTACK_AI_CREDITS_MODE defaults to off and no account is ' +
-      'on them). Document it, and remove this entry, in the change that makes credits live.',
-  ],
-]);
-
 describe('customer-facing catalogues are complete, not just consistent', () => {
   it('CRITICAL reference/errors.md lists EXACTLY the canonical problem-type set. Its own description promises "Every Driftstack RFC 9457 problem-type"; a type added to problem.ts without a page entry turns that promise into a lie and leaves customers switching on `type` with an unhandled branch.', () => {
     const canonical = new Set(
@@ -86,32 +68,13 @@ describe('customer-facing catalogues are complete, not just consistent', () => {
     // rather than the set check silently becoming pointless.
     expect(page).toMatch(/Every Driftstack RFC 9457 problem-type/);
 
-    const missing = [...canonical]
-      .filter((t) => !documented.has(t) && !WITHHELD_UNTIL_LAUNCH.has(t))
-      .sort();
+    const missing = [...canonical].filter((t) => !documented.has(t)).sort();
     const phantom = [...documented].filter((t) => !canonical.has(t)).sort();
     expect(
       missing,
       'Problem type(s) defined in problem.ts but absent from the error reference:',
     ).toEqual([]);
     expect(phantom, 'Error reference documents (a) problem type(s) that do not exist:').toEqual([]);
-  });
-
-  it('CRITICAL every withheld problem type really is absent from the error reference, and really is a canonical type. This page is public, so an entry here is a promise that a customer cannot read the name of an unreleased feature — and an entry naming a type that no longer exists, or that has already reached the page, is an exemption that exempts nothing.', () => {
-    const canonical = new Set(
-      [...read('packages/api-types/src/problem.ts').matchAll(PROBLEM_TYPE_RE)].map((m) => m[1]!),
-    );
-    const page = read('apps/docs/src/pages/reference/errors.md');
-    const documented = new Set([...page.matchAll(PROBLEM_TYPE_RE)].map((m) => m[1]!));
-    for (const [slug, why] of WITHHELD_UNTIL_LAUNCH) {
-      expect(canonical.has(slug), `${slug} is withheld but not a canonical problem type`).toBe(
-        true,
-      );
-      expect(
-        documented.has(slug),
-        `${slug} is withheld (${why}) and yet appears on the public error reference`,
-      ).toBe(false);
-    }
   });
 
   it('CRITICAL every webhook event type is documented somewhere customer-facing. An undocumented event still gets DELIVERED — it arrives at an endpoint the customer never wrote a handler for.', () => {

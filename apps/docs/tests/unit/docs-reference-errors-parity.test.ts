@@ -8,21 +8,6 @@ import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PROBLEM_TYPES } from '@driftstack/api-types';
 
-/**
- * Problem types withheld from the customer docs until their feature launches —
- * the same map, by name, as `errors-site-slug-parity.test.ts` and
- * `docs-catalogue-completeness-invariant.test.ts` carry. A withheld slug must
- * really be absent from the page (checked below), so this can never quietly
- * excuse a slug that is documented after all.
- */
-const WITHHELD_UNTIL_LAUNCH = new Map<string, string>([
-  [
-    'ai-credits-exhausted',
-    'AI credits are built and dark (DRIFTSTACK_AI_CREDITS_MODE defaults to off and no account is ' +
-      'on them). Document it, and remove this entry, in the change that makes credits live.',
-  ],
-]);
-
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const DOC = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/errors.md');
@@ -54,20 +39,9 @@ describe('W258.B docs/reference/errors ↔ PROBLEM_TYPES parity', () => {
     );
     const missing: string[] = [];
     for (const slug of liveSlugs) {
-      if (WITHHELD_UNTIL_LAUNCH.has(slug)) continue;
       if (!docMatches.has(slug)) missing.push(slug);
     }
     expect(missing).toEqual([]);
-  });
-
-  it('CRITICAL every withheld slug really is absent from the table, and really is a live problem type', () => {
-    for (const [slug, why] of WITHHELD_UNTIL_LAUNCH) {
-      expect(liveSlugs.has(slug), `${slug} is withheld but not in PROBLEM_TYPES`).toBe(true);
-      expect(
-        doc.includes(`errors.driftstack.dev/${slug}`),
-        `${slug} is withheld (${why}) and yet is documented`,
-      ).toBe(false);
-    }
   });
 
   it('cites no internal repository paths (2026-09-15: the source-of-truth section was how we run it, not what the customer gets)', () => {

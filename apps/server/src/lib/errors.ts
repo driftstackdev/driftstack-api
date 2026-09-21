@@ -9,6 +9,7 @@
 // problem-type. We never leak raw error messages to clients.
 
 import {
+  AI_CREDITS_PROBLEM_TYPES,
   PROBLEM_TYPES,
   ProblemSchema,
   type AiDebtReason,
@@ -605,7 +606,13 @@ function aiCreditsExhaustedDetail(args: AiCreditsExhaustedArgs): string {
 export class AiCreditsExhaustedError extends ApiError {
   constructor(args: AiCreditsExhaustedArgs) {
     super({
-      type: PROBLEM_TYPES.AiCreditsExhausted,
+      // Dark until launch — AI_CREDITS_PROBLEM_TYPES is a SEPARATE roster
+      // from PROBLEM_TYPES precisely so this type never reaches a published
+      // surface (see ai-credits.ts's own doc comment on the const). The cast
+      // is the only place that crosses the two rosters; ApiError.type keeps
+      // its PROBLEM_TYPES-only signature so every OTHER subclass still gets
+      // the closed-set check.
+      type: AI_CREDITS_PROBLEM_TYPES.AiCreditsExhausted as ProblemType,
       title: 'AI credits exhausted',
       status: 402,
       detail: aiCreditsExhaustedDetail(args),

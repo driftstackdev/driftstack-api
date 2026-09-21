@@ -24,19 +24,6 @@ const slugsIn = (file: string): Set<string> =>
     ),
   );
 
-/**
- * Slugs withheld from the public errors.driftstack.dev site until their
- * feature launches — same pattern as `docs-metrics-content-parity.test.ts`'s
- * map of the same name.
- */
-const WITHHELD_UNTIL_LAUNCH = new Map<string, string>([
-  [
-    'ai-credits-exhausted',
-    'AI credits are built and dark (DRIFTSTACK_AI_CREDITS_MODE defaults to off and no account is ' +
-      'on them). Give it a page, and remove this entry, in the change that makes credits live.',
-  ],
-]);
-
 describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
   const canonical = slugsIn(resolve(REPO_ROOT, 'packages/api-types/src/problem.ts'));
   // ERROR_PAGES keys are bare slugs; the per-page body interpolates the full
@@ -56,22 +43,11 @@ describe('W483 errors-site ↔ PROBLEM_TYPES slug parity', () => {
     expect(pageSlugs.size).toBeGreaterThanOrEqual(29);
   });
 
-  it('every canonical problem type has an error page (no dead type URIs), except the ones withheld until their feature launches', () => {
-    const missing = [...canonical]
-      .filter((s) => !pageSlugs.has(s) && !WITHHELD_UNTIL_LAUNCH.has(s))
-      .sort();
+  it('every canonical problem type has an error page (no dead type URIs)', () => {
+    const missing = [...canonical].filter((s) => !pageSlugs.has(s)).sort();
     expect(missing, `PROBLEM_TYPES without an errors-site page:\n${missing.join('\n')}`).toEqual(
       [],
     );
-  });
-
-  it('CRITICAL every withheld slug really is absent from the site, and really is a canonical problem type', () => {
-    for (const [slug, why] of WITHHELD_UNTIL_LAUNCH) {
-      expect(canonical.has(slug), `${slug} is withheld but not in PROBLEM_TYPES`).toBe(true);
-      expect(pageSlugs.has(slug), `${slug} is withheld (${why}) and yet has a live page`).toBe(
-        false,
-      );
-    }
   });
 
   it('every error page documents a real problem type (no phantom pages)', () => {
