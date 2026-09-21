@@ -117,8 +117,15 @@ describe('which refusals leave an Idempotency-Key free', () => {
     // Ten throw sites for the eight refusals: "another turn is running" is thrown
     // on both the AI lane and the manual-note lane, and the own-key-only model
     // refusal on both of Driftstack's key legs.
+    //
+    // S12 adds four more, all on the moved-account (credits) leg, dark until
+    // AI credits launch: the plan has no AI at all, a header key on a
+    // credits-only plan, an explicit own-key choice with no usable key, and
+    // one shared site for reserve()'s own four refusals (model, tasks in
+    // flight, debt, balance) — none of these ran any of the customer's work
+    // either, so the key is released for all four the same way. Fourteen.
     const marks = [...ROUTE.matchAll(/throw refusedBeforeAnyWork\(/g)];
-    expect(marks).toHaveLength(10);
+    expect(marks).toHaveLength(14);
     // Nothing marks a refusal except a throw site: every call of the marker is
     // one of the throws counted above. (Its declaration is generic, so it is not
     // spelled `refusedBeforeAnyWork(`; the test seam is an alias, not a call.)

@@ -125,8 +125,16 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
     // $0.10/turn (Q5=A hide actual upstream Anthropic cost) under a
     // distinct record_type so the soft-cap sweep (sub-slice 6.5) can
     // sum only bundled rows.
-    const isBundled = args.keySource === 'bundled';
-    const recordType = isBundled ? 'agent_decomposer_bundled' : 'agent_decomposer';
+    //
+    // S12 — a MOVED account's turn on `keySource:'credits'` runs on the SAME
+    // deployment key as a bundled turn and posts the SAME flat placeholder
+    // here: this row is the soft-cap/audit-continuity record, not the
+    // customer-facing charge (that is `publicUsage`'s `ceil(charged)`, built
+    // from the reservation's own settle, §5.2). Kept under the bundled
+    // record_type too, so a query written against `agent_decomposer_bundled`
+    // before S12 landed keeps meaning what it always meant.
+    const isBundledLike = args.keySource === 'bundled' || args.keySource === 'credits';
+    const recordType = isBundledLike ? 'agent_decomposer_bundled' : 'agent_decomposer';
     const POSTED_BUNDLED_COST_CENTS = 10;
 
     const metadata: Record<string, unknown> = {
@@ -174,7 +182,7 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
     if (args.usage.anthropicStopReason !== undefined) {
       metadata.anthropic_stop_reason = args.usage.anthropicStopReason;
     }
-    if (isBundled) {
+    if (isBundledLike) {
       // Q5=A — surface the POSTED flat cost; the upstream Anthropic-
       // derived cost in args.usage.costUsdCents is intentionally NOT
       // written to metadata so a leaked DB snapshot can't reveal it.
@@ -190,7 +198,11 @@ export class DrizzleAgentDecomposerUsageRecorder implements AgentDecomposerUsage
       // both rows — the turn still posts a flat $0.10 on that basis.
       metadata.cost_usd_cents =
         args.bundledFlatCostAlreadyPosted === true ? 0 : POSTED_BUNDLED_COST_CENTS;
-      metadata.cost_basis = 'bundled_flat_per_turn';
+      // S12 — 'credits' gets its OWN basis word. Nothing sums this field by
+      // basis today, but a row that says 'bundled_flat_per_turn' for a turn
+      // that was in fact charged against a reservation would be a false
+      // record the moment anything does.
+      metadata.cost_basis = args.keySource === 'credits' ? 'credits' : 'bundled_flat_per_turn';
     } else if (args.usage.costUsdCents !== undefined) {
       metadata.cost_usd_cents = args.usage.costUsdCents;
     }

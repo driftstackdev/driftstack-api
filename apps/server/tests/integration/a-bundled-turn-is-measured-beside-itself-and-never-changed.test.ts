@@ -124,6 +124,22 @@ function creditsRuntime(
       shadowReport: () => Promise.reject(new Error('not used by this test')),
       census: () => Promise.reject(new Error('not used by this test')),
     },
+    // S12 — every legacy turn in this file is on `billing_mode='legacy'`:
+    // nothing here tests a moved account, so the read the route takes before
+    // choosing a leg always answers "legacy" and the credits leg is never
+    // reached.
+    accounts: {
+      ensureAccount: (accountId: string) =>
+        Promise.resolve({
+          accountId,
+          billingMode: 'legacy',
+          aiSource: null,
+          aiSourceSetBy: null,
+          aiSourceSetAt: null,
+          debtMicro: 0,
+          autoTopUpEnabled: false,
+        }),
+    },
   };
 }
 

@@ -35,11 +35,15 @@ function read(rel: string): string {
   return readFileSync(resolve(SRC, rel), 'utf8');
 }
 
-// WRITER: `const recordType = isBundled ? '<literal>' : 'agent_decomposer';`
+// WRITER: `const recordType = isBundledLike ? '<literal>' : 'agent_decomposer';`
 // (`record_type` values are lowercase snake_case, optionally with digits — so a
 // rename still EXTRACTS and trips the equality assertion cleanly, rather than
-// throwing on a failed match.)
-const WRITER_RE = /const recordType = isBundled \? '([a-z0-9_]+)' : 'agent_decomposer';/;
+// throwing on a failed match.) S12 renamed the guard variable `isBundled` →
+// `isBundledLike` when a MOVED account's `keySource:'credits'` turn joined
+// 'bundled' under the same flat-price/record_type treatment (§5.2) — the
+// WRITER'S OUTPUT this invariant cares about (the record_type literal itself)
+// is unchanged.
+const WRITER_RE = /const recordType = isBundledLike \? '([a-z0-9_]+)' : 'agent_decomposer';/;
 // READER (cap-query filter): `eq(usageRecords.recordType, '<literal>')`
 const READER_RE = /eq\(usageRecords\.recordType, '([a-z0-9_]+)'\)/;
 // usage-repo internal-types array body.

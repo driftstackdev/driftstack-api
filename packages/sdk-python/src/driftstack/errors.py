@@ -33,6 +33,19 @@ def _coerce_int(value: Any) -> int:
         return 0
 
 
+def _coerce_optional_int(value: Any) -> int | None:
+    """Like :func:`_coerce_int`, but ``None`` stays ``None`` rather than
+    becoming 0 — for fields whose ABSENCE is meaningful (e.g. a 'balance'
+    refusal carries no ``debt_credits`` at all, which must not read as a
+    debt of exactly zero)."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 class DriftstackError(Exception):
     """Base for every error raised by the Driftstack SDK.
 
@@ -497,6 +510,45 @@ class BundledLlmConsentRequiredError(DriftstackError):
     with ``{"consent": true}``) or use your own Anthropic key."""
 
 
+class AiCreditsExhaustedError(DriftstackError):
+    """402 — a MOVED account's turn could not be funded from its AI credits.
+
+    ``reason`` tells the three shapes apart:
+
+    - ``"balance"`` — nothing left to spend; ``available_credits`` /
+      ``required_credits`` say how far short. ``resets_at``, when present, is
+      when the next grant lands.
+    - ``"debt"`` — the account owes credits back (``debt_reason``
+      ``"payment_reversed"`` or ``"plan_change"``) and spends nothing until it
+      is repaid.
+    - ``"task_too_large"`` — this one request would not fit even at the
+      model's maximum reservation. Shortening the request is the only fix.
+
+    Distinct from :class:`BundledLlmBudgetExhaustedError`: that type is the
+    LEGACY monthly soft cap and never applies once an account is moved onto
+    credits.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = 402,
+        problem_type: str | None = None,
+        problem: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, status=status, problem_type=problem_type, problem=problem)
+        p = problem or {}
+        self.reason: str = str(p.get("reason", "balance"))
+        debt_reason = p.get("debt_reason")
+        self.debt_reason: str | None = str(debt_reason) if debt_reason is not None else None
+        self.available_credits: int | None = _coerce_optional_int(p.get("available_credits"))
+        self.required_credits: int | None = _coerce_optional_int(p.get("required_credits"))
+        self.debt_credits: int | None = _coerce_optional_int(p.get("debt_credits"))
+        resets_at = p.get("resets_at")
+        self.resets_at: str | None = str(resets_at) if resets_at is not None else None
+
+
 class PairModeConflictError(DriftstackError):
     """Pair-mode takeover lost the race to another client. HTTP 409.
 
@@ -635,6 +687,8 @@ PROBLEM_TYPE_TO_ERROR: dict[str, type[DriftstackError]] = {
     "https://errors.driftstack.dev/pair-mode-invalid-transition": (
         PairModeStateInvalidTransitionError
     ),
+    # AI credits (402), dark until launch.
+    "https://errors.driftstack.dev/ai-credits-exhausted": AiCreditsExhaustedError,
 }
 
 

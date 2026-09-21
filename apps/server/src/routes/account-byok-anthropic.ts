@@ -25,10 +25,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import { InvalidKeyFormatError } from '../services/byok-anthropic.js';
 import type { AccountAuditService } from '../services/account-audit.js';
-import { BadRequestError, FeatureUnavailableError } from '../lib/errors.js';
+import { BadRequestError, FeatureUnavailableError, ForbiddenError } from '../lib/errors.js';
 import { readClientIp } from '../lib/client-ip.js';
 import { METRIC_NAMES, type MetricsRegistry } from '../services/metrics-registry.js';
 import { testAnthropicKey, type AnthropicKeyTestResult } from '../services/anthropic-key-tester.js';
+import { OWN_KEY_NOT_ON_PLAN_DETAIL, ownKeyAllowedForTier } from '../services/ai-entitlements.js';
+import type { AiCreditsAccounts } from '../services/ai-credits-runtime.js';
+import type { AccountTier } from '@driftstack/api-types';
 
 export interface AccountByokAnthropicRoutesOptions {
   service: BYOKAnthropicService;
@@ -62,6 +65,16 @@ export interface AccountByokAnthropicRoutesOptions {
    * without it; when absent, clear/rotate behave exactly as before.
    */
   byokKeyCache?: { deleteByAccount(accountId: string): number };
+  /**
+   * S12 — whether the caller's account is MOVED (`billing_mode='credits'`).
+   * Per §8.6: a Personal account moved onto credits keeps a stored key on
+   * file but never reads it, and PUT/POST-test are refused so the account
+   * cannot be led to believe a key it sets will ever run. GET and DELETE
+   * stay open — a customer may still read or clear what is on file. Optional
+   * and absent while `DRIFTSTACK_AI_CREDITS_MODE` is off, so every existing
+   * deployment and test fixture is unaffected.
+   */
+  aiCredits?: AiCreditsAccounts;
 }
 
 /** Map a connection-test result to one of the bounded `outcome` label
@@ -83,6 +96,22 @@ export function registerAccountByokAnthropicRoutes(
   const metrics = opts.metrics;
   const accountAudit = opts.accountAudit;
   const byokKeyCache = opts.byokKeyCache;
+  const aiCredits = opts.aiCredits;
+
+  /**
+   * S12/§8.6 — refuse PUT and POST /test on a MOVED account whose plan runs
+   * AI on credits only (Personal). Every other account — legacy, or moved
+   * onto credits with a plan that still allows a key — is unaffected: a
+   * moved account with `own_key` allowed can still rotate and test the key
+   * it may choose to run on (§4.3 rule 3).
+   */
+  async function refuseIfOwnKeyNotOnPlan(accountId: string, tier: AccountTier): Promise<void> {
+    if (aiCredits === undefined) return;
+    const credit = await aiCredits.ensureAccount(accountId);
+    if (credit.billingMode !== 'credits') return;
+    if (ownKeyAllowedForTier(tier)) return;
+    throw new ForbiddenError(OWN_KEY_NOT_ON_PLAN_DETAIL, { own_key_not_on_plan: true });
+  }
 
   // 2026-05-20 — best-effort audit emit. Wraps the record call so the
   // route never 5xx's because audit failed (mirrors the
@@ -144,6 +173,7 @@ export function registerAccountByokAnthropicRoutes(
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
+      await refuseIfOwnKeyNotOnPlan(ctx.account.id, ctx.account.tier);
       const body = (request.body ?? {}) as { api_key?: unknown };
       if (typeof body.api_key !== 'string' || body.api_key.length === 0) {
         throw new BadRequestError('Body must include a non-empty `api_key` string.');
@@ -225,6 +255,7 @@ export function registerAccountByokAnthropicRoutes(
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
+      await refuseIfOwnKeyNotOnPlan(ctx.account.id, ctx.account.tier);
       const plaintext = await service.getPlaintext({ accountId: ctx.account.id });
       if (plaintext === null) {
         try {

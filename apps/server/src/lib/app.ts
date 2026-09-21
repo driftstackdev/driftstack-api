@@ -1400,6 +1400,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // lifecycle never reaches them: a cleared key kept being sent to Anthropic
       // until the session closed or the 13h TTL lapsed.
       ...(deps.byokKeyCache !== undefined ? { byokKeyCache: deps.byokKeyCache } : {}),
+      // S12 — refuses PUT/POST-test on a moved Personal account (§8.6).
+      // Absent while AI credits are off, same as every other credits wiring.
+      ...(deps.aiCredits !== undefined ? { aiCredits: deps.aiCredits.accounts } : {}),
     });
   } else {
     registerAccountByokAnthropicDisabledRoutes(app);

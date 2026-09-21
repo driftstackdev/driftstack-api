@@ -1040,15 +1040,38 @@ describe('the Run AI tasks guide teaches only what the API and SDKs do', () => {
       return delegate === undefined || delegate === name ? '' : problemOf(source, delegate);
     }
 
+    // S12 — withheld from this comparison until AI credits launch. Unlike
+    // every other throw site, `enforceReservationRefusedError` is a helper
+    // with FOUR distinct outcomes (one status+type per reserve() refusal
+    // reason), not a single `new XError(...)`/`someHelper(...)` `problemOf`
+    // can resolve to one string — and even if it could, this guide's own
+    // banned-words list refuses the word "credit" anywhere on the page
+    // (see `bannedIn` below), so none of those four rows could be taught
+    // here yet regardless. All four are still marked
+    // `refusedBeforeAnyWork` at the one throw site — the customer-visible
+    // behaviour (retry the same key) already holds — this only defers
+    // DOCUMENTING it. Give it the four rows, and remove this entry, in the
+    // change that makes credits live.
+    const WITHHELD_UNTIL_LAUNCH = new Set(['enforceReservationRefusedError']);
+
     const released = new Set<string>();
     for (const m of route.matchAll(/refusedBeforeAnyWork\(\s*(?:new )?(\w+)\(/g)) {
       const name = m[1] ?? '';
+      if (WITHHELD_UNTIL_LAUNCH.has(name)) continue;
       const problem = problemOf(route, name) || problemOf(errorsSrc, name);
       expect(
         problem,
         `the status and type of ${name}, the error at a released throw site`,
       ).not.toBe('');
       released.add(problem);
+    }
+    // CRITICAL — every withheld name really is still a marked throw site, so
+    // the exemption is not hiding a refusal that stopped releasing the key.
+    for (const name of WITHHELD_UNTIL_LAUNCH) {
+      expect(
+        new RegExp(`refusedBeforeAnyWork\\(\\s*${name}\\(`).test(route),
+        `${name} is withheld but is no longer a refusedBeforeAnyWork throw site`,
+      ).toBe(true);
     }
     // Vacuity: no throw sites found would make the comparison below pass empty.
     expect(released.size, 'distinct refusals the server gives the key back for').toBeGreaterThan(4);

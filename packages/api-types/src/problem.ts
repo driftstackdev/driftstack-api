@@ -118,6 +118,18 @@ export const PROBLEM_TYPES = {
   // session is NOT a new bind and is never blocked; a profile with only TERMINAL
   // sessions is free to bind again; a create without a profile_id is never gated.
   ProfileInUse: 'https://errors.driftstack.dev/profile-in-use',
+  // A MOVED account's turn could not be funded from its credits: no
+  // balance left (`reason:'balance'`), the account owes credits back
+  // (`reason:'debt'`, with `debt_reason`), or this one request would cost
+  // more than the task's reservation could ever hold
+  // (`reason:'task_too_large'`). 402 Payment Required. `bundled-llm-budget-
+  // exhausted` is never reused for this: that type means the LEGACY monthly
+  // soft cap, and the two rails stop being the same thing the moment an
+  // account is moved. Dark until AI credits launch — see
+  // `nothing-about-an-unreleased-feature-is-in-the-published-spec.test.ts`
+  // and `scripts/api-types-build-publish.mjs`, which refuses to publish this
+  // package while the word appears anywhere in what ships.
+  AiCreditsExhausted: 'https://errors.driftstack.dev/ai-credits-exhausted',
 } as const;
 
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES];

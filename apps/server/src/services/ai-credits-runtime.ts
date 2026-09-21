@@ -27,6 +27,7 @@
 import type { CreditBoundExceeded, CreditReservationsService } from './credit-reservations.js';
 import type { AiCreditLeaseKeeper } from './ai-credit-lease-keeper.js';
 import type { AiCreditsReportReader } from '../db/ai-credits-report-repo.js';
+import type { CreditAccountRecord, DrizzleCreditLedgerRepo } from '../db/credit-ledger-repo.js';
 import { METRIC_NAMES } from './metrics-registry.js';
 
 /**
@@ -52,6 +53,19 @@ export type AiCreditsReservations = Pick<
  */
 export type AiCreditsLeaseKeeper = Pick<AiCreditLeaseKeeper, 'add' | 'remove' | 'liveCount'>;
 
+/**
+ * S12 — what a turn needs to know about ONE account before it decides which
+ * leg funds it: `billing_mode` (is this account moved?) and, for a moved
+ * account, its chosen `ai_source` (§4.3). `ensureAccount` is the read
+ * `reserve()` itself takes under lock; here it runs with no lock, exactly as
+ * §4.4 says the tier/source read may ("the tier read takes no lock — it gates
+ * the product, not the money"). A route that decided from a stale read would
+ * still be safe: `reserve()` re-reads `credit_accounts` under lock and is the
+ * only place that ever moves credit.
+ */
+export type AiCreditsAccounts = Pick<DrizzleCreditLedgerRepo, 'ensureAccount'>;
+export type { CreditAccountRecord };
+
 /** The one member of `AppDeps` the credits runtime occupies. Absent while the mode is off. */
 export interface AiCreditsRuntime {
   /** Never `off`: with the mode off this whole object is absent. */
@@ -71,6 +85,13 @@ export interface AiCreditsRuntime {
    * rest.
    */
   readonly report: AiCreditsReportReader;
+  /**
+   * S12 — whether ONE account is moved, and onto which source. See
+   * {@link AiCreditsAccounts}. Absent from nothing: every deployment that has
+   * an `aiCredits` member at all can answer this, whatever its mode — a
+   * shadow-mode route reads `mode` first and never asks.
+   */
+  readonly accounts: AiCreditsAccounts;
 }
 
 /**

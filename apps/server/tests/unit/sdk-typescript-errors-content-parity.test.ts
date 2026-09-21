@@ -92,7 +92,7 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
     );
     expect(body).toMatch(/\/\/[^\n]*closing problem-type parity with Go \+ Python\./);
     expect(body).toMatch(
-      /\|\s*'feature_unavailable'\s*\|\s*'mfa_step_up_required'\s*\|\s*'byok_anthropic_required'\s*\|\s*'proxy_validation_failed'\s*\|\s*'transport';/,
+      /\|\s*'feature_unavailable'\s*\|\s*'mfa_step_up_required'\s*\|\s*'byok_anthropic_required'\s*\|\s*'proxy_validation_failed'[\s\S]*?\|\s*'ai_credits_exhausted'\s*\|\s*'transport';/,
     );
   });
 
@@ -150,8 +150,12 @@ describe('W423.A packages/sdk-typescript/src/errors.ts content parity', () => {
       /export class ConcurrencyLimitError extends DriftstackError \{\s*readonly currentSessions: number \| undefined;\s*readonly limit: number \| undefined;/,
     );
     expect(body).toMatch(
-      /const ext = p as \{ current_sessions\?: number; limit\?: number \};\s*this\.currentSessions = ext\.current_sessions;\s*this\.limit = ext\.limit;/,
+      /const ext = p as \{ current_sessions\?: number; limit\?: number; ai_tasks_in_flight\?: unknown \};\s*this\.currentSessions = ext\.current_sessions;\s*this\.limit = ext\.limit;\s*this\.aiTasksInFlight = ext\.ai_tasks_in_flight === true \? true : undefined;/,
     );
+  });
+
+  it('S12 CRITICAL ConcurrencyLimitError.aiTasksInFlight — true when this 429 is the AI-turn concurrency limit rather than the session-concurrency one; dark until AI credits launch.', () => {
+    expect(body).toMatch(/readonly aiTasksInFlight: boolean \| undefined;/);
   });
 
   it('TierLimitError + SessionDestroyedError — 2 simple subclasses with no extension data. TierLimitError surfaces from create/clone/restore on profiles + restore on profile-snapshots (the 3 "mint a new profile" paths). SessionDestroyedError surfaces when a session is acted on after destroy.', () => {

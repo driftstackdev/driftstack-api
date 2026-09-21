@@ -11,6 +11,7 @@
 import {
   PROBLEM_TYPES,
   ProblemSchema,
+  type AiDebtReason,
   type Problem,
   type ProblemType,
 } from '@driftstack/api-types';
@@ -147,12 +148,16 @@ export class ExpiredKeyError extends ApiError {
 }
 
 export class ForbiddenError extends ApiError {
-  constructor(detail = 'Caller is not permitted to perform this action.') {
+  constructor(
+    detail = 'Caller is not permitted to perform this action.',
+    extensions?: Record<string, unknown>,
+  ) {
     super({
       type: PROBLEM_TYPES.Forbidden,
       title: 'Forbidden',
       status: 403,
       detail,
+      ...(extensions !== undefined ? { extensions } : {}),
     });
     this.name = 'ForbiddenError';
   }
@@ -196,14 +201,33 @@ export class RateLimitedError extends ApiError {
   }
 }
 
+// S12/M11 — `overrides` lets the AI-turn concurrency limit (at most 3
+// enforced tasks running at once) reuse this type's 429 so old SDKs already
+// understand it, without inheriting the session-limit title/detail: the
+// customer has not opened a fourth SESSION, they have sent a fourth TASK
+// while three are still running. The default (undefined) keeps every
+// existing call site's session-limit copy byte for byte. `extraExtensions`
+// merges on top of `current_sessions`/`limit` — S12 adds
+// `ai_tasks_in_flight: true` so a client can tell the two 429s apart without
+// parsing the title.
 export class ConcurrencyLimitError extends ApiError {
-  constructor(currentSessions: number, limit: number) {
+  constructor(
+    currentSessions: number,
+    limit: number,
+    overrides?: { title?: string; detail?: string; extraExtensions?: Record<string, unknown> },
+  ) {
     super({
       type: PROBLEM_TYPES.ConcurrencyLimit,
-      title: 'Concurrent session limit reached',
+      title: overrides?.title ?? 'Concurrent session limit reached',
       status: 429,
-      detail: `Account already has ${currentSessions.toString()} active sessions; tier permits ${limit.toString()}.`,
-      extensions: { current_sessions: currentSessions, limit },
+      detail:
+        overrides?.detail ??
+        `Account already has ${currentSessions.toString()} active sessions; tier permits ${limit.toString()}.`,
+      extensions: {
+        current_sessions: currentSessions,
+        limit,
+        ...overrides?.extraExtensions,
+      },
     });
     this.name = 'ConcurrencyLimitError';
   }
@@ -530,6 +554,73 @@ export class BundledLlmBudgetExhaustedError extends ApiError {
       },
     });
     this.name = 'BundledLlmBudgetExhaustedError';
+  }
+}
+
+// S12/§9.6 — a MOVED account's turn could not be funded from its credits.
+// Three shapes, told apart by `reason`, drawn from where each was decided:
+//
+//  · 'balance'          — reserve() found less than the model's minimum to
+//                          start available (§4.4). `availableCredits` /
+//                          `requiredCredits` say how far.
+//  · 'debt'              — the account owes credits back (`debtReason`
+//                          `payment_reversed` or `plan_change`, §6.7/M5) and
+//                          spends nothing until it is repaid.
+//  · 'task_too_large'    — the reservation was already at the MODEL's
+//                          maximum (`reserve()`'s own `max_reserve_micro`)
+//                          and this one call still would not fit (§4.5's
+//                          fit ladder, first-call refusal). Distinct from
+//                          `balance`: topping up would not have helped.
+//
+// `bundled-llm-budget-exhausted` is never reused here (M10/M11): that type
+// names the LEGACY monthly soft cap, and conflating the two would tell a
+// moved customer to raise a cap that no longer exists.
+export type AiCreditsExhaustedReason = 'balance' | 'debt' | 'task_too_large';
+
+export interface AiCreditsExhaustedArgs {
+  readonly reason: AiCreditsExhaustedReason;
+  /** Required, and only meaningful, when `reason === 'debt'`. */
+  readonly debtReason?: AiDebtReason;
+  readonly availableCredits?: number;
+  readonly requiredCredits?: number;
+  readonly debtCredits?: number;
+  /** ISO-8601. When known, names the date `balance`'s sentence promises. */
+  readonly resetsAt?: string;
+}
+
+function aiCreditsExhaustedDetail(args: AiCreditsExhaustedArgs): string {
+  if (args.reason === 'task_too_large') {
+    return 'This request is too large to run on AI credits. Shorten it or start a new chat.';
+  }
+  if (args.reason === 'debt') {
+    return args.debtReason === 'plan_change'
+      ? 'AI is paused until your plan change is settled. It resumes when your next credits arrive, or contact support.'
+      : 'AI is paused on this account because a payment was reversed. Contact support to restore it.';
+  }
+  return args.resetsAt !== undefined
+    ? `You’ve used your AI credits for now. They refresh on ${args.resetsAt}.`
+    : 'You’ve used your AI credits for now. They’ll refresh next billing period.';
+}
+
+export class AiCreditsExhaustedError extends ApiError {
+  constructor(args: AiCreditsExhaustedArgs) {
+    super({
+      type: PROBLEM_TYPES.AiCreditsExhausted,
+      title: 'AI credits exhausted',
+      status: 402,
+      detail: aiCreditsExhaustedDetail(args),
+      extensions: {
+        reason: args.reason,
+        ...(args.debtReason !== undefined ? { debt_reason: args.debtReason } : {}),
+        ...(args.availableCredits !== undefined
+          ? { available_credits: args.availableCredits }
+          : {}),
+        ...(args.requiredCredits !== undefined ? { required_credits: args.requiredCredits } : {}),
+        ...(args.debtCredits !== undefined ? { debt_credits: args.debtCredits } : {}),
+        ...(args.resetsAt !== undefined ? { resets_at: args.resetsAt } : {}),
+      },
+    });
+    this.name = 'AiCreditsExhaustedError';
   }
 }
 

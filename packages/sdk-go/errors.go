@@ -87,6 +87,8 @@ var (
 	ErrProxyValidationFailed = errors.New("proxy validation failed")
 	// Single-active-session-per-profile guard (409 at launch).
 	ErrProfileInUse = errors.New("profile already in use")
+	// AI credits (402), dark until launch.
+	ErrAiCreditsExhausted = errors.New("ai credits exhausted")
 )
 
 // AuthError covers any of the auth-related problem types. Use the
@@ -527,6 +529,34 @@ type BundledLlmConsentRequiredError struct{ apiError }
 
 func (e *BundledLlmConsentRequiredError) Is(target error) bool {
 	return target == ErrBundledLlmConsentRequired
+}
+
+// AiCreditsExhaustedError — 402: a MOVED account's turn could not be funded
+// from its AI credits. Reason tells the three shapes apart:
+//
+//   - "balance" — nothing left to spend; AvailableCredits / RequiredCredits
+//     say how far short. ResetsAt, when non-empty, is when the next grant
+//     lands.
+//   - "debt" — the account owes credits back (DebtReason "payment_reversed"
+//     or "plan_change") and spends nothing until it is repaid.
+//   - "task_too_large" — this one request would not fit even at the model's
+//     maximum reservation. Shortening the request is the only fix.
+//
+// Distinct from BundledLlmBudgetExhaustedError: that type is the LEGACY
+// monthly soft cap and never applies once an account is moved onto credits.
+type AiCreditsExhaustedError struct {
+	apiError
+	Reason           string
+	DebtReason       string
+	AvailableCredits int
+	RequiredCredits  int
+	DebtCredits      int
+	// ResetsAt is ISO-8601, when known; empty otherwise.
+	ResetsAt string
+}
+
+func (e *AiCreditsExhaustedError) Is(target error) bool {
+	return target == ErrAiCreditsExhausted
 }
 
 // Pair-mode takeover lock contention.

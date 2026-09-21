@@ -60,6 +60,9 @@ function creditsRuntime(): AiCreditsRuntime {
       settleCall: unused,
     },
     leaseKeeper: { add: () => undefined, remove: () => undefined, liveCount: () => 0 },
+    // S12 — this file exercises the staff report/census routes only; nothing
+    // here reaches a turn, so the account read must never be asked for.
+    accounts: { ensureAccount: unused },
     report: {
       shadowReport: (args) =>
         Promise.resolve({

@@ -32,6 +32,19 @@ function slugsFromPROBLEM_TYPES(): Set<string> {
   return out;
 }
 
+/**
+ * Slugs withheld from this public marketing-site doc until their feature
+ * launches — same pattern as `docs-metrics-content-parity.test.ts`'s map of
+ * the same name.
+ */
+const WITHHELD_UNTIL_LAUNCH = new Map<string, string>([
+  [
+    'ai-credits-exhausted',
+    'AI credits are built and dark (DRIFTSTACK_AI_CREDITS_MODE defaults to off and no account is ' +
+      'on them). Document it, and remove this entry, in the change that makes credits live.',
+  ],
+]);
+
 describe('W242.D error-codes doc parity', () => {
   const doc = read();
   const docSlugs = slugsFromDoc(doc);
@@ -41,9 +54,18 @@ describe('W242.D error-codes doc parity', () => {
     expect(docSlugs.size).toBeGreaterThanOrEqual(20);
   });
 
-  it('every PROBLEM_TYPES slug is listed in the doc', () => {
-    const missing = [...liveSlugs].filter((s) => !docSlugs.has(s));
+  it('every PROBLEM_TYPES slug is listed in the doc, except the ones withheld until their feature launches', () => {
+    const missing = [...liveSlugs].filter((s) => !docSlugs.has(s) && !WITHHELD_UNTIL_LAUNCH.has(s));
     expect(missing).toEqual([]);
+  });
+
+  it('CRITICAL every withheld slug really is absent from the doc, and really is a live problem type', () => {
+    for (const [slug, why] of WITHHELD_UNTIL_LAUNCH) {
+      expect(liveSlugs.has(slug), `${slug} is withheld but not in PROBLEM_TYPES`).toBe(true);
+      expect(docSlugs.has(slug), `${slug} is withheld (${why}) and yet appears in the doc`).toBe(
+        false,
+      );
+    }
   });
 
   it('every doc slug exists in PROBLEM_TYPES', () => {

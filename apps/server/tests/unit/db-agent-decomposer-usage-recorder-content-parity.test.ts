@@ -43,7 +43,7 @@ describe('db/agent-decomposer-usage-recorder content parity', () => {
     );
   });
 
-  it("Arc 1 sub-slice 6.4 bundled-cost framing pinned: 'bundled-LLM turns post a flat $0.10/turn (Q5=A hide actual upstream Anthropic cost) under a distinct record_type so the soft-cap sweep (sub-slice 6.5) can sum only bundled rows.' + POSTED_BUNDLED_COST_CENTS = 10 + recordType: isBundled ? 'agent_decomposer_bundled' : 'agent_decomposer' — pinned so the 6.4 anchor + Q5=A hide-upstream-cost + 10-cent-flat-fee + 6.5-soft-cap-sweep cross-reference contract all stay documented", () => {
+  it("Arc 1 sub-slice 6.4 bundled-cost framing pinned: 'bundled-LLM turns post a flat $0.10/turn (Q5=A hide actual upstream Anthropic cost) under a distinct record_type so the soft-cap sweep (sub-slice 6.5) can sum only bundled rows.' + POSTED_BUNDLED_COST_CENTS = 10 + recordType: isBundledLike ? 'agent_decomposer_bundled' : 'agent_decomposer' — pinned so the 6.4 anchor + Q5=A hide-upstream-cost + 10-cent-flat-fee + 6.5-soft-cap-sweep cross-reference contract all stay documented", () => {
     expect(body).toMatch(
       /\/\/ Arc 1 sub-slice 6\.4 \(v2-#6\) — bundled-LLM turns post a flat\s*\/\/ \$0\.10\/turn \(Q5=A hide actual upstream Anthropic cost\) under a\s*\/\/ distinct record_type so the soft-cap sweep \(sub-slice 6\.5\) can\s*\/\/ sum only bundled rows\./,
     );
@@ -58,9 +58,14 @@ describe('db/agent-decomposer-usage-recorder content parity', () => {
       /metadata\.cost_usd_cents =\s*args\.bundledFlatCostAlreadyPosted === true \? 0 : POSTED_BUNDLED_COST_CENTS;/,
     );
     expect(body).not.toMatch(/metadata\.cost_usd_cents = POSTED_BUNDLED_COST_CENTS;/);
-    expect(body).toMatch(/metadata\.cost_basis = 'bundled_flat_per_turn';/);
+    // S12 — 'credits' gets its own cost_basis word; a bundled (legacy) row is
+    // unaffected. See db-agent-decomposer-usage-recorder-bundled-flat-cost.test.ts
+    // for the behavioural proof of both arms.
     expect(body).toMatch(
-      /const recordType = isBundled \? 'agent_decomposer_bundled' : 'agent_decomposer';/,
+      /metadata\.cost_basis = args\.keySource === 'credits' \? 'credits' : 'bundled_flat_per_turn';/,
+    );
+    expect(body).toMatch(
+      /const recordType = isBundledLike \? 'agent_decomposer_bundled' : 'agent_decomposer';/,
     );
   });
 

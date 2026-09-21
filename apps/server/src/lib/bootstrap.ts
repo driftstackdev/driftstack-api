@@ -1115,6 +1115,11 @@ export async function createProductionDeps(
   const aiCredits: AiCreditsRuntime | undefined =
     creditReservationsService === null ||
     creditLeaseKeeper === null ||
+    // S12 — always non-null alongside `creditReservationsService` (both are
+    // guarded by the same `creditGrants === null` check above); named
+    // explicitly so TypeScript narrows `creditLedgerRepo` for the `accounts`
+    // member below instead of requiring a cast.
+    creditLedgerRepo === null ||
     config.aiCreditsMode === 'off'
       ? undefined
       : {
@@ -1128,6 +1133,12 @@ export async function createProductionDeps(
           // census counts exactly the accounts this deployment already treats
           // as its own.
           report: new DrizzleAiCreditsReportRepo(dbHandle, effectiveStaffEmails),
+          // S12 — whether ONE account is moved (`billing_mode`) and its chosen
+          // source (`ai_source`), read with no lock (§4.4: the tier/source read
+          // takes none). The same ledger repo `reserve()` locks under its own
+          // transaction; this is the unlocked read a route takes BEFORE it
+          // decides which leg funds a turn.
+          accounts: creditLedgerRepo,
         };
 
   // Webhooks first so sessions + api-keys can wire it.

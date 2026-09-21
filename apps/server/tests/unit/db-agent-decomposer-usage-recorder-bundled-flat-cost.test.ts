@@ -94,6 +94,23 @@ describe('bundled-LLM flat cost is posted once per TURN, not once per row', () =
     for (const row of rows) expect(row.metadata.cost_basis).toBe('bundled_flat_per_turn');
   });
 
+  it('S12 — a credits-sourced turn posts the same flat placeholder and record_type as a bundled one, but its own cost_basis word', async () => {
+    const { recorder, rows } = recorderWithCapture();
+    await recorder.record({ ...base, keySource: 'credits' });
+    await recorder.record({ ...base, keySource: 'credits', bundledFlatCostAlreadyPosted: true });
+
+    expect(rows).toHaveLength(2);
+    // Same record_type as bundled — the soft-cap query and every other reader
+    // of 'agent_decomposer_bundled' keeps working unchanged.
+    for (const row of rows) expect(row.recordType).toBe('agent_decomposer_bundled');
+    const total = rows.reduce((sum, r) => sum + Number(r.metadata.cost_usd_cents ?? 0), 0);
+    expect(total).toBe(10);
+    // But 'credits', never 'bundled_flat_per_turn': a reader that sums or
+    // reconciles by basis must not mistake a charged reservation for the
+    // legacy monthly-cap rail.
+    for (const row of rows) expect(row.metadata.cost_basis).toBe('credits');
+  });
+
   it('never suppresses the upstream-derived cost on a BYOK turn, where both rows are real spend', async () => {
     const { recorder, rows } = recorderWithCapture();
     // No keySource → not bundled. Two rows of a read-intent turn each carry

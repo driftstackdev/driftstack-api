@@ -45,6 +45,7 @@ import {
   agentTurnAdmissionForSession,
   agentTurnAdmissionMatchesSnapshot,
   AgentProviderKeyRejectedError,
+  AgentTurnCreditsExhaustedError,
   AGENT_SEED_MAX_ENTRIES,
   AGENT_SEED_MAX_SERIALIZED_BYTES,
   turnWasDeclinedBeforeItStarted,
@@ -56,13 +57,30 @@ import {
 import { consequentialSignature } from '../services/agent-executor.js';
 import type { AgentIntent, DecomposeUsage, TranscriptEntry } from '../services/agent-decomposer.js';
 import type { AgentCreditMeter } from '../services/agent-credit-meter.js';
-import { shadowCreditMeter } from '../services/agent-credit-meter.js';
+import { enforceCreditMeter, shadowCreditMeter } from '../services/agent-credit-meter.js';
 import {
   aiCreditsCounters,
   withinShadowDeadline,
   type AiCreditsRuntime,
+  type CreditAccountRecord,
 } from '../services/ai-credits-runtime.js';
-import { CREDIT_SHADOW_STATEMENT_TIMEOUT_MS } from '../services/credit-reservations.js';
+import {
+  CREDIT_SHADOW_STATEMENT_TIMEOUT_MS,
+  type CreditReserveRefused,
+  type CreditSettleResult,
+} from '../services/credit-reservations.js';
+import { decideAiSource } from '../services/ai-source.js';
+import {
+  aiEntitlementFor,
+  aiNotOnPlanDetail,
+  creditsModelRefusalFor,
+  OWN_KEY_NOT_ON_PLAN_DETAIL,
+} from '../services/ai-entitlements.js';
+import {
+  CREDIT_RATE_CARD_V1,
+  MICROCREDITS_PER_CREDIT,
+  MAX_AI_TASKS_IN_FLIGHT,
+} from '@driftstack/api-types';
 import {
   publicAgentIntent,
   publicIntentResult,
@@ -154,6 +172,7 @@ import {
 } from '../lib/gui-control-key-encryption.js';
 import { validateGuiControlKey } from '../lib/agent-session-control-key.js';
 import {
+  AiCreditsExhaustedError,
   BundledLlmBudgetExhaustedError,
   BundledLlmConsentRequiredError,
   BadRequestError,
@@ -2288,6 +2307,35 @@ async function cancelRunningTurn(args: {
   await args.runtime.awaitTurnSettled(args.agentSessionId);
 }
 
+/**
+ * Which key actually ran a turn — for the usage block's `cost_usd_cents`
+ * (`publicUsage`), the usage recorder's `record_type` split, and
+ * {@link aiKeyRejectedProblem}. `'credits'` is S12's: a MOVED account funded
+ * on its own AI credits, running on the SAME deployment key `'bundled'` and
+ * `'fallback'` do (M10: never the customer's own key, never the staging
+ * fallback). Kept as ONE alias rather than repeated inline unions so a
+ * seventh source cannot be added at one call site and missed at another.
+ */
+type ResolvedKeySource = 'header' | 'cached' | 'bundled' | 'fallback' | 'none' | 'credits';
+
+/** A turn's SHADOW measurement (S11, legacy accounts) or its ENFORCE
+ *  reservation (S12, a moved account's credits leg). See `ResolvedKeySource`
+ *  for why the two are kept apart rather than unified into one shape: only
+ *  `enforce` really holds credit, and only it prices `cost_usd_cents`. */
+type TurnCreditLeg =
+  | { kind: 'shadow'; reservationId: string; meter: AgentCreditMeter }
+  | {
+      kind: 'enforce';
+      reservationId: string;
+      meter: AgentCreditMeter;
+      /** What §4.4 reserved for this task, and the model it was reserved on —
+       *  read back by the 402 mapper to draw `task_too_large` vs `balance`
+       *  from the RESERVATION, never from the runtime's own error (that layer
+       *  never sees the reservation at all). */
+      reservedMicro: number;
+      model: string;
+    };
+
 export function registerAgentSessionsRoutes(
   app: FastifyInstance,
   deps: AgentSessionsRoutesDeps,
@@ -2385,8 +2433,12 @@ export function registerAgentSessionsRoutes(
    *    refuses to boot with it. S12 moves accounts off `bundled`, so `bundled`
    *    is what the shadow numbers have to be about.
    *
-   * MOVED accounts are S12's: until then every account is legacy, so the mode
-   * alone decides and the account's `billing_mode` is not read here.
+   * A MOVED account never reaches this predicate at all: `executeAgentMessage`
+   * branches on `movedAccount` before `keySource` is even resolved, and a
+   * moved account's key chain has no `'bundled'` member (S12 replaces the
+   * whole bundled leg for it, §4.2). So `keySource === 'bundled'` still means
+   * exactly what it always meant — a LEGACY account on Driftstack's key — and
+   * `billing_mode` still need not be read here.
    */
   const turnIsMeteredLegacyBundled = (keySource: string): boolean =>
     aiCredits !== undefined && agentDecomposerKind === 'claude' && keySource === 'bundled';
@@ -2506,6 +2558,145 @@ export function registerAgentSessionsRoutes(
         );
       }
     }
+  };
+
+  /**
+   * S12/§4.4 — 429 for a MOVED account with three enforced tasks already open.
+   * Reuses `concurrency-limit` so old SDKs already understand the status and
+   * the type without a release; M11 overrides the session-limit title/detail
+   * that type carries by default, because this is about TASKS in flight, not
+   * open SESSIONS, and `ai_tasks_in_flight` lets a client tell the two apart
+   * without parsing the sentence.
+   */
+  const aiTasksInFlightError = (openTasks: number): ApiError =>
+    new ConcurrencyLimitError(openTasks, MAX_AI_TASKS_IN_FLIGHT, {
+      title: 'AI task limit reached',
+      detail: `${MAX_AI_TASKS_IN_FLIGHT.toString()} AI tasks are already running. Start this one when one finishes.`,
+      extraExtensions: { ai_tasks_in_flight: true },
+    });
+
+  /**
+   * S12/§9.6 — the typed answer for one of `reserve()`'s four refusals
+   * (§4.4's own order: model, tasks_in_flight, debt, balance). `resetsAt` is
+   * left undefined: the reservation does not carry the account's window end,
+   * and this slice does not add the extra read to fill it in — a caller that
+   * has it may still fill the field in later without changing this shape.
+   *
+   * ⛔ MARKED `refusedBeforeAnyWork` ONCE, AT THE CALL SITE, NOT HERE. This
+   * function only BUILDS the error; the repo's own invariant (pinned by
+   * which-refusals-leave-an-idempotency-key-free.test.ts) is that the marker
+   * is applied at THROW sites only, so a reader can find every Idempotency-Key
+   * release by searching for one literal string.
+   */
+  const enforceReservationRefusedError = (a: {
+    req: FastifyRequest;
+    model: string;
+    ownKeyAllowed: boolean;
+    refused: CreditReserveRefused;
+  }): ApiError => {
+    const { refused } = a;
+    if (refused.reason === 'model') {
+      const refusal = creditsModelRefusalFor(a.model, a.ownKeyAllowed);
+      if (refusal !== null) {
+        return refuseModelOnTheDeploymentKey({
+          req: a.req,
+          model: a.model,
+          refusal,
+          route: '/v1/agent-sessions/:id/message',
+        });
+      }
+      // Defensive only: reserve() refused on 'model' but the same pure
+      // predicate this route reads copy from disagrees. Never worded as
+      // "credits used" — this is a configuration disagreement, not a
+      // balance answer.
+      return new InternalError(
+        'The AI could not run this message because of a problem on our side, not with your account or your request. No step was run. Try again later, and contact support if it keeps happening.',
+      );
+    }
+    if (refused.reason === 'tasks_in_flight') {
+      return aiTasksInFlightError(refused.openTasks);
+    }
+    if (refused.reason === 'debt') {
+      return new AiCreditsExhaustedError({
+        reason: 'debt',
+        ...(refused.debtReason !== null ? { debtReason: refused.debtReason } : {}),
+        debtCredits: Math.ceil(refused.debtMicro / MICROCREDITS_PER_CREDIT),
+      });
+    }
+    // 'balance'
+    return new AiCreditsExhaustedError({
+      reason: 'balance',
+      availableCredits: Math.floor(refused.availableMicro / MICROCREDITS_PER_CREDIT),
+      ...(refused.minStartMicro !== null
+        ? { requiredCredits: Math.ceil(refused.minStartMicro / MICROCREDITS_PER_CREDIT) }
+        : {}),
+    });
+  };
+
+  /**
+   * S12 — open the ENFORCE leg for a MOVED account's turn on credits (§4.4).
+   *
+   * ⛔ UNLIKE THE SHADOW OPEN, A REFUSAL HERE IS REAL. `reserve()`'s refusal
+   * outcome becomes the typed error the route throws; a database FAULT
+   * (the promise rejects for any other reason) is left to propagate as an
+   * ordinary error rather than being swallowed the way shadow's is — an
+   * enforce task that could not be checked must not silently run unmetered,
+   * and it must not be worded as "credits used" either (H5, §4.5's last row):
+   * nothing was spent, so telling the customer otherwise is a lie they cannot
+   * check.
+   */
+  const openEnforceCreditLeg = async (a: {
+    req: FastifyRequest;
+    agentSessionId: string;
+    admission: AgentTurnAdmission;
+    accountId: string;
+    model: string;
+    ownKeyAllowed: boolean;
+    idempotencyKey: string | null;
+  }): Promise<TurnCreditLeg> => {
+    const credits = aiCredits;
+    if (credits === undefined) {
+      // Unreachable in practice: the caller only reaches here when
+      // `aiCredits !== undefined && aiCredits.mode === 'enforce'` already
+      // held long enough to read `movedAccount`. Fail closed rather than run
+      // a credits turn with nothing to meter it against.
+      throw new InternalError('AI credits are not configured on this deployment.');
+    }
+    const reservationId = randomUUID();
+    const reserved = await credits.reservations.reserve({
+      accountId: a.accountId,
+      reservationId,
+      agentSessionId: a.agentSessionId,
+      idempotencyKey: a.idempotencyKey,
+      model: a.model,
+      mode: 'enforce',
+      bootId: credits.bootId,
+    });
+    if (reserved.outcome === 'refused') {
+      await assertAgentMessageAdmissionCurrent(a.agentSessionId, a.admission);
+      throw refusedBeforeAnyWork(
+        enforceReservationRefusedError({
+          req: a.req,
+          model: a.model,
+          ownKeyAllowed: a.ownKeyAllowed,
+          refused: reserved,
+        }),
+      );
+    }
+    if (reserved.outcome !== 'reserved') {
+      // 'shadowed' / 'shadow_lost' cannot happen for `mode:'enforce'` — see
+      // `CreditReserveResult`. Fail closed rather than trust an impossible
+      // shape.
+      throw new InternalError('an AI-credit reservation answered unexpectedly for an enforce task');
+    }
+    credits.leaseKeeper.add(reservationId);
+    return {
+      kind: 'enforce',
+      reservationId,
+      reservedMicro: reserved.reservedMicro,
+      model: a.model,
+      meter: enforceCreditMeter({ reservations: credits.reservations, reservationId }),
+    };
   };
 
   // N-2 — read the customer-safe {os, confidence} subset of a session's exit-proxy
@@ -3137,13 +3328,101 @@ export function registerAgentSessionsRoutes(
       // reads the tier already loaded on ctx (no extra lookup); team-scoped
       // uses the live tier resolved by the effective-owner limiter above.
       if ((parsed.data.mode ?? 'ai') !== 'manual') {
-        requireTierFeature(ownerTier, 'aiAgent');
-        await refuseModelTheAccountCanOnlyRunOnTheDeploymentKey({
-          req,
-          ownerAccountId,
-          ownerTier,
-          model: parsed.data.model ?? DEFAULT_AGENT_MODEL,
-        });
+        // S12 — a MOVED account (`billing_mode='credits'`) is gated by the
+        // CREDITS entitlement table, not the legacy `aiAgent` tier feature:
+        // Personal has no `aiAgent` there (today's Personal account has no AI
+        // at all) and included credits here — that gap is H3's whole point
+        // (see `AiPlanEntitlement`'s own doc comment in api-types). Every
+        // other tier already agrees between the two tables, so this changes
+        // behaviour for Personal only, and only once it is moved.
+        const movedCreditAccount =
+          aiCredits !== undefined && aiCredits.mode === 'enforce'
+            ? await aiCredits.accounts.ensureAccount(ownerAccountId)
+            : null;
+        const createOwnerMovedToCredits = movedCreditAccount?.billingMode === 'credits';
+        const creditsEntitlement = createOwnerMovedToCredits ? aiEntitlementFor(ownerTier) : null;
+        if (creditsEntitlement !== null) {
+          if (!creditsEntitlement.aiIncluded) {
+            throw new ForbiddenError(aiNotOnPlanDetail(ownerTier), {
+              ai_not_on_plan: true,
+              tier: ownerTier,
+            });
+          }
+        } else {
+          requireTierFeature(ownerTier, 'aiAgent');
+          // ⛔ SKIPPED FOR A MOVED ACCOUNT, ON PURPOSE. This legacy helper
+          // reasons about the BUNDLED leg and the staging fallback, neither
+          // of which a moved account ever reaches (M10); asking it anyway
+          // would either refuse Opus with the "add your key" copy on a
+          // Personal account that may never add one, or (once
+          // `allowFallbackForUnconfiguredCustomers` is on) refuse it before
+          // the credits-aware check below gets a chance to answer with the
+          // right copy. The block right after this one is the moved
+          // account's own create-time model check.
+          await refuseModelTheAccountCanOnlyRunOnTheDeploymentKey({
+            req,
+            ownerAccountId,
+            ownerTier,
+            model: parsed.data.model ?? DEFAULT_AGENT_MODEL,
+          });
+        }
+        // S12/§4.3 rule 6 — refuse an Opus-class or unpriced model on credits
+        // at CREATE too, with M11's plan-aware copy (never "add your key" for
+        // Personal). The legacy check above only runs for a LEGACY account;
+        // a moved account needs its own create-time check.
+        //
+        // ⛔ RUN THROUGH `decideAiSource`, THE SAME FUNCTION THE TURN USES —
+        // not just the header. A moved account whose turns will actually run
+        // on its OWN key (rule 3's `ai_source='own_key'`, or rule 4's
+        // automatic fallback) never reaches credits at all, so refusing Opus
+        // for it here would be a false positive: the create-time answer must
+        // agree with what the first turn will actually do.
+        if (creditsEntitlement !== null && agentDecomposerKind === 'claude' && movedCreditAccount) {
+          const header = req.headers['x-byok-anthropic-api-key'];
+          const hasHeaderKey = typeof header === 'string' && header.length > 0;
+          let storedKeyUsable = false;
+          if (!hasHeaderKey && byokService !== undefined) {
+            try {
+              const stored = await byokService.getPlaintext({
+                accountId: ownerAccountId,
+                now: new Date(),
+              });
+              storedKeyUsable = stored !== null;
+            } catch (err) {
+              // A stored key that cannot be read is not proof there is none.
+              // Let the create through, exactly as the legacy helper does on
+              // the same fault — the per-turn check still refuses if the
+              // turn would truly land on credits.
+              req.log.warn(
+                { component: 'agent-session-create', err },
+                'BYOK read failed during the credits model check at create; deferring to the per-turn check',
+              );
+              storedKeyUsable = true;
+            }
+          }
+          const sourceDecision = decideAiSource({
+            entitlement: creditsEntitlement,
+            aiSource: movedCreditAccount.aiSource,
+            headerKeyPresent: hasHeaderKey,
+            storedKeyUsable,
+          });
+          // Only a turn that would actually land on credits can be refused
+          // for a model credits cannot run; every other decision resolves to
+          // the customer's own key (or a refusal the turn-time path already
+          // answers more precisely, e.g. own_key_missing).
+          if (sourceDecision.outcome === 'use' && sourceDecision.kind === 'credits') {
+            const model = parsed.data.model ?? DEFAULT_AGENT_MODEL;
+            const refusal = creditsModelRefusalFor(model, creditsEntitlement.ownKeyAllowed);
+            if (refusal !== null) {
+              throw refuseModelOnTheDeploymentKey({
+                req,
+                model,
+                refusal,
+                route: '/v1/agent-sessions',
+              });
+            }
+          }
+        }
       }
 
       // Founder directive #63 — TEST THE PROXY LIVE before we create a session row
@@ -5955,7 +6234,7 @@ export function registerAgentSessionsRoutes(
     };
     const publicUsage = (
       usage: DecomposeUsage | undefined,
-      source?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none',
+      source?: ResolvedKeySource,
     ):
       | {
           decomposer_kind: 'claude' | 'deterministic';
@@ -5986,9 +6265,22 @@ export function registerAgentSessionsRoutes(
           : {}),
         ...(source === 'bundled'
           ? { cost_usd_cents: 10 }
-          : usage.costUsdCents !== undefined
-            ? { cost_usd_cents: usage.costUsdCents }
-            : {}),
+          : // S12/§5.2 — a credits turn's cost is what it was REALLY charged,
+            // ceil'd to a whole cent (1 credit = 1 cent, so this is
+            // ceil(charged credits)). `enforceSettleResult` is set by the
+            // explicit settle the route runs right after `runTurn` resolves
+            // (§5.2's "normal path"), before any branch below calls
+            // `publicUsage` — so it is always populated here on a credits
+            // turn, and 0 only if the turn made no billable call at all.
+            source === 'credits'
+            ? {
+                cost_usd_cents: Math.ceil(
+                  (enforceSettleResult?.chargedMicro ?? 0) / MICROCREDITS_PER_CREDIT,
+                ),
+              }
+            : usage.costUsdCents !== undefined
+              ? { cost_usd_cents: usage.costUsdCents }
+              : {}),
         ...(usage.model !== undefined ? { model: usage.model } : {}),
       };
     };
@@ -5998,7 +6290,7 @@ export function registerAgentSessionsRoutes(
         tokensConsumed?: number;
         executor?: { results: ReadonlyArray<Parameters<typeof publicIntentResult>[0]> };
       },
-      source?: 'header' | 'cached' | 'bundled' | 'fallback' | 'none',
+      source?: ResolvedKeySource,
     ) => {
       const usage = publicUsage(result.usage, source);
       return {
@@ -6169,12 +6461,130 @@ export function registerAgentSessionsRoutes(
     // one slot on every exit path (the turn throwing, a downstream 502,
     // or a normal return).
     let bundledSlotAcquired = false;
-    // S11 — this turn's AI-credit measurement, once it has one. Declared out
-    // here, beside the slot, because the `finally` below has to be able to close
-    // it however the turn ended — including the paths that throw between opening
-    // it and reaching the runtime.
-    let creditLeg: { reservationId: string; meter: AgentCreditMeter } | null = null;
+    // S11/S12 — this turn's AI-credit measurement or reservation, once it has
+    // one. Declared out here, beside the slot, because the `finally` below has
+    // to be able to close it however the turn ended — including the paths
+    // that throw between opening it and reaching the runtime. `kind` tells the
+    // finally, and the settle-early logic below, which of the two legs it is:
+    // a SHADOW leg only ever measures (S11, legacy accounts); an ENFORCE leg
+    // (S12) really holds the account's credit and is what the response's
+    // `cost_usd_cents` is priced from.
+    let creditLeg: TurnCreditLeg | null = null;
+    // S12 — what the enforce leg's settle answered, the ONE time this route
+    // calls it (settle is idempotent, but there is no reason to ask twice).
+    // `publicUsage` reads `chargedMicro` off this for a `keySource:'credits'`
+    // turn's `cost_usd_cents` (§5.2: ceil(charged), never the flat bundled 10¢).
+    let enforceSettleResult: CreditSettleResult | null = null;
+    // S12 — settle the enforce leg exactly once. Called explicitly right
+    // after `runTurn` resolves (the "normal path", §5.2) so every response
+    // branch below can price `cost_usd_cents` from what was really charged,
+    // and again, unconditionally, from the route's `finally` — which is a
+    // no-op the moment this already succeeded (settle is idempotent
+    // server-side) and is what covers every path that throws before the
+    // first call ever runs.
+    const settleEnforceLegOnce = async (
+      reason: 'completed' | 'lease_expired' | 'max_age' | 'admin',
+    ): Promise<CreditSettleResult | null> => {
+      if (creditLeg === null || creditLeg.kind !== 'enforce' || aiCredits === undefined) {
+        return null;
+      }
+      if (enforceSettleResult !== null) return enforceSettleResult;
+      try {
+        enforceSettleResult = await aiCredits.reservations.settle(creditLeg.reservationId, reason);
+      } catch (err) {
+        // §5.3 — logged and left to the lease keeper, which finishes an
+        // unsettled task within 90 s. Must not replace the turn's own
+        // outcome (M1's reasoning, the enforce side of it): the customer
+        // already has a real answer by the time this can fail.
+        req.log.warn(
+          {
+            component: 'agent-session-message',
+            event: 'ai_credits_enforce_settle_failed',
+            sessionId: req.params.id,
+            err,
+          },
+          'settling an AI-credit reservation failed — the lease keeper finishes it',
+        );
+      }
+      return enforceSettleResult;
+    };
+    /** The route's `finally`, for the enforce leg: settle (idempotent) and
+     *  ALWAYS remove from the live set, whatever settle answered (M1). */
+    const closeEnforceCreditLeg = async (): Promise<void> => {
+      if (creditLeg === null || creditLeg.kind !== 'enforce' || aiCredits === undefined) return;
+      await settleEnforceLegOnce('completed');
+      try {
+        aiCredits.leaseKeeper.remove(creditLeg.reservationId);
+      } catch (err) {
+        req.log.warn(
+          {
+            component: 'agent-session-message',
+            event: 'ai_credits_enforce_lease_release_failed',
+            sessionId: req.params.id,
+            err,
+          },
+          'handing an AI-credit lease back failed — the lease lapses and the keeper finishes the task',
+        );
+      }
+    };
+    /**
+     * S12/§4.5 — the FIRST call's `AgentTurnCreditsExhaustedError` maps to
+     * 402 `ai-credits-exhausted`. Only `did_not_fit` is a real "no room"
+     * answer; every other reason (`gone`, `settled`, `max_age`, `model`,
+     * `unmetered_provider`) is a race, a mismatch or a capability gap — NOT
+     * "ran out of credits" — and is answered honestly as transient instead
+     * (wave-4b's carried note).
+     *
+     * `task_too_large` vs `balance` is read off the RESERVATION
+     * (`creditLeg.reservedMicro` against the model's `maxReserveMicro` on the
+     * pinned rate card), never off the runtime's error — that layer never
+     * saw the reservation at all.
+     */
+    const creditsExhaustedFromFirstCallRefusal = (
+      err: AgentTurnCreditsExhaustedError,
+    ): ApiError => {
+      if (err.reason !== 'did_not_fit') {
+        return new InternalError(
+          'The AI could not run this message because of a problem on our side, not with your account or your request. No step was run. Try again later, and contact support if it keeps happening.',
+          err,
+        );
+      }
+      const maxReserveMicro =
+        creditLeg?.kind === 'enforce'
+          ? (CREDIT_RATE_CARD_V1.models as Record<string, { maxReserveMicro: number }>)[
+              creditLeg.model
+            ]?.maxReserveMicro
+          : undefined;
+      const atCap =
+        creditLeg?.kind === 'enforce' &&
+        maxReserveMicro !== undefined &&
+        creditLeg.reservedMicro >= maxReserveMicro;
+      return atCap
+        ? new AiCreditsExhaustedError({ reason: 'task_too_large' })
+        : new AiCreditsExhaustedError({
+            reason: 'balance',
+            ...(creditLeg?.kind === 'enforce'
+              ? { availableCredits: Math.floor(creditLeg.reservedMicro / MICROCREDITS_PER_CREDIT) }
+              : {}),
+          });
+    };
+
+    // S12 — is this turn funded by a MOVED account's own chosen AI source
+    // (§4.3)? Only ever true under `enforce`: §4.1 treats a moved account as
+    // LEGACY while the mode is `shadow`, so the S11 measurement above still
+    // applies to it and nothing below this point may read `movedAccount`
+    // except through this guard. The read takes no lock (§4.4) — `reserve()`
+    // re-reads `credit_accounts` under lock and is the only place that ever
+    // moves credit, so a stale read here costs nothing but a wrong LEG choice,
+    // never a wrong CHARGE.
+    let movedAccount: CreditAccountRecord | null = null;
+    if (aiCredits !== undefined && aiCredits.mode === 'enforce') {
+      const creditAccount = await aiCredits.accounts.ensureAccount(turnAccountId);
+      if (creditAccount.billingMode === 'credits') movedAccount = creditAccount;
+    }
+
     if (
+      movedAccount === null &&
       headerByokKey === undefined &&
       cachedByokKey === undefined &&
       bundledLlmService !== undefined &&
@@ -6346,43 +6756,128 @@ export function registerAgentSessionsRoutes(
     // exit path from here on (the turn throwing, a downstream 502, or a
     // normal return), so a thrown turn can't leak a slot.
     try {
-      const resolvedByokKey =
-        headerByokKey ??
-        cachedByokKey ??
-        bundledLlmKey ??
-        (allowFallbackForUnconfiguredCustomers === true ? deploymentFallbackKey : undefined);
-      // Arc 1 sub-slice 6.4 (v2-#6) — derive the resolution leg so
-      // AgentRuntime can write the right record_type. Order mirrors
-      // the chain above; 'none' for the prod-default 502 path.
-      const keySource: 'header' | 'cached' | 'bundled' | 'fallback' | 'none' =
-        headerByokKey !== undefined
-          ? 'header'
-          : cachedByokKey !== undefined
-            ? 'cached'
-            : bundledLlmKey !== undefined
-              ? 'bundled'
-              : resolvedByokKey !== undefined
-                ? 'fallback'
-                : 'none';
-      // S11 — open the measurement HERE: inside the try, so the `finally` closes
-      // it whatever happens next, and BEFORE the refusals below, because a
-      // reservation taken before a preflight throw is exactly the leak M1 is
-      // about. Never through `settleProviderPreflight`: that helper re-asserts
-      // the turn's admission and RE-THROWS, so a shadow measurement routed
-      // through it could end a turn — which is the one thing shadow may not do.
-      if (turnIsMeteredLegacyBundled(keySource)) {
-        creditLeg = await openShadowCreditLeg({
-          accountId: turnAccountId,
-          agentSessionId: req.params.id,
-          model: pre.model,
-        });
+      let resolvedByokKey: string | undefined;
+      let keySource: ResolvedKeySource;
+
+      if (movedAccount !== null) {
+        // ═══ S12 — the credits leg REPLACES the whole bundled leg for a
+        // MOVED account: no consent read, no tier re-check against the old
+        // table, no calendar-month cap, no in-memory slot (§4.2). ═══
+        const owner =
+          authRepo === undefined
+            ? null
+            : await settleProviderPreflight(() => authRepo.getAccount(turnAccountId));
+        if (owner === null) {
+          // The account vanished mid-request. Fall through to the shared
+          // "no key" 502 below exactly as the legacy chain does when nothing
+          // resolved — there is no plan left to read.
+          resolvedByokKey = undefined;
+          keySource = 'none';
+        } else {
+          const entitlement = aiEntitlementFor(owner.tier);
+          const decision = decideAiSource({
+            entitlement,
+            aiSource: movedAccount.aiSource,
+            headerKeyPresent: headerByokKey !== undefined,
+            storedKeyUsable: cachedByokKey !== undefined,
+          });
+          if (decision.outcome === 'refuse') {
+            await assertAgentMessageAdmissionCurrent(req.params.id, admission);
+            if (decision.kind === 'ai_not_on_plan') {
+              throw refusedBeforeAnyWork(
+                new ForbiddenError(aiNotOnPlanDetail(owner.tier), {
+                  ai_not_on_plan: true,
+                  tier: owner.tier,
+                }),
+              );
+            }
+            if (decision.kind === 'own_key_not_on_plan') {
+              throw refusedBeforeAnyWork(
+                new ForbiddenError(OWN_KEY_NOT_ON_PLAN_DETAIL, { own_key_not_on_plan: true }),
+              );
+            }
+            // 'own_key_missing' — ai_source='own_key' and the stored key is
+            // missing or expired. §4.3 rule 3: this NEVER falls back to
+            // credits, so the answer is the same 502 a keyless legacy
+            // account gets, not a typed credits refusal.
+            throw refusedBeforeAnyWork(
+              new ByokAnthropicRequiredError(
+                'No usable Anthropic API key is on file for this account, and this account’s ' +
+                  'AI source is set to its own key. PUT /v1/account/me/byok-anthropic-key to add ' +
+                  'or replace it.',
+              ),
+            );
+          }
+          if (decision.kind === 'header_key') {
+            resolvedByokKey = headerByokKey;
+            keySource = 'header';
+          } else if (decision.kind === 'stored_key') {
+            resolvedByokKey = cachedByokKey;
+            keySource = 'cached';
+          } else {
+            // decision.kind === 'credits'. M10 — never the staging fallback:
+            // this key chain has no fallback member at all, so an
+            // unconfigured deployment (`deploymentFallbackKey === undefined`)
+            // falls through to the shared "no key" 502 below exactly like a
+            // legacy account with nothing resolved, rather than ever reading
+            // `allowFallbackForUnconfiguredCustomers`.
+            keySource = 'credits';
+            resolvedByokKey = deploymentFallbackKey;
+            if (resolvedByokKey !== undefined && agentDecomposerKind === 'claude') {
+              const idempotency = readIdempotencyKey(req);
+              creditLeg = await openEnforceCreditLeg({
+                req,
+                agentSessionId: req.params.id,
+                admission,
+                accountId: turnAccountId,
+                model: pre.model,
+                ownKeyAllowed: entitlement.ownKeyAllowed,
+                idempotencyKey: idempotency.kind === 'valid' ? idempotency.key : null,
+              });
+            }
+          }
+        }
+      } else {
+        resolvedByokKey =
+          headerByokKey ??
+          cachedByokKey ??
+          bundledLlmKey ??
+          (allowFallbackForUnconfiguredCustomers === true ? deploymentFallbackKey : undefined);
+        // Arc 1 sub-slice 6.4 (v2-#6) — derive the resolution leg so
+        // AgentRuntime can write the right record_type. Order mirrors
+        // the chain above; 'none' for the prod-default 502 path.
+        keySource =
+          headerByokKey !== undefined
+            ? 'header'
+            : cachedByokKey !== undefined
+              ? 'cached'
+              : bundledLlmKey !== undefined
+                ? 'bundled'
+                : resolvedByokKey !== undefined
+                  ? 'fallback'
+                  : 'none';
+        // S11 — open the measurement HERE: inside the try, so the `finally` closes
+        // it whatever happens next, and BEFORE the refusals below, because a
+        // reservation taken before a preflight throw is exactly the leak M1 is
+        // about. Never through `settleProviderPreflight`: that helper re-asserts
+        // the turn's admission and RE-THROWS, so a shadow measurement routed
+        // through it could end a turn — which is the one thing shadow may not do.
+        if (turnIsMeteredLegacyBundled(keySource)) {
+          const leg = await openShadowCreditLeg({
+            accountId: turnAccountId,
+            agentSessionId: req.params.id,
+            model: pre.model,
+          });
+          creditLeg = leg === null ? null : { kind: 'shadow', ...leg };
+        }
       }
       // The fallback leg is Driftstack's key too, so it refuses exactly what the
       // bundled leg refuses. It is staging-only (production refuses to boot with
       // it), but on staging an account with no key and no consent would otherwise
       // run Opus, or a model nobody can meter, on the deployment's key: the bundled
       // leg's check above never ran for it. Deterministic calls no model, so it
-      // has nothing to refuse.
+      // has nothing to refuse. Unreachable for a moved account: `keySource` never
+      // becomes `'fallback'` on that branch (M10).
       if (keySource === 'fallback' && agentDecomposerKind === 'claude') {
         const fallbackRefusal = deploymentKeyModelRefusalFor(pre.model);
         if (fallbackRefusal !== null) {
@@ -6468,9 +6963,27 @@ export function registerAgentSessionsRoutes(
         if (err instanceof AgentProviderKeyRejectedError) {
           throw aiKeyRejectedProblem(err, keySource);
         }
+        // S12 — the turn's FIRST planning call could not be admitted against
+        // its AI-credit reservation, so no turn happened at all (§4.5). Maps
+        // to 402 `ai-credits-exhausted`; wave-4b's carried note is why this
+        // was UNMAPPED before (would have been a plain 500).
+        if (err instanceof AgentTurnCreditsExhaustedError) {
+          throw creditsExhaustedFromFirstCallRefusal(err);
+        }
         throw err;
       }
       turnObserver?.observeResult(result);
+      // S12/§5.2 — settle a MOVED account's task right after the turn
+      // resolves and BEFORE any branch below builds its response, so
+      // `publicUsage`'s `cost_usd_cents` (ceil(charged)) reflects what this
+      // turn actually spent on every one of them — including the ones that
+      // never reach a normal 200 (`ai-control-unavailable`, `session-closed`)
+      // and still report usage. The `finally` below settles again, but that
+      // call is a no-op the moment this one succeeded (settle is idempotent);
+      // it exists for the paths that throw before reaching this line.
+      if (creditLeg !== null && creditLeg.kind === 'enforce') {
+        await settleEnforceLegOnce('completed');
+      }
       if (result.kind === 'turn-in-progress') {
         throw refusedBeforeAnyWork(
           new ConflictError(
@@ -6655,12 +7168,18 @@ export function registerAgentSessionsRoutes(
       if (bundledSlotAcquired && bundledTurnConcurrency !== undefined) {
         bundledTurnConcurrency.release(turnAccountId);
       }
-      // S11 — settle this turn's measurement ONCE and hand its lease back,
-      // whatever the turn did and whatever the settle returned (M1). Same
-      // reasoning as the slot above, one resource further down: a task left in
-      // the keeper's live set is renewed for ever by this process and can never
-      // be reached by the sweep that would have finished it.
-      await closeShadowCreditLeg(creditLeg);
+      // S11/S12 — settle this turn's measurement or reservation ONCE and hand
+      // its lease back, whatever the turn did and whatever settle returned
+      // (M1). Same reasoning as the slot above, one resource further down: a
+      // task left in the keeper's live set is renewed for ever by this
+      // process and can never be reached by the sweep that would have
+      // finished it. Exactly one of the two runs anything — `creditLeg.kind`
+      // is set once, at open, and never changes.
+      if (creditLeg?.kind === 'shadow') {
+        await closeShadowCreditLeg(creditLeg);
+      } else {
+        await closeEnforceCreditLeg();
+      }
     }
   };
 
@@ -7676,15 +8195,17 @@ export const markRefusedBeforeAnyWorkForTest = refusedBeforeAnyWork;
  * apart; `key_source` says which key; `key_rejected_reason` says whether to
  * replace the key or fix billing at the provider.
  *
- * DRIFTSTACK'S KEY (the included AI, or the staging fallback): our fault. It
- * stays a 5xx, and it never mentions a key, because the customer has none to fix.
+ * DRIFTSTACK'S KEY (the included AI, a MOVED account's credits leg, or the
+ * staging fallback — `keySource` 'bundled', 'credits' or 'fallback'): our
+ * fault. It stays a 5xx, and it never mentions a key, because the customer
+ * has none to fix.
  *
  * ⛔ Neither answer carries the key or the provider's words. The `cause` kept for
  * error tracking is the runtime's own fixed-text error, never the provider's.
  */
 function aiKeyRejectedProblem(
   rejection: AgentProviderKeyRejectedError,
-  keySource: 'header' | 'cached' | 'bundled' | 'fallback' | 'none',
+  keySource: ResolvedKeySource,
 ): ApiError {
   if (keySource !== 'header' && keySource !== 'cached') {
     return new InternalError(

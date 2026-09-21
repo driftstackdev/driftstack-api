@@ -129,7 +129,13 @@ describe('W389.A apps/server/src/lib/errors.ts content parity', () => {
 
   it('ConcurrencyLimitError = 429 + current_sessions + limit extensions', () => {
     expect(body).toMatch(
-      /export class ConcurrencyLimitError extends ApiError \{[\s\S]+?type: PROBLEM_TYPES\.ConcurrencyLimit,\s*title: 'Concurrent session limit reached',\s*status: 429,[\s\S]+?extensions: \{ current_sessions: currentSessions, limit \},/,
+      /export class ConcurrencyLimitError extends ApiError \{[\s\S]+?type: PROBLEM_TYPES\.ConcurrencyLimit,\s*title: overrides\?\.title \?\? 'Concurrent session limit reached',\s*status: 429,[\s\S]+?extensions: \{\s*current_sessions: currentSessions,\s*limit,\s*\.\.\.overrides\?\.extraExtensions,\s*\},/,
+    );
+  });
+
+  it("S12 — ConcurrencyLimitError's title/detail/extensions are overridable, so the AI-turn 429 (§4.4's 'at most 3 enforced tasks') can reuse the type without inheriting the session-limit copy", () => {
+    expect(body).toMatch(
+      /overrides\?: \{ title\?: string; detail\?: string; extraExtensions\?: Record<string, unknown> \},/,
     );
   });
 
@@ -227,7 +233,7 @@ describe('W389.A apps/server/src/lib/errors.ts content parity', () => {
       // reserved RFC 7807 member names from `ProblemSchema.shape` rather than
       // restating them, so a member added to the schema is protected with no
       // second list to keep in step.
-      /import \{\s*PROBLEM_TYPES,\s*ProblemSchema,\s*type Problem,\s*type ProblemType,\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*PROBLEM_TYPES,\s*ProblemSchema,\s*type AiDebtReason,\s*type Problem,\s*type ProblemType,\s*\} from '@driftstack\/api-types';/,
     );
   });
 

@@ -1069,10 +1069,25 @@ export type TurnLoopStopReason =
 export const TURN_LOOP_STOP_REASONS_NOT_YET_REACHABLE: Readonly<
   Partial<Record<TurnLoopStopReason, string>>
 > = Object.freeze({
+  // S12 DECISION — left dark here on purpose, not by oversight. S12 DOES pass
+  // a real ENFORCE credit meter to `runTurn` for a MOVED account (§4.5), so
+  // "nothing passes a credit meter" is no longer literally true — this
+  // ending is reachable in any test, and in staging/production the moment an
+  // account is moved. But S12 moves no account (S16's cutover does that, and
+  // Phase 1 ends with only the internal C0 cohort), so in production this
+  // stays unreached until S16 lands. Giving it its own word NOW would mean a
+  // documented cause on both customer-facing pages and an entry in each
+  // published SDK — exactly the kind of customer-visible mention of AI
+  // credits that must not ship before launch (the darkness rule this repo
+  // applies everywhere else the feature is dark). `budget_low`'s advice
+  // ("start a new session") is not the best answer for this ending (its own
+  // sentence says "send continue" instead) — that mismatch is the debt this
+  // entry names, and it is the reason to give the ending its own word once
+  // it may be published, not a reason to publish the word before then.
   credits_used:
-    'nothing passes a credit meter to runTurn: the mode flag defaults to off and no account is ' +
-    'on AI credits. Give this ending its own notice_reason, a documented cause on both pages and ' +
-    'an entry in each SDK, and remove it from here, in the change that makes AI credits live.',
+    'reachable in tests, and in production the moment S16 moves an account — but S16 has moved ' +
+    'none yet, so it is still unreached there. Give this ending its own notice_reason, a ' +
+    'documented cause on both pages and an entry in each SDK, and remove it from here, at launch.',
 });
 
 export const TURN_LOOP_STOP_SENTENCES: Readonly<Record<TurnLoopStopReason, string>> = {
@@ -1274,11 +1289,13 @@ export class AgentProviderKeyRejectedError extends Error {
  *
  * ⛔ IT IS A THROW, NOT A TURN RESULT, BECAUSE NO TURN HAPPENED. Nothing was
  * planned, nothing ran on the page, and there is no transcript entry to hand
- * back — which is what a `RunTurnResult` is. The route answers it; S12 maps it to
- * a 402 `ai-credits-exhausted` with §9.6's copy, the same shape
- * {@link AgentProviderKeyRejectedError} already uses for "the money side said
- * no". Until then it reaches the route as an unmapped error, which is a 500 —
- * and that is safe, because nothing passes a credit meter yet.
+ * back — which is what a `RunTurnResult` is. S12 maps this in the route to a
+ * 402 `ai-credits-exhausted` (only when `reason === 'did_not_fit'`; every
+ * other reason is a race or a capability gap, not "out of credits", and is
+ * answered as transient instead — see
+ * `creditsExhaustedFromFirstCallRefusal` in routes/agent-sessions.ts), the
+ * same shape {@link AgentProviderKeyRejectedError} already uses for "the
+ * money side said no".
  *
  * ⛔ THE MESSAGE IS FIXED TEXT AND IS NOT CUSTOMER COPY. It names the refusal
  * the admission gave, so a log says which predicate refused; the sentence the

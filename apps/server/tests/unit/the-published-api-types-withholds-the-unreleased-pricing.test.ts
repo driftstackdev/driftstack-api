@@ -106,8 +106,35 @@ function pricingIdentifiers(): string[] {
  * The arm below still fails if anything is ADDED to the leak — that is what
  * keeps this at zero — and would fail if this list named a file that is now
  * clean.
+ *
+ * S12 ADDS `['dist/problem.d.ts', 'dist/problem.js']`, A DIFFERENT SHAPE OF
+ * LEAK FROM THE admin.d.ts ONE ABOVE. That one was a field on a schema and was
+ * closeable by moving the field into the withheld module; this one is the
+ * `ai-credits-exhausted` problem-type URI itself
+ * (`PROBLEM_TYPES.AiCreditsExhausted`, `packages/api-types/src/problem.ts`),
+ * and it cannot move into `ai-credits.ts` the same way: `PROBLEM_TYPES` is the
+ * single source of truth three OTHER guards read directly from `problem.ts`'s
+ * SOURCE (`cross-sdk-problem-type-roster-source-parity.test.ts`,
+ * `cross-sdk-problem-type-parity.test.ts`, and each SDK's own error-mapping
+ * table), all of them already true dark-feature guards in their own right
+ * (the roster test asserts a 33-entry `PROBLEM_TYPES`; none of them check
+ * whether the feature has launched). Splitting the constant would trade one
+ * proven guard family for an unproven one two slices before launch was ever
+ * asked for.
+ *
+ * What DOES stay true: `build:publish` (`scripts/api-types-build-publish.mjs`)
+ * still REFUSES a real release while this URI is anywhere in what ships — its
+ * `creditsMentions` scan is not scoped to `ai-credits.*` either, so it catches
+ * this file exactly as it would catch the admin.ts leak. This ratchet is the
+ * ORDINARY `npm run build` shape, which nobody packs or publishes; the
+ * publish-shape build is a separate, deliberate step no fixture here runs.
+ * Closing this hand-off means either the feature has launched (the term is
+ * allowed to ship) or a later slice finds a way to keep the URI reachable at
+ * runtime without it appearing in generated `.js`/`.d.ts` text — not a
+ * comment rewrite, which is exactly the trap this file's own header warns
+ * against.
  */
-const KNOWN_LEAK_HANDOFF: readonly string[] = [];
+const KNOWN_LEAK_HANDOFF: readonly string[] = ['dist/problem.d.ts', 'dist/problem.js'];
 
 describe('the published api-types withholds the unreleased pricing', () => {
   const packed = npmShippedFilesViaPack(PKG_DIR);
