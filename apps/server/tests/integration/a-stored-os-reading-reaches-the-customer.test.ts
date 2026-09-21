@@ -55,15 +55,17 @@ const STORED = {
 };
 
 /**
- * 2026-09-21 — what `STORED` looks like once it crosses `POST …/test`, which
- * (unlike the `/proxies` LIST route `STORED` otherwise compares against)
- * additively aliases `single_host_vantage` / `web_port_vantage` to
- * `direct_reading` / `website_like_reading` on every reply — see
- * `toPublicProxyTestResult` in `routes/account-me.ts`. A SEPARATE constant
- * rather than mutating `STORED` itself: the LIST-route assertions below
- * compare against the un-aliased shape and must stay that way.
+ * 2026-09-21 — what `STORED` looks like once it crosses either public route:
+ * both the `/proxies` LIST (`storedOsFingerprint` in `routes/account-me.ts`)
+ * and `POST …/test` (`toPublicProxyTestResult`) additively alias
+ * `single_host_vantage` / `web_port_vantage` to `direct_reading` /
+ * `website_like_reading` now, off the SAME `withCustomerFingerprintAliases`
+ * helper — so one constant serves both. A SEPARATE constant rather than
+ * mutating `STORED` itself: several arms below assert the RAW stored shape
+ * (what the row holds / what `storeReading` wrote), which must stay
+ * un-aliased.
  */
-const STORED_ON_TEST_REPLY = {
+const STORED_WITH_CUSTOMER_ALIASES = {
   ...STORED,
   direct_reading: STORED.single_host_vantage,
   website_like_reading: STORED.web_port_vantage,
@@ -183,8 +185,21 @@ describe('GET /v1/account/me/proxies — the stored OS reading', () => {
     await storeReading(id, STORED, MEASURED_AT);
 
     const row = await listOne(id);
-    expect(row.os_fingerprint).toEqual(STORED);
+    expect(row.os_fingerprint).toEqual(STORED_WITH_CUSTOMER_ALIASES);
     expect(row.os_fingerprint_at).toBe(MEASURED_AT.toISOString());
+  });
+
+  it('CRITICAL carries the customer-worded `direct_reading` / `website_like_reading` aliases too (2026-09-21) — added beside `single_host_vantage` / `web_port_vantage`, same values, not a replacement for them. MUTATION: drop `withCustomerFingerprintAliases(...)` from `storedOsFingerprint` (routes/account-me.ts) and this reds', async () => {
+    fx = await buildTestApp({});
+    const id = await makeProxy('stored-list-aliases.example.com');
+    await storeReading(id, STORED, MEASURED_AT);
+
+    const row = await listOne(id);
+    const fp = row.os_fingerprint as Record<string, unknown>;
+    expect(fp.direct_reading).toBe(true);
+    expect(fp.website_like_reading).toBe(true);
+    expect(fp.single_host_vantage).toBe(true);
+    expect(fp.web_port_vantage).toBe(true);
   });
 
   it('carries NULL for a proxy nobody has fingerprinted — never a placeholder OS, and never a date for a measurement that did not happen', async () => {
@@ -196,7 +211,7 @@ describe('GET /v1/account/me/proxies — the stored OS reading', () => {
     expect(row.os_fingerprint_at).toBeNull();
   });
 
-  it('normalises a PRE-V-219 reading (no vantage flags stored) to false rather than promoting it: absent must never become the claim that unlocks a green chip', async () => {
+  it('normalises a PRE-V-219 reading (no vantage flags stored) to false rather than promoting it: absent must never become the claim that unlocks a green chip — and the customer-worded aliases mirror the normalised false, not a promoted true', async () => {
     fx = await buildTestApp({});
     const id = await makeProxy('legacy-reading.example.com');
     const { single_host_vantage: _s, web_port_vantage: _w, ...legacy } = STORED;
@@ -207,6 +222,8 @@ describe('GET /v1/account/me/proxies — the stored OS reading', () => {
       ...legacy,
       single_host_vantage: false,
       web_port_vantage: false,
+      direct_reading: false,
+      website_like_reading: false,
     });
   });
 
@@ -231,7 +248,7 @@ describe('POST /v1/account/me/proxies/:id/test — a miss still answers with wha
 
     const body = await test(id);
     expect(body.ok).toBe(true);
-    expect(body.os_fingerprint).toEqual(STORED_ON_TEST_REPLY);
+    expect(body.os_fingerprint).toEqual(STORED_WITH_CUSTOMER_ALIASES);
     expect(body.os_fingerprint_at).toBe(MEASURED_AT.toISOString());
     // ⛔ The cause stays. It is about THIS test, not about the reading.
     // Public wire value (2026-09-21): not_observed -> not_captured.
@@ -325,7 +342,7 @@ describe('POST /v1/account/me/proxies/:id/test — the reading rides every reply
     const body = await testFleet(id);
     expect(body.ok).toBe(true);
     expect(body.measured_from).toBe('fleet');
-    expect(body.os_fingerprint).toEqual(STORED_ON_TEST_REPLY);
+    expect(body.os_fingerprint).toEqual(STORED_WITH_CUSTOMER_ALIASES);
     expect(body.os_fingerprint_at).toBe(MEASURED_AT.toISOString());
     // ⛔ The cause is about THIS test and stays; the pair is how the client tells a
     // stored reading from a fresh one.
@@ -356,7 +373,7 @@ describe('POST /v1/account/me/proxies/:id/test — the reading rides every reply
 
     const body = await test(id);
     expect(body.ok).toBe(true);
-    expect(body.os_fingerprint).toEqual(STORED_ON_TEST_REPLY);
+    expect(body.os_fingerprint).toEqual(STORED_WITH_CUSTOMER_ALIASES);
     expect(body.os_fingerprint_at).toBe(MEASURED_AT.toISOString());
     // Nothing observed a SYN here, and nothing claims one was: the reachability
     // check reports no cause of its own, and the reading is dated.

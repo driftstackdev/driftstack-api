@@ -234,9 +234,11 @@ export type AccountProxyUpdate = z.infer<typeof AccountProxyUpdateSchema>;
  * website would see. `website_like_reading` mirrors `web_port_vantage`: true
  * when the reading was taken the way a real website connection is — a
  * literal address on the standard secure-web port, not a name that could
- * route to shared infrastructure. Optional because not every surface that
- * carries this shape populates them yet (only `POST …/proxies/:id/test`
- * does today — see `customer-safe-proxy-test-vocabulary.ts` in the server).
+ * route to shared infrastructure. Optional so an older server, or a reading
+ * stored before these existed, keeps parsing — every surface that carries
+ * this shape populates them now (`POST …/proxies/:id/test` and the saved
+ * proxy list alike — see `customer-safe-proxy-test-vocabulary.ts` in the
+ * server).
  */
 export const AccountProxyOsFingerprintSchema = z.object({
   os: z.enum(['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown']),
@@ -414,10 +416,26 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
         city: z.string().nullable(),
       })
       .optional(),
+    // 2026-09-21 — where this result was measured. Present only on a
+    // `?check=full` result — absent on the default `?check=quick`, which is
+    // always `driftstack` and needs no field to say so. `phone` — a real
+    // phone session took the measurement, the same machine `?check=full`
+    // dispatches to. `driftstack` — Driftstack itself measured it: the same
+    // path `?check=quick` always takes, and the honest fallback when a
+    // `?check=full` request could not reach a phone in time.
+    //
+    // The wire also still sends the original field this mirrors
+    // (`measured_from`, values unchanged) for an integration that already
+    // reads it. Undocumented from here on and deliberately not part of this
+    // type — read `measured_by` instead.
+    measured_by: z.enum(['phone', 'driftstack']).optional(),
   }),
   z.object({
     ok: z.literal(false),
     reason: z.string(),
+    // 2026-09-21 — see `measured_by` on the `ok:true` member above; same
+    // field, same rule, present under the same condition.
+    measured_by: z.enum(['phone', 'driftstack']).optional(),
     // (d) 2026-09-10 — present when NOTHING RAN, so `ok:false` is not a verdict
     // about the proxy: `live_session` = a fleet-vantage test of a VPN row was
     // REFUSED because a live session holds the tunnel (a second tunnel on a

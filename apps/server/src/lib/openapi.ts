@@ -2360,8 +2360,9 @@ function buildRegistry(): OpenAPIRegistry {
     // 2026-09-21 — the customer-worded aliases for the two fields above (same
     // values; new names). Documented from here on; the originals are kept,
     // unrenamed, for `apps/gui-client`'s existing reader of this exact shape.
-    // Optional: populated on `POST …/proxies/:id/test` today, not yet on the
-    // saved-proxy list.
+    // Optional so an older server (or a reading it stored before these
+    // existed) keeps parsing; populated everywhere the two fields above are —
+    // `POST …/proxies/:id/test` and the saved-proxy list alike.
     direct_reading: z
       .boolean()
       .optional()
@@ -2559,6 +2560,17 @@ function buildRegistry(): OpenAPIRegistry {
         '`config_unresolvable` (the stored configuration could not be used, so nothing was dialled — re-add it); ' +
         '`check_unavailable` (the full check could not be completed on our side right now — try again shortly, or full checks are not available on this deployment).',
     );
+  // 2026-09-21 — `measured_by`, the customer word for `measured_from` (see
+  // `customer-safe-proxy-test-vocabulary.ts`). ONE description used at every
+  // member below, for the reason the block above states: three return shapes
+  // reach the same two words, and a second copy is a second thing to forget.
+  const MEASURED_BY_DESCRIPTION =
+    'Where this result was measured. `phone` — a real phone session took the measurement, the same machine `check=full` dispatches to. ' +
+    '`driftstack` — Driftstack itself measured it: the same path `check=quick` always takes, and the honest fallback when a `check=full` request could not reach a phone in time. ' +
+    'Present only on a `check=full` result; `check=quick` is always `driftstack` and carries no field to say so.';
+  const ProxyTestMeasuredByOpenApi = z
+    .enum(['phone', 'driftstack'])
+    .describe(MEASURED_BY_DESCRIPTION);
   const AccountProxyTestResultOpenApi = z
     .union([
       z.object({
@@ -2589,13 +2601,19 @@ function buildRegistry(): OpenAPIRegistry {
         os_fingerprint_unavailable: OsFingerprintUnavailableOpenApi.nullable().optional(),
         // T-1 — present only when a fleet-vantage request FELL BACK to the control
         // plane (no node free). Absent on a plain control-plane test.
+        // 2026-09-21 — legacy. `measured_by` below is the documented field
+        // from here on; this stays on the wire, values unchanged, only for an
+        // integration that already reads it.
         measured_from: z.enum(['fleet', 'control_plane']).optional(),
+        measured_by: ProxyTestMeasuredByOpenApi.optional(),
       }),
       z.object({
         ok: z.literal(false),
         reason: z.string(),
         // T-1 — set to 'control_plane' when a fleet request fell back to the cp probe.
+        // 2026-09-21 — legacy, see the `ok:true` member above.
         measured_from: z.enum(['fleet', 'control_plane']).optional(),
+        measured_by: ProxyTestMeasuredByOpenApi.optional(),
         // (d) 2026-09-10 — present when NOTHING RAN, so `ok:false` is not a
         // verdict about the proxy: `live_session` = a fleet-vantage test of a
         // VPN row was REFUSED because a live session holds the tunnel (a second
@@ -2640,7 +2658,14 @@ function buildRegistry(): OpenAPIRegistry {
         // Present exactly when `ok` is false: which leg failed, in the customer's
         // words. Same four sentences the control-plane member uses.
         reason: z.string().optional(),
+        // 2026-09-21 — legacy, see `measured_by` immediately below. Still
+        // always `'fleet'` here — this member IS the machine measurement.
         measured_from: z.literal('fleet'),
+        // Always present and always `'phone'` on this member — this result
+        // IS a real phone session's measurement, so it names it unconditionally
+        // rather than repeating the conditional wording the other two members
+        // carry.
+        measured_by: z.literal('phone').describe(MEASURED_BY_DESCRIPTION),
         node_id: z.string(),
         // (d) 2026-09-10 — present when the node could NOT RUN the probe
         // (`node_busy`: another tunnel/test holds it; `node_error`: a refused

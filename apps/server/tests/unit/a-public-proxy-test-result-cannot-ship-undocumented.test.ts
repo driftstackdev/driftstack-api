@@ -26,9 +26,11 @@ import {
   PUBLIC_PROXY_TEST_NOT_RUN_CODES,
   PUBLIC_PROXY_TEST_CHECK_VALUES,
   PUBLIC_OS_FINGERPRINT_VANTAGE_FIELDS,
+  PUBLIC_PROXY_TEST_MEASURED_BY_VALUES,
   resolveProxyTestVantage,
   publicOsFingerprintUnavailable,
   publicProxyTestNotRun,
+  publicProxyTestMeasuredBy,
   unmappedProxyTestVocabulary,
 } from '../../src/services/customer-safe-proxy-test-vocabulary.js';
 
@@ -67,6 +69,7 @@ describe('every published proxy-test result code is documented where customers r
       'live_session',
     ]);
     expect(PUBLIC_PROXY_TEST_CHECK_VALUES).toEqual(['quick', 'full']);
+    expect(PUBLIC_PROXY_TEST_MEASURED_BY_VALUES).toEqual(['driftstack', 'phone']);
     expect(apiTypes).toContain('AccountProxyTestResultSchema');
     expect(apiTypes).toContain('AccountProxyOsFingerprintSchema');
     expect(docsPage).toContain('## Test a proxy');
@@ -154,6 +157,83 @@ describe('every published proxy-test result code is documented where customers r
     }
   });
 
+  it('CRITICAL the `/proxies` LIST (and GET/PUT, which share the same shape) structurally carries `direct_reading` / `website_like_reading` on its OWN schema — not only reachable by a full-text search that a shared description string could satisfy on its own', () => {
+    // (2026-09-21) The alias check above does a full-text search over the
+    // whole document, which a single shared `.describe()` string could
+    // satisfy even if only the /test result's schema actually declared the
+    // property. This asserts the LIST's OWN component schema
+    // (`AccountProxyMetadata`) declares both fields as real properties.
+    const spec = generateOpenApiSpec() as unknown as {
+      components: { schemas: Record<string, { properties?: Record<string, unknown> }> };
+    };
+    const metadata = spec.components.schemas['AccountProxyMetadata'];
+    expect(metadata, 'AccountProxyMetadata schema missing from the live spec').toBeDefined();
+    const osFingerprint = metadata?.properties?.['os_fingerprint'] as
+      | { properties?: Record<string, unknown> }
+      | undefined;
+    expect(
+      osFingerprint?.properties,
+      'AccountProxyMetadata.os_fingerprint has no nested properties',
+    ).toBeDefined();
+    for (const alias of Object.values(PUBLIC_OS_FINGERPRINT_VANTAGE_FIELDS)) {
+      expect(
+        osFingerprint?.properties,
+        `${alias} missing from AccountProxyMetadata.os_fingerprint in the live spec`,
+      ).toHaveProperty(alias);
+    }
+  });
+
+  it('CRITICAL the customer-worded `measured_by` values are documented everywhere `measured_from` needs a customer-worded mirror', () => {
+    for (const value of PUBLIC_PROXY_TEST_MEASURED_BY_VALUES) {
+      expect(documents(apiTypes, value), `${value} undocumented in api-types`).toBe(true);
+      expect(documents(docsPage, value), `${value} undocumented in the docs page`).toBe(true);
+      expect(documents(liveSpecText, value), `${value} undocumented in the OpenAPI document`).toBe(
+        true,
+      );
+      expect(
+        documents(snapshotText, value),
+        `${value} undocumented in the committed spec snapshot`,
+      ).toBe(true);
+      expect(
+        documents(pyModels, value),
+        `${value} undocumented in the generated Python model`,
+      ).toBe(true);
+    }
+  });
+
+  it('CRITICAL every union member of AccountProxyTestResult that can carry `measured_from` also declares `measured_by` beside it', () => {
+    const spec = generateOpenApiSpec() as unknown as {
+      components: {
+        schemas: { AccountProxyTestResult: { anyOf: { properties?: Record<string, unknown> }[] } };
+      };
+    };
+    const members = spec.components.schemas.AccountProxyTestResult.anyOf;
+    const withMeasuredFrom = members.filter((m) => 'measured_from' in (m.properties ?? {}));
+    expect(withMeasuredFrom.length, 'no union member declares measured_from any more').toBe(3);
+    for (const member of withMeasuredFrom) {
+      expect(member.properties).toHaveProperty('measured_by');
+    }
+  });
+
+  it('CRITICAL every distinct measured_from the route can produce maps to a member of the closed public set', () => {
+    expect(publicProxyTestMeasuredBy('fleet')).toBe('phone');
+    expect(publicProxyTestMeasuredBy('control_plane')).toBe('driftstack');
+    expect(PUBLIC_PROXY_TEST_MEASURED_BY_VALUES).toContain(publicProxyTestMeasuredBy('fleet'));
+    expect(PUBLIC_PROXY_TEST_MEASURED_BY_VALUES).toContain(
+      publicProxyTestMeasuredBy('control_plane'),
+    );
+  });
+
+  it('NEGATIVE CONTROL an unrecognised measured_from is withheld (no measured_by), never guessed, and is recorded through the shared bounded recorder', () => {
+    expect(publicProxyTestMeasuredBy('a_future_vantage_nobody_mapped')).toBeUndefined();
+    publicProxyTestMeasuredBy('zz_test_unmapped_measured_from_cause');
+    expect(
+      unmappedProxyTestVocabulary
+        .counts()
+        .get('measured_from:zz_test_unmapped_measured_from_cause'),
+    ).toBeGreaterThan(0);
+  });
+
   it('CRITICAL no published proxy-test string names an internal mechanism — the customer-copy rule of this product: say WHAT, never HOW', () => {
     const forbidden = [
       'fleet',
@@ -177,6 +257,7 @@ describe('every published proxy-test result code is documented where customers r
       ...allReasonCodes,
       ...PUBLIC_PROXY_TEST_CHECK_VALUES,
       ...Object.values(PUBLIC_OS_FINGERPRINT_VANTAGE_FIELDS),
+      ...PUBLIC_PROXY_TEST_MEASURED_BY_VALUES,
     ];
     for (const code of published) {
       for (const term of forbidden) {

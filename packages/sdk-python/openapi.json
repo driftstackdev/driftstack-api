@@ -3595,6 +3595,11 @@
               "measured_from": {
                 "type": "string",
                 "enum": ["fleet", "control_plane"]
+              },
+              "measured_by": {
+                "type": "string",
+                "enum": ["phone", "driftstack"],
+                "description": "Where this result was measured. `phone` — a real phone session took the measurement, the same machine `check=full` dispatches to. `driftstack` — Driftstack itself measured it: the same path `check=quick` always takes, and the honest fallback when a `check=full` request could not reach a phone in time. Present only on a `check=full` result; `check=quick` is always `driftstack` and carries no field to say so."
               }
             },
             "required": ["ok", "latency_ms"]
@@ -3612,6 +3617,11 @@
               "measured_from": {
                 "type": "string",
                 "enum": ["fleet", "control_plane"]
+              },
+              "measured_by": {
+                "type": "string",
+                "enum": ["phone", "driftstack"],
+                "description": "Where this result was measured. `phone` — a real phone session took the measurement, the same machine `check=full` dispatches to. `driftstack` — Driftstack itself measured it: the same path `check=quick` always takes, and the honest fallback when a `check=full` request could not reach a phone in time. Present only on a `check=full` result; `check=quick` is always `driftstack` and carries no field to say so."
               },
               "not_run": {
                 "type": "string",
@@ -3657,6 +3667,11 @@
               "measured_from": {
                 "type": "string",
                 "enum": ["fleet"]
+              },
+              "measured_by": {
+                "type": "string",
+                "enum": ["phone"],
+                "description": "Where this result was measured. `phone` — a real phone session took the measurement, the same machine `check=full` dispatches to. `driftstack` — Driftstack itself measured it: the same path `check=quick` always takes, and the honest fallback when a `check=full` request could not reach a phone in time. Present only on a `check=full` result; `check=quick` is always `driftstack` and carries no field to say so."
               },
               "node_id": {
                 "type": "string"
@@ -3793,7 +3808,7 @@
                 "description": "Why no OS fingerprint was taken, when Driftstack knows the cause: `not_available_for_vpn` (an openvpn or wireguard proxy has no single address of its own to read a stack from — no retry can help); `not_captured` (the reading was attempted and produced nothing this time — a retry may help); `not_offered_here` (this deployment does not take this reading at all — no retry can help)."
               }
             },
-            "required": ["ok", "measured_from", "node_id", "latency_ms"]
+            "required": ["ok", "measured_from", "measured_by", "node_id", "latency_ms"]
           }
         ]
       },

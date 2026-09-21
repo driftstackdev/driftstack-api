@@ -25,6 +25,46 @@ export function cleanProxyVantage(raw: unknown): ProxyVantage | undefined {
   return raw === 'fleet' || raw === 'control_plane' ? raw : undefined;
 }
 
+// 2026-09-21 — the server started sending a second, customer-worded field
+// (`measured_by: 'phone' | 'driftstack'`) beside the original `measured_from`
+// ('fleet' / 'control_plane'), which stays on the wire unchanged for an
+// integration that already reads it. `cleanWireProxyVantage` is the ONE place
+// that resolves the two into this module's internal `ProxyVantage` — kept
+// SEPARATE from `cleanProxyVantage` above (which only ever knew the original
+// pair) rather than widening it to accept both vocabularies, so a value read
+// from the on-disk cache (always written in the original pair, see
+// proxy-probe-cache.ts) can never be misread as the new one by accident.
+
+/** `measured_by`'s two wire values, and the internal `ProxyVantage` each one
+ *  names — `phone` (a real phone session measured it) is the `fleet` vantage,
+ *  `driftstack` (Driftstack itself measured it) is the `control_plane` one. */
+const MEASURED_BY_VANTAGE: Readonly<Record<string, ProxyVantage>> = {
+  phone: 'fleet',
+  driftstack: 'control_plane',
+};
+
+function cleanMeasuredBy(raw: unknown): ProxyVantage | undefined {
+  return typeof raw === 'string' && Object.prototype.hasOwnProperty.call(MEASURED_BY_VANTAGE, raw)
+    ? MEASURED_BY_VANTAGE[raw]
+    : undefined;
+}
+
+/**
+ * Resolve a vantage straight off the wire: `measuredBy` (the new,
+ * customer-worded field) wins when present and recognised; `measuredFrom`
+ * (the original field, which every server still sends) is read only when it
+ * is not. A server built before `measured_by` existed sends only
+ * `measured_from` and is read exactly as before; a server that sends both
+ * resolves to the identical vantage either way, so nothing downstream needs
+ * to know which field supplied it.
+ */
+export function cleanWireProxyVantage(
+  measuredBy: unknown,
+  measuredFrom: unknown,
+): ProxyVantage | undefined {
+  return cleanMeasuredBy(measuredBy) ?? cleanProxyVantage(measuredFrom);
+}
+
 /** A server measurement's provenance: where it ran and, for a fleet Mac, which one. */
 export interface ServerVantage {
   measuredFrom: ProxyVantage;

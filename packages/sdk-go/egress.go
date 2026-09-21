@@ -143,7 +143,19 @@ type AccountProxyTestResult struct {
 	// MeasuredFrom names where the measurement was taken: "control_plane"
 	// (Driftstack measured it) or "fleet" (the machine that would run your
 	// profile measured it — what `?check=full` asks for, used for VPN rows).
+	//
+	// Deprecated: superseded by MeasuredBy below (2026-09-21). Still sent
+	// with its original values, unchanged, for an integration that already
+	// reads it; MeasuredBy is documented from here on.
 	MeasuredFrom *string `json:"measured_from,omitempty"`
+	// MeasuredBy is the customer-worded name for MeasuredFrom above: "phone"
+	// (a real phone session took the measurement — what `?check=full` asks
+	// for) or "driftstack" (Driftstack itself measured it — the same path
+	// `?check=quick` always takes, and the honest fallback when a
+	// `?check=full` request could not reach a phone in time). Present only
+	// on a `?check=full` result; `?check=quick` is always "driftstack" and
+	// carries no field to say so.
+	MeasuredBy *string `json:"measured_by,omitempty"`
 	// OsFingerprint is the proxy's own TCP-stack fingerprint, present only when
 	// Driftstack actually observed it. Absent is "not observed", never
 	// a placeholder OS.

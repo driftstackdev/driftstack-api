@@ -363,6 +363,15 @@ below cover the cases where a full check could not run.
 > (`cp` = `check=quick`, `fleet` = `check=full`) so an existing integration
 > keeps working; `check` is the name documented from here on.
 
+A `?check=full` result also carries `measured_by`, saying where the
+measurement actually came from: `phone` when a real phone session took it —
+the machine `?check=full` asks for — or `driftstack` when Driftstack itself
+did, the honest fallback when a `?check=full` request could not reach a phone
+in time. `?check=quick` is always `driftstack` and carries no field to say so.
+The original `measured_from` field (`fleet` / `control_plane`) is still sent
+beside it, unchanged, for an integration that already reads it; `measured_by`
+is the name documented from here on.
+
 An `ok: false` result that also carries `not_run` is **not a result about the
 proxy** — nothing was measured. Branch on `not_run`, never on the `reason`
 prose, before treating the result as a failed proxy:
@@ -372,7 +381,7 @@ prose, before treating the result as a failed proxy:
   "ok": false,
   "not_run": "live_session",
   "reason": "This VPN is being used by a running session, so the exit IP shown is from that session. End the session to check the VPN.",
-  "measured_from": "control_plane",
+  "measured_by": "driftstack",
   "exit_observed": {
     "ip": "203.0.113.9",
     "country": "NL",
@@ -387,7 +396,7 @@ prose, before treating the result as a failed proxy:
 - `live_session` — a `?check=full` test of an `openvpn` / `wireguard`
   proxy was skipped because a live session is browsing through this VPN. A
   second connection on a one-connection VPN account would drop that session,
-  so nothing was tested. `measured_from` is `control_plane` (nothing measured
+  so nothing was tested. `measured_by` is `driftstack` (nothing measured
   the tunnel) and `exit_observed`, when present, is the exit that session saw
   — the same `exit_observed` the proxy object lists — so a client can still
   show where the tunnel exits. End the session to test the tunnel.
@@ -402,7 +411,7 @@ prose, before treating the result as a failed proxy:
   timeout — also worth a retry), or full checks are not set up on this
   deployment (a retry will not change that). The `reason` field says which.
   In every case there is no fallback to a plain reachability check of the
-  tunnel endpoint. `measured_from` is `control_plane` and `exit_observed`,
+  tunnel endpoint. `measured_by` is `driftstack` and `exit_observed`,
   when present, is the stored exit a session observed.
 
 The `exit_observed` beside a `not_run` is the proxy's **stored** observation,

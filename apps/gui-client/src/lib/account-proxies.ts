@@ -25,7 +25,7 @@ import {
   type OsFingerprint,
   type OsFingerprintUnavailable,
 } from './os-fingerprint-verdict';
-import { cleanProxyVantage, type ProxyVantage } from './proxy-vantage';
+import { cleanWireProxyVantage, type ProxyVantage } from './proxy-vantage';
 import { MISSING_API_KEY_NEXT_STEP } from './proxy-check-copy';
 
 /**
@@ -910,7 +910,9 @@ export async function testAccountProxy(
   const body = await readBoundedApiJson<Record<string, unknown>>(res);
   // T-1 — the vantage is a CLOSED set; a value outside it is dropped (the number
   // then renders unlabelled), never shown under a label it did not earn.
-  const vantage = cleanProxyVantage(body.measured_from);
+  // 2026-09-21 — reads `measured_by` (customer-worded) first and falls back to
+  // the original `measured_from`, so an old server and a new one both parse.
+  const vantage = cleanWireProxyVantage(body.measured_by, body.measured_from);
   // T-1 — `latency_ms: null` is a DOCUMENTED ok answer from a fleet Mac, not a
   // malformed one: the node reached the proxy and produced no timing. Accepted
   // for the fleet vantage ONLY — the cp member of the spec types the field as a

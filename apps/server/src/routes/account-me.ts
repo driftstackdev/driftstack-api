@@ -91,6 +91,7 @@ import {
 } from '../schemas/harness-control-protocol.js';
 import {
   publicOsFingerprintUnavailable,
+  publicProxyTestMeasuredBy,
   publicProxyTestNotRun,
   resolveProxyTestVantage,
 } from '../services/customer-safe-proxy-test-vocabulary.js';
@@ -336,11 +337,19 @@ function storedOsFingerprint(
 ): AccountProxyOsFingerprint | null {
   const stored = row.osFingerprint;
   if (stored === null) return null;
-  const parsed = AccountProxyOsFingerprintSchema.safeParse({
-    ...stored,
-    single_host_vantage: stored.single_host_vantage === true,
-    web_port_vantage: stored.web_port_vantage === true,
-  });
+  // 2026-09-21 — the customer-worded `direct_reading` / `website_like_reading`
+  // aliases ride the LIST/GET/PUT shape too now, computed off the SAME
+  // normalised booleans `single_host_vantage` / `web_port_vantage` use below
+  // (via `withCustomerFingerprintAliases`, the one function `/:id/test`
+  // already uses for this) — guaranteeing identical values rather than a
+  // second copy of the mapping that could drift from it.
+  const parsed = AccountProxyOsFingerprintSchema.safeParse(
+    withCustomerFingerprintAliases({
+      ...stored,
+      single_host_vantage: stored.single_host_vantage === true,
+      web_port_vantage: stored.web_port_vantage === true,
+    }),
+  );
   return parsed.success ? parsed.data : null;
 }
 
@@ -747,6 +756,14 @@ function toPublicProxyTestResult(
     out['os_fingerprint'] = withCustomerFingerprintAliases(
       out['os_fingerprint'] as Record<string, unknown>,
     );
+  }
+  // 2026-09-21 — `measured_by` beside `measured_from`: additive, same rule as
+  // the fingerprint aliases above. `measured_from` itself is UNCHANGED (still
+  // its original 'fleet' / 'control_plane' values) — see
+  // `customer-safe-proxy-test-vocabulary.ts`.
+  if (typeof out['measured_from'] === 'string') {
+    const measuredBy = publicProxyTestMeasuredBy(out['measured_from'], logger);
+    if (measuredBy !== undefined) out['measured_by'] = measuredBy;
   }
   return out;
 }

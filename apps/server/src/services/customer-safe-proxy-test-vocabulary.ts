@@ -289,3 +289,67 @@ export const PUBLIC_OS_FINGERPRINT_VANTAGE_FIELDS = {
   single_host_vantage: 'direct_reading',
   web_port_vantage: 'website_like_reading',
 } as const;
+
+// ───────────────────────────────────────────────────────────────────────────
+// measured_from → measured_by
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * The two literal values the route has always written for `measured_from` on
+ * a `?check=full` result: a measurement taken through the machine that will
+ * actually run a profile, or (no such machine free) the control plane's own
+ * fallback measurement. Both are produced by THIS route's own code at each of
+ * its return points — never device input — so, like the two reason-code
+ * enums above, an "unmapped" value here can only mean this map and the
+ * route's own literals have drifted apart.
+ */
+export type ProxyTestMeasuredFrom = 'fleet' | 'control_plane';
+
+/**
+ * `measured_from`'s customer word, published as `measured_by` beside it —
+ * never replacing it; see the file header's "ADDITIVE ONLY" note.
+ *
+ *   `fleet`         → `phone` — a real phone session took the measurement,
+ *                      the same machine a `?check=full` request dispatches
+ *                      to.
+ *   `control_plane` → `driftstack` — Driftstack itself took the
+ *                      measurement: the same path `?check=quick` always
+ *                      takes, and the honest fallback when a `?check=full`
+ *                      request could not reach a phone in time.
+ */
+export type ProxyTestMeasuredBy = 'phone' | 'driftstack';
+
+/** `measured_from` → `measured_by`. The only place this correspondence is
+ *  written down — the route, the OpenAPI document, and every guard read it
+ *  from here. */
+export const PUBLIC_PROXY_TEST_MEASURED_FROM: Readonly<
+  Record<ProxyTestMeasuredFrom, ProxyTestMeasuredBy>
+> = {
+  fleet: 'phone',
+  control_plane: 'driftstack',
+};
+
+export const PUBLIC_PROXY_TEST_MEASURED_BY_VALUES: readonly ProxyTestMeasuredBy[] = [
+  ...new Set(Object.values(PUBLIC_PROXY_TEST_MEASURED_FROM)),
+].sort();
+
+/**
+ * Map the route's own `measured_from` literal to the customer's word, or
+ * `undefined` when it is not one of the two values this repository's code
+ * has ever written (defence in depth only — see above). Unlike
+ * `os_fingerprint_unavailable` / `not_run`, an unmapped value leaves
+ * `measured_by` OFF the reply rather than guessing at one: `measured_from`
+ * itself still rides unchanged either way, so no provenance is lost — only
+ * the customer-worded alias is withheld until the drift is fixed.
+ */
+export function publicProxyTestMeasuredBy(
+  internal: string,
+  logger?: EgressWarningLogger,
+): ProxyTestMeasuredBy | undefined {
+  const mapped = Object.prototype.hasOwnProperty.call(PUBLIC_PROXY_TEST_MEASURED_FROM, internal)
+    ? PUBLIC_PROXY_TEST_MEASURED_FROM[internal as ProxyTestMeasuredFrom]
+    : undefined;
+  if (mapped !== undefined) return mapped;
+  unmappedProxyTestVocabulary.record([`measured_from:${safeVocabToken(internal)}`], logger);
+  return undefined;
+}

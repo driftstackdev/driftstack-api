@@ -74,7 +74,12 @@ import {
   saveProbeResult,
   saveServerProbeResult,
 } from '../../src/lib/proxy-probe-cache';
-import { cleanProxyVantage, cleanServerVantage, vantageLabel } from '../../src/lib/proxy-vantage';
+import {
+  cleanProxyVantage,
+  cleanServerVantage,
+  cleanWireProxyVantage,
+  vantageLabel,
+} from '../../src/lib/proxy-vantage';
 
 const json = (body: unknown): Response =>
   new Response(JSON.stringify(body), {
@@ -315,6 +320,45 @@ describe('the two QUIC signals are never merged', () => {
   });
 });
 
+describe('the wire — measured_by (2026-09-21) is read first, measured_from is the fallback', () => {
+  it("a server sending ONLY measured_by ('phone', no measured_from) still resolves to the fleet vantage", async () => {
+    // The forward-compat direction: a client newer than a server that has not
+    // yet added `measured_by` must keep working off `measured_from` alone —
+    // covered by the existing 'fleet'/'control_plane' arms above. This arm is
+    // the other one: a server that sends the new field with none of the old.
+    nextResponse = () => json({ ok: true, latency_ms: 31, measured_by: 'phone' });
+    const r = await testAccountProxy('https://api.example', 'ds_x', 'srv1', { vantage: 'fleet' });
+    expect(r).toMatchObject({ ok: true, measured_from: 'fleet' });
+  });
+
+  it("measured_by 'driftstack' resolves to the control-plane vantage", async () => {
+    nextResponse = () => json({ ok: true, latency_ms: 88, measured_by: 'driftstack' });
+    const r = await testAccountProxy('https://api.example', 'ds_x', 'srv1', { vantage: 'fleet' });
+    expect(r).toMatchObject({ ok: true, measured_from: 'control_plane' });
+  });
+
+  it('measured_by WINS over a disagreeing measured_from — proves it is read first, not merely as an alternate spelling', async () => {
+    nextResponse = () =>
+      json({ ok: true, latency_ms: 88, measured_by: 'phone', measured_from: 'control_plane' });
+    const r = await testAccountProxy('https://api.example', 'ds_x', 'srv1', { vantage: 'fleet' });
+    expect(r).toMatchObject({ ok: true, measured_from: 'fleet' });
+  });
+
+  it('an unrecognised measured_by falls back to measured_from rather than dropping the vantage', async () => {
+    nextResponse = () =>
+      json({ ok: true, latency_ms: 88, measured_by: 'laptop', measured_from: 'fleet' });
+    const r = await testAccountProxy('https://api.example', 'ds_x', 'srv1', { vantage: 'fleet' });
+    expect(r).toMatchObject({ ok: true, measured_from: 'fleet' });
+  });
+
+  it('NEGATIVE CONTROL both unrecognised — the vantage is dropped, not guessed', async () => {
+    nextResponse = () =>
+      json({ ok: true, latency_ms: 88, measured_by: 'laptop', measured_from: 'laptop' });
+    const r = await testAccountProxy('https://api.example', 'ds_x', 'srv1', { vantage: 'fleet' });
+    expect(r).not.toHaveProperty('measured_from');
+  });
+});
+
 describe('the closed set helper', () => {
   it("keeps 'fleet' and 'control_plane'", () => {
     expect(cleanProxyVantage('fleet')).toBe('fleet');
@@ -326,6 +370,24 @@ describe('the closed set helper', () => {
     expect(cleanProxyVantage('cp')).toBeUndefined();
     expect(cleanProxyVantage(1)).toBeUndefined();
     expect(cleanProxyVantage(null)).toBeUndefined();
+  });
+
+  it("cleanWireProxyVantage prefers measured_by ('phone' -> 'fleet', 'driftstack' -> 'control_plane')", () => {
+    expect(cleanWireProxyVantage('phone', undefined)).toBe('fleet');
+    expect(cleanWireProxyVantage('driftstack', undefined)).toBe('control_plane');
+    expect(cleanWireProxyVantage('phone', 'control_plane')).toBe('fleet');
+  });
+
+  it('cleanWireProxyVantage falls back to measured_from when measured_by is absent or unrecognised', () => {
+    expect(cleanWireProxyVantage(undefined, 'fleet')).toBe('fleet');
+    expect(cleanWireProxyVantage(undefined, 'control_plane')).toBe('control_plane');
+    expect(cleanWireProxyVantage('laptop', 'fleet')).toBe('fleet');
+  });
+
+  it('NEGATIVE CONTROL cleanWireProxyVantage drops both when neither value is recognised', () => {
+    expect(cleanWireProxyVantage('laptop', 'laptop')).toBeUndefined();
+    expect(cleanWireProxyVantage(undefined, undefined)).toBeUndefined();
+    expect(cleanWireProxyVantage(1, null)).toBeUndefined();
   });
 
   it("keeps a node id only beside 'fleet'", () => {
