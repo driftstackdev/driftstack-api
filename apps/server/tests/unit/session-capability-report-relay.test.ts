@@ -3,6 +3,7 @@ import type { Logger } from '../../src/lib/logger.js';
 import type { CapabilityReport } from '../../src/schemas/harness-control-protocol.js';
 import { makeSessionCapabilityReportRelay } from '../../src/services/session-capability-report-relay.js';
 import { SessionCapabilityReportStore } from '../../src/services/session-capability-report-store.js';
+import { unmappedEgressWarnings } from '../../src/services/customer-safe-egress-warnings.js';
 
 function report(sessionId = 'agt_1', overrides: Partial<CapabilityReport> = {}): CapabilityReport {
   return {
@@ -394,5 +395,150 @@ describe('T-26 stop-on-exit-IP-change enforcement', () => {
     await vi.waitFor(() => expect(h.ingest).toHaveBeenCalledTimes(1));
     expect(h.closeWithReasonOutcome).not.toHaveBeenCalled();
     expect(h.setFirstExitIpIfUnset).not.toHaveBeenCalled();
+  });
+});
+
+// Item 4 — a device-side safeguard layer with no entry in
+// PUBLIC_SAFEGUARD_LAYERS is noticed the moment it is DECLARED (expected or
+// reported), not the moment it first FAILS. Every layer name in this block is
+// unique to these tests, so the recorder's real once-per-process log dedupe
+// (shared with the egress-warning map) cannot make one test's assertion
+// depend on another test having run first.
+describe('makeSessionCapabilityReportRelay — early notice of an unworded safeguard layer', () => {
+  function ownedRelay(log: Logger) {
+    const store = new SessionCapabilityReportStore();
+    const ingest = vi.fn((_args: unknown) => Promise.resolve());
+    const relay = makeSessionCapabilityReportRelay(
+      {
+        get: vi.fn(() =>
+          Promise.resolve({
+            nodeId: 'node-1',
+            driftstackSessionId: 'ses_driver_1',
+            accountId: 'acc_1',
+            proxyId: null,
+            status: 'active',
+          }),
+        ),
+        ...stopPolicyStubs(),
+      },
+      { ingestEgressCapabilityReport: ingest },
+      store,
+      log,
+    );
+    return { relay, ingest };
+  }
+
+  it('CRITICAL a reported layer with no public word is logged once, sanitised, under the distinct safeguard_layer_unworded: form — noticed on report, before it ever fails', async () => {
+    const log = logger();
+    const { relay } = ownedRelay(log);
+
+    relay(
+      report('agt_unworded_1', {
+        safeguardChecks: [{ layer: 'zz_test_new_layer_reported', passed: true, timestamp: 't' }],
+      }),
+      'node-1',
+    );
+
+    await vi.waitFor(() =>
+      expect(log.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'safeguard_layer_unworded:zz_test_new_layer_reported' }),
+        expect.any(String),
+      ),
+    );
+    expect(
+      unmappedEgressWarnings.counts().get('safeguard_layer_unworded:zz_test_new_layer_reported'),
+    ).toBeGreaterThan(0);
+  });
+
+  it("CRITICAL a layer only DECLARED via safeguardLayersExpected — never checked, never failed — is still noticed. This is the whole point: today's failure-only path would never see a layer that keeps passing or never runs at all.", async () => {
+    const log = logger();
+    const { relay } = ownedRelay(log);
+
+    relay(
+      report('agt_unworded_2', {
+        safeguardLayersExpected: ['zz_test_new_layer_expected_only'],
+        safeguardChecks: [],
+      }),
+      'node-1',
+    );
+
+    await vi.waitFor(() =>
+      expect(log.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: 'safeguard_layer_unworded:zz_test_new_layer_expected_only',
+        }),
+        expect.any(String),
+      ),
+    );
+  });
+
+  it('a layer already published under PUBLIC_SAFEGUARD_LAYERS triggers no notice — VACUITY check for the arms above: this is the same relay, the same call site, and it stays silent for a layer already worded', async () => {
+    const log = logger();
+    const { relay, ingest } = ownedRelay(log);
+    const before = unmappedEgressWarnings.counts().get('safeguard_layer_unworded:network_firewall');
+
+    relay(
+      report('agt_unworded_3', {
+        safeguardLayersExpected: ['network_firewall'],
+        safeguardChecks: [{ layer: 'network_firewall', passed: true, timestamp: 't' }],
+      }),
+      'node-1',
+    );
+
+    // Wait for processing to complete (ingest fires last), then assert silence.
+    await vi.waitFor(() => expect(ingest).toHaveBeenCalledTimes(1));
+    expect(unmappedEgressWarnings.counts().get('safeguard_layer_unworded:network_firewall')).toBe(
+      before,
+    );
+    for (const call of vi.mocked(log.warn).mock.calls as unknown[][]) {
+      const arg = call[0] as Record<string, unknown> | undefined;
+      expect(arg?.code).not.toBe('safeguard_layer_unworded:network_firewall');
+    }
+  });
+
+  it('a hostile layer name is sanitised before it is ever logged — the raw device string never reaches the log line', async () => {
+    const log = logger();
+    const { relay } = ownedRelay(log);
+    const hostile = '../../x <script> relay-07.fleet.internal:1080';
+
+    relay(
+      report('agt_unworded_4', {
+        safeguardChecks: [{ layer: hostile, passed: true, timestamp: 't' }],
+      }),
+      'node-1',
+    );
+
+    await vi.waitFor(() =>
+      expect(log.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'safeguard_layer_unworded:unprintable' }),
+        expect.any(String),
+      ),
+    );
+    for (const call of vi.mocked(log.warn).mock.calls as unknown[][]) {
+      const arg = call[0] as Record<string, unknown> | undefined;
+      expect(JSON.stringify(arg)).not.toContain('fleet.internal');
+      expect(JSON.stringify(arg)).not.toContain('<script>');
+    }
+  });
+
+  it('NEGATIVE CONTROL — deriveWarnings-visible customer output is unchanged by this notice: warnings still carries only safeguard_failed:<published word>, never the unworded prefix', async () => {
+    const log = logger();
+    const { relay, ingest } = ownedRelay(log);
+
+    relay(
+      report('agt_unworded_5', {
+        safeguardChecks: [
+          { layer: 'zz_test_new_layer_customer_check', passed: false, timestamp: 't' },
+        ],
+      }),
+      'node-1',
+    );
+
+    await vi.waitFor(() => expect(ingest).toHaveBeenCalledTimes(1));
+    const derived = (ingest.mock.calls[0] as unknown[])[0] as { derived: { warnings: string[] } };
+    expect(derived.derived.warnings).toContain('safeguard_failed:zz_test_new_layer_customer_check');
+    expect(derived.derived.warnings.some((w) => w.startsWith('safeguard_layer_unworded:'))).toBe(
+      false,
+    );
   });
 });

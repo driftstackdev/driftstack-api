@@ -22,6 +22,28 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>2026-09</h2>
     <ul>
       <li>
+        <strong>API — the proxy test gets customer-worded names.</strong>
+        <code>POST /v1/account/me/proxies/&#123;id&#125;/test</code> now takes
+        <code>?check=quick</code> (measured by Driftstack itself) or
+        <code>?check=full</code> (run through the machine that runs your
+        profile). The previous query parameter, which named one of our internal
+        mechanisms, is still accepted for existing integrations but is no
+        longer documented. The result's
+        <code>os_fingerprint_unavailable</code> codes are renamed to say what
+        happened (<code>not_available_for_vpn</code>, <code>not_captured</code>,
+        <code>not_offered_here</code>), and the <code>not_run</code> codes are
+        renamed and consolidated: <code>config_unresolvable</code>, and one
+        <code>check_unavailable</code> where three internal causes used to be
+        listed, since you can do exactly one thing about any of them;
+        <code>live_session</code> is unchanged. The <code>os_fingerprint</code>
+        object gains <code>direct_reading</code> and
+        <code>website_like_reading</code>, the same facts as the two fields
+        beside them, which stay. Two documented
+        <code>egress_capabilities.warnings</code> codes that were never sent are
+        retired. Everything is additive; no SDK method changed. Reference at
+        <a href="https://docs.driftstack.io/api/proxies/">/api/proxies</a>.
+      </li>
+      <li>
         <strong>API — <code>egress_capabilities.warnings</code> now has a
         published list of codes.</strong>
         The <code>warnings</code> list on a session's

@@ -564,7 +564,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(res.statusCode, res.body).toBe(200);
     const body = res.json<Record<string, unknown>>();
     expect('os_fingerprint' in body).toBe(false);
-    expect(body.os_fingerprint_unavailable).toBe('vpn_tunnel');
+    expect(body.os_fingerprint_unavailable).toBe('not_available_for_vpn');
   });
 
   it('CRITICAL an openvpn row dispatches too — the same path, the openvpn wire', async () => {
@@ -833,7 +833,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(body.reason).toMatch(/test service is busy right now/);
     // (d) — the machine-readable "nothing ran": a client branches on THIS, not
     // on the sentence, so a busy Mac never renders as a tunnel that is down.
-    expect(body.not_run).toBe('node_busy');
+    expect(body.not_run).toBe('check_unavailable');
     for (const k of [
       'reachable',
       'auth_ok',
@@ -871,7 +871,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(body2.reason).toMatch(/The test could not be completed\. Try again shortly/);
     // (d) — still "nothing ran", under its own value: not the busy token, and
     // never absent (absent would let a client read it as a measured failure).
-    expect(body2.not_run).toBe('node_error');
+    expect(body2.not_run).toBe('check_unavailable');
   });
 
   it('(e) CONTROL — a socks5 row with a node that could not run the probe still gets the control-plane fallback (a real SOCKS5 measurement)', async () => {
@@ -958,7 +958,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(probeSpy).toHaveBeenCalledTimes(1); // asked, and told "no node"
     const body = res.json<Record<string, unknown>>();
     expect(body.ok).toBe(false);
-    expect(body.not_run).toBe('no_node');
+    expect(body.not_run).toBe('check_unavailable');
     expect(body.reason).toMatch(NO_NODE);
     expect(body.reason).not.toMatch(/unreachable/i);
     expect(body.measured_from).toBe('control_plane');
@@ -997,7 +997,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(res.statusCode, res.body).toBe(200);
     const body = res.json<Record<string, unknown>>();
     expect(body.ok).toBe(false);
-    expect(body.not_run).toBe('no_node');
+    expect(body.not_run).toBe('check_unavailable');
     expect(body.measured_from).toBe('control_plane');
     for (const k of MEASUREMENT_KEYS) {
       expect(k in body, `${k} must be absent — nothing ran`).toBe(false);
@@ -1031,7 +1031,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(res.statusCode, res.body).toBe(200);
     const body = res.json<Record<string, unknown>>();
     expect(body.ok).toBe(false);
-    expect(body.not_run).toBe('no_node');
+    expect(body.not_run).toBe('check_unavailable');
     expect(body.measured_from).toBe('control_plane');
     expect(body.reason).not.toMatch(/unreachable/i);
     expect('node_id' in body).toBe(false);
@@ -1056,7 +1056,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(res.statusCode, res.body).toBe(200);
     const body = res.json<Record<string, unknown>>();
     expect(body.ok).toBe(false);
-    expect(body.not_run).toBe('no_node');
+    expect(body.not_run).toBe('check_unavailable');
     expect(body.measured_from).toBe('control_plane');
     expect('node_id' in body).toBe(false);
   });
@@ -1099,7 +1099,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(res.statusCode, res.body).toBe(200);
     const body = res.json<Record<string, unknown>>();
     expect(body.ok).toBe(false);
-    expect(body.not_run).toBe('no_node');
+    expect(body.not_run).toBe('check_unavailable');
     expect(body.measured_from).toBe('control_plane');
     expect(body.reason).toMatch(/VPN checks are not available on this deployment/);
     expect(body.reason).not.toMatch(/was free|try again/i);
@@ -1153,7 +1153,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     });
     expect(res.statusCode, res.body).toBe(200);
     const body = res.json<Record<string, unknown>>();
-    expect(body.not_run).toBe('no_node');
+    expect(body.not_run).toBe('check_unavailable');
     expect(body.reason).toMatch(NO_NODE);
   });
 
@@ -1222,7 +1222,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     const body = res.json<Record<string, unknown>>();
     expect(body.ok).toBe(false);
     // THE DISCRIMINATOR: nothing ran, so this is not a tunnel verdict.
-    expect(body.not_run).toBe('unresolvable');
+    expect(body.not_run).toBe('config_unresolvable');
     // The sentence is unchanged, byte for byte — a customer who has read it
     // does not get a new one because we fixed a machine field.
     expect(body.reason).toMatch(/could not be read\. Re-add it/);
@@ -1260,7 +1260,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     });
     expect(res.statusCode, res.body).toBe(200);
     const body = res.json<Record<string, unknown>>();
-    expect(body.not_run).toBe('unresolvable');
+    expect(body.not_run).toBe('config_unresolvable');
     expect(body.reason).toMatch(/could not be read\. Re-add it/);
     expect(body.reason).not.toMatch(NO_NODE);
   });
@@ -1292,7 +1292,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(body.ok).toBe(false);
     expect(body.reason).toMatch(/private or local network address/);
     expect(body.reason).not.toMatch(/could not be read/);
-    expect(body.not_run).toBe('unresolvable');
+    expect(body.not_run).toBe('config_unresolvable');
     expect(probeSpy).not.toHaveBeenCalled();
   });
 });
@@ -2062,7 +2062,7 @@ describe('(i) I3 / I7 — the stored exit: named by its source, contradicted by 
     const id = await makeWireGuardProxy();
     await seedExit(id, SESSION_EXIT);
     const body = await fleetTest(id);
-    expect(body.not_run).toBe('node_busy');
+    expect(body.not_run).toBe('check_unavailable');
     const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
     expect(after?.exitObserved).toEqual(SESSION_EXIT);
     expect(after?.exitSupersededAt).toBeNull();
@@ -2274,12 +2274,12 @@ describe('(i) I3 / I7 — the stored exit: named by its source, contradicted by 
     const id = await makeWireGuardProxy();
     await seedExit(id, SESSION_EXIT, new Date('2026-09-02T00:00:00Z'));
     const contradicted = await fleetTest(id);
-    expect(contradicted.not_run).toBe('no_node');
+    expect(contradicted.not_run).toBe('check_unavailable');
     expect('exit_observed' in contradicted).toBe(false);
     // CONTROL — clear the stamp and the very same reply carries the exit.
     await seedExit(id, SESSION_EXIT, null);
     const plain = await fleetTest(id);
-    expect(plain.not_run).toBe('no_node');
+    expect(plain.not_run).toBe('check_unavailable');
     expect((plain.exit_observed as { ip?: string })?.ip).toBe('203.0.113.9');
     expect((plain.exit_observed as { observed_at?: string })?.observed_at).toBe(
       '2026-09-01T00:00:00.000Z',

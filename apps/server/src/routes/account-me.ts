@@ -89,7 +89,11 @@ import {
   probeReachedVerdict,
   type ProbeEgressResult,
 } from '../schemas/harness-control-protocol.js';
-import { z } from 'zod';
+import {
+  publicOsFingerprintUnavailable,
+  publicProxyTestNotRun,
+  resolveProxyTestVantage,
+} from '../services/customer-safe-proxy-test-vocabulary.js';
 
 /** V-352b — avatar presigned-GET TTL. 1h is long enough that a single
  *  dashboard render doesn't churn signed URLs but short enough that
@@ -188,12 +192,12 @@ export interface AccountMeRoutesOptions {
   agentSessions?: Pick<AgentSessionsRepo, 'listOpenByAccount'>;
 }
 
-/** T-1 — the vantage a proxy test is measured from. `cp` (default) keeps the
- *  control-plane probe; `fleet` measures from the Mac that will run the profile.
- *  Published as an enum so the value is a BOUND, not free text. */
-const ProxyTestQuerySchema = z.object({
-  vantage: z.enum(['cp', 'fleet']).default('cp'),
-});
+// T-1 — the vantage a proxy test is measured from. `cp` (default) keeps the
+// control-plane probe; `fleet` measures from the Mac that will run the
+// profile. Query-parameter parsing (both the documented `?check=quick|full`
+// and the legacy `?vantage=cp|fleet`) now lives in
+// `resolveProxyTestVantage` (`services/customer-safe-proxy-test-vocabulary.ts`),
+// so the route and the OpenAPI document read one definition of the bound.
 
 /** T-1 — the neutral egress endpoint a fleet node routes to THROUGH the proxy,
  *  derived from the SAME target the control-plane probe uses so both vantages
@@ -688,6 +692,63 @@ export function proxyReadingsInvalidatedByEdit(
     };
   }
   return {};
+}
+
+/**
+ * Add the customer-worded `direct_reading` / `website_like_reading` aliases
+ * beside the original `single_host_vantage` / `web_port_vantage` booleans on
+ * an OS-fingerprint object. Additive only — the originals are untouched, for
+ * `apps/gui-client`'s existing readers of this exact shape.
+ */
+function withCustomerFingerprintAliases(fp: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...fp };
+  if (typeof fp['single_host_vantage'] === 'boolean') {
+    out['direct_reading'] = fp['single_host_vantage'];
+  }
+  if (typeof fp['web_port_vantage'] === 'boolean') {
+    out['website_like_reading'] = fp['web_port_vantage'];
+  }
+  return out;
+}
+
+/**
+ * ⛔ THE ONE MAPPING POINT for `POST …/proxies/:id/test`'s result vocabulary —
+ * see `customer-safe-proxy-test-vocabulary.ts`. `runAccountProxyTest` below
+ * computes its result exactly as it always has, in the route's own internal
+ * words (`os_fingerprint_unavailable` causes, `not_run` causes, and the
+ * `single_host_vantage` / `web_port_vantage` field names); this is the single
+ * place those cross into the closed public vocabulary, on the way OUT to the
+ * customer — mapped at read time, same direction as
+ * `customerSafeEgressCapabilities`, so every one of `runAccountProxyTest`'s
+ * many return points (host-safety refusal, both probes, every `not_run`
+ * branch) is covered by construction rather than by a mapping call repeated
+ * at each one, which is how a future branch would ship unmapped.
+ *
+ * Takes and returns a loosely-typed object on purpose: `runAccountProxyTest`
+ * returns one of several structurally-different object-literal shapes (an
+ * `ok:true` cp result, an `ok:false` result, the richer fleet-measured
+ * result), and this function's job is a field-name walk over whichever one
+ * arrived, not a re-statement of that union.
+ */
+function toPublicProxyTestResult(
+  result: Record<string, unknown>,
+  logger: Parameters<typeof publicProxyTestNotRun>[1],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...result };
+  if (typeof out['os_fingerprint_unavailable'] === 'string') {
+    const mapped = publicOsFingerprintUnavailable(out['os_fingerprint_unavailable'], logger);
+    if (mapped === null) delete out['os_fingerprint_unavailable'];
+    else out['os_fingerprint_unavailable'] = mapped;
+  }
+  if (typeof out['not_run'] === 'string') {
+    out['not_run'] = publicProxyTestNotRun(out['not_run'], logger);
+  }
+  if (out['os_fingerprint'] !== null && typeof out['os_fingerprint'] === 'object') {
+    out['os_fingerprint'] = withCustomerFingerprintAliases(
+      out['os_fingerprint'] as Record<string, unknown>,
+    );
+  }
+  return out;
 }
 
 export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRoutesOptions): void {
@@ -1604,1095 +1665,1100 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   // owned proxy's host:port (SSRF host-guard runs first, fail-closed). Returns a
   // discriminated result (ok=true+latency_ms | ok=false+reason), 200 either way —
   // an unreachable proxy is a result, not an error. 404 for an unknown/foreign id.
-  app.post<{ Params: { id: string }; Querystring: { vantage?: 'cp' | 'fleet' } }>(
+  app.post<{ Params: { id: string }; Querystring: { vantage?: string; check?: string } }>(
     '/v1/account/me/proxies/:id/test',
     { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
-    async (request) => {
-      const ctx = request.account;
-      if (!ctx) throw new Error('account context missing after requireAuth');
-      if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.');
-      const id = parseProxyId(request.params.id);
-      const row = await accountProxiesRepo.findById({ id, accountId: ctx.account.id });
-      if (row === null) throw new NotFoundError('Proxy not found.');
-      // T-6 — surface the QUIC verdict a real session measured through this
-      // proxy on every ok:true result, so the desktop client can show a
-      // confirmed QUIC mark instead of one inferred from UDP association. Read
-      // from the row already fetched; null stays null (never measured).
-      const quicMeasured: AccountProxyMetadata['quic_measured'] =
-        row.quicMeasured as AccountProxyMetadata['quic_measured'];
-      const quicFields = {
-        quic_measured: quicMeasured,
-        quic_measured_at: row.quicMeasuredAt !== null ? row.quicMeasuredAt.toISOString() : null,
+    // The internal handler computes the response in the route's OWN words
+    // (`os_fingerprint_unavailable`, `not_run`, `single_host_vantage` /
+    // `web_port_vantage`) exactly as it always has; `toPublicProxyTestResult`
+    // is the ONE place that maps them to the closed customer vocabulary —
+    // mirrors `customerSafeEgressCapabilities` being the one mapping point for
+    // the egress-warning vocabulary rather than a mapping call at every branch
+    // that can produce a result.
+    async (request) => toPublicProxyTestResult(await runAccountProxyTest(request), request.log),
+  );
+
+  async function runAccountProxyTest(
+    request: FastifyRequest<{
+      Params: { id: string };
+      Querystring: { vantage?: string; check?: string };
+    }>,
+  ) {
+    const ctx = request.account;
+    if (!ctx) throw new Error('account context missing after requireAuth');
+    if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.');
+    const id = parseProxyId(request.params.id);
+    const row = await accountProxiesRepo.findById({ id, accountId: ctx.account.id });
+    if (row === null) throw new NotFoundError('Proxy not found.');
+    // T-6 — surface the QUIC verdict a real session measured through this
+    // proxy on every ok:true result, so the desktop client can show a
+    // confirmed QUIC mark instead of one inferred from UDP association. Read
+    // from the row already fetched; null stays null (never measured).
+    const quicMeasured: AccountProxyMetadata['quic_measured'] =
+      row.quicMeasured as AccountProxyMetadata['quic_measured'];
+    const quicFields = {
+      quic_measured: quicMeasured,
+      quic_measured_at: row.quicMeasuredAt !== null ? row.quicMeasuredAt.toISOString() : null,
+    };
+    if (classifyUnsafeHost(row.host) !== null) {
+      return {
+        ok: false as const,
+        reason:
+          'This proxy host is not allowed. It must be a public internet address, not a private or local network address.',
       };
-      if (classifyUnsafeHost(row.host) !== null) {
+    }
+    // T-1 — which machine measures the proxy. `?check=quick|full` is the
+    // documented customer name; `?vantage=cp|fleet` is the original name,
+    // still accepted (never documented again) so nothing that already links
+    // to it breaks. `check` wins when both are present. An unknown value on
+    // either is a 400, not a silent default — see
+    // `resolveProxyTestVantage`.
+    const resolvedVantage = resolveProxyTestVantage(request.query);
+    if ('error' in resolvedVantage) {
+      throw new BadRequestError(resolvedVantage.error);
+    }
+    const vantage = resolvedVantage.vantage;
+
+    // N-2 — the OS fingerprint, and it belongs to BOTH vantages.
+    //
+    // ⛔ It is a CONTROL-PLANE observation that does not ride the node's
+    // result: `observeOs` CONNECTs through the proxy to our own raw-socket
+    // observer and reads the SYN the proxy's own kernel built, so it is measured
+    // from HERE no matter which machine measured the latency. It used to be
+    // attached on the cp branch alone, so a customer whose GUI asked for the
+    // fleet vantage lost the chip with nothing on the wire to say why.
+    //
+    // Returns the fields to spread onto an ok result, or `{}` when nothing was
+    // observed — a miss is ABSENCE, never a placeholder OS, so no client can
+    // colour a cell on a value nobody measured. It NEVER throws: on the fleet
+    // branch an exception here would be caught by `runFleetProbe`'s own handler
+    // and fall the whole request back to the control plane, which would relabel
+    // a node measurement `control_plane`. A wrong provenance is worse than a
+    // missing chip.
+    //
+    // (o) 2026-09-11 — AND WHEN NOTHING WAS OBSERVED, WHY. A bare `{}` said
+    // "absent" and nothing else, so the desktop client rendered every miss with
+    // one hint — "Run Test on a proxy stored on your account; the control plane
+    // fingerprints the proxy's own TCP stack" — which is advice that CANNOT
+    // produce a value for two of the three causes. `os_fingerprint_unavailable`
+    // is the machine-readable cause a client branches on; the three values are
+    // the three arms that already existed here, now reported instead of merged.
+    // (V-219) A VPN row's stack, read from the observer record the FLEET NODE
+    // caused by connecting to the observer through the tunnel it brought up
+    // (`observerTarget` on the probeEgress frame). No dial from here: the
+    // control plane cannot bring a tunnel up. Until a node connects, the lookup
+    // misses and the row keeps the `vpn_tunnel` cause it always had — a miss
+    // is never coerced into a reading, and the cause it falls back to is still
+    // true of every node that predates the contract.
+    const vpnOsFingerprintFields = async (
+      exitIp: string | null,
+      sinceMs: number,
+    ): Promise<OsFingerprintFields> => {
+      if (
+        proxyConnectivityProbe === undefined ||
+        typeof proxyConnectivityProbe.observeOsAtExit !== 'function' ||
+        exitIp === null
+      ) {
+        return { os_fingerprint_unavailable: 'vpn_tunnel' as const };
+      }
+      try {
+        const os = await proxyConnectivityProbe.observeOsAtExit(exitIp, sinceMs);
+        if (!os.observed) {
+          request.log.info(
+            { proxyId: row.id, reason: os.reason },
+            'proxy test: vpn os fingerprint not observed',
+          );
+          return { os_fingerprint_unavailable: 'vpn_tunnel' as const };
+        }
+        request.log.info(
+          { proxyId: row.id, os: os.os, confidence: os.confidence, reason: os.reason },
+          'proxy test: os fingerprint observed',
+        );
         return {
-          ok: false as const,
-          reason:
-            'This proxy host is not allowed. It must be a public internet address, not a private or local network address.',
+          os_fingerprint: {
+            os: os.os,
+            confidence: os.confidence,
+            reason: customerOsFingerprintReason(os.os),
+            observed_ip: os.observedIp,
+            observed_via: os.via,
+            single_host_vantage: os.singleHostVantage,
+            web_port_vantage: os.webPortVantage,
+          },
         };
+      } catch (err) {
+        request.log.info({ proxyId: row.id, err }, 'proxy test: vpn os fingerprint lookup failed');
+        return { os_fingerprint_unavailable: 'vpn_tunnel' as const };
       }
-      // T-1 — which machine measures the proxy. Validated with the zod enum at the
-      // read site (an unknown value is a 400, not a silent default), so the union
-      // the handler branches on can only be `cp` or `fleet`.
-      const parsedQuery = ProxyTestQuerySchema.safeParse(request.query);
-      if (!parsedQuery.success) {
-        throw new BadRequestError('The `vantage` query parameter must be one of: cp, fleet.');
+    };
+    const osFingerprintFields = async (
+      descriptor: ProbeProxyDescriptor,
+      exitIp: string | null | undefined,
+    ): Promise<OsFingerprintFields> => {
+      // No probe wired at all (a fixture, or a deployment with no master key):
+      // nothing on this deployment fingerprints anything, which is the same
+      // thing a customer needs told as a probe with no observer configured.
+      if (proxyConnectivityProbe === undefined) {
+        return { os_fingerprint_unavailable: 'observer_off' as const };
       }
-      const vantage = parsedQuery.data.vantage;
-
-      // N-2 — the OS fingerprint, and it belongs to BOTH vantages.
-      //
-      // ⛔ It is a CONTROL-PLANE observation that does not ride the node's
-      // result: `observeOs` CONNECTs through the proxy to our own raw-socket
-      // observer and reads the SYN the proxy's own kernel built, so it is measured
-      // from HERE no matter which machine measured the latency. It used to be
-      // attached on the cp branch alone, so a customer whose GUI asked for the
-      // fleet vantage lost the chip with nothing on the wire to say why.
-      //
-      // Returns the fields to spread onto an ok result, or `{}` when nothing was
-      // observed — a miss is ABSENCE, never a placeholder OS, so no client can
-      // colour a cell on a value nobody measured. It NEVER throws: on the fleet
-      // branch an exception here would be caught by `runFleetProbe`'s own handler
-      // and fall the whole request back to the control plane, which would relabel
-      // a node measurement `control_plane`. A wrong provenance is worse than a
-      // missing chip.
-      //
-      // (o) 2026-09-11 — AND WHEN NOTHING WAS OBSERVED, WHY. A bare `{}` said
-      // "absent" and nothing else, so the desktop client rendered every miss with
-      // one hint — "Run Test on a proxy stored on your account; the control plane
-      // fingerprints the proxy's own TCP stack" — which is advice that CANNOT
-      // produce a value for two of the three causes. `os_fingerprint_unavailable`
-      // is the machine-readable cause a client branches on; the three values are
-      // the three arms that already existed here, now reported instead of merged.
-      // (V-219) A VPN row's stack, read from the observer record the FLEET NODE
-      // caused by connecting to the observer through the tunnel it brought up
-      // (`observerTarget` on the probeEgress frame). No dial from here: the
-      // control plane cannot bring a tunnel up. Until a node connects, the lookup
-      // misses and the row keeps the `vpn_tunnel` cause it always had — a miss
-      // is never coerced into a reading, and the cause it falls back to is still
-      // true of every node that predates the contract.
-      const vpnOsFingerprintFields = async (
-        exitIp: string | null,
-        sinceMs: number,
-      ): Promise<OsFingerprintFields> => {
-        if (
-          proxyConnectivityProbe === undefined ||
-          typeof proxyConnectivityProbe.observeOsAtExit !== 'function' ||
-          exitIp === null
-        ) {
-          return { os_fingerprint_unavailable: 'vpn_tunnel' as const };
-        }
-        try {
-          const os = await proxyConnectivityProbe.observeOsAtExit(exitIp, sinceMs);
-          if (!os.observed) {
-            request.log.info(
-              { proxyId: row.id, reason: os.reason },
-              'proxy test: vpn os fingerprint not observed',
-            );
-            return { os_fingerprint_unavailable: 'vpn_tunnel' as const };
-          }
+      try {
+        const os = await proxyConnectivityProbe.observeOs(descriptor, exitIp ?? undefined);
+        if (!os.observed) {
+          // info, not debug: production runs at info, and a miss that cannot be
+          // read there is the silent failure this field exists to avoid. One
+          // line per customer-initiated test; the launch path never reaches it.
           request.log.info(
-            { proxyId: row.id, os: os.os, confidence: os.confidence, reason: os.reason },
-            'proxy test: os fingerprint observed',
+            { proxyId: row.id, reason: os.reason },
+            'proxy test: os fingerprint not observed',
           );
           return {
-            os_fingerprint: {
-              os: os.os,
-              confidence: os.confidence,
-              reason: customerOsFingerprintReason(os.os),
-              observed_ip: os.observedIp,
-              observed_via: os.via,
-              single_host_vantage: os.singleHostVantage,
-              web_port_vantage: os.webPortVantage,
-            },
+            os_fingerprint_unavailable:
+              os.reason === OBSERVER_NOT_CONFIGURED_REASON
+                ? ('observer_off' as const)
+                : ('not_observed' as const),
           };
-        } catch (err) {
-          request.log.info(
-            { proxyId: row.id, err },
-            'proxy test: vpn os fingerprint lookup failed',
-          );
-          return { os_fingerprint_unavailable: 'vpn_tunnel' as const };
         }
-      };
-      const osFingerprintFields = async (
-        descriptor: ProbeProxyDescriptor,
-        exitIp: string | null | undefined,
-      ): Promise<OsFingerprintFields> => {
-        // No probe wired at all (a fixture, or a deployment with no master key):
-        // nothing on this deployment fingerprints anything, which is the same
-        // thing a customer needs told as a probe with no observer configured.
-        if (proxyConnectivityProbe === undefined) {
-          return { os_fingerprint_unavailable: 'observer_off' as const };
-        }
-        try {
-          const os = await proxyConnectivityProbe.observeOs(descriptor, exitIp ?? undefined);
-          if (!os.observed) {
-            // info, not debug: production runs at info, and a miss that cannot be
-            // read there is the silent failure this field exists to avoid. One
-            // line per customer-initiated test; the launch path never reaches it.
-            request.log.info(
-              { proxyId: row.id, reason: os.reason },
-              'proxy test: os fingerprint not observed',
-            );
-            return {
-              os_fingerprint_unavailable:
-                os.reason === OBSERVER_NOT_CONFIGURED_REASON
-                  ? ('observer_off' as const)
-                  : ('not_observed' as const),
-            };
-          }
-          request.log.info(
-            { proxyId: row.id, os: os.os, confidence: os.confidence, reason: os.reason },
-            'proxy test: os fingerprint observed',
-          );
-          return {
-            os_fingerprint: {
-              os: os.os,
-              confidence: os.confidence,
-              reason: customerOsFingerprintReason(os.os),
-              observed_ip: os.observedIp,
-              observed_via: os.via,
-              // (V-219) Whether this reading describes the path a website gets.
-              // The client withholds a match/mismatch CLAIM when it is false —
-              // see the owner's browserleaks measurement in the probe's comment.
-              single_host_vantage: os.singleHostVantage,
-              web_port_vantage: os.webPortVantage,
-            },
-          };
-        } catch (err) {
-          request.log.info(
-            { proxyId: row.id, err },
-            'proxy test: os fingerprint observation failed',
-          );
-          // A throw is the observer tunnel failing, never the observer being off:
-          // `observeOs` answers the off case without touching the network.
-          return { os_fingerprint_unavailable: 'not_observed' as const };
-        }
-      };
+        request.log.info(
+          { proxyId: row.id, os: os.os, confidence: os.confidence, reason: os.reason },
+          'proxy test: os fingerprint observed',
+        );
+        return {
+          os_fingerprint: {
+            os: os.os,
+            confidence: os.confidence,
+            reason: customerOsFingerprintReason(os.os),
+            observed_ip: os.observedIp,
+            observed_via: os.via,
+            // (V-219) Whether this reading describes the path a website gets.
+            // The client withholds a match/mismatch CLAIM when it is false —
+            // see the owner's browserleaks measurement in the probe's comment.
+            single_host_vantage: os.singleHostVantage,
+            web_port_vantage: os.webPortVantage,
+          },
+        };
+      } catch (err) {
+        request.log.info({ proxyId: row.id, err }, 'proxy test: os fingerprint observation failed');
+        // A throw is the observer tunnel failing, never the observer being off:
+        // `observeOs` answers the off case without touching the network.
+        return { os_fingerprint_unavailable: 'not_observed' as const };
+      }
+    };
 
-      // N-2 — persist the observed fingerprint onto the proxy row so a live agent
-      // session can later project the exit's OS onto its capability_report. ONLY
-      // when a fingerprint was observed: a miss (os_fingerprint absent) writes
-      // NOTHING and leaves the column as-is — never coercing a miss to a value, and
-      // never nulling a value a previous test measured. Best-effort and owner-scoped
-      // (id + accountId): a failure is logged but never fails the customer's test.
-      // `accountProxiesRepo` is non-null here (checked at the top of the handler);
-      // the local binding carries that narrowing into this closure.
-      const proxiesRepo = accountProxiesRepo;
-      // (o) — takes the union, so the "no fingerprint, here is why" members reach
-      // it and are correctly no-ops: a CAUSE is not a measurement and must never
-      // touch the stored column.
-      const persistOsFingerprintIfObserved = async (
-        fields: OsFingerprintFields | Record<string, never>,
-      ): Promise<void> => {
-        const fp = 'os_fingerprint' in fields ? fields.os_fingerprint : undefined;
-        if (fp === undefined) return;
-        try {
-          // ⛔ Rule 4 (services/proxy-reading-persist.ts) — `row` was read before a
-          // probe that can take ~12 seconds, and a PUT inside that window can have
-          // repointed the proxy, clearing this very column in the same statement.
-          // Writing now would restore a reading of the PREVIOUS address, dated
-          // after the move, onto the row the customer just fixed. The background
-          // refresher fences its write the same way, against the same helper.
-          const current = await proxiesRepo.findById({ id: row.id, accountId: ctx.account.id });
-          if (current === null || !readingWasTakenThroughCurrentIdentity(row, current)) {
-            request.log.info(
-              { proxyId: row.id },
-              'proxy test: the proxy changed while the test ran — the fingerprint describes the previous address and is not stored',
-            );
-            return;
-          }
-          await proxiesRepo.update({
-            id: row.id,
-            accountId: ctx.account.id,
-            updates: { osFingerprint: fp, osFingerprintAt: new Date() },
-          });
-        } catch (err) {
+    // N-2 — persist the observed fingerprint onto the proxy row so a live agent
+    // session can later project the exit's OS onto its capability_report. ONLY
+    // when a fingerprint was observed: a miss (os_fingerprint absent) writes
+    // NOTHING and leaves the column as-is — never coercing a miss to a value, and
+    // never nulling a value a previous test measured. Best-effort and owner-scoped
+    // (id + accountId): a failure is logged but never fails the customer's test.
+    // `accountProxiesRepo` is non-null here (checked at the top of the handler);
+    // the local binding carries that narrowing into this closure.
+    const proxiesRepo = accountProxiesRepo;
+    // (o) — takes the union, so the "no fingerprint, here is why" members reach
+    // it and are correctly no-ops: a CAUSE is not a measurement and must never
+    // touch the stored column.
+    const persistOsFingerprintIfObserved = async (
+      fields: OsFingerprintFields | Record<string, never>,
+    ): Promise<void> => {
+      const fp = 'os_fingerprint' in fields ? fields.os_fingerprint : undefined;
+      if (fp === undefined) return;
+      try {
+        // ⛔ Rule 4 (services/proxy-reading-persist.ts) — `row` was read before a
+        // probe that can take ~12 seconds, and a PUT inside that window can have
+        // repointed the proxy, clearing this very column in the same statement.
+        // Writing now would restore a reading of the PREVIOUS address, dated
+        // after the move, onto the row the customer just fixed. The background
+        // refresher fences its write the same way, against the same helper.
+        const current = await proxiesRepo.findById({ id: row.id, accountId: ctx.account.id });
+        if (current === null || !readingWasTakenThroughCurrentIdentity(row, current)) {
           request.log.info(
-            { proxyId: row.id, err },
-            'proxy test: failed to persist os fingerprint',
+            { proxyId: row.id },
+            'proxy test: the proxy changed while the test ran — the fingerprint describes the previous address and is not stored',
+          );
+          return;
+        }
+        await proxiesRepo.update({
+          id: row.id,
+          accountId: ctx.account.id,
+          updates: { osFingerprint: fp, osFingerprintAt: new Date() },
+        });
+      } catch (err) {
+        request.log.info({ proxyId: row.id, err }, 'proxy test: failed to persist os fingerprint');
+      }
+    };
+
+    // (0124) — persist what THIS test measured about QUIC and UDP onto the row,
+    // so the reading outlives the desktop that pressed Test and a stored `false`
+    // can be told apart from a reading nobody has taken. WHAT may be written is
+    // `probeCapabilityUpdates` (services/proxy-reading-persist.ts): a measured
+    // leg is stored as measured, true OR false, with its date; an absent leg
+    // writes nothing. Owner-scoped, best-effort, and it NEVER throws: on the fleet
+    // branch a throw is caught by `runFleetProbe`'s own handler and would relabel
+    // a node measurement `control_plane`.
+    //
+    // ⛔ Rule 4's identity fence is IN THE WRITE here, not before it
+    // (`storeProbeReadingsIfSameIdentity`). `persistOsFingerprintIfObserved`
+    // above reads the row and then updates it; for these columns that gap is
+    // not acceptable, because the value a PUT landing inside it would let
+    // through can be a `false` — on the NEW address, telling every consumer not
+    // to look again at a machine nobody has measured. `row` is the identity the
+    // node dialled, so it is the identity the statement must still find.
+    //
+    // `measuredAt` is the reading's date — when the node's frame resolved, not
+    // when this write runs (the OS observation sits between the two).
+    //
+    // ⛔ Returns the row AS THE STATEMENT LEFT IT, which is what the reply
+    // carries (a leg this test did not measure, or that a later measurement
+    // already holds, reads as stored) — or null when nothing was stored: no leg
+    // was measured, the write threw, or the statement matched no row because it
+    // is gone or no longer carries the identity the node dialled. That last case
+    // is NOT the same as "repointed": a PUT that resubmits the SAME password
+    // re-wraps the envelope (the desktop sends one before every launch), fails
+    // the fence, and KEEPS the stored readings. So on null the reply never
+    // guesses from `row`, which was read BEFORE the test — it re-reads
+    // (`probeReadingsAsTheRowStands`).
+    const persistProbeReadingsIfMeasured = async (
+      measured: MeasuredProbeCapabilities,
+      measuredAt: Date,
+    ): Promise<AccountProxyRow | null> => {
+      const updates = probeCapabilityUpdates({ measured, at: measuredAt, row });
+      if (updates === null) return null;
+      try {
+        const written = await proxiesRepo.storeProbeReadingsIfSameIdentity({
+          id: row.id,
+          accountId: ctx.account.id,
+          probedIdentity: row,
+          readings: updates,
+        });
+        if (written === null) {
+          request.log.info(
+            { proxyId: row.id },
+            'proxy test: the proxy was edited or removed while the test ran — the QUIC/UDP readings are not stored',
           );
         }
-      };
+        return written;
+      } catch (err) {
+        request.log.info(
+          { proxyId: row.id, err },
+          'proxy test: failed to persist the QUIC/UDP readings',
+        );
+        return null;
+      }
+    };
 
-      // (0124) — persist what THIS test measured about QUIC and UDP onto the row,
-      // so the reading outlives the desktop that pressed Test and a stored `false`
-      // can be told apart from a reading nobody has taken. WHAT may be written is
-      // `probeCapabilityUpdates` (services/proxy-reading-persist.ts): a measured
-      // leg is stored as measured, true OR false, with its date; an absent leg
-      // writes nothing. Owner-scoped, best-effort, and it NEVER throws: on the fleet
-      // branch a throw is caught by `runFleetProbe`'s own handler and would relabel
-      // a node measurement `control_plane`.
-      //
-      // ⛔ Rule 4's identity fence is IN THE WRITE here, not before it
-      // (`storeProbeReadingsIfSameIdentity`). `persistOsFingerprintIfObserved`
-      // above reads the row and then updates it; for these columns that gap is
-      // not acceptable, because the value a PUT landing inside it would let
-      // through can be a `false` — on the NEW address, telling every consumer not
-      // to look again at a machine nobody has measured. `row` is the identity the
-      // node dialled, so it is the identity the statement must still find.
-      //
-      // `measuredAt` is the reading's date — when the node's frame resolved, not
-      // when this write runs (the OS observation sits between the two).
-      //
-      // ⛔ Returns the row AS THE STATEMENT LEFT IT, which is what the reply
-      // carries (a leg this test did not measure, or that a later measurement
-      // already holds, reads as stored) — or null when nothing was stored: no leg
-      // was measured, the write threw, or the statement matched no row because it
-      // is gone or no longer carries the identity the node dialled. That last case
-      // is NOT the same as "repointed": a PUT that resubmits the SAME password
-      // re-wraps the envelope (the desktop sends one before every launch), fails
-      // the fence, and KEEPS the stored readings. So on null the reply never
-      // guesses from `row`, which was read BEFORE the test — it re-reads
-      // (`probeReadingsAsTheRowStands`).
-      const persistProbeReadingsIfMeasured = async (
-        measured: MeasuredProbeCapabilities,
-        measuredAt: Date,
-      ): Promise<AccountProxyRow | null> => {
-        const updates = probeCapabilityUpdates({ measured, at: measuredAt, row });
-        if (updates === null) return null;
-        try {
-          const written = await proxiesRepo.storeProbeReadingsIfSameIdentity({
-            id: row.id,
-            accountId: ctx.account.id,
-            probedIdentity: row,
-            readings: updates,
-          });
-          if (written === null) {
-            request.log.info(
-              { proxyId: row.id },
-              'proxy test: the proxy was edited or removed while the test ran — the QUIC/UDP readings are not stored',
-            );
-          }
-          return written;
-        } catch (err) {
-          request.log.info(
-            { proxyId: row.id, err },
-            'proxy test: failed to persist the QUIC/UDP readings',
-          );
-          return null;
-        }
-      };
+    // (0124) — the Test readings the row holds NOW, for a reply whose own test
+    // stored none: a control-plane test (it measures neither leg, so the stored
+    // reading, dated, is the only QUIC/UDP answer it has) and a fleet test that
+    // wrote nothing. Carried beside `quicFields` on those replies.
+    //
+    // ⛔ RE-READ, never `row`. `row` was read before a test that can run for many
+    // seconds, and a PUT inside that window that repoints the proxy nulls these
+    // columns in the same statement. Serving the snapshot would hand back the
+    // PREVIOUS address's reading — possibly a `false` — for a row that now points
+    // somewhere else, while the list says "never tested". Re-reading makes the
+    // reply agree with the list in every case: a repointed row reads null, a row
+    // whose password was merely resubmitted reads the reading it kept, and a row
+    // deleted mid-test reads null.
+    //
+    // Never throws (on the fleet branch a throw would relabel a node measurement
+    // `control_plane`). When the store cannot be READ — the one case with no
+    // better knowledge of the row — the snapshot is served.
+    const probeReadingsAsTheRowStands = async (): Promise<
+      ReturnType<typeof storedProbeReadings>
+    > => {
+      try {
+        const current = await proxiesRepo.findById({ id: row.id, accountId: ctx.account.id });
+        return storedProbeReadings(
+          current ?? { quicProbe: null, quicProbeAt: null, udpProbe: null, udpProbeAt: null },
+        );
+      } catch (err) {
+        request.log.info(
+          { proxyId: row.id, err },
+          'proxy test: failed to re-read the stored QUIC/UDP readings',
+        );
+        return storedProbeReadings(row);
+      }
+    };
 
-      // (0124) — the Test readings the row holds NOW, for a reply whose own test
-      // stored none: a control-plane test (it measures neither leg, so the stored
-      // reading, dated, is the only QUIC/UDP answer it has) and a fleet test that
-      // wrote nothing. Carried beside `quicFields` on those replies.
-      //
-      // ⛔ RE-READ, never `row`. `row` was read before a test that can run for many
-      // seconds, and a PUT inside that window that repoints the proxy nulls these
-      // columns in the same statement. Serving the snapshot would hand back the
-      // PREVIOUS address's reading — possibly a `false` — for a row that now points
-      // somewhere else, while the list says "never tested". Re-reading makes the
-      // reply agree with the list in every case: a repointed row reads null, a row
-      // whose password was merely resubmitted reads the reading it kept, and a row
-      // deleted mid-test reads null.
-      //
-      // Never throws (on the fleet branch a throw would relabel a node measurement
-      // `control_plane`). When the store cannot be READ — the one case with no
-      // better knowledge of the row — the snapshot is served.
-      const probeReadingsAsTheRowStands = async (): Promise<
-        ReturnType<typeof storedProbeReadings>
-      > => {
-        try {
-          const current = await proxiesRepo.findById({ id: row.id, accountId: ctx.account.id });
-          return storedProbeReadings(
-            current ?? { quicProbe: null, quicProbeAt: null, udpProbe: null, udpProbeAt: null },
-          );
-        } catch (err) {
-          request.log.info(
-            { proxyId: row.id, err },
-            'proxy test: failed to re-read the stored QUIC/UDP readings',
-          );
-          return storedProbeReadings(row);
-        }
-      };
+    // (p) 2026-09-16 — the row's STORED OS reading, attached to a reply whose OWN
+    // test observed none. The precedent is two lines of this same handler: the
+    // QUIC verdict a live session measured is spread onto every ok reply from the
+    // row (`quicFields`), while the OS reading — measured by this very route,
+    // minutes earlier, and stored — was dropped, so a test that missed answered
+    // `os_fingerprint_unavailable` and nothing else and the customer's chip went
+    // blank on a proxy this deployment had already fingerprinted.
+    //
+    // ⛔ A FRESH OBSERVATION ALWAYS WINS: when `fields` already carries one this
+    // returns nothing, so the stored reading can never overwrite what this test
+    // just measured. The cause (`os_fingerprint_unavailable`) is NOT removed when
+    // a stored reading is attached — it explains why THIS test produced nothing,
+    // and the pair is how a client tells a stored reading from a fresh one.
+    //
+    // ⛔ And never a reading this server cannot DATE: `os_fingerprint_at` is what
+    // the client ages it by, so a row holding a reading with no timestamp is left
+    // alone rather than sent as something that will read as measured just now.
+    const storedOsForReply = (
+      fields: OsFingerprintFields | Record<string, never>,
+    ):
+      | { os_fingerprint: AccountProxyOsFingerprint; os_fingerprint_at: string }
+      | Record<string, never> => {
+      if ('os_fingerprint' in fields) return {};
+      const stored = storedOsFingerprint(row);
+      if (stored === null || row.osFingerprintAt === null) return {};
+      return { os_fingerprint: stored, os_fingerprint_at: row.osFingerprintAt.toISOString() };
+    };
 
-      // (p) 2026-09-16 — the row's STORED OS reading, attached to a reply whose OWN
-      // test observed none. The precedent is two lines of this same handler: the
-      // QUIC verdict a live session measured is spread onto every ok reply from the
-      // row (`quicFields`), while the OS reading — measured by this very route,
-      // minutes earlier, and stored — was dropped, so a test that missed answered
-      // `os_fingerprint_unavailable` and nothing else and the customer's chip went
-      // blank on a proxy this deployment had already fingerprinted.
-      //
-      // ⛔ A FRESH OBSERVATION ALWAYS WINS: when `fields` already carries one this
-      // returns nothing, so the stored reading can never overwrite what this test
-      // just measured. The cause (`os_fingerprint_unavailable`) is NOT removed when
-      // a stored reading is attached — it explains why THIS test produced nothing,
-      // and the pair is how a client tells a stored reading from a fresh one.
-      //
-      // ⛔ And never a reading this server cannot DATE: `os_fingerprint_at` is what
-      // the client ages it by, so a row holding a reading with no timestamp is left
-      // alone rather than sent as something that will read as measured just now.
-      const storedOsForReply = (
-        fields: OsFingerprintFields | Record<string, never>,
-      ):
-        | { os_fingerprint: AccountProxyOsFingerprint; os_fingerprint_at: string }
-        | Record<string, never> => {
-        if ('os_fingerprint' in fields) return {};
-        const stored = storedOsFingerprint(row);
-        if (stored === null || row.osFingerprintAt === null) return {};
-        return { os_fingerprint: stored, os_fingerprint_at: row.osFingerprintAt.toISOString() };
-      };
-
-      // The control-plane probe — today's behaviour, byte-for-byte. It is BOTH the
-      // answer for vantage=cp and the fallback for vantage=fleet, so it lives in one
-      // place rather than being duplicated and drifting.
-      const runControlPlaneProbe = async () => {
-        const startedAt = Date.now();
-        // Prefer the LAUNCH probe. A reachability check answers a question nobody
-        // asked: a proxy can accept TCP and authenticate perfectly and still refuse
-        // to route, which is what "SOCKS5 reply 0x02 not allowed by ruleset" means
-        // and what blocked every launch on 2026-08-18 while every reachability
-        // check reported healthy. Falling back to TCP only when the probe or the
-        // resolver is absent (fixtures, and deployments with no master key).
-        if (
-          proxyConnectivityProbe !== undefined &&
-          accountProxiesService !== undefined &&
-          row.scheme === 'socks5'
-        ) {
-          const resolved = await accountProxiesService.resolveForDispatch({
-            proxyId: row.id,
-            accountId: ctx.account.id,
-            tier: ctx.account.tier,
-          });
-          if (resolved === null) {
-            return {
-              ok: false as const,
-              reason:
-                'This proxy’s stored configuration could not be read. Re-add it and try again.',
-            };
-          }
-          // A VPN wire carries `type`, not host/port — nothing to dial with a
-          // SOCKS5 probe. Unreachable for a scheme-socks5 row, but the union says
-          // it is possible, so fall through to the reachability check rather than
-          // asserting it away.
-          if (!('host' in resolved)) {
-            await proxyTcpProbe(row.host, row.port, 8_000);
-            // (o) — same cause as the fleet branch's twin of this narrowing: a
-            // VPN wire has no SOCKS5 endpoint for the observer to dial through,
-            // so there is no SYN to read and no retry can produce one.
-            const osFields = { os_fingerprint_unavailable: 'vpn_tunnel' as const };
-            return {
-              ok: true as const,
-              latency_ms: Date.now() - startedAt,
-              ...quicFields,
-              ...(await probeReadingsAsTheRowStands()),
-              ...osFields,
-              // (p) — the cause says no reading can be taken HERE; it does not say
-              // the row has none. A tunnel the fleet has fingerprinted still shows
-              // its reading, dated, beside the cause.
-              ...storedOsForReply(osFields),
-            };
-          }
-          const descriptor = {
-            protocol: 'socks5' as const,
-            host: resolved.host,
-            port: resolved.port,
-            ...(resolved.username !== undefined ? { username: resolved.username } : {}),
-            ...(resolved.password !== undefined ? { password: resolved.password } : {}),
-          };
-          const result = await proxyConnectivityProbe.probe(descriptor);
-          if (result.ok) {
-            const latency_ms = Date.now() - startedAt;
-            // N-2 — passive OS fingerprint of the proxy's own TCP stack, via the
-            // shared helper above. ONE implementation on purpose: this attachment
-            // existed here and nowhere else, and the fleet branch shipped without
-            // it for four days because a second copy was never written.
-            const osFields = await osFingerprintFields(descriptor, result.exitIdentity?.ip);
-            await persistOsFingerprintIfObserved(osFields);
-            return {
-              ok: true as const,
-              latency_ms,
-              ...quicFields,
-              ...(await probeReadingsAsTheRowStands()),
-              ...osFields,
-              // (p) — this test observed nothing; the row may still hold a reading.
-              // A no-op when `osFields` carries a fresh one.
-              ...storedOsForReply(osFields),
-            };
-          }
-          // The same four sentences the desktop client renders, so a customer who
-          // reads one and then the other is not told two different stories.
-          const copy: Record<string, string> = {
-            unreachable:
-              'The proxy did not answer. Check the host and port, and that it is online.',
-            auth_failed:
-              'The proxy rejected the username and password. Re-enter them and try again.',
-            timeout: 'The proxy was too slow to respond. It may be overloaded — try again shortly.',
-            egress_blocked:
-              'The proxy connected but could not reach the internet. Check with your proxy provider.',
-          };
+    // The control-plane probe — today's behaviour, byte-for-byte. It is BOTH the
+    // answer for vantage=cp and the fallback for vantage=fleet, so it lives in one
+    // place rather than being duplicated and drifting.
+    const runControlPlaneProbe = async () => {
+      const startedAt = Date.now();
+      // Prefer the LAUNCH probe. A reachability check answers a question nobody
+      // asked: a proxy can accept TCP and authenticate perfectly and still refuse
+      // to route, which is what "SOCKS5 reply 0x02 not allowed by ruleset" means
+      // and what blocked every launch on 2026-08-18 while every reachability
+      // check reported healthy. Falling back to TCP only when the probe or the
+      // resolver is absent (fixtures, and deployments with no master key).
+      if (
+        proxyConnectivityProbe !== undefined &&
+        accountProxiesService !== undefined &&
+        row.scheme === 'socks5'
+      ) {
+        const resolved = await accountProxiesService.resolveForDispatch({
+          proxyId: row.id,
+          accountId: ctx.account.id,
+          tier: ctx.account.tier,
+        });
+        if (resolved === null) {
           return {
             ok: false as const,
-            reason:
-              copy[result.reason ?? ''] ?? 'The proxy could not be verified. Check its details.',
+            reason: 'This proxy’s stored configuration could not be read. Re-add it and try again.',
           };
         }
-        try {
+        // A VPN wire carries `type`, not host/port — nothing to dial with a
+        // SOCKS5 probe. Unreachable for a scheme-socks5 row, but the union says
+        // it is possible, so fall through to the reachability check rather than
+        // asserting it away.
+        if (!('host' in resolved)) {
           await proxyTcpProbe(row.host, row.port, 8_000);
-          // (p) — a reachability check looks at no SYN at all, so it is the purest
-          // case of "this test observed none": the row's stored reading, dated,
-          // is the only OS answer there is.
+          // (o) — same cause as the fleet branch's twin of this narrowing: a
+          // VPN wire has no SOCKS5 endpoint for the observer to dial through,
+          // so there is no SYN to read and no retry can produce one.
+          const osFields = { os_fingerprint_unavailable: 'vpn_tunnel' as const };
           return {
             ok: true as const,
             latency_ms: Date.now() - startedAt,
             ...quicFields,
             ...(await probeReadingsAsTheRowStands()),
-            ...storedOsForReply({}),
-          };
-        } catch {
-          // The probe can surface Node socket/TLS details (and a remote endpoint
-          // can influence some protocol text). Keep the public discriminated
-          // result stable; raw transport diagnostics never belong in an API body.
-          return {
-            ok: false as const,
-            reason: 'Proxy unreachable. Check the host, port, and firewall.',
-          };
-        }
-      };
-
-      // T-1 — the FLEET vantage: dispatch the measurement to the Mac that will run
-      // the profile. Returns the node-measured shape on success, or null to signal
-      // "fall back to the control plane" — no free node, an unresolvable config, a
-      // node error/timeout, or any throw. Never lets an exception reach the client,
-      // so vantage=fleet can never 500: it degrades to the cp probe instead.
-      /** (h) finding 2 — WHY no fleet node measured the row, so the VPN branch
-       *  below can say the true thing instead of asserting "no Mac was free"
-       *  for causes a retry cannot fix. `no_fleet` = this deployment cannot
-       *  dispatch a VPN test at all (no fleet registry, or no proxies service
-       *  to resolve the row); `unresolvable` = the stored row cannot be turned
-       *  into a dispatchable config (unreadable secret, unsafe targets);
-       *  `no_node` = the fleet exists and was asked, and no node produced a
-       *  measurement (none free, dispatch unavailable/timed out, an error with
-       *  no node to blame, any unexpected throw). A tier refusal is not a miss:
-       *  it is thrown, exactly as the launch path surfaces it. */
-      type FleetMiss = {
-        miss: 'no_fleet' | 'unresolvable' | 'no_node';
-        /** (V3) — for `unresolvable` only: the sentence that names the cause. A
-         *  policy refusal (a script directive the control plane will not run, an
-         *  external cert/key reference) is NOT "could not be read", and the one
-         *  sentence this arm used to give was false for it.
-         *
-         *  ⛔ (V4 follow-up) — there was a `reason?: ProxyUnresolvableReason`
-         *  here too and NOTHING READ IT: the closed-set code reaches triage
-         *  through the `request.log.info` beside each producer, not through the
-         *  reply, and the customer-facing pick below branches on `detail`. A
-         *  written-never-read field on a reply-shaping type reads to the next
-         *  editor as though some consumer branched on it. */
-        detail?: string;
-      };
-      /** The row's STORED exit as a /test reply carries it beside a `not_run`
-       *  (live_session / no_node). (h) finding 1 — it rides WITH the date it was
-       *  observed: the stored exit is what a session saw BEFORE whatever the
-       *  fleet said since, and a client that keeps a "this exit was contradicted
-       *  at T" stamp can only honour it when the reply dates the observation
-       *  rather than letting the reply time stand in for it. `observed_at` is
-       *  null for a row whose observation predates the column.
-       *  (i) I7 follow-up — and NEVER a CONTRADICTED exit: a non-null
-       *  `exitSupersededAt` always postdates the stored exit (every exit write
-       *  clears it), so the stored exit is one a fleet verdict has since found
-       *  the tunnel down behind. The Mac that ran that test refuses to show it;
-       *  a Mac with no local stamp would adopt it off this reply — so the reply
-       *  attaches none (the LIST still carries it beside the stamp, dated). */
-      const storedExitUnlessSuperseded = (): {
-        ip: string;
-        country: string | null;
-        timezone: string | null;
-        observed_via: 'session' | 'probe';
-      } | null => (row.exitSupersededAt !== null ? null : (row.exitObserved ?? null));
-      const storedExitForReply = ():
-        | {
-            exit_observed: {
-              ip: string;
-              country: string | null;
-              timezone: string | null;
-              region: null;
-              city: null;
-              observed_at: string | null;
-            };
-          }
-        | Record<string, never> => {
-        const stored = storedExitUnlessSuperseded();
-        if (stored === null) return {};
-        return {
-          exit_observed: {
-            ip: stored.ip,
-            country: stored.country,
-            timezone: stored.timezone,
-            region: null,
-            city: null,
-            observed_at: row.exitObservedAt === null ? null : row.exitObservedAt.toISOString(),
-          },
-        };
-      };
-      const runFleetProbe = async () => {
-        // VPN exit parity — NO scheme guard here any more. An openvpn/wireguard row
-        // dispatches too: `resolveForDispatch` already returns the flat inline VPN
-        // wire for those schemes (and null for http, which falls back below), and
-        // the node is the ONLY vantage that can see through a tunnel. Before this a
-        // VPN row silently fell back to the control-plane TCP probe of the display
-        // host, which measures nothing about the tunnel.
-        if (fleetControlRegistry === undefined || accountProxiesService === undefined) {
-          return { miss: 'no_fleet' } satisfies FleetMiss;
-        }
-        try {
-          // (d) 2026-09-10 — REFUSE a VPN probe while a live session browses
-          // through this row. The probe would bring a SECOND tunnel up on the
-          // same VPN account while the session already holds one, and many VPN
-          // accounts allow exactly one connection: the probe can drop the live
-          // session. The node's own `node_busy` only sees tunnels on ITSELF; a
-          // session on another Mac is invisible there, so the cross-node case is
-          // the control plane's to refuse. Nothing is dispatched, so nothing was
-          // measured: `measured_from` says `control_plane` (a node did not
-          // measure this) and the stored exit — the session's own observation
-          // of the tunnel — rides along so the GUI still shows where it exits.
-          // A closed session holds no tunnel and does not block. A socks5/http
-          // row is untouched: its test is a plain CONNECT, not a second tunnel.
-          // (g) G1 — `listOpenByAccount` returns only NON-closed rows (the
-          // filter is the repo's contract, pushed to SQL), so the account's
-          // closed history is never fetched — nor its transcripts decrypted —
-          // per VPN fleet test. Trust that contract here rather than
-          // re-checking `status`: a repo that leaked closed rows would then
-          // refuse, and the "closed session does not block" arm would catch it.
-          if (
-            agentSessions !== undefined &&
-            (row.scheme === 'openvpn' || row.scheme === 'wireguard')
-          ) {
-            const open = await agentSessions.listOpenByAccount(ctx.account.id);
-            const live = open.find((s) => s.proxyId === row.id);
-            if (live !== undefined) {
-              request.log.info(
-                { proxyId: row.id, agentSessionId: live.id, status: live.status },
-                'proxy test: refusing a VPN fleet probe while a live session holds the tunnel',
-              );
-              // (h) finding 24 — promise "its exit is shown from that session"
-              // ONLY when a stored exit is actually attached below; otherwise
-              // the sentence would point at an exit cell that reads "run Check".
-              // (i) I3 — and only when that exit IS the session's: a stored
-              // exit a fleet probe observed (`observed_via: 'probe'`) is "the
-              // last check's exit", not something the live session reported.
-              // The prose names the exit's real source; a person reading the
-              // exit cell must not be told a session observed what a check did.
-              // (i) I7 follow-up — a CONTRADICTED exit (`exitSupersededAt` set)
-              // is attached by neither `storedExitForReply` nor this sentence:
-              // the last check found the tunnel DOWN and produced no exit, and
-              // the Mac that ran it shows an empty cell, so "its exit is shown
-              // from the last check" would name an exit nobody shows. Same
-              // predicate as the attachment, so prose and payload cannot part.
-              const stored = storedExitUnlessSuperseded();
-              const exitSource =
-                stored === null ? 'none' : stored.observed_via === 'session' ? 'session' : 'probe';
-              return {
-                ok: false,
-                reason:
-                  exitSource === 'session'
-                    ? 'This VPN is being used by a running session, so the exit IP shown is from that session. End the session to check the VPN.'
-                    : exitSource === 'probe'
-                      ? 'This VPN is being used by a running session, so the exit IP shown is from its last check. End the session to check the VPN.'
-                      : 'This VPN is being used by a running session. End the session to check the VPN.',
-                measured_from: 'control_plane' as const,
-                // ⛔ A refusal is NOT a failed tunnel. `not_run` is the
-                // machine-readable discriminator a client branches on, so a
-                // wait that measured nothing is never rendered as "tunnel
-                // down" — the prose is for a person, never for a branch.
-                not_run: 'live_session' as const,
-                ...storedExitForReply(),
-              };
-            }
-          }
-          const resolved = await accountProxiesService.resolveForDispatch({
-            proxyId: row.id,
-            accountId: ctx.account.id,
-            tier: ctx.account.tier,
-          });
-          if (resolved === null) {
-            // (V3 2026-09-12) — ask WHY, and say it. This whole request is the
-            // customer asking "why can't you measure my VPN", so a second read of
-            // the row on the FAILURE path only is the cheapest possible way to
-            // answer it honestly; the success path is untouched. `resolveForDispatch`
-            // stays the first call deliberately — it is the one the fleet arm has
-            // always made, and the one this route's suites intercept.
-            // ⛔ (V4 follow-up) — IN ITS OWN try/catch. This call sits inside the
-            // closure's outer `try`, whose handler answers with
-            // `{ miss: 'no_node' }` — "No fleet Mac was free to test this VPN
-            // tunnel. Try again in a minute." The verdict is ALREADY established
-            // by the first resolve above: the row is not dispatchable. If this
-            // purely DIAGNOSTIC second read then threw (a DB blip on the second
-            // findById, a decrypt-library fault), the customer would be handed a
-            // fabricated cause AND a retry promise for a row no retry can fix,
-            // and the true answer would be lost. A diagnostic must never be able
-            // to change the verdict it exists to explain — so a throw here
-            // degrades to the unresolvable answer with no cause, which is
-            // exactly what this arm said before the cause existed.
-            let why: ProxyDispatchResolution | null = null;
-            try {
-              why = await accountProxiesService.resolveForDispatchWithReason({
-                proxyId: row.id,
-                accountId: ctx.account.id,
-                tier: ctx.account.tier,
-              });
-            } catch (err) {
-              request.log.info(
-                { proxyId: row.id, err },
-                'proxy test: the diagnostic re-resolve threw; answering unresolvable with no cause',
-              );
-            }
-            request.log.info(
-              { proxyId: row.id, reason: why?.reason },
-              'proxy test: stored row is not dispatchable',
-            );
-            return {
-              miss: 'unresolvable',
-              ...(why?.detail !== undefined ? { detail: why.detail } : {}),
-            } satisfies FleetMiss;
-          }
-          // (V-219) Stamped BEFORE the dispatch: a SYN the node causes through a
-          // tunnel cannot predate it, so the observer lookup below refuses older
-          // records the same way `observeOs` refuses records older than its dial.
-          const dispatchedAtMs = Date.now();
-          const dispatch = await fleetControlRegistry.probeEgress({
-            inlineProxyConfig: resolved,
-            target: FLEET_PROBE_TARGET,
-            // The node connects here once, through the tunnel, so a VPN row's
-            // device stack is on record under the exit it reports.
-            // Guarded on the METHOD, not only the object: the route's deps type is
-            // a Pick, and a caller wiring only `probe`/`observeOs` (every
-            // fixture, and any older composition root) must dispatch exactly as
-            // before rather than throw here and read as "no node was free".
-            observerTarget:
-              typeof proxyConnectivityProbe?.observerTarget === 'function'
-                ? proxyConnectivityProbe.observerTarget()
-                : undefined,
-          });
-          // (0124) — WHEN the node's readings were taken, stamped the moment its
-          // frame resolves and before anything else is awaited. The QUIC/UDP
-          // readings are stored under THIS date, not the date of the write: on a
-          // SOCKS5 row the write sits behind the OS observation (seconds), so a
-          // date taken there would trail the measurement, and two Tests of one
-          // proxy finishing out of order would be ranked by who WROTE last.
-          const measuredAt = new Date();
-          if (dispatch.status !== 'ok') {
-            // (e) 2026-09-10 — a node that could not RUN the probe (node_busy,
-            // bad_config:*, handshake_failed…) surfaces here as an error outcome.
-            // For a socks5 row the control-plane fallback is a REAL measurement
-            // (the control plane speaks SOCKS5 itself), so it stands. For a VPN
-            // row the control plane cannot bring a tunnel up — its fallback is a
-            // bare TCP connect that says nothing about the tunnel — so the only
-            // honest answer is the node's refusal, labelled as the fleet's, with
-            // no measurement fields (nothing ran).
-            if (
-              dispatch.status === 'error' &&
-              (row.scheme === 'openvpn' || row.scheme === 'wireguard') &&
-              dispatch.nodeId !== undefined
-            ) {
-              // (n) N15 — classify the node's STATIC token before deciding
-              // `not_run`. A failed bring-up (`handshake_failed`,
-              // `endpoint_unreachable`, `egress_leak_detected`) arrives on this
-              // branch and IS a verdict about the tunnel; calling it a `not_run`
-              // left the row on its last green verdict with a stale exit forever,
-              // and no retry could change the sentence. See classifyVpnProbeFailure.
-              const refusal = classifyVpnProbeFailure(dispatch.message, row.scheme);
-              if (refusal.notRun === undefined) {
-                // (i) I7 parity — a tunnel the node found DOWN contradicts the
-                // stored exit NOW, exactly as the verdict path below does for
-                // `!usable && probeReachedVerdict(r)`. The exit is KEPT (it is
-                // still the last thing seen, at its own date) and the stamp dates
-                // the contradiction, so the /proxies list can carry it to a Mac
-                // that never saw this test. Best-effort like the verdict path's
-                // write: a throw here would be caught by this closure's handler
-                // and RELABEL the node's verdict as `control_plane`.
-                try {
-                  await proxiesRepo.update({
-                    id: row.id,
-                    accountId: ctx.account.id,
-                    updates: { exitSupersededAt: new Date() },
-                  });
-                } catch (err) {
-                  request.log.info(
-                    { proxyId: row.id, err },
-                    'proxy test: failed to stamp exit_superseded_at for a failed VPN bring-up',
-                  );
-                }
-              }
-              return {
-                ok: false,
-                reason: refusal.reason,
-                latency_ms: null,
-                node_id: dispatch.nodeId,
-                measured_from: 'fleet' as const,
-                // (d) — `not_run` is the discriminator a client branches on (never
-                // the prose): present when NOTHING was learned about the tunnel,
-                // ABSENT when the node reached a tunnel verdict.
-                ...(refusal.notRun !== undefined ? { not_run: refusal.notRun } : {}),
-              };
-            }
-            return { miss: 'no_node' } satisfies FleetMiss;
-          }
-          const r = dispatch.result;
-          // ⛔ `r.ok` IS NOT "THE PROXY WORKS". Its contract on the node's frame is
-          // "the probe reached a verdict" — a proxy that answers nothing at all
-          // comes back `ok:true` with reachable/auth_ok/udp_associate/can_route all
-          // false and `quic_detail: "skipped: endpoint_unreachable"`. Measured on a
-          // live proxy 2026-09-06, four consecutive identical results.
-          //
-          // On the other two members of this union `ok` means the proxy is USABLE,
-          // and a client reads one field. Passing the node's flag straight through
-          // under the same name published a PASS for a dead proxy: the desktop card
-          // showed a successful test for something no session could ever launch on.
-          // One field, one meaning — so translate here, at the protocol boundary,
-          // rather than asking every client to know which member it is holding.
-          //
-          // The sentences are the cp branch's, deliberately: a customer who reads
-          // one and then the other must not be told two different stories. Reported
-          // in the order the probe establishes the legs, so they are told the FIRST
-          // thing that went wrong rather than the last.
-          const fleetFailure = ((): string | undefined => {
-            // W-28 — ask the question through the reader, which prefers the node's
-            // `status` and falls back to `ok`. The schema has already refused any
-            // frame where the two disagree, so this cannot pick a side quietly.
-            if (!probeReachedVerdict(r)) {
-              // (e) 2026-09-10 — `node_busy`: the node refuses a VPN probe while ANY
-              // userspace tunnel is live on it (a second tunnel could break the live
-              // session), and also under its own concurrency backpressure. A wait,
-              // not a verdict on the proxy.
-              if (typeof r.error === 'string' && /node_busy/i.test(r.error)) {
-                return 'Our test service is busy right now. Try again in a minute.';
-              }
-              return 'The test could not be completed. Try again shortly.';
-            }
-            if (!r.reachable) {
-              return 'The proxy did not answer. Check the host and port, and that it is online.';
-            }
-            if (!r.auth_ok) {
-              return 'The proxy rejected the username and password. Re-enter them and try again.';
-            }
-            if (!r.can_route) {
-              return 'The proxy connected but could not reach the internet. Check with your proxy provider.';
-            }
-            return undefined;
-          })();
-          const usable = fleetFailure === undefined;
-          // N-2 — the fingerprint is measured by the CONTROL PLANE even here (see
-          // `osFingerprintFields`), so it rides ALONGSIDE the node's latency rather
-          // than coming back from the node. Only on an `ok` result: a proxy the node
-          // could not use has no stack worth fingerprinting and must not spend the
-          // observer's budget. The `'host' in resolved` narrowing IS REACHABLE: a
-          // VPN wire carries `type` and no host/port (there is no SOCKS5 endpoint to
-          // dial through), so an openvpn/wireguard row takes the no-fingerprint arm.
-          //
-          // ⛔ (o) 2026-09-11 — and THAT ARM IS THE WHOLE VPN POPULATION. `'host' in
-          // resolved` is false for EVERY openvpn/wireguard row, so before this the
-          // chip on a VPN profile card was blank permanently, under a hint telling
-          // the owner to press Test — the one action that provably cannot change it.
-          // The arm now reports its cause: `vpn_tunnel`, "there is no SOCKS5 stack
-          // here to fingerprint", which is true and terminates.
-          //
-          // ⛔ (o) 2026-09-11 follow-up — `vpn_tunnel` is a property of the SCHEME,
-          // never of the verdict. It used to sit behind a `!usable ? {}` gate, so
-          // the cause was emitted ONLY when the tunnel came up — i.e. in the one
-          // state the owner does not need it. In the two states a VPN owner
-          // actually presses Check in (the handshake failed; the row has never
-          // tested green) the reply carried no cause at all, and the desktop chip
-          // fell back to "Run Test … the control plane fingerprints the proxy's
-          // own TCP stack" — a button that row does not have, promising a
-          // measurement that can never exist for a tunnel. The narrowing decides
-          // FIRST now: a VPN wire always reports its cause, and the observer is
-          // still spent only on a usable socks5 row.
-          //
-          // The socks5 `!usable` arm still reports NOTHING on purpose: a proxy the
-          // node could not use has its cause in `reason` already, and "fingerprint
-          // unavailable because VPN" would be false about a broken socks5 row.
-          const osFields: OsFingerprintFields | Record<string, never> =
-            'host' in resolved
-              ? usable
-                ? await osFingerprintFields(
-                    {
-                      protocol: 'socks5' as const,
-                      host: resolved.host,
-                      port: resolved.port,
-                      ...(resolved.username !== undefined ? { username: resolved.username } : {}),
-                      ...(resolved.password !== undefined ? { password: resolved.password } : {}),
-                    },
-                    r.exit_ip,
-                  )
-                : {}
-              : await vpnOsFingerprintFields(usable ? r.exit_ip : null, dispatchedAtMs);
-          await persistOsFingerprintIfObserved(osFields);
-          // (0124) — which of the node's capability fields are READINGS is decided
-          // once, by `capabilityReadingsForReply`, and the SAME answer is both
-          // replied and stored: a leg absent from it (skipped, `null`, a VPN row's
-          // asserted literal) is absent from the reply AND writes nothing, so the
-          // row can never hold a value the customer was not just shown.
-          //
-          // ⛔ Stored only on a USABLE verdict, like the exit and the OS reading.
-          // A frame that reached no verdict carries default falses; a proxy that
-          // refused the credential or could not route has its cause in `reason`,
-          // and a `false` beside it says the leg had nothing to run over — not
-          // that this proxy lacks QUIC. A stored negative stops anyone looking
-          // again, so it must be earned by a test of a proxy that works.
-          const capabilityReadings = capabilityReadingsForReply(row.scheme, r);
-          const probeReadingsPersisted = usable
-            ? await persistProbeReadingsIfMeasured(
-                {
-                  ...(capabilityReadings.quic_ok !== undefined
-                    ? { quic: capabilityReadings.quic_ok }
-                    : {}),
-                  ...(capabilityReadings.udp_associate !== undefined
-                    ? { udp: capabilityReadings.udp_associate }
-                    : {}),
-                },
-                measuredAt,
-              )
-            : null;
-          // VPN exit parity — persist the exit the NODE observed onto the proxy row
-          // (`observed_via: 'probe'`, beside the relay's 'session' writes; latest
-          // wins), so the /proxies list can show a VPN row's location and hand its
-          // timezone to the next launch before any session has run. ONLY when the
-          // proxy was USABLE and the node saw an exit: a null exit_ip writes
-          // NOTHING and never nulls a value a live session observed earlier.
-          // ⛔ (i) I7 follow-up — `usable`, not `exit_ip !== null`: the node's
-          // egress-LEAK verdict is `can_route:false` WITH an exit_ip — the node's
-          // OWN public address, "traffic is not leaving through the tunnel"
-          // (HarnessCoordinator.swift `canRoute:false, exitIp: proxiedIp`). That
-          // ip is not this tunnel's exit; storing it dated now would put the
-          // fleet Mac's address on the /proxies list as this VPN's location,
-          // beside a reply that says `ok:false`, and clear the superseded stamp
-          // with a non-exit. Best-effort, owner-scoped, logged at info — mirrors
-          // persistOsFingerprintIfObserved: a persistence failure must not throw,
-          // because a throw here is caught by this closure's handler and would
-          // RELABEL a node measurement as `control_plane`.
-          const exitObserved =
-            !usable || r.exit_ip === null
-              ? undefined
-              : {
-                  ip: r.exit_ip,
-                  country: r.exit_country ?? null,
-                  timezone: r.exit_timezone ?? null,
-                  region: r.exit_region ?? null,
-                  city: r.exit_city ?? null,
-                };
-          // Never DOWNGRADE a stored observation: a node that does not yet emit
-          // the exit_* keys sends the ip alone, and writing {country: null,
-          // timezone: null} over a live session's observation of the same exit
-          // would erase real geo. Same ip + no incoming geo + existing geo → keep.
-          const incomingHasGeo =
-            exitObserved !== undefined &&
-            (exitObserved.country !== null || exitObserved.timezone !== null);
-          const existingExit = row.exitObserved ?? null;
-          const wouldDowngrade =
-            exitObserved !== undefined &&
-            !incomingHasGeo &&
-            existingExit !== null &&
-            existingExit.ip === exitObserved.ip &&
-            (existingExit.country !== null || existingExit.timezone !== null);
-          // (i) I7 — the row's `exit_superseded_at` (migration 0122). Three
-          // outcomes, decided by the node's VERDICT (`usable`: reached a verdict,
-          // reachable, auth ok, can route) — never by whether an `exit_ip` came
-          // back, since the leak frame above carries one on a DOWN verdict:
-          //   * the proxy was usable and the node saw an exit → the tunnel was
-          //     up: the exit is written (unless it would downgrade stored geo)
-          //     AND the stamp is cleared, because a contradiction older than an
-          //     observation is spent;
-          //   * the node reached a verdict and the proxy is not usable (no
-          //     exit, or a leak's non-exit) → the tunnel is DOWN: the stored
-          //     exit (if any) is contradicted NOW. It is kept — it is still the
-          //     last thing seen, at its own date — and the stamp dates the
-          //     contradiction so the /proxies list can carry it to a Mac that
-          //     never saw this test;
-          //   * nothing ran (`could_not_run`) → nothing was measured, nothing
-          //     is written: a wait is not a verdict about the tunnel.
-          // Best-effort like the exit write: a persistence failure must not
-          // throw, or the node's measurement would be relabelled `control_plane`.
-          const stampUpdates: AccountProxyRowUpdates | null =
-            exitObserved !== undefined
-              ? wouldDowngrade
-                ? row.exitSupersededAt !== null
-                  ? { exitSupersededAt: null }
-                  : null
-                : {
-                    exitObserved: {
-                      ip: exitObserved.ip,
-                      country: exitObserved.country,
-                      timezone: exitObserved.timezone,
-                      observed_via: 'probe',
-                    },
-                    exitObservedAt: new Date(),
-                    exitSupersededAt: null,
-                  }
-              : // (k) — the stamp is decided by the VERDICT, never by whether an exit is
-                // stored: a never-stamped row lists exit_superseded_at as null, which a
-                // client reads as "seen up again" and would erase its own fresh failure.
-                !usable && probeReachedVerdict(r)
-                ? { exitSupersededAt: new Date() }
-                : null;
-          if (stampUpdates !== null) {
-            try {
-              await proxiesRepo.update({
-                id: row.id,
-                accountId: ctx.account.id,
-                updates: stampUpdates,
-              });
-            } catch (err) {
-              request.log.info(
-                { proxyId: row.id, err },
-                'proxy test: failed to persist the probe-observed exit / exit_superseded_at',
-              );
-            }
-          }
-          return {
-            ok: usable,
-            ...(fleetFailure !== undefined ? { reason: fleetFailure } : {}),
-            latency_ms: r.latency_ms,
-            ...quicFields,
-            // (0124) — the row's Test readings AS THEY NOW STAND, so the reply
-            // agrees with the list. Where the write landed, that is the row the
-            // statement returned. Where nothing was stored — no leg measured, the
-            // proxy not usable, the write failed, the row gone or edited mid-test
-            // — it is a RE-READ: `row` predates the test and may still hold a
-            // reading an edit has since cleared.
-            ...(probeReadingsPersisted !== null
-              ? storedProbeReadings(probeReadingsPersisted)
-              : await probeReadingsAsTheRowStands()),
             ...osFields,
-            // (p) — the stored reading rides a fleet reply too, under the same rule
-            // (a fresh observation wins, the cause stays). Only on a USABLE verdict:
-            // a proxy the node could not use answers `ok:false`, where the OS half of
-            // the reply is not part of the published shape and the desktop client
-            // reads no reading at all — the list is what carries it there.
-            ...(usable ? storedOsForReply(osFields) : {}),
-            // (e) 2026-09-10 — a `could_not_run` frame (node_busy, bad_config:*,
-            // timeout…) carries no fact except `error`: every measurement field on
-            // it is a default false/null, so none is reported.
-            //
-            // (V6 2026-09-16) ITEM 3 — on a verdict, which of `udp_associate`,
-            // `h2_ok` and `quic_ok` is a READING is decided in ONE place,
-            // `capabilityReadingsForReply` above: a VPN row's UDP/HTTP-2 literals and
-            // a leg the node skipped are ABSENT, and absence is the wire's "not
-            // measured". `reachable` / `auth_ok` / `can_route` / `exit_ip` are probed
-            // on every path and are reported unchanged.
-            ...(probeReachedVerdict(r)
-              ? {
-                  reachable: r.reachable,
-                  auth_ok: r.auth_ok,
-                  can_route: r.can_route,
-                  ...capabilityReadings,
-                  quic_detail: r.quic_detail,
-                  exit_ip: r.exit_ip,
-                }
-              : {}),
-            // Spread only when defined — never an `exit_observed: undefined` key.
-            ...(exitObserved !== undefined ? { exit_observed: exitObserved } : {}),
-            node_id: r.node_id,
-            measured_from: 'fleet' as const,
+            // (p) — the cause says no reading can be taken HERE; it does not say
+            // the row has none. A tunnel the fleet has fingerprinted still shows
+            // its reading, dated, beside the cause.
+            ...storedOsForReply(osFields),
           };
-        } catch (err) {
-          // (h) finding 2 — a TIER refusal is the route's own answer (the same
-          // one POST/PUT and the launch path give for a VPN row on a tier without
-          // vpnEgress); swallowing it into "no Mac was free… try again" told a
-          // downgraded account to keep retrying something a retry can never fix.
-          // An unsafe stored host is a config the fleet must never be handed,
-          // not a missing node.
-          if (err instanceof ForbiddenError) throw err;
-          if (err instanceof UnsafeProxyHostError) {
-            request.log.info(
-              { proxyId: row.id, err },
-              'proxy test: stored proxy host is unsafe; refusing the fleet dispatch',
-            );
-            // ⛔ (V4 follow-up) — WITH its cause. This return carried no
-            // reason/detail, so it fell through to the shipped "could not be
-            // read. Re-add it" sentence 40 lines below — the exact class of lie
-            // V3 says it eliminated, in the same route, for the one cause where
-            // re-adding the same config is guaranteed to be refused again. The
-            // service already owns the right words (it answers the EMBEDDED
-            // endpoint with them); this is the DISPLAY host, classified by the
-            // same `classifyUnsafeHost`, so it gets the same sentence. Note this
-            // is also the only way `config_refused_target` can be reported for
-            // the display host: the service THROWS for it rather than returning.
-            return { miss: 'unresolvable', detail: UNSAFE_TARGET_DETAIL } satisfies FleetMiss;
-          }
-          request.log.info(
-            { proxyId: row.id, err },
-            'proxy test: fleet-vantage probe failed, falling back to the control plane',
-          );
-          return { miss: 'no_node' } satisfies FleetMiss;
         }
-      };
+        const descriptor = {
+          protocol: 'socks5' as const,
+          host: resolved.host,
+          port: resolved.port,
+          ...(resolved.username !== undefined ? { username: resolved.username } : {}),
+          ...(resolved.password !== undefined ? { password: resolved.password } : {}),
+        };
+        const result = await proxyConnectivityProbe.probe(descriptor);
+        if (result.ok) {
+          const latency_ms = Date.now() - startedAt;
+          // N-2 — passive OS fingerprint of the proxy's own TCP stack, via the
+          // shared helper above. ONE implementation on purpose: this attachment
+          // existed here and nowhere else, and the fleet branch shipped without
+          // it for four days because a second copy was never written.
+          const osFields = await osFingerprintFields(descriptor, result.exitIdentity?.ip);
+          await persistOsFingerprintIfObserved(osFields);
+          return {
+            ok: true as const,
+            latency_ms,
+            ...quicFields,
+            ...(await probeReadingsAsTheRowStands()),
+            ...osFields,
+            // (p) — this test observed nothing; the row may still hold a reading.
+            // A no-op when `osFields` carries a fresh one.
+            ...storedOsForReply(osFields),
+          };
+        }
+        // The same four sentences the desktop client renders, so a customer who
+        // reads one and then the other is not told two different stories.
+        const copy: Record<string, string> = {
+          unreachable: 'The proxy did not answer. Check the host and port, and that it is online.',
+          auth_failed: 'The proxy rejected the username and password. Re-enter them and try again.',
+          timeout: 'The proxy was too slow to respond. It may be overloaded — try again shortly.',
+          egress_blocked:
+            'The proxy connected but could not reach the internet. Check with your proxy provider.',
+        };
+        return {
+          ok: false as const,
+          reason:
+            copy[result.reason ?? ''] ?? 'The proxy could not be verified. Check its details.',
+        };
+      }
+      try {
+        await proxyTcpProbe(row.host, row.port, 8_000);
+        // (p) — a reachability check looks at no SYN at all, so it is the purest
+        // case of "this test observed none": the row's stored reading, dated,
+        // is the only OS answer there is.
+        return {
+          ok: true as const,
+          latency_ms: Date.now() - startedAt,
+          ...quicFields,
+          ...(await probeReadingsAsTheRowStands()),
+          ...storedOsForReply({}),
+        };
+      } catch {
+        // The probe can surface Node socket/TLS details (and a remote endpoint
+        // can influence some protocol text). Keep the public discriminated
+        // result stable; raw transport diagnostics never belong in an API body.
+        return {
+          ok: false as const,
+          reason: 'Proxy unreachable. Check the host, port, and firewall.',
+        };
+      }
+    };
 
-      if (vantage === 'fleet') {
-        const fleet = await runFleetProbe();
-        if (!('miss' in fleet)) return fleet;
-        // (h) H1 2026-09-10 — findings 4/10. For an openvpn/wireguard row NEVER
-        // fall through to the control-plane probe. The cp cannot bring a tunnel
-        // up; its "fallback" for a VPN row is a bare TCP connect to the tunnel
-        // endpoint — UDP-only for WireGuard, udp by default for OpenVPN — which
-        // fails and was published as `ok:false, reason:'Proxy unreachable…'`
-        // with no `not_run`: the GUI rendered a red "tunnel down" with a wrong
-        // next step for a tunnel nobody measured. "No node measured it" (registry
-        // absent, config unresolvable, dispatch unavailable/timeout, an error
-        // outcome with no node to blame, any throw) is a NOT-RUN: `no_node` is
-        // the discriminator a client branches on, `control_plane` says no node
-        // produced this, no measurement field is present, and the stored exit
-        // rides along (as on the live_session refusal) so the row still shows
-        // where it exits. A socks5/http row keeps the cp fallback below: there
-        // the control plane speaks the protocol itself, so it IS a measurement.
-        if (row.scheme === 'openvpn' || row.scheme === 'wireguard') {
-          // (h) finding 2 — the sentence says WHAT kept the fleet from measuring,
-          // and "try again in a minute" is promised only where a retry can help.
-          // A row the fleet cannot be handed (unreadable secret, unsafe target)
-          // is a verdict about the ROW, in the words the cp path uses for the
-          // same condition on a socks5 row — not a `not_run`, and never "no Mac
-          // was free". A deployment with no fleet will never have a free Mac.
-          if (fleet.miss === 'unresolvable') {
+    // T-1 — the FLEET vantage: dispatch the measurement to the Mac that will run
+    // the profile. Returns the node-measured shape on success, or null to signal
+    // "fall back to the control plane" — no free node, an unresolvable config, a
+    // node error/timeout, or any throw. Never lets an exception reach the client,
+    // so vantage=fleet can never 500: it degrades to the cp probe instead.
+    /** (h) finding 2 — WHY no fleet node measured the row, so the VPN branch
+     *  below can say the true thing instead of asserting "no Mac was free"
+     *  for causes a retry cannot fix. `no_fleet` = this deployment cannot
+     *  dispatch a VPN test at all (no fleet registry, or no proxies service
+     *  to resolve the row); `unresolvable` = the stored row cannot be turned
+     *  into a dispatchable config (unreadable secret, unsafe targets);
+     *  `no_node` = the fleet exists and was asked, and no node produced a
+     *  measurement (none free, dispatch unavailable/timed out, an error with
+     *  no node to blame, any unexpected throw). A tier refusal is not a miss:
+     *  it is thrown, exactly as the launch path surfaces it. */
+    type FleetMiss = {
+      miss: 'no_fleet' | 'unresolvable' | 'no_node';
+      /** (V3) — for `unresolvable` only: the sentence that names the cause. A
+       *  policy refusal (a script directive the control plane will not run, an
+       *  external cert/key reference) is NOT "could not be read", and the one
+       *  sentence this arm used to give was false for it.
+       *
+       *  ⛔ (V4 follow-up) — there was a `reason?: ProxyUnresolvableReason`
+       *  here too and NOTHING READ IT: the closed-set code reaches triage
+       *  through the `request.log.info` beside each producer, not through the
+       *  reply, and the customer-facing pick below branches on `detail`. A
+       *  written-never-read field on a reply-shaping type reads to the next
+       *  editor as though some consumer branched on it. */
+      detail?: string;
+    };
+    /** The row's STORED exit as a /test reply carries it beside a `not_run`
+     *  (live_session / no_node). (h) finding 1 — it rides WITH the date it was
+     *  observed: the stored exit is what a session saw BEFORE whatever the
+     *  fleet said since, and a client that keeps a "this exit was contradicted
+     *  at T" stamp can only honour it when the reply dates the observation
+     *  rather than letting the reply time stand in for it. `observed_at` is
+     *  null for a row whose observation predates the column.
+     *  (i) I7 follow-up — and NEVER a CONTRADICTED exit: a non-null
+     *  `exitSupersededAt` always postdates the stored exit (every exit write
+     *  clears it), so the stored exit is one a fleet verdict has since found
+     *  the tunnel down behind. The Mac that ran that test refuses to show it;
+     *  a Mac with no local stamp would adopt it off this reply — so the reply
+     *  attaches none (the LIST still carries it beside the stamp, dated). */
+    const storedExitUnlessSuperseded = (): {
+      ip: string;
+      country: string | null;
+      timezone: string | null;
+      observed_via: 'session' | 'probe';
+    } | null => (row.exitSupersededAt !== null ? null : (row.exitObserved ?? null));
+    const storedExitForReply = ():
+      | {
+          exit_observed: {
+            ip: string;
+            country: string | null;
+            timezone: string | null;
+            region: null;
+            city: null;
+            observed_at: string | null;
+          };
+        }
+      | Record<string, never> => {
+      const stored = storedExitUnlessSuperseded();
+      if (stored === null) return {};
+      return {
+        exit_observed: {
+          ip: stored.ip,
+          country: stored.country,
+          timezone: stored.timezone,
+          region: null,
+          city: null,
+          observed_at: row.exitObservedAt === null ? null : row.exitObservedAt.toISOString(),
+        },
+      };
+    };
+    const runFleetProbe = async () => {
+      // VPN exit parity — NO scheme guard here any more. An openvpn/wireguard row
+      // dispatches too: `resolveForDispatch` already returns the flat inline VPN
+      // wire for those schemes (and null for http, which falls back below), and
+      // the node is the ONLY vantage that can see through a tunnel. Before this a
+      // VPN row silently fell back to the control-plane TCP probe of the display
+      // host, which measures nothing about the tunnel.
+      if (fleetControlRegistry === undefined || accountProxiesService === undefined) {
+        return { miss: 'no_fleet' } satisfies FleetMiss;
+      }
+      try {
+        // (d) 2026-09-10 — REFUSE a VPN probe while a live session browses
+        // through this row. The probe would bring a SECOND tunnel up on the
+        // same VPN account while the session already holds one, and many VPN
+        // accounts allow exactly one connection: the probe can drop the live
+        // session. The node's own `node_busy` only sees tunnels on ITSELF; a
+        // session on another Mac is invisible there, so the cross-node case is
+        // the control plane's to refuse. Nothing is dispatched, so nothing was
+        // measured: `measured_from` says `control_plane` (a node did not
+        // measure this) and the stored exit — the session's own observation
+        // of the tunnel — rides along so the GUI still shows where it exits.
+        // A closed session holds no tunnel and does not block. A socks5/http
+        // row is untouched: its test is a plain CONNECT, not a second tunnel.
+        // (g) G1 — `listOpenByAccount` returns only NON-closed rows (the
+        // filter is the repo's contract, pushed to SQL), so the account's
+        // closed history is never fetched — nor its transcripts decrypted —
+        // per VPN fleet test. Trust that contract here rather than
+        // re-checking `status`: a repo that leaked closed rows would then
+        // refuse, and the "closed session does not block" arm would catch it.
+        if (
+          agentSessions !== undefined &&
+          (row.scheme === 'openvpn' || row.scheme === 'wireguard')
+        ) {
+          const open = await agentSessions.listOpenByAccount(ctx.account.id);
+          const live = open.find((s) => s.proxyId === row.id);
+          if (live !== undefined) {
+            request.log.info(
+              { proxyId: row.id, agentSessionId: live.id, status: live.status },
+              'proxy test: refusing a VPN fleet probe while a live session holds the tunnel',
+            );
+            // (h) finding 24 — promise "its exit is shown from that session"
+            // ONLY when a stored exit is actually attached below; otherwise
+            // the sentence would point at an exit cell that reads "run Check".
+            // (i) I3 — and only when that exit IS the session's: a stored
+            // exit a fleet probe observed (`observed_via: 'probe'`) is "the
+            // last check's exit", not something the live session reported.
+            // The prose names the exit's real source; a person reading the
+            // exit cell must not be told a session observed what a check did.
+            // (i) I7 follow-up — a CONTRADICTED exit (`exitSupersededAt` set)
+            // is attached by neither `storedExitForReply` nor this sentence:
+            // the last check found the tunnel DOWN and produced no exit, and
+            // the Mac that ran it shows an empty cell, so "its exit is shown
+            // from the last check" would name an exit nobody shows. Same
+            // predicate as the attachment, so prose and payload cannot part.
+            const stored = storedExitUnlessSuperseded();
+            const exitSource =
+              stored === null ? 'none' : stored.observed_via === 'session' ? 'session' : 'probe';
             return {
-              ok: false as const,
-              // (V3) — the CAUSE's own sentence when the service named one (for a
-              // refused directive it quotes the offending line, exactly as the
-              // create/update route does for the same blob); the shipped sentence
-              // when it did not, which is also what every unreadable cause says.
+              ok: false,
               reason:
-                fleet.detail ??
-                'This VPN’s stored configuration could not be read. Re-add it and try again.',
+                exitSource === 'session'
+                  ? 'This VPN is being used by a running session, so the exit IP shown is from that session. End the session to check the VPN.'
+                  : exitSource === 'probe'
+                    ? 'This VPN is being used by a running session, so the exit IP shown is from its last check. End the session to check the VPN.'
+                    : 'This VPN is being used by a running session. End the session to check the VPN.',
               measured_from: 'control_plane' as const,
-              // ⛔ (V4 follow-up) — `not_run`, and the in-code defence that used
-              // to sit here ("a verdict about the ROW … not a `not_run`") was
-              // contradicted by its own consequence. `not_run`'s CONTRACT is
-              // "present when NOTHING RAN, so `ok:false` is not a verdict about
-              // the proxy" — and nothing ran here: no node was dispatched, no
-              // tunnel was brought up, no packet left. Its absence made the
-              // client classify the reply `failed`, which DROPS the row's
-              // exitIp/geo/latency/quic/os and stamps `exitSupersededAt`, so a
-              // WireGuard row with a missing `Address` was rendered as a red
-              // "VPN tunnel down" and the exit IP the customer had just gained
-              // was erased — by a cause that measured nothing about the tunnel.
-              // `unresolvable` covers all ten causes truthfully (see
-              // ProxyUnresolvableReason); `reason` above still carries the
-              // sentence, and the stored exit rides along exactly as it does on
-              // the live_session / no_node refusals below.
-              not_run: 'unresolvable' as const,
+              // ⛔ A refusal is NOT a failed tunnel. `not_run` is the
+              // machine-readable discriminator a client branches on, so a
+              // wait that measured nothing is never rendered as "tunnel
+              // down" — the prose is for a person, never for a branch.
+              not_run: 'live_session' as const,
               ...storedExitForReply(),
             };
           }
+        }
+        const resolved = await accountProxiesService.resolveForDispatch({
+          proxyId: row.id,
+          accountId: ctx.account.id,
+          tier: ctx.account.tier,
+        });
+        if (resolved === null) {
+          // (V3 2026-09-12) — ask WHY, and say it. This whole request is the
+          // customer asking "why can't you measure my VPN", so a second read of
+          // the row on the FAILURE path only is the cheapest possible way to
+          // answer it honestly; the success path is untouched. `resolveForDispatch`
+          // stays the first call deliberately — it is the one the fleet arm has
+          // always made, and the one this route's suites intercept.
+          // ⛔ (V4 follow-up) — IN ITS OWN try/catch. This call sits inside the
+          // closure's outer `try`, whose handler answers with
+          // `{ miss: 'no_node' }` — "No fleet Mac was free to test this VPN
+          // tunnel. Try again in a minute." The verdict is ALREADY established
+          // by the first resolve above: the row is not dispatchable. If this
+          // purely DIAGNOSTIC second read then threw (a DB blip on the second
+          // findById, a decrypt-library fault), the customer would be handed a
+          // fabricated cause AND a retry promise for a row no retry can fix,
+          // and the true answer would be lost. A diagnostic must never be able
+          // to change the verdict it exists to explain — so a throw here
+          // degrades to the unresolvable answer with no cause, which is
+          // exactly what this arm said before the cause existed.
+          let why: ProxyDispatchResolution | null = null;
+          try {
+            why = await accountProxiesService.resolveForDispatchWithReason({
+              proxyId: row.id,
+              accountId: ctx.account.id,
+              tier: ctx.account.tier,
+            });
+          } catch (err) {
+            request.log.info(
+              { proxyId: row.id, err },
+              'proxy test: the diagnostic re-resolve threw; answering unresolvable with no cause',
+            );
+          }
+          request.log.info(
+            { proxyId: row.id, reason: why?.reason },
+            'proxy test: stored row is not dispatchable',
+          );
+          return {
+            miss: 'unresolvable',
+            ...(why?.detail !== undefined ? { detail: why.detail } : {}),
+          } satisfies FleetMiss;
+        }
+        // (V-219) Stamped BEFORE the dispatch: a SYN the node causes through a
+        // tunnel cannot predate it, so the observer lookup below refuses older
+        // records the same way `observeOs` refuses records older than its dial.
+        const dispatchedAtMs = Date.now();
+        const dispatch = await fleetControlRegistry.probeEgress({
+          inlineProxyConfig: resolved,
+          target: FLEET_PROBE_TARGET,
+          // The node connects here once, through the tunnel, so a VPN row's
+          // device stack is on record under the exit it reports.
+          // Guarded on the METHOD, not only the object: the route's deps type is
+          // a Pick, and a caller wiring only `probe`/`observeOs` (every
+          // fixture, and any older composition root) must dispatch exactly as
+          // before rather than throw here and read as "no node was free".
+          observerTarget:
+            typeof proxyConnectivityProbe?.observerTarget === 'function'
+              ? proxyConnectivityProbe.observerTarget()
+              : undefined,
+        });
+        // (0124) — WHEN the node's readings were taken, stamped the moment its
+        // frame resolves and before anything else is awaited. The QUIC/UDP
+        // readings are stored under THIS date, not the date of the write: on a
+        // SOCKS5 row the write sits behind the OS observation (seconds), so a
+        // date taken there would trail the measurement, and two Tests of one
+        // proxy finishing out of order would be ranked by who WROTE last.
+        const measuredAt = new Date();
+        if (dispatch.status !== 'ok') {
+          // (e) 2026-09-10 — a node that could not RUN the probe (node_busy,
+          // bad_config:*, handshake_failed…) surfaces here as an error outcome.
+          // For a socks5 row the control-plane fallback is a REAL measurement
+          // (the control plane speaks SOCKS5 itself), so it stands. For a VPN
+          // row the control plane cannot bring a tunnel up — its fallback is a
+          // bare TCP connect that says nothing about the tunnel — so the only
+          // honest answer is the node's refusal, labelled as the fleet's, with
+          // no measurement fields (nothing ran).
+          if (
+            dispatch.status === 'error' &&
+            (row.scheme === 'openvpn' || row.scheme === 'wireguard') &&
+            dispatch.nodeId !== undefined
+          ) {
+            // (n) N15 — classify the node's STATIC token before deciding
+            // `not_run`. A failed bring-up (`handshake_failed`,
+            // `endpoint_unreachable`, `egress_leak_detected`) arrives on this
+            // branch and IS a verdict about the tunnel; calling it a `not_run`
+            // left the row on its last green verdict with a stale exit forever,
+            // and no retry could change the sentence. See classifyVpnProbeFailure.
+            const refusal = classifyVpnProbeFailure(dispatch.message, row.scheme);
+            if (refusal.notRun === undefined) {
+              // (i) I7 parity — a tunnel the node found DOWN contradicts the
+              // stored exit NOW, exactly as the verdict path below does for
+              // `!usable && probeReachedVerdict(r)`. The exit is KEPT (it is
+              // still the last thing seen, at its own date) and the stamp dates
+              // the contradiction, so the /proxies list can carry it to a Mac
+              // that never saw this test. Best-effort like the verdict path's
+              // write: a throw here would be caught by this closure's handler
+              // and RELABEL the node's verdict as `control_plane`.
+              try {
+                await proxiesRepo.update({
+                  id: row.id,
+                  accountId: ctx.account.id,
+                  updates: { exitSupersededAt: new Date() },
+                });
+              } catch (err) {
+                request.log.info(
+                  { proxyId: row.id, err },
+                  'proxy test: failed to stamp exit_superseded_at for a failed VPN bring-up',
+                );
+              }
+            }
+            return {
+              ok: false,
+              reason: refusal.reason,
+              latency_ms: null,
+              node_id: dispatch.nodeId,
+              measured_from: 'fleet' as const,
+              // (d) — `not_run` is the discriminator a client branches on (never
+              // the prose): present when NOTHING was learned about the tunnel,
+              // ABSENT when the node reached a tunnel verdict.
+              ...(refusal.notRun !== undefined ? { not_run: refusal.notRun } : {}),
+            };
+          }
+          return { miss: 'no_node' } satisfies FleetMiss;
+        }
+        const r = dispatch.result;
+        // ⛔ `r.ok` IS NOT "THE PROXY WORKS". Its contract on the node's frame is
+        // "the probe reached a verdict" — a proxy that answers nothing at all
+        // comes back `ok:true` with reachable/auth_ok/udp_associate/can_route all
+        // false and `quic_detail: "skipped: endpoint_unreachable"`. Measured on a
+        // live proxy 2026-09-06, four consecutive identical results.
+        //
+        // On the other two members of this union `ok` means the proxy is USABLE,
+        // and a client reads one field. Passing the node's flag straight through
+        // under the same name published a PASS for a dead proxy: the desktop card
+        // showed a successful test for something no session could ever launch on.
+        // One field, one meaning — so translate here, at the protocol boundary,
+        // rather than asking every client to know which member it is holding.
+        //
+        // The sentences are the cp branch's, deliberately: a customer who reads
+        // one and then the other must not be told two different stories. Reported
+        // in the order the probe establishes the legs, so they are told the FIRST
+        // thing that went wrong rather than the last.
+        const fleetFailure = ((): string | undefined => {
+          // W-28 — ask the question through the reader, which prefers the node's
+          // `status` and falls back to `ok`. The schema has already refused any
+          // frame where the two disagree, so this cannot pick a side quietly.
+          if (!probeReachedVerdict(r)) {
+            // (e) 2026-09-10 — `node_busy`: the node refuses a VPN probe while ANY
+            // userspace tunnel is live on it (a second tunnel could break the live
+            // session), and also under its own concurrency backpressure. A wait,
+            // not a verdict on the proxy.
+            if (typeof r.error === 'string' && /node_busy/i.test(r.error)) {
+              return 'Our test service is busy right now. Try again in a minute.';
+            }
+            return 'The test could not be completed. Try again shortly.';
+          }
+          if (!r.reachable) {
+            return 'The proxy did not answer. Check the host and port, and that it is online.';
+          }
+          if (!r.auth_ok) {
+            return 'The proxy rejected the username and password. Re-enter them and try again.';
+          }
+          if (!r.can_route) {
+            return 'The proxy connected but could not reach the internet. Check with your proxy provider.';
+          }
+          return undefined;
+        })();
+        const usable = fleetFailure === undefined;
+        // N-2 — the fingerprint is measured by the CONTROL PLANE even here (see
+        // `osFingerprintFields`), so it rides ALONGSIDE the node's latency rather
+        // than coming back from the node. Only on an `ok` result: a proxy the node
+        // could not use has no stack worth fingerprinting and must not spend the
+        // observer's budget. The `'host' in resolved` narrowing IS REACHABLE: a
+        // VPN wire carries `type` and no host/port (there is no SOCKS5 endpoint to
+        // dial through), so an openvpn/wireguard row takes the no-fingerprint arm.
+        //
+        // ⛔ (o) 2026-09-11 — and THAT ARM IS THE WHOLE VPN POPULATION. `'host' in
+        // resolved` is false for EVERY openvpn/wireguard row, so before this the
+        // chip on a VPN profile card was blank permanently, under a hint telling
+        // the owner to press Test — the one action that provably cannot change it.
+        // The arm now reports its cause: `vpn_tunnel`, "there is no SOCKS5 stack
+        // here to fingerprint", which is true and terminates.
+        //
+        // ⛔ (o) 2026-09-11 follow-up — `vpn_tunnel` is a property of the SCHEME,
+        // never of the verdict. It used to sit behind a `!usable ? {}` gate, so
+        // the cause was emitted ONLY when the tunnel came up — i.e. in the one
+        // state the owner does not need it. In the two states a VPN owner
+        // actually presses Check in (the handshake failed; the row has never
+        // tested green) the reply carried no cause at all, and the desktop chip
+        // fell back to "Run Test … the control plane fingerprints the proxy's
+        // own TCP stack" — a button that row does not have, promising a
+        // measurement that can never exist for a tunnel. The narrowing decides
+        // FIRST now: a VPN wire always reports its cause, and the observer is
+        // still spent only on a usable socks5 row.
+        //
+        // The socks5 `!usable` arm still reports NOTHING on purpose: a proxy the
+        // node could not use has its cause in `reason` already, and "fingerprint
+        // unavailable because VPN" would be false about a broken socks5 row.
+        const osFields: OsFingerprintFields | Record<string, never> =
+          'host' in resolved
+            ? usable
+              ? await osFingerprintFields(
+                  {
+                    protocol: 'socks5' as const,
+                    host: resolved.host,
+                    port: resolved.port,
+                    ...(resolved.username !== undefined ? { username: resolved.username } : {}),
+                    ...(resolved.password !== undefined ? { password: resolved.password } : {}),
+                  },
+                  r.exit_ip,
+                )
+              : {}
+            : await vpnOsFingerprintFields(usable ? r.exit_ip : null, dispatchedAtMs);
+        await persistOsFingerprintIfObserved(osFields);
+        // (0124) — which of the node's capability fields are READINGS is decided
+        // once, by `capabilityReadingsForReply`, and the SAME answer is both
+        // replied and stored: a leg absent from it (skipped, `null`, a VPN row's
+        // asserted literal) is absent from the reply AND writes nothing, so the
+        // row can never hold a value the customer was not just shown.
+        //
+        // ⛔ Stored only on a USABLE verdict, like the exit and the OS reading.
+        // A frame that reached no verdict carries default falses; a proxy that
+        // refused the credential or could not route has its cause in `reason`,
+        // and a `false` beside it says the leg had nothing to run over — not
+        // that this proxy lacks QUIC. A stored negative stops anyone looking
+        // again, so it must be earned by a test of a proxy that works.
+        const capabilityReadings = capabilityReadingsForReply(row.scheme, r);
+        const probeReadingsPersisted = usable
+          ? await persistProbeReadingsIfMeasured(
+              {
+                ...(capabilityReadings.quic_ok !== undefined
+                  ? { quic: capabilityReadings.quic_ok }
+                  : {}),
+                ...(capabilityReadings.udp_associate !== undefined
+                  ? { udp: capabilityReadings.udp_associate }
+                  : {}),
+              },
+              measuredAt,
+            )
+          : null;
+        // VPN exit parity — persist the exit the NODE observed onto the proxy row
+        // (`observed_via: 'probe'`, beside the relay's 'session' writes; latest
+        // wins), so the /proxies list can show a VPN row's location and hand its
+        // timezone to the next launch before any session has run. ONLY when the
+        // proxy was USABLE and the node saw an exit: a null exit_ip writes
+        // NOTHING and never nulls a value a live session observed earlier.
+        // ⛔ (i) I7 follow-up — `usable`, not `exit_ip !== null`: the node's
+        // egress-LEAK verdict is `can_route:false` WITH an exit_ip — the node's
+        // OWN public address, "traffic is not leaving through the tunnel"
+        // (HarnessCoordinator.swift `canRoute:false, exitIp: proxiedIp`). That
+        // ip is not this tunnel's exit; storing it dated now would put the
+        // fleet Mac's address on the /proxies list as this VPN's location,
+        // beside a reply that says `ok:false`, and clear the superseded stamp
+        // with a non-exit. Best-effort, owner-scoped, logged at info — mirrors
+        // persistOsFingerprintIfObserved: a persistence failure must not throw,
+        // because a throw here is caught by this closure's handler and would
+        // RELABEL a node measurement as `control_plane`.
+        const exitObserved =
+          !usable || r.exit_ip === null
+            ? undefined
+            : {
+                ip: r.exit_ip,
+                country: r.exit_country ?? null,
+                timezone: r.exit_timezone ?? null,
+                region: r.exit_region ?? null,
+                city: r.exit_city ?? null,
+              };
+        // Never DOWNGRADE a stored observation: a node that does not yet emit
+        // the exit_* keys sends the ip alone, and writing {country: null,
+        // timezone: null} over a live session's observation of the same exit
+        // would erase real geo. Same ip + no incoming geo + existing geo → keep.
+        const incomingHasGeo =
+          exitObserved !== undefined &&
+          (exitObserved.country !== null || exitObserved.timezone !== null);
+        const existingExit = row.exitObserved ?? null;
+        const wouldDowngrade =
+          exitObserved !== undefined &&
+          !incomingHasGeo &&
+          existingExit !== null &&
+          existingExit.ip === exitObserved.ip &&
+          (existingExit.country !== null || existingExit.timezone !== null);
+        // (i) I7 — the row's `exit_superseded_at` (migration 0122). Three
+        // outcomes, decided by the node's VERDICT (`usable`: reached a verdict,
+        // reachable, auth ok, can route) — never by whether an `exit_ip` came
+        // back, since the leak frame above carries one on a DOWN verdict:
+        //   * the proxy was usable and the node saw an exit → the tunnel was
+        //     up: the exit is written (unless it would downgrade stored geo)
+        //     AND the stamp is cleared, because a contradiction older than an
+        //     observation is spent;
+        //   * the node reached a verdict and the proxy is not usable (no
+        //     exit, or a leak's non-exit) → the tunnel is DOWN: the stored
+        //     exit (if any) is contradicted NOW. It is kept — it is still the
+        //     last thing seen, at its own date — and the stamp dates the
+        //     contradiction so the /proxies list can carry it to a Mac that
+        //     never saw this test;
+        //   * nothing ran (`could_not_run`) → nothing was measured, nothing
+        //     is written: a wait is not a verdict about the tunnel.
+        // Best-effort like the exit write: a persistence failure must not
+        // throw, or the node's measurement would be relabelled `control_plane`.
+        const stampUpdates: AccountProxyRowUpdates | null =
+          exitObserved !== undefined
+            ? wouldDowngrade
+              ? row.exitSupersededAt !== null
+                ? { exitSupersededAt: null }
+                : null
+              : {
+                  exitObserved: {
+                    ip: exitObserved.ip,
+                    country: exitObserved.country,
+                    timezone: exitObserved.timezone,
+                    observed_via: 'probe',
+                  },
+                  exitObservedAt: new Date(),
+                  exitSupersededAt: null,
+                }
+            : // (k) — the stamp is decided by the VERDICT, never by whether an exit is
+              // stored: a never-stamped row lists exit_superseded_at as null, which a
+              // client reads as "seen up again" and would erase its own fresh failure.
+              !usable && probeReachedVerdict(r)
+              ? { exitSupersededAt: new Date() }
+              : null;
+        if (stampUpdates !== null) {
+          try {
+            await proxiesRepo.update({
+              id: row.id,
+              accountId: ctx.account.id,
+              updates: stampUpdates,
+            });
+          } catch (err) {
+            request.log.info(
+              { proxyId: row.id, err },
+              'proxy test: failed to persist the probe-observed exit / exit_superseded_at',
+            );
+          }
+        }
+        return {
+          ok: usable,
+          ...(fleetFailure !== undefined ? { reason: fleetFailure } : {}),
+          latency_ms: r.latency_ms,
+          ...quicFields,
+          // (0124) — the row's Test readings AS THEY NOW STAND, so the reply
+          // agrees with the list. Where the write landed, that is the row the
+          // statement returned. Where nothing was stored — no leg measured, the
+          // proxy not usable, the write failed, the row gone or edited mid-test
+          // — it is a RE-READ: `row` predates the test and may still hold a
+          // reading an edit has since cleared.
+          ...(probeReadingsPersisted !== null
+            ? storedProbeReadings(probeReadingsPersisted)
+            : await probeReadingsAsTheRowStands()),
+          ...osFields,
+          // (p) — the stored reading rides a fleet reply too, under the same rule
+          // (a fresh observation wins, the cause stays). Only on a USABLE verdict:
+          // a proxy the node could not use answers `ok:false`, where the OS half of
+          // the reply is not part of the published shape and the desktop client
+          // reads no reading at all — the list is what carries it there.
+          ...(usable ? storedOsForReply(osFields) : {}),
+          // (e) 2026-09-10 — a `could_not_run` frame (node_busy, bad_config:*,
+          // timeout…) carries no fact except `error`: every measurement field on
+          // it is a default false/null, so none is reported.
+          //
+          // (V6 2026-09-16) ITEM 3 — on a verdict, which of `udp_associate`,
+          // `h2_ok` and `quic_ok` is a READING is decided in ONE place,
+          // `capabilityReadingsForReply` above: a VPN row's UDP/HTTP-2 literals and
+          // a leg the node skipped are ABSENT, and absence is the wire's "not
+          // measured". `reachable` / `auth_ok` / `can_route` / `exit_ip` are probed
+          // on every path and are reported unchanged.
+          ...(probeReachedVerdict(r)
+            ? {
+                reachable: r.reachable,
+                auth_ok: r.auth_ok,
+                can_route: r.can_route,
+                ...capabilityReadings,
+                quic_detail: r.quic_detail,
+                exit_ip: r.exit_ip,
+              }
+            : {}),
+          // Spread only when defined — never an `exit_observed: undefined` key.
+          ...(exitObserved !== undefined ? { exit_observed: exitObserved } : {}),
+          node_id: r.node_id,
+          measured_from: 'fleet' as const,
+        };
+      } catch (err) {
+        // (h) finding 2 — a TIER refusal is the route's own answer (the same
+        // one POST/PUT and the launch path give for a VPN row on a tier without
+        // vpnEgress); swallowing it into "no Mac was free… try again" told a
+        // downgraded account to keep retrying something a retry can never fix.
+        // An unsafe stored host is a config the fleet must never be handed,
+        // not a missing node.
+        if (err instanceof ForbiddenError) throw err;
+        if (err instanceof UnsafeProxyHostError) {
+          request.log.info(
+            { proxyId: row.id, err },
+            'proxy test: stored proxy host is unsafe; refusing the fleet dispatch',
+          );
+          // ⛔ (V4 follow-up) — WITH its cause. This return carried no
+          // reason/detail, so it fell through to the shipped "could not be
+          // read. Re-add it" sentence 40 lines below — the exact class of lie
+          // V3 says it eliminated, in the same route, for the one cause where
+          // re-adding the same config is guaranteed to be refused again. The
+          // service already owns the right words (it answers the EMBEDDED
+          // endpoint with them); this is the DISPLAY host, classified by the
+          // same `classifyUnsafeHost`, so it gets the same sentence. Note this
+          // is also the only way `config_refused_target` can be reported for
+          // the display host: the service THROWS for it rather than returning.
+          return { miss: 'unresolvable', detail: UNSAFE_TARGET_DETAIL } satisfies FleetMiss;
+        }
+        request.log.info(
+          { proxyId: row.id, err },
+          'proxy test: fleet-vantage probe failed, falling back to the control plane',
+        );
+        return { miss: 'no_node' } satisfies FleetMiss;
+      }
+    };
+
+    if (vantage === 'fleet') {
+      const fleet = await runFleetProbe();
+      if (!('miss' in fleet)) return fleet;
+      // (h) H1 2026-09-10 — findings 4/10. For an openvpn/wireguard row NEVER
+      // fall through to the control-plane probe. The cp cannot bring a tunnel
+      // up; its "fallback" for a VPN row is a bare TCP connect to the tunnel
+      // endpoint — UDP-only for WireGuard, udp by default for OpenVPN — which
+      // fails and was published as `ok:false, reason:'Proxy unreachable…'`
+      // with no `not_run`: the GUI rendered a red "tunnel down" with a wrong
+      // next step for a tunnel nobody measured. "No node measured it" (registry
+      // absent, config unresolvable, dispatch unavailable/timeout, an error
+      // outcome with no node to blame, any throw) is a NOT-RUN: `no_node` is
+      // the discriminator a client branches on, `control_plane` says no node
+      // produced this, no measurement field is present, and the stored exit
+      // rides along (as on the live_session refusal) so the row still shows
+      // where it exits. A socks5/http row keeps the cp fallback below: there
+      // the control plane speaks the protocol itself, so it IS a measurement.
+      if (row.scheme === 'openvpn' || row.scheme === 'wireguard') {
+        // (h) finding 2 — the sentence says WHAT kept the fleet from measuring,
+        // and "try again in a minute" is promised only where a retry can help.
+        // A row the fleet cannot be handed (unreadable secret, unsafe target)
+        // is a verdict about the ROW, in the words the cp path uses for the
+        // same condition on a socks5 row — not a `not_run`, and never "no Mac
+        // was free". A deployment with no fleet will never have a free Mac.
+        if (fleet.miss === 'unresolvable') {
           return {
             ok: false as const,
+            // (V3) — the CAUSE's own sentence when the service named one (for a
+            // refused directive it quotes the offending line, exactly as the
+            // create/update route does for the same blob); the shipped sentence
+            // when it did not, which is also what every unreadable cause says.
             reason:
-              fleet.miss === 'no_fleet'
-                ? 'VPN checks are not available on this deployment.'
-                : 'Our test service is busy right now. Try again in a minute.',
+              fleet.detail ??
+              'This VPN’s stored configuration could not be read. Re-add it and try again.',
             measured_from: 'control_plane' as const,
-            not_run: 'no_node' as const,
+            // ⛔ (V4 follow-up) — `not_run`, and the in-code defence that used
+            // to sit here ("a verdict about the ROW … not a `not_run`") was
+            // contradicted by its own consequence. `not_run`'s CONTRACT is
+            // "present when NOTHING RAN, so `ok:false` is not a verdict about
+            // the proxy" — and nothing ran here: no node was dispatched, no
+            // tunnel was brought up, no packet left. Its absence made the
+            // client classify the reply `failed`, which DROPS the row's
+            // exitIp/geo/latency/quic/os and stamps `exitSupersededAt`, so a
+            // WireGuard row with a missing `Address` was rendered as a red
+            // "VPN tunnel down" and the exit IP the customer had just gained
+            // was erased — by a cause that measured nothing about the tunnel.
+            // `unresolvable` covers all ten causes truthfully (see
+            // ProxyUnresolvableReason); `reason` above still carries the
+            // sentence, and the stored exit rides along exactly as it does on
+            // the live_session / no_node refusals below.
+            not_run: 'unresolvable' as const,
             ...storedExitForReply(),
           };
         }
-        // No node measured it — return the control-plane result, HONESTLY labelled
-        // so a fleet request is never shown a cp measurement as if a node produced it.
-        return { ...(await runControlPlaneProbe()), measured_from: 'control_plane' as const };
+        return {
+          ok: false as const,
+          reason:
+            fleet.miss === 'no_fleet'
+              ? 'VPN checks are not available on this deployment.'
+              : 'Our test service is busy right now. Try again in a minute.',
+          measured_from: 'control_plane' as const,
+          not_run: 'no_node' as const,
+          ...storedExitForReply(),
+        };
       }
-      // vantage=cp — today's response, unchanged (no measured_from field).
-      return runControlPlaneProbe();
-    },
-  );
+      // No node measured it — return the control-plane result, HONESTLY labelled
+      // so a fleet request is never shown a cp measurement as if a node produced it.
+      return { ...(await runControlPlaneProbe()), measured_from: 'control_plane' as const };
+    }
+    // vantage=cp — today's response, unchanged (no measured_from field).
+    return runControlPlaneProbe();
+  }
 
   // V-352b — upload (or replace) the calling account's avatar. Inline
   // base64 body, validated for MIME + size, written to R2 public

@@ -2350,12 +2350,29 @@ function buildRegistry(): OpenAPIRegistry {
     single_host_vantage: z
       .boolean()
       .describe(
-        'True only when the proxy host you entered, the machine that opened the connection and the exit address are all one machine, so the reading describes the same path a website sees. Absent or false: do not draw a match/mismatch conclusion from it.',
+        'True only when the proxy host you entered, the machine that opened the connection and the exit address are all one machine, so the reading describes the same path a website sees. Absent or false: do not draw a match/mismatch conclusion from it. Same fact as `direct_reading` below, kept under its original name for existing integrations.',
       ),
     web_port_vantage: z
       .boolean()
       .describe(
-        'True when the reading was taken on the standard HTTPS port at the proxy\'s IP address, with no CDN in front — the same path a website connects on. It describes what a site sees on that path; with observed_via "proxy_host" it is still a reading, not a guarantee.',
+        'True when the reading was taken on the standard HTTPS port at the proxy\'s IP address, with no CDN in front — the same path a website connects on. It describes what a site sees on that path; with observed_via "proxy_host" it is still a reading, not a guarantee. Same fact as `website_like_reading` below, kept under its original name for existing integrations.',
+      ),
+    // 2026-09-21 — the customer-worded aliases for the two fields above (same
+    // values; new names). Documented from here on; the originals are kept,
+    // unrenamed, for `apps/gui-client`'s existing reader of this exact shape.
+    // Optional: populated on `POST …/proxies/:id/test` today, not yet on the
+    // saved-proxy list.
+    direct_reading: z
+      .boolean()
+      .optional()
+      .describe(
+        'Whether nothing sat between what was read and what your traffic actually exits from: true only when the address you gave, the address that answered, and your exit address are one machine. The customer-worded name for `single_host_vantage`.',
+      ),
+    website_like_reading: z
+      .boolean()
+      .optional()
+      .describe(
+        'Whether the reading was taken the way a real website connection is — a literal address on the standard secure-web port, not a name that could route to shared infrastructure. The customer-worded name for `web_port_vantage`.',
       ),
   });
   const AccountProxyMetadataOpenApi = z
@@ -2504,25 +2521,44 @@ function buildRegistry(): OpenAPIRegistry {
   // spread into BOTH ok-bearing members, for the reason the block above states:
   // the cp member and the fleet member reach the same three causes, and a second
   // copy is a second thing to forget.
-  //   `vpn_tunnel`   — an openvpn/wireguard row has no SOCKS5 endpoint to dial
-  //                    through, so no SYN exists to read. No retry can help.
-  //   `not_observed` — the observer tunnel was refused, or no SYN was recorded
-  //                    under either candidate address. A retry may help.
-  //   `observer_off` — this deployment runs no raw-socket observer (or no
-  //                    connectivity probe at all). No retry can help.
+  //   `not_available_for_vpn` — an openvpn/wireguard proxy has no single
+  //                    address of its own to read a stack from. No retry can help.
+  //   `not_captured`   — the reading was attempted and produced nothing this
+  //                    time. A retry may help.
+  //   `not_offered_here` — this deployment does not take this reading at all.
+  //                    No retry can help.
   // Absent when a fingerprint WAS observed. A client renders the cause; it must
   // never turn a bare absence into advice, which is what shipped before this.
-  const OsFingerprintUnavailableOpenApi = z.enum(['vpn_tunnel', 'not_observed', 'observer_off']);
+  //
+  // ⛔ RENAMED 2026-09-21 from `vpn_tunnel` / `not_observed` / `observer_off` —
+  // see `customer-safe-proxy-test-vocabulary.ts`.
+  const OsFingerprintUnavailableOpenApi = z
+    .enum(['not_available_for_vpn', 'not_captured', 'not_offered_here'])
+    .describe(
+      'Why no OS fingerprint was taken, when Driftstack knows the cause: ' +
+        '`not_available_for_vpn` (an openvpn or wireguard proxy has no single address of its own to read a stack from — no retry can help); ' +
+        '`not_captured` (the reading was attempted and produced nothing this time — a retry may help); ' +
+        '`not_offered_here` (this deployment does not take this reading at all — no retry can help).',
+    );
   // (d) 2026-09-10 — why a test produced NO measurement. One vocabulary for
   // both `ok:false` members: `live_session` is the control plane's refusal (a
-  // VPN row a live session browses through), `node_busy` / `node_error` are the
-  // node's own could-not-run, and `no_node` (h) is a fleet-vantage test of a
-  // VPN row that NO node measured (none free, dispatch unavailable/timed out,
-  // or a deployment with no fleet at all — the `reason` says which) — the
+  // VPN row a live session browses through), `config_unresolvable` is the
+  // stored row itself (could not be turned into anything runnable — the same
+  // word the "Why a launch is refused" table already publishes for this fact),
+  // and `check_unavailable` is every other reason NO node measured a VPN
+  // tunnel (none free, dispatch unavailable/timed out, or a deployment with no
+  // fleet at all — the `reason` says which) — the
   // control plane cannot bring a tunnel up, so it refuses rather than falling
   // back to a TCP connect that says nothing about the tunnel. Absent on every
   // result that actually measured.
-  const ProxyTestNotRunOpenApi = z.enum(['live_session', 'node_busy', 'node_error', 'no_node']);
+  const ProxyTestNotRunOpenApi = z
+    .enum(['live_session', 'config_unresolvable', 'check_unavailable'])
+    .describe(
+      'Present when NOTHING RAN, so `ok:false` is not a result about the proxy: ' +
+        '`live_session` (a full check of a VPN proxy was skipped because a live session is browsing through it — end the session to check it); ' +
+        '`config_unresolvable` (the stored configuration could not be used, so nothing was dialled — re-add it); ' +
+        '`check_unavailable` (the full check could not be completed on our side right now — try again shortly, or full checks are not available on this deployment).',
+    );
   const AccountProxyTestResultOpenApi = z
     .union([
       z.object({
@@ -2563,13 +2599,13 @@ function buildRegistry(): OpenAPIRegistry {
         // (d) 2026-09-10 — present when NOTHING RAN, so `ok:false` is not a
         // verdict about the proxy: `live_session` = a fleet-vantage test of a
         // VPN row was REFUSED because a live session holds the tunnel (a second
-        // tunnel on a one-connection VPN account would drop it); `no_node` (h)
-        // = no fleet node was free to bring the tunnel up, and the control plane
+        // tunnel on a one-connection VPN account would drop it); `check_unavailable`
+        // (h) = no fleet node was free to bring the tunnel up, and the control plane
         // cannot measure a tunnel itself. A client branches on THIS — never on
         // the `reason` prose — to keep the row's last verdict and show the
         // sentence as a notice, not a failure.
         not_run: ProxyTestNotRunOpenApi.optional(),
-        // (d) 2026-09-10 — beside `not_run: 'live_session'` / `'no_node'`: the
+        // (d) 2026-09-10 — beside `not_run: 'live_session'` / `'check_unavailable'`: the
         // STORED exit a session observed, so a client can still show where the
         // tunnel exits.
         // `region` / `city` are null — the stored observation carries neither.
@@ -2677,9 +2713,10 @@ function buildRegistry(): OpenAPIRegistry {
         // present = a stored reading of that age, attached because this test
         // observed none. Age a stored one by this, never by the reply time.
         os_fingerprint_at: z.string().nullable().optional(),
-        // (o) — and the cause when it is absent. `vpn_tunnel` is REACHED HERE and
-        // only here in practice: a VPN row is measurable from a node alone, and a
-        // tunnel has no SOCKS5 endpoint for the control plane's observer to dial.
+        // (o) — and the cause when it is absent. `not_available_for_vpn` is REACHED
+        // HERE and only here in practice: a VPN row is measurable from a node
+        // alone, and a tunnel has no SOCKS5 endpoint for the control plane's
+        // observer to dial.
         os_fingerprint_unavailable: OsFingerprintUnavailableOpenApi.nullable().optional(),
       }),
     ])
@@ -2694,20 +2731,33 @@ function buildRegistry(): OpenAPIRegistry {
       // V-1483 — the route enforces this; the document published the
       // path-validity backstop's generic 1..2048 bound instead.
       params: z.object({ id: uuidPathParam('Account proxy') }),
-      // T-1 — WHERE the proxy is measured from. `cp` (default) keeps the
-      // control-plane probe; `fleet` measures from the Mac that will run the
-      // profile. Published as an enum so the value is a BOUND, not free text.
+      // 2026-09-21 — `check` is the documented parameter; `vantage` is the
+      // original name, still accepted (never documented again — see
+      // `resolveProxyTestVantage` in `customer-safe-proxy-test-vocabulary.ts`,
+      // the one place that reads both). Both are published as enums so the
+      // value is a BOUND, not free text.
       query: z.object({
-        vantage: z.enum(['cp', 'fleet']).optional(),
+        check: z
+          .enum(['quick', 'full'])
+          .optional()
+          .openapi({
+            description:
+              '`quick` (default): a check Driftstack runs itself, right now. ' +
+              '`full`: a fuller check dispatched through the machine that will actually run your profile — the same path a real session takes, useful before you rely on a proxy for one.',
+          }),
+        vantage: z.enum(['cp', 'fleet']).optional().openapi({
+          description:
+            'Deprecated — use `check` (`cp` = `check=quick`, `fleet` = `check=full`). Still accepted.',
+        }),
       }),
     },
     responses: {
       404: { description: 'Not found (or owned by another account).', content: problemContent },
       200: {
         description:
-          'Reachability result. vantage=cp (default): measured by Driftstack — ok=true + latency_ms, or ok=false + reason. ' +
-          'vantage=fleet: measured from the machine that will run your profile, reported with measured_from=fleet; ' +
-          'when no such machine is free, Driftstack measures it instead and reports measured_from=control_plane.',
+          'Reachability result. `check=quick` (default) is measured by Driftstack itself: `ok=true` + `latency_ms`, or `ok=false` + `reason`. ' +
+          '`check=full` is dispatched through the machine that will actually run your profile — a fuller, slower check, useful before you rely on a proxy for a real session; ' +
+          'when that machine is unavailable, Driftstack measures it instead and the reply says so.',
         content: { 'application/json': { schema: AccountProxyTestResultOpenApi } },
       },
       ...errors4xx,

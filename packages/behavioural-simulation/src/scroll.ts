@@ -1,5 +1,19 @@
 // V-530.B — scroll velocity profiles with exponential decay.
 //
+// ⚠️ WHAT THIS MODELS, stated after both models were compared on 2026-09-21:
+// the INERTIAL phase after the finger is released — the decay a scroll view
+// animates on its own once a flick ends. It is not a model of the finger on
+// the glass: the device's own gesture generator (harness side) produces the
+// touch samples of a flick — onset ramp, per-sample magnitudes, a measured
+// ProMotion interval mixture, lateral drift, overshoot and reversal — and on a
+// real iPhone the phase modelled here is animated by the OS itself. So this
+// module is a LIBRARY model of the post-release phase, unwired on purpose, and
+// not for device gesture synthesis. No device data exists for this phase yet:
+// whether the compositor holds a fixed period during an inertial animation or
+// varies with the display's refresh rate is unmeasured, so the fixed tick below
+// is neither a known tell nor cleared. Two models of different phases; neither
+// corroborates the other.
+//
 // Second module of the Phase 3 real implementation, after V-530.A
 // (touch event distributions). Models the velocity curve a human finger
 // flick produces on a scroll container: initial velocity from the flick,

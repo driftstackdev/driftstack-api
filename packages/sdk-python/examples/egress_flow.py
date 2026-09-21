@@ -60,8 +60,9 @@ def main() -> int:
             "host": proxy_host,
             "port": proxy_port,
             "udp_associate": True,  # Required for WebRTC routing per planning 133.
-            # EG-WK-1.9 (2026-05-17) — leave DNS resolution local-side (default).
-            # Set True to route DNS through the proxy via SOCKS5 ATYP DOMAINNAME (0x03).
+            # EG-WK-1.9 (2026-05-17) — the default is True (resolve host names
+            # through the proxy). This example sets it False to resolve locally
+            # instead; set it to True (or omit it) to use the secure default.
             "require_remote_dns": False,
         },
     }

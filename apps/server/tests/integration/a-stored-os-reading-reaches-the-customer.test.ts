@@ -54,6 +54,21 @@ const STORED = {
   web_port_vantage: true,
 };
 
+/**
+ * 2026-09-21 — what `STORED` looks like once it crosses `POST …/test`, which
+ * (unlike the `/proxies` LIST route `STORED` otherwise compares against)
+ * additively aliases `single_host_vantage` / `web_port_vantage` to
+ * `direct_reading` / `website_like_reading` on every reply — see
+ * `toPublicProxyTestResult` in `routes/account-me.ts`. A SEPARATE constant
+ * rather than mutating `STORED` itself: the LIST-route assertions below
+ * compare against the un-aliased shape and must stay that way.
+ */
+const STORED_ON_TEST_REPLY = {
+  ...STORED,
+  direct_reading: STORED.single_host_vantage,
+  website_like_reading: STORED.web_port_vantage,
+};
+
 const OVPN_BLOB = 'client\nremote vpn.example.com 1194 udp\ndev tun\n';
 
 /** ONE node per fixture, answering a frame that reached a verdict. `usable` is the
@@ -216,10 +231,11 @@ describe('POST /v1/account/me/proxies/:id/test — a miss still answers with wha
 
     const body = await test(id);
     expect(body.ok).toBe(true);
-    expect(body.os_fingerprint).toEqual(STORED);
+    expect(body.os_fingerprint).toEqual(STORED_ON_TEST_REPLY);
     expect(body.os_fingerprint_at).toBe(MEASURED_AT.toISOString());
     // ⛔ The cause stays. It is about THIS test, not about the reading.
-    expect(body.os_fingerprint_unavailable).toBe('not_observed');
+    // Public wire value (2026-09-21): not_observed -> not_captured.
+    expect(body.os_fingerprint_unavailable).toBe('not_captured');
   });
 
   it('a FRESH observation wins and carries no date — this reply measured it, and attaching a stale stamp to a fresh reading would age it from the wrong moment', async () => {
@@ -252,6 +268,10 @@ describe('POST /v1/account/me/proxies/:id/test — a miss still answers with wha
       observed_via: 'exit_ip',
       single_host_vantage: true,
       web_port_vantage: false,
+      // 2026-09-21 — the customer-worded aliases (same values), added on
+      // every `POST …/test` reply.
+      direct_reading: true,
+      website_like_reading: false,
     });
     expect('os_fingerprint_at' in body).toBe(false);
     expect('os_fingerprint_unavailable' in body).toBe(false);
@@ -269,7 +289,8 @@ describe('POST /v1/account/me/proxies/:id/test — a miss still answers with wha
     expect(body.ok).toBe(true);
     expect('os_fingerprint' in body).toBe(false);
     expect('os_fingerprint_at' in body).toBe(false);
-    expect(body.os_fingerprint_unavailable).toBe('not_observed');
+    // Public wire value (2026-09-21): not_observed -> not_captured.
+    expect(body.os_fingerprint_unavailable).toBe('not_captured');
   });
 
   it('CONTROL — a row with NO stored reading is unchanged by all of this: the miss is still a bare cause, never an invented reading', async () => {
@@ -283,7 +304,8 @@ describe('POST /v1/account/me/proxies/:id/test — a miss still answers with wha
     expect(body.ok).toBe(true);
     expect('os_fingerprint' in body).toBe(false);
     expect('os_fingerprint_at' in body).toBe(false);
-    expect(body.os_fingerprint_unavailable).toBe('not_observed');
+    // Public wire value (2026-09-21): not_observed -> not_captured.
+    expect(body.os_fingerprint_unavailable).toBe('not_captured');
   });
 });
 
@@ -303,11 +325,12 @@ describe('POST /v1/account/me/proxies/:id/test — the reading rides every reply
     const body = await testFleet(id);
     expect(body.ok).toBe(true);
     expect(body.measured_from).toBe('fleet');
-    expect(body.os_fingerprint).toEqual(STORED);
+    expect(body.os_fingerprint).toEqual(STORED_ON_TEST_REPLY);
     expect(body.os_fingerprint_at).toBe(MEASURED_AT.toISOString());
     // ⛔ The cause is about THIS test and stays; the pair is how the client tells a
     // stored reading from a fresh one.
-    expect(body.os_fingerprint_unavailable).toBe('vpn_tunnel');
+    // Public wire value (2026-09-21): vpn_tunnel -> not_available_for_vpn.
+    expect(body.os_fingerprint_unavailable).toBe('not_available_for_vpn');
   });
 
   it('CRITICAL VACUITY CONTROL — a fleet verdict that found the proxy UNUSABLE carries no reading: the OS half of an `ok:false` reply is not part of the published shape, so attaching it there would put a reading where no client reads one. MUTATION: drop the `usable ?` guard on that spread and this reds', async () => {
@@ -333,7 +356,7 @@ describe('POST /v1/account/me/proxies/:id/test — the reading rides every reply
 
     const body = await test(id);
     expect(body.ok).toBe(true);
-    expect(body.os_fingerprint).toEqual(STORED);
+    expect(body.os_fingerprint).toEqual(STORED_ON_TEST_REPLY);
     expect(body.os_fingerprint_at).toBe(MEASURED_AT.toISOString());
     // Nothing observed a SYN here, and nothing claims one was: the reachability
     // check reports no cause of its own, and the reading is dated.

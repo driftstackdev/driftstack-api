@@ -211,7 +211,7 @@ to get proxy-health alerts in your own tooling.
     "egress_capabilities": {
       "udp_associate": true,
       "quic_route": "proxy",
-      "dns_remote_resolve": false,
+      "dns_remote_resolve": true,
       "warnings": []
     }
   }

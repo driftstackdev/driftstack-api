@@ -10,6 +10,11 @@ import type { CapabilityReport } from '../schemas/harness-control-protocol.js';
 import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import type { SessionCapabilityReportStore } from './session-capability-report-store.js';
 import { missingSafeguardLayers } from './session-capability-report-store.js';
+import {
+  PUBLIC_SAFEGUARD_LAYERS,
+  safeToken,
+  unmappedEgressWarnings,
+} from './customer-safe-egress-warnings.js';
 
 interface CapabilityReportAgentSessions {
   get(id: string): Promise<{
@@ -128,6 +133,48 @@ function deriveWarnings(frame: CapabilityReport): string[] {
   return warnings;
 }
 
+const SAFEGUARD_LAYER_UNWORDED_PREFIX = 'safeguard_layer_unworded:';
+
+/**
+ * ⛔ EARLY NOTICE, ON DECLARATION — NOT ON FAILURE. `deriveWarnings` above only
+ * ever learns about a layer name once it FAILS (`safeguard_failed:<layer>`) or
+ * is MISSING from a report that declared an expectation
+ * (`safeguard_missing:<layer>`). A brand-new device-side layer that the fork
+ * ships and that keeps passing is invisible to both: nothing here would name
+ * it until the day it first fails, by which point it has been shipping
+ * unclassified — and therefore unworded for `PUBLIC_SAFEGUARD_LAYERS` — for as
+ * long as it has existed.
+ *
+ * This walks every layer name a frame MENTIONS AT ALL — `safeguardLayersExpected`
+ * (what the device says a healthy session reports) and every
+ * `safeguardChecks[].layer` (what it actually reported this time), passing or
+ * not — and reports any that is not a key of `PUBLIC_SAFEGUARD_LAYERS` through
+ * the SAME bounded recorder the egress-warning map uses. That recorder already
+ * logs a given code at most once per process and keeps counting past its cap,
+ * which is exactly "once per process" for this notice too — no second
+ * dedupe/bound to invent or drift from the original.
+ *
+ * ⛔ NO CUSTOMER-VISIBLE CHANGE. This never touches the `warnings` array
+ * `deriveWarnings` builds; it is a side channel straight to the recorder an
+ * operator reads, the same one `unmappedEgressWarnings.counts()` already
+ * exposes. A device-controlled layer name is sanitised through the same
+ * `safeToken` the map uses before it is ever logged, for the same reason: it
+ * must never put device-chosen text into a log line unshaped.
+ */
+function recordUnwordedSafeguardLayers(frame: CapabilityReport, logger: Logger): void {
+  const layers = new Set<string>();
+  for (const layer of frame.safeguardLayersExpected ?? []) layers.add(layer);
+  for (const check of frame.safeguardChecks) layers.add(check.layer);
+  if (layers.size === 0) return;
+  const unworded: string[] = [];
+  for (const layer of layers) {
+    if (!Object.prototype.hasOwnProperty.call(PUBLIC_SAFEGUARD_LAYERS, layer)) {
+      unworded.push(`${SAFEGUARD_LAYER_UNWORDED_PREFIX}${safeToken(layer)}`);
+    }
+  }
+  if (unworded.length > 0) unmappedEgressWarnings.record(unworded, logger);
+}
+
 export function makeSessionCapabilityReportRelay(
   agentSessions: CapabilityReportAgentSessions,
   sessionsService: CapabilityReportSessionsService,
@@ -160,6 +207,14 @@ export function makeSessionCapabilityReportRelay(
     // device this report belongs to, and the operator drift report has to compare
     // a session's frameworks against its DEVICE's current heartbeat.
     store.set(frame, reportingNodeId);
+
+    // Item 4 — notice a new device-side safeguard layer NAME the moment it is
+    // first declared or reported, not the moment it first fails. Runs on every
+    // accepted frame, ownership-gated the same as the store write above and
+    // unconditional on `driftstackSessionId` (below): the layer name is a
+    // property of the DEVICE's report, not of whether this session has a
+    // driver link.
+    recordUnwordedSafeguardLayers(frame, logger);
 
     // T-26 — stop-on-exit-IP-change enforcement, control-plane side only: the
     // harness already emits the exit IP on the capabilityReport it sends, so no

@@ -195,30 +195,34 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
     expect(await supersededAt(proxyId)).not.toBeNull();
   });
 
-  it('CONTROL node_busy keeps not_run:node_busy and stamps NOTHING (a wait is not a verdict)', async () => {
+  it('CONTROL node_busy keeps not_run:check_unavailable and stamps NOTHING (a wait is not a verdict)', async () => {
     const { body, proxyId } = await runFleetTest('mac-wg-004', 'node_busy');
 
     expect(body.ok).toBe(false);
-    expect(body.not_run).toBe('node_busy');
+    // Public wire value (2026-09-21): node_busy -> check_unavailable (merged
+    // with node_error / no_node — a customer can do exactly one thing about
+    // any of the three).
+    expect(body.not_run).toBe('check_unavailable');
     expect(body.reason).toMatch(/test service is busy right now/);
     expect(await supersededAt(proxyId), 'a busy Mac contradicts no exit').toBeNull();
   });
 
-  it('CONTROL an UNKNOWN token (a node newer than this build) stays the residual not_run:node_error and stamps NOTHING', async () => {
+  it('CONTROL an UNKNOWN token (a node newer than this build) stays the residual not_run:check_unavailable and stamps NOTHING', async () => {
     const { body, proxyId } = await runFleetTest('mac-wg-005', 'some_future_token_v9');
 
     expect(body.ok).toBe(false);
-    expect(body.not_run).toBe('node_error');
+    // Public wire value (2026-09-21): node_error -> check_unavailable.
+    expect(body.not_run).toBe('check_unavailable');
     expect(body.reason).toMatch(/The test could not be completed\. Try again shortly/);
     // ⛔ Guessing "tunnel down" from a word this build cannot read would publish a
     // red verdict nothing measured — and supersede an exit on a guess.
     expect(await supersededAt(proxyId)).toBeNull();
   });
 
-  it('CONTROL egress_bin_missing is OUR fault: not_run:node_error, copy that owns it, no stamp', async () => {
+  it('CONTROL egress_bin_missing is OUR fault: not_run:check_unavailable, copy that owns it, no stamp', async () => {
     const { body, proxyId } = await runFleetTest('mac-wg-006', 'egress_bin_missing');
 
-    expect(body.not_run).toBe('node_error');
+    expect(body.not_run).toBe('check_unavailable');
     expect(body.reason).toMatch(/We could not run the test/);
     expect(body.reason).toMatch(/problem on our side/);
     // Never blame the customer's config for a binary missing on OUR Mac.
@@ -229,7 +233,7 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
   it('CONTROL tunnel_up_no_socks is OUR fault too (the tunnel DID come up — never a tunnel-down verdict)', async () => {
     const { body, proxyId } = await runFleetTest('mac-wg-007', 'tunnel_up_no_socks');
 
-    expect(body.not_run).toBe('node_error');
+    expect(body.not_run).toBe('check_unavailable');
     expect(body.reason).toMatch(/We could not run the test/);
     expect(await supersededAt(proxyId)).toBeNull();
   });
@@ -267,8 +271,9 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
       expect(res.statusCode, res.body).toBe(200);
       const body = res.json<Record<string, unknown>>();
 
+      // Public wire value (2026-09-21): no_node -> check_unavailable.
       expect(body.not_run, 'the late answer must not be reported as "no Mac was free"').not.toBe(
-        'no_node',
+        'check_unavailable',
       );
       expect(String(body.reason)).not.toMatch(/test service is busy/);
       // …and it is the verdict, with the node named as its source.
@@ -283,10 +288,10 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
     expect(await supersededAt(proxyId)).not.toBeNull();
   });
 
-  it('CONTROL bad_config:<field> keeps the residual sentence and not_run:node_error (unchanged by this fix)', async () => {
+  it('CONTROL bad_config:<field> keeps the residual sentence and not_run:check_unavailable (unchanged by this fix)', async () => {
     const { body, proxyId } = await runFleetTest('mac-wg-008', 'bad_config:private_key');
 
-    expect(body.not_run).toBe('node_error');
+    expect(body.not_run).toBe('check_unavailable');
     expect(body.reason).toMatch(/The test could not be completed\. Try again shortly/);
     // The wire field name is jargon — it must never reach the customer.
     expect(String(body.reason)).not.toMatch(/private_key/);

@@ -179,7 +179,8 @@ describe('POST /v1/account/me/proxies/:id/test — os_fingerprint_unavailable', 
     const body = res.json<Record<string, unknown>>();
     expect(body.ok).toBe(true);
     expect(body.measured_from).toBe('fleet');
-    expect(body.os_fingerprint_unavailable).toBe('vpn_tunnel');
+    // Public wire value (2026-09-21): vpn_tunnel -> not_available_for_vpn.
+    expect(body.os_fingerprint_unavailable).toBe('not_available_for_vpn');
     // ⛔ A cause is NOT a measurement. The fingerprint stays absent — the whole
     // reason this field exists is that a miss must never be coloured in.
     expect('os_fingerprint' in body).toBe(false);
@@ -216,7 +217,8 @@ describe('POST /v1/account/me/proxies/:id/test — os_fingerprint_unavailable', 
     expect('not_run' in body).toBe(false);
     expect(typeof body.reason).toBe('string');
     // …and it still says WHY there is no fingerprint.
-    expect(body.os_fingerprint_unavailable).toBe('vpn_tunnel');
+    // Public wire value (2026-09-21): vpn_tunnel -> not_available_for_vpn.
+    expect(body.os_fingerprint_unavailable).toBe('not_available_for_vpn');
     expect('os_fingerprint' in body).toBe(false);
   });
 
@@ -264,7 +266,8 @@ describe('POST /v1/account/me/proxies/:id/test — os_fingerprint_unavailable', 
     expect(res.statusCode, res.body).toBe(200);
     const body = res.json<Record<string, unknown>>();
     expect(body.ok).toBe(true);
-    expect(body.os_fingerprint_unavailable).toBe('not_observed');
+    // Public wire value (2026-09-21): not_observed -> not_captured.
+    expect(body.os_fingerprint_unavailable).toBe('not_captured');
     expect('os_fingerprint' in body).toBe(false);
   });
 
@@ -288,7 +291,8 @@ describe('POST /v1/account/me/proxies/:id/test — os_fingerprint_unavailable', 
     });
     expect(res.statusCode, res.body).toBe(200);
     const body = res.json<Record<string, unknown>>();
-    expect(body.os_fingerprint_unavailable).toBe('observer_off');
+    // Public wire value (2026-09-21): observer_off -> not_offered_here.
+    expect(body.os_fingerprint_unavailable).toBe('not_offered_here');
     expect('os_fingerprint' in body).toBe(false);
   });
 

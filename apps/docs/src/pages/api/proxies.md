@@ -123,10 +123,23 @@ run (`not_run`) measured nothing and never sets it, and while it is set a
 `os_fingerprint` is the last passive OS reading Driftstack took of the proxy's
 own TCP stack — the same object [Test a proxy](#test-a-proxy) returns
 (`os`, `confidence`, `reason`, `observed_ip`, `observed_via`,
-`single_host_vantage`, `web_port_vantage`) — or `null` when the proxy has never
-been fingerprinted. Only Driftstack can take this reading: it comes from the SYN
-the proxy's own kernel sends to our observer, which the machine you are calling
-from cannot see. `null` means not measured, never "no OS".
+`single_host_vantage`, `web_port_vantage`, `direct_reading`,
+`website_like_reading`) — or `null` when the proxy has never been
+fingerprinted. Only Driftstack can take this reading: it comes from the
+connection the proxy's own kernel opens on our side, which the machine you are
+calling from cannot see. `null` means not measured, never "no OS".
+
+`single_host_vantage` and `web_port_vantage` are the original field names;
+`direct_reading` and `website_like_reading` are the same two facts under their
+customer-facing names, added alongside them — read whichever pair you like,
+they always agree. `direct_reading` (`single_host_vantage`) is true only when
+the address you gave, the address that answered, and the address your traffic
+exits from are one machine, so nothing sat between what was read and what a
+website would see. `website_like_reading` (`web_port_vantage`) is true when
+the reading was taken the way a real website connection is — a literal
+address on the standard secure-web port, not a name that could route to
+shared infrastructure. Read a missing or false value on either pair as "this
+reading does not describe that path," never as an assurance that it does.
 
 `os_fingerprint_at` is when that reading was taken (ISO 8601), or `null`. Age the
 reading by this stamp rather than by the time of your request: it is a stored
@@ -313,8 +326,15 @@ This test reports it.
 
 An `ok: true` result carries `os_fingerprint` when Driftstack read the proxy's
 own TCP stack during the test, and `os_fingerprint_unavailable` when it could
-not (`vpn_tunnel`, `not_observed`, `observer_off` — only the middle one is worth
-retrying). When this test read nothing but the proxy has a STORED reading, that
+not:
+
+| Code                    | What it means                                                                            | Worth retrying?                     |
+| ----------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------- |
+| `not_available_for_vpn` | An `openvpn` or `wireguard` proxy has no single address of its own to read a stack from. | No — permanent for this proxy.      |
+| `not_captured`          | The reading was attempted and produced nothing this time.                                | Yes.                                |
+| `not_offered_here`      | This deployment does not take this reading at all.                                       | No — permanent for this deployment. |
+
+When this test read nothing but the proxy has a STORED reading, that
 one is returned instead, with `os_fingerprint_at` saying when it was taken and
 the `os_fingerprint_unavailable` cause still beside it: the cause is about this
 test, the stamp is about the reading. A reading with **no** `os_fingerprint_at`
@@ -331,11 +351,17 @@ address, scheme, or credentials were submitted again while the test was running
 be stored. Either way the four fields match the proxy object as it then stands:
 `null` after a change that resets them, and the earlier answer otherwise.
 
-The default test (`vantage=cp`) is quick: for an `openvpn` or `wireguard`
-proxy it only checks that the address answers and does not connect the
-tunnel. Add `?vantage=fleet` to run the full test, which connects the
-tunnel the way a session would. The `not_run` values below cover the
-cases where the full test could not run.
+`?check=quick` (the default) is measured by Driftstack itself, right now: for
+an `openvpn` or `wireguard` proxy it only checks that the address answers and
+does not connect the tunnel. Add `?check=full` to run a fuller check,
+dispatched through the machine that will actually run your profile — the same
+path a real session takes, which is what connects the tunnel and is worth
+running before you rely on a proxy for a real session. The `not_run` values
+below cover the cases where a full check could not run.
+
+> The original `?vantage=cp|fleet` query parameter is still accepted
+> (`cp` = `check=quick`, `fleet` = `check=full`) so an existing integration
+> keeps working; `check` is the name documented from here on.
 
 An `ok: false` result that also carries `not_run` is **not a result about the
 proxy** — nothing was measured. Branch on `not_run`, never on the `reason`
@@ -358,24 +384,26 @@ prose, before treating the result as a failed proxy:
 }
 ```
 
-- `live_session` — a `?vantage=fleet` test of an `openvpn` / `wireguard`
+- `live_session` — a `?check=full` test of an `openvpn` / `wireguard`
   proxy was skipped because a live session is browsing through this VPN. A
   second connection on a one-connection VPN account would drop that session,
   so nothing was tested. `measured_from` is `control_plane` (nothing measured
   the tunnel) and `exit_observed`, when present, is the exit that session saw
   — the same `exit_observed` the proxy object lists — so a client can still
   show where the tunnel exits. End the session to test the tunnel.
-- `node_busy` — the tester is busy with another tunnel or test; try again in
-  a minute.
-- `node_error` — the tunnel could not be brought up (a bad config, a
-  handshake failure, or a timeout).
-- `no_node` — a `?vantage=fleet` test of an `openvpn` / `wireguard` proxy
-  that was not run. The `reason` says which: no tester was free or the
-  request timed out (try again in a minute), or VPN testing is not set up on
-  this deployment (a retry will not change that). In this case there is no
-  fallback to a plain reachability check of the tunnel endpoint.
-  `measured_from` is `control_plane` and `exit_observed`, when present, is
-  the stored exit a session observed.
+- `config_unresolvable` — the stored configuration could not be turned into
+  anything Driftstack could run (the same fact the `config_unresolvable`
+  reason in [Why a launch is refused](#why-a-launch-is-refused) names — the
+  `reason` field says to re-add it; a retry will not help).
+- `check_unavailable` — a `?check=full` test of an `openvpn` / `wireguard`
+  proxy that was not run for a reason on our side: the machine that would
+  have run it was busy or the dispatch timed out (try again in a minute), the
+  tunnel could not be brought up (a bad config, a handshake failure, or a
+  timeout — also worth a retry), or full checks are not set up on this
+  deployment (a retry will not change that). The `reason` field says which.
+  In every case there is no fallback to a plain reachability check of the
+  tunnel endpoint. `measured_from` is `control_plane` and `exit_observed`,
+  when present, is the stored exit a session observed.
 
 The `exit_observed` beside a `not_run` is the proxy's **stored** observation,
 not something this test measured, so it carries `observed_at` — when it was
@@ -387,14 +415,14 @@ reason then does not say the exit is shown — because the last check found the
 tunnel down and produced no exit to show.
 
 Absent `not_run`, an `ok: false` result is a measurement. Two of those are
-worth knowing for a VPN proxy on a `?vantage=fleet` test: a stored
+worth knowing for a VPN proxy on a `?check=full` test: a stored
 configuration Driftstack cannot read (the `reason` says to re-add it — a retry
 will not help), and a **403** when your tier no longer includes VPN proxies —
 the same refusal you get when launching a session through it.
 
 Two cases fall back to a plain reachability check, which confirms the address
 answers and nothing more: an `openvpn` or `wireguard` proxy on the default
-test (`vantage=cp`), which does not connect the tunnel itself, and a
+test (`check=quick`), which does not connect the tunnel itself, and a
 deployment where the full tunnel test is not available.
 
 Required scope: `account_owner` — a broad `write` key is not sufficient.

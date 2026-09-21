@@ -316,7 +316,7 @@ describe('the public egress warning list is the mapped one on every documented s
         udp_associate: false,
         quic_route: 'disabled',
         dns_remote_resolve: true,
-        warnings: ['udp_unsupported_by_proxy', 'quic_disabled_fallback_http2'],
+        warnings: ['udp_unsupported_by_proxy', 'dead_proxy'],
       },
       raw: {},
     });
@@ -328,7 +328,48 @@ describe('the public egress warning list is the mapped one on every documented s
     expect(res.statusCode).toBe(200);
     expect(res.json<{ egress_capabilities: { warnings: string[] } }>().egress_capabilities.warnings)
       // Both are published codes, so an old row is unchanged rather than emptied.
-      .toEqual(['udp_unsupported_by_proxy', 'quic_disabled_fallback_http2']);
+      .toEqual(['udp_unsupported_by_proxy', 'dead_proxy']);
+  });
+
+  it('a RETIRED code in an old stored row is dropped, not leaked — 2026-09-21: quic_disabled_fallback_http2 and dns_remote_resolve_unsupported_by_proxy were removed from the public vocabulary because nothing ever emitted them', async () => {
+    fx = await buildTestApp();
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const created = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/sessions',
+      headers: auth,
+      payload: {},
+    });
+    const sessionId = created.json<{ id: string }>().id;
+    // A row written before the retirement can still hold these — storage is
+    // unchanged and rows are never migrated. The map must drop them now, the
+    // same way it already drops any other code it does not recognise.
+    await fx.sessionsRepo.setEgressCapabilityReport({
+      sessionId: sessionId.replace(/^ses_/, ''),
+      derived: {
+        udp_associate: false,
+        quic_route: 'disabled',
+        dns_remote_resolve: true,
+        warnings: [
+          'udp_unsupported_by_proxy',
+          'quic_disabled_fallback_http2',
+          'dns_remote_resolve_unsupported_by_proxy',
+        ],
+      },
+      raw: {},
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/sessions/${sessionId}`,
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<{ egress_capabilities: { warnings: string[] } }>();
+    expect(body.egress_capabilities.warnings).toEqual(['udp_unsupported_by_proxy']);
+    expect(res.body).not.toContain('quic_disabled_fallback_http2');
+    expect(res.body).not.toContain('dns_remote_resolve_unsupported_by_proxy');
+    expect(isPublicEgressWarning('quic_disabled_fallback_http2')).toBe(false);
+    expect(isPublicEgressWarning('dns_remote_resolve_unsupported_by_proxy')).toBe(false);
   });
 
   it('POSITIVE CONTROL — the fixture really exercises every branch of the mapper', () => {

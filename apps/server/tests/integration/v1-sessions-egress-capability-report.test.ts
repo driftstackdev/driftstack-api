@@ -73,7 +73,7 @@ describe('Arc 5 EGRESS eg.1.e — egress_capability_report end-to-end persist→
         udp_associate: true,
         quic_route: 'proxy',
         dns_remote_resolve: false,
-        warnings: ['dns_remote_resolve_unsupported_by_proxy'],
+        warnings: ['dead_proxy'],
       },
       raw: {
         // Customer observations about their own session — allowlisted, so these
@@ -110,7 +110,7 @@ describe('Arc 5 EGRESS eg.1.e — egress_capability_report end-to-end persist→
       udp_associate: true,
       quic_route: 'proxy',
       dns_remote_resolve: false,
-      warnings: ['dns_remote_resolve_unsupported_by_proxy'],
+      warnings: ['dead_proxy'],
     });
     expect(body.egress_capability_report).toEqual({
       proxyKind: 'socks5',

@@ -125,12 +125,16 @@ type AccountProxyList struct {
 //
 // NotRun is set when NOTHING RAN, so an Ok=false result is not a judgement
 // about the proxy: "live_session" (a test of a VPN proxy was refused because
-// a live session holds the tunnel), "node_busy" or "node_error" (the machine
-// that would have run the test could not), or "no_node" (no machine measured
-// the VPN tunnel — none was free, the dispatch timed out, or this deployment
-// has none; the Reason says which, and Driftstack cannot measure a tunnel
-// from anywhere else). Branch on it — never on the Reason prose — before
-// treating Ok=false as a failed proxy.
+// a live session holds the tunnel), "config_unresolvable" (the stored
+// configuration could not be turned into anything runnable — the same word
+// the launch-refusal reason table uses for this fact), or "check_unavailable"
+// (the full check could not be completed on our side right now — none of the
+// machines that run full checks was free, the dispatch timed out, or this
+// deployment does not run them; the Reason says which). Branch on it — never
+// on the Reason prose — before treating Ok=false as a failed proxy.
+//
+// Renamed 2026-09-21 from "node_busy" / "node_error" / "no_node" (merged into
+// "check_unavailable") and "unresolvable" (renamed "config_unresolvable").
 type AccountProxyTestResult struct {
 	Ok        bool   `json:"ok"`
 	LatencyMs int    `json:"latency_ms,omitempty"`
@@ -138,7 +142,7 @@ type AccountProxyTestResult struct {
 	NotRun    string `json:"not_run,omitempty"`
 	// MeasuredFrom names where the measurement was taken: "control_plane"
 	// (Driftstack measured it) or "fleet" (the machine that would run your
-	// profile measured it — what `?vantage=fleet` asks for, used for VPN rows).
+	// profile measured it — what `?check=full` asks for, used for VPN rows).
 	MeasuredFrom *string `json:"measured_from,omitempty"`
 	// OsFingerprint is the proxy's own TCP-stack fingerprint, present only when
 	// Driftstack actually observed it. Absent is "not observed", never
@@ -151,10 +155,13 @@ type AccountProxyTestResult struct {
 	// OsFingerprintUnavailable beside it: that names why this test found none.
 	OsFingerprintAt *string `json:"os_fingerprint_at,omitempty"`
 	// OsFingerprintUnavailable names WHY OsFingerprint is absent when the server
-	// knows: "vpn_tunnel" (a tunnel has no SOCKS5 stack to fingerprint),
-	// "not_observed" (the measuring connection was refused) or "observer_off"
-	// (this deployment does not take fingerprints). Nil when a fingerprint is
-	// present or the server predates the field.
+	// knows: "not_available_for_vpn" (an openvpn/wireguard proxy has no single
+	// address of its own to read a stack from), "not_captured" (the reading
+	// was attempted and produced nothing this time) or "not_offered_here"
+	// (this deployment does not take this reading at all). Nil when a
+	// fingerprint is present or the server predates the field.
+	//
+	// Renamed 2026-09-21 from "vpn_tunnel" / "not_observed" / "observer_off".
 	OsFingerprintUnavailable *string `json:"os_fingerprint_unavailable,omitempty"`
 	// ExitObserved is the exit seen behind a VPN row, when one was
 	// observed; nil otherwise.
@@ -172,11 +179,19 @@ type AccountProxyOsFingerprint struct {
 	// SingleHostVantage is true only when the dialled host, the SYN source and
 	// the exit are one machine, so the reading describes the path a website
 	// gets. When false, do not draw a match/mismatch conclusion from OS.
+	// Same fact as DirectReading below, under its original name.
 	SingleHostVantage bool `json:"single_host_vantage"`
 	// WebPortVantage is true when the reading was taken on port 443 at an IP
 	// literal, the port a website connects on. With ObservedVia "proxy_host"
 	// it still names a stack rather than giving a conclusion.
+	// Same fact as WebsiteLikeReading below, under its original name.
 	WebPortVantage bool `json:"web_port_vantage"`
+	// DirectReading is the customer-worded name for SingleHostVantage above —
+	// added 2026-09-21, same value, alongside the original field.
+	DirectReading bool `json:"direct_reading,omitempty"`
+	// WebsiteLikeReading is the customer-worded name for WebPortVantage above —
+	// added 2026-09-21, same value, alongside the original field.
+	WebsiteLikeReading bool `json:"website_like_reading,omitempty"`
 }
 
 // AttachToSession sets the proxy config for a session. The body's

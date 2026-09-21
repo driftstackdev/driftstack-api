@@ -105,12 +105,20 @@ const SAFEGUARDS_UNVERIFIED = 'safeguards_unverified';
  *
  * `undefined` for a code means "not in this table"; the parameterised
  * `safeguard_*` forms are handled by `publicWarningFor` below.
+ *
+ * ⛔ RETIRED, 2026-09-21: `quic_disabled_fallback_http2` and
+ * `dns_remote_resolve_unsupported_by_proxy` used to be listed here as
+ * pass-through codes. Neither is emitted by anything device-side (confirmed
+ * against the fork) and production holds zero stored rows carrying either —
+ * they were documented promises nothing kept. Removed from the vocabulary,
+ * the docs, and the fixtures that exercised them, rather than kept as dead
+ * weight a customer could still be told to expect. If a real fallback path
+ * for either is built later, it gets a new code documented against real
+ * behaviour, not this one un-retired.
  */
 const UNPARAMETERISED: Readonly<Record<string, string>> = {
   // ── Pass through unchanged: already WHAT, already documented ───────────
   udp_unsupported_by_proxy: 'udp_unsupported_by_proxy',
-  quic_disabled_fallback_http2: 'quic_disabled_fallback_http2',
-  dns_remote_resolve_unsupported_by_proxy: 'dns_remote_resolve_unsupported_by_proxy',
   dead_proxy: 'dead_proxy',
   streaming_blank: 'streaming_blank',
   streaming_failed: 'streaming_failed',
@@ -176,12 +184,18 @@ export function isPublicEgressWarning(code: string): boolean {
 /**
  * The shape every real code and layer has: lowercase, digits, underscore, at
  * most 64 characters (the device schema's own cap on `layer`).
+ *
+ * Exported so a second call site that needs to report a device-supplied
+ * token safely (`session-capability-report-relay.ts`'s early notice of an
+ * unworded `safeguardLayersExpected` / `safeguardChecks[].layer` name) reuses
+ * the SAME shape check rather than restating it — a restated regex is a
+ * second thing that can quietly stop agreeing with this one.
  */
-const SAFE_TOKEN_RE = /^[a-z0-9_]{1,64}$/;
+export const SAFE_TOKEN_RE = /^[a-z0-9_]{1,64}$/;
 /** What an operator sees instead of a token that is not of that shape. */
 const UNPRINTABLE = 'unprintable';
 
-function safeToken(value: string): string {
+export function safeToken(value: string): string {
   return SAFE_TOKEN_RE.test(value) ? value : UNPRINTABLE;
 }
 

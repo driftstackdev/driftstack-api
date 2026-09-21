@@ -395,12 +395,7 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
       udp_associate: false,
       quic_route: 'disabled',
       dns_remote_resolve: false,
-      warnings: [
-        'udp_unsupported_by_proxy',
-        'quic_disabled_fallback_http2',
-        'dns_remote_resolve_unsupported_by_proxy',
-        'novel_code_xyz',
-      ],
+      warnings: ['udp_unsupported_by_proxy', 'dead_proxy', 'streaming_blank', 'novel_code_xyz'],
     });
     expect(withWarnings.warnings).toHaveLength(4);
     // udp_associate + quic_route + dns_remote_resolve all required.

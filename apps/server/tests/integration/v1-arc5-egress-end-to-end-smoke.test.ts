@@ -77,7 +77,7 @@ describe('Arc 5 EGRESS eg.8 — end-to-end capability_report smoke', () => {
       udp_associate: false,
       quic_route: 'disabled' as const,
       dns_remote_resolve: false,
-      warnings: ['udp_unsupported_by_proxy', 'dns_remote_resolve_unsupported_by_proxy'],
+      warnings: ['udp_unsupported_by_proxy', 'dead_proxy'],
     };
     const raw = {
       // Customer observations about their own session.

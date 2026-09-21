@@ -224,6 +224,19 @@ export type AccountProxyUpdate = z.infer<typeof AccountProxyUpdateSchema>;
  * taken over the same path a website's traffic takes. Read a missing or
  * false value as "this reading does not describe that path", never as an
  * assurance that it does.
+ *
+ * `direct_reading` and `website_like_reading` are the SAME two facts under
+ * their customer names — added 2026-09-21 beside the originals, which stay
+ * exactly as they are (`apps/gui-client` reads them by these names today).
+ * `direct_reading` mirrors `single_host_vantage`: true only when the address
+ * dialled, the address that answered, and the address your traffic exits
+ * from are one machine, so nothing sat between what was read and what a
+ * website would see. `website_like_reading` mirrors `web_port_vantage`: true
+ * when the reading was taken the way a real website connection is — a
+ * literal address on the standard secure-web port, not a name that could
+ * route to shared infrastructure. Optional because not every surface that
+ * carries this shape populates them yet (only `POST …/proxies/:id/test`
+ * does today — see `customer-safe-proxy-test-vocabulary.ts` in the server).
  */
 export const AccountProxyOsFingerprintSchema = z.object({
   os: z.enum(['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown']),
@@ -233,6 +246,8 @@ export const AccountProxyOsFingerprintSchema = z.object({
   observed_via: z.enum(['proxy_host', 'exit_ip']),
   single_host_vantage: z.boolean(),
   web_port_vantage: z.boolean(),
+  direct_reading: z.boolean().optional(),
+  website_like_reading: z.boolean().optional(),
 });
 export type AccountProxyOsFingerprint = z.infer<typeof AccountProxyOsFingerprintSchema>;
 
@@ -343,18 +358,25 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
     // was indistinguishable across three unlike causes, and the desktop client
     // rendered ALL of them as "press Test again" — advice that can never produce
     // a value on the first two:
-    //   `vpn_tunnel`    an openvpn/wireguard row has no SOCKS5 stack to dial
-    //                   through, so there is no SYN to read. No retry can help.
-    //   `not_observed`  the observer tunnel was refused, or no SYN was recorded
-    //                   under either candidate address. Retrying may help.
-    //   `observer_off`  this deployment runs no raw-socket observer (or no
-    //                   connectivity probe at all), so nothing fingerprints
-    //                   anything here. No retry can help.
+    //   `not_available_for_vpn`  an openvpn/wireguard proxy has no single
+    //                            address of its own to read a stack from. No
+    //                            retry can help.
+    //   `not_captured`           the reading was attempted and produced
+    //                            nothing this time. Retrying may help.
+    //   `not_offered_here`       this deployment does not take this reading
+    //                            at all. No retry can help.
     // Absent on a result that DID observe one, and absent from an older server —
     // optional + nullable so an older client keeps parsing and a newer client
     // reads absence as "no cause reported", never as a cause.
+    //
+    // ⛔ RENAMED 2026-09-21 from `vpn_tunnel` / `not_observed` / `observer_off` —
+    // the old names described OUR mechanism (an open-socket "observer"); the new
+    // ones describe what the customer gets. See
+    // `customer-safe-proxy-test-vocabulary.ts` for the map and the parity guard
+    // that holds every documented copy to it
+    // (`tests/unit/a-public-proxy-test-result-cannot-ship-undocumented.test.ts`).
     os_fingerprint_unavailable: z
-      .enum(['vpn_tunnel', 'not_observed', 'observer_off'])
+      .enum(['not_available_for_vpn', 'not_captured', 'not_offered_here'])
       .nullable()
       .optional(),
     // (V-219) The fingerprint itself, which the route has sent since N-2 and this
@@ -399,28 +421,24 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
     // (d) 2026-09-10 — present when NOTHING RAN, so `ok:false` is not a verdict
     // about the proxy: `live_session` = a fleet-vantage test of a VPN row was
     // REFUSED because a live session holds the tunnel (a second tunnel on a
-    // one-connection VPN account drops the session); `node_busy` / `node_error`
-    // = the fleet node could not run the probe; `no_node` (h) = NO fleet node
-    // measured a VPN tunnel (none free, the dispatch timed out, or the deployment
-    // has no fleet — `reason` says which), and the control plane cannot measure a
-    // tunnel itself (it never falls back to a TCP connect for a VPN row). A
-    // client branches on THIS, never on the `reason` prose.
-    // ⛔ (V4 follow-up 2026-09-12) — `unresolvable` = the STORED ROW could not be
-    // turned into anything a node could be handed (see the server's
-    // `ProxyUnresolvableReason`: an unreadable secret, a refused
-    // `script-security 2` directive, an external `ca ca.crt` reference, an
-    // unsafe tunnel target, a WireGuard row with no `Address`, a downgraded
-    // tier…). It belongs in THIS enum and not outside it because the test of
-    // membership is the one written above — *did anything run* — and for every
-    // one of those causes nothing did: no node was dispatched, no tunnel was
-    // brought up, no packet left. Emitting it as a bare `ok:false` made clients
-    // classify a CONFIG problem as a tunnel verdict, drop the row's measured
-    // exit/QUIC/OS and render a red "tunnel down" for a tunnel nobody touched.
-    // `reason` carries the cause's own sentence beside it, and the row's stored
-    // exit rides along as it does for `live_session` / `no_node`.
-    not_run: z
-      .enum(['live_session', 'node_busy', 'node_error', 'no_node', 'unresolvable'])
-      .optional(),
+    // one-connection VPN account drops the session); `config_unresolvable` =
+    // the stored row could not be turned into anything runnable (see
+    // `ProxyUnresolvableReason` server-side: an unreadable secret, a refused
+    // config directive, an unsafe tunnel target, a WireGuard row with no
+    // `Address`, a downgraded tier…) — the SAME word the "Why a launch is
+    // refused" table already publishes for the identical fact; `check_unavailable`
+    // = the full check could not be completed on our side right now (no fleet
+    // machine was free, the dispatch timed out, or this deployment does not run
+    // full checks — `reason` says which; retrying may help). A client branches
+    // on THIS, never on the `reason` prose.
+    //
+    // ⛔ RENAMED 2026-09-21 — `node_busy`, `node_error` and `no_node` merged
+    // into `check_unavailable` (a customer can do exactly one thing about any
+    // of the three: try again shortly, or contact support if it persists);
+    // `unresolvable` renamed to `config_unresolvable` to match the existing
+    // launch-refusal vocabulary. See `customer-safe-proxy-test-vocabulary.ts`
+    // and its parity guard.
+    not_run: z.enum(['live_session', 'config_unresolvable', 'check_unavailable']).optional(),
     // (d) 2026-09-10 — beside `not_run: 'live_session'` / `'no_node'`: the STORED
     // exit a session observed, surfaced so the client can still show where the
     // tunnel exits. `region`/`city` are null (the stored observation carries neither).

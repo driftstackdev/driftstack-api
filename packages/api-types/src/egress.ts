@@ -75,10 +75,16 @@ export const SocksProxyConfigSchema = z.object({
    * Set it to `false` only for a loopback or local proxy, where there is no
    * real egress to leak.
    *
-   * If the proxy does not support name resolution on its side, the session
-   * reports the warning `dns_remote_resolve_unsupported_by_proxy` and then
-   * follows your egress safeguard settings. The mode actually used is
-   * reported back in `egress_capabilities.dns_remote_resolve`.
+   * ⚠️ THIS SETTING IS APPLIED, BUT NOT YET VERIFIED OR REPORTED BACK. It
+   * changes how the session's proxy chain is configured — asking for remote
+   * resolution really does change what the session does. What it does not
+   * yet do is confirm the result: `egress_capabilities.dns_remote_resolve`
+   * always reads `true` for a SOCKS5 session today, regardless of this
+   * setting and regardless of whether your proxy actually accepted and
+   * resolved a name. If your proxy cannot resolve names on its side, no
+   * warning is reported for it — read `dns_remote_resolve` as "remote
+   * resolution was requested for this session", not as a confirmed outcome,
+   * until it becomes a real per-proxy measurement.
    */
   require_remote_dns: z.boolean().default(true),
 });
@@ -414,9 +420,7 @@ const EGRESS_WARNINGS_DESCRIPTION =
   'and a new code can appear without an SDK upgrade. ' +
   'Published vocabulary, with what you can do about each: ' +
   '`udp_unsupported_by_proxy` (the proxy refused UDP, so QUIC cannot travel through it — use a UDP-capable proxy if you need HTTP/3); ' +
-  '`quic_disabled_fallback_http2` (QUIC was switched off for this session, so traffic used HTTP/2 over TCP — create the session with QUIC enabled if you wanted it); ' +
   '`quic_unavailable` (QUIC was asked for but could not be used, and traffic fell back to HTTP/2 — retry on a new session if HTTP/3 matters); ' +
-  '`dns_remote_resolve_unsupported_by_proxy` (the proxy could not resolve names on its side, so lookups fell back to local resolution — use a proxy that resolves names, or accept local lookups); ' +
   '`dead_proxy` (the proxy stopped answering mid-session — check it is reachable before starting another); ' +
   '`streaming_blank` (the live view produced no picture; the session itself kept running — reopen the view); ' +
   '`streaming_failed` (the live view stopped — start a new session if you need to watch it); ' +
@@ -441,29 +445,23 @@ const EGRESS_WARNINGS_DESCRIPTION =
  *   goes around the tunnel — reachable only where a safeguard has been
  *   relaxed; the default safeguards block it), or `disabled` (QUIC is off
  *   for this session and traffic falls back to HTTP/2 over TCP).
- * - `dns_remote_resolve` — whether host names were resolved by the proxy
- *   (`true`) or locally (`false`). When `proxy.require_remote_dns` is set,
- *   the proxy is checked for SOCKS5 ATYP DOMAINNAME (0x03) support; if it
- *   has none, the warning below is reported and the session falls back to
- *   local resolution, or refuses to egress, according to your safeguard
- *   settings.
+ * - `dns_remote_resolve` — for a SOCKS5 session, always `true` today. It
+ *   states that the session's proxy chain was CONFIGURED to hand host names
+ *   to the proxy rather than resolve them locally — which is what
+ *   `proxy.require_remote_dns` asks for — and it is NOT YET a measurement of
+ *   whether your particular proxy accepted and resolved them: there is
+ *   currently no check of that, and no warning reported when a proxy cannot.
+ *   Read it as "remote resolution was requested for this session", not as a
+ *   confirmed outcome, until it becomes a real per-proxy measurement.
  * - `warnings` — codes naming anything that did not work as asked for this
  *   session. The full published vocabulary, each with what you can do about
  *   it:
  *     - `udp_unsupported_by_proxy` — the proxy answered UDP ASSOCIATE with
  *       a non-success reply, so QUIC cannot travel through it. Use a proxy
  *       that supports UDP if you need HTTP/3.
- *     - `quic_disabled_fallback_http2` — QUIC was switched off when the
- *       session was created, so there was no QUIC to route. Nothing to do
- *       unless you wanted HTTP/3, in which case create the session with QUIC
- *       enabled.
  *     - `quic_unavailable` — QUIC was asked for but could not be used for
  *       this session, and traffic fell back to HTTP/2 over TCP. Retry on a
  *       new session if HTTP/3 matters to you.
- *     - `dns_remote_resolve_unsupported_by_proxy` — the proxy answered an
- *       ATYP DOMAINNAME request with a non-success reply, so lookups fell
- *       back to local resolution. Use a proxy that resolves names on its
- *       side, or accept local lookups for this proxy.
  *     - `dead_proxy` — the proxy stopped answering while the session was
  *       running. Check that it is reachable before starting another session.
  *     - `streaming_blank` — the live view of the session produced no
