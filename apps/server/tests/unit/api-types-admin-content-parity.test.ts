@@ -65,9 +65,12 @@ describe('W435.B packages/api-types/src/admin.ts content parity', () => {
     );
   });
 
-  it('ChangeTier / SuspendAccount / UnsuspendAccount: tier + audit-row reason max 500 optional; ChangeTier also carries the optional Enterprise contract figure monthly_credits (0..10,000,000 whole credits), the one plan with no standard allowance', () => {
+  it('ChangeTier / SuspendAccount / UnsuspendAccount: tier + audit-row reason max 500 optional — and the PUBLISHED ChangeTier carries nothing else. The Enterprise contract figure belongs to a feature that is built and switched off, and this file SHIPS to npm, so it is declared in the withheld pricing module instead (see the-published-api-types-withholds-the-unreleased-pricing)', () => {
     expect(body).toMatch(
-      /export const ChangeTierRequestSchema = z\.object\(\{\s*tier: AccountTierSchema,\s*\/\*\* Optional human-readable reason recorded in the audit row\. \*\/\s*reason: z\.string\(\)\.max\(500\)\.optional\(\),\s*\/\*\*[\s\S]*?\*\/\s*monthly_credits: z\.number\(\)\.int\(\)\.min\(0\)\.max\(10_000_000\)\.optional\(\),\s*\}\);/,
+      /export const ChangeTierRequestSchema = z\.object\(\{\s*tier: AccountTierSchema,\s*\/\*\* Optional human-readable reason recorded in the audit row\. \*\/\s*reason: z\.string\(\)\.max\(500\)\.optional\(\),\s*\}\);/,
+    );
+    expect(body, 'the unreleased field is not in the file that ships').not.toMatch(
+      /monthly_credits/,
     );
     expect(body).toMatch(
       /export const SuspendAccountRequestSchema = z\.object\(\{\s*\/\*\* Optional reason recorded in the audit row\. \*\/\s*reason: z\.string\(\)\.max\(500\)\.optional\(\),\s*\}\);/,
@@ -89,13 +92,15 @@ describe('W435.B packages/api-types/src/admin.ts content parity', () => {
     );
   });
 
-  it('V-281 RecordRefund framing pinned: operator records manual Stripe-dashboard refund; endpoint does NOT call Stripe (money movement out-of-band); audit row = post-action receipt for compliance + support follow-up; V-280 launch runbook + founder tier-3 boundary on direct financial actions', () => {
+  it('V-281 RecordRefund framing pinned: operator records manual Stripe-dashboard refund; endpoint does NOT call Stripe (money movement out-of-band); audit row = post-action receipt for compliance + support follow-up — and NOTHING about who decided that or under which internal ticket, because this doc comment is the hover text a customer’s editor shows', () => {
     expect(body).toMatch(
       /\*\s*Records that the operator manually issued a refund via the Stripe\s*\*\s*dashboard\. The endpoint does NOT call Stripe\. Money movement happens\s*\*\s*out-of-band; the audit row is the post-action receipt for compliance\s*\*\s*and customer support follow-up\./,
     );
-    expect(body).toMatch(
-      /\*\s*Per[^\n]*launch-day-runbook \+ the[^\n]*boundary on\s*\*\s*direct financial actions\./,
-    );
+    // The two lines that named an internal runbook and an internal role are
+    // GONE: the paragraph above already states the whole customer-facing fact —
+    // what the endpoint records, what it does not do, and what the audit row is
+    // for — so removing them took nothing away from a reader outside the team.
+    expect(body).not.toMatch(/launch-day-runbook|tier-3 boundary/);
     expect(body).toMatch(
       /export const RecordRefundRequestSchema = z\.object\(\{\s*\/\*\* The Stripe charge \/ payment_intent \/ invoice id refunded\. \*\/\s*external_reference: z\.string\(\)\.min\(3\)\.max\(120\),\s*\/\*\* Refund amount in cents\. May be partial\. \*\/\s*amount_cents: z\.number\(\)\.int\(\)\.positive\(\),\s*\/\*\* Currency ISO 4217; defaults to USD if omitted\. \*\/\s*currency: z\.string\(\)\.length\(3\)\.optional\(\),\s*\/\*\* Reason recorded on the audit row \+ the customer-visible audit slice\. \*\/\s*reason: z\.string\(\)\.min\(1\)\.max\(500\),\s*\}\);/,
     );

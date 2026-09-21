@@ -190,12 +190,19 @@ describe.skipIf(!RUN_DB_TESTS)(
       }
     });
 
-    it('a clawback record may only pay down what it is still owed, or be reversed once: its facts never change, its pending claim never rises, and no other state move is allowed', async () => {
+    it('a clawback record may only pay down what it is still owed, take that claim as debt, or be reversed once: its facts never change, its pending claim never rises, and no other state move is allowed', async () => {
       const accountId = await newAccountOn(db());
       const id = await clawback(db(), accountId, 400_000_000);
       const refused: Array<[string, string]> = [
         ['its amount', 'clawed_micro = 1'],
-        ['its debt', 'debt_micro = 5'],
+        // ⛔ DEBT ALONE, which 0132 still refuses. That migration permits ONE
+        // new movement — `debt_micro` rising by exactly what `pending_micro`
+        // falls in the same statement, a claim the account still owed becoming
+        // debt it owes — and nothing else. A rise with no fall beside it is the
+        // shape that would let a clawback's own record overstate what it cost.
+        // The permitted movement, and six more ways of getting it wrong, are in
+        // `a-late-charge-is-refused-an-unsent-call-is-not-billed-and-a-clawback-records-its-debt`.
+        ['its debt, on its own', 'debt_micro = 5'],
         ['its reference', "source_ref = 'ch_other'"],
         ['its target', "target_key = 'window:other'"],
         ['its share', 'fraction_ppm = 1'],
@@ -209,7 +216,7 @@ describe.skipIf(!RUN_DB_TESTS)(
         );
         expect(r.code, what).toBe('55000');
         expect(r.message, what).toBe(
-          'a clawback only pays down its pending claim or is reversed once',
+          'a clawback only pays down its pending claim, takes that claim as debt, or is reversed once',
         );
       }
       await db().unsafe(`UPDATE credit_clawbacks SET pending_micro = 150000000 WHERE id = '${id}'`);

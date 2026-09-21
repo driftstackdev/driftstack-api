@@ -17,7 +17,12 @@
 //     would read as "they sent one".
 
 import { describe, expect, it } from 'vitest';
-import { ChangeTierRequestSchema, type AccountTier, type ApiKeyScope } from '@driftstack/api-types';
+import {
+  ChangeTierRequestSchema,
+  ChangeTierRequestWithCreditsSchema,
+  type AccountTier,
+  type ApiKeyScope,
+} from '@driftstack/api-types';
 import {
   AccountsAdminService,
   type AccountsAdminRepo,
@@ -81,19 +86,33 @@ describe('an enterprise contract figure reaches the repo that writes it', () => 
   it('CRITICAL the request schema takes a whole number of credits from 0 to ten million — the range the database’s own CHECK takes — and refuses everything else', () => {
     for (const good of [0, 1, 42_000, 10_000_000]) {
       expect(
-        ChangeTierRequestSchema.parse({ tier: 'enterprise', monthly_credits: good }),
+        ChangeTierRequestWithCreditsSchema.parse({ tier: 'enterprise', monthly_credits: good }),
         String(good),
       ).toMatchObject({ monthly_credits: good });
     }
     for (const bad of [-1, 0.5, 10_000_001, '42000', null]) {
       expect(
-        ChangeTierRequestSchema.safeParse({ tier: 'enterprise', monthly_credits: bad }).success,
+        ChangeTierRequestWithCreditsSchema.safeParse({ tier: 'enterprise', monthly_credits: bad })
+          .success,
         String(bad),
       ).toBe(false);
     }
     // Optional: every other plan ignores it, and a request that sends none is
     // the ordinary tier change it has always been.
-    const plain = ChangeTierRequestSchema.parse({ tier: 'api_scale' });
+    const plain = ChangeTierRequestWithCreditsSchema.parse({ tier: 'api_scale' });
     expect('monthly_credits' in plain).toBe(false);
+  });
+
+  it('⛔ CRITICAL the figure is on the schema the ROUTE parses and NOT on the one that is PUBLISHED, and the two agree about everything else. `@driftstack/api-types` ships to npm, so a field on the published schema reaches a customer’s hover text and the emitted Zod object; the server’s copy extends the published one, so `tier` and `reason` cannot drift apart between them.', () => {
+    expect('monthly_credits' in ChangeTierRequestWithCreditsSchema.shape).toBe(true);
+    expect('monthly_credits' in ChangeTierRequestSchema.shape).toBe(false);
+    expect(Object.keys(ChangeTierRequestSchema.shape)).toEqual(['tier', 'reason']);
+    // The extension APPENDS, so a caller who sends neither field gets the same
+    // issues in the same order under the same paths from either schema — which
+    // is what makes the change invisible to a client.
+    const bad = { tier: 'not-a-tier', reason: 'x'.repeat(501) };
+    expect(JSON.stringify(ChangeTierRequestWithCreditsSchema.safeParse(bad))).toBe(
+      JSON.stringify(ChangeTierRequestSchema.safeParse(bad)),
+    );
   });
 });

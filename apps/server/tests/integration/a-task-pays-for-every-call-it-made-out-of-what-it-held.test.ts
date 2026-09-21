@@ -537,19 +537,22 @@ describe.skipIf(!RUN_DB_TESTS)('a task pays for every call it made out of what i
     expect(await lotState(db(), lot)).toEqual({ remaining: 100 * MICRO, held: 60 * MICRO });
 
     // A second task of the same account asks for 41 of the 40 credits the lot
-    // has left. Written in one transaction, because a hold has to name a task
-    // that exists — and a SHADOW task, because an enforced one must be backed by
-    // holds summing to what it reserved and this hold is the one being refused.
+    // has left. Written in one transaction, because neither row may exist
+    // without the other: an enforced task must be backed by holds summing to
+    // exactly what it reserved (checked at COMMIT), and from 0132 a hold must
+    // name a task that is open and enforced (checked as it is inserted). It
+    // reserves exactly the 41 the hold is for, so the only thing wrong with this
+    // transaction is the one thing under test.
     const over = await refusal(
       () =>
         db().begin(async (tx) => {
           const other = randomUUID();
           await tx`
             INSERT INTO credit_reservations (id, account_id, agent_session_id, model,
-                                             rate_card_version, mode, reserved_micro, lease_owner,
-                                             lease_expires_at, max_until)
+                                             rate_card_version, mode, slot, reserved_micro,
+                                             lease_owner, lease_expires_at, max_until)
             VALUES (${other}::uuid, ${accountId}::uuid, ${`as_${other}`}, ${ON_CREDITS_MODEL}, 1,
-                    'shadow', ${String(41 * MICRO)}::bigint, ${BOOT},
+                    'enforce', 2, ${String(41 * MICRO)}::bigint, ${BOOT},
                     now() + interval '90 seconds', now() + interval '30 minutes')`;
           await tx`
             INSERT INTO credit_reservation_holds (reservation_id, lot_id, account_id, held_micro)

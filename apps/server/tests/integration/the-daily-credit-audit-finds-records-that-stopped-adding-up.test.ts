@@ -223,20 +223,29 @@ async function shadowMeasurementCharged(accountId: string, actualMicro: number):
 
 /**
  * A hold left behind by a task that has ALREADY ENDED, which is the shape that
- * freezes credit for ever.
- *
- * ⛔ NOTHING IS SWITCHED OFF FOR THIS ONE, and that is the finding. A statement
- * that touches only `credit_reservation_holds` fires no COMMIT-time reservation
- * check — `credit_model_calls_balance` and `credit_reservations_balance` hang
- * off the other two tables — so the database accepts a hold against a task that
- * is already final, and `credit_reservations_guard` then refuses to let that
- * task change again. The settlement that would have walked the hold has run.
- * The credit it holds is spendable by nobody: every spendable predicate is
- * `remaining − held`, and so is the expiry sweep's.
+ * freezes credit for ever: spendable by nobody (every spendable predicate is
+ * `remaining − held`), expirable by nobody (`expireDueLots` expires
+ * `remaining − held` too), released by nobody — the settlement that would have
+ * walked it has run, and `credit_reservations_guard` refuses to let a settled
+ * task change again.
  *
  * Both shapes reach it. A SETTLED task can never release anything again; a
  * SHADOW task never could — `settleIn` returns before the holds walk for a
  * measurement, because a measurement is not supposed to hold anything at all.
+ *
+ * ⛔ THE HOLD IS ALWAYS PLACED HONESTLY AND THE TASK IS ENDED AROUND IT, which
+ * is a deliberate change of route and not a convenience. Until 0132 this fixture
+ * simply inserted the hold after the task had ended, because the database took
+ * it: a statement touching only `credit_reservation_holds` fires no COMMIT-time
+ * reservation check. 0132's `credit_holds_apply` now refuses a hold whose task
+ * is not open and enforced, so that route is closed — which is the repair, not a
+ * reason to stop auditing. The state is still REACHABLE by everything the audit
+ * exists for: a guard dropped by a migration that meant to drop something else,
+ * a restore from a backup taken mid-transaction, a replication apply. So the
+ * hold goes on while the task is genuinely running (every trigger firing,
+ * `held_micro` moved the only way it can move) and the TASK is then ended with
+ * the guards off — which leaves the lot's own arithmetic correct and exactly one
+ * rule broken.
  */
 async function holdStrandedOnATaskThatEnded(input: {
   readonly accountId: string;
@@ -247,42 +256,34 @@ async function holdStrandedOnATaskThatEnded(input: {
   // The lot the stranded hold lands on. Its own, so the arm's count is about
   // this hold and not about credit some other fixture put beside it.
   const lotId = await fundedTaskLot(db(), accountId, { credits: 50 });
-  let reservationId: string = randomUUID();
+  // An ordinary open enforced task, holding `micro` of that lot the only way a
+  // hold can be written: with every guard firing.
+  const reservationId = await openTask({
+    accountId,
+    lotId,
+    reservedMicro: micro,
+    createdAt: "now() - interval '2 minutes'",
+    maxUntil: "now() + interval '28 minutes'",
+    lease: "now() + interval '90 seconds'",
+  });
   if (input.on === 'shadow') {
-    await db()`
-      INSERT INTO credit_reservations (id, account_id, agent_session_id, model, rate_card_version,
-                                       mode, reserved_micro, lease_owner, lease_expires_at, max_until)
-      VALUES (${reservationId}::uuid, ${accountId}::uuid, ${`as_${reservationId}`},
-              ${ON_CREDITS_MODEL}, 1, 'shadow', ${String(60 * MICRO)}::bigint, 'audit-fixture-boot',
-              now() + interval '90 seconds', now() + interval '25 minutes')`;
-  } else {
-    // An ordinary task that reserved, made no call and was settled for nothing:
-    // every hold released, every COMMIT-time check satisfied. It is FINAL now.
-    const own = await fundedTaskLot(db(), accountId, { credits: 50 });
-    reservationId = await openTask({
-      accountId,
-      lotId: own,
-      reservedMicro: micro,
-      createdAt: "now() - interval '2 minutes'",
-      maxUntil: "now() + interval '28 minutes'",
-      lease: "now() + interval '90 seconds'",
+    // It becomes a measurement, with its hold still on. `credit_reservations_guard`
+    // refuses a mode change and the slot CHECK refuses a shadow row holding one,
+    // so both columns move together, with the guards off.
+    await withGuardsOff(async (tx) => {
+      await tx`UPDATE credit_reservations SET mode = 'shadow', slot = NULL
+                WHERE id = ${reservationId}::uuid`;
     });
-    await db().begin(async (tx) => {
-      await tx`
-        UPDATE credit_reservation_holds SET released_at = now(), charged_micro = 0
-         WHERE reservation_id = ${reservationId}::uuid`;
-      await tx`
-        UPDATE credit_reservations SET state = 'settled', charged_micro = 0, settled_at = now(),
-                                       settle_reason = 'lease_expired'
-         WHERE id = ${reservationId}::uuid`;
+  } else {
+    // It settles for nothing WITHOUT releasing its hold — which is precisely
+    // what `credit_check_reservation` refuses (`h_open > 0`) and what a restore
+    // that lands between the release and the settlement produces.
+    await withGuardsOff(async (tx) => {
+      await tx`UPDATE credit_reservations SET state = 'settled', charged_micro = 0,
+                      settled_at = now(), settle_reason = 'lease_expired'
+                WHERE id = ${reservationId}::uuid`;
     });
   }
-  // The hold arrives after the task ended, in a statement that touches only
-  // holds — so no COMMIT-time reservation check runs, and the database takes it.
-  await db()`
-    INSERT INTO credit_reservation_holds (reservation_id, lot_id, account_id, held_micro)
-    VALUES (${reservationId}::uuid, ${lotId}::uuid, ${accountId}::uuid,
-            ${String(micro)}::bigint)`;
   return { reservationId, lotId };
 }
 

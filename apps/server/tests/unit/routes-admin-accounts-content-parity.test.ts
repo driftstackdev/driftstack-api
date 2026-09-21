@@ -54,7 +54,7 @@ describe('W438.A apps/server/src/routes/admin-accounts.ts content parity', () =>
 
   it('imports: 9 Zod schemas from api-types + ListAdminAccountsQuerySchema inline (limit coerce 1..100 default 50 + cursor + status + tier + email_contains 1..254); AccountsAdminService + AccountAuditService + AdminAuditService/Action + AccountRow + RateLimitOverridesService + UsageService + BadRequestError', () => {
     expect(body).toMatch(
-      /import \{\s*AccountStatusSchema,\s*AccountTierSchema,\s*AddSupportNoteRequestSchema,\s*ChangeTierRequestSchema,\s*ClearQuotaOverrideQuerySchema,\s*DeleteAccountRequestSchema,\s*RecordRefundRequestSchema,\s*SetQuotaOverrideRequestSchema,\s*SuspendAccountRequestSchema,\s*UnsuspendAccountRequestSchema,\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*AccountStatusSchema,\s*AccountTierSchema,\s*AddSupportNoteRequestSchema,\s*ChangeTierRequestWithCreditsSchema,\s*ClearQuotaOverrideQuerySchema,\s*DeleteAccountRequestSchema,\s*RecordRefundRequestSchema,\s*SetQuotaOverrideRequestSchema,\s*SuspendAccountRequestSchema,\s*UnsuspendAccountRequestSchema,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
       /const ListAdminAccountsQuerySchema = z\.object\(\{\s*limit: z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(100\)\.default\(50\),[\s\S]*?cursor: z\.string\(\)\.min\(1\)\.max\(512\)\.optional\(\),\s*status: AccountStatusSchema\.optional\(\),\s*tier: AccountTierSchema\.optional\(\),\s*email_contains: z\.string\(\)\.min\(1\)\.max\(254\)\.optional\(\),\s*\}\);/,
@@ -101,7 +101,7 @@ describe('W438.A apps/server/src/routes/admin-accounts.ts content parity', () =>
     expect(body).toMatch(/result: `error: \$\{code\}`,/);
   });
 
-  it('POST /:id/tier: driftstack_internal_admin scope; ChangeTierRequest parse; withAudit action "account.tier_changed" with input {tier, reason?, monthly_credits?} — the Enterprise contract figure is audited beside the tier it paid for; returns publicAccount', () => {
+  it('POST /:id/tier: driftstack_internal_admin scope; ChangeTierRequestWithCredits parse (the published ChangeTierRequest has no monthly_credits: it ships to npm); withAudit action "account.tier_changed" with input {tier, reason?, monthly_credits?} — the Enterprise contract figure is audited beside the tier it paid for; returns publicAccount', () => {
     expect(body).toMatch(
       /app\.post<\{ Params: \{ id: string \} \}>\(\s*'\/v1\/admin\/accounts\/:id\/tier',\s*\{\s*preHandler: \[app\.requireScope\('driftstack_internal_admin'\), app\.rateLimit\('global'\)\],\s*\},/,
     );

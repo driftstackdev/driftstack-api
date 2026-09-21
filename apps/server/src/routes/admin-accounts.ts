@@ -18,7 +18,7 @@ import {
   AccountStatusSchema,
   AccountTierSchema,
   AddSupportNoteRequestSchema,
-  ChangeTierRequestSchema,
+  ChangeTierRequestWithCreditsSchema,
   ClearQuotaOverrideQuerySchema,
   DeleteAccountRequestSchema,
   RecordRefundRequestSchema,
@@ -177,7 +177,7 @@ export function registerAdminAccountsRoutes(
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       const accountId = uuidFromPrefixedId(request.params.id, 'acc');
-      const body = ChangeTierRequestSchema.parse(request.body ?? {});
+      const body = ChangeTierRequestWithCreditsSchema.parse(request.body ?? {});
 
       const updated = await withAudit(
         request,

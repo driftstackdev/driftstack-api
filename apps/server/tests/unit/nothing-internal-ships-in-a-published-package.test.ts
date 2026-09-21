@@ -25,6 +25,24 @@
 // how many shipped TEXT files the scan opened, and this fails if that number
 // falls.
 //
+// ⛔ ONE MEASUREMENT THE RATCHET CARRIED AND THIS FILE NOW DOES, so deleting it
+// did not delete a finding. `packages/sdk-go/*_test.go` — 32 files — held 52
+// ticket-id and 33 internal-vocabulary findings when last measured (2026-09-20,
+// `node scripts/scan-shipped-text.mjs --package sdk-go --go-tests`). They are
+// EXCLUDED from every count above because the release brief scoped the sweep to
+// non-test files, and they are not nothing: they travel in the module zip and
+// pkg.go.dev renders `Example*` functions from them. Seven of the vocabulary
+// findings are that package's own doc guard spelling the words it forbids.
+//
+// ⛔ THE SWEEP IS FINISHED AND THE RATCHET FILE IS GONE (2026-09-20). All five
+// artifacts read zero, which is the end state the third rule above describes.
+// The FLOOR is not gone with it: it moved into `TEXT_FILE_FLOOR` below, because
+// deleting the ratchet would otherwise have deleted the only thing telling
+// "every package is clean" apart from "the scan read nothing" — and an assertion
+// of zero is exactly the shape that failure mode satisfies. The floor is the one
+// number here that has to survive the ratchet, and it is now a floor in the
+// guard rather than a by-product of the allowance it was written beside.
+//
 // HOW THE FILE LISTS ARE BUILT HERE, and why not the way the script does it by
 // default. The script prefers `npm pack --dry-run --json` and a real
 // `python -m build`. CI's `build-test` job installs the Python venv with
@@ -81,6 +99,28 @@ interface RatchetEntry {
  * catches a dist that was never built.
  */
 const RATCHET_EXISTS = existsSync(RATCHET_PATH);
+
+/**
+ * How many shipped TEXT files the scan must still open, per artifact.
+ *
+ * ⛔ A FLOOR, NOT A TARGET, and the only defence against the failure mode an
+ * assertion of zero cannot see: a `dist/` that was never built ships three files
+ * and reads perfectly clean. Measured 2026-09-20 with the same OPTIONS every arm
+ * uses, at the commit that took the last package to zero. It may RISE with a new
+ * module; a FALL is either a build that did not run or a file that stopped
+ * shipping, and both are decisions somebody takes rather than discovers.
+ *
+ * api-types deliberately ships five fewer files than its dist holds — its
+ * `files` allowlist withholds `dist/ai-*` (the unreleased pricing module) and
+ * `dist/.tsbuildinfo` — which is why 103 and not 108.
+ */
+const TEXT_FILE_FLOOR: Readonly<Record<string, number>> = {
+  'sdk-typescript \u00b7 npm:@driftstack/sdk': 10,
+  'api-types \u00b7 npm:@driftstack/api-types': 103,
+  'sdk-python \u00b7 pypi:wheel': 34,
+  'sdk-python \u00b7 pypi:sdist': 38,
+  'sdk-go \u00b7 go:module': 45,
+};
 
 function readRatchet(): Record<string, Record<string, RatchetEntry>> | null {
   if (!RATCHET_EXISTS) return null;
@@ -145,10 +185,17 @@ function ratchetVerdict(
       if (recorded === null && now !== 0)
         v.mustBeZero.push(`${m.package} \u00b7 ${m.artifact} \u00b7 ${cls}: ${String(now)}`);
     }
-    if (entry !== undefined && m.textFiles < entry.textFiles)
+    // The floor comes from the ratchet while there is one, and from
+    // TEXT_FILE_FLOOR once it is gone — the higher of the two, so retiring the
+    // ratchet can never lower a floor it used to carry.
+    const floor = Math.max(
+      entry?.textFiles ?? 0,
+      TEXT_FILE_FLOOR[`${m.package} \u00b7 ${m.artifact}`] ?? 0,
+    );
+    if (m.textFiles < floor)
       v.shrunk.push(
-        `${m.package} \u00b7 ${m.artifact}: read ${String(m.textFiles)} text files, ratchet ` +
-          `recorded ${String(entry.textFiles)}. For the npm packages this usually means dist/ was ` +
+        `${m.package} \u00b7 ${m.artifact}: read ${String(m.textFiles)} text files, at least ` +
+          `${String(floor)} were expected. For the npm packages this usually means dist/ was ` +
           `never built (\`npm run build -w packages/${m.package}\`); an empty scan reports zero ` +
           `and reads exactly like a clean package.`,
       );
@@ -194,8 +241,14 @@ describe('nothing internal ships in a published package', () => {
     ).toEqual([]);
   });
 
-  it('the scan opened at least as many shipped text files as the ratchet recorded, so a missing build cannot read as a clean sweep', () => {
+  it('CRITICAL the scan opened at least as many shipped text files as the floor records, so a missing build cannot read as a clean sweep — the one thing an assertion of zero cannot tell you', () => {
     expect(verdict.shrunk, verdict.shrunk.join('\n  ')).toEqual([]);
+    // The floor covers every artifact the roster produces. An artifact with no
+    // entry would be floored at zero, which is the silence this arm is for.
+    expect(
+      measured.map((m) => `${m.package} \u00b7 ${m.artifact}`).sort(),
+      'an artifact with no text-file floor',
+    ).toEqual(Object.keys(TEXT_FILE_FLOOR).sort());
   });
 
   it('NEGATIVE CONTROL every ratchet verdict fires on a measurement built to trigger it', () => {
@@ -224,6 +277,14 @@ describe('nothing internal ships in a published package', () => {
 
     // Fewer files read than were read when the ratchet was written.
     expect(ratchetVerdict(at(5, 1, 1), book).shrunk).toHaveLength(1);
+
+    // …and with NO ratchet at all the floor still fires, which is the whole
+    // point of moving it into the guard: `p · a` is not in TEXT_FILE_FLOOR, so
+    // this pair is floored at zero and passes, while a REAL artifact read short
+    // is caught by the arm above. Both halves, so "the floor works" cannot mean
+    // "the floor is everything" or "the floor is nothing".
+    expect(ratchetVerdict(at(0, 0, 0), null).shrunk).toEqual([]);
+    expect(Object.values(TEXT_FILE_FLOOR).every((n) => n > 0)).toBe(true);
 
     // No ratchet at all: anything left over is a failure, and zero is a pass.
     expect(ratchetVerdict(at(5, 1), null).mustBeZero).toHaveLength(2);

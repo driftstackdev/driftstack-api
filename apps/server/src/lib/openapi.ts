@@ -1515,15 +1515,23 @@ function buildRegistry(): OpenAPIRegistry {
       params: z.object({ id: prefixedIdParam('acc', 'account') }),
       body: {
         required: true,
-        // ⛔ PUBLISHED WITHOUT `monthly_credits`, ON PURPOSE. The route accepts it
-        // (an Enterprise agreement's monthly figure), but it belongs to a feature
-        // that is built and switched off. This document is public, and nothing
-        // about an unreleased feature is published before it is live. The guard
-        // `nothing-about-an-unreleased-feature-is-in-the-published-spec` holds
-        // this; remove the omit and that guard's entry together at launch.
-        content: {
-          'application/json': { schema: ChangeTierRequestSchema.omit({ monthly_credits: true }) },
-        },
+        // ⛔ PUBLISHED WITHOUT `monthly_credits`, ON PURPOSE — and now withheld
+        // at the SOURCE rather than by an omit here. The route accepts the field
+        // (an Enterprise agreement's monthly figure) through
+        // `ChangeTierRequestWithCreditsSchema`, which lives in the unreleased
+        // pricing module; `ChangeTierRequestSchema` itself no longer has it.
+        //
+        // The omit was not enough. This document is one of two public surfaces:
+        // the other is the npm package, where the field reached a customer's
+        // `dist/admin.d.ts`, their editor's hover text and the emitted Zod object
+        // the moment it was written, and `npm run build:publish -w
+        // packages/api-types` refused the release while it was there. A rule kept
+        // by an omit at one call site is kept at one call site.
+        //
+        // The guard `nothing-about-an-unreleased-feature-is-in-the-published-spec`
+        // holds this; at launch, move the field back onto `ChangeTierRequestSchema`
+        // in api-types and remove that guard's entry in the same change.
+        content: { 'application/json': { schema: ChangeTierRequestSchema } },
       },
     },
     responses: {

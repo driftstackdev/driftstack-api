@@ -72,7 +72,13 @@ const PARSE_RE =
  * source edit would not reach an imported copy until a rebuild.
  */
 const CAN_DROP: ReadonlySet<string> = new Set([
-  'admin-accounts.ts (ChangeTierRequestSchema)',
+  // ⛔ THE SERVER'S SCHEMA, NOT THE PUBLISHED ONE. The tier route parses
+  // `ChangeTierRequestWithCreditsSchema`, which extends the published
+  // `ChangeTierRequestSchema` with the Enterprise contract figure and lives in
+  // the WITHHELD pricing module (api-types ships to npm, and a field declared
+  // there reaches a customer's hover text). Both carry the optional audit
+  // `reason`, so what this surface can drop is unchanged; only its name moved.
+  'admin-accounts.ts (ChangeTierRequestWithCreditsSchema)',
   'admin-accounts.ts (DeleteAccountRequestSchema)',
   'admin-accounts.ts (RecordRefundRequestSchema)',
   'admin-accounts.ts (SetQuotaOverrideRequestSchema)',

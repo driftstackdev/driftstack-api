@@ -3693,6 +3693,13 @@ export type CreditLedgerRow = typeof creditLedger.$inferSelect;
 //     · UPDATE refuses (55000) any change to the facts, a pending claim that
 //       rises, and any state move other than applied → reversed. DELETE only
 //       when the account row is gone.
+//     · 0132 permits ONE movement it used to refuse, and no other: `debt_micro`
+//       may RISE by exactly the amount `pending_micro` FALLS in the same
+//       statement — credit the account still owed becoming debt it owes, the sum
+//       of the two unchanged. Without it `claimsLeftBecomeDebt` could write the
+//       ledger's `debt_incurred` row and NOT the clawback's own record of it, so
+//       M6's "forgive the unrepaid debt it created", read off that row, would
+//       forgive too little. `debt_micro` still cannot move on its own.
 //
 //   (Every function pins `search_path = public, pg_temp`.)
 //
@@ -3893,6 +3900,23 @@ export type CreditClawbackRow = typeof creditClawbacks.$inferSelect;
 //       branch needs `released_at` to have been NULL, so such a row would raise
 //       `held_micro` with no path back and the credit would be frozen — not
 //       spendable, not expirable, never charged.
+//     · 0132: INSERT refuses (23514) a hold whose TASK is not an OPEN ENFORCED
+//       one. The lot test above says whose credit it is; this says whether there
+//       is still a task to spend it. A hold on a SETTLED task is credit frozen
+//       after the fact (the settlement that would have walked it has run, and a
+//       settled task is final); a hold on a SHADOW task is credit frozen behind
+//       a measurement that holds nothing and releases nothing. Neither was
+//       caught before: `credit_check_reservation` returns early for shadow, and
+//       no COMMIT-time check fires at all on a statement touching only holds.
+//       The task is asked about by ID alone — whether it is this ACCOUNT's task
+//       is the composite foreign key's job, and that key answers first (23503).
+//       ⛔ The lookup takes `FOR SHARE` on the task row. Unlocked it answered
+//       from the inserting transaction's snapshot and nothing re-asked, because
+//       a statement touching only holds queues no COMMIT-time check — measured,
+//       two sessions: a hold inserted while the task was open committed AFTER a
+//       concurrent settle, landing on a settled task with `held_micro` raised
+//       and no path back. The row lock makes the hold and the settlement order
+//       themselves, in either order, against the same row.
 //     · UPDATE takes the hold back off the lot, and ONLY for a release —
 //       `released_at` NULL → an instant, with the amount, the lot, the ACCOUNT
 //       and the TASK unchanged. Every other update is refused (55000). The
@@ -3929,6 +3953,14 @@ export type CreditClawbackRow = typeof creditClawbacks.$inferSelect;
 //     · 0128's `credit_check_debt_vs_free` again: releasing a hold frees credit
 //       WITHOUT a ledger row, so it is the second way an account could end a
 //       transaction holding debt beside spendable credit.
+//   credit_ledger_reservation_balance  CONSTRAINT TRIGGER AFTER INSERT ON
+//                                      credit_ledger, DEFERRABLE INITIALLY
+//                                      DEFERRED, WHEN reservation_id IS NOT NULL
+//     · 0132, the THIRD leg of the same balance. A settled task's charge is one
+//       number written into three records — its calls, its holds and its
+//       `task_charge` ledger rows — and until 0132 only two of them re-checked
+//       it, so a lone ledger row written after a task settled moved credit off a
+//       lot with nothing asking whether the three still agreed.
 //
 // The two partial unique indexes carry rules the columns do not say:
 // `credit_reservations_open_slot_unique` is what makes "at most three enforced
@@ -3950,7 +3982,8 @@ export type CreditClawbackRow = typeof creditClawbacks.$inferSelect;
 // `a-task-reserves-credits-in-one-locked-transaction`,
 // `at-most-three-enforced-tasks-hold-credit-at-once`,
 // `a-hold-moves-held-credit-and-nothing-else-does`,
-// `a-settled-task-is-charged-only-what-it-held`.
+// `a-settled-task-is-charged-only-what-it-held`,
+// `a-late-charge-is-refused-an-unsent-call-is-not-billed-and-a-clawback-records-its-debt`.
 export const creditReservations = pgTable(
   'credit_reservations',
   {
@@ -4010,9 +4043,23 @@ export const creditReservations = pgTable(
       sql`((${t.mode} = 'enforce') = (${t.slot} IS NOT NULL)) AND (${t.slot} IS NULL OR ${t.slot} BETWEEN 1 AND 3)`,
     ),
     check('credit_reservations_state', sql`${t.state} IN ('open', 'settled')`),
+    // 0132 widened this by exactly one shape: a SHADOW measurement of a model
+    // the card cannot price reserves NOTHING. It is the only row that may carry
+    // `reserved_micro = 0`, because it is the only one with no `max_reserve` to
+    // measure against — and without it `would_refuse_reason = 'model'` could
+    // never be written at all, which left model refusals invisible to the shadow
+    // census and M3's "a lost rate of 0" unreachable.
+    //
+    // ⛔ `IS NOT DISTINCT FROM`, NOT `=`. A CHECK passes when its expression is
+    // NULL and `would_refuse_reason` is nullable, so `= 'model'` would let a
+    // SECOND shape through: a shadow row reserving zero with NO reason at all
+    // evaluates the disjunct to NULL, and `FALSE OR NULL` is NULL, which a CHECK
+    // accepts. Measured: such a row inserted cleanly against `=` and is refused
+    // against this. S11's census tells a refusal from a reading by that column,
+    // so a zero with no reason would count as a reading of zero.
     check(
       'credit_reservations_amounts',
-      sql`${t.reservedMicro} > 0 AND ${t.committedMicro} >= 0 AND (${t.mode} = 'shadow' OR ${t.committedMicro} <= ${t.reservedMicro})`,
+      sql`(${t.reservedMicro} > 0 OR (${t.reservedMicro} = 0 AND ${t.mode} = 'shadow' AND ${t.wouldRefuseReason} IS NOT DISTINCT FROM 'model')) AND ${t.committedMicro} >= 0 AND (${t.mode} = 'shadow' OR ${t.committedMicro} <= ${t.reservedMicro})`,
     ),
     check(
       'credit_reservations_max_until',
@@ -4082,6 +4129,16 @@ export const creditReservationHolds = pgTable(
       columns: [t.reservationId, t.accountId],
       foreignColumns: [creditReservations.id, creditReservations.accountId],
     }).onDelete('cascade'),
+    // 0132: the daily audit's three holds rules all start from "unreleased",
+    // and the primary key `(reservation_id, lot_id)` cannot serve any of them —
+    // measured as a Seq Scan removing 39,800 of 40,000 rows. The open set stays
+    // small while the table grows with every enforced task for ever, so this is
+    // partial; `account_id` leads because `claim_pending_with_no_open_hold`
+    // correlates on it, and `reservation_id` follows for the other two's
+    // anti-join.
+    index('credit_reservation_holds_open_idx')
+      .on(t.accountId, t.reservationId)
+      .where(sql`${t.releasedAt} IS NULL`),
     check('credit_reservation_holds_positive', sql`${t.heldMicro} > 0`),
     check(
       'credit_reservation_holds_release_shape',
@@ -4171,6 +4228,9 @@ export const creditModelCalls = pgTable(
       'credit_model_calls_never_sent_really',
       sql`${t.settleBasis} <> 'never_sent' OR NOT ${t.sent}`,
     ),
+    // 0132, the mirror of the one above: `no_record` charges the FULL BOUND, so
+    // it may only be named on a row that says the request really went out.
+    check('credit_model_calls_no_record_really', sql`${t.settleBasis} <> 'no_record' OR ${t.sent}`),
     check(
       'credit_model_calls_no_record_pays_bound',
       sql`${t.settleBasis} <> 'no_record' OR ${t.chargedMicro} = ${t.boundMicro}`,

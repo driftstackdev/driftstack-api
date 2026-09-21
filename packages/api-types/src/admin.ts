@@ -49,12 +49,6 @@ export const ChangeTierRequestSchema = z.object({
   tier: AccountTierSchema,
   /** Optional human-readable reason recorded in the audit row. */
   reason: z.string().max(500).optional(),
-  /**
-   * Whole AI credits a month for an Enterprise agreement. Enterprise is the one
-   * plan with no standard allowance, so an account funded by AI credits cannot
-   * be put on it without this figure; every other tier ignores it.
-   */
-  monthly_credits: z.number().int().min(0).max(10_000_000).optional(),
 });
 export type ChangeTierRequest = z.infer<typeof ChangeTierRequestSchema>;
 
@@ -105,9 +99,6 @@ export type AddSupportNoteRequest = z.infer<typeof AddSupportNoteRequestSchema>;
  * dashboard. The endpoint does NOT call Stripe. Money movement happens
  * out-of-band; the audit row is the post-action receipt for compliance
  * and customer support follow-up.
- *
- * Per V-280 launch-day-runbook + the founder's tier-3 boundary on
- * direct financial actions.
  */
 export const RecordRefundRequestSchema = z.object({
   /** The Stripe charge / payment_intent / invoice id refunded. */

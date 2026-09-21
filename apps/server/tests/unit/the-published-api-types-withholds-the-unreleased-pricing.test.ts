@@ -90,21 +90,24 @@ function pricingIdentifiers(): string[] {
 }
 
 /**
- * The shipped files this release still names the feature in.
+ * The shipped files this release still names the feature in. EMPTY, and that is
+ * the finished state rather than a list nobody got round to filling.
  *
- * ⛔ A RATCHET ENTRY, NOT AN EXEMPTION, AND IT IS NOT ONLY PROSE.
- * `packages/api-types/src/admin.ts` belongs to the credits workflow and is
- * off-limits to this lane. Its `ChangeTierRequest` carries a `monthly_credits`
- * FIELD — so the leak is in the emitted `.js` as well as the hover text, and
- * rewriting a comment does not close it. Closing it means the field is renamed,
- * the module is withheld from the published package, or the feature is live.
+ * ⛔ IT WAS `['dist/admin.d.ts', 'dist/admin.js']`, AND THE LEAK WAS NOT ONLY
+ * PROSE. `packages/api-types/src/admin.ts` declared `monthly_credits` on
+ * `ChangeTierRequest`, so the unreleased feature's field name reached the
+ * emitted `.js` as a Zod field and the `.d.ts` as hover text — which is why
+ * rewriting a comment could never have closed it and why `build:publish`
+ * REFUSED the release while it stood. It is closed the way this note said it
+ * would have to be: the PUBLISHED schema has no such field, and the server
+ * extends it inside `src/ai-credits.ts`, the module `files` withholds from the
+ * tarball unconditionally.
  *
- * `build:publish` REFUSES while this is true, so the release cannot ship it by
- * accident; this list is what keeps the fact visible in the suite instead of a
- * green tick. The arm below fails if anything is ADDED to the leak, and fails
- * if the leak is closed while this list still names it.
+ * The arm below still fails if anything is ADDED to the leak — that is what
+ * keeps this at zero — and would fail if this list named a file that is now
+ * clean.
  */
-const KNOWN_LEAK_HANDOFF = ['dist/admin.d.ts', 'dist/admin.js'];
+const KNOWN_LEAK_HANDOFF: readonly string[] = [];
 
 describe('the published api-types withholds the unreleased pricing', () => {
   const packed = npmShippedFilesViaPack(PKG_DIR);

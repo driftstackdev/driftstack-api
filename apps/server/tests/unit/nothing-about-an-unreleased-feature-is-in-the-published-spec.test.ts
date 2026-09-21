@@ -15,7 +15,7 @@
 // fails too, so the list cannot outlive its reason.
 
 import { describe, expect, it } from 'vitest';
-import { ChangeTierRequestSchema } from '@driftstack/api-types';
+import { ChangeTierRequestWithCreditsSchema } from '@driftstack/api-types';
 import { generateOpenApiSpec } from '../../src/lib/openapi.js';
 
 interface Withheld {
@@ -31,9 +31,15 @@ const WITHHELD: readonly Withheld[] = [
     term: /credit/i,
     why:
       'AI credits are built and switched off (the mode flag defaults to off and no account ' +
-      'is on them). Publish the admin tier field, and remove this entry and the omit in ' +
-      'openapi.ts, in the change that makes them live.',
-    stillAccepted: () => 'monthly_credits' in ChangeTierRequestSchema.shape,
+      'is on them). The route accepts the admin tier field through the WITHHELD pricing ' +
+      'module; publish it on ChangeTierRequestSchema in api-types, and remove this entry, ' +
+      'in the change that makes credits live.',
+    // ⛔ THE SCHEMA THE ROUTE PARSES, NOT THE ONE THE DOCUMENT REGISTERS. Those
+    // are now two different objects: the published schema has no such field at
+    // all (it ships to npm), and the route's extends it. Asked of the published
+    // one this would read false the moment the field moved — and a `stillAccepted`
+    // that is false retires the entry, which would publish the term.
+    stillAccepted: () => 'monthly_credits' in ChangeTierRequestWithCreditsSchema.shape,
   },
 ];
 

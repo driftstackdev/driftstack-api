@@ -423,13 +423,7 @@ export class CreditReservationsService {
     await this.refreshUnderSavepoint(tx, input.accountId);
 
     const priced = await this.priceModel(tx, input.model);
-    // No card in force, or none that prices this model: there is no
-    // `rate_card_version` to record the measurement under, so there is nothing
-    // to write. Counted like any other lost measurement.
-    if (priced === null) {
-      this.deps.onShadowLost?.(new Error(`no rate card prices ${input.model}`));
-      return { outcome: 'shadow_lost' };
-    }
+    if (priced === null) return this.measureModelRefusal(tx, input);
 
     const openTasks = await reservations.openEnforceCount(tx, input.accountId);
     const account = await ledger.ensureAccount(input.accountId, tx);
@@ -450,7 +444,7 @@ export class CreditReservationsService {
       requestKey: requestKeyFor(input.idempotencyKey),
       model: input.model,
       rateCardVersion: priced.rateCardVersion,
-      maxReserveMicro: priced.maxReserveMicro,
+      reservedMicro: priced.maxReserveMicro,
       leaseOwner: input.bootId,
       wouldRefuseReason,
     });
@@ -459,6 +453,63 @@ export class CreditReservationsService {
       reservationId: input.reservationId,
       reservedMicro: written.reservedMicro,
       wouldRefuseReason,
+    };
+  }
+
+  /**
+   * The shadow measurement of a task whose MODEL enforcement would have refused:
+   * an own-key-only model, or one the card in force carries no row for.
+   *
+   * ⛔ THIS IS THE FIRST CHECK IN THE ORDER AND IT USED TO BE THE ONE THE CENSUS
+   * COULD NOT SEE. `would_refuse_reason = 'model'` was a value the CHECK
+   * accepted and nothing wrote: this path returned `shadow_lost` instead, so
+   * model refusals were invisible to S11's census AND M3's "a lost rate of 0"
+   * shadow exit criterion was unreachable for any deployment whose customers
+   * ever asked for an Opus-class model on a legacy turn. `shadow_lost` now means
+   * what it says — a FAULT — and this means "enforcement would have said no".
+   *
+   * IT RESERVES NOTHING, and zero is the honest amount rather than a placeholder:
+   * `reserved_micro` on a shadow row is the model's `max_reserve`, the measuring
+   * stick, and a model with no rate-card row has none. 0132's
+   * `credit_reservations_amounts` accepts zero for exactly this shape.
+   *
+   * ⛔ NO CARD IN FORCE AT ALL IS STILL A LOST MEASUREMENT, and that is not a
+   * hedge. `rate_card_version` is NOT NULL and a foreign key, so with no card
+   * there is no version to record the measurement under and no row that could be
+   * written at all — and a deployment metering credits with no card in force is
+   * a misconfiguration, which is what `shadow_lost` is for.
+   *
+   * The card is read a second time here rather than threaded out of
+   * `priceModel`, deliberately: `priceModel` answers the M10 question — may the
+   * deployment's key run this model — BEFORE it looks at any card, so that the
+   * answer cannot depend on one, and the enforced path (which needs no version)
+   * stays exactly as it was. This path is rare and the read is one indexed row.
+   */
+  private async measureModelRefusal(
+    tx: CreditLedgerTx,
+    input: CreditReserveInput,
+  ): Promise<CreditReserveResult> {
+    const card = await this.deps.rateCards.cardInForce(undefined, tx);
+    if (card === null) {
+      this.deps.onShadowLost?.(new Error('no credit rate card is in force'));
+      return { outcome: 'shadow_lost' };
+    }
+    const written = await this.deps.reservations.insertShadowReservation(tx, {
+      id: input.reservationId,
+      accountId: input.accountId,
+      agentSessionId: input.agentSessionId,
+      requestKey: requestKeyFor(input.idempotencyKey),
+      model: input.model,
+      rateCardVersion: card.version,
+      reservedMicro: 0,
+      leaseOwner: input.bootId,
+      wouldRefuseReason: 'model',
+    });
+    return {
+      outcome: 'shadowed',
+      reservationId: input.reservationId,
+      reservedMicro: written.reservedMicro,
+      wouldRefuseReason: 'model',
     };
   }
 
@@ -574,9 +625,26 @@ export class CreditReservationsService {
 
       const rates = await this.deps.rateCards.modelRow(terms.rateCardVersion, terms.model, tx);
       if (rates === null) {
-        // The card a live task pinned no longer prices its model. A card is
-        // immutable and its rows are never deleted, so this is corruption, not a
-        // state to fall back from: a bound priced at a guessed rate is not a bound.
+        // ⛔ A MEASUREMENT OF A MODEL THE CARD NEVER PRICED IS NOT CORRUPTION,
+        // AND IT IS NOW A STATE THE SERVICE ITSELF WRITES. `measureModelRefusal`
+        // records the would-refuse reason `model` on a SHADOW row reserving
+        // ZERO, which is the whole point of that value existing: enforcement
+        // would have refused this task on its model, and the census must see it.
+        // Such a task then reaches here once per attempt, and there is no bound
+        // to plan — but there is also nothing wrong. Answered as `unavailable`,
+        // the same as a task that is gone, settled or past its ceiling.
+        //
+        // ⛔ AND THE DISCRIMINATOR IS THE DATABASE'S, NOT A GUESS.
+        // `credit_reservations_amounts` (0132) accepts `reserved_micro = 0` for
+        // exactly one row shape — shadow, `would_refuse_reason = 'model'` — so a
+        // shadow task that reserved nothing IS a model refusal and nothing else
+        // can be. A task that was PRICED at reserve reserved its model's
+        // `max_reserve`, which is `> 0`, so it still takes the throw below: a
+        // card is immutable and its rows are never deleted, so losing a row a
+        // live task pinned is corruption, and a bound priced at a guessed rate
+        // is not a bound.
+        if (terms.mode === 'shadow' && terms.reservedMicro === 0)
+          return { outcome: 'unavailable', reason: 'model' };
         throw new Error(
           `credit rate card ${terms.rateCardVersion} does not price ${terms.model}, which a running task pinned`,
         );
@@ -981,6 +1049,13 @@ export class CreditReservationsService {
    * reason: the plan's "one row for their sum" is the same row whenever the
    * claims come from one clawback, which is the only case reachable today, and
    * two clawbacks of different sources must not be recorded under one reason.
+   *
+   * ⛔ THE CLAWBACK'S OWN RECORD MOVES WITH THE LEDGER'S, NOT AFTER IT. The
+   * claim does not merely disappear: it BECOMES the clawback's `debt_micro`, in
+   * the one statement 0132's guard permits. Until 0132 the guard listed
+   * `debt_micro` among the immutable facts, so this wrote the ledger row and
+   * left the clawback saying it had caused no debt at all — and M6's "forgive
+   * the unrepaid debt it created", read off that row, would forgive too little.
    */
   private async claimsLeftBecomeDebt(
     tx: CreditLedgerTx,
@@ -1012,7 +1087,7 @@ export class CreditReservationsService {
         },
         tx,
       );
-      await this.deps.reservations.payPendingClaim(tx, {
+      await this.deps.reservations.pendingClaimBecomesDebt(tx, {
         clawbackId: claim.clawbackId,
         micro: claim.owed,
       });

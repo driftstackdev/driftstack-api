@@ -406,6 +406,91 @@ describe.skipIf(!RUN_DB_TESTS)('a task reserves credits in one locked transactio
     });
   });
 
+  it("⛔ CRITICAL a shadow task whose MODEL enforcement would refuse records `model`, reserves NOTHING, and is NOT counted as a lost measurement. This was the first check in §4.4’s order and the one the census could not see: `would_refuse_reason = 'model'` was a value the CHECK accepted and nothing wrote, so model refusals were invisible AND M3’s “a lost rate of 0” exit criterion was unreachable for any deployment whose customers ask for an own-key-only model on a legacy turn.", async () => {
+    const accountId = await newTaskAccount(db());
+    await fundedTaskLot(db(), accountId, { credits: 500 });
+    const h = harness();
+
+    for (const [what, model] of [
+      ['an own-key-only model', OWN_KEY_ONLY_MODEL],
+      ['a model the registry cannot price at all', 'claude-made-up-9'],
+    ] as const) {
+      const input = reserveInput(accountId, { mode: 'shadow', model });
+      const result = await h.service.reserve(input);
+      expect(result.outcome, what).toBe('shadowed');
+      if (result.outcome !== 'shadowed') return;
+      expect(result.wouldRefuseReason, what).toBe('model');
+      // ZERO, and zero is the honest amount rather than a placeholder: the
+      // measuring stick a shadow row carries is the model's `max_reserve`, and
+      // a model the card does not price has none.
+      expect(result.reservedMicro, what).toBe(0);
+      expect(await reservationRow(db(), input.reservationId), what).toMatchObject({
+        mode: 'shadow',
+        slot: null,
+        model,
+        would_refuse_reason: 'model',
+        reserved_micro: '0',
+        rate_card_version: 1,
+      });
+    }
+    expect(h.shadowLost, 'a refusal is not a fault, and must not be counted as one').toEqual([]);
+
+    // The control, in the same breath: the SAME account in the SAME mode on a
+    // model the card prices records nothing as its reason and reserves the
+    // model's full maximum — so "0" and "model" above are about the model.
+    const fine = await h.service.reserve(reserveInput(accountId, { mode: 'shadow' }));
+    expect(fine.outcome).toBe('shadowed');
+    if (fine.outcome !== 'shadowed') return;
+    expect(fine.wouldRefuseReason).toBeNull();
+    expect(fine.reservedMicro).toBe(SONNET_MAX_RESERVE_MICRO);
+  });
+
+  it('⛔ CRITICAL a card in force that does not price this model is a `model` refusal too, and NO card in force at all is still a LOST measurement. The difference is not a hedge: `rate_card_version` is NOT NULL and a foreign key, so with no card there is no version to record a measurement under and no row that could be written — and a deployment metering credits with no card in force is a misconfiguration, which is what `shadow_lost` is for.', async () => {
+    const accountId = await newTaskAccount(db());
+    await fundedTaskLot(db(), accountId, { credits: 500 });
+
+    // Version 1 is the launch card, which really is in force here — so the row
+    // this writes still satisfies the foreign key to `credit_rate_cards`. The
+    // only thing standing in is the answer to "does this card price that model".
+    const cardWithoutTheModel: CreditRateCardReader = {
+      cardInForce: () =>
+        Promise.resolve({
+          version: 1,
+          markupBp: 20_000,
+          announcedAt: new Date(0),
+          effectiveAt: new Date(0),
+          withdrawnAt: null,
+          createdByKeyId: null,
+          note: '',
+        }),
+      modelRow: () => Promise.resolve(null),
+    };
+    const priced = harness({ rateCards: cardWithoutTheModel });
+    const measured = reserveInput(accountId, { mode: 'shadow' });
+    const result = await priced.service.reserve(measured);
+    expect(result.outcome).toBe('shadowed');
+    if (result.outcome !== 'shadowed') return;
+    expect(result.wouldRefuseReason).toBe('model');
+    expect(priced.shadowLost).toEqual([]);
+    expect(await reservationRow(db(), measured.reservationId)).toMatchObject({
+      would_refuse_reason: 'model',
+      reserved_micro: '0',
+    });
+
+    const noCard: CreditRateCardReader = {
+      cardInForce: () => Promise.resolve(null),
+      modelRow: () => Promise.resolve(null),
+    };
+    const blind = harness({ rateCards: noCard });
+    const unmeasurable = reserveInput(accountId, { mode: 'shadow' });
+    expect((await blind.service.reserve(unmeasurable)).outcome).toBe('shadow_lost');
+    expect(blind.shadowLost, 'and it IS counted, because it is a fault').toHaveLength(1);
+    expect(
+      await reservationRow(db(), unmeasurable.reservationId),
+      'and nothing was written',
+    ).toBeUndefined();
+  });
+
   it('CRITICAL a shadow reserve whose DATABASE work fails leaves the caller untouched (M3): it is swallowed, counted, and returns a value — while the same fault on the enforced path throws', async () => {
     const h = harness();
     const broken = reserveInput('not-a-uuid', { mode: 'shadow' });

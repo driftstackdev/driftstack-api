@@ -90,10 +90,24 @@ describe('W892 V-281 admin schemas cross-source invariant', () => {
     expect(p).toMatch(/out-of-band; the audit row is the post-action receipt for compliance/);
   });
 
-  it("CRITICAL RecordRefund framing pins V-280 + 'tier-3 boundary on direct financial actions'. The framing documents WHY the endpoint is audit-only.", () => {
+  it("⛔ CRITICAL RecordRefund's framing says WHY the endpoint is audit-only WITHOUT naming an internal ticket or an internal role. This doc comment ships: it is compiled into `dist/admin.d.ts`, which is the hover text a customer's editor shows, so the reason has to stand on its own for a reader outside the team. The paragraph above — records a manual refund, does not call Stripe, the audit row is the receipt — already carries the whole of it.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/admin.ts'));
-    expect(p).toMatch(/Per[^\n]*launch-day-runbook \+ the[^\n]*boundary on/);
-    expect(p).toMatch(/direct financial actions/);
+    // ⛔ THE DOC COMMENT ALONE, not the file. `//` comments are stripped by tsc
+    // and never reach `dist/admin.d.ts`; a `/** … */` block directly above an
+    // export is copied into it verbatim. Scanning the whole file would report
+    // the `// V-218` section headers, which ship nowhere — a finding about text
+    // nobody outside the team can ever see.
+    const doc = /\/\*\*((?:[^*]|\*(?!\/))*)\*\/\s*export const RecordRefundRequestSchema/.exec(
+      p,
+    )?.[1];
+    expect(doc, "RecordRefundRequestSchema's doc comment was found").toBeTruthy();
+    expect(doc ?? '', 'the reason is still stated').toMatch(/post-action receipt for compliance/);
+    expect(doc ?? '', 'and it names nothing internal').not.toMatch(
+      /launch-day-runbook|tier-3 boundary|\bV-\d{2,4}\b|founder/i,
+    );
+    // The control, so "matches nothing internal" cannot mean "found nothing":
+    // the same reader does find the section header that is NOT a doc comment.
+    expect(p).toMatch(/\/\/ V-281 — admin audit-note \+ refund-record/);
   });
 
   // ─── ChangeTierRequest + Suspend + Unsuspend reason bounds ──

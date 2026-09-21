@@ -260,14 +260,33 @@ describe('migration 0131 only adds, and every guard it installs is pinned down',
     expect(journal.entries[at]?.when).toBeGreaterThan(journal.entries[at - 1]?.when ?? Infinity);
   });
 
-  it('CRITICAL schema.ts mirrors every CHECK and every index the migration creates, by name, and names none it does not create', () => {
+  it('CRITICAL schema.ts mirrors every CHECK and every index the migration creates, by name, and names none it does not create — counting 0132, which adds one of each to these same three tables', () => {
+    // ⛔ TWO MIGRATIONS, ONE SET OF TABLES. 0132 adds
+    // `credit_model_calls_no_record_really` and
+    // `credit_reservation_holds_open_idx` to tables 0131 created, so a mirror
+    // check scoped to 0131 alone would report both as names schema.ts invents.
+    // The union is what schema.ts actually has to match; 0132's own guard is
+    // `the-credit-gap-migration-changes-exactly-three-guards-and-pins-each-one`.
+    // Read from the files rather than listed here, so a third migration on
+    // these tables joins this comparison by being written, not by being
+    // remembered.
+    const LATER = readFileSync(resolve(DB, 'migrations', '0132_credit_guard_gaps.sql'), 'utf8')
+      .split('\n')
+      .map((line) => line.replace(/--.*$/, ''))
+      .join('\n');
+    const both = `${SQL}\n${LATER}`;
     const inSql = {
-      checks: [...SQL.matchAll(/CONSTRAINT "(\w+)"\s+CHECK/g)].map((m) => m[1] ?? '').sort(),
-      indexes: [...SQL.matchAll(/CREATE (?:UNIQUE )?INDEX "(\w+)"/g)].map((m) => m[1] ?? '').sort(),
+      checks: [...both.matchAll(/CONSTRAINT "(\w+)"\s+CHECK/g)].map((m) => m[1] ?? '').sort(),
+      indexes: [...both.matchAll(/CREATE (?:UNIQUE )?INDEX "(\w+)"/g)]
+        .map((m) => m[1] ?? '')
+        .sort(),
     };
-    // 10 on reservations, 2 on holds, 10 on model calls.
-    expect(inSql.checks).toHaveLength(22);
-    expect(inSql.indexes).toHaveLength(6);
+    // 10 on reservations, 2 on holds, 10 on model calls — plus 0132's one more
+    // on model calls, and its re-statement of `credit_reservations_amounts`,
+    // which names a constraint 0131 already named and so must be de-duplicated.
+    expect(new Set(inSql.checks).size).toBe(23);
+    expect(inSql.indexes).toHaveLength(7);
+    inSql.checks = [...new Set(inSql.checks)].sort();
 
     const schema = codeOnly(readFileSync(resolve(DB, 'schema.ts'), 'utf8'));
     const mine = /^(credit_reservations_|credit_reservation_holds_|credit_model_calls_)/;

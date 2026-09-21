@@ -288,10 +288,18 @@ export class DrizzleCreditReservationsRepo {
    * credit — it holds nothing — so capping it at a balance the task never
    * touches would cap the measurement too, and the balance answer is exactly
    * what `would_refuse_reason` already carries.
+   *
+   * ⛔ `reservedMicro`, NOT `maxReserveMicro`, because the two part company in
+   * exactly one case: a model the card in force cannot price has NO
+   * `max_reserve`, and its measurement reserves ZERO (0132). Naming the
+   * parameter after the rate-card row would have made that call site a lie about
+   * where its number came from.
    */
   async insertShadowReservation(
     tx: CreditLedgerTx,
-    r: Omit<NewCreditReservation, 'availableMicro'> & {
+    r: Omit<NewCreditReservation, 'availableMicro' | 'maxReserveMicro'> & {
+      /** The model's `max_reserve`, or 0 for a model the card cannot price. */
+      readonly reservedMicro: number;
       readonly wouldRefuseReason: CreditWouldRefuseReason | null;
     },
   ): Promise<{ readonly reservedMicro: number }> {
@@ -300,7 +308,7 @@ export class DrizzleCreditReservationsRepo {
                                        rate_card_version, mode, reserved_micro,
                                        would_refuse_reason, lease_owner, lease_expires_at, max_until)
       VALUES (${r.id}::uuid, ${r.accountId}::uuid, ${r.agentSessionId}, ${r.requestKey},
-              ${r.model}, ${r.rateCardVersion}, 'shadow', ${r.maxReserveMicro}::bigint,
+              ${r.model}, ${r.rateCardVersion}, 'shadow', ${r.reservedMicro}::bigint,
               ${r.wouldRefuseReason}, ${r.leaseOwner},
               now() + make_interval(secs => ${CREDIT_LEASE_SECONDS}),
               now() + make_interval(mins => ${CREDIT_MAX_UNTIL_MINUTES}))
@@ -979,6 +987,40 @@ export class DrizzleCreditReservationsRepo {
       RETURNING id`);
     if (rowsOf<{ id: string }>(result).length !== 1) {
       throw new Error('a pending credit claim could not be paid down: it no longer owes that much');
+    }
+  }
+
+  /**
+   * Take what one clawback's pending claim still owes as DEBT: `pending_micro`
+   * falls to zero for that amount and `debt_micro` rises by the same amount, in
+   * ONE statement.
+   *
+   * ⛔ ONE STATEMENT BECAUSE THE DATABASE WILL ACCEPT NO OTHER SHAPE. 0132's
+   * `credit_clawbacks_guard` permits exactly this movement — a rise in
+   * `debt_micro` matched by an equal fall in `pending_micro`, judged on OLD and
+   * NEW of the same row — and refuses `debt_micro` moving on its own. Paying the
+   * claim down first and raising the debt afterwards would be refused twice
+   * over, which is the point: the clawback's own record of what it cost cannot
+   * drift from the ledger's.
+   *
+   * Refused outright if the row no longer owes that much, or carries no debt
+   * figure at all (an `unmatched` clawback took nothing and owes nothing).
+   */
+  async pendingClaimBecomesDebt(
+    tx: CreditLedgerTx,
+    input: { readonly clawbackId: string; readonly micro: number },
+  ): Promise<void> {
+    const result = await tx.execute<{ id: string }>(sql`
+      UPDATE credit_clawbacks
+         SET pending_micro = pending_micro - ${input.micro}::bigint,
+             debt_micro = debt_micro + ${input.micro}::bigint
+       WHERE id = ${input.clawbackId}::uuid AND pending_micro >= ${input.micro}::bigint
+         AND debt_micro IS NOT NULL
+      RETURNING id`);
+    if (rowsOf<{ id: string }>(result).length !== 1) {
+      throw new Error(
+        'a pending credit claim could not be taken as debt: it no longer owes that much',
+      );
     }
   }
 

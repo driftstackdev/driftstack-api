@@ -6,6 +6,7 @@ import {
   type AccountTier,
 } from './common.js';
 import { AgentModelSchema, type AgentModel, type ModelCallTokens } from './agent-models.js';
+import { ChangeTierRequestSchema } from './admin.js';
 
 // ───────────────────────────────────────────────────────────────────────────
 // AI credits — the unit, the arithmetic, what each plan includes, and the
@@ -976,3 +977,41 @@ export const TurnCreditsUsageSchema = z.object({
   rate_card_version: RateCardVersionSchema.nullable(),
 });
 export type TurnCreditsUsage = z.infer<typeof TurnCreditsUsageSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
+// The admin request shape that is NOT published yet
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * `ChangeTierRequest` as the SERVER accepts it: the published shape plus the
+ * Enterprise contract's monthly credit figure.
+ *
+ * ⛔ IT LIVES HERE BECAUSE THIS MODULE DOES NOT SHIP. `@driftstack/api-types` is
+ * published to npm and `packages/api-types/src/admin.ts` is one of the files in
+ * the tarball — so a `monthly_credits` field declared there reached a
+ * customer's `dist/admin.d.ts` and their editor's hover text the day it was
+ * written, and reached the emitted `dist/admin.js` as a Zod field with it. The
+ * published OpenAPI document could omit the field; `npm publish` could not, and
+ * `scripts/api-types-build-publish.mjs` correctly REFUSED the release while it
+ * was there. `dist/ai-*` is withheld from the tarball unconditionally, so the
+ * extension ships nowhere and the server still imports it through the barrel
+ * exactly as it imports everything else in this module.
+ *
+ * ⛔ AN EXTENSION, NOT A SECOND DECLARATION. It is built from the published
+ * schema, so the two can never disagree about `tier` or `reason`, and
+ * `.extend()` appends — a validation failure reports the same issues, in the
+ * same order, under the same paths as the single object did before.
+ *
+ * WHEN AI CREDITS SHIP: move the field back onto `ChangeTierRequestSchema` in
+ * `admin.ts`, delete this, and remove the `credit` entry from
+ * `nothing-about-an-unreleased-feature-is-in-the-published-spec`.
+ */
+export const ChangeTierRequestWithCreditsSchema = ChangeTierRequestSchema.extend({
+  /**
+   * Whole AI credits a month for an Enterprise agreement. Enterprise is the one
+   * plan with no standard allowance, so an account funded by AI credits cannot
+   * be put on it without this figure; every other tier ignores it.
+   */
+  monthly_credits: z.number().int().min(0).max(10_000_000).optional(),
+});
+export type ChangeTierRequestWithCredits = z.infer<typeof ChangeTierRequestWithCreditsSchema>;

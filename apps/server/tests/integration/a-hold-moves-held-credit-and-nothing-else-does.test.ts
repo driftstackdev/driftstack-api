@@ -8,6 +8,10 @@
 //
 //   · a hold needs a lot that has STARTED, has not expired, is not revoked, and
 //     belongs to the SAME account (the `starts_at` half is H4);
+//   · a hold needs a TASK that is open and enforced (0132) — a hold behind a
+//     settled task, a shadow measurement, or no task at all is credit frozen for
+//     ever, because nothing will ever release it and no COMMIT-time check fires
+//     on a statement that touches only holds;
 //   · a hold never exceeds what its lot has left (`credit_lots_held_bounds`);
 //   · `credit_lots.held_micro` moves ONLY through this table's trigger — a
 //     session that writes it directly is refused even if it raises the flag the
@@ -60,9 +64,13 @@ function db(): postgres.Sql {
 }
 
 /**
- * A SHADOW reservation, written with raw SQL. Shadow because an ENFORCED one
- * must be backed by holds that sum to what it reserved, checked at COMMIT — and
- * these arms are about what a hold may be, one hold at a time.
+ * A reservation with NO holds behind it, written with raw SQL — SHADOW, because
+ * an ENFORCED one must be backed by holds that sum to exactly what it reserved,
+ * checked at COMMIT, so an enforced task cannot exist on its own at all.
+ *
+ * ⛔ ONLY FOR ARMS THAT NEVER PUT A HOLD ON IT. From 0132 a hold needs an OPEN
+ * ENFORCED task, so a hold named against one of these is refused; `taskHolding`
+ * below is what the arms that place holds use.
  */
 async function rawReservation(accountId: string, reservedMicro = 50 * MICRO): Promise<string> {
   const id = randomUUID();
@@ -72,6 +80,46 @@ async function rawReservation(accountId: string, reservedMicro = 50 * MICRO): Pr
     VALUES (${id}::uuid, ${accountId}::uuid, ${`as_${id}`}, ${ON_CREDITS_MODEL}, 1,
             'shadow', ${String(reservedMicro)}::bigint, ${BOOT},
             now() + interval '90 seconds', now() + interval '30 minutes')`;
+  return id;
+}
+
+/**
+ * An OPEN ENFORCED task holding exactly what it reserved: the reservation and
+ * its holds in ONE transaction, taking the lowest free slot.
+ *
+ * ⛔ ONE TRANSACTION BECAUSE THE TWO ROWS ARE EACH OTHER'S PRECONDITION, and
+ * that is the whole shape of the guarantee. An enforced reservation whose holds
+ * do not sum to exactly what it reserved is refused at COMMIT (0131), and from
+ * 0132 a hold whose task is not an open enforced one is refused as it is
+ * inserted. Neither row can be written first on its own, which is what makes
+ * "credit is held for a task that is really running" a fact about the database.
+ */
+async function taskHolding(
+  accountId: string,
+  holds: readonly { readonly lotId: string; readonly micro: number }[],
+): Promise<string> {
+  const id = randomUUID();
+  const reserved = holds.reduce((sum, h) => sum + h.micro, 0);
+  await db().begin(async (tx) => {
+    await tx`
+      INSERT INTO credit_reservations (id, account_id, agent_session_id, model, rate_card_version,
+                                       mode, slot, reserved_micro, lease_owner, lease_expires_at,
+                                       max_until)
+      SELECT ${id}::uuid, ${accountId}::uuid, ${`as_${id}`}, ${ON_CREDITS_MODEL}, 1, 'enforce',
+             (SELECT s FROM generate_series(1, 3) s
+               WHERE NOT EXISTS (SELECT 1 FROM credit_reservations o
+                                  WHERE o.account_id = ${accountId}::uuid
+                                    AND o.state = 'open' AND o.mode = 'enforce' AND o.slot = s)
+               ORDER BY s LIMIT 1),
+             ${String(reserved)}::bigint, ${BOOT},
+             now() + interval '90 seconds', now() + interval '30 minutes'`;
+    for (const hold of holds) {
+      await tx`
+        INSERT INTO credit_reservation_holds (reservation_id, lot_id, account_id, held_micro)
+        VALUES (${id}::uuid, ${hold.lotId}::uuid, ${accountId}::uuid,
+                ${String(hold.micro)}::bigint)`;
+    }
+  });
   return id;
 }
 
@@ -94,7 +142,11 @@ describe.skipIf(!RUN_DB_TESTS)('a hold moves held credit, and nothing else does'
   it('CRITICAL a hold needs a STARTED, live, unrevoked lot of the SAME account — all four refused by the trigger, with the same lot accepted once it is none of those things', async () => {
     const accountId = await newTaskAccount(db());
     const stranger = await newTaskAccount(db());
-    const rid = await rawReservation(accountId);
+    // A real running task to hang the refused holds off, so each refusal is
+    // about the LOT and not about the task: from 0132 a hold whose task is not
+    // an open enforced one is refused before the lot is looked at.
+    const ballast = await fundedTaskLot(db(), accountId, { credits: 50 });
+    const rid = await taskHolding(accountId, [{ lotId: ballast, micro: 10 * MICRO }]);
 
     const future = await fundedTaskLot(db(), accountId, {
       credits: 50,
@@ -126,28 +178,99 @@ describe.skipIf(!RUN_DB_TESTS)('a hold moves held credit, and nothing else does'
 
     // The positive control: a lot that is started, live, unrevoked and this
     // account's takes the hold, so the four refusals are about those four facts
-    // and not about the statement.
+    // and not about the statement. It goes behind a task of its own — the
+    // ballast task above already holds exactly what it reserved, and a second
+    // hold on it would be a different thing to have proved.
     const good = await fundedTaskLot(db(), accountId, { credits: 50 });
-    await placeHold(rid, good, accountId, 10 * MICRO);
+    await taskHolding(accountId, [{ lotId: good, micro: 10 * MICRO }]);
     expect(await heldOf(db(), good)).toBe(10 * MICRO);
+    expect(await heldOf(db(), ballast), 'and the ballast task kept exactly its own').toBe(
+      10 * MICRO,
+    );
+  });
+
+  it('⛔ CRITICAL a hold needs an OPEN ENFORCED task (0132). A hold against a SETTLED task, a SHADOW one, or a task that is not there freezes its credit for ever — spendable by nobody, expirable by nobody, released by nobody — and nothing anywhere would notice', async () => {
+    const accountId = await newTaskAccount(db());
+    const lot = await fundedTaskLot(db(), accountId, { credits: 50 });
+
+    // A task that reserved, made no call, and was settled for nothing. Every
+    // COMMIT-time check is satisfied and it is FINAL: `credit_reservations_guard`
+    // will not let it change again, so the settlement that would have walked a
+    // hold has already run and no other ever will.
+    const own = await fundedTaskLot(db(), accountId, { credits: 50 });
+    const settled = await taskHolding(accountId, [{ lotId: own, micro: 5 * MICRO }]);
+    await db().begin(async (tx) => {
+      await tx`UPDATE credit_reservation_holds SET released_at = now(), charged_micro = 0
+                WHERE reservation_id = ${settled}::uuid`;
+      await tx`UPDATE credit_reservations
+                  SET state = 'settled', charged_micro = 0, settled_at = now(),
+                      settle_reason = 'completed'
+                WHERE id = ${settled}::uuid`;
+    });
+
+    // A measurement. It holds nothing and releases nothing — `settleIn` returns
+    // before the holds walk for a shadow task — so a hold behind one is credit
+    // nothing will ever give back.
+    const shadow = await rawReservation(accountId);
+
+    for (const [what, taskId] of [
+      ['a task that has already settled', settled],
+      ['a shadow measurement', shadow],
+    ] as const) {
+      const refused = await refusal(() => placeHold(taskId, lot, accountId, 7 * MICRO), what);
+      expect(refused.code, what).toBe('23514');
+      expect(refused.message, what).toMatch(/a hold needs an open, enforced task/);
+      expect(await heldOf(db(), lot), `${what} — and nothing was held`).toBe(0);
+    }
+
+    // ⛔ A TASK THAT IS NOT THERE AT ALL IS THE KEY'S ANSWER, NOT THIS TRIGGER'S,
+    // and the difference is MEASURED rather than assumed: Postgres fires AFTER
+    // ROW triggers in name order and a referential-integrity trigger is called
+    // `RI_ConstraintTrigger_…`, which sorts before `credit_holds_apply_trigger`.
+    // So the composite key reports first, with its own code and its own name.
+    // Written down because the obvious reading of the trigger — "its predicate
+    // is total, so it refuses this too" — would be the wrong explanation of a
+    // green arm.
+    const noTask = await refusal(
+      () => placeHold(randomUUID(), lot, accountId, 7 * MICRO),
+      'a task that does not exist',
+    );
+    expect(noTask).toMatchObject({
+      code: '23503',
+      constraint: 'credit_reservation_holds_reservation_fk',
+    });
+    expect(await heldOf(db(), lot), 'and nothing was held').toBe(0);
+
+    // ⛔ THE REFUSAL COMES BEFORE THE LOT IS LOOKED AT, and it has to: the lot
+    // here is this account's, started, live and unrevoked, so every test the
+    // trigger made before 0132 passes. Nothing else in the database would have
+    // refused this row — no COMMIT-time reservation check fires on a statement
+    // touching only holds, and `credit_check_reservation` returns before the
+    // holds check for a shadow task even when one does.
+    //
+    // The positive control: the SAME hold, on the SAME lot, behind an open
+    // enforced task, is accepted.
+    await taskHolding(accountId, [{ lotId: lot, micro: 7 * MICRO }]);
+    expect(await heldOf(db(), lot)).toBe(7 * MICRO);
   });
 
   it('CRITICAL a hold can never exceed what its lot has left, and two holds on one lot cannot exceed it between them', async () => {
     const accountId = await newTaskAccount(db());
     const lot = await fundedTaskLot(db(), accountId, { credits: 10 });
 
-    const big = await rawReservation(accountId);
+    // Each task is written with its hold, in one transaction, because neither
+    // row may exist without the other; a refused hold takes its whole task down
+    // with it, which is why the lot is untouched after each refusal.
     const tooBig = await refusal(
-      () => placeHold(big, lot, accountId, 11 * MICRO),
+      () => taskHolding(accountId, [{ lotId: lot, micro: 11 * MICRO }]),
       'a hold larger than the lot',
     );
     expect(tooBig).toMatchObject({ code: '23514', constraint: 'credit_lots_held_bounds' });
     expect(await heldOf(db(), lot)).toBe(0);
 
-    await placeHold(await rawReservation(accountId), lot, accountId, 6 * MICRO);
-    const second = await rawReservation(accountId);
+    await taskHolding(accountId, [{ lotId: lot, micro: 6 * MICRO }]);
     const overTheTop = await refusal(
-      () => placeHold(second, lot, accountId, 5 * MICRO),
+      () => taskHolding(accountId, [{ lotId: lot, micro: 5 * MICRO }]),
       'a second hold past what is left',
     );
     expect(overTheTop).toMatchObject({ code: '23514', constraint: 'credit_lots_held_bounds' });
@@ -156,7 +279,7 @@ describe.skipIf(!RUN_DB_TESTS)('a hold moves held credit, and nothing else does'
     );
 
     // The rest of the lot is still available to a second task.
-    await placeHold(await rawReservation(accountId), lot, accountId, 4 * MICRO);
+    await taskHolding(accountId, [{ lotId: lot, micro: 4 * MICRO }]);
     expect(await heldOf(db(), lot)).toBe(10 * MICRO);
   });
 
@@ -192,8 +315,7 @@ describe.skipIf(!RUN_DB_TESTS)('a hold moves held credit, and nothing else does'
   it('CRITICAL a hold changes exactly once, by being released: the release takes the whole hold back off the lot, and every other update is refused', async () => {
     const accountId = await newTaskAccount(db());
     const lot = await fundedTaskLot(db(), accountId, { credits: 20 });
-    const rid = await rawReservation(accountId);
-    await placeHold(rid, lot, accountId, 12 * MICRO);
+    const rid = await taskHolding(accountId, [{ lotId: lot, micro: 12 * MICRO }]);
     expect(await heldOf(db(), lot)).toBe(12 * MICRO);
 
     const grew = await refusal(
@@ -241,7 +363,13 @@ describe.skipIf(!RUN_DB_TESTS)('a hold moves held credit, and nothing else does'
   it('⛔ CRITICAL a hold is BORN UNRELEASED — a row inserted with its release already filled in is refused, because nothing could ever take that credit back off the lot', async () => {
     const accountId = await newTaskAccount(db());
     const lot = await fundedTaskLot(db(), accountId, { credits: 20 });
-    const rid = await rawReservation(accountId);
+    const other = await fundedTaskLot(db(), accountId, { credits: 20 });
+    // The positive control first, because from 0132 the hold needs an open
+    // enforced task and an enforced task needs its holds: the row that proves a
+    // hold IS accepted when it is born unreleased is the same row that makes the
+    // task below exist at all.
+    const rid = await taskHolding(accountId, [{ lotId: lot, micro: 8 * MICRO }]);
+    expect(await heldOf(db(), lot)).toBe(8 * MICRO);
 
     // The insert branch adds the hold to `held_micro`; the release branch is the
     // only thing that takes it off, and it needs `OLD."released_at" IS NULL`. A
@@ -253,18 +381,17 @@ describe.skipIf(!RUN_DB_TESTS)('a hold moves held credit, and nothing else does'
       () => db()`
         INSERT INTO credit_reservation_holds
           (reservation_id, lot_id, account_id, held_micro, charged_micro, released_at)
-        VALUES (${rid}::uuid, ${lot}::uuid, ${accountId}::uuid, ${String(8 * MICRO)}::bigint,
+        VALUES (${rid}::uuid, ${other}::uuid, ${accountId}::uuid, ${String(8 * MICRO)}::bigint,
                 0, now())`,
       'a hold inserted already released',
     );
     expect(born.code).toBe('23514');
     expect(born.message).toMatch(/a hold is born unreleased/);
-    expect(await heldOf(db(), lot), 'and nothing was held').toBe(0);
+    expect(await heldOf(db(), other), 'and nothing was held').toBe(0);
 
-    // The positive control: the same hold, born unreleased, is accepted and can
-    // be given back.
-    await placeHold(rid, lot, accountId, 8 * MICRO);
-    expect(await heldOf(db(), lot)).toBe(8 * MICRO);
+    // …and the one born unreleased can be given back, which is the whole
+    // difference: the release branch is reachable for it and never would be for
+    // the row above.
     await db()`UPDATE credit_reservation_holds SET released_at = now(), charged_micro = 0
                 WHERE reservation_id = ${rid}::uuid AND lot_id = ${lot}::uuid`;
     expect(await heldOf(db(), lot)).toBe(0);
@@ -274,8 +401,7 @@ describe.skipIf(!RUN_DB_TESTS)('a hold moves held credit, and nothing else does'
     const indebted = await newTaskAccount(db());
     const clear = await newTaskAccount(db());
     const lot = await fundedTaskLot(db(), indebted, { credits: 20 });
-    const rid = await rawReservation(indebted);
-    await placeHold(rid, lot, indebted, 20 * MICRO);
+    const rid = await taskHolding(indebted, [{ lotId: lot, micro: 20 * MICRO }]);
     // Debt is writable only because the whole lot is held: nothing is spendable.
     await db()`
       INSERT INTO credit_ledger (account_id, kind, debt_delta_micro, idempotency_key, reason)
@@ -352,8 +478,7 @@ describe.skipIf(!RUN_DB_TESTS)('a hold moves held credit, and nothing else does'
     // The positive control: an account that owes nothing releases the same
     // shape of hold, and the credit comes back.
     const clearLot = await fundedTaskLot(db(), clear, { credits: 20 });
-    const clearRid = await rawReservation(clear);
-    await placeHold(clearRid, clearLot, clear, 20 * MICRO);
+    const clearRid = await taskHolding(clear, [{ lotId: clearLot, micro: 20 * MICRO }]);
     await db()`UPDATE credit_reservation_holds SET released_at = now(), charged_micro = 0
                 WHERE reservation_id = ${clearRid}::uuid AND lot_id = ${clearLot}::uuid`;
     expect(await heldOf(db(), clearLot)).toBe(0);
@@ -363,7 +488,10 @@ describe.skipIf(!RUN_DB_TESTS)('a hold moves held credit, and nothing else does'
     const mine = await newTaskAccount(db());
     const stranger = await newTaskAccount(db());
     const theirLot = await fundedTaskLot(db(), stranger, { credits: 50 });
-    const rid = await rawReservation(mine);
+    const ballast = await fundedTaskLot(db(), mine, { credits: 50 });
+    // A real running task of MINE, so the refusals below are about the account
+    // the row names and not about the task being finished or a measurement.
+    const rid = await taskHolding(mine, [{ lotId: ballast, micro: 10 * MICRO }]);
 
     // The lot IS the stranger's and the hold says so, so the apply trigger's
     // own "same account" test is satisfied — it compares the hold with its LOT.
@@ -398,7 +526,7 @@ describe.skipIf(!RUN_DB_TESTS)('a hold moves held credit, and nothing else does'
     // account, are accepted — so the two refusals are about the account and not
     // about the statements.
     const ours = await fundedTaskLot(db(), mine, { credits: 50 });
-    await placeHold(rid, ours, mine, 10 * MICRO);
+    await taskHolding(mine, [{ lotId: ours, micro: 10 * MICRO }]);
     expect(await heldOf(db(), ours)).toBe(10 * MICRO);
     await db().begin(async (tx) => {
       await tx`
@@ -416,8 +544,7 @@ describe.skipIf(!RUN_DB_TESTS)('a hold moves held credit, and nothing else does'
   it('CRITICAL a hold is removed only with its account — the append-only guard refuses a DELETE while the account is there', async () => {
     const accountId = await newTaskAccount(db());
     const lot = await fundedTaskLot(db(), accountId, { credits: 20 });
-    const rid = await rawReservation(accountId);
-    await placeHold(rid, lot, accountId, 5 * MICRO);
+    const rid = await taskHolding(accountId, [{ lotId: lot, micro: 5 * MICRO }]);
 
     for (const [what, run] of [
       [

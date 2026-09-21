@@ -519,6 +519,20 @@ describe.skipIf(!RUN_DB_TESTS)('a settled task is charged only what it held', ()
       SELECT reason FROM credit_ledger
        WHERE account_id = ${accountId}::uuid AND kind = 'debt_incurred'`;
     expect(reason).toEqual({ reason: 'plan_change' });
+
+    // ⛔ AND THE CLAWBACK'S OWN RECORD SAYS WHAT IT COST (0132). The claim did
+    // not merely disappear: it BECAME this clawback's `debt_micro`, in the one
+    // statement the guard permits. Before 0132 `debt_micro` was listed among the
+    // immutable facts, so this row said the clawback had caused no debt at all —
+    // and M6's "forgive the unrepaid debt it created", read off this row, would
+    // have forgiven nothing.
+    const [clawbackRow] = await db()<Array<{ pending: string; debt: string }>>`
+      SELECT pending_micro::text AS pending, debt_micro::text AS debt
+        FROM credit_clawbacks WHERE account_id = ${accountId}::uuid`;
+    expect(clawbackRow, 'the clawback records the debt it caused, and owes nothing more').toEqual({
+      pending: '0',
+      debt: String(25 * MICRO),
+    });
   });
 
   it('CRITICAL an account never ends a transaction holding debt beside credit a release just freed: the settlement repays it, and a raw release that does not is refused at COMMIT', async () => {

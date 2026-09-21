@@ -37,6 +37,7 @@ import { refusal } from './_helpers/database-refusal.js';
 import {
   MICRO,
   ON_CREDITS_MODEL,
+  OWN_KEY_ONLY_MODEL,
   agedReservation,
   fundedTaskLot,
   modelCallRows,
@@ -849,6 +850,56 @@ describe.skipIf(!RUN_DB_TESTS)(
       expect(plan.decision.rung).toBe('ceiling');
       if (plan.decision.rung !== 'ceiling') throw new Error('unreachable');
       expect(plan.decision.maxOutputTokens).toBe(8_192);
+    });
+
+    it("⛔ CRITICAL a SHADOW task whose MODEL the pinned card does not price is UNAVAILABLE to plan, not a corruption to throw on — the measurement that records `would_refuse_reason = 'model'` reserves nothing, and every attempt of that turn asks this next", async () => {
+      const h = harness();
+      const accountId = await newTaskAccount(db());
+      await fundedTaskLot(db(), accountId, { credits: 100 });
+      const reservationId = randomUUID();
+      const measured = await h.service.reserve({
+        accountId,
+        reservationId,
+        agentSessionId: `as_${reservationId}`,
+        idempotencyKey: null,
+        model: OWN_KEY_ONLY_MODEL,
+        mode: 'shadow',
+        bootId: BOOT,
+      });
+      expect(measured.outcome).toBe('shadowed');
+      if (measured.outcome !== 'shadowed') throw new Error('unreachable');
+      expect(measured.wouldRefuseReason).toBe('model');
+      expect(measured.reservedMicro).toBe(0);
+
+      expect(
+        await h.service.planCall({
+          reservationId,
+          purpose: 'plan',
+          regions: REGIONS,
+          historyBytes: 0,
+        }),
+      ).toEqual({ outcome: 'unavailable', reason: 'model' });
+
+      // THE CONTROL, in the same breath: a shadow task on a model the card DOES
+      // price is still planned at the ceiling, so "unavailable" above is about
+      // the model and not about the mode.
+      const priced = randomUUID();
+      await h.service.reserve({
+        accountId,
+        reservationId: priced,
+        agentSessionId: `as_${priced}`,
+        idempotencyKey: null,
+        model: ON_CREDITS_MODEL,
+        mode: 'shadow',
+        bootId: BOOT,
+      });
+      const ok = await h.service.planCall({
+        reservationId: priced,
+        purpose: 'plan',
+        regions: REGIONS,
+        historyBytes: 0,
+      });
+      expect(ok.outcome).toBe('planned');
     });
   },
 );
