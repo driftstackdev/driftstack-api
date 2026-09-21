@@ -563,7 +563,7 @@ export function CommandCenterView({
           actionable strips below the fold. Glow dropped for a utilitarian look;
           card chrome + the shared .btn-primary/.btn-secondary CTAs match every
           other strip. */}
-      <section className="flex flex-col gap-3 rounded-xl border border-surface-divider bg-surface-raised p-5">
+      <section className="cc-hero flex flex-col gap-3 rounded-xl border border-surface-divider bg-surface-raised p-5 shadow">
         <div className="flex flex-col gap-1">
           <span className="section-label text-accent-text">{hello}</span>
           <h1 className="text-xl font-semibold tracking-tight text-ink-primary">
@@ -635,6 +635,7 @@ export function CommandCenterView({
             // most-read number saying "running" while nothing was. Accent now
             // means there IS something live; nothing live reads neutral.
             accent={liveNow !== null && liveNow > 0}
+            live={liveNow !== null && liveNow > 0}
             onClick={liveNowAction}
             title="Sessions counting toward your session limit — includes sessions that are starting up or failed, not just running ones."
           />
@@ -1038,6 +1039,7 @@ export function Kpi({
   value,
   valueNode,
   accent,
+  live,
   onClick,
   title,
 }: {
@@ -1049,6 +1051,10 @@ export function Kpi({
    *  `value` is still required as the accessible/`title` fallback. */
   valueNode?: ReactNode;
   accent?: boolean;
+  /** Round 2 — something is HAPPENING behind this number (a session is
+   *  running): the tile wears the ready light and a breathing pip beside its
+   *  label. The number and the word carry the fact on their own. */
+  live?: boolean;
   onClick?: () => void;
   title?: string;
 }): JSX.Element {
@@ -1061,7 +1067,10 @@ export function Kpi({
         {icon}
       </span>
       <div className="flex min-w-0 flex-col">
-        <span className="section-label">{label}</span>
+        <span className="section-label">
+          {label}
+          {live === true ? <span aria-hidden="true" className="cc-kpi-pip" /> : null}
+        </span>
         {/* The value, not the label, is what this card exists to show. It was
             `text-xl` — barely above body copy — so a strip of four KPIs read as
             four labels with footnotes. Owner: the page "looks too boring".
@@ -1097,7 +1106,8 @@ export function Kpi({
         type="button"
         onClick={onClick}
         title={title}
-        className="flex cursor-pointer items-center gap-3 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated hover:ring-1 hover:ring-accent/30"
+        data-live={live === true ? 'true' : undefined}
+        className="cc-kpi flex cursor-pointer items-center gap-3 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 text-left shadow transition-colors hover:border-accent/50 hover:bg-surface-elevated hover:ring-1 hover:ring-accent/30"
       >
         {inner}
       </button>
@@ -1106,7 +1116,8 @@ export function Kpi({
   return (
     <div
       title={title}
-      className="flex items-center gap-3 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised px-4 py-3"
+      data-live={live === true ? 'true' : undefined}
+      className="cc-kpi flex items-center gap-3 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 shadow"
     >
       {inner}
     </div>

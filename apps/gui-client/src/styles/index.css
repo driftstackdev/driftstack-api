@@ -4861,3 +4861,84 @@
   opacity: var(--pf-light-alpha);
   transition: opacity var(--ai-dur-shift) var(--ai-ease);
 }
+
+/* ═════ the Command center — redesign round 2 (stage 3) ══════════════════════
+   The hero is the first thing a returning customer sees; it was a flat card.
+   It now stands in a soft room: the accent light pooled behind its top-left,
+   breathing on the AI view's calm cadence (opacity only, one layer, stilled by
+   the reduced-motion clamp), and it carries the shared lift. The four tiles
+   take the same lift, and the one tile that reports something HAPPENING — the
+   active-session count — wears the ready light when the count is above zero:
+   a rim in the ready colour and a small breathing pip beside its label. Colour
+   is never the only signal: the number and the word are unchanged. */
+.cc-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  --tw-shadow: var(--ai-lift);
+  --tw-shadow-colored: var(--ai-lift);
+}
+.cc-hero::before {
+  content: '';
+  position: absolute;
+  inset: -40% -20% auto -10%;
+  height: 160%;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    60% 70% at 18% 20%,
+    rgb(var(--accent-rgb) / 0.18) 0%,
+    rgb(var(--accent-rgb) / 0.06) 45%,
+    transparent 72%
+  );
+  animation: ds-ai-calm var(--ai-dur-calm) ease-in-out infinite;
+}
+.cc-kpi {
+  --tw-shadow: var(--ai-lift);
+  --tw-shadow-colored: var(--ai-lift);
+  transition: box-shadow var(--ai-dur-shift) var(--ai-ease);
+}
+.cc-kpi[data-live='true'] {
+  --tw-shadow:
+    var(--ai-lift), 0 0 0 1px rgb(var(--status-ready-rgb) / 0.45),
+    0 12px 30px -16px rgb(var(--status-ready-rgb) / 0.45);
+  --tw-shadow-colored: var(--tw-shadow);
+}
+.cc-kpi-pip {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  margin-left: 6px;
+  vertical-align: middle;
+  background: rgb(var(--status-ready-rgb));
+  box-shadow: 0 0 0 3px rgb(var(--status-ready-rgb) / 0.18);
+  animation: ds-pf-breathe 2600ms ease-in-out infinite;
+}
+
+/* ═════ the Sessions cards — redesign round 2 (stage 3) ═══════════════════
+   A session card already coloured its border by state; now the state is
+   LIGHT: the shared lift on every card, and on a live one a halo in the
+   ready colour that reaches the page, on a failed one the same in the error
+   colour, so the eye finds the card that needs it from across the room. The
+   pip beside the state word already pulses when busy; nothing else moves. */
+.ss-card {
+  --tw-shadow: var(--ai-lift);
+  --tw-shadow-colored: var(--ai-lift);
+  transition:
+    transform 150ms var(--ai-ease),
+    box-shadow var(--ai-dur-shift) var(--ai-ease),
+    border-color var(--ai-dur-shift) var(--ai-ease);
+}
+.ss-card[data-light='live'] {
+  --tw-shadow:
+    var(--ai-lift), 0 0 0 3px rgb(var(--status-ready-rgb) / 0.1),
+    0 14px 34px -16px rgb(var(--status-ready-rgb) / 0.45);
+  --tw-shadow-colored: var(--tw-shadow);
+}
+.ss-card[data-light='attention'] {
+  --tw-shadow:
+    var(--ai-lift), 0 0 0 3px rgb(var(--status-error-rgb) / 0.1),
+    0 14px 34px -16px rgb(var(--status-error-rgb) / 0.4);
+  --tw-shadow-colored: var(--tw-shadow);
+}

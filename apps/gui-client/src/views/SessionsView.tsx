@@ -626,7 +626,10 @@ function AgentSessionCard({
   const modeLabel =
     session.mode === 'ai' ? 'AI-driven' : session.mode === 'pair' ? 'Pair mode' : 'Manual';
   return (
-    <article className="group flex flex-col gap-3.5 rounded-xl border border-status-ready/50 bg-surface-raised p-4 shadow-sm transition-all hover:-translate-y-px hover:shadow-md">
+    <article
+      data-light="live"
+      className="ss-card group flex flex-col gap-3.5 rounded-xl border border-status-ready/50 bg-surface-raised p-4 shadow-sm transition-all hover:-translate-y-px hover:shadow-md"
+    >
       <div className="flex items-start gap-3">
         <span
           className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent"
@@ -801,7 +804,10 @@ function SessionCard({
       : 'bg-surface-inset text-ink-muted';
   return (
     <article
-      className={`group flex flex-col gap-3.5 rounded-xl border bg-surface-raised p-4 shadow-sm transition-all hover:-translate-y-px hover:shadow-md ${
+      // Round 2 — the card's state as light (see `.ss-card` in index.css);
+      // the border colour and the state word beside the pip say the same thing.
+      data-light={errored ? 'attention' : live ? 'live' : undefined}
+      className={`ss-card group flex flex-col gap-3.5 rounded-xl border bg-surface-raised p-4 shadow-sm transition-all hover:-translate-y-px hover:shadow-md ${
         errored
           ? 'border-status-error/50'
           : live

@@ -2510,7 +2510,7 @@ function CommandCenterScene(): JSX.Element {
   return (
     <AppWindow scene="command-center" current="home">
       <div className="flex flex-col gap-4 p-6">
-        <section className="flex flex-col gap-3 rounded-xl border border-surface-divider bg-surface-raised p-5">
+        <section className="cc-hero flex flex-col gap-3 rounded-xl border border-surface-divider bg-surface-raised p-5 shadow">
           <div className="flex flex-col gap-1">
             <span className="section-label text-accent-text">Good morning</span>
             <h1 className="text-xl font-semibold tracking-tight text-ink-primary">
@@ -2540,6 +2540,7 @@ function CommandCenterScene(): JSX.Element {
             label="Active"
             value={String(FIXTURE_ACCOUNT.concurrent_session_active)}
             accent
+            live
           />
           <Kpi icon={<span>🌍</span>} label="Proxies" value={String(MARKETING_PROXY_TALLY.total)} />
           <Kpi
