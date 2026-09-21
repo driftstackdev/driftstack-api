@@ -22,6 +22,25 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>2026-09</h2>
     <ul>
       <li>
+        <strong>API — the proxy test says who measured it, and the
+        saved-proxy list carries the same fingerprint fields as the test.</strong>
+        A <code>?check=full</code> result from
+        <code>POST /v1/account/me/proxies/&#123;id&#125;/test</code> now carries
+        <code>measured_by</code>: <code>phone</code> when a real phone session
+        took the measurement, <code>driftstack</code> when Driftstack itself did
+        because no phone could be reached in time. The field that carried this
+        fact before is still sent beside it with its old values for existing
+        integrations, but its values named our internal machinery and it is no
+        longer documented; read <code>measured_by</code> from here on. Each
+        proxy on <code>GET /v1/account/me/proxies</code> and in the response to
+        <code>PUT /v1/account/me/proxies/&#123;id&#125;</code> now carries
+        <code>direct_reading</code> and <code>website_like_reading</code> on its
+        <code>os_fingerprint</code>, the same fields the test result gained
+        earlier this month, with the same meaning. Everything is additive; the
+        SDKs' types include the new fields. Reference at
+        <a href="https://docs.driftstack.io/api/proxies/">/api/proxies</a>.
+      </li>
+      <li>
         <strong>API — the proxy test gets customer-worded names.</strong>
         <code>POST /v1/account/me/proxies/&#123;id&#125;/test</code> now takes
         <code>?check=quick</code> (measured by Driftstack itself) or
