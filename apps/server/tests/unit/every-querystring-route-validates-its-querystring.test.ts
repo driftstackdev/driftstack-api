@@ -58,6 +58,14 @@ const EXCEPTIONS = new Map<string, string>([
     'the sole query param `after` is an opaque cursor read once via Number() with a NaN→undefined guard; no schema needed',
   ],
   [
+    'account-me.ts::{ Params: { id: string }; Querystring: { vantage?: string; check?: string } }',
+    'The proxy test reads both names through resolveProxyTestVantage(request.query) in ' +
+      'services/customer-safe-proxy-test-vocabulary.ts, which accepts a value only from its ' +
+      'two closed sets (check: quick|full; vantage: cp|fleet) and answers 400 naming the ' +
+      'parameter otherwise — a typeof narrowing the classifier cannot see because it lives ' +
+      'in the helper, pinned by a-public-proxy-test-result-cannot-ship-undocumented.',
+  ],
+  [
     'auth-oauth-client.ts::{ Querystring: Record<string, string> }',
     "Forwards the IDP's query string verbatim to the dashboard. It iterates Object.entries and " +
       "appends only `typeof v === 'string'` values, so a repeated key is dropped rather than " +
