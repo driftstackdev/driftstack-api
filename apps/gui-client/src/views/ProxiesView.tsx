@@ -2746,7 +2746,7 @@ function ProxyTable({
 
           `ds-table-shell` makes this box the query container — viewport
           breakpoints misfire here because the box is not the window. */}
-      <div className="ds-table-shell overflow-x-auto rounded-lg border border-surface-divider bg-surface-raised">
+      <div className="ds-table-shell ds-lift overflow-x-auto rounded-lg border border-surface-divider bg-surface-raised shadow">
         <table className="w-full table-fixed border-collapse text-[12px]">
           <colgroup>
             <col className="w-8" />

@@ -1474,7 +1474,7 @@ function Panel({
 }): JSX.Element {
   return (
     <section
-      className={`rounded-xl border border-surface-divider bg-surface-raised px-5 py-4 shadow-sm ${
+      className={`ds-lift rounded-xl border border-surface-divider bg-surface-raised px-5 py-4 shadow ${
         className ?? ''
       }`}
     >

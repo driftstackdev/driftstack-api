@@ -4942,3 +4942,73 @@
     0 14px 34px -16px rgb(var(--status-error-rgb) / 0.4);
   --tw-shadow-colored: var(--tw-shadow);
 }
+
+/* ═════ the first-run wizard — redesign round 2 (stage 5) ════════════════
+   Every customer's first screen was bare text on the page: no card, no
+   depth, nothing lit. Each step now sits in a well: a raised card with the
+   shared lift, a hairline rim, and the accent light pooled behind its
+   top-left, breathing on the calm cadence by opacity alone. The stepper,
+   the copy and every control are exactly where they were; only the surface
+   under them changed. Stilled under reduced motion by the global clamp. */
+.fr-well {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border-radius: 18px;
+  padding: 28px 32px 30px;
+  background: rgb(var(--surface-raised-rgb));
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--surface-divider-rgb)),
+    var(--ai-lift);
+}
+.fr-well::before {
+  content: '';
+  position: absolute;
+  inset: -50% -20% auto -20%;
+  height: 170%;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    55% 60% at 12% 12%,
+    rgb(var(--accent-rgb) / 0.2) 0%,
+    rgb(var(--accent-rgb) / 0.06) 48%,
+    transparent 74%
+  );
+  animation: ds-ai-calm var(--ai-dur-calm) ease-in-out infinite;
+}
+
+/* ═════ Recordings — redesign round 2 (stage 4) ══════════════════════════
+   A recording's thumbnail was a flat inset rectangle. It is now the same
+   dark glass the profile card's screen wears, so a saved session reads as a
+   phone's screen at rest; the card carries the shared lift, and the one that
+   is selected glows in the accent instead of only wearing a ring. Nothing
+   moves; the frame under the glass is the recording's own first frame. */
+.rc-card {
+  --tw-shadow: var(--ai-lift);
+  --tw-shadow-colored: var(--ai-lift);
+  transition:
+    transform 150ms var(--ai-ease),
+    box-shadow var(--ai-dur-shift) var(--ai-ease),
+    border-color var(--ai-dur-shift) var(--ai-ease);
+}
+.rc-card[data-selected='true'] {
+  --tw-shadow:
+    var(--ai-lift), 0 0 0 3px rgb(var(--accent-rgb) / 0.12),
+    0 14px 34px -16px rgb(var(--accent-rgb) / 0.5);
+  --tw-shadow-colored: var(--tw-shadow);
+}
+.rc-thumb {
+  background: linear-gradient(165deg, rgb(27 33 48), rgb(6 8 16) 72%);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.06),
+    inset 0 12px 26px -18px rgb(0 0 0 / 0.9);
+}
+
+/* ═════ shared: a section card with the lift — Settings, Proxies (stage 6) ═
+   The one class every remaining section card can wear: the shared lift on
+   the mode axis, a hairline rim, no motion. Settings' section cards and the
+   Proxies table shell take it; nothing inside them changes. */
+.ds-lift {
+  --tw-shadow: var(--ai-lift);
+  --tw-shadow-colored: var(--ai-lift);
+}

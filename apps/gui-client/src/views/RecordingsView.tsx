@@ -420,7 +420,8 @@ function RecordingCard({
       type="button"
       data-recording-card={r.id}
       aria-pressed={selected}
-      className={`group relative overflow-hidden rounded-xl border bg-surface-raised text-left shadow-sm transition-all hover:-translate-y-px hover:shadow-md ${
+      data-selected={selected ? 'true' : undefined}
+      className={`rc-card group relative overflow-hidden rounded-xl border bg-surface-raised text-left shadow-sm transition-all hover:-translate-y-px hover:shadow-md ${
         selected
           ? 'border-accent ring-1 ring-accent'
           : 'border-surface-divider hover:border-ink-muted/60'
@@ -479,7 +480,7 @@ function Thumb({
   const first = r.frames[0];
   return (
     <div
-      className={`relative flex items-center justify-center overflow-hidden bg-surface-inset ${
+      className={`rc-thumb relative flex items-center justify-center overflow-hidden bg-surface-inset ${
         large ? 'aspect-[9/13] rounded-md' : 'aspect-[9/12]'
       }`}
     >

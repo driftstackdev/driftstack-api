@@ -148,7 +148,7 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
         to top-aligned, fully scrollable, when they do not.
       */}
       <main className="flex flex-1 items-start justify-center overflow-auto p-8">
-        <div className="my-auto w-full max-w-xl">
+        <div className="fr-well my-auto w-full max-w-xl">
           {step !== 'done' && <Stepper current={step} />}
           {step === 'welcome' && <WelcomeStep onNext={() => setStep('mode')} />}
           {step === 'mode' && (
