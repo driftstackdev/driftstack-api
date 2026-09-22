@@ -43,6 +43,22 @@ const EXTERNAL_CONSUMERS: Record<string, string> = {
     'The Swift harness in the driftstack repo connects here; the consumer is not in this repo.',
   '/v1/auth/oauth/${provider}/callback':
     'Template-literal registration; the identity provider redirects here.',
+  // 2026-09-22 — the four AI-credits customer routes are registered DARK
+  // (only while DRIFTSTACK_AI_CREDITS_MODE is on) and deliberately have no
+  // consumer yet: the dashboard, the docs and the SDKs pick them up in the
+  // launch change, and `every-registered-route-is-in-the-spec-or-exempt-for-a-
+  // stated-reason` + `nothing-about-an-unreleased-feature-is-in-the-published-
+  // spec` hold them out of every published surface until then. Once a consumer
+  // references one, this guard's "now referenced" arm fails and the entry is
+  // removed — that is the intended way these four leave this list.
+  '/v1/account/me/ai':
+    'Dark until AI credits launch; consumed by the dashboard and SDKs in that change.',
+  '/v1/account/me/ai-settings':
+    'Dark until AI credits launch; consumed by the dashboard in that change.',
+  '/v1/account/me/ai/ledger':
+    'Dark until AI credits launch; consumed by the dashboard and SDKs in that change.',
+  '/v1/ai/models':
+    'Dark until AI credits launch; consumed by the desktop app and SDKs in that change.',
 };
 
 function filesUnder(dir: string, exts: Set<string>): string[] {
