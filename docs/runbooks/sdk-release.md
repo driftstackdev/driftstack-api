@@ -91,7 +91,14 @@ git tag -a packages/sdk-go/v0.3.0 <ci-green-sha> \
 git push --no-verify origin packages/sdk-go/v0.3.0
 
 # 10. VERIFY FROM THE REGISTRIES, not from the working tree. See "Verify".
-# 11. Write the GitHub release note. See "The release note".
+# 11. Write the GitHub release note. See "The release note". ⛔ Pass
+#     `--latest=false` on EVERY SDK or api-types release: GitHub keeps one
+#     "latest" pointer per repository, the desktop updater reads
+#     `releases/latest/download/latest.json`, and a fresh SDK release silently
+#     takes that pointer and 404s every desktop install's update check until
+#     `gh release edit gui-v<current> --latest` puts it back. After any release
+#     action, confirm `curl -sIL …/releases/latest` still redirects to the
+#     current `gui-v*` tag.
 ```
 
 ## ⛔ Why api-types is published in a different shape
@@ -109,11 +116,12 @@ emitted files, the barrel's re-export of it, and `dist/.tsbuildinfo`. It writes
 nothing until every check passes, so a refusal leaves the workspace usable.
 
 It also REFUSES while any shipped file still names the feature in prose or in a
-field name. Today one does — `dist/admin.d.ts`, compiled from
-`packages/api-types/src/admin.ts`, whose `monthly_credits` field is documented
-in terms of a month's credits. That file belongs to the credits workflow.
-**The api-types publish is blocked until its owner rewrites that comment or the
-feature is live.** Run the publish build in step 6 to see the current list.
+field name. It did, twice: first `dist/admin.d.ts` (a field documented in terms
+of a month's credits, moved into the withheld module), then `dist/problem.d.ts`
+(the feature's own problem type sitting in the shared roster, moved into its own
+roster inside the withheld module). Both are closed and 0.2.0 published clean.
+Run the publish build in step 6 to see the current list; a refusal names the
+file and the line.
 
 `files` withholds the module's own files unconditionally, which is why a
 tarball packed WITHOUT this step is broken at import rather than quietly
@@ -320,8 +328,10 @@ for the same check run in CI against a stand-in.
 ## The release note
 
 One GitHub release per SDK version, tagged and titled for that SDK
-(`Driftstack TypeScript SDK 0.2.0`). The body is the CHANGELOG entry, copied,
-plus three things the CHANGELOG does not carry:
+(`Driftstack TypeScript SDK 0.2.0`), created with `--latest=false` (see step
+11: the repository's single "latest" pointer belongs to the desktop client's
+update feed). The body is the CHANGELOG entry, copied, plus three things the
+CHANGELOG does not carry:
 
 1. **The install line, at this version.** `npm install @driftstack/sdk@0.2.0`.
    A reader arriving from a search result should not have to work it out.
