@@ -29,7 +29,12 @@ import type { AiCreditLeaseKeeper } from './ai-credit-lease-keeper.js';
 import type { AiCreditsReportReader } from '../db/ai-credits-report-repo.js';
 import type { CreditAccountRecord, DrizzleCreditLedgerRepo } from '../db/credit-ledger-repo.js';
 import type { CurrentCreditWindow, DrizzleCreditWindowsRepo } from '../db/credit-windows-repo.js';
-import type { CreditRateCardReader } from '../db/credit-rate-card-repo.js';
+import type {
+  CreditRateCardReader,
+  DrizzleCreditRateCardRepo,
+} from '../db/credit-rate-card-repo.js';
+import type { DrizzleCreditPlanOverridesRepo } from '../db/credit-plan-overrides-repo.js';
+import type { CreditsRefresher } from './credit-grants.js';
 import { METRIC_NAMES } from './metrics-registry.js';
 
 /**
@@ -183,6 +188,52 @@ export interface AiCreditsRuntime {
    * does not support the surface it is calling and should throw, not guess.
    */
   readonly stateReads?: AiCreditsStateReads;
+  /**
+   * S15 — the admin mutation surface `routes/admin-ai-credits.ts` needs
+   * beyond every read above: ledger writes (a goodwill lot, a debt
+   * forgiveness adjustment), the plan-overrides repo, the rate-card writer
+   * (publish/withdraw/list), and the ONE entry point that re-derives an
+   * account's current window after either (`refreshCredits`, §6.6
+   * `reconcileLevel`). OPTIONAL ON THE TYPE ONLY, same reason as
+   * {@link AiCreditsStateReads}: a NEW bundle rather than widening
+   * {@link AiCreditsAccounts}, so every fixture built before S15 (a narrower
+   * `accounts` object literal satisfying that Pick) keeps typechecking
+   * unmodified. A real deployment populates this alongside `stateReads` in
+   * the same `creditGrants === null` guard bootstrap.ts already uses.
+   */
+  readonly admin?: AiCreditsAdminSurface;
+}
+
+/**
+ * S15 — see {@link AiCreditsRuntime.admin}. `transaction`/`lockAccount` are the
+ * two primitives the goodwill-grant and debt-forgiveness writes need to read
+ * the account's current debt and write its ledger row atomically, under the
+ * account's own lock; `insertLot`/`append` are the two writes themselves.
+ *
+ * `settleDebtFromFree` is ADDED (beyond the read/write pair above) because a
+ * goodwill grant is free credit, and the database refuses to COMMIT an
+ * account that holds debt beside spendable credit
+ * (`credit_check_debt_vs_free`, migration 0128) — every OTHER writer that
+ * adds free credit to an account ends its transaction with this same call
+ * (`credit-grants.ts`'s `refreshCreditsIn`), and an admin goodwill grant to an
+ * account that is IN DEBT is exactly the case that would otherwise fail at
+ * commit with a raw trigger error instead of quietly paying the debt down.
+ */
+export interface AiCreditsAdminSurface {
+  transaction: DrizzleCreditLedgerRepo['transaction'];
+  lockAccount: DrizzleCreditLedgerRepo['lockAccount'];
+  insertLot: DrizzleCreditLedgerRepo['insertLot'];
+  /** Re-reads a lot's state AFTER it was funded — see the method's own doc
+   *  comment; `insertLot`'s own return value is a pre-funding snapshot. */
+  getLot: DrizzleCreditLedgerRepo['getLot'];
+  append: DrizzleCreditLedgerRepo['append'];
+  settleDebtFromFree: DrizzleCreditLedgerRepo['settleDebtFromFree'];
+  planOverrides: Pick<DrizzleCreditPlanOverridesRepo, 'get' | 'upsert' | 'end'>;
+  rateCards: Pick<DrizzleCreditRateCardRepo, 'publish' | 'withdraw' | 'listAll' | 'modelCounts'>;
+  /** §6.6 — re-derive the account's current window after a plan-override
+   *  change. Does nothing when credits are off; always present here because
+   *  this whole member is absent then. */
+  refreshCredits: CreditsRefresher['refreshCredits'];
 }
 
 /**

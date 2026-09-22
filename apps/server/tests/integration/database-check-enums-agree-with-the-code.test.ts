@@ -40,6 +40,7 @@
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as apiTypes from '@driftstack/api-types';
+import { AI_CREDITS_ADMIN_AUDIT_ACTIONS } from '../../src/db/schema.js';
 import {
   CREDIT_LEDGER_ACTORS,
   CREDIT_LEDGER_KINDS,
@@ -234,6 +235,11 @@ const SERVER_SIDE_ENUMS: { name: string; values: readonly string[] }[] = [
   { name: 'CREDIT_CALL_BOUND_BASES', values: CREDIT_CALL_BOUND_BASES },
   { name: 'CREDIT_MODEL_CALL_STATES', values: CREDIT_MODEL_CALL_STATES },
   { name: 'CREDIT_CALL_SETTLE_BASES', values: CREDIT_CALL_SETTLE_BASES },
+  // The credits admin audit trail (0134). A text column with a CHECK rather
+  // than a pgEnum, on purpose: the published admin audit enum ships to npm and
+  // may not carry this vocabulary before launch, so the constant lives in
+  // schema.ts beside the table and is registered here by name.
+  { name: 'AI_CREDITS_ADMIN_AUDIT_ACTIONS', values: AI_CREDITS_ADMIN_AUDIT_ACTIONS },
 ];
 
 /**
@@ -405,6 +411,7 @@ describe('the database CHECK enumerations agree with the code', () => {
       'AGENT_TURN_PERSISTED_OUTCOMES=agent_turn_telemetry_outcome',
       'AGENT_TURN_PERSISTED_STEP_KINDS=agent_turn_telemetry_died_step_kind',
       'AGENT_TURN_TRANSPORTS=agent_turn_telemetry_transport',
+      'AI_CREDITS_ADMIN_AUDIT_ACTIONS=ai_credits_admin_audit_log_action_check',
       'AgentModelSchema=agent_sessions_model_check',
       'AiBillingSchema=credit_accounts_billing_mode',
       'AiDebtReasonSchema=credit_ledger_debt_reason',

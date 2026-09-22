@@ -64,6 +64,11 @@ const LIVE_SEAMS = new Map<string, string>([
   ],
   ['in-memory-admin-audit-repo.ts::getAll', 'not on AdminAuditLogRepo; assertion-only seam'],
   [
+    'in-memory-ai-credits-admin-audit-repo.ts::getAll',
+    'not on DrizzleAiCreditsAdminAuditRepo (S15); assertion-only seam, same as ' +
+      'in-memory-admin-audit-repo.ts::getAll beside it',
+  ],
+  [
     'in-memory-account-lifecycle-repo.ts::read',
     'not on AccountLifecycleRepo; returns the fixture-internal InMemoryRow for assertions',
   ],

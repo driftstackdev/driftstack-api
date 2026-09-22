@@ -148,6 +148,42 @@ const UNDOCUMENTED_ROUTES = new Map<string, string>([
     'GET /v1/admin/ai-credits/shadow-report',
     'staff — driftstack_internal_admin; per-day per-model shadow charge against real list price, counts and sums only. Undocumented for the same two reasons as the census beside it',
   ],
+  // S15 — the AI-credits ADMIN tools: contract credits (plan override),
+  // goodwill grants and debt forgiveness, and rate-card publishing. STAFF,
+  // like the two routes above, not CUSTOMER like the S14 block below — each
+  // reaches `requireScope('driftstack_internal_admin')` except the two rate-
+  // card mutations, which are OWNER-ONLY (`app.requireOwner`, an identity
+  // gate, not a scope). Undocumented for the same second reason as the census
+  // and shadow-report beside them: nothing published may mention AI credits
+  // before the feature launches.
+  [
+    'GET /v1/admin/accounts/:p/credits',
+    "staff — driftstack_internal_admin; one account's credit state (billing mode, source, window, lots, debt, reservations, override, last 20 ledger entries). Undocumented for the same second reason as the census beside it",
+  ],
+  [
+    'POST /v1/admin/accounts/:p/credits/adjustments',
+    'staff — driftstack_internal_admin; a goodwill grant or a debt forgiveness, both idempotent and audited. Undocumented for the same second reason as the census above',
+  ],
+  [
+    'PUT /v1/admin/accounts/:p/ai-plan-override',
+    'staff — driftstack_internal_admin; sets a contract or admin-assigned monthly credit figure for one account. Undocumented for the same second reason as the census above',
+  ],
+  [
+    'DELETE /v1/admin/accounts/:p/ai-plan-override',
+    'staff — driftstack_internal_admin; ends a live override. Undocumented for the same second reason as the census above',
+  ],
+  [
+    'POST /v1/admin/credit-rate-cards',
+    'owner-only — app.requireOwner, an identity gate on the configured owner account, not a staff scope. Undocumented for the same second reason as the census above',
+  ],
+  [
+    'GET /v1/admin/credit-rate-cards',
+    'staff — driftstack_internal_admin; lists every card with its lifecycle status. Undocumented for the same second reason as the census above',
+  ],
+  [
+    'POST /v1/admin/credit-rate-cards/:p/withdraw',
+    'owner-only — app.requireOwner, same gate as publishing a card. Undocumented for the same second reason as the census above',
+  ],
   // S14 — the Phase-2-facing customer read/settings API for AI credits.
   // CUSTOMER, unlike the two staff routes above: each reaches
   // `requireAuth` + `requireScope('read')` or `requireScope('account_owner')`.

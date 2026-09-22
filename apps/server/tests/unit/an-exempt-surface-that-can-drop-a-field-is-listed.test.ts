@@ -84,6 +84,13 @@ const CAN_DROP: ReadonlySet<string> = new Set([
   'admin-accounts.ts (SetQuotaOverrideRequestSchema)',
   'admin-accounts.ts (SuspendAccountRequestSchema)',
   'admin-accounts.ts (UnsuspendAccountRequestSchema)',
+  // S15 — `PUT /v1/admin/accounts/:id/ai-plan-override`'s `expires_at` is the
+  // only optional field (`monthly_credits` and `reason` are both required). A
+  // mistyped `expires_at` is silently dropped and the override is written with
+  // no end date (open-ended) instead of the one the admin meant to set — wrong
+  // in the direction of granting MORE than intended, not less, which is why
+  // this is listed rather than left to the blanket admin-* rationale.
+  'admin-ai-credits.ts (AdminSetPlanOverrideRequestSchema)',
   'admin-force-actions.ts (ForceActionBodySchema)',
   'admin-incidents.ts (CreateIncidentRequestSchema)',
   'admin-owner.ts (SetSecretBodySchema)',

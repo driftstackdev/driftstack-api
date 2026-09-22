@@ -95,6 +95,12 @@ const UNBOUNDED_SCANS = new Map<string, string>([
     'cost-nightly-accounts-provider.ts:listAllAccountIds',
     'CUSTOMERS — every active account, once per nightly tick',
   ],
+  [
+    'credit-rate-card-repo.ts:listAll',
+    'operator — one row per PUBLISHED rate card (S15). A card is published rarely, by the owner ' +
+      'alone, through the 30-day-notice admin route; the table is bounded by that cadence the same ' +
+      'way pricing-repo.ts:listAll is bounded by one row per tier',
+  ],
   ['fleet-nodes-repo.ts:listActive', 'operator — fleet size, provisioned by us'],
   ['fleet-nodes-repo.ts:listActiveByRegion', 'operator — a subset of the fleet'],
   ['fleet-nodes-repo.ts:listWithLivekitNearest', 'operator — a subset of the fleet'],

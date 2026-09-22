@@ -243,6 +243,20 @@ const INTENTIONALLY_UNPUBLISHED_OPERATIONS = new Set([
   'GET /v1/account/me/ai/ledger',
   'PATCH /v1/account/me/ai-settings',
   'GET /v1/ai/models',
+  // S15 — the AI-credits ADMIN tools: contract credits (plan override),
+  // goodwill grants and debt forgiveness, and rate-card publishing. Staff-only
+  // (driftstack_internal_admin), except the two rate-card mutations which are
+  // OWNER-ONLY (requireOwner). Unpublished for the same second reason as every
+  // other credits route above: the published document may not mention AI
+  // credits before launch. Registered only while DRIFTSTACK_AI_CREDITS_MODE is
+  // not off.
+  'GET /v1/admin/accounts/:p/credits',
+  'POST /v1/admin/accounts/:p/credits/adjustments',
+  'PUT /v1/admin/accounts/:p/ai-plan-override',
+  'DELETE /v1/admin/accounts/:p/ai-plan-override',
+  'POST /v1/admin/credit-rate-cards',
+  'GET /v1/admin/credit-rate-cards',
+  'POST /v1/admin/credit-rate-cards/:p/withdraw',
   'GET /v1/agent-sessions/:p/gui-control-key',
   'GET /v1/auth/oauth/github/callback',
   'GET /v1/auth/oauth/google/callback',
@@ -267,6 +281,14 @@ const ADMIN_OPERATIONS_WITHHELD_FROM_THE_CUSTOMER_SPEC: readonly string[] = [
   'GET /v1/admin/agent-turns/summary',
   'GET /v1/admin/ai-credits/census',
   'GET /v1/admin/ai-credits/shadow-report',
+  // S15 — the AI-credits admin tools.
+  'GET /v1/admin/accounts/:p/credits',
+  'POST /v1/admin/accounts/:p/credits/adjustments',
+  'PUT /v1/admin/accounts/:p/ai-plan-override',
+  'DELETE /v1/admin/accounts/:p/ai-plan-override',
+  'POST /v1/admin/credit-rate-cards',
+  'GET /v1/admin/credit-rate-cards',
+  'POST /v1/admin/credit-rate-cards/:p/withdraw',
 ];
 
 describe('published OpenAPI operation ↔ Fastify registration coverage', () => {
@@ -328,7 +350,12 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     // PATCH /v1/account/me/ai-settings and GET /v1/ai/models — all four
     // unpublished, see their INTENTIONALLY_UNPUBLISHED_OPERATIONS entries, so the
     // published count above does not move either.
-    expect(routeOperations.size).toBe(268);
+    // 275 since S15 registered seven AI-credits admin operations — GET/POST
+    // /v1/admin/accounts/:id/credits(/adjustments), PUT+DELETE .../ai-plan-
+    // override, POST+GET /v1/admin/credit-rate-cards and POST .../:version/
+    // withdraw — all seven unpublished, see their INTENTIONALLY_UNPUBLISHED_
+    // OPERATIONS entries, so the published count above does not move either.
+    expect(routeOperations.size).toBe(275);
   });
 
   it('documents the method-specific customer-core contract', () => {

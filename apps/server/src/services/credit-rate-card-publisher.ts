@@ -244,3 +244,67 @@ export function deriveRateCardRows(
 
   return refusals.length > 0 ? { ok: false, refusals } : { ok: true, markupBp, rows };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S15 — the OWNER-ONLY admin publish path sends only `{markup_bp, effective_at}`
+// (the design's §7 shape): no per-model terms. This derives the full model list
+// itself, so nothing is hand-typed on the request.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Every model's per-task start minimum and reserve maximum is Sonnet 5's own
+ * (6 / 60 credits), scaled by that model's OUTPUT list price relative to Sonnet
+ * 5's — the same ratio `CREDIT_RATE_CARD_V1` was hand-built from (§9: Sonnet
+ * 4.6 at 9/90, Haiku 4.5 at 3/30). A model that costs more per output token
+ * needs more credit to run one task; a model that costs less needs less.
+ */
+const BASE_TERMS_MODEL: AgentModel = 'claude-sonnet-5';
+const BASE_MIN_START_MICRO = 6_000_000;
+const BASE_MAX_RESERVE_MICRO = 60_000_000;
+
+/**
+ * The models a card SHOULD price, with their scaled per-task limits — every
+ * `AgentModel` the key policy and the credits decision both call `any_key` /
+ * `on_credits` today, Opus-class ids excluded outright (mirrors
+ * `deriveRateCardRows`'s own refusal so the two can never disagree about which
+ * models are creditable).
+ *
+ * ⛔ NOT EVERY MODEL IN THE REGISTRY. Feeding `deriveRateCardRows` an
+ * own-key-only model here would make EVERY publish refuse forever — Opus is
+ * always own-key-only, so a draft that always includes it could never
+ * succeed. The own_key_only refusal in `deriveRateCardRows` stays reachable
+ * only because a CALLER can pass its own `sources` (a test proving "an
+ * own-key-only model is refused" swaps `keyPolicy`/`decisions` for one that
+ * marks a normally-creditable model own-key-only); this function is what a
+ * real publish uses, and it never manufactures that refusal against itself.
+ */
+export function candidateRateCardModels(
+  sources: RateCardSources = SHIPPED_SOURCES,
+): RateCardModelTerms[] {
+  const base = sources.registry[BASE_TERMS_MODEL];
+  if (base === undefined || !(base.outputCentsPer1k > 0)) {
+    throw new Error(
+      `the rate card base model ${BASE_TERMS_MODEL} has no positive output list price`,
+    );
+  }
+  const terms: RateCardModelTerms[] = [];
+  for (const model of Object.keys(sources.registry) as AgentModel[]) {
+    if (OPUS_CLASS.test(model)) continue;
+    if (sources.keyPolicy[model] !== 'any_key') continue;
+    if (sources.decisions[model] !== 'on_credits') continue;
+    const info = sources.registry[model];
+    if (!(info.outputCentsPer1k > 0)) continue;
+    const ratio = info.outputCentsPer1k / base.outputCentsPer1k;
+    const minStartMicro = wholeOrNull(BASE_MIN_START_MICRO * ratio);
+    const maxReserveMicro = wholeOrNull(BASE_MAX_RESERVE_MICRO * ratio);
+    // A ratio that does not land on a whole microcredit is a registry price
+    // this scaling cannot express cleanly; skip rather than round, the same
+    // discipline `deriveRateCardRows` applies to every other price.
+    if (minStartMicro === null || maxReserveMicro === null) continue;
+    terms.push({ model, minStartMicro, maxReserveMicro });
+  }
+  // Deterministic order: the id itself, so two publishes of the same registry
+  // insert their model rows in the same order and a diff is ever only prices.
+  terms.sort((a, b) => (a.model < b.model ? -1 : a.model > b.model ? 1 : 0));
+  return terms;
+}

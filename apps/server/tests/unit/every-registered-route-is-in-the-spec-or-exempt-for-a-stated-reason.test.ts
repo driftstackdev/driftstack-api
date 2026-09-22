@@ -89,6 +89,39 @@ const EXEMPT: ReadonlyMap<string, string> = new Map([
   // (`nothing-about-an-unreleased-feature-is-in-the-published-spec` holds
   // the whole term). Due to be published at launch, together with the
   // `AI_CREDITS_PROBLEM_TYPES` roster these routes' 403/409 draw on.
+  // S15 — the AI-credits ADMIN tools: contract credits (plan override),
+  // goodwill grants and debt forgiveness, and rate-card publishing. Staff-only
+  // (driftstack_internal_admin), except the two rate-card mutations which are
+  // OWNER-ONLY (requireOwner) — withheld for the same reason either way: the
+  // published spec may not mention AI credits before launch.
+  [
+    'GET /v1/admin/accounts/{}/credits',
+    'staff panel only; and the published spec may not mention AI credits before launch',
+  ],
+  [
+    'POST /v1/admin/accounts/{}/credits/adjustments',
+    'staff panel only; and the published spec may not mention AI credits before launch',
+  ],
+  [
+    'PUT /v1/admin/accounts/{}/ai-plan-override',
+    'staff panel only; and the published spec may not mention AI credits before launch',
+  ],
+  [
+    'DELETE /v1/admin/accounts/{}/ai-plan-override',
+    'staff panel only; and the published spec may not mention AI credits before launch',
+  ],
+  [
+    'POST /v1/admin/credit-rate-cards',
+    'owner-only; and the published spec may not mention AI credits before launch',
+  ],
+  [
+    'GET /v1/admin/credit-rate-cards',
+    'staff panel only; and the published spec may not mention AI credits before launch',
+  ],
+  [
+    'POST /v1/admin/credit-rate-cards/{}/withdraw',
+    'owner-only; and the published spec may not mention AI credits before launch',
+  ],
   [
     'GET /v1/account/me/ai',
     'dark until launch; the published spec may not mention AI credits before launch',

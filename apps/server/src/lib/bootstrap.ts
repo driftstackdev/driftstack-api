@@ -262,6 +262,7 @@ import {
 import { CryptoTierActivationService } from '../services/crypto-tier-activation.js';
 import { DrizzleCreditLedgerRepo } from '../db/credit-ledger-repo.js';
 import { DrizzleCreditPlanOverridesRepo } from '../db/credit-plan-overrides-repo.js';
+import { DrizzleAiCreditsAdminAuditRepo } from '../db/ai-credits-admin-audit-repo.js';
 import { DrizzleCreditWindowsRepo } from '../db/credit-windows-repo.js';
 import { DrizzleCreditRateCardRepo } from '../db/credit-rate-card-repo.js';
 import { DrizzleCreditReservationsRepo } from '../db/credit-reservations-repo.js';
@@ -613,6 +614,13 @@ export async function createProductionDeps(
   // override and writes no contract, which is exactly what it did before.
   const creditPlanOverridesRepo = creditGrantsRun(config.aiCreditsMode)
     ? new DrizzleCreditPlanOverridesRepo(dbHandle)
+    : null;
+  // S15 — the SEPARATE, dark audit trail for the AI-credits admin routes
+  // (`db/ai-credits-admin-audit-repo.ts`). Same `creditGrantsRun` gate as
+  // every other credits dependency here, so it is non-null exactly when
+  // `aiCredits` (built further below) is present.
+  const aiCreditsAdminAuditRepo = creditGrantsRun(config.aiCreditsMode)
+    ? new DrizzleAiCreditsAdminAuditRepo(dbHandle)
     : null;
   const accountsAdminRepo = new DrizzleAccountsAdminRepo(dbHandle, creditPlanOverridesRepo);
   const adminBillingRepo = new DrizzleAdminBillingRepo(dbHandle);
@@ -1184,6 +1192,29 @@ export async function createProductionDeps(
                   cardInForce: creditRateCardRepo.cardInForce.bind(creditRateCardRepo),
                   nextAnnouncedCard: creditRateCardRepo.nextAnnouncedCard.bind(creditRateCardRepo),
                   modelRow: creditRateCardRepo.modelRow.bind(creditRateCardRepo),
+                },
+          // S15 — the admin mutation surface `routes/admin-ai-credits.ts`
+          // needs: ledger writes for a goodwill grant/debt forgiveness, the
+          // plan-overrides repo, the rate-card writer, and `refreshCredits`
+          // itself. `creditPlanOverridesRepo`, `creditRateCardRepo` and
+          // `creditGrants` are each set by the same `creditGrantsRun`/
+          // `creditGrants === null` condition this whole branch is already
+          // inside; checked again here (as `stateReads` above already checks
+          // two of its own) so TypeScript narrows each to non-null instead of
+          // requiring a cast.
+          admin:
+            creditPlanOverridesRepo === null || creditRateCardRepo === null || creditGrants === null
+              ? undefined
+              : {
+                  transaction: creditLedgerRepo.transaction.bind(creditLedgerRepo),
+                  lockAccount: creditLedgerRepo.lockAccount.bind(creditLedgerRepo),
+                  insertLot: creditLedgerRepo.insertLot.bind(creditLedgerRepo),
+                  getLot: creditLedgerRepo.getLot.bind(creditLedgerRepo),
+                  append: creditLedgerRepo.append.bind(creditLedgerRepo),
+                  settleDebtFromFree: creditLedgerRepo.settleDebtFromFree.bind(creditLedgerRepo),
+                  planOverrides: creditPlanOverridesRepo,
+                  rateCards: creditRateCardRepo,
+                  refreshCredits: creditGrants.refreshCredits.bind(creditGrants),
                 },
         };
 
@@ -3924,6 +3955,8 @@ export async function createProductionDeps(
     // production posture), which is what keeps the AI turn byte for byte what
     // it was and the admin credits routes unregistered.
     ...(aiCredits !== undefined ? { aiCredits } : {}),
+    // S15 — present exactly when `aiCredits` is (same `creditGrantsRun` gate).
+    ...(aiCreditsAdminAuditRepo !== null ? { aiCreditsAdminAuditRepo } : {}),
     readinessChecks,
     // 2026-05-20 — env-var-controlled escape hatch. Some webview
     // contexts (Tauri custom-scheme pages, certain mobile in-app

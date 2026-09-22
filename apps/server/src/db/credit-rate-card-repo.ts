@@ -1,10 +1,15 @@
-// Reads the AI credits rate card (migration 0127).
+// Reads and (S15) writes the AI credits rate card (migration 0127).
 //
-// Two questions and nothing else: which card is in force at an instant, and
-// what one model costs on one card. There is deliberately NO writer here. A card
-// is published by an owner-only admin path that does not exist yet, and the
-// database refuses every later change on its own (see the trigger notes beside
-// `creditRateCards` in schema.ts), so the read side has nothing to guard.
+// Two questions the read side answers, and nothing else: which card is in
+// force at an instant, and what one model costs on one card.
+//
+// S15 adds the writer: `publish` and `withdraw`, for the owner-only admin
+// path (`services/admin-credits.ts`). The database still refuses everything
+// this file does not do on its own — no UPDATE of a published card's terms,
+// no DELETE ever, no model row after the card's own transaction, the 30-day
+// notice, "withdraw only before it takes effect" — see the trigger notes
+// beside `creditRateCards`/`creditRateCardModels` in schema.ts. This file's
+// checks exist to fail early and readably; the database is the last line.
 //
 // The card in force is the newest card that has taken effect and was not
 // withdrawn. A withdrawn card is never in force at any instant, because the
@@ -14,7 +19,7 @@
 import { and, desc, eq, gt, isNull, lte, sql } from 'drizzle-orm';
 import type { CreditRateCardModelRow } from '@driftstack/api-types';
 import type { Database } from './client.js';
-import type { CreditLedgerExecutor } from './credit-ledger-repo.js';
+import { rowsOf, type CreditLedgerExecutor, type CreditLedgerTx } from './credit-ledger-repo.js';
 import {
   creditRateCardModels,
   creditRateCards,
@@ -38,6 +43,71 @@ export interface CreditRateCardRecord {
 export interface CreditRateCardModelRecord extends CreditRateCardModelRow {
   readonly version: number;
   readonly model: string;
+}
+
+/** S15 — a derived row (`deriveRateCardRows`'s output), ready to write. */
+export interface RateCardModelToWrite extends CreditRateCardModelRow {
+  readonly model: string;
+}
+
+/** S15 — what `publish` writes: the card row plus every model it prices. */
+export interface RateCardPublishInput {
+  /** Markup over list price in basis points; the database re-checks the range. */
+  readonly markupBp: number;
+  /** When the card takes effect. The database re-checks the 30-day notice. */
+  readonly effectiveAt: Date;
+  readonly rows: readonly RateCardModelToWrite[];
+  readonly createdByKeyId: string | null;
+  readonly note?: string;
+}
+
+/** S15 — what `withdraw` found. `card` is null only for `not_found`. */
+export type RateCardWithdrawResult =
+  | { readonly outcome: 'withdrawn'; readonly card: CreditRateCardRecord }
+  | { readonly outcome: 'already_withdrawn'; readonly card: CreditRateCardRecord }
+  | { readonly outcome: 'not_found'; readonly card: null };
+
+/**
+ * S15 — thrown by `publish`/`withdraw` when the DATABASE itself refused the
+ * write (a CHECK or a trigger raised at INSERT/UPDATE or at COMMIT), so the
+ * caller can tell "this specific rule" apart from an ordinary connection
+ * failure. `sqlState` is the Postgres error code (e.g. `23514`, `55000`);
+ * `constraintName` is set when Postgres named one.
+ */
+export class RateCardRefusedError extends Error {
+  constructor(
+    message: string,
+    readonly sqlState: string | null,
+    readonly constraintName: string | null,
+  ) {
+    super(message);
+    this.name = 'RateCardRefusedError';
+  }
+}
+
+/** The Postgres error shape `postgres`/drizzle surface on a driver error. */
+function pgError(err: unknown): { code?: string; constraint_name?: string } | null {
+  const cause = (err as { cause?: unknown }).cause;
+  const candidate = cause ?? err;
+  if (candidate !== null && typeof candidate === 'object' && 'code' in candidate) {
+    return candidate as { code?: string; constraint_name?: string };
+  }
+  return null;
+}
+
+/** Re-throw a driver error from a rate-card write as {@link RateCardRefusedError}
+ *  when it is one of the CHECKs/triggers migration 0127 documents; anything
+ *  else (a dropped connection, say) passes through unchanged. */
+function asRateCardRefusal(err: unknown): never {
+  const pg = pgError(err);
+  if (pg !== null && (pg.code === '23514' || pg.code === '55000')) {
+    throw new RateCardRefusedError(
+      err instanceof Error ? err.message : 'the rate card write was refused',
+      pg.code ?? null,
+      pg.constraint_name ?? null,
+    );
+  }
+  throw err;
 }
 
 export interface CreditRateCardReader {
@@ -74,7 +144,39 @@ export interface CreditRateCardReader {
   nextAnnouncedCard(at?: Date, on?: CreditLedgerExecutor): Promise<CreditRateCardRecord | null>;
 }
 
-export class DrizzleCreditRateCardRepo implements CreditRateCardReader {
+/** S15 — the owner-only publish path. */
+export interface CreditRateCardWriter {
+  /**
+   * Insert a new card and its model rows in ONE transaction: the next version
+   * number (`max(version) + 1`, serialized against a concurrent publish by an
+   * advisory lock so two owners cannot compute the same one), the card row,
+   * then every model row. `input.rows` is already `deriveRateCardRows`'
+   * OUTPUT — this writes what it derived, unchanged; it does not re-derive.
+   *
+   * Throws {@link RateCardRefusedError} for a CHECK/trigger refusal (the
+   * 30-day notice, the markup range, an Opus-class model — every rule
+   * migration 0127 documents); the caller decides the HTTP shape.
+   */
+  publish(input: RateCardPublishInput): Promise<CreditRateCardRecord>;
+  /**
+   * Withdraw a card that has not taken effect yet.
+   *
+   * Throws {@link RateCardRefusedError} when the database refuses the write
+   * itself (its `effective_at` has passed — including the COMMIT-time race
+   * the deferred trigger catches). Does NOT throw for "no such version" or
+   * "already withdrawn": both are ordinary outcomes the caller distinguishes
+   * from `withdrawn` on the result, because neither reaches the database
+   * trigger (the UPDATE's own WHERE excludes an already-withdrawn row, so it
+   * matches zero rows rather than being refused).
+   */
+  withdraw(version: number, on?: CreditLedgerExecutor): Promise<RateCardWithdrawResult>;
+  /** Every card, newest version first — `GET /v1/admin/credit-rate-cards`. */
+  listAll(on?: CreditLedgerExecutor): Promise<readonly CreditRateCardRecord[]>;
+  /** How many models each card prices, by version — that list's `model_count`. */
+  modelCounts(on?: CreditLedgerExecutor): Promise<ReadonlyMap<number, number>>;
+}
+
+export class DrizzleCreditRateCardRepo implements CreditRateCardReader, CreditRateCardWriter {
   constructor(private readonly database: Database) {}
 
   async cardInForce(
@@ -132,6 +234,110 @@ export class DrizzleCreditRateCardRepo implements CreditRateCardReader {
       .orderBy(creditRateCards.effectiveAt)
       .limit(1);
     return row === undefined ? null : toCardRecord(row);
+  }
+
+  async publish(input: RateCardPublishInput): Promise<CreditRateCardRecord> {
+    try {
+      return await this.database.db.transaction(async (tx: CreditLedgerTx) => {
+        // Serialize concurrent publishes: without this, two owners racing to
+        // publish could both read the same MAX(version) and try to insert the
+        // same next one — the second would fail on the primary key, which is
+        // a correct refusal but a confusing one ("version already exists" for
+        // a version the caller never chose). The lock makes the second wait
+        // and then see the first's version in its own MAX() read.
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtextextended('credit_rate_cards_publish', 0))`,
+        );
+        const result = await tx.execute<{ next: number }>(
+          sql`SELECT (COALESCE(MAX(version), 0) + 1)::int AS next FROM credit_rate_cards`,
+        );
+        const next = rowsOf<{ next: number }>(result)[0]?.next;
+        if (next === undefined) throw new Error('could not compute the next rate card version');
+
+        const [card] = await tx
+          .insert(creditRateCards)
+          .values({
+            version: next,
+            markupBp: input.markupBp,
+            // announced_at is forced to now() by the BEFORE INSERT trigger
+            // regardless of what is sent; effective_at is the one figure this
+            // write actually controls.
+            effectiveAt: input.effectiveAt,
+            createdByKeyId: input.createdByKeyId,
+            note: input.note ?? '',
+          })
+          .returning();
+        if (card === undefined) throw new Error('a rate card was inserted and not returned');
+
+        if (input.rows.length > 0) {
+          await tx.insert(creditRateCardModels).values(
+            input.rows.map((r) => ({
+              version: next,
+              model: r.model,
+              inputMicroPerToken: r.inputMicroPerToken,
+              outputMicroPerToken: r.outputMicroPerToken,
+              cacheReadMicroPerToken: r.cacheReadMicroPerToken,
+              cacheWrite5mMicroPerToken: r.cacheWrite5mMicroPerToken,
+              cacheWrite1hMicroPerToken: r.cacheWrite1hMicroPerToken,
+              minStartMicro: r.minStartMicro,
+              maxReserveMicro: r.maxReserveMicro,
+              listInputMicrocentsPerToken: r.listInputMicrocentsPerToken,
+              listOutputMicrocentsPerToken: r.listOutputMicrocentsPerToken,
+            })),
+          );
+        }
+        return toCardRecord(card);
+      });
+    } catch (err) {
+      asRateCardRefusal(err);
+    }
+  }
+
+  async withdraw(
+    version: number,
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<RateCardWithdrawResult> {
+    try {
+      const [row] = await on
+        .update(creditRateCards)
+        .set({ withdrawnAt: sql`now()` })
+        .where(and(eq(creditRateCards.version, version), isNull(creditRateCards.withdrawnAt)))
+        .returning();
+      if (row !== undefined) return { outcome: 'withdrawn', card: toCardRecord(row) };
+      // The UPDATE matched zero rows: either no such version, or one that
+      // exists but is already withdrawn (the WHERE above excludes it). Read
+      // back to tell the two apart.
+      const [existing] = await on
+        .select()
+        .from(creditRateCards)
+        .where(eq(creditRateCards.version, version))
+        .limit(1);
+      return existing === undefined
+        ? { outcome: 'not_found', card: null }
+        : { outcome: 'already_withdrawn', card: toCardRecord(existing) };
+    } catch (err) {
+      asRateCardRefusal(err);
+    }
+  }
+
+  async listAll(
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<readonly CreditRateCardRecord[]> {
+    const rows = await on.select().from(creditRateCards).orderBy(desc(creditRateCards.version));
+    return rows.map(toCardRecord);
+  }
+
+  /** S15 — how many models each card prices, for `GET /v1/admin/credit-rate-cards`'
+   *  `model_count`. A card with no rows at all (refused before any model row was
+   *  written) reads 0, not absent. */
+  async modelCounts(
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<ReadonlyMap<number, number>> {
+    const rows = await on
+      .select({ version: creditRateCardModels.version, count: sql<string>`count(*)::text` })
+      .from(creditRateCardModels)
+      .groupBy(creditRateCardModels.version);
+    return new Map(rows.map((r) => [r.version, Number(r.count)]));
   }
 }
 

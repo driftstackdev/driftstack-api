@@ -648,6 +648,22 @@ export class DrizzleCreditLedgerRepo {
   }
 
   /**
+   * S15 — one lot by id, exactly as the row stands right now. `insertLot`'s
+   * own return value is a snapshot from BEFORE any `grant`/`debt_repayment`
+   * row funded or drew it down (a lot is born with `remaining_micro = 0`), so
+   * a caller that wants the lot's state AFTER funding it — the admin
+   * goodwill-grant response, for one — re-reads it with this rather than
+   * reusing that snapshot.
+   */
+  async getLot(
+    lotId: string,
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<CreditLotRecord | null> {
+    const [row] = await on.select().from(creditLots).where(eq(creditLots.id, lotId)).limit(1);
+    return row === undefined ? null : toLotRecord(row);
+  }
+
+  /**
    * Credit a new task could use right now: the sum of `remaining − held` over
    * lots that have started, have not expired and are not revoked. "Now" is the
    * DATABASE's clock (inside a transaction, its start), never this process's.

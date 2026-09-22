@@ -206,7 +206,11 @@ describe('/v1/admin route authorization invariant', () => {
     // cutover cohort census, both aggregates over the whole deployment and both
     // on the same internal-admin scope. Refreshed with the gating arm below
     // proven green at the new count.
-    expect(routes).toHaveLength(71);
+    // 78 with S15's seven AI-credits admin routes: GET/POST/PUT/DELETE under
+    // /v1/admin/accounts/:id/{credits,credits/adjustments,ai-plan-override}
+    // and GET/POST /v1/admin/credit-rate-cards + POST .../:version/withdraw —
+    // five on internal-admin scope, two (publish, withdraw) on requireOwner.
+    expect(routes).toHaveLength(78);
     expect(routes.length).toBeGreaterThanOrEqual(60);
   });
 

@@ -214,6 +214,15 @@ const REVIEWED_RAW: Array<{ match: string; why: string }> = [
   // credit-reservations-repo, the per-call admission and settlement (reviewed
   // 2026-09-20). Four statements, each about ONE task or ONE call, addressed by
   // a primary key or a unique constraint.
+  // credit-rate-card-repo, the owner-only publisher (reviewed 2026-09-22).
+  {
+    match: 'SELECT (COALESCE(MAX(version), 0) + 1)::int AS next FROM credit_rate_cards',
+    why:
+      'publish: an aggregate over the whole card table (MAX(version) + 1) that returns exactly ' +
+      'one row with no GROUP BY, taken under the publish advisory lock acquired on the line ' +
+      'above it, so two publishers cannot both read the same next version; ' +
+      '`credit_rate_cards.version` is the primary key and refuses a repeat',
+  },
   {
     match: 'SELECT state, model, (now() >= max_until) AS past_ceiling',
     why:

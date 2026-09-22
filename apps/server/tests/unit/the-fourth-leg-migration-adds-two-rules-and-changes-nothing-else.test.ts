@@ -250,7 +250,11 @@ describe('migration 0133 adds the fourth leg and the shadow charge rule, and not
     expect(journal.entries[at]?.idx).toBe(133);
     expect(journal.entries[at - 1]?.tag).toBe('0132_credit_guard_gaps');
     expect(journal.entries[at]?.when).toBeGreaterThan(journal.entries[at - 1]?.when ?? Infinity);
-    expect(journal.entries, 'it is the last one').toHaveLength(134);
+    // 0134 (the credits admin audit trail, 2026-09-22) follows it; pinned from
+    // both sides like 0132's guard pins 0133.
+    expect(journal.entries[at + 1]?.tag).toBe('0134_ai_credits_admin_audit_log');
+    expect(journal.entries[at + 1]?.when).toBeGreaterThan(journal.entries[at]?.when ?? Infinity);
+    expect(journal.entries, 'and 0134 is the last one').toHaveLength(135);
   });
 
   it('CRITICAL schema.ts names the trigger this migration installs, says where the shadow rule lives, and carries the one sentence about the relaxed clawback guard that 0133 is the record of', () => {

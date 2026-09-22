@@ -89,6 +89,18 @@ const NOT_REGISTERED_IN_MEMORY: Record<string, string> = {
   // with the surface switched on, in only-a-staff-key-can-read-the-ai-credits-report.
   'GET /v1/admin/ai-credits/census': 'registered only while the AI credits mode is not off',
   'GET /v1/admin/ai-credits/shadow-report': 'registered only while the AI credits mode is not off',
+  // S15 — the five staff-scoped AI-credits admin routes, same gate as the two
+  // above (`deps.aiCredits !== undefined`). Their refusal of an ordinary
+  // customer key is exercised with the surface switched on in
+  // admin-ai-credits-routes.test.ts.
+  'GET /v1/admin/accounts/:id/credits': 'registered only while the AI credits mode is not off',
+  'POST /v1/admin/accounts/:id/credits/adjustments':
+    'registered only while the AI credits mode is not off',
+  'PUT /v1/admin/accounts/:id/ai-plan-override':
+    'registered only while the AI credits mode is not off',
+  'DELETE /v1/admin/accounts/:id/ai-plan-override':
+    'registered only while the AI credits mode is not off',
+  'GET /v1/admin/credit-rate-cards': 'registered only while the AI credits mode is not off',
 };
 
 /**
@@ -108,7 +120,11 @@ const NOT_REGISTERED_IN_MEMORY: Record<string, string> = {
 const EXPECTED_STAFF_ROUTES: readonly string[] = [
   'GET /v1/admin/accounts',
   'GET /v1/admin/accounts/:id',
+  'DELETE /v1/admin/accounts/:id/ai-plan-override',
+  'PUT /v1/admin/accounts/:id/ai-plan-override',
   'POST /v1/admin/accounts/:id/audit-note',
+  'GET /v1/admin/accounts/:id/credits',
+  'POST /v1/admin/accounts/:id/credits/adjustments',
   'POST /v1/admin/accounts/:id/delete',
   'DELETE /v1/admin/accounts/:id/quota-override',
   'POST /v1/admin/accounts/:id/quota-override',
@@ -129,6 +145,7 @@ const EXPECTED_STAFF_ROUTES: readonly string[] = [
   'GET /v1/admin/cost/accounts/:id',
   'GET /v1/admin/cost/config',
   'GET /v1/admin/cost/overview',
+  'GET /v1/admin/credit-rate-cards',
   'GET /v1/admin/crypto-orders',
   'GET /v1/admin/crypto-orders.csv',
   'GET /v1/admin/crypto-orders/:order_id',

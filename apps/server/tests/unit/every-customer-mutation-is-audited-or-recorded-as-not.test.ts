@@ -213,7 +213,11 @@ describe('W-13 every customer mutation is audited, or recorded as not', () => {
       (b) => MUTATING.has(b.verb.toLowerCase()) && b.path.startsWith('/v1/admin/'),
     );
     // `every-mutating-admin-route-writes-an-audit-row` measured 33.
-    expect(admin.length, 'admin mutating routes').toBe(33);
+    // S15 — 38 since the five AI-credits admin mutations (POST .../credits/
+    // adjustments, PUT+DELETE .../ai-plan-override, POST /v1/admin/credit-
+    // rate-cards, POST .../:version/withdraw); see route-mutation-ratelimit-
+    // coverage-invariant.test.ts's own count of the same five.
+    expect(admin.length, 'admin mutating routes').toBe(38);
     expect(customerMutations().length, 'customer mutating routes').toBeGreaterThan(80);
   });
 

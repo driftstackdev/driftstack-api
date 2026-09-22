@@ -154,6 +154,7 @@ import type { CostMonitoringService } from '../services/cost-monitoring.js';
 import type { AgentTurnTelemetry } from '../services/agent-turn-telemetry.js';
 import type { AgentTurnSummaryService } from '../services/agent-turn-summary.js';
 import type { AiCreditsRuntime } from '../services/ai-credits-runtime.js';
+import type { DrizzleAiCreditsAdminAuditRepo } from '../db/ai-credits-admin-audit-repo.js';
 import { registerProfileRoutes } from '../routes/profiles.js';
 import { registerProfileSnapshotsRoutes } from '../routes/profile-snapshots.js';
 import { registerBillingDisabledRoutes, registerBillingRoutes } from '../routes/billing.js';
@@ -449,6 +450,20 @@ export interface AppDeps {
    * Nothing customer-visible depends on it in any mode.
    */
   aiCredits?: AiCreditsRuntime;
+  /**
+   * S15 — the SEPARATE, dark audit trail `routes/admin-ai-credits.ts`'s new
+   * admin routes write to (`db/ai-credits-admin-audit-repo.ts`), not
+   * `adminAuditService`. See that repo's own header: `admin_audit_action` is
+   * a published contract (mirrored in `packages/api-types/src/admin.ts`,
+   * which ships to npm), and this vocabulary is not, for the same reason
+   * `AI_CREDITS_PROBLEM_TYPES` is a separate roster from `PROBLEM_TYPES`.
+   * Always present exactly when `aiCredits` is (both gated on the same
+   * `creditGrantsRun(config.aiCreditsMode)` check in bootstrap.ts) — a second
+   * optional field rather than folding it into `aiCredits.admin` because nothing
+   * else that bundle carries is a database dependency built OUTSIDE the
+   * credits-repo family the way an audit sink is.
+   */
+  aiCreditsAdminAuditRepo?: Pick<DrizzleAiCreditsAdminAuditRepo, 'record'>;
   /**
    * Q.1.c — in-memory per-session plaintext BYOK key cache.
    * Wired alongside `agentRuntime`. Route layer stashes decrypted
@@ -1567,13 +1582,28 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   if (deps.agentTurnSummaryService !== undefined) {
     registerAdminAgentTurnsRoutes(app, { summary: deps.agentTurnSummaryService });
   }
-  // S11 — the staff shadow report and cutover census. Registered exactly when
-  // the credits runtime is wired, which is exactly when the mode is shadow or
-  // enforce: with the mode off (the production default) there is no route here
-  // at all, so a deployment that is dark does not answer for a surface it has
-  // nothing to say about.
+  // S11 — the staff shadow report and cutover census. S15 adds the admin
+  // credit-adjustment, plan-override and rate-card routes in the same file.
+  // Registered exactly when the credits runtime is wired, which is exactly
+  // when the mode is shadow or enforce: with the mode off (the production
+  // default) there is no route here at all, so a deployment that is dark does
+  // not answer for a surface it has nothing to say about.
   if (deps.aiCredits !== undefined) {
-    registerAdminAiCreditsRoutes(app, { report: deps.aiCredits.report });
+    // S15's admin routes write to the SEPARATE dark audit repo, never
+    // `adminAuditService` — see `aiCreditsAdminAuditRepo`'s own doc comment
+    // above. Both are wired by the same `creditGrantsRun` guard in
+    // bootstrap.ts, so this can only be absent on a fixture that predates S15.
+    if (deps.aiCreditsAdminAuditRepo === undefined) {
+      throw new Error(
+        'deps.aiCreditsAdminAuditRepo must be wired whenever deps.aiCredits is (S15)',
+      );
+    }
+    registerAdminAiCreditsRoutes(app, {
+      report: deps.aiCredits.report,
+      aiCredits: deps.aiCredits,
+      adminAudit: deps.aiCreditsAdminAuditRepo,
+      authRepo: deps.authRepo,
+    });
   }
   registerAdminUsageRoutes(app, {
     usageService: deps.usageService,

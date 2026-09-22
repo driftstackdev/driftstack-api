@@ -3655,6 +3655,62 @@ export const creditLedger = pgTable(
 export type CreditLedgerRow = typeof creditLedger.$inferSelect;
 
 // ───────────────────────────────────────────────────────────────────────────
+// ai_credits_admin_audit_log — a SEPARATE, DARK audit trail for the AI-credits
+// admin tools (0134). See the migration's own header for why this is not six
+// new `admin_audit_action` values: that enum is published (mirrored exactly in
+// `packages/api-types/src/admin.ts`, which ships to npm), and this vocabulary
+// is not, for the same reason `AI_CREDITS_PROBLEM_TYPES` is a separate roster
+// from `PROBLEM_TYPES`. `action` is a plain `text` column with a CHECK, not a
+// pgEnum — nothing outside this database needs to mirror its allowed values.
+// ───────────────────────────────────────────────────────────────────────────
+
+export const AI_CREDITS_ADMIN_AUDIT_ACTIONS = [
+  'credits.goodwill_granted',
+  'credits.debt_forgiven',
+  'credits.plan_override_set',
+  'credits.plan_override_cleared',
+  'rate_card.published',
+  'rate_card.withdrawn',
+] as const;
+
+export const aiCreditsAdminAuditLog = pgTable(
+  'ai_credits_admin_audit_log',
+  {
+    id: uuid('id')
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    adminAccountId: uuid('admin_account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'restrict' }),
+    adminKeyId: uuid('admin_key_id')
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: 'restrict' }),
+    action: text('action').notNull(),
+    targetAccountId: uuid('target_account_id').references(() => accounts.id, {
+      onDelete: 'set null',
+    }),
+    targetResourceId: text('target_resource_id'),
+    inputPayload: jsonb('input_payload').$type<Record<string, unknown>>(),
+    result: text('result').notNull(),
+    ipAddress: text('ip_address'),
+    timestamp: timestamp('timestamp', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+  },
+  (t) => [
+    index('ai_credits_admin_audit_log_admin_idx').on(t.adminAccountId, t.timestamp),
+    index('ai_credits_admin_audit_log_target_idx').on(t.targetAccountId, t.timestamp),
+    index('ai_credits_admin_audit_log_action_idx').on(t.action, t.timestamp),
+    check(
+      'ai_credits_admin_audit_log_action_check',
+      sql`${t.action} IN ('credits.goodwill_granted', 'credits.debt_forgiven', 'credits.plan_override_set', 'credits.plan_override_cleared', 'rate_card.published', 'rate_card.withdrawn')`,
+    ),
+  ],
+);
+
+export type AiCreditsAdminAuditLogRow = typeof aiCreditsAdminAuditLog.$inferSelect;
+
+// ───────────────────────────────────────────────────────────────────────────
 // credit_windows / credit_window_level_changes / credit_clawbacks — the month
 // windows included AI credits are granted into (0130)
 // ───────────────────────────────────────────────────────────────────────────

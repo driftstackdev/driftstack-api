@@ -1046,3 +1046,152 @@ export const ChangeTierRequestWithCreditsSchema = ChangeTierRequestSchema.extend
   monthly_credits: z.number().int().min(0).max(10_000_000).optional(),
 });
 export type ChangeTierRequestWithCredits = z.infer<typeof ChangeTierRequestWithCreditsSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
+// Admin (S15) — contract credits, goodwill/forgiveness, rate-card publishing
+// ───────────────────────────────────────────────────────────────────────────
+//
+// Staff-only shapes for `routes/admin-ai-credits.ts`. Same reason as the
+// section above: this module never ships, so a field here never reaches a
+// customer's autocomplete, and the server imports it through the barrel like
+// everything else in this file.
+
+/** `credit_plan_overrides.reason` on the wire — mirrors `CREDIT_PLAN_OVERRIDE_REASONS`
+ *  in `apps/server/src/db/credit-ledger-repo.ts` (a contract's own figure, or a
+ *  plan an admin assigned by hand). Duplicated by value, not by import: this
+ *  package never depends on the server, and the server repo re-validates
+ *  membership on every write regardless (the database is the authority). */
+export const AiPlanOverrideReasonSchema = z.enum(['contract', 'admin_tier']);
+export type AiPlanOverrideReason = z.infer<typeof AiPlanOverrideReasonSchema>;
+
+/** `GET .../credits` and `PUT .../ai-plan-override`'s view of one override. */
+export const AdminPlanOverrideViewSchema = z.object({
+  monthly_credits: z.number().int().nonnegative(),
+  reason: AiPlanOverrideReasonSchema,
+  own_key_allowed: z.boolean(),
+  anchor_at: Iso8601Schema,
+  /** Null while the override does not end. */
+  ends_at: Iso8601Schema.nullable(),
+  effective_since: Iso8601Schema,
+  note: z.string(),
+});
+export type AdminPlanOverrideView = z.infer<typeof AdminPlanOverrideViewSchema>;
+
+/** `PUT /v1/admin/accounts/:id/ai-plan-override`. Whole credits a month, 0 to
+ *  ten million (mirrors `credit_plan_overrides_credits_range`). */
+export const AdminSetPlanOverrideRequestSchema = z.object({
+  monthly_credits: z.number().int().min(0).max(10_000_000),
+  reason: AiPlanOverrideReasonSchema,
+  expires_at: Iso8601Schema.optional(),
+});
+export type AdminSetPlanOverrideRequest = z.infer<typeof AdminSetPlanOverrideRequestSchema>;
+
+/** One lot on the admin credit-state read: the raw facts, not the customer's
+ *  rounded `extras[]` shape — an admin reads what is really on the row. */
+export const AdminCreditLotViewSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(CREDIT_LOT_KINDS),
+  granted_credits: CreditAmountSchema,
+  remaining_credits: CreditAmountSchema,
+  held_credits: CreditAmountSchema,
+  starts_at: Iso8601Schema,
+  expires_at: Iso8601Schema,
+});
+export type AdminCreditLotView = z.infer<typeof AdminCreditLotViewSchema>;
+
+/** `GET /v1/admin/accounts/:id/credits`. */
+export const AdminCreditsAccountStateSchema = z.object({
+  account_id: z.string().min(1),
+  billing: AiBillingSchema,
+  ai_source: AiSourceSchema.nullable(),
+  ai_source_set_by: AiSourceSetBySchema.nullable(),
+  ai_source_set_at: Iso8601Schema.nullable(),
+  current_window: z.object({ window_start: Iso8601Schema, window_end: Iso8601Schema }).nullable(),
+  lots: z.array(AdminCreditLotViewSchema),
+  available_credits: CreditAmountSchema,
+  debt_credits: CreditAmountSchema,
+  /** The newest debt reason on file; shown only while `debt_credits > 0`, same
+   *  rule as `GET /v1/account/me/ai`'s `debt_reason`. */
+  debt_reason: AiDebtReasonSchema.nullable(),
+  reservations_in_flight: z.number().int().nonnegative(),
+  plan_override: AdminPlanOverrideViewSchema.nullable(),
+  /** Newest first, at most 20. */
+  ledger: z.array(AiLedgerEntrySchema),
+});
+export type AdminCreditsAccountState = z.infer<typeof AdminCreditsAccountStateSchema>;
+
+/**
+ * `POST /v1/admin/accounts/:id/credits/adjustments`. `credits > 0` inserts a
+ * goodwill lot with an expiry; `forgive_debt` clears whatever the account
+ * currently owes. Both carry `idempotency_key`: a repeat writes nothing new
+ * and returns the first attempt's result (`applied: false` on the response).
+ */
+export const AdminCreditAdjustmentRequestSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('goodwill'),
+    credits: z.number().positive().multipleOf(0.001),
+    expires_at: Iso8601Schema,
+    reason: z.string().min(1).max(500),
+    idempotency_key: z.string().min(1).max(200),
+  }),
+  z.object({
+    kind: z.literal('forgive_debt'),
+    reason: z.string().min(1).max(500),
+    idempotency_key: z.string().min(1).max(200),
+  }),
+]);
+export type AdminCreditAdjustmentRequest = z.infer<typeof AdminCreditAdjustmentRequestSchema>;
+
+export const AdminCreditAdjustmentResponseSchema = z.object({
+  /** False when this key already applied and nothing new was written or audited. */
+  applied: z.boolean(),
+  kind: z.enum(['goodwill', 'forgive_debt']),
+  /** The goodwill lot, present only when `kind: 'goodwill'`. */
+  lot: AdminCreditLotViewSchema.nullable(),
+  /** Credits actually forgiven, present only when `kind: 'forgive_debt'` (0 when
+   *  the account owed nothing at the time). */
+  forgiven_credits: CreditAmountSchema.nullable(),
+  /** The account's debt after this adjustment. */
+  debt_credits: CreditAmountSchema,
+});
+export type AdminCreditAdjustmentResponse = z.infer<typeof AdminCreditAdjustmentResponseSchema>;
+
+/**
+ * `POST /v1/admin/credit-rate-cards`. Owner-only. Markup range mirrors
+ * `credit_rate_cards_markup_range` (1.0× to 10.0× list price); every priced
+ * model and its per-task bounds are derived server-side from the registry, per
+ * the design's §7 — nothing here is hand-typed.
+ */
+export const AdminRateCardPublishRequestSchema = z.object({
+  markup_bp: z.number().int().min(10_000).max(100_000),
+  effective_at: Iso8601Schema,
+});
+export type AdminRateCardPublishRequest = z.infer<typeof AdminRateCardPublishRequestSchema>;
+
+/** A card's lifecycle, derived from its dates relative to `now()` and to the
+ *  card currently in force — never stored. */
+export const AdminRateCardStatusSchema = z.enum([
+  'announced',
+  'in_force',
+  'withdrawn',
+  'superseded',
+]);
+export type AdminRateCardStatus = z.infer<typeof AdminRateCardStatusSchema>;
+
+export const AdminRateCardViewSchema = z.object({
+  version: RateCardVersionSchema,
+  markup_bp: z.number().int(),
+  status: AdminRateCardStatusSchema,
+  announced_at: Iso8601Schema,
+  effective_at: Iso8601Schema,
+  withdrawn_at: Iso8601Schema.nullable(),
+  note: z.string(),
+  model_count: z.number().int().nonnegative(),
+});
+export type AdminRateCardView = z.infer<typeof AdminRateCardViewSchema>;
+
+/** `GET /v1/admin/credit-rate-cards`, newest version first. */
+export const AdminRateCardListResponseSchema = z.object({
+  data: z.array(AdminRateCardViewSchema),
+});
+export type AdminRateCardListResponse = z.infer<typeof AdminRateCardListResponseSchema>;

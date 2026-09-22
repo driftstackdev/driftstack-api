@@ -368,7 +368,9 @@ describe('migration 0132 changes exactly three guards, and pins each one', () =>
     // a journal entry with no migration reads as this arm passing.
     expect(journal.entries[at + 1]?.tag).toBe('0133_credit_holds_leg_and_shadow_charge');
     expect(journal.entries[at + 1]?.when).toBeGreaterThan(journal.entries[at]?.when ?? Infinity);
-    expect(journal.entries, 'and it is the last one').toHaveLength(134);
+    // 0134 (the credits admin audit trail) follows 0133; its own guard pins it.
+    expect(journal.entries[at + 2]?.tag).toBe('0134_ai_credits_admin_audit_log');
+    expect(journal.entries, 'and 0134 is the last one').toHaveLength(135);
   });
 
   it('CRITICAL schema.ts mirrors the CHECK and the index this migration adds, by name, and its prose names the trigger it installs and the guard it relaxes', () => {

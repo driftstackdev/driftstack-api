@@ -379,7 +379,13 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // twin (dark until launch, registered only while DRIFTSTACK_AI_CREDITS_MODE
     // is not off — same posture as every other credits route, not an
     // activation-gate stub). Refreshed with violations(routes) proven empty first.
-    expect(routes).toHaveLength(179);
+    // 184 since S15: five AI-credits ADMIN mutations — POST /v1/admin/accounts/:id/
+    // credits/adjustments, PUT + DELETE /v1/admin/accounts/:id/ai-plan-override,
+    // POST /v1/admin/credit-rate-cards, POST /v1/admin/credit-rate-cards/:version/
+    // withdraw — each gated with `app.rateLimit('global')` in the same options
+    // argument as its requireScope/requireOwner. No disabled twins, same reason
+    // as S14's above. Refreshed with violations(routes) proven empty first.
+    expect(routes).toHaveLength(184);
     // +1: `app.patch<{ Params: { id: string } }>('/v1/teams/:id', ...)` is the only
     // one of the two new routes carrying type arguments.
     // T-1 — 77 since `POST /v1/account/me/proxies/:id/test` gained a
@@ -391,7 +397,13 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // this moves by one where the surface above moved by two).
     // 79 since B2: the live stop route carries `<{ Params: { id: string }; Body: unknown }>`
     // (its disabled twin does not).
-    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(79);
+    // 83 since S15: four of its five new mutations carry a `<{ Params: {...} }>`
+    // type argument — POST .../credits/adjustments, PUT + DELETE .../ai-plan-
+    // override (all `<{ Params: { id: string } }>`), and POST .../:version/
+    // withdraw (`<{ Params: { version: string } }>`). POST /v1/admin/credit-
+    // rate-cards has no route params and carries none, so this moves by four
+    // where the surface above moved by five.
+    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(83);
   });
 
   it('every mutation route has a limiter, privileged gate, or exact exemption', () => {

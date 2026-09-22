@@ -660,7 +660,16 @@ describe('all-route caller-authority invariant', () => {
     // them, by four. None has a disabled twin — same reason the AI-credits
     // staff reads above have none: dark until launch, no client to read a 503
     // as anything but "wrong path".
-    expect(routes).toHaveLength(323);
+    // S15 — 330 since seven AI-credits ADMIN routes: GET /v1/admin/accounts/:id/
+    // credits, POST .../credits/adjustments, PUT+DELETE .../ai-plan-override and
+    // GET /v1/admin/credit-rate-cards (five carrying
+    // requireScope('driftstack_internal_admin')), plus POST /v1/admin/credit-
+    // rate-cards + POST .../:version/withdraw (two carrying requireOwner
+    // instead — both are recognized structural-authority markers, see
+    // FASTIFY_AUTHORITY_PROPERTIES above). The structurally-authorized count
+    // below moves WITH the total, by seven — none is ungated. No disabled
+    // twins: dark until launch, same reason as every other credits route.
+    expect(routes).toHaveLength(330);
     // +1 (not +2): only the LIVE network route is structurally authorized; the
     // disabled twin is a stub in DISABLED_EXEMPTIONS. Had the live route shipped
     // ungated, this number would not have moved while the total moved by two.
@@ -678,7 +687,10 @@ describe('all-route caller-authority invariant', () => {
     // 229 since S14's four AI-credits customer routes (requireAuth + requireScope
     // 'read'/'account_owner' on every one) — the count moves in step with the
     // total, same as every other arm above.
-    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(229);
+    // 236 since S15's seven AI-credits ADMIN routes (requireScope
+    // 'driftstack_internal_admin' on five, requireOwner on two) — the count
+    // moves in step with the total again, same as every other arm above.
+    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(236);
   });
 
   it('every route has structural caller authority or one exact reviewed exemption', () => {

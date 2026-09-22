@@ -54,6 +54,21 @@ const NOT_PUBLIC_API: Record<string, string> = {
   '/v1/ai/models':
     'S14 — customer-reachable (requireAuth + read scope); withheld for the same reason as ' +
     'GET /v1/account/me/ai above.',
+  '/v1/admin/accounts/{id}/credits':
+    'S15 — staff panel only (driftstack_internal_admin); withheld for the same second reason as ' +
+    'the AI-credits staff routes above: the published document may not mention AI credits before launch.',
+  '/v1/admin/accounts/{id}/credits/adjustments':
+    'S15 — staff panel only (driftstack_internal_admin); withheld for the same reason as ' +
+    'GET /v1/admin/accounts/{id}/credits beside it.',
+  '/v1/admin/accounts/{id}/ai-plan-override':
+    'S15 — staff panel only (driftstack_internal_admin); withheld for the same reason as ' +
+    'GET /v1/admin/accounts/{id}/credits above.',
+  '/v1/admin/credit-rate-cards':
+    'S15 — the create side is owner-only (requireOwner); the list side is staff panel only ' +
+    '(driftstack_internal_admin). Withheld for the same reason as GET /v1/admin/accounts/{id}/credits above.',
+  '/v1/admin/credit-rate-cards/{version}/withdraw':
+    'S15 — owner-only (requireOwner); withheld for the same reason as ' +
+    'GET /v1/admin/accounts/{id}/credits above.',
   '/v1/internal/atlas-priority/event-status': 'Internal control-plane surface; not customer API.',
   '/v1/internal/atlas-priority/event/{id}': 'Internal control-plane surface; not customer API.',
   '/v1/internal/atlas-priority/probe-signature':

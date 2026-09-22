@@ -29,6 +29,8 @@ import {
 import { DeterministicAgentDecomposer } from '../../../src/services/agent-decomposer-deterministic.js';
 import type { AgentDecomposer, DecomposeUsage } from '../../../src/services/agent-decomposer.js';
 import type { AiCreditsRuntime } from '../../../src/services/ai-credits-runtime.js';
+import type { DrizzleAiCreditsAdminAuditRepo } from '../../../src/db/ai-credits-admin-audit-repo.js';
+import { InMemoryAiCreditsAdminAuditRepo } from './in-memory-ai-credits-admin-audit-repo.js';
 import { StubAgentExecutor } from '../../../src/services/agent-executor.js';
 import { InMemoryAgentSessionsRepo } from '../../../src/services/agent-sessions.js';
 import { InMemoryAgentTurnReceiptsRepo } from '../../../src/services/agent-turn-receipts.js';
@@ -546,6 +548,16 @@ export interface TestAppOptions {
    */
   aiCredits?: AiCreditsRuntime;
   /**
+   * S15 — the SEPARATE dark audit sink `routes/admin-ai-credits.ts`'s new
+   * admin routes write to; `lib/app.ts` requires it whenever `aiCredits` is
+   * present (S15 predates nothing — every real deployment wires both
+   * together). Defaults to a fresh `InMemoryAiCreditsAdminAuditRepo` whenever
+   * `aiCredits` is given and this is not, so every existing `aiCredits`-only
+   * fixture keeps working unmodified; pass one explicitly to inspect what a
+   * route recorded.
+   */
+  aiCreditsAdminAuditRepo?: Pick<DrizzleAiCreditsAdminAuditRepo, 'record'>;
+  /**
    * Wires the active BYOKAnthropicService (backed by
    * InMemoryBYOKAnthropicRepo) so the GET/PUT/DELETE byok-anthropic
    * routes register their real handlers instead of the 503
@@ -662,6 +674,9 @@ export interface TestAppFixture {
    *  a real session-completion event. */
   webhooksService: WebhooksService;
   adminAuditRepo: InMemoryAdminAuditLogRepo;
+  /** S15 — set whenever `aiCredits` was, default or explicit (see the option's
+   *  own doc comment). */
+  aiCreditsAdminAuditRepo?: Pick<DrizzleAiCreditsAdminAuditRepo, 'record'>;
   /** V-281 — exposed so tests can assert customer-audit rows post admin action. */
   accountAuditRepo: InMemoryAccountAuditRepo;
   /** Arc 4 Wave 2.B 8.18/8.19 — exposed so tests can scrape /metrics
@@ -1338,6 +1353,10 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // when the runtime isn't wired.
   let agentSessionsRepoForTests: InMemoryAgentSessionsRepo | undefined;
   let agentTurnReceiptsRepoForTests: InMemoryAgentTurnReceiptsRepo | undefined;
+  // S15 — whichever ai-credits admin-audit sink ended up wired (the default
+  // in-memory one, or one the test passed explicitly), exposed on the
+  // fixture so a test can assert what an admin route recorded.
+  let aiCreditsAdminAuditRepoForTests: Pick<DrizzleAiCreditsAdminAuditRepo, 'record'> | undefined;
   // Arc 2 sub-slice 8.8 (v2-#8) — in-memory takeover lock for tests.
   const pairModeLock = new InMemoryPairModeTakeoverLock();
   // Arc 4 Wave 2.B sub-slice 8.13d (v2-#8) — heartbeat tracker for tests.
@@ -1931,7 +1950,17 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       : { aiCreditsResponseFields: opts.aiCreditsResponseFields }),
     // S11 — absent unless the test asked for it, exactly as bootstrap leaves it
     // absent while the mode is off.
-    ...(opts.aiCredits === undefined ? {} : { aiCredits: opts.aiCredits }),
+    ...(opts.aiCredits === undefined
+      ? {}
+      : {
+          aiCredits: opts.aiCredits,
+          // S15 — `lib/app.ts` requires this whenever `aiCredits` is present;
+          // defaulted here so every pre-S15 `aiCredits`-only fixture keeps
+          // working unmodified. `aiCreditsAdminAuditRepoForTests` (below)
+          // exposes whichever one ends up wired, default or explicit.
+          aiCreditsAdminAuditRepo: (aiCreditsAdminAuditRepoForTests =
+            opts.aiCreditsAdminAuditRepo ?? new InMemoryAiCreditsAdminAuditRepo()),
+        }),
     ...(opts.enableAgentRuntime === true
       ? (() => {
           const agentSessionsRepo = new InMemoryAgentSessionsRepo();
@@ -2168,6 +2197,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       : {}),
     ...(agentTurnReceiptsRepoForTests !== undefined
       ? { agentTurnReceiptsRepo: agentTurnReceiptsRepoForTests }
+      : {}),
+    ...(aiCreditsAdminAuditRepoForTests !== undefined
+      ? { aiCreditsAdminAuditRepo: aiCreditsAdminAuditRepoForTests }
       : {}),
     accountProxiesRepo,
     pairModeLock,
