@@ -16,12 +16,12 @@ function read(p: string): string {
 }
 
 describe('W594.C packages/sdk-go/version.go + doc.go content parity', () => {
-  it('version.go: Version constant = 0.3.0 (lockstep with git tag on release)', () => {
+  it('version.go: Version constant = 0.4.0 (lockstep with git tag on release)', () => {
     const body = read(VERSION);
     expect(body).toMatch(/^package driftstack$/m);
     expect(body).toMatch(/\/\/ Version is the Driftstack Go SDK semver string\. Bump in lockstep/);
     expect(body).toMatch(/\/\/ with the git tag on release\./);
-    expect(body).toMatch(/^const Version = "0\.3\.0"$/m);
+    expect(body).toMatch(/^const Version = "0\.4\.0"$/m);
     expect(existsSync(VERSION)).toBe(true);
   });
 

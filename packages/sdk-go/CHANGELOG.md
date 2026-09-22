@@ -6,6 +6,70 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-22
+
+**Nothing was removed.** Every method, field and error type v0.3.0 published
+still means the same thing, so upgrading takes no code change on its own —
+except where **Migration** below says a string comparison needs updating.
+
+### Added
+
+- **`EgressCapabilities.Safeguards`** — `*string`, one of `"passed"`,
+  `"failed"` or `"unverified"`, summarising whether every egress safeguard
+  held for a session. `"failed"` wins whenever any check did not pass;
+  `"passed"` only when the device declared the full set of checks a healthy
+  session reports and every one of them reported back; `"unverified"`
+  otherwise. `nil` on a session reported before this field existed — never
+  read a `nil` `Safeguards` as `"unverified"` or `"passed"`. Rides everywhere
+  `EgressCapabilities` already does: `client.Sessions.Get` / `.List` /
+  `.Create`, `client.Profiles.Launch`, and the
+  `session.egress_capability_changed` webhook payload.
+- **`AccountProxyTestResult.MeasuredBy`** on a `?check=full` proxy test
+  result (`client.Egress.TestProxy`) — `"phone"` when a real phone session
+  took the measurement, `"driftstack"` when Driftstack itself did because no
+  phone could be reached in time. `MeasuredFrom`, the field this replaces, is
+  still sent beside it with its original values for existing integrations
+  (now doc-commented `Deprecated`), but is no longer documented; read
+  `MeasuredBy` from here on.
+- **`AccountProxyOsFingerprint.DirectReading` and `.WebsiteLikeReading`** —
+  the same two facts `SingleHostVantage` and `WebPortVantage` already carry,
+  under plainer names, added beside the originals rather than replacing
+  them. Present on the proxy test result **and** on each saved
+  proxy returned by `client.Egress.ListProxies` / `.UpdateProxy`.
+- **`"page_unreadable"`** joins the `NoticeReason` values a `plan-executed`
+  turn can carry: the page could not be read to plan the next step, so the
+  task stopped rather than guess. Send `continue` to try again.
+
+### Changed
+
+- **Two dead `EgressCapabilities.Warnings` codes are retired from the
+  documentation**: `quic_disabled_fallback_http2` and
+  `dns_remote_resolve_unsupported_by_proxy`. Neither has ever been sent, so
+  this is a documentation correction, not a behavioural change. `Warnings`
+  stays `[]string`.
+
+### Migration
+
+Two closed-string fields were narrowed — values removed, not added — on
+`AccountProxyTestResult`, the result of `client.Egress.TestProxy`. Both
+fields are plain `string`, not a Go enum type, so neither change fails to
+compile: code comparing a value against one of the old strings simply stops
+matching, silently. The server has sent the new values only since
+2026-09-21.
+
+- **`NotRun`** — `"node_busy"`, `"node_error"` and `"no_node"` merged into
+  `"check_unavailable"` (you can do exactly one thing about any of the
+  three: try again shortly, or contact support if it persists);
+  `"unresolvable"` is now `"config_unresolvable"`, matching the word the
+  "why a launch is refused" vocabulary already used for the identical fact.
+  `"live_session"` is unchanged.
+- **`OsFingerprintUnavailable`** — `"vpn_tunnel"` is now
+  `"not_available_for_vpn"`, `"not_observed"` is now `"not_captured"`, and
+  `"observer_off"` is now `"not_offered_here"`.
+
+Update any code that compares `NotRun` or `OsFingerprintUnavailable` against
+one of the old strings to compare against its replacement instead.
+
 ## [0.3.0] - 2026-09-20
 
 The release the guide [Run AI tasks from your

@@ -12,7 +12,7 @@ multi-language overview see the [combined quickstart](/quickstart/).
 ## Prerequisites
 
 - Go 1.22+ (the SDK uses generic constraints + `slices` package).
-- The Go module at `v0.3.0` or newer. The examples on this page are written
+- The Go module at `v0.4.0` or newer. The examples on this page are written
   against it.
 - Any paid Driftstack tier, including Manual. Free is supported through the
   desktop app, whose browser sign-in automatically stores a restricted
