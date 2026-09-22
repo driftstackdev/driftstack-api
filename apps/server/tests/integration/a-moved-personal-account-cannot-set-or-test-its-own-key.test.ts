@@ -38,7 +38,15 @@ function creditsRuntime(account: MovedAccountState): AiCreditsRuntime {
           autoTopUpEnabled: false,
           ...account,
         }),
+      // S13 — this file exercises the BYOK routes only, never the old
+      // bundled-llm routes, so none of these four are ever reached.
+      setAiSource: unreachable,
+      spendableMicro: unreachable,
+      otherLiveGrantedMicro: unreachable,
+      chargedInWindowMicro: unreachable,
     },
+    // S13 — same reason: this fixture's routes never read the current window.
+    windows: { currentWindow: unreachable },
   };
 }
 

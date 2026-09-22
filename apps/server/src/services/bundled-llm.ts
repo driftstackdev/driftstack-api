@@ -20,8 +20,10 @@ import {
   deploymentKeyModelRefusal,
   DEFAULT_AGENT_MODEL,
   CLAUDE_MODELS,
+  type AiSource,
   type DeploymentKeyModelRefusal,
 } from '@driftstack/api-types';
+import { firstMillisecondAtOrAfter, type CurrentCreditWindow } from '../db/credit-windows-repo.js';
 
 /**
  * The most a customer may SET as their bundled monthly soft cap: $100.
@@ -61,6 +63,117 @@ export function bundledCapWriteRefusal(args: {
     `monthly_cap_usd_cents can be set to at most ${BUNDLED_CAP_MAX_NEW_WRITE_CENTS.toString()} ` +
     `($${(BUNDLED_CAP_MAX_NEW_WRITE_CENTS / 100).toFixed(2)}).`
   );
+}
+
+// ═══ S13 — the old routes' meaning on a MOVED account (§8.6, L6) ═══
+//
+// Everything below is PURE: the route (account-bundled-llm.ts) reads the
+// account's credit row, its current window (if any), and the three
+// microcredit sums this needs, then hands them here. Nothing here touches a
+// database, so the arithmetic — including the microcredit→cents conversion —
+// can be stated and tested without one.
+
+/** §2: 1 credit = 1,000,000 µcr = US$0.01, so 1,000,000 µcr = 1 cent. */
+const MICRO_PER_CENT = 1_000_000;
+
+/** Balances round DOWN — never show the customer more than they have. */
+function centsFloor(micro: number): number {
+  return Math.floor(micro / MICRO_PER_CENT);
+}
+
+/** Charges round UP — never show the customer less than they were charged. */
+function centsCeil(micro: number): number {
+  return Math.ceil(micro / MICRO_PER_CENT);
+}
+
+/**
+ * The old `consent` field, for a MOVED account (L6): true unless the account
+ * chose to run only on its own key. Automatic (`null`) and explicit
+ * `'credits'` both read as consented — both spend credits when there is no
+ * usable key — which is the same thing the legacy boolean always meant.
+ */
+export function movedAccountConsent(aiSource: AiSource | null): boolean {
+  return aiSource !== 'own_key';
+}
+
+/** The old PATCH's refusal detail for a cap write that isn't a re-save of
+ *  the shown value (§8.6 item 6). */
+export const MOVED_ACCOUNT_CAP_IMMUTABLE_DETAIL =
+  "Monthly AI credits come with your plan and can't be changed here.";
+
+/**
+ * Whether the old PATCH may accept `requestedCents` for a MOVED account:
+ * only when it exactly re-sends the cap the status route already shows
+ * (`currentCapCents`, from {@link movedAccountCreditsView}). Null when it may;
+ * otherwise the customer-facing reason. Unlike `bundledCapWriteRefusal`,
+ * there is no write to grandfather — the old cap column is never read or
+ * written for a moved account (§8.6) — so this is a pure equality check.
+ */
+export function movedAccountCapWriteRefusal(args: {
+  readonly requestedCents: number;
+  readonly currentCapCents: number;
+}): string | null {
+  return args.requestedCents === args.currentCapCents ? null : MOVED_ACCOUNT_CAP_IMMUTABLE_DETAIL;
+}
+
+export interface MovedAccountCreditsView {
+  readonly consent: boolean;
+  /** `cap_cents`, and the settings GET's `monthly_cap_usd_cents` (§8.6 — the
+   *  same number under both names). */
+  readonly capCents: number;
+  readonly usedThisMonthCents: number;
+  readonly remainingCents: number;
+  readonly monthStartedAt: Date;
+}
+
+/**
+ * The old status shape's numbers for a MOVED account (§8.6 + L6), computed
+ * from what the route read with no lock:
+ *
+ *   · `cap_cents` = min(current window level + other live grants, the old
+ *     column's storage bound) — the window's recurring monthly rate PLUS
+ *     every other currently live lot (a mid-window proration, an admin
+ *     adjustment, a bought top-up), summed at what each was GRANTED. Floored
+ *     to cents; in practice both operands are already whole credits (§2), so
+ *     the floor is a no-op that just refuses to round UP if that ever stops
+ *     holding.
+ *   · `used_this_month_cents` = ceil(what the current window's OWN lots have
+ *     been charged) — never higher than what the customer actually spent.
+ *   · `remaining_cents` = floor(spendable) — the account-wide spendable
+ *     balance (§2's definition), not window-scoped: a task may still draw on
+ *     credit an older window left behind (S7).
+ *   · `month_started_at` = the window's `window_start`.
+ *
+ * Where the account has no current window — no paid coverage yet — cap and
+ * remaining read 0 and the month falls back to the calendar month, the same
+ * default the LEGACY shape already returns when its settings row is missing.
+ */
+export function movedAccountCreditsView(args: {
+  readonly aiSource: AiSource | null;
+  readonly currentWindow: Pick<CurrentCreditWindow, 'windowStart' | 'levelMicro'> | null;
+  readonly otherLiveGrantedMicro: number;
+  readonly spendableMicro: number;
+  readonly chargedInWindowMicro: number;
+  readonly now: Date;
+}): MovedAccountCreditsView {
+  const consent = movedAccountConsent(args.aiSource);
+  if (args.currentWindow === null) {
+    return {
+      consent,
+      capCents: 0,
+      usedThisMonthCents: 0,
+      remainingCents: 0,
+      monthStartedAt: startOfCalendarMonthUtc(args.now),
+    };
+  }
+  const capMicro = args.currentWindow.levelMicro + args.otherLiveGrantedMicro;
+  return {
+    consent,
+    capCents: Math.min(centsFloor(capMicro), BUNDLED_CAP_STORAGE_MAX_CENTS),
+    usedThisMonthCents: centsCeil(args.chargedInWindowMicro),
+    remainingCents: centsFloor(args.spendableMicro),
+    monthStartedAt: firstMillisecondAtOrAfter(args.currentWindow.windowStart),
+  };
 }
 
 /**

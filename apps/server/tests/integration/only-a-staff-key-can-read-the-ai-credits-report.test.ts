@@ -62,7 +62,16 @@ function creditsRuntime(): AiCreditsRuntime {
     leaseKeeper: { add: () => undefined, remove: () => undefined, liveCount: () => 0 },
     // S12 — this file exercises the staff report/census routes only; nothing
     // here reaches a turn, so the account read must never be asked for.
-    accounts: { ensureAccount: unused },
+    // S13 added the same reasoning to the four new members: this file never
+    // exercises the old bundled-llm routes either.
+    accounts: {
+      ensureAccount: unused,
+      setAiSource: unused,
+      spendableMicro: unused,
+      otherLiveGrantedMicro: unused,
+      chargedInWindowMicro: unused,
+    },
+    windows: { currentWindow: unused },
     report: {
       shadowReport: (args) =>
         Promise.resolve({

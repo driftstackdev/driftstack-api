@@ -487,6 +487,42 @@ export class DrizzleCreditLedgerRepo {
   }
 
   /**
+   * S13 — set which source funds a MOVED account's turns (§4.3's
+   * `credit_accounts.ai_source`), under the account's own lock, in a
+   * transaction of its own. Shaped for two callers, per the plan: the old
+   * `PATCH /v1/account/me/bundled-llm-settings` (S13, `setBy: 'customer'`
+   * only) and the new `PATCH /v1/account/me/ai-settings` (S14, same shape).
+   * Neither caller nor this method re-checks `billing_mode` — both routes
+   * gate on it before ever reaching here, the same way `lockAccount` and
+   * `ensureAccount` trust their callers to have read what they need first.
+   *
+   * `aiSource: null` writes automatic (rule 4 of §4.3): the customer's own
+   * key when the plan allows one and it is usable, else credits.
+   */
+  async setAiSource(
+    accountId: string,
+    args: { readonly aiSource: AiSource | null; readonly setBy: AiSourceSetBy },
+  ): Promise<CreditAccountRecord> {
+    return this.transaction(async (tx) => {
+      await this.lockAccount(tx, accountId);
+      const [row] = await tx
+        .update(creditAccounts)
+        .set({
+          aiSource: args.aiSource,
+          aiSourceSetBy: args.setBy,
+          aiSourceSetAt: sql`now()`,
+          updatedAt: sql`now()`,
+        })
+        .where(eq(creditAccounts.accountId, accountId))
+        .returning();
+      if (row === undefined) {
+        throw new Error('credit account row vanished while setting ai_source');
+      }
+      return toAccountRecord(row);
+    });
+  }
+
+  /**
    * Add a lot. It is born EMPTY — the database forces `remaining_micro` to 0 —
    * and holds credit only once a `grant` ledger row funds it. The same grant key
    * inserts once; a second call with the same terms returns the first lot.
@@ -626,6 +662,69 @@ export class DrizzleCreditLedgerRepo {
       .from(creditLots)
       .where(eq(creditLots.accountId, accountId));
     return exact('held credit', Number(row?.micro ?? '0'));
+  }
+
+  /**
+   * S13 — credit granted to the account beyond its current window's recurring
+   * level: every OTHER currently live lot (a mid-window proration, an admin
+   * adjustment, a bought top-up), summed at what it was GRANTED, not what is
+   * left of it. Feeds the old status route's `cap_cents` (§8.6): "current
+   * window level" is read separately, from `credit_windows.level_micro` for
+   * the SAME window (`DrizzleCreditWindowsRepo.currentWindow`) — not from the
+   * window's own monthly lot, whose `granted_micro` a short first window
+   * prorates down while the level stays the full rate.
+   *
+   * "Live" is `starts_at <= now() < expires_at` and not revoked — the same
+   * predicate `spendableMicro` uses, without requiring free room, because
+   * this is the entitlement the cap shows, not what is left of it.
+   */
+  async otherLiveGrantedMicro(
+    accountId: string,
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<number> {
+    const [row] = await on
+      .select({ micro: sql<string>`coalesce(sum(${creditLots.grantedMicro}), 0)::text` })
+      .from(creditLots)
+      .where(
+        and(
+          eq(creditLots.accountId, accountId),
+          lte(creditLots.startsAt, sql`now()`),
+          gt(creditLots.expiresAt, sql`now()`),
+          isNull(creditLots.revokedAt),
+          sql`${creditLots.kind} <> 'monthly'`,
+        ),
+      );
+    return exact('other live granted credit', Number(row?.micro ?? '0'));
+  }
+
+  /**
+   * S13 — what the current window's OWN lots (its monthly lot, and any
+   * proration lot for it) have been charged, for the old status route's
+   * `used_this_month_cents`. Scoped by `credit_lots.window_id`, not by ledger
+   * row time, so a charge against a lot from BEFORE this window (a task that
+   * started under the last window and is still being charged after rollover,
+   * §4.7/§4.4's `max_until`) is not counted here, and a charge against an
+   * admin top-up or adjustment lot — which carries no window — is not counted
+   * here either: both are correct, because neither is what THIS window
+   * granted.
+   */
+  async chargedInWindowMicro(
+    accountId: string,
+    windowId: string,
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<number> {
+    const [row] = await on
+      .select({ micro: sql<string>`coalesce(sum(-${creditLedger.lotDeltaMicro}), 0)::text` })
+      .from(creditLedger)
+      .innerJoin(creditLots, eq(creditLedger.lotId, creditLots.id))
+      .where(
+        and(
+          eq(creditLedger.accountId, accountId),
+          eq(creditLedger.kind, 'task_charge'),
+          eq(creditLots.windowId, windowId),
+        ),
+      );
+    return exact('charged in window', Number(row?.micro ?? '0'));
   }
 
   /**

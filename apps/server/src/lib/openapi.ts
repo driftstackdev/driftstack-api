@@ -2150,6 +2150,29 @@ function buildRegistry(): OpenAPIRegistry {
   });
 
   // Bundled LLM (v2-#6).
+  //
+  // S13 — none of the THREE published descriptions below (GET settings, PATCH
+  // settings, GET status) is rewritten for a MOVED account (`billing_mode =
+  // 'credits'`), on purpose: §8.6 keeps the SHAPE identical but changes what a
+  // few sentences mean —
+  //   · "Defaults to consent=false, cap=$20" (GET settings) never applied to a
+  //     moved account; its cap is computed (§8.6 item 6), never a stored default.
+  //   · The PATCH 403 description ("consent:true … below API Builder") names
+  //     the LEGACY tier gate (S42); a moved account is refused on the PLAN
+  //     ENTITLEMENT instead (`aiIncludedForTier`, §8.6 item 1) — same status
+  //     code, same shape, a different reason.
+  //   · "plus calendar-month-start" (GET status) is exactly true for legacy;
+  //     a moved account's `month_started_at` is its credit window's
+  //     `window_start`, which need not fall on the 1st (L6).
+  //   · The `monthly_cap_usd_cents` PATCH description's "$100" ceiling is the
+  //     LEGACY write bound; a moved account accepts only an EXACT re-send of
+  //     the cap already shown and refuses every other value, `$100` or not.
+  // This is deliberate, not an oversight: every account that can read this
+  // spec today is legacy (moved accounts are dark until a cutover — §8 — and
+  // Phase 1 moves only the internal C0 cohort), so the published text is true
+  // for the whole population that can see it. Widening it to also describe a
+  // population that cannot read it yet would put "credits" into published
+  // spec text before launch, which nothing on this surface may do.
   const BundledLlmSettingsOpenApi = z
     .object({
       consent: z.boolean(),

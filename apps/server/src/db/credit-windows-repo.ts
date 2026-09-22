@@ -134,6 +134,15 @@ export interface MonthlyLot {
 export interface CurrentCreditWindow {
   readonly id: string;
   readonly windowEnd: PgInstant;
+  /** S13 — the old status route's `month_started_at`. Added alongside
+   *  `levelMicro`; `refreshCreditsIn` (the only other caller) reads neither. */
+  readonly windowStart: PgInstant;
+  /** S13 — the monthly rate this window is levelled at right now (§4.4's
+   *  `credit_windows.level_micro`), for the old status route's `cap_cents`.
+   *  NOT the same as the window's monthly LOT's `granted_micro`: a short
+   *  first window prorates that lot down, while the level is the full rate a
+   *  later, full-length window would grant. */
+  readonly levelMicro: number;
 }
 
 /**
@@ -899,19 +908,43 @@ export class DrizzleCreditWindowsRepo {
     return existing;
   }
 
-  /** The window that contains now(), if the account has one. */
+  /**
+   * The window that contains now(), if the account has one.
+   *
+   * S13 widened this to carry `windowStart` and `levelMicro` too, for the old
+   * status route's `month_started_at` and `cap_cents` (§8.6). The one other
+   * caller, `refreshCreditsIn`, reads only `windowEnd` from what this returns,
+   * so the wider shape costs it nothing.
+   */
   async currentWindow(
     accountId: string,
     on: CreditLedgerExecutor = this.database.db,
   ): Promise<CurrentCreditWindow | null> {
-    const result = await on.execute<{ id: string; window_end: string }>(sql`
-      SELECT id, to_char(window_end AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS window_end
+    const result = await on.execute<{
+      id: string;
+      window_start: string;
+      window_end: string;
+      level_micro: string;
+    }>(sql`
+      SELECT id, level_micro::text AS level_micro,
+             to_char(window_start AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS window_start,
+             to_char(window_end AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS window_end
         FROM credit_windows
        WHERE account_id = ${accountId}::uuid AND window_start <= now() AND now() < window_end`);
-    const row = rowsOf<{ id: string; window_end: string }>(result)[0];
+    const row = rowsOf<{
+      id: string;
+      window_start: string;
+      window_end: string;
+      level_micro: string;
+    }>(result)[0];
     return row === undefined
       ? null
-      : { id: row.id, windowEnd: instant('window_end', row.window_end) };
+      : {
+          id: row.id,
+          windowStart: instant('window_start', row.window_start),
+          windowEnd: instant('window_end', row.window_end),
+          levelMicro: exactMicro('a window level', row.level_micro),
+        };
   }
 
   /**

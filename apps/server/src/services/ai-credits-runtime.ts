@@ -28,6 +28,7 @@ import type { CreditBoundExceeded, CreditReservationsService } from './credit-re
 import type { AiCreditLeaseKeeper } from './ai-credit-lease-keeper.js';
 import type { AiCreditsReportReader } from '../db/ai-credits-report-repo.js';
 import type { CreditAccountRecord, DrizzleCreditLedgerRepo } from '../db/credit-ledger-repo.js';
+import type { CurrentCreditWindow, DrizzleCreditWindowsRepo } from '../db/credit-windows-repo.js';
 import { METRIC_NAMES } from './metrics-registry.js';
 
 /**
@@ -62,9 +63,34 @@ export type AiCreditsLeaseKeeper = Pick<AiCreditLeaseKeeper, 'add' | 'remove' | 
  * the product, not the money"). A route that decided from a stale read would
  * still be safe: `reserve()` re-reads `credit_accounts` under lock and is the
  * only place that ever moves credit.
+ *
+ * S13 widened this with the other `DrizzleCreditLedgerRepo` reads and the one
+ * write the old `bundled-llm-settings`/`-status` routes need for a MOVED
+ * account: `setAiSource` (also shaped for S14's `PATCH /v1/account/me/ai-settings`),
+ * and the no-lock reads `spendableMicro`, `otherLiveGrantedMicro` and
+ * `chargedInWindowMicro` that back the old status shape's `remaining_cents`,
+ * `cap_cents` and `used_this_month_cents` (§8.6). Every deployment already
+ * passes the ledger repo itself here (`accounts: creditLedgerRepo` in
+ * bootstrap.ts), so widening this Pick needed no change there.
  */
-export type AiCreditsAccounts = Pick<DrizzleCreditLedgerRepo, 'ensureAccount'>;
+export type AiCreditsAccounts = Pick<
+  DrizzleCreditLedgerRepo,
+  | 'ensureAccount'
+  | 'setAiSource'
+  | 'spendableMicro'
+  | 'otherLiveGrantedMicro'
+  | 'chargedInWindowMicro'
+>;
 export type { CreditAccountRecord };
+
+/**
+ * S13 — the current-window read the old status route needs alongside
+ * {@link AiCreditsAccounts}: `credit_windows`, not `credit_accounts`/
+ * `credit_lots`, so it is a different repo and a member of its own rather
+ * than folded into `accounts`. No lock, same as `accounts` (§4.4).
+ */
+export type AiCreditsWindows = Pick<DrizzleCreditWindowsRepo, 'currentWindow'>;
+export type { CurrentCreditWindow };
 
 /** The one member of `AppDeps` the credits runtime occupies. Absent while the mode is off. */
 export interface AiCreditsRuntime {
@@ -92,6 +118,12 @@ export interface AiCreditsRuntime {
    * shadow-mode route reads `mode` first and never asks.
    */
   readonly accounts: AiCreditsAccounts;
+  /**
+   * S13 — the account's current credit window, for the old
+   * `bundled-llm-settings`/`-status` routes' moved-account shape. See
+   * {@link AiCreditsWindows}.
+   */
+  readonly windows: AiCreditsWindows;
 }
 
 /**

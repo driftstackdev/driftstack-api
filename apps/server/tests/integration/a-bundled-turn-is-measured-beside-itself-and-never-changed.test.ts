@@ -139,6 +139,16 @@ function creditsRuntime(
           debtMicro: 0,
           autoTopUpEnabled: false,
         }),
+      // S13 — this file exercises the agent-turn path only, never the old
+      // bundled-llm routes, so none of these four are ever reached.
+      setAiSource: () => Promise.reject(new Error('not used by this test')),
+      spendableMicro: () => Promise.reject(new Error('not used by this test')),
+      otherLiveGrantedMicro: () => Promise.reject(new Error('not used by this test')),
+      chargedInWindowMicro: () => Promise.reject(new Error('not used by this test')),
+    },
+    // S13 — same reason: this fixture's routes never read the current window.
+    windows: {
+      currentWindow: () => Promise.reject(new Error('not used by this test')),
     },
   };
 }

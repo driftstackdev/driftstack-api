@@ -1418,6 +1418,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // 2026-05-20 — audit emit on consent toggle (Tier 2 polish per
       // 2026-05-19 audit-coverage doc).
       ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
+      // S13 — the old routes' meaning for a MOVED account (§8.6). Absent
+      // while AI credits are off, same as every other credits wiring. The
+      // route only Picks `mode`/`accounts`/`windows`; passing the whole
+      // runtime is fine — `AiCreditsRuntime` is structurally a superset.
+      ...(deps.aiCredits !== undefined ? { aiCredits: deps.aiCredits } : {}),
     });
   }
   if (deps.cliAuthorizeService !== undefined) {

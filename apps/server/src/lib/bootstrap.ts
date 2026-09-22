@@ -1053,6 +1053,11 @@ export async function createProductionDeps(
   // leases — those lapse and are settled from what each task recorded.
   const creditLeaseOwner = `boot-${randomUUID()}`;
   const creditLedgerRepo = creditGrants === null ? null : new DrizzleCreditLedgerRepo(dbHandle);
+  // S13 — a second, independent read of `credit_windows` for the old
+  // bundled-llm routes' moved-account shape (`AiCreditsRuntime.windows`,
+  // §8.6). Gated on the same `creditGrants === null` check as every other
+  // credits-mode-off local, so it is null exactly when `aiCredits` will be.
+  const creditWindowsRepo = creditGrants === null ? null : new DrizzleCreditWindowsRepo(dbHandle);
   const creditReservationsRepo = creditGrants === null ? null : new DrizzleCreditReservationsRepo();
   // S11 — the two counters §8's shadow exit criteria are read from. Registered
   // ONLY when the mode is shadow or enforce, on the same value everything else
@@ -1120,6 +1125,8 @@ export async function createProductionDeps(
     // explicitly so TypeScript narrows `creditLedgerRepo` for the `accounts`
     // member below instead of requiring a cast.
     creditLedgerRepo === null ||
+    // S13 — same guard, same reason, for `creditWindowsRepo` and `windows`.
+    creditWindowsRepo === null ||
     config.aiCreditsMode === 'off'
       ? undefined
       : {
@@ -1139,6 +1146,8 @@ export async function createProductionDeps(
           // transaction; this is the unlocked read a route takes BEFORE it
           // decides which leg funds a turn.
           accounts: creditLedgerRepo,
+          // S13 — the account's current credit window, the same no-lock way.
+          windows: creditWindowsRepo,
         };
 
   // Webhooks first so sessions + api-keys can wire it.

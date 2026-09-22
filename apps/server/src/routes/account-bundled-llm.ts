@@ -25,15 +25,32 @@
 // account_owner-only for the PATCH. Reads require broad `read` so a
 // resource-granular or zero-scope key cannot inspect billing consent/spend.
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { z } from 'zod';
-import { bundledCapWriteRefusal, type BundledLlmService } from '../services/bundled-llm.js';
+import {
+  bundledCapWriteRefusal,
+  movedAccountConsent,
+  movedAccountCapWriteRefusal,
+  movedAccountCreditsView,
+  type BundledLlmService,
+  type MovedAccountCreditsView,
+} from '../services/bundled-llm.js';
 import type { AccountAuditService } from '../services/account-audit.js';
-import { BadRequestError, ValidationError } from '../lib/errors.js';
+import { BadRequestError, ForbiddenError, ValidationError } from '../lib/errors.js';
 // S42 2026-07-07 (founder-approved) — bundled-LLM consent tier gate.
 import { requireBundledLlmTier } from '../lib/errors-helpers.js';
 import { readClientIp } from '../lib/client-ip.js';
+// S13 — the moved-account leg (§8.6). `aiIncludedForTier`/`ownKeyAllowedForTier`
+// are the PLAN entitlement this route gates on for a moved account, in place
+// of `requireBundledLlmTier` (that gate is legacy-only, S42).
+import {
+  aiIncludedForTier,
+  aiNotOnPlanDetail,
+  ownKeyAllowedForTier,
+} from '../services/ai-entitlements.js';
+import type { AiCreditsRuntime, CreditAccountRecord } from '../services/ai-credits-runtime.js';
+import type { AccountTier } from '@driftstack/api-types';
 
 const PatchBodySchema = z
   .object({
@@ -53,6 +70,17 @@ export interface AccountBundledLlmRoutesOptions {
    *  separate `account.bundled_llm_cap_changed` enum value can be
    *  added). */
   accountAudit?: AccountAuditService;
+  /**
+   * S13 — what these three routes need to give a MOVED account (`billing_mode
+   * = 'credits'`) the old shape's meaning instead of its old storage (§8.6):
+   * `mode` to tell `enforce` from `shadow`/`off` (only `enforce` treats the
+   * account as moved — §4.1's table), `accounts` for the account's
+   * `ai_source` and the write that sets it, `windows` for its current
+   * credit window. Optional and absent while `DRIFTSTACK_AI_CREDITS_MODE` is
+   * off, same as every other credits wiring — every existing deployment and
+   * test fixture is unaffected.
+   */
+  aiCredits?: Pick<AiCreditsRuntime, 'mode' | 'accounts' | 'windows'>;
 }
 
 export function registerAccountBundledLlmRoutes(
@@ -61,6 +89,138 @@ export function registerAccountBundledLlmRoutes(
 ): void {
   const { service } = opts;
   const accountAudit = opts.accountAudit;
+  const aiCredits = opts.aiCredits;
+
+  /**
+   * S13/§8.6 — whether `accountId` is MOVED for these three routes: only
+   * true under `enforce` (§4.1's table treats `shadow` and `off` as legacy,
+   * whatever `billing_mode` says), and only when the account was actually
+   * cut over. No lock (§4.4: the tier/source read may run without one); the
+   * one WRITE this file makes (`setAiSource`, in the PATCH) takes its own.
+   */
+  async function resolveMovedAccount(accountId: string): Promise<CreditAccountRecord | null> {
+    if (aiCredits === undefined || aiCredits.mode !== 'enforce') return null;
+    const credit = await aiCredits.accounts.ensureAccount(accountId);
+    return credit.billingMode === 'credits' ? credit : null;
+  }
+
+  /**
+   * S13 — the settings/status numbers for a moved account, from the same
+   * three no-lock reads every one of these routes needs (§8.6). Composed
+   * here once so GET settings, GET status and the PATCH's cap check and
+   * response all read the identical numbers the identical way.
+   */
+  async function movedAccountView(
+    accountId: string,
+    credit: CreditAccountRecord,
+  ): Promise<MovedAccountCreditsView> {
+    // `aiCredits` is defined whenever this is reachable — only `resolveMovedAccount`
+    // (which requires it) ever produces the `credit` this takes.
+    const runtime = aiCredits;
+    if (runtime === undefined) throw new Error('movedAccountView called with no aiCredits runtime');
+    const [currentWindow, otherLiveGrantedMicro, spendableMicro] = await Promise.all([
+      runtime.windows.currentWindow(accountId),
+      runtime.accounts.otherLiveGrantedMicro(accountId),
+      runtime.accounts.spendableMicro(accountId),
+    ]);
+    const chargedInWindowMicro =
+      currentWindow === null
+        ? 0
+        : await runtime.accounts.chargedInWindowMicro(accountId, currentWindow.id);
+    return movedAccountCreditsView({
+      aiSource: credit.aiSource,
+      currentWindow,
+      otherLiveGrantedMicro,
+      spendableMicro,
+      chargedInWindowMicro,
+      now: new Date(),
+    });
+  }
+
+  /**
+   * S13/§8.6 item 6 — the moved-account leg of the PATCH. The old cap column
+   * is never read or written here; `consent` writes `credit_accounts.ai_source`
+   * through `setAiSource`, under ITS OWN account lock (never this function's
+   * — there is no wider transaction to hold it in, and nothing else this
+   * route does needs the account locked).
+   */
+  async function handleMovedPatch(
+    request: FastifyRequest,
+    accountId: string,
+    tier: AccountTier,
+    credit: CreditAccountRecord,
+    patch: { readonly consent?: boolean; readonly monthly_cap_usd_cents?: number },
+  ): Promise<{ consent: boolean; monthly_cap_usd_cents: number }> {
+    if (aiCredits === undefined)
+      throw new Error('handleMovedPatch called with no aiCredits runtime');
+
+    // The plan entitlement, not the legacy tier gate (§8.6 item 1): a plan
+    // with no AI at all refuses `consent:true` even for a moved account.
+    if (patch.consent === true && !aiIncludedForTier(tier)) {
+      throw new ForbiddenError(aiNotOnPlanDetail(tier), { ai_not_on_plan: true });
+    }
+
+    // One read, before any write, so the cap check and the PATCH's own
+    // `monthly_cap_usd_cents` echo use the exact same number (cap does not
+    // depend on `ai_source`, so nothing below needs to re-read it).
+    const before = await movedAccountView(accountId, credit);
+
+    if (patch.monthly_cap_usd_cents !== undefined) {
+      const refusal = movedAccountCapWriteRefusal({
+        requestedCents: patch.monthly_cap_usd_cents,
+        currentCapCents: before.capCents,
+      });
+      if (refusal !== null) {
+        throw new ValidationError({
+          formErrors: [],
+          fieldErrors: { monthly_cap_usd_cents: [refusal] },
+        });
+      }
+    }
+
+    let nextAiSource = credit.aiSource;
+    if (patch.consent === true) {
+      const updated = await aiCredits.accounts.setAiSource(accountId, {
+        aiSource: null,
+        setBy: 'customer',
+      });
+      nextAiSource = updated.aiSource;
+    } else if (patch.consent === false && ownKeyAllowedForTier(tier)) {
+      const updated = await aiCredits.accounts.setAiSource(accountId, {
+        aiSource: 'own_key',
+        setBy: 'customer',
+      });
+      nextAiSource = updated.aiSource;
+    }
+    // `consent:false` on a plan that forbids an own key (Personal): ACCEPTED
+    // and changes nothing — no write, so `nextAiSource` stays what it was,
+    // and the response tells the truth: `consent: true` (§8.6 item 6).
+
+    if (patch.consent !== undefined && accountAudit !== undefined) {
+      const nextConsent = movedAccountConsent(nextAiSource);
+      if (before.consent !== nextConsent) {
+        try {
+          await accountAudit.record({
+            accountId,
+            actorType: 'customer',
+            action: 'account.bundled_llm_consent_changed',
+            targetResourceId: `account_${accountId}`,
+            payload: {
+              from: before.consent,
+              to: nextConsent,
+              ai_source_from: credit.aiSource,
+              ai_source_to: nextAiSource,
+            },
+            ipAddress: readClientIp(request),
+          });
+        } catch {
+          /* swallow */
+        }
+      }
+    }
+
+    return { consent: movedAccountConsent(nextAiSource), monthly_cap_usd_cents: before.capCents };
+  }
 
   app.get(
     '/v1/account/me/bundled-llm-settings',
@@ -68,6 +228,11 @@ export function registerAccountBundledLlmRoutes(
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
+      const moved = await resolveMovedAccount(ctx.account.id);
+      if (moved !== null) {
+        const view = await movedAccountView(ctx.account.id, moved);
+        return { consent: view.consent, monthly_cap_usd_cents: view.capCents };
+      }
       const settings = await service.findSettings(ctx.account.id);
       // Null means "no row" (account was deleted between auth + this
       // call). Defaults match migration 0050.
@@ -93,6 +258,18 @@ export function registerAccountBundledLlmRoutes(
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
+      const moved = await resolveMovedAccount(ctx.account.id);
+      if (moved !== null) {
+        const view = await movedAccountView(ctx.account.id, moved);
+        return {
+          consent: view.consent,
+          cap_cents: view.capCents,
+          used_this_month_cents: view.usedThisMonthCents,
+          remaining_cents: view.remainingCents,
+          refused_count_this_month: 0,
+          month_started_at: view.monthStartedAt.toISOString(),
+        };
+      }
       const now = new Date();
       const settings = await service.findSettings(ctx.account.id);
       const consent = settings?.consent ?? false;
@@ -135,6 +312,10 @@ export function registerAccountBundledLlmRoutes(
         logger: request.log,
         route: 'PATCH /v1/account/me/bundled-llm-settings',
       });
+      const moved = await resolveMovedAccount(ctx.account.id);
+      if (moved !== null) {
+        return handleMovedPatch(request, ctx.account.id, ctx.account.tier, moved, parsed.data);
+      }
       // S42 2026-07-07 (founder-approved) — gate the bundled-billing OPT-IN to
       // the tiers whose TIER_FEATURES.llmBilling is byok_or_bundled(_custom):
       // api_builder / api_scale / enterprise. Only consent=true is gated —
