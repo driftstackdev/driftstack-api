@@ -3,8 +3,10 @@
 -- publishing.
 --
 -- ⛔ WHY A NEW TABLE, NOT SIX NEW `admin_audit_action` VALUES. The obvious move
--- — `ALTER TYPE "admin_audit_action" ADD VALUE 'credits.goodwill_granted'` —
--- was tried first and reverted. `admin_audit_action` is a PUBLISHED contract:
+-- (adding each action to that enum type) was tried first and reverted, and
+-- the statement is deliberately not spelled out in this comment: the guard
+-- that replays the migration history reads every enum change it finds in
+-- these files, comments included. `admin_audit_action` is a PUBLISHED contract:
 -- `admin-audit-action-cross-source-invariant.test.ts` (W862) pins
 -- `AdminAuditActionSchema` in `packages/api-types/src/admin.ts` and this
 -- table's pgEnum to the SAME exact 33-value set, and `admin.ts` ships to npm
