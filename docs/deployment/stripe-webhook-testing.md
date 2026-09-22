@@ -56,7 +56,34 @@ stripe trigger customer.subscription.created
 stripe trigger invoice.paid
 stripe trigger invoice.payment_failed
 stripe trigger customer.subscription.deleted
+# Reversals (the AI-credits clawback path; logged and nothing more while
+# DRIFTSTACK_AI_CREDITS_MODE is off):
+stripe trigger charge.refunded
+stripe trigger charge.dispute.created
+stripe trigger charge.dispute.closed
 ```
+
+## Events the production endpoint must be subscribed to
+
+The endpoint is registered in the Stripe dashboard with an explicit event
+list. Every handled type below must be on it; an event Stripe never sends is
+a handler that never runs, and nothing in this repository can tell.
+
+| Event                                                       | What the server does                                               |
+| ----------------------------------------------------------- | ------------------------------------------------------------------ |
+| `customer.subscription.created` / `updated` / `deleted`     | subscription mirror, tier                                          |
+| `checkout.session.completed`                                | trial pack / informational                                         |
+| `invoice.payment_succeeded`                                 | receipt                                                            |
+| `invoice.paid`                                              | records the paid period; grants the month's AI credits             |
+| `invoice.payment_failed`                                    | billing-failure notice                                             |
+| `invoice.finalized` / `invoice.upcoming`                    | logged                                                             |
+| `charge.refunded`                                           | takes back the refunded share of the AI credits the payment bought |
+| `charge.dispute.created`                                    | takes back the disputed share until the dispute is decided         |
+| `charge.dispute.closed` / `charge.dispute.funds_reinstated` | a WON dispute puts its credits back; a lost one changes nothing    |
+
+Adding a row here is not the same as subscribing the endpoint: the dashboard
+(Developers → Webhooks → the endpoint → "Listen to events") is where the
+subscription lives, and it is an operator action.
 
 Verify against your local server log:
 

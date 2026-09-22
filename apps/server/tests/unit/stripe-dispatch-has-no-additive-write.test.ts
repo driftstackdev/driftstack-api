@@ -89,6 +89,13 @@ const DISPATCH_PATH_FILES = [
   // for the same lot. Scanned here all the same, for the shape this detector
   // does see.
   'services/credit-grants.ts',
+  // S17 — reached from the three reversal events (`charge.refunded`,
+  // `charge.dispute.*`) while AI credits are on. What makes each of its writes
+  // safe to run twice is stated in its header: every ledger row is keyed, the
+  // clawback row is unique on (source, source_ref, target_key), the refund's
+  // cumulative is compared under the account lock and written only when it
+  // rose, and a level change is conditional on the step it was read at.
+  'services/credit-clawbacks.ts',
 ] as const;
 
 /** The two files whose imports define the path: the handlers, and the writes behind them. */

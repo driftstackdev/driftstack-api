@@ -124,9 +124,12 @@ describe('the AI credits mode is off unless it is spelt as a mode', () => {
     expect(activators, 'crypto activators constructed in bootstrap').toBeGreaterThanOrEqual(3);
     expect(
       BOOTSTRAP.match(
-        /new CryptoTierActivationService\(\s*stripeWebhooksRepo,\s*logger,\s*accountLifecycleService,\s*authCache,\s*creditGrants,\s*\)/g,
+        // S17 — the clawbacks service rides beside the grants service: null
+        // whenever grants are, so a crypto refund takes nothing back while AI
+        // credits are off, and takes it back everywhere they are on.
+        /new CryptoTierActivationService\(\s*stripeWebhooksRepo,\s*logger,\s*accountLifecycleService,\s*authCache,\s*creditGrants,[^\n]*\n\s*creditClawbacks,[^\n]*\n\s*\)/g,
       )?.length,
-      'a crypto activator is constructed without the grants service',
+      'a crypto activator is constructed without the grants service and the clawbacks service',
     ).toBe(activators);
     expect(BOOTSTRAP).toMatch(/new AccountsAdminService\([\s\S]*?creditGrants,\s*\);/);
   });

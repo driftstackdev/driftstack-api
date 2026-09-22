@@ -456,17 +456,29 @@ export class CreditGrantsService implements CreditsRefresher {
       readonly windowId: string;
       readonly amountMicro: number;
       /**
-       * The kind of ledger row each lot's loss is written as. `proration_clawback`
-       * is a plan change's; S17 widens this to `refund_clawback` when it adds
-       * that movement to the ledger repo, and nothing else here changes.
+       * The kind of ledger row each lot's loss is written as: `proration_clawback`
+       * for a plan change, `refund_clawback` for a refund or a dispute (S17).
        */
-      readonly ledgerKind: 'proration_clawback';
+      readonly ledgerKind: 'proration_clawback' | 'refund_clawback';
       readonly debtReason: AiDebtReason;
+      /**
+       * S17 — the prefix every ledger row of this clawback is keyed under.
+       * Absent, it is `clawback:<source>:<source_ref>`, which a plan change
+       * (one window per source reference) keys everything by. A refund of an
+       * annual invoice claws SEVERAL windows under one source reference, and
+       * each window's `debt` row needs a key of its own, so a refund passes a
+       * prefix that names the window.
+       */
+      readonly ledgerKeyPrefix?: string;
     },
   ): Promise<CreditClawbackRecord> {
     const { ledger, windows } = this.deps;
     const already = await windows.findClawback(tx, input);
     if (already !== null) return already;
+    const keyOf = (suffix: string): string =>
+      input.ledgerKeyPrefix !== undefined
+        ? `${input.ledgerKeyPrefix}:${suffix}`
+        : clawbackLedgerKey(input, suffix);
 
     const lots = await windows.clawbackTargets(tx, accountId, input.windowId);
     const heldTotal = await ledger.heldMicro(accountId, tx);
@@ -481,7 +493,7 @@ export class CreditGrantsService implements CreditsRefresher {
           kind: input.ledgerKind,
           lotId: take.lotId,
           amountMicro: take.micro,
-          idempotencyKey: clawbackLedgerKey(input, take.lotId),
+          idempotencyKey: keyOf(take.lotId),
           reason: input.source,
         },
         tx,
@@ -494,7 +506,7 @@ export class CreditGrantsService implements CreditsRefresher {
           kind: 'debt_incurred',
           amountMicro: plan.debtMicro,
           reason: input.debtReason,
-          idempotencyKey: clawbackLedgerKey(input, 'debt'),
+          idempotencyKey: keyOf('debt'),
         },
         tx,
       );

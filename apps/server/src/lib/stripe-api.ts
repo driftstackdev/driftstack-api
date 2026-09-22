@@ -252,6 +252,20 @@ export class StripeApiClient {
   }
 
   /**
+   * S17 — one charge, as Stripe holds it now, read for the invoice it paid
+   * when a refund or dispute event does not say. The same refusal as
+   * `getInvoice`: the answer must be the charge asked for.
+   */
+  async getCharge(chargeId: string): Promise<Record<string, unknown>> {
+    const path = `/v1/charges/${encodeURIComponent(chargeId)}`;
+    const charge = await this.get<Record<string, unknown>>(path, {});
+    if (charge.id !== chargeId) {
+      throw malformedResponse(200, 'Stripe returned a different charge than the one requested');
+    }
+    return charge;
+  }
+
+  /**
    * One page of invoices in one status, created at or after `createdGte`, newest
    * first (Stripe's list order). `startingAfter` is the id of the last invoice of
    * the previous page; `hasMore` says whether another page follows.

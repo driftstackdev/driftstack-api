@@ -52,6 +52,7 @@ import type { Logger } from '../lib/logger.js';
 import type { AccountLifecycleService } from './account-lifecycle.js';
 import type { AuthCache } from './auth-cache.js';
 import { refreshCreditsAfter, type CreditsRefresher } from './credit-grants.js';
+import type { CreditClawbacks } from './credit-clawbacks.js';
 import type { CryptoOrderTierActivationIntent, CryptoOrderTierActivator } from './crypto-orders.js';
 import type { StripeWebhooksRepo } from './stripe-webhooks.js';
 
@@ -135,6 +136,14 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
      * nothing, and the coverage sweep retries a refresh that failed.
      */
     private readonly credits: CreditsRefresher | null = null,
+    /**
+     * S17 — takes back the credits a refunded order's term granted, before the
+     * refresh below. Null while AI credits are off. Best-effort for the same
+     * reason the refresh is: the entitlement is revoked and the tier moved
+     * whether or not the credits could be taken back, and the failure is
+     * logged where a person can act on it.
+     */
+    private readonly creditClawbacks: CreditClawbacks | null = null,
   ) {}
 
   async activateTierForPaidOrder(intent: CryptoOrderTierActivationIntent): Promise<void> {
@@ -404,6 +413,28 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
         },
         'crypto order refunded — entitlement revoked; account still floored by other valid access, tier unchanged',
       );
+    }
+    // S17 — the credits the refunded term granted go back FIRST, under the
+    // account's credit lock, before the refresh reads a coverage that no
+    // longer includes the term. Idempotent on the order id.
+    if (this.creditClawbacks !== null) {
+      try {
+        await this.creditClawbacks.applyCryptoRefund({
+          accountId: args.account_id,
+          orderId: args.order_id,
+        });
+      } catch (err) {
+        this.logger.error(
+          {
+            component: 'crypto-tier-activation',
+            event: 'crypto_refund_credits_clawback_failed',
+            account_id: args.account_id,
+            order_id: args.order_id,
+            err: { message: err instanceof Error ? err.message : String(err) },
+          },
+          'crypto order refunded but its AI credits could not be taken back — review the account',
+        );
+      }
     }
     // The refunded term no longer covers anything. Last, after the tier and its fan-out.
     await refreshCreditsAfter(this.credits, args.account_id, {

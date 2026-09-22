@@ -78,6 +78,35 @@ export type CreditClawbackState = (typeof CREDIT_CLAWBACK_STATES)[number];
 export const PLAN_OVERRIDE_SOURCE_REF = 'override';
 
 /**
+ * S17 — the share of a paid invoice the customer is still paying for, as the
+ * expression the level a paid line earns is scaled by, at EVERY place coverage
+ * is computed. A refund or a dispute of a fraction `f` of an invoice lowers
+ * what that invoice covers by the same fraction (plan M8): the clawback
+ * service moves the window's level to exactly this value, and because the
+ * level a reconciliation would target is computed from this same expression,
+ * the two agree to the microcredit and a refund is never re-granted as an
+ * "upgrade" on the next refresh. Integer arithmetic in bigint; a free invoice
+ * (`amount_paid_minor = 0`) covers in full, as it always did.
+ */
+function paidShareOf(level: string): SQL {
+  // Plain text spliced with `sql.raw`, not a nested template: the guard that
+  // reads every raw query for its ORDER BY cannot see past an inner backtick.
+  return sql.raw(
+    `CASE WHEN pay.amount_paid_minor = 0 THEN ${level}
+          ELSE (${level} * GREATEST(pay.amount_paid_minor - pay.refunded_minor - pay.disputed_minor, 0))
+               / pay.amount_paid_minor END`,
+  );
+}
+
+/** The level a paid line earns before any of it is reversed. */
+const PAID_LINE_LEVEL = 'LEAST(line_plan.allowance_micro, mirror_plan.allowance_micro)';
+
+/** S17 — an invoice whose payment has been wholly refunded or disputed covers nothing. */
+const stillPaidFor = sql.raw(
+  '(pay.refunded_minor + pay.disputed_minor < pay.amount_paid_minor OR pay.amount_paid_minor = 0)',
+);
+
+/**
  * A `timestamptz`, as UTC text exact to the microsecond:
  * `2026-01-31T00:00:00.000000Z`. Fixed width, so two of them order as strings.
  */
@@ -129,6 +158,23 @@ export type WriteWindowResult =
 export interface MonthlyLot {
   readonly lotId: string;
   readonly grantedMicro: number;
+}
+
+/**
+ * S17 — one window a refund, dispute or crypto refund may claw from: every
+ * window a given coverage source earned, granted so far (an annual invoice
+ * earns one per month). `current` says whether it contains now(), which is
+ * the only window whose LEVEL a clawback moves; a past window's lots may still
+ * be clawed (what they held is what the payment bought), but its level is
+ * history.
+ */
+export interface SourcedCreditWindow {
+  readonly id: string;
+  readonly levelMicro: number;
+  readonly levelSeq: number;
+  readonly windowStart: PgInstant;
+  readonly windowEnd: PgInstant;
+  readonly current: boolean;
 }
 
 export interface CurrentCreditWindow {
@@ -298,7 +344,7 @@ function coverageCandidatesSql(accountId: string | null): SQL {
              pay.stripe_invoice_id AS source_ref,
              CASE WHEN mirror_plan.allowance_micro < line_plan.allowance_micro
                   THEN mirror_plan.tier ELSE line_plan.tier END AS tier,
-             LEAST(line_plan.allowance_micro, mirror_plan.allowance_micro) AS level_micro,
+             ${paidShareOf(PAID_LINE_LEVEL)} AS level_micro,
              (pay.line_interval = 'year') AS by_month,
              pay.line_period_start AS starts,
              pay.line_period_end AS paid_end
@@ -311,7 +357,7 @@ function coverageCandidatesSql(accountId: string | null): SQL {
        WHERE pay.line_kind = 'period'
          AND pay.line_interval IS NOT NULL
          AND pay.line_period_start <= clock.t AND clock.t < pay.line_period_end
-         AND (pay.refunded_minor < pay.amount_paid_minor OR pay.amount_paid_minor = 0)
+         AND ${stillPaidFor}
          AND sub.status = 'active'${onlyPaid}
       UNION ALL
       SELECT ce.account_id, 'crypto_entitlement', ce.order_id, crypto_plan.tier,
@@ -489,7 +535,7 @@ function levelReconciliationSql(accountId: string): SQL {
              -- A paid proration line is the upgrade itself; a period line that
              -- earns the same level is the month it sits in.
              CASE WHEN pay.line_kind = 'proration_up' THEN 0 ELSE 1 END AS kind_rank,
-             LEAST(line_plan.allowance_micro, mirror_plan.allowance_micro) AS level_micro,
+             ${paidShareOf(PAID_LINE_LEVEL)} AS level_micro,
              pay.line_period_start AS up_from,
              COALESCE(sub.tier_since, clock.t) AS down_from
         FROM billing_invoice_payments pay
@@ -501,7 +547,7 @@ function levelReconciliationSql(accountId: string): SQL {
        WHERE pay.account_id = ${accountId}::uuid
          AND pay.line_kind IN ('period', 'proration_up')
          AND pay.line_period_start <= clock.t AND clock.t < pay.line_period_end
-         AND (pay.refunded_minor < pay.amount_paid_minor OR pay.amount_paid_minor = 0)
+         AND ${stillPaidFor}
          AND sub.status = 'active'
       UNION ALL
       SELECT 'crypto_entitlement', ce.order_id, 1, crypto_plan.allowance_micro,
@@ -918,6 +964,112 @@ export class DrizzleCreditWindowsRepo {
     const existing = await this.findClawback(tx, input);
     if (existing === null) throw new Error('a clawback conflicted and then could not be read');
     return existing;
+  }
+
+  /**
+   * S17 — every window one coverage source earned for the account, oldest
+   * first, locked for the rest of the transaction (a clawback moves a level
+   * and takes from lots; the account's credit lock serialises that already,
+   * and the row lock keeps the read exact under it).
+   */
+  async windowsForSource(
+    tx: CreditLedgerTx,
+    accountId: string,
+    source: CreditWindowSource,
+    sourceRef: string,
+  ): Promise<SourcedCreditWindow[]> {
+    const result = await tx.execute<Record<string, unknown>>(sql`
+      SELECT id, level_micro::text AS level_micro, level_seq,
+             to_char(window_start AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS window_start,
+             to_char(window_end AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS window_end,
+             (window_start <= now() AND now() < window_end) AS current
+        FROM credit_windows
+       WHERE account_id = ${accountId}::uuid AND source = ${source} AND source_ref = ${sourceRef}
+       ORDER BY window_start, id
+         FOR UPDATE`);
+    return rowsOf<{
+      id: string;
+      level_micro: string;
+      level_seq: number;
+      window_start: string;
+      window_end: string;
+      current: boolean;
+    }>(result).map((r) => ({
+      id: r.id,
+      levelMicro: exactMicro('a window level', r.level_micro),
+      levelSeq: r.level_seq,
+      windowStart: instant('window_start', r.window_start),
+      windowEnd: instant('window_end', r.window_end),
+      current: r.current === true,
+    }));
+  }
+
+  /**
+   * S17 — the level one paid invoice covers RIGHT NOW, after the share of it
+   * that has been refunded or disputed is taken off: the same expression
+   * (`paidShareOf`) the coverage reads use, so the level a clawback sets is the
+   * level a reconciliation would target. Null when the invoice covers nothing
+   * now — its period is over, its subscription is not active, its plan is
+   * unknown, or it has been wholly refunded — in which case a clawback lowers
+   * the current window to zero and nothing later raises it.
+   */
+  async coverageLevelForInvoice(
+    tx: CreditLedgerExecutor,
+    accountId: string,
+    stripeInvoiceId: string,
+  ): Promise<number | null> {
+    const result = await tx.execute<{ level_micro: string }>(sql`
+      WITH plan AS (
+        SELECT p.tier, p.allowance_micro
+          FROM jsonb_to_recordset(${planAllowancesJson()}::jsonb) AS p(tier text, allowance_micro bigint)
+      )
+      SELECT ${paidShareOf(PAID_LINE_LEVEL)}::text AS level_micro
+        FROM billing_invoice_payments pay
+        JOIN subscriptions sub
+          ON sub.stripe_subscription_id = pay.stripe_subscription_id AND sub.account_id = pay.account_id
+        JOIN plan line_plan ON line_plan.tier = pay.line_tier::text
+        JOIN plan mirror_plan ON mirror_plan.tier = sub.tier::text
+       WHERE pay.account_id = ${accountId}::uuid AND pay.stripe_invoice_id = ${stripeInvoiceId}
+         AND pay.line_kind IN ('period', 'proration_up')
+         AND pay.line_period_start <= now() AND now() < pay.line_period_end
+         AND ${stillPaidFor}
+         AND sub.status = 'active'
+       ORDER BY level_micro DESC
+       LIMIT 1`);
+    const row = rowsOf<{ level_micro: string }>(result)[0];
+    return row === undefined ? null : exactMicro('a covered level', row.level_micro);
+  }
+
+  /**
+   * S17 — the APPLIED clawbacks one source wrote (a dispute's, by its id), for
+   * the reinstatement a won dispute performs. Locked, since each will be moved
+   * to `reversed`.
+   */
+  async appliedClawbacksForSource(
+    tx: CreditLedgerTx,
+    source: CreditClawbackSource,
+    sourceRef: string,
+  ): Promise<CreditClawbackRecord[]> {
+    const result = await tx.execute<Record<string, unknown>>(sql`
+      SELECT id, account_id, source, source_ref, target_key, state,
+             amount_micro::text AS amount_micro, clawed_micro::text AS clawed_micro,
+             pending_micro::text AS pending_micro, debt_micro::text AS debt_micro
+        FROM credit_clawbacks
+       WHERE source = ${source} AND source_ref = ${sourceRef} AND state = 'applied'
+       ORDER BY created_at, id
+         FOR UPDATE`);
+    return rowsOf<ClawbackRow>(result).map(toClawbackRecord);
+  }
+
+  /**
+   * S17 — a clawback is reversed exactly once (the database's own guard refuses
+   * any other state change); the row's amounts stay as the record of what was
+   * taken, which the reinstatement re-grants beside it.
+   */
+  async markClawbackReversed(tx: CreditLedgerTx, clawbackId: string): Promise<void> {
+    await tx.execute(sql`
+      UPDATE credit_clawbacks SET state = 'reversed'
+       WHERE id = ${clawbackId}::uuid AND state = 'applied'`);
   }
 
   /**

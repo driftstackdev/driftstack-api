@@ -268,6 +268,7 @@ import { DrizzleCreditRateCardRepo } from '../db/credit-rate-card-repo.js';
 import { DrizzleCreditReservationsRepo } from '../db/credit-reservations-repo.js';
 import { DrizzleCreditInvariantAuditRepo } from '../db/credit-invariant-audit-repo.js';
 import { DrizzleCreditCutoverRepo } from '../db/credit-cutover-repo.js';
+import { CreditClawbacksService } from '../services/credit-clawbacks.js';
 import { CreditGrantsService, creditGrantsRun } from '../services/credit-grants.js';
 import { CreditReservationsService } from '../services/credit-reservations.js';
 import { CreditCutoverService } from '../services/credit-cutover.js';
@@ -1042,6 +1043,18 @@ export async function createProductionDeps(
         logger,
       })
     : null;
+  // S17 — refunds and disputes take credits back through the same repos; null
+  // whenever grants are, so a deployment with AI credits off has neither.
+  const creditClawbacks =
+    creditGrants !== null
+      ? new CreditClawbacksService({
+          ledger: new DrizzleCreditLedgerRepo(dbHandle),
+          windows: new DrizzleCreditWindowsRepo(dbHandle),
+          grants: creditGrants,
+          logger,
+          sentry,
+        })
+      : null;
 
   // AI credits, the spending half (slices S7-S9). NULL WHILE THE MODE IS OFF,
   // on the same value as the grants above: with it off nothing sets credits
@@ -2280,6 +2293,7 @@ export async function createProductionDeps(
       ...(stripeInvoiceFetcher !== undefined ? { invoiceFetcher: stripeInvoiceFetcher } : {}),
       sentry,
       creditsRefresher: creditGrants, // null while AI credits are off
+      creditClawbacks, // S17 — null while AI credits are off
     },
     accountLifecycleService, // V-202b — fans out tier_changed audit + email at one call site
     authCache, // invalidate the cached AccountContext on a Stripe-driven tier change (rate-limit tier freshness)
@@ -2329,6 +2343,7 @@ export async function createProductionDeps(
       accountLifecycleService,
       authCache,
       creditGrants, // null while AI credits are off
+      creditClawbacks, // S17 — null while AI credits are off
     ),
     logger,
   });
@@ -2365,6 +2380,7 @@ export async function createProductionDeps(
       accountLifecycleService,
       authCache,
       creditGrants, // null while AI credits are off
+      creditClawbacks, // S17 — null while AI credits are off
     ),
     logger,
   });
@@ -2880,6 +2896,7 @@ export async function createProductionDeps(
       accountLifecycleService,
       authCache,
       creditGrants, // null while AI credits are off
+      creditClawbacks, // S17 — null while AI credits are off
     );
     cryptoOrdersService = new CryptoOrdersService({
       repo: cryptoRepo,
