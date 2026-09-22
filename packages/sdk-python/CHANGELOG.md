@@ -6,6 +6,78 @@ follows [SemVer](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-22
+
+**Nothing was removed.** Every name 0.2.0 exported, every method, every
+keyword argument and every error class is still here and still means the
+same thing, so upgrading takes no code change on its own — except where
+**Migration** below says a string comparison needs updating. Every addition
+below exists on **both** `Driftstack` and `AsyncDriftstack`.
+
+### Added
+
+- **`EgressCapabilities.safeguards`** — `"passed"`, `"failed"` or
+  `"unverified"`, summarising whether every egress safeguard held for a
+  session. `"failed"` wins whenever any check did not pass; `"passed"` only
+  when the device declared the full set of checks a healthy session reports
+  and every one of them reported back; `"unverified"` otherwise. The field is
+  **absent**, not `None`, on a session reported before it existed — do not
+  read an absent value as `"unverified"` or `"passed"`. Rides everywhere
+  `egress_capabilities` already does: `sessions.get()` / `.list()` /
+  `.create()`, `profiles.launch()`, and the
+  `session.egress_capability_changed` webhook payload.
+- **`measured_by`** on a `?check=full` proxy test result
+  (`egress.test_proxy(proxy_id)`) — `"phone"` when a real phone session took
+  the measurement, `"driftstack"` when Driftstack itself did because no phone
+  could be reached in time. The field this replaces, `measured_from`, is
+  still sent beside it with its original values for existing integrations,
+  but is no longer documented; read `measured_by` from here on.
+- **`direct_reading` and `website_like_reading`** on `os_fingerprint` — the
+  same two facts `single_host_vantage` and `web_port_vantage` already carry,
+  under plainer names, added beside the originals rather than replacing
+  them. Present on the proxy test result **and** on each saved
+  proxy returned by `egress.list_proxies()` / `.update_proxy(proxy_id, body)`.
+- **`"page_unreadable"`** joins the `AgentNoticeReason` values a
+  `plan-executed` result can carry: the page could not be read to plan the
+  next step, so the task stopped rather than guess. Send `continue` to try
+  again.
+
+### Changed
+
+- **Two dead `egress_capabilities.warnings` codes are retired from the
+  documentation**: `quic_disabled_fallback_http2` and
+  `dns_remote_resolve_unsupported_by_proxy`. Neither has ever been sent, so
+  this is a documentation correction, not a behavioural change.
+
+### Migration
+
+Two closed-string fields were narrowed — values removed, not added — inside
+the `?check=full` proxy test result. `egress.test_proxy()` and
+`egress.list_proxies()` return a plain `dict`, not a validated model, so the
+affected `AccountProxyTestResult*` / `OsFingerprint` models in
+`driftstack._generated.models` are typing-only for these two fields: neither
+change raises at call time, and code comparing a value against one of the old
+strings simply stops matching, silently. The server has sent the new values
+only since 2026-09-21.
+
+- **`not_run`** — `"node_busy"`, `"node_error"` and `"no_node"` merged into
+  `"check_unavailable"` (you can do exactly one thing about any of the
+  three: try again shortly, or contact support if it persists);
+  `"unresolvable"` is now `"config_unresolvable"`, matching the word the
+  "why a launch is refused" vocabulary already used for the identical fact.
+  `"live_session"` is unchanged.
+- **`os_fingerprint_unavailable`** — `"vpn_tunnel"` is now
+  `"not_available_for_vpn"`, `"not_observed"` is now `"not_captured"`, and
+  `"observer_off"` is now `"not_offered_here"`.
+
+Update any code that compares `not_run` or `os_fingerprint_unavailable`
+against one of the old strings to compare against its replacement instead.
+
+### Pre-1.0 stability
+
+The SDK is pre-1.0. Pin `driftstack-sdk~=0.3.0` rather than an exact version
+and read this file before bumping.
+
 ## [0.2.0] - 2026-09-20
 
 The release the guide [Run AI tasks from your

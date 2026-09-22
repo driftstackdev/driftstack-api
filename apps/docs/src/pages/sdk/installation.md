@@ -183,7 +183,7 @@ The distribution name is `driftstack-sdk`; the import name is `driftstack`.
 
 **Requirements:** Python 3.10+.
 
-**Versions:** install normally. In a requirements file, write the compatible-release specifier `driftstack-sdk~=0.2.0` — it takes patch releases and stops before the next minor, which is what you want, because while the SDK is `0.x` a minor version can change the surface and a patch never does. Read the changelog before moving to a new minor. Pin an exact version only if you need a byte-for-byte reproducible build, and note that a lockfile already gives you one.
+**Versions:** install normally. In a requirements file, write the compatible-release specifier `driftstack-sdk~=0.3.0` — it takes patch releases and stops before the next minor, which is what you want, because while the SDK is `0.x` a minor version can change the surface and a patch never does. Read the changelog before moving to a new minor. Pin an exact version only if you need a byte-for-byte reproducible build, and note that a lockfile already gives you one.
 
 **Configure (sync):**
 
