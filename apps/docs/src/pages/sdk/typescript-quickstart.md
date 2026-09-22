@@ -12,7 +12,7 @@ multi-language overview see the [combined quickstart](/quickstart/).
 ## Prerequisites
 
 - Node.js 18+ (Node 22 LTS recommended).
-- `@driftstack/sdk` 0.2.0 or newer. The examples on this page are written
+- `@driftstack/sdk` 0.3.0 or newer. The examples on this page are written
   against it.
 - Any paid Driftstack tier, including Manual. Free is supported through the
   desktop app, whose browser sign-in automatically stores a restricted
