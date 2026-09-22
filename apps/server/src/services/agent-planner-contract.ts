@@ -1103,6 +1103,10 @@ export interface InterpretOptions {
  * none of them; the adapter wraps the throw with the call's validated usage so a
  * paid, unusable reply is still accounted for.
  */
+/** What a first-segment "done" with nothing to run says to the customer. */
+export const FIRST_SEGMENT_ALREADY_DONE_QUESTION =
+  'As far as I can tell that is already done. Tell me what to do next, or what you want checked.';
+
 export function interpretPlanText(text: string, opts: InterpretOptions): PlanInterpretation {
   const label = opts.label;
   const raw = parseReplyJson(text, { objectMustLead: true });
@@ -1126,7 +1130,17 @@ export function interpretPlanText(text: string, opts: InterpretOptions): PlanInt
     const said = answerWanted !== undefined ? { answerWanted } : {};
     // A "done" with no steps may leave `intents` out altogether — there is
     // nothing to list. Anywhere else a missing list is still a broken reply.
-    const mayOmitIntents = status === 'done' && opts.allowEmptyDone === true;
+    //
+    // 2026-09-22 — "done" may omit the list on a FIRST segment too. Measured
+    // on the routed OpenAI-style family (live safety corpus, run 30): told
+    // "that is not finished yet, please continue" after a turn that had in
+    // fact answered, the model replied `status: "done"` with `intents: null`
+    // in four of ten repetitions — and did it AGAIN on the bounded retry, so
+    // this is a systematic way that family says "nothing left to do", not a
+    // formatting slip. It used to throw here and fail the customer's turn.
+    // Below, a first-segment "done" with nothing to run becomes a clarify
+    // that says so; the second-segment meaning (`allowEmptyDone`) is unchanged.
+    const mayOmitIntents = status === 'done';
     const { intents, declared } = parsePlanIntents(
       obj.intents === undefined && mayOmitIntents ? [] : obj.intents,
       label,
@@ -1137,6 +1151,16 @@ export function interpretPlanText(text: string, opts: InterpretOptions): PlanInt
     // planner shown the confirmation page says the form went through.
     if (intents.length === 0 && status === 'done' && opts.allowEmptyDone === true) {
       return { kind: 'plan', intents, status, ...said };
+    }
+    // On a FIRST segment, "done" with nothing to run is the model saying the
+    // task is already complete. That is not a broken reply and not "I could
+    // not turn that into actions": tell the customer plainly and ask what
+    // comes next, instead of failing the turn (see the note above).
+    if (intents.length === 0 && status === 'done') {
+      return {
+        kind: 'clarify',
+        clarifyingQuestion: FIRST_SEGMENT_ALREADY_DONE_QUESTION,
+      };
     }
     // A plan with ZERO runnable intents (the model emitted none, or parseIntents
     // dropped them all as unmappable — the #139 "responds without steps" class):
