@@ -271,12 +271,24 @@ describe('the chat-completions planner is the same planner on another wire', () 
   });
 
   it('a malformed reply throws with the wording the runtime classifies as a broken wire, and a cut-off one says it was cut off', async () => {
-    const { dec } = adapter([
+    // P6 — NOT TRUNCATED, so it gets its one bounded retry (see the dedicated
+    // suite `a-malformed-planner-reply-gets-one-bounded-retry.test.ts`); this
+    // target configures no raised ceiling, so the retry sends the SAME request
+    // again. Both scripted replies are malformed, so the wording that survives
+    // — the runtime's classifier match — is still exactly this.
+    const notTruncated = adapter([
       { kind: 'reply', text: 'Sure! Here is my plan' },
+      { kind: 'reply', text: 'Sure! Here is my plan, again' },
+    ]);
+    await expect(notTruncated.dec.decompose(args())).rejects.toThrow(
+      'OpenAI response was not valid JSON',
+    );
+    // TRUNCATED, and this target has no raised ceiling for the retry — so the
+    // ONE call stands, unretried, exactly as before this slice.
+    const truncated = adapter([
       { kind: 'reply', text: '{"kind":"plan","intents":[{"kind":"nav', finishReason: 'length' },
     ]);
-    await expect(dec.decompose(args())).rejects.toThrow('OpenAI response was not valid JSON');
-    await expect(dec.decompose(args())).rejects.toThrow(
+    await expect(truncated.dec.decompose(args())).rejects.toThrow(
       'OpenAI response was not valid JSON (the reply was cut off at the output limit)',
     );
   });
@@ -459,9 +471,13 @@ describe('the chat-completions planner is the same planner on another wire', () 
         status: 'done',
         intents: [],
       });
-      // Strict dropped by a 400: the same text is a broken reply, as it always was.
+      // Strict dropped by a 400: the same text is a broken reply, as it always
+      // was. Not truncated, so it gets its own P6 retry — a THIRD scripted
+      // reply, the same broken text again, so the wording this test pins
+      // survives that retry too.
       const dropped = adapter([
         { kind: 'status', status: 400, body: 'strict schema not supported' },
+        { kind: 'reply', text: doneWithNulls },
         { kind: 'reply', text: doneWithNulls },
       ]);
       await expect(dropped.dec.decompose(args(later))).rejects.toThrow(

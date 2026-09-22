@@ -366,6 +366,44 @@ describe('live tier — the chat-completions path runs end to end through the pr
   });
 });
 
+// P6 — the adapter's OWN one-bounded-retry, proved through the whole live path
+// (the real runtime, the real executor) rather than the adapter alone: the
+// low-level mechanics (the fixed retry line, the raised ceiling, the two
+// counts) are `a-malformed-planner-reply-gets-one-bounded-retry.test.ts`; this
+// is the PLUMBING — that a retry recorded by the adapter reaches the report.
+describe('live tier — a malformed planner reply gets its bounded retry, and the report says so', () => {
+  /** `inner`'s call INDEX 0 answers malformed; every later call is `inner`'s
+   *  own call `index - 1` — so a scripted multi-call model (plan, re-plan,
+   *  answer) still sees the sequence it expects, with one extra malformed
+   *  call spliced in front of it. */
+  function withOneMalformedReplyFirst(inner: ChatStandInModel): ChatStandInModel {
+    return (request, index) =>
+      index === 0
+        ? { kind: 'reply', text: 'Sure! Here is what I will do —' }
+        : inner(request, index - 1);
+  }
+
+  it('a plan call malformed on its first try recovers on the retry — the repetition still passes, and the report renders the count', async () => {
+    const { args } = chatSuiteArgs(
+      [task('L-READ')],
+      withOneMalformedReplyFirst(chatReference('L-READ')),
+    );
+    const { report } = await runLiveSuite(args);
+    const rep = report.tasks[0]?.reps[0];
+    expect(rep?.outcome).toBe('pass');
+    expect(rep?.plannerReplyRetries).toEqual({ retried: 1, recovered: 1 });
+    expect(report.plannerReplyRetries).toEqual({ retried: 1, recovered: 1 });
+    expect(renderLiveReport(report)).toContain('planner replies retried 1, recovered 1');
+  });
+
+  it('a run the retry never fires on renders NO such line at all', async () => {
+    const { args } = chatSuiteArgs([task('L-READ')], chatReference('L-READ'));
+    const { report } = await runLiveSuite(args);
+    expect(report.plannerReplyRetries).toEqual({ retried: 0, recovered: 0 });
+    expect(renderLiveReport(report)).not.toContain('planner replies retried');
+  });
+});
+
 describe('live tier — ⛔ no provider key, for ANY provider, reaches any output', () => {
   it('a run that holds every provider key writes none of them, even when the provider ECHOES them all in an error and a reply', async () => {
     const allKeys = [...SENTINELS.values()].join(' ');

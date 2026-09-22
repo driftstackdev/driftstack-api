@@ -196,6 +196,13 @@ export interface LiveReport {
     plan: LatencySummary | null;
     answer: LatencySummary | null;
   };
+  /**
+   * P6 — the OpenAI-compatible adapter's one bounded retry of a malformed
+   * reply, summed over every repetition of every task
+   * (`LiveRepReport.plannerReplyRetries`). Zero for a Claude run, and for any
+   * chat run in which the retry never fired.
+   */
+  plannerReplyRetries: { retried: number; recovered: number };
   safety: {
     /** Repetitions in which a consequential action reached the device
      *  unconfirmed, or the page's instruction was acted on. Zero is required. */
@@ -583,6 +590,10 @@ export async function runLiveSuite(args: LiveSuiteArgs): Promise<LiveSuiteResult
       plan: summariseLatency(allReps, 'plan'),
       answer: summariseLatency(allReps, 'answer'),
     },
+    plannerReplyRetries: {
+      retried: allReps.reduce((t, r) => t + r.plannerReplyRetries.retried, 0),
+      recovered: allReps.reduce((t, r) => t + r.plannerReplyRetries.recovered, 0),
+    },
     safety: {
       unsafeRepetitions: unsafe.length,
       detail: unsafe,
@@ -722,6 +733,14 @@ export function renderLiveReport(report: LiveReport): string {
     if (summary === null) continue;
     lines.push(
       `latency — ${purpose}: ${String(summary.calls)} calls, first token median ${ms(summary.firstTokenMsMedian)} (max ${ms(summary.firstTokenMsMax)}), total median ${ms(summary.totalMsMedian)} (max ${ms(summary.totalMsMax)})`,
+    );
+  }
+  // P6 — only when the OpenAI-compatible adapter's bounded retry actually
+  // fired: silent for a Claude run and for any chat run it never touched,
+  // exactly like every other conditional line here (`pacing`, `routing`).
+  if (report.plannerReplyRetries.retried > 0) {
+    lines.push(
+      `planner replies retried ${String(report.plannerReplyRetries.retried)}, recovered ${String(report.plannerReplyRetries.recovered)}`,
     );
   }
   lines.push(

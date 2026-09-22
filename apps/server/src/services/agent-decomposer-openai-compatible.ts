@@ -30,6 +30,15 @@
 //    including cached-prompt and reasoning tokens where it reports them;
 //  · the authority fence before every attempt, and the caller's Stop signal
 //    honoured throughout.
+//
+// P6 — WHAT IS NOT MIRRORED FROM THE CLAUDE ADAPTER: a malformed reply gets ONE
+// bounded retry, the same messages plus a fixed corrective line, INSIDE this
+// call — see `decompose` / `answerFromObservation`. It exists for THIS family:
+// the bake-off (run 22) measured 6 malformed replies in 170 safety trials on
+// the routed GPT family, half of them a reply cut off at the output ceiling
+// because this family's reasoning spends the same budget the reply does — see
+// `ChatMaxCompletionTokensCeiling`. The Claude adapter is untouched; its own
+// numbers did not show this failure mode.
 
 import type { AgentCreditMeter } from './agent-credit-meter.js';
 import {
@@ -83,6 +92,30 @@ export type ChatReplyFormat = 'json_schema_strict' | 'json_schema' | 'none';
  *  reasoning); most compatible endpoints still document `max_tokens`. */
 export type ChatMaxTokensParam = 'max_completion_tokens' | 'max_tokens';
 
+/**
+ * A RAISED output ceiling for one call kind, sent ONLY on the one retry of a
+ * reply that was cut off at the ordinary ceiling (`finishReason === 'length'`)
+ * — never on a call's first attempt, which always sends `PLAN_MAX_COMPLETION_
+ * TOKENS` / `ANSWER_MAX_COMPLETION_TOKENS` exactly as it always has.
+ *
+ * ⛔ WHY A FAMILY NEEDS ONE AT ALL. `maxTokensParam` can be
+ * `max_completion_tokens`, which bounds REASONING and the reply together (see
+ * the module header): a family whose reasoning spends that budget can run out
+ * of room before it has written a byte of the reply, at the SAME ceiling a
+ * family with cheap or no reasoning never approaches. Doubling the ceiling for
+ * everyone would be paying every OTHER family for headroom it does not use;
+ * this field is per-target so only the family that needs it gets it.
+ *
+ * Absent member ⇒ that call kind is never retried on truncation: re-asking at
+ * the SAME ceiling would truncate again, so the adapter skips the wasted call
+ * and the existing truncation error stands (see `decompose` /
+ * `answerFromObservation`).
+ */
+export interface ChatMaxCompletionTokensCeiling {
+  plan?: number;
+  answer?: number;
+}
+
 /** List prices in US dollars per million tokens. */
 export interface ChatModelPrices {
   inputUsdPerMTok: number;
@@ -119,6 +152,10 @@ export interface ChatCompletionsTarget {
    *  sent — `the-direct-chat-wire-does-not-move-when-openrouter-is-added` pins
    *  that byte for byte. */
   openRouter?: OpenRouterRoute;
+  /** See `ChatMaxCompletionTokensCeiling`. Absent ⇒ every existing target's
+   *  behaviour is byte-identical to before this field existed: the first call
+   *  is never affected, and a truncated reply is never retried. */
+  maxCompletionTokensCeiling?: ChatMaxCompletionTokensCeiling;
 }
 
 /**
@@ -315,20 +352,19 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
       if (isLast && conversation.volatileTail !== null) texts.push(conversation.volatileTail);
       messages.push({ role: turn.role, content: texts.join('\n\n') });
     }
-    const reply = await this.callConstrained(
-      (allowed) =>
-        this.requestBody(
-          messages,
-          PLAN_MAX_COMPLETION_TOKENS,
-          'plan_reply',
-          PLAN_REPLY_SCHEMA,
-          allowed,
-        ),
-      args.shouldContinue,
-      args.signal,
-    );
-    const tokensConsumed = this.accountFor(reply);
-    // The provider's own safety stop: a refusal, never a parse failure.
+    const callPlan = (
+      msgs: ReadonlyArray<{ role: string; content: string }>,
+      maxTokens: number,
+    ): Promise<ChatReply> =>
+      this.callConstrained(
+        (allowed) => this.requestBody(msgs, maxTokens, 'plan_reply', PLAN_REPLY_SCHEMA, allowed),
+        args.shouldContinue,
+        args.signal,
+      );
+    let reply = await callPlan(messages, PLAN_MAX_COMPLETION_TOKENS);
+    let tokensConsumed = this.accountFor(reply);
+    // The provider's own safety stop: a refusal, never a parse failure — and
+    // never retried as one (see `decompose`'s module-level retry note).
     if (reply.refusal.length > 0 || reply.finishReason === 'content_filter') {
       return { kind: 'refuse', refuseReason: PROVIDER_SAFETY_REFUSAL, tokensConsumed };
     }
@@ -340,8 +376,55 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
         nullMeansAbsent: this.sentStrict(),
       });
       return { ...interpreted, tokensConsumed };
-    } catch (error) {
-      throw unusableReply(error, this.target.label);
+    } catch (firstError) {
+      // P6 — ONE BOUNDED RETRY OF A MALFORMED REPLY. See the ceiling doc on
+      // `ChatMaxCompletionTokensCeiling` for why a truncated reply needs a
+      // raised budget rather than the same request again.
+      const truncated = reply.finishReason === 'length';
+      const ceiling = this.target.maxCompletionTokensCeiling?.plan;
+      if (truncated && ceiling === undefined) {
+        // Re-asking a truncated reply at the SAME ceiling truncates again — no
+        // family configured a larger one, so the call is not spent. The
+        // existing error (already worded with the truncation note by
+        // `interpretPlanText`) stands unchanged.
+        throw unusableReply(firstError, this.target.label, { retried: false });
+      }
+      // S10/§4.5 — THE RETRY IS A SECOND BILLABLE ATTEMPT, admitted exactly
+      // like the first: an ENFORCE meter that would refuse a fresh call
+      // refuses this one too, before it is sent.
+      refuseWhatCannotBeMetered(args.creditMeter);
+      reply = await callPlan(
+        [...messages, { role: 'user', content: malformedReplyRetryLine(errorReason(firstError)) }],
+        truncated ? ceiling! : PLAN_MAX_COMPLETION_TOKENS,
+      );
+      tokensConsumed += this.accountFor(reply);
+      if (reply.refusal.length > 0 || reply.finishReason === 'content_filter') {
+        return {
+          kind: 'refuse',
+          refuseReason: PROVIDER_SAFETY_REFUSAL,
+          tokensConsumed,
+          plannerReplyRetried: true,
+          plannerReplyRetryRecovered: true,
+        };
+      }
+      try {
+        const interpreted = interpretPlanText(reply.text, {
+          label: this.target.label,
+          truncated: reply.finishReason === 'length',
+          allowEmptyDone: args.turnProgress !== undefined,
+          nullMeansAbsent: this.sentStrict(),
+        });
+        return {
+          ...interpreted,
+          tokensConsumed,
+          plannerReplyRetried: true,
+          plannerReplyRetryRecovered: true,
+        };
+      } catch (secondError) {
+        throw unusableReply(combineMalformedReasons(firstError, secondError), this.target.label, {
+          retried: true,
+        });
+      }
     }
   }
 
@@ -355,31 +438,70 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
       { role: 'system', content: prompt.system },
       { role: 'user', content: prompt.userText },
     ];
-    const reply = await this.callConstrained(
-      (allowed) =>
-        this.requestBody(
-          messages,
-          ANSWER_MAX_COMPLETION_TOKENS,
-          'answer_reply',
-          ANSWER_REPLY_SCHEMA,
-          allowed,
-        ),
-      args.shouldContinue,
-      args.signal,
-    );
-    const tokensConsumed = this.accountFor(reply);
+    const callAnswer = (
+      msgs: ReadonlyArray<{ role: string; content: string }>,
+      maxTokens: number,
+    ): Promise<ChatReply> =>
+      this.callConstrained(
+        (allowed) =>
+          this.requestBody(msgs, maxTokens, 'answer_reply', ANSWER_REPLY_SCHEMA, allowed),
+        args.shouldContinue,
+        args.signal,
+      );
+    let reply = await callAnswer(messages, ANSWER_MAX_COMPLETION_TOKENS);
+    let tokensConsumed = this.accountFor(reply);
+    // A refusal is never retried as a malformed reply — see `decompose`. It
+    // is checked BEFORE the retry-eligible parse below, same as there.
+    if (reply.refusal.length > 0 || reply.finishReason === 'content_filter') {
+      throw unusableReply(
+        new Error(`${this.target.label} answer response was a refusal`),
+        this.target.label,
+        { retried: false },
+      );
+    }
     try {
-      if (reply.refusal.length > 0 || reply.finishReason === 'content_filter') {
-        throw new Error(`${this.target.label} answer response was a refusal`);
-      }
       const answer = interpretAnswerText(reply.text, {
         label: this.target.label,
         truncated: reply.finishReason === 'length',
         nullMeansAbsent: this.sentStrict(),
       });
       return { answer, tokensConsumed };
-    } catch (error) {
-      throw unusableReply(error, this.target.label);
+    } catch (firstError) {
+      const truncated = reply.finishReason === 'length';
+      const ceiling = this.target.maxCompletionTokensCeiling?.answer;
+      if (truncated && ceiling === undefined) {
+        throw unusableReply(firstError, this.target.label, { retried: false });
+      }
+      refuseWhatCannotBeMetered(args.creditMeter);
+      reply = await callAnswer(
+        [...messages, { role: 'user', content: malformedReplyRetryLine(errorReason(firstError)) }],
+        truncated ? ceiling! : ANSWER_MAX_COMPLETION_TOKENS,
+      );
+      tokensConsumed += this.accountFor(reply);
+      if (reply.refusal.length > 0 || reply.finishReason === 'content_filter') {
+        throw unusableReply(
+          new Error(`${this.target.label} answer response was a refusal`),
+          this.target.label,
+          { retried: true },
+        );
+      }
+      try {
+        const answer = interpretAnswerText(reply.text, {
+          label: this.target.label,
+          truncated: reply.finishReason === 'length',
+          nullMeansAbsent: this.sentStrict(),
+        });
+        return {
+          answer,
+          tokensConsumed,
+          plannerReplyRetried: true,
+          plannerReplyRetryRecovered: true,
+        };
+      } catch (secondError) {
+        throw unusableReply(combineMalformedReasons(firstError, secondError), this.target.label, {
+          retried: true,
+        });
+      }
     }
   }
 
@@ -606,9 +728,53 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
  * classifies the Claude one — and the spend stays visible to the live eval's
  * meter, which reads it off the wire. Widening `decomposerKind` is the change
  * that would let it settle properly.
+ *
+ * `retry.retried` marks whether the ONE bounded retry (see `decompose` /
+ * `answerFromObservation`) was actually sent before this error was thrown —
+ * `plannerReplyRetried` on the thrown Error itself, the failure-path mirror of
+ * the SAME field on a successful `DecomposeResult` / `AnswerResult`, for a test
+ * (or an operator) to read off a call that never produced a usable reply.
+ * `plannerReplyRetryRecovered` is always `false` here: this function is only
+ * ever called for a reply nothing could use.
  */
-function unusableReply(error: unknown, label: string): Error {
-  return error instanceof Error ? error : new Error(`${label} response content was invalid`);
+function unusableReply(error: unknown, label: string, retry: { retried: boolean }): Error {
+  const err = error instanceof Error ? error : new Error(`${label} response content was invalid`);
+  return Object.assign(err, {
+    plannerReplyRetried: retry.retried,
+    plannerReplyRetryRecovered: false,
+  });
+}
+
+/**
+ * P6 — the ONE fixed line appended to the conversation on the single bounded
+ * retry of a malformed reply. Only the quoted reason varies; the wording
+ * around it is a constant, so the retry adds no new instructions about the
+ * TASK and the first call's prompt corpus is unchanged (see the module
+ * comment and `decompose`).
+ */
+function malformedReplyRetryLine(reason: string): string {
+  return (
+    `Your last reply could not be used: ${reason}. Send the reply again as a single JSON ` +
+    'object in the exact shape already described, and nothing else.'
+  );
+}
+
+function errorReason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Both attempts' reasons, when a retried reply is STILL unusable. The SECOND
+ * reason leads (it is what actually ends the call) and keeps its own wording
+ * verbatim, so the runtime's classifier — which matches a fixed set of phrases
+ * in the message, see `MALFORMED_PROVIDER_REPLY_RE` in `agent-runtime.ts` —
+ * reads this exactly as it reads an unretried failure. The first reason is
+ * appended for whoever reads the error, never dropped.
+ */
+function combineMalformedReasons(firstError: unknown, secondError: unknown): Error {
+  return new Error(
+    `${errorReason(secondError)} (retried once; first attempt: ${errorReason(firstError)})`,
+  );
 }
 
 /**
@@ -952,4 +1118,5 @@ export const __TEST_ONLY__ = {
   chatBillableTokens,
   rejectedChatControl,
   openRouterStatusMessage,
+  malformedReplyRetryLine,
 };

@@ -28,6 +28,7 @@ import {
 import {
   OpenAICompatibleAgentDecomposer,
   type ChatCompletionsTarget,
+  type ChatMaxCompletionTokensCeiling,
   type ChatModelPrices,
   type OpenAICompatibleAgentDecomposerDeps,
   type OpenRouterRoute,
@@ -65,6 +66,14 @@ export interface ChatPlannerModel {
   priceSource: string;
   /** What in this row is NOT confirmed from the provider's current docs. */
   unverified: ReadonlyArray<string>;
+  /**
+   * P6 — a raised output ceiling for this family's ONE retry of a reply
+   * truncated at the ordinary constant (`PLAN_MAX_COMPLETION_TOKENS` /
+   * `ANSWER_MAX_COMPLETION_TOKENS` in the adapter). Absent everywhere except
+   * the row the bake-off measured truncating: see `openrouter:openai/gpt-
+   * 5.6-luna` below for the evidence. See `ChatMaxCompletionTokensCeiling`.
+   */
+  maxCompletionTokensCeiling?: ChatMaxCompletionTokensCeiling;
   /**
    * OpenRouter rows only: the ONE upstream the model is pinned to, and whether
    * Anthropic's automatic cache marker is sent. See `OpenRouterRoute` for what
@@ -508,6 +517,21 @@ export const CHAT_PLANNER_MODELS: ReadonlyArray<ChatPlannerModel> = [
       upstreamLabel: 'OpenAI (first-party, standard tier)',
       endpointsSource: openRouterEndpoints('openai/gpt-5.6-luna'),
     },
+    // P6 — MEASURED, NOT GUESSED. Hard safety corpus, run 22 (2026-09-20,
+    // /private/tmp/ds-gate/live-eval/run22-safety/or-gpt-5.6-luna-safety.json):
+    // 2 of 170 trials truncated at the ordinary PLAN_MAX_COMPLETION_TOKENS
+    // (8,192) with the reply still incomplete — L-SAFE-INJECTION rep 7 (this
+    // rep's total output tokens: 8,321) and L-SAFE-UGC-TOOL rep 10 (8,329),
+    // both landing right at the ceiling despite `reasoning_effort: "none"`
+    // being sent (`requestControls.effortSent` in that same report) — this
+    // family spends the shared budget on reasoning the request asked it not
+    // to produce (the qualification-run verdict says so explicitly: "the
+    // output ceiling was tuned for a model whose reasoning does not spend the
+    // output budget — luna's does"). Doubled for margin: 16,384. No truncated
+    // ANSWER call was observed in that corpus (`answerErrors` is empty
+    // throughout), so 8,192 here is the SAME 2x-for-margin rule applied on no
+    // direct evidence, not a measured floor — see the report for the number.
+    maxCompletionTokensCeiling: { plan: 16_384, answer: 8_192 },
   },
   {
     qualifiedId: 'openrouter:google/gemini-3.8-flash',
@@ -625,6 +649,12 @@ export function chatTarget(row: ChatPlannerModel, day: Date = new Date()): ChatC
     // its target — and its request — is what it always was.
     ...(row.openRouter !== undefined
       ? { openRouter: { only: row.openRouter.only, cacheControl: row.openRouter.cacheControl } }
+      : {}),
+    // P6 — absent for every row but the one the bake-off measured truncating,
+    // so every other target's request is byte-identical to before this field
+    // existed (see `ChatMaxCompletionTokensCeiling`).
+    ...(row.maxCompletionTokensCeiling !== undefined
+      ? { maxCompletionTokensCeiling: row.maxCompletionTokensCeiling }
       : {}),
   };
 }

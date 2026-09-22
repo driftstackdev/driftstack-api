@@ -2538,6 +2538,32 @@ export class AgentRuntime {
   }
 
   /**
+   * P6 — this turn's OpenAI-compatible-adapter reply retries, counted onto
+   * `run.actionPaths` the same way {@link withPlanningReadModeCount} counts
+   * planning-read mode: `retried`/`recovered` are the turn's RUNNING TOTALS at
+   * the call site (every decompose/replan/answer call folded in so far), so
+   * this is a SET, not an ADD — safe to call again after a later segment or
+   * the read-back without double-counting. A no-op while neither call site has
+   * retried anything yet.
+   */
+  private withPlannerReplyRetryCounts(
+    run: ExecutorRunResult,
+    retried: number,
+    recovered: number,
+  ): ExecutorRunResult {
+    if (retried <= 0 && recovered <= 0) return run;
+    const actionPaths = run.actionPaths ?? emptyAgentActionPathCounts();
+    return {
+      ...run,
+      actionPaths: {
+        ...actionPaths,
+        plannerReplyRetried: retried,
+        plannerReplyRetryRecovered: recovered,
+      },
+    };
+  }
+
+  /**
    * P1 — account for a decompose call that is NOT the turn's first.
    *
    * ⛔ EVERY ITERATION RECORDS ITS OWN ROW. `sumMonthlySpendCents` is the sole
@@ -3257,6 +3283,18 @@ export class AgentRuntime {
      * reported on the turn's `loop` line so a retried turn is visible as one.
      */
     let plannerRetries = 0;
+    /**
+     * P6 — the OpenAI-compatible adapter's OWN bounded retry of a malformed
+     * reply, folded onto this turn's `agent_turn_action_paths` line
+     * (`AgentActionPathCounts.plannerReplyRetried` /
+     * `.plannerReplyRetryRecovered`) the same way `planningReadTrace.length`
+     * is: a running total, set (not added) into `executorResult` wherever it
+     * is next available. Distinct from `plannerRetries` above, which counts
+     * THIS runtime's own outer, whole-call retry
+     * (`planWithOneRetryOnMalformedReply`) on the `loop` line.
+     */
+    let plannerReplyRetried = 0;
+    let plannerReplyRetryRecovered = 0;
     let decomposed: DecomposeResult;
     if (resumePlan !== null) {
       decomposed = resumePlan;
@@ -3434,6 +3472,8 @@ export class AgentRuntime {
           },
         );
         decomposed = planned.result;
+        if (decomposed.plannerReplyRetried === true) plannerReplyRetried += 1;
+        if (decomposed.plannerReplyRetryRecovered === true) plannerReplyRetryRecovered += 1;
       } catch (err) {
         if (err instanceof AgentDecomposerContinuationDeniedError) {
           return this.interruptedTurnResult(session.id, sessionWithUser, 'decompose');
@@ -3912,12 +3952,16 @@ export class AgentRuntime {
     // a blind first segment, which the policy reads as "no page read yet"
     // rather than as a page of zero words.
     if (pace !== undefined) pace.pageWordCount = countDigestWords(firstPlanObservation);
-    let executorResult = this.withPlanningReadModeCount(
-      await runPlan(decomposed, verifiedConsequentialApprovals, {
-        segment: 1,
-        ...(decomposed.status !== undefined ? { status: decomposed.status } : {}),
-      }),
-      planningReadTrace.length,
+    let executorResult = this.withPlannerReplyRetryCounts(
+      this.withPlanningReadModeCount(
+        await runPlan(decomposed, verifiedConsequentialApprovals, {
+          segment: 1,
+          ...(decomposed.status !== undefined ? { status: decomposed.status } : {}),
+        }),
+        planningReadTrace.length,
+      ),
+      plannerReplyRetried,
+      plannerReplyRetryRecovered,
     );
 
     // ── B1 — LOOK, PLAN AS FAR AS YOU CAN SEE, ACT, LOOK AGAIN — IN ONE TURN ──
@@ -4209,6 +4253,8 @@ export class AgentRuntime {
           },
         );
         replanned = replannedOnce.result;
+        if (replanned.plannerReplyRetried === true) plannerReplyRetried += 1;
+        if (replanned.plannerReplyRetryRecovered === true) plannerReplyRetryRecovered += 1;
       } catch (err) {
         // S10/§4.5 — THE TASK RAN OUT OF THE AI CREDITS SET ASIDE FOR IT, part
         // way through. The steps that ran stand and are published as always; what
@@ -4457,9 +4503,13 @@ export class AgentRuntime {
       lastRunResults = nextRun.results;
       lastRun = nextRun;
       noteRan(nextRun, segment, pageNow);
-      executorResult = this.withPlanningReadModeCount(
-        mergeExecutorRuns(executorResult, nextRun),
-        planningReadTrace.length,
+      executorResult = this.withPlannerReplyRetryCounts(
+        this.withPlanningReadModeCount(
+          mergeExecutorRuns(executorResult, nextRun),
+          planningReadTrace.length,
+        ),
+        plannerReplyRetried,
+        plannerReplyRetryRecovered,
       );
       if (cause === 'replan') replans += 1;
       if (nextRun.stopped === true) stoppedDuring = 'executing';
@@ -4779,6 +4829,16 @@ export class AgentRuntime {
             ...(args.creditMeter !== undefined ? { creditMeter: args.creditMeter } : {}),
           });
           answerInFlight = false;
+          // P6 — the read-back is the LAST call this turn can retry a
+          // malformed reply on; fold its own count in before anything below
+          // reads `executorResult` again.
+          if (answer.plannerReplyRetried === true) plannerReplyRetried += 1;
+          if (answer.plannerReplyRetryRecovered === true) plannerReplyRetryRecovered += 1;
+          executorResult = this.withPlannerReplyRetryCounts(
+            executorResult,
+            plannerReplyRetried,
+            plannerReplyRetryRecovered,
+          );
           latestReadbackEvidence = {
             ...(answer.usage !== undefined ? { usage: answer.usage } : {}),
             ...(answer.tokensConsumed > 0 ? { tokensConsumed: answer.tokensConsumed } : {}),

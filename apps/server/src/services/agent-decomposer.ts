@@ -358,6 +358,29 @@ export type DecomposeResult =
        *  deterministic decomposer + legacy callers don't have to
        *  populate it. AgentRuntime records a usage row when present. */
       usage?: DecomposeUsage;
+      /**
+       * P6 — THE OPENAI-COMPATIBLE ADAPTER'S ONE BOUNDED RETRY OF A MALFORMED
+       * REPLY, reported on the result it recovered so the turn can count it
+       * (`services/agent-turn-telemetry.ts`'s `AgentActionPathCounts
+       * .plannerReplyRetried` / `.plannerReplyRetryRecovered`).
+       *
+       * `plannerReplyRetried` — the adapter re-asked once, inside THIS call,
+       * because the first reply was not truncated and could not be read (or was
+       * truncated and the model family carries a raised ceiling for the retry).
+       * Absent/false when the first reply was used as-is.
+       *
+       * `plannerReplyRetryRecovered` (below) — the retry produced the reply this
+       * result was built from. Only ever true alongside this field.
+       *
+       * ⛔ ABSENT FOR EVERY OTHER DECOMPOSER (Claude, deterministic) and for the
+       * runtime's OWN outer retry (`planWithOneRetryOnMalformedReply` in
+       * `agent-runtime.ts`, a different, whole-call retry): a reader must never
+       * default either field, exactly like every other optional result member
+       * here.
+       */
+      plannerReplyRetried?: boolean;
+      /** See {@link DecomposeResult}'s `plannerReplyRetried` (the 'plan' arm). */
+      plannerReplyRetryRecovered?: boolean;
     }
   | {
       kind: 'clarify';
@@ -366,6 +389,10 @@ export type DecomposeResult =
       clarifyingQuestion: string;
       tokensConsumed: number;
       usage?: DecomposeUsage;
+      /** See {@link DecomposeResult}'s `plannerReplyRetried` (the 'plan' arm). */
+      plannerReplyRetried?: boolean;
+      /** See {@link DecomposeResult}'s `plannerReplyRetried` (the 'plan' arm). */
+      plannerReplyRetryRecovered?: boolean;
     }
   | {
       kind: 'refuse';
@@ -374,6 +401,10 @@ export type DecomposeResult =
       refuseReason: string;
       tokensConsumed: number;
       usage?: DecomposeUsage;
+      /** See {@link DecomposeResult}'s `plannerReplyRetried` (the 'plan' arm). */
+      plannerReplyRetried?: boolean;
+      /** See {@link DecomposeResult}'s `plannerReplyRetried` (the 'plan' arm). */
+      plannerReplyRetryRecovered?: boolean;
     };
 
 /**
@@ -628,6 +659,11 @@ export interface AnswerResult {
    *  records these, exactly like a decompose turn. */
   tokensConsumed: number;
   usage?: DecomposeUsage;
+  /** See {@link DecomposeResult}'s `plannerReplyRetried` (the 'plan' arm) — the
+   *  same one-bounded-retry mirrored onto the read-back call. */
+  plannerReplyRetried?: boolean;
+  /** See {@link DecomposeResult}'s `plannerReplyRetried` (the 'plan' arm). */
+  plannerReplyRetryRecovered?: boolean;
 }
 
 /**

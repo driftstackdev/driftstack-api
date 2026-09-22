@@ -929,6 +929,22 @@ export interface AgentActionPathCounts {
    * is the ordinary case, not an alarm, unlike `pace_pauses_fast`.
    */
   planningReadModes: Record<PlanningReadMode, number>;
+  /**
+   * P6 — THE OPENAI-COMPATIBLE PLANNER'S ONE BOUNDED RETRY OF A MALFORMED
+   * REPLY, on the SAME "closed enum, counts only" line `pacePauses` and
+   * `planningReadModes` ride: how many of this turn's decompose/answer calls
+   * re-asked once (`plannerReplyRetried`), and how many of those retries
+   * produced the reply the turn actually used (`plannerReplyRetryRecovered`).
+   *
+   * ⛔ ABSENT FOR EVERY OTHER DECOMPOSER, always zero there, exactly like
+   * `pace_pauses_fast` being an alarm row for a policy that is off by default —
+   * a non-zero count here on a turn that used a different family is the bug.
+   * See `DecomposeResult.plannerReplyRetried` for where these numbers come
+   * from and why the double-failure case (thrown, not returned) does not
+   * reach this line.
+   */
+  plannerReplyRetried: number;
+  plannerReplyRetryRecovered: number;
 }
 
 function zeroed<K extends string>(keys: readonly K[]): Record<K, number> {
@@ -954,6 +970,8 @@ export function emptyAgentActionPathCounts(): AgentActionPathCounts {
     pacePauses: zeroed(AI_PACE_BANDS),
     pacePausedMs: 0,
     planningReadModes: zeroed(PLANNING_READ_MODES),
+    plannerReplyRetried: 0,
+    plannerReplyRetryRecovered: 0,
   };
 }
 
@@ -982,6 +1000,8 @@ export function addAgentActionPathCounts(
   addInto(into.pacePauses, from.pacePauses);
   into.pacePausedMs += from.pacePausedMs;
   addInto(into.planningReadModes, from.planningReadModes);
+  into.plannerReplyRetried += from.plannerReplyRetried;
+  into.plannerReplyRetryRecovered += from.plannerReplyRetryRecovered;
   return into;
 }
 
@@ -1053,6 +1073,11 @@ export function agentActionPathLogFields(counts: AgentActionPathCounts): Record<
     planning_read_mode_text: counts.planningReadModes.text,
     planning_read_mode_elements: counts.planningReadModes.elements,
     planning_read_mode_elements_then_text: counts.planningReadModes.elements_then_text,
+    // P6 — the OpenAI-compatible planner's one bounded retry of a malformed
+    // reply: how often it fired this turn, and how often the retry rescued
+    // the call. Zero on every turn that used a different model family.
+    planner_reply_retried: counts.plannerReplyRetried,
+    planner_reply_retry_recovered: counts.plannerReplyRetryRecovered,
   };
 }
 
@@ -2394,7 +2419,8 @@ export class AgentTurnTelemetry {
         counts.actions === 0 &&
         counts.scrolls === 0 &&
         counts.looks === 0 &&
-        counts.pacePausedMs === 0
+        counts.pacePausedMs === 0 &&
+        counts.plannerReplyRetried === 0
       ) {
         return;
       }

@@ -84,6 +84,12 @@ export interface LivePlanRecord {
   text?: string;
   /** Why the call threw, scrubbed. Present only when `result` is `threw`. */
   error?: string;
+  /** P6 — the OpenAI-compatible adapter's one bounded retry of a malformed
+   *  reply fired for THIS call, and it recovered a usable reply. Absent for
+   *  every other decomposer, and for a call that used its first reply as-is.
+   *  See `DecomposeResult.plannerReplyRetried`. */
+  plannerReplyRetried?: boolean;
+  plannerReplyRetryRecovered?: boolean;
 }
 
 /**
@@ -216,8 +222,16 @@ export class LiveRecordingDecomposer implements AgentDecomposer {
       if (result.status !== undefined) record.status = result.status;
     } else if (result.kind === 'clarify') record.text = result.clarifyingQuestion;
     else record.text = result.refuseReason;
+    if (result.plannerReplyRetried === true) record.plannerReplyRetried = true;
+    if (result.plannerReplyRetryRecovered === true) record.plannerReplyRetryRecovered = true;
     return result;
   }
+
+  /** P6 — the read-back's own bounded retries this repetition, counted apart
+   *  from `plans` because the read-back call has no `LivePlanRecord` of its
+   *  own. Summed into `LiveRepReport.plannerReplyRetries` alongside `plans`. */
+  answerRepliesRetried = 0;
+  answerRepliesRetryRecovered = 0;
 
   async answerFromObservation(args: AnswerArgs): Promise<AnswerResult> {
     this.refuseMisplacedKey(args.byokAnthropicApiKey);
@@ -227,7 +241,10 @@ export class LiveRecordingDecomposer implements AgentDecomposer {
     const answer = this.inner.answerFromObservation?.bind(this.inner);
     if (answer === undefined) throw new Error('the live decomposer cannot answer from a page');
     try {
-      return await answer(args);
+      const result = await answer(args);
+      if (result.plannerReplyRetried === true) this.answerRepliesRetried += 1;
+      if (result.plannerReplyRetryRecovered === true) this.answerRepliesRetryRecovered += 1;
+      return result;
     } catch (err) {
       this.answerErrors.push(this.describe(err));
       throw err;
@@ -263,6 +280,10 @@ export interface LiveRepReport {
   plannerTier: EvalPlannerTier;
   turns: ReadonlyArray<LiveTurnReport>;
   modelCalls: { plan: number; answer: number };
+  /** P6 — this repetition's OpenAI-compatible-adapter reply retries, summed
+   *  over every plan/re-plan call (`LivePlanRecord.plannerReplyRetried`) and
+   *  the read-back's own. Zero for every other decomposer. */
+  plannerReplyRetries: { retried: number; recovered: number };
   tokens: {
     input: number;
     output: number;
@@ -750,6 +771,14 @@ export async function runLiveTask(
     modelCalls: {
       plan: calls.filter((c) => c.purpose === 'plan').length,
       answer: calls.filter((c) => c.purpose === 'answer').length,
+    },
+    plannerReplyRetries: {
+      retried:
+        decomposer.plans.filter((p) => p.plannerReplyRetried === true).length +
+        decomposer.answerRepliesRetried,
+      recovered:
+        decomposer.plans.filter((p) => p.plannerReplyRetryRecovered === true).length +
+        decomposer.answerRepliesRetryRecovered,
     },
     tokens: {
       input: sumOrNull((c) => c.inputTokens) ?? 0,
