@@ -78,33 +78,30 @@ export type CreditClawbackState = (typeof CREDIT_CLAWBACK_STATES)[number];
 export const PLAN_OVERRIDE_SOURCE_REF = 'override';
 
 /**
- * S17 — the share of a paid invoice the customer is still paying for, as the
- * expression the level a paid line earns is scaled by, at EVERY place coverage
- * is computed. A refund or a dispute of a fraction `f` of an invoice lowers
- * what that invoice covers by the same fraction (plan M8): the clawback
- * service moves the window's level to exactly this value, and because the
- * level a reconciliation would target is computed from this same expression,
- * the two agree to the microcredit and a refund is never re-granted as an
- * "upgrade" on the next refresh. Integer arithmetic in bigint; a free invoice
- * (`amount_paid_minor = 0`) covers in full, as it always did.
+ * S17 — the level a paid line earns, after the share of it that has been
+ * refunded or disputed is taken off (plan M8): a refund or a dispute of a
+ * fraction `f` of an invoice lowers what that invoice covers by the same
+ * fraction, rounded DOWN to whole credits (the level column accepts nothing
+ * else). It is ONE expression used at every place coverage is computed, so the
+ * level a clawback sets and the level a reconciliation would target are the
+ * same number to the microcredit, and a refund is never re-granted as an
+ * "upgrade" on the next refresh. A free invoice (`amount_paid_minor = 0`)
+ * covers in full, as it always did.
+ *
+ * A top-level fragment with no interpolation of its own, referenced by name
+ * inside each query: a fragment NESTED as an inline template would put a
+ * backtick inside the query's text, which the guard that reads every raw
+ * query for its ORDER BY cannot see past; and raw text splicing is refused by
+ * the guard that keeps every query parameterised. Bigint arithmetic throughout.
  */
-function paidShareOf(level: string): SQL {
-  // Plain text spliced with `sql.raw`, not a nested template: the guard that
-  // reads every raw query for its ORDER BY cannot see past an inner backtick.
-  return sql.raw(
-    `CASE WHEN pay.amount_paid_minor = 0 THEN ${level}
-          ELSE (${level} * GREATEST(pay.amount_paid_minor - pay.refunded_minor - pay.disputed_minor, 0))
-               / pay.amount_paid_minor END`,
-  );
-}
-
-/** The level a paid line earns before any of it is reversed. */
-const PAID_LINE_LEVEL = 'LEAST(line_plan.allowance_micro, mirror_plan.allowance_micro)';
+const PAID_LINE_LEVEL = sql`CASE WHEN pay.amount_paid_minor = 0
+       THEN LEAST(line_plan.allowance_micro, mirror_plan.allowance_micro)
+       ELSE ((LEAST(line_plan.allowance_micro, mirror_plan.allowance_micro)
+              * GREATEST(pay.amount_paid_minor - pay.refunded_minor - pay.disputed_minor, 0))
+             / pay.amount_paid_minor / 1000000) * 1000000 END`;
 
 /** S17 — an invoice whose payment has been wholly refunded or disputed covers nothing. */
-const stillPaidFor = sql.raw(
-  '(pay.refunded_minor + pay.disputed_minor < pay.amount_paid_minor OR pay.amount_paid_minor = 0)',
-);
+const STILL_PAID_FOR = sql`(pay.refunded_minor + pay.disputed_minor < pay.amount_paid_minor OR pay.amount_paid_minor = 0)`;
 
 /**
  * A `timestamptz`, as UTC text exact to the microsecond:
@@ -344,7 +341,7 @@ function coverageCandidatesSql(accountId: string | null): SQL {
              pay.stripe_invoice_id AS source_ref,
              CASE WHEN mirror_plan.allowance_micro < line_plan.allowance_micro
                   THEN mirror_plan.tier ELSE line_plan.tier END AS tier,
-             ${paidShareOf(PAID_LINE_LEVEL)} AS level_micro,
+             ${PAID_LINE_LEVEL} AS level_micro,
              (pay.line_interval = 'year') AS by_month,
              pay.line_period_start AS starts,
              pay.line_period_end AS paid_end
@@ -357,7 +354,7 @@ function coverageCandidatesSql(accountId: string | null): SQL {
        WHERE pay.line_kind = 'period'
          AND pay.line_interval IS NOT NULL
          AND pay.line_period_start <= clock.t AND clock.t < pay.line_period_end
-         AND ${stillPaidFor}
+         AND ${STILL_PAID_FOR}
          AND sub.status = 'active'${onlyPaid}
       UNION ALL
       SELECT ce.account_id, 'crypto_entitlement', ce.order_id, crypto_plan.tier,
@@ -535,7 +532,7 @@ function levelReconciliationSql(accountId: string): SQL {
              -- A paid proration line is the upgrade itself; a period line that
              -- earns the same level is the month it sits in.
              CASE WHEN pay.line_kind = 'proration_up' THEN 0 ELSE 1 END AS kind_rank,
-             ${paidShareOf(PAID_LINE_LEVEL)} AS level_micro,
+             ${PAID_LINE_LEVEL} AS level_micro,
              pay.line_period_start AS up_from,
              COALESCE(sub.tier_since, clock.t) AS down_from
         FROM billing_invoice_payments pay
@@ -547,7 +544,7 @@ function levelReconciliationSql(accountId: string): SQL {
        WHERE pay.account_id = ${accountId}::uuid
          AND pay.line_kind IN ('period', 'proration_up')
          AND pay.line_period_start <= clock.t AND clock.t < pay.line_period_end
-         AND ${stillPaidFor}
+         AND ${STILL_PAID_FOR}
          AND sub.status = 'active'
       UNION ALL
       SELECT 'crypto_entitlement', ce.order_id, 1, crypto_plan.allowance_micro,
@@ -1007,7 +1004,7 @@ export class DrizzleCreditWindowsRepo {
   /**
    * S17 — the level one paid invoice covers RIGHT NOW, after the share of it
    * that has been refunded or disputed is taken off: the same expression
-   * (`paidShareOf`) the coverage reads use, so the level a clawback sets is the
+   * (`PAID_LINE_LEVEL`) the coverage reads use, so the level a clawback sets is the
    * level a reconciliation would target. Null when the invoice covers nothing
    * now — its period is over, its subscription is not active, its plan is
    * unknown, or it has been wholly refunded — in which case a clawback lowers
@@ -1023,7 +1020,7 @@ export class DrizzleCreditWindowsRepo {
         SELECT p.tier, p.allowance_micro
           FROM jsonb_to_recordset(${planAllowancesJson()}::jsonb) AS p(tier text, allowance_micro bigint)
       )
-      SELECT ${paidShareOf(PAID_LINE_LEVEL)}::text AS level_micro
+      SELECT ${PAID_LINE_LEVEL}::text AS level_micro
         FROM billing_invoice_payments pay
         JOIN subscriptions sub
           ON sub.stripe_subscription_id = pay.stripe_subscription_id AND sub.account_id = pay.account_id
@@ -1032,7 +1029,7 @@ export class DrizzleCreditWindowsRepo {
        WHERE pay.account_id = ${accountId}::uuid AND pay.stripe_invoice_id = ${stripeInvoiceId}
          AND pay.line_kind IN ('period', 'proration_up')
          AND pay.line_period_start <= now() AND now() < pay.line_period_end
-         AND ${stillPaidFor}
+         AND ${STILL_PAID_FOR}
          AND sub.status = 'active'
        ORDER BY level_micro DESC
        LIMIT 1`);
