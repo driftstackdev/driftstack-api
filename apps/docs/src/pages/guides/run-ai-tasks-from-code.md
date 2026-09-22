@@ -54,8 +54,8 @@ A nightly job that:
   `pip install driftstack-sdk`, or
   `go get github.com/driftstackdev/driftstack-api/packages/sdk-go@latest`.
   See [SDK installation](/sdk/installation/).
-- **SDK versions.** The programs here need `@driftstack/sdk` 0.2.0,
-  `driftstack-sdk` 0.2.0, or the Go module at `v0.3.0`. Earlier releases have
+- **SDK versions.** The programs here need `@driftstack/sdk` 0.3.0,
+  `driftstack-sdk` 0.3.0, or the Go module at `v0.4.0`. Earlier releases have
   no agent sessions at all, so they cannot run these examples — and the
   published packages before those versions will not even compile them.
 

@@ -49,7 +49,7 @@ breaks bump the MINOR version AND get explicit deprecation notice
 the difference is only that we haven't promised long-term stability.
 
 Customers integrating a pre-1.0 SDK should pin a compatible version
-(e.g., `^0.2.0`) and read the CHANGELOG before bumping.
+(e.g., `^0.3.0`) and read the CHANGELOG before bumping.
 
 ## Deprecation policy
 
@@ -126,14 +126,14 @@ exceed one MINOR release.
 
 In customer code:
 
-- **TypeScript**: `"@driftstack/sdk": "^0.2.0"` (caret = pre-1.0
+- **TypeScript**: `"@driftstack/sdk": "^0.3.0"` (caret = pre-1.0
   pinning to MINOR). Bump on customer schedule.
-- **Python**: `driftstack-sdk>=0.2.0,<0.3` or
-  `driftstack-sdk~=0.2.0` (PEP 440 compatible-release). Pin the
+- **Python**: `driftstack-sdk>=0.3.0,<0.4` or
+  `driftstack-sdk~=0.3.0` (PEP 440 compatible-release). Pin the
   `driftstack-sdk` distribution name — `pip install driftstack-sdk`,
   then `import driftstack`.
 - **Go**: `go.mod` with `github.com/driftstackdev/driftstack-api/
-packages/sdk-go v0.3.0`. Bump via `go get -u`.
+packages/sdk-go v0.4.0`. Bump via `go get -u`.
 
 What every one of those lines has in common: while a package is `0.x`, a
 MINOR version can change the surface and a PATCH never does, so the default
