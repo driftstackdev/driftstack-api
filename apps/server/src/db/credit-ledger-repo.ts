@@ -26,7 +26,7 @@
 // bug, and it throws rather than reporting success for a movement that never
 // happened.
 
-import { and, desc, eq, gt, isNull, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gt, isNull, lte, sql } from 'drizzle-orm';
 import {
   AiBillingSchema,
   AiDebtReasonSchema,
@@ -280,6 +280,33 @@ export interface CreditLotInsertResult {
 export interface CreditLedgerPage {
   /** Newest first. */
   readonly entries: readonly CreditLedgerRecord[];
+  /** Pass back as `cursor` for the next (older) page; null on the last page. */
+  readonly nextCursor: string | null;
+}
+
+/** S14 — one ledger row plus the account's running balance through it. */
+export interface CreditLedgerRecordWithBalance extends CreditLedgerRecord {
+  /**
+   * Σ(lot_delta_micro − debt_delta_micro) over every row of this account's
+   * ledger up to and including this one, ordered by id. NOT the same figure
+   * as `spendableMicro()` at that instant: this sum includes lots that have
+   * since expired or been fully spent (their own ledger rows already netted
+   * them to their final value here) and does not exclude what a task holds —
+   * it is the account's net position, not what a new task could draw on.
+   */
+  readonly balanceAfterMicro: number;
+  /**
+   * The lot's own `expires_at`, when this row names one (`lotId !== null`);
+   * null otherwise. A row that ADDED credit (a positive `lotDeltaMicro`) is
+   * the only case `GET /v1/account/me/ai/ledger`'s `expires_at` reports —
+   * see `buildLedgerEntry` in `services/ai-account-state.ts`.
+   */
+  readonly lotExpiresAt: Date | null;
+}
+
+export interface CreditLedgerPageWithBalance {
+  /** Newest first. */
+  readonly entries: readonly CreditLedgerRecordWithBalance[];
   /** Pass back as `cursor` for the next (older) page; null on the last page. */
   readonly nextCursor: string | null;
 }
@@ -872,6 +899,146 @@ export class DrizzleCreditLedgerRepo {
       entries,
       nextCursor: rows.length > limit && last !== undefined ? last.id : null,
     };
+  }
+
+  /**
+   * S14 — {@link ledgerPage}, with each entry's running `balanceAfterMicro`
+   * for `GET /v1/account/me/ai/ledger`'s `balance_after_credits`.
+   *
+   * ⛔ THE WINDOW FUNCTION SEES EVERY ROW THE `WHERE` CLAUSE PASSES, BEFORE
+   * `LIMIT` APPLIES — that ordering (FROM/WHERE, then window functions, then
+   * LIMIT) is what makes filtering on the cursor SAFE here rather than a
+   * truncated sum: `id < cursor` selects an unbroken prefix of the account's
+   * whole history from its very first row, so `SUM(...) OVER (ORDER BY id)`
+   * computed over exactly that filtered set already equals the true running
+   * balance for every row it returns — a row with `id <= X` for any `X` in the
+   * page is, by construction, also `id < cursor`. A version that computed the
+   * sum outside the cursor filter (a CTE with no WHERE, filtered afterwards)
+   * would answer the same question at the cost of scanning the whole ledger on
+   * every page; this does not need to.
+   */
+  async ledgerPageWithBalance(
+    accountId: string,
+    opts: { readonly limit: number; readonly cursor?: string },
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<CreditLedgerPageWithBalance> {
+    const { limit, cursor } = opts;
+    if (!Number.isInteger(limit) || limit < 1 || limit > CREDIT_LEDGER_PAGE_MAX) {
+      throw new RangeError(`a ledger page holds 1 to ${String(CREDIT_LEDGER_PAGE_MAX)} entries`);
+    }
+    if (cursor !== undefined && !/^[1-9][0-9]{0,17}$/.test(cursor)) {
+      throw new RangeError('a ledger cursor is the id of a ledger entry');
+    }
+    const rows = await on
+      .select({
+        ...getTableColumns(creditLedger),
+        balanceAfterMicro: sql<string>`(sum(${creditLedger.lotDeltaMicro} - ${creditLedger.debtDeltaMicro}) over (order by ${creditLedger.id}))::text`,
+        // The lot this row names, if any — only to read ITS `expires_at` back
+        // beside the row; nothing here changes which rows are returned (an
+        // inner join would drop every row with a null `lotId`, e.g. every
+        // `debt_incurred`).
+        lotExpiresAt: creditLots.expiresAt,
+      })
+      .from(creditLedger)
+      .leftJoin(creditLots, eq(creditLedger.lotId, creditLots.id))
+      .where(
+        and(
+          eq(creditLedger.accountId, accountId),
+          cursor === undefined ? undefined : sql`${creditLedger.id} < ${cursor}::bigint`,
+        ),
+      )
+      .orderBy(desc(creditLedger.id))
+      .limit(limit + 1);
+    const entries = rows.slice(0, limit).map((r) => ({
+      ...toLedgerRecord(r),
+      balanceAfterMicro: exact('a running balance', Number(r.balanceAfterMicro)),
+      lotExpiresAt: r.lotExpiresAt,
+    }));
+    const last = entries[entries.length - 1];
+    return {
+      entries,
+      nextCursor: rows.length > limit && last !== undefined ? last.id : null,
+    };
+  }
+
+  /**
+   * S14 — every `task_charge` this ONE agent session's turns have settled, for
+   * the session response's `credits_spent` (behind `DRIFTSTACK_AI_CREDITS_RESPONSE_FIELDS`).
+   * `credit_ledger.agent_session_id` is set on every `task_charge` row
+   * (`services/credit-reservations.ts`'s settle path passes
+   * `reservation.agentSessionId` straight through) and on nothing else this
+   * sums, so a shadow-mode measurement (which settles too, but only ever
+   * shadow reservations, never `enforce`) contributes nothing here — matching
+   * `credits_spent`'s meaning: what this session actually cost the account.
+   */
+  async chargedForSessionMicro(
+    agentSessionId: string,
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<number> {
+    const [row] = await on
+      .select({
+        micro: sql<string>`coalesce(sum(-${creditLedger.lotDeltaMicro}), 0)::text`,
+      })
+      .from(creditLedger)
+      .where(
+        and(eq(creditLedger.agentSessionId, agentSessionId), eq(creditLedger.kind, 'task_charge')),
+      );
+    return exact('charged for session', Number(row?.micro ?? '0'));
+  }
+
+  /**
+   * S14 — the current window's OWN 'monthly' lot, for `GET /v1/account/me/ai`'s
+   * `balance.monthly.{granted_credits,remaining_credits}`. Null when the
+   * window has none yet (a window is created before its monthly lot is
+   * funded — §6.4 — so a caller that already has a non-null `currentWindow`
+   * can still see this return null for a brief window).
+   */
+  async monthlyLotForWindow(
+    accountId: string,
+    windowId: string,
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<CreditLotRecord | null> {
+    const [row] = await on
+      .select()
+      .from(creditLots)
+      .where(
+        and(
+          eq(creditLots.accountId, accountId),
+          eq(creditLots.windowId, windowId),
+          eq(creditLots.kind, 'monthly'),
+        ),
+      )
+      .limit(1);
+    return row === undefined ? null : toLotRecord(row);
+  }
+
+  /**
+   * S14 — every currently LIVE lot beyond the current window's monthly one
+   * (§2's spendable predicate, minus the free-room requirement: an extra with
+   * nothing left unheld is still worth listing while it is held), for
+   * `GET /v1/account/me/ai`'s `balance.extras[]`. Ordered oldest-created
+   * first, matching the spend order's tie-break (`compareLotsInSpendOrder`)
+   * for lots of equal rank and expiry.
+   */
+  async liveExtraLots(
+    accountId: string,
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<CreditLotRecord[]> {
+    const rows = await on
+      .select()
+      .from(creditLots)
+      .where(
+        and(
+          eq(creditLots.accountId, accountId),
+          sql`${creditLots.kind} <> 'monthly'`,
+          lte(creditLots.startsAt, sql`now()`),
+          gt(creditLots.expiresAt, sql`now()`),
+          isNull(creditLots.revokedAt),
+          gt(creditLots.remainingMicro, 0),
+        ),
+      )
+      .orderBy(creditLots.createdAt, creditLots.id);
+    return rows.map(toLotRecord);
   }
 }
 

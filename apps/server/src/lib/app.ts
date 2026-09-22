@@ -88,6 +88,8 @@ import {
   registerAccountByokAnthropicRoutes,
 } from '../routes/account-byok-anthropic.js';
 import { registerAccountBundledLlmRoutes } from '../routes/account-bundled-llm.js';
+import { registerAccountAiRoutes } from '../routes/account-ai.js';
+import { registerAiModelsRoutes } from '../routes/ai-models.js';
 import type { ApiKeysRepo } from '../services/api-keys.js';
 import type { Driver } from '../drivers/types.js';
 import type { R2 } from './r2.js';
@@ -471,6 +473,13 @@ export interface AppDeps {
    * of selectAgentDecomposer when neither key path is configured).
    */
   agentDecomposerKind?: 'claude' | 'deterministic';
+  /**
+   * S14 — customer-facing `credits`/`credits_spent` fields on the message and
+   * session responses (`config.aiCreditsResponseFields`,
+   * `DRIFTSTACK_AI_CREDITS_RESPONSE_FIELDS`). Default `false`: the published
+   * shape stays byte-identical with the flag unset.
+   */
+  aiCreditsResponseFields?: boolean;
   /**
    * Q.1.d — optional deployment-side Anthropic API key. Used ONLY
    * when the message-turn's resolved key is undefined AND
@@ -1425,6 +1434,25 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.aiCredits !== undefined ? { aiCredits: deps.aiCredits } : {}),
     });
   }
+  // S14 — the Phase-2-facing read/settings API for AI credits. Registered
+  // ONLY when the credits runtime is wired (mode shadow|enforce) — with the
+  // mode off (the production default) none of these three routes exist at
+  // all, and a request to any of them gets the app's ordinary 404, same
+  // posture as `registerAdminAiCreditsRoutes` beside it.
+  if (deps.aiCredits !== undefined) {
+    registerAccountAiRoutes(app, {
+      aiCredits: deps.aiCredits,
+      authRepo: deps.authRepo,
+      accountAudit: deps.accountAuditService,
+      // BYOK is its own independently-gated feature — see account-ai.ts's
+      // `AccountAiRoutesDeps.byokService` doc comment for what an absent one
+      // means for `own_key`.
+      ...(deps.byokAnthropicService !== undefined
+        ? { byokService: deps.byokAnthropicService }
+        : {}),
+    });
+    registerAiModelsRoutes(app, { aiCredits: deps.aiCredits });
+  }
   if (deps.cliAuthorizeService !== undefined) {
     registerAuthCliRoutes(app, {
       cliAuthorizeService: deps.cliAuthorizeService,
@@ -1649,6 +1677,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // branch of bootstrap's selectAgentDecomposer when neither key
       // path is wired.
       agentDecomposerKind: deps.agentDecomposerKind ?? 'deterministic',
+      aiCreditsResponseFields: deps.aiCreditsResponseFields ?? false,
       ...(deps.agentDecomposerFallbackKey !== undefined
         ? { deploymentFallbackKey: deps.agentDecomposerFallbackKey }
         : {}),

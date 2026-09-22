@@ -232,6 +232,17 @@ const INTENTIONALLY_UNPUBLISHED_OPERATIONS = new Set([
   // becomes the ordinary V-862 one.
   'GET /v1/admin/ai-credits/census',
   'GET /v1/admin/ai-credits/shadow-report',
+  // S14 — the Phase-2-facing customer read/settings API for AI credits.
+  // Unpublished for the same second reason as the two staff routes above:
+  // `nothing-about-an-unreleased-feature-is-in-the-published-spec` forbids the
+  // published document from containing the term "credit" at all while the
+  // feature is dark. Reachable with an ordinary customer key (unlike the
+  // staff routes), and registered only while DRIFTSTACK_AI_CREDITS_MODE is not
+  // off. Due to be published at launch.
+  'GET /v1/account/me/ai',
+  'GET /v1/account/me/ai/ledger',
+  'PATCH /v1/account/me/ai-settings',
+  'GET /v1/ai/models',
   'GET /v1/agent-sessions/:p/gui-control-key',
   'GET /v1/auth/oauth/github/callback',
   'GET /v1/auth/oauth/google/callback',
@@ -313,7 +324,11 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     // `GET /v1/admin/ai-credits/census` — both unpublished, see their
     // INTENTIONALLY_UNPUBLISHED_OPERATIONS entries, so the published count above
     // does not move.
-    expect(routeOperations.size).toBe(264);
+    // 268 since S14 registered GET /v1/account/me/ai, GET /v1/account/me/ai/ledger,
+    // PATCH /v1/account/me/ai-settings and GET /v1/ai/models — all four
+    // unpublished, see their INTENTIONALLY_UNPUBLISHED_OPERATIONS entries, so the
+    // published count above does not move either.
+    expect(routeOperations.size).toBe(268);
   });
 
   it('documents the method-specific customer-core contract', () => {

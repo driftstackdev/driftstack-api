@@ -373,7 +373,13 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // by its own IP limiter. Refreshed with violations() proven empty first.
     // 178 since B2: POST /v1/agent-sessions/:id/stop (live, `global` limiter) and
     // its disabled twin are both mutation registrations.
-    expect(routes).toHaveLength(178);
+    // 179 since S14: PATCH /v1/account/me/ai-settings, gated the same way its
+    // sibling PATCH /v1/account/me/bundled-llm-settings is — `app.rateLimit('global')`
+    // in the options argument, alongside requireAuth + requireScope. No disabled
+    // twin (dark until launch, registered only while DRIFTSTACK_AI_CREDITS_MODE
+    // is not off — same posture as every other credits route, not an
+    // activation-gate stub). Refreshed with violations(routes) proven empty first.
+    expect(routes).toHaveLength(179);
     // +1: `app.patch<{ Params: { id: string } }>('/v1/teams/:id', ...)` is the only
     // one of the two new routes carrying type arguments.
     // T-1 — 77 since `POST /v1/account/me/proxies/:id/test` gained a

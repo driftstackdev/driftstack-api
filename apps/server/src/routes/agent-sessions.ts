@@ -80,6 +80,8 @@ import {
   CREDIT_RATE_CARD_V1,
   MICROCREDITS_PER_CREDIT,
   MAX_AI_TASKS_IN_FLIGHT,
+  chargeCreditsForDisplay,
+  type TurnCreditsUsage,
 } from '@driftstack/api-types';
 import {
   publicAgentIntent,
@@ -676,6 +678,13 @@ export interface AgentSessionsRoutesDeps {
    *  when this is 'claude' (deterministic ignores keys entirely
    *  so the gate would be a false alarm). */
   agentDecomposerKind?: 'claude' | 'deterministic';
+  /**
+   * S14 — customer-facing `credits`/`credits_spent` fields on the message and
+   * session responses. Defaults to `false` (today's shape, byte for byte):
+   * read from `config.aiCreditsResponseFields`
+   * (`DRIFTSTACK_AI_CREDITS_RESPONSE_FIELDS`, default off).
+   */
+  aiCreditsResponseFields?: boolean;
   /** Q.1.d — deployment fallback Anthropic key. Used only when:
    *  (a) the request has no x-byok-anthropic-api-key header
    *  (b) the session has no cached stored key
@@ -2334,6 +2343,12 @@ type TurnCreditLeg =
        *  never sees the reservation at all). */
       reservedMicro: number;
       model: string;
+      /** S14 — the rate card this task was priced on, pinned at RESERVE time
+       *  (`CreditReserveResult`'s 'reserved' outcome), for the message
+       *  response's `credits.rate_card_version` behind
+       *  `DRIFTSTACK_AI_CREDITS_RESPONSE_FIELDS`. Settle never re-answers
+       *  this — a task is priced once, at reserve, and stays pinned to it. */
+      rateCardVersion: number;
     };
 
 export function registerAgentSessionsRoutes(
@@ -2348,6 +2363,7 @@ export function registerAgentSessionsRoutes(
     byokKeyCache,
     exitIdentityCache,
     agentDecomposerKind = 'deterministic',
+    aiCreditsResponseFields = false,
     deploymentFallbackKey,
     allowFallbackForUnconfiguredCustomers,
     bundledLlmService,
@@ -2695,6 +2711,7 @@ export function registerAgentSessionsRoutes(
       reservationId,
       reservedMicro: reserved.reservedMicro,
       model: a.model,
+      rateCardVersion: reserved.rateCardVersion,
       meter: enforceCreditMeter({ reservations: credits.reservations, reservationId }),
     };
   };
@@ -6284,6 +6301,84 @@ export function registerAgentSessionsRoutes(
         ...(usage.model !== undefined ? { model: usage.model } : {}),
       };
     };
+    // S14 — the message response's `credits` field, behind
+    // `aiCreditsResponseFields` (default off; every call site below gates on
+    // it, so this closure runs at all only when the flag is on).
+    //
+    // ⛔ `movedAccount === null` (a LEGACY account, or any account under
+    // `shadow` — §4.1's table) answers `undefined`: the credits vocabulary
+    // (`source: 'credits'|'own_key'`) describes a MOVED account's funding
+    // choice, and a legacy account's own-key usage has nothing to do with it.
+    //
+    // `source === 'credits'` reads straight off `creditLeg`/`enforceSettleResult`
+    // — the SAME two locals `publicUsage`'s `cost_usd_cents` reads, so the two
+    // fields can never disagree about what a credits turn cost. `creditLeg`
+    // is null when the turn made no billable call at all (a manual note, a
+    // deterministic decomposer, an idempotent replay — see `TurnCreditLeg`'s
+    // own header): `undefined` there for the same reason `publicUsage`
+    // answers `undefined` with no `usage` to report on.
+    //
+    // `source === 'header' | 'cached'` is a moved account's turn funded by
+    // its OWN key (§4.3 rules 2/3): no reservation, so `reserved`/`charged`
+    // are exactly 0 and `rate_card_version` is null — a real, useful answer
+    // ("nothing came off your credits this turn"), not a placeholder.
+    const publicCredits = (source: ResolvedKeySource): TurnCreditsUsage | undefined => {
+      if (movedAccount === null) return undefined;
+      if (source === 'credits') {
+        if (creditLeg === null || creditLeg.kind !== 'enforce') return undefined;
+        return {
+          source: 'credits',
+          // Both are amounts taken FROM the account's balance (a hold, then
+          // a charge against it) — the same "never understate what left"
+          // rounding `publicUsage`'s `cost_usd_cents` already applies to
+          // `chargedMicro` two lines above, extended to `reservedMicro` for
+          // the same reason.
+          reserved: chargeCreditsForDisplay(creditLeg.reservedMicro),
+          charged: chargeCreditsForDisplay(enforceSettleResult?.chargedMicro ?? 0),
+          rate_card_version: creditLeg.rateCardVersion,
+        };
+      }
+      if (source === 'header' || source === 'cached') {
+        return { source: 'own_key', reserved: 0, charged: 0, rate_card_version: null };
+      }
+      // 'bundled' | 'fallback' | 'none' — never reached for a moved account
+      // (§4.2: the credits leg replaces the whole bundled leg), so this is
+      // unreachable in practice; answering `undefined` costs nothing if that
+      // ever stops holding.
+      return undefined;
+    };
+    /** `{ credits }` when the flag is on and there is one to report; `{}`
+     *  otherwise — the same "additive, never an explicit null" shape every
+     *  other optional field in this response family uses. */
+    const creditsExtension = (source: ResolvedKeySource): { credits?: TurnCreditsUsage } => {
+      if (!aiCreditsResponseFields) return {};
+      const credits = publicCredits(source);
+      return credits !== undefined ? { credits } : {};
+    };
+    // S14 — the session's `credits_spent`, behind the same flag. A second
+    // read (`chargedForSessionMicro`), not a derivation from `creditLeg`:
+    // ONE turn's own charge is already on `enforceSettleResult`, but the
+    // session-level figure is the SUM over every turn the session has ever
+    // settled, which no in-memory local carries.
+    const sessionWithCredits = async (
+      rec: AgentSessionRecord,
+    ): Promise<ReturnType<typeof publicAgentSession> & { credits_spent?: number }> => {
+      const base = publicAgentSession(
+        rec,
+        undefined,
+        sessionLivenessStore,
+        sessionCapabilityReportStore,
+      );
+      if (
+        !aiCreditsResponseFields ||
+        movedAccount === null ||
+        aiCredits?.stateReads === undefined
+      ) {
+        return base;
+      }
+      const chargedMicro = await aiCredits.stateReads.chargedForSessionMicro(rec.id);
+      return { ...base, credits_spent: chargeCreditsForDisplay(chargedMicro) };
+    };
     const settledWorkExtensions = (
       result: {
         usage?: DecomposeUsage;
@@ -7051,12 +7146,7 @@ export function registerAgentSessionsRoutes(
       if (result.kind === 'logged-manual') {
         return {
           kind: result.kind,
-          session: publicAgentSession(
-            result.session,
-            undefined,
-            sessionLivenessStore,
-            sessionCapabilityReportStore,
-          ),
+          session: await sessionWithCredits(result.session),
         };
       }
       if (result.kind === 'stopped') {
@@ -7069,18 +7159,14 @@ export function registerAgentSessionsRoutes(
         const ran = result.executor?.results ?? [];
         return {
           kind: result.kind,
-          session: publicAgentSession(
-            result.session,
-            undefined,
-            sessionLivenessStore,
-            sessionCapabilityReportStore,
-          ),
+          session: await sessionWithCredits(result.session),
           intents: ran.map((r) => publicAgentIntent(r.intent)),
           results: ran.map(publicIntentResult),
           ok: false,
           notice: result.notice,
           stopped_during: result.stoppedDuring,
           ...(usage !== undefined ? { usage } : {}),
+          ...creditsExtension(keySource),
         };
       }
       if (result.kind === 'plan-executed') {
@@ -7093,12 +7179,7 @@ export function registerAgentSessionsRoutes(
         const usage = publicUsage(plan.usage, keySource);
         return {
           kind: result.kind,
-          session: publicAgentSession(
-            result.session,
-            undefined,
-            sessionLivenessStore,
-            sessionCapabilityReportStore,
-          ),
+          session: await sessionWithCredits(result.session),
           // EVERY step the turn attempted, across every plan it made — the list
           // its transcript entry records. `plan.intents` is the FIRST plan only,
           // and returning it left `intents` truncated beside `results`, which has
@@ -7132,34 +7213,27 @@ export function registerAgentSessionsRoutes(
           // Additive, and never present without `notice`.
           ...(result.noticeReason !== undefined ? { notice_reason: result.noticeReason } : {}),
           ...(usage !== undefined ? { usage } : {}),
+          ...creditsExtension(keySource),
         };
       }
       if (result.kind === 'clarify') {
         const usage = publicUsage(result.decomposer.usage, keySource);
         return {
           kind: result.kind,
-          session: publicAgentSession(
-            result.session,
-            undefined,
-            sessionLivenessStore,
-            sessionCapabilityReportStore,
-          ),
+          session: await sessionWithCredits(result.session),
           clarifying_question: result.decomposer.clarifyingQuestion,
           ...(usage !== undefined ? { usage } : {}),
+          ...creditsExtension(keySource),
         };
       }
       // refuse
       const usage = publicUsage(result.decomposer.usage, keySource);
       return {
         kind: result.kind,
-        session: publicAgentSession(
-          result.session,
-          undefined,
-          sessionLivenessStore,
-          sessionCapabilityReportStore,
-        ),
+        session: await sessionWithCredits(result.session),
         refuse_reason: result.decomposer.refuseReason,
         ...(usage !== undefined ? { usage } : {}),
+        ...creditsExtension(keySource),
       };
     } finally {
       // Release the bundled-LLM concurrency slot (if reserved). ALWAYS

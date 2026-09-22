@@ -1059,6 +1059,11 @@ export async function createProductionDeps(
   // credits-mode-off local, so it is null exactly when `aiCredits` will be.
   const creditWindowsRepo = creditGrants === null ? null : new DrizzleCreditWindowsRepo(dbHandle);
   const creditReservationsRepo = creditGrants === null ? null : new DrizzleCreditReservationsRepo();
+  // S14 — hoisted so `creditReservationsService` below and `aiCredits.stateReads`
+  // share the SAME instance rather than each constructing their own (the repo
+  // is stateless, so two instances would behave identically, but one is the
+  // fewer thing to keep in sync).
+  const creditRateCardRepo = creditGrants === null ? null : new DrizzleCreditRateCardRepo(dbHandle);
   // S11 — the two counters §8's shadow exit criteria are read from. Registered
   // ONLY when the mode is shadow or enforce, on the same value everything else
   // credits-related hangs off: a deployment running `off` must not render a
@@ -1084,12 +1089,15 @@ export async function createProductionDeps(
   }
   const creditCounters = aiCreditsCounters(metricsRegistry);
   const creditReservationsService =
-    creditGrants === null || creditLedgerRepo === null || creditReservationsRepo === null
+    creditGrants === null ||
+    creditLedgerRepo === null ||
+    creditReservationsRepo === null ||
+    creditRateCardRepo === null
       ? null
       : new CreditReservationsService({
           ledger: creditLedgerRepo,
           reservations: creditReservationsRepo,
-          rateCards: new DrizzleCreditRateCardRepo(dbHandle),
+          rateCards: creditRateCardRepo,
           refresher: creditGrants,
           logger,
           sentry,
@@ -1148,6 +1156,35 @@ export async function createProductionDeps(
           accounts: creditLedgerRepo,
           // S13 — the account's current credit window, the same no-lock way.
           windows: creditWindowsRepo,
+          // S14 — the reads `GET /v1/account/me/ai`, its ledger page and
+          // `GET /v1/ai/models` need beyond the above. `creditReservationsRepo`
+          // and `creditRateCardRepo` are guaranteed non-null here: both are set
+          // by the same `creditGrants === null` check this whole branch is
+          // already inside.
+          stateReads:
+            creditReservationsRepo === null || creditRateCardRepo === null
+              ? undefined
+              : {
+                  heldMicro: creditLedgerRepo.heldMicro.bind(creditLedgerRepo),
+                  latestDebtReason: creditLedgerRepo.latestDebtReason.bind(creditLedgerRepo),
+                  monthlyLotForWindow: creditLedgerRepo.monthlyLotForWindow.bind(creditLedgerRepo),
+                  liveExtraLots: creditLedgerRepo.liveExtraLots.bind(creditLedgerRepo),
+                  ledgerPageWithBalance:
+                    creditLedgerRepo.ledgerPageWithBalance.bind(creditLedgerRepo),
+                  chargedForSessionMicro:
+                    creditLedgerRepo.chargedForSessionMicro.bind(creditLedgerRepo),
+                  pendingClaimTotalMicro:
+                    creditWindowsRepo.pendingClaimTotalMicroNoLock.bind(creditWindowsRepo),
+                  // `DrizzleCreditReservationsRepo` is stateless and its method
+                  // takes the executor explicitly (see `AiCreditsStateReads`'s
+                  // doc comment) — closed over `dbHandle.db` here rather than
+                  // bound, since there is no `this.database` to bind it to.
+                  openEnforceCountNoLock: (accountId: string) =>
+                    creditReservationsRepo.openEnforceCountNoLock(accountId, dbHandle.db),
+                  cardInForce: creditRateCardRepo.cardInForce.bind(creditRateCardRepo),
+                  nextAnnouncedCard: creditRateCardRepo.nextAnnouncedCard.bind(creditRateCardRepo),
+                  modelRow: creditRateCardRepo.modelRow.bind(creditRateCardRepo),
+                },
         };
 
   // Webhooks first so sessions + api-keys can wire it.
@@ -3633,6 +3670,8 @@ export async function createProductionDeps(
     byokKeyCache,
     exitIdentityCache,
     agentDecomposerKind,
+    // S14 — customer-facing `credits`/`credits_spent` fields, default off.
+    aiCreditsResponseFields: config.aiCreditsResponseFields,
     // Arc 2 sub-slice 8.3 (v2-#8) — SSE transcript bus wired
     // unconditionally; route registration is gated on agentRuntime
     // being wired (same activation pattern as the rest).

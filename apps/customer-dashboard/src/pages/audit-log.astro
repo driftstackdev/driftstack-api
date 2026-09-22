@@ -81,6 +81,8 @@ const ACTION_LABEL: Record<string, string> = {
   'proxy.deleted': 'Saved proxy deleted',
   // 2026-05-20 — bundled-LLM consent toggle.
   'account.bundled_llm_consent_changed': 'Bundled AI consent changed',
+  // S14 — which source funds the account's AI turns.
+  'account.ai_source_changed': 'AI source changed',
   // 2026-05-20 — email-preferences opt-in/out toggle.
   'account.email_preferences_changed': 'Email preferences changed',
 };
@@ -156,6 +158,8 @@ const FILTER_OPTIONS = [
   { value: 'proxy.deleted', label: 'Saved proxies deleted' },
   // 2026-05-20 — bundled-LLM consent toggle.
   { value: 'account.bundled_llm_consent_changed', label: 'Bundled AI consent changes' },
+  // S14 — which source funds the account's AI turns.
+  { value: 'account.ai_source_changed', label: 'AI source changes' },
   // 2026-05-20 — email-preferences opt-in/out toggle.
   { value: 'account.email_preferences_changed', label: 'Email preference changes' },
 ] as const;

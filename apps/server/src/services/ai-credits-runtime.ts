@@ -29,6 +29,7 @@ import type { AiCreditLeaseKeeper } from './ai-credit-lease-keeper.js';
 import type { AiCreditsReportReader } from '../db/ai-credits-report-repo.js';
 import type { CreditAccountRecord, DrizzleCreditLedgerRepo } from '../db/credit-ledger-repo.js';
 import type { CurrentCreditWindow, DrizzleCreditWindowsRepo } from '../db/credit-windows-repo.js';
+import type { CreditRateCardReader } from '../db/credit-rate-card-repo.js';
 import { METRIC_NAMES } from './metrics-registry.js';
 
 /**
@@ -92,6 +93,52 @@ export type { CreditAccountRecord };
 export type AiCreditsWindows = Pick<DrizzleCreditWindowsRepo, 'currentWindow'>;
 export type { CurrentCreditWindow };
 
+/**
+ * S14 — the reads `GET /v1/account/me/ai`, its ledger page and
+ * `GET /v1/ai/models` need beyond every member above: the current window's
+ * own monthly lot and every other live lot (`DrizzleCreditLedgerRepo`), a
+ * ledger page with each entry's running balance (same repo), what earlier
+ * clawbacks still stand against held credit (`DrizzleCreditWindowsRepo`), how
+ * many enforced tasks are open right now with no lock
+ * (`DrizzleCreditReservationsRepo`), and the rate card in force plus the next
+ * announced one (`CreditRateCardReader`).
+ *
+ * A hand-rolled interface rather than four more `Pick<...>` aliases folded
+ * into `accounts`/`windows`, on purpose: those two are already `Pick`s over
+ * SPECIFIC classes, and every existing fixture across the test suite that
+ * builds a fake `AiCreditsRuntime` types its `accounts`/`windows` object
+ * literals against them — widening either Pick would make every one of those
+ * object literals miss a now-required key and fail to typecheck for a slice
+ * they have nothing to do with. Bundling S14's five new reads into one NEW,
+ * OPTIONAL member sidesteps that: an object literal that omits `stateReads`
+ * entirely is still a valid `AiCreditsRuntime`.
+ */
+export interface AiCreditsStateReads {
+  heldMicro: DrizzleCreditLedgerRepo['heldMicro'];
+  latestDebtReason: DrizzleCreditLedgerRepo['latestDebtReason'];
+  monthlyLotForWindow: DrizzleCreditLedgerRepo['monthlyLotForWindow'];
+  liveExtraLots: DrizzleCreditLedgerRepo['liveExtraLots'];
+  ledgerPageWithBalance: DrizzleCreditLedgerRepo['ledgerPageWithBalance'];
+  /** For a message/session response's `credits_spent`, behind
+   *  `DRIFTSTACK_AI_CREDITS_RESPONSE_FIELDS` — see `routes/agent-sessions.ts`. */
+  chargedForSessionMicro: DrizzleCreditLedgerRepo['chargedForSessionMicro'];
+  pendingClaimTotalMicro: DrizzleCreditWindowsRepo['pendingClaimTotalMicroNoLock'];
+  /**
+   * `DrizzleCreditReservationsRepo` is stateless (its methods take an
+   * executor explicitly; there is no `this.database` to default it from), so
+   * unlike every other read here this is not that class's method bound —
+   * bootstrap closes over the pool itself to fill the executor in, and only
+   * `accountId` is left for a caller to supply.
+   */
+  openEnforceCountNoLock: (accountId: string) => Promise<number>;
+  cardInForce: CreditRateCardReader['cardInForce'];
+  nextAnnouncedCard: CreditRateCardReader['nextAnnouncedCard'];
+  /** One model's prices on one card version — `GET /v1/ai/models` reads this
+   *  once per on-credits model, for the card in force and, when there is
+   *  one, the next announced card. */
+  modelRow: CreditRateCardReader['modelRow'];
+}
+
 /** The one member of `AppDeps` the credits runtime occupies. Absent while the mode is off. */
 export interface AiCreditsRuntime {
   /** Never `off`: with the mode off this whole object is absent. */
@@ -124,6 +171,18 @@ export interface AiCreditsRuntime {
    * {@link AiCreditsWindows}.
    */
   readonly windows: AiCreditsWindows;
+  /**
+   * S14 — see {@link AiCreditsStateReads}. OPTIONAL ON THE TYPE ONLY: every
+   * deployment that constructs `aiCredits` at all (bootstrap.ts) populates
+   * this alongside every other member, in the same `creditGrants === null`
+   * guard as the rest — so in a real process this is undefined exactly when
+   * `aiCredits` itself is undefined, never independently. The optionality
+   * exists solely so pre-S14 test fixtures that build a narrower fake runtime
+   * (for routes that never read `stateReads`) keep typechecking unmodified. A
+   * route that reads it and finds it undefined has been handed a fixture that
+   * does not support the surface it is calling and should throw, not guess.
+   */
+  readonly stateReads?: AiCreditsStateReads;
 }
 
 /**

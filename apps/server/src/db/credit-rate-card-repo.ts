@@ -11,7 +11,7 @@
 // database only lets a card be withdrawn before it takes effect, and judges
 // "before" when the withdrawal COMMITS, so no reader ever saw it in force.
 
-import { and, desc, eq, isNull, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, lte, sql } from 'drizzle-orm';
 import type { CreditRateCardModelRow } from '@driftstack/api-types';
 import type { Database } from './client.js';
 import type { CreditLedgerExecutor } from './credit-ledger-repo.js';
@@ -63,6 +63,15 @@ export interface CreditRateCardReader {
     model: string,
     on?: CreditLedgerExecutor,
   ): Promise<CreditRateCardModelRecord | null>;
+  /**
+   * S14 — the next ANNOUNCED card: the soonest `effective_at` strictly after
+   * `at` (the database's now() when omitted) among cards not withdrawn. Null
+   * when none is announced. `GET /v1/account/me/ai`'s `rate_card.next` and
+   * `GET /v1/ai/models`' per-model `next` both read this — the published
+   * notice period (§9, `RATE_CARD_CHANGE_NOTICE_DAYS`) means a customer may
+   * see the NEXT card's prices before they take effect.
+   */
+  nextAnnouncedCard(at?: Date, on?: CreditLedgerExecutor): Promise<CreditRateCardRecord | null>;
 }
 
 export class DrizzleCreditRateCardRepo implements CreditRateCardReader {
@@ -99,6 +108,30 @@ export class DrizzleCreditRateCardRepo implements CreditRateCardReader {
       .where(and(eq(creditRateCardModels.version, version), eq(creditRateCardModels.model, model)))
       .limit(1);
     return row === undefined ? null : toModelRecord(row);
+  }
+
+  async nextAnnouncedCard(
+    at?: Date,
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<CreditRateCardRecord | null> {
+    const [row] = await on
+      .select()
+      .from(creditRateCards)
+      .where(
+        and(
+          // Same shape as `cardInForce` above: the raw `sql` fragment carries
+          // only the literal `now()`, with the column comparison left to the
+          // builder — never a column or a `Date` interpolated into a raw
+          // template (docs/internal/drizzle-date-param-workaround.md).
+          at === undefined
+            ? gt(creditRateCards.effectiveAt, sql`now()`)
+            : gt(creditRateCards.effectiveAt, at),
+          isNull(creditRateCards.withdrawnAt),
+        ),
+      )
+      .orderBy(creditRateCards.effectiveAt)
+      .limit(1);
+    return row === undefined ? null : toCardRecord(row);
   }
 }
 

@@ -218,8 +218,11 @@ describe('X-Driftstack-Account acting-as authz invariant (all routes/)', () => {
     // surface is exactly these 10 route files. The two new reads are the
     // profile-taxonomy GET/PUT pair, both resolved before repository access. The 33rd
     // is P-23 GET /v1/profiles/:id/activity (2026-09-05), resolved before the store read.
-    expect(reads).toHaveLength(33);
-    expect(new Set(reads.map((read) => read.file)).size).toBe(10);
+    // The 34th (2026-09-22) is GET /v1/account/me/ai in account-ai.ts, an
+    // eleventh reader file, resolved before any credit read the way GET
+    // /v1/billing is.
+    expect(reads).toHaveLength(34);
+    expect(new Set(reads.map((read) => read.file)).size).toBe(11);
 
     expect(
       reads

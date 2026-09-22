@@ -3929,6 +3929,7 @@
               "proxy.updated",
               "proxy.deleted",
               "account.bundled_llm_consent_changed",
+              "account.ai_source_changed",
               "account.email_preferences_changed"
             ]
           },
@@ -22919,6 +22920,7 @@
                 "proxy.updated",
                 "proxy.deleted",
                 "account.bundled_llm_consent_changed",
+                "account.ai_source_changed",
                 "account.email_preferences_changed"
               ]
             },

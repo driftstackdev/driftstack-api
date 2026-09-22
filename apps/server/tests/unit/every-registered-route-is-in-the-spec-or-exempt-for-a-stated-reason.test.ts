@@ -82,6 +82,29 @@ const EXEMPT: ReadonlyMap<string, string> = new Map([
     'GET /v1/admin/ai-credits/census',
     'staff panel only; and the published spec may not mention AI credits before launch',
   ],
+  // S14 — the Phase-2-facing customer read/settings API for AI credits.
+  // Reachable with an ordinary customer key (unlike the two above), and
+  // withheld for the same second reason: the published document may not
+  // mention AI credits at all while the feature is dark
+  // (`nothing-about-an-unreleased-feature-is-in-the-published-spec` holds
+  // the whole term). Due to be published at launch, together with the
+  // `AI_CREDITS_PROBLEM_TYPES` roster these routes' 403/409 draw on.
+  [
+    'GET /v1/account/me/ai',
+    'dark until launch; the published spec may not mention AI credits before launch',
+  ],
+  [
+    'PATCH /v1/account/me/ai-settings',
+    'dark until launch; the published spec may not mention AI credits before launch',
+  ],
+  [
+    'GET /v1/account/me/ai/ledger',
+    'dark until launch; the published spec may not mention AI credits before launch',
+  ],
+  [
+    'GET /v1/ai/models',
+    'dark until launch; the published spec may not mention AI credits before launch',
+  ],
   // Inbound receivers — the provider calls us; signature-authenticated.
   ['POST /v1/webhooks/stripe', 'inbound provider webhook receiver'],
   ['POST /v1/webhooks/nowpayments', 'inbound provider webhook receiver'],

@@ -245,6 +245,22 @@ export class DrizzleCreditReservationsRepo {
   }
 
   /**
+   * S14 — the same count as {@link openEnforceCount}, read with NO LOCK, for
+   * `GET /v1/account/me/ai`'s `balance.tasks_in_flight` (§4.4: the tier/source
+   * read may run without one — this is the same kind of read, and the number
+   * it returns is free to move before the response is sent). The authority
+   * for whether a NEW task may start remains `openEnforceCount` under the
+   * account lock inside `reserve()`; this exists only so a GET does not open a
+   * write transaction merely to count.
+   */
+  async openEnforceCountNoLock(accountId: string, on: CreditLedgerExecutor): Promise<number> {
+    const result = await on.execute<{ n: string }>(sql`
+      SELECT count(*)::text AS n FROM credit_reservations
+       WHERE account_id = ${accountId}::uuid AND state = 'open' AND mode = 'enforce'`);
+    return exact('open reservations', Number(rowsOf<{ n: string }>(result)[0]?.n ?? '0'));
+  }
+
+  /**
    * Insert an ENFORCED reservation, taking the lowest free slot and reserving
    * `LEAST(max_reserve, available)`. One statement: the slot is chosen by the
    * database from the rows that exist at that instant, so two connections racing

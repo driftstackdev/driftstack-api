@@ -464,6 +464,7 @@ describe.skipIf(!RUN_DB_TESTS)('a task reserves credits in one locked transactio
           note: '',
         }),
       modelRow: () => Promise.resolve(null),
+      nextAnnouncedCard: () => Promise.reject(new Error('S14 — not used by this test')),
     };
     const priced = harness({ rateCards: cardWithoutTheModel });
     const measured = reserveInput(accountId, { mode: 'shadow' });
@@ -480,6 +481,7 @@ describe.skipIf(!RUN_DB_TESTS)('a task reserves credits in one locked transactio
     const noCard: CreditRateCardReader = {
       cardInForce: () => Promise.resolve(null),
       modelRow: () => Promise.resolve(null),
+      nextAnnouncedCard: () => Promise.reject(new Error('S14 — not used by this test')),
     };
     const blind = harness({ rateCards: noCard });
     const unmeasurable = reserveInput(accountId, { mode: 'shadow' });
@@ -513,6 +515,7 @@ describe.skipIf(!RUN_DB_TESTS)('a task reserves credits in one locked transactio
     const exploding: CreditRateCardReader = {
       cardInForce: () => Promise.reject(new Error('the card reader is down')),
       modelRow: () => Promise.reject(new Error('the card reader is down')),
+      nextAnnouncedCard: () => Promise.reject(new Error('the card reader is down')),
     };
     const h = harness({ rateCards: exploding });
 

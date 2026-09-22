@@ -57,7 +57,7 @@ rev-parse HEAD` → stored at `/tmp/dr-rehearse-pre-head.txt`.
       `ls apps/server/src/routes/*.ts | wc -l` for the module count and
       `curl /openapi.json | jq '.paths | keys | length'` for the paths,
       and require the restored instance to MATCH the same two commands
-      run against production. At the time of writing that is 62 modules
+      run against production. At the time of writing that is 64 modules
       and 208 paths.
 
       V-819 — this step named a module count from the V-540.A audit and

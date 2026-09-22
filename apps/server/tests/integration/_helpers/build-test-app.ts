@@ -433,6 +433,13 @@ export interface TestAppOptions {
   agentDecomposerKind?: 'claude' | 'deterministic';
   /** Test the fail-closed deployment posture when turn-receipt storage is absent. */
   disableAgentTurnReceipts?: boolean;
+  /**
+   * S14 — `config.aiCreditsResponseFields`
+   * (`DRIFTSTACK_AI_CREDITS_RESPONSE_FIELDS`). Unset ⇒ `false`, matching
+   * production default: the message/session response stays byte-identical to
+   * today's shape.
+   */
+  aiCreditsResponseFields?: boolean;
 
   /**
    * V-1344 — leave `accountProxiesService` UNWIRED, the state a deployment is in
@@ -1919,6 +1926,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ...(opts.agentDecomposerKind === undefined
       ? {}
       : { agentDecomposerKind: opts.agentDecomposerKind }),
+    ...(opts.aiCreditsResponseFields === undefined
+      ? {}
+      : { aiCreditsResponseFields: opts.aiCreditsResponseFields }),
     // S11 — absent unless the test asked for it, exactly as bootstrap leaves it
     // absent while the mode is off.
     ...(opts.aiCredits === undefined ? {} : { aiCredits: opts.aiCredits }),

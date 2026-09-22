@@ -147,6 +147,16 @@ function concreteUrl(path: string): string {
 const NOT_ACTIVATABLE: Record<string, string> = {
   'POST /v1/agent-sessions/:id/livekit-token':
     'needs a real drizzleFleetNodesRepo (LK.3 gate), which in-memory fixtures skip',
+  // S14 — registered only while DRIFTSTACK_AI_CREDITS_MODE is not off, which
+  // ALL_SUBSYSTEMS_ON does not switch on (same reason
+  // admin-scope-refusal-coverage.test.ts gives for the AI-credits staff
+  // routes beside these). Their scope refusal is NOT left unproven: it is
+  // called, with the runtime present, in
+  // the-ai-state-route-reports-when-credits-reset-from-the-billing-period.test.ts.
+  'GET /v1/account/me/ai': 'registered only while the AI credits mode is not off',
+  'GET /v1/account/me/ai/ledger': 'registered only while the AI credits mode is not off',
+  'PATCH /v1/account/me/ai-settings': 'registered only while the AI credits mode is not off',
+  'GET /v1/ai/models': 'registered only while the AI credits mode is not off',
 };
 
 /**
@@ -177,6 +187,8 @@ const EXPECTED_SCOPED_ROUTES: readonly string[] = [
   'PATCH /v1/teams/:id [account_owner]',
   'GET /v1/account/cost [read:billing]',
   'GET /v1/account/me [read]',
+  'GET /v1/account/me/ai [read]',
+  'GET /v1/account/me/ai/ledger [read]',
   'GET /v1/account/me/billing-portal [admin:billing]',
   'GET /v1/account/me/bundled-llm-settings [read]',
   'GET /v1/account/me/bundled-llm-status [read]',
@@ -198,6 +210,7 @@ const EXPECTED_SCOPED_ROUTES: readonly string[] = [
   'GET /v1/agent-sessions/:id/network [read:sessions]',
   'GET /v1/agent-sessions/:id/page-state [read:sessions]',
   'GET /v1/agent-sessions/:id/recipe-suggestion [read]',
+  'GET /v1/ai/models [read]',
   'GET /v1/billing [read:billing]',
   'GET /v1/billing/crypto-orders [read:billing]',
   'GET /v1/billing/crypto-orders/:order_id [read:billing]',
@@ -224,6 +237,7 @@ const EXPECTED_SCOPED_ROUTES: readonly string[] = [
   'GET /v1/usage [read]',
   'GET /v1/usage/series [read]',
   'PATCH /v1/account/me [account_owner]',
+  'PATCH /v1/account/me/ai-settings [account_owner]',
   'PATCH /v1/account/me/bundled-llm-settings [account_owner]',
   'PATCH /v1/billing/crypto-orders/:order_id [admin:billing]',
   'PATCH /v1/profiles/:id [write:profiles]',

@@ -193,6 +193,36 @@ export class BYOKAnthropicService {
     };
   }
 
+  /**
+   * S14 — the account's own-key facts as `GET /v1/account/me/ai`'s `own_key`
+   * needs them: whether a key is stored, whether it would actually be USED
+   * right now, when it was set, and when it stops being usable.
+   *
+   * Composes `getMetadata` with the exact TTL gate `getPlaintext` enforces at
+   * resolution time, so the two can never disagree about which key is stale —
+   * a second copy of the `Number.isFinite(maxAgeMs)` / age-comparison logic
+   * here would be a second place for that gate to drift from the one that
+   * actually decides whether a turn may use the key. `usable` is what fixes
+   * the stale `has_key` the design flagged: a key can be STORED and still be
+   * unusable (past `maxKeyAgeMs`), and a customer reading only `has_key`
+   * would see no reason their turn fell back to credits.
+   */
+  async getUsabilityFacts(args: { accountId: string; now: Date }): Promise<{
+    hasKey: boolean;
+    usable: boolean;
+    setAt: Date | null;
+    expiresAt: Date | null;
+  }> {
+    const meta = await this.getMetadata({ accountId: args.accountId });
+    if (!meta.hasKey || meta.setAt === null) {
+      return { hasKey: meta.hasKey, usable: false, setAt: meta.setAt, expiresAt: null };
+    }
+    const maxAgeMs = this.config.maxKeyAgeMs ?? BYOK_ANTHROPIC_KEY_TTL_MS;
+    const expiresAt = Number.isFinite(maxAgeMs) ? new Date(meta.setAt.getTime() + maxAgeMs) : null;
+    const usable = expiresAt === null || args.now.getTime() < expiresAt.getTime();
+    return { hasKey: true, usable, setAt: meta.setAt, expiresAt };
+  }
+
   /** Bump `last_used_at` — wired into the AgentRuntime success path
    *  by the route handler once a Claude call succeeds. Idempotent;
    *  safe to call from concurrent turns. */

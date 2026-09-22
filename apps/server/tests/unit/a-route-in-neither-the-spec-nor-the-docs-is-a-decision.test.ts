@@ -148,6 +148,28 @@ const UNDOCUMENTED_ROUTES = new Map<string, string>([
     'GET /v1/admin/ai-credits/shadow-report',
     'staff — driftstack_internal_admin; per-day per-model shadow charge against real list price, counts and sums only. Undocumented for the same two reasons as the census beside it',
   ],
+  // S14 — the Phase-2-facing customer read/settings API for AI credits.
+  // CUSTOMER, unlike the two staff routes above: each reaches
+  // `requireAuth` + `requireScope('read')` or `requireScope('account_owner')`.
+  // Undocumented for one reason, not two: there is no V-862-style admin
+  // ceiling on a customer route, only the credits-dark rule
+  // (`nothing-about-an-unreleased-feature-is-in-the-published-spec`).
+  [
+    'GET /v1/account/me/ai',
+    'CUSTOMER — requireAuth + read scope. Undocumented because nothing published may mention AI credits before the feature launches',
+  ],
+  [
+    'GET /v1/account/me/ai/ledger',
+    'CUSTOMER — requireAuth + read scope. Undocumented for the same reason as GET /v1/account/me/ai beside it',
+  ],
+  [
+    'GET /v1/ai/models',
+    'CUSTOMER — requireAuth + read scope. Undocumented for the same reason as GET /v1/account/me/ai above',
+  ],
+  [
+    'PATCH /v1/account/me/ai-settings',
+    'CUSTOMER — requireAuth + account_owner scope. Undocumented for the same reason as GET /v1/account/me/ai above',
+  ],
   ['GET /v1/internal/atlas-priority/event/:p', 'm2m — internal capture orchestration'],
   ['GET /v1/internal/atlas-priority/queue', 'm2m — internal capture orchestration'],
   ['GET /v1/mac-nodes', 'staff — driftstack_internal_admin, like every /v1/admin surface'],
@@ -308,7 +330,11 @@ describe('a route in neither the spec nor the docs is a decision, not an oversig
       .map(([ep]) => ep)
       .sort();
     expect(derived, 'undocumented routes whose registration names a customer auth path:').toEqual([
+      'GET /v1/account/me/ai',
+      'GET /v1/account/me/ai/ledger',
       'GET /v1/agent-sessions/:p/gui-control-key',
+      'GET /v1/ai/models',
+      'PATCH /v1/account/me/ai-settings',
       'POST /v1/agent-sessions/:p/transport-report',
       'POST /v1/sessions/:p/gui-input',
     ]);

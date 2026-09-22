@@ -367,6 +367,15 @@ export const AccountAuditActionSchema = z.enum([
   // and deployment-fallback. Auditable should be default for any
   // consent change.
   'account.bundled_llm_consent_changed',
+  // S14 — which source (`credits` | `own_key`) funds a moved account's AI
+  // turns, set by `PATCH /v1/account/me/ai-settings`. Same rationale as the
+  // bundled-LLM consent toggle beside it: it flips which billing rail a
+  // customer's turns draw on, and an owner-scoped billing decision is
+  // default-auditable. Dark surface (the route does not exist while AI
+  // credits are off); the enum value ships in this published roster now so
+  // the emit site is ready the moment the route lands, the same pattern
+  // `proxy.created` etc. used above.
+  'account.ai_source_changed',
   // 2026-05-20 — email-preferences toggle (last Tier 2 polish item
   // from the 2026-05-19 audit-coverage doc; "marginal" classification
   // but trivial to add). Customer-controlled mutation on the

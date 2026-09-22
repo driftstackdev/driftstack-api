@@ -47,6 +47,9 @@ const CONSUMER_ROUTES = [
   'apps/server/src/routes/account-me.ts',
   'apps/server/src/routes/agent-sessions.ts',
   'apps/server/src/routes/billing.ts',
+  // S14 — GET /v1/account/me/ai honours act-as the way GET /v1/billing does
+  // (see that route's own header comment).
+  'apps/server/src/routes/account-ai.ts',
 ];
 
 /**

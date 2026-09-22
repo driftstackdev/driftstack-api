@@ -857,6 +857,18 @@ export class DrizzleCreditWindowsRepo {
     return exactMicro('a standing claim', rowsOf<{ micro: string }>(result)[0]?.micro ?? '0');
   }
 
+  /**
+   * S14 — {@link pendingClaimTotalMicro} against the pool rather than a
+   * caller's transaction, for `GET /v1/account/me/ai`'s
+   * `balance.pending_claims_credits` (§4.4: the tier/source read may run with
+   * no lock, and this is the same kind of read). Every existing caller holds
+   * a transaction already and keeps using the method above directly; this
+   * exists only for a route that has none open.
+   */
+  async pendingClaimTotalMicroNoLock(accountId: string): Promise<number> {
+    return this.pendingClaimTotalMicro(this.database.db, accountId);
+  }
+
   /** The clawback already recorded for this key, if there is one. */
   async findClawback(
     tx: CreditLedgerExecutor,

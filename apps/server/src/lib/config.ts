@@ -258,6 +258,14 @@ const ConfigSchema = z.object({
   // `parseAiCreditsMode`, which refuses a value that is none of the three: a
   // misspelt mode must not read as `off` and say nothing.
   aiCreditsMode: z.enum(AI_CREDITS_MODES).default('off'),
+  // S14 — customer-facing credit fields on a message/session response
+  // (`credits`, `credits_spent`). Default OFF: the published spec is
+  // byte-identical with the flag unset, proven by
+  // `a-dark-problem-type-reaches-no-published-surface-before-launch`'s sibling
+  // guards for this slice. Read from DRIFTSTACK_AI_CREDITS_RESPONSE_FIELDS by
+  // `parseAiCreditsResponseFields`, which refuses a value that is neither `0`
+  // nor `1`.
+  aiCreditsResponseFields: z.boolean().default(false),
   /**
    * AI pace, the master switch, and it is DEFAULT OFF — `fast` is what every
    * turn does today, byte for byte: no inserted pause, no draw, no extra clock
@@ -781,6 +789,30 @@ export function parseAiCreditsMode(raw: string | undefined): AiCreditsMode {
 }
 
 /**
+ * S14 — DRIFTSTACK_AI_CREDITS_RESPONSE_FIELDS, read the same way every other
+ * knob in this family is: trimmed, and REFUSING anything that is not one of
+ * its two accepted values rather than reading a typo as the default. Unset or
+ * blank is `0` (off): the message and session projections stay byte-identical
+ * to today's published shape, which is the whole reason this exists — a dark
+ * `credits`/`credits_spent` field must not reach a strict SDK consumer that
+ * decodes the response before AI credits ships. `1` turns them on.
+ *
+ * ⛔ `0`/`1`, NOT `envFlag`'s `true`/`1`/`yes`/`on` vocabulary. The plan and the
+ * judge slice both spell this flag `=1`/`=0`, and `envFlag` would silently
+ * accept `true` too — a second spelling nobody asked for and a mismatch the
+ * next reader would have to notice on their own.
+ */
+export function parseAiCreditsResponseFields(raw: string | undefined): boolean {
+  const value = (raw ?? '').trim();
+  if (value === '') return false;
+  if (value === '0') return false;
+  if (value === '1') return true;
+  throw new Error(
+    'Refusing to boot: DRIFTSTACK_AI_CREDITS_RESPONSE_FIELDS must be 0 or 1 (or unset, which is 0).',
+  );
+}
+
+/**
  * DRIFTSTACK_AI_PACE, read exactly the way `parseAiCreditsMode` reads its mode
  * and `envFlag` reads a boolean: trimmed and case-insensitive, because a value
  * pasted out of a secret store often carries a trailing newline.
@@ -983,6 +1015,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     bundledTurnMaxConcurrency: env.BUNDLED_TURN_MAX_CONCURRENCY,
     agentTurnMaxAccountInFlight: env.AGENT_TURN_MAX_ACCOUNT_INFLIGHT,
     aiCreditsMode: parseAiCreditsMode(env.DRIFTSTACK_AI_CREDITS_MODE),
+    aiCreditsResponseFields: parseAiCreditsResponseFields(
+      env.DRIFTSTACK_AI_CREDITS_RESPONSE_FIELDS,
+    ),
     aiPace: parseAiPace(env.DRIFTSTACK_AI_PACE),
     planningRead: parsePlanningReadMode(env.DRIFTSTACK_PLANNING_READ),
     authFlowUrls: deriveAuthFlowUrls(env),

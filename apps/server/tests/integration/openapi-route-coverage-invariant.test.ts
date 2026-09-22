@@ -42,6 +42,18 @@ const NOT_PUBLIC_API: Record<string, string> = {
     'is-in-the-published-spec holds the whole term).',
   '/v1/admin/ai-credits/census':
     'Staff panel only; withheld for the same two reasons as the shadow report beside it.',
+  '/v1/account/me/ai':
+    'S14 — customer-reachable (requireAuth + read scope), and withheld for the same second reason as ' +
+    'the AI-credits staff routes above: the published document may not mention AI credits before launch.',
+  '/v1/account/me/ai-settings':
+    'S14 — customer-reachable (requireAuth + account_owner scope); withheld for the same reason as ' +
+    'GET /v1/account/me/ai beside it.',
+  '/v1/account/me/ai/ledger':
+    'S14 — customer-reachable (requireAuth + read scope); withheld for the same reason as ' +
+    'GET /v1/account/me/ai above.',
+  '/v1/ai/models':
+    'S14 — customer-reachable (requireAuth + read scope); withheld for the same reason as ' +
+    'GET /v1/account/me/ai above.',
   '/v1/internal/atlas-priority/event-status': 'Internal control-plane surface; not customer API.',
   '/v1/internal/atlas-priority/event/{id}': 'Internal control-plane surface; not customer API.',
   '/v1/internal/atlas-priority/probe-signature':
