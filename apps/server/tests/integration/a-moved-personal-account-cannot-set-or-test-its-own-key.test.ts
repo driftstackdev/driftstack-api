@@ -36,6 +36,11 @@ function creditsRuntime(account: MovedAccountState): AiCreditsRuntime {
           aiSourceSetAt: null,
           debtMicro: 0,
           autoTopUpEnabled: false,
+          legacyConsentAtMove: null,
+          legacyCapCentsAtMove: null,
+          hadStoredKeyAtMove: null,
+          movedToCreditsAt: null,
+          movedBackAt: null,
           ...account,
         }),
       // S13 — this file exercises the BYOK routes only, never the old

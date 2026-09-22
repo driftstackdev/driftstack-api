@@ -64,6 +64,11 @@ function fakeMovedRuntime(config: FakeRuntimeConfig): FakeRuntime {
     aiSourceSetAt: null,
     debtMicro: 0,
     autoTopUpEnabled: false,
+    legacyConsentAtMove: null,
+    legacyCapCentsAtMove: null,
+    hadStoredKeyAtMove: null,
+    movedToCreditsAt: null,
+    movedBackAt: null,
   };
   const window = config.window ?? null;
   const accounts: AiCreditsAccounts = {

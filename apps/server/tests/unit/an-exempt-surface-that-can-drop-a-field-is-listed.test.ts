@@ -91,6 +91,17 @@ const CAN_DROP: ReadonlySet<string> = new Set([
   // in the direction of granting MORE than intended, not less, which is why
   // this is listed rather than left to the blanket admin-* rationale.
   'admin-ai-credits.ts (AdminSetPlanOverrideRequestSchema)',
+  // S16 — both take `dry_run: z.boolean().optional().default(false)`. A
+  // mistyped key (`dryrun`, `dry-run`) is silently dropped to the default —
+  // `false` — so a staff request that MEANT a preview instead runs the real
+  // cutover or rollback. `account_ids`/`cohort` are safe: the `.refine`
+  // (exactly one of the two) turns a typo there into a loud 400, never a
+  // silent drop. The response always says what actually happened
+  // (`dry_run: false`, real `decisions`/`summary`), so the mistake is visible
+  // immediately — bounded, but not nothing, which is why this is listed
+  // rather than left to the blanket admin-* rationale.
+  'admin-ai-credits.ts (AiCreditsCutoverRequestSchema)',
+  'admin-ai-credits.ts (AiCreditsRollbackRequestSchema)',
   'admin-force-actions.ts (ForceActionBodySchema)',
   'admin-incidents.ts (CreateIncidentRequestSchema)',
   'admin-owner.ts (SetSecretBodySchema)',

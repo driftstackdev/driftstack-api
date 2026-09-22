@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  AccountIdSchema,
   AccountTierSchema,
   Iso8601Schema,
   PaginatedListSchema,
@@ -1195,3 +1196,119 @@ export const AdminRateCardListResponseSchema = z.object({
   data: z.array(AdminRateCardViewSchema),
 });
 export type AdminRateCardListResponse = z.infer<typeof AdminRateCardListResponseSchema>;
+
+// ───────────────────────────────────────────────────────────────────────────
+// S16 — per-account cutover and rollback (§8 items 4-7).
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * §8's cutover cohorts. Mirrors `AI_CREDITS_COHORTS` in
+ * `apps/server/src/db/ai-credits-report-repo.ts` — duplicated by value, not
+ * by import, for the same reason `AiPlanOverrideReasonSchema` above is: this
+ * package never depends on the server. Kept in agreement by
+ * `the-cutover-cohort-schema-agrees-with-the-census-cohorts.test.ts`.
+ *
+ * Every value is accepted at the SCHEMA layer — a Phase-2 cohort (C1-C4) is a
+ * well-formed request the SERVICE refuses with a clear error
+ * (`PhaseTwoCohortError`), not a request the wire format cannot express. §8
+ * step 4: "C1-C4 are Phase 2 and must be REFUSED by this slice's route with a
+ * clear error, not silently accepted" — silently accepting only happens by
+ * mistyping the value away, which this schema does not do.
+ */
+export const AiCreditsCutoverCohortSchema = z.enum(['C0', 'C1', 'C2', 'C3', 'C4']);
+export type AiCreditsCutoverCohort = z.infer<typeof AiCreditsCutoverCohortSchema>;
+
+/**
+ * `POST /v1/admin/ai-credits/cutover`. Exactly one of `account_ids` or
+ * `cohort` (§8 step 4). `to: 'credits'` is the plan's own literal shape —
+ * cutover has one destination in Phase 1; a request naming any other value
+ * is a schema-level 400, not a business refusal. `dry_run: true` (the
+ * default is false) computes and returns the plan; it writes nothing.
+ */
+export const AiCreditsCutoverRequestSchema = z
+  .object({
+    account_ids: z.array(AccountIdSchema).min(1).max(500).optional(),
+    cohort: AiCreditsCutoverCohortSchema.optional(),
+    to: z.literal('credits'),
+    dry_run: z.boolean().optional().default(false),
+  })
+  .refine((v) => (v.account_ids !== undefined) !== (v.cohort !== undefined), {
+    message: 'Send exactly one of account_ids or cohort.',
+  });
+export type AiCreditsCutoverRequest = z.infer<typeof AiCreditsCutoverRequestSchema>;
+
+/** Why an account was refused or is not eligible — §8 step 4/M7 and §8's
+ *  Free row, in that order of severity. */
+export const AiCreditsCutoverRefuseReasonSchema = z.enum([
+  'no_paid_coverage',
+  'account_not_found',
+  'account_deleted',
+]);
+export type AiCreditsCutoverRefuseReason = z.infer<typeof AiCreditsCutoverRefuseReasonSchema>;
+
+export const AiCreditsCutoverNotEligibleReasonSchema = z.enum(['free_plan']);
+export type AiCreditsCutoverNotEligibleReason = z.infer<
+  typeof AiCreditsCutoverNotEligibleReasonSchema
+>;
+
+/** One account's decision, whether from the dry run or the real run. */
+export const AiCreditsCutoverDecisionSchema = z.discriminatedUnion('outcome', [
+  z.object({
+    outcome: z.literal('move'),
+    account_id: AccountIdSchema,
+    /** Null means automatic — §8.5's "stored key plus consent" row. */
+    ai_source: AiSourceSchema.nullable(),
+  }),
+  z.object({ outcome: z.literal('already_moved'), account_id: AccountIdSchema }),
+  z.object({
+    outcome: z.literal('not_eligible'),
+    account_id: AccountIdSchema,
+    reason: AiCreditsCutoverNotEligibleReasonSchema,
+  }),
+  z.object({
+    outcome: z.literal('refuse'),
+    account_id: AccountIdSchema,
+    reason: AiCreditsCutoverRefuseReasonSchema,
+  }),
+]);
+export type AiCreditsCutoverDecision = z.infer<typeof AiCreditsCutoverDecisionSchema>;
+
+export const AiCreditsCutoverResponseSchema = z.object({
+  dry_run: z.boolean(),
+  decisions: z.array(AiCreditsCutoverDecisionSchema),
+  summary: z.object({
+    moved: z.number().int().nonnegative(),
+    already_moved: z.number().int().nonnegative(),
+    not_eligible: z.number().int().nonnegative(),
+    refused: z.number().int().nonnegative(),
+  }),
+});
+export type AiCreditsCutoverResponse = z.infer<typeof AiCreditsCutoverResponseSchema>;
+
+/** `POST /v1/admin/ai-credits/rollback`. One account only (§8.7: "everyone"
+ *  is an operator action on the environment, not a route). `dry_run: true`
+ *  reports what WOULD happen and writes nothing. */
+export const AiCreditsRollbackRequestSchema = z.object({
+  account_id: AccountIdSchema,
+  dry_run: z.boolean().optional().default(false),
+});
+export type AiCreditsRollbackRequest = z.infer<typeof AiCreditsRollbackRequestSchema>;
+
+export const AiCreditsRollbackOutcomeSchema = z.enum([
+  'rolled_back',
+  'not_moved',
+  'would_roll_back',
+]);
+export type AiCreditsRollbackOutcome = z.infer<typeof AiCreditsRollbackOutcomeSchema>;
+
+export const AiCreditsRollbackResponseSchema = z.object({
+  dry_run: z.boolean(),
+  account_id: AccountIdSchema,
+  outcome: AiCreditsRollbackOutcomeSchema,
+  /** The legacy consent + cap restored (or, on a dry run, that WOULD be
+   *  restored); null when the account was not moved. */
+  restored: z
+    .object({ consent: z.boolean(), monthly_cap_usd_cents: z.number().int().nonnegative() })
+    .nullable(),
+});
+export type AiCreditsRollbackResponse = z.infer<typeof AiCreditsRollbackResponseSchema>;

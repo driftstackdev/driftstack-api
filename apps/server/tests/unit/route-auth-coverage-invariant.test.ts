@@ -669,7 +669,12 @@ describe('all-route caller-authority invariant', () => {
     // FASTIFY_AUTHORITY_PROPERTIES above). The structurally-authorized count
     // below moves WITH the total, by seven — none is ungated. No disabled
     // twins: dark until launch, same reason as every other credits route.
-    expect(routes).toHaveLength(330);
+    // S16 — 332 since two AI-credits routes, POST /v1/admin/ai-credits/
+    // {cutover,rollback}, both carrying requireScope('driftstack_internal_
+    // admin') — the strictest scope the other admin credits routes use. The
+    // structurally-authorized count below moves WITH the total, by two. No
+    // disabled twins, same reason as every other credits route.
+    expect(routes).toHaveLength(332);
     // +1 (not +2): only the LIVE network route is structurally authorized; the
     // disabled twin is a stub in DISABLED_EXEMPTIONS. Had the live route shipped
     // ungated, this number would not have moved while the total moved by two.
@@ -690,7 +695,10 @@ describe('all-route caller-authority invariant', () => {
     // 236 since S15's seven AI-credits ADMIN routes (requireScope
     // 'driftstack_internal_admin' on five, requireOwner on two) — the count
     // moves in step with the total again, same as every other arm above.
-    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(236);
+    // 238 since S16's two AI-credits routes (requireScope
+    // 'driftstack_internal_admin' on both) — the count moves in step with
+    // the total again, same as every other arm above.
+    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(238);
   });
 
   it('every route has structural caller authority or one exact reviewed exemption', () => {

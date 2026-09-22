@@ -184,6 +184,18 @@ const UNDOCUMENTED_ROUTES = new Map<string, string>([
     'POST /v1/admin/credit-rate-cards/:p/withdraw',
     'owner-only — app.requireOwner, same gate as publishing a card. Undocumented for the same second reason as the census above',
   ],
+  // S16 — the per-account cutover and rollback. STAFF, like every route
+  // above except the two rate-card mutations: `requireScope('driftstack_
+  // internal_admin')`, the strictest scope the other admin credits routes
+  // use. Undocumented for the same second reason as the census above.
+  [
+    'POST /v1/admin/ai-credits/cutover',
+    'staff — driftstack_internal_admin; moves an account_ids list or the C0 cohort onto credits (or previews it, dry_run). Undocumented for the same second reason as the census above',
+  ],
+  [
+    'POST /v1/admin/ai-credits/rollback',
+    'staff — driftstack_internal_admin; moves one account back to legacy, restoring its snapshot (or previews it, dry_run). Undocumented for the same second reason as the census above',
+  ],
   // S14 — the Phase-2-facing customer read/settings API for AI credits.
   // CUSTOMER, unlike the two staff routes above: each reaches
   // `requireAuth` + `requireScope('read')` or `requireScope('account_owner')`.

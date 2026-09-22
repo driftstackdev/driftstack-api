@@ -3671,6 +3671,11 @@ export const AI_CREDITS_ADMIN_AUDIT_ACTIONS = [
   'credits.plan_override_cleared',
   'rate_card.published',
   'rate_card.withdrawn',
+  // S16 (migration 0135) — one account cut over onto credits, or rolled back
+  // to legacy. Same table, same reason: the published admin audit vocabulary
+  // may not carry these words before launch.
+  'credits.cutover_moved',
+  'credits.cutover_rolled_back',
 ] as const;
 
 export const aiCreditsAdminAuditLog = pgTable(
@@ -3701,9 +3706,10 @@ export const aiCreditsAdminAuditLog = pgTable(
     index('ai_credits_admin_audit_log_admin_idx').on(t.adminAccountId, t.timestamp),
     index('ai_credits_admin_audit_log_target_idx').on(t.targetAccountId, t.timestamp),
     index('ai_credits_admin_audit_log_action_idx').on(t.action, t.timestamp),
+    // Widened by migration 0135 (S16) to add the cutover/rollback actions.
     check(
       'ai_credits_admin_audit_log_action_check',
-      sql`${t.action} IN ('credits.goodwill_granted', 'credits.debt_forgiven', 'credits.plan_override_set', 'credits.plan_override_cleared', 'rate_card.published', 'rate_card.withdrawn')`,
+      sql`${t.action} IN ('credits.goodwill_granted', 'credits.debt_forgiven', 'credits.plan_override_set', 'credits.plan_override_cleared', 'rate_card.published', 'rate_card.withdrawn', 'credits.cutover_moved', 'credits.cutover_rolled_back')`,
     ),
   ],
 );

@@ -101,6 +101,9 @@ const NOT_REGISTERED_IN_MEMORY: Record<string, string> = {
   'DELETE /v1/admin/accounts/:id/ai-plan-override':
     'registered only while the AI credits mode is not off',
   'GET /v1/admin/credit-rate-cards': 'registered only while the AI credits mode is not off',
+  // S16 — the per-account cutover and rollback, same gate.
+  'POST /v1/admin/ai-credits/cutover': 'registered only while the AI credits mode is not off',
+  'POST /v1/admin/ai-credits/rollback': 'registered only while the AI credits mode is not off',
 };
 
 /**
@@ -135,6 +138,8 @@ const EXPECTED_STAFF_ROUTES: readonly string[] = [
   'GET /v1/admin/accounts/:id/usage',
   'GET /v1/admin/agent-turns/summary',
   'GET /v1/admin/ai-credits/census',
+  'POST /v1/admin/ai-credits/cutover',
+  'POST /v1/admin/ai-credits/rollback',
   'GET /v1/admin/ai-credits/shadow-report',
   'GET /v1/admin/api-keys',
   'POST /v1/admin/api-keys/:id/revoke',

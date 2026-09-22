@@ -79,6 +79,13 @@ describe.skipIf(!RUN_DB_TESTS)('the credit account lock makes a second writer wa
       aiSourceSetAt: null,
       debtMicro: 0,
       autoTopUpEnabled: false,
+      // The move snapshot (0128's columns, first written by the S16 cutover):
+      // a fresh row has never moved, so every one is null.
+      legacyConsentAtMove: null,
+      legacyCapCentsAtMove: null,
+      hadStoredKeyAtMove: null,
+      movedToCreditsAt: null,
+      movedBackAt: null,
     });
     expect(second).toEqual(first);
     const [row] = await db()<Array<{ n: number }>>`

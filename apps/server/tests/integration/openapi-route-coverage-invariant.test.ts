@@ -69,6 +69,12 @@ const NOT_PUBLIC_API: Record<string, string> = {
   '/v1/admin/credit-rate-cards/{version}/withdraw':
     'S15 — owner-only (requireOwner); withheld for the same reason as ' +
     'GET /v1/admin/accounts/{id}/credits above.',
+  '/v1/admin/ai-credits/cutover':
+    'S16 — staff panel only (driftstack_internal_admin); withheld for the same reason as ' +
+    'GET /v1/admin/accounts/{id}/credits above.',
+  '/v1/admin/ai-credits/rollback':
+    'S16 — staff panel only (driftstack_internal_admin); withheld for the same reason as ' +
+    'GET /v1/admin/accounts/{id}/credits above.',
   '/v1/internal/atlas-priority/event-status': 'Internal control-plane surface; not customer API.',
   '/v1/internal/atlas-priority/event/{id}': 'Internal control-plane surface; not customer API.',
   '/v1/internal/atlas-priority/probe-signature':

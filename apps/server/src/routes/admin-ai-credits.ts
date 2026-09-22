@@ -7,6 +7,8 @@
 //   PUT/DELETE /v1/admin/accounts/:id/ai-plan-override
 //   POST/GET /v1/admin/credit-rate-cards
 //   POST /v1/admin/credit-rate-cards/:version/withdraw
+//   POST /v1/admin/ai-credits/cutover    (S16 — move accounts onto credits)
+//   POST /v1/admin/ai-credits/rollback   (S16 — move one account back)
 //
 // Auth: `driftstack_internal_admin` for every route above except the two rate-
 // card MUTATIONS (publish, withdraw), which are OWNER-ONLY — `app.requireOwner`,
@@ -35,7 +37,11 @@
 // override to end. Those write nothing to the ledger either, so there is
 // nothing new to attribute; a second `adminAudit` row for the SAME action
 // already on file would be the thing that misleads an auditor, not the thing
-// that protects them.
+// that protects them. Same rule for S16's two routes: `credits.cutover_moved`
+// is written once per account actually MOVED (never for `already_moved`,
+// `not_eligible` or `refuse`, and never at all for a `dry_run`), and
+// `credits.cutover_rolled_back` only for an account that WAS on credits
+// (never for `not_moved`, and never for a `dry_run`).
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -43,12 +49,17 @@ import {
   AdminCreditAdjustmentRequestSchema,
   AdminRateCardPublishRequestSchema,
   AdminSetPlanOverrideRequestSchema,
+  AiCreditsCutoverRequestSchema,
+  AiCreditsRollbackRequestSchema,
   creditsToMicro,
   type AdminCreditAdjustmentResponse,
   type AdminCreditsAccountState,
   type AdminPlanOverrideView,
   type AdminRateCardListResponse,
   type AdminRateCardView,
+  type AiCreditsCutoverDecision,
+  type AiCreditsCutoverResponse,
+  type AiCreditsRollbackResponse,
 } from '@driftstack/api-types';
 import {
   BadRequestError,
@@ -71,8 +82,15 @@ import {
 } from '../services/credit-rate-card-publisher.js';
 import { refreshCreditsAfter } from '../services/credit-grants.js';
 import { buildLedgerEntry } from '../services/ai-account-state.js';
+import {
+  PhaseTwoCohortError,
+  summarizeCutoverDecisions,
+  type CutoverDecision,
+  type CutoverSelector,
+} from '../services/credit-cutover.js';
 import type {
   AiCreditsAdminSurface,
+  AiCreditsCutoverSurface,
   AiCreditsRuntime,
   AiCreditsStateReads,
 } from '../services/ai-credits-runtime.js';
@@ -157,6 +175,48 @@ function requireAdmin(aiCredits: AiCreditsRuntime): AiCreditsAdminSurface {
     );
   }
   return aiCredits.admin;
+}
+
+function requireCutover(aiCredits: AiCreditsRuntime): AiCreditsCutoverSurface {
+  if (aiCredits.cutover === undefined) {
+    throw new Error(
+      'aiCredits.cutover is required by routes/admin-ai-credits.ts; this AiCreditsRuntime fixture predates S16',
+    );
+  }
+  return aiCredits.cutover;
+}
+
+/**
+ * §4.1's table, restated as a clear refusal rather than a silent no-op:
+ * `billing_mode = 'credits'` means "moved" only under `enforce` —
+ * `routes/account-ai.ts`'s `isMoved` and `routes/account-bundled-llm.ts`'s
+ * `resolveMovedAccount` gate every customer-facing surface the same way. A
+ * cutover in `shadow` mode would set `billing_mode` on an account nothing
+ * customer-facing yet treats as moved, so it is refused before it writes
+ * anything.
+ */
+function requireEnforceMode(aiCredits: AiCreditsRuntime, action: 'cutover' | 'rollback'): void {
+  if (aiCredits.mode !== 'enforce') {
+    throw new ConflictError(
+      `AI-credits ${action} requires enforce mode; this deployment is in ${aiCredits.mode} mode.`,
+      { ai_credits_mode: aiCredits.mode },
+    );
+  }
+}
+
+/** {@link CutoverDecision} on the wire: `account_id` prefixed, `accountId` dropped. */
+function toWireCutoverDecision(d: CutoverDecision): AiCreditsCutoverDecision {
+  const account_id = `acc_${d.accountId}`;
+  switch (d.outcome) {
+    case 'move':
+      return { outcome: 'move', account_id, ai_source: d.aiSource };
+    case 'already_moved':
+      return { outcome: 'already_moved', account_id };
+    case 'not_eligible':
+      return { outcome: 'not_eligible', account_id, reason: d.reason };
+    case 'refuse':
+      return { outcome: 'refuse', account_id, reason: d.reason };
+  }
 }
 
 /** The start of the whole UTC minute BEFORE the one `at` falls in — see the
@@ -655,6 +715,148 @@ export function registerAdminAiCreditsRoutes(
       });
       const counts = await admin.rateCards.modelCounts();
       return buildAdminRateCardView(result.card, counts.get(version) ?? 0, null, now());
+    },
+  );
+
+  // ── POST /v1/admin/ai-credits/cutover ───────────────────────────────────
+  // §8 step 4. `account_ids` moves the named accounts; `cohort: 'C0'` moves
+  // every internal account not already moved. Any other cohort is a
+  // well-formed request the SERVICE refuses (`PhaseTwoCohortError` → 400):
+  // C1-C4 are Phase 2. `dry_run: true` computes and returns the decision
+  // list with nothing locked or written.
+  app.post(
+    '/v1/admin/ai-credits/cutover',
+    {
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
+    },
+    async (request): Promise<AiCreditsCutoverResponse> => {
+      const ctx = requireCtx(request);
+      const parsed = AiCreditsCutoverRequestSchema.safeParse(request.body ?? {});
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      requireEnforceMode(aiCredits, 'cutover');
+      const cutover = requireCutover(aiCredits);
+
+      const selector: CutoverSelector =
+        parsed.data.account_ids !== undefined
+          ? {
+              kind: 'account_ids',
+              accountIds: parsed.data.account_ids.map((id) => uuidFromPrefixedId(id, 'acc')),
+            }
+          : // The schema's `.refine` already requires exactly one of the two;
+            // `cohort` is therefore defined whenever `account_ids` is not.
+            {
+              kind: 'cohort',
+              cohort: parsed.data.cohort as NonNullable<typeof parsed.data.cohort>,
+            };
+
+      let decisions;
+      try {
+        decisions = parsed.data.dry_run
+          ? await cutover.planCutover(selector)
+          : await cutover.runCutover(selector);
+      } catch (err) {
+        if (err instanceof PhaseTwoCohortError) throw new BadRequestError(err.message);
+        throw err;
+      }
+
+      // AUDIT (D-025) — one row per account actually moved. Nothing else
+      // changed anything: `already_moved`/`not_eligible`/`refuse` wrote
+      // nothing, and a dry run wrote nothing at all.
+      if (!parsed.data.dry_run) {
+        for (const d of decisions) {
+          if (d.outcome !== 'move') continue;
+          await adminAudit.record({
+            adminAccountId: ctx.account.id,
+            adminKeyId: ctx.apiKey.id,
+            action: 'credits.cutover_moved',
+            targetAccountId: d.accountId,
+            inputPayload: {
+              ai_source: d.aiSource,
+              selector:
+                parsed.data.account_ids !== undefined
+                  ? 'account_ids'
+                  : `cohort:${parsed.data.cohort}`,
+            },
+            result: 'success',
+            ipAddress: readClientIp(request),
+          });
+        }
+      }
+
+      const summary = summarizeCutoverDecisions(decisions);
+      return {
+        dry_run: parsed.data.dry_run,
+        decisions: decisions.map(toWireCutoverDecision),
+        summary: {
+          moved: summary.moved.length,
+          already_moved: summary.alreadyMoved.length,
+          not_eligible: summary.notEligible.length,
+          refused: summary.refused.length,
+        },
+      };
+    },
+  );
+
+  // ── POST /v1/admin/ai-credits/rollback ──────────────────────────────────
+  // §8 step 7, one account only: "everyone" is an operator action on the
+  // environment (setting the mode to shadow), not a route. Restores the
+  // legacy consent + cap the cutover snapshotted and clears `ai_source`;
+  // touches no ledger row, lot or window, so this month's spend stays
+  // exactly as it is.
+  app.post(
+    '/v1/admin/ai-credits/rollback',
+    {
+      preHandler: [app.requireScope('driftstack_internal_admin'), app.rateLimit('global')],
+    },
+    async (request): Promise<AiCreditsRollbackResponse> => {
+      const ctx = requireCtx(request);
+      const parsed = AiCreditsRollbackRequestSchema.safeParse(request.body ?? {});
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      requireEnforceMode(aiCredits, 'rollback');
+      const accountId = uuidFromPrefixedId(parsed.data.account_id, 'acc');
+      await requireAccountExists(accountId);
+      const cutover = requireCutover(aiCredits);
+
+      if (parsed.data.dry_run) {
+        const preview = await cutover.previewRollback(accountId);
+        return {
+          dry_run: true,
+          account_id: parsed.data.account_id,
+          outcome: preview.outcome,
+          restored:
+            preview.outcome === 'would_roll_back'
+              ? {
+                  consent: preview.restored.consent,
+                  monthly_cap_usd_cents: preview.restored.capCents,
+                }
+              : null,
+        };
+      }
+
+      const result = await cutover.rollbackAccount(accountId);
+      if (result.outcome === 'rolled_back') {
+        await adminAudit.record({
+          adminAccountId: ctx.account.id,
+          adminKeyId: ctx.apiKey.id,
+          action: 'credits.cutover_rolled_back',
+          targetAccountId: accountId,
+          inputPayload: {
+            restored_consent: result.restored.consent,
+            restored_monthly_cap_usd_cents: result.restored.capCents,
+          },
+          result: 'success',
+          ipAddress: readClientIp(request),
+        });
+      }
+      return {
+        dry_run: false,
+        account_id: parsed.data.account_id,
+        outcome: result.outcome,
+        restored:
+          result.outcome === 'rolled_back'
+            ? { consent: result.restored.consent, monthly_cap_usd_cents: result.restored.capCents }
+            : null,
+      };
     },
   );
 }

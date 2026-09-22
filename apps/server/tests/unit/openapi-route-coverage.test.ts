@@ -257,6 +257,12 @@ const INTENTIONALLY_UNPUBLISHED_OPERATIONS = new Set([
   'POST /v1/admin/credit-rate-cards',
   'GET /v1/admin/credit-rate-cards',
   'POST /v1/admin/credit-rate-cards/:p/withdraw',
+  // S16 — the per-account cutover and rollback. Staff-only
+  // (driftstack_internal_admin). Unpublished for the same second reason as
+  // every other credits route above. Registered only while
+  // DRIFTSTACK_AI_CREDITS_MODE is not off.
+  'POST /v1/admin/ai-credits/cutover',
+  'POST /v1/admin/ai-credits/rollback',
   'GET /v1/agent-sessions/:p/gui-control-key',
   'GET /v1/auth/oauth/github/callback',
   'GET /v1/auth/oauth/google/callback',
@@ -289,6 +295,9 @@ const ADMIN_OPERATIONS_WITHHELD_FROM_THE_CUSTOMER_SPEC: readonly string[] = [
   'POST /v1/admin/credit-rate-cards',
   'GET /v1/admin/credit-rate-cards',
   'POST /v1/admin/credit-rate-cards/:p/withdraw',
+  // S16 — the per-account cutover and rollback.
+  'POST /v1/admin/ai-credits/cutover',
+  'POST /v1/admin/ai-credits/rollback',
 ];
 
 describe('published OpenAPI operation ↔ Fastify registration coverage', () => {
@@ -355,7 +364,11 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     // override, POST+GET /v1/admin/credit-rate-cards and POST .../:version/
     // withdraw — all seven unpublished, see their INTENTIONALLY_UNPUBLISHED_
     // OPERATIONS entries, so the published count above does not move either.
-    expect(routeOperations.size).toBe(275);
+    // 277 since S16 registered POST /v1/admin/ai-credits/cutover and POST
+    // /v1/admin/ai-credits/rollback — both unpublished, see their
+    // INTENTIONALLY_UNPUBLISHED_OPERATIONS entries, so the published count
+    // above does not move either.
+    expect(routeOperations.size).toBe(277);
   });
 
   it('documents the method-specific customer-core contract', () => {

@@ -370,7 +370,9 @@ describe('migration 0132 changes exactly three guards, and pins each one', () =>
     expect(journal.entries[at + 1]?.when).toBeGreaterThan(journal.entries[at]?.when ?? Infinity);
     // 0134 (the credits admin audit trail) follows 0133; its own guard pins it.
     expect(journal.entries[at + 2]?.tag).toBe('0134_ai_credits_admin_audit_log');
-    expect(journal.entries, 'and 0134 is the last one').toHaveLength(135);
+    // 0135 (S16 — the cutover/rollback audit actions) follows 0134.
+    expect(journal.entries[at + 3]?.tag).toBe('0135_ai_credits_admin_audit_log_cutover_actions');
+    expect(journal.entries, 'and 0135 is the last one').toHaveLength(136);
   });
 
   it('CRITICAL schema.ts mirrors the CHECK and the index this migration adds, by name, and its prose names the trigger it installs and the guard it relaxes', () => {

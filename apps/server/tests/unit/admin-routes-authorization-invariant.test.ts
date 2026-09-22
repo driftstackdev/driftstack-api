@@ -210,7 +210,10 @@ describe('/v1/admin route authorization invariant', () => {
     // /v1/admin/accounts/:id/{credits,credits/adjustments,ai-plan-override}
     // and GET/POST /v1/admin/credit-rate-cards + POST .../:version/withdraw —
     // five on internal-admin scope, two (publish, withdraw) on requireOwner.
-    expect(routes).toHaveLength(78);
+    // 80 with S16's two AI-credits routes, POST /v1/admin/ai-credits/{cutover,
+    // rollback} — both on internal-admin scope, the strictest the other admin
+    // credits routes use.
+    expect(routes).toHaveLength(80);
     expect(routes.length).toBeGreaterThanOrEqual(60);
   });
 

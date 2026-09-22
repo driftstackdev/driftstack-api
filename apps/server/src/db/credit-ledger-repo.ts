@@ -97,6 +97,18 @@ export interface CreditAccountRecord {
   readonly aiSourceSetAt: Date | null;
   readonly debtMicro: number;
   readonly autoTopUpEnabled: boolean;
+  /**
+   * S16 — the legacy settings snapshot a cutover took, and the two move/
+   * rollback instants. Null on an account never cut over. Set together
+   * (`credit_accounts_move_snapshot`, 0128) whenever `movedToCreditsAt` is
+   * not null, which is what lets `rollbackAccount` read the snapshot straight
+   * off the row `lockAccount` already returns, with no second query.
+   */
+  readonly legacyConsentAtMove: boolean | null;
+  readonly legacyCapCentsAtMove: number | null;
+  readonly hadStoredKeyAtMove: boolean | null;
+  readonly movedToCreditsAt: Date | null;
+  readonly movedBackAt: Date | null;
 }
 
 export interface CreditLotRecord {
@@ -474,6 +486,27 @@ export class DrizzleCreditLedgerRepo {
   }
 
   /**
+   * S16 — the account's credit row exactly as it stands, with NO insert and
+   * NO lock: null when the row does not exist (an account credits has never
+   * touched), never a freshly-created legacy one the way {@link ensureAccount}
+   * would hand back. For a caller that must not write anything even when the
+   * account turns out to need no row at all — a rollback's `dry_run` preview,
+   * which has nothing to restore on an account still on legacy and must not
+   * manufacture a `credit_accounts` row to say so.
+   */
+  async peekAccount(
+    accountId: string,
+    on: CreditLedgerExecutor = this.database.db,
+  ): Promise<CreditAccountRecord | null> {
+    const [row] = await on
+      .select()
+      .from(creditAccounts)
+      .where(eq(creditAccounts.accountId, accountId))
+      .limit(1);
+    return row === undefined ? null : toAccountRecord(row);
+  }
+
+  /**
    * The account's credit row, created (owing nothing, on legacy billing) if it
    * did not exist. Takes no lock; see `lockAccount`.
    */
@@ -532,21 +565,111 @@ export class DrizzleCreditLedgerRepo {
   ): Promise<CreditAccountRecord> {
     return this.transaction(async (tx) => {
       await this.lockAccount(tx, accountId);
-      const [row] = await tx
-        .update(creditAccounts)
-        .set({
-          aiSource: args.aiSource,
-          aiSourceSetBy: args.setBy,
-          aiSourceSetAt: sql`now()`,
-          updatedAt: sql`now()`,
-        })
-        .where(eq(creditAccounts.accountId, accountId))
-        .returning();
-      if (row === undefined) {
-        throw new Error('credit account row vanished while setting ai_source');
-      }
-      return toAccountRecord(row);
+      return this.setAiSourceIn(tx, accountId, args);
     });
+  }
+
+  /**
+   * S16 — the same write as {@link setAiSource}, inside a transaction the
+   * caller already holds and has locked (`lockAccount`). `setAiSource` opens
+   * its OWN transaction, which is exactly what the cutover and rollback flows
+   * cannot use: they need this write in the SAME transaction as their other
+   * `credit_accounts` writes (the legacy-settings snapshot, `billing_mode`),
+   * under the ONE account lock the whole move takes — a second, independent
+   * transaction opened from inside the first would commit (or fail)
+   * separately from it, breaking "one transaction per account" (§8.4).
+   */
+  async setAiSourceIn(
+    tx: CreditLedgerTx,
+    accountId: string,
+    args: { readonly aiSource: AiSource | null; readonly setBy: AiSourceSetBy },
+  ): Promise<CreditAccountRecord> {
+    const [row] = await tx
+      .update(creditAccounts)
+      .set({
+        aiSource: args.aiSource,
+        aiSourceSetBy: args.setBy,
+        aiSourceSetAt: sql`now()`,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(creditAccounts.accountId, accountId))
+      .returning();
+    if (row === undefined) {
+      throw new Error('credit account row vanished while setting ai_source');
+    }
+    return toAccountRecord(row);
+  }
+
+  /**
+   * S16 — the cutover's last write: `billing_mode = 'credits'`, plus the
+   * legacy-settings snapshot the rollback restores from
+   * (`legacy_consent_at_move`, `legacy_cap_cents_at_move`,
+   * `had_stored_key_at_move`) and `moved_to_credits_at`. Inside a transaction
+   * the caller already holds and has locked (`lockAccount`) — same reason as
+   * {@link setAiSourceIn}.
+   *
+   * `moved_back_at` is cleared: a second cutover of an account that was once
+   * rolled back is a FRESH move, and a stale `moved_back_at` from the earlier
+   * round-trip would misreport it as still-rolled-back to anything that reads
+   * the column on its own.
+   */
+  async setCutoverMoved(
+    tx: CreditLedgerTx,
+    accountId: string,
+    args: {
+      readonly legacyConsentAtMove: boolean;
+      readonly legacyCapCentsAtMove: number;
+      readonly hadStoredKeyAtMove: boolean;
+    },
+  ): Promise<CreditAccountRecord> {
+    const [row] = await tx
+      .update(creditAccounts)
+      .set({
+        billingMode: 'credits',
+        legacyConsentAtMove: args.legacyConsentAtMove,
+        legacyCapCentsAtMove: args.legacyCapCentsAtMove,
+        hadStoredKeyAtMove: args.hadStoredKeyAtMove,
+        movedToCreditsAt: sql`now()`,
+        movedBackAt: null,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(creditAccounts.accountId, accountId))
+      .returning();
+    if (row === undefined) {
+      throw new Error('credit account row vanished while cutting the account over');
+    }
+    return toAccountRecord(row);
+  }
+
+  /**
+   * S16 — the rollback's `credit_accounts` write: `billing_mode = 'legacy'`,
+   * `ai_source`/`ai_source_set_by`/`ai_source_set_at` cleared together (the
+   * `credit_accounts_ai_source_set_by` CHECK requires the pair to be null or
+   * non-null together), and `moved_back_at` stamped. Leaves
+   * `legacy_*_at_move` and `moved_to_credits_at` exactly as the cutover left
+   * them — a historical record of what the account looked like right before
+   * it moved — and touches no ledger row, lot or window: this month's charges
+   * stay exactly as they are (§8.7). Inside a transaction the caller already
+   * holds and has locked (`lockAccount`), same reason as
+   * {@link setAiSourceIn}.
+   */
+  async setCutoverRolledBack(tx: CreditLedgerTx, accountId: string): Promise<CreditAccountRecord> {
+    const [row] = await tx
+      .update(creditAccounts)
+      .set({
+        billingMode: 'legacy',
+        aiSource: null,
+        aiSourceSetBy: null,
+        aiSourceSetAt: null,
+        movedBackAt: sql`now()`,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(creditAccounts.accountId, accountId))
+      .returning();
+    if (row === undefined) {
+      throw new Error('credit account row vanished while rolling the account back');
+    }
+    return toAccountRecord(row);
   }
 
   /**
@@ -1097,6 +1220,11 @@ function toAccountRecord(r: CreditAccountRow): CreditAccountRecord {
     aiSourceSetAt: r.aiSourceSetAt,
     debtMicro: exact('credit_accounts.debt_micro', r.debtMicro),
     autoTopUpEnabled: r.autoTopUpEnabled,
+    legacyConsentAtMove: r.legacyConsentAtMove,
+    legacyCapCentsAtMove: r.legacyCapCentsAtMove,
+    hadStoredKeyAtMove: r.hadStoredKeyAtMove,
+    movedToCreditsAt: r.movedToCreditsAt,
+    movedBackAt: r.movedBackAt,
   };
 }
 

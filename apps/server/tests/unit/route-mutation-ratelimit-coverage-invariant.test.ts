@@ -385,7 +385,11 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // withdraw — each gated with `app.rateLimit('global')` in the same options
     // argument as its requireScope/requireOwner. No disabled twins, same reason
     // as S14's above. Refreshed with violations(routes) proven empty first.
-    expect(routes).toHaveLength(184);
+    // 186 since S16: POST /v1/admin/ai-credits/cutover and POST /v1/admin/ai-
+    // credits/rollback, each gated with `app.rateLimit('global')` in the same
+    // options argument as their `requireScope('driftstack_internal_admin')`.
+    // No disabled twins, same reason as S15's above.
+    expect(routes).toHaveLength(186);
     // +1: `app.patch<{ Params: { id: string } }>('/v1/teams/:id', ...)` is the only
     // one of the two new routes carrying type arguments.
     // T-1 — 77 since `POST /v1/account/me/proxies/:id/test` gained a
@@ -403,6 +407,9 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // withdraw (`<{ Params: { version: string } }>`). POST /v1/admin/credit-
     // rate-cards has no route params and carries none, so this moves by four
     // where the surface above moved by five.
+    // Unchanged at 83 for S16: both new routes take a body only, no route
+    // params, so neither carries a type argument — the surface above moved by
+    // two where this one moved by zero.
     expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(83);
   });
 

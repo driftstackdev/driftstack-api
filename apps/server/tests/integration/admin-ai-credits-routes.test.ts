@@ -141,6 +141,9 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
       { method: 'GET', url: '/v1/admin/credit-rate-cards' },
       { method: 'POST', url: '/v1/admin/credit-rate-cards' },
       { method: 'POST', url: '/v1/admin/credit-rate-cards/1/withdraw' },
+      // S16
+      { method: 'POST', url: '/v1/admin/ai-credits/cutover' },
+      { method: 'POST', url: '/v1/admin/ai-credits/rollback' },
     ];
     for (const route of routes) {
       it(`CRITICAL ${route.method} ${route.url} does not exist with credits off — a 404, not a 403 that would announce the surface`, async () => {

@@ -138,6 +138,11 @@ function creditsRuntime(
           aiSourceSetAt: null,
           debtMicro: 0,
           autoTopUpEnabled: false,
+          legacyConsentAtMove: null,
+          legacyCapCentsAtMove: null,
+          hadStoredKeyAtMove: null,
+          movedToCreditsAt: null,
+          movedBackAt: null,
         }),
       // S13 — this file exercises the agent-turn path only, never the old
       // bundled-llm routes, so none of these four are ever reached.

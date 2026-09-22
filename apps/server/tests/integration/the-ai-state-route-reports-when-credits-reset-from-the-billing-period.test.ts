@@ -74,6 +74,11 @@ function fakeRuntime(config: FakeConfig): {
     aiSourceSetAt: null,
     debtMicro: config.debtMicro ?? 0,
     autoTopUpEnabled: false,
+    legacyConsentAtMove: null,
+    legacyCapCentsAtMove: null,
+    hadStoredKeyAtMove: null,
+    movedToCreditsAt: null,
+    movedBackAt: null,
   };
   const accounts: AiCreditsAccounts = {
     ensureAccount: (accountId: string) => Promise.resolve({ ...record, accountId }),

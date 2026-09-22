@@ -122,6 +122,11 @@ function enforceRuntime(
           aiSourceSetAt: null,
           debtMicro: 0,
           autoTopUpEnabled: false,
+          legacyConsentAtMove: null,
+          legacyCapCentsAtMove: null,
+          hadStoredKeyAtMove: null,
+          movedToCreditsAt: null,
+          movedBackAt: null,
           ...state,
         });
       },

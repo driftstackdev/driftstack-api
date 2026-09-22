@@ -35,6 +35,7 @@ import type {
 } from '../db/credit-rate-card-repo.js';
 import type { DrizzleCreditPlanOverridesRepo } from '../db/credit-plan-overrides-repo.js';
 import type { CreditsRefresher } from './credit-grants.js';
+import type { CreditCutoverService } from './credit-cutover.js';
 import { METRIC_NAMES } from './metrics-registry.js';
 
 /**
@@ -202,6 +203,24 @@ export interface AiCreditsRuntime {
    * the same `creditGrants === null` guard bootstrap.ts already uses.
    */
   readonly admin?: AiCreditsAdminSurface;
+  /**
+   * S16 — the cutover and rollback surface `routes/admin-ai-credits.ts`'s two
+   * new routes need: plan (dry run), run (execute) and roll one account back.
+   * OPTIONAL ON THE TYPE ONLY, same reason as {@link AiCreditsStateReads} and
+   * {@link admin}: a NEW bundle rather than widening either of those, so
+   * every fixture built before S16 keeps typechecking unmodified. A real
+   * deployment populates this alongside `admin`, gated on the same
+   * `creditGrants === null` check bootstrap.ts already uses for it.
+   */
+  readonly cutover?: AiCreditsCutoverSurface;
+}
+
+/** S16 — see {@link AiCreditsRuntime.cutover}. */
+export interface AiCreditsCutoverSurface {
+  planCutover: CreditCutoverService['planCutover'];
+  runCutover: CreditCutoverService['runCutover'];
+  previewRollback: CreditCutoverService['previewRollback'];
+  rollbackAccount: CreditCutoverService['rollbackAccount'];
 }
 
 /**

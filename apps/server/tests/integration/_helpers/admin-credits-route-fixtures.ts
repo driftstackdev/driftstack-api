@@ -15,7 +15,9 @@
 import type postgres from 'postgres';
 import { DrizzleCreditPlanOverridesRepo } from '../../../src/db/credit-plan-overrides-repo.js';
 import { DrizzleCreditRateCardRepo } from '../../../src/db/credit-rate-card-repo.js';
+import { DrizzleCreditCutoverRepo } from '../../../src/db/credit-cutover-repo.js';
 import { CreditGrantsService } from '../../../src/services/credit-grants.js';
+import { CreditCutoverService } from '../../../src/services/credit-cutover.js';
 import type { AiCreditsRuntime } from '../../../src/services/ai-credits-runtime.js';
 import type { AiCreditsReportReader } from '../../../src/db/ai-credits-report-repo.js';
 import { reservationsHarness, type ReservationsHarness } from './credit-reservation-fixtures.js';
@@ -25,6 +27,9 @@ export interface AdminCreditsHarness {
   readonly overrides: DrizzleCreditPlanOverridesRepo;
   readonly rateCardsWriter: DrizzleCreditRateCardRepo;
   readonly grants: CreditGrantsService;
+  /** S16 */
+  readonly cutoverRepo: DrizzleCreditCutoverRepo;
+  readonly cutover: CreditCutoverService;
   readonly aiCredits: AiCreditsRuntime;
 }
 
@@ -39,13 +44,27 @@ function unusedReport(): AiCreditsReportReader {
 }
 
 /** The real repos + a real `AiCreditsRuntime` (mode `enforce`, `.admin` and
- *  `.stateReads` both populated) over one connection pool on `url`. */
-export function adminCreditsHarness(url: string): AdminCreditsHarness {
+ *  `.stateReads` both populated) over one connection pool on `url`.
+ *  `internalEmails` (default empty) is C0's own predicate — see
+ *  `services/credit-cutover.ts`. */
+export function adminCreditsHarness(
+  url: string,
+  opts: { internalEmails?: ReadonlySet<string> } = {},
+): AdminCreditsHarness {
   const base = reservationsHarness(url, { refresher: 'real' });
   const { database, ledger, windows, reservations } = base;
   const overrides = new DrizzleCreditPlanOverridesRepo(database);
   const rateCardsWriter = new DrizzleCreditRateCardRepo(database);
   const grants = new CreditGrantsService({ ledger, windows });
+  const cutoverRepo = new DrizzleCreditCutoverRepo(database);
+  const cutover = new CreditCutoverService({
+    ledger,
+    windows,
+    cutoverRepo,
+    creditGrants: grants,
+    pool: database.db,
+    internalEmails: opts.internalEmails ?? new Set(),
+  });
 
   const aiCredits: AiCreditsRuntime = {
     mode: 'enforce',
@@ -80,9 +99,15 @@ export function adminCreditsHarness(url: string): AdminCreditsHarness {
       rateCards: rateCardsWriter,
       refreshCredits: grants.refreshCredits.bind(grants),
     },
+    cutover: {
+      planCutover: cutover.planCutover.bind(cutover),
+      runCutover: cutover.runCutover.bind(cutover),
+      previewRollback: cutover.previewRollback.bind(cutover),
+      rollbackAccount: cutover.rollbackAccount.bind(cutover),
+    },
   };
 
-  return { base, overrides, rateCardsWriter, grants, aiCredits };
+  return { base, overrides, rateCardsWriter, grants, cutoverRepo, cutover, aiCredits };
 }
 
 export { type ReservationsHarness };

@@ -122,6 +122,16 @@ const EXEMPT: ReadonlyMap<string, string> = new Map([
     'POST /v1/admin/credit-rate-cards/{}/withdraw',
     'owner-only; and the published spec may not mention AI credits before launch',
   ],
+  // S16 — the per-account cutover and rollback. Staff panel only, same gate
+  // as every route above except the two rate-card mutations.
+  [
+    'POST /v1/admin/ai-credits/cutover',
+    'staff panel only; and the published spec may not mention AI credits before launch',
+  ],
+  [
+    'POST /v1/admin/ai-credits/rollback',
+    'staff panel only; and the published spec may not mention AI credits before launch',
+  ],
   [
     'GET /v1/account/me/ai',
     'dark until launch; the published spec may not mention AI credits before launch',

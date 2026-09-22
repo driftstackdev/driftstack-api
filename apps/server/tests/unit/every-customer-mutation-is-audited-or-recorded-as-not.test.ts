@@ -217,7 +217,9 @@ describe('W-13 every customer mutation is audited, or recorded as not', () => {
     // adjustments, PUT+DELETE .../ai-plan-override, POST /v1/admin/credit-
     // rate-cards, POST .../:version/withdraw); see route-mutation-ratelimit-
     // coverage-invariant.test.ts's own count of the same five.
-    expect(admin.length, 'admin mutating routes').toBe(38);
+    // S16 — 40 since two more: POST /v1/admin/ai-credits/cutover and POST
+    // /v1/admin/ai-credits/rollback.
+    expect(admin.length, 'admin mutating routes').toBe(40);
     expect(customerMutations().length, 'customer mutating routes').toBeGreaterThan(80);
   });
 

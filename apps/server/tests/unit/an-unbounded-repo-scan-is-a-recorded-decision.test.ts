@@ -96,6 +96,15 @@ const UNBOUNDED_SCANS = new Map<string, string>([
     'CUSTOMERS — every active account, once per nightly tick',
   ],
   [
+    'credit-cutover-repo.ts:listCohortAccountIds',
+    'CUSTOMERS — `lower(accounts.email) IN (...)` has no matching index (`accounts_email_unique` ' +
+      'is on the plain column), so Postgres scans every account row to find the ones the internal-' +
+      "emails set names; the RESULT is tiny (the deployment's own staff roster) but the SCAN cost " +
+      'is a property of total account count, same as the census query beside it (0128/S11) that ' +
+      'this table shares its predicate with. Unlike the nightly-tick entry above, this runs only ' +
+      'on an explicit staff-initiated C0 cutover, never on a schedule.',
+  ],
+  [
     'credit-rate-card-repo.ts:listAll',
     'operator — one row per PUBLISHED rate card (S15). A card is published rarely, by the owner ' +
       'alone, through the 30-day-notice admin route; the table is bounded by that cadence the same ' +
@@ -241,8 +250,13 @@ describe('an unbounded repo scan is a recorded decision', () => {
     // V-1591 — was FOUR. audit-archive-repo.ts:selectArchivableRows left the
     // list by gaining an optional row cap that the scheduled sweep always
     // passes, so its read is a LIMITed prefix rather than the whole window.
+    // S16 — back to FOUR: credit-cutover-repo.ts:listCohortAccountIds joins it
+    // (the `lower(email) IN (...)` scan has no matching index, so its cost is
+    // total account count, same table the census query beside it shares its
+    // predicate with — see its own entry above for the full reasoning).
     expect(byCustomers, 'scans whose size is customer activity:').toEqual([
       'cost-nightly-accounts-provider.ts:listAllAccountIds',
+      'credit-cutover-repo.ts:listCohortAccountIds',
       'status-subscribers-repo.ts:listConfirmed',
       'status-subscribers-repo.ts:listPurgeCandidates',
     ]);

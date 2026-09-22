@@ -267,8 +267,10 @@ import { DrizzleCreditWindowsRepo } from '../db/credit-windows-repo.js';
 import { DrizzleCreditRateCardRepo } from '../db/credit-rate-card-repo.js';
 import { DrizzleCreditReservationsRepo } from '../db/credit-reservations-repo.js';
 import { DrizzleCreditInvariantAuditRepo } from '../db/credit-invariant-audit-repo.js';
+import { DrizzleCreditCutoverRepo } from '../db/credit-cutover-repo.js';
 import { CreditGrantsService, creditGrantsRun } from '../services/credit-grants.js';
 import { CreditReservationsService } from '../services/credit-reservations.js';
+import { CreditCutoverService } from '../services/credit-cutover.js';
 import { DrizzleAiCreditsReportRepo } from '../db/ai-credits-report-repo.js';
 import { aiCreditsCounters, type AiCreditsRuntime } from '../services/ai-credits-runtime.js';
 import {
@@ -1072,6 +1074,10 @@ export async function createProductionDeps(
   // is stateless, so two instances would behave identically, but one is the
   // fewer thing to keep in sync).
   const creditRateCardRepo = creditGrants === null ? null : new DrizzleCreditRateCardRepo(dbHandle);
+  // S16 — the `accounts`-table half of the cutover/rollback (tier, status,
+  // legacy consent+cap, whether a key is stored, the C0 cohort listing).
+  // Same guard as every other credits-mode-off local above.
+  const creditCutoverRepo = creditGrants === null ? null : new DrizzleCreditCutoverRepo(dbHandle);
   // S11 — the two counters §8's shadow exit criteria are read from. Registered
   // ONLY when the mode is shadow or enforce, on the same value everything else
   // credits-related hangs off: a deployment running `off` must not render a
@@ -1216,6 +1222,26 @@ export async function createProductionDeps(
                   rateCards: creditRateCardRepo,
                   refreshCredits: creditGrants.refreshCredits.bind(creditGrants),
                 },
+          // S16 — the cutover/rollback surface `routes/admin-ai-credits.ts`'s
+          // two new routes need. `creditCutoverRepo` is set by the same
+          // `creditGrants === null` guard as every other local above;
+          // re-checked here so TypeScript narrows it (and `creditGrants`)
+          // instead of requiring a cast, same as `admin` just above.
+          cutover:
+            creditCutoverRepo === null || creditGrants === null
+              ? undefined
+              : new CreditCutoverService({
+                  ledger: creditLedgerRepo,
+                  windows: creditWindowsRepo,
+                  cutoverRepo: creditCutoverRepo,
+                  creditGrants,
+                  pool: dbHandle.db,
+                  // The C0 cohort's own predicate — see the census's identical
+                  // comment on the same set (`report: new
+                  // DrizzleAiCreditsReportRepo(dbHandle, effectiveStaffEmails)`
+                  // just above): "internal" is configuration, not a column.
+                  internalEmails: effectiveStaffEmails,
+                }),
         };
 
   // Webhooks first so sessions + api-keys can wire it.
