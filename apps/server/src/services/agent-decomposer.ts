@@ -367,16 +367,25 @@ export type DecomposeResult =
        * `plannerReplyRetried` — the adapter re-asked once, inside THIS call,
        * because the first reply was not truncated and could not be read (or was
        * truncated and the model family carries a raised ceiling for the retry).
-       * Absent/false when the first reply was used as-is.
+       * Absent/false when the first reply was used as-is. The SAME marker rides
+       * a thrown error when the re-ask was made and the call still failed.
        *
-       * `plannerReplyRetryRecovered` (below) — the retry produced the reply this
-       * result was built from. Only ever true alongside this field.
+       * `plannerReplyRetryRecovered` (below) — the retry produced a USABLE reply,
+       * the plan, question or refusal this result was built from. Only ever true
+       * alongside this field. ⛔ A PROVIDER SAFETY STOP ON THE RE-ASK IS NOT A
+       * RECOVERY: the result is still the refusal, retried and NOT recovered —
+       * the malformed reply was never recovered, the provider declined.
+       *
+       * ⛔ #16 — THE RE-ASK IS THE STEP'S ONLY ONE, AND IT IS A CALL. The runtime
+       * re-asks an unreadable planning reply itself
+       * (`planWithOneRetryOnMalformedReply` in `agent-runtime.ts`); when this
+       * marker says the adapter already did, the runtime does not re-ask again,
+       * and it counts the extra provider call against the turn's call caps. See
+       * {@link DecomposeArgs.mayRetryMalformedReply} for the other half.
        *
        * ⛔ ABSENT FOR EVERY OTHER DECOMPOSER (Claude, deterministic) and for the
-       * runtime's OWN outer retry (`planWithOneRetryOnMalformedReply` in
-       * `agent-runtime.ts`, a different, whole-call retry): a reader must never
-       * default either field, exactly like every other optional result member
-       * here.
+       * runtime's OWN outer retry: a reader must never default either field,
+       * exactly like every other optional result member here.
        */
       plannerReplyRetried?: boolean;
       /** See {@link DecomposeResult}'s `plannerReplyRetried` (the 'plan' arm). */
@@ -547,6 +556,30 @@ export interface DecomposeArgs {
    * promise for a different reason — it measures and never alters the turn (M3).
    */
   creditMeter?: AgentCreditMeter;
+  /**
+   * #16 — may an adapter that re-asks a malformed reply INSIDE its own call
+   * (the OpenAI-compatible adapter's P6 retry) spend that re-ask now?
+   *
+   * ⛔ ONE RE-ASK PER PLANNING STEP, WHICHEVER LAYER MAKES IT. The runtime
+   * re-asks an unreadable planning reply once itself; an adapter that re-asked
+   * as well stacked a second re-ask on it — four provider calls for one step,
+   * and every one of them outside the turn's call caps. So the runtime hands
+   * the adapter this gate, answers it from the SAME bounds its own re-ask is
+   * held to (the planner-call cap, the model-call cap with the read-back's call
+   * reserved, the wall clock, the hard stop, Stop and control authority), and
+   * answers `false` on the runtime's own re-ask, so a step never gets two.
+   * When the adapter reports the re-ask was made (`plannerReplyRetried: true`,
+   * on the result or on the thrown error) the runtime re-asks nothing more and
+   * counts the extra call.
+   *
+   * An adapter awaits it immediately before the re-ask, after deciding one is
+   * worth making. `false`, or a throw, means no re-ask: the first failure is
+   * thrown unretried. ABSENT means the adapter's own one-retry bound alone —
+   * the evaluation harness calls the adapter directly and has no turn to bound
+   * it. An adapter that never re-asks inside a call (Claude, deterministic)
+   * ignores it.
+   */
+  mayRetryMalformedReply?: () => boolean | Promise<boolean>;
 }
 
 /**
@@ -659,10 +692,18 @@ export interface AnswerResult {
    *  records these, exactly like a decompose turn. */
   tokensConsumed: number;
   usage?: DecomposeUsage;
-  /** See {@link DecomposeResult}'s `plannerReplyRetried` (the 'plan' arm) — the
-   *  same one-bounded-retry mirrored onto the read-back call. */
+  /**
+   * ⛔ #16 — SET BY NOTHING: THE READ-BACK CALL IS NEVER RE-ASKED. The runtime
+   * decided that at the read-back's own catch (a failed answer falls back to
+   * the plan result), and the OpenAI-compatible adapter's answer retry was
+   * removed rather than counted: runs 22 and 30 made 280 answer calls on the
+   * family it was built for, and none came back unusable. The runtime does not
+   * read these. They stay only because the evaluation harness
+   * (`tests/eval/_lib/live-runner.ts`) still reads them; remove the three
+   * together.
+   */
   plannerReplyRetried?: boolean;
-  /** See {@link DecomposeResult}'s `plannerReplyRetried` (the 'plan' arm). */
+  /** See {@link AnswerResult.plannerReplyRetried}: set by nothing. */
   plannerReplyRetryRecovered?: boolean;
 }
 

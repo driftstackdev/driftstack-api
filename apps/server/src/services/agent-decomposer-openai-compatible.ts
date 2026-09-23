@@ -31,14 +31,23 @@
 //  · the authority fence before every attempt, and the caller's Stop signal
 //    honoured throughout.
 //
-// P6 — WHAT IS NOT MIRRORED FROM THE CLAUDE ADAPTER: a malformed reply gets ONE
-// bounded retry, the same messages plus a fixed corrective line, INSIDE this
-// call — see `decompose` / `answerFromObservation`. It exists for THIS family:
-// the bake-off (run 22) measured 6 malformed replies in 170 safety trials on
-// the routed GPT family, half of them a reply cut off at the output ceiling
-// because this family's reasoning spends the same budget the reply does — see
+// P6 — WHAT IS NOT MIRRORED FROM THE CLAUDE ADAPTER: a malformed PLAN reply gets
+// ONE bounded retry, the same messages plus a fixed corrective line, INSIDE this
+// call — see `decompose`. It exists for THIS family: the bake-off (run 22)
+// measured 6 malformed replies in 170 safety trials on the routed GPT family,
+// half of them a reply cut off at the output ceiling because this family's
+// reasoning spends the same budget the reply does — see
 // `ChatMaxCompletionTokensCeiling`. The Claude adapter is untouched; its own
 // numbers did not show this failure mode.
+//
+// ⛔ #16 — IT IS THE STEP'S ONE RE-ASK, ASKED OF THE TURN FIRST. The runtime
+// re-asks an unreadable planning reply itself, and the two stacked made four
+// calls for one step, outside the turn's call caps. So the retry asks
+// `DecomposeArgs.mayRetryMalformedReply` before it is spent, and marks the
+// result — or the error — `plannerReplyRetried`, which tells the runtime not to
+// re-ask again and to count the call. The READ-BACK call is never re-asked:
+// runs 22 and 30 made 280 answer calls on this family and none was unusable,
+// and the runtime already falls back to the plan result when one is.
 
 import type { AgentCreditMeter } from './agent-credit-meter.js';
 import {
@@ -109,11 +118,15 @@ export type ChatMaxTokensParam = 'max_completion_tokens' | 'max_tokens';
  *
  * Absent member ⇒ that call kind is never retried on truncation: re-asking at
  * the SAME ceiling would truncate again, so the adapter skips the wasted call
- * and the existing truncation error stands (see `decompose` /
- * `answerFromObservation`).
+ * and the existing truncation error stands (see `decompose`).
  */
 export interface ChatMaxCompletionTokensCeiling {
   plan?: number;
+  /**
+   * ⛔ NOT READ (#16): the read-back call is never re-asked, so it has no retry
+   * to raise the ceiling for. Kept only because the provider table
+   * (`agent-planner-providers.ts`) still sets it; remove the two together.
+   */
   answer?: number;
 }
 
@@ -391,22 +404,44 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
         // `interpretPlanText`) stands unchanged.
         throw unusableReply(firstError, this.target.label, { retried: false });
       }
+      // #16 — THE TURN'S BOUNDS, ASKED BEFORE THE RE-ASK IS SPENT. It is the
+      // planning step's one re-ask, and a call the turn's caps must have room
+      // for; the runtime answers no when they do not, or when it has already
+      // re-asked this step itself. A no leaves the first failure standing,
+      // unretried — exactly what the runtime would then do with it.
+      if (!(await reAskAdmitted(args.mayRetryMalformedReply))) {
+        throw unusableReply(firstError, this.target.label, { retried: false });
+      }
       // S10/§4.5 — THE RETRY IS A SECOND BILLABLE ATTEMPT, admitted exactly
       // like the first: an ENFORCE meter that would refuse a fresh call
       // refuses this one too, before it is sent.
       refuseWhatCannotBeMetered(args.creditMeter);
-      reply = await callPlan(
-        [...messages, { role: 'user', content: malformedReplyRetryLine(errorReason(firstError)) }],
-        truncated ? ceiling! : PLAN_MAX_COMPLETION_TOKENS,
-      );
-      tokensConsumed += this.accountFor(reply);
+      try {
+        reply = await callPlan(
+          [
+            ...messages,
+            { role: 'user', content: malformedReplyRetryLine(errorReason(firstError)) },
+          ],
+          truncated ? ceiling! : PLAN_MAX_COMPLETION_TOKENS,
+        );
+        tokensConsumed += this.accountFor(reply);
+      } catch (retryError) {
+        // #16/#18 — the re-ask was made and this call ends without a reply:
+        // still the step's one re-ask, and still a call the turn must count.
+        // Unmarked, a failure that reads as malformed (a reply with no usage
+        // block) would buy the runtime's re-ask on top of this one.
+        throw markReAsked(retryError);
+      }
       if (reply.refusal.length > 0 || reply.finishReason === 'content_filter') {
+        // #18 — RETRIED, NOT RECOVERED. The refusal the customer is owed is
+        // still the result; but the malformed reply was never recovered — the
+        // provider declined — so it must not count as a retry that worked.
         return {
           kind: 'refuse',
           refuseReason: PROVIDER_SAFETY_REFUSAL,
           tokensConsumed,
           plannerReplyRetried: true,
-          plannerReplyRetryRecovered: true,
+          plannerReplyRetryRecovered: false,
         };
       }
       try {
@@ -441,71 +476,34 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
       { role: 'system', content: prompt.system },
       { role: 'user', content: prompt.userText },
     ];
-    const callAnswer = (
-      msgs: ReadonlyArray<{ role: string; content: string }>,
-      maxTokens: number,
-    ): Promise<ChatReply> =>
-      this.callConstrained(
-        (allowed) =>
-          this.requestBody(msgs, maxTokens, 'answer_reply', ANSWER_REPLY_SCHEMA, allowed),
-        args.shouldContinue,
-        args.signal,
-      );
-    let reply = await callAnswer(messages, ANSWER_MAX_COMPLETION_TOKENS);
-    let tokensConsumed = this.accountFor(reply);
-    // A refusal is never retried as a malformed reply — see `decompose`. It
-    // is checked BEFORE the retry-eligible parse below, same as there.
+    // ⛔ #16 — ONE CALL, NEVER RE-ASKED. An unusable read-back is thrown, and
+    // the runtime answers the customer from the plan result with a sentence
+    // saying the answer half did not complete (see the note at the read-back's
+    // own catch in `agent-runtime.ts`). A re-ask here would be a second paid
+    // call on a turn whose work is done, for a failure runs 22 and 30 never
+    // saw on this family in 280 answer calls.
+    const reply = await this.callConstrained(
+      (allowed) =>
+        this.requestBody(
+          messages,
+          ANSWER_MAX_COMPLETION_TOKENS,
+          'answer_reply',
+          ANSWER_REPLY_SCHEMA,
+          allowed,
+        ),
+      args.shouldContinue,
+      args.signal,
+    );
+    const tokensConsumed = this.accountFor(reply);
     if (reply.refusal.length > 0 || reply.finishReason === 'content_filter') {
-      throw unusableReply(
-        new Error(`${this.target.label} answer response was a refusal`),
-        this.target.label,
-        { retried: false },
-      );
+      throw new Error(`${this.target.label} answer response was a refusal`);
     }
-    try {
-      const answer = interpretAnswerText(reply.text, {
-        label: this.target.label,
-        truncated: reply.finishReason === 'length',
-        nullMeansAbsent: this.sentStrict(),
-      });
-      return { answer, tokensConsumed };
-    } catch (firstError) {
-      const truncated = reply.finishReason === 'length';
-      const ceiling = this.target.maxCompletionTokensCeiling?.answer;
-      if (truncated && ceiling === undefined) {
-        throw unusableReply(firstError, this.target.label, { retried: false });
-      }
-      refuseWhatCannotBeMetered(args.creditMeter);
-      reply = await callAnswer(
-        [...messages, { role: 'user', content: malformedReplyRetryLine(errorReason(firstError)) }],
-        truncated ? ceiling! : ANSWER_MAX_COMPLETION_TOKENS,
-      );
-      tokensConsumed += this.accountFor(reply);
-      if (reply.refusal.length > 0 || reply.finishReason === 'content_filter') {
-        throw unusableReply(
-          new Error(`${this.target.label} answer response was a refusal`),
-          this.target.label,
-          { retried: true },
-        );
-      }
-      try {
-        const answer = interpretAnswerText(reply.text, {
-          label: this.target.label,
-          truncated: reply.finishReason === 'length',
-          nullMeansAbsent: this.sentStrict(),
-        });
-        return {
-          answer,
-          tokensConsumed,
-          plannerReplyRetried: true,
-          plannerReplyRetryRecovered: true,
-        };
-      } catch (secondError) {
-        throw unusableReply(combineMalformedReasons(firstError, secondError), this.target.label, {
-          retried: true,
-        });
-      }
-    }
+    const answer = interpretAnswerText(reply.text, {
+      label: this.target.label,
+      truncated: reply.finishReason === 'length',
+      nullMeansAbsent: this.sentStrict(),
+    });
+    return { answer, tokensConsumed };
   }
 
   /** Whether the schema that is sent now is the strict form. */
@@ -730,15 +728,18 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
  * Error with the same wording — which the runtime classifies exactly as it
  * classifies the Claude one — and the spend stays visible to the live eval's
  * meter, which reads it off the wire. Widening `decomposerKind` is the change
- * that would let it settle properly.
+ * that would let it settle properly, and it is not this file's alone: the
+ * message response's public usage block (`routes/agent-sessions.ts`, the
+ * OpenAPI enum and the SDKs) and the usage recorder's audit action
+ * (`db/agent-decomposer-usage-recorder.ts`) both branch on the two kinds.
  *
- * `retry.retried` marks whether the ONE bounded retry (see `decompose` /
- * `answerFromObservation`) was actually sent before this error was thrown —
- * `plannerReplyRetried` on the thrown Error itself, the failure-path mirror of
- * the SAME field on a successful `DecomposeResult` / `AnswerResult`, for a test
- * (or an operator) to read off a call that never produced a usable reply.
- * `plannerReplyRetryRecovered` is always `false` here: this function is only
- * ever called for a reply nothing could use.
+ * `retry.retried` marks whether the ONE bounded retry (see `decompose`) was
+ * actually made before this error was thrown — `plannerReplyRetried` on the
+ * thrown Error itself, the failure-path mirror of the SAME field on a
+ * successful `DecomposeResult`. The runtime reads it (#16): a marked error is
+ * not re-asked again, and its extra call is counted against the turn's caps and
+ * on its retry counters. `plannerReplyRetryRecovered` is always `false` here:
+ * this function is only ever called for a reply nothing could use.
  */
 function unusableReply(error: unknown, label: string, retry: { retried: boolean }): Error {
   const err = error instanceof Error ? error : new Error(`${label} response content was invalid`);
@@ -746,6 +747,36 @@ function unusableReply(error: unknown, label: string, retry: { retried: boolean 
     plannerReplyRetried: retry.retried,
     plannerReplyRetryRecovered: false,
   });
+}
+
+/**
+ * #16 — whatever ended the call AFTER the re-ask was made (a transport failure,
+ * a reply with no usage block, a Stop), marked as the re-asked call it was, so
+ * the runtime neither re-asks the step a second time nor loses the call from
+ * its counts. The error's own type and wording are kept: the runtime still
+ * classifies it exactly as it would have.
+ */
+function markReAsked(error: unknown): unknown {
+  if (!(error instanceof Error)) return error;
+  return Object.assign(error, {
+    plannerReplyRetried: true,
+    plannerReplyRetryRecovered: false,
+  });
+}
+
+/**
+ * #16 — the turn's answer to "may the re-ask be spent now". Absent ⇒ yes: a
+ * caller with no turn (the evaluation harness) is bounded by the adapter's own
+ * one retry. A gate that throws is a no — a store that cannot answer does not
+ * authorise a paid call, the same rule the runtime's own gate follows.
+ */
+async function reAskAdmitted(gate: DecomposeArgs['mayRetryMalformedReply']): Promise<boolean> {
+  if (gate === undefined) return true;
+  try {
+    return (await gate()) === true;
+  } catch {
+    return false;
+  }
 }
 
 /**

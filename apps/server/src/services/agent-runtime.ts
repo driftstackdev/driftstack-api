@@ -427,8 +427,10 @@ export type RunTurnResult =
         segments: number;
         plannerCalls: number;
         replans: number;
-        /** P1 — planning calls whose reply was unreadable and was asked again.
-         *  Absent when none were. */
+        /** P1 — planning calls whose reply was unreadable and was asked again,
+         *  by the runtime or (#16) inside the adapter's own call — at most one
+         *  per planning step, each counted in `plannerCalls`. Absent when none
+         *  were. */
         plannerRetries?: number;
         finalStatus?: PlanStatus;
         stopped?: TurnLoopStopReason;
@@ -2541,10 +2543,10 @@ export class AgentRuntime {
    * P6 — this turn's OpenAI-compatible-adapter reply retries, counted onto
    * `run.actionPaths` the same way {@link withPlanningReadModeCount} counts
    * planning-read mode: `retried`/`recovered` are the turn's RUNNING TOTALS at
-   * the call site (every decompose/replan/answer call folded in so far), so
-   * this is a SET, not an ADD — safe to call again after a later segment or
-   * the read-back without double-counting. A no-op while neither call site has
-   * retried anything yet.
+   * the call site (every decompose/replan call folded in so far — the read-back
+   * is never re-asked, #16), so this is a SET, not an ADD — safe to call again
+   * after a later segment or once the loop has ended without double-counting.
+   * A no-op while no call has retried anything yet.
    */
   private withPlannerReplyRetryCounts(
     run: ExecutorRunResult,
@@ -2840,6 +2842,10 @@ export class AgentRuntime {
    * loop's own guard does (`MAX_MODEL_CALLS_PER_TURN - 1`). A retry that ate the
    * read-back's call would turn "the plan was unreadable" into "the customer got
    * no answer", which is a worse trade than failing the turn.
+   *
+   * ⛔ #16 — AND IT ANSWERS AN ADAPTER'S RE-ASK TOO. The same gate is handed to
+   * the decomposer as `mayRetryMalformedReply`, so a re-ask made inside the call
+   * meets exactly these bounds, asked at the moment it is about to be spent.
    */
   private async mayRetryPlannerReply(gate: {
     turnStartedAtMs: number;
@@ -3281,6 +3287,9 @@ export class AgentRuntime {
      * P1 — planning calls whose reply nobody could read and which were asked
      * again. Counted against the turn's own planner/model caps below, and
      * reported on the turn's `loop` line so a retried turn is visible as one.
+     * #16 — EVERY re-ask, whichever layer made it: the runtime's own
+     * (`planWithOneRetryOnMalformedReply`) or the adapter's inside its call.
+     * Each is a provider call, and there is at most one per planning step.
      */
     let plannerRetries = 0;
     /**
@@ -3289,9 +3298,11 @@ export class AgentRuntime {
      * (`AgentActionPathCounts.plannerReplyRetried` /
      * `.plannerReplyRetryRecovered`) the same way `planningReadTrace.length`
      * is: a running total, set (not added) into `executorResult` wherever it
-     * is next available. Distinct from `plannerRetries` above, which counts
-     * THIS runtime's own outer, whole-call retry
-     * (`planWithOneRetryOnMalformedReply`) on the `loop` line.
+     * is next available — and, #18, once more after the loop, however it
+     * ended, so a count taken on the last planning call is never dropped.
+     * The subset of `plannerRetries` above that the adapter made; counted on a
+     * thrown error as well as on a returned result (#18: a re-ask that also
+     * failed is still a re-ask).
      */
     let plannerReplyRetried = 0;
     let plannerReplyRetryRecovered = 0;
@@ -3425,7 +3436,7 @@ export class AgentRuntime {
         // turn's `loop` line instead (`plannerRetries`) — see the note there for
         // why it is not a metric.
         const planned = await planWithOneRetryOnMalformedReply(
-          () =>
+          (mayRetryMalformedReply) =>
             this.deps.decomposer.decompose({
               task: args.userMessage,
               archetype: turnArchetype,
@@ -3446,6 +3457,9 @@ export class AgentRuntime {
               // S10/§4.5 — the adapter asks this before every billable attempt,
               // the runtime's one re-ask of a malformed reply included.
               ...(args.creditMeter !== undefined ? { creditMeter: args.creditMeter } : {}),
+              // #16 — the step's one re-ask, if the adapter makes it, meets the
+              // same bounds as the runtime's own.
+              mayRetryMalformedReply,
             }),
           () =>
             this.mayRetryPlannerReply({
@@ -3470,10 +3484,15 @@ export class AgentRuntime {
               err: discarded,
             });
           },
+          (recovered) => {
+            // #16 — the adapter's re-ask is a call like the runtime's own:
+            // `modelCalls`/`plannerCalls` below start from `plannerRetries`.
+            plannerRetries += 1;
+            plannerReplyRetried += 1;
+            if (recovered) plannerReplyRetryRecovered += 1;
+          },
         );
         decomposed = planned.result;
-        if (decomposed.plannerReplyRetried === true) plannerReplyRetried += 1;
-        if (decomposed.plannerReplyRetryRecovered === true) plannerReplyRetryRecovered += 1;
       } catch (err) {
         if (err instanceof AgentDecomposerContinuationDeniedError) {
           return this.interruptedTurnResult(session.id, sessionWithUser, 'decompose');
@@ -4208,7 +4227,7 @@ export class AgentRuntime {
         // Every bound is re-asked with the counters as they stand, so a retry
         // here can never take the last planner call or the read-back's.
         const replannedOnce = await planWithOneRetryOnMalformedReply(
-          () =>
+          (mayRetryMalformedReply) =>
             this.deps.decomposer.decompose({
               task: args.userMessage,
               archetype: turnArchetype,
@@ -4225,6 +4244,7 @@ export class AgentRuntime {
               shouldContinue: authorityMayContinue,
               signal,
               ...(args.creditMeter !== undefined ? { creditMeter: args.creditMeter } : {}),
+              mayRetryMalformedReply,
             }),
           () =>
             this.mayRetryPlannerReply({
@@ -4251,10 +4271,18 @@ export class AgentRuntime {
               err: discarded,
             });
           },
+          (recovered) => {
+            // #16 — the adapter's re-ask inside the call: the same kind of call
+            // as the discarded attempt above, counted the same way. The call it
+            // re-asked is counted where every re-plan call is, below.
+            modelCalls += 1;
+            plannerCalls += 1;
+            plannerRetries += 1;
+            plannerReplyRetried += 1;
+            if (recovered) plannerReplyRetryRecovered += 1;
+          },
         );
         replanned = replannedOnce.result;
-        if (replanned.plannerReplyRetried === true) plannerReplyRetried += 1;
-        if (replanned.plannerReplyRetryRecovered === true) plannerReplyRetryRecovered += 1;
       } catch (err) {
         // S10/§4.5 — THE TASK RAN OUT OF THE AI CREDITS SET ASIDE FOR IT, part
         // way through. The steps that ran stand and are published as always; what
@@ -4321,6 +4349,13 @@ export class AgentRuntime {
             ).catch(() => null);
             if (debitedAfterSettled !== null) postDebitSession = debitedAfterSettled;
           }
+        } else if (plannerReplyWasMalformed(err)) {
+          // #16 — THE PROVIDER ANSWERED, SO IT WAS A CALL, even though this lane
+          // carries no accounting evidence to settle it with (the chat lane's
+          // plain error). Uncounted, the read-back below would be admitted
+          // against a call total that is short by exactly this call.
+          modelCalls += 1;
+          plannerCalls += 1;
         }
         // Another segment is an improvement on stopping, never a new way to fail
         // a turn whose steps already ran. Any decomposer error ends the loop and
@@ -4521,6 +4556,17 @@ export class AgentRuntime {
         break;
       }
     }
+    // #18 — THE LOOP'S LAST PLANNING CALL IS COUNTED WHEREVER THE LOOP ENDED.
+    // The counts above are written onto the turn's result only after a segment
+    // runs; a planning call whose re-ask was counted and that then ended the
+    // loop (nothing left to run, a question handed back, a failure, a Stop) had
+    // no later segment to carry it, and was dropped from the turn's line unless
+    // a read-back happened to follow. A SET, so writing it again is harmless.
+    executorResult = this.withPlannerReplyRetryCounts(
+      executorResult,
+      plannerReplyRetried,
+      plannerReplyRetryRecovered,
+    );
 
     if (
       executorResult.authorityLost === true ||
@@ -4829,16 +4875,6 @@ export class AgentRuntime {
             ...(args.creditMeter !== undefined ? { creditMeter: args.creditMeter } : {}),
           });
           answerInFlight = false;
-          // P6 — the read-back is the LAST call this turn can retry a
-          // malformed reply on; fold its own count in before anything below
-          // reads `executorResult` again.
-          if (answer.plannerReplyRetried === true) plannerReplyRetried += 1;
-          if (answer.plannerReplyRetryRecovered === true) plannerReplyRetryRecovered += 1;
-          executorResult = this.withPlannerReplyRetryCounts(
-            executorResult,
-            plannerReplyRetried,
-            plannerReplyRetryRecovered,
-          );
           latestReadbackEvidence = {
             ...(answer.usage !== undefined ? { usage: answer.usage } : {}),
             ...(answer.tokensConsumed > 0 ? { tokensConsumed: answer.tokensConsumed } : {}),
@@ -4998,6 +5034,13 @@ export class AgentRuntime {
         // If the same reasoning ever does hold here — say the recovery is
         // removed, or measurement shows this class killing answers at the plan
         // call's rate — the seam to reuse is `planWithOneRetryOnMalformedReply`.
+        //
+        // ⛔ #16 — AND NO ADAPTER RE-ASKS IT EITHER. The OpenAI-compatible
+        // adapter used to, inside its call, where no cap here could see it; that
+        // retry was removed rather than counted. Measured: live runs 22 and 30
+        // made 280 read-back calls on the family it was built for, and not one
+        // came back unusable. So this catch is the only answer to a failed
+        // read-back, and one call is the most it costs.
         if (error instanceof AgentDecomposerSettledError) {
           latestReadbackEvidence = {
             usage: error.usage,
@@ -5204,24 +5247,57 @@ export class AgentRuntime {
  *
  * ⛔ A SECOND FAILURE THROWS THE SECOND ERROR, so the turn ends exactly as it
  * ends today, on the reply that actually ended it.
+ *
+ * ⛔ #16 — ONE RE-ASK PER PLANNING STEP, WHICHEVER LAYER MAKES IT. An adapter
+ * may re-ask inside its own call (the OpenAI-compatible adapter does); stacked
+ * on this one that was four provider calls for one step, and the turn counted
+ * one. So the step's re-ask is shared: the adapter is handed `gate` as
+ * `mayRetryMalformedReply` on the FIRST attempt only (the runtime's own re-ask
+ * hands it a no), and when it reports the re-ask was made
+ * (`plannerReplyRetried: true` on the result or on the thrown error) nothing
+ * here re-asks again, and `onReaskedInsideCall` counts that call — every re-ask
+ * is a call, whoever made it.
  */
 async function planWithOneRetryOnMalformedReply(
-  decompose: () => Promise<DecomposeResult>,
+  decompose: (mayRetryMalformedReply: () => Promise<boolean>) => Promise<DecomposeResult>,
   gate: () => Promise<boolean>,
   onDiscardedReply: (err: unknown) => Promise<void>,
+  /** The adapter re-asked inside the call just made. `recovered` — the re-ask
+   *  produced the usable reply the step goes on with. */
+  onReaskedInsideCall: (recovered: boolean) => void,
 ): Promise<{ result: DecomposeResult; retries: number }> {
   let retries = 0;
+  const refused = (): Promise<boolean> => Promise.resolve(false);
   for (;;) {
     try {
-      return { result: await decompose(), retries };
+      const result = await decompose(retries === 0 ? gate : refused);
+      if (result.plannerReplyRetried === true) {
+        onReaskedInsideCall(result.plannerReplyRetryRecovered === true);
+      }
+      return { result, retries };
     } catch (err) {
-      if (retries >= MAX_MALFORMED_PLAN_RETRIES) throw err;
+      const reaskedInside = plannerReplyWasReaskedInsideCall(err);
+      if (reaskedInside) onReaskedInsideCall(false);
+      if (reaskedInside || retries >= MAX_MALFORMED_PLAN_RETRIES) throw err;
       if (!plannerReplyWasMalformed(err)) throw err;
       if (!(await gate())) throw err;
       await onDiscardedReply(err);
       retries += 1;
     }
   }
+}
+
+/**
+ * #16 — did the adapter already spend this planning step's re-ask inside the
+ * call that just threw? Read off the marker it leaves on the error; the SAME
+ * field a recovered result carries.
+ */
+function plannerReplyWasReaskedInsideCall(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { plannerReplyRetried?: unknown }).plannerReplyRetried === true
+  );
 }
 
 /**

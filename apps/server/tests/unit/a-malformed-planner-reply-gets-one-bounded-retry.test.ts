@@ -9,10 +9,12 @@
 // stand-in that speaks its wire — no key, no network, no other file's state.
 //
 // ⛔ NOT COVERED HERE: the RUNTIME's own separate, outer, whole-call retry
-// (`planWithOneRetryOnMalformedReply` in `agent-runtime.ts`) — untouched by
-// this slice, exercised by its own tests. This file is about the retry INSIDE
-// one `decompose()` / `answerFromObservation()` call: the same messages, plus
-// one fixed corrective line, at a raised ceiling when the family has one.
+// (`planWithOneRetryOnMalformedReply` in `agent-runtime.ts`) and how the two
+// layers share one re-ask per planning step — see
+// `a-planning-step-is-re-asked-once-in-total-and-the-re-ask-is-a-counted-call`.
+// This file is about the retry INSIDE one `decompose()` call: the same
+// messages, plus one fixed corrective line, at a raised ceiling when the family
+// has one. The read-back call (`answerFromObservation`) is never re-asked.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -198,23 +200,44 @@ describe('decompose() — a malformed plan reply', () => {
   });
 });
 
-describe('answerFromObservation() — the answer path mirrors the plan path', () => {
-  it('a malformed read-back reply followed by a well-formed one is used, retried and recovered', async () => {
+describe('answerFromObservation() — the read-back call is NEVER re-asked', () => {
+  // #16 — the runtime never retries a failed read-back (the plan result is the
+  // fallback; see the note at the read-back's own catch), and the adapter's own
+  // answer retry is removed rather than counted: runs 22 and 30 made 280 answer
+  // calls on the family it was built for, and none came back unusable.
+  it('a malformed read-back reply is thrown after ONE call, for the runtime’s fallback — even when a good one would follow', async () => {
     const { dec, log } = adapter([
       // Valid JSON, wrong shape — no `answer` string — so `interpretAnswerText`
       // actually throws rather than recovering plain prose as the answer (its
-      // OWN, separate fallback for hand-written JSON with a broken wrapper;
-      // unrelated to this retry and not what this test is about).
+      // OWN, separate fallback for hand-written JSON with a broken wrapper).
       { kind: 'reply', text: '{"kind":"answer","nope":true}' },
       { kind: 'reply', text: ANSWER_OK },
     ]);
+    const caught = await dec.answerFromObservation(answerArgs()).catch((err: unknown) => err);
+    expect(log.requests).toHaveLength(1);
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as { plannerReplyRetried?: boolean }).plannerReplyRetried).toBeUndefined();
+  });
+
+  it('a read-back cut off at the output ceiling is not re-asked either, even on a family with a raised answer ceiling', async () => {
+    const { dec, log } = adapter(
+      [
+        { kind: 'reply', text: '{"kind":"answer","answer":"Your IP', finishReason: 'length' },
+        { kind: 'reply', text: ANSWER_OK },
+      ],
+      { maxCompletionTokensCeiling: { plan: 20_000, answer: 9_000 } },
+    );
+    await expect(dec.answerFromObservation(answerArgs())).rejects.toThrow(/output limit/);
+    expect(log.requests).toHaveLength(1);
+    expect(log.requests[0]!.body.max_completion_tokens).toBe(
+      __TEST_ONLY__.ANSWER_MAX_COMPLETION_TOKENS,
+    );
+  });
+
+  it('⛔ NON-VACUITY: a well-formed read-back is used as-is', async () => {
+    const { dec, log } = adapter([{ kind: 'reply', text: ANSWER_OK }]);
     const result = await dec.answerFromObservation(answerArgs());
-    expect(log.requests).toHaveLength(2);
+    expect(log.requests).toHaveLength(1);
     expect(result.answer).toBe('Your IP address is 203.0.113.7.');
-    expect(result.plannerReplyRetried).toBe(true);
-    expect(result.plannerReplyRetryRecovered).toBe(true);
-    const second = log.requests[1]!.body.messages as Array<{ role: string; content: string }>;
-    expect(second[second.length - 1]!.role).toBe('user');
-    expect(second[second.length - 1]!.content).toContain('Your last reply could not be used');
   });
 });
