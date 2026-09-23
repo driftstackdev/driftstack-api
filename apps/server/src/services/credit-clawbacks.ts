@@ -1023,7 +1023,11 @@ function scaledUp(levelMicro: number, stillPaidBefore: number, stillPaidAfter: n
   return Number((scaled / MICRO_PER_CREDIT) * MICRO_PER_CREDIT);
 }
 
-const WINDOW_TARGET = /^window:([0-9a-f-]{36})(?::(.+))?$/;
+/** `window:<window uuid>` or `window:<window uuid>:<invoice or order>`. The uuid
+ *  is spelled 8-4-4-4-12, never 36 hex-or-dash characters (which admits 36
+ *  dashes — twelve-copies-of-the-id-parser-must-agree). */
+const WINDOW_TARGET =
+  /^window:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?::(.+))?$/;
 
 /** The window a clawback's target names. */
 function windowIdOf(targetKey: string): string | null {
