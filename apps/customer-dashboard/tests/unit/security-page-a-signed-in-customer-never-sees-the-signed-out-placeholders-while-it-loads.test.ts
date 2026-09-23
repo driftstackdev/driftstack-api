@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+// @ts-expect-error — jsdom ships no type declarations in this workspace.
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
 import { installDashboardDeadline } from './dashboard-test-runtime';
@@ -44,27 +45,22 @@ function setUpDom(token: string | null): {
   });
   const { window } = dom;
   const fetched: string[] = [];
-  // @ts-expect-error — jsdom global is loose
   if (typeof window.Response !== 'function') window.Response = Response;
   // Every request stays in flight: this is the moment between the reveal and
   // the first answer.
-  // @ts-expect-error — jsdom global is loose
   window.fetch = (input: string) => {
     fetched.push(String(input));
     return new Promise<Response>(() => {});
   };
   if (token !== null) window.localStorage.setItem('ds_web_session_token', token);
   let hydrated = 0;
-  // @ts-expect-error — injected by DashboardLayout
   window.dashboardHydrated = () => {
     hydrated += 1;
   };
-  // @ts-expect-error — injected by DashboardLayout
   window.driftstackConfirm = () => Promise.resolve(true);
   const pageScript = scriptBodies.find((s) => s.includes('data-page="security"'));
   if (!pageScript) throw new Error('security inline script not found');
   installDashboardDeadline(window);
-  // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
   return { window: window as JSDOM['window'], hydratedCount: () => hydrated, fetched };
 }
