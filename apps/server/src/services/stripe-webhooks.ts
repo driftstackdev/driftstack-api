@@ -50,7 +50,7 @@ import {
 import type { AccountLifecycleService } from './account-lifecycle.js';
 import type { AuthCache } from './auth-cache.js';
 import { refreshCreditsAfter, type CreditsRefresher } from './credit-grants.js';
-import type { CreditClawbacks } from './credit-clawbacks.js';
+import { isCreditReversalAwaitingPayment, type CreditClawbacks } from './credit-clawbacks.js';
 
 /**
  * Minimal parsed-Stripe-event shape. We don't depend on the `stripe`
@@ -540,25 +540,25 @@ export class StripeWebhooksService {
           await this.handleInvoicePaymentFailed(event);
           return 'handled';
         case 'charge.refunded':
-          // S17 — a refund takes back the AI credits the payment bought, in the
-          // share refunded, measured against the largest cumulative already
-          // seen (the event's `amount_refunded` is cumulative and deliveries
-          // repeat). Logged and nothing more while AI credits are off.
-          await this.handleChargeReversal(event, 'refund');
-          return 'handled';
+          // S17 — a refund takes back the AI credits the payment no longer
+          // pays for, measured on the cumulative `amount_refunded` (deliveries
+          // repeat and arrive out of order). Logged and nothing more while AI
+          // credits are off. A failure is recorded as an `error:` outcome.
+          return await this.handleChargeReversal(event, 'refund');
         case 'charge.dispute.created':
           // S17 — a dispute is a reversal of the disputed amount until it is
-          // decided; the same clawback as a refund, keyed on the dispute.
-          await this.handleChargeReversal(event, 'dispute');
-          return 'handled';
+          // decided; the same clawback as a refund, keyed on the dispute. An
+          // inquiry (`warning_*`) takes nothing: no funds have moved.
+          return await this.handleChargeReversal(event, 'dispute');
         case 'charge.dispute.closed':
         case 'charge.dispute.funds_reinstated':
           // S17 — a dispute WON puts its credits back (the clawback is
-          // reversed, the debt it made forgiven, the credits re-granted for the
-          // window they came from). A dispute lost changes nothing: its
-          // clawback already stands from `created`.
-          await this.handleDisputeDecided(event);
-          return 'handled';
+          // reversed, its claim cancelled, the debt it made forgiven, the
+          // credits re-granted for the window they came from, the invoice and
+          // the level put back). A dispute lost changes nothing: its clawback
+          // already stands from `created`. An inquiry closed changes nothing:
+          // it took nothing.
+          return await this.handleDisputeDecided(event);
         case 'invoice.finalized':
           // Informational only — the S44 receipt fires on
           // payment_succeeded, not at finalization (a finalized-but-
@@ -588,6 +588,17 @@ export class StripeWebhooksService {
           return 'ignored';
       }
     } catch (err) {
+      // S17 — a refund or dispute that arrived before `invoice.paid` recorded
+      // its payment must NOT be recorded as processed either: Stripe's
+      // redelivery, once the payment is on record, is what applies it (audit
+      // #8). Rethrown exactly like a transient failure below.
+      if (isCreditReversalAwaitingPayment(err)) {
+        this.config.logger.warn(
+          { component: 'stripe-webhooks', eventId: event.id, eventType: event.type },
+          'a reversal arrived before its payment was recorded — rethrowing so Stripe redelivers it',
+        );
+        throw err;
+      }
       // C5 — a transient infra failure must NOT be recorded as processed:
       // rethrow so handle() never writes a ledger row and Stripe retries.
       if (isTransientInfraError(err)) {
@@ -1322,17 +1333,26 @@ export class StripeWebhooksService {
    * The invoice the charge paid is read from the object when it says; a
    * dispute object never does, so the recorded payment is found by the charge
    * id first, and the charge is fetched from Stripe only when nothing on record
-   * names it. A transient failure is rethrown so the delivery is retried
-   * whole; any other failure is logged, alerted without ids, and acknowledged.
+   * names it.
+   *
+   *   · An INQUIRY (`warning_*`) takes nothing: no funds have left, and its
+   *     close (`warning_closed`) is neither won nor lost (audit #9).
+   *   · A reversal whose invoice has no payment on record yet — it arrived
+   *     before `invoice.paid` — is rethrown, so the delivery fails and Stripe
+   *     redelivers it once the payment is recorded (audit #8).
+   *   · A transient failure is rethrown so the delivery is retried whole.
+   *   · Any other failure is logged with the charge, alerted without it, and
+   *     recorded as `error:ai_credits_reversal_failed`, so the processed-events
+   *     ledger shows the event failed rather than handled (audit #15).
    */
   private async handleChargeReversal(
     event: StripeEvent,
     what: 'refund' | 'dispute',
-  ): Promise<void> {
+  ): Promise<DispatchOutcome> {
     const clawbacks = this.config.creditClawbacks;
     if (clawbacks === null || clawbacks === undefined) {
       this.logEvent(event, `${event.type} (AI credits off; nothing to take back)`);
-      return;
+      return 'handled';
     }
     const object = event.data.object;
     const chargeId = what === 'refund' ? readString(object, 'id') : readString(object, 'charge');
@@ -1345,47 +1365,40 @@ export class StripeWebhooksService {
         `${event.type} missing required fields; credits not taken back`,
       );
       this.logEvent(event, `${event.type} (missing-fields)`);
-      return;
+      return 'handled';
+    }
+    const status = readString(object, 'status');
+    if (what === 'dispute' && isInquiry(status)) {
+      this.logEvent(event, `${event.type} (${status ?? 'inquiry'}; an inquiry takes nothing)`);
+      return 'handled';
     }
     let invoiceId = what === 'refund' ? readString(object, 'invoice') : null;
+    const apply = (stripeInvoiceId: string | null) =>
+      what === 'refund'
+        ? clawbacks.applyStripeRefund({
+            chargeId,
+            stripeInvoiceId,
+            cumulativeRefundedMinor: amount,
+          })
+        : clawbacks.applyStripeDispute({
+            disputeId: disputeId ?? '',
+            chargeId,
+            stripeInvoiceId,
+            amountMinor: amount,
+          });
     try {
-      let outcome =
-        what === 'refund'
-          ? await clawbacks.applyStripeRefund({
-              chargeId,
-              stripeInvoiceId: invoiceId,
-              cumulativeRefundedMinor: amount,
-            })
-          : await clawbacks.applyStripeDispute({
-              disputeId: disputeId ?? '',
-              chargeId,
-              stripeInvoiceId: invoiceId,
-              amountMinor: amount,
-            });
+      let outcome = await apply(invoiceId);
       if (outcome.kind === 'unmatched' && invoiceId === null) {
         // Nothing on record names the charge: ask Stripe which invoice it paid,
         // once, and try again with that. A charge with no invoice (a one-off
         // payment) stays unmatched, which is the truth about it.
         invoiceId = await this.invoiceOfCharge(event, chargeId);
-        if (invoiceId !== null) {
-          outcome =
-            what === 'refund'
-              ? await clawbacks.applyStripeRefund({
-                  chargeId,
-                  stripeInvoiceId: invoiceId,
-                  cumulativeRefundedMinor: amount,
-                })
-              : await clawbacks.applyStripeDispute({
-                  disputeId: disputeId ?? '',
-                  chargeId,
-                  stripeInvoiceId: invoiceId,
-                  amountMinor: amount,
-                });
-        }
+        if (invoiceId !== null) outcome = await apply(invoiceId);
       }
       this.logEvent(event, `${event.type} → credits ${outcome.kind}`);
+      return 'handled';
     } catch (err) {
-      if (isTransientInfraError(err)) throw err;
+      if (isTransientInfraError(err) || isCreditReversalAwaitingPayment(err)) throw err;
       this.config.logger.error(
         {
           component: 'stripe-webhooks',
@@ -1396,40 +1409,61 @@ export class StripeWebhooksService {
         },
         'taking AI credits back for a reversed payment failed; review the charge by hand',
       );
-      try {
-        this.config.sentry?.captureMessage({
-          message:
-            'Taking AI credits back for a reversed payment failed. ' +
-            'Find the charge id in the server log and review the account by hand.',
-          level: 'error',
-          fingerprint: ['billing', 'ai_credits_reversal_failed', what],
-          tags: { kind: 'ai_credits_reversal_failed', what },
-        });
-      } catch {
-        /* the log line is the record */
-      }
+      this.alertCreditsFailure(
+        'ai_credits_reversal_failed',
+        what,
+        'Taking AI credits back for a reversed payment failed. ' +
+          'Find the charge id in the server log and review the account by hand.',
+      );
       this.logEvent(event, `${event.type} (credits not taken back)`);
+      return 'error:ai_credits_reversal_failed';
     }
   }
 
-  /** S17 — `charge.dispute.closed` / `funds_reinstated`: only a WON dispute acts. */
-  private async handleDisputeDecided(event: StripeEvent): Promise<void> {
+  /**
+   * S17 — `charge.dispute.closed` / `funds_reinstated`: only a WON dispute
+   * acts. `funds_reinstated` is always a win; `closed` is one when its status
+   * says `won`. `lost` leaves the clawback standing, and `warning_closed` is an
+   * inquiry that took nothing (audit #9).
+   *
+   * The reinstatement is handed the dispute's charge and amount, so the invoice
+   * is put back even when the dispute took nothing from the credits (audit #2);
+   * when neither the dispute's rows nor the charge find the payment, Stripe is
+   * asked once which invoice the charge paid. Failures are handled as a
+   * reversal's are, recorded as `error:ai_credits_reinstate_failed` and alerted
+   * without ids (audit #15).
+   */
+  private async handleDisputeDecided(event: StripeEvent): Promise<DispatchOutcome> {
     const clawbacks = this.config.creditClawbacks;
     const dispute = event.data.object;
     const disputeId = readString(dispute, 'id');
     const status = readString(dispute, 'status');
     if (clawbacks === null || clawbacks === undefined || disputeId === null) {
       this.logEvent(event, `${event.type} (nothing to do)`);
-      return;
+      return 'handled';
     }
     const won = event.type === 'charge.dispute.funds_reinstated' || status === 'won';
     if (!won) {
-      this.logEvent(event, `${event.type} (${status ?? 'unknown'}; clawback stands)`);
-      return;
+      this.logEvent(
+        event,
+        isInquiry(status)
+          ? `${event.type} (${status ?? 'inquiry'}; an inquiry took nothing)`
+          : `${event.type} (${status ?? 'unknown'}; clawback stands)`,
+      );
+      return 'handled';
     }
+    const chargeId = readString(dispute, 'charge');
+    const amountMinor = readNumber(dispute, 'amount');
+    const reinstate = (stripeInvoiceId: string | null) =>
+      clawbacks.reinstateDispute({ disputeId, chargeId, stripeInvoiceId, amountMinor });
     try {
-      const outcome = await clawbacks.reinstateDispute({ disputeId });
+      let outcome = await reinstate(null);
+      if (outcome.kind === 'nothing_to_reinstate' && chargeId !== null) {
+        const invoiceId = await this.invoiceOfCharge(event, chargeId);
+        if (invoiceId !== null) outcome = await reinstate(invoiceId);
+      }
       this.logEvent(event, `${event.type} → credits ${outcome.kind}`);
+      return 'handled';
     } catch (err) {
       if (isTransientInfraError(err)) throw err;
       this.config.logger.error(
@@ -1442,7 +1476,32 @@ export class StripeWebhooksService {
         },
         'putting AI credits back for a won dispute failed; review the account by hand',
       );
+      this.alertCreditsFailure(
+        'ai_credits_reinstate_failed',
+        'dispute',
+        'Putting AI credits back for a won dispute failed. ' +
+          'Find the dispute id in the server log and review the account by hand.',
+      );
       this.logEvent(event, `${event.type} (credits not put back)`);
+      return 'error:ai_credits_reinstate_failed';
+    }
+  }
+
+  /** S17 — the id-free alert both reversal paths raise when the credits could not be moved. */
+  private alertCreditsFailure(
+    kind: 'ai_credits_reversal_failed' | 'ai_credits_reinstate_failed',
+    what: 'refund' | 'dispute',
+    message: string,
+  ): void {
+    try {
+      this.config.sentry?.captureMessage({
+        message,
+        level: 'error',
+        fingerprint: ['billing', kind, what],
+        tags: { kind, what },
+      });
+    } catch {
+      /* the log line is the record */
     }
   }
 
@@ -1496,6 +1555,15 @@ export class StripeWebhooksService {
  */
 function eventTime(event: StripeEvent): Date {
   return event.created !== undefined ? new Date(event.created * 1000) : new Date();
+}
+
+/**
+ * S17 — a dispute that is an INQUIRY, not a chargeback: Stripe gives it a
+ * `warning_*` status (`warning_needs_response`, `warning_under_review`,
+ * `warning_closed`). No funds leave for an inquiry, so it takes no credits.
+ */
+function isInquiry(status: string | null): boolean {
+  return status !== null && status.startsWith('warning_');
 }
 
 function readString(obj: Record<string, unknown>, key: string): string | null {

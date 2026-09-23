@@ -16,8 +16,10 @@
 //   · with AI credits off (no clawbacks wired) every reversal is logged and
 //     acknowledged, and nothing else happens;
 //   · a non-transient failure is logged with the charge and alerted WITHOUT it,
-//     and the delivery is still acknowledged; a transient one is rethrown so
-//     Stripe retries the whole event.
+//     and recorded as `error:ai_credits_reversal_failed` (the route still
+//     answers 200 for a recorded outcome, so Stripe does not retry a
+//     deterministic failure); a transient one is rethrown so Stripe retries the
+//     whole event.
 
 import { describe, expect, it } from 'vitest';
 
@@ -278,10 +280,12 @@ describe('a refund event takes credits back', () => {
     expect(h.alerts).toEqual([]);
   });
 
-  it('CRITICAL a non-transient failure is logged WITH the charge, alerted WITHOUT it, and the delivery is acknowledged', async () => {
+  it('CRITICAL a non-transient failure is logged WITH the charge, alerted WITHOUT it, and recorded as a failed event (S17 audit #15)', async () => {
     const { clawbacks } = fakeClawbacks({ refund: () => new Error('the ledger refused the row') });
     const h = harness({ clawbacks });
-    expect(await h.service.handle(event('charge.refunded', refunded()), '{}')).toBe('handled');
+    expect(await h.service.handle(event('charge.refunded', refunded()), '{}')).toBe(
+      'error:ai_credits_reversal_failed',
+    );
     const failure = h.lines.find((l) => l.level === 'error');
     expect(failure?.fields.chargeId).toBe('ch_1');
     expect(h.alerts).toHaveLength(1);

@@ -3841,7 +3841,8 @@ export const creditWindows = pgTable(
 
 export type CreditWindowRow = typeof creditWindows.$inferSelect;
 
-// One row per change of a window's level. Nothing writes it yet.
+// One row per change of a window's level: a plan change (S6) or a refund,
+// dispute or won dispute (S17). Append-only.
 export const creditWindowLevelChanges = pgTable(
   'credit_window_level_changes',
   {
@@ -3855,11 +3856,23 @@ export const creditWindowLevelChanges = pgTable(
     fromLevelMicro: bigint('from_level_micro', { mode: 'number' }).notNull(),
     toLevelMicro: bigint('to_level_micro', { mode: 'number' }).notNull(),
     effectiveAt: timestamp('effective_at', { withTimezone: true }).notNull(),
-    /** Credits granted (positive) or taken back (negative) for the rest of the window. */
+    /**
+     * Credits granted (positive) or taken back (negative) for the rest of the
+     * window by a plan change. A refund, a dispute or a won dispute records 0:
+     * the credits it moved are its clawback's rows (S17).
+     */
     deltaMicro: bigint('delta_micro', { mode: 'number' }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    /**
+     * 0136 — the coverage the change is attributed to: for a plan change, the
+     * coverage that supplied the new level (a Stripe invoice id, a crypto order
+     * id, or the override marker); for a refund, a dispute or a won dispute, the
+     * invoice or order whose payment moved. A proration lot belongs to the
+     * invoice its step names. NULL on rows written before 0136.
+     */
+    sourceRef: text('source_ref'),
   },
   (t) => [
     primaryKey({ columns: [t.windowId, t.seq] }),

@@ -161,7 +161,9 @@ describe.skipIf(!RUN_DB_TESTS)('a refund or chargeback takes credits back', () =
     expect(rows[0]).toMatchObject({
       source: 'stripe_refund',
       source_ref: `ch_full:${String(PAID)}`,
-      target_key: `window:${c.windowId}`,
+      // The target names the window AND the invoice: a window can hold lots
+      // two invoices paid for, and a refund takes only its own (S17 audit #4, #5).
+      target_key: `window:${c.windowId}:${c.invoiceId}`,
       state: 'applied',
       clawed_micro: String(2_000 * MICRO),
       debt_micro: String(1_000 * MICRO),
@@ -360,7 +362,12 @@ describe.skipIf(!RUN_DB_TESTS)('a refund or chargeback takes credits back', () =
     });
     expect(await debtOf(db(), c.accountId)).toBe(1_000 * MICRO);
     expect(await levelOf(c.windowId)).toBe(0);
-    const outcome = await svc().reinstateDispute({ disputeId: 'dp_won' });
+    const outcome = await svc().reinstateDispute({
+      disputeId: 'dp_won',
+      chargeId: 'ch_won',
+      stripeInvoiceId: null,
+      amountMinor: PAID,
+    });
     expect(outcome).toMatchObject({
       kind: 'reinstated',
       reversed: 1,
@@ -380,9 +387,16 @@ describe.skipIf(!RUN_DB_TESTS)('a refund or chargeback takes credits back', () =
     ]);
     expect((await paymentOf(c.invoiceId)).disputed).toBe(0);
     // Reinstating again finds nothing standing.
-    expect((await svc().reinstateDispute({ disputeId: 'dp_won' })).kind).toBe(
-      'nothing_to_reinstate',
-    );
+    expect(
+      (
+        await svc().reinstateDispute({
+          disputeId: 'dp_won',
+          chargeId: 'ch_won',
+          stripeInvoiceId: null,
+          amountMinor: PAID,
+        })
+      ).kind,
+    ).toBe('nothing_to_reinstate');
   });
 
   it('CRITICAL a new subscription after a full refund gets its credits at once (M8): the next refresh treats the new invoice as an upgrade from the refunded level', async () => {

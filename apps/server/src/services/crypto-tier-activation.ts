@@ -328,8 +328,10 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
    * `subscription.tier_changed` lifecycle event (audit row + tier-changed email).
    *
    * Idempotent on IPN replay: the repo revoke only affects a still-unexpired row,
-   * so a replayed refund finds it already expired → revoked:false → this no-ops
-   * (no second reconcile, no second emit). The best-remaining reconcile is itself
+   * so a replayed refund finds it already expired → revoked:false → the tier
+   * no-ops (no second reconcile, no second emit). S17 — the AI credits clawback
+   * still runs on that path (it is idempotent on the order id, and a replay is
+   * the only retry a failed one gets). The best-remaining reconcile is itself
    * a pure function of committed DB state (previousTier === appliedTier ⇒ no
    * emit), so even a replay that somehow reached the reconcile would not
    * double-fire.
@@ -349,7 +351,7 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
     });
     if (!revoked) {
       // Already expired / replayed refund — the grant is not (or no longer) a
-      // floor, so there is nothing to claw back. No-op, no emit.
+      // floor, so there is no tier to claw back. No tier change, no emit.
       this.logger.info(
         {
           component: 'crypto-tier-activation',
@@ -357,8 +359,14 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
           account_id: args.account_id,
           order_id: args.order_id,
         },
-        'crypto refund clawback: entitlement already expired (replay or no active grant) — no change',
+        'crypto refund clawback: entitlement already expired (replay or no active grant) — tier unchanged',
       );
+      // S17 (audit #10) — but the CREDITS are still taken back. A replayed IPN
+      // is what retries a clawback that failed the first time, and an order
+      // refunded after its term ended still bought credits the customer may
+      // have spent. Idempotent on the order id: a clawback already applied
+      // finds nothing more to take.
+      await this.takeCreditsBack(args);
       return { revoked: false, previousTier: null, appliedTier: null };
     }
 
@@ -417,25 +425,7 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
     // S17 — the credits the refunded term granted go back FIRST, under the
     // account's credit lock, before the refresh reads a coverage that no
     // longer includes the term. Idempotent on the order id.
-    if (this.creditClawbacks !== null) {
-      try {
-        await this.creditClawbacks.applyCryptoRefund({
-          accountId: args.account_id,
-          orderId: args.order_id,
-        });
-      } catch (err) {
-        this.logger.error(
-          {
-            component: 'crypto-tier-activation',
-            event: 'crypto_refund_credits_clawback_failed',
-            account_id: args.account_id,
-            order_id: args.order_id,
-            err: { message: err instanceof Error ? err.message : String(err) },
-          },
-          'crypto order refunded but its AI credits could not be taken back — review the account',
-        );
-      }
-    }
+    await this.takeCreditsBack(args);
     // The refunded term no longer covers anything. Last, after the tier and its fan-out.
     await refreshCreditsAfter(this.credits, args.account_id, {
       trigger: 'crypto_refund',
@@ -443,5 +433,33 @@ export class CryptoTierActivationService implements CryptoOrderTierActivator {
       logger: this.logger,
     });
     return { revoked: true, previousTier, appliedTier };
+  }
+
+  /**
+   * S17 — take back the credits a refunded order's term granted. Best-effort:
+   * the entitlement is revoked and the tier moved whether or not the credits
+   * could be taken back. A failure is logged here with the order and the
+   * account, and ALERTED (without either) by the clawback service itself
+   * (audit #10), because nothing retries it but a replayed IPN.
+   */
+  private async takeCreditsBack(args: { account_id: string; order_id: string }): Promise<void> {
+    if (this.creditClawbacks === null) return;
+    try {
+      await this.creditClawbacks.applyCryptoRefund({
+        accountId: args.account_id,
+        orderId: args.order_id,
+      });
+    } catch (err) {
+      this.logger.error(
+        {
+          component: 'crypto-tier-activation',
+          event: 'crypto_refund_credits_clawback_failed',
+          account_id: args.account_id,
+          order_id: args.order_id,
+          err: { message: err instanceof Error ? err.message : String(err) },
+        },
+        'crypto order refunded but its AI credits could not be taken back — review the account',
+      );
+    }
   }
 }

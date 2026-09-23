@@ -382,6 +382,10 @@ export class CreditGrantsService implements CreditsRefresher {
       toLevelMicro: due.targetMicro,
       effectiveAt: due.effectiveAt,
       deltaMicro,
+      // S17 (0136) — the coverage that supplies the new level. The proration lot
+      // this step grants belongs to it, so a refund of that invoice takes back
+      // exactly this lot, and a refund of any other invoice never touches it.
+      sourceRef: due.sourceRef,
     });
 
     let prorationLotId: string | null = null;
@@ -470,6 +474,14 @@ export class CreditGrantsService implements CreditsRefresher {
        * prefix that names the window.
        */
       readonly ledgerKeyPrefix?: string;
+      /**
+       * S17 — the lots to take from, newest first, when they are not simply
+       * every lot of the window: a refund takes only the lots the refunded
+       * invoice paid for (`DrizzleCreditWindowsRepo.reversalLots`), read under
+       * the same lock just before this call. Absent, it is every lot of the
+       * window, which is what a plan change takes from.
+       */
+      readonly targets?: readonly ClawbackTargetLot[];
     },
   ): Promise<CreditClawbackRecord> {
     const { ledger, windows } = this.deps;
@@ -480,7 +492,7 @@ export class CreditGrantsService implements CreditsRefresher {
         ? `${input.ledgerKeyPrefix}:${suffix}`
         : clawbackLedgerKey(input, suffix);
 
-    const lots = await windows.clawbackTargets(tx, accountId, input.windowId);
+    const lots = input.targets ?? (await windows.clawbackTargets(tx, accountId, input.windowId));
     const heldTotal = await ledger.heldMicro(accountId, tx);
     const standingClaims = await windows.pendingClaimTotalMicro(tx, accountId);
     const claimable = Math.max(0, heldTotal - standingClaims);

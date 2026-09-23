@@ -974,11 +974,16 @@ export class DrizzleCreditReservationsRepo {
    * order `credit_clawbacks_pending_idx` is built for. A settlement pays them
    * from the credit it releases, one claim at a time, so that two claims are
    * never both paid from the same credit.
+   *
+   * ⛔ ONLY A CLAWBACK THAT STILL STANDS (S17 audit #3). A won dispute reverses
+   * its clawback, and a reversed clawback is owed nothing: paying its claim
+   * would take credit from a customer whose payment is whole again, and a
+   * claim left unpaid would become debt that nothing forgives.
    */
   async pendingClaims(tx: CreditLedgerTx, accountId: string): Promise<PendingCreditClaim[]> {
     const result = await tx.execute<{ id: string; source: string; pending: string }>(sql`
       SELECT id, source, pending_micro::text AS pending FROM credit_clawbacks
-       WHERE account_id = ${accountId}::uuid AND pending_micro > 0
+       WHERE account_id = ${accountId}::uuid AND pending_micro > 0 AND state = 'applied'
        ORDER BY created_at, id
          FOR UPDATE`);
     return rowsOf<{ id: string; source: string; pending: string }>(result).map((row) => ({
