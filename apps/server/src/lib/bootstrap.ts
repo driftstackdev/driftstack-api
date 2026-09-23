@@ -322,6 +322,7 @@ import {
   type EmailService,
 } from '../services/email.js';
 import { initSentry, type SentryClient } from './sentry.js';
+import { isNewWorkerFault } from './worker-fault-log.js';
 import type { AppDeps, ReadinessCheck } from './app.js';
 import type { Config } from './config.js';
 import { envFlag } from './config.js';
@@ -3401,7 +3402,15 @@ export async function createProductionDeps(
                 //
                 // NOT persisted — a column needs a migration, which is the owner's
                 // call. Logged so the next unexplained fault leaves a trace.
-                if (frame.lastErrorSummary !== undefined) {
+                //
+                // 2026-09-23 — logged ONCE per distinct fault per node, not on
+                // every beat: the worker repeats its latest fault on every beat
+                // until it faults again, so logging each beat turned one fault
+                // into 7,873 identical warnings in a day. See worker-fault-log.ts.
+                if (
+                  frame.lastErrorSummary !== undefined &&
+                  isNewWorkerFault(frame.macNodeId, frame.lastErrorSummary, frame.lastErrorAtMs)
+                ) {
                   logger.warn(
                     {
                       component: 'fleet-heartbeat',
