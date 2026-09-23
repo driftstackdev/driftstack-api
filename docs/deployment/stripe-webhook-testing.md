@@ -96,6 +96,16 @@ Some cases in the reversal rows answer differently from the rest:
   A dispute is applied once, whichever of these arrives, so an ordinary
   dispute's `funds_withdrawn` after its `created` changes nothing. Any other
   update (evidence submitted, an inquiry still under review) changes nothing.
+- **Two disputes of one charge each take their own share.** Each dispute is
+  recorded by its id with the amount it disputed, and the payment counts as
+  disputed for the sum of the disputes still standing (never more than was
+  paid). Winning one takes only that dispute's amount off.
+- **A won dispute leaves the account where no dispute would have.** What the
+  dispute took goes back into the lots it came from, the debt it caused is
+  forgiven, and credit that repaid that debt is returned for as long as it
+  would have lasted. When that credit and the month have both ended, nothing
+  is returned: the win logs `returned_credit_already_expired` and raises no
+  alert, since nothing was lost that would not have been.
 - **A refund or dispute that arrives before its `invoice.paid` answers 500.**
   When the charge names an invoice whose payment is not on record yet, the
   handler refuses the event as retryable, no `processed_stripe_events` row is

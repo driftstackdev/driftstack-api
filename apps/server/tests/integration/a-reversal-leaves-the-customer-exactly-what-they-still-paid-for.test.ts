@@ -489,8 +489,14 @@ describe.skipIf(!RUN_DB_TESTS)(
         amountMinor: PAID,
       });
       expect(await disputedOf(customer.invoiceId)).toBe(0);
+      // R4 (S17 round 3) — the win draws the month it makes the invoice cover
+      // again INSIDE the win: the month is grantable in full because it is
+      // granted, at once, and the refresh after the win (which this arm used to
+      // see `created` it) finds it drawn and writes nothing.
+      expect(await spendable(customer.accountId)).toBe(3_000);
       const refreshed = await h().grants.refreshCredits(customer.accountId);
-      expect(refreshed.window.outcome).toBe('created');
+      expect(refreshed.window.outcome).toBe('none');
+      await aRefreshChangesNothing(customer.accountId);
       expect(await spendable(customer.accountId)).toBe(3_000);
     });
 
@@ -727,9 +733,11 @@ describe.skipIf(!RUN_DB_TESTS)(
       });
       expect(second.kind).toBe('nothing_to_reinstate');
       expect(await spendable(c.accountId)).toBe(2_000);
-      expect((await lotsOf(db(), c.accountId)).filter((l) => l.kind === 'adjustment')).toHaveLength(
-        1,
-      );
+      // Once: the month's own lot holds its 2,000 again (the win puts the
+      // credit back into the lot it came from, S17 round 3), and the second
+      // event added nothing to it and no lot beside it.
+      expect(await remainingOfLot(c.lotId)).toBe(2_000);
+      expect((await lotsOf(db(), c.accountId)).map((l) => l.kind)).toEqual(['monthly']);
       expect(await levelOf(c.windowId)).toBe(3_000);
     });
 

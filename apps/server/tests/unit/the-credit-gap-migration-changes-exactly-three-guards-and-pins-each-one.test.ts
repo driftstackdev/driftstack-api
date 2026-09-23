@@ -381,7 +381,11 @@ describe('migration 0132 changes exactly three guards, and pins each one', () =>
     // 0138 (an action taken from a signed-in browser is recorded against its
     // web session) follows 0137; its own guard pins its shape.
     expect(journal.entries[at + 6]?.tag).toBe('0138_web_session_actor_columns');
-    expect(journal.entries, 'and 0138 is the last one').toHaveLength(139);
+    // 0139 (the S17 third-audit fix — a window's undisputed level, and what a
+    // level change's payment still paid) follows 0138; its own guard pins its
+    // shape.
+    expect(journal.entries[at + 7]?.tag).toBe('0139_credit_window_undisputed_level');
+    expect(journal.entries, 'and 0139 is the last one').toHaveLength(140);
   });
 
   it('CRITICAL schema.ts mirrors the CHECK and the index this migration adds, by name, and its prose names the trigger it installs and the guard it relaxes', () => {

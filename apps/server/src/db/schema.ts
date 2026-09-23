@@ -3844,7 +3844,8 @@ export type AiCreditsAdminAuditLogRow = typeof aiCreditsAdminAuditLog.$inferSele
 //       "never created ahead of its start" a fact about the database clock.
 //     · UPDATE refuses (55000) a change to anything but the level, and a level
 //       change that does not raise `level_seq` by exactly one (or a `level_seq`
-//       change with no level change).
+//       change with no level change). Since 0139 "the level" is the pair of
+//       `level_micro` and `undisputed_level_micro` (NULL read as the first).
 //     · DELETE only when the account row is gone.
 //   credit_window_level_changes_guard_trigger   BEFORE UPDATE OR DELETE
 //     · Append-only (55000); a row goes only with its window.
@@ -3891,8 +3892,20 @@ export const creditWindows = pgTable(
     windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
     windowEnd: timestamp('window_end', { withTimezone: true }).notNull(),
     tier: accountTier('tier').notNull(),
-    /** The monthly level this window is granted at, in microcredits. */
+    /**
+     * The monthly level this window SHOWS, in microcredits: what its paid
+     * coverage earns now, refunds and standing disputes taken off.
+     */
     levelMicro: bigint('level_micro', { mode: 'number' }).notNull(),
+    /**
+     * 0139 — the level the coverage earns with standing disputes LEFT OUT
+     * (refunds still taken off): what every grant or take of a plan change or
+     * a new month is measured on, so that a won dispute leaves the window
+     * exactly where it would have been without it. NULL means the same as
+     * `level_micro` (every window written before 0139). It moves only with a
+     * level change.
+     */
+    undisputedLevelMicro: bigint('undisputed_level_micro', { mode: 'number' }),
     /** Rises by one with every level change; forced to 0 on insert. */
     levelSeq: integer('level_seq').notNull().default(0),
     /** Forced to now() on insert. */
@@ -3929,6 +3942,10 @@ export const creditWindows = pgTable(
     check('credit_windows_started', sql`${t.windowStart} <= ${t.createdAt}`),
     check('credit_windows_level', sql`${t.levelMicro} >= 0 AND ${t.levelMicro} % 1000000 = 0`),
     check('credit_windows_level_seq', sql`${t.levelSeq} >= 0`),
+    check(
+      'credit_windows_undisputed_level',
+      sql`${t.undisputedLevelMicro} IS NULL OR (${t.undisputedLevelMicro} >= 0 AND ${t.undisputedLevelMicro} % 1000000 = 0)`,
+    ),
   ],
 );
 
@@ -3966,6 +3983,21 @@ export const creditWindowLevelChanges = pgTable(
      * invoice its step names. NULL on rows written before 0136.
      */
     sourceRef: text('source_ref'),
+    /**
+     * 0139 — the window's UNDISPUTED level before and after the change (see
+     * `credit_windows.undisputed_level_micro`): both NULL on a row written
+     * before 0139, where it equals the level shown. A change may move only
+     * this one — a plan change made while a dispute takes all of the month.
+     */
+    undisputedFromMicro: bigint('undisputed_from_micro', { mode: 'number' }),
+    undisputedToMicro: bigint('undisputed_to_micro', { mode: 'number' }),
+    /**
+     * 0139 — what the payment the change is attributed to still paid when it
+     * was made, refunds taken off, in its minor units: what a later refund
+     * measures the change's own grant or take against. NULL for a change that
+     * names no Stripe invoice, and on rows written before 0139.
+     */
+    stillPaidMinor: bigint('still_paid_minor', { mode: 'number' }),
   },
   (t) => [
     primaryKey({ columns: [t.windowId, t.seq] }),
@@ -3978,8 +4010,19 @@ export const creditWindowLevelChanges = pgTable(
       'credit_window_level_changes_levels',
       sql`${t.fromLevelMicro} >= 0 AND ${t.fromLevelMicro} % 1000000 = 0 AND ${t.toLevelMicro} >= 0 AND ${t.toLevelMicro} % 1000000 = 0`,
     ),
-    check('credit_window_level_changes_real', sql`${t.fromLevelMicro} <> ${t.toLevelMicro}`),
+    check(
+      'credit_window_level_changes_real',
+      sql`${t.fromLevelMicro} <> ${t.toLevelMicro} OR ${t.undisputedFromMicro} IS DISTINCT FROM ${t.undisputedToMicro}`,
+    ),
     check('credit_window_level_changes_whole', sql`${t.deltaMicro} % 1000000 = 0`),
+    check(
+      'credit_window_level_changes_undisputed',
+      sql`(${t.undisputedFromMicro} IS NULL AND ${t.undisputedToMicro} IS NULL) OR (${t.undisputedFromMicro} >= 0 AND ${t.undisputedFromMicro} % 1000000 = 0 AND ${t.undisputedToMicro} >= 0 AND ${t.undisputedToMicro} % 1000000 = 0)`,
+    ),
+    check(
+      'credit_window_level_changes_still_paid',
+      sql`${t.stillPaidMinor} IS NULL OR ${t.stillPaidMinor} >= 0`,
+    ),
   ],
 );
 
@@ -4012,6 +4055,13 @@ export const creditClawbacks = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    /**
+     * 0139 — the amount a dispute took from its payment, in the payment's minor
+     * units, on every row the dispute writes under its own id: what a payment
+     * has disputed is the SUM of its standing disputes, each by its id, and the
+     * sum can pass what the payment row may hold. NULL on every other row.
+     */
+    disputedMinor: bigint('disputed_minor', { mode: 'number' }),
   },
   (t) => [
     uniqueIndex('credit_clawbacks_idempotency_unique').on(t.source, t.sourceRef, t.targetKey),
@@ -4043,6 +4093,7 @@ export const creditClawbacks = pgTable(
       'credit_clawbacks_unmatched_shape',
       sql`${t.state} <> 'unmatched' OR (${t.clawedMicro} IS NULL AND ${t.debtMicro} IS NULL AND ${t.pendingMicro} = 0)`,
     ),
+    check('credit_clawbacks_disputed', sql`${t.disputedMinor} IS NULL OR ${t.disputedMinor} >= 0`),
   ],
 );
 

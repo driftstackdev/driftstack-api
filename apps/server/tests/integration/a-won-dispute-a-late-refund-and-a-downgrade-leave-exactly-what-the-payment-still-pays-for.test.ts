@@ -546,12 +546,18 @@ describe.skipIf(!RUN_DB_TESTS)(
       expect(first.kind).toBe('no_windows');
       await svc().reinstateDispute(dispute('dp_r2_13', 'ch_r2_13'));
       expect(await disputedOf(customer.invoiceId)).toBe(0);
+      // R4 (S17 round 3) — the win draws the month it makes the invoice cover
+      // again INSIDE the win, so the month is there at once. This arm said the
+      // next refresh `created` it; that refresh now finds it drawn and writes
+      // nothing.
+      expect(await spendable(customer.accountId)).toBe(3_000);
 
       const again = await svc().applyStripeDispute(dispute('dp_r2_13', 'ch_r2_13'));
       expect(again.kind).toBe('already_applied');
       expect(await disputedOf(customer.invoiceId)).toBe(0);
       const refreshed = await h().grants.refreshCredits(customer.accountId);
-      expect(refreshed.window.outcome).toBe('created');
+      expect(refreshed.window.outcome).toBe('none');
+      await aRefreshChangesNothing(customer.accountId);
       expect(await spendable(customer.accountId)).toBe(3_000);
     });
 

@@ -20,7 +20,7 @@
 // What these rules DO is proved against Postgres, in the integration tests the
 // schema comment names; the last arm holds that comment to files that exist.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -161,7 +161,20 @@ describe('migration 0130 only adds, and every guard it installs is pinned down',
         .map((m) => m[1] ?? '')
         .filter((n) => mine.test(n))
         .sort();
-    expect(named(['check'])).toEqual(inSql.checks);
+    // Later migrations may add CHECKs to these same tables (0139 adds the
+    // undisputed-level and dispute-amount checks and re-creates `_real`); they
+    // are read from those migrations' own text, so schema.ts must mirror 0130's
+    // checks plus exactly theirs — still nothing it does not create.
+    const later = readdirSync(resolve(DB, 'migrations'))
+      .filter((f) => /^\d{4}_.*\.sql$/.test(f) && f.localeCompare(`${TAG}.sql`) > 0)
+      .flatMap((f) => [
+        ...readFileSync(resolve(DB, 'migrations', f), 'utf8').matchAll(
+          /ADD CONSTRAINT "(\w+)"\s+CHECK/g,
+        ),
+      ])
+      .map((m) => m[1] ?? '')
+      .filter((n) => mine.test(n));
+    expect(named(['check'])).toEqual([...new Set([...inSql.checks, ...later])].sort());
     // `unique` as well as `uniqueIndex`: migration 0131 promoted
     // `credit_windows_id_account_unique` from a unique INDEX to the unique
     // CONSTRAINT backed by that same index (which is the form a foreign key is

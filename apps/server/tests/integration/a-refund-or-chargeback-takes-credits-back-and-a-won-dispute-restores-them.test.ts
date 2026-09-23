@@ -377,8 +377,14 @@ describe.skipIf(!RUN_DB_TESTS)('a refund or chargeback takes credits back', () =
     expect(await debtOf(db(), c.accountId)).toBe(0);
     const rows = await clawbacksOf(db(), c.accountId);
     expect(rows.map((r) => r.state)).toEqual(['reversed']);
-    const regranted = (await lotsOf(db(), c.accountId)).find((l) => l.kind === 'adjustment');
-    expect(regranted).toBeDefined();
+    // The credits are re-granted INTO the window's own lot, which expires with
+    // the window: it holds the 2,000 it held before the dispute, exactly as if
+    // the dispute had never been filed (S17 round 3 — a separate goodwill lot
+    // is spent after every other included credit of the month, which moved what
+    // a later refund of an annual invoice under the interim cap left the
+    // customer; see the third audit's twin test). No goodwill lot is needed.
+    expect(await remaining(c.lotId)).toBe(2_000);
+    expect((await lotsOf(db(), c.accountId)).map((l) => l.kind)).toEqual(['monthly']);
     expect(await h().ledger.spendableMicro(c.accountId)).toBe(2_000 * MICRO);
     expect(await levelOf(c.windowId)).toBe(3_000);
     expect((await levelChangesOf(db(), c.windowId)).map((r) => r.reason)).toEqual([
