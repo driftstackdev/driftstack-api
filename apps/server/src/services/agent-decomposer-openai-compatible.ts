@@ -122,12 +122,8 @@ export type ChatMaxTokensParam = 'max_completion_tokens' | 'max_tokens';
  */
 export interface ChatMaxCompletionTokensCeiling {
   plan?: number;
-  /**
-   * ⛔ NOT READ (#16): the read-back call is never re-asked, so it has no retry
-   * to raise the ceiling for. Kept only because the provider table
-   * (`agent-planner-providers.ts`) still sets it; remove the two together.
-   */
-  answer?: number;
+  // No `answer` member: the read-back is never re-asked (#16), so there is no
+  // retry for a raised ceiling to apply to.
 }
 
 /** List prices in US dollars per million tokens. */

@@ -527,11 +527,9 @@ export const CHAT_PLANNER_MODELS: ReadonlyArray<ChatPlannerModel> = [
     // family spends the shared budget on reasoning the request asked it not
     // to produce (the qualification-run verdict says so explicitly: "the
     // output ceiling was tuned for a model whose reasoning does not spend the
-    // output budget — luna's does"). Doubled for margin: 16,384. No truncated
-    // ANSWER call was observed in that corpus (`answerErrors` is empty
-    // throughout), so 8,192 here is the SAME 2x-for-margin rule applied on no
-    // direct evidence, not a measured floor — see the report for the number.
-    maxCompletionTokensCeiling: { plan: 16_384, answer: 8_192 },
+    // output budget — luna's does"). Doubled for margin: 16,384. (It had an
+    // answer ceiling too, removed with the read-back retry it raised, #16.)
+    maxCompletionTokensCeiling: { plan: 16_384 },
   },
   {
     qualifiedId: 'openrouter:google/gemini-3.8-flash',

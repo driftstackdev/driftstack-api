@@ -227,12 +227,6 @@ export class LiveRecordingDecomposer implements AgentDecomposer {
     return result;
   }
 
-  /** P6 — the read-back's own bounded retries this repetition, counted apart
-   *  from `plans` because the read-back call has no `LivePlanRecord` of its
-   *  own. Summed into `LiveRepReport.plannerReplyRetries` alongside `plans`. */
-  answerRepliesRetried = 0;
-  answerRepliesRetryRecovered = 0;
-
   async answerFromObservation(args: AnswerArgs): Promise<AnswerResult> {
     this.refuseMisplacedKey(args.byokAnthropicApiKey);
     this.answerCalls += 1;
@@ -241,10 +235,7 @@ export class LiveRecordingDecomposer implements AgentDecomposer {
     const answer = this.inner.answerFromObservation?.bind(this.inner);
     if (answer === undefined) throw new Error('the live decomposer cannot answer from a page');
     try {
-      const result = await answer(args);
-      if (result.plannerReplyRetried === true) this.answerRepliesRetried += 1;
-      if (result.plannerReplyRetryRecovered === true) this.answerRepliesRetryRecovered += 1;
-      return result;
+      return await answer(args);
     } catch (err) {
       this.answerErrors.push(this.describe(err));
       throw err;
@@ -772,13 +763,10 @@ export async function runLiveTask(
       plan: calls.filter((c) => c.purpose === 'plan').length,
       answer: calls.filter((c) => c.purpose === 'answer').length,
     },
+    // Planning calls only: the read-back is never re-asked (#16).
     plannerReplyRetries: {
-      retried:
-        decomposer.plans.filter((p) => p.plannerReplyRetried === true).length +
-        decomposer.answerRepliesRetried,
-      recovered:
-        decomposer.plans.filter((p) => p.plannerReplyRetryRecovered === true).length +
-        decomposer.answerRepliesRetryRecovered,
+      retried: decomposer.plans.filter((p) => p.plannerReplyRetried === true).length,
+      recovered: decomposer.plans.filter((p) => p.plannerReplyRetryRecovered === true).length,
     },
     tokens: {
       input: sumOrNull((c) => c.inputTokens) ?? 0,

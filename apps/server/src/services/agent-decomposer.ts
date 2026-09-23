@@ -692,19 +692,11 @@ export interface AnswerResult {
    *  records these, exactly like a decompose turn. */
   tokensConsumed: number;
   usage?: DecomposeUsage;
-  /**
-   * ⛔ #16 — SET BY NOTHING: THE READ-BACK CALL IS NEVER RE-ASKED. The runtime
-   * decided that at the read-back's own catch (a failed answer falls back to
-   * the plan result), and the OpenAI-compatible adapter's answer retry was
-   * removed rather than counted: runs 22 and 30 made 280 answer calls on the
-   * family it was built for, and none came back unusable. The runtime does not
-   * read these. They stay only because the evaluation harness
-   * (`tests/eval/_lib/live-runner.ts`) still reads them; remove the three
-   * together.
-   */
-  plannerReplyRetried?: boolean;
-  /** See {@link AnswerResult.plannerReplyRetried}: set by nothing. */
-  plannerReplyRetryRecovered?: boolean;
+  // No retry markers: the read-back call is never re-asked (#16). The runtime
+  // decided that at the read-back's own catch (a failed answer falls back to
+  // the plan result), and the OpenAI-compatible adapter's answer retry was
+  // removed rather than counted: runs 22 and 30 made 280 answer calls on the
+  // family it was built for, and none came back unusable.
 }
 
 /**

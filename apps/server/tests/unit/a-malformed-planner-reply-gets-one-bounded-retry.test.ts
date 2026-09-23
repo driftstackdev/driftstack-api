@@ -155,7 +155,7 @@ describe('decompose() — a malformed plan reply', () => {
         { kind: 'reply', text: '{"kind":"plan","in', finishReason: 'length' },
         { kind: 'reply', text: PLAN_OK },
       ],
-      { maxCompletionTokensCeiling: { plan: 20_000, answer: 9_000 } },
+      { maxCompletionTokensCeiling: { plan: 20_000 } },
     );
     const result = await dec.decompose(decomposeArgs());
     expect(log.requests).toHaveLength(2);
@@ -219,13 +219,13 @@ describe('answerFromObservation() — the read-back call is NEVER re-asked', () 
     expect((caught as { plannerReplyRetried?: boolean }).plannerReplyRetried).toBeUndefined();
   });
 
-  it('a read-back cut off at the output ceiling is not re-asked either, even on a family with a raised answer ceiling', async () => {
+  it('a read-back cut off at the output ceiling is not re-asked either, even on a family with a raised plan ceiling', async () => {
     const { dec, log } = adapter(
       [
         { kind: 'reply', text: '{"kind":"answer","answer":"Your IP', finishReason: 'length' },
         { kind: 'reply', text: ANSWER_OK },
       ],
-      { maxCompletionTokensCeiling: { plan: 20_000, answer: 9_000 } },
+      { maxCompletionTokensCeiling: { plan: 20_000 } },
     );
     await expect(dec.answerFromObservation(answerArgs())).rejects.toThrow(/output limit/);
     expect(log.requests).toHaveLength(1);
