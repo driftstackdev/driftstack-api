@@ -109,6 +109,9 @@ export function registerStripeWebhookRoutes(
       // as a 500 so Stripe re-delivers within its ~3-day retry window; no
       // ledger row was written, so the retry cleanly re-processes the event
       // and a paying customer isn't left un-upgraded by a one-second blip.
+      // The same path carries a refund or dispute that arrives before the
+      // `invoice.paid` recording its payment (S17 audit #8): retrying it is
+      // the point, so it counts under the same label.
       bumpOutcome('handler_transient_error');
       throw err;
     }

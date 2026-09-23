@@ -81,6 +81,18 @@ a handler that never runs, and nothing in this repository can tell.
 | `charge.dispute.created`                                    | takes back the disputed share until the dispute is decided         |
 | `charge.dispute.closed` / `charge.dispute.funds_reinstated` | a WON dispute puts its credits back; a lost one changes nothing    |
 
+Two cases in the last three rows answer differently from the rest:
+
+- **An inquiry takes nothing.** A dispute whose status starts with `warning_`
+  is an inquiry, not a chargeback: `charge.dispute.created` for it records the
+  event and moves no credits, and its `warning_closed` changes nothing.
+- **A refund or dispute that arrives before its `invoice.paid` answers 500.**
+  When the charge names an invoice whose payment is not on record yet, the
+  handler refuses the event as retryable, no `processed_stripe_events` row is
+  written, and Stripe redelivers it; the redelivery after `invoice.paid` applies
+  it. In the log it counts as `handler_transient_error`. A charge with no
+  invoice at all is still recorded and kept for review.
+
 Adding a row here is not the same as subscribing the endpoint: the dashboard
 (Developers → Webhooks → the endpoint → "Listen to events") is where the
 subscription lives, and it is an operator action.
