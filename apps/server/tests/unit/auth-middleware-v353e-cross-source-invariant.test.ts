@@ -237,14 +237,14 @@ describe('W980 auth middleware V-353e MFA step-up cross-source invariant', () =>
     expect(p).toMatch(/This action requires the project owner account\./);
   });
 
-  it('CRITICAL bootstrap wires the owner — DRIFTSTACK_OWNER_EMAIL (default founder account), unioned into the staff set (owner always admin), passed as deps.ownerEmail.', () => {
+  it('CRITICAL bootstrap wires the owner — DRIFTSTACK_OWNER_EMAIL only (no default address in the source), unioned into the staff set (owner always admin), passed as deps.ownerEmail; unset → no owner, said once at boot.', () => {
     const b = read(resolve(REPO_ROOT, 'apps/server/src/lib/bootstrap.ts'));
     expect(b).toMatch(
-      /const ownerEmailRaw = process\.env\.DRIFTSTACK_OWNER_EMAIL \?\? 'joeltheunissen89@gmail\.com';/,
+      /const ownerEmail: string \| null =\s*\(process\.env\.DRIFTSTACK_OWNER_EMAIL \?\? ''\)\.trim\(\)\.toLowerCase\(\) \|\| null;/,
     );
-    expect(b).toMatch(
-      /const ownerEmail: string \| null = ownerEmailRaw\.trim\(\)\.toLowerCase\(\) \|\| null;/,
-    );
+    // No address is ever the fallback owner.
+    expect(b).not.toMatch(/DRIFTSTACK_OWNER_EMAIL \?\? '[^']+@/);
+    expect(b).toContain("event: 'owner_email_unset'");
     // Owner unioned into the staff set → always admin.
     expect(b).toMatch(
       /ownerEmail !== null \? new Set\(\[\.\.\.staffEmails, ownerEmail\]\) : staffEmails;/,

@@ -728,7 +728,7 @@ export interface AppDeps {
    * 2026-06-04 — lowercased email of the project OWNER (master) account.
    * The owner passes the `requireOwner` guard that gates the high-power
    * admin surfaces (pricing, secrets, project config). Sourced from
-   * DRIFTSTACK_OWNER_EMAIL at bootstrap (defaults to the founder account)
+   * DRIFTSTACK_OWNER_EMAIL at bootstrap (no default: unset means no owner)
    * and also unioned into `staffEmails` so the owner is always admin.
    * Undefined → `requireOwner` fails closed (no owner configured = no
    * owner access).

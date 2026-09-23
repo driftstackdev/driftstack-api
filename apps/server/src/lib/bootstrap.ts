@@ -660,18 +660,27 @@ export async function createProductionDeps(
   // 2026-06-04 — project OWNER (master) account. The owner is the single
   // top-tier account with full control of the high-power admin surfaces
   // (pricing, secrets, project config), gated by the `requireOwner` guard.
-  // Defaults to the founder account; override via DRIFTSTACK_OWNER_EMAIL.
+  // Named ONLY by DRIFTSTACK_OWNER_EMAIL, set per environment. There is no
+  // default: a personal address in the source of a public repository is a
+  // disclosure, and a new deployment silently bound to someone else's account
+  // is worse than one with no owner. Unset → no account is the owner, the
+  // owner-only routes refuse every caller, and boot says so once.
   // The owner is ALWAYS unioned into the staff set, so they receive
   // `driftstack_internal_admin` on web-session auth (full admin) without
   // needing to also be listed in DRIFTSTACK_STAFF_EMAILS. Set-once at boot.
-  const ownerEmailRaw = process.env.DRIFTSTACK_OWNER_EMAIL ?? 'joeltheunissen89@gmail.com';
-  const ownerEmail: string | null = ownerEmailRaw.trim().toLowerCase() || null;
+  const ownerEmail: string | null =
+    (process.env.DRIFTSTACK_OWNER_EMAIL ?? '').trim().toLowerCase() || null;
   const effectiveStaffEmails: ReadonlySet<string> =
     ownerEmail !== null ? new Set([...staffEmails, ownerEmail]) : staffEmails;
   if (ownerEmail !== null) {
     logger.info(
       { component: 'auth' },
       'project owner account wired (requireOwner gate + always-admin)',
+    );
+  } else {
+    logger.warn(
+      { component: 'auth', event: 'owner_email_unset' },
+      'DRIFTSTACK_OWNER_EMAIL is not set: no account is the owner, so the owner-only admin routes refuse every caller',
     );
   }
 
