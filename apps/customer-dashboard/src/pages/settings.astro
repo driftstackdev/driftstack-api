@@ -307,6 +307,14 @@ const EMAIL_EVENTS = [
         </dl>
       </div>
 
+      <p
+        data-bundled-other-workspace
+        class="mt-6 hidden rounded-md border border-tk-border bg-tk-bg px-3 py-2 text-sm text-tk-ink-2"
+      >
+        AI settings belong to each account, and the numbers above are your own. Switch to your own
+        workspace to change them.
+      </p>
+
       <form data-bundled-form class="mt-6 space-y-5">
         <label class="flex items-start gap-3">
           <input
@@ -1142,6 +1150,22 @@ const EMAIL_EVENTS = [
       const bundledReady = root.querySelector('[data-bundled-state="ready"]');
       const bundledErrorState = root.querySelector('[data-bundled-state="error"]');
       const bundledLoadError = root.querySelector('[data-bundled-load-error]');
+      const bundledOtherWorkspace = root.querySelector('[data-bundled-other-workspace]');
+
+      // The AI settings read and write the SIGNED-IN account only; the server
+      // refuses a save that names another workspace. In a team workspace the
+      // form therefore shows your own settings, read-only, with a note.
+      function actingInOtherWorkspace() {
+        try {
+          const headers =
+            typeof window.driftstackActAsHeaders === 'function'
+              ? window.driftstackActAsHeaders()
+              : {};
+          return Boolean(headers && headers['x-driftstack-account']);
+        } catch {
+          return false;
+        }
+      }
       const bundledRetry = root.querySelector('[data-bundled-retry]');
       const bundledError = root.querySelector('[data-bundled-error]');
       const bundledStatus = root.querySelector('[data-bundled-status]');
@@ -1223,14 +1247,20 @@ const EMAIL_EVENTS = [
 
       function syncBundledControls() {
         const authenticated = Boolean(token);
-        const disabled = !authenticated || !bundledKnown || bundledSaving;
+        const otherWorkspace = actingInOtherWorkspace();
+        const disabled = !authenticated || !bundledKnown || bundledSaving || otherWorkspace;
         const reason = bundledSaving
           ? 'Wait for the current AI settings save to finish'
           : !authenticated
             ? 'Sign in to manage AI billing settings'
-            : !bundledKnown
-              ? 'Wait for AI billing settings to load'
-              : '';
+            : otherWorkspace
+              ? 'Switch to your own workspace to change AI settings'
+              : !bundledKnown
+                ? 'Wait for AI billing settings to load'
+                : '';
+        if (bundledOtherWorkspace) {
+          bundledOtherWorkspace.classList.toggle('hidden', !(authenticated && otherWorkspace));
+        }
         if (bundledConsent) {
           bundledConsent.disabled = disabled;
           bundledConsent.title = reason;
@@ -1352,7 +1382,7 @@ const EMAIL_EVENTS = [
       if (bundledForm) {
         bundledForm.addEventListener('submit', async (event) => {
           event.preventDefault();
-          if (!token || !bundledKnown || bundledSaving) return;
+          if (!token || !bundledKnown || bundledSaving || actingInOtherWorkspace()) return;
           let desired;
           try {
             desired = desiredBundledSettings();
