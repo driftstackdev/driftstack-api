@@ -38,6 +38,33 @@ const MIGRATIONS_FOLDER = resolve(
   '../../../src/db/migrations',
 );
 
+/**
+ * The database a test file's isolated name resolves to in THIS run.
+ *
+ * Two runs of the same test file at once — a gate in a clean clone and a
+ * builder in the working tree — would otherwise share one database, and a file
+ * that rebuilds its database on every run drops it out from under the other
+ * (2026-09-23: a gate failed with `database "driftstack_iso_twin_property"
+ * does not exist` while an auditor ran the same file). A run that may overlap
+ * sets `DRIFTSTACK_ISO_DB_SUFFIX` (lowercase letters, digits, underscore; up to
+ * 8), and every isolated database it touches gets that suffix. Unset — every
+ * other run, and CI — the name is used as written.
+ */
+export function isolatedDatabaseName(name: string): string {
+  const suffix = (process.env.DRIFTSTACK_ISO_DB_SUFFIX ?? '').trim();
+  if (suffix === '') return name;
+  if (!/^[a-z0-9_]{1,8}$/.test(suffix)) {
+    throw new Error(
+      `DRIFTSTACK_ISO_DB_SUFFIX must be 1-8 lowercase letters, digits or underscores; got ${JSON.stringify(suffix)}`,
+    );
+  }
+  const resolved = `${name}_${suffix}`;
+  // Postgres truncates identifiers at 63 bytes; two names that truncate to the
+  // same prefix would silently share a database.
+  if (resolved.length > 63) throw new Error(`isolated database name too long: ${resolved}`);
+  return resolved;
+}
+
 function withDatabase(base: string, name: string): string {
   const url = new URL(base);
   url.pathname = `/${name}`;
@@ -57,7 +84,8 @@ function withDatabase(base: string, name: string): string {
  *             sweeping the same table will collide with each other and the
  *             whole point is lost.
  */
-export async function ensureIsolatedDatabase(name: string): Promise<string | null> {
+export async function ensureIsolatedDatabase(requested: string): Promise<string | null> {
+  const name = isolatedDatabaseName(requested);
   const base = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
   const dbUrl = withDatabase(base, name);
   const admin = postgres(withDatabase(base, 'postgres'), {
@@ -116,9 +144,10 @@ export async function assertIsolatedDatabase(
     name: string;
   }>;
   const actual = rows[0]?.name;
-  if (actual !== name) {
+  const expected = isolatedDatabaseName(name);
+  if (actual !== expected) {
     throw new Error(
-      `refusing to run: expected the isolated database "${name}" but this client is on ` +
+      `refusing to run: expected the isolated database "${expected}" but this client is on ` +
         `"${actual ?? '<unknown>'}". A TRUNCATE here would delete other suites' rows.`,
     );
   }

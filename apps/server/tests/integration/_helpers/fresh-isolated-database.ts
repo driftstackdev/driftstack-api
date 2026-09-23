@@ -15,7 +15,7 @@
 // refactor from pointing a DROP at the shared database.
 
 import postgres from 'postgres';
-import { ensureIsolatedDatabase } from './isolated-database.js';
+import { ensureIsolatedDatabase, isolatedDatabaseName } from './isolated-database.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const ISOLATED_NAME = /^driftstack_iso_[a-z0-9_]{1,40}$/;
@@ -34,10 +34,13 @@ function withDatabase(base: string, name: string): string {
  * For a test that runs the migrator itself and needs to see how it fails;
  * `ensureIsolatedDatabase` reports a failed migration only as `null`.
  */
-export async function recreateEmptyIsolatedDatabase(name: string): Promise<string | null> {
-  if (!ISOLATED_NAME.test(name)) {
-    throw new Error(`refusing to drop "${name}": only driftstack_iso_* databases are rebuilt`);
+export async function recreateEmptyIsolatedDatabase(requested: string): Promise<string | null> {
+  if (!ISOLATED_NAME.test(requested)) {
+    throw new Error(`refusing to drop "${requested}": only driftstack_iso_* databases are rebuilt`);
   }
+  // The name this run actually uses (see `isolatedDatabaseName`); the pattern
+  // check above is on the name as written, which the suffix only lengthens.
+  const name = isolatedDatabaseName(requested);
   const base = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
   if (new URL(base).pathname === `/${name}`) {
     throw new Error(`refusing to drop "${name}": it is the database DATABASE_URL points at`);
