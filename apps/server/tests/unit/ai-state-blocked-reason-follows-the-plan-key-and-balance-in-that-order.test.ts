@@ -2,8 +2,11 @@
 // `blocked_reason` for `GET /v1/account/me/ai`. Pure: no database, no clock,
 // no request. It composes `decideAiSource` (§4.3, tested on its own in
 // decide-ai-source-picks-one-of-six-rules-in-order.test.ts) with the three
-// checks that only matter once a task WOULD run on credits: debt, the
-// concurrency cap, and the balance itself.
+// checks that only matter once a task WOULD run on credits, in `reserve()`'s
+// own order (S14 audit #4): the concurrency cap, debt, then the balance against
+// the cheapest runnable model's minimum to start. The order and the threshold
+// are pinned against `reserve()`'s source in
+// the-ai-state-blocks-in-the-order-reserve-refuses-at-the-cheapest-models-minimum.test.ts.
 //
 // Each test fixes every input EXCEPT the one under test, so a failure names
 // which rule regressed rather than "some combination of inputs changed".
@@ -21,6 +24,9 @@ function input(over: Partial<DeriveAiStateInputs> = {}): DeriveAiStateInputs {
     debtMicro: 0,
     tasksInFlight: 0,
     availableMicro: 1_000_000,
+    // A one-microcredit minimum keeps every arm below about the rule it names,
+    // not the threshold (which has its own file — see the header).
+    minStartMicro: 1,
     ...over,
   };
 }
@@ -107,19 +113,19 @@ describe('deriveAiState — an own-key-funded turn is never blocked by debt, the
   });
 });
 
-describe('deriveAiState — a credits-funded turn: debt, then the task cap, then the balance', () => {
+describe('deriveAiState — a credits-funded turn: the task cap, then debt, then the balance', () => {
   it('CRITICAL debt blocks a credits turn even with room in the balance and the task cap', () => {
     expect(
       deriveAiState(input({ aiSource: 'credits', debtMicro: 1, availableMicro: 9_000_000 })),
     ).toEqual({ effectiveSource: 'credits', blockedReason: 'debt' });
   });
 
-  it('CRITICAL debt wins over tasks_in_flight when both would otherwise apply', () => {
+  it('CRITICAL tasks_in_flight wins over debt when both would otherwise apply — reserve() asks the cap first and answers 429', () => {
     expect(
       deriveAiState(
         input({ aiSource: 'credits', debtMicro: 1, tasksInFlight: MAX_AI_TASKS_IN_FLIGHT }),
       ),
-    ).toEqual({ effectiveSource: 'credits', blockedReason: 'debt' });
+    ).toEqual({ effectiveSource: 'credits', blockedReason: 'tasks_in_flight' });
   });
 
   it('CRITICAL tasks_in_flight blocks a credits turn at the cap, with no debt and a healthy balance', () => {
@@ -155,8 +161,10 @@ describe('deriveAiState — a credits-funded turn: debt, then the task cap, then
     });
   });
 
-  it('a single microcredit of balance is enough to NOT be no_credits', () => {
-    expect(deriveAiState(input({ aiSource: 'credits', availableMicro: 1 }))).toEqual({
+  it('a balance exactly at the cheapest minimum to start is enough to NOT be no_credits', () => {
+    expect(
+      deriveAiState(input({ aiSource: 'credits', availableMicro: 1, minStartMicro: 1 })),
+    ).toEqual({
       effectiveSource: 'credits',
       blockedReason: null,
     });

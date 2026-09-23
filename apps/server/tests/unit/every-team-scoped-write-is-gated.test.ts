@@ -17,6 +17,11 @@
 //
 // so this file starts green. What it refuses is the forty-eighth.
 //
+// (2026-09-23) A later write arrived with a sixth form: PATCH
+// /v1/account/me/ai-settings resolves the header only to REFUSE every account
+// but the caller's own — a "self-only refusal", registered below and recognised
+// by `gatesFor`.
+//
 // ── The derived form alone was a false green, and a mutation said so ───────
 //
 // The first version detected "team-scoped" from the same tokens that count as
@@ -80,10 +85,20 @@ function gatingHelpers(): string[] {
   return [...(block?.[1] ?? '').matchAll(/'([^']+)'/g)].map((m) => m[1]!);
 }
 
-/** A gate is one of those helpers, or the inline role comparison. */
+/**
+ * A gate is one of those helpers, the inline role comparison, or a SELF-ONLY
+ * REFUSAL — a handler that throws whenever the resolved account is not the
+ * caller's own. That last form is stricter than any role gate (an admin member is
+ * refused too), and it is the only honest shape for a write that resolves the
+ * header solely to refuse it: `PATCH /v1/account/me/ai-settings` (S14 audit #9)
+ * must not act on an owner's account at all, so it has no role to consult.
+ * Matched only as `kind !== 'self')` followed directly by a `throw`, so a branch
+ * that merely reads `kind` does not count.
+ */
 function gatesFor(segment: string): string[] {
   const found = gatingHelpers().filter((h) => segment.includes(h));
   if (/role\s*!==\s*'admin'|role\s*===\s*'admin'/.test(segment)) found.push('inline role check');
+  if (/\.kind\s*!==\s*'self'\s*\)\s*\{?\s*throw\b/.test(segment)) found.push('self-only refusal');
   return found;
 }
 
@@ -155,6 +170,9 @@ const ROSTER: Readonly<Record<string, readonly string[]>> = {
   'POST /v1/webhooks/:id/test': ['effectiveAccountIdForWrite'],
   'PUT /v1/account/email-preferences': ['inline role check'],
   'PUT /v1/account/me/organization': ['inline role check'],
+  // S14 audit #9 — resolves the header only to refuse any account but the
+  // caller's own (400, before the body is read); see `gatesFor`.
+  'PATCH /v1/account/me/ai-settings': ['self-only refusal'],
 };
 
 /**
@@ -221,6 +239,14 @@ describe('V-1069 every team-scoped write is gated', () => {
     // and a segment with no gate reads as ungated.
     expect(gatesFor("if (effective.role !== 'admin') throw x;")).toContain('inline role check');
     expect(gatesFor('const id = ctx.account.id;')).toEqual([]);
+    // The self-only form reads as a gate only when it REFUSES: a branch on
+    // `kind` that goes on to act on the resolved account is not one.
+    expect(
+      gatesFor("if (effective.kind !== 'self') {\n  throw new BadRequestError('x');\n}"),
+    ).toContain('self-only refusal');
+    expect(
+      gatesFor("if (effective.kind !== 'self') {\n  accountId = effective.accountId;\n}"),
+    ).toEqual([]);
   });
 
   it('CRITICAL every write that resolves an effective account through the header consults the membership role. This is the derived half, and it covers routes written in the resolveEffectiveAccount style — the ones whose team-scope survives having their gate deleted.', () => {
@@ -271,6 +297,9 @@ describe('V-1069 every team-scoped write is gated', () => {
   it('CRITICAL the recognised gates are exactly the ones V-837 knows. If a new gating helper is registered here and not there, a role check can hide where that guard cannot attribute it; registered there and not here, its routes read as ungated. Sharing one list is what keeps both true.', () => {
     const used = new Set(writes().flatMap((r) => r.gates));
     used.delete('inline role check');
+    // Not a role helper at all — it consults no role because it refuses every
+    // account but the caller's own (see `gatesFor`).
+    used.delete('self-only refusal');
     const unknown = [...used].filter((g) => !gatingHelpers().includes(g)).sort();
     expect(unknown, 'gate used by a route that V-837 does not list as a gating helper:').toEqual(
       [],

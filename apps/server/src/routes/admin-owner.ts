@@ -93,7 +93,13 @@ export function registerAdminOwnerRoutes(
 ): void {
   app.get(
     '/v1/admin/owner/platform-status',
-    { preHandler: [app.requireOwner, app.rateLimit('global')] },
+    {
+      preHandler: [
+        app.requireScope('driftstack_internal_admin'),
+        app.requireOwner,
+        app.rateLimit('global'),
+      ],
+    },
     () => {
       // Boot-time activation posture; no secrets, no per-request state.
       // Sync handler — no I/O, so no async (avoids require-await lint).
@@ -103,7 +109,13 @@ export function registerAdminOwnerRoutes(
 
   app.get(
     '/v1/admin/owner/pricing',
-    { preHandler: [app.requireOwner, app.rateLimit('global')] },
+    {
+      preHandler: [
+        app.requireScope('driftstack_internal_admin'),
+        app.requireOwner,
+        app.rateLimit('global'),
+      ],
+    },
     async () => {
       // Current per-tier monthly pricing (cents) via PricingService — the DB
       // pricing table (migration 0067), falling back to the TIER_MONTHLY_PRICE_CENTS
@@ -123,7 +135,13 @@ export function registerAdminOwnerRoutes(
   // charge footgun). Owner-gated (identity, not scope) + audited per D-025.
   app.patch<{ Params: { tier: string } }>(
     '/v1/admin/owner/pricing/:tier',
-    { preHandler: [app.requireOwner, app.rateLimit('global')] },
+    {
+      preHandler: [
+        app.requireScope('driftstack_internal_admin'),
+        app.requireOwner,
+        app.rateLimit('global'),
+      ],
+    },
     async (req, reply) => {
       const ctx = req.account;
       if (!ctx) throw new Error('account context missing after requireOwner');
@@ -178,7 +196,13 @@ export function registerAdminOwnerRoutes(
 
   app.get(
     '/v1/admin/owner/secrets',
-    { preHandler: [app.requireOwner, app.rateLimit('global')] },
+    {
+      preHandler: [
+        app.requireScope('driftstack_internal_admin'),
+        app.requireOwner,
+        app.rateLimit('global'),
+      ],
+    },
     async () => {
       const metas = await opts.secrets.list();
       return {
@@ -195,7 +219,13 @@ export function registerAdminOwnerRoutes(
 
   app.put<{ Params: { name: string }; Body: unknown }>(
     '/v1/admin/owner/secrets/:name',
-    { preHandler: [app.requireOwner, app.rateLimit('global')] },
+    {
+      preHandler: [
+        app.requireScope('driftstack_internal_admin'),
+        app.requireOwner,
+        app.rateLimit('global'),
+      ],
+    },
     async (req, reply) => {
       const ctx = req.account;
       if (!ctx) throw new Error('account context missing after requireOwner');
@@ -260,7 +290,13 @@ export function registerAdminOwnerRoutes(
 
   app.post<{ Params: { name: string } }>(
     '/v1/admin/owner/secrets/:name/reveal',
-    { preHandler: [app.requireOwner, app.rateLimit('global')] },
+    {
+      preHandler: [
+        app.requireScope('driftstack_internal_admin'),
+        app.requireOwner,
+        app.rateLimit('global'),
+      ],
+    },
     async (req) => {
       const ctx = req.account;
       if (!ctx) throw new Error('account context missing after requireOwner');
@@ -310,7 +346,13 @@ export function registerAdminOwnerRoutes(
 
   app.delete<{ Params: { name: string } }>(
     '/v1/admin/owner/secrets/:name',
-    { preHandler: [app.requireOwner, app.rateLimit('global')] },
+    {
+      preHandler: [
+        app.requireScope('driftstack_internal_admin'),
+        app.requireOwner,
+        app.rateLimit('global'),
+      ],
+    },
     async (req, reply) => {
       const ctx = req.account;
       if (!ctx) throw new Error('account context missing after requireOwner');

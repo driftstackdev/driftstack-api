@@ -6287,14 +6287,19 @@ export function registerAgentSessionsRoutes(
             // ceil(charged credits)). `enforceSettleResult` is set by the
             // explicit settle the route runs right after `runTurn` resolves
             // (§5.2's "normal path"), before any branch below calls
-            // `publicUsage` — so it is always populated here on a credits
-            // turn, and 0 only if the turn made no billable call at all.
+            // `publicUsage` — so it is populated here on a credits turn whose
+            // settle succeeded, and 0 only if the turn made no billable call.
+            // A settle that FAILED (left to the lease keeper, which charges it
+            // later) leaves the cost out: the charge is unknown, and 0 would
+            // read as a free turn — the same rule as the `credits` member.
             source === 'credits'
-            ? {
-                cost_usd_cents: Math.ceil(
-                  (enforceSettleResult?.chargedMicro ?? 0) / MICROCREDITS_PER_CREDIT,
-                ),
-              }
+            ? enforceSettleResult !== null
+              ? {
+                  cost_usd_cents: Math.ceil(
+                    enforceSettleResult.chargedMicro / MICROCREDITS_PER_CREDIT,
+                  ),
+                }
+              : {}
             : usage.costUsdCents !== undefined
               ? { cost_usd_cents: usage.costUsdCents }
               : {}),
@@ -6326,6 +6331,14 @@ export function registerAgentSessionsRoutes(
       if (movedAccount === null) return undefined;
       if (source === 'credits') {
         if (creditLeg === null || creditLeg.kind !== 'enforce') return undefined;
+        // S14 audit #10 — a settle that FAILED (logged in
+        // `settleEnforceLegOnce`, finished later by the lease keeper, which
+        // does charge it) leaves no charge to report. `charged: 0` there would
+        // tell the customer the turn cost nothing when it will not have, and
+        // the schema has no "pending" form, so the member is omitted — the
+        // same "additive, never a placeholder" shape as every other optional
+        // field here.
+        if (enforceSettleResult === null) return undefined;
         return {
           source: 'credits',
           // Both are amounts taken FROM the account's balance (a hold, then
@@ -6334,7 +6347,7 @@ export function registerAgentSessionsRoutes(
           // `chargedMicro` two lines above, extended to `reservedMicro` for
           // the same reason.
           reserved: chargeCreditsForDisplay(creditLeg.reservedMicro),
-          charged: chargeCreditsForDisplay(enforceSettleResult?.chargedMicro ?? 0),
+          charged: chargeCreditsForDisplay(enforceSettleResult.chargedMicro),
           rate_card_version: creditLeg.rateCardVersion,
         };
       }
@@ -6376,8 +6389,25 @@ export function registerAgentSessionsRoutes(
       ) {
         return base;
       }
-      const chargedMicro = await aiCredits.stateReads.chargedForSessionMicro(rec.id);
-      return { ...base, credits_spent: chargeCreditsForDisplay(chargedMicro) };
+      // S14 audit #10 — this read runs AFTER the turn has run and been billed.
+      // A database error here must not turn that turn's answer into a 500:
+      // it is logged and the field omitted (it is additive, so its absence is
+      // a shape every consumer already handles).
+      try {
+        const chargedMicro = await aiCredits.stateReads.chargedForSessionMicro(rec.id);
+        return { ...base, credits_spent: chargeCreditsForDisplay(chargedMicro) };
+      } catch (err) {
+        req.log.warn(
+          {
+            component: 'agent-session-message',
+            event: 'ai_credits_session_spent_read_failed',
+            sessionId: rec.id,
+            err,
+          },
+          'reading a session’s AI-credit spend failed — credits_spent is omitted from this response',
+        );
+        return base;
+      }
     };
     const settledWorkExtensions = (
       result: {

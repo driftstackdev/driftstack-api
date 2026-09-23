@@ -31,6 +31,58 @@ export interface AdminCreditsHarness {
   readonly cutoverRepo: DrizzleCreditCutoverRepo;
   readonly cutover: CreditCutoverService;
   readonly aiCredits: AiCreditsRuntime;
+  /**
+   * C0 — the SAME set the harness's cutover service reads, so a test makes an
+   * account internal by adding its e-mail here. Phase 1 moves only C0, by
+   * cohort or by id, so an account a test means to move must be in it.
+   */
+  readonly internalEmails: Set<string>;
+}
+
+/** The staff identity `buildTestApp` authenticates by default (its own
+ *  `accountId`/`apiKeyId` defaults). */
+export const DEFAULT_STAFF_IDENTITY = {
+  accountId: '00000000-0000-4000-8000-000000000001',
+  apiKeyId: '00000000-0000-4000-8000-000000000a01',
+} as const;
+
+/**
+ * Put a staff identity's `accounts` and `api_keys` rows into the isolated
+ * database. Every AI-credits admin mutation writes its audit row INSIDE its own
+ * transaction, into `ai_credits_admin_audit_log`, whose actor columns are
+ * foreign keys to both tables — and `buildTestApp`'s identity otherwise lives
+ * only in its in-memory auth store. Idempotent.
+ */
+export async function seedStaffIdentity(
+  sql: postgres.Sql,
+  identity: { readonly accountId: string; readonly apiKeyId: string } = DEFAULT_STAFF_IDENTITY,
+): Promise<void> {
+  await sql`
+    INSERT INTO accounts (id, email)
+    VALUES (${identity.accountId}::uuid, ${`staff-${identity.accountId}@driftstack.test`})
+    ON CONFLICT (id) DO NOTHING`;
+  await sql`
+    INSERT INTO api_keys (id, account_id, name, key_prefix, key_hash, scopes)
+    VALUES (${identity.apiKeyId}::uuid, ${identity.accountId}::uuid, 'staff',
+            ${`staff_${identity.apiKeyId.slice(0, 8)}`}, 'x', '{}')
+    ON CONFLICT (id) DO NOTHING`;
+}
+
+/** The audit rows the admin routes wrote for one target account, oldest first. */
+export async function adminAuditRowsFor(
+  sql: postgres.Sql,
+  where: { readonly targetAccountId?: string; readonly targetResourceId?: string },
+): Promise<Array<{ action: string; admin_account_id: string; input_payload: unknown }>> {
+  if (where.targetAccountId !== undefined) {
+    return sql<Array<{ action: string; admin_account_id: string; input_payload: unknown }>>`
+      SELECT action, admin_account_id::text, input_payload FROM ai_credits_admin_audit_log
+       WHERE target_account_id = ${where.targetAccountId}::uuid
+       ORDER BY timestamp, id`;
+  }
+  return sql<Array<{ action: string; admin_account_id: string; input_payload: unknown }>>`
+    SELECT action, admin_account_id::text, input_payload FROM ai_credits_admin_audit_log
+     WHERE target_resource_id = ${where.targetResourceId ?? ''}
+     ORDER BY timestamp, id`;
 }
 
 /** A report reader no admin-credits test calls; every method rejects loudly
@@ -57,13 +109,14 @@ export function adminCreditsHarness(
   const rateCardsWriter = new DrizzleCreditRateCardRepo(database);
   const grants = new CreditGrantsService({ ledger, windows });
   const cutoverRepo = new DrizzleCreditCutoverRepo(database);
+  const internalEmails = new Set(opts.internalEmails ?? []);
   const cutover = new CreditCutoverService({
     ledger,
     windows,
     cutoverRepo,
     creditGrants: grants,
     pool: database.db,
-    internalEmails: opts.internalEmails ?? new Set(),
+    internalEmails,
   });
 
   const aiCredits: AiCreditsRuntime = {
@@ -107,7 +160,16 @@ export function adminCreditsHarness(
     },
   };
 
-  return { base, overrides, rateCardsWriter, grants, cutoverRepo, cutover, aiCredits };
+  return {
+    base,
+    overrides,
+    rateCardsWriter,
+    grants,
+    cutoverRepo,
+    cutover,
+    aiCredits,
+    internalEmails,
+  };
 }
 
 export { type ReservationsHarness };

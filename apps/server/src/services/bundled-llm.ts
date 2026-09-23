@@ -144,9 +144,14 @@ export interface MovedAccountCreditsView {
  *     credit an older window left behind (S7).
  *   · `month_started_at` = the window's `window_start`.
  *
- * Where the account has no current window — no paid coverage yet — cap and
- * remaining read 0 and the month falls back to the calendar month, the same
- * default the LEGACY shape already returns when its settings row is missing.
+ * Where the account has no current window — coverage lapsed, or not granted
+ * yet — the window's LEVEL is 0 and nothing has been charged to it, so `used`
+ * is 0; the other live grants and the spendable balance still count, exactly
+ * as §8.6 defines `cap_cents` and `remaining_cents` (S13 audit #13: forcing
+ * both to 0 showed "cap 0, remaining 0" to an account whose turns were still
+ * running on a goodwill lot). The month falls back to the calendar month, the
+ * same default the LEGACY shape already returns when its settings row is
+ * missing.
  */
 export function movedAccountCreditsView(args: {
   readonly aiSource: AiSource | null;
@@ -157,22 +162,17 @@ export function movedAccountCreditsView(args: {
   readonly now: Date;
 }): MovedAccountCreditsView {
   const consent = movedAccountConsent(args.aiSource);
-  if (args.currentWindow === null) {
-    return {
-      consent,
-      capCents: 0,
-      usedThisMonthCents: 0,
-      remainingCents: 0,
-      monthStartedAt: startOfCalendarMonthUtc(args.now),
-    };
-  }
-  const capMicro = args.currentWindow.levelMicro + args.otherLiveGrantedMicro;
+  const window = args.currentWindow;
+  const capMicro = (window === null ? 0 : window.levelMicro) + args.otherLiveGrantedMicro;
   return {
     consent,
     capCents: Math.min(centsFloor(capMicro), BUNDLED_CAP_STORAGE_MAX_CENTS),
-    usedThisMonthCents: centsCeil(args.chargedInWindowMicro),
+    usedThisMonthCents: window === null ? 0 : centsCeil(args.chargedInWindowMicro),
     remainingCents: centsFloor(args.spendableMicro),
-    monthStartedAt: firstMillisecondAtOrAfter(args.currentWindow.windowStart),
+    monthStartedAt:
+      window === null
+        ? startOfCalendarMonthUtc(args.now)
+        : firstMillisecondAtOrAfter(window.windowStart),
   };
 }
 
@@ -238,7 +238,35 @@ export interface BundledLlmRepo {
     consent?: boolean;
     monthlyCapUsdCents?: number;
   }): Promise<BundledLlmSettings | null>;
+  /**
+   * S16 audit #11 — the legacy PATCH's write, decided UNDER THE LOCK THE
+   * CUTOVER TAKES FIRST (`accounts`, FOR NO KEY UPDATE), read, then written,
+   * in one transaction. With `refuseIfMoved`, an account whose
+   * `credit_accounts.billing_mode` is `'credits'` is not written: `moved`.
+   * So a save racing a cutover either commits before the move (and is in the
+   * move's snapshot) or waits for it and sees the account moved — never lands
+   * in legacy columns a moved account no longer reads. `refuseIfMoved` is
+   * false outside `enforce`, where a credits-billed account is still legacy to
+   * these routes (§4.1; "rollback everyone" is setting the mode to shadow).
+   * PATCH semantics as {@link updateSettings}; `prior` is the row as locked.
+   */
+  updateLegacySettings(args: {
+    accountId: string;
+    consent?: boolean;
+    monthlyCapUsdCents?: number;
+    refuseIfMoved: boolean;
+  }): Promise<LegacySettingsWrite>;
 }
+
+/** {@link BundledLlmRepo.updateLegacySettings}'s answer. */
+export type LegacySettingsWrite =
+  | {
+      readonly outcome: 'written';
+      readonly prior: BundledLlmSettings;
+      readonly next: BundledLlmSettings;
+    }
+  | { readonly outcome: 'moved' }
+  | { readonly outcome: 'not_found' };
 
 /** Start-of-calendar-month boundary (UTC) for the supplied date.
  *  Pure function; exported so tests can pin the boundary. */
@@ -271,6 +299,16 @@ export class BundledLlmService {
     monthlyCapUsdCents?: number;
   }): Promise<BundledLlmSettings | null> {
     return this.repo.updateSettings(args);
+  }
+
+  /** S16 audit #11 — see {@link BundledLlmRepo.updateLegacySettings}. */
+  async updateLegacySettings(args: {
+    accountId: string;
+    consent?: boolean;
+    monthlyCapUsdCents?: number;
+    refuseIfMoved: boolean;
+  }): Promise<LegacySettingsWrite> {
+    return this.repo.updateLegacySettings(args);
   }
 }
 
@@ -318,5 +356,27 @@ export class InMemoryBundledLlmRepo implements BundledLlmRepo {
     };
     this.rows.set(args.accountId, next);
     return Promise.resolve(next);
+  }
+
+  /** Accounts this double treats as cut over (`billing_mode = 'credits'`). */
+  private readonly moved = new Set<string>();
+
+  /** Test helper: make {@link updateLegacySettings} see `accountId` as moved. */
+  markMoved(accountId: string): void {
+    this.moved.add(accountId);
+  }
+
+  /** Single-threaded, so there is no lock to take; the moved check is the
+   *  same one the database version makes under its lock. */
+  async updateLegacySettings(args: {
+    accountId: string;
+    consent?: boolean;
+    monthlyCapUsdCents?: number;
+    refuseIfMoved: boolean;
+  }): Promise<LegacySettingsWrite> {
+    if (args.refuseIfMoved && this.moved.has(args.accountId)) return { outcome: 'moved' };
+    const prior = this.rows.get(args.accountId) ?? { consent: false, monthlyCapUsdCents: 2000 };
+    const next = await this.updateSettings(args);
+    return next === null ? { outcome: 'not_found' } : { outcome: 'written', prior, next };
   }
 }

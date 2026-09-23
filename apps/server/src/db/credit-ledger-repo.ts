@@ -26,7 +26,7 @@
 // bug, and it throws rather than reporting success for a movement that never
 // happened.
 
-import { and, desc, eq, getTableColumns, gt, isNull, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gt, inArray, isNull, lte, sql } from 'drizzle-orm';
 import {
   AiBillingSchema,
   AiDebtReasonSchema,
@@ -676,6 +676,16 @@ export class DrizzleCreditLedgerRepo {
    * Add a lot. It is born EMPTY — the database forces `remaining_micro` to 0 —
    * and holds credit only once a `grant` ledger row funds it. The same grant key
    * inserts once; a second call with the same terms returns the first lot.
+   *
+   * ⛔ AN `adjustment` LOT'S TERMS DO NOT INCLUDE ITS START. Its writers (an
+   * admin goodwill grant, a dispute's reinstatement) take `starts_at` from the
+   * clock at the time of the call — floored to a minute, but a clock all the
+   * same — so a retry of the SAME request in a later minute carries a different
+   * start. Compared, that retry read as a different grant under a used key
+   * (a 409 that invites a NEW key, and so a second grant). The amount, the
+   * expiry, the account and the kind still decide; every other kind of lot
+   * (monthly, proration, top-up) is written from stored facts and still
+   * compares its start.
    */
   async insertLot(
     lot: NewCreditLot,
@@ -712,7 +722,7 @@ export class DrizzleCreditLedgerRepo {
       record.kind === values.kind &&
       record.windowId === values.windowId &&
       record.grantedMicro === values.grantedMicro &&
-      record.startsAt.getTime() === values.startsAt.getTime() &&
+      (values.kind === 'adjustment' || record.startsAt.getTime() === values.startsAt.getTime()) &&
       record.expiresAt.getTime() === values.expiresAt.getTime();
     if (!same) throw new CreditLotGrantKeyReusedError(lot.grantKey);
     return { inserted: false, lot: record };
@@ -1041,20 +1051,54 @@ export class DrizzleCreditLedgerRepo {
   }
 
   /**
-   * S14 — {@link ledgerPage}, with each entry's running `balanceAfterMicro`
-   * for `GET /v1/account/me/ai/ledger`'s `balance_after_credits`.
+   * S14 — one page of the account's ledger as the CUSTOMER reads it, newest
+   * first, each entry with its running `balanceAfterMicro`, for
+   * `GET /v1/account/me/ai/ledger` (and the admin credit-state read).
    *
-   * ⛔ THE WINDOW FUNCTION SEES EVERY ROW THE `WHERE` CLAUSE PASSES, BEFORE
-   * `LIMIT` APPLIES — that ordering (FROM/WHERE, then window functions, then
-   * LIMIT) is what makes filtering on the cursor SAFE here rather than a
-   * truncated sum: `id < cursor` selects an unbroken prefix of the account's
-   * whole history from its very first row, so `SUM(...) OVER (ORDER BY id)`
-   * computed over exactly that filtered set already equals the true running
-   * balance for every row it returns — a row with `id <= X` for any `X` in the
-   * page is, by construction, also `id < cursor`. A version that computed the
-   * sum outside the cursor filter (a CTE with no WHERE, filtered afterwards)
-   * would answer the same question at the cost of scanning the whole ledger on
-   * every page; this does not need to.
+   * ONE TASK, ONE ENTRY (the winning design: "task charges spanning two lots
+   * are grouped into one entry per reservation"; S14 audit #7). A task that
+   * drew on two lots settles as two `task_charge` rows sharing one
+   * `reservation_id`; they read as ONE entry whose deltas are their sums.
+   * Every other row is an entry of its own.
+   *
+   * ⛔ THE CURSOR PAGES BY ENTRY, SO A GROUP CANNOT STRADDLE A PAGE. An entry's
+   * id is the id of its NEWEST row — for a grouped charge `max(id)` over the
+   * reservation's `task_charge` rows, otherwise the row's own id — and every id
+   * the page returns, and every cursor, is such an entry id. A page holds the
+   * entries whose id is `< cursor`, so each entry lands on exactly one page:
+   * it is either wholly before the cursor or wholly not. Because every one of
+   * an entry's rows has `id <= its entry id`, prefiltering the rows on
+   * `id < cursor` keeps every row of every entry the page may hold, and the
+   * second filter (`entry_id < cursor`) drops the rows of newer entries that
+   * started before the cursor.
+   *
+   * ⛔ THE RUNNING BALANCE IS SUMMED OVER ENTRIES IN ENTRY ORDER, so that each
+   * entry's balance is the previous one's plus exactly its own displayed
+   * delta. Today a reservation's `task_charge` rows are contiguous in the
+   * account's id order (settle charges each hold in full before touching the
+   * next, and every ledger writer takes the account lock), so this equals the
+   * row-level running sum at the entry's newest row. If a row of another kind
+   * were ever written between two of them, the entries would still add up:
+   * that row's entry would sit BEFORE the grouped charge, which is where its
+   * own id puts it.
+   *
+   * ⛔ THE WINDOW SUM SEES EVERY ENTRY THE `WHERE` CLAUSES PASS, BEFORE `LIMIT`
+   * APPLIES. `entry_id < cursor` selects an unbroken prefix of the account's
+   * entries from its very first, so the sum over exactly that set is the true
+   * running balance for every entry the page returns.
+   *
+   * ⛔ EVERY ORDER BY NAMES `e.entry_id`, QUALIFIED. The SELECT list prints the
+   * id as text under the same name, and a bare `ORDER BY entry_id` binds to
+   * that OUTPUT alias — a text sort, which puts '9' before '11' and returned
+   * the wrong page the first time this was written.
+   *
+   * Two reads: the grouped page (raw SQL — a GROUP BY under a window sum), then
+   * the page's key rows through the typed builder, for their stored columns.
+   * No snapshot is needed between them: the ledger refuses UPDATE and DELETE,
+   * and a lot's `expires_at` is one of its immutable terms. A grouped entry's
+   * `lotId`/`lotExpiresAt` are null (it names more than one lot); every other
+   * column is its newest row's, and `model`, `rateCardVersion` and
+   * `agentSessionId` are the reservation's, the same on every row of it.
    */
   async ledgerPageWithBalance(
     accountId: string,
@@ -1068,35 +1112,95 @@ export class DrizzleCreditLedgerRepo {
     if (cursor !== undefined && !/^[1-9][0-9]{0,17}$/.test(cursor)) {
       throw new RangeError('a ledger cursor is the id of a ledger entry');
     }
-    const rows = await on
-      .select({
-        ...getTableColumns(creditLedger),
-        balanceAfterMicro: sql<string>`(sum(${creditLedger.lotDeltaMicro} - ${creditLedger.debtDeltaMicro}) over (order by ${creditLedger.id}))::text`,
-        // The lot this row names, if any — only to read ITS `expires_at` back
-        // beside the row; nothing here changes which rows are returned (an
-        // inner join would drop every row with a null `lotId`, e.g. every
-        // `debt_incurred`).
-        lotExpiresAt: creditLots.expiresAt,
-      })
-      .from(creditLedger)
-      .leftJoin(creditLots, eq(creditLedger.lotId, creditLots.id))
-      .where(
-        and(
-          eq(creditLedger.accountId, accountId),
-          cursor === undefined ? undefined : sql`${creditLedger.id} < ${cursor}::bigint`,
-        ),
+    const before = cursor ?? null;
+    const grouped = await on.execute<{
+      entry_id: string;
+      lot_delta_micro: string;
+      debt_delta_micro: string;
+      parts: number;
+      balance_after_micro: string;
+    }>(sql`
+      WITH keyed AS (
+        SELECT l.id, l.lot_delta_micro, l.debt_delta_micro,
+               CASE WHEN l.kind = 'task_charge'
+                    THEN (SELECT max(x.id) FROM credit_ledger x
+                           WHERE x.account_id = l.account_id
+                             AND x.kind = 'task_charge'
+                             AND x.reservation_id = l.reservation_id)
+                    ELSE l.id
+               END AS entry_id
+          FROM credit_ledger l
+         WHERE l.account_id = ${accountId}::uuid
+           AND (${before}::bigint IS NULL OR l.id < ${before}::bigint)
+      ),
+      entries AS (
+        SELECT entry_id,
+               sum(lot_delta_micro) AS lot_delta_micro,
+               sum(debt_delta_micro) AS debt_delta_micro,
+               count(*) AS parts
+          FROM keyed
+         WHERE (${before}::bigint IS NULL OR entry_id < ${before}::bigint)
+         GROUP BY entry_id
       )
-      .orderBy(desc(creditLedger.id))
-      .limit(limit + 1);
-    const entries = rows.slice(0, limit).map((r) => ({
-      ...toLedgerRecord(r),
-      balanceAfterMicro: exact('a running balance', Number(r.balanceAfterMicro)),
-      lotExpiresAt: r.lotExpiresAt,
-    }));
+      SELECT e.entry_id::text AS entry_id,
+             e.lot_delta_micro::text AS lot_delta_micro,
+             e.debt_delta_micro::text AS debt_delta_micro,
+             e.parts::int AS parts,
+             (sum(e.lot_delta_micro - e.debt_delta_micro) OVER (ORDER BY e.entry_id))::text
+               AS balance_after_micro
+        FROM entries e
+       ORDER BY e.entry_id DESC
+       LIMIT ${limit + 1}::int`);
+    const pageRows = rowsOf<{
+      entry_id: string;
+      lot_delta_micro: string;
+      debt_delta_micro: string;
+      parts: number;
+      balance_after_micro: string;
+    }>(grouped);
+    const onPage = pageRows.slice(0, limit);
+    const keyRows =
+      onPage.length === 0
+        ? []
+        : await on
+            .select({
+              ...getTableColumns(creditLedger),
+              // The lot this row names, if any — only to read ITS `expires_at`
+              // back beside the row (a left join: a `debt_incurred` names none).
+              lotExpiresAt: creditLots.expiresAt,
+            })
+            .from(creditLedger)
+            .leftJoin(creditLots, eq(creditLedger.lotId, creditLots.id))
+            .where(
+              and(
+                eq(creditLedger.accountId, accountId),
+                inArray(
+                  creditLedger.id,
+                  onPage.map((r) => BigInt(r.entry_id)),
+                ),
+              ),
+            )
+            .orderBy(desc(creditLedger.id));
+    const byId = new Map(keyRows.map((r) => [r.id.toString(), r]));
+    const entries = onPage.map((g): CreditLedgerRecordWithBalance => {
+      const key = byId.get(g.entry_id);
+      if (key === undefined) {
+        throw new Error(`ledger entry ${g.entry_id} was paged and then could not be read`);
+      }
+      const spansLots = g.parts > 1;
+      return {
+        ...toLedgerRecord(key),
+        lotId: spansLots ? null : key.lotId,
+        lotDeltaMicro: exact('an entry’s lot delta', Number(g.lot_delta_micro)),
+        debtDeltaMicro: exact('an entry’s debt delta', Number(g.debt_delta_micro)),
+        balanceAfterMicro: exact('a running balance', Number(g.balance_after_micro)),
+        lotExpiresAt: spansLots ? null : key.lotExpiresAt,
+      };
+    });
     const last = entries[entries.length - 1];
     return {
       entries,
-      nextCursor: rows.length > limit && last !== undefined ? last.id : null,
+      nextCursor: pageRows.length > limit && last !== undefined ? last.id : null,
     };
   }
 

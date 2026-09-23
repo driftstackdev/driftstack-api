@@ -11,11 +11,12 @@
 
 import { and, eq, gte, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
-import { accounts, usageRecords } from './schema.js';
+import { accounts, creditAccounts, usageRecords } from './schema.js';
 import {
   startOfCalendarMonthUtc,
   type BundledLlmRepo,
   type BundledLlmSettings,
+  type LegacySettingsWrite,
 } from '../services/bundled-llm.js';
 
 export class DrizzleBundledLlmRepo implements BundledLlmRepo {
@@ -54,6 +55,59 @@ export class DrizzleBundledLlmRepo implements BundledLlmRepo {
       await this.database.db.update(accounts).set(set).where(eq(accounts.id, args.accountId));
     }
     return this.findSettings(args.accountId);
+  }
+
+  /**
+   * S16 audit #11 — the legacy PATCH's write: LOCK, THEN READ, THEN WRITE, in
+   * one transaction. The lock is the one a cutover takes FIRST —
+   * `accounts` FOR NO KEY UPDATE (`DrizzleCreditCutoverRepo.lockAccountFacts`)
+   * — so the two serialise on the same row in the same order: a save that
+   * holds it first commits before the move reads its snapshot; a save that
+   * waits reads `billing_mode` only once the move has committed, and sees it.
+   * `credit_accounts` is read, never locked (taking it here would invert the
+   * cutover's accounts-then-credit_accounts order). No row there is legacy.
+   */
+  async updateLegacySettings(args: {
+    accountId: string;
+    consent?: boolean;
+    monthlyCapUsdCents?: number;
+    refuseIfMoved: boolean;
+  }): Promise<LegacySettingsWrite> {
+    return this.database.db.transaction(async (tx): Promise<LegacySettingsWrite> => {
+      const [locked] = await tx
+        .select({
+          consent: accounts.bundledLlmConsent,
+          cap: accounts.bundledLlmMonthlyCapUsdCents,
+        })
+        .from(accounts)
+        .where(eq(accounts.id, args.accountId))
+        .limit(1)
+        .for('no key update');
+      if (locked === undefined) return { outcome: 'not_found' };
+      if (args.refuseIfMoved) {
+        const [credit] = await tx
+          .select({ billingMode: creditAccounts.billingMode })
+          .from(creditAccounts)
+          .where(eq(creditAccounts.accountId, args.accountId))
+          .limit(1);
+        if (credit?.billingMode === 'credits') return { outcome: 'moved' };
+      }
+      const prior: BundledLlmSettings = { consent: locked.consent, monthlyCapUsdCents: locked.cap };
+      const next: BundledLlmSettings = {
+        consent: args.consent ?? prior.consent,
+        monthlyCapUsdCents: args.monthlyCapUsdCents ?? prior.monthlyCapUsdCents,
+      };
+      if (args.consent !== undefined || args.monthlyCapUsdCents !== undefined) {
+        await tx
+          .update(accounts)
+          .set({
+            bundledLlmConsent: next.consent,
+            bundledLlmMonthlyCapUsdCents: next.monthlyCapUsdCents,
+          })
+          .where(eq(accounts.id, args.accountId));
+      }
+      return { outcome: 'written', prior, next };
+    });
   }
 
   async sumMonthlySpendCents(args: { accountId: string; now: Date }): Promise<number> {

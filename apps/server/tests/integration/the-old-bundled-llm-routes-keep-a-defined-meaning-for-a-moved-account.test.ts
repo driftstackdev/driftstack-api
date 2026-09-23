@@ -404,7 +404,10 @@ describe('the old bundled-llm routes keep a defined meaning for a moved account 
     expect(settings.json<SettingsBody>().monthly_cap_usd_cents).toBe(3_000);
   });
 
-  it('with no current window (no paid coverage yet), cap/used/remaining read 0 and the month falls back to the calendar month', async () => {
+  // S13 audit #13: with no window the LEVEL is 0, but the other live grants
+  // and the spendable balance still count (§8.6) — a lapsed account holding a
+  // goodwill lot shows that credit, not "cap 0, remaining 0".
+  it('with no current window (no paid coverage now), used reads 0 and the level adds nothing, but the other live grants and the spendable balance still show', async () => {
     const { runtime } = fakeMovedRuntime({
       mode: 'enforce',
       billingMode: 'credits',
@@ -421,9 +424,9 @@ describe('the old bundled-llm routes keep a defined meaning for a moved account 
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
     const body = res.json<StatusBody>();
-    expect(body.cap_cents).toBe(0);
+    expect(body.cap_cents).toBe(999);
     expect(body.used_this_month_cents).toBe(0);
-    expect(body.remaining_cents).toBe(0);
+    expect(body.remaining_cents).toBe(999);
     expect(body.consent).toBe(true);
   });
 

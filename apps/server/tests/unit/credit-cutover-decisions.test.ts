@@ -12,6 +12,7 @@ import {
   decideCutoverAiSource,
   summarizeCutoverDecisions,
   CreditCutoverService,
+  legacyConsentOnRollback,
   PhaseTwoCohortError,
   type CutoverAccountDecisionFacts,
   type CutoverDecision,
@@ -60,6 +61,8 @@ function facts(over: Partial<CutoverAccountDecisionFacts> = {}): CutoverAccountD
     consent: false,
     hasStoredKey: false,
     hasPaidCoverage: true,
+    hasLiveContractOverride: false,
+    inPhaseOneCohort: true,
     ...over,
   };
 }
@@ -88,17 +91,69 @@ describe('decideCutover — §8.4’s per-account decision', () => {
     expect(d).toEqual({ accountId: 'a1', outcome: 'refuse', reason: 'no_paid_coverage' });
   });
 
-  it('Enterprise without a contract stays legacy — its plan-wide allowance is "contract", so no coverage means no override was ever set', () => {
+  it('Enterprise without a contract stays legacy, refused no_contract — its plan-wide allowance is "contract"', () => {
     const d = decideCutover('a1', facts({ tier: 'enterprise', hasPaidCoverage: false }));
+    expect(d).toEqual({ accountId: 'a1', outcome: 'refuse', reason: 'no_contract' });
+  });
+
+  it('CRITICAL Enterprise with paid coverage from some OTHER plan (a Stripe line) but no contract is refused no_contract (S16 audit #3, M7)', () => {
+    const d = decideCutover(
+      'a1',
+      facts({ tier: 'enterprise', hasPaidCoverage: true, hasLiveContractOverride: false }),
+    );
+    expect(d).toEqual({ accountId: 'a1', outcome: 'refuse', reason: 'no_contract' });
+  });
+
+  it('Enterprise WITH a live contract override moves — the override is its paid coverage too', () => {
+    const d = decideCutover(
+      'a1',
+      facts({
+        tier: 'enterprise',
+        hasPaidCoverage: true,
+        hasLiveContractOverride: true,
+        hasStoredKey: false,
+      }),
+    );
+    expect(d).toEqual({ accountId: 'a1', outcome: 'move', aiSource: 'credits' });
+  });
+
+  it('Enterprise with a contract that grants nothing is still refused no_paid_coverage', () => {
+    const d = decideCutover(
+      'a1',
+      facts({ tier: 'enterprise', hasPaidCoverage: false, hasLiveContractOverride: true }),
+    );
     expect(d).toEqual({ accountId: 'a1', outcome: 'refuse', reason: 'no_paid_coverage' });
   });
 
-  it('Enterprise WITH a contract override moves — hasPaidCoverage reads the override the same as a paid invoice', () => {
+  it('a plan with a plan-wide allowance never needs a contract', () => {
     const d = decideCutover(
       'a1',
-      facts({ tier: 'enterprise', hasPaidCoverage: true, hasStoredKey: false }),
+      facts({ tier: 'api_scale', hasPaidCoverage: true, hasLiveContractOverride: false }),
     );
     expect(d).toEqual({ accountId: 'a1', outcome: 'move', aiSource: 'credits' });
+  });
+
+  it('CRITICAL an account outside C0 is refused not_in_phase_1_cohort, whatever else is true of it (S16 audit #6)', () => {
+    for (const over of [
+      {},
+      { billingMode: 'credits' as const },
+      { tier: 'free' as const },
+      { tier: 'enterprise' as const, hasLiveContractOverride: true },
+    ]) {
+      expect(decideCutover('a1', facts({ ...over, inPhaseOneCohort: false }))).toEqual({
+        accountId: 'a1',
+        outcome: 'refuse',
+        reason: 'not_in_phase_1_cohort',
+      });
+    }
+  });
+
+  it('a deleted account is refused account_deleted even outside C0 — deletion is checked first', () => {
+    expect(decideCutover('a1', facts({ status: 'deleted', inPhaseOneCohort: false }))).toEqual({
+      accountId: 'a1',
+      outcome: 'refuse',
+      reason: 'account_deleted',
+    });
   });
 
   it('Personal (solo_manual) moves onto credits-only, a stored key notwithstanding', () => {
@@ -192,6 +247,7 @@ describe('CreditCutoverService.resolveSelector — the Phase-2 cohort refusal', 
         readBillingMode: unreachable,
         restoreLegacySettings: unreachable,
         listCohortAccountIds: unreachable,
+        coverageFacts: unreachable,
       },
       creditGrants: { refreshCreditsIn: unreachable },
       pool: {} as never,
@@ -227,6 +283,7 @@ describe('CreditCutoverService.resolveSelector — the Phase-2 cohort refusal', 
         readBillingMode: unreachable,
         restoreLegacySettings: unreachable,
         listCohortAccountIds: () => Promise.resolve(['internal-1']),
+        coverageFacts: unreachable,
       },
       creditGrants: { refreshCreditsIn: unreachable },
       pool: {} as never,
@@ -246,4 +303,35 @@ describe('CreditCutoverService.resolveSelector — the Phase-2 cohort refusal', 
       );
     },
   );
+});
+
+describe('legacyConsentOnRollback — what a rollback puts back as the legacy consent (S16 audit #10)', () => {
+  it('CRITICAL a customer who chose their own key while moved rolls back with consent false, whatever the snapshot says', () => {
+    expect(legacyConsentOnRollback({ aiSource: 'own_key', aiSourceSetBy: 'customer' }, true)).toBe(
+      false,
+    );
+    expect(legacyConsentOnRollback({ aiSource: 'own_key', aiSourceSetBy: 'customer' }, false)).toBe(
+      false,
+    );
+  });
+
+  it('any other customer choice keeps the snapshot', () => {
+    for (const snapshot of [true, false]) {
+      expect(legacyConsentOnRollback({ aiSource: null, aiSourceSetBy: 'customer' }, snapshot)).toBe(
+        snapshot,
+      );
+      expect(
+        legacyConsentOnRollback({ aiSource: 'credits', aiSourceSetBy: 'customer' }, snapshot),
+      ).toBe(snapshot);
+    }
+  });
+
+  it('a source the cutover (or an admin) chose keeps the snapshot — own_key included', () => {
+    expect(legacyConsentOnRollback({ aiSource: 'own_key', aiSourceSetBy: 'cutover' }, true)).toBe(
+      true,
+    );
+    expect(legacyConsentOnRollback({ aiSource: 'own_key', aiSourceSetBy: 'admin' }, true)).toBe(
+      true,
+    );
+  });
 });

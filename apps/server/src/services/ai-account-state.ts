@@ -59,11 +59,22 @@ function isoOfNullable(value: WireInstant | null): string | null {
   return value === null ? null : isoOf(value);
 }
 
-/** A stored `credit_ledger.model` value, refused rather than trusted if the
- *  database somehow holds a string outside `AgentModelSchema` — see
- *  `buildLedgerEntry`. */
-function agentModelOf(model: string): AgentModel {
-  return AgentModelSchema.parse(model);
+/**
+ * A stored `credit_ledger.model` value as the ledger's `task.model`, or null
+ * when it is no longer in `AgentModelSchema`.
+ *
+ * ⛔ NULL, NOT A THROW AND NOT THE RAW STRING (S14 audit #11). The column is
+ * plain text and history never changes, so a model later retired from the enum
+ * stays on every charge it ever made: parsing it strictly turned each page
+ * holding one of those charges into a 500, forever. Echoing the raw string
+ * would need the published field widened from the model enum to any string;
+ * null is the fallback the schema admits without that (`task.model` is
+ * `AgentModelSchema.nullable()`), and the entry's credits, session and rate
+ * card still say what the task cost.
+ */
+function agentModelOrNull(model: string): AgentModel | null {
+  const parsed = AgentModelSchema.safeParse(model);
+  return parsed.success ? parsed.data : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,6 +91,15 @@ export interface DeriveAiStateInputs {
   readonly debtMicro: number;
   readonly tasksInFlight: number;
   readonly availableMicro: number;
+  /**
+   * The SMALLEST minimum to start among the models the account can run on
+   * credits right now — every model the deployment's key may run that has a
+   * row on the card in force, the same two questions `reserve()`'s
+   * `priceModel` asks. Below it no task can start; at or above it at least one
+   * can. Null when the card prices none of them, so every credits task would
+   * be refused.
+   */
+  readonly minStartMicro: number | null;
 }
 
 export interface DerivedAiState {
@@ -88,15 +108,59 @@ export interface DerivedAiState {
 }
 
 /**
+ * `reserve()`'s refusals, in the order `CreditReservationsService.reserveEnforce`
+ * (services/credit-reservations.ts) asks them — the model, the task cap, debt,
+ * then the balance against the model's minimum to start.
+ *
+ * ⛔ A MIRROR, NOT AN IMPORT. That file expresses its order only as the
+ * `CreditReserveRefusal` type and the sequence of its `if`s, and it is not this
+ * slice's to change. So the order is written again here, `deriveAiState` walks
+ * THIS array, and
+ * the-ai-state-blocks-in-the-order-reserve-refuses-at-the-cheapest-models-minimum.test.ts
+ * reads both files and fails the moment the two stop agreeing. (S14 audit #4:
+ * this GET used to ask debt before the task cap, so an account in debt with
+ * three tasks running read `debt` while `reserve()` answered
+ * `tasks_in_flight`.)
+ */
+export const RESERVE_REFUSAL_ORDER = ['model', 'tasks_in_flight', 'debt', 'balance'] as const;
+type ReserveRefusal = (typeof RESERVE_REFUSAL_ORDER)[number];
+
+/**
+ * Each of `reserve()`'s refusals as the account-level `blocked_reason` it reads
+ * as, or null when that check passes.
+ *
+ * `model` — `reserve()` asks it per MODEL, and this GET is not per-model, so its
+ * only account-level form is "the card prices no model the account can run":
+ * then every credits task is refused. The published vocabulary has no reason for
+ * that, and `no_credits` ("nothing can start on credits right now") is the
+ * nearest honest one; answering null would say a task could start when none can.
+ *
+ * `balance` — `reserve()` refuses `available < min_start` for the model asked
+ * for; against the CHEAPEST runnable model's minimum, "blocked" here means no
+ * model at all could start, never merely the one the customer might pick.
+ */
+const CREDITS_CHECKS: Readonly<
+  Record<ReserveRefusal, (args: DeriveAiStateInputs) => AiBlockedReason | null>
+> = {
+  model: (args) => (args.minStartMicro === null ? 'no_credits' : null),
+  tasks_in_flight: (args) =>
+    args.tasksInFlight >= MAX_AI_TASKS_IN_FLIGHT ? 'tasks_in_flight' : null,
+  debt: (args) => (args.debtMicro > 0 ? 'debt' : null),
+  balance: (args) =>
+    args.minStartMicro !== null && args.availableMicro < args.minStartMicro ? 'no_credits' : null,
+};
+
+/**
  * `effective_source` and `blocked_reason`, in one pass so the two can never
  * disagree about which source is being evaluated.
  *
  * Order, and why: `decideAiSource` first rules out the two refusals a task
  * cannot get past regardless of balance (no AI on the plan at all; an
  * explicit own-key choice with nothing usable to spend). Only once a task
- * WOULD run on credits do debt, the concurrency cap and the balance itself
- * get to block it — an own-key-funded task costs this account nothing on the
- * credits ledger, so none of those three ever block one (§2, §4.3 rule 3).
+ * WOULD run on credits do `reserve()`'s own checks get to block it, in
+ * `reserve()`'s own order ({@link RESERVE_REFUSAL_ORDER}) — an own-key-funded
+ * task costs this account nothing on the credits ledger, so none of them ever
+ * block one (§2, §4.3 rule 3).
  */
 export function deriveAiState(args: DeriveAiStateInputs): DerivedAiState {
   const decision = decideAiSource({
@@ -125,11 +189,10 @@ export function deriveAiState(args: DeriveAiStateInputs): DerivedAiState {
   }
   // `decision.kind === 'credits'` is the only case left — `header_key` cannot
   // occur either, for the same reason `own_key_not_on_plan` cannot above.
-  if (args.debtMicro > 0) return { effectiveSource: 'credits', blockedReason: 'debt' };
-  if (args.tasksInFlight >= MAX_AI_TASKS_IN_FLIGHT) {
-    return { effectiveSource: 'credits', blockedReason: 'tasks_in_flight' };
+  for (const check of RESERVE_REFUSAL_ORDER) {
+    const blockedReason = CREDITS_CHECKS[check](args);
+    if (blockedReason !== null) return { effectiveSource: 'credits', blockedReason };
   }
-  if (args.availableMicro <= 0) return { effectiveSource: 'credits', blockedReason: 'no_credits' };
   return { effectiveSource: 'credits', blockedReason: null };
 }
 
@@ -164,7 +227,48 @@ export interface MonthlyLotFacts {
 export interface ExtraLotFacts {
   readonly kind: Exclude<CreditLotKind, 'monthly'>;
   readonly remainingMicro: number;
+  /** What running tasks hold on this lot — not spendable by a new one. */
+  readonly heldMicro: number;
   readonly expiresAt: Date;
+}
+
+/** What a lot has left that a NEW task could draw on: remaining minus held,
+ *  never below zero. The monthly lot and every extra use this one rule, so
+ *  their parts add up to `available_credits` (S14 audit #3). */
+function unheldMicro(lot: { readonly remainingMicro: number; readonly heldMicro: number }): number {
+  return Math.max(0, lot.remainingMicro - lot.heldMicro);
+}
+
+/** The `credit_plan_overrides` facts that decide whether an override is in force. */
+export interface PlanOverrideFacts {
+  /** Whole credits a month. */
+  readonly monthlyCredits: number;
+  readonly anchorAt: Date;
+  readonly effectiveSince: Date;
+  readonly endsAt: Date | null;
+}
+
+/**
+ * The monthly figure of the account's plan override when one is IN FORCE at
+ * `at`, else null — the same predicate the monthly grants read coverage with
+ * (`credit-windows-repo.ts`: `anchor_at <= t AND effective_since <= t AND
+ * (ends_at IS NULL OR t < ends_at)`), so the plan shows exactly the figure
+ * that is being granted. Both reasons count: a `contract` override IS the
+ * contract's figure, and an `admin_tier` override IS the figure of the tier an
+ * admin assigned (S14 audit #6).
+ *
+ * A zero-credit override is a real figure (0), not "no override": an admin
+ * wrote it on purpose.
+ */
+export function livePlanOverrideCredits(
+  override: PlanOverrideFacts | null,
+  at: Date,
+): number | null {
+  if (override === null) return null;
+  const t = at.getTime();
+  if (override.anchorAt.getTime() > t || override.effectiveSince.getTime() > t) return null;
+  if (override.endsAt !== null && override.endsAt.getTime() <= t) return null;
+  return override.monthlyCredits;
 }
 
 function ownKeyForWire(facts: OwnKeyFacts): AccountAiState['own_key'] {
@@ -187,13 +291,23 @@ function rateCardForWire(
   };
 }
 
-function planForWire(tier: AccountTier): AccountAiState['plan'] {
+/**
+ * `plan`. `monthly_included_credits` is a LIVE plan override's figure when
+ * there is one (see {@link livePlanOverrideCredits}); otherwise the tier's own
+ * figure — null only for a tier whose figure is set per contract (Enterprise)
+ * and has none in force.
+ */
+function planForWire(
+  tier: AccountTier,
+  planOverrideMonthlyCredits: number | null,
+): AccountAiState['plan'] {
   const entitlement = aiEntitlementFor(tier);
   return {
     tier,
     ai_included: entitlement.aiIncluded,
     monthly_included_credits:
-      entitlement.monthlyCredits === 'contract' ? null : entitlement.monthlyCredits,
+      planOverrideMonthlyCredits ??
+      (entitlement.monthlyCredits === 'contract' ? null : entitlement.monthlyCredits),
     own_key_allowed: entitlement.ownKeyAllowed,
     allowed_sources: [...aiSourcesAllowedOnPlan(tier)],
   };
@@ -224,10 +338,12 @@ export function buildLegacyAccountAiState(args: {
   readonly ownKey: OwnKeyFacts;
   readonly rateCard: RateCardFacts;
   readonly nextRateCard: RateCardFacts | null;
+  /** {@link livePlanOverrideCredits}'s answer for this account. */
+  readonly planOverrideMonthlyCredits: number | null;
 }): AccountAiState {
   return {
     billing: 'legacy',
-    plan: planForWire(args.tier),
+    plan: planForWire(args.tier, args.planOverrideMonthlyCredits),
     ai_source: null,
     ai_source_set_by: null,
     effective_source: null,
@@ -270,13 +386,26 @@ export interface AccountAiStateInputs {
    *  Shown only while `debtMicro > 0` — see the field's own comment below. */
   readonly debtReason: AiDebtReason | null;
   readonly tasksInFlight: number;
+  /** See {@link DeriveAiStateInputs.minStartMicro}. */
+  readonly minStartMicro: number | null;
+  /** {@link livePlanOverrideCredits}'s answer for this account. */
+  readonly planOverrideMonthlyCredits: number | null;
   readonly rateCard: RateCardFacts;
   readonly nextRateCard: RateCardFacts | null;
 }
 
-/** `GET /v1/account/me/ai` for an account MOVED onto AI credits (`billing_mode
- *  = 'credits'`, and mode `enforce` — see {@link buildLegacyAccountAiState}
- *  for every other case). */
+/**
+ * `GET /v1/account/me/ai` for an account MOVED onto AI credits (`billing_mode
+ * = 'credits'`, and mode `enforce` — see {@link buildLegacyAccountAiState}
+ * for every other case).
+ *
+ * ROUNDING (§9 preamble: charges up, balances down). What the account HAS —
+ * `available`, `monthly`, `extras` — rounds DOWN, so it is never shown more
+ * than it can spend. What it OWES or has COMMITTED — debt, pending claims,
+ * credit a running task holds — rounds UP like a charge, so it is never shown
+ * less: rounded down, 500 µcr of debt read `blocked_reason: 'debt'` beside
+ * `debt_credits: 0` (S14 audit #2).
+ */
 export function buildAccountAiState(args: AccountAiStateInputs): AccountAiState {
   const entitlement = aiEntitlementFor(args.tier);
   const { effectiveSource, blockedReason } = deriveAiState({
@@ -287,21 +416,20 @@ export function buildAccountAiState(args: AccountAiStateInputs): AccountAiState 
     debtMicro: args.debtMicro,
     tasksInFlight: args.tasksInFlight,
     availableMicro: args.availableMicro,
+    minStartMicro: args.minStartMicro,
   });
   const monthly: AccountAiState['balance']['monthly'] =
     args.currentWindow === null || args.monthlyLot === null
       ? null
       : {
           granted_credits: balanceCreditsForDisplay(args.monthlyLot.grantedMicro),
-          remaining_credits: balanceCreditsForDisplay(
-            Math.max(0, args.monthlyLot.remainingMicro - args.monthlyLot.heldMicro),
-          ),
+          remaining_credits: balanceCreditsForDisplay(unheldMicro(args.monthlyLot)),
           period_start: isoOf(args.currentWindow.windowStart),
           resets_at: isoOf(args.currentWindow.windowEnd),
         };
   return {
     billing: 'credits',
-    plan: planForWire(args.tier),
+    plan: planForWire(args.tier, args.planOverrideMonthlyCredits),
     ai_source: args.aiSource,
     ai_source_set_by: args.aiSourceSetBy,
     effective_source: effectiveSource,
@@ -311,12 +439,12 @@ export function buildAccountAiState(args: AccountAiStateInputs): AccountAiState 
       monthly,
       extras: args.extraLots.map((lot) => ({
         kind: CREDIT_LOT_EXTRA_KIND[lot.kind],
-        remaining_credits: balanceCreditsForDisplay(lot.remainingMicro),
+        remaining_credits: balanceCreditsForDisplay(unheldMicro(lot)),
         expires_at: lot.expiresAt.toISOString(),
       })),
-      reserved_in_flight_credits: balanceCreditsForDisplay(args.reservedInFlightMicro),
-      pending_claims_credits: balanceCreditsForDisplay(args.pendingClaimsMicro),
-      debt_credits: balanceCreditsForDisplay(args.debtMicro),
+      reserved_in_flight_credits: chargeCreditsForDisplay(args.reservedInFlightMicro),
+      pending_claims_credits: chargeCreditsForDisplay(args.pendingClaimsMicro),
+      debt_credits: chargeCreditsForDisplay(args.debtMicro),
       tasks_in_flight: Math.max(0, Math.min(args.tasksInFlight, MAX_AI_TASKS_IN_FLIGHT)),
       max_tasks_in_flight: MAX_AI_TASKS_IN_FLIGHT,
     },
@@ -506,10 +634,9 @@ export function buildLedgerEntry(entry: LedgerEntryInputs): AiLedgerEntry {
           agent_session_id: entry.agentSessionId,
           // `credit_ledger.model` is a plain text column (§4.4 pins the
           // model at reserve time from `AgentModelSchema`, but the column
-          // itself carries no CHECK) — refused rather than trusted, the same
-          // way `credit-ledger-repo.ts`'s `member()` helper treats every
-          // other stored vocabulary value.
-          model: agentModelOf(entry.model),
+          // itself carries no CHECK, and the enum can lose a model later) —
+          // see `agentModelOrNull` for why a stranger reads as null.
+          model: agentModelOrNull(entry.model),
           rate_card_version: entry.rateCardVersion,
         }
       : null;
@@ -517,7 +644,13 @@ export function buildLedgerEntry(entry: LedgerEntryInputs): AiLedgerEntry {
     id: entry.id,
     kind: publicLedgerKind(entry.kind),
     credits: signedCreditsForDisplay(entry.deltaMicro),
-    balance_after_credits: balanceCreditsForDisplay(entry.balanceAfterMicro),
+    // SIGNED (S14 audit #1): Σ(lot − debt) is negative whenever the account
+    // owes more than it holds, and the balance helper refuses a negative —
+    // which made every page holding such a row a 500, forever. The signed
+    // helper rounds toward minus infinity on both sides of zero: down for a
+    // positive balance, as every balance is, and never shows a debt smaller
+    // than it is.
+    balance_after_credits: signedCreditsForDisplay(entry.balanceAfterMicro),
     created_at: entry.createdAt.toISOString(),
     expires_at: addedCredit ? isoOfNullable(entry.lotExpiresAt) : null,
     task,

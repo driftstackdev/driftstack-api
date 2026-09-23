@@ -1466,7 +1466,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         ? { byokService: deps.byokAnthropicService }
         : {}),
     });
-    registerAiModelsRoutes(app, { aiCredits: deps.aiCredits });
+    registerAiModelsRoutes(app, { aiCredits: deps.aiCredits, authRepo: deps.authRepo });
   }
   if (deps.cliAuthorizeService !== undefined) {
     registerAuthCliRoutes(app, {

@@ -28,6 +28,25 @@
 // selector — the N already on credits are decided `already_moved` (read, not
 // written, a second time) and the rest are decided and moved exactly as the
 // first call would have.
+//
+// ⛔ AND AUDITED BY CONSTRUCTION. `runCutover`/`rollbackAccount` take the
+// caller's audit hook and run it INSIDE each account's own transaction, after
+// the change it records: a committed move always has its audit row, and an
+// account a failed batch never committed has none. (Audited after the whole
+// batch, a batch that failed part-way left its committed moves with no row,
+// and the resume reported them `already_moved` — never audited.)
+//
+// ⛔ PHASE 1 MOVES C0 ONLY, BY COHORT OR BY ID. The `account_ids` selector is
+// not a way around the cohort: an id outside C0 is refused per account
+// (`not_in_phase_1_cohort`), in the dry run as in the real run.
+//
+// ⛔ THE M9 OVER-ALLOWANCE GATE IS NOT BUILT, and belongs to Phase 2. M9 (and
+// §8's cohort table, C3) keeps a consented bundled account whose 30-day shadow
+// spend exceeds its allowance on legacy until Phase 3's purchase path or an
+// admin goodwill grant. That gate is a property of the Phase-2 cohorts
+// (C1–C4), which this slice refuses outright (`PhaseTwoCohortError`, and the
+// C0-only rule above for ids); nothing here reads shadow spend. Whoever opens
+// a Phase-2 cohort must build that gate first.
 
 import {
   aiEntitlementFor,
@@ -42,7 +61,11 @@ import type {
   DrizzleCreditLedgerRepo,
 } from '../db/credit-ledger-repo.js';
 import type { DrizzleCreditWindowsRepo } from '../db/credit-windows-repo.js';
-import type { DrizzleCreditCutoverRepo } from '../db/credit-cutover-repo.js';
+import type {
+  CutoverAccountFacts,
+  CutoverCoverageFacts,
+  DrizzleCreditCutoverRepo,
+} from '../db/credit-cutover-repo.js';
 import type { CreditGrantsService } from './credit-grants.js';
 
 /** §8's cutover cohorts. Only C0 is this slice's to move — see
@@ -68,7 +91,14 @@ export class PhaseTwoCohortError extends Error {
 }
 
 export type CutoverNotEligibleReason = 'free_plan';
-export type CutoverRefuseReason = 'no_paid_coverage' | 'account_not_found' | 'account_deleted';
+/** Mirrors `AiCreditsCutoverRefuseReasonSchema` in `@driftstack/api-types`, which
+ *  says what each one means. */
+export type CutoverRefuseReason =
+  | 'no_paid_coverage'
+  | 'no_contract'
+  | 'not_in_phase_1_cohort'
+  | 'account_not_found'
+  | 'account_deleted';
 
 export type CutoverDecision =
   | { readonly accountId: string; readonly outcome: 'move'; readonly aiSource: AiSource | null }
@@ -133,19 +163,31 @@ export interface CutoverAccountDecisionFacts {
   readonly tier: AccountTier;
   readonly consent: boolean;
   readonly hasStoredKey: boolean;
-  /** `windows.coverageCandidates(...)` non-empty — a paid Stripe invoice, a
-   *  paid crypto entitlement, or a live admin override with `monthly_credits
-   *  > 0` — the SAME plumbing `refreshCredits` grants from (§8.4's "no paid
-   *  coverage and no admin override" is one fact, not two, for exactly the
-   *  reason `services/ai-source.ts`'s header warns about: deciding it twice
-   *  is how the two copies drift). */
+  /**
+   * A paid source covers now(): a paid Stripe subscription line, a crypto
+   * term, or a live admin override with `monthly_credits > 0`
+   * (`cutoverRepo.coverageFacts`) — the three sources `refreshCredits` grants
+   * from, asked WHETHER they cover now, not whether a window is still OWED
+   * for it. (Asked the second way, as it once was, every account whose month
+   * had already been granted read as uncovered.) §8.4's "no paid coverage and
+   * no admin override" is this one fact: a live override IS a paid source.
+   */
   readonly hasPaidCoverage: boolean;
+  /** A live `contract` override — what a plan whose allowance is `'contract'`
+   *  (Enterprise) must have to move (§8.4/M7). */
+  readonly hasLiveContractOverride: boolean;
+  /** The account is in C0 (its e-mail is one of the deployment's internal
+   *  ones). Phase 1 moves nothing else, whatever the selector. */
+  readonly inPhaseOneCohort: boolean;
 }
 
 /**
  * §8.4's per-account decision, pure. `accountId` travels through untouched —
  * this function never reads or writes anything — so the caller's decision
  * list can be built by mapping accounts through it.
+ *
+ * In order: deleted → outside C0 → already moved → Free → a contract plan
+ * with no live contract → no paid coverage → move.
  */
 export function decideCutover(
   accountId: string,
@@ -154,6 +196,13 @@ export function decideCutover(
   if (facts.status === 'deleted') {
     return { accountId, outcome: 'refuse', reason: 'account_deleted' };
   }
+  // Phase 1 is C0 (§8's cohort table). An id named directly is held to the
+  // same cohort as the `cohort: 'C0'` selector: without this, `account_ids`
+  // moved any account at all — a consented bundled customer over their
+  // allowance (C3, the M9 case) included.
+  if (!facts.inPhaseOneCohort) {
+    return { accountId, outcome: 'refuse', reason: 'not_in_phase_1_cohort' };
+  }
   if (facts.billingMode === 'credits') {
     return { accountId, outcome: 'already_moved' };
   }
@@ -161,10 +210,17 @@ export function decideCutover(
   if (!entitlement.aiIncluded) {
     return { accountId, outcome: 'not_eligible', reason: 'free_plan' };
   }
-  // §8.4/M7 — a paid tier with no paid coverage and no admin override stays
-  // legacy, Enterprise (whose plan-wide allowance is 'contract' — no
-  // Stripe price maps to it at all) included. §11 decision 4: no automatic
-  // overrides.
+  // §8.4/M7 — a plan with no plan-wide allowance (Enterprise: 'contract')
+  // moves only on the figure an admin set as its contract. A paid Stripe line
+  // on some OTHER plan (an Enterprise account paying a Scale subscription) is
+  // coverage, but not the agreement M7 asks for, and would otherwise move the
+  // account on that other plan's allowance. §11 decision 4: no automatic
+  // overrides — the cutover never writes one.
+  if (entitlement.monthlyCredits === 'contract' && !facts.hasLiveContractOverride) {
+    return { accountId, outcome: 'refuse', reason: 'no_contract' };
+  }
+  // §8.4 — a paid tier with no paid coverage and no admin override stays
+  // legacy, listed in the dry run.
   if (!facts.hasPaidCoverage) {
     return { accountId, outcome: 'refuse', reason: 'no_paid_coverage' };
   }
@@ -205,6 +261,46 @@ export type RollbackPreview =
     }
   | { readonly outcome: 'not_moved'; readonly accountId: string };
 
+/** A decision that moved an account. */
+export type CutoverMove = Extract<CutoverDecision, { outcome: 'move' }>;
+
+/**
+ * What `runCutover` runs INSIDE each account's move transaction, after the
+ * move is written and before it commits — the audit row (see the file header,
+ * "audited by construction"). A hook that throws rolls that account's move
+ * back and stops the batch there, exactly as a failed move does.
+ */
+export interface CutoverRunHooks {
+  onMoved(tx: CreditLedgerTx, decision: CutoverMove): Promise<void>;
+}
+
+/** The same, for `rollbackAccount`: run inside the rollback's transaction,
+ *  only when the account was actually rolled back. */
+export interface RollbackHooks {
+  onRolledBack(
+    tx: CreditLedgerTx,
+    result: Extract<RollbackResult, { outcome: 'rolled_back' }>,
+  ): Promise<void>;
+}
+
+/**
+ * S16 audit fix #10 — the legacy consent a rollback puts back. The move's
+ * snapshot, EXCEPT when the customer chose their own source while moved
+ * (`ai_source_set_by = 'customer'`): a customer who chose their own key
+ * (`own_key`) turned the credits fallback OFF, and the legacy equivalent of
+ * that is consent false — restoring a `true` snapshot would switch back on a
+ * fallback they had just refused. Any other customer choice keeps the
+ * snapshot (the coordinator's rule: choosing credits while moved has no
+ * legacy meaning stronger than the consent the account had before).
+ */
+export function legacyConsentOnRollback(
+  credit: Pick<CreditAccountRecord, 'aiSource' | 'aiSourceSetBy'>,
+  snapshotConsent: boolean,
+): boolean {
+  if (credit.aiSourceSetBy === 'customer' && credit.aiSource === 'own_key') return false;
+  return snapshotConsent;
+}
+
 export interface CreditCutoverDeps {
   readonly ledger: Pick<
     DrizzleCreditLedgerRepo,
@@ -215,7 +311,15 @@ export interface CreditCutoverDeps {
     | 'setCutoverMoved'
     | 'setCutoverRolledBack'
   >;
-  readonly windows: Pick<DrizzleCreditWindowsRepo, 'coverageCandidates'>;
+  /**
+   * NO LONGER READ. Coverage used to come from `windows.coverageCandidates`,
+   * which answers "is a window still owed" and so said "uncovered" for every
+   * account whose month was already granted (S16 audit #1); it now comes from
+   * `cutoverRepo.coverageFacts`. Optional, not removed, only because
+   * `lib/bootstrap.ts` (outside this fix) still passes it — remove the two
+   * together.
+   */
+  readonly windows?: Pick<DrizzleCreditWindowsRepo, 'coverageCandidates'>;
   readonly cutoverRepo: Pick<
     DrizzleCreditCutoverRepo,
     | 'readAccountFacts'
@@ -223,15 +327,41 @@ export interface CreditCutoverDeps {
     | 'readBillingMode'
     | 'restoreLegacySettings'
     | 'listCohortAccountIds'
+    | 'coverageFacts'
   >;
   readonly creditGrants: Pick<CreditGrantsService, 'refreshCreditsIn'>;
   /** The pool-level executor — for `planCutover`'s no-lock coverage read.
    *  Every locked read in `runCutover`/`rollbackAccount` uses the
    *  transaction it opened instead. */
   readonly pool: CreditLedgerExecutor;
-  /** C0 — the deployment's own accounts, lower-cased. Same set
-   *  bootstrap.ts hands `DrizzleAiCreditsReportRepo` for the census. */
+  /** C0 — the deployment's own accounts. Same set bootstrap.ts hands
+   *  `DrizzleAiCreditsReportRepo` for the census; compared case-insensitively
+   *  on both sides, as the census does. */
   readonly internalEmails: ReadonlySet<string>;
+}
+
+/** The C0 set lower-cased — read at each call, never cached, so it is always
+ *  the set the census reads. */
+function loweredEmails(emails: ReadonlySet<string>): ReadonlySet<string> {
+  return new Set([...emails].map((e) => e.toLowerCase()));
+}
+
+function decisionFacts(
+  facts: CutoverAccountFacts,
+  billingMode: AiBilling,
+  coverage: CutoverCoverageFacts,
+  c0: ReadonlySet<string>,
+): CutoverAccountDecisionFacts {
+  return {
+    billingMode,
+    status: facts.status,
+    tier: facts.tier,
+    consent: facts.consent,
+    hasStoredKey: facts.hasStoredKey,
+    hasPaidCoverage: coverage.hasPaidCoverage,
+    hasLiveContractOverride: coverage.hasLiveContractOverride,
+    inPhaseOneCohort: c0.has(facts.email.toLowerCase()),
+  };
 }
 
 /** Bucket a flat decision list into the shape a staff response's `summary`
@@ -281,6 +411,7 @@ export class CreditCutoverService {
    */
   async planCutover(selector: CutoverSelector): Promise<CutoverDecision[]> {
     const accountIds = await this.resolveSelector(selector);
+    const c0 = loweredEmails(this.deps.internalEmails);
     const decisions: CutoverDecision[] = [];
     for (const accountId of accountIds) {
       const facts = await this.deps.cutoverRepo.readAccountFacts(accountId);
@@ -289,19 +420,8 @@ export class CreditCutoverService {
         continue;
       }
       const billingMode = await this.deps.cutoverRepo.readBillingMode(accountId);
-      const hasPaidCoverage =
-        billingMode === 'credits' ||
-        (await this.deps.windows.coverageCandidates(this.deps.pool, accountId)).length > 0;
-      decisions.push(
-        decideCutover(accountId, {
-          billingMode,
-          status: facts.status,
-          tier: facts.tier,
-          consent: facts.consent,
-          hasStoredKey: facts.hasStoredKey,
-          hasPaidCoverage,
-        }),
-      );
+      const coverage = await this.deps.cutoverRepo.coverageFacts(accountId, this.deps.pool);
+      decisions.push(decideCutover(accountId, decisionFacts(facts, billingMode, coverage, c0)));
     }
     return decisions;
   }
@@ -313,39 +433,42 @@ export class CreditCutoverService {
    * which is what makes "resumable" true by construction: accounts already
    * committed before the failure stay moved, and a fresh call re-walks the
    * whole selector, redeciding (and skipping) every one of them.
+   *
+   * `hooks.onMoved` is REQUIRED: it is how a move gets its audit row inside
+   * its own transaction (the file header, "audited by construction").
    */
-  async runCutover(selector: CutoverSelector): Promise<CutoverDecision[]> {
+  async runCutover(selector: CutoverSelector, hooks: CutoverRunHooks): Promise<CutoverDecision[]> {
     const accountIds = await this.resolveSelector(selector);
+    const c0 = loweredEmails(this.deps.internalEmails);
     const decisions: CutoverDecision[] = [];
     for (const accountId of accountIds) {
-      decisions.push(await this.moveOneAccount(accountId));
+      decisions.push(await this.moveOneAccount(accountId, c0, hooks));
     }
     return decisions;
   }
 
-  private async moveOneAccount(accountId: string): Promise<CutoverDecision> {
-    const { ledger, windows, cutoverRepo, creditGrants } = this.deps;
+  private async moveOneAccount(
+    accountId: string,
+    c0: ReadonlySet<string>,
+    hooks: CutoverRunHooks,
+  ): Promise<CutoverDecision> {
+    const { ledger, cutoverRepo, creditGrants } = this.deps;
     return ledger.transaction(async (tx: CreditLedgerTx) => {
       const facts = await cutoverRepo.lockAccountFacts(tx, accountId);
       if (facts === null) {
         return { accountId, outcome: 'refuse' as const, reason: 'account_not_found' as const };
       }
       const credit: CreditAccountRecord = await ledger.lockAccount(tx, accountId);
-      const hasPaidCoverage =
-        credit.billingMode === 'credits' ||
-        (await windows.coverageCandidates(tx, accountId)).length > 0;
-      const decision = decideCutover(accountId, {
-        billingMode: credit.billingMode,
-        status: facts.status,
-        tier: facts.tier,
-        consent: facts.consent,
-        hasStoredKey: facts.hasStoredKey,
-        hasPaidCoverage,
-      });
+      const coverage = await cutoverRepo.coverageFacts(accountId, tx);
+      const decision = decideCutover(
+        accountId,
+        decisionFacts(facts, credit.billingMode, coverage, c0),
+      );
       if (decision.outcome !== 'move') return decision;
 
       // §8.4's order: set ai_source, refreshCredits (grants the current
-      // window in full — §8's "no bridge lots"), THEN set billing_mode.
+      // window in full — §8's "no bridge lots"; nothing when it was granted
+      // already), THEN set billing_mode, THEN audit.
       await ledger.setAiSourceIn(tx, accountId, { aiSource: decision.aiSource, setBy: 'cutover' });
       await creditGrants.refreshCreditsIn(tx, accountId);
       await ledger.setCutoverMoved(tx, accountId, {
@@ -353,6 +476,7 @@ export class CreditCutoverService {
         legacyCapCentsAtMove: facts.capCents,
         hadStoredKeyAtMove: facts.hasStoredKey,
       });
+      await hooks.onMoved(tx, decision);
       return decision;
     });
   }
@@ -377,19 +501,28 @@ export class CreditCutoverService {
     return {
       outcome: 'would_roll_back' as const,
       accountId,
-      restored: { consent: credit.legacyConsentAtMove, capCents: credit.legacyCapCentsAtMove },
+      restored: {
+        consent: legacyConsentOnRollback(credit, credit.legacyConsentAtMove),
+        capCents: credit.legacyCapCentsAtMove,
+      },
     };
   }
 
   /**
-   * One account → legacy (§8.7). Restores the legacy consent/cap snapshot
-   * the cutover took and clears `ai_source`; touches no ledger row, lot or
-   * window, so this month's spend stays exactly as it is (the S13 status
-   * route then shows the OLD cap with this month's spend intact — proved
-   * through the route in the integration tests). `not_moved` when the
-   * account is not currently on credits; writes nothing in that case.
+   * One account → legacy (§8.7). Restores the legacy cap snapshot the cutover
+   * took, and the legacy consent per {@link legacyConsentOnRollback} (the
+   * snapshot, unless the customer chose their own key while moved), and
+   * clears `ai_source`; touches no ledger row, lot or window, so this month's
+   * spend stays exactly as it is (the S13 status route then shows the OLD cap
+   * with this month's spend intact — proved through the route in the
+   * integration tests). `not_moved` when the account is not currently on
+   * credits; writes nothing to either table in that case (it may create the
+   * empty `credit_accounts` row `lockAccount` ensures).
+   *
+   * `hooks.onRolledBack` runs inside the same transaction, only for an
+   * account actually rolled back — the audit row commits with the rollback.
    */
-  async rollbackAccount(accountId: string): Promise<RollbackResult> {
+  async rollbackAccount(accountId: string, hooks: RollbackHooks): Promise<RollbackResult> {
     const { ledger, cutoverRepo } = this.deps;
     return ledger.transaction(async (tx: CreditLedgerTx) => {
       // Lock order: accounts, then credit_accounts — even though this
@@ -410,12 +543,14 @@ export class CreditCutoverService {
         );
       }
       const restored = {
-        consent: credit.legacyConsentAtMove,
+        consent: legacyConsentOnRollback(credit, credit.legacyConsentAtMove),
         capCents: credit.legacyCapCentsAtMove,
       };
       await cutoverRepo.restoreLegacySettings(tx, accountId, restored);
       await ledger.setCutoverRolledBack(tx, accountId);
-      return { outcome: 'rolled_back' as const, accountId, restored };
+      const result = { outcome: 'rolled_back' as const, accountId, restored };
+      await hooks.onRolledBack(tx, result);
+      return result;
     });
   }
 }

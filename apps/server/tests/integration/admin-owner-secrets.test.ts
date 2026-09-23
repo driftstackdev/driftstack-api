@@ -128,6 +128,10 @@ async function buildApp(
     authCache: makeCache(),
     authCoalescer: null,
     ownerEmail: OWNER_EMAIL,
+    // As bootstrap.ts does: the owner is always in the staff set, so the owner's
+    // session carries `driftstack_internal_admin` — which every owner route now
+    // requires as well as `requireOwner` (S15 audit #5).
+    staffEmails: new Set([OWNER_EMAIL]),
   });
   app.decorate('rateLimit', () => async () => {});
   const auditRepo = new InMemoryAdminAuditLogRepo();
@@ -397,6 +401,10 @@ describe('disabled deployment (MFA_ENCRYPTION_KEY unset) — V-352b mapping', ()
       authCache: makeCache(),
       authCoalescer: null,
       ownerEmail: OWNER_EMAIL,
+      // As bootstrap.ts does: the owner is always in the staff set, so the owner's
+      // session carries `driftstack_internal_admin` — which every owner route now
+      // requires as well as `requireOwner` (S15 audit #5).
+      staffEmails: new Set([OWNER_EMAIL]),
     });
     app.decorate('rateLimit', () => async () => {});
     const auditRepo = new InMemoryAdminAuditLogRepo();

@@ -48,8 +48,11 @@ const CONSUMER_ROUTES = [
   'apps/server/src/routes/agent-sessions.ts',
   'apps/server/src/routes/billing.ts',
   // S14 — GET /v1/account/me/ai honours act-as the way GET /v1/billing does
-  // (see that route's own header comment).
+  // (see that route's own header comment); since the S14 audit (#9) so does
+  // its ledger GET, and its PATCH resolves the header only to refuse it.
   'apps/server/src/routes/account-ai.ts',
+  // S14 audit #9 — GET /v1/ai/models answers for the effective account's plan.
+  'apps/server/src/routes/ai-models.ts',
 ];
 
 /**

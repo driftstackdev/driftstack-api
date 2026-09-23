@@ -5,7 +5,10 @@
 // what must stay a boolean-only activation snapshot.
 //
 //   • Wire path: GET /v1/admin/owner/platform-status.
-//   • Gate: app.requireOwner (identity check, NOT a scope) + rateLimit('global').
+//   • Gate: the staff scope AND app.requireOwner (identity check) + rateLimit('global').
+//     S15 audit #5: requireOwner checks the ACCOUNT, never the KEY, so on its own
+//     it admitted any key on the owner's account (a read-only one included). The
+//     scope is ADDED in front of it; it never replaces it.
 //   • Response: { features: { billing, livekit, crypto, oauth_client, sentry,
 //     permissive_cors } } — booleans only, no secrets.
 //   • app.ts derives each flag from the same `deps.X !== undefined` check it
@@ -17,6 +20,10 @@ import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+/** Every owner route's gate: the staff scope first, then the owner identity. */
+const OWNER_GATE =
+  /preHandler: \[\s*app\.requireScope\('driftstack_internal_admin'\),\s*app\.requireOwner,\s*app\.rateLimit\('global'\),\s*\]/;
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/admin-owner.ts');
 const APP = resolve(REPO_ROOT, 'apps/server/src/lib/app.ts');
@@ -42,11 +49,17 @@ describe('apps/server/src/routes/admin-owner.ts content parity', () => {
     expect(body).toContain("'/v1/admin/owner/platform-status'");
   });
 
-  it('OWNER-gated via app.requireOwner (identity, not a scope) + rateLimit', () => {
+  it('OWNER-gated via app.requireOwner (identity) behind the staff scope + rateLimit', () => {
     expect(body).toContain('app.requireOwner');
     expect(body).toContain("app.rateLimit('global')");
-    // Must NOT fall back to a mere scope check — owner-only is the contract.
-    expect(body).not.toContain('requireScope');
+    // Must NOT fall back to a mere scope check — owner-only is the contract:
+    // EVERY preHandler here is the full gate, owner identity included.
+    const preHandlers = (body.match(/preHandler:/g) ?? []).length;
+    const fullGates = (body.match(new RegExp(OWNER_GATE.source, 'g')) ?? []).length;
+    expect(preHandlers).toBeGreaterThanOrEqual(7);
+    expect(fullGates, 'a route here without the owner gate (or without the scope)').toBe(
+      preHandlers,
+    );
   });
 
   it('returns { features } only — booleans, no per-request state', () => {
@@ -83,9 +96,8 @@ describe('apps/server/src/routes/admin-owner.ts content parity', () => {
 
   it('owner price EDIT: PATCH /v1/admin/owner/pricing/:tier — OWNER-gated, validates tier in EDITABLE_TIERS + monthly_cents, calls PricingService.setPrice, and audits pricing.updated per D-025 (audit-before-response on success AND error)', () => {
     expect(body).toContain("'/v1/admin/owner/pricing/:tier'");
-    // OWNER identity gate (not a scope) + rate limit.
-    expect(body).toMatch(/preHandler: \[app\.requireOwner, app\.rateLimit\('global'\)\]/);
-    expect(body).not.toContain('requireScope');
+    // Staff scope + OWNER identity gate + rate limit.
+    expect(body).toMatch(OWNER_GATE);
     // Editable-tier allowlist derived from the price map (free/unpriced rejected).
     expect(body).toContain('Object.keys(TIER_MONTHLY_PRICE_CENTS)');
     expect(body).toContain('EditPricingParamsSchema');
@@ -109,10 +121,8 @@ describe('owner platform-secrets routes (secrets Phase A slice 2) parity', () =>
     expect(body).toContain("app.get(\n    '/v1/admin/owner/secrets',");
     expect(body).toContain("'/v1/admin/owner/secrets/:name',");
     expect(body).toContain("'/v1/admin/owner/secrets/:name/reveal',");
-    // Each registration uses the owner-identity gate (not a scope).
-    const gateCount = (
-      body.match(/preHandler: \[app\.requireOwner, app\.rateLimit\('global'\)\]/g) ?? []
-    ).length;
+    // Each registration uses the owner-identity gate, behind the staff scope.
+    const gateCount = (body.match(new RegExp(OWNER_GATE.source, 'g')) ?? []).length;
     expect(gateCount).toBeGreaterThanOrEqual(7); // 3 pre-existing + 4 secrets routes
   });
 

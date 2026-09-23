@@ -68,15 +68,17 @@ const READER = 'lib/effective-account-header.ts';
  * above (three) or beside its own entry (the fourth); a fifth arriving without
  * explanation is what this guard is for.
  *
- * S14 — `routes/account-ai.ts` names the header in one diagnostic Error
- * message only (`'X-Driftstack-Account named a membership whose owner
+ * S14 — `routes/account-ai.ts` names the header in two message strings only:
+ * a diagnostic Error (`'X-Driftstack-Account named a membership whose owner
  * account no longer exists'`), thrown when `resolveEffectiveAccount` already
  * authorised the substitution and the owner row vanished between that check
- * and the read. It never touches `request.headers` itself — the read is
- * `readEffectiveAccountHeader(request)`, the same shared resolver
- * `routes/billing.ts` uses (see `effective-account-header-shared-parser.test.ts`'s
- * CONSUMER_ROUTES) — so this is prose in a string literal, not a second
- * reader.
+ * and the read; and (S14 audit #9) the PATCH's self-workspace refusal ("…
+ * Remove X-Driftstack-Account and retry."), the same wording
+ * `routes/billing-crypto.ts` refuses with. It never touches `request.headers`
+ * itself — every read is `readEffectiveAccountHeader(request)` passed straight
+ * into `resolveEffectiveAccount`, the same shared resolver `routes/billing.ts`
+ * uses (see `effective-account-header-shared-parser.test.ts`'s CONSUMER_ROUTES)
+ * — so these are prose in string literals, not a second reader.
  */
 const NON_READING_USES = new Set([
   'lib/app.ts',

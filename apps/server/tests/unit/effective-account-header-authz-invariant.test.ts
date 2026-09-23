@@ -221,8 +221,24 @@ describe('X-Driftstack-Account acting-as authz invariant (all routes/)', () => {
     // The 34th (2026-09-22) is GET /v1/account/me/ai in account-ai.ts, an
     // eleventh reader file, resolved before any credit read the way GET
     // /v1/billing is.
-    expect(reads).toHaveLength(34);
-    expect(new Set(reads.map((read) => read.file)).size).toBe(11);
+    // The 35th–37th (2026-09-23, S14 audit #9): GET /v1/account/me/ai/ledger and
+    // PATCH /v1/account/me/ai-settings in account-ai.ts, and GET /v1/ai/models
+    // in ai-models.ts — a twelfth reader file. The two GETs act as the owner;
+    // the PATCH resolves only to REFUSE a non-self account. All three pass the
+    // parser straight into resolveEffectiveAccount (the arm below proves it).
+    expect(reads).toHaveLength(37);
+    expect(new Set(reads.map((read) => read.file)).size).toBe(12);
+    expect(
+      reads
+        .filter((read) => read.file === 'account-ai.ts' || read.file === 'ai-models.ts')
+        .map((read) => `${read.routeMethod} ${read.routePath}`)
+        .sort(),
+    ).toEqual([
+      'GET /v1/account/me/ai',
+      'GET /v1/account/me/ai/ledger',
+      'GET /v1/ai/models',
+      'PATCH /v1/account/me/ai-settings',
+    ]);
 
     expect(
       reads

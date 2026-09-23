@@ -104,6 +104,15 @@ const NOT_REGISTERED_IN_MEMORY: Record<string, string> = {
   // S16 — the per-account cutover and rollback, same gate.
   'POST /v1/admin/ai-credits/cutover': 'registered only while the AI credits mode is not off',
   'POST /v1/admin/ai-credits/rollback': 'registered only while the AI credits mode is not off',
+  // S15 audit #5 — rate-card publish and withdraw now carry the staff scope in
+  // front of `requireOwner` (the owner gate alone checked the account, never
+  // the key). Same registration gate as the routes above. Their refusal of a
+  // key without the staff scope — the owner's own `read` key, the case that
+  // mattered — is called, with the surface switched on, in
+  // the-owner-only-tools-refuse-an-owner-key-without-the-staff-scope.test.ts.
+  'POST /v1/admin/credit-rate-cards': 'registered only while the AI credits mode is not off',
+  'POST /v1/admin/credit-rate-cards/:version/withdraw':
+    'registered only while the AI credits mode is not off',
 };
 
 /**
@@ -151,6 +160,8 @@ const EXPECTED_STAFF_ROUTES: readonly string[] = [
   'GET /v1/admin/cost/config',
   'GET /v1/admin/cost/overview',
   'GET /v1/admin/credit-rate-cards',
+  'POST /v1/admin/credit-rate-cards',
+  'POST /v1/admin/credit-rate-cards/:version/withdraw',
   'GET /v1/admin/crypto-orders',
   'GET /v1/admin/crypto-orders.csv',
   'GET /v1/admin/crypto-orders/:order_id',
@@ -175,6 +186,15 @@ const EXPECTED_STAFF_ROUTES: readonly string[] = [
   'GET /v1/admin/oauth/clients/:id',
   'POST /v1/admin/oauth/clients/:id/rotate-secret',
   'GET /v1/admin/overview',
+  // S15 audit #5 — every owner route now requires the staff scope as well as
+  // the owner (`requireOwner` alone admitted any key on the owner's account).
+  'GET /v1/admin/owner/platform-status',
+  'GET /v1/admin/owner/pricing',
+  'PATCH /v1/admin/owner/pricing/:tier',
+  'GET /v1/admin/owner/secrets',
+  'PUT /v1/admin/owner/secrets/:name',
+  'DELETE /v1/admin/owner/secrets/:name',
+  'POST /v1/admin/owner/secrets/:name/reveal',
   'GET /v1/admin/rate-limit-overrides',
   'GET /v1/admin/sessions',
   'POST /v1/admin/sessions/:id/destroy',

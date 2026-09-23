@@ -24,6 +24,7 @@ import type {
 } from '../../src/db/credit-ledger-repo.js';
 import type { CreditRateCardRecord } from '../../src/db/credit-rate-card-repo.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
+import { launchCardRow } from './_helpers/fake-account-ai-runtime.js';
 
 const MICRO = 1_000_000;
 
@@ -109,8 +110,19 @@ function fakeRuntime(config: FakeConfig): {
     cardInForce: () =>
       Promise.resolve(config.cardInForce === undefined ? CARD_V1 : config.cardInForce),
     nextAnnouncedCard: () => Promise.resolve(config.nextCard ?? null),
-    modelRow: unreachable,
+    // The GET reads the cheapest runnable model's minimum to start (S14
+    // audit #4); a card with no model rows would block every credits task.
+    modelRow: (_version: number, model: string) => Promise.resolve(launchCardRow(model)),
     chargedForSessionMicro: unreachable,
+    planOverride: () => Promise.resolve(null),
+    refreshCredits: () =>
+      Promise.resolve({
+        expired: [],
+        window: { outcome: 'none' },
+        level: null,
+        repaid: [],
+        currentWindowEnd: null,
+      }),
   };
   const runtime: AiCreditsRuntime = {
     mode: config.mode,

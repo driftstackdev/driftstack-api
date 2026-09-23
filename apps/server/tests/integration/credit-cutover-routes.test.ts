@@ -21,7 +21,10 @@ import type { CreditLedgerTx } from '../../src/db/credit-ledger-repo.js';
 import { openLedgerDatabase, MICRO } from './_helpers/credit-ledger-fixtures.js';
 import { subscription, paidLine } from './_helpers/credit-grant-fixtures.js';
 import {
+  adminAuditRowsFor,
   adminCreditsHarness,
+  DEFAULT_STAFF_IDENTITY,
+  seedStaffIdentity,
   type AdminCreditsHarness,
 } from './_helpers/admin-credits-route-fixtures.js';
 import { InMemoryAiCreditsAdminAuditRepo } from './_helpers/in-memory-ai-credits-admin-audit-repo.js';
@@ -31,6 +34,7 @@ import {
   type TestAppFixture,
 } from './_helpers/build-test-app.js';
 import { CreditCutoverService } from '../../src/services/credit-cutover.js';
+import { aiCreditsAdminAuditIn } from '../../src/db/credit-cutover-repo.js';
 import { decideAiSource } from '../../src/services/ai-source.js';
 import { aiEntitlementFor, type AccountTier } from '@driftstack/api-types';
 
@@ -48,7 +52,25 @@ beforeAll(async () => {
   client = opened.sql;
   database = createDb(opened.url, { max: 6 });
   harness = adminCreditsHarness(opened.url);
+  // Audit rows are written inside each move's own transaction, and their
+  // actor columns are foreign keys: the app's staff identity must exist.
+  await seedStaffIdentity(opened.sql);
 }, 60_000);
+
+/** The audit hook every direct `runCutover` call here passes: the same
+ *  in-transaction writer the route uses, as the default staff identity. */
+const AUDIT_AS_STAFF = {
+  onMoved: async (tx: CreditLedgerTx, d: { accountId: string; aiSource: string | null }) => {
+    await aiCreditsAdminAuditIn(tx).record({
+      adminAccountId: DEFAULT_STAFF_IDENTITY.accountId,
+      adminKeyId: DEFAULT_STAFF_IDENTITY.apiKeyId,
+      action: 'credits.cutover_moved',
+      targetAccountId: d.accountId,
+      inputPayload: { ai_source: d.aiSource, selector: 'test' },
+      result: 'success',
+    });
+  },
+};
 
 afterAll(async () => {
   await database?.close().catch(() => {});
@@ -86,10 +108,13 @@ async function seedAccount(
     readonly hasKey?: boolean;
     readonly keySetAt?: string;
     readonly email?: string;
+    /** In C0 (default). Phase 1 moves nothing outside it, by id or cohort. */
+    readonly internal?: boolean;
   },
 ): Promise<string> {
   const id = randomUUID();
   const email = opts.email ?? `s16-${id}@example.test`;
+  if (opts.internal !== false) h().internalEmails.add(email);
   await sql()`
     INSERT INTO accounts (id, email, tier, bundled_llm_consent, bundled_llm_monthly_cap_usd_cents)
     VALUES (${id}::uuid, ${email}, ${opts.tier}::account_tier, ${opts.consent ?? false},
@@ -214,7 +239,7 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
       });
     });
 
-    it('lists Enterprise without a contract as refused (M7) — never granted a default figure', async () => {
+    it('lists Enterprise without a contract as refused no_contract (M7) — never granted a default figure', async () => {
       fx = await buildTestApp({ aiCredits: h().aiCredits, scopes: [...ADMIN_SCOPES] });
       const accountId = await seedAccount(fx, { tier: 'enterprise' });
       const res = await fx.app.inject({
@@ -224,9 +249,7 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
         payload: { account_ids: [`acc_${accountId}`], to: 'credits', dry_run: true },
       });
       expect(res.json()).toMatchObject({
-        decisions: [
-          { outcome: 'refuse', reason: 'no_paid_coverage', account_id: `acc_${accountId}` },
-        ],
+        decisions: [{ outcome: 'refuse', reason: 'no_contract', account_id: `acc_${accountId}` }],
       });
     });
 
@@ -376,12 +399,12 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
           },
         },
         pool: h().base.database.db,
-        internalEmails: new Set(),
+        internalEmails: h().internalEmails,
       });
 
-      await expect(faulty.runCutover({ kind: 'account_ids', accountIds })).rejects.toThrow(
-        'simulated crash mid-cutover',
-      );
+      await expect(
+        faulty.runCutover({ kind: 'account_ids', accountIds }, AUDIT_AS_STAFF),
+      ).rejects.toThrow('simulated crash mid-cutover');
 
       const rows = await Promise.all(accountIds.map((id) => creditAccountRow(id)));
       expect(rows[0]?.billingMode, 'account 1 committed before the crash').toBe('credits');
@@ -391,8 +414,18 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
 
       // A fresh call over the same selector, with the real (non-throwing)
       // service, finishes the rest.
-      const decisions = await h().cutover.runCutover({ kind: 'account_ids', accountIds });
+      const decisions = await h().cutover.runCutover(
+        { kind: 'account_ids', accountIds },
+        AUDIT_AS_STAFF,
+      );
       expect(decisions.map((d) => d.outcome)).toEqual(['already_moved', 'already_moved', 'move']);
+      const audited = await Promise.all(
+        accountIds.map((id) => adminAuditRowsFor(sql(), { targetAccountId: id })),
+      );
+      expect(
+        audited.map((rows) => rows.length),
+        'each account audited exactly once, inside its own move — the two committed before the crash included',
+      ).toEqual([1, 1, 1]);
       const rowsAfter = await Promise.all(accountIds.map((id) => creditAccountRow(id)));
       expect(rowsAfter.every((r) => r?.billingMode === 'credits')).toBe(true);
       expect(
@@ -478,7 +511,7 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
       fx = await buildTestApp({ aiCredits: h().aiCredits, scopes: [...ADMIN_SCOPES] });
       const internalEmail = `internal-${randomUUID()}@driftstack.test`;
       const internalId = await seedAccount(fx, { tier: 'team_manual', email: internalEmail });
-      const outsideId = await seedAccount(fx, { tier: 'team_manual' });
+      const outsideId = await seedAccount(fx, { tier: 'team_manual', internal: false });
       await givePaidCoverage(internalId, 'team_manual');
       await givePaidCoverage(outsideId, 'team_manual');
 
@@ -490,7 +523,10 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
         pool: h().base.database.db,
         internalEmails: new Set([internalEmail]),
       });
-      const decisions = await scopedCutover.runCutover({ kind: 'cohort', cohort: 'C0' });
+      const decisions = await scopedCutover.runCutover(
+        { kind: 'cohort', cohort: 'C0' },
+        AUDIT_AS_STAFF,
+      );
       expect(decisions.map((d) => d.accountId)).toContain(internalId);
       expect(decisions.map((d) => d.accountId)).not.toContain(outsideId);
       expect((await creditAccountRow(internalId))?.billingMode).toBe('credits');
@@ -498,12 +534,7 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
     });
 
     it('CRITICAL every move leaves an audit row with the actor and the chosen source', async () => {
-      const audit = new InMemoryAiCreditsAdminAuditRepo();
-      fx = await buildTestApp({
-        aiCredits: h().aiCredits,
-        aiCreditsAdminAuditRepo: audit,
-        scopes: [...ADMIN_SCOPES],
-      });
+      fx = await buildTestApp({ aiCredits: h().aiCredits, scopes: [...ADMIN_SCOPES] });
       const accountId = await seedAccount(fx, { tier: 'team_manual' });
       await givePaidCoverage(accountId, 'team_manual');
       await fx.app.inject({
@@ -512,10 +543,10 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
         headers: { authorization: `Bearer ${fx.plaintext}` },
         payload: { account_ids: [`acc_${accountId}`], to: 'credits' },
       });
-      const rows = audit.getAll().filter((r) => r.action === 'credits.cutover_moved');
-      expect(rows).toHaveLength(1);
-      expect(rows[0]?.targetAccountId).toBe(accountId);
-      expect(rows[0]?.inputPayload).toMatchObject({ ai_source: 'credits' });
+      const rows = await adminAuditRowsFor(sql(), { targetAccountId: accountId });
+      expect(rows.map((r) => r.action)).toEqual(['credits.cutover_moved']);
+      expect(rows[0]?.admin_account_id).toBe(DEFAULT_STAFF_IDENTITY.accountId);
+      expect(rows[0]?.input_payload).toMatchObject({ ai_source: 'credits' });
 
       // Idempotency: a repeat cutover writes no second audit row.
       await fx.app.inject({
@@ -524,18 +555,15 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
         headers: { authorization: `Bearer ${fx.plaintext}` },
         payload: { account_ids: [`acc_${accountId}`], to: 'credits' },
       });
-      expect(audit.getAll().filter((r) => r.action === 'credits.cutover_moved')).toHaveLength(1);
+      expect(
+        (await adminAuditRowsFor(sql(), { targetAccountId: accountId })).map((r) => r.action),
+      ).toEqual(['credits.cutover_moved']);
     });
   });
 
   describe('rollback', () => {
     it('CRITICAL restores the old limit with this month’s spend intact — proved through the S13 bundled-llm-status route for the MOVED view, and directly against accounts/usage_records for the restored LEGACY view (buildTestApp’s bundled-llm-settings double is in-memory and never reads the accounts row a real deployment’s DrizzleBundledLlmRepo would — see credit-cutover-repo.ts’s restoreLegacySettings, which writes that exact row)', async () => {
-      const audit = new InMemoryAiCreditsAdminAuditRepo();
-      fx = await buildTestApp({
-        aiCredits: h().aiCredits,
-        aiCreditsAdminAuditRepo: audit,
-        scopes: [...ADMIN_SCOPES],
-      });
+      fx = await buildTestApp({ aiCredits: h().aiCredits, scopes: [...ADMIN_SCOPES] });
       const accountId = await seedAccount(fx, {
         tier: 'team_manual',
         consent: true,
@@ -591,9 +619,9 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
         SELECT count(*)::text AS n FROM usage_records
          WHERE account_id = ${accountId}::uuid AND record_type = 'agent_decomposer_bundled'`;
       expect(spend?.n, 'this month’s legacy spend row was never touched').toBe('1');
-      expect(audit.getAll().filter((r) => r.action === 'credits.cutover_rolled_back')).toHaveLength(
-        1,
-      );
+      expect(
+        (await adminAuditRowsFor(sql(), { targetAccountId: accountId })).map((r) => r.action),
+      ).toEqual(['credits.cutover_moved', 'credits.cutover_rolled_back']);
     });
 
     it('touches no ledger row, lot or window — a rollback is a credit_accounts + accounts write only', async () => {
@@ -682,12 +710,7 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
     });
 
     it('CRITICAL every rollback leaves an audit row, and a rollback of a legacy account leaves none', async () => {
-      const audit = new InMemoryAiCreditsAdminAuditRepo();
-      fx = await buildTestApp({
-        aiCredits: h().aiCredits,
-        aiCreditsAdminAuditRepo: audit,
-        scopes: [...ADMIN_SCOPES],
-      });
+      fx = await buildTestApp({ aiCredits: h().aiCredits, scopes: [...ADMIN_SCOPES] });
       const movedId = await seedAccount(fx, { tier: 'team_manual' });
       await givePaidCoverage(movedId, 'team_manual');
       await fx.app.inject({
@@ -711,9 +734,10 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
         payload: { account_id: `acc_${legacyId}` },
       });
 
-      const rows = audit.getAll().filter((r) => r.action === 'credits.cutover_rolled_back');
-      expect(rows).toHaveLength(1);
-      expect(rows[0]?.targetAccountId).toBe(movedId);
+      expect(
+        (await adminAuditRowsFor(sql(), { targetAccountId: movedId })).map((r) => r.action),
+      ).toEqual(['credits.cutover_moved', 'credits.cutover_rolled_back']);
+      expect(await adminAuditRowsFor(sql(), { targetAccountId: legacyId })).toEqual([]);
     });
 
     it('CRITICAL a rollback in shadow mode is refused with a clear error, and writes nothing', async () => {

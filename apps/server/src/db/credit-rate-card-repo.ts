@@ -61,6 +61,14 @@ export interface RateCardPublishInput {
   readonly note?: string;
 }
 
+/**
+ * S15 audit fix #2 — what `publish`/`withdraw` run INSIDE their own
+ * transaction, after the write and before the commit: the audit row. The card
+ * and its audit row then commit together or not at all; a hook that throws
+ * rolls the write back.
+ */
+export type RateCardWriteHook = (tx: CreditLedgerTx, card: CreditRateCardRecord) => Promise<void>;
+
 /** S15 — what `withdraw` found. `card` is null only for `not_found`. */
 export type RateCardWithdrawResult =
   | { readonly outcome: 'withdrawn'; readonly card: CreditRateCardRecord }
@@ -95,12 +103,22 @@ function pgError(err: unknown): { code?: string; constraint_name?: string } | nu
   return null;
 }
 
-/** Re-throw a driver error from a rate-card write as {@link RateCardRefusedError}
- *  when it is one of the CHECKs/triggers migration 0127 documents; anything
- *  else (a dropped connection, say) passes through unchanged. */
+/**
+ * Re-throw a driver error from a rate-card write as {@link RateCardRefusedError}
+ * when it is one of the rules migration 0127 documents; anything else (a
+ * dropped connection, say) passes through unchanged.
+ *
+ *   · 23514 — a CHECK (the markup range, the 30-day notice, "withdraw before
+ *     it takes effect"), or a trigger raising `check_violation`;
+ *   · 55000 — the immutability and commit-time triggers;
+ *   · 23505 — `credit_rate_cards_live_effective_unique`: a live card already
+ *     takes effect at that instant (S15 audit #8 — this one came back as a
+ *     500). The version itself cannot collide: publishes are serialised by
+ *     their advisory lock. The caller answers it 409, a clash, not a 400.
+ */
 function asRateCardRefusal(err: unknown): never {
   const pg = pgError(err);
-  if (pg !== null && (pg.code === '23514' || pg.code === '55000')) {
+  if (pg !== null && (pg.code === '23514' || pg.code === '55000' || pg.code === '23505')) {
     throw new RateCardRefusedError(
       err instanceof Error ? err.message : 'the rate card write was refused',
       pg.code ?? null,
@@ -157,9 +175,13 @@ export interface CreditRateCardWriter {
    * 30-day notice, the markup range, an Opus-class model — every rule
    * migration 0127 documents); the caller decides the HTTP shape.
    */
-  publish(input: RateCardPublishInput): Promise<CreditRateCardRecord>;
+  publish(
+    input: RateCardPublishInput,
+    inTransaction?: RateCardWriteHook,
+  ): Promise<CreditRateCardRecord>;
   /**
-   * Withdraw a card that has not taken effect yet.
+   * Withdraw a card that has not taken effect yet, in a transaction of its
+   * own; `inTransaction` runs inside it only when the card was withdrawn.
    *
    * Throws {@link RateCardRefusedError} when the database refuses the write
    * itself (its `effective_at` has passed — including the COMMIT-time race
@@ -169,7 +191,7 @@ export interface CreditRateCardWriter {
    * trigger (the UPDATE's own WHERE excludes an already-withdrawn row, so it
    * matches zero rows rather than being refused).
    */
-  withdraw(version: number, on?: CreditLedgerExecutor): Promise<RateCardWithdrawResult>;
+  withdraw(version: number, inTransaction?: RateCardWriteHook): Promise<RateCardWithdrawResult>;
   /** Every card, newest version first — `GET /v1/admin/credit-rate-cards`. */
   listAll(on?: CreditLedgerExecutor): Promise<readonly CreditRateCardRecord[]>;
   /** How many models each card prices, by version — that list's `model_count`. */
@@ -236,7 +258,10 @@ export class DrizzleCreditRateCardRepo implements CreditRateCardReader, CreditRa
     return row === undefined ? null : toCardRecord(row);
   }
 
-  async publish(input: RateCardPublishInput): Promise<CreditRateCardRecord> {
+  async publish(
+    input: RateCardPublishInput,
+    inTransaction?: RateCardWriteHook,
+  ): Promise<CreditRateCardRecord> {
     try {
       return await this.database.db.transaction(async (tx: CreditLedgerTx) => {
         // Serialize concurrent publishes: without this, two owners racing to
@@ -286,7 +311,9 @@ export class DrizzleCreditRateCardRepo implements CreditRateCardReader, CreditRa
             })),
           );
         }
-        return toCardRecord(card);
+        const record = toCardRecord(card);
+        if (inTransaction !== undefined) await inTransaction(tx, record);
+        return record;
       });
     } catch (err) {
       asRateCardRefusal(err);
@@ -295,26 +322,37 @@ export class DrizzleCreditRateCardRepo implements CreditRateCardReader, CreditRa
 
   async withdraw(
     version: number,
-    on: CreditLedgerExecutor = this.database.db,
+    inTransaction?: RateCardWriteHook,
   ): Promise<RateCardWithdrawResult> {
     try {
-      const [row] = await on
-        .update(creditRateCards)
-        .set({ withdrawnAt: sql`now()` })
-        .where(and(eq(creditRateCards.version, version), isNull(creditRateCards.withdrawnAt)))
-        .returning();
-      if (row !== undefined) return { outcome: 'withdrawn', card: toCardRecord(row) };
-      // The UPDATE matched zero rows: either no such version, or one that
-      // exists but is already withdrawn (the WHERE above excludes it). Read
-      // back to tell the two apart.
-      const [existing] = await on
-        .select()
-        .from(creditRateCards)
-        .where(eq(creditRateCards.version, version))
-        .limit(1);
-      return existing === undefined
-        ? { outcome: 'not_found', card: null }
-        : { outcome: 'already_withdrawn', card: toCardRecord(existing) };
+      // One transaction, so the hook commits with the withdrawal; the
+      // deferred "before it takes effect" trigger fires at ITS commit, still
+      // inside this try.
+      return await this.database.db.transaction(
+        async (tx: CreditLedgerTx): Promise<RateCardWithdrawResult> => {
+          const [row] = await tx
+            .update(creditRateCards)
+            .set({ withdrawnAt: sql`now()` })
+            .where(and(eq(creditRateCards.version, version), isNull(creditRateCards.withdrawnAt)))
+            .returning();
+          if (row !== undefined) {
+            const card = toCardRecord(row);
+            if (inTransaction !== undefined) await inTransaction(tx, card);
+            return { outcome: 'withdrawn', card };
+          }
+          // The UPDATE matched zero rows: either no such version, or one that
+          // exists but is already withdrawn (the WHERE above excludes it).
+          // Read back to tell the two apart.
+          const [existing] = await tx
+            .select()
+            .from(creditRateCards)
+            .where(eq(creditRateCards.version, version))
+            .limit(1);
+          return existing === undefined
+            ? { outcome: 'not_found', card: null }
+            : { outcome: 'already_withdrawn', card: toCardRecord(existing) };
+        },
+      );
     } catch (err) {
       asRateCardRefusal(err);
     }

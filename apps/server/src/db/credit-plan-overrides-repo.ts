@@ -29,6 +29,19 @@ import { creditPlanOverrides, type CreditPlanOverrideRow } from './schema.js';
 /** `credit_plan_overrides_credits_range`: 0 to ten million credits a month. */
 export const CREDIT_PLAN_OVERRIDE_MAX_MONTHLY_CREDITS = 10_000_000;
 
+/**
+ * The anchor an upsert's ON CONFLICT branch keeps: the replaced row's own
+ * `anchor_at` while that row is live (anchored by now(), not ended), else
+ * now(). Inside `ON CONFLICT DO UPDATE SET`, `credit_plan_overrides.*` IS the
+ * row being replaced. A literal top-level fragment — no parameter, no SELECT,
+ * no Date, nothing spliced in.
+ */
+const LIVE_ANCHOR_OR_NOW = sql`CASE
+  WHEN credit_plan_overrides.anchor_at <= now()
+   AND (credit_plan_overrides.ends_at IS NULL OR credit_plan_overrides.ends_at > now())
+  THEN credit_plan_overrides.anchor_at
+  ELSE now() END`;
+
 export interface CreditPlanOverrideRecord {
   readonly accountId: string;
   /** Whole credits a month. */
@@ -49,6 +62,16 @@ export interface SetCreditPlanOverride {
   readonly ownKeyAllowed?: boolean;
   /** The day of the month the credits reset on, as an instant. Omitted: the database's now(). */
   readonly anchorAt?: Date;
+  /**
+   * S15 audit fix #7 — with no `anchorAt`, keep the anchor of the override
+   * being replaced when that override is LIVE (anchored at or before now() and
+   * not ended); a brand-new override — none, or one that has ended — still
+   * anchors at now(). The admin PUT sets this: re-anchoring a live override on
+   * every amendment moved the account's reset day and made its next window a
+   * stub. Decided in the upsert itself, on the database's clock, against the
+   * row it replaces. Ignored when `anchorAt` is given.
+   */
+  readonly carryLiveAnchor?: boolean;
   /** When the override stops granting. Omitted or null: it does not end. */
   readonly endsAt?: Date | null;
   /** The admin API key that set it, for the audit trail. */
@@ -127,12 +150,19 @@ export class DrizzleCreditPlanOverridesRepo {
       setByKeyId: input.setByKeyId ?? null,
       note: input.note ?? '',
     };
+    // On conflict the SET sees the row being replaced (`credit_plan_overrides.*`),
+    // so "was it live" is judged against exactly that row, atomically.
+    const carry = input.carryLiveAnchor === true && input.anchorAt === undefined;
     const [row] = await on
       .insert(creditPlanOverrides)
       .values({ accountId: input.accountId, ...written })
       .onConflictDoUpdate({
         target: creditPlanOverrides.accountId,
-        set: { ...written, updatedAt: sql`now()` },
+        set: {
+          ...written,
+          ...(carry ? { anchorAt: LIVE_ANCHOR_OR_NOW } : {}),
+          updatedAt: sql`now()`,
+        },
       })
       .returning();
     if (row === undefined) throw new Error('a credit plan override was written and not returned');

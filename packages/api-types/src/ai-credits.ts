@@ -936,14 +936,20 @@ export const AiLedgerEntrySchema = z.object({
   kind: AiLedgerEntryKindSchema,
   /** Signed: positive when credits arrive, negative when they leave. */
   credits: SignedCreditAmountSchema,
-  balance_after_credits: CreditAmountSchema,
+  /**
+   * The account's net position after this entry: credits held minus credits
+   * owed. Signed — negative while the account owes more than it holds — and
+   * rounded toward minus infinity, so a balance is never shown higher than it is.
+   */
+  balance_after_credits: SignedCreditAmountSchema,
   created_at: Iso8601Schema,
   /** When the credits this entry added expire; null when it added none. */
   expires_at: Iso8601Schema.nullable(),
   task: z
     .object({
       agent_session_id: z.string().min(1),
-      model: AgentModelSchema,
+      /** The model the task ran on; null when that model is no longer offered. */
+      model: AgentModelSchema.nullable(),
       rate_card_version: RateCardVersionSchema,
     })
     .nullable(),
@@ -1000,7 +1006,10 @@ export const AI_CREDITS_PROBLEM_TYPES = {
 export type AiCreditsProblemType =
   (typeof AI_CREDITS_PROBLEM_TYPES)[keyof typeof AI_CREDITS_PROBLEM_TYPES];
 
-/** Credits on one message turn's usage block. */
+/**
+ * Credits on one message turn: the message response's TOP-LEVEL `credits`
+ * member, beside `usage` rather than inside it.
+ */
 export const TurnCreditsUsageSchema = z.object({
   source: AiSourceSchema,
   reserved: CreditAmountSchema,
@@ -1078,10 +1087,23 @@ export const AdminPlanOverrideViewSchema = z.object({
 });
 export type AdminPlanOverrideView = z.infer<typeof AdminPlanOverrideViewSchema>;
 
+/**
+ * The most credits ONE staff request may move: a goodwill grant's `credits`, or
+ * a plan override's `monthly_credits` (1,000,000 credits = US$10,000). A staff
+ * bound, deliberately tighter than the storage bounds beneath it (a lot holds
+ * any safe integer of microcredits; `credit_plan_overrides_credits_range`
+ * allows ten million a month): a figure past it is almost certainly a typo, and
+ * a figure past the storage bound used to reach the database and come back as a
+ * 500. `forgive_debt` carries no amount — it forgives what the account owes.
+ */
+export const ADMIN_CREDITS_MAX_PER_REQUEST = 1_000_000;
+
 /** `PUT /v1/admin/accounts/:id/ai-plan-override`. Whole credits a month, 0 to
- *  ten million (mirrors `credit_plan_overrides_credits_range`). */
+ *  {@link ADMIN_CREDITS_MAX_PER_REQUEST}. `expires_at` must be in the future;
+ *  the ROUTE refuses a past one with a 400 (a schema cannot read the clock the
+ *  request is judged against). */
 export const AdminSetPlanOverrideRequestSchema = z.object({
-  monthly_credits: z.number().int().min(0).max(10_000_000),
+  monthly_credits: z.number().int().min(0).max(ADMIN_CREDITS_MAX_PER_REQUEST),
   reason: AiPlanOverrideReasonSchema,
   expires_at: Iso8601Schema.optional(),
 });
@@ -1122,15 +1144,17 @@ export const AdminCreditsAccountStateSchema = z.object({
 export type AdminCreditsAccountState = z.infer<typeof AdminCreditsAccountStateSchema>;
 
 /**
- * `POST /v1/admin/accounts/:id/credits/adjustments`. `credits > 0` inserts a
- * goodwill lot with an expiry; `forgive_debt` clears whatever the account
- * currently owes. Both carry `idempotency_key`: a repeat writes nothing new
- * and returns the first attempt's result (`applied: false` on the response).
+ * `POST /v1/admin/accounts/:id/credits/adjustments`. `credits` (a WHOLE number,
+ * 1 to {@link ADMIN_CREDITS_MAX_PER_REQUEST}) inserts a goodwill lot with an
+ * expiry; `forgive_debt` clears whatever the account currently owes. Both carry
+ * `idempotency_key`: a repeat writes nothing new and returns the first attempt's
+ * result (`applied: false` on the response). The ROUTE refuses an `expires_at`
+ * that is not after now — and so not after the lot's own start — with a 400.
  */
 export const AdminCreditAdjustmentRequestSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('goodwill'),
-    credits: z.number().positive().multipleOf(0.001),
+    credits: z.number().int().positive().max(ADMIN_CREDITS_MAX_PER_REQUEST),
     expires_at: Iso8601Schema,
     reason: z.string().min(1).max(500),
     idempotency_key: z.string().min(1).max(200),
@@ -1237,10 +1261,22 @@ export const AiCreditsCutoverRequestSchema = z
   });
 export type AiCreditsCutoverRequest = z.infer<typeof AiCreditsCutoverRequestSchema>;
 
-/** Why an account was refused or is not eligible — §8 step 4/M7 and §8's
- *  Free row, in that order of severity. */
+/**
+ * Why an account was refused (kept legacy, listed in the dry run):
+ *   · `no_paid_coverage`      — a paid tier with nothing paid covering now (§8.4).
+ *   · `no_contract`           — a plan whose allowance is a contract
+ *                               (Enterprise) with no live `contract` override
+ *                               (§8.4/M7), whatever Stripe line it pays for.
+ *   · `not_in_phase_1_cohort` — named by id but not in C0: Phase 1 moves only
+ *                               internal accounts, by cohort OR by id.
+ *   · `account_not_found` / `account_deleted`.
+ * `not_eligible`'s one reason (Free) is below. Mirrors `CutoverRefuseReason` in
+ * `apps/server/src/services/credit-cutover.ts`.
+ */
 export const AiCreditsCutoverRefuseReasonSchema = z.enum([
   'no_paid_coverage',
+  'no_contract',
+  'not_in_phase_1_cohort',
   'account_not_found',
   'account_deleted',
 ]);

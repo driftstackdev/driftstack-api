@@ -8,9 +8,11 @@
 // that file's header for the three guard tests this route is recorded in
 // instead of `lib/openapi.ts`.
 //
-// Read scope, no act-as: the catalogue plus `available_on_your_plan` depends
-// only on the CALLER's own tier, and no other route in this family act-as's
-// except `GET /v1/account/me/ai` (see that file's header for why).
+// Read scope, and ACT-AS (S14 audit #9): `available_on_your_plan` is the
+// EFFECTIVE account's plan — a team member acting as the owner starts turns
+// that run on the owner's plan, so the catalogue they choose from must say
+// what that plan can run. Resolved through the same resolver and membership
+// check as `GET /v1/account/me/ai` (see `routes/account-ai.ts`'s header).
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
@@ -23,11 +25,16 @@ import {
   type RateCardModelPrices,
 } from '../services/ai-account-state.js';
 import type { AiCreditsRuntime, AiCreditsStateReads } from '../services/ai-credits-runtime.js';
+import { resolveEffectiveAccount, type AccountAuthRepo } from '../services/auth.js';
+import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
+import { resolveEffectiveTier } from './account-ai.js';
 
 export interface AiModelsRoutesDeps {
   /** Required: `lib/app.ts` registers this file only when `deps.aiCredits` is
    *  defined (mode `shadow`|`enforce`). */
   aiCredits: AiCreditsRuntime;
+  /** The acting-as owner's tier, when the request acts as one. */
+  authRepo: Pick<AccountAuthRepo, 'getAccount'>;
   /** Injectable clock for tests. */
   now?: () => Date;
 }
@@ -47,7 +54,7 @@ function requireStateReads(aiCredits: AiCreditsRuntime): AiCreditsStateReads {
 }
 
 export function registerAiModelsRoutes(app: FastifyInstance, deps: AiModelsRoutesDeps): void {
-  const { aiCredits } = deps;
+  const { aiCredits, authRepo } = deps;
   const now = deps.now ?? ((): Date => new Date());
 
   app.get(
@@ -55,7 +62,8 @@ export function registerAiModelsRoutes(app: FastifyInstance, deps: AiModelsRoute
     { preHandler: [app.requireAuth, app.requireScope('read'), app.rateLimit('global')] },
     async (request): Promise<AiModelCatalogueResponse> => {
       const ctx = requireCtx(request);
-      const tier = ctx.account.tier;
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      const tier = await resolveEffectiveTier(ctx, effective, authRepo);
       const at = now();
       const stateReads = requireStateReads(aiCredits);
       const cardInForce = await stateReads.cardInForce(at);

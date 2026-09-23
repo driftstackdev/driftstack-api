@@ -59,8 +59,13 @@ describe('movedAccountCapWriteRefusal — only an exact re-send of the shown cap
   });
 });
 
-describe('movedAccountCreditsView — no current window (no paid coverage yet)', () => {
-  it('CRITICAL cap, used and remaining all read 0, whatever ai_source is', () => {
+describe('movedAccountCreditsView — no current window (no paid coverage now)', () => {
+  // S13 audit #13: the missing window makes the LEVEL 0 (and `used`, nothing
+  // having been charged to a window that does not exist); the other live
+  // grants and the spendable balance still count, as §8.6 defines them. It
+  // used to force cap and remaining to 0 too, hiding credit the account's
+  // turns were still spending.
+  it('CRITICAL the level and used read 0; cap is the other live grants and remaining the spendable balance, whatever ai_source is', () => {
     const view = movedAccountCreditsView({
       aiSource: 'credits',
       currentWindow: null,
@@ -69,12 +74,12 @@ describe('movedAccountCreditsView — no current window (no paid coverage yet)',
       chargedInWindowMicro: 999_000_000,
       now: new Date('2026-06-15T12:00:00Z'),
     });
-    expect(view.capCents).toBe(0);
+    expect(view.capCents).toBe(999);
     expect(view.usedThisMonthCents).toBe(0);
-    expect(view.remainingCents).toBe(0);
+    expect(view.remainingCents).toBe(999);
   });
 
-  it('consent is still computed from ai_source — the missing window only zeroes the money fields', () => {
+  it('consent is still computed from ai_source — the missing window only changes the money fields', () => {
     const consented = movedAccountCreditsView({
       aiSource: null,
       currentWindow: null,

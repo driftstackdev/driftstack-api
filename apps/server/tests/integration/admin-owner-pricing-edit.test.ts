@@ -128,6 +128,10 @@ async function buildApp(authRepo: AccountAuthRepo = makeRepo()): Promise<Harness
     authCache: makeCache(),
     authCoalescer: null,
     ownerEmail: OWNER_EMAIL,
+    // As bootstrap.ts does: the owner is always in the staff set, so the owner's
+    // session carries `driftstack_internal_admin` — which every owner route now
+    // requires as well as `requireOwner` (S15 audit #5).
+    staffEmails: new Set([OWNER_EMAIL]),
   });
   // The real app provides the rateLimit decorator via its own plugin; the
   // admin-owner routes only need it to exist. Stub it as a no-op preHandler.

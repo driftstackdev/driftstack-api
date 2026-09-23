@@ -178,23 +178,53 @@ export function registerAccountBundledLlmRoutes(
       }
     }
 
+    // ⛔ A SAVE THAT WOULD NOT CHANGE THE CONSENT PROJECTION WRITES NOTHING.
+    // The dashboard sends `consent: true` on EVERY save of this form, so
+    // writing on every `consent` would turn a Team account on `'credits'`
+    // into automatic (its usable stored key first, credits only after) each
+    // time the customer saved anything — a change of who pays, made without
+    // anyone choosing it, and invisible to the consent audit because the
+    // true/false projection had not moved (S13 audit #12). So `ai_source`
+    // is written only when the requested consent DIFFERS from the projection
+    // (`ai_source !== 'own_key'`), and every write is audited as
+    // `account.ai_source_changed` below. (The coordinator amends §8.6's
+    // "consent:true → automatic" to this.)
     let nextAiSource = credit.aiSource;
-    if (patch.consent === true) {
-      const updated = await aiCredits.accounts.setAiSource(accountId, {
-        aiSource: null,
-        setBy: 'customer',
-      });
-      nextAiSource = updated.aiSource;
-    } else if (patch.consent === false && ownKeyAllowedForTier(tier)) {
-      const updated = await aiCredits.accounts.setAiSource(accountId, {
-        aiSource: 'own_key',
-        setBy: 'customer',
-      });
-      nextAiSource = updated.aiSource;
+    if (patch.consent !== undefined && patch.consent !== before.consent) {
+      if (patch.consent) {
+        const updated = await aiCredits.accounts.setAiSource(accountId, {
+          aiSource: null,
+          setBy: 'customer',
+        });
+        nextAiSource = updated.aiSource;
+      } else if (ownKeyAllowedForTier(tier)) {
+        const updated = await aiCredits.accounts.setAiSource(accountId, {
+          aiSource: 'own_key',
+          setBy: 'customer',
+        });
+        nextAiSource = updated.aiSource;
+      }
     }
     // `consent:false` on a plan that forbids an own key (Personal): ACCEPTED
     // and changes nothing — no write, so `nextAiSource` stays what it was,
     // and the response tells the truth: `consent: true` (§8.6 item 6).
+
+    if (accountAudit !== undefined && nextAiSource !== credit.aiSource) {
+      try {
+        // Same action and payload `PATCH /v1/account/me/ai-settings` writes
+        // for the same change.
+        await accountAudit.record({
+          accountId,
+          actorType: 'customer',
+          action: 'account.ai_source_changed',
+          targetResourceId: `account_${accountId}`,
+          payload: { from: credit.aiSource, to: nextAiSource },
+          ipAddress: readClientIp(request),
+        });
+      } catch {
+        /* swallow */
+      }
+    }
 
     if (patch.consent !== undefined && accountAudit !== undefined) {
       const nextConsent = movedAccountConsent(nextAiSource);
@@ -344,24 +374,42 @@ export function registerAccountBundledLlmRoutes(
           });
         }
       }
-      const next = await service.updateSettings({
+      // S16 audit #11 — "moved or not" was decided above from an UNLOCKED
+      // read; a cutover can take the account between that read and this
+      // write. So the write takes the lock the cutover takes first, re-reads
+      // `billing_mode` under it, and writes the legacy columns only if the
+      // account is still legacy: a save racing a cutover either lands before
+      // the move (and is in its snapshot) or answers as a moved account —
+      // never lands in columns a moved account no longer reads.
+      const write = await service.updateLegacySettings({
         accountId: ctx.account.id,
         ...(parsed.data.consent !== undefined ? { consent: parsed.data.consent } : {}),
         ...(parsed.data.monthly_cap_usd_cents !== undefined
           ? { monthlyCapUsdCents: parsed.data.monthly_cap_usd_cents }
           : {}),
+        refuseIfMoved: aiCredits !== undefined && aiCredits.mode === 'enforce',
       });
-      if (next === null) {
+      if (write.outcome === 'not_found') {
         throw new BadRequestError('Account row not found — re-authenticate and retry.');
       }
+      if (write.outcome === 'moved') {
+        const movedNow = await resolveMovedAccount(ctx.account.id);
+        if (movedNow === null) {
+          throw new Error(
+            'the bundled-LLM settings write saw a moved account the credits read did not',
+          );
+        }
+        return handleMovedPatch(request, ctx.account.id, ctx.account.tier, movedNow, parsed.data);
+      }
+      const next = write.next;
       // 2026-05-20 — audit emit ONLY when consent actually changed.
       // Cap-only PATCHes don't audit (separate enum value if later
       // needed). Best-effort emit; audit failure must not break the
-      // PATCH response.
+      // PATCH response. `write.prior` is the row as the write locked it.
       if (
         accountAudit !== undefined &&
         parsed.data.consent !== undefined &&
-        (prior?.consent ?? false) !== next.consent
+        write.prior.consent !== next.consent
       ) {
         try {
           await accountAudit.record({
@@ -370,7 +418,7 @@ export function registerAccountBundledLlmRoutes(
             action: 'account.bundled_llm_consent_changed',
             targetResourceId: `account_${ctx.account.id}`,
             payload: {
-              from: prior?.consent ?? false,
+              from: write.prior.consent,
               to: next.consent,
             },
             ipAddress: readClientIp(request),

@@ -143,6 +143,26 @@ export interface AiCreditsStateReads {
    *  once per on-credits model, for the card in force and, when there is
    *  one, the next announced card. */
   modelRow: CreditRateCardReader['modelRow'];
+  /**
+   * S14 audit #6 — the account's `credit_plan_overrides` row, for
+   * `GET /v1/account/me/ai`'s `plan.monthly_included_credits`.
+   *
+   * OPTIONAL ON THE TYPE ONLY, the same reason `AiCreditsRuntime.stateReads`
+   * itself is: fixtures built before this member existed (for routes that
+   * never read it) keep typechecking. bootstrap.ts populates it beside every
+   * other member here, and `routes/account-ai.ts` THROWS on a runtime that
+   * lacks it rather than silently reporting the tier default.
+   */
+  planOverride?: DrizzleCreditPlanOverridesRepo['get'];
+  /**
+   * S14 audit #5 — §6.4's lazy refresh "in `GET /v1/account/me/ai`": expire
+   * due lots, materialise the window the account's paid coverage earns,
+   * reconcile its level and repay debt, in a transaction of its own, before
+   * the route reads anything. The ONE write in this bundle, here because it
+   * exists only to make the reads beside it current. Called for a MOVED account
+   * only. Optional on the type for the same reason as {@link planOverride}.
+   */
+  refreshCredits?: CreditsRefresher['refreshCredits'];
 }
 
 /** The one member of `AppDeps` the credits runtime occupies. Absent while the mode is off. */

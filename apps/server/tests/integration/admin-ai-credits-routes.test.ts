@@ -25,10 +25,11 @@ import {
   fundedTaskLot,
 } from './_helpers/credit-reservation-fixtures.js';
 import {
+  adminAuditRowsFor,
   adminCreditsHarness,
+  seedStaffIdentity,
   type AdminCreditsHarness,
 } from './_helpers/admin-credits-route-fixtures.js';
-import { InMemoryAiCreditsAdminAuditRepo } from './_helpers/in-memory-ai-credits-admin-audit-repo.js';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 const ISOLATED_DB_NAME = 'driftstack_iso_s15_admin_credits_routes';
@@ -47,6 +48,9 @@ beforeAll(async () => {
   client = opened.sql;
   database = createDb(opened.url, { max: 6 });
   harness = adminCreditsHarness(opened.url);
+  // Every admin mutation writes its audit row inside its own transaction, and
+  // the row's actor columns are foreign keys: the app's staff identity must exist.
+  await seedStaffIdentity(opened.sql);
 }, 60_000);
 
 afterAll(async () => {
@@ -160,12 +164,7 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
   });
 
   it('CRITICAL a contract sets its own monthly credits — PUT .../ai-plan-override with reason "contract"', async () => {
-    let audit: InMemoryAiCreditsAdminAuditRepo | null = new InMemoryAiCreditsAdminAuditRepo();
-    fx = await buildTestApp({
-      aiCredits: h().aiCredits,
-      aiCreditsAdminAuditRepo: audit,
-      scopes: [...ADMIN_SCOPES],
-    });
+    fx = await buildTestApp({ aiCredits: h().aiCredits, scopes: [...ADMIN_SCOPES] });
     const accountId = await seedTargetAccount(fx);
     const res = await fx.app.inject({
       method: 'PUT',
@@ -188,17 +187,13 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
       String(5000 * MICRO),
     );
 
-    expect(audit.getAll().filter((r) => r.action === 'credits.plan_override_set')).toHaveLength(1);
-    audit = null;
+    expect(
+      (await adminAuditRowsFor(sql(), { targetAccountId: accountId })).map((r) => r.action),
+    ).toEqual(['credits.plan_override_set']);
   });
 
   it('CRITICAL DELETE .../ai-plan-override ends a live override and is idempotent (no audit row the second time)', async () => {
-    const audit = new InMemoryAiCreditsAdminAuditRepo();
-    fx = await buildTestApp({
-      aiCredits: h().aiCredits,
-      aiCreditsAdminAuditRepo: audit,
-      scopes: [...ADMIN_SCOPES],
-    });
+    fx = await buildTestApp({ aiCredits: h().aiCredits, scopes: [...ADMIN_SCOPES] });
     const accountId = await seedTargetAccount(fx);
     await fx.app.inject({
       method: 'PUT',
@@ -224,19 +219,16 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
     expect(second.json<{ removed: boolean }>().removed).toBe(false);
 
     expect(
-      audit.getAll().filter((r) => r.action === 'credits.plan_override_cleared'),
+      (await adminAuditRowsFor(sql(), { targetAccountId: accountId })).filter(
+        (r) => r.action === 'credits.plan_override_cleared',
+      ),
       'only the first DELETE actually ended a live override',
     ).toHaveLength(1);
   });
 
   describe('a goodwill grant is idempotent and audited', () => {
     it('CRITICAL two calls with the same idempotency_key produce one lot, and the second is not audited', async () => {
-      const audit = new InMemoryAiCreditsAdminAuditRepo();
-      fx = await buildTestApp({
-        aiCredits: h().aiCredits,
-        aiCreditsAdminAuditRepo: audit,
-        scopes: [...ADMIN_SCOPES],
-      });
+      fx = await buildTestApp({ aiCredits: h().aiCredits, scopes: [...ADMIN_SCOPES] });
       const accountId = await seedTargetAccount(fx);
       const key = `goodwill-${randomUUID()}`;
       const payload = {
@@ -277,7 +269,9 @@ describe.skipIf(!RUN_DB_TESTS)('the AI-credits admin routes', () => {
       expect(row?.n, 'exactly one lot exists, not two').toBe(1);
 
       expect(
-        audit.getAll().filter((r) => r.action === 'credits.goodwill_granted'),
+        (await adminAuditRowsFor(sql(), { targetAccountId: accountId })).filter(
+          (r) => r.action === 'credits.goodwill_granted',
+        ),
         'audits nothing new on the repeat',
       ).toHaveLength(1);
     });

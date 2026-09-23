@@ -10,17 +10,16 @@
 //   POST /v1/admin/ai-credits/cutover    (S16 — move accounts onto credits)
 //   POST /v1/admin/ai-credits/rollback   (S16 — move one account back)
 //
-// Auth: `driftstack_internal_admin` for every route above except the two rate-
-// card MUTATIONS (publish, withdraw), which are OWNER-ONLY — `app.requireOwner`,
-// an identity check against `DRIFTSTACK_OWNER_EMAIL`, not a staff scope (see
-// `middleware/auth.ts`). A rate card sets what every customer on credits pays;
-// `routes/admin-owner.ts` already gates the platform's other high-power,
-// money-shaped surfaces (pricing, secrets) the same way, and the codebase has
-// no stronger admin gate than that identity check — "find how owner is
-// expressed... if none exists, refuse to invent one" (S15 brief) is answered
-// by reusing exactly that gate rather than adding a new scope. GET-ing the
-// list of cards stays staff-scoped: reading is not the power this route
-// guards.
+// Auth: `driftstack_internal_admin` for every route above. The two rate-card
+// MUTATIONS (publish, withdraw) are ALSO OWNER-ONLY — `app.requireOwner`, an
+// identity check against `DRIFTSTACK_OWNER_EMAIL` (see `middleware/auth.ts`).
+// A rate card sets what every customer on credits pays; `routes/admin-owner.ts`
+// gates the platform's other high-power, money-shaped surfaces (pricing,
+// secrets) the same way. ⛔ BOTH GATES, SCOPE FIRST: `requireOwner` checks the
+// ACCOUNT, never the KEY, so on its own it let any key on the owner's account
+// — a `read`-only one included — publish and withdraw cards (S15 audit #5).
+// GET-ing the list of cards stays staff-scoped: reading is not the power this
+// route guards.
 //
 // ⛔ REGISTERED ONLY WHILE THE MODE IS SHADOW OR ENFORCE (`deps.aiCredits !==
 // undefined`), same posture as every other credits-gated admin surface.
@@ -31,17 +30,25 @@
 // `openapi-route-coverage-invariant` all carry every route this file
 // registers with the same "staff panel only; AI credits are dark" reason.
 //
-// AUDIT (D-025). Every route that WRITES calls `deps.adminAudit.record(...)`
-// before returning — except a call that changed nothing: a repeat adjustment
-// on an already-used idempotency key, or a plan-override DELETE with no live
+// AUDIT (D-025). Every route that WRITES records one `ai_credits_admin_audit_log`
+// row — except a call that changed nothing: a repeat adjustment on an
+// already-used idempotency key, or a plan-override DELETE with no live
 // override to end. Those write nothing to the ledger either, so there is
-// nothing new to attribute; a second `adminAudit` row for the SAME action
-// already on file would be the thing that misleads an auditor, not the thing
-// that protects them. Same rule for S16's two routes: `credits.cutover_moved`
-// is written once per account actually MOVED (never for `already_moved`,
-// `not_eligible` or `refuse`, and never at all for a `dry_run`), and
-// `credits.cutover_rolled_back` only for an account that WAS on credits
-// (never for `not_moved`, and never for a `dry_run`).
+// nothing new to attribute; a second row for the SAME action already on file
+// would be the thing that misleads an auditor, not the thing that protects
+// them. Same rule for S16's two routes: `credits.cutover_moved` is written once
+// per account actually MOVED (never for `already_moved`, `not_eligible` or
+// `refuse`, and never at all for a `dry_run`), and `credits.cutover_rolled_back`
+// only for an account that WAS on credits (never for `not_moved`, and never
+// for a `dry_run`).
+//
+// ⛔ THE AUDIT ROW IS WRITTEN IN THE MUTATION'S OWN TRANSACTION
+// (`aiCreditsAdminAuditIn(tx)`), never after it commits (S15/S16 audit #2). A
+// change and its row commit together or not at all: written after commit, a
+// failed audit write left a change that a retry reports `applied:false` (or
+// `already_moved`) and never audits, and a cutover batch that failed part-way
+// left every account it had committed with no row at all. `deps.adminAudit`
+// (a pool-level writer) is therefore no longer called here — see its doc.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -76,6 +83,7 @@ import {
   type CreditLotRecord,
 } from '../db/credit-ledger-repo.js';
 import { RateCardRefusedError } from '../db/credit-rate-card-repo.js';
+import { aiCreditsAdminAuditIn, storedLedgerEntryIn } from '../db/credit-cutover-repo.js';
 import {
   candidateRateCardModels,
   deriveRateCardRows,
@@ -135,6 +143,14 @@ export interface AdminAiCreditsRoutesDeps {
   /** S15 — the admin mutation surface + the S14 read bundle, both required by
    *  the routes below (the original two routes above use only `report`). */
   aiCredits: AiCreditsRuntime;
+  /**
+   * NO LONGER CALLED by this file: it writes on the pool, after the mutation
+   * has committed, and every audit row here is now written INSIDE the
+   * mutation's own transaction (see the file header). Kept on the interface
+   * only because `lib/app.ts` (outside S15/S16's fix) still passes it; remove
+   * it there and here together — or give `record` an executor and route the
+   * in-transaction writes back through it.
+   */
   adminAudit: Pick<DrizzleAiCreditsAdminAuditRepo, 'record'>;
   authRepo: Pick<AccountAuthRepo, 'getAccount'>;
   /** Injectable clock; the shadow-report window AND the rate-card notice
@@ -231,8 +247,25 @@ export function registerAdminAiCreditsRoutes(
   app: FastifyInstance,
   deps: AdminAiCreditsRoutesDeps,
 ): void {
-  const { aiCredits, adminAudit, authRepo } = deps;
+  const { aiCredits, authRepo } = deps;
   const now = deps.now ?? ((): Date => new Date());
+
+  /**
+   * S15 audit #8 — an `expires_at` that is not after both `now` and `after`
+   * is a 400 in the same field-error shape a schema failure has, before
+   * anything is written. (It used to reach the database, whose own CHECK
+   * refused it — or, for a goodwill lot expiring between its start and now,
+   * accepted a grant that arrived already expired.)
+   */
+  function requireExpiryAfter(expiresAt: Date, after: Date, what: string): void {
+    const floor = Math.max(now().getTime(), after.getTime());
+    if (!(expiresAt.getTime() > floor)) {
+      throw new ValidationError({
+        formErrors: [],
+        fieldErrors: { expires_at: [`expires_at must be in the future (after ${what}).`] },
+      });
+    }
+  }
 
   async function requireAccountExists(accountId: string): Promise<void> {
     const account = await authRepo.getAccount(accountId);
@@ -349,9 +382,13 @@ export function registerAdminAiCreditsRoutes(
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       const admin = requireAdmin(aiCredits);
 
+      const ipAddress = readClientIp(request);
+
       if (parsed.data.kind === 'goodwill') {
         const { credits, expires_at, reason, idempotency_key } = parsed.data;
         const expiresAt = new Date(expires_at);
+        const startsAt = floorToPriorMinute(now());
+        requireExpiryAfter(expiresAt, startsAt, 'now and after the grant starts');
         let applied: boolean;
         let lot: CreditLotRecord;
         let debtAfterMicro: number;
@@ -381,15 +418,11 @@ export function registerAdminAiCreditsRoutes(
                 //      that lands right at a minute boundary can still floor
                 //      to a value a few ms after the transaction's own now();
                 //      going back one whole extra minute clears that too.
-                //   2. `insertLot` is idempotent on `grantKey` ONLY when a
-                //      repeat call sends the SAME `startsAt` — an unrounded
-                //      `now()` differs on every call by construction, so a
-                //      genuine retry of the SAME request would be read as a
-                //      different one and refused as a grant-key reuse.
-                //      Flooring to a whole minute makes same-minute retries
-                //      agree; going back one further minute is pure margin
-                //      for reason 1 and does not change that.
-                startsAt: floorToPriorMinute(now()),
+                //   2. A retry of the SAME request must be recognised as one.
+                //      `insertLot` no longer compares an `adjustment` lot's
+                //      `starts_at` at all (S15 audit #4: a retry in a later
+                //      minute was a 409), so this floor is now reason 1 only.
+                startsAt,
                 expiresAt,
               },
               tx,
@@ -419,6 +452,18 @@ export function registerAdminAiCreditsRoutes(
             if (fundedLot === null) {
               throw new Error(`goodwill lot ${inserted.lot.id} vanished after it was funded`);
             }
+            if (appendResult.applied) {
+              const audit = aiCreditsAdminAuditIn(tx);
+              await audit.record({
+                adminAccountId: ctx.account.id,
+                adminKeyId: ctx.apiKey.id,
+                action: 'credits.goodwill_granted',
+                targetAccountId: accountId,
+                inputPayload: { credits, expires_at, reason, idempotency_key },
+                result: 'success',
+                ipAddress,
+              });
+            }
             return {
               lot: fundedLot,
               applied: appendResult.applied,
@@ -439,28 +484,37 @@ export function registerAdminAiCreditsRoutes(
           }
           throw err;
         }
-        if (applied) {
-          await adminAudit.record({
-            adminAccountId: ctx.account.id,
-            adminKeyId: ctx.apiKey.id,
-            action: 'credits.goodwill_granted',
-            targetAccountId: accountId,
-            inputPayload: { credits, expires_at, reason, idempotency_key },
-            result: 'success',
-            ipAddress: readClientIp(request),
-          });
-        }
         return buildGoodwillAdjustmentResponse({ applied, lot, debtMicro: debtAfterMicro });
       }
 
       // kind === 'forgive_debt'
       const { reason, idempotency_key } = parsed.data;
+      const forgiveKey = `admin_forgive_debt:${idempotency_key}`;
+      const reusedKey = (): ConflictError =>
+        new ConflictError(
+          'This idempotency key was already used for a different debt forgiveness.',
+        );
       let applied: boolean;
       let forgivenMicro: number;
       let debtAfterMicro: number;
       try {
         const result = await admin.transaction(async (tx) => {
           const before = await admin.lockAccount(tx, accountId);
+          // S15 audit #9 — a REPLAY reports what the first call forgave, read
+          // from its own ledger row, and writes nothing. Deriving it from the
+          // debt owed NOW reported the wrong figure (0 at zero debt), and with
+          // a new debt of a different size re-sent a different amount under
+          // the same key — a 409 for a request that had simply been retried.
+          const stored = await storedLedgerEntryIn(tx, accountId, forgiveKey);
+          if (stored !== null) {
+            if (stored.kind !== 'adjustment' || stored.debtDeltaMicro >= 0) throw reusedKey();
+            if (stored.reason !== reason) throw reusedKey();
+            return {
+              applied: false,
+              forgivenMicro: -stored.debtDeltaMicro,
+              debtAfterMicro: before.debtMicro,
+            };
+          }
           if (before.debtMicro <= 0) {
             return { applied: false, forgivenMicro: 0, debtAfterMicro: before.debtMicro };
           }
@@ -469,16 +523,30 @@ export function registerAdminAiCreditsRoutes(
               accountId,
               kind: 'adjustment',
               forgiveDebtMicro: before.debtMicro,
-              idempotencyKey: `admin_forgive_debt:${idempotency_key}`,
+              idempotencyKey: forgiveKey,
               actor: 'admin',
               reason,
             },
             tx,
           );
+          if (appendResult.applied) {
+            const audit = aiCreditsAdminAuditIn(tx);
+            await audit.record({
+              adminAccountId: ctx.account.id,
+              adminKeyId: ctx.apiKey.id,
+              action: 'credits.debt_forgiven',
+              targetAccountId: accountId,
+              inputPayload: { reason, idempotency_key },
+              result: 'success',
+              ipAddress,
+            });
+          }
           const after = await admin.lockAccount(tx, accountId);
           return {
             applied: appendResult.applied,
-            forgivenMicro: before.debtMicro,
+            forgivenMicro: appendResult.applied
+              ? before.debtMicro
+              : -appendResult.entry.debtDeltaMicro,
             debtAfterMicro: after.debtMicro,
           };
         });
@@ -486,23 +554,8 @@ export function registerAdminAiCreditsRoutes(
         forgivenMicro = result.forgivenMicro;
         debtAfterMicro = result.debtAfterMicro;
       } catch (err) {
-        if (err instanceof CreditLedgerKeyReusedError) {
-          throw new ConflictError(
-            'This idempotency key was already used for a different debt forgiveness.',
-          );
-        }
+        if (err instanceof CreditLedgerKeyReusedError) throw reusedKey();
         throw err;
-      }
-      if (applied) {
-        await adminAudit.record({
-          adminAccountId: ctx.account.id,
-          adminKeyId: ctx.apiKey.id,
-          action: 'credits.debt_forgiven',
-          targetAccountId: accountId,
-          inputPayload: { reason, idempotency_key },
-          result: 'success',
-          ipAddress: readClientIp(request),
-        });
       }
       return buildForgiveDebtAdjustmentResponse({
         applied,
@@ -525,33 +578,50 @@ export function registerAdminAiCreditsRoutes(
       const parsed = AdminSetPlanOverrideRequestSchema.safeParse(request.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       const admin = requireAdmin(aiCredits);
+      const endsAt = parsed.data.expires_at === undefined ? null : new Date(parsed.data.expires_at);
+      // S15 audit #8 — a past end date is a 400 here, not the database's
+      // "ends after it is anchored" CHECK coming back as a 500.
+      if (endsAt !== null) requireExpiryAfter(endsAt, now(), 'now');
+      const ipAddress = readClientIp(request);
 
-      const record = await admin.planOverrides.upsert({
-        accountId,
-        monthlyCredits: parsed.data.monthly_credits,
-        reason: parsed.data.reason,
-        endsAt: parsed.data.expires_at === undefined ? null : new Date(parsed.data.expires_at),
-        setByKeyId: ctx.apiKey.id,
+      const record = await admin.transaction(async (tx) => {
+        const written = await admin.planOverrides.upsert(
+          {
+            accountId,
+            monthlyCredits: parsed.data.monthly_credits,
+            reason: parsed.data.reason,
+            endsAt,
+            setByKeyId: ctx.apiKey.id,
+            // S15 audit #7 — amending a LIVE override keeps its anchor (the
+            // account's reset day); only a brand-new one anchors at now().
+            carryLiveAnchor: true,
+          },
+          tx,
+        );
+        const audit = aiCreditsAdminAuditIn(tx);
+        await audit.record({
+          adminAccountId: ctx.account.id,
+          adminKeyId: ctx.apiKey.id,
+          action: 'credits.plan_override_set',
+          targetAccountId: accountId,
+          inputPayload: {
+            monthly_credits: parsed.data.monthly_credits,
+            reason: parsed.data.reason,
+            ...(parsed.data.expires_at !== undefined ? { expires_at: parsed.data.expires_at } : {}),
+          },
+          result: 'success',
+          ipAddress,
+        });
+        return written;
       });
       // §6.6 — the current window follows the new override immediately,
-      // rather than waiting for the next billing event or sweep tick.
+      // rather than waiting for the next billing event or sweep tick. After
+      // the commit: the refresh takes its own locks, and a failure here is
+      // recovered by the next refresh (`rethrowTransient: false`).
       await refreshCreditsAfter({ refreshCredits: admin.refreshCredits }, accountId, {
         trigger: 'admin_tier_change',
         rethrowTransient: false,
         logger: request.log,
-      });
-      await adminAudit.record({
-        adminAccountId: ctx.account.id,
-        adminKeyId: ctx.apiKey.id,
-        action: 'credits.plan_override_set',
-        targetAccountId: accountId,
-        inputPayload: {
-          monthly_credits: parsed.data.monthly_credits,
-          reason: parsed.data.reason,
-          ...(parsed.data.expires_at !== undefined ? { expires_at: parsed.data.expires_at } : {}),
-        },
-        result: 'success',
-        ipAddress: readClientIp(request),
       });
       return buildPlanOverrideView(record);
     },
@@ -567,22 +637,29 @@ export function registerAdminAiCreditsRoutes(
       const accountId = uuidFromPrefixedId(request.params.id, 'acc');
       await requireAccountExists(accountId);
       const admin = requireAdmin(aiCredits);
+      const ipAddress = readClientIp(request);
 
-      const removed = await admin.planOverrides.end(accountId);
+      const removed = await admin.transaction(async (tx) => {
+        const ended = await admin.planOverrides.end(accountId, tx);
+        if (ended) {
+          const audit = aiCreditsAdminAuditIn(tx);
+          await audit.record({
+            adminAccountId: ctx.account.id,
+            adminKeyId: ctx.apiKey.id,
+            action: 'credits.plan_override_cleared',
+            targetAccountId: accountId,
+            inputPayload: {},
+            result: 'success',
+            ipAddress,
+          });
+        }
+        return ended;
+      });
       if (removed) {
         await refreshCreditsAfter({ refreshCredits: admin.refreshCredits }, accountId, {
           trigger: 'admin_tier_change',
           rethrowTransient: false,
           logger: request.log,
-        });
-        await adminAudit.record({
-          adminAccountId: ctx.account.id,
-          adminKeyId: ctx.apiKey.id,
-          action: 'credits.plan_override_cleared',
-          targetAccountId: accountId,
-          inputPayload: {},
-          result: 'success',
-          ipAddress: readClientIp(request),
         });
       }
       return { removed };
@@ -590,12 +667,16 @@ export function registerAdminAiCreditsRoutes(
   );
 
   // ── POST/GET /v1/admin/credit-rate-cards, POST .../:version/withdraw ────
-  // Publish and withdraw are OWNER-ONLY (`app.requireOwner`) — see the file
-  // header. Listing stays staff-scoped.
+  // Publish and withdraw need the staff scope AND the owner (scope first) —
+  // see the file header. Listing stays staff-scoped.
   app.post(
     '/v1/admin/credit-rate-cards',
     {
-      preHandler: [app.requireOwner, app.rateLimit('global')],
+      preHandler: [
+        app.requireScope('driftstack_internal_admin'),
+        app.requireOwner,
+        app.rateLimit('global'),
+      ],
     },
     async (request): Promise<AdminRateCardView> => {
       const ctx = requireCtx(request);
@@ -618,33 +699,46 @@ export function registerAdminAiCreditsRoutes(
         );
       }
 
+      const ipAddress = readClientIp(request);
       let card;
       try {
-        card = await admin.rateCards.publish({
-          markupBp: derived.markupBp,
-          effectiveAt,
-          rows: derived.rows,
-          createdByKeyId: ctx.apiKey.id,
-        });
+        card = await admin.rateCards.publish(
+          {
+            markupBp: derived.markupBp,
+            effectiveAt,
+            rows: derived.rows,
+            createdByKeyId: ctx.apiKey.id,
+          },
+          async (tx, published) => {
+            const audit = aiCreditsAdminAuditIn(tx);
+            await audit.record({
+              adminAccountId: ctx.account.id,
+              adminKeyId: ctx.apiKey.id,
+              action: 'rate_card.published',
+              targetResourceId: `rate_card_${String(published.version)}`,
+              inputPayload: {
+                markup_bp: parsed.data.markup_bp,
+                effective_at: parsed.data.effective_at,
+                models: derived.rows.map((r) => r.model),
+              },
+              result: 'success',
+              ipAddress,
+            });
+          },
+        );
       } catch (err) {
         if (err instanceof RateCardRefusedError) {
+          // 23505: a live card already takes effect at that instant — a
+          // clash with existing state, not a malformed request (S15 audit #8).
+          if (err.sqlState === '23505') {
+            throw new ConflictError(
+              'A rate card already takes effect at that instant. Choose another effective_at, or withdraw that card first.',
+            );
+          }
           throw new BadRequestError(`The rate card was refused: ${err.message}`);
         }
         throw err;
       }
-      await adminAudit.record({
-        adminAccountId: ctx.account.id,
-        adminKeyId: ctx.apiKey.id,
-        action: 'rate_card.published',
-        targetResourceId: `rate_card_${String(card.version)}`,
-        inputPayload: {
-          markup_bp: parsed.data.markup_bp,
-          effective_at: parsed.data.effective_at,
-          models: derived.rows.map((r) => r.model),
-        },
-        result: 'success',
-        ipAddress: readClientIp(request),
-      });
       // Freshly published: its effective_at is at least 30 days out (just
       // checked above), so it is `announced`, never `in_force` — no need to
       // read which card IS in force to answer that correctly.
@@ -677,7 +771,11 @@ export function registerAdminAiCreditsRoutes(
   app.post<{ Params: { version: string } }>(
     '/v1/admin/credit-rate-cards/:version/withdraw',
     {
-      preHandler: [app.requireOwner, app.rateLimit('global')],
+      preHandler: [
+        app.requireScope('driftstack_internal_admin'),
+        app.requireOwner,
+        app.rateLimit('global'),
+      ],
     },
     async (request): Promise<AdminRateCardView> => {
       const ctx = requireCtx(request);
@@ -686,10 +784,22 @@ export function registerAdminAiCreditsRoutes(
         throw new BadRequestError('The rate card version must be a positive whole number.');
       }
       const admin = requireAdmin(aiCredits);
+      const ipAddress = readClientIp(request);
 
       let result;
       try {
-        result = await admin.rateCards.withdraw(version);
+        result = await admin.rateCards.withdraw(version, async (tx) => {
+          const audit = aiCreditsAdminAuditIn(tx);
+          await audit.record({
+            adminAccountId: ctx.account.id,
+            adminKeyId: ctx.apiKey.id,
+            action: 'rate_card.withdrawn',
+            targetResourceId: `rate_card_${String(version)}`,
+            inputPayload: {},
+            result: 'success',
+            ipAddress,
+          });
+        });
       } catch (err) {
         if (err instanceof RateCardRefusedError) {
           throw new ConflictError(
@@ -704,23 +814,15 @@ export function registerAdminAiCreditsRoutes(
       if (result.outcome === 'already_withdrawn') {
         throw new ConflictError(`Rate card version ${String(version)} was already withdrawn.`);
       }
-      await adminAudit.record({
-        adminAccountId: ctx.account.id,
-        adminKeyId: ctx.apiKey.id,
-        action: 'rate_card.withdrawn',
-        targetResourceId: `rate_card_${String(version)}`,
-        inputPayload: {},
-        result: 'success',
-        ipAddress: readClientIp(request),
-      });
       const counts = await admin.rateCards.modelCounts();
       return buildAdminRateCardView(result.card, counts.get(version) ?? 0, null, now());
     },
   );
 
   // ── POST /v1/admin/ai-credits/cutover ───────────────────────────────────
-  // §8 step 4. `account_ids` moves the named accounts; `cohort: 'C0'` moves
-  // every internal account not already moved. Any other cohort is a
+  // §8 step 4. `account_ids` moves the named accounts that are in C0 (any
+  // other id is refused `not_in_phase_1_cohort`, per account); `cohort: 'C0'`
+  // moves every internal account not already moved. Any other cohort is a
   // well-formed request the SERVICE refuses (`PhaseTwoCohortError` → 400):
   // C1-C4 are Phase 2. `dry_run: true` computes and returns the decision
   // list with nothing locked or written.
@@ -749,38 +851,37 @@ export function registerAdminAiCreditsRoutes(
               cohort: parsed.data.cohort as NonNullable<typeof parsed.data.cohort>,
             };
 
+      const ipAddress = readClientIp(request);
+      const selectorLabel =
+        parsed.data.account_ids !== undefined ? 'account_ids' : `cohort:${parsed.data.cohort}`;
+
       let decisions;
       try {
         decisions = parsed.data.dry_run
           ? await cutover.planCutover(selector)
-          : await cutover.runCutover(selector);
+          : await cutover.runCutover(selector, {
+              // AUDIT (D-025) — one row per account actually moved, written
+              // INSIDE that account's own move transaction, so a committed
+              // move always has its row and a batch that fails part-way
+              // leaves none for the accounts it never committed. Nothing
+              // else changed anything: `already_moved`/`not_eligible`/
+              // `refuse` wrote nothing, and a dry run wrote nothing at all.
+              onMoved: async (tx, d) => {
+                const audit = aiCreditsAdminAuditIn(tx);
+                await audit.record({
+                  adminAccountId: ctx.account.id,
+                  adminKeyId: ctx.apiKey.id,
+                  action: 'credits.cutover_moved',
+                  targetAccountId: d.accountId,
+                  inputPayload: { ai_source: d.aiSource, selector: selectorLabel },
+                  result: 'success',
+                  ipAddress,
+                });
+              },
+            });
       } catch (err) {
         if (err instanceof PhaseTwoCohortError) throw new BadRequestError(err.message);
         throw err;
-      }
-
-      // AUDIT (D-025) — one row per account actually moved. Nothing else
-      // changed anything: `already_moved`/`not_eligible`/`refuse` wrote
-      // nothing, and a dry run wrote nothing at all.
-      if (!parsed.data.dry_run) {
-        for (const d of decisions) {
-          if (d.outcome !== 'move') continue;
-          await adminAudit.record({
-            adminAccountId: ctx.account.id,
-            adminKeyId: ctx.apiKey.id,
-            action: 'credits.cutover_moved',
-            targetAccountId: d.accountId,
-            inputPayload: {
-              ai_source: d.aiSource,
-              selector:
-                parsed.data.account_ids !== undefined
-                  ? 'account_ids'
-                  : `cohort:${parsed.data.cohort}`,
-            },
-            result: 'success',
-            ipAddress: readClientIp(request),
-          });
-        }
       }
 
       const summary = summarizeCutoverDecisions(decisions);
@@ -800,9 +901,10 @@ export function registerAdminAiCreditsRoutes(
   // ── POST /v1/admin/ai-credits/rollback ──────────────────────────────────
   // §8 step 7, one account only: "everyone" is an operator action on the
   // environment (setting the mode to shadow), not a route. Restores the
-  // legacy consent + cap the cutover snapshotted and clears `ai_source`;
-  // touches no ledger row, lot or window, so this month's spend stays
-  // exactly as it is.
+  // legacy cap the cutover snapshotted, and its consent unless the customer
+  // chose their own key while moved (`legacyConsentOnRollback`), and clears
+  // `ai_source`; touches no ledger row, lot or window, so this month's spend
+  // stays exactly as it is.
   app.post(
     '/v1/admin/ai-credits/rollback',
     {
@@ -833,21 +935,25 @@ export function registerAdminAiCreditsRoutes(
         };
       }
 
-      const result = await cutover.rollbackAccount(accountId);
-      if (result.outcome === 'rolled_back') {
-        await adminAudit.record({
-          adminAccountId: ctx.account.id,
-          adminKeyId: ctx.apiKey.id,
-          action: 'credits.cutover_rolled_back',
-          targetAccountId: accountId,
-          inputPayload: {
-            restored_consent: result.restored.consent,
-            restored_monthly_cap_usd_cents: result.restored.capCents,
-          },
-          result: 'success',
-          ipAddress: readClientIp(request),
-        });
-      }
+      const ipAddress = readClientIp(request);
+      const result = await cutover.rollbackAccount(accountId, {
+        // Inside the rollback's own transaction: the row commits with it.
+        onRolledBack: async (tx, rolled) => {
+          const audit = aiCreditsAdminAuditIn(tx);
+          await audit.record({
+            adminAccountId: ctx.account.id,
+            adminKeyId: ctx.apiKey.id,
+            action: 'credits.cutover_rolled_back',
+            targetAccountId: accountId,
+            inputPayload: {
+              restored_consent: rolled.restored.consent,
+              restored_monthly_cap_usd_cents: rolled.restored.capCents,
+            },
+            result: 'success',
+            ipAddress,
+          });
+        },
+      });
       return {
         dry_run: false,
         account_id: parsed.data.account_id,

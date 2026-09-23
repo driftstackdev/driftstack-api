@@ -1188,9 +1188,14 @@ export async function createProductionDeps(
           // `GET /v1/ai/models` need beyond the above. `creditReservationsRepo`
           // and `creditRateCardRepo` are guaranteed non-null here: both are set
           // by the same `creditGrants === null` check this whole branch is
-          // already inside.
+          // already inside. So are `creditPlanOverridesRepo` and
+          // `creditGrants` itself (the S14 audit's `planOverride` and
+          // `refreshCredits`), re-checked for TypeScript's narrowing only.
           stateReads:
-            creditReservationsRepo === null || creditRateCardRepo === null
+            creditReservationsRepo === null ||
+            creditRateCardRepo === null ||
+            creditPlanOverridesRepo === null ||
+            creditGrants === null
               ? undefined
               : {
                   heldMicro: creditLedgerRepo.heldMicro.bind(creditLedgerRepo),
@@ -1212,6 +1217,11 @@ export async function createProductionDeps(
                   cardInForce: creditRateCardRepo.cardInForce.bind(creditRateCardRepo),
                   nextAnnouncedCard: creditRateCardRepo.nextAnnouncedCard.bind(creditRateCardRepo),
                   modelRow: creditRateCardRepo.modelRow.bind(creditRateCardRepo),
+                  // S14 audit #6 — `plan.monthly_included_credits` reads a live override.
+                  planOverride: creditPlanOverridesRepo.get.bind(creditPlanOverridesRepo),
+                  // S14 audit #5 — §6.4's lazy refresh before `GET /v1/account/me/ai`
+                  // reads a moved account.
+                  refreshCredits: creditGrants.refreshCredits.bind(creditGrants),
                 },
           // S15 — the admin mutation surface `routes/admin-ai-credits.ts`
           // needs: ledger writes for a goodwill grant/debt forgiveness, the
