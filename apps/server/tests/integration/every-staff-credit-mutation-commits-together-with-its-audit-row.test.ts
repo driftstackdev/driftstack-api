@@ -24,7 +24,6 @@ import type postgres from 'postgres';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { AccountTier } from '@driftstack/api-types';
 import type { CreditLedgerTx } from '../../src/db/credit-ledger-repo.js';
-import type { DrizzleAiCreditsAdminAuditRepo } from '../../src/db/ai-credits-admin-audit-repo.js';
 import { CreditCutoverService } from '../../src/services/credit-cutover.js';
 import { openLedgerDatabase, MICRO } from './_helpers/credit-ledger-fixtures.js';
 import { paidLine, planOverride, subscription } from './_helpers/credit-grant-fixtures.js';
@@ -47,11 +46,6 @@ const GHOST = {
   accountId: '00000000-0000-4000-8000-00000000dead',
   apiKeyId: '00000000-0000-4000-8000-00000000beef',
 } as const;
-
-/** The audit sink the code before this fix wrote to after commit; it fails. */
-const throwingAuditSink: Pick<DrizzleAiCreditsAdminAuditRepo, 'record'> = {
-  record: () => Promise.reject(new Error('the audit sink is down')),
-};
 
 let client: postgres.Sql | null = null;
 let harness: AdminCreditsHarness | null = null;
@@ -103,7 +97,6 @@ async function failingAuditApp(opts: { readonly owner?: boolean } = {}): Promise
     scopes: [...ADMIN_SCOPES],
     accountId: GHOST.accountId,
     apiKeyId: GHOST.apiKeyId,
-    aiCreditsAdminAuditRepo: throwingAuditSink,
     ...(opts.owner === true ? { email: OWNER_EMAIL, ownerEmail: OWNER_EMAIL } : {}),
   });
   open.push(f);
@@ -201,7 +194,6 @@ describe.skipIf(!RUN_DB_TESTS)(
         let refreshes = 0;
         const faulty = new CreditCutoverService({
           ledger: h().base.ledger,
-          windows: h().base.windows,
           cutoverRepo: h().cutoverRepo,
           creditGrants: {
             refreshCreditsIn: (tx: CreditLedgerTx, accountId: string) => {

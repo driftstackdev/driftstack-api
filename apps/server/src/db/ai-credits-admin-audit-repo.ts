@@ -11,6 +11,7 @@
 
 import { and, desc, eq, lt } from 'drizzle-orm';
 import type { Database } from './client.js';
+import type { CreditLedgerExecutor } from './credit-ledger-repo.js';
 import {
   AI_CREDITS_ADMIN_AUDIT_ACTIONS,
   aiCreditsAdminAuditLog,
@@ -77,22 +78,54 @@ function toEntry(r: AiCreditsAdminAuditLogRow): AiCreditsAdminAuditLogEntry {
   };
 }
 
+/** The row an entry becomes — shared by `record` and {@link aiCreditsAdminAuditIn}. */
+function auditRowValues(
+  entry: NewAiCreditsAdminAuditLogEntry,
+): typeof aiCreditsAdminAuditLog.$inferInsert {
+  return {
+    adminAccountId: entry.adminAccountId,
+    adminKeyId: entry.adminKeyId,
+    action: entry.action,
+    targetAccountId: entry.targetAccountId ?? null,
+    targetResourceId: entry.targetResourceId ?? null,
+    inputPayload: entry.inputPayload ?? null,
+    result: entry.result,
+    ipAddress: entry.ipAddress ?? null,
+  };
+}
+
+/** An audit writer bound to one transaction — see {@link aiCreditsAdminAuditIn}. */
+export interface AiCreditsAdminAuditWriter {
+  record(entry: NewAiCreditsAdminAuditLogEntry): Promise<void>;
+}
+
+/**
+ * S15/S16 audit fix #2 — write `ai_credits_admin_audit_log` rows INSIDE the
+ * transaction that makes the change they record. A mutation and its audit row
+ * then commit together or not at all: a failed audit write rolls the mutation
+ * back (the request fails and a retry does it properly), and a batch that fails
+ * part-way leaves exactly one row per account it committed — never a committed
+ * change with no row, which a retry would then report as `applied:false` or
+ * `already_moved` and never audit.
+ *
+ * The row's actor columns are foreign keys to `accounts` and `api_keys`, so an
+ * actor that does not exist fails the whole transaction — which is the point.
+ */
+export function aiCreditsAdminAuditIn(on: CreditLedgerExecutor): AiCreditsAdminAuditWriter {
+  return {
+    async record(entry: NewAiCreditsAdminAuditLogEntry): Promise<void> {
+      await on.insert(aiCreditsAdminAuditLog).values(auditRowValues(entry));
+    },
+  };
+}
+
 export class DrizzleAiCreditsAdminAuditRepo {
   constructor(private readonly database: Database) {}
 
   async record(entry: NewAiCreditsAdminAuditLogEntry): Promise<AiCreditsAdminAuditLogEntry> {
     const [row] = await this.database.db
       .insert(aiCreditsAdminAuditLog)
-      .values({
-        adminAccountId: entry.adminAccountId,
-        adminKeyId: entry.adminKeyId,
-        action: entry.action,
-        targetAccountId: entry.targetAccountId ?? null,
-        targetResourceId: entry.targetResourceId ?? null,
-        inputPayload: entry.inputPayload ?? null,
-        result: entry.result,
-        ipAddress: entry.ipAddress ?? null,
-      })
+      .values(auditRowValues(entry))
       .returning();
     if (row === undefined) throw new Error('an ai_credits_admin_audit_log row was not returned');
     return toEntry(row);

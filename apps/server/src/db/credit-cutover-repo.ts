@@ -39,9 +39,8 @@ import {
 } from '@driftstack/api-types';
 import type { Database } from './client.js';
 import { rowsOf, type CreditLedgerExecutor, type CreditLedgerTx } from './credit-ledger-repo.js';
-import { planAllowancesJson } from './credit-windows-repo.js';
-import type { NewAiCreditsAdminAuditLogEntry } from './ai-credits-admin-audit-repo.js';
-import { accounts, aiCreditsAdminAuditLog, creditAccounts, creditLedger } from './schema.js';
+import { planAllowancesJson, STILL_PAID_FOR } from './credit-windows-repo.js';
+import { accounts, creditAccounts } from './schema.js';
 
 /**
  * What the cutover asks about an account's paid coverage, at the database's
@@ -55,16 +54,6 @@ export interface CutoverCoverageFacts {
    *  (Enterprise) needs before it may move (§8.4/M7). */
   readonly hasLiveContractOverride: boolean;
 }
-
-/**
- * S17 — an invoice whose payment has been wholly refunded or disputed covers
- * nothing. ⛔ A VERBATIM COPY of `STILL_PAID_FOR` in `credit-windows-repo.ts`
- * (which does not export it), held equal to it, text for text, by
- * `a-cutover-moves-every-account-a-paid-source-covers-and-refuses-the-rest`.
- * A top-level fragment, referenced by name in the query below, for the same
- * guard reasons that file gives.
- */
-const STILL_PAID_FOR = sql`(pay.refunded_minor + pay.disputed_minor < pay.amount_paid_minor OR pay.amount_paid_minor = 0)`;
 
 export type AccountLifecycleStatus = 'active' | 'suspended' | 'deleted';
 
@@ -289,85 +278,4 @@ export class DrizzleCreditCutoverRepo {
       .set({ bundledLlmConsent: args.consent, bundledLlmMonthlyCapUsdCents: args.capCents })
       .where(eq(accounts.id, accountId));
   }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// S15/S16 — the two statements the admin routes run inside their own transactions
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// ⛔ WHY HERE. Both belong, by table, to other repos —
-// `DrizzleAiCreditsAdminAuditRepo.record` (which writes on the pool and takes no
-// executor) and `DrizzleCreditLedgerRepo` (which has no lookup by key) — and
-// neither file was this fix's to change, nor can `AiCreditsAdminSurface` gain a
-// member without `ai-credits-runtime.ts`/`bootstrap.ts`. They are module
-// functions taking the caller's executor, so moving them to their own repos
-// later is a move, not a rewrite: an `on` parameter on `record`, a method on
-// the ledger repo.
-
-/** An audit writer bound to one transaction — see {@link aiCreditsAdminAuditIn}. */
-export interface AiCreditsAdminAuditWriter {
-  record(entry: NewAiCreditsAdminAuditLogEntry): Promise<void>;
-}
-
-/**
- * S15/S16 audit fix #2 — write `ai_credits_admin_audit_log` rows INSIDE the
- * transaction that makes the change they record. A mutation and its audit row
- * then commit together or not at all: a failed audit write rolls the mutation
- * back (the request fails and a retry does it properly), and a batch that fails
- * part-way leaves exactly one row per account it committed — never a committed
- * change with no row, which a retry would then report as `applied:false` or
- * `already_moved` and never audit.
- *
- * Same columns, same defaults as `DrizzleAiCreditsAdminAuditRepo.record`. The
- * row's actor columns are foreign keys to `accounts` and `api_keys`, so an
- * actor that does not exist fails the whole transaction — which is the point.
- */
-export function aiCreditsAdminAuditIn(on: CreditLedgerExecutor): AiCreditsAdminAuditWriter {
-  return {
-    async record(entry: NewAiCreditsAdminAuditLogEntry): Promise<void> {
-      await on.insert(aiCreditsAdminAuditLog).values({
-        adminAccountId: entry.adminAccountId,
-        adminKeyId: entry.adminKeyId,
-        action: entry.action,
-        targetAccountId: entry.targetAccountId ?? null,
-        targetResourceId: entry.targetResourceId ?? null,
-        inputPayload: entry.inputPayload ?? null,
-        result: entry.result,
-        ipAddress: entry.ipAddress ?? null,
-      });
-    },
-  };
-}
-
-/** A ledger row as a key-replay needs to report it. */
-export interface StoredLedgerEntry {
-  readonly kind: string;
-  /** Signed: a forgiveness is negative (the debt went down). */
-  readonly debtDeltaMicro: number;
-  readonly reason: string | null;
-}
-
-/**
- * S15 audit fix #9 — the ledger row already written under `(accountId,
- * idempotencyKey)`, or null. At most one row: that pair is the ledger's own
- * idempotency key. Lets a `forgive_debt` replay report what the FIRST call
- * forgave, rather than re-deriving it from whatever the account owes now.
- */
-export async function storedLedgerEntryIn(
-  on: CreditLedgerExecutor,
-  accountId: string,
-  idempotencyKey: string,
-): Promise<StoredLedgerEntry | null> {
-  const [row] = await on
-    .select({
-      kind: creditLedger.kind,
-      debtDeltaMicro: creditLedger.debtDeltaMicro,
-      reason: creditLedger.reason,
-    })
-    .from(creditLedger)
-    .where(
-      and(eq(creditLedger.accountId, accountId), eq(creditLedger.idempotencyKey, idempotencyKey)),
-    )
-    .limit(1);
-  return row === undefined ? null : row;
 }

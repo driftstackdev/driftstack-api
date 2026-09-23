@@ -129,8 +129,13 @@ const PAID_LINE_LEVEL = sql`CASE WHEN pay.amount_paid_minor = 0
                      ELSE 0 END)
              / pay.amount_paid_minor / 1000000) * 1000000 END`;
 
-/** S17 — an invoice whose payment has been wholly refunded or disputed covers nothing. */
-const STILL_PAID_FOR = sql`(pay.refunded_minor + pay.disputed_minor < pay.amount_paid_minor OR pay.amount_paid_minor = 0)`;
+/**
+ * S17 — an invoice whose payment has been wholly refunded or disputed covers
+ * nothing. Exported because the cutover's coverage read
+ * (`credit-cutover-repo.ts`) must apply the same rule the grants do: a copy
+ * that drifted would move accounts no grant covers.
+ */
+export const STILL_PAID_FOR = sql`(pay.refunded_minor + pay.disputed_minor < pay.amount_paid_minor OR pay.amount_paid_minor = 0)`;
 
 /**
  * A `timestamptz`, as UTC text exact to the microsecond:

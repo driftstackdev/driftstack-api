@@ -27,14 +27,13 @@ import {
   seedStaffIdentity,
   type AdminCreditsHarness,
 } from './_helpers/admin-credits-route-fixtures.js';
-import { InMemoryAiCreditsAdminAuditRepo } from './_helpers/in-memory-ai-credits-admin-audit-repo.js';
 import {
   buildTestApp,
   seedAdditionalAccount,
   type TestAppFixture,
 } from './_helpers/build-test-app.js';
 import { CreditCutoverService } from '../../src/services/credit-cutover.js';
-import { aiCreditsAdminAuditIn } from '../../src/db/credit-cutover-repo.js';
+import { aiCreditsAdminAuditIn } from '../../src/db/ai-credits-admin-audit-repo.js';
 import { decideAiSource } from '../../src/services/ai-source.js';
 import { aiEntitlementFor, type AccountTier } from '@driftstack/api-types';
 
@@ -188,7 +187,6 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
     it('CRITICAL a row-count control: credit_accounts.billing_mode and credit_lots are unchanged after a dry run', async () => {
       fx = await buildTestApp({
         aiCredits: h().aiCredits,
-        aiCreditsAdminAuditRepo: new InMemoryAiCreditsAdminAuditRepo(),
         scopes: [...ADMIN_SCOPES],
       });
       const accountId = await seedAccount(fx, { tier: 'team_manual' });
@@ -304,7 +302,6 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
     it('CRITICAL moves an account and grants the CURRENT window in full before its next task — no bridge lot, no proration', async () => {
       fx = await buildTestApp({
         aiCredits: h().aiCredits,
-        aiCreditsAdminAuditRepo: new InMemoryAiCreditsAdminAuditRepo(),
         scopes: [...ADMIN_SCOPES],
       });
       const accountId = await seedAccount(fx, { tier: 'team_manual', consent: false });
@@ -389,7 +386,6 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
       let calls = 0;
       const faulty = new CreditCutoverService({
         ledger: h().base.ledger,
-        windows: h().base.windows,
         cutoverRepo: h().cutoverRepo,
         creditGrants: {
           refreshCreditsIn: (tx: CreditLedgerTx, accountId: string) => {
@@ -517,7 +513,6 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
 
       const scopedCutover = new CreditCutoverService({
         ledger: h().base.ledger,
-        windows: h().base.windows,
         cutoverRepo: h().cutoverRepo,
         creditGrants: h().grants,
         pool: h().base.database.db,
@@ -660,7 +655,6 @@ describe.skipIf(!RUN_DB_TESTS)('S16 — the per-account cutover and rollback', (
     it('a legacy account rolls back to not_moved and writes nothing', async () => {
       fx = await buildTestApp({
         aiCredits: h().aiCredits,
-        aiCreditsAdminAuditRepo: new InMemoryAiCreditsAdminAuditRepo(),
         scopes: [...ADMIN_SCOPES],
       });
       const accountId = await seedAccount(fx, {

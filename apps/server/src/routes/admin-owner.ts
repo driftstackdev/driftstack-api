@@ -7,10 +7,15 @@
 // Read-only operational snapshot for the project OWNER: which
 // activation-gated features are wired in THIS deployment (billing /
 // livekit / crypto / oauth-client / sentry) plus the permissive-CORS
-// posture. Owner-gated via `app.requireOwner` — an identity check on the
-// configured owner email, NOT a staff scope — per the master-owner model:
-// staff-admins keep their existing powers; the owner alone gets the
-// high-power project-config surface (this is its first consumer).
+// posture. Owner-gated per the master-owner model: staff-admins keep their
+// existing powers; the owner alone gets the high-power project-config surface
+// (this is its first consumer). Every route runs
+// `[requireScope('driftstack_internal_admin'), requireOwner, rateLimit]`:
+// `requireOwner` is an identity check on the configured owner email, and the
+// staff scope in front of it means a key the owner minted WITHOUT that scope
+// is refused too (S15 audit #5 — a `['read']` owner key could otherwise edit
+// pricing). The owner's own dashboard sign-in always carries the scope:
+// bootstrap unions the owner into the staff set.
 //
 // NO secrets are exposed — only boolean "is it configured" flags, each
 // derived from the exact same `deps.X !== undefined` check app.ts uses to

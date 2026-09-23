@@ -45,6 +45,7 @@ import {
 } from '@driftstack/api-types';
 import { aiEntitlementFor, aiIncludedForTier, ownKeyAllowedForTier } from './ai-entitlements.js';
 import { decideAiSource } from './ai-source.js';
+import { CREDIT_RESERVE_REFUSAL_ORDER, type CreditReserveRefusal } from './credit-reservations.js';
 import type { CreditLedgerKind } from '../db/credit-ledger-repo.js';
 
 /** A timestamp as any of the shapes the repos hand back: a `Date`, or a
@@ -107,23 +108,11 @@ export interface DerivedAiState {
   readonly blockedReason: AiBlockedReason | null;
 }
 
-/**
- * `reserve()`'s refusals, in the order `CreditReservationsService.reserveEnforce`
- * (services/credit-reservations.ts) asks them — the model, the task cap, debt,
- * then the balance against the model's minimum to start.
- *
- * ⛔ A MIRROR, NOT AN IMPORT. That file expresses its order only as the
- * `CreditReserveRefusal` type and the sequence of its `if`s, and it is not this
- * slice's to change. So the order is written again here, `deriveAiState` walks
- * THIS array, and
- * the-ai-state-blocks-in-the-order-reserve-refuses-at-the-cheapest-models-minimum.test.ts
- * reads both files and fails the moment the two stop agreeing. (S14 audit #4:
- * this GET used to ask debt before the task cap, so an account in debt with
- * three tasks running read `debt` while `reserve()` answered
- * `tasks_in_flight`.)
- */
-export const RESERVE_REFUSAL_ORDER = ['model', 'tasks_in_flight', 'debt', 'balance'] as const;
-type ReserveRefusal = (typeof RESERVE_REFUSAL_ORDER)[number];
+// `reserve()`'s refusals are walked in `CREDIT_RESERVE_REFUSAL_ORDER`, the one
+// declaration beside `reserveEnforce` — the model, the task cap, debt, then the
+// balance against the model's minimum to start. (S14 audit #4: this GET used to
+// ask debt before the task cap, so an account in debt with three tasks running
+// read `debt` while `reserve()` answered `tasks_in_flight`.)
 
 /**
  * Each of `reserve()`'s refusals as the account-level `blocked_reason` it reads
@@ -140,7 +129,7 @@ type ReserveRefusal = (typeof RESERVE_REFUSAL_ORDER)[number];
  * model at all could start, never merely the one the customer might pick.
  */
 const CREDITS_CHECKS: Readonly<
-  Record<ReserveRefusal, (args: DeriveAiStateInputs) => AiBlockedReason | null>
+  Record<CreditReserveRefusal, (args: DeriveAiStateInputs) => AiBlockedReason | null>
 > = {
   model: (args) => (args.minStartMicro === null ? 'no_credits' : null),
   tasks_in_flight: (args) =>
@@ -158,7 +147,7 @@ const CREDITS_CHECKS: Readonly<
  * cannot get past regardless of balance (no AI on the plan at all; an
  * explicit own-key choice with nothing usable to spend). Only once a task
  * WOULD run on credits do `reserve()`'s own checks get to block it, in
- * `reserve()`'s own order ({@link RESERVE_REFUSAL_ORDER}) — an own-key-funded
+ * `reserve()`'s own order ({@link CREDIT_RESERVE_REFUSAL_ORDER}) — an own-key-funded
  * task costs this account nothing on the credits ledger, so none of them ever
  * block one (§2, §4.3 rule 3).
  */
@@ -189,7 +178,7 @@ export function deriveAiState(args: DeriveAiStateInputs): DerivedAiState {
   }
   // `decision.kind === 'credits'` is the only case left — `header_key` cannot
   // occur either, for the same reason `own_key_not_on_plan` cannot above.
-  for (const check of RESERVE_REFUSAL_ORDER) {
+  for (const check of CREDIT_RESERVE_REFUSAL_ORDER) {
     const blockedReason = CREDITS_CHECKS[check](args);
     if (blockedReason !== null) return { effectiveSource: 'credits', blockedReason };
   }

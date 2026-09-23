@@ -217,7 +217,6 @@ describe.skipIf(!RUN_DB_TESTS)(
       let cutoverInside = false;
       const cutover = new CreditCutoverService({
         ledger: h().base.ledger,
-        windows: h().base.windows,
         cutoverRepo: h().cutoverRepo,
         creditGrants: {
           refreshCreditsIn: async (tx: CreditLedgerTx, id: string) => {

@@ -47,8 +47,7 @@
 // change and its row commit together or not at all: written after commit, a
 // failed audit write left a change that a retry reports `applied:false` (or
 // `already_moved`) and never audits, and a cutover batch that failed part-way
-// left every account it had committed with no row at all. `deps.adminAudit`
-// (a pool-level writer) is therefore no longer called here — see its doc.
+// left every account it had committed with no row at all.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -83,7 +82,8 @@ import {
   type CreditLotRecord,
 } from '../db/credit-ledger-repo.js';
 import { RateCardRefusedError } from '../db/credit-rate-card-repo.js';
-import { aiCreditsAdminAuditIn, storedLedgerEntryIn } from '../db/credit-cutover-repo.js';
+import { aiCreditsAdminAuditIn } from '../db/ai-credits-admin-audit-repo.js';
+import { storedLedgerEntryIn } from '../db/credit-ledger-repo.js';
 import {
   candidateRateCardModels,
   deriveRateCardRows,
@@ -102,7 +102,6 @@ import type {
   AiCreditsRuntime,
   AiCreditsStateReads,
 } from '../services/ai-credits-runtime.js';
-import type { DrizzleAiCreditsAdminAuditRepo } from '../db/ai-credits-admin-audit-repo.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import {
   buildAdminCreditsAccountState,
@@ -143,15 +142,6 @@ export interface AdminAiCreditsRoutesDeps {
   /** S15 — the admin mutation surface + the S14 read bundle, both required by
    *  the routes below (the original two routes above use only `report`). */
   aiCredits: AiCreditsRuntime;
-  /**
-   * NO LONGER CALLED by this file: it writes on the pool, after the mutation
-   * has committed, and every audit row here is now written INSIDE the
-   * mutation's own transaction (see the file header). Kept on the interface
-   * only because `lib/app.ts` (outside S15/S16's fix) still passes it; remove
-   * it there and here together — or give `record` an executor and route the
-   * in-transaction writes back through it.
-   */
-  adminAudit: Pick<DrizzleAiCreditsAdminAuditRepo, 'record'>;
   authRepo: Pick<AccountAuthRepo, 'getAccount'>;
   /** Injectable clock; the shadow-report window AND the rate-card notice
    *  check are both computed from it. */

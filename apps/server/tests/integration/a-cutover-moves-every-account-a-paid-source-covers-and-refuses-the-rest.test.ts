@@ -336,16 +336,17 @@ describe.skipIf(!RUN_DB_TESTS)(
 
     describe('the coverage read agrees with the window-granting query it was split from', () => {
       const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '../../src/db');
-      const stillPaidFor = (file: string): string => {
-        const m = /const STILL_PAID_FOR = sql`([^`]*)`;/.exec(
-          readFileSync(resolve(SRC, file), 'utf8'),
-        );
-        if (m?.[1] === undefined) throw new Error(`no STILL_PAID_FOR in ${file}`);
-        return m[1];
-      };
 
-      it('CRITICAL the "still paid for" rule is the same text in both files — a refund rule changed in one and not the other would move accounts the grants never cover', () => {
-        expect(stillPaidFor('credit-cutover-repo.ts')).toBe(stillPaidFor('credit-windows-repo.ts'));
+      it('CRITICAL the cutover applies the grants\' own "still paid for" rule, not a copy — a refund rule changed in one and not the other would move accounts the grants never cover', () => {
+        const cutover = readFileSync(resolve(SRC, 'credit-cutover-repo.ts'), 'utf8');
+        const windows = readFileSync(resolve(SRC, 'credit-windows-repo.ts'), 'utf8');
+        expect(windows).toMatch(/^export const STILL_PAID_FOR = sql`/m);
+        expect(cutover).toMatch(
+          /import \{[^}]*\bSTILL_PAID_FOR\b[^}]*\} from '\.\/credit-windows-repo\.js'/,
+        );
+        expect(cutover).toContain('AND ${STILL_PAID_FOR}');
+        // No second definition to drift from the first.
+        expect(cutover).not.toMatch(/const STILL_PAID_FOR\b/);
       });
 
       it('CRITICAL on accounts with NO window yet, "a paid source covers now()" is exactly "a window is owed now()", source by source', async () => {

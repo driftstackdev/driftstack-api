@@ -262,7 +262,6 @@ import {
 import { CryptoTierActivationService } from '../services/crypto-tier-activation.js';
 import { DrizzleCreditLedgerRepo } from '../db/credit-ledger-repo.js';
 import { DrizzleCreditPlanOverridesRepo } from '../db/credit-plan-overrides-repo.js';
-import { DrizzleAiCreditsAdminAuditRepo } from '../db/ai-credits-admin-audit-repo.js';
 import { DrizzleCreditWindowsRepo } from '../db/credit-windows-repo.js';
 import { DrizzleCreditRateCardRepo } from '../db/credit-rate-card-repo.js';
 import { DrizzleCreditReservationsRepo } from '../db/credit-reservations-repo.js';
@@ -618,13 +617,6 @@ export async function createProductionDeps(
   // override and writes no contract, which is exactly what it did before.
   const creditPlanOverridesRepo = creditGrantsRun(config.aiCreditsMode)
     ? new DrizzleCreditPlanOverridesRepo(dbHandle)
-    : null;
-  // S15 — the SEPARATE, dark audit trail for the AI-credits admin routes
-  // (`db/ai-credits-admin-audit-repo.ts`). Same `creditGrantsRun` gate as
-  // every other credits dependency here, so it is non-null exactly when
-  // `aiCredits` (built further below) is present.
-  const aiCreditsAdminAuditRepo = creditGrantsRun(config.aiCreditsMode)
-    ? new DrizzleAiCreditsAdminAuditRepo(dbHandle)
     : null;
   const accountsAdminRepo = new DrizzleAccountsAdminRepo(dbHandle, creditPlanOverridesRepo);
   const adminBillingRepo = new DrizzleAdminBillingRepo(dbHandle);
@@ -1256,7 +1248,6 @@ export async function createProductionDeps(
               ? undefined
               : new CreditCutoverService({
                   ledger: creditLedgerRepo,
-                  windows: creditWindowsRepo,
                   cutoverRepo: creditCutoverRepo,
                   creditGrants,
                   pool: dbHandle.db,
@@ -4017,8 +4008,6 @@ export async function createProductionDeps(
     // production posture), which is what keeps the AI turn byte for byte what
     // it was and the admin credits routes unregistered.
     ...(aiCredits !== undefined ? { aiCredits } : {}),
-    // S15 — present exactly when `aiCredits` is (same `creditGrantsRun` gate).
-    ...(aiCreditsAdminAuditRepo !== null ? { aiCreditsAdminAuditRepo } : {}),
     readinessChecks,
     // 2026-05-20 — env-var-controlled escape hatch. Some webview
     // contexts (Tauri custom-scheme pages, certain mobile in-app

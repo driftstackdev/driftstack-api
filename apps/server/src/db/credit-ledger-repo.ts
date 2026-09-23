@@ -1286,6 +1286,41 @@ export class DrizzleCreditLedgerRepo {
 }
 
 /** The rows of a raw `execute`: postgres-js returns them as the array itself. */
+/** A ledger row as a key-replay needs to report it. */
+export interface StoredLedgerEntry {
+  readonly kind: string;
+  /** Signed: a forgiveness is negative (the debt went down). */
+  readonly debtDeltaMicro: number;
+  readonly reason: string | null;
+}
+
+/**
+ * S15 audit fix #9 — the ledger row already written under `(accountId,
+ * idempotencyKey)`, or null. At most one row: that pair is the ledger's own
+ * idempotency key. Lets a `forgive_debt` replay report what the FIRST call
+ * forgave, rather than re-deriving it from whatever the account owes now. Takes
+ * the caller's executor so the replay is read inside the staff request's own
+ * transaction.
+ */
+export async function storedLedgerEntryIn(
+  on: CreditLedgerExecutor,
+  accountId: string,
+  idempotencyKey: string,
+): Promise<StoredLedgerEntry | null> {
+  const [row] = await on
+    .select({
+      kind: creditLedger.kind,
+      debtDeltaMicro: creditLedger.debtDeltaMicro,
+      reason: creditLedger.reason,
+    })
+    .from(creditLedger)
+    .where(
+      and(eq(creditLedger.accountId, accountId), eq(creditLedger.idempotencyKey, idempotencyKey)),
+    )
+    .limit(1);
+  return row === undefined ? null : row;
+}
+
 export function rowsOf<T>(result: unknown): T[] {
   const rows = (result as { rows?: unknown }).rows;
   return (Array.isArray(rows) ? rows : (result as unknown[])) as T[];

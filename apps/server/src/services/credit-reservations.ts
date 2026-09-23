@@ -87,8 +87,19 @@ import { callSettlement } from './credit-call-charge.js';
 import { CALL_OUTPUT_CEILING, fitCall, type CallFitDecision } from './credit-call-fit.js';
 import { reportCreditsRefreshFailed } from './credit-grants.js';
 
-/** Why enforcement refused a task. The order below is the order they are asked in. */
-export type CreditReserveRefusal = 'model' | 'tasks_in_flight' | 'debt' | 'balance';
+/**
+ * Why enforcement refused a task, in the order `reserveEnforce` asks them. The
+ * account's `blocked_reason` (services/ai-account-state.ts) walks this same
+ * array, so the state a customer reads never names a different refusal from the
+ * one a task gets (S14 audit #4); a test pins it to the order of the checks.
+ */
+export const CREDIT_RESERVE_REFUSAL_ORDER = [
+  'model',
+  'tasks_in_flight',
+  'debt',
+  'balance',
+] as const;
+export type CreditReserveRefusal = (typeof CREDIT_RESERVE_REFUSAL_ORDER)[number];
 
 /** How long a shadow reservation may spend in the database before it gives up (M3). */
 export const CREDIT_SHADOW_STATEMENT_TIMEOUT_MS = 2_000;

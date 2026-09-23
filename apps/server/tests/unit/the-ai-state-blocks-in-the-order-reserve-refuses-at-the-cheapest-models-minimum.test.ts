@@ -14,22 +14,19 @@
 // models the account can run on credits right now: below it no task can start,
 // at or above it at least one can.
 //
-// `ai-account-state.ts` cannot import the order from credit-reservations.ts
-// (another builder's file exports none), so it MIRRORS it in
-// `RESERVE_REFUSAL_ORDER`, and `deriveAiState` walks that array. The last
-// describe block pins the mirror to the SOURCE of `reserveEnforce` — read,
-// not assumed — so the two cannot drift apart silently.
+// The order is declared ONCE, as `CREDIT_RESERVE_REFUSAL_ORDER` beside
+// `reserveEnforce`, and `deriveAiState` walks that array. The last describe
+// block pins the declaration to the SOURCE of `reserveEnforce` — the order its
+// checks actually run in, read, not assumed — and checks the state service
+// keeps no copy of its own.
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MAX_AI_TASKS_IN_FLIGHT } from '@driftstack/api-types';
-import {
-  deriveAiState,
-  RESERVE_REFUSAL_ORDER,
-  type DeriveAiStateInputs,
-} from '../../src/services/ai-account-state.js';
+import { deriveAiState, type DeriveAiStateInputs } from '../../src/services/ai-account-state.js';
+import { CREDIT_RESERVE_REFUSAL_ORDER as RESERVE_REFUSAL_ORDER } from '../../src/services/credit-reservations.js';
 
 const MICRO = 1_000_000;
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -137,10 +134,10 @@ function reserveEnforceRefusalOrder(source: string): string[] {
   );
 }
 
-describe('the mirror is pinned to reserve()’s own source', () => {
+describe('the declared order is pinned to reserve()’s own source', () => {
   const source = readFileSync(resolve(SERVER_SRC, 'services/credit-reservations.ts'), 'utf8');
 
-  it('CRITICAL RESERVE_REFUSAL_ORDER equals the order reserveEnforce asks its refusals in, read from the file', () => {
+  it('CRITICAL CREDIT_RESERVE_REFUSAL_ORDER equals the order reserveEnforce asks its refusals in, read from the file', () => {
     const order = reserveEnforceRefusalOrder(source);
     // Non-vacuity: the reader found every refusal, not an empty list that
     // would equal an empty mirror.
@@ -148,11 +145,11 @@ describe('the mirror is pinned to reserve()’s own source', () => {
     expect([...RESERVE_REFUSAL_ORDER]).toEqual(order);
   });
 
-  it('CRITICAL and equals the order CreditReserveRefusal documents ("the order below is the order they are asked in")', () => {
-    const m = /export type CreditReserveRefusal = ([^;]+);/.exec(source);
-    expect(m, 'CreditReserveRefusal not found').not.toBeNull();
-    const declared = [...(m?.[1] ?? '').matchAll(/'([a-z_]+)'/g)].map((x) => x[1] ?? '');
-    expect([...RESERVE_REFUSAL_ORDER]).toEqual(declared);
+  it('CRITICAL the state service walks that declaration and keeps no copy of its own', () => {
+    const state = readFileSync(resolve(SERVER_SRC, 'services/ai-account-state.ts'), 'utf8');
+    expect(state).toContain('for (const check of CREDIT_RESERVE_REFUSAL_ORDER)');
+    // A second literal list of the four refusals is how the two drifted.
+    expect(state).not.toMatch(/\[\s*'model',\s*'tasks_in_flight'/);
   });
 
   it('the reader notices a reordering (negative control on a mutated copy)', () => {

@@ -60,7 +60,6 @@ import type {
   CreditLedgerTx,
   DrizzleCreditLedgerRepo,
 } from '../db/credit-ledger-repo.js';
-import type { DrizzleCreditWindowsRepo } from '../db/credit-windows-repo.js';
 import type {
   CutoverAccountFacts,
   CutoverCoverageFacts,
@@ -311,15 +310,6 @@ export interface CreditCutoverDeps {
     | 'setCutoverMoved'
     | 'setCutoverRolledBack'
   >;
-  /**
-   * NO LONGER READ. Coverage used to come from `windows.coverageCandidates`,
-   * which answers "is a window still owed" and so said "uncovered" for every
-   * account whose month was already granted (S16 audit #1); it now comes from
-   * `cutoverRepo.coverageFacts`. Optional, not removed, only because
-   * `lib/bootstrap.ts` (outside this fix) still passes it — remove the two
-   * together.
-   */
-  readonly windows?: Pick<DrizzleCreditWindowsRepo, 'coverageCandidates'>;
   readonly cutoverRepo: Pick<
     DrizzleCreditCutoverRepo,
     | 'readAccountFacts'

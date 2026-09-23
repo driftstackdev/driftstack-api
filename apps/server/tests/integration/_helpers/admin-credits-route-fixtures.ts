@@ -112,7 +112,6 @@ export function adminCreditsHarness(
   const internalEmails = new Set(opts.internalEmails ?? []);
   const cutover = new CreditCutoverService({
     ledger,
-    windows,
     cutoverRepo,
     creditGrants: grants,
     pool: database.db,
