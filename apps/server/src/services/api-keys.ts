@@ -315,6 +315,21 @@ export class ApiKeysService {
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const tier = opts.effectiveTier ?? ctx.account.tier;
 
+    // `driftstack_internal_admin` on a key is honoured only while the KEY's
+    // account is on the staff allow-list (services/auth.ts,
+    // withStaffScopeOnlyIfListed), so a key carrying it on an account off the
+    // list could never be used as one. The check above already covers a key
+    // minted on the caller's own account: the caller holds the scope only when
+    // its own account is listed (web sessions are bumped from the list, API keys
+    // are filtered by it, and OAuth grants cannot carry it). What it does not
+    // cover is a team-scoped mint, which lands the key on the OWNER's account —
+    // an account whose listing says nothing about the caller's. Refused.
+    if (input.scopes.includes('driftstack_internal_admin') && accountId !== ctx.account.id) {
+      throw new ForbiddenError(
+        'Cannot grant the "driftstack_internal_admin" scope on another account: it works only on a staff account.',
+      );
+    }
+
     // Free stays usable through the browser-authorized desktop flow, which
     // mints a provenance-bound restricted device credential. Ordinary
     // customer API keys require the effective account/workspace tier to carry
@@ -557,7 +572,31 @@ export class ApiKeysService {
     assertNotDeviceKey(ctx, 'revoke API keys');
     // V-326e6 — when team-scoped, revoke a key on the OWNER's
     // account. Route layer enforces 'admin' team role.
-    return this.revokeChecked(ctx, keyId, opts.effectiveAccountId ?? ctx.account.id);
+    const outcome = await this.revokeChecked(
+      ctx,
+      keyId,
+      opts.effectiveAccountId ?? ctx.account.id,
+      'customer',
+    );
+    return outcome.kind === 'revoked';
+  }
+
+  /**
+   * Staff force-revoke of ANY account's key (`POST /v1/admin/api-keys/:id/revoke`).
+   * Unscoped, and goes through the same body as every other revoke, so the key's
+   * owner gets the `api_key.revoked` webhook (webhooks/events.md: "regardless of
+   * who initiated the revocation") and a staff row on their audit log. It used to
+   * write the key directly from the route, and the customer's integration just
+   * started getting 401s with nothing on their account saying why. Returns the
+   * repository outcome: the route audits the key's account and marks a repeat as
+   * idempotent.
+   */
+  async revokeAsStaff(
+    ctx: AccountContext,
+    keyId: string,
+  ): Promise<Extract<RevokeApiKeyRepoResult, { kind: 'revoked' | 'already_revoked' }>> {
+    throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    return this.revokeChecked(ctx, keyId, null, 'staff');
   }
 
   /**
@@ -574,23 +613,33 @@ export class ApiKeysService {
    * every per-key revoke threw ForbiddenError, and `deleteAccount` catches and
    * discards reclaim errors, so the termination reported success having revoked
    * nothing. Routing the staff paths here makes the reclaim unconditional.
+   *
+   * `actorType` says who the customer's audit row names. A staff revocation is
+   * recorded as `staff`, with the staff account and NO key (audit-log.md: the key
+   * is null for staff events) — whichever credential the staff member used. It
+   * used to be recorded as `customer` with the caller's ids, so a staff reclaim
+   * of a key a team member minted on the OWNER's account read, on the owner's
+   * log, as one of their own team revoking it. `scopedAccountId` null is the
+   * unscoped staff force-revoke: the row lands on the key's own account.
    */
   private async revokeChecked(
     ctx: AccountContext,
     keyId: string,
-    accountId: string,
-  ): Promise<boolean> {
+    scopedAccountId: string | null,
+    actorType: 'customer' | 'staff',
+  ): Promise<Extract<RevokeApiKeyRepoResult, { kind: 'revoked' | 'already_revoked' }>> {
     const outcome = await this.repo.revokeApiKeyAtomic({
       id: keyId,
-      accountId,
+      accountId: scopedAccountId,
       revokedAt: new Date(),
     });
     if (outcome.kind === 'not_found') {
       throw new NotFoundError(`API key "${keyId}" not found.`);
     }
-    if (outcome.kind === 'already_revoked') return false; // idempotent
+    if (outcome.kind === 'already_revoked') return outcome; // idempotent
 
     const key = outcome.key;
+    const accountId = scopedAccountId ?? key.accountId;
     const revokedAt = key.revokedAt;
     if (revokedAt === null) {
       throw new Error('revokeApiKeyAtomic returned a revoked row without revokedAt');
@@ -625,23 +674,30 @@ export class ApiKeysService {
 
     // V-216 — record customer-facing audit entry.
     // V-326e6 — audit row on OWNER's log; actor stays the calling
-    // member.
+    // member. A staff row names the staff account and no key.
     if (this.accountAudit) {
+      const shared = {
+        accountId,
+        actorAccountId: ctx.account.id,
+        targetResourceId: `key_${keyId}`,
+        payload: { name: key.name, revoked_at: revokedAt.toISOString() },
+      };
       try {
-        await this.accountAudit.record({
-          accountId,
-          actorType: 'customer',
-          actorAccountId: ctx.account.id,
-          actorKeyId: ctx.apiKey.id,
-          action: 'api_key.revoked',
-          targetResourceId: `key_${keyId}`,
-          payload: { name: key.name, revoked_at: revokedAt.toISOString() },
-        });
+        await this.accountAudit.record(
+          actorType === 'staff'
+            ? { ...shared, actorType: 'staff', actorKeyId: null, action: 'api_key.revoked' }
+            : {
+                ...shared,
+                actorType: 'customer',
+                actorKeyId: ctx.apiKey.id,
+                action: 'api_key.revoked',
+              },
+        );
       } catch {
         /* swallow */
       }
     }
-    return true;
+    return outcome;
   }
 
   /**
@@ -665,7 +721,7 @@ export class ApiKeysService {
     let n = 0;
     for (const key of keys) {
       if (key.revokedAt !== null) continue;
-      if (await this.revokeChecked(ctx, key.id, accountId)) n++;
+      if ((await this.revokeChecked(ctx, key.id, accountId, 'staff')).kind === 'revoked') n++;
     }
     return n;
   }
@@ -687,8 +743,9 @@ export class ApiKeysService {
     for (const key of keys) {
       if (key.revokedAt !== null) continue;
       // Scoped to the key's OWN account, which is the owner's — not the
-      // minter's — because that is the account the row belongs to.
-      if (await this.revokeChecked(ctx, key.id, key.accountId)) n++;
+      // minter's — because that is the account the row belongs to. Recorded
+      // there as staff: the owner must not read it as one of their own team.
+      if ((await this.revokeChecked(ctx, key.id, key.accountId, 'staff')).kind === 'revoked') n++;
     }
     return n;
   }

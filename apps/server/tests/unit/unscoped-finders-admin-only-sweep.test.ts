@@ -74,8 +74,21 @@ describe('security: unscoped access requires explicit admin atomic authority', (
     expect(sessionSection).toMatch(
       /withAudit\(request, 'session\.destroyed_by_admin',[\s\S]+?perform: async \(\) => \{[\s\S]+?sessionRepo\.destroySessionSerialized\([\s\S]+?accountId: null,/,
     );
+    // The API-key force-revoke goes through the service's revoke body (so the
+    // owner gets the api_key.revoked webhook and a staff audit row), still
+    // inside the route's D-025 boundary.
     expect(apiKeySection).toMatch(
-      /withAudit\(request, 'api_key\.revoked_by_admin',[\s\S]+?perform: async \(\) => \{[\s\S]+?apiKeysRepo\.revokeApiKeyAtomic\(\{[\s\S]+?accountId: null,/,
+      /withAudit\(request, 'api_key\.revoked_by_admin',[\s\S]+?perform: async \(\) => \{[\s\S]+?apiKeysService\.revokeAsStaff\(ctx, keyId\)/,
+    );
+    // …and that service method is the ONLY null-scope revoke, gated on the
+    // staff scope before it reaches the atomic primitive.
+    const apiKeysBody = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
+    expect(apiKeysBody).toMatch(
+      /async revokeAsStaff\([\s\S]+?\{\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);\s*return this\.revokeChecked\(ctx, keyId, null, 'staff'\);\s*\}/,
+    );
+    expect(apiKeysBody.match(/this\.revokeChecked\([^)]*\bnull\b/g) ?? []).toHaveLength(1);
+    expect(apiKeysBody).toMatch(
+      /revokeApiKeyAtomic\(\{\s*id: keyId,\s*accountId: scopedAccountId,/,
     );
   });
 

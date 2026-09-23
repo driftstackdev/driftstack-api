@@ -94,7 +94,13 @@ describe('W417.C apps/server/src/routes/account-audit.ts content parity', () => 
     expect(body).toMatch(
       /actor_account_id: row\.actorAccountId \? `acc_\$\{row\.actorAccountId\}` : null,/,
     );
-    expect(body).toMatch(/actor_key_id: row\.actorKeyId \? `key_\$\{row\.actorKeyId\}` : null,/);
+    // Null for a staff row whatever it stored (audit-log.md), in the list and both exports.
+    expect(body).toMatch(
+      /actor_key_id:\s*row\.actorType !== 'staff' && row\.actorKeyId \? `key_\$\{row\.actorKeyId\}` : null,/,
+    );
+    expect(body).toMatch(
+      /row\.actorType !== 'staff' && row\.actorKeyId \? `key_\$\{row\.actorKeyId\}` : '',/,
+    );
     expect(body).toMatch(/action: row\.action,/);
     expect(body).toMatch(/target_resource_id: row\.targetResourceId,/);
     // Privacy scrub: a team-member cross-actor view OR a per-row actor

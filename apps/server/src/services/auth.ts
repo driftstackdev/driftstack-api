@@ -421,10 +421,12 @@ export async function authenticate(
       // last_used_at remains sampled at cache TTL granularity. Live key scopes,
       // provenance, expiry, account tier/status/profile authority, team roles,
       // and resource-limit policy are refreshed if invalidation was lost.
+      // The staff scope is re-derived here too, against the live account and the
+      // allow-list this process booted with — the cached entry is not authority.
       return {
         ...cached,
         account: liveAccount,
-        apiKey: liveApiKey,
+        apiKey: withStaffScopeOnlyIfListed(liveApiKey, liveAccount, staffEmails),
         teams: liveTeams,
         rateLimitOverrides: indexRateLimitOverrides(liveOverrideRows),
       };
@@ -444,7 +446,7 @@ export async function authenticate(
   // authenticate (a silent, permanent session break).
   const innerSlowPath = async (): Promise<AccountContext> => {
     if (isApiKeyShape(plaintext)) {
-      const viaApiKey = await slowPathApiKey(repo, plaintext, sha, cache, now, {
+      const viaApiKey = await slowPathApiKey(repo, plaintext, sha, cache, now, staffEmails, {
         fallThroughOnPrefixMiss: true,
       });
       if (viaApiKey !== null) return viaApiKey;
@@ -524,12 +526,39 @@ function isApiKeyShape(plaintext: string): boolean {
   return plaintext.startsWith('ds_');
 }
 
+/**
+ * `driftstack_internal_admin` on an API key is honoured only while the key's
+ * account is on the staff allow-list — the same `staffEmails` set (owner
+ * included) that grants it to a web session. Otherwise it is dropped from the
+ * effective scopes and the key is an ordinary customer key.
+ *
+ * The allow-list is how staff are added and removed (DRIFTSTACK_STAFF_EMAILS),
+ * but it used to be consulted only for web sessions. A staff member's browser
+ * could mint a key carrying the scope, and that key kept cross-account admin
+ * after the person was taken off the list and the server restarted: removing
+ * them removed their browser's access and left their key's. Applied on both the
+ * slow path and the cached path, because each builds the scopes a request acts
+ * with.
+ *
+ * The key row is left as stored: re-listing the account restores the key.
+ */
+function withStaffScopeOnlyIfListed(
+  apiKey: ApiKeyRow,
+  account: AccountRow,
+  staffEmails: ReadonlySet<string>,
+): ApiKeyRow {
+  if (!apiKey.scopes.includes('driftstack_internal_admin')) return apiKey;
+  if (staffEmails.has(account.email.toLowerCase())) return apiKey;
+  return { ...apiKey, scopes: apiKey.scopes.filter((s) => s !== 'driftstack_internal_admin') };
+}
+
 async function slowPathApiKey(
   repo: AccountAuthRepo,
   plaintext: string,
   sha: string,
   cache: AuthCache | null,
   now: Date,
+  staffEmails: ReadonlySet<string>,
   opts: { fallThroughOnPrefixMiss?: boolean } = {},
 ): Promise<AccountContext | null> {
   const prefix = keyPrefixFromPlaintext(plaintext);
@@ -596,7 +625,7 @@ async function slowPathApiKey(
   const rateLimitOverrides = indexRateLimitOverrides(overrideRows);
   const ctx: AccountContext = {
     account,
-    apiKey,
+    apiKey: withStaffScopeOnlyIfListed(apiKey, account, staffEmails),
     rateLimitOverrides,
     teams,
     webSession: null, // API-key auth path; no web session.
@@ -715,11 +744,12 @@ async function slowPathWebSession(
   // threaded in via authenticate()'s staffEmails param), the
   // synthetic key gets `driftstack_internal_admin` appended so the
   // dashboard user can hit /v1/admin/* without minting a separate
-  // staff-only API key. This is intentionally narrow: it ONLY
-  // applies to web-session auth (NOT api-key auth), and the
-  // allowlist is set-once at bootstrap so a rotation requires a
-  // server restart. Staff identity stays coupled to the same login
-  // flow customers use.
+  // staff-only API key. The BUMP applies only to web-session auth; an
+  // API key never gains the scope from the list, and a key that carries
+  // it keeps it only while its account is listed
+  // (withStaffScopeOnlyIfListed). The allowlist is set-once at bootstrap
+  // so a rotation requires a server restart. Staff identity stays coupled
+  // to the same login flow customers use.
   const baseScopes: ApiKeyRow['scopes'] = ['read', 'write', 'account_owner'];
   const accountEmail = account.email.toLowerCase();
   const scopes: ApiKeyRow['scopes'] = staffEmails.has(accountEmail)

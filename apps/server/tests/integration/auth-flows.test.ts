@@ -1198,7 +1198,9 @@ describe('AuthFlowsService recovery authentication — enrolled MFA', () => {
     });
     const setPassword = vi.spyOn(repo, 'setPassword');
     const insertSession = vi.spyOn(repo, 'insertWebSession');
-    const revokeAll = vi.spyOn(repo, 'revokeAllWebSessionsForAccount');
+    // The reset revokes through one repo call that also ends the desktop app's
+    // credentials; `null` = no session is kept (none is minted before MFA).
+    const revokeAll = vi.spyOn(repo, 'revokeCredentialsAfterPasswordReset');
 
     const result = await service.confirmPasswordReset({
       token: reset.debugToken as string,
@@ -1218,7 +1220,7 @@ describe('AuthFlowsService recovery authentication — enrolled MFA', () => {
     });
     expect(getStatus).toHaveBeenCalledWith(signup.account.id);
     expect(setPassword).toHaveBeenCalledTimes(1);
-    expect(revokeAll).toHaveBeenCalledWith(signup.account.id, expect.any(Date));
+    expect(revokeAll).toHaveBeenCalledWith(signup.account.id, null, expect.any(Date));
     expect(await repo.listActiveWebSessionsForAccount(signup.account.id, new Date())).toEqual([]);
     expect(insertSession).not.toHaveBeenCalled();
   });

@@ -672,10 +672,8 @@ export class WebhooksService {
       throwIfMissingScope(ctx, 'account_owner');
     }
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
-    const row = await this.repo.findEndpoint(id, accountId);
-    if (!row) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
-    if (row.disabledAt !== null) return; // idempotent — no audit emit on no-op
-    await this.repo.disableEndpoint(id, new Date());
+    const row = await this.disableLiveEndpoint(id, accountId);
+    if (row === null) return; // idempotent — no audit emit on no-op
     await this.emitAuditBestEffort(
       ctx,
       accountId,
@@ -687,14 +685,28 @@ export class WebhooksService {
     );
   }
 
+  /** Disable one endpoint of the account; null when it already was (a no-op). */
+  private async disableLiveEndpoint(
+    id: string,
+    accountId: string,
+  ): Promise<WebhookEndpointRow | null> {
+    const row = await this.repo.findEndpoint(id, accountId);
+    if (!row) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
+    if (row.disabledAt !== null) return null;
+    await this.repo.disableEndpoint(id, new Date());
+    return row;
+  }
+
   /**
    * GDPR Article 17 — bulk-disable every non-disabled webhook endpoint
-   * for the account. Backs AccountsAdminService.deleteAccount(); reuses
-   * delete() per-endpoint rather than duplicating its audit-emit logic.
-   * effectiveAccountId bypasses delete()'s account_owner check the same
-   * way the V-326e5 team-admin gate does (trusts the caller) — the
-   * caller here is always the admin account-deletion flow, which has
-   * already checked driftstack_internal_admin.
+   * for the account. Backs AccountsAdminService.deleteAccount(); shares
+   * delete()'s disable step, skipping delete()'s account_owner check — the
+   * caller here is always the admin account-deletion flow, which has checked
+   * driftstack_internal_admin just below.
+   *
+   * Recorded on the account's log as `staff`, naming no key: this is a staff
+   * termination, and it used to go through delete() and be written as a
+   * `customer` deletion carrying the staff member's ids.
    */
   async deleteAllForAccount(ctx: AccountContext, accountId: string): Promise<number> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
@@ -702,7 +714,22 @@ export class WebhooksService {
     let n = 0;
     for (const endpoint of endpoints) {
       if (endpoint.disabledAt !== null) continue;
-      await this.delete(ctx, endpoint.id, { effectiveAccountId: accountId });
+      const row = await this.disableLiveEndpoint(endpoint.id, accountId);
+      if (row !== null && this.accountAudit !== null) {
+        try {
+          await this.accountAudit.record({
+            accountId,
+            actorType: 'staff',
+            actorAccountId: ctx.account.id,
+            actorKeyId: null,
+            action: 'webhook_endpoint.deleted',
+            targetResourceId: `webhook_endpoint_${endpoint.id}`,
+            payload: { url: row.url },
+          });
+        } catch {
+          /* best-effort — audit failures don't break the reclaim */
+        }
+      }
       n++;
     }
     return n;

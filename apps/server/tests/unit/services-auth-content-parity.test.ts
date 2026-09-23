@@ -163,7 +163,7 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
     // C4 — a ds_-shaped token with no matching API-key prefix falls through
     // to the web-session path instead of failing (chance ds_ session token).
     expect(body).toMatch(
-      /const viaApiKey = await slowPathApiKey\(repo, plaintext, sha, cache, now, \{\s*fallThroughOnPrefixMiss: true,\s*\}\);\s*if \(viaApiKey !== null\) return viaApiKey;/,
+      /const viaApiKey = await slowPathApiKey\(repo, plaintext, sha, cache, now, staffEmails, \{\s*fallThroughOnPrefixMiss: true,\s*\}\);\s*if \(viaApiKey !== null\) return viaApiKey;/,
     );
   });
 

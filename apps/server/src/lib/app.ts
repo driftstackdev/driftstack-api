@@ -1949,10 +1949,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   ) {
     registerAdminForceActionRoutes(app, {
       sessionRepo: deps.sessionRepo,
-      apiKeysRepo: deps.apiKeysRepo,
+      apiKeysService: deps.apiKeysService,
       driver: deps.driver,
       audit: deps.adminAuditService,
-      authCache: deps.authCache,
     });
   }
   await registerOpenApiRoutes(app);

@@ -18,6 +18,7 @@ import { accounts, apiKeys, legalAcceptances } from '../../../src/db/schema.js';
 import * as schema from '../../../src/db/schema.js';
 import { buildLegalCatalog } from '../../../src/services/legal-catalog.js';
 import type { AccountTier, ApiKeyScope } from '@driftstack/api-types';
+import { e2eStaffEmails } from './server.js';
 
 export interface SeedAccountInput {
   email?: string;
@@ -63,11 +64,16 @@ export async function seedAccount(
 ): Promise<SeededAccount> {
   const db = drizzle(client, { schema });
   const tier: AccountTier = input.tier ?? 'api_builder';
+  const email = input.email ?? `seed-${Math.random().toString(36).slice(2, 10)}@driftstack.test`;
+  // An admin-scoped key works only on a listed account (see e2eStaffEmails).
+  if ((input.scopes ?? []).includes('driftstack_internal_admin')) {
+    e2eStaffEmails.add(email.toLowerCase());
+  }
 
   const [account] = await db
     .insert(accounts)
     .values({
-      email: input.email ?? `seed-${Math.random().toString(36).slice(2, 10)}@driftstack.test`,
+      email,
       name: 'Seeded',
       tier,
       status: input.status ?? 'active',

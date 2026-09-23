@@ -6,14 +6,17 @@
 // These bypass the usual ownership check (admin scope only). Both
 // write an admin_audit_log row before responding (D-025: audit-write
 // before response is not best-effort).
+//
+// The API-key revoke goes through ApiKeysService.revokeAsStaff — the same
+// body as every other revoke — so the key's owner also gets the
+// `api_key.revoked` webhook and a `staff` row on their own audit log.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { AdminAuditService, AdminAuditAction } from '../services/admin-audit.js';
 import { destroyDriverSessionWithTimeout, type SessionRepo } from '../services/sessions.js';
-import type { ApiKeysRepo } from '../services/api-keys.js';
+import type { ApiKeysService } from '../services/api-keys.js';
 import type { Driver } from '../drivers/types.js';
-import type { AuthCache } from '../services/auth-cache.js';
 import { BadRequestError, NotFoundError } from '../lib/errors.js';
 import { requireScope } from '../lib/errors-helpers.js';
 import { readClientIp } from '../lib/client-ip.js';
@@ -42,17 +45,16 @@ function resolveAuditValue<T>(value: DeferredAuditValue<T>): T {
 
 export interface AdminForceActionsRoutesOptions {
   sessionRepo: SessionRepo;
-  apiKeysRepo: ApiKeysRepo;
+  apiKeysService: Pick<ApiKeysService, 'revokeAsStaff'>;
   driver: Driver;
   audit: AdminAuditService;
-  authCache: AuthCache | null;
 }
 
 export function registerAdminForceActionRoutes(
   app: FastifyInstance,
   opts: AdminForceActionsRoutesOptions,
 ): void {
-  const { sessionRepo, apiKeysRepo, driver, audit, authCache } = opts;
+  const { sessionRepo, apiKeysService, driver, audit } = opts;
 
   /**
    * Wrap a force-action with audit-on-success + audit-on-error per D-025.
@@ -182,14 +184,10 @@ export function registerAdminForceActionRoutes(
         targetResourceId: keyId,
         inputPayload: () => resolvedInputPayload,
         perform: async () => {
-          const result = await apiKeysRepo.revokeApiKeyAtomic({
-            id: keyId,
-            accountId: null,
-            revokedAt: new Date(),
-          });
-          if (result.kind === 'not_found') {
-            throw new NotFoundError(`API key "${keyId}" not found.`);
-          }
+          // Unscoped atomic revoke, cache invalidation, the owner's
+          // api_key.revoked webhook and their staff audit row. A missing key
+          // throws NotFoundError, audited here as `error: notfound`.
+          const result = await apiKeysService.revokeAsStaff(ctx, keyId);
           const key = result.key;
           targetAccountId = key.accountId;
           if (key.revokedAt === null) {
@@ -197,17 +195,6 @@ export function registerAdminForceActionRoutes(
           }
           if (result.kind === 'already_revoked') {
             resolvedInputPayload = { ...inputPayload, idempotent: true };
-            return result;
-          }
-          // Invalidate any cached AccountContext entries for this key
-          // so the next auth read sees the revocation immediately
-          // (D-020 cache invalidation pattern).
-          if (authCache !== null) {
-            try {
-              await authCache.invalidateKey(key.id);
-            } catch {
-              /* cache failure non-fatal */
-            }
           }
           return result;
         },

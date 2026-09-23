@@ -462,7 +462,9 @@ export function registerAdminAccountsRoutes(
             accountId,
             actorType: 'staff',
             actorAccountId: ctx.account.id,
-            actorKeyId: ctx.apiKey.id,
+            // A staff row names no key, whichever credential staff used
+            // (audit-log.md); the staff key is on the admin_audit_log row.
+            actorKeyId: null,
             action: 'admin.support_note',
             targetResourceId: null,
             payload: { note: body.note },
@@ -505,7 +507,7 @@ export function registerAdminAccountsRoutes(
             accountId,
             actorType: 'staff',
             actorAccountId: ctx.account.id,
-            actorKeyId: ctx.apiKey.id,
+            actorKeyId: null,
             action: 'admin.refund_recorded',
             targetResourceId: body.external_reference,
             payload,

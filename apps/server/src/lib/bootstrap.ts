@@ -2113,6 +2113,7 @@ export async function createProductionDeps(
     mfaService, // V-353d — branch login() on enrollment status
     mfaChallengeStore, // V-353d — short-lived challenge store
     emailPreferencesService, // C9 — honor the 'signup-welcome' opt-out
+    webhooksService, // api_key.revoked for each desktop credential a password reset revokes
   );
 
   // accountsAdminService — constructed here (not up near adminAuditService)

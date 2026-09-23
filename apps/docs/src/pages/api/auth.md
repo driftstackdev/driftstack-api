@@ -268,6 +268,15 @@ Every prior device must re-authenticate. The reset-confirming device
 is logged in only after it receives the no-MFA session branch or
 successfully exchanges the MFA challenge.
 
+That includes the desktop app: its sign-in is revoked with the
+dashboard sessions, and it asks you to sign in again. Each desktop
+sign-in it ends appears in your audit log as `api_key.revoked`.
+
+API keys you created yourself, and apps you authorized through OAuth,
+are **not** revoked by a password reset, so your integrations keep
+working. If you think one of them was exposed, revoke it on the API
+keys page or with `DELETE /v1/api-keys/:id`.
+
 ## Refresh
 
 `POST /v1/auth/refresh`

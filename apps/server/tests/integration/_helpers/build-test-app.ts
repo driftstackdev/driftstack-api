@@ -1865,6 +1865,14 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     // suites that are not about the owner gate; a suite that needs the surface
     // passes the account's own email and gets in.
     ...(opts.ownerEmail !== undefined ? { ownerEmail: opts.ownerEmail } : {}),
+    // An API key carrying `driftstack_internal_admin` is honoured only while its
+    // account is on the staff list (services/auth.ts, withStaffScopeOnlyIfListed),
+    // and in production the only such key belongs to a listed account. The
+    // seeded key carries the scope by default, so its account is listed exactly
+    // when it does — and no other account is.
+    ...((opts.scopes ?? ['driftstack_internal_admin']).includes('driftstack_internal_admin')
+      ? { staffEmails: new Set([(opts.email ?? 'tester@driftstack.local').toLowerCase()]) }
+      : {}),
     authRepo,
     authCache,
     authCoalescer,

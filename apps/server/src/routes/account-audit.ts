@@ -81,7 +81,10 @@ function publicEntry(
     account_id: `acc_${row.accountId}`,
     actor_type: row.actorType,
     actor_account_id: row.actorAccountId ? `acc_${row.actorAccountId}` : null,
-    actor_key_id: row.actorKeyId ? `key_${row.actorKeyId}` : null,
+    // Null for a staff row whatever it stored (audit-log.md): rows written
+    // before the staff writes stopped recording the key published the staff
+    // member's internal key id when they had used an API key.
+    actor_key_id: row.actorType !== 'staff' && row.actorKeyId ? `key_${row.actorKeyId}` : null,
     action: row.action,
     target_resource_id: row.targetResourceId,
     payload: redact ? scrubActorPrivacy(row.payload) : row.payload,
@@ -225,7 +228,7 @@ export function registerAccountAuditRoutes(
             row.action,
             row.actorType,
             row.actorAccountId ? `acc_${row.actorAccountId}` : '',
-            row.actorKeyId ? `key_${row.actorKeyId}` : '',
+            row.actorType !== 'staff' && row.actorKeyId ? `key_${row.actorKeyId}` : '',
             row.targetResourceId ?? '',
             redact ? '' : (row.ipAddress ?? ''),
             redact ? '' : (row.userAgent ?? ''),

@@ -147,7 +147,7 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
       /export interface SuspendSessionReclaimer \{\s*destroyAllForAccount\(accountId: string\): Promise<number>;\s*\}/,
     );
     expect(body).toMatch(
-      /export interface DeleteWebSessionReclaimer \{\s*revokeAllWebSessionsForAccount\(accountId: string, now: Date\): Promise<number>;\s*\}/,
+      /export interface DeleteWebSessionReclaimer \{[\s\S]*?revokeAllWebSessionsForAccount\(\s*accountId: string,\s*now: Date,\s*staffAccountId: string,\s*\): Promise<number>;\s*\}/,
     );
     // V-727 — the reclaimer now has TWO methods. revokeAllForAccount filters on
     // account_id and so can only reach credentials ON the account; a team

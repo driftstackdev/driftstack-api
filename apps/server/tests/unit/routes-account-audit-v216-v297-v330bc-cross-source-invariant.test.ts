@@ -117,7 +117,9 @@ describe('W1037 routes/account-audit V-216 + V-297 + V-330b/c + V-484 cross-sour
     expect(p).toMatch(
       /actor_account_id: row\.actorAccountId \? `acc_\$\{row\.actorAccountId\}` : null,/,
     );
-    expect(p).toMatch(/actor_key_id: row\.actorKeyId \? `key_\$\{row\.actorKeyId\}` : null,/);
+    expect(p).toMatch(
+      /actor_key_id:\s*row\.actorType !== 'staff' && row\.actorKeyId \? `key_\$\{row\.actorKeyId\}` : null,/,
+    );
     expect(p).toMatch(/action: row\.action,/);
     expect(p).toMatch(/target_resource_id: row\.targetResourceId,/);
     // ip/ua + payload conditionally scrubbed for cross-actor (team-member)

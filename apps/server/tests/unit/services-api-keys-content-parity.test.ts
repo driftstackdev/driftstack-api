@@ -193,7 +193,7 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toContain('const outcome = await this.repo.revokeApiKeyAtomic({');
     expect(body).toContain('accountId,');
     expect(body).toMatch(
-      /if \(outcome\.kind === 'already_revoked'\) return false; \/\/ idempotent/,
+      /if \(outcome\.kind === 'already_revoked'\) return outcome; \/\/ idempotent/,
     );
     expect(body).toContain('const revokedAt = key.revokedAt;');
     expect(body).toMatch(/await this\.authCache\.invalidateKey\(keyId\);/);
@@ -201,9 +201,16 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
       /await this\.webhooks\.enqueueEvent\(accountId, 'api_key\.revoked', \{\s*api_key_id: `key_\$\{keyId\}`,\s*name: key\.name,\s*revoked_at: revokedAt\.toISOString\(\),/,
     );
     expect(body).toMatch(
-      /action: 'api_key\.revoked',\s*targetResourceId: `key_\$\{keyId\}`,\s*payload: \{ name: key\.name, revoked_at: revokedAt\.toISOString\(\) \},/,
+      /targetResourceId: `key_\$\{keyId\}`,\s*payload: \{ name: key\.name, revoked_at: revokedAt\.toISOString\(\) \},/,
     );
-    expect(body).toContain('return true;');
+    // A staff revocation names the staff account and no key; a customer's names its key.
+    expect(body).toMatch(
+      /\{ \.\.\.shared, actorType: 'staff', actorKeyId: null, action: 'api_key\.revoked' \}/,
+    );
+    expect(body).toMatch(
+      /\.\.\.shared,\s*actorType: 'customer',\s*actorKeyId: ctx\.apiKey\.id,\s*action: 'api_key\.revoked',/,
+    );
+    expect(body).toContain('return outcome;');
   });
 
   it('Constructor: 5-arg shape (repo + 4 nullable collaborators: authCache + webhooks + legalGate + accountAudit)', () => {

@@ -16,9 +16,24 @@ import type {
   AuthFlowKind,
   AuthFlowTokenRow,
   AuthFlowsRepo,
+  PasswordResetRevocation,
   WebSessionRow,
 } from '../../../src/services/auth-flows.js';
 import { canonicalizeEmailForDedup } from '../../../src/services/auth-flows.js';
+
+/**
+ * The `api_keys` columns a password reset reads and writes. The Drizzle repo
+ * revokes the account's live desktop credentials in the same transaction as its
+ * web sessions; this double holds the keys a test seeds, so it can do the same.
+ */
+export interface InMemoryResetApiKey {
+  id: string;
+  accountId: string;
+  name: string;
+  provenance: string | null;
+  revokedAt: Date | null;
+  expiresAt: Date | null;
+}
 
 interface Storage {
   account: AuthFlowAccountRow;
@@ -37,6 +52,18 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     password_reset: new Map(),
   };
   private webSessions = new Map<string, WebSessionRow>();
+  private apiKeys = new Map<string, InMemoryResetApiKey>();
+
+  /** Test-only seam: an `api_keys` row a password reset may revoke. */
+  seedApiKey(row: InMemoryResetApiKey): void {
+    this.apiKeys.set(row.id, { ...row });
+  }
+
+  /** Test-only read of a seeded key, as the reset left it. */
+  apiKey(id: string): InMemoryResetApiKey | undefined {
+    const row = this.apiKeys.get(id);
+    return row === undefined ? undefined : { ...row };
+  }
 
   /**
    * Test-only seam for seeding existing accounts (e.g. legacy migration
@@ -345,6 +372,33 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       n++;
     }
     return Promise.resolve(n);
+  }
+
+  /** Same predicates as the Drizzle repo; synchronous, so trivially one unit. */
+  revokeCredentialsAfterPasswordReset(
+    accountId: string,
+    keepSessionId: string | null,
+    at: Date,
+  ): Promise<PasswordResetRevocation> {
+    let webSessions = 0;
+    for (const row of this.webSessions.values()) {
+      if (row.accountId !== accountId) continue;
+      if (keepSessionId !== null && row.id === keepSessionId) continue;
+      if (row.revokedAt !== null) continue;
+      this.webSessions.set(row.id, { ...row, revokedAt: at });
+      webSessions++;
+    }
+    const deviceKeys: Array<{ id: string; name: string }> = [];
+    for (const key of this.apiKeys.values()) {
+      if (key.accountId !== accountId) continue;
+      if (key.provenance !== 'cli_device') continue;
+      if (key.revokedAt !== null) continue;
+      if (key.expiresAt !== null && key.expiresAt.getTime() <= at.getTime()) continue;
+      this.apiKeys.set(key.id, { ...key, revokedAt: at });
+      deviceKeys.push({ id: key.id, name: key.name });
+    }
+    deviceKeys.sort((a, b) => a.id.localeCompare(b.id));
+    return Promise.resolve({ webSessions, deviceKeys });
   }
 
   markWebSessionMfaSatisfied(id: string, at: Date): Promise<void> {

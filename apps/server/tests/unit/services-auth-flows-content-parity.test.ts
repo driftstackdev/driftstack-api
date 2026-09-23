@@ -331,9 +331,9 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     );
   });
 
-  it('emitAuditBestEffort: V-224 4-action union (email_verified/login/logout/password_changed) try/catch warn-log swallow', () => {
+  it('emitAuditBestEffort: V-224 action union (email_verified/login/logout/password_changed, + api_key.revoked for the desktop credentials a password reset revokes) try/catch warn-log swallow', () => {
     expect(body).toMatch(
-      /action:\s*\| 'account\.email_verified'\s*\| 'account\.login'\s*\| 'account\.logout'\s*\| 'account\.password_changed',/,
+      /action:\s*\| 'account\.email_verified'\s*\| 'account\.login'\s*\| 'account\.logout'\s*\| 'account\.password_changed'\s*\| 'api_key\.revoked',/,
     );
     expect(body).toMatch(/'account-audit emit failed \(best-effort, swallowed\)',/);
   });

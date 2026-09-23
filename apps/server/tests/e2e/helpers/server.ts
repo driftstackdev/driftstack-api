@@ -133,6 +133,16 @@ export interface TestServer {
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DEFAULT_REDIS_URL = 'redis://localhost:6379';
 
+/**
+ * The staff allow-list the e2e server authenticates against. An API key carrying
+ * `driftstack_internal_admin` is honoured only while its account is listed
+ * (services/auth.ts, withStaffScopeOnlyIfListed), and in production the only
+ * such key belongs to a listed account — so `seedAccount` lists the account it
+ * seeds exactly when the key carries that scope. Read per request, so an
+ * account seeded after the server started is listed too.
+ */
+export const e2eStaffEmails = new Set<string>();
+
 const TRUNCATE_SQL = `
   TRUNCATE TABLE
     "session_events",
@@ -503,6 +513,7 @@ export async function startTestServer(): Promise<TestServer> {
     authRepo,
     authCache,
     authCoalescer,
+    staffEmails: e2eStaffEmails,
     sessionsService,
     apiKeysService,
     usageService,

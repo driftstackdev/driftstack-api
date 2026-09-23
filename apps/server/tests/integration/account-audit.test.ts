@@ -790,21 +790,25 @@ describe('GET /v1/account/audit-log — per-row actor-privacy redaction (cross-a
 
   it('REAL end-to-end: a driftstack-staff admin-note on a customer account no longer leaks the staff IP on the customer self-view', async () => {
     fx = await buildTestApp({ trustProxy: 1 });
-    // A distinct account plays the "staff" side of admin.support_note —
-    // POST /v1/admin/accounts/:id/audit-note writes accountId = the
-    // CUSTOMER (fx.accountId) but actorAccountId = ctx.account.id (the
-    // caller, i.e. the staff account below) + the staff caller's real IP.
-    const staff = await seedAdditionalAccount(fx, {
+    // The fixture's seeded account plays the "staff" side of
+    // admin.support_note: its key carries driftstack_internal_admin, so the
+    // fixture lists it as staff (an admin key on an unlisted account is refused
+    // — services/auth.ts, withStaffScopeOnlyIfListed). A distinct, ordinary
+    // account is the CUSTOMER. POST /v1/admin/accounts/:id/audit-note writes
+    // accountId = the customer but actorAccountId = ctx.account.id (the staff
+    // caller) + the staff caller's real IP.
+    const customer = await seedAdditionalAccount(fx, {
       accountId: '00000000-0000-4000-8000-000000000c12',
       apiKeyId: '00000000-0000-4000-8000-000000000c13',
-      email: 'staff@driftstack.local',
+      email: 'customer@driftstack.local',
+      scopes: ['read', 'write', 'account_owner'],
     });
 
     const note = await fx.app.inject({
       method: 'POST',
-      url: `/v1/admin/accounts/acc_${fx.accountId}/audit-note`,
+      url: `/v1/admin/accounts/acc_${customer.accountId}/audit-note`,
       headers: {
-        authorization: `Bearer ${staff.plaintext}`,
+        authorization: `Bearer ${fx.plaintext}`,
         'x-forwarded-for': '203.0.113.55',
       },
       payload: { note: 'Investigated a billing question.' },
@@ -814,18 +818,18 @@ describe('GET /v1/account/audit-log — per-row actor-privacy redaction (cross-a
     // Sanity: the row really is cross-actor before we assert redaction.
     const raw = fx.accountAuditRepo
       .getAll()
-      .find((r) => r.action === 'admin.support_note' && r.accountId === fx.accountId)!;
-    expect(raw.actorAccountId).toBe(staff.accountId);
+      .find((r) => r.action === 'admin.support_note' && r.accountId === customer.accountId)!;
+    expect(raw.actorAccountId).toBe(fx.accountId);
     expect(raw.actorAccountId).not.toBe(raw.accountId);
     expect(raw.ipAddress).toBe('203.0.113.55');
 
-    // The CUSTOMER (fx, the default fixture account) self-reads their OWN
-    // audit log — no team header, no cross-account relationship. Prior to
-    // the fix this returned the staff member's real IP verbatim.
+    // The CUSTOMER self-reads their OWN audit log — no team header, no
+    // cross-account relationship. Prior to the fix this returned the staff
+    // member's real IP verbatim.
     const list = await fx.app.inject({
       method: 'GET',
       url: '/v1/account/audit-log?action=admin.support_note',
-      headers: auth(fx),
+      headers: { authorization: `Bearer ${customer.plaintext}` },
     });
     expect(list.statusCode).toBe(200);
     const entry = list.json<ListResponse>().data[0]!;

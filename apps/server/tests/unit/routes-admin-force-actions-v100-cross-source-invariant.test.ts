@@ -23,11 +23,13 @@
 //   serialized repo outcome inside D-025, authoritative idempotency.
 //
 //   API-key revoke: key_-prefixed id, idempotent on already-revoked,
-//   uses an explicitly admin-unscoped atomic outcome inside D-025,
-//   and invalidates authCache only for the persisted winner.
+//   goes through ApiKeysService.revokeAsStaff inside D-025 — the
+//   service's revoke body, which makes the explicitly unscoped atomic
+//   revoke, invalidates authCache only for the persisted winner, and
+//   sends the owner the api_key.revoked webhook + a staff audit row.
 //
 //   D-020 authCache.invalidateKey is best-effort (try/catch — cache
-//   failure non-fatal).
+//   failure non-fatal), in that revoke body.
 //
 //   AdminAuditAction taxonomy — 'session.destroyed_by_admin' +
 //   'api_key.revoked_by_admin' with idempotent: true marker on
@@ -133,24 +135,29 @@ describe('W1046 routes/admin-force-actions V-100 + D-020/D-025 cross-source inva
   it('CRITICAL API-key revoke — explicit unscoped atomic outcome inside D-025; authoritative loser marker; winner-only cache invalidation.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts'));
     expect(p).toMatch(/uuidFromPrefixedId\(request\.params\.id, 'key'\)/);
-    expect(p).toContain('const result = await apiKeysRepo.revokeApiKeyAtomic({');
-    expect(p).toContain('accountId: null,');
+    expect(p).toContain('const result = await apiKeysService.revokeAsStaff(ctx, keyId);');
     expect(p).toContain("if (result.kind === 'already_revoked') {");
     expect(p).toContain('resolvedInputPayload = { ...inputPayload, idempotent: true };');
-    expect(p).toMatch(/authCache\.invalidateKey\(key\.id\)/);
-  });
-
-  it("CRITICAL D-020 cache invalidation comment + best-effort pattern — 'Invalidate any cached AccountContext entries for this key so the next auth read sees the revocation immediately (D-020 cache invalidation pattern)'. The post-write timing is what makes the revocation visible to the next request.", () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts'));
-    expect(p).toMatch(/Invalidate any cached AccountContext entries for this key/);
-    expect(p).toMatch(
-      /so the next auth read sees the revocation immediately\s*\/\/ \(D-020 cache invalidation pattern\)\./,
+    const service = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
+    // Unscoped only on the staff path; cache invalidation only after a winning revoke.
+    expect(service).toMatch(/return this\.revokeChecked\(ctx, keyId, null, 'staff'\);/);
+    expect(service).toMatch(
+      /if \(outcome\.kind === 'already_revoked'\) return outcome;[\s\S]+?await this\.authCache\.invalidateKey\(keyId\);/,
     );
   });
 
-  it('CRITICAL cache-invalidation best-effort — try/catch around authCache.invalidateKey with comment "cache failure non-fatal". Drift to throw-on-cache-failure would prevent admin revocation when cache is offline.', () => {
-    const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts'));
-    expect(p).toMatch(/\/\* cache failure non-fatal \*\//);
+  it("CRITICAL D-020 cache invalidation comment + best-effort pattern, in the revoke body the route calls — 'Pop the cache entry so the revoked key stops authenticating immediately, not after the 30s TTL'. The post-write timing is what makes the revocation visible to the next request.", () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
+    expect(p).toMatch(
+      /Pop the cache entry so the revoked key stops authenticating\s*\/\/ immediately, not after the 30s TTL\./,
+    );
+  });
+
+  it('CRITICAL cache-invalidation best-effort — try/catch around authCache.invalidateKey, a cache failure never propagates. Drift to throw-on-cache-failure would prevent admin revocation when cache is offline.', () => {
+    const p = read(resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts'));
+    expect(p).toMatch(
+      /try \{\s*await this\.authCache\.invalidateKey\(keyId\);\s*\} catch \{\s*\/\/ Logged inside the cache impl;/,
+    );
   });
 
   // ─── AdminAuditAction taxonomy ───────────────────────────────

@@ -11,12 +11,14 @@ import type {
   AuthFlowKind,
   AuthFlowTokenRow,
   AuthFlowsRepo,
+  PasswordResetRevocation,
   WebSessionRow,
 } from '../services/auth-flows.js';
 import { canonicalizeEmailForDedup } from '../services/auth-flows.js';
 import type { Database } from './client.js';
 import {
   accounts,
+  apiKeys,
   emailVerifyTokens,
   magicLinkTokens,
   passwordResetTokens,
@@ -388,6 +390,46 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
       .where(and(eq(webSessions.accountId, accountId), isNull(webSessions.revokedAt)))
       .returning({ id: webSessions.id });
     return rows.length;
+  }
+
+  async revokeCredentialsAfterPasswordReset(
+    accountId: string,
+    keepSessionId: string | null,
+    at: Date,
+  ): Promise<PasswordResetRevocation> {
+    // One transaction: a reset that ends the browser sign-ins must not leave the
+    // desktop app's credential live because the second write failed.
+    return this.database.db.transaction(async (tx) => {
+      const sessions = await tx
+        .update(webSessions)
+        .set({ revokedAt: at })
+        .where(
+          and(
+            eq(webSessions.accountId, accountId),
+            isNull(webSessions.revokedAt),
+            ...(keepSessionId === null ? [] : [ne(webSessions.id, keepSessionId)]),
+          ),
+        )
+        .returning({ id: webSessions.id });
+      // The desktop app's credentials only: keys the customer minted
+      // themselves (provenance NULL) are integrations and stay working.
+      const keys = await tx
+        .update(apiKeys)
+        .set({ revokedAt: at })
+        .where(
+          and(
+            eq(apiKeys.accountId, accountId),
+            eq(apiKeys.provenance, 'cli_device'),
+            isNull(apiKeys.revokedAt),
+            or(isNull(apiKeys.expiresAt), gt(apiKeys.expiresAt, at)),
+          ),
+        )
+        .returning({ id: apiKeys.id, name: apiKeys.name });
+      return {
+        webSessions: sessions.length,
+        deviceKeys: [...keys].sort((a, b) => a.id.localeCompare(b.id)),
+      };
+    });
   }
 
   async markWebSessionMfaSatisfied(id: string, at: Date): Promise<void> {

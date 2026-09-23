@@ -109,7 +109,12 @@ export interface BillingCollectionPauser {
  * out everywhere else" flow, which keeps the calling session alive).
  */
 export interface DeleteWebSessionReclaimer {
-  revokeAllWebSessionsForAccount(accountId: string, now: Date): Promise<number>;
+  /** `staffAccountId` is who the account's log names: this is a staff reclaim. */
+  revokeAllWebSessionsForAccount(
+    accountId: string,
+    now: Date,
+    staffAccountId: string,
+  ): Promise<number>;
 }
 
 /** GDPR Article 17 — minimal api-keys-service surface the delete-reclaim path depends on. */
@@ -352,7 +357,7 @@ export class AccountsAdminService {
     const webSessions = this.webSessions;
     if (webSessions) {
       await this.reclaim('web_sessions', accountId, () =>
-        webSessions.revokeAllWebSessionsForAccount(accountId, now),
+        webSessions.revokeAllWebSessionsForAccount(accountId, now, ctx.account.id),
       );
     }
     const apiKeys = this.apiKeys;

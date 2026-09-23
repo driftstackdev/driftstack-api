@@ -48,7 +48,6 @@ const RESOLVED_BY_HAND: Record<string, string> = {
     "actorType: 'customer' — verified by reading it; the same helper covers login/logout/" +
     'password_changed.',
   'account.login': 'same emitAuditBestEffort() helper — customer.',
-  'account.logout': 'same emitAuditBestEffort() helper — customer.',
   'account.password_changed': 'same emitAuditBestEffort() helper — customer.',
   // Listed rather than raising the unresolved ceiling: the ceiling is a number and
   // bumping it explains nothing, which is how an allowlist becomes a blindfold.
@@ -58,6 +57,42 @@ const RESOLVED_BY_HAND: Record<string, string> = {
     'is the field the row exists for on an account whose API keys are shared.',
   'recipe.deleted': 'same emitRecipeAudit() helper — customer.',
 };
+
+/**
+ * Actions the resolver sees only PART of: one emit is an object literal it reads,
+ * and another reaches `record()` through a helper that takes `action` as a
+ * PARAMETER. Each entry names the actor type of the emit it cannot see, checked
+ * by hand, and is merged into what the resolver found — so the half it CAN see
+ * is still defended. An entry whose actor the resolver already finds, or whose
+ * action it cannot see at all, has outlived its reason and fails below.
+ */
+const ALSO_EMITTED_THROUGH_A_HELPER: Record<string, { actor: string; reason: string }> = {
+  'account.logout': {
+    actor: 'customer',
+    reason:
+      'services/auth-flows.ts emitAuditBestEffort() hardcodes customer for sign-out, "sign out ' +
+      'everywhere else" and a password reset. The staff emit (the web-session reclaim when staff ' +
+      'terminate an account) is a literal the resolver reads.',
+  },
+  'webhook_endpoint.deleted': {
+    actor: 'customer',
+    reason:
+      'services/webhooks.ts emitAuditBestEffort() hardcodes customer for DELETE /v1/webhooks/:id. ' +
+      'The staff emit (deleteAllForAccount, when staff terminate an account) is a literal the ' +
+      'resolver reads.',
+  },
+};
+
+/** What the resolver found, plus the hand-checked helper halves. */
+function actorsWithHelperEmits(): Map<string, Set<string>> {
+  const resolved = actorsByAction();
+  for (const [action, { actor }] of Object.entries(ALSO_EMITTED_THROUGH_A_HELPER)) {
+    const set = new Set(resolved.get(action) ?? []);
+    set.add(actor);
+    resolved.set(action, set);
+  }
+  return resolved;
+}
 
 /** Every `{ … action: '…' … actorType: '…' … }` object literal in the server. */
 function actorsByAction(): Map<string, Set<string>> {
@@ -122,14 +157,16 @@ describe('V-802 the audit-log actor column is derived, not remembered', () => {
     expect(documented.size, 'actions documented in the table').toBeGreaterThan(40);
     expect(resolved.size, 'actions whose actorType was resolved from source').toBeGreaterThan(20);
     expect(
-      [...documented.values()].every((v) => /^(customer|system|staff|customer or system)$/.test(v)),
+      [...documented.values()].every((v) =>
+        /^(customer|system|staff|customer or system|customer or staff)$/.test(v),
+      ),
       'every documented actor is one of the known values',
     ).toBe(true);
   });
 
   it('CRITICAL no documented actor contradicts the code that writes the row. A customer reads this column to tell "someone on my team did this" from "Driftstack did this", which is where an incident review or a compliance export starts. session.created was documented `system` while the code emits `customer` with the acting member\'s key — precisely the attribution a team owner needs.', () => {
     const documented = documentedActors();
-    const resolved = actorsByAction();
+    const resolved = actorsWithHelperEmits();
 
     const mismatches: string[] = [];
     for (const [action, docActor] of documented) {
@@ -160,6 +197,14 @@ describe('V-802 the audit-log actor column is derived, not remembered', () => {
     expect(
       nowResolvable,
       'these are resolvable from source now — delete the hand-checked entry so the guard defends them:',
+    ).toEqual([]);
+
+    const outlived = Object.entries(ALSO_EMITTED_THROUGH_A_HELPER)
+      .filter(([action, { actor }]) => !resolved.has(action) || resolved.get(action)?.has(actor))
+      .map(([action]) => action);
+    expect(
+      outlived,
+      'helper-half entries the resolver now sees in full (delete them) or cannot see at all (move them to RESOLVED_BY_HAND):',
     ).toEqual([]);
   });
 });

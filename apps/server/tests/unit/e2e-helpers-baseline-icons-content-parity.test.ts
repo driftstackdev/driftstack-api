@@ -60,7 +60,7 @@ describe('W625 e2e helpers + baseline.ci + icons README content parity', () => {
     expect(body).toMatch(/^export async function seedAccount\($/m);
     expect(body).toMatch(/const tier: AccountTier = input\.tier \?\? 'api_builder';/);
     expect(body).toMatch(
-      /email: input\.email \?\? `seed-\$\{Math\.random\(\)\.toString\(36\)\.slice\(2, 10\)\}@driftstack\.test`,/,
+      /const email = input\.email \?\? `seed-\$\{Math\.random\(\)\.toString\(36\)\.slice\(2, 10\)\}@driftstack\.test`;/,
     );
     expect(body).toMatch(/const env = tier === 'free' \? 'test' : 'live';/);
     expect(body).toMatch(/const plaintext = generateApiKey\(env\);/);

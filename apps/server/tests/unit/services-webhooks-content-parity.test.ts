@@ -142,9 +142,8 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
   });
 
   it('delete: idempotent on already-disabled (no audit emit on no-op); emits webhook_endpoint.deleted audit otherwise', () => {
-    expect(body).toMatch(
-      /if \(row\.disabledAt !== null\) return; \/\/ idempotent — no audit emit on no-op/,
-    );
+    expect(body).toMatch(/if \(row === null\) return; \/\/ idempotent — no audit emit on no-op/);
+    expect(body).toMatch(/if \(row\.disabledAt !== null\) return null;/);
     expect(body).toMatch(/await this\.repo\.disableEndpoint\(id, new Date\(\)\);/);
     expect(body).toMatch(
       /await this\.emitAuditBestEffort\(\s*ctx,\s*accountId,\s*'webhook_endpoint\.deleted',\s*`webhook_endpoint_\$\{id\}`,/,

@@ -23,8 +23,11 @@
 //     audit payload idempotent and return the persisted timestamp.
 //   • Session destroy: explicit unscoped serialized repo authority
 //     contains driver callback + terminal/event transaction.
-//   • API key revoke: D-020 auth-cache invalidation; cache failure
-//     non-fatal (swallow).
+//   • API key revoke: goes through ApiKeysService.revokeAsStaff — the
+//     service's revoke body, so the key's owner also gets the
+//     api_key.revoked webhook and a staff audit row. D-020 auth-cache
+//     invalidation (cache failure non-fatal) now lives in that body
+//     (services/api-keys.ts revokeChecked) and is pinned there below.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +37,7 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/server/src/routes/admin-force-actions.ts');
+const API_KEYS_SERVICE = resolve(REPO_ROOT, 'apps/server/src/services/api-keys.ts');
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -74,9 +78,9 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
     expect(body).toMatch(/ipAddress: readClientIp\(request\),/);
   });
 
-  it('AdminForceActionsRoutesOptions: sessionRepo + apiKeysRepo + driver + audit + authCache (nullable)', () => {
+  it('AdminForceActionsRoutesOptions: sessionRepo + apiKeysService (revokeAsStaff) + driver + audit', () => {
     expect(body).toMatch(
-      /export interface AdminForceActionsRoutesOptions \{\s*sessionRepo: SessionRepo;\s*apiKeysRepo: ApiKeysRepo;\s*driver: Driver;\s*audit: AdminAuditService;\s*authCache: AuthCache \| null;\s*\}/,
+      /export interface AdminForceActionsRoutesOptions \{\s*sessionRepo: SessionRepo;\s*apiKeysService: Pick<ApiKeysService, 'revokeAsStaff'>;\s*driver: Driver;\s*audit: AdminAuditService;\s*\}/,
     );
   });
 
@@ -111,20 +115,23 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
 
   it('API key revoke uses atomic authoritative outcome and marks concurrent losers idempotent', () => {
     expect(body).toContain('const outcome = await withAudit(request,');
-    expect(body).toContain('const result = await apiKeysRepo.revokeApiKeyAtomic({');
-    expect(body).toContain('accountId: null,');
+    expect(body).toContain('const result = await apiKeysService.revokeAsStaff(ctx, keyId);');
     expect(body).toContain("if (result.kind === 'already_revoked') {");
     expect(body).toContain('resolvedInputPayload = { ...inputPayload, idempotent: true };');
     expect(body).toContain('const persistedRevokedAt = outcome.key.revokedAt;');
     expect(body).toContain('revoked_at: persistedRevokedAt.toISOString(),');
   });
 
-  it('D-020 cache invalidation on key revoke: authCache.invalidateKey(key.id); failure non-fatal (swallow); pattern rationale comment', () => {
-    expect(body).toMatch(
-      /\/\/ Invalidate any cached AccountContext entries for this key\s*\/\/ so the next auth read sees the revocation immediately\s*\/\/ \(D-020 cache invalidation pattern\)\./,
+  it('D-020 cache invalidation on key revoke: the revoke body the route calls invalidates the key; failure non-fatal (swallow); pattern rationale comment', () => {
+    const service = read(API_KEYS_SERVICE);
+    expect(service).toMatch(
+      /async revokeAsStaff\([\s\S]+?return this\.revokeChecked\(ctx, keyId, null, 'staff'\);/,
     );
-    expect(body).toMatch(
-      /if \(authCache !== null\) \{\s*try \{\s*await authCache\.invalidateKey\(key\.id\);\s*\} catch \{\s*\/\* cache failure non-fatal \*\/\s*\}\s*\}/,
+    expect(service).toMatch(
+      /\/\/ Pop the cache entry so the revoked key stops authenticating\s*\/\/ immediately, not after the 30s TTL\./,
+    );
+    expect(service).toMatch(
+      /if \(this\.authCache\) \{\s*try \{\s*await this\.authCache\.invalidateKey\(keyId\);\s*\} catch \{/,
     );
   });
 
@@ -133,11 +140,13 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
     expect(body).toMatch(/const keyId = uuidFromPrefixedId\(request\.params\.id, 'key'\);/);
     expect(body).toMatch(/if \(result\.kind === 'not_found'\) \{/);
     expect(body).toMatch(/throw new NotFoundError\(`Session "\$\{sessionId\}" not found\.`\);/);
-    expect(body).toMatch(/if \(result\.kind === 'not_found'\) \{/);
-    expect(body).toMatch(/throw new NotFoundError\(`API key "\$\{keyId\}" not found\.`\);/);
+    // The key-not-found 404 is thrown by the revoke body the route calls.
+    expect(read(API_KEYS_SERVICE)).toMatch(
+      /if \(outcome\.kind === 'not_found'\) \{\s*throw new NotFoundError\(`API key "\$\{keyId\}" not found\.`\);/,
+    );
   });
 
-  it('imports: FastifyInstance/FastifyRequest + zod + AdminAuditService/Action + SessionRepo + ApiKeysRepo + Driver + AuthCache + BadRequestError/NotFoundError + requireScope helper', () => {
+  it('imports: FastifyInstance/FastifyRequest + zod + AdminAuditService/Action + SessionRepo + ApiKeysService + Driver + BadRequestError/NotFoundError + requireScope helper', () => {
     expect(body).toMatch(/import type \{ FastifyInstance, FastifyRequest \} from 'fastify';/);
     expect(body).toMatch(/import \{ z \} from 'zod';/);
     expect(body).toMatch(
@@ -146,9 +155,8 @@ describe('W419.C apps/server/src/routes/admin-force-actions.ts content parity', 
     expect(body).toMatch(
       /import \{ destroyDriverSessionWithTimeout, type SessionRepo \} from '\.\.\/services\/sessions\.js';/,
     );
-    expect(body).toMatch(/import type \{ ApiKeysRepo \} from '\.\.\/services\/api-keys\.js';/);
+    expect(body).toMatch(/import type \{ ApiKeysService \} from '\.\.\/services\/api-keys\.js';/);
     expect(body).toMatch(/import type \{ Driver \} from '\.\.\/drivers\/types\.js';/);
-    expect(body).toMatch(/import type \{ AuthCache \} from '\.\.\/services\/auth-cache\.js';/);
     expect(body).toMatch(
       /import \{ BadRequestError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,
     );

@@ -21,6 +21,7 @@ import { maskEmail } from '../lib/redact-url.js';
 import type { EmailService } from './email.js';
 import type { AuthCache } from './auth-cache.js';
 import type { AccountAuditService } from './account-audit.js';
+import type { RevocationWebhookEmitter } from './api-keys.js';
 import type { EmailPreferencesService } from './email-preferences.js';
 import type { MfaService } from './mfa.js';
 import {
@@ -223,10 +224,29 @@ export interface AuthFlowsRepo {
    */
   revokeAllWebSessionsForAccount(accountId: string, at: Date): Promise<number>;
   /**
+   * A password reset's revocation, in ONE transaction: every active web session
+   * of the account (all of them, or all but `keepSessionId` — the session the
+   * reset just issued), AND every live desktop device credential of the account
+   * — an unrevoked, unexpired `api_keys` row with `provenance = 'cli_device'`.
+   * The keys the customer minted themselves (provenance NULL) are integrations
+   * and are left alone. Returns what it revoked, the keys ordered by id.
+   */
+  revokeCredentialsAfterPasswordReset(
+    accountId: string,
+    keepSessionId: string | null,
+    at: Date,
+  ): Promise<PasswordResetRevocation>;
+  /**
    * V-353d — set web_sessions.mfa_satisfied_at on a session id. Used
    * by completeMfaChallenge so step-up gates pass.
    */
   markWebSessionMfaSatisfied(id: string, at: Date): Promise<void>;
+}
+
+/** What {@link AuthFlowsRepo.revokeCredentialsAfterPasswordReset} revoked. */
+export interface PasswordResetRevocation {
+  webSessions: number;
+  deviceKeys: Array<{ id: string; name: string }>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -551,6 +571,13 @@ export class AuthFlowsService {
      * Tests that don't exercise preferences pass null (always sends).
      */
     private readonly emailPreferences: EmailPreferencesService | null = null,
+    /**
+     * Sends `api_key.revoked` for each desktop credential a password reset
+     * revokes — the event fires whenever a key is revoked, whoever initiated it
+     * (webhooks/events.md). Same payload as the ordinary revoke path. Tests that
+     * don't exercise webhooks pass null.
+     */
+    private readonly webhooksService: RevocationWebhookEmitter | null = null,
   ) {}
 
   private async createMfaChallenge(
@@ -609,9 +636,11 @@ export class AuthFlowsService {
       | 'account.email_verified'
       | 'account.login'
       | 'account.logout'
-      | 'account.password_changed',
+      | 'account.password_changed'
+      | 'api_key.revoked',
     payload: Record<string, unknown>,
     actorAccountId: string | null = null,
+    opts: { targetResourceId?: string } = {},
   ): Promise<void> {
     if (this.accountAudit === null) return;
     try {
@@ -621,7 +650,7 @@ export class AuthFlowsService {
         actorAccountId: actorAccountId ?? accountId,
         actorKeyId: null,
         action,
-        targetResourceId: null,
+        targetResourceId: opts.targetResourceId ?? null,
         payload,
       });
     } catch (err) {
@@ -1484,9 +1513,15 @@ export class AuthFlowsService {
    * revokeAllWebSessionsExceptCurrent (customer "sign out everywhere
    * else"), there is no session to keep alive during an admin-
    * triggered account termination. Same cache-invalidate + audit-
-   * emit shape as its sibling above.
+   * emit shape as its sibling above, except that the row names the
+   * staff member who terminated the account (`staff`, no key) — it
+   * used to read as the customer signing themselves out.
    */
-  async revokeAllWebSessionsForAccount(accountId: string, now = new Date()): Promise<number> {
+  async revokeAllWebSessionsForAccount(
+    accountId: string,
+    now: Date,
+    staffAccountId: string,
+  ): Promise<number> {
     const n = await this.repo.revokeAllWebSessionsForAccount(accountId, now);
     if (n > 0 && this.authCache) {
       try {
@@ -1495,26 +1530,56 @@ export class AuthFlowsService {
         /* cache TTLs out within 30s */
       }
     }
-    if (n > 0) {
-      await this.emitAuditBestEffort(accountId, 'account.logout', {
-        revoked_via: 'admin_account_deletion',
-        revoked_count: n,
-      });
+    if (n > 0 && this.accountAudit !== null) {
+      try {
+        await this.accountAudit.record({
+          accountId,
+          actorType: 'staff',
+          actorAccountId: staffAccountId,
+          actorKeyId: null,
+          action: 'account.logout',
+          targetResourceId: null,
+          payload: { revoked_via: 'admin_account_deletion', revoked_count: n },
+        });
+      } catch (err) {
+        this.logger.warn(
+          { component: 'auth-flows', action: 'account.logout', accountId, err },
+          'account-audit emit failed (best-effort, swallowed)',
+        );
+      }
     }
     return n;
   }
 
   // ──────────────────── helpers ────────────────────
 
+  /**
+   * A password reset is how a customer recovers from a stolen credential, so it
+   * ends every prior sign-in: the web sessions AND the desktop app's device
+   * credentials. The desktop app does not hold a web session — its sign-in is an
+   * API key minted by the device-code flow (`provenance = 'cli_device'`) — so a
+   * reset that revoked only web sessions left a stolen desktop credential working,
+   * with `account_owner`, contrary to the docs ("Every prior device must
+   * re-authenticate"). Both are revoked in one transaction by the repo. Keys the
+   * customer minted themselves are integrations and are not revoked.
+   *
+   * Each revoked device credential gets its auth-cache entry dropped, the
+   * `api_key.revoked` webhook (the ordinary revoke path's payload), and one
+   * `api_key.revoked` row on the account's log, attributed exactly as the
+   * reset's own sign-out row is: `customer`, the account itself, no key. All of
+   * it after the repo's transaction has committed, and best-effort: the
+   * revocation itself is what makes the reset safe.
+   */
   private async revokeSessionsAfterPasswordReset(
     accountId: string,
     keepSessionId: string | null,
     now: Date,
   ): Promise<number> {
-    const revoked =
-      keepSessionId === null
-        ? await this.repo.revokeAllWebSessionsForAccount(accountId, now)
-        : await this.repo.revokeAllWebSessionsExcept(accountId, keepSessionId, now);
+    const revoked = await this.repo.revokeCredentialsAfterPasswordReset(
+      accountId,
+      keepSessionId,
+      now,
+    );
     // Password change increments auth_epoch even when the physical sweep finds
     // no live rows. Always invalidate: a previously cached context must not
     // survive the credential boundary merely because its DB row was already
@@ -1525,15 +1590,45 @@ export class AuthFlowsService {
       } catch {
         /* cache TTLs out within 30s */
       }
+      for (const key of revoked.deviceKeys) {
+        try {
+          await this.authCache.invalidateKey(key.id);
+        } catch {
+          /* the cache hit re-reads the key row, which is already revoked */
+        }
+      }
     }
-    if (revoked > 0) {
+    if (revoked.webSessions > 0) {
       await this.emitAuditBestEffort(accountId, 'account.logout', {
         revoked_via: 'password_reset',
-        revoked_count: revoked,
+        revoked_count: revoked.webSessions,
         ...(keepSessionId === null ? {} : { kept_session_id: keepSessionId }),
       });
     }
-    return revoked;
+    for (const key of revoked.deviceKeys) {
+      if (this.webhooksService !== null) {
+        try {
+          await this.webhooksService.enqueueEvent(accountId, 'api_key.revoked', {
+            api_key_id: `key_${key.id}`,
+            name: key.name,
+            revoked_at: now.toISOString(),
+          });
+        } catch (err) {
+          this.logger.warn(
+            { component: 'auth-flows', flow: 'password-reset', apiKeyId: key.id, err },
+            'api_key.revoked webhook enqueue failed after a password reset (best-effort, swallowed)',
+          );
+        }
+      }
+      await this.emitAuditBestEffort(
+        accountId,
+        'api_key.revoked',
+        { name: key.name, revoked_at: now.toISOString(), revoked_via: 'password_reset' },
+        null,
+        { targetResourceId: `key_${key.id}` },
+      );
+    }
+    return revoked.webSessions;
   }
 
   private async releaseStepUpAttemptBestEffort(key: string): Promise<void> {

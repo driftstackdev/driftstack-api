@@ -148,7 +148,7 @@ describe('W438.A apps/server/src/routes/admin-accounts.ts content parity', () =>
       /\/\/ ── V-281 — POST \/v1\/admin\/accounts\/:id\/audit-note ─[\s\S]*?\/\/ Records a free-form admin support note on the customer's audit log\.\s*\/\/ Audit-only — no side effect on account state\. Both surfaces \(the\s*\/\/ admin_audit_log via withAudit, and the customer-visible\s*\/\/ account_audit log via accountAudit\.record\) are written so the note\s*\/\/ is visible on the per-customer audit slice \+ the admin audit table\./,
     );
     expect(body).toMatch(
-      /await accountAudit\.record\(\{\s*accountId,\s*actorType: 'staff',\s*actorAccountId: ctx\.account\.id,\s*actorKeyId: ctx\.apiKey\.id,\s*action: 'admin\.support_note',\s*targetResourceId: null,\s*payload: \{ note: body\.note \},\s*ipAddress: readClientIp\(request\),\s*\}\);/,
+      /await accountAudit\.record\(\{\s*accountId,\s*actorType: 'staff',\s*actorAccountId: ctx\.account\.id,\s*\/\/ A staff row names no key[\s\S]*?actorKeyId: null,\s*action: 'admin\.support_note',\s*targetResourceId: null,\s*payload: \{ note: body\.note \},\s*ipAddress: readClientIp\(request\),\s*\}\);/,
     );
     expect(body).toMatch(/return reply\.code\(201\)\.send\(\{ ok: true as const \}\);/);
   });
