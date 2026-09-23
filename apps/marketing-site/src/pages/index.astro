@@ -347,10 +347,52 @@ const PROXIES_ALT =
        a hand-drawn cockpit; since 2026-09-12 that capture is the app window
        itself with the device window floating over it). ═══ -->
   <Section
-    label="Two ways to drive it"
+    id="drive-it"
+    label="Three ways to drive it"
     title="Point and click — or just say what you want."
     lead="The desktop app keeps every iPhone one click away, in folders and tags you choose. When a job is repetitive, type what you want in plain English. The built-in AI agent does it while you watch. The agent comes with Team plans and up, and with every API plan."
   >
+      {/* 2026-09-23 — "One real iPhone. Three ways in." The redesign's
+          three-surfaces direction, as an index to this section and the
+          developer band: the same phone, driven by hand in the desktop app,
+          by the AI agent from a sentence, or by code. Each card says WHAT it
+          is for and links to where the page shows it; no capability is
+          claimed here that the section it links to does not show. */}
+      <div class="ways-in mt-10" aria-labelledby="ways-in-title">
+        <p id="ways-in-title" class="text-sm font-semibold text-tk-ink">
+          One real iPhone. Three ways in.
+        </p>
+        <ul class="mt-4 grid gap-4 md:grid-cols-3" role="list">
+          <li class="ways-in-card">
+            <span class="ways-in-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
+            </span>
+            <span class="ways-in-kicker font-mono">You drive</span>
+            <b class="ways-in-name">The desktop app</b>
+            <span class="ways-in-body">Point and click, live. Profiles in folders, one click to launch, and any session in its own phone window.</span>
+            <a class="ways-in-link" href="#desktop-app">See the app</a>
+          </li>
+          <li class="ways-in-card" data-lit>
+            <span class="ways-in-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" /><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8z" /></svg>
+            </span>
+            <span class="ways-in-kicker font-mono">It drives</span>
+            <b class="ways-in-name">The AI agent</b>
+            <span class="ways-in-body">Say what you want in plain English and watch it happen. It pauses to ask you before buying, paying or deleting.</span>
+            <a class="ways-in-link" href="#ai-agent">See it run</a>
+          </li>
+          <li class="ways-in-card">
+            <span class="ways-in-ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5" /></svg>
+            </span>
+            <span class="ways-in-kicker font-mono">Your code drives</span>
+            <b class="ways-in-name">The API</b>
+            <span class="ways-in-body">Official SDKs for TypeScript, Python and Go, or plain HTTPS from anything. No AI cost, no AI wait.</span>
+            <a class="ways-in-link" href="#for-developers">See the code</a>
+          </li>
+        </ul>
+      </div>
+
       {/* The desktop app with its floating device window lifted over it —
           a REAL capture of both (the app's own Profiles view behind, the
           popped-out simulator window over it, an example shop page on the
@@ -358,7 +400,7 @@ const PROXIES_ALT =
           cockpit + floating simulator. No live-session implication: the
           harness renders both from fixture data. The explanatory copy below
           stays real copy, outside the decorative frame. */}
-      <div class="mt-10">
+      <div id="desktop-app" class="mt-10 scroll-mt-24">
         <AppScreen src={simulatorScreen} alt={SIMULATOR_ALT} />
       </div>
 
@@ -376,7 +418,7 @@ const PROXIES_ALT =
            right under the sentence it depicts. Not `accent`: that treatment
            stays reserved for the hero, the one capture meant to read as lit
            at first glance. -->
-      <div class="mt-10">
+      <div id="ai-agent" class="mt-10 scroll-mt-24">
         <AppScreen src={aiRunningScreen} alt={AI_RUNNING_ALT} />
       </div>
   </Section>
@@ -567,6 +609,7 @@ const PROXIES_ALT =
        full jargon + the real SDK snippet + the enum values live. Merges the
        former code-demo hero, works-with-your-stack, and egress cards. ═══ -->
   <Section
+    id="for-developers"
     label="// for developers"
     title="Real iPhone Safari. Programmable from any language."
     lead="Run a real iPhone browser in the cloud that every website treats as a genuine iPhone — never a bot, never an emulator. Built for scraping, testing, and automation that has to pass as a real mobile user. Drive it from TypeScript, Python, Go, or the desktop app."

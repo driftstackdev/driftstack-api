@@ -242,6 +242,60 @@
     }
   }
 
+  /* 2026-09-23 — "One real iPhone. Three ways in." (index.astro §5). Three
+     equal cards on the same card recipe; the middle one, the AI agent, is
+     the one lit card — the same accent pool the hero capture wears, so the
+     strip reads as a small version of the AI view's stage. Opacity-only
+     motion on the pool, stilled under reduced motion. Every text colour is a
+     tokened pair already measured for contrast on both grounds. */
+  .ways-in-card {
+    @apply relative flex flex-col gap-1.5 overflow-hidden rounded-card border border-tk-border
+           bg-tk-surface p-5 shadow-ambient transition-colors duration-300
+           hover:border-tk-accent/40;
+  }
+  .ways-in-card[data-lit] {
+    @apply border-tk-accent/40;
+  }
+  .ways-in-card[data-lit]::before {
+    content: '';
+    position: absolute;
+    inset: -40% -20% auto auto;
+    width: 70%;
+    height: 90%;
+    border-radius: 9999px;
+    background: radial-gradient(circle, rgb(var(--accent-rgb) / 0.14), transparent 70%);
+    filter: blur(24px);
+    pointer-events: none;
+    will-change: opacity;
+    animation: hero-glow-pulse 12s ease-in-out infinite;
+  }
+  .ways-in-ico {
+    @apply relative mb-2 inline-flex h-9 w-9 items-center justify-center rounded-lg
+           border border-tk-border text-tk-accent-text;
+  }
+  .ways-in-kicker {
+    @apply relative text-[10px] uppercase tracking-[0.18em] text-tk-ink-3;
+  }
+  .ways-in-name {
+    @apply relative text-base font-semibold text-tk-ink;
+  }
+  .ways-in-body {
+    @apply relative text-sm leading-6 text-tk-ink-2;
+  }
+  .ways-in-link {
+    @apply relative mt-auto pt-2 text-sm font-medium text-tk-accent-text underline-offset-4
+           hover:underline focus-visible:underline;
+  }
+  .ways-in-link::after {
+    content: ' \2193';
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ways-in-card[data-lit]::before {
+      animation: none;
+      opacity: 0.8;
+    }
+  }
+
   /* "Bringing The Stage everywhere" §4/§7 (2026-09-21) — AppScreen.astro's
      wrapper around every real app capture on the site. The AI view's own
      device language (`.ai-stage`/`.ai-room`/`.ai-floor`, apps/gui-client
