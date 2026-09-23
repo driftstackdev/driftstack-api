@@ -21,11 +21,14 @@ const ConfigSchema = z.object({
   // Fastify trustProxy. Drives `req.ip` / `X-Forwarded-For` resolution: prod is
   // Cloudflare→nginx(127.0.0.1)→Fastify, so without this `req.ip` is the
   // loopback peer (breaks per-IP rate-limiting + records 127.0.0.1 as the audit
-  // IP). Set via `TRUST_PROXY` env (coerced in loadConfig): a number = trust N
-  // hops (prod uses `1`, safe because ufw default-denies :7780 so nginx is the
-  // only peer + nginx appends the real client via $proxy_add_x_forwarded_for); a
-  // string = an IP/CIDR/'loopback' trust list; `true`/`false` as-is. Default
-  // false (dev/test have no proxy → req.ip is the socket peer).
+  // IP). Set via `TRUST_PROXY` env (coerced in loadConfig): a string = an
+  // IP/CIDR/'loopback' trust list (production and staging use `loopback`: ufw
+  // default-denies :7780 so nginx on 127.0.0.1 is the only peer, and nginx
+  // appends the real client via $proxy_add_x_forwarded_for); `true`/`false`
+  // as-is. A number (the old hop count, which fastify 5.12 removed) is still
+  // accepted and translated to 'loopback' with a warning — see
+  // `fastifyTrustProxy` in app.ts. Default false (dev/test have no proxy →
+  // req.ip is the socket peer).
   trustProxy: z
     .union([z.boolean(), z.number().int().nonnegative(), z.string().min(1)])
     .default(false),
