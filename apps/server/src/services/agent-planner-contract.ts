@@ -1096,6 +1096,23 @@ export interface InterpretOptions {
   allowEmptyDone?: boolean;
   /** The reply was constrained by {@link strictReplySchema}. */
   nullMeansAbsent?: boolean;
+  /** Earlier turns of this session ran steps (see {@link sessionHasRunSteps}).
+   *  Only then can a first-segment "done" mean the work is already done. */
+  sessionHasRunSteps?: boolean;
+}
+
+/**
+ * Whether an earlier turn of this session ran steps. A "done" with nothing to
+ * run can only mean "already done" when there is earlier work for it to refer
+ * to; on a brand-new task it is a broken reply and the runtime re-asks.
+ */
+export function sessionHasRunSteps(history: ReadonlyArray<TranscriptEntry>): boolean {
+  return history.some(
+    (entry) =>
+      (entry.role === 'agent' || entry.role === 'operator') &&
+      entry.intents !== undefined &&
+      entry.intents.length > 0,
+  );
 }
 
 /**
@@ -1140,7 +1157,16 @@ export function interpretPlanText(text: string, opts: InterpretOptions): PlanInt
     // formatting slip. It used to throw here and fail the customer's turn.
     // Below, a first-segment "done" with nothing to run becomes a clarify
     // that says so; the second-segment meaning (`allowEmptyDone`) is unchanged.
-    const mayOmitIntents = status === 'done';
+    //
+    // 2026-09-23 — but ONLY when earlier turns ran steps. An audit found the
+    // same reply on a brand-new task, where "already done" is false and the
+    // runtime's re-ask (which the throw below triggers) was the recovery.
+    const priorWork = opts.sessionHasRunSteps === true;
+    const mayOmitIntents = status === 'done' && (opts.allowEmptyDone === true || priorWork);
+    // The model itself listed nothing — as opposed to listing steps the parser
+    // then dropped, which is still "I couldn't turn that into actions".
+    const listedNothing =
+      obj.intents === undefined || (Array.isArray(obj.intents) && obj.intents.length === 0);
     const { intents, declared } = parsePlanIntents(
       obj.intents === undefined && mayOmitIntents ? [] : obj.intents,
       label,
@@ -1152,11 +1178,11 @@ export function interpretPlanText(text: string, opts: InterpretOptions): PlanInt
     if (intents.length === 0 && status === 'done' && opts.allowEmptyDone === true) {
       return { kind: 'plan', intents, status, ...said };
     }
-    // On a FIRST segment, "done" with nothing to run is the model saying the
-    // task is already complete. That is not a broken reply and not "I could
-    // not turn that into actions": tell the customer plainly and ask what
-    // comes next, instead of failing the turn (see the note above).
-    if (intents.length === 0 && status === 'done') {
+    // On a FIRST segment after earlier work, "done" with nothing listed is the
+    // model saying the task is already complete. That is not a broken reply
+    // and not "I could not turn that into actions": tell the customer plainly
+    // and ask what comes next, instead of failing the turn (see the note above).
+    if (intents.length === 0 && status === 'done' && priorWork && listedNothing) {
       return {
         kind: 'clarify',
         clarifyingQuestion: FIRST_SEGMENT_ALREADY_DONE_QUESTION,

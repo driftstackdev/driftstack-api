@@ -79,6 +79,7 @@ import {
   buildPlannerConversation,
   interpretAnswerText,
   interpretPlanText,
+  sessionHasRunSteps,
   isEventStreamResponse,
   isCancelled,
   isTokenCount,
@@ -563,6 +564,9 @@ export class ClaudeAgentDecomposer implements AgentDecomposer {
       // turn's first call an empty plan is still the "it did nothing" defect and
       // still becomes a clarify.
       allowEmptyDone: args.turnProgress !== undefined,
+      // The FULL history, not the trimmed one sent: trimming drops the oldest
+      // turns, and those are still work this session ran.
+      sessionHasRunSteps: sessionHasRunSteps(args.history),
     });
   }
 
@@ -1540,7 +1544,7 @@ function readStopReason(envelope: Record<string, unknown>): string | undefined {
 function parseAnthropicResponse(
   json: unknown,
   model: AgentModel,
-  opts: { allowEmptyDone?: boolean } = {},
+  opts: { allowEmptyDone?: boolean; sessionHasRunSteps?: boolean } = {},
 ): DecomposeResult {
   const envelope = requireAnthropicEnvelope(json);
   const parts = parseAnthropicUsage(envelope);
@@ -1570,6 +1574,9 @@ function parseAnthropicResponse(
       label: 'Anthropic',
       truncated,
       ...(opts.allowEmptyDone !== undefined ? { allowEmptyDone: opts.allowEmptyDone } : {}),
+      ...(opts.sessionHasRunSteps !== undefined
+        ? { sessionHasRunSteps: opts.sessionHasRunSteps }
+        : {}),
     });
     return { ...interpreted, tokensConsumed, usage };
   } catch (error) {

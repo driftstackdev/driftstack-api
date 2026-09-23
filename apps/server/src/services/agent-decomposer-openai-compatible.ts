@@ -63,6 +63,7 @@ import {
   buildPlannerConversation,
   interpretAnswerText,
   interpretPlanText,
+  sessionHasRunSteps,
   isCancelled,
   isEventStreamResponse,
   isTokenCount,
@@ -374,6 +375,7 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
         truncated: reply.finishReason === 'length',
         allowEmptyDone: args.turnProgress !== undefined,
         nullMeansAbsent: this.sentStrict(),
+        sessionHasRunSteps: sessionHasRunSteps(args.history),
       });
       return { ...interpreted, tokensConsumed };
     } catch (firstError) {
@@ -413,6 +415,7 @@ export class OpenAICompatibleAgentDecomposer implements AgentDecomposer {
           truncated: reply.finishReason === 'length',
           allowEmptyDone: args.turnProgress !== undefined,
           nullMeansAbsent: this.sentStrict(),
+          sessionHasRunSteps: sessionHasRunSteps(args.history),
         });
         return {
           ...interpreted,
