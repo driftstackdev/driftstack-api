@@ -60,7 +60,10 @@ describe('admin rate-limit page ↔ server parity', () => {
   it('keeps the public prefixes and accepted bucket enum exact', () => {
     expect(listRoute).toContain('id: `rlo_${r.id}`');
     expect(listRoute).toContain('account_id: `acc_${r.accountId}`');
-    expect(listRoute).toContain('set_by_key_id: `key_${r.setByKeyId}`');
+    // An API key reads `key_<uuid>`, a signed-in browser `wsk_<uuid>`, and the
+    // page accepts exactly those two.
+    expect(listRoute).toContain('set_by_key_id: publicActingKeyId(r.setByKeyId)');
+    expect(page).toContain("new RegExp('^(?:key|wsk)_' + UUID_RE.source.slice(1, -1) + '$')");
     expect(page).toContain("new Set(['global', 'sessions:create', 'agent_sessions:message'])");
     expect(page).toContain("'sessions:create': 'Sessions: create'");
     expect(page).toContain("'agent_sessions:message': 'Agent sessions: message'");

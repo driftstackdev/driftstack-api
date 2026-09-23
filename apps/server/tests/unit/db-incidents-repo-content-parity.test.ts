@@ -56,13 +56,13 @@ describe('W447.C apps/server/src/db/incidents-repo.ts content parity', () => {
 
   it('toRow: 14-field IncidentRow (id + title + description + severity + status + affectedComponents + public + startedAt + resolvedAt + createdByAdminId + createdByAdminKeyId + autoProbeTarget + created/updated_at)', () => {
     expect(body).toMatch(
-      /function toRow\(row: IncidentDbRow\): IncidentRow \{\s*return \{\s*id: row\.id,\s*title: row\.title,\s*description: row\.description,\s*severity: row\.severity,\s*status: row\.status,\s*affectedComponents: row\.affectedComponents,\s*public: row\.public,\s*startedAt: row\.startedAt,\s*resolvedAt: row\.resolvedAt,\s*createdByAdminId: row\.createdByAdminId,\s*createdByAdminKeyId: row\.createdByAdminKeyId,\s*autoProbeTarget: row\.autoProbeTarget,\s*createdAt: row\.createdAt,\s*updatedAt: row\.updatedAt,\s*\};\s*\}/,
+      /function toRow\(row: IncidentDbRow\): IncidentRow \{\s*return \{\s*id: row\.id,\s*title: row\.title,\s*description: row\.description,\s*severity: row\.severity,\s*status: row\.status,\s*affectedComponents: row\.affectedComponents,\s*public: row\.public,\s*startedAt: row\.startedAt,\s*resolvedAt: row\.resolvedAt,\s*createdByAdminId: row\.createdByAdminId,\s*createdByAdminKeyId: actingKeyIdFromColumns\(\s*row\.createdByAdminKeyId,\s*row\.createdByAdminWebSessionId,\s*\),\s*autoProbeTarget: row\.autoProbeTarget,\s*createdAt: row\.createdAt,\s*updatedAt: row\.updatedAt,\s*\};\s*\}/,
     );
   });
 
   it('toUpdateRow: 7-field IncidentUpdateRow (id + incidentId + message + status + postedByAdminId + postedByAdminKeyId + postedAt)', () => {
     expect(body).toMatch(
-      /function toUpdateRow\(row: IncidentUpdateDbRow\): IncidentUpdateRow \{\s*return \{\s*id: row\.id,\s*incidentId: row\.incidentId,\s*message: row\.message,\s*status: row\.status,\s*postedByAdminId: row\.postedByAdminId,\s*postedByAdminKeyId: row\.postedByAdminKeyId,\s*postedAt: row\.postedAt,\s*\};\s*\}/,
+      /function toUpdateRow\(row: IncidentUpdateDbRow\): IncidentUpdateRow \{\s*return \{\s*id: row\.id,\s*incidentId: row\.incidentId,\s*message: row\.message,\s*status: row\.status,\s*postedByAdminId: row\.postedByAdminId,\s*postedByAdminKeyId: actingKeyIdFromColumns\(\s*row\.postedByAdminKeyId,\s*row\.postedByAdminWebSessionId,\s*\),\s*postedAt: row\.postedAt,\s*\};\s*\}/,
     );
   });
 
@@ -129,7 +129,7 @@ describe('W447.C apps/server/src/db/incidents-repo.ts content parity', () => {
 
   it("addUpdate framing pinned: transaction-bracketed insert; bumps status + keeps resolved_at in LOCKSTEP with status (invariant: status==='resolved' <=> resolved_at != null); throws 'incident_updates insert returned no row' on missing insert row", () => {
     expect(body).toMatch(
-      /async addUpdate\(input: AddUpdateInput\): Promise<IncidentUpdateRow> \{\s*return this\.database\.db\.transaction\(async \(tx\) => \{\s*const \[updateRow\] = await tx\s*\.insert\(incidentUpdates\)\s*\.values\(\{\s*incidentId: input\.incidentId,\s*message: input\.message,\s*status: input\.status,\s*postedByAdminId: input\.postedByAdminId,\s*postedByAdminKeyId: input\.postedByAdminKeyId,\s*\}\)\s*\.returning\(\);\s*if \(!updateRow\) throw new Error\('incident_updates insert returned no row'\);/,
+      /async addUpdate\(input: AddUpdateInput\): Promise<IncidentUpdateRow> \{\s*return this\.database\.db\.transaction\(async \(tx\) => \{\s*const \[updateRow\] = await tx\s*\.insert\(incidentUpdates\)\s*\.values\(\{\s*incidentId: input\.incidentId,\s*message: input\.message,\s*status: input\.status,\s*postedByAdminId: input\.postedByAdminId,\s*\.\.\.postedBy\(input\.postedByAdminKeyId\),\s*\}\)\s*\.returning\(\);\s*if \(!updateRow\) throw new Error\('incident_updates insert returned no row'\);/,
     );
     // The resolved_at lockstep (Fable admin re-audit 2026-07-02): a 'resolved'
     // update stamps resolved_at (preserving an existing one), any non-resolved
@@ -149,7 +149,7 @@ describe('W447.C apps/server/src/db/incidents-repo.ts content parity', () => {
       /async resolve\(\s*input: ResolveIncidentInput,\s*\): Promise<\{ incident: IncidentRow; update: IncidentUpdateRow \}> \{\s*return this\.database\.db\.transaction\(async \(tx\) => \{/,
     );
     expect(body).toMatch(
-      /status: 'resolved',\s*postedByAdminId: input\.postedByAdminId,\s*postedByAdminKeyId: input\.postedByAdminKeyId,\s*\}\)/,
+      /status: 'resolved',\s*postedByAdminId: input\.postedByAdminId,\s*\.\.\.postedBy\(input\.postedByAdminKeyId\),\s*\}\)/,
     );
     expect(body).toMatch(
       /const \[incidentRow\] = await tx\s*\.update\(incidents\)\s*\.set\(\{ status: 'resolved', resolvedAt: now, updatedAt: now \}\)\s*\.where\(eq\(incidents\.id, input\.incidentId\)\)\s*\.returning\(\);\s*if \(!incidentRow\) \{\s*throw new NotFoundError\(`Incident \$\{input\.incidentId\} not found\.`\);\s*\}/,

@@ -14,16 +14,21 @@ import type {
 import type { Database } from './client.js';
 import { adminAuditLog } from './schema.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
+import { actingKeyColumns, requiredActingKeyIdFromColumns } from '../lib/acting-key-columns.js';
 
 export class DrizzleAdminAuditLogRepo implements AdminAuditLogRepo {
   constructor(private readonly database: Database) {}
 
   async insert(input: NewAdminAuditLogInput): Promise<AdminAuditLogRow> {
+    // 0138 — an API key id goes to admin_key_id, a web session's `wsk_<uuid>` to
+    // admin_web_session_id; anything else throws here, before the insert.
+    const actor = actingKeyColumns(input.adminKeyId);
     const [row] = await this.database.db
       .insert(adminAuditLog)
       .values({
         adminAccountId: input.adminAccountId,
-        adminKeyId: input.adminKeyId,
+        adminKeyId: actor.keyId,
+        adminWebSessionId: actor.webSessionId,
         action: input.action,
         targetAccountId: input.targetAccountId ?? null,
         targetResourceId: input.targetResourceId ?? null,
@@ -107,7 +112,8 @@ function toRow(r: typeof adminAuditLog.$inferSelect): AdminAuditLogRow {
   return {
     id: r.id,
     adminAccountId: r.adminAccountId,
-    adminKeyId: r.adminKeyId,
+    // The string the auth context had: the key's uuid, or `wsk_<uuid>`.
+    adminKeyId: requiredActingKeyIdFromColumns(r.adminKeyId, r.adminWebSessionId),
     action: r.action,
     targetAccountId: r.targetAccountId,
     targetResourceId: r.targetResourceId,

@@ -20,6 +20,7 @@ import { and, desc, eq, gt, isNull, lte, sql } from 'drizzle-orm';
 import type { CreditRateCardModelRow } from '@driftstack/api-types';
 import type { Database } from './client.js';
 import { rowsOf, type CreditLedgerExecutor, type CreditLedgerTx } from './credit-ledger-repo.js';
+import { actingKeyIdFromColumns, optionalActingKeyColumns } from '../lib/acting-key-columns.js';
 import {
   creditRateCardModels,
   creditRateCards,
@@ -35,6 +36,7 @@ export interface CreditRateCardRecord {
   readonly effectiveAt: Date;
   /** Always null for a card that is or was in force. */
   readonly withdrawnAt: Date | null;
+  /** Who published it, as the auth context had it: a key's uuid or `wsk_<uuid>`. */
   readonly createdByKeyId: string | null;
   readonly note: string;
 }
@@ -279,6 +281,9 @@ export class DrizzleCreditRateCardRepo implements CreditRateCardReader, CreditRa
         const next = rowsOf<{ next: number }>(result)[0]?.next;
         if (next === undefined) throw new Error('could not compute the next rate card version');
 
+        // 0138 — the owner's key, or their web session when they published signed
+        // in (`wsk_<uuid>` cannot go in the uuid key column).
+        const publisher = optionalActingKeyColumns(input.createdByKeyId);
         const [card] = await tx
           .insert(creditRateCards)
           .values({
@@ -288,7 +293,8 @@ export class DrizzleCreditRateCardRepo implements CreditRateCardReader, CreditRa
             // regardless of what is sent; effective_at is the one figure this
             // write actually controls.
             effectiveAt: input.effectiveAt,
-            createdByKeyId: input.createdByKeyId,
+            createdByKeyId: publisher.keyId,
+            createdByWebSessionId: publisher.webSessionId,
             note: input.note ?? '',
           })
           .returning();
@@ -386,7 +392,7 @@ function toCardRecord(r: CreditRateCardRow): CreditRateCardRecord {
     announcedAt: r.announcedAt,
     effectiveAt: r.effectiveAt,
     withdrawnAt: r.withdrawnAt,
-    createdByKeyId: r.createdByKeyId,
+    createdByKeyId: actingKeyIdFromColumns(r.createdByKeyId, r.createdByWebSessionId),
     note: r.note,
   };
 }

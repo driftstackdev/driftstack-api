@@ -967,6 +967,13 @@
       "when": 1786665600025,
       "tag": "0137_credit_lot_still_paid",
       "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1786665600026,
+      "tag": "0138_web_session_actor_columns",
+      "breakpoints": true
     }
   ]
 }

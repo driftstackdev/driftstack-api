@@ -252,12 +252,12 @@ describe('W430.A apps/server/src/lib/app.ts content parity', () => {
     expect(body).not.toMatch(/latency_ms: Date\.now\(\) - start,\s*error:/);
   });
 
-  it('/v1/whoami: requireAuth + rateLimit(global); returns account_id (acc_ prefix) + api_key_id (key_ prefix) + tier + scopes; unreachable account-missing branch throws', () => {
+  it('/v1/whoami: requireAuth + rateLimit(global); returns account_id (acc_ prefix) + api_key_id (key_ prefix, or a signed-in browser’s own wsk_ id) + tier + scopes; unreachable account-missing branch throws', () => {
     expect(body).toMatch(
       /app\.get\('\/v1\/whoami', \{ preHandler: \[app\.requireAuth, app\.rateLimit\('global'\)\] \}, \(request\) => \{/,
     );
     expect(body).toMatch(
-      /return \{\s*account_id: `acc_\$\{ctx\.account\.id\}`,\s*api_key_id: `key_\$\{ctx\.apiKey\.id\}`,\s*tier: ctx\.account\.tier,\s*scopes: ctx\.apiKey\.scopes,\s*\};/,
+      /return \{\s*account_id: `acc_\$\{ctx\.account\.id\}`,[\s\S]*?api_key_id: ctx\.apiKey\.id\.startsWith\(WEB_SESSION_ACTING_KEY_PREFIX\)\s*\?\s*ctx\.apiKey\.id\s*:\s*`key_\$\{ctx\.apiKey\.id\}`,\s*tier: ctx\.account\.tier,\s*scopes: ctx\.apiKey\.scopes,\s*\};/,
     );
   });
 

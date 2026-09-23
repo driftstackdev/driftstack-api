@@ -74,13 +74,13 @@ describe('W415.B apps/server/src/routes/admin-audit-log.ts content parity', () =
     );
   });
 
-  it('publicEntry: id pass-through + admin_account_id=acc_ + admin_key_id=key_ + target_account_id nullable acc_ + ISO timestamp', () => {
+  it('publicEntry: id pass-through + admin_account_id=acc_ + admin_key_id=key_ (wsk_ for a web session, via publicActingKeyId — 0138) + target_account_id nullable acc_ + ISO timestamp', () => {
     expect(body).toMatch(
       /function publicEntry\(row: AdminAuditLogRow\): Record<string, unknown> \{/,
     );
     expect(body).toMatch(/id: row\.id,/);
     expect(body).toMatch(/admin_account_id: `acc_\$\{row\.adminAccountId\}`,/);
-    expect(body).toMatch(/admin_key_id: `key_\$\{row\.adminKeyId\}`,/);
+    expect(body).toMatch(/admin_key_id: publicActingKeyId\(row\.adminKeyId\),/);
     expect(body).toMatch(
       /target_account_id: row\.targetAccountId \? `acc_\$\{row\.targetAccountId\}` : null,/,
     );

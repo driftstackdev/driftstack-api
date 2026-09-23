@@ -17,6 +17,7 @@ import type {
 import type { Database } from './client.js';
 import { platformSecrets } from './schema.js';
 import { verifyBootEncryptionKey } from '../lib/boot-key-verification.js';
+import { actingKeyIdFromColumns, optionalActingKeyColumns } from '../lib/acting-key-columns.js';
 
 const MAX_PLATFORM_SECRET_VALUE_MIGRATION_BATCH = 500;
 const PLATFORM_SECRET_VALUE_V2_PREFIX_BYTES = Buffer.from(PLATFORM_SECRET_VALUE_V2_PREFIX, 'utf8');
@@ -105,10 +106,15 @@ export class DrizzlePlatformSecretsRepo implements PlatformSecretsRepo {
         createdAt: platformSecrets.createdAt,
         updatedAt: platformSecrets.updatedAt,
         updatedByKeyId: platformSecrets.updatedByKeyId,
+        updatedByWebSessionId: platformSecrets.updatedByWebSessionId,
       })
       .from(platformSecrets)
       .orderBy(platformSecrets.name);
-    return rows;
+    return rows.map(({ updatedByWebSessionId, ...meta }) => ({
+      ...meta,
+      // The acting key id as the auth context had it: a uuid, or `wsk_<uuid>`.
+      updatedByKeyId: actingKeyIdFromColumns(meta.updatedByKeyId, updatedByWebSessionId),
+    }));
   }
 
   async getCiphertext(name: string): Promise<Buffer | null> {
@@ -129,6 +135,10 @@ export class DrizzlePlatformSecretsRepo implements PlatformSecretsRepo {
     description: string | null;
     updatedByKeyId: string | null;
   }): Promise<PlatformSecretSetOutcome> {
+    // 0138 — the owner's key, or their web session when they set it signed in to
+    // the admin panel (`wsk_<uuid>` cannot go in the uuid key column).
+    const actor = optionalActingKeyColumns(args.updatedByKeyId);
+    const by = { updatedByKeyId: actor.keyId, updatedByWebSessionId: actor.webSessionId };
     return this.database.db.transaction(async (tx) => {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtextextended(${`platform-secret-upsert:${args.name}`}, 0))`,
@@ -146,7 +156,7 @@ export class DrizzlePlatformSecretsRepo implements PlatformSecretsRepo {
             name: args.name,
             ciphertext: args.ciphertext,
             description: args.description,
-            updatedByKeyId: args.updatedByKeyId,
+            ...by,
           })
           .returning({ name: platformSecrets.name });
         if (inserted.length !== 1) {
@@ -161,7 +171,7 @@ export class DrizzlePlatformSecretsRepo implements PlatformSecretsRepo {
           ciphertext: args.ciphertext,
           description: args.description,
           updatedAt: sql`now()`,
-          updatedByKeyId: args.updatedByKeyId,
+          ...by,
         })
         .where(eq(platformSecrets.name, args.name))
         .returning({ name: platformSecrets.name });

@@ -43,7 +43,9 @@ describe('PricingService.setPrice', () => {
   it('persists a new price and listEffective() reflects it — the edit reaches BOTH readers (owner view + crypto charge both read listEffective), closing the editable-price-that-does-not-charge footgun', async () => {
     const repo = new InMemoryPricingRepo();
     const svc = new PricingService(repo);
-    const written = await svc.setPrice('api_scale', 199900, 'key_abc'); // $1,499 → $1,999
+    // The editing key's id is a uuid, as `api_keys.id` is — the repo refuses any
+    // other shape, as the database does (migration 0138).
+    const written = await svc.setPrice('api_scale', 199900, '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d'); // $1,499 → $1,999
     expect(written).toEqual({ tier: 'api_scale', monthlyCents: 199900 });
     // The effective price (what every reader consumes) now reflects the edit,
     // not the seeded constant (149900).

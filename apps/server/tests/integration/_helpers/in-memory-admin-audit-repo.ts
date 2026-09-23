@@ -10,6 +10,10 @@ import type {
   NewAdminAuditLogInput,
 } from '../../../src/services/admin-audit.js';
 import { keysetPage } from './keyset-page.js';
+import {
+  actingKeyColumns,
+  requiredActingKeyIdFromColumns,
+} from '../../../src/lib/acting-key-columns.js';
 
 /**
  * Ascending `(timestamp, id)`; the sort negates it and the keyset boundary derives from
@@ -25,10 +29,15 @@ export class InMemoryAdminAuditLogRepo implements AdminAuditLogRepo {
   private readonly rows: AdminAuditLogRow[] = [];
 
   insert(input: NewAdminAuditLogInput): Promise<AdminAuditLogRow> {
+    // 0138 — validated exactly as the real columns are: an API key's uuid or a web
+    // session's `wsk_<uuid>`, anything else throws. This double accepted any
+    // string, which is how 'wsk_ws-owner' passed here while production answered
+    // 500; read back the way the real repo reads it back.
+    const actor = actingKeyColumns(input.adminKeyId);
     const row: AdminAuditLogRow = {
       id: randomUUID(),
       adminAccountId: input.adminAccountId,
-      adminKeyId: input.adminKeyId,
+      adminKeyId: requiredActingKeyIdFromColumns(actor.keyId, actor.webSessionId),
       action: input.action,
       targetAccountId: input.targetAccountId ?? null,
       targetResourceId: input.targetResourceId ?? null,

@@ -9,6 +9,7 @@ import { ListAuditLogQuerySchema, type ListAuditLogQueryInput } from '@driftstac
 import type { AdminAuditLogRow, AdminAuditService } from '../services/admin-audit.js';
 import { requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
 import { BadRequestError } from '../lib/errors.js';
+import { publicActingKeyId } from '../lib/acting-key-columns.js';
 
 const PUBLIC_ID_RE = /^[a-z]{3}_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 
@@ -43,7 +44,9 @@ function publicEntry(row: AdminAuditLogRow): Record<string, unknown> {
   return {
     id: row.id,
     admin_account_id: `acc_${row.adminAccountId}`,
-    admin_key_id: `key_${row.adminKeyId}`,
+    // `key_<uuid>` for an API key; `wsk_<uuid>` for an admin signed in to the
+    // panel (0138) — the string the auth context had, never `key_wsk_…`.
+    admin_key_id: publicActingKeyId(row.adminKeyId),
     action: row.action,
     target_account_id: row.targetAccountId ? `acc_${row.targetAccountId}` : null,
     target_resource_id: row.targetResourceId,

@@ -43,7 +43,8 @@ describe('admin /rate-limit-overrides source contract', () => {
     expect(body).toContain('(body.data.length === 0 && body.next_cursor !== null)');
     expect(body).toContain('OVERRIDE_ID_RE.test(value.id)');
     expect(body).toContain('ACCOUNT_ID_RE.test(value.account_id)');
-    expect(body).toContain('KEY_ID_RE.test(value.set_by_key_id)');
+    expect(body).toContain('ACTING_KEY_ID_RE.test(value.set_by_key_id)');
+    expect(body).toContain("new RegExp('^(?:key|wsk)_' + UUID_RE.source.slice(1, -1) + '$')");
     expect(body).toContain('Number.isFinite(value.refill_per_second)');
     expect(body).toContain('value.reason.length <= 500');
     expect(body).toContain('isIsoUtc(value.expires_at)');

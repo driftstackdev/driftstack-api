@@ -63,7 +63,7 @@ describe('W1028 routes/admin-rate-limit-overrides cross-source invariant', () =>
     expect(p).toMatch(/const includeExpired = parsed\.data\.include_expired === 'true';/);
   });
 
-  it('CRITICAL publicOverride 10-field — id (rlo_ prefix) + account_id (acc_ prefix) + bucket_key + capacity + refill_per_second + reason + expires_at (ISO) + set_by_key_id (key_ prefix) + created_at + updated_at.', () => {
+  it('CRITICAL publicOverride 10-field — id (rlo_ prefix) + account_id (acc_ prefix) + bucket_key + capacity + refill_per_second + reason + expires_at (ISO) + set_by_key_id (key_ prefix, or wsk_ for a web session — 0138) + created_at + updated_at.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-rate-limit-overrides.ts'));
     expect(p).toMatch(/id: `rlo_\$\{r\.id\}`,/);
     expect(p).toMatch(/account_id: `acc_\$\{r\.accountId\}`,/);
@@ -72,7 +72,7 @@ describe('W1028 routes/admin-rate-limit-overrides cross-source invariant', () =>
     expect(p).toMatch(/refill_per_second: r\.refillPerSecond,/);
     expect(p).toMatch(/reason: r\.reason,/);
     expect(p).toMatch(/expires_at: r\.expiresAt\.toISOString\(\),/);
-    expect(p).toMatch(/set_by_key_id: `key_\$\{r\.setByKeyId\}`,/);
+    expect(p).toMatch(/set_by_key_id: publicActingKeyId\(r\.setByKeyId\),/);
     expect(p).toMatch(/created_at: r\.createdAt\.toISOString\(\),/);
     expect(p).toMatch(/updated_at: r\.updatedAt\.toISOString\(\),/);
   });

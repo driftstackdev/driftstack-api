@@ -16,6 +16,7 @@ import type {
 import { NotFoundError } from '../lib/errors-helpers.js';
 import type { Database } from './client.js';
 import { incidentUpdates, incidents } from './schema.js';
+import { actingKeyIdFromColumns, optionalActingKeyColumns } from '../lib/acting-key-columns.js';
 
 type IncidentDbRow = typeof incidents.$inferSelect;
 type IncidentUpdateDbRow = typeof incidentUpdates.$inferSelect;
@@ -32,7 +33,10 @@ function toRow(row: IncidentDbRow): IncidentRow {
     startedAt: row.startedAt,
     resolvedAt: row.resolvedAt,
     createdByAdminId: row.createdByAdminId,
-    createdByAdminKeyId: row.createdByAdminKeyId,
+    createdByAdminKeyId: actingKeyIdFromColumns(
+      row.createdByAdminKeyId,
+      row.createdByAdminWebSessionId,
+    ),
     autoProbeTarget: row.autoProbeTarget,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -46,7 +50,10 @@ function toUpdateRow(row: IncidentUpdateDbRow): IncidentUpdateRow {
     message: row.message,
     status: row.status,
     postedByAdminId: row.postedByAdminId,
-    postedByAdminKeyId: row.postedByAdminKeyId,
+    postedByAdminKeyId: actingKeyIdFromColumns(
+      row.postedByAdminKeyId,
+      row.postedByAdminWebSessionId,
+    ),
     postedAt: row.postedAt,
   };
 }
@@ -115,6 +122,15 @@ async function readListPage(
 // what a caller may ask for.
 export const INCIDENT_PAGE_DEFAULT = 100;
 
+/** The timeline row's two actor columns (0138): a key or a web session, or neither. */
+function postedBy(actingKeyId: string | null): {
+  postedByAdminKeyId: string | null;
+  postedByAdminWebSessionId: string | null;
+} {
+  const actor = optionalActingKeyColumns(actingKeyId);
+  return { postedByAdminKeyId: actor.keyId, postedByAdminWebSessionId: actor.webSessionId };
+}
+
 export class DrizzleIncidentsRepo implements IncidentsRepo {
   constructor(private readonly database: Database) {}
 
@@ -122,6 +138,9 @@ export class DrizzleIncidentsRepo implements IncidentsRepo {
     input: CreateIncidentInput,
     explicitId?: string,
   ): Promise<CreateIncidentWriteResult> {
+    // 0138 — the admin that opened it: a key, or a web session (`wsk_<uuid>`) in
+    // its own column; neither for an incident the health poller opened.
+    const actor = optionalActingKeyColumns(input.createdByAdminKeyId);
     return this.database.db.transaction(async (tx) => {
       const initialStatus = input.status ?? 'investigating';
       const values = {
@@ -135,7 +154,8 @@ export class DrizzleIncidentsRepo implements IncidentsRepo {
         startedAt: input.startedAt,
         resolvedAt: initialStatus === 'resolved' ? new Date() : null,
         createdByAdminId: input.createdByAdminId,
-        createdByAdminKeyId: input.createdByAdminKeyId,
+        createdByAdminKeyId: actor.keyId,
+        createdByAdminWebSessionId: actor.webSessionId,
         autoProbeTarget: input.autoProbeTarget ?? null,
       };
       const insert = tx.insert(incidents).values(values);
@@ -151,7 +171,8 @@ export class DrizzleIncidentsRepo implements IncidentsRepo {
             message: input.description,
             status: insertedRow.status,
             postedByAdminId: input.createdByAdminId,
-            postedByAdminKeyId: input.createdByAdminKeyId,
+            postedByAdminKeyId: actor.keyId,
+            postedByAdminWebSessionId: actor.webSessionId,
           })
           .returning();
         if (!updateRow) throw new Error('incident initial update insert returned no row');
@@ -288,7 +309,7 @@ export class DrizzleIncidentsRepo implements IncidentsRepo {
           message: input.message,
           status: input.status,
           postedByAdminId: input.postedByAdminId,
-          postedByAdminKeyId: input.postedByAdminKeyId,
+          ...postedBy(input.postedByAdminKeyId),
         })
         .returning();
       if (!updateRow) throw new Error('incident_updates insert returned no row');
@@ -334,7 +355,7 @@ export class DrizzleIncidentsRepo implements IncidentsRepo {
           message: input.message,
           status: 'resolved',
           postedByAdminId: input.postedByAdminId,
-          postedByAdminKeyId: input.postedByAdminKeyId,
+          ...postedBy(input.postedByAdminKeyId),
         })
         .returning();
       if (!updateRow) throw new Error('incident_updates insert returned no row');
@@ -371,7 +392,7 @@ export class DrizzleIncidentsRepo implements IncidentsRepo {
           message: input.message,
           status: 'investigating',
           postedByAdminId: input.postedByAdminId,
-          postedByAdminKeyId: input.postedByAdminKeyId,
+          ...postedBy(input.postedByAdminKeyId),
         })
         .returning();
       if (!updateRow) throw new Error('incident_updates insert returned no row');

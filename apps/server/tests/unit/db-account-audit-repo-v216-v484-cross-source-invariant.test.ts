@@ -8,7 +8,7 @@
 //   DrizzleAccountAuditRepo 2-method surface — insert + list.
 //
 //   insert 9-field values shape — accountId + actorType +
-//     actorAccountId??null + actorKeyId??null + action +
+//     actorAccountId??null + actorKeyId/actorWebSessionId (0138) + action +
 //     targetResourceId??null + payload??null + ipAddress??null +
 //     userAgent??null.
 //
@@ -64,12 +64,13 @@ describe('W1007 db/account-audit-repo V-216 + V-484 cross-source invariant', () 
     );
   });
 
-  it('CRITICAL insert 9-field values — accountId + actorType + actorAccountId??null + actorKeyId??null + action + targetResourceId??null + payload??null + ipAddress??null + userAgent??null. The ??null normalization keeps NULL semantics consistent with schema.', () => {
+  it('CRITICAL insert 10-field values — accountId + actorType + actorAccountId??null + actorKeyId/actorWebSessionId (one of them or neither, from optionalActingKeyColumns — 0138) + action + targetResourceId??null + payload??null + ipAddress??null + userAgent??null. The ??null normalization keeps NULL semantics consistent with schema.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/account-audit-repo.ts'));
     expect(p).toMatch(/accountId: input\.accountId,/);
     expect(p).toMatch(/actorType: input\.actorType,/);
     expect(p).toMatch(/actorAccountId: input\.actorAccountId \?\? null,/);
-    expect(p).toMatch(/actorKeyId: input\.actorKeyId \?\? null,/);
+    expect(p).toMatch(/const actor = optionalActingKeyColumns\(input\.actorKeyId\);/);
+    expect(p).toMatch(/actorKeyId: actor\.keyId,\s*actorWebSessionId: actor\.webSessionId,/);
     expect(p).toMatch(/action: input\.action,/);
     expect(p).toMatch(/targetResourceId: input\.targetResourceId \?\? null,/);
     expect(p).toMatch(/payload: input\.payload \?\? null,/);

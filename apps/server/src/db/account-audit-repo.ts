@@ -12,18 +12,26 @@ import type {
 import type { Database } from './client.js';
 import { accountAuditLog } from './schema.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
+import { optionalActingKeyColumns } from '../lib/acting-key-columns.js';
 
 export class DrizzleAccountAuditRepo implements AccountAuditRepo {
   constructor(private readonly database: Database) {}
 
   async insert(input: RecordAccountAuditInput): Promise<AccountAuditEntryRow> {
+    // 0138 — a customer signed in to the dashboard acts as `wsk_<uuid>`, which
+    // actor_key_id (a uuid, FK to api_keys) cannot hold: the insert failed, the
+    // callers swallow audit failures, and the row silently never existed. The
+    // web session goes to actor_web_session_id; actor_key_id stays null, and so
+    // does the published `actor_key_id` (toRow below) — it was not a key.
+    const actor = optionalActingKeyColumns(input.actorKeyId);
     const [row] = await this.database.db
       .insert(accountAuditLog)
       .values({
         accountId: input.accountId,
         actorType: input.actorType,
         actorAccountId: input.actorAccountId ?? null,
-        actorKeyId: input.actorKeyId ?? null,
+        actorKeyId: actor.keyId,
+        actorWebSessionId: actor.webSessionId,
         action: input.action,
         targetResourceId: input.targetResourceId ?? null,
         payload: input.payload ?? null,

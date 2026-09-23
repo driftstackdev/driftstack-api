@@ -10,6 +10,7 @@ import type {
   RateLimitOverridesService,
 } from '../services/rate-limit-overrides.js';
 import { BadRequestError } from '../lib/errors.js';
+import { publicActingKeyId } from '../lib/acting-key-columns.js';
 
 // V-2005 — a BARE uuid is accepted alongside the public `acc_<uuid>` form, and a
 // length check is not a shape check: `.length === 36` admitted ANY 36 characters
@@ -46,7 +47,8 @@ function publicOverride(r: RateLimitOverrideRecord): Record<string, unknown> {
     refill_per_second: r.refillPerSecond,
     reason: r.reason,
     expires_at: r.expiresAt.toISOString(),
-    set_by_key_id: `key_${r.setByKeyId}`,
+    // `key_<uuid>`, or `wsk_<uuid>` when set from a signed-in admin panel (0138).
+    set_by_key_id: publicActingKeyId(r.setByKeyId),
     created_at: r.createdAt.toISOString(),
     updated_at: r.updatedAt.toISOString(),
   };

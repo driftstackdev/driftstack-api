@@ -8,6 +8,10 @@ import type {
   PlatformSecretsRepo,
   PlatformSecretSetOutcome,
 } from '../../../src/services/platform-secrets.js';
+import {
+  actingKeyIdFromColumns,
+  optionalActingKeyColumns,
+} from '../../../src/lib/acting-key-columns.js';
 
 export class InMemoryPlatformSecretsRepo implements PlatformSecretsRepo {
   private readonly blobs = new Map<string, Buffer>();
@@ -29,6 +33,10 @@ export class InMemoryPlatformSecretsRepo implements PlatformSecretsRepo {
     description: string | null;
     updatedByKeyId: string | null;
   }): Promise<PlatformSecretSetOutcome> {
+    // 0138 — validated exactly as the real columns are (a key's uuid, a web
+    // session's `wsk_<uuid>`, or none; anything else throws), and read back as the
+    // real repo reads it back.
+    const actor = optionalActingKeyColumns(args.updatedByKeyId);
     const existing = this.meta.get(args.name);
     this.blobs.set(args.name, args.ciphertext);
     this.meta.set(args.name, {
@@ -36,7 +44,7 @@ export class InMemoryPlatformSecretsRepo implements PlatformSecretsRepo {
       description: args.description,
       createdAt: existing?.createdAt ?? new Date(),
       updatedAt: new Date(),
-      updatedByKeyId: args.updatedByKeyId,
+      updatedByKeyId: actingKeyIdFromColumns(actor.keyId, actor.webSessionId),
     });
     return Promise.resolve(existing === undefined ? 'created' : 'updated');
   }

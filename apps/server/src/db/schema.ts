@@ -701,15 +701,28 @@ export type BillingInvoicePaymentRow = typeof billingInvoicePayments.$inferSelec
 // table is SEEDED from those constants in migration 0067, so the DB equals the
 // constants on day one and behaviour is unchanged until the owner edits a price.
 // One row per paid AccountTier (tier is the PK).
-export const pricing = pgTable('pricing', {
-  tier: accountTier('tier').primaryKey(),
-  monthlyCents: integer('monthly_cents').notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .notNull()
-    .default(sql`now()`),
-  /** API key id of the owner who last edited this row (null = seeded default). */
-  updatedByKeyId: uuid('updated_by_key_id'),
-});
+export const pricing = pgTable(
+  'pricing',
+  {
+    tier: accountTier('tier').primaryKey(),
+    monthlyCents: integer('monthly_cents').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    /** API key id of the owner who last edited this row (null = seeded default). */
+    updatedByKeyId: uuid('updated_by_key_id'),
+    /** 0138 — the web session that last edited it, when the owner was signed in
+     *  (no FK: the row outlives the session). At most one of the two is set;
+     *  written and read through lib/acting-key-columns.ts. */
+    updatedByWebSessionId: uuid('updated_by_web_session_id'),
+  },
+  (t) => [
+    check(
+      'pricing_at_most_one_actor',
+      sql`num_nonnulls(${t.updatedByKeyId}, ${t.updatedByWebSessionId}) <= 1`,
+    ),
+  ],
+);
 
 // platform_secrets — admin-cockpit secrets Phase A (founder-locked decision 3):
 // DB-backed platform secret store. Values use an explicit v2 byte prefix plus
@@ -718,21 +731,33 @@ export const pricing = pgTable('pricing', {
 // Ciphertext is NEVER returned by list reads (repo list selects metadata only).
 // Owner-gated management + audit ride the routes slice. Migration 0074 created
 // the table; the bounded bootstrap bridge upgrades its prefixless legacy rows.
-export const platformSecrets = pgTable('platform_secrets', {
-  name: text('name').primaryKey(),
-  description: text('description'),
-  ciphertext: customType<{ data: Buffer; driverData: Buffer }>({
-    dataType: () => 'bytea',
-  })('ciphertext').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .notNull()
-    .default(sql`now()`),
-  updatedAt: timestamp('updated_at', { withTimezone: true })
-    .notNull()
-    .default(sql`now()`),
-  /** API key id of the owner who last set this secret (null = never set via API). */
-  updatedByKeyId: uuid('updated_by_key_id'),
-});
+export const platformSecrets = pgTable(
+  'platform_secrets',
+  {
+    name: text('name').primaryKey(),
+    description: text('description'),
+    ciphertext: customType<{ data: Buffer; driverData: Buffer }>({
+      dataType: () => 'bytea',
+    })('ciphertext').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .default(sql`now()`),
+    /** API key id of the owner who last set this secret (null = never set via API). */
+    updatedByKeyId: uuid('updated_by_key_id'),
+    /** 0138 — the web session that last set it, when the owner was signed in (no
+     *  FK). At most one of the two is set; see lib/acting-key-columns.ts. */
+    updatedByWebSessionId: uuid('updated_by_web_session_id'),
+  },
+  (t) => [
+    check(
+      'platform_secrets_at_most_one_actor',
+      sql`num_nonnulls(${t.updatedByKeyId}, ${t.updatedByWebSessionId}) <= 1`,
+    ),
+  ],
+);
 
 // profiles — persistent customer-defined identity slots that sessions
 // are created against. The Manual ladder caps profile count as the
@@ -1746,9 +1771,12 @@ export const adminAuditLog = pgTable(
     adminAccountId: uuid('admin_account_id')
       .notNull()
       .references(() => accounts.id, { onDelete: 'restrict' }),
-    adminKeyId: uuid('admin_key_id')
-      .notNull()
-      .references(() => apiKeys.id, { onDelete: 'restrict' }),
+    // The API key that acted — or, from 0138, null when the admin was signed in
+    // with a web session, which `adminWebSessionId` then names. Exactly one of
+    // the two is set (CHECK below); see lib/acting-key-columns.ts.
+    adminKeyId: uuid('admin_key_id').references(() => apiKeys.id, { onDelete: 'restrict' }),
+    // No FK: the audit row outlives the session it names.
+    adminWebSessionId: uuid('admin_web_session_id'),
     action: adminAuditAction('action').notNull(),
     // Account the action was performed against. Nullable for actions
     // that don't target a single account (none today; reserved).
@@ -1781,6 +1809,10 @@ export const adminAuditLog = pgTable(
     index('admin_audit_log_action_idx').on(t.action, t.timestamp),
     // 0113 — the audit archive filters on timestamp alone.
     index('admin_audit_log_timestamp_idx').on(t.timestamp),
+    check(
+      'admin_audit_log_one_actor',
+      sql`num_nonnulls(${t.adminKeyId}, ${t.adminWebSessionId}) = 1`,
+    ),
   ],
 );
 
@@ -1810,9 +1842,10 @@ export const rateLimitOverrides = pgTable(
     // expired rows as absent. Cleanup is lazy (no cron); rows hang
     // around until an admin re-sets or a periodic sweep removes them.
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
-    setByKeyId: uuid('set_by_key_id')
-      .notNull()
-      .references(() => apiKeys.id, { onDelete: 'restrict' }),
+    // The API key that set it, or (0138) null when a web session did, which
+    // `setByWebSessionId` then names (no FK). Exactly one is set.
+    setByKeyId: uuid('set_by_key_id').references(() => apiKeys.id, { onDelete: 'restrict' }),
+    setByWebSessionId: uuid('set_by_web_session_id'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -1827,6 +1860,10 @@ export const rateLimitOverrides = pgTable(
     index('rate_limit_overrides_account_idx').on(t.accountId),
     // For the sweep query (find expired rows).
     index('rate_limit_overrides_expires_idx').on(t.expiresAt),
+    check(
+      'rate_limit_overrides_one_actor',
+      sql`num_nonnulls(${t.setByKeyId}, ${t.setByWebSessionId}) = 1`,
+    ),
   ],
 );
 
@@ -2013,6 +2050,10 @@ export const accountAuditLog = pgTable(
     actorKeyId: uuid('actor_key_id').references(() => apiKeys.id, {
       onDelete: 'set null',
     }),
+    /** 0138 — the web session that acted, when the actor was signed in rather than
+     *  using a key (no FK). Never published: the customer's `actor_key_id` stays
+     *  null for such a row. At most one of the two is set. */
+    actorWebSessionId: uuid('actor_web_session_id'),
     action: text('action').notNull(),
     targetResourceId: text('target_resource_id'),
     payload: jsonb('payload').$type<Record<string, unknown>>(),
@@ -2025,6 +2066,10 @@ export const accountAuditLog = pgTable(
   (t) => [
     index('account_audit_log_account_idx').on(t.accountId, t.timestamp),
     index('account_audit_log_action_idx').on(t.accountId, t.action, t.timestamp),
+    check(
+      'account_audit_log_at_most_one_actor',
+      sql`num_nonnulls(${t.actorKeyId}, ${t.actorWebSessionId}) <= 1`,
+    ),
   ],
 );
 
@@ -2168,10 +2213,13 @@ export const incidents = pgTable(
     createdByAdminId: uuid('created_by_admin_id').references(() => accounts.id, {
       onDelete: 'restrict',
     }),
-    /** Null when auto-created by health probe poller; see above. */
+    /** Null when auto-created by health probe poller; see above. From 0138 also
+     *  null when the admin was signed in with a web session, which
+     *  `createdByAdminWebSessionId` then names (no FK). At most one is set. */
     createdByAdminKeyId: uuid('created_by_admin_key_id').references(() => apiKeys.id, {
       onDelete: 'restrict',
     }),
+    createdByAdminWebSessionId: uuid('created_by_admin_web_session_id'),
     /** V-295b — non-null only for auto-created incidents. The probe target
      *  whose 3-consecutive-fail triggered creation (e.g. 'api'). Used by the
      *  poller to find the open auto-incident for auto-resolve. */
@@ -2187,6 +2235,10 @@ export const incidents = pgTable(
     index('incidents_started_at_idx').on(t.startedAt),
     index('incidents_public_status_idx').on(t.public, t.status),
     index('incidents_auto_probe_open_idx').on(t.autoProbeTarget, t.status),
+    check(
+      'incidents_at_most_one_actor',
+      sql`num_nonnulls(${t.createdByAdminKeyId}, ${t.createdByAdminWebSessionId}) <= 1`,
+    ),
   ],
 );
 
@@ -2205,15 +2257,23 @@ export const incidentUpdates = pgTable(
     postedByAdminId: uuid('posted_by_admin_id').references(() => accounts.id, {
       onDelete: 'restrict',
     }),
-    /** Null when posted by the V-295b auto poller; see above. */
+    /** Null when posted by the V-295b auto poller; see above. From 0138 also null
+     *  when a web session posted it, which `postedByAdminWebSessionId` names. */
     postedByAdminKeyId: uuid('posted_by_admin_key_id').references(() => apiKeys.id, {
       onDelete: 'restrict',
     }),
+    postedByAdminWebSessionId: uuid('posted_by_admin_web_session_id'),
     postedAt: timestamp('posted_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
   },
-  (t) => [index('incident_updates_incident_id_idx').on(t.incidentId, t.postedAt)],
+  (t) => [
+    index('incident_updates_incident_id_idx').on(t.incidentId, t.postedAt),
+    check(
+      'incident_updates_at_most_one_actor',
+      sql`num_nonnulls(${t.postedByAdminKeyId}, ${t.postedByAdminWebSessionId}) <= 1`,
+    ),
+  ],
 );
 
 export type Incident = typeof incidents.$inferSelect;
@@ -3263,9 +3323,16 @@ export const creditRateCards = pgTable(
     /** Set only by a withdrawal before `effective_at`; a withdrawn card is never in force. */
     withdrawnAt: timestamp('withdrawn_at', { withTimezone: true }),
     createdByKeyId: uuid('created_by_key_id'),
+    /** 0138 — the web session that published it, when the owner was signed in.
+     *  At most one of the two is set, and neither changes on a withdrawal. */
+    createdByWebSessionId: uuid('created_by_web_session_id'),
     note: text('note').notNull().default(''),
   },
   (t) => [
+    check(
+      'credit_rate_cards_at_most_one_actor',
+      sql`num_nonnulls(${t.createdByKeyId}, ${t.createdByWebSessionId}) <= 1`,
+    ),
     // One live card per instant, so "the card in force" is always one row.
     uniqueIndex('credit_rate_cards_live_effective_unique')
       .on(t.effectiveAt)
@@ -3474,6 +3541,9 @@ export const creditPlanOverrides = pgTable(
     /** 'contract' | 'admin_tier'. */
     reason: text('reason').notNull(),
     setByKeyId: uuid('set_by_key_id'),
+    /** 0138 — the web session that set it, when the admin was signed in. At most
+     *  one of the two is set. */
+    setByWebSessionId: uuid('set_by_web_session_id'),
     note: text('note').notNull().default(''),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
@@ -3488,6 +3558,10 @@ export const creditPlanOverrides = pgTable(
     check(
       'credit_plan_overrides_ends_after_anchor',
       sql`${t.endsAt} IS NULL OR ${t.endsAt} > ${t.anchorAt}`,
+    ),
+    check(
+      'credit_plan_overrides_at_most_one_actor',
+      sql`num_nonnulls(${t.setByKeyId}, ${t.setByWebSessionId}) <= 1`,
     ),
   ],
 );
@@ -3701,9 +3775,10 @@ export const aiCreditsAdminAuditLog = pgTable(
     adminAccountId: uuid('admin_account_id')
       .notNull()
       .references(() => accounts.id, { onDelete: 'restrict' }),
-    adminKeyId: uuid('admin_key_id')
-      .notNull()
-      .references(() => apiKeys.id, { onDelete: 'restrict' }),
+    // 0138 — the API key that acted, or null when a web session did, which
+    // `adminWebSessionId` then names (no FK). Exactly one is set.
+    adminKeyId: uuid('admin_key_id').references(() => apiKeys.id, { onDelete: 'restrict' }),
+    adminWebSessionId: uuid('admin_web_session_id'),
     action: text('action').notNull(),
     targetAccountId: uuid('target_account_id').references(() => accounts.id, {
       onDelete: 'set null',
@@ -3724,6 +3799,10 @@ export const aiCreditsAdminAuditLog = pgTable(
     check(
       'ai_credits_admin_audit_log_action_check',
       sql`${t.action} IN ('credits.goodwill_granted', 'credits.debt_forgiven', 'credits.plan_override_set', 'credits.plan_override_cleared', 'rate_card.published', 'rate_card.withdrawn', 'credits.cutover_moved', 'credits.cutover_rolled_back')`,
+    ),
+    check(
+      'ai_credits_admin_audit_log_one_actor',
+      sql`num_nonnulls(${t.adminKeyId}, ${t.adminWebSessionId}) = 1`,
     ),
   ],
 );

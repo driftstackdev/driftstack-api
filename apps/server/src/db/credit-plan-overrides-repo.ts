@@ -25,6 +25,7 @@ import {
   type CreditPlanOverrideReason,
 } from './credit-ledger-repo.js';
 import { creditPlanOverrides, type CreditPlanOverrideRow } from './schema.js';
+import { actingKeyIdFromColumns, optionalActingKeyColumns } from '../lib/acting-key-columns.js';
 
 /** `credit_plan_overrides_credits_range`: 0 to ten million credits a month. */
 export const CREDIT_PLAN_OVERRIDE_MAX_MONTHLY_CREDITS = 10_000_000;
@@ -51,6 +52,7 @@ export interface CreditPlanOverrideRecord {
   readonly endsAt: Date | null;
   readonly effectiveSince: Date;
   readonly reason: CreditPlanOverrideReason;
+  /** Who set it, as the auth context had it: a key's uuid or `wsk_<uuid>`. */
   readonly setByKeyId: string | null;
   readonly note: string;
 }
@@ -74,7 +76,8 @@ export interface SetCreditPlanOverride {
   readonly carryLiveAnchor?: boolean;
   /** When the override stops granting. Omitted or null: it does not end. */
   readonly endsAt?: Date | null;
-  /** The admin API key that set it, for the audit trail. */
+  /** `ctx.apiKey.id` of the admin that set it — an API key's uuid, or a web
+   *  session's `wsk_<uuid>` — for the audit trail. */
   readonly setByKeyId?: string | null;
   readonly note?: string;
 }
@@ -91,7 +94,7 @@ function toRecord(r: CreditPlanOverrideRow): CreditPlanOverrideRecord {
     endsAt: r.endsAt,
     effectiveSince: r.effectiveSince,
     reason: r.reason as CreditPlanOverrideReason,
-    setByKeyId: r.setByKeyId,
+    setByKeyId: actingKeyIdFromColumns(r.setByKeyId, r.setByWebSessionId),
     note: r.note,
   };
 }
@@ -140,6 +143,9 @@ export class DrizzleCreditPlanOverridesRepo {
     if (!(CREDIT_PLAN_OVERRIDE_REASONS as readonly string[]).includes(input.reason)) {
       throw new RangeError('an override is set for a contract or for an admin-assigned plan');
     }
+    // 0138 — both actor columns are written every time, so a replacement never
+    // keeps the previous setter's column beside the new one.
+    const setBy = optionalActingKeyColumns(input.setByKeyId);
     const written = {
       monthlyCredits: credits,
       ownKeyAllowed: input.ownKeyAllowed ?? true,
@@ -147,7 +153,8 @@ export class DrizzleCreditPlanOverridesRepo {
       endsAt: input.endsAt ?? null,
       effectiveSince: sql`now()`,
       reason: input.reason,
-      setByKeyId: input.setByKeyId ?? null,
+      setByKeyId: setBy.keyId,
+      setByWebSessionId: setBy.webSessionId,
       note: input.note ?? '',
     };
     // On conflict the SET sees the row being replaced (`credit_plan_overrides.*`),

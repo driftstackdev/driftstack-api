@@ -12,6 +12,7 @@
 import { and, desc, eq, lt } from 'drizzle-orm';
 import type { Database } from './client.js';
 import type { CreditLedgerExecutor } from './credit-ledger-repo.js';
+import { actingKeyColumns, requiredActingKeyIdFromColumns } from '../lib/acting-key-columns.js';
 import {
   AI_CREDITS_ADMIN_AUDIT_ACTIONS,
   aiCreditsAdminAuditLog,
@@ -23,6 +24,7 @@ export type AiCreditsAdminAuditAction = (typeof AI_CREDITS_ADMIN_AUDIT_ACTIONS)[
 export interface AiCreditsAdminAuditLogEntry {
   readonly id: string;
   readonly adminAccountId: string;
+  /** The acting key id as the auth context had it: a key's uuid or `wsk_<uuid>`. */
   readonly adminKeyId: string;
   readonly action: AiCreditsAdminAuditAction;
   readonly targetAccountId: string | null;
@@ -35,6 +37,7 @@ export interface AiCreditsAdminAuditLogEntry {
 
 export interface NewAiCreditsAdminAuditLogEntry {
   readonly adminAccountId: string;
+  /** `ctx.apiKey.id`: an API key's uuid, or a web session's `wsk_<uuid>`. */
   readonly adminKeyId: string;
   readonly action: AiCreditsAdminAuditAction;
   readonly targetAccountId?: string | null;
@@ -67,7 +70,7 @@ function toEntry(r: AiCreditsAdminAuditLogRow): AiCreditsAdminAuditLogEntry {
   return {
     id: r.id,
     adminAccountId: r.adminAccountId,
-    adminKeyId: r.adminKeyId,
+    adminKeyId: requiredActingKeyIdFromColumns(r.adminKeyId, r.adminWebSessionId),
     action: member(r.action),
     targetAccountId: r.targetAccountId,
     targetResourceId: r.targetResourceId,
@@ -82,9 +85,14 @@ function toEntry(r: AiCreditsAdminAuditLogRow): AiCreditsAdminAuditLogEntry {
 function auditRowValues(
   entry: NewAiCreditsAdminAuditLogEntry,
 ): typeof aiCreditsAdminAuditLog.$inferInsert {
+  // 0138 — a web session acts as `wsk_<uuid>`, which admin_key_id (a uuid and a
+  // foreign key to api_keys) cannot hold; it goes to admin_web_session_id. An id
+  // that is neither throws here, inside the caller's transaction.
+  const actor = actingKeyColumns(entry.adminKeyId);
   return {
     adminAccountId: entry.adminAccountId,
-    adminKeyId: entry.adminKeyId,
+    adminKeyId: actor.keyId,
+    adminWebSessionId: actor.webSessionId,
     action: entry.action,
     targetAccountId: entry.targetAccountId ?? null,
     targetResourceId: entry.targetResourceId ?? null,
@@ -109,7 +117,10 @@ export interface AiCreditsAdminAuditWriter {
  * `already_moved` and never audit.
  *
  * The row's actor columns are foreign keys to `accounts` and `api_keys`, so an
- * actor that does not exist fails the whole transaction — which is the point.
+ * actor that does not exist fails the whole transaction — which is the point. A
+ * web session (the admin panel's sign-in) is recorded in `admin_web_session_id`
+ * instead of the key column (0138), so a signed-in admin's change is recorded
+ * rather than refused.
  */
 export function aiCreditsAdminAuditIn(on: CreditLedgerExecutor): AiCreditsAdminAuditWriter {
   return {

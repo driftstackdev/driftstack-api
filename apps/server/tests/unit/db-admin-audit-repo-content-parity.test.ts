@@ -48,9 +48,9 @@ describe('W443.A apps/server/src/db/admin-audit-repo.ts content parity', () => {
     expect(body).toMatch(/import \{ adminAuditLog \} from '\.\/schema\.js';/);
   });
 
-  it("insert(): 8-field values (adminAccountId + adminKeyId + action + targetAccountId nullable + targetResourceId nullable + inputPayload nullable + result + ipAddress nullable); returning(); throws 'admin_audit_log insert returned no row' on empty", () => {
+  it("insert(): 9-field values (adminAccountId + adminKeyId/adminWebSessionId split by actingKeyColumns (0138) + action + targetAccountId nullable + targetResourceId nullable + inputPayload nullable + result + ipAddress nullable); returning(); throws 'admin_audit_log insert returned no row' on empty", () => {
     expect(body).toMatch(
-      /async insert\(input: NewAdminAuditLogInput\): Promise<AdminAuditLogRow> \{\s*const \[row\] = await this\.database\.db\s*\.insert\(adminAuditLog\)\s*\.values\(\{\s*adminAccountId: input\.adminAccountId,\s*adminKeyId: input\.adminKeyId,\s*action: input\.action,\s*targetAccountId: input\.targetAccountId \?\? null,\s*targetResourceId: input\.targetResourceId \?\? null,\s*inputPayload: input\.inputPayload \?\? null,\s*result: input\.result,\s*ipAddress: input\.ipAddress \?\? null,\s*\}\)\s*\.returning\(\);\s*if \(!row\) throw new Error\('admin_audit_log insert returned no row'\);\s*return toRow\(row\);\s*\}/,
+      /async insert\(input: NewAdminAuditLogInput\): Promise<AdminAuditLogRow> \{\s*(?:\/\/[^\n]*\s*)*const actor = actingKeyColumns\(input\.adminKeyId\);\s*const \[row\] = await this\.database\.db\s*\.insert\(adminAuditLog\)\s*\.values\(\{\s*adminAccountId: input\.adminAccountId,\s*adminKeyId: actor\.keyId,\s*adminWebSessionId: actor\.webSessionId,\s*action: input\.action,\s*targetAccountId: input\.targetAccountId \?\? null,\s*targetResourceId: input\.targetResourceId \?\? null,\s*inputPayload: input\.inputPayload \?\? null,\s*result: input\.result,\s*ipAddress: input\.ipAddress \?\? null,\s*\}\)\s*\.returning\(\);\s*if \(!row\) throw new Error\('admin_audit_log insert returned no row'\);\s*return toRow\(row\);\s*\}/,
     );
   });
 
@@ -82,9 +82,9 @@ describe('W443.A apps/server/src/db/admin-audit-repo.ts content parity', () => {
     );
   });
 
-  it('toRow: 10-field (id + adminAccountId + adminKeyId + action + targetAccountId + targetResourceId + inputPayload + result + ipAddress + timestamp)', () => {
+  it('toRow: 10-field (id + adminAccountId + adminKeyId read back from both actor columns (0138) + action + targetAccountId + targetResourceId + inputPayload + result + ipAddress + timestamp)', () => {
     expect(body).toMatch(
-      /function toRow\(r: typeof adminAuditLog\.\$inferSelect\): AdminAuditLogRow \{\s*return \{\s*id: r\.id,\s*adminAccountId: r\.adminAccountId,\s*adminKeyId: r\.adminKeyId,\s*action: r\.action,\s*targetAccountId: r\.targetAccountId,\s*targetResourceId: r\.targetResourceId,\s*inputPayload: r\.inputPayload,\s*result: r\.result,\s*ipAddress: r\.ipAddress,\s*timestamp: r\.timestamp,\s*\};\s*\}/,
+      /function toRow\(r: typeof adminAuditLog\.\$inferSelect\): AdminAuditLogRow \{\s*return \{\s*id: r\.id,\s*adminAccountId: r\.adminAccountId,\s*(?:\/\/[^\n]*\s*)*adminKeyId: requiredActingKeyIdFromColumns\(r\.adminKeyId, r\.adminWebSessionId\),\s*action: r\.action,\s*targetAccountId: r\.targetAccountId,\s*targetResourceId: r\.targetResourceId,\s*inputPayload: r\.inputPayload,\s*result: r\.result,\s*ipAddress: r\.ipAddress,\s*timestamp: r\.timestamp,\s*\};\s*\}/,
     );
   });
 

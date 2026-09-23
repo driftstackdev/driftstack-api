@@ -50,9 +50,9 @@ describe('W442.C apps/server/src/db/account-audit-repo.ts content parity', () =>
     expect(body).toMatch(/import \{ accountAuditLog \} from '\.\/schema\.js';/);
   });
 
-  it("insert(): 9-field values with null-coalesce on optional (actorAccountId/actorKeyId/targetResourceId/payload/ipAddress/userAgent) → returning(); throws 'account_audit_log insert returned no row' on empty", () => {
+  it("insert(): 10-field values with null-coalesce on optional (actorAccountId/targetResourceId/payload/ipAddress/userAgent), the acting key split by optionalActingKeyColumns into actorKeyId + actorWebSessionId (0138) → returning(); throws 'account_audit_log insert returned no row' on empty", () => {
     expect(body).toMatch(
-      /async insert\(input: RecordAccountAuditInput\): Promise<AccountAuditEntryRow> \{\s*const \[row\] = await this\.database\.db\s*\.insert\(accountAuditLog\)\s*\.values\(\{\s*accountId: input\.accountId,\s*actorType: input\.actorType,\s*actorAccountId: input\.actorAccountId \?\? null,\s*actorKeyId: input\.actorKeyId \?\? null,\s*action: input\.action,\s*targetResourceId: input\.targetResourceId \?\? null,\s*payload: input\.payload \?\? null,\s*ipAddress: input\.ipAddress \?\? null,\s*userAgent: input\.userAgent \?\? null,\s*\}\)\s*\.returning\(\);\s*if \(!row\) throw new Error\('account_audit_log insert returned no row'\);\s*return toRow\(row\);\s*\}/,
+      /async insert\(input: RecordAccountAuditInput\): Promise<AccountAuditEntryRow> \{\s*(?:\/\/[^\n]*\s*)*const actor = optionalActingKeyColumns\(input\.actorKeyId\);\s*const \[row\] = await this\.database\.db\s*\.insert\(accountAuditLog\)\s*\.values\(\{\s*accountId: input\.accountId,\s*actorType: input\.actorType,\s*actorAccountId: input\.actorAccountId \?\? null,\s*actorKeyId: actor\.keyId,\s*actorWebSessionId: actor\.webSessionId,\s*action: input\.action,\s*targetResourceId: input\.targetResourceId \?\? null,\s*payload: input\.payload \?\? null,\s*ipAddress: input\.ipAddress \?\? null,\s*userAgent: input\.userAgent \?\? null,\s*\}\)\s*\.returning\(\);\s*if \(!row\) throw new Error\('account_audit_log insert returned no row'\);\s*return toRow\(row\);\s*\}/,
     );
   });
 

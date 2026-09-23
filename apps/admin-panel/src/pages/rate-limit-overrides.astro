@@ -160,7 +160,9 @@ const apiBaseUrl = resolveApiBaseUrl();
       const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
       const ACCOUNT_ID_RE = new RegExp('^acc_' + UUID_RE.source.slice(1, -1) + '$');
       const OVERRIDE_ID_RE = new RegExp('^rlo_' + UUID_RE.source.slice(1, -1) + '$');
-      const KEY_ID_RE = new RegExp('^key_' + UUID_RE.source.slice(1, -1) + '$');
+      // Who set an override: an API key (`key_<uuid>`) or a signed-in browser
+      // (`wsk_<uuid>`) — this page itself always acts as the latter.
+      const ACTING_KEY_ID_RE = new RegExp('^(?:key|wsk)_' + UUID_RE.source.slice(1, -1) + '$');
       const BUCKET_KEYS = new Set(['global', 'sessions:create', 'agent_sessions:message']);
       const OVERRIDE_FIELDS = [
         'id',
@@ -277,7 +279,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             (typeof value.reason === 'string' && value.reason.length <= 500)) &&
           isIsoUtc(value.expires_at) &&
           typeof value.set_by_key_id === 'string' &&
-          KEY_ID_RE.test(value.set_by_key_id) &&
+          ACTING_KEY_ID_RE.test(value.set_by_key_id) &&
           isIsoUtc(value.created_at) &&
           isIsoUtc(value.updated_at)
         );

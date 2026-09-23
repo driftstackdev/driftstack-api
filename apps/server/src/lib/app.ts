@@ -8,6 +8,7 @@ import Fastify, { type FastifyBaseLogger, type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { randomUUID } from 'node:crypto';
+import { WEB_SESSION_ACTING_KEY_PREFIX } from './acting-key-columns.js';
 import type { Logger } from './logger.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import type { AuthCache } from '../services/auth-cache.js';
@@ -2042,7 +2043,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
     return {
       account_id: `acc_${ctx.account.id}`,
-      api_key_id: `key_${ctx.apiKey.id}`,
+      // A signed-in browser acts as `wsk_<uuid>`, which is not a key: name it
+      // as itself rather than `key_wsk_…`.
+      api_key_id: ctx.apiKey.id.startsWith(WEB_SESSION_ACTING_KEY_PREFIX)
+        ? ctx.apiKey.id
+        : `key_${ctx.apiKey.id}`,
       tier: ctx.account.tier,
       scopes: ctx.apiKey.scopes,
     };

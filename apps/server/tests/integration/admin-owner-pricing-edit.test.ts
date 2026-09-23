@@ -62,13 +62,17 @@ function ctxFor(id: string, email: string, sessionId: string): AccountContext {
   };
 }
 
-const OWNER_CTX = ctxFor('acc-owner', OWNER_EMAIL, 'ws-owner');
-const STAFF_CTX = ctxFor('acc-staff', 'staff@driftstack.test', 'ws-staff');
+// Web session ids are uuids, as `web_sessions.id` is: the audit repositories
+// refuse any other shape, as the database does (migration 0138).
+const OWNER_WEB_SESSION_ID = '6f1e2d3c-4b5a-4968-8776-a5b4c3d2e101';
+const STAFF_WEB_SESSION_ID = '6f1e2d3c-4b5a-4968-8776-a5b4c3d2e102';
+const OWNER_CTX = ctxFor('acc-owner', OWNER_EMAIL, OWNER_WEB_SESSION_ID);
+const STAFF_CTX = ctxFor('acc-staff', 'staff@driftstack.test', STAFF_WEB_SESSION_ID);
 
 function makeRepo(retiredTokenHash: string | null = null): AccountAuthRepo {
   const sessions = new Map([
-    [sha256Hex(OWNER_TOKEN), { ctx: OWNER_CTX, id: 'ws-owner' }],
-    [sha256Hex(STAFF_TOKEN), { ctx: STAFF_CTX, id: 'ws-staff' }],
+    [sha256Hex(OWNER_TOKEN), { ctx: OWNER_CTX, id: OWNER_WEB_SESSION_ID }],
+    [sha256Hex(STAFF_TOKEN), { ctx: STAFF_CTX, id: STAFF_WEB_SESSION_ID }],
   ]);
   return {
     findApiKeyByPrefix: () => Promise.resolve(null),
@@ -186,7 +190,7 @@ describe('PATCH /v1/admin/owner/pricing/:tier — owner price edit', () => {
     expect(audit.items[0]).toMatchObject({
       action: 'pricing.updated',
       adminAccountId: 'acc-owner',
-      adminKeyId: 'wsk_ws-owner',
+      adminKeyId: `wsk_${OWNER_WEB_SESSION_ID}`,
       targetResourceId: 'api_scale',
       result: 'success',
       inputPayload: { tier: 'api_scale', monthly_cents: 199900 },

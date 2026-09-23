@@ -9,6 +9,7 @@ import type {
   RecordAccountAuditInput,
 } from '../../../src/services/account-audit.js';
 import { keysetPage } from './keyset-page.js';
+import { optionalActingKeyColumns } from '../../../src/lib/acting-key-columns.js';
 
 /**
  * Ascending `(timestamp, id)`; the sort negates it and the keyset boundary derives from
@@ -24,12 +25,17 @@ export class InMemoryAccountAuditRepo implements AccountAuditRepo {
   private readonly rows: AccountAuditEntryRow[] = [];
 
   insert(input: RecordAccountAuditInput): Promise<AccountAuditEntryRow> {
+    // 0138 — validated exactly as the real columns are (a key's uuid, a web
+    // session's `wsk_<uuid>`, or none; anything else throws), and read back the
+    // way the real repo reads it: a web session is not a key, so actorKeyId is
+    // null for it — the row itself exists.
+    const actor = optionalActingKeyColumns(input.actorKeyId);
     const row: AccountAuditEntryRow = {
       id: randomUUID(),
       accountId: input.accountId,
       actorType: input.actorType,
       actorAccountId: input.actorAccountId ?? null,
-      actorKeyId: input.actorKeyId ?? null,
+      actorKeyId: actor.keyId,
       action: input.action,
       targetResourceId: input.targetResourceId ?? null,
       payload: input.payload ?? null,

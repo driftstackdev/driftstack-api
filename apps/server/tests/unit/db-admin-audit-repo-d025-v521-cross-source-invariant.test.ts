@@ -67,10 +67,11 @@ describe('W995 db/admin-audit-repo D-025 + V-521 cross-source invariant', () => 
 
   // ─── insert 8-field values ───────────────────────────────────
 
-  it('CRITICAL insert 8-field values shape — adminAccountId + adminKeyId + action + targetAccountId??null + targetResourceId??null + inputPayload??null + result + ipAddress??null. The ??null normalisation keeps NULL semantics consistent with the schema.', () => {
+  it('CRITICAL insert 9-field values shape — adminAccountId + adminKeyId/adminWebSessionId (exactly one, from actingKeyColumns — 0138) + action + targetAccountId??null + targetResourceId??null + inputPayload??null + result + ipAddress??null. The ??null normalisation keeps NULL semantics consistent with the schema.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/admin-audit-repo.ts'));
     expect(p).toMatch(/adminAccountId: input\.adminAccountId,/);
-    expect(p).toMatch(/adminKeyId: input\.adminKeyId,/);
+    expect(p).toMatch(/const actor = actingKeyColumns\(input\.adminKeyId\);/);
+    expect(p).toMatch(/adminKeyId: actor\.keyId,\s*adminWebSessionId: actor\.webSessionId,/);
     expect(p).toMatch(/action: input\.action,/);
     expect(p).toMatch(/targetAccountId: input\.targetAccountId \?\? null,/);
     expect(p).toMatch(/targetResourceId: input\.targetResourceId \?\? null,/);
@@ -155,7 +156,9 @@ describe('W995 db/admin-audit-repo D-025 + V-521 cross-source invariant', () => 
     );
     expect(p).toMatch(/id: r\.id,/);
     expect(p).toMatch(/adminAccountId: r\.adminAccountId,/);
-    expect(p).toMatch(/adminKeyId: r\.adminKeyId,/);
+    expect(p).toMatch(
+      /adminKeyId: requiredActingKeyIdFromColumns\(r\.adminKeyId, r\.adminWebSessionId\),/,
+    );
     expect(p).toMatch(/action: r\.action,/);
     expect(p).toMatch(/targetAccountId: r\.targetAccountId,/);
     expect(p).toMatch(/targetResourceId: r\.targetResourceId,/);

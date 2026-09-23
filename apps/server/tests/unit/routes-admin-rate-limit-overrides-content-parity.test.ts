@@ -57,7 +57,7 @@ describe('W415.C apps/server/src/routes/admin-rate-limit-overrides.ts content pa
     );
   });
 
-  it('publicOverride: id=rlo_ + account_id=acc_ + bucket_key/capacity/refill_per_second/reason + expires_at ISO + set_by_key_id=key_ + created/updated ISO', () => {
+  it('publicOverride: id=rlo_ + account_id=acc_ + bucket_key/capacity/refill_per_second/reason + expires_at ISO + set_by_key_id=key_ (wsk_ for a web session, via publicActingKeyId — 0138) + created/updated ISO', () => {
     expect(body).toMatch(
       /function publicOverride\(r: RateLimitOverrideRecord\): Record<string, unknown> \{/,
     );
@@ -68,7 +68,7 @@ describe('W415.C apps/server/src/routes/admin-rate-limit-overrides.ts content pa
     expect(body).toMatch(/refill_per_second: r\.refillPerSecond,/);
     expect(body).toMatch(/reason: r\.reason,/);
     expect(body).toMatch(/expires_at: r\.expiresAt\.toISOString\(\),/);
-    expect(body).toMatch(/set_by_key_id: `key_\$\{r\.setByKeyId\}`,/);
+    expect(body).toMatch(/set_by_key_id: publicActingKeyId\(r\.setByKeyId\),/);
     expect(body).toMatch(/created_at: r\.createdAt\.toISOString\(\),/);
     expect(body).toMatch(/updated_at: r\.updatedAt\.toISOString\(\),/);
   });

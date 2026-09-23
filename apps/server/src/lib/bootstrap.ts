@@ -3108,8 +3108,9 @@ export async function createProductionDeps(
   //
   // V-783 — this used to claim the purge records each row in the admin audit
   // log as an actor-less system action. That was false, and unachievable:
-  // admin_audit_log.admin_account_id and .admin_key_id are both NOT NULL with
-  // FKs, account_audit_log requires an accountId, and a status subscriber is an
+  // admin_audit_log.admin_account_id is NOT NULL with an FK and every row must
+  // name exactly one acting key or web session (0138's CHECK), account_audit_log
+  // requires an accountId, and a status subscriber is an
   // anonymous email fired at by a sweep with no actor — there is no row that
   // could be inserted. Migration 0027 reserved the 'status_subscriber.purged'
   // enum value for a write that nothing has ever performed. The log line below

@@ -66,9 +66,11 @@ import {
   ConflictError,
   DriverError,
   DriverNotIntegratedError,
+  ForbiddenError,
   NotFoundError,
   SessionDestroyedError,
 } from '../lib/errors.js';
+import { WEB_SESSION_ACTING_KEY_PREFIX } from '../lib/acting-key-columns.js';
 import {
   requireArchetypeForTier,
   requireScope as throwIfMissingScope,
@@ -497,6 +499,16 @@ export class SessionsService {
       profileId?: string;
     } = {},
   ): Promise<SessionRecord> {
+    // A session belongs to the API key that started it: `sessions.api_key_id`
+    // is a real key, published on every session and used when that key is
+    // revoked. A signed-in browser acts as `wsk_<uuid>`, which is not a key, so
+    // it is refused here — before any work — instead of failing at the insert
+    // with a 500 (web-session actor audit, excluded column).
+    if (ctx.apiKey.id.startsWith(WEB_SESSION_ACTING_KEY_PREFIX)) {
+      throw new ForbiddenError(
+        'Automation sessions are started with an API key. Create one under API keys and use it to start sessions.',
+      );
+    }
     // V-326e1 — when effectiveAccountId is set (route layer resolved
     // X-Driftstack-Account + verified the caller has 'admin' role on
     // the owner's team), the new session is OWNED by the team owner

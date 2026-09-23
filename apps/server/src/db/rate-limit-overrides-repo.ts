@@ -10,6 +10,7 @@ import type {
 import type { Database } from './client.js';
 import { rateLimitOverrides } from './schema.js';
 import { parseUuidCursor } from '../lib/keyset-cursor.js';
+import { actingKeyColumns, requiredActingKeyIdFromColumns } from '../lib/acting-key-columns.js';
 
 // V-1241 — `refill_per_second_centi` is an INTEGER column holding hundredths, so a
 // requested refill rate does not survive a round-trip unchanged. Exported because the
@@ -46,6 +47,10 @@ export class DrizzleRateLimitOverridesRepo implements RateLimitOverridesRepo {
 
   async upsert(input: SetOverrideInput): Promise<RateLimitOverrideRecord> {
     const refillCenti = toRefillCenti(input.refillPerSecond);
+    // 0138 — the admin that set it: a key, or a web session (`wsk_<uuid>`), in
+    // its own column. A re-set replaces BOTH, so a row never keeps the previous
+    // setter's column beside the new one.
+    const actor = actingKeyColumns(input.setByKeyId);
     const [row] = await this.database.db
       .insert(rateLimitOverrides)
       .values({
@@ -55,7 +60,8 @@ export class DrizzleRateLimitOverridesRepo implements RateLimitOverridesRepo {
         refillPerSecondCenti: refillCenti,
         reason: input.reason ?? null,
         expiresAt: input.expiresAt,
-        setByKeyId: input.setByKeyId,
+        setByKeyId: actor.keyId,
+        setByWebSessionId: actor.webSessionId,
       })
       .onConflictDoUpdate({
         target: [rateLimitOverrides.accountId, rateLimitOverrides.bucketKey],
@@ -64,7 +70,8 @@ export class DrizzleRateLimitOverridesRepo implements RateLimitOverridesRepo {
           refillPerSecondCenti: refillCenti,
           reason: input.reason ?? null,
           expiresAt: input.expiresAt,
-          setByKeyId: input.setByKeyId,
+          setByKeyId: actor.keyId,
+          setByWebSessionId: actor.webSessionId,
           updatedAt: new Date(),
         },
       })
@@ -146,7 +153,7 @@ function toRecord(r: typeof rateLimitOverrides.$inferSelect): RateLimitOverrideR
     refillPerSecond: r.refillPerSecondCenti / REFILL_CENTI_SCALE,
     reason: r.reason,
     expiresAt: r.expiresAt,
-    setByKeyId: r.setByKeyId,
+    setByKeyId: requiredActingKeyIdFromColumns(r.setByKeyId, r.setByWebSessionId),
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };

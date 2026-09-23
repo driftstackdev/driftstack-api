@@ -111,11 +111,11 @@ describe('W1027 routes/admin-audit-log V-484 + V-521 cross-source invariant', ()
     expect(p).toMatch(/\/\/ customer-side filter\)\./);
   });
 
-  it('CRITICAL publicEntry 10-field shape — id + admin_account_id (acc_ prefix) + admin_key_id (key_ prefix) + action + nullable target_account_id (acc_ prefix) + target_resource_id + input_payload + result + ip_address + timestamp ISO.', () => {
+  it('CRITICAL publicEntry 10-field shape — id + admin_account_id (acc_ prefix) + admin_key_id (key_ prefix, or wsk_ for a web session — 0138) + action + nullable target_account_id (acc_ prefix) + target_resource_id + input_payload + result + ip_address + timestamp ISO.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/admin-audit-log.ts'));
     expect(p).toMatch(/id: row\.id,/);
     expect(p).toMatch(/admin_account_id: `acc_\$\{row\.adminAccountId\}`,/);
-    expect(p).toMatch(/admin_key_id: `key_\$\{row\.adminKeyId\}`,/);
+    expect(p).toMatch(/admin_key_id: publicActingKeyId\(row\.adminKeyId\),/);
     expect(p).toMatch(/action: row\.action,/);
     expect(p).toMatch(
       /target_account_id: row\.targetAccountId \? `acc_\$\{row\.targetAccountId\}` : null,/,

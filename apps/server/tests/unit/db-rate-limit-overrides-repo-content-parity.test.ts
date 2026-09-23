@@ -56,9 +56,9 @@ describe('W444.B apps/server/src/db/rate-limit-overrides-repo.ts content parity'
     expect(body).toMatch(/const refillCenti = toRefillCenti\(input\.refillPerSecond\);/);
   });
 
-  it("upsert: 7-field values (accountId + bucketKey + capacity + refillPerSecondCenti + reason nullable + expiresAt + setByKeyId); onConflictDoUpdate target=[accountId, bucketKey] + updatedAt:new Date() on conflict; throws 'rate_limit_overrides upsert returned no row'", () => {
+  it("upsert: 7-field values (accountId + bucketKey + capacity + refillPerSecondCenti + reason nullable + expiresAt + setByKeyId/setByWebSessionId split by actingKeyColumns (0138)); onConflictDoUpdate target=[accountId, bucketKey] + updatedAt:new Date() on conflict; throws 'rate_limit_overrides upsert returned no row'", () => {
     expect(body).toMatch(
-      /\.values\(\{\s*accountId: input\.accountId,\s*bucketKey: input\.bucketKey,\s*capacity: input\.capacity,\s*refillPerSecondCenti: refillCenti,\s*reason: input\.reason \?\? null,\s*expiresAt: input\.expiresAt,\s*setByKeyId: input\.setByKeyId,\s*\}\)\s*\.onConflictDoUpdate\(\{\s*target: \[rateLimitOverrides\.accountId, rateLimitOverrides\.bucketKey\],\s*set: \{\s*capacity: input\.capacity,\s*refillPerSecondCenti: refillCenti,\s*reason: input\.reason \?\? null,\s*expiresAt: input\.expiresAt,\s*setByKeyId: input\.setByKeyId,\s*updatedAt: new Date\(\),\s*\},\s*\}\)\s*\.returning\(\);\s*if \(!row\) throw new Error\('rate_limit_overrides upsert returned no row'\);/,
+      /\.values\(\{\s*accountId: input\.accountId,\s*bucketKey: input\.bucketKey,\s*capacity: input\.capacity,\s*refillPerSecondCenti: refillCenti,\s*reason: input\.reason \?\? null,\s*expiresAt: input\.expiresAt,\s*setByKeyId: actor\.keyId,\s*setByWebSessionId: actor\.webSessionId,\s*\}\)\s*\.onConflictDoUpdate\(\{\s*target: \[rateLimitOverrides\.accountId, rateLimitOverrides\.bucketKey\],\s*set: \{\s*capacity: input\.capacity,\s*refillPerSecondCenti: refillCenti,\s*reason: input\.reason \?\? null,\s*expiresAt: input\.expiresAt,\s*setByKeyId: actor\.keyId,\s*setByWebSessionId: actor\.webSessionId,\s*updatedAt: new Date\(\),\s*\},\s*\}\)\s*\.returning\(\);\s*if \(!row\) throw new Error\('rate_limit_overrides upsert returned no row'\);/,
     );
   });
 
@@ -89,7 +89,7 @@ describe('W444.B apps/server/src/db/rate-limit-overrides-repo.ts content parity'
 
   it('toRecord: read-side divides centi by 100 (refillPerSecond: r.refillPerSecondCenti / 100); 9-field record', () => {
     expect(body).toMatch(
-      /function toRecord\(r: typeof rateLimitOverrides\.\$inferSelect\): RateLimitOverrideRecord \{\s*return \{\s*id: r\.id,\s*accountId: r\.accountId,\s*bucketKey: r\.bucketKey,\s*capacity: r\.capacity,\s*refillPerSecond: r\.refillPerSecondCenti \/ REFILL_CENTI_SCALE,\s*reason: r\.reason,\s*expiresAt: r\.expiresAt,\s*setByKeyId: r\.setByKeyId,\s*createdAt: r\.createdAt,\s*updatedAt: r\.updatedAt,\s*\};\s*\}/,
+      /function toRecord\(r: typeof rateLimitOverrides\.\$inferSelect\): RateLimitOverrideRecord \{\s*return \{\s*id: r\.id,\s*accountId: r\.accountId,\s*bucketKey: r\.bucketKey,\s*capacity: r\.capacity,\s*refillPerSecond: r\.refillPerSecondCenti \/ REFILL_CENTI_SCALE,\s*reason: r\.reason,\s*expiresAt: r\.expiresAt,\s*setByKeyId: requiredActingKeyIdFromColumns\(r\.setByKeyId, r\.setByWebSessionId\),\s*createdAt: r\.createdAt,\s*updatedAt: r\.updatedAt,\s*\};\s*\}/,
     );
   });
 

@@ -85,7 +85,10 @@ describe('W1009 db/rate-limit-overrides-repo V-016 cross-source invariant', () =
     expect(p).toMatch(/refillPerSecondCenti: refillCenti,/);
     expect(p).toMatch(/reason: input\.reason \?\? null,/);
     expect(p).toMatch(/expiresAt: input\.expiresAt,/);
-    expect(p).toMatch(/setByKeyId: input\.setByKeyId,/);
+    expect(p).toMatch(/const actor = actingKeyColumns\(input\.setByKeyId\);/);
+    expect(p).toMatch(
+      /setByKeyId: actor\.keyId,\s*setByWebSessionId: actor\.webSessionId,\s*updatedAt: new Date\(\),/,
+    );
     expect(p).toMatch(/updatedAt: new Date\(\),/);
     expect(p).toMatch(
       /if \(!row\) throw new Error\('rate_limit_overrides upsert returned no row'\);/,
@@ -137,7 +140,9 @@ describe('W1009 db/rate-limit-overrides-repo V-016 cross-source invariant', () =
     expect(p).toMatch(/refillPerSecond: r\.refillPerSecondCenti \/ REFILL_CENTI_SCALE,/);
     expect(p).toMatch(/reason: r\.reason,/);
     expect(p).toMatch(/expiresAt: r\.expiresAt,/);
-    expect(p).toMatch(/setByKeyId: r\.setByKeyId,/);
+    expect(p).toMatch(
+      /setByKeyId: requiredActingKeyIdFromColumns\(r\.setByKeyId, r\.setByWebSessionId\),/,
+    );
     expect(p).toMatch(/createdAt: r\.createdAt,/);
     expect(p).toMatch(/updatedAt: r\.updatedAt,/);
   });

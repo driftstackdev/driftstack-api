@@ -273,7 +273,13 @@ describe('migration 0133 adds the fourth leg and the shadow charge rule, and not
     expect(journal.entries[at + 4]?.when).toBeGreaterThan(
       journal.entries[at + 3]?.when ?? Infinity,
     );
-    expect(journal.entries, 'and 0137 is the last one').toHaveLength(138);
+    // 0138 (an action taken from a signed-in browser is recorded against its
+    // web session) follows 0137.
+    expect(journal.entries[at + 5]?.tag).toBe('0138_web_session_actor_columns');
+    expect(journal.entries[at + 5]?.when).toBeGreaterThan(
+      journal.entries[at + 4]?.when ?? Infinity,
+    );
+    expect(journal.entries, 'and 0138 is the last one').toHaveLength(139);
   });
 
   it('CRITICAL schema.ts names the trigger this migration installs, says where the shadow rule lives, and carries the one sentence about the relaxed clawback guard that 0133 is the record of', () => {

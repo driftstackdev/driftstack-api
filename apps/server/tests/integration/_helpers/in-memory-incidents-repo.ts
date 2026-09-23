@@ -15,6 +15,20 @@ import type {
 } from '../../../src/services/incidents.js';
 import { NotFoundError } from '../../../src/lib/errors-helpers.js';
 import { INCIDENT_PAGE_DEFAULT } from '../../../src/db/incidents-repo.js';
+import {
+  actingKeyIdFromColumns,
+  optionalActingKeyColumns,
+} from '../../../src/lib/acting-key-columns.js';
+
+/**
+ * 0138 — an actor id validated exactly as the real columns validate it (a key's
+ * uuid, a web session's `wsk_<uuid>`, or none for the health poller; anything
+ * else throws) and read back the way the real repo reads it back.
+ */
+function storedActor(actingKeyId: string | null): string | null {
+  const actor = optionalActingKeyColumns(actingKeyId);
+  return actingKeyIdFromColumns(actor.keyId, actor.webSessionId);
+}
 
 /**
  * V-1255 — every INTERFACE read hands back a SNAPSHOT, never the stored object.
@@ -42,6 +56,8 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
     input: CreateIncidentInput,
     explicitId?: string,
   ): Promise<CreateIncidentWriteResult> {
+    // Before anything else, as DrizzleIncidentsRepo validates before its transaction.
+    const createdBy = storedActor(input.createdByAdminKeyId);
     if (explicitId !== undefined) {
       const existing = this.incidents.find((row) => row.id === explicitId);
       if (existing) {
@@ -83,7 +99,7 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
       startedAt: input.startedAt,
       resolvedAt: (input.status ?? 'investigating') === 'resolved' ? now : null,
       createdByAdminId: input.createdByAdminId,
-      createdByAdminKeyId: input.createdByAdminKeyId,
+      createdByAdminKeyId: createdBy,
       autoProbeTarget: input.autoProbeTarget ?? null,
       createdAt: now,
       updatedAt: now,
@@ -94,7 +110,7 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
       message: input.description,
       status: row.status,
       postedByAdminId: input.createdByAdminId,
-      postedByAdminKeyId: input.createdByAdminKeyId,
+      postedByAdminKeyId: createdBy,
       postedAt: now,
     };
     this.incidents.push(row);
@@ -208,7 +224,7 @@ export class InMemoryIncidentsRepo implements IncidentsRepo {
       message: input.message,
       status: input.status,
       postedByAdminId: input.postedByAdminId,
-      postedByAdminKeyId: input.postedByAdminKeyId,
+      postedByAdminKeyId: storedActor(input.postedByAdminKeyId),
       postedAt: new Date(),
     };
     this.updates.push(update);

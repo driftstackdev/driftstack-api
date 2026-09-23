@@ -85,7 +85,11 @@ beforeAll(async () => {
       ciphertext bytea NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now(),
-      updated_by_key_id uuid
+      updated_by_key_id uuid,
+      -- 0138: the repo writes the owner's key OR their web session, never both.
+      updated_by_web_session_id uuid,
+      CONSTRAINT platform_secrets_at_most_one_actor
+        CHECK (num_nonnulls(updated_by_key_id, updated_by_web_session_id) <= 1)
     )
   `);
   client = postgres(DB_URL, {

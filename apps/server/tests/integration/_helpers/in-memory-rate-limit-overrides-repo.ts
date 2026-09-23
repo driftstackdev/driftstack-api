@@ -10,6 +10,10 @@ import type {
 } from '../../../src/services/rate-limit-overrides.js';
 import { quantizeRefillPerSecond } from '../../../src/db/rate-limit-overrides-repo.js';
 import { parseUuidCursor } from '../../../src/lib/keyset-cursor.js';
+import {
+  actingKeyColumns,
+  requiredActingKeyIdFromColumns,
+} from '../../../src/lib/acting-key-columns.js';
 import type { InMemoryAuthRepo } from './in-memory-auth-repo.js';
 
 /**
@@ -38,6 +42,9 @@ export class InMemoryRateLimitOverridesRepo implements RateLimitOverridesRepo {
     // used to store it verbatim, which let a test assert 1.234 while production served
     // 1.23, and let a refill of 0 read back as 0 where the database floors it at 0.01.
     const refillPerSecond = quantizeRefillPerSecond(input.refillPerSecond);
+    // 0138 — validated exactly as the real columns are, and read back as the real
+    // repo reads it back (a key's uuid, or a web session's `wsk_<uuid>`).
+    const setBy = actingKeyColumns(input.setByKeyId);
     const record: RateLimitOverrideRecord = {
       id: existing?.id ?? randomUUID(),
       accountId: input.accountId,
@@ -46,7 +53,7 @@ export class InMemoryRateLimitOverridesRepo implements RateLimitOverridesRepo {
       refillPerSecond,
       reason: input.reason ?? null,
       expiresAt: input.expiresAt,
-      setByKeyId: input.setByKeyId,
+      setByKeyId: requiredActingKeyIdFromColumns(setBy.keyId, setBy.webSessionId),
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };

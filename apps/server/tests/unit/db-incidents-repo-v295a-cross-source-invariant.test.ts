@@ -161,7 +161,12 @@ describe('W999 db/incidents-repo V-295a cross-source invariant', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/incidents-repo.ts'));
     expect(p).toMatch(/status: 'resolved',/);
     expect(p).toMatch(/postedByAdminId: input\.postedByAdminId,/);
-    expect(p).toMatch(/postedByAdminKeyId: input\.postedByAdminKeyId,/);
+    // 0138 — the actor goes through postedBy(), which writes the key column or the
+    // web-session column (never both) via optionalActingKeyColumns.
+    expect(p).toMatch(/\.\.\.postedBy\(input\.postedByAdminKeyId\),/);
+    expect(p).toMatch(
+      /function postedBy\(actingKeyId: string \| null\)[\s\S]*?const actor = optionalActingKeyColumns\(actingKeyId\);\s*return \{ postedByAdminKeyId: actor\.keyId, postedByAdminWebSessionId: actor\.webSessionId \};/,
+    );
     expect(p).toMatch(/const now = new Date\(\);/);
     expect(p).toMatch(/\.set\(\{ status: 'resolved', resolvedAt: now, updatedAt: now \}\)/);
   });
@@ -194,7 +199,9 @@ describe('W999 db/incidents-repo V-295a cross-source invariant', () => {
     expect(p).toMatch(/startedAt: row\.startedAt,/);
     expect(p).toMatch(/resolvedAt: row\.resolvedAt,/);
     expect(p).toMatch(/createdByAdminId: row\.createdByAdminId,/);
-    expect(p).toMatch(/createdByAdminKeyId: row\.createdByAdminKeyId,/);
+    expect(p).toMatch(
+      /createdByAdminKeyId: actingKeyIdFromColumns\(\s*row\.createdByAdminKeyId,\s*row\.createdByAdminWebSessionId,\s*\),/,
+    );
     expect(p).toMatch(/autoProbeTarget: row\.autoProbeTarget,/);
     expect(p).toMatch(/createdAt: row\.createdAt,/);
     expect(p).toMatch(/updatedAt: row\.updatedAt,/);
@@ -210,7 +217,9 @@ describe('W999 db/incidents-repo V-295a cross-source invariant', () => {
     expect(p).toMatch(/message: row\.message,/);
     expect(p).toMatch(/status: row\.status,/);
     expect(p).toMatch(/postedByAdminId: row\.postedByAdminId,/);
-    expect(p).toMatch(/postedByAdminKeyId: row\.postedByAdminKeyId,/);
+    expect(p).toMatch(
+      /postedByAdminKeyId: actingKeyIdFromColumns\(\s*row\.postedByAdminKeyId,\s*row\.postedByAdminWebSessionId,\s*\),/,
+    );
     expect(p).toMatch(/postedAt: row\.postedAt,/);
   });
 
