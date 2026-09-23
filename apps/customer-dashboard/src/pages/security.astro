@@ -657,6 +657,11 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function loadAudit() {
         if (!token || !auditList) return;
+        // The page is revealed before this answers (see the reveal below), so
+        // the signed-out placeholder must not show while it loads — the same
+        // as loadWebSessions.
+        const auditEmpty = auditList.querySelector('[data-field="audit-empty"]');
+        if (auditEmpty) auditEmpty.classList.add('hidden');
         authedFetch('/v1/account/audit-log?limit=20', { method: 'GET' })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((body) => renderAudit(body.data || []))
@@ -737,6 +742,8 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function loadOauthLinks() {
         if (!token || !oauthLinksList) return;
+        const oauthLinksEmpty = oauthLinksList.querySelector('[data-field="oauth-links-empty"]');
+        if (oauthLinksEmpty) oauthLinksEmpty.classList.add('hidden');
         authedFetch('/v1/account/me/oauth-links', { method: 'GET' })
           .then((r) => {
             if (r.status === 404) {
