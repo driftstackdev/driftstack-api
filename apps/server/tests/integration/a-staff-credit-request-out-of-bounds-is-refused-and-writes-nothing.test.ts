@@ -8,14 +8,18 @@
 // `expires_at` is past, and a second rate card on an `effective_at` a live card
 // already has (23505 on `credit_rate_cards_live_effective_unique`).
 //
-// The credit bound is ONE constant in api-types (`ADMIN_CREDITS_MAX_PER_REQUEST`,
-// 1,000,000 credits a request); both the goodwill and the override schema read it.
+// Each credit bound is ONE constant in api-types: a goodwill grant's
+// `ADMIN_CREDITS_MAX_PER_REQUEST` (1,000,000 credits a request), and a monthly
+// figure's `ADMIN_MONTHLY_CREDITS_MAX` (10,000,000 a month, the storage bound),
+// which the override PUT shares with the Enterprise tier change (S13–S16
+// re-audit #7: the PUT used to read the goodwill bound, so it refused a contract
+// the tier change had written).
 
 import { randomUUID } from 'node:crypto';
 import type { LightMyRequestResponse } from 'fastify';
 import type postgres from 'postgres';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { ADMIN_CREDITS_MAX_PER_REQUEST } from '@driftstack/api-types';
+import { ADMIN_CREDITS_MAX_PER_REQUEST, ADMIN_MONTHLY_CREDITS_MAX } from '@driftstack/api-types';
 import { openLedgerDatabase } from './_helpers/credit-ledger-fixtures.js';
 import { newTaskAccount } from './_helpers/credit-reservation-fixtures.js';
 import {
@@ -142,8 +146,9 @@ describe.skipIf(!RUN_DB_TESTS)(
       expect(harness).not.toBeNull();
     });
 
-    it('the bound is one million credits a request', () => {
+    it('the bounds are one million credits a goodwill request and ten million a month', () => {
       expect(ADMIN_CREDITS_MAX_PER_REQUEST).toBe(1_000_000);
+      expect(ADMIN_MONTHLY_CREDITS_MAX).toBe(10_000_000);
     });
 
     describe('goodwill credits', () => {
@@ -211,15 +216,27 @@ describe.skipIf(!RUN_DB_TESTS)(
         expect(await overrides(accountId)).toBe(0);
       });
 
-      it('CRITICAL monthly_credits past the bound is a 400 and writes no override', async () => {
+      it('CRITICAL monthly_credits past the monthly bound is a 400 and writes no override', async () => {
         const f = await app();
         const accountId = await target(f);
         const res = await putOverride(f, accountId, {
-          monthly_credits: ADMIN_CREDITS_MAX_PER_REQUEST + 1,
+          monthly_credits: ADMIN_MONTHLY_CREDITS_MAX + 1,
           reason: 'contract',
         });
         expect(res.statusCode, res.body).toBe(400);
         expect(await overrides(accountId)).toBe(0);
+      });
+
+      it('CRITICAL a 2,000,000-credit contract — past a goodwill grant’s bound, within the monthly one the tier change also accepts — is written (re-audit #7)', async () => {
+        const f = await app();
+        const accountId = await target(f);
+        const res = await putOverride(f, accountId, {
+          monthly_credits: 2_000_000,
+          reason: 'contract',
+        });
+        expect(res.statusCode, res.body).toBe(200);
+        expect(res.json<{ monthly_credits: number }>().monthly_credits).toBe(2_000_000);
+        expect(await overrides(accountId)).toBe(1);
       });
 
       it('CONTROL — a future expires_at is accepted', async () => {

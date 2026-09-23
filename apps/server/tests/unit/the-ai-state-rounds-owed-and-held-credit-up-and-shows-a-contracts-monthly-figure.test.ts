@@ -17,6 +17,12 @@
 // admin-assigned plan read the tier default instead of the figure it is
 // granted. A LIVE override's figure is now shown; `null` only for an
 // Enterprise account with none.
+//
+// The S13–S16 re-audit (#2) narrowed that to the figure the grant ACTUALLY
+// uses (`planMonthlyIncludedCredits`): the current window's level when there is
+// one, else the higher of the tier's figure and a live override's, a 0-credit
+// override counting as none. Proved through the real route in
+// the-ai-plan-figure-is-the-figure-the-monthly-grant-uses.test.ts.
 
 import { describe, expect, it } from 'vitest';
 import { AccountAiStateSchema } from '@driftstack/api-types';
@@ -24,6 +30,7 @@ import {
   buildAccountAiState,
   buildLegacyAccountAiState,
   livePlanOverrideCredits,
+  planMonthlyIncludedCredits,
   type AccountAiStateInputs,
 } from '../../src/services/ai-account-state.js';
 
@@ -49,7 +56,7 @@ function state(over: Partial<AccountAiStateInputs> = {}): AccountAiStateInputs {
     debtReason: null,
     tasksInFlight: 0,
     minStartMicro: 3 * MICRO,
-    planOverrideMonthlyCredits: null,
+    planMonthlyIncludedCredits: 5_000,
     rateCard: { version: 1, effectiveAt: new Date('2026-01-01T00:00:00Z') },
     nextRateCard: null,
     ...over,
@@ -136,41 +143,95 @@ describe('an extra lot excludes what a running task holds on it (#3)', () => {
 });
 
 describe('plan.monthly_included_credits reads a live plan override (#6)', () => {
-  it('CRITICAL an Enterprise account with a contract shows the contract figure, not null', () => {
+  it('CRITICAL an Enterprise account with a contract and no window shows the contract figure, not null', () => {
+    const figure = planMonthlyIncludedCredits({
+      tier: 'enterprise',
+      currentWindowLevelMicro: null,
+      liveOverrideCredits: 40_000,
+    });
+    expect(figure).toBe(40_000);
     const body = buildAccountAiState(
-      state({ tier: 'enterprise', planOverrideMonthlyCredits: 40_000 }),
+      state({ tier: 'enterprise', planMonthlyIncludedCredits: figure }),
     );
     expect(body.plan.monthly_included_credits).toBe(40_000);
     expect(AccountAiStateSchema.safeParse(body).success).toBe(true);
   });
 
-  it('CRITICAL an admin-assigned plan shows the figure the override grants, not the tier default', () => {
-    const body = buildAccountAiState(
-      state({ tier: 'team_manual', planOverrideMonthlyCredits: 7_500 }),
-    );
-    expect(body.plan.monthly_included_credits).toBe(7_500);
+  it('CRITICAL an admin-assigned plan above the tier shows the figure the override grants, not the tier default', () => {
+    expect(
+      planMonthlyIncludedCredits({
+        tier: 'team_manual',
+        currentWindowLevelMicro: null,
+        liveOverrideCredits: 7_500,
+      }),
+    ).toBe(7_500);
   });
 
-  it('an Enterprise account with NO contract is the only null', () => {
+  it('an Enterprise account with NO live override is the only null', () => {
     expect(
-      buildAccountAiState(state({ tier: 'enterprise', planOverrideMonthlyCredits: null })).plan
-        .monthly_included_credits,
+      planMonthlyIncludedCredits({
+        tier: 'enterprise',
+        currentWindowLevelMicro: null,
+        liveOverrideCredits: null,
+      }),
     ).toBeNull();
     expect(
-      buildAccountAiState(state({ tier: 'team_manual', planOverrideMonthlyCredits: null })).plan
-        .monthly_included_credits,
+      planMonthlyIncludedCredits({
+        tier: 'team_manual',
+        currentWindowLevelMicro: null,
+        liveOverrideCredits: null,
+      }),
     ).toBe(5_000);
   });
 
-  it('a LEGACY account reads the override the same way — the plan is a property of the account, not of its billing mode', () => {
+  it('a LEGACY account reads the figure the same way — the plan is a property of the account, not of its billing mode', () => {
     const legacy = buildLegacyAccountAiState({
       tier: 'enterprise',
       ownKey: { hasKey: false, usable: false, setAt: null, expiresAt: null },
       rateCard: { version: 1, effectiveAt: new Date('2026-01-01T00:00:00Z') },
       nextRateCard: null,
-      planOverrideMonthlyCredits: 12_000,
+      planMonthlyIncludedCredits: 12_000,
     });
     expect(legacy.plan.monthly_included_credits).toBe(12_000);
+  });
+});
+
+describe('planMonthlyIncludedCredits — the figure the grant uses (re-audit #2)', () => {
+  it('CRITICAL a window over now wins over every other figure: its level is what was granted', () => {
+    expect(
+      planMonthlyIncludedCredits({
+        tier: 'enterprise',
+        currentWindowLevelMicro: 30_000 * MICRO,
+        liveOverrideCredits: 20_000,
+      }),
+    ).toBe(30_000);
+    expect(
+      planMonthlyIncludedCredits({
+        tier: 'team_manual',
+        currentWindowLevelMicro: 3_000 * MICRO,
+        liveOverrideCredits: null,
+      }),
+    ).toBe(3_000);
+  });
+
+  it('CRITICAL with no window the higher figure wins, as the grant picks: a 3,000 override on Team reads 5,000', () => {
+    expect(
+      planMonthlyIncludedCredits({
+        tier: 'team_manual',
+        currentWindowLevelMicro: null,
+        liveOverrideCredits: 3_000,
+      }),
+    ).toBe(5_000);
+  });
+
+  it('a window level is shown in whole credits, rounded down', () => {
+    expect(
+      planMonthlyIncludedCredits({
+        tier: 'team_manual',
+        currentWindowLevelMicro: 5_000 * MICRO + 999_999,
+        liveOverrideCredits: null,
+      }),
+    ).toBe(5_000);
   });
 });
 
@@ -206,7 +267,7 @@ describe('livePlanOverrideCredits — only an override in force counts (#6)', ()
     ).toBeNull();
   });
 
-  it('a zero-credit contract is a real figure, 0 — not "no contract"', () => {
-    expect(livePlanOverrideCredits({ ...base, monthlyCredits: 0 }, AT)).toBe(0);
+  it('CRITICAL a zero-credit override counts as no override — the grant skips it (re-audit #2)', () => {
+    expect(livePlanOverrideCredits({ ...base, monthlyCredits: 0 }, AT)).toBeNull();
   });
 });

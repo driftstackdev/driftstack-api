@@ -552,9 +552,17 @@ export class DrizzleCreditLedgerRepo {
    * transaction of its own. Shaped for two callers, per the plan: the old
    * `PATCH /v1/account/me/bundled-llm-settings` (S13, `setBy: 'customer'`
    * only) and the new `PATCH /v1/account/me/ai-settings` (S14, same shape).
-   * Neither caller nor this method re-checks `billing_mode` — both routes
-   * gate on it before ever reaching here, the same way `lockAccount` and
-   * `ensureAccount` trust their callers to have read what they need first.
+   *
+   * ⛔ IT WRITES ONLY WHILE THE ACCOUNT IS MOVED, DECIDED UNDER ITS LOCK. Both
+   * callers decide "moved" from an UNLOCKED read, and a rollback can commit
+   * between that read and this write: written anyway, the choice landed in a
+   * column a legacy account never reads, behind a 200 that described it (the
+   * S13–S16 re-audit, #5). So `billing_mode` is re-read from the row
+   * `lockAccount` has just locked — the lock a rollback (and a cutover) takes
+   * too, so neither can commit in between — and on an account that is not
+   * `'credits'` NOTHING is written and the row comes back as it stands. The
+   * caller reads `billingMode` off the answer and, on `'legacy'`, answers as
+   * its legacy path would.
    *
    * `aiSource: null` writes automatic (rule 4 of §4.3): the customer's own
    * key when the plan allows one and it is usable, else credits.
@@ -564,7 +572,8 @@ export class DrizzleCreditLedgerRepo {
     args: { readonly aiSource: AiSource | null; readonly setBy: AiSourceSetBy },
   ): Promise<CreditAccountRecord> {
     return this.transaction(async (tx) => {
-      await this.lockAccount(tx, accountId);
+      const locked = await this.lockAccount(tx, accountId);
+      if (locked.billingMode !== 'credits') return locked;
       return this.setAiSourceIn(tx, accountId, args);
     });
   }

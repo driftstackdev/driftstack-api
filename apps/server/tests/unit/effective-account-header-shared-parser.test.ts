@@ -53,6 +53,10 @@ const CONSUMER_ROUTES = [
   'apps/server/src/routes/account-ai.ts',
   // S14 audit #9 — GET /v1/ai/models answers for the effective account's plan.
   'apps/server/src/routes/ai-models.ts',
+  // S13–S16 re-audit #3 — the old PATCH /v1/account/me/bundled-llm-settings
+  // resolves the header only to refuse any account but the caller's own, the
+  // way PATCH /v1/account/me/ai-settings does.
+  'apps/server/src/routes/account-bundled-llm.ts',
 ];
 
 /**

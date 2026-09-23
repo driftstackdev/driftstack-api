@@ -13,9 +13,16 @@
 // — this file composes those into the shapes the admin route sends and reads,
 // and adds the one thing that lives above both: turning a refusal list into an
 // HTTP-shaped answer, and turning a card's dates into its lifecycle status.
+//
+// ROUNDING, the customer view's rule (`ai-account-state.ts`): what an account
+// HAS rounds DOWN; what it OWES, and what a forgiveness wiped out, rounds UP
+// (`chargeCreditsForDisplay`). Rounded down, 500 µcr of debt read
+// `debt_credits: 0` beside a debt reason, and forgiving it read
+// `forgiven_credits: 0` (S13–S16 re-audit #6).
 
 import {
   balanceCreditsForDisplay,
+  chargeCreditsForDisplay,
   type AdminCreditAdjustmentResponse,
   type AdminCreditLotView,
   type AdminCreditsAccountState,
@@ -55,7 +62,9 @@ export function buildAdminCreditLotView(lot: CreditLotRecord): AdminCreditLotVie
     kind: lot.kind,
     granted_credits: balanceCreditsForDisplay(lot.grantedMicro),
     remaining_credits: balanceCreditsForDisplay(lot.remainingMicro),
-    held_credits: balanceCreditsForDisplay(lot.heldMicro),
+    // Held credit rounds UP, as on the customer view: 500 µcr held is 0.001
+    // unavailable, never "nothing held" beside a lot that cannot be spent.
+    held_credits: chargeCreditsForDisplay(lot.heldMicro),
     starts_at: isoOf(lot.startsAt),
     expires_at: isoOf(lot.expiresAt),
   };
@@ -120,7 +129,7 @@ export function buildAdminCreditsAccountState(
           },
     lots: args.lots.map(buildAdminCreditLotView),
     available_credits: balanceCreditsForDisplay(args.availableMicro),
-    debt_credits: balanceCreditsForDisplay(args.debtMicro),
+    debt_credits: chargeCreditsForDisplay(args.debtMicro),
     debt_reason: args.debtMicro > 0 ? args.debtReason : null,
     reservations_in_flight: Math.max(0, args.reservationsInFlight),
     plan_override: args.planOverride === null ? null : buildPlanOverrideView(args.planOverride),
@@ -154,7 +163,7 @@ export function buildGoodwillAdjustmentResponse(args: {
     kind: 'goodwill',
     lot: buildAdminCreditLotView(args.lot),
     forgiven_credits: null,
-    debt_credits: balanceCreditsForDisplay(args.debtMicro),
+    debt_credits: chargeCreditsForDisplay(args.debtMicro),
   };
 }
 
@@ -167,8 +176,8 @@ export function buildForgiveDebtAdjustmentResponse(args: {
     applied: args.applied,
     kind: 'forgive_debt',
     lot: null,
-    forgiven_credits: balanceCreditsForDisplay(args.forgivenMicro),
-    debt_credits: balanceCreditsForDisplay(args.debtMicro),
+    forgiven_credits: chargeCreditsForDisplay(args.forgivenMicro),
+    debt_credits: chargeCreditsForDisplay(args.debtMicro),
   };
 }
 

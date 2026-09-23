@@ -163,7 +163,7 @@ describe.skipIf(!RUN_DB_TESTS)(
       expect(client, 'isolated Postgres database could not be created or reached').not.toBeNull();
     });
 
-    describe('setAiSource — the one new write', () => {
+    describe('setAiSource — the one new write, made only on a moved account', () => {
       it('CRITICAL writes ai_source, ai_source_set_by and ai_source_set_at, and returns the updated record', async () => {
         const accountId = await movedAccount(db());
         const before = Date.now();
@@ -188,15 +188,31 @@ describe.skipIf(!RUN_DB_TESTS)(
         expect(record.aiSourceSetBy).toBe('customer');
       });
 
-      it('creates the credit_accounts row if the account had none yet — the same upsert ensureAccount/lockAccount already do', async () => {
+      it('CRITICAL an account that is not moved gets NOTHING written, and the answer says it is legacy (S13–S16 re-audit #5: billing_mode is re-read under the lock)', async () => {
         const id = randomUUID();
         await db()`INSERT INTO accounts (id, email, tier) VALUES (${id}::uuid, ${`bare-${id}@example.test`}, 'team_manual'::account_tier)`;
-        // No credit_accounts row inserted for this account.
-        const record = await ledger().setAiSource(id, { aiSource: 'credits', setBy: 'cutover' });
-        expect(record.aiSource).toBe('credits');
-        expect(record.aiSourceSetBy).toBe('cutover');
-        // And it persists: a plain read agrees with what the write returned.
-        expect((await ledger().ensureAccount(id)).aiSource).toBe('credits');
+        // No credit_accounts row inserted for this account: the lock creates
+        // the legacy one, as ensureAccount/lockAccount always have.
+        const record = await ledger().setAiSource(id, { aiSource: 'credits', setBy: 'customer' });
+        expect(record.billingMode).toBe('legacy');
+        expect(record.aiSource).toBeNull();
+        expect(record.aiSourceSetBy).toBeNull();
+        expect(record.aiSourceSetAt).toBeNull();
+        // And nothing was written behind the answer.
+        const reread = await ledger().ensureAccount(id);
+        expect(reread.aiSource).toBeNull();
+        expect(reread.aiSourceSetBy).toBeNull();
+      });
+
+      it('a rolled-back account (legacy again) gets nothing written either', async () => {
+        const accountId = await movedAccount(db());
+        await db()`UPDATE credit_accounts SET billing_mode = 'legacy' WHERE account_id = ${accountId}::uuid`;
+        const record = await ledger().setAiSource(accountId, {
+          aiSource: 'own_key',
+          setBy: 'customer',
+        });
+        expect(record.billingMode).toBe('legacy');
+        expect((await ledger().ensureAccount(accountId)).aiSource).toBeNull();
       });
 
       it('persists across a separate read — the write is committed, not just echoed back', async () => {

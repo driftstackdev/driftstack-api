@@ -8,10 +8,11 @@
 // fallback they had just refused was switched back on for them.
 //
 // Now, when `ai_source_set_by` is the customer, the legacy consent is derived
-// from the current `ai_source`: `own_key` → consent false; anything else keeps
-// the snapshot (the coordinator's rule — a customer's "use credits" choice has
-// no legacy meaning stronger than what they had before the move). The dry run
-// previews exactly what the rollback writes.
+// from the current `ai_source`: `own_key` → consent false. Since the S13–S16
+// re-audit (#4, the mirror of this fix) the other direction holds too: a
+// customer who turned the fallback ON while moved (automatic, or credits) rolls
+// back with consent true, whatever the snapshot said. A source the cutover set
+// keeps the snapshot. The dry run previews exactly what the rollback writes.
 
 import { randomUUID } from 'node:crypto';
 import type postgres from 'postgres';
@@ -182,7 +183,7 @@ describe.skipIf(!RUN_DB_TESTS)(
       expect(await legacy(m.accountId)).toEqual({ consent: true, cap: 1500 });
     });
 
-    it('a customer who turned credits ON while moved keeps the snapshot (consent false stays false)', async () => {
+    it('CRITICAL a customer who turned credits ON while moved rolls back with consent TRUE, over a false snapshot (S13–S16 re-audit #4, the mirror of #10)', async () => {
       const m = await movedAccount({ consent: false });
       expect(await source(m.accountId), 'a stored key, consent off → own_key').toEqual({
         aiSource: 'own_key',
@@ -191,8 +192,8 @@ describe.skipIf(!RUN_DB_TESTS)(
       await customerPatch(m, true);
       expect(await source(m.accountId)).toEqual({ aiSource: null, setBy: 'customer' });
       const done = await rollback(m, false);
-      expect(done.restored.consent).toBe(false);
-      expect(await legacy(m.accountId)).toEqual({ consent: false, cap: 1500 });
+      expect(done.restored.consent).toBe(true);
+      expect(await legacy(m.accountId)).toEqual({ consent: true, cap: 1500 });
     });
   },
 );

@@ -61,7 +61,7 @@ function facts(over: Partial<CutoverAccountDecisionFacts> = {}): CutoverAccountD
     consent: false,
     hasStoredKey: false,
     hasPaidCoverage: true,
-    hasLiveContractOverride: false,
+    hasLivePlanOverride: false,
     inPhaseOneCohort: true,
     ...over,
   };
@@ -91,36 +91,36 @@ describe('decideCutover — §8.4’s per-account decision', () => {
     expect(d).toEqual({ accountId: 'a1', outcome: 'refuse', reason: 'no_paid_coverage' });
   });
 
-  it('Enterprise without a contract stays legacy, refused no_contract — its plan-wide allowance is "contract"', () => {
+  it('Enterprise with no plan override (neither a contract nor an admin_tier plan) stays legacy, refused no_contract — its plan-wide allowance is "contract"', () => {
     const d = decideCutover('a1', facts({ tier: 'enterprise', hasPaidCoverage: false }));
     expect(d).toEqual({ accountId: 'a1', outcome: 'refuse', reason: 'no_contract' });
   });
 
-  it('CRITICAL Enterprise with paid coverage from some OTHER plan (a Stripe line) but no contract is refused no_contract (S16 audit #3, M7)', () => {
+  it('CRITICAL Enterprise with paid coverage from some OTHER plan (a Stripe line) but no plan override is refused no_contract (S16 audit #3, M7)', () => {
     const d = decideCutover(
       'a1',
-      facts({ tier: 'enterprise', hasPaidCoverage: true, hasLiveContractOverride: false }),
+      facts({ tier: 'enterprise', hasPaidCoverage: true, hasLivePlanOverride: false }),
     );
     expect(d).toEqual({ accountId: 'a1', outcome: 'refuse', reason: 'no_contract' });
   });
 
-  it('Enterprise WITH a live contract override moves — the override is its paid coverage too', () => {
+  it('Enterprise WITH a live plan override (a contract or an admin_tier plan) moves — the override is its paid coverage too', () => {
     const d = decideCutover(
       'a1',
       facts({
         tier: 'enterprise',
         hasPaidCoverage: true,
-        hasLiveContractOverride: true,
+        hasLivePlanOverride: true,
         hasStoredKey: false,
       }),
     );
     expect(d).toEqual({ accountId: 'a1', outcome: 'move', aiSource: 'credits' });
   });
 
-  it('Enterprise with a contract that grants nothing is still refused no_paid_coverage', () => {
+  it('Enterprise with an override that grants nothing is still refused no_paid_coverage', () => {
     const d = decideCutover(
       'a1',
-      facts({ tier: 'enterprise', hasPaidCoverage: false, hasLiveContractOverride: true }),
+      facts({ tier: 'enterprise', hasPaidCoverage: false, hasLivePlanOverride: true }),
     );
     expect(d).toEqual({ accountId: 'a1', outcome: 'refuse', reason: 'no_paid_coverage' });
   });
@@ -128,7 +128,7 @@ describe('decideCutover — §8.4’s per-account decision', () => {
   it('a plan with a plan-wide allowance never needs a contract', () => {
     const d = decideCutover(
       'a1',
-      facts({ tier: 'api_scale', hasPaidCoverage: true, hasLiveContractOverride: false }),
+      facts({ tier: 'api_scale', hasPaidCoverage: true, hasLivePlanOverride: false }),
     );
     expect(d).toEqual({ accountId: 'a1', outcome: 'move', aiSource: 'credits' });
   });
@@ -138,7 +138,7 @@ describe('decideCutover — §8.4’s per-account decision', () => {
       {},
       { billingMode: 'credits' as const },
       { tier: 'free' as const },
-      { tier: 'enterprise' as const, hasLiveContractOverride: true },
+      { tier: 'enterprise' as const, hasLivePlanOverride: true },
     ]) {
       expect(decideCutover('a1', facts({ ...over, inPhaseOneCohort: false }))).toEqual({
         accountId: 'a1',
@@ -313,14 +313,14 @@ describe('legacyConsentOnRollback — what a rollback puts back as the legacy co
     );
   });
 
-  it('any other customer choice keeps the snapshot', () => {
+  it('any other customer choice turned the fallback ON, and rolls back with consent true, whatever the snapshot says (re-audit #4, the mirror of #10)', () => {
     for (const snapshot of [true, false]) {
       expect(legacyConsentOnRollback({ aiSource: null, aiSourceSetBy: 'customer' }, snapshot)).toBe(
-        snapshot,
+        true,
       );
       expect(
         legacyConsentOnRollback({ aiSource: 'credits', aiSourceSetBy: 'customer' }, snapshot),
-      ).toBe(snapshot);
+      ).toBe(true);
     }
   });
 

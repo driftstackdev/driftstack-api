@@ -10,7 +10,9 @@
 // now(), in both the dry run and the locked run.
 //
 // #3. A plan whose allowance is a contract (Enterprise) moves only with a live
-// `contract` override; a paid Stripe line alone is refused `no_contract`.
+// plan override — a `contract`, or (since the S13–S16 re-audit, #8, following
+// M7's text) an `admin_tier` plan; a paid Stripe line alone is refused
+// `no_contract`.
 //
 // #6. Phase 1 moves C0 only — by cohort OR by id. An id outside C0 is refused
 // per account, `not_in_phase_1_cohort`, and the dry run says so too.
@@ -267,7 +269,7 @@ describe.skipIf(!RUN_DB_TESTS)(
       });
     });
 
-    describe('#3 — a contract plan moves only with a live contract override', () => {
+    describe('#3 — a contract plan moves only with a live plan override (a contract or an admin_tier plan)', () => {
       it('CRITICAL Enterprise paying for a Scale subscription, with no contract, is refused no_contract — no lot, no override, still legacy', async () => {
         const f = await app();
         const accountId = await seedAccount(f, 'enterprise');
@@ -279,11 +281,11 @@ describe.skipIf(!RUN_DB_TESTS)(
         expect(o?.n, 'the cutover never creates an override (M7)').toBe(0);
       });
 
-      it('Enterprise with only an admin_tier override (not a contract) is refused no_contract', async () => {
+      it('Enterprise with only an admin_tier override (not a contract) moves — M7 names both (re-audit #8)', async () => {
         const f = await app();
         const accountId = await seedAccount(f, 'enterprise');
         await planOverride(sql(), accountId, { monthlyCredits: 3000, reason: 'admin_tier' });
-        await expectBothRuns(f, accountId, { outcome: 'refuse', reason: 'no_contract' });
+        await expectBothRuns(f, accountId, { outcome: 'move' });
       });
 
       it('Enterprise whose contract has ended is refused no_contract', async () => {

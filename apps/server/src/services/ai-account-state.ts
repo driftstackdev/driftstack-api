@@ -29,6 +29,7 @@ import {
   CREDIT_LOT_EXTRA_KIND,
   creditsPer1kTokens,
   MAX_AI_TASKS_IN_FLIGHT,
+  MICROCREDITS_PER_CREDIT,
   type AccountAiState,
   type AccountTier,
   type AgentModel,
@@ -238,16 +239,19 @@ export interface PlanOverrideFacts {
 }
 
 /**
- * The monthly figure of the account's plan override when one is IN FORCE at
- * `at`, else null — the same predicate the monthly grants read coverage with
- * (`credit-windows-repo.ts`: `anchor_at <= t AND effective_since <= t AND
- * (ends_at IS NULL OR t < ends_at)`), so the plan shows exactly the figure
- * that is being granted. Both reasons count: a `contract` override IS the
+ * The monthly figure of the account's plan override when it is a SOURCE the
+ * monthly grant would draw from at `at`, else null — the grant's own predicate
+ * for an override (`credit-windows-repo.ts`, the `plan_override` arm of the
+ * coverage query): in force (`anchor_at <= t AND effective_since <= t AND
+ * (ends_at IS NULL OR t < ends_at)`) AND granting more than nothing
+ * (`monthly_credits > 0`). Both reasons count: a `contract` override IS the
  * contract's figure, and an `admin_tier` override IS the figure of the tier an
  * admin assigned (S14 audit #6).
  *
- * A zero-credit override is a real figure (0), not "no override": an admin
- * wrote it on purpose.
+ * ⛔ A ZERO-CREDIT OVERRIDE IS NO OVERRIDE HERE. The grant skips it, so a
+ * Team account paying 5,000 with a 0-credit override is granted 5,000; showing
+ * it as "0" said the plan included nothing while it was being granted 5,000
+ * (S13–S16 re-audit #2).
  */
 export function livePlanOverrideCredits(
   override: PlanOverrideFacts | null,
@@ -257,7 +261,46 @@ export function livePlanOverrideCredits(
   const t = at.getTime();
   if (override.anchorAt.getTime() > t || override.effectiveSince.getTime() > t) return null;
   if (override.endsAt !== null && override.endsAt.getTime() <= t) return null;
+  if (override.monthlyCredits <= 0) return null;
   return override.monthlyCredits;
+}
+
+/**
+ * `plan.monthly_included_credits`: the figure the monthly grant ACTUALLY uses
+ * (S13–S16 re-audit #2), never merely the one an override names.
+ *
+ *   · The account has a window over now → THAT WINDOW'S LEVEL, in whole
+ *     credits (`credit_windows.level_micro`). It is the figure the grant used,
+ *     from whichever source won — a Scale subscription's 30,000 over a 20,000
+ *     contract, a Team line's 5,000 over a 0-credit override — and it is the
+ *     full monthly rate even when a short first window prorated its lot.
+ *   · No window → the grant's own source choice between the two figures the
+ *     plan names: the HIGHER of the tier's own figure and a live override's
+ *     ({@link livePlanOverrideCredits}, where a 0-credit override counts as
+ *     none) — `pickWindowCandidate` takes the highest level. Null only for a
+ *     tier whose figure is set per contract (Enterprise) with no live override
+ *     granting anything.
+ *
+ * Without a window this cannot see payments (the route reads no payment rows),
+ * so it names what the plan and its override grant, not whether they are paid
+ * for: a moved account with any paid source gets its window from the refresh
+ * `GET /v1/account/me/ai` runs first, and is answered by the first rule.
+ */
+export function planMonthlyIncludedCredits(args: {
+  readonly tier: AccountTier;
+  /** `level_micro` of the account's window over now, or null when it has none. */
+  readonly currentWindowLevelMicro: number | null;
+  /** {@link livePlanOverrideCredits}'s answer for this account. */
+  readonly liveOverrideCredits: number | null;
+}): number | null {
+  if (args.currentWindowLevelMicro !== null) {
+    return Math.floor(args.currentWindowLevelMicro / MICROCREDITS_PER_CREDIT);
+  }
+  const monthly = aiEntitlementFor(args.tier).monthlyCredits;
+  const tierFigure = monthly === 'contract' ? null : monthly;
+  if (args.liveOverrideCredits === null) return tierFigure;
+  if (tierFigure === null) return args.liveOverrideCredits;
+  return Math.max(tierFigure, args.liveOverrideCredits);
 }
 
 function ownKeyForWire(facts: OwnKeyFacts): AccountAiState['own_key'] {
@@ -281,22 +324,18 @@ function rateCardForWire(
 }
 
 /**
- * `plan`. `monthly_included_credits` is a LIVE plan override's figure when
- * there is one (see {@link livePlanOverrideCredits}); otherwise the tier's own
- * figure — null only for a tier whose figure is set per contract (Enterprise)
- * and has none in force.
+ * `plan`. `monthly_included_credits` is {@link planMonthlyIncludedCredits}'s
+ * answer, computed by the caller from the account's window and override.
  */
 function planForWire(
   tier: AccountTier,
-  planOverrideMonthlyCredits: number | null,
+  monthlyIncludedCredits: number | null,
 ): AccountAiState['plan'] {
   const entitlement = aiEntitlementFor(tier);
   return {
     tier,
     ai_included: entitlement.aiIncluded,
-    monthly_included_credits:
-      planOverrideMonthlyCredits ??
-      (entitlement.monthlyCredits === 'contract' ? null : entitlement.monthlyCredits),
+    monthly_included_credits: monthlyIncludedCredits,
     own_key_allowed: entitlement.ownKeyAllowed,
     allowed_sources: [...aiSourcesAllowedOnPlan(tier)],
   };
@@ -327,12 +366,12 @@ export function buildLegacyAccountAiState(args: {
   readonly ownKey: OwnKeyFacts;
   readonly rateCard: RateCardFacts;
   readonly nextRateCard: RateCardFacts | null;
-  /** {@link livePlanOverrideCredits}'s answer for this account. */
-  readonly planOverrideMonthlyCredits: number | null;
+  /** {@link planMonthlyIncludedCredits}'s answer for this account. */
+  readonly planMonthlyIncludedCredits: number | null;
 }): AccountAiState {
   return {
     billing: 'legacy',
-    plan: planForWire(args.tier, args.planOverrideMonthlyCredits),
+    plan: planForWire(args.tier, args.planMonthlyIncludedCredits),
     ai_source: null,
     ai_source_set_by: null,
     effective_source: null,
@@ -377,8 +416,8 @@ export interface AccountAiStateInputs {
   readonly tasksInFlight: number;
   /** See {@link DeriveAiStateInputs.minStartMicro}. */
   readonly minStartMicro: number | null;
-  /** {@link livePlanOverrideCredits}'s answer for this account. */
-  readonly planOverrideMonthlyCredits: number | null;
+  /** {@link planMonthlyIncludedCredits}'s answer for this account. */
+  readonly planMonthlyIncludedCredits: number | null;
   readonly rateCard: RateCardFacts;
   readonly nextRateCard: RateCardFacts | null;
 }
@@ -418,7 +457,7 @@ export function buildAccountAiState(args: AccountAiStateInputs): AccountAiState 
         };
   return {
     billing: 'credits',
-    plan: planForWire(args.tier, args.planOverrideMonthlyCredits),
+    plan: planForWire(args.tier, args.planMonthlyIncludedCredits),
     ai_source: args.aiSource,
     ai_source_set_by: args.aiSourceSetBy,
     effective_source: effectiveSource,

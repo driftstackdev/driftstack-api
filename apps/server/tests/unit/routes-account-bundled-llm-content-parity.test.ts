@@ -113,10 +113,12 @@ describe('routes/account-bundled-llm content parity', () => {
   // read `billing_mode`, then write — one transaction), so a missing row is
   // its `not_found` outcome rather than a null. What this pin protects is
   // unchanged: only the fields the PATCH supplied are written, and a missing
-  // account row is the same 400.
+  // account row is the same 400. (The S13–S16 re-audit, #5, moved the legacy
+  // leg into `handleLegacyPatch`, which a moved save that finds the account
+  // rolled back also runs, so the parsed body arrives there as `patch`.)
   it("PATCH 400-on-missing-row + spread-only-defined-fields framing pinned: BadRequestError('Account row not found — re-authenticate and retry.') on the write's not_found + conditional spread of consent + monthlyCapUsdCents so undefined keys don't write back. Drift to spreading the undefined keys would null out an existing consent on a cap-only PATCH (and vice versa)", () => {
     expect(body).toMatch(
-      /const write = await service\.updateLegacySettings\(\{\s*accountId: ctx\.account\.id,\s*\.\.\.\(parsed\.data\.consent !== undefined \? \{ consent: parsed\.data\.consent \} : \{\}\),\s*\.\.\.\(parsed\.data\.monthly_cap_usd_cents !== undefined\s*\? \{ monthlyCapUsdCents: parsed\.data\.monthly_cap_usd_cents \}\s*: \{\}\),\s*refuseIfMoved: [^,]+,\s*\}\);\s*if \(write\.outcome === 'not_found'\) \{\s*throw new BadRequestError\('Account row not found — re-authenticate and retry\.'\);/,
+      /const write = await service\.updateLegacySettings\(\{\s*accountId: ctx\.account\.id,\s*\.\.\.\(patch\.consent !== undefined \? \{ consent: patch\.consent \} : \{\}\),\s*\.\.\.\(patch\.monthly_cap_usd_cents !== undefined\s*\? \{ monthlyCapUsdCents: patch\.monthly_cap_usd_cents \}\s*: \{\}\),\s*refuseIfMoved: [^,]+,\s*\}\);\s*if \(write\.outcome === 'not_found'\) \{\s*throw new BadRequestError\('Account row not found — re-authenticate and retry\.'\);/,
     );
   });
 });

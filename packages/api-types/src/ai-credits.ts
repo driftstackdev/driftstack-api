@@ -1024,6 +1024,19 @@ export type TurnCreditsUsage = z.infer<typeof TurnCreditsUsageSchema>;
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
+ * The most whole credits A MONTH staff may set as an account's monthly figure:
+ * 10,000,000 (US$100,000 a month) — `credit_plan_overrides_credits_range`, the
+ * storage bound, so a figure past it is a 400 here and never a 500 from the
+ * database. ONE bound for the one figure, wherever staff set it: the Enterprise
+ * tier change's `monthly_credits` ({@link ChangeTierRequestWithCreditsSchema})
+ * and the plan-override PUT's ({@link AdminSetPlanOverrideRequestSchema}). With
+ * two, a contract the tier change wrote could not be re-sent or amended through
+ * the PUT (the S13–S16 re-audit, #7). A single goodwill grant has its own,
+ * tighter bound: {@link ADMIN_CREDITS_MAX_PER_REQUEST}.
+ */
+export const ADMIN_MONTHLY_CREDITS_MAX = 10_000_000;
+
+/**
  * `ChangeTierRequest` as the SERVER accepts it: the published shape plus the
  * Enterprise contract's monthly credit figure.
  *
@@ -1049,11 +1062,12 @@ export type TurnCreditsUsage = z.infer<typeof TurnCreditsUsageSchema>;
  */
 export const ChangeTierRequestWithCreditsSchema = ChangeTierRequestSchema.extend({
   /**
-   * Whole AI credits a month for an Enterprise agreement. Enterprise is the one
-   * plan with no standard allowance, so an account funded by AI credits cannot
-   * be put on it without this figure; every other tier ignores it.
+   * Whole AI credits a month for an Enterprise agreement, 0 to
+   * {@link ADMIN_MONTHLY_CREDITS_MAX}. Enterprise is the one plan with no
+   * standard allowance, so an account funded by AI credits cannot be put on it
+   * without this figure; every other tier ignores it.
    */
-  monthly_credits: z.number().int().min(0).max(10_000_000).optional(),
+  monthly_credits: z.number().int().min(0).max(ADMIN_MONTHLY_CREDITS_MAX).optional(),
 });
 export type ChangeTierRequestWithCredits = z.infer<typeof ChangeTierRequestWithCreditsSchema>;
 
@@ -1088,22 +1102,23 @@ export const AdminPlanOverrideViewSchema = z.object({
 export type AdminPlanOverrideView = z.infer<typeof AdminPlanOverrideViewSchema>;
 
 /**
- * The most credits ONE staff request may move: a goodwill grant's `credits`, or
- * a plan override's `monthly_credits` (1,000,000 credits = US$10,000). A staff
- * bound, deliberately tighter than the storage bounds beneath it (a lot holds
- * any safe integer of microcredits; `credit_plan_overrides_credits_range`
- * allows ten million a month): a figure past it is almost certainly a typo, and
- * a figure past the storage bound used to reach the database and come back as a
- * 500. `forgive_debt` carries no amount — it forgives what the account owes.
+ * The most credits ONE goodwill grant may add: its `credits` (1,000,000 credits
+ * = US$10,000). A staff bound, deliberately tighter than the storage bound
+ * beneath it (a lot holds any safe integer of microcredits): a figure past it is
+ * almost certainly a typo, and one past the storage bound used to reach the
+ * database and come back as a 500. `forgive_debt` carries no amount — it
+ * forgives what the account owes. A MONTHLY figure (a plan override, an
+ * Enterprise contract) is bounded by {@link ADMIN_MONTHLY_CREDITS_MAX} instead.
  */
 export const ADMIN_CREDITS_MAX_PER_REQUEST = 1_000_000;
 
 /** `PUT /v1/admin/accounts/:id/ai-plan-override`. Whole credits a month, 0 to
- *  {@link ADMIN_CREDITS_MAX_PER_REQUEST}. `expires_at` must be in the future;
- *  the ROUTE refuses a past one with a 400 (a schema cannot read the clock the
- *  request is judged against). */
+ *  {@link ADMIN_MONTHLY_CREDITS_MAX} — the same bound the Enterprise tier
+ *  change accepts, so either can re-send what the other wrote. `expires_at`
+ *  must be in the future; the ROUTE refuses a past one with a 400 (a schema
+ *  cannot read the clock the request is judged against). */
 export const AdminSetPlanOverrideRequestSchema = z.object({
-  monthly_credits: z.number().int().min(0).max(ADMIN_CREDITS_MAX_PER_REQUEST),
+  monthly_credits: z.number().int().min(0).max(ADMIN_MONTHLY_CREDITS_MAX),
   reason: AiPlanOverrideReasonSchema,
   expires_at: Iso8601Schema.optional(),
 });
@@ -1265,8 +1280,9 @@ export type AiCreditsCutoverRequest = z.infer<typeof AiCreditsCutoverRequestSche
  * Why an account was refused (kept legacy, listed in the dry run):
  *   · `no_paid_coverage`      — a paid tier with nothing paid covering now (§8.4).
  *   · `no_contract`           — a plan whose allowance is a contract
- *                               (Enterprise) with no live `contract` override
- *                               (§8.4/M7), whatever Stripe line it pays for.
+ *                               (Enterprise) with no live plan override —
+ *                               neither a `contract` nor an `admin_tier` one
+ *                               (§8.4/M7) — whatever Stripe line it pays for.
  *   · `not_in_phase_1_cohort` — named by id but not in C0: Phase 1 moves only
  *                               internal accounts, by cohort OR by id.
  *   · `account_not_found` / `account_deleted`.

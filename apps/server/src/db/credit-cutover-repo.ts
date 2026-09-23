@@ -24,11 +24,6 @@
 // alone; a caller that also needs `billing_mode` reads it separately, under
 // its OWN lock, from `DrizzleCreditLedgerRepo.lockAccount` — which every
 // caller of this file already calls right after, per the lock order above.
-//
-// The file also holds, at its end, the two statements the S15/S16 admin routes
-// run INSIDE their own transactions that no repo they can reach offers: the
-// audit-row insert and a ledger entry looked up by its key. See that section's
-// own header for why they live here.
 
 import { and, eq, ne, sql } from 'drizzle-orm';
 import {
@@ -50,9 +45,11 @@ export interface CutoverCoverageFacts {
   /** A paid source covers now(): a paid Stripe subscription line, a crypto
    *  term, or a live override granting more than nothing. */
   readonly hasPaidCoverage: boolean;
-  /** A live `contract` override: what a plan whose allowance is `'contract'`
-   *  (Enterprise) needs before it may move (§8.4/M7). */
-  readonly hasLiveContractOverride: boolean;
+  /** A live plan override, `contract` OR `admin_tier`, whatever its figure:
+   *  what a plan whose allowance is `'contract'` (Enterprise) needs before it
+   *  may move (§8.4/M7 — "until an admin sets a contract or `admin_tier`
+   *  override"). */
+  readonly hasLivePlanOverride: boolean;
 }
 
 export type AccountLifecycleStatus = 'active' | 'suspended' | 'deleted';
@@ -172,9 +169,9 @@ export class DrizzleCreditCutoverRepo {
 
   /**
    * S16 audit fixes #1 and #3 — whether a PAID SOURCE covers now(), and whether
-   * a live `contract` override exists: the two coverage facts the cutover
-   * decides on. The dry run reads them on the pool; the real run inside the
-   * account's own locked transaction.
+   * a live plan override exists (`contract` or `admin_tier`, M7): the two
+   * coverage facts the cutover decides on. The dry run reads them on the pool;
+   * the real run inside the account's own locked transaction.
    *
    * ⛔ THIS IS THE `src` CTE OF `coverageCandidatesSql` (credit-windows-repo.ts)
    * ON ITS OWN — the same three sources, the same "paid", the same plans —
@@ -187,16 +184,17 @@ export class DrizzleCreditCutoverRepo {
    * over again — into `no_paid_coverage`. The two are held in agreement on
    * accounts with no window by the S16 fixes' integration test.
    *
-   * A scalar count, one row: `paid_sources` > 0 is "covered"; `live_contracts`
-   * > 0 is "has a contract". A contract counts whatever its figure (a 0-credit
-   * contract is still the agreement M7 asks for; it simply grants nothing, so
-   * it is not paid coverage on its own).
+   * A scalar count, one row: `paid_sources` > 0 is "covered"; `live_overrides`
+   * > 0 is "an admin set a figure". An override counts whatever its reason
+   * (M7 names both `contract` and `admin_tier`) and whatever its figure (a
+   * 0-credit override is still the figure an admin set; it simply grants
+   * nothing, so it is not paid coverage on its own).
    */
   async coverageFacts(
     accountId: string,
     on: CreditLedgerExecutor = this.database.db,
   ): Promise<CutoverCoverageFacts> {
-    const result = await on.execute<{ paid_sources: number; live_contracts: number }>(sql`
+    const result = await on.execute<{ paid_sources: number; live_overrides: number }>(sql`
       WITH plan AS (
         SELECT p.tier, p.allowance_micro
           FROM jsonb_to_recordset(${planAllowancesJson()}::jsonb) AS p(tier text, allowance_micro bigint)
@@ -227,16 +225,15 @@ export class DrizzleCreditCutoverRepo {
              (SELECT count(*)
                 FROM credit_plan_overrides o
                WHERE o.account_id = ${accountId}::uuid
-                 AND o.reason = 'contract'
                  AND o.anchor_at <= now() AND o.effective_since <= now()
-                 AND (o.ends_at IS NULL OR now() < o.ends_at)) AS live_contracts`);
-    const [row] = rowsOf<{ paid_sources: number | string; live_contracts: number | string }>(
+                 AND (o.ends_at IS NULL OR now() < o.ends_at)) AS live_overrides`);
+    const [row] = rowsOf<{ paid_sources: number | string; live_overrides: number | string }>(
       result,
     );
     if (row === undefined) throw new Error('the cutover coverage read returned no row');
     return {
       hasPaidCoverage: Number(row.paid_sources) > 0,
-      hasLiveContractOverride: Number(row.live_contracts) > 0,
+      hasLivePlanOverride: Number(row.live_overrides) > 0,
     };
   }
 

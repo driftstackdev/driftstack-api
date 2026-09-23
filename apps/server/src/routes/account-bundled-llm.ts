@@ -24,6 +24,13 @@
 // bundled-LLM), this slice mirrors the byok-anthropic ownership model:
 // account_owner-only for the PATCH. Reads require broad `read` so a
 // resource-granular or zero-scope key cannot inspect billing consent/spend.
+//
+// ACT-AS (`X-Driftstack-Account`). The PATCH REFUSES a header naming any
+// account but the caller's own, before it reads the body, with the same
+// self-workspace 400 `PATCH /v1/account/me/ai-settings` answers (S13–S16
+// re-audit #3): the dashboard sends that header from a team workspace, and a
+// save that silently wrote the MEMBER's own account while the page claimed the
+// team's is the defect S14 audit #9 fixed on the new route.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
@@ -51,6 +58,11 @@ import {
 } from '../services/ai-entitlements.js';
 import type { AiCreditsRuntime, CreditAccountRecord } from '../services/ai-credits-runtime.js';
 import type { AccountTier } from '@driftstack/api-types';
+// S13–S16 re-audit #3 — the PATCH refuses act-as through the ONE resolver,
+// with the ONE self-workspace sentence `PATCH /v1/account/me/ai-settings` uses.
+import { resolveEffectiveAccount } from '../services/auth.js';
+import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
+import { AI_SETTINGS_SELF_WORKSPACE_ONLY_DETAIL } from './account-ai.js';
 
 const PatchBodySchema = z
   .object({
@@ -60,6 +72,15 @@ const PatchBodySchema = z
   .refine((b) => b.consent !== undefined || b.monthly_cap_usd_cents !== undefined, {
     message: 'Body must include at least one of: consent, monthly_cap_usd_cents.',
   });
+
+/** A parsed PATCH body. */
+type SettingsPatch = { readonly consent?: boolean; readonly monthly_cap_usd_cents?: number };
+/** Every leg of this PATCH answers this shape. */
+type SettingsBody = { consent: boolean; monthly_cap_usd_cents: number };
+/** The moved leg's answer, or its report that the account is legacy again. */
+type MovedPatchOutcome =
+  | { readonly outcome: 'answered'; readonly body: SettingsBody }
+  | { readonly outcome: 'no_longer_moved' };
 
 export interface AccountBundledLlmRoutesOptions {
   service: BundledLlmService;
@@ -96,7 +117,10 @@ export function registerAccountBundledLlmRoutes(
    * true under `enforce` (§4.1's table treats `shadow` and `off` as legacy,
    * whatever `billing_mode` says), and only when the account was actually
    * cut over. No lock (§4.4: the tier/source read may run without one); the
-   * one WRITE this file makes (`setAiSource`, in the PATCH) takes its own.
+   * PATCH's writes take their own and re-decide under it — `setAiSource` for a
+   * moved account (re-audit #5), `updateLegacySettings` for a legacy one
+   * (S16 #11) — so a rollback or cutover landing after this read never has a
+   * save written to the wrong side.
    */
   async function resolveMovedAccount(accountId: string): Promise<CreditAccountRecord | null> {
     if (aiCredits === undefined || aiCredits.mode !== 'enforce') return null;
@@ -143,14 +167,22 @@ export function registerAccountBundledLlmRoutes(
    * through `setAiSource`, under ITS OWN account lock (never this function's
    * — there is no wider transaction to hold it in, and nothing else this
    * route does needs the account locked).
+   *
+   * ⛔ `no_longer_moved` (S13–S16 re-audit #5): `credit` came from an UNLOCKED
+   * read, and a rollback may commit before the write. `setAiSource` re-reads
+   * `billing_mode` under the account lock the rollback also takes and writes
+   * nothing on an account that is legacy again; this then returns
+   * `no_longer_moved` having written and audited NOTHING, and the caller runs
+   * the legacy save instead — which re-decides under the lock the rollback
+   * takes first and writes the legacy consent the account now runs on.
    */
   async function handleMovedPatch(
     request: FastifyRequest,
     accountId: string,
     tier: AccountTier,
     credit: CreditAccountRecord,
-    patch: { readonly consent?: boolean; readonly monthly_cap_usd_cents?: number },
-  ): Promise<{ consent: boolean; monthly_cap_usd_cents: number }> {
+    patch: SettingsPatch,
+  ): Promise<MovedPatchOutcome> {
     if (aiCredits === undefined)
       throw new Error('handleMovedPatch called with no aiCredits runtime');
 
@@ -196,12 +228,14 @@ export function registerAccountBundledLlmRoutes(
           aiSource: null,
           setBy: 'customer',
         });
+        if (updated.billingMode !== 'credits') return { outcome: 'no_longer_moved' };
         nextAiSource = updated.aiSource;
       } else if (ownKeyAllowedForTier(tier)) {
         const updated = await aiCredits.accounts.setAiSource(accountId, {
           aiSource: 'own_key',
           setBy: 'customer',
         });
+        if (updated.billingMode !== 'credits') return { outcome: 'no_longer_moved' };
         nextAiSource = updated.aiSource;
       }
     }
@@ -249,7 +283,124 @@ export function registerAccountBundledLlmRoutes(
       }
     }
 
-    return { consent: movedAccountConsent(nextAiSource), monthly_cap_usd_cents: before.capCents };
+    return {
+      outcome: 'answered',
+      body: { consent: movedAccountConsent(nextAiSource), monthly_cap_usd_cents: before.capCents },
+    };
+  }
+
+  /**
+   * The legacy leg of the PATCH: the old consent/cap columns on `accounts`.
+   * `mayAnswerAsMoved` is false when this is ALREADY the fallback of a moved
+   * save that found the account rolled back (re-audit #5) — a save that then
+   * finds it moved again has seen a cutover AND a rollback land inside one
+   * request, and fails rather than bouncing between the two legs.
+   */
+  async function handleLegacyPatch(
+    request: FastifyRequest,
+    ctx: NonNullable<FastifyRequest['account']>,
+    patch: SettingsPatch,
+    mayAnswerAsMoved: boolean,
+  ): Promise<SettingsBody> {
+    // S42 2026-07-07 (founder-approved) — gate the bundled-billing OPT-IN to
+    // the tiers whose TIER_FEATURES.llmBilling is byok_or_bundled(_custom):
+    // api_builder / api_scale / enterprise. Only consent=true is gated —
+    // consent=false (opting OUT) and cap-only PATCHes stay open on every
+    // tier, so a downgraded account can always switch bundled billing off.
+    // BYOK settings (routes/account-byok-anthropic.ts) stay open to every
+    // aiAgent tier; this route is account_owner-scoped, so ctx.account IS
+    // the tier that gets billed.
+    if (patch.consent === true) {
+      requireBundledLlmTier(ctx.account.tier);
+    }
+    // Capture prior consent state so we can detect a true toggle
+    // (not just a no-op re-write) before emitting the audit row.
+    const prior = await service.findSettings(ctx.account.id);
+    if (patch.monthly_cap_usd_cents !== undefined) {
+      const refusal = bundledCapWriteRefusal({
+        requestedCents: patch.monthly_cap_usd_cents,
+        currentCents: prior?.monthlyCapUsdCents ?? null,
+      });
+      // The same problem type and field-error shape as a schema failure, so a
+      // client that already renders "fails schema" renders this one too.
+      if (refusal !== null) {
+        throw new ValidationError({
+          formErrors: [],
+          fieldErrors: { monthly_cap_usd_cents: [refusal] },
+        });
+      }
+    }
+    // S16 audit #11 — "moved or not" was decided above from an UNLOCKED
+    // read; a cutover can take the account between that read and this
+    // write. So the write takes the lock the cutover takes first, re-reads
+    // `billing_mode` under it, and writes the legacy columns only if the
+    // account is still legacy: a save racing a cutover either lands before
+    // the move (and is in its snapshot) or answers as a moved account —
+    // never lands in columns a moved account no longer reads.
+    const write = await service.updateLegacySettings({
+      accountId: ctx.account.id,
+      ...(patch.consent !== undefined ? { consent: patch.consent } : {}),
+      ...(patch.monthly_cap_usd_cents !== undefined
+        ? { monthlyCapUsdCents: patch.monthly_cap_usd_cents }
+        : {}),
+      refuseIfMoved: aiCredits !== undefined && aiCredits.mode === 'enforce',
+    });
+    if (write.outcome === 'not_found') {
+      throw new BadRequestError('Account row not found — re-authenticate and retry.');
+    }
+    if (write.outcome === 'moved') {
+      const movedNow = mayAnswerAsMoved ? await resolveMovedAccount(ctx.account.id) : null;
+      if (movedNow === null) {
+        throw new Error(
+          mayAnswerAsMoved
+            ? 'the bundled-LLM settings write saw a moved account the credits read did not'
+            : 'the bundled-LLM settings save saw the account rolled back and then moved again',
+        );
+      }
+      const answer = await handleMovedPatch(
+        request,
+        ctx.account.id,
+        ctx.account.tier,
+        movedNow,
+        patch,
+      );
+      if (answer.outcome === 'no_longer_moved') {
+        throw new Error(
+          'the bundled-LLM settings save saw the account moved and then rolled back again',
+        );
+      }
+      return answer.body;
+    }
+    const next = write.next;
+    // 2026-05-20 — audit emit ONLY when consent actually changed.
+    // Cap-only PATCHes don't audit (separate enum value if later
+    // needed). Best-effort emit; audit failure must not break the
+    // PATCH response. `write.prior` is the row as the write locked it.
+    if (
+      accountAudit !== undefined &&
+      patch.consent !== undefined &&
+      write.prior.consent !== next.consent
+    ) {
+      try {
+        await accountAudit.record({
+          accountId: ctx.account.id,
+          actorType: 'customer',
+          action: 'account.bundled_llm_consent_changed',
+          targetResourceId: `account_${ctx.account.id}`,
+          payload: {
+            from: write.prior.consent,
+            to: next.consent,
+          },
+          ipAddress: readClientIp(request),
+        });
+      } catch {
+        /* swallow */
+      }
+    }
+    return {
+      consent: next.consent,
+      monthly_cap_usd_cents: next.monthlyCapUsdCents,
+    };
   }
 
   app.get(
@@ -333,6 +484,19 @@ export function registerAccountBundledLlmRoutes(
     async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
+      // S13–S16 re-audit #3 — the dashboard sends `X-Driftstack-Account` on
+      // every request from a team workspace, and this PATCH used to ignore it:
+      // a member saving the AI form there changed their OWN account while the
+      // page said it was saving the team's. Refused BEFORE the body is read or
+      // anything is written, with the same self-workspace 400
+      // `PATCH /v1/account/me/ai-settings` answers. A header naming the
+      // caller's own account resolves to `self` and is no header at all; one
+      // naming an account the caller is not a member of is refused by the
+      // resolver itself (403).
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
+      if (effective.kind !== 'self') {
+        throw new BadRequestError(AI_SETTINGS_SELF_WORKSPACE_ONLY_DETAIL);
+      }
       const parsed = PatchBodySchema.safeParse(request.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       reportUnknownRequestFields({
@@ -344,93 +508,19 @@ export function registerAccountBundledLlmRoutes(
       });
       const moved = await resolveMovedAccount(ctx.account.id);
       if (moved !== null) {
-        return handleMovedPatch(request, ctx.account.id, ctx.account.tier, moved, parsed.data);
+        const answer = await handleMovedPatch(
+          request,
+          ctx.account.id,
+          ctx.account.tier,
+          moved,
+          parsed.data,
+        );
+        if (answer.outcome === 'answered') return answer.body;
+        // Rolled back since the unlocked read (re-audit #5): nothing was
+        // written; save exactly as a legacy account's PATCH does.
+        return handleLegacyPatch(request, ctx, parsed.data, false);
       }
-      // S42 2026-07-07 (founder-approved) — gate the bundled-billing OPT-IN to
-      // the tiers whose TIER_FEATURES.llmBilling is byok_or_bundled(_custom):
-      // api_builder / api_scale / enterprise. Only consent=true is gated —
-      // consent=false (opting OUT) and cap-only PATCHes stay open on every
-      // tier, so a downgraded account can always switch bundled billing off.
-      // BYOK settings (routes/account-byok-anthropic.ts) stay open to every
-      // aiAgent tier; this route is account_owner-scoped, so ctx.account IS
-      // the tier that gets billed.
-      if (parsed.data.consent === true) {
-        requireBundledLlmTier(ctx.account.tier);
-      }
-      // Capture prior consent state so we can detect a true toggle
-      // (not just a no-op re-write) before emitting the audit row.
-      const prior = await service.findSettings(ctx.account.id);
-      if (parsed.data.monthly_cap_usd_cents !== undefined) {
-        const refusal = bundledCapWriteRefusal({
-          requestedCents: parsed.data.monthly_cap_usd_cents,
-          currentCents: prior?.monthlyCapUsdCents ?? null,
-        });
-        // The same problem type and field-error shape as a schema failure, so a
-        // client that already renders "fails schema" renders this one too.
-        if (refusal !== null) {
-          throw new ValidationError({
-            formErrors: [],
-            fieldErrors: { monthly_cap_usd_cents: [refusal] },
-          });
-        }
-      }
-      // S16 audit #11 — "moved or not" was decided above from an UNLOCKED
-      // read; a cutover can take the account between that read and this
-      // write. So the write takes the lock the cutover takes first, re-reads
-      // `billing_mode` under it, and writes the legacy columns only if the
-      // account is still legacy: a save racing a cutover either lands before
-      // the move (and is in its snapshot) or answers as a moved account —
-      // never lands in columns a moved account no longer reads.
-      const write = await service.updateLegacySettings({
-        accountId: ctx.account.id,
-        ...(parsed.data.consent !== undefined ? { consent: parsed.data.consent } : {}),
-        ...(parsed.data.monthly_cap_usd_cents !== undefined
-          ? { monthlyCapUsdCents: parsed.data.monthly_cap_usd_cents }
-          : {}),
-        refuseIfMoved: aiCredits !== undefined && aiCredits.mode === 'enforce',
-      });
-      if (write.outcome === 'not_found') {
-        throw new BadRequestError('Account row not found — re-authenticate and retry.');
-      }
-      if (write.outcome === 'moved') {
-        const movedNow = await resolveMovedAccount(ctx.account.id);
-        if (movedNow === null) {
-          throw new Error(
-            'the bundled-LLM settings write saw a moved account the credits read did not',
-          );
-        }
-        return handleMovedPatch(request, ctx.account.id, ctx.account.tier, movedNow, parsed.data);
-      }
-      const next = write.next;
-      // 2026-05-20 — audit emit ONLY when consent actually changed.
-      // Cap-only PATCHes don't audit (separate enum value if later
-      // needed). Best-effort emit; audit failure must not break the
-      // PATCH response. `write.prior` is the row as the write locked it.
-      if (
-        accountAudit !== undefined &&
-        parsed.data.consent !== undefined &&
-        write.prior.consent !== next.consent
-      ) {
-        try {
-          await accountAudit.record({
-            accountId: ctx.account.id,
-            actorType: 'customer',
-            action: 'account.bundled_llm_consent_changed',
-            targetResourceId: `account_${ctx.account.id}`,
-            payload: {
-              from: write.prior.consent,
-              to: next.consent,
-            },
-            ipAddress: readClientIp(request),
-          });
-        } catch {
-          /* swallow */
-        }
-      }
-      return {
-        consent: next.consent,
-        monthly_cap_usd_cents: next.monthlyCapUsdCents,
-      };
+      return handleLegacyPatch(request, ctx, parsed.data, true);
     },
   );
 }

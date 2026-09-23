@@ -173,6 +173,9 @@ const ROSTER: Readonly<Record<string, readonly string[]>> = {
   // S14 audit #9 — resolves the header only to refuse any account but the
   // caller's own (400, before the body is read); see `gatesFor`.
   'PATCH /v1/account/me/ai-settings': ['self-only refusal'],
+  // S13–S16 re-audit #3 — the old settings PATCH, the same form and the same
+  // 400 as the ai-settings PATCH above.
+  'PATCH /v1/account/me/bundled-llm-settings': ['self-only refusal'],
 };
 
 /**

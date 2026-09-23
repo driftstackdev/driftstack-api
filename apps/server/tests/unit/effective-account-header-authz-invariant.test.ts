@@ -226,11 +226,20 @@ describe('X-Driftstack-Account acting-as authz invariant (all routes/)', () => {
     // in ai-models.ts — a twelfth reader file. The two GETs act as the owner;
     // the PATCH resolves only to REFUSE a non-self account. All three pass the
     // parser straight into resolveEffectiveAccount (the arm below proves it).
-    expect(reads).toHaveLength(37);
-    expect(new Set(reads.map((read) => read.file)).size).toBe(12);
+    // The 38th (2026-09-23, S13–S16 re-audit #3): PATCH
+    // /v1/account/me/bundled-llm-settings in account-bundled-llm.ts — a
+    // thirteenth reader file. Like the ai-settings PATCH it resolves the header
+    // only to REFUSE a non-self account, before the body is read.
+    expect(reads).toHaveLength(38);
+    expect(new Set(reads.map((read) => read.file)).size).toBe(13);
     expect(
       reads
-        .filter((read) => read.file === 'account-ai.ts' || read.file === 'ai-models.ts')
+        .filter(
+          (read) =>
+            read.file === 'account-ai.ts' ||
+            read.file === 'ai-models.ts' ||
+            read.file === 'account-bundled-llm.ts',
+        )
         .map((read) => `${read.routeMethod} ${read.routePath}`)
         .sort(),
     ).toEqual([
@@ -238,6 +247,7 @@ describe('X-Driftstack-Account acting-as authz invariant (all routes/)', () => {
       'GET /v1/account/me/ai/ledger',
       'GET /v1/ai/models',
       'PATCH /v1/account/me/ai-settings',
+      'PATCH /v1/account/me/bundled-llm-settings',
     ]);
 
     expect(

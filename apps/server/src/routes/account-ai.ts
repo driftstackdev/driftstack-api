@@ -50,6 +50,7 @@ import {
   buildLedgerEntry,
   buildLegacyAccountAiState,
   livePlanOverrideCredits,
+  planMonthlyIncludedCredits,
   type ExtraLotFacts,
 } from '../services/ai-account-state.js';
 import type { AiCreditsRuntime, AiCreditsStateReads } from '../services/ai-credits-runtime.js';
@@ -167,6 +168,24 @@ async function smallestMinStartMicro(
   return smallest;
 }
 
+/**
+ * The self-workspace 400 BOTH AI settings PATCHes answer when
+ * `X-Driftstack-Account` names an account other than the caller's own: this
+ * file's `PATCH /v1/account/me/ai-settings` (S14 audit #9) and the old
+ * `PATCH /v1/account/me/bundled-llm-settings` (S13–S16 re-audit #3). One
+ * sentence, so the two routes can never refuse the same header two ways.
+ */
+export const AI_SETTINGS_SELF_WORKSPACE_ONLY_DETAIL =
+  'AI settings can be changed only in the Self workspace. Remove X-Driftstack-Account and retry.';
+
+/** The PATCH's answer for an account that is not on AI credits — whether its
+ *  unlocked read said so, or `setAiSource`'s locked re-read did. */
+function creditsNotActive(): ConflictError {
+  return new ConflictError("AI credits aren't active on this account yet.", {
+    credits_not_active: true,
+  });
+}
+
 /** The empty page a ledger read answers for an account nothing on the credits
  *  ledger governs (S14 audit #8). */
 function emptyLedgerPage(): AiLedgerPage {
@@ -205,31 +224,38 @@ export function registerAccountAiRoutes(app: FastifyInstance, deps: AccountAiRou
     const at = now();
     const stateReads = requireStateReads(aiCredits);
     const { planOverride } = requireOverrideAndRefresh(stateReads);
-    const [ownKey, cardInForce, nextCard, override] = await Promise.all([
+    // The current window is read for EVERY account, legacy included: its level
+    // is the plan figure the grant actually used (`planMonthlyIncludedCredits`),
+    // and the plan is a property of the account, not of its billing mode.
+    const [ownKey, cardInForce, nextCard, override, currentWindow] = await Promise.all([
       byokService === undefined
         ? Promise.resolve({ hasKey: false, usable: false, setAt: null, expiresAt: null })
         : byokService.getUsabilityFacts({ accountId: args.accountId, now: at }),
       stateReads.cardInForce(at),
       stateReads.nextAnnouncedCard(at),
       planOverride(args.accountId),
+      aiCredits.windows.currentWindow(args.accountId),
     ]);
     if (cardInForce === null) {
       throw new Error(
         'no AI credits rate card is in force — publish one before enabling AI credits',
       );
     }
-    const planOverrideMonthlyCredits = livePlanOverrideCredits(override, at);
+    const monthlyIncludedCredits = planMonthlyIncludedCredits({
+      tier: args.tier,
+      currentWindowLevelMicro: currentWindow === null ? null : currentWindow.levelMicro,
+      liveOverrideCredits: livePlanOverrideCredits(override, at),
+    });
     if (!isMoved(args.billingMode)) {
       return buildLegacyAccountAiState({
         tier: args.tier,
         ownKey,
         rateCard: cardInForce,
         nextRateCard: nextCard,
-        planOverrideMonthlyCredits,
+        planMonthlyIncludedCredits: monthlyIncludedCredits,
       });
     }
     const [
-      currentWindow,
       availableMicro,
       reservedInFlightMicro,
       pendingClaimsMicro,
@@ -237,7 +263,6 @@ export function registerAccountAiRoutes(app: FastifyInstance, deps: AccountAiRou
       tasksInFlight,
       minStartMicro,
     ] = await Promise.all([
-      aiCredits.windows.currentWindow(args.accountId),
       aiCredits.accounts.spendableMicro(args.accountId),
       stateReads.heldMicro(args.accountId),
       stateReads.pendingClaimTotalMicro(args.accountId),
@@ -276,7 +301,7 @@ export function registerAccountAiRoutes(app: FastifyInstance, deps: AccountAiRou
       debtReason,
       tasksInFlight,
       minStartMicro,
-      planOverrideMonthlyCredits,
+      planMonthlyIncludedCredits: monthlyIncludedCredits,
       rateCard: cardInForce,
       nextRateCard: nextCard,
     });
@@ -347,9 +372,7 @@ export function registerAccountAiRoutes(app: FastifyInstance, deps: AccountAiRou
       // not a member of is refused by the resolver itself (403).
       const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(request));
       if (effective.kind !== 'self') {
-        throw new BadRequestError(
-          'AI settings can be changed only in the Self workspace. Remove X-Driftstack-Account and retry.',
-        );
+        throw new BadRequestError(AI_SETTINGS_SELF_WORKSPACE_ONLY_DETAIL);
       }
       const accountId = ctx.account.id;
       const tier = ctx.account.tier;
@@ -364,11 +387,7 @@ export function registerAccountAiRoutes(app: FastifyInstance, deps: AccountAiRou
       });
 
       const credit = await aiCredits.accounts.ensureAccount(accountId);
-      if (!isMoved(credit.billingMode)) {
-        throw new ConflictError("AI credits aren't active on this account yet.", {
-          credits_not_active: true,
-        });
-      }
+      if (!isMoved(credit.billingMode)) throw creditsNotActive();
       if (parsed.data.ai_source === 'own_key' && !ownKeyAllowedForTier(tier)) {
         throw new ForbiddenError(OWN_KEY_NOT_ON_PLAN_DETAIL, { own_key_not_on_plan: true });
       }
@@ -382,6 +401,12 @@ export function registerAccountAiRoutes(app: FastifyInstance, deps: AccountAiRou
           aiSource: parsed.data.ai_source,
           setBy: 'customer',
         });
+        // S13–S16 re-audit #5 — "moved" above was an UNLOCKED read, and a
+        // rollback may have committed since. `setAiSource` re-reads
+        // `billing_mode` under the account lock and writes nothing on an
+        // account that is no longer moved; this answers exactly as the check
+        // above answers any legacy account.
+        if (!isMoved(updated.billingMode)) throw creditsNotActive();
         aiSource = updated.aiSource;
         aiSourceSetBy = updated.aiSourceSetBy;
         if (accountAudit !== undefined) {

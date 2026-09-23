@@ -40,6 +40,12 @@
 // not a way around the cohort: an id outside C0 is refused per account
 // (`not_in_phase_1_cohort`), in the dry run as in the real run.
 //
+// ⛔ A PLAN WITH NO PLAN-WIDE ALLOWANCE (ENTERPRISE) MOVES ONLY ON A FIGURE AN
+// ADMIN SET — M7's text: it stays legacy "until an admin sets a contract or
+// `admin_tier` override". A live override of EITHER reason is that figure; with
+// neither, the account is refused `no_contract`, whatever Stripe line it pays
+// for. The cutover never writes an override itself (§11 decision 4).
+//
 // ⛔ THE M9 OVER-ALLOWANCE GATE IS NOT BUILT, and belongs to Phase 2. M9 (and
 // §8's cohort table, C3) keeps a consented bundled account whose 30-day shadow
 // spend exceeds its allowance on legacy until Phase 3's purchase path or an
@@ -172,9 +178,10 @@ export interface CutoverAccountDecisionFacts {
    * no admin override" is this one fact: a live override IS a paid source.
    */
   readonly hasPaidCoverage: boolean;
-  /** A live `contract` override — what a plan whose allowance is `'contract'`
-   *  (Enterprise) must have to move (§8.4/M7). */
-  readonly hasLiveContractOverride: boolean;
+  /** A live plan override, `contract` OR `admin_tier`, whatever its figure —
+   *  what a plan whose allowance is `'contract'` (Enterprise) must have to
+   *  move (§8.4/M7). */
+  readonly hasLivePlanOverride: boolean;
   /** The account is in C0 (its e-mail is one of the deployment's internal
    *  ones). Phase 1 moves nothing else, whatever the selector. */
   readonly inPhaseOneCohort: boolean;
@@ -186,7 +193,8 @@ export interface CutoverAccountDecisionFacts {
  * list can be built by mapping accounts through it.
  *
  * In order: deleted → outside C0 → already moved → Free → a contract plan
- * with no live contract → no paid coverage → move.
+ * with no live override (neither `contract` nor `admin_tier`) → no paid
+ * coverage → move.
  */
 export function decideCutover(
   accountId: string,
@@ -210,12 +218,13 @@ export function decideCutover(
     return { accountId, outcome: 'not_eligible', reason: 'free_plan' };
   }
   // §8.4/M7 — a plan with no plan-wide allowance (Enterprise: 'contract')
-  // moves only on the figure an admin set as its contract. A paid Stripe line
-  // on some OTHER plan (an Enterprise account paying a Scale subscription) is
-  // coverage, but not the agreement M7 asks for, and would otherwise move the
-  // account on that other plan's allowance. §11 decision 4: no automatic
-  // overrides — the cutover never writes one.
-  if (entitlement.monthlyCredits === 'contract' && !facts.hasLiveContractOverride) {
+  // moves only on a figure an admin set: a live `contract` OR `admin_tier`
+  // override (M7: "until an admin sets a contract or `admin_tier` override").
+  // A paid Stripe line on some OTHER plan (an Enterprise account paying a
+  // Scale subscription) is coverage, but not the figure M7 asks for, and would
+  // otherwise move the account on that other plan's allowance. §11 decision 4:
+  // no automatic overrides — the cutover never writes one.
+  if (entitlement.monthlyCredits === 'contract' && !facts.hasLivePlanOverride) {
     return { accountId, outcome: 'refuse', reason: 'no_contract' };
   }
   // §8.4 — a paid tier with no paid coverage and no admin override stays
@@ -283,20 +292,28 @@ export interface RollbackHooks {
 }
 
 /**
- * S16 audit fix #10 — the legacy consent a rollback puts back. The move's
- * snapshot, EXCEPT when the customer chose their own source while moved
- * (`ai_source_set_by = 'customer'`): a customer who chose their own key
- * (`own_key`) turned the credits fallback OFF, and the legacy equivalent of
- * that is consent false — restoring a `true` snapshot would switch back on a
- * fallback they had just refused. Any other customer choice keeps the
- * snapshot (the coordinator's rule: choosing credits while moved has no
- * legacy meaning stronger than the consent the account had before).
+ * The legacy consent a rollback puts back (S16 audit #10, and its mirror in the
+ * S13–S16 re-audit, #4). The move's snapshot, EXCEPT when the customer chose
+ * their own source while moved (`ai_source_set_by = 'customer'`): then the
+ * legacy consent is what that choice means — `ai_source !== 'own_key'`, the
+ * same projection the old settings route shows a moved account
+ * (`movedAccountConsent`):
+ *
+ *   · `own_key` → false. The customer turned the credits fallback OFF;
+ *     restoring a `true` snapshot would switch back on a fallback they had
+ *     just refused.
+ *   · automatic (NULL) or `credits` → true. The customer turned the fallback
+ *     ON (for example, `consent: true` on an account the cutover had moved as
+ *     `own_key`); restoring a `false` snapshot would discard their opt-in.
+ *
+ * A source the cutover or an admin set is not the customer's choice, and the
+ * snapshot — the consent the account had when it moved — comes back unchanged.
  */
 export function legacyConsentOnRollback(
   credit: Pick<CreditAccountRecord, 'aiSource' | 'aiSourceSetBy'>,
   snapshotConsent: boolean,
 ): boolean {
-  if (credit.aiSourceSetBy === 'customer' && credit.aiSource === 'own_key') return false;
+  if (credit.aiSourceSetBy === 'customer') return credit.aiSource !== 'own_key';
   return snapshotConsent;
 }
 
@@ -349,7 +366,7 @@ function decisionFacts(
     consent: facts.consent,
     hasStoredKey: facts.hasStoredKey,
     hasPaidCoverage: coverage.hasPaidCoverage,
-    hasLiveContractOverride: coverage.hasLiveContractOverride,
+    hasLivePlanOverride: coverage.hasLivePlanOverride,
     inPhaseOneCohort: c0.has(facts.email.toLowerCase()),
   };
 }
@@ -501,7 +518,7 @@ export class CreditCutoverService {
   /**
    * One account → legacy (§8.7). Restores the legacy cap snapshot the cutover
    * took, and the legacy consent per {@link legacyConsentOnRollback} (the
-   * snapshot, unless the customer chose their own key while moved), and
+   * snapshot, unless the customer chose their own source while moved), and
    * clears `ai_source`; touches no ledger row, lot or window, so this month's
    * spend stays exactly as it is (the S13 status route then shows the OLD cap
    * with this month's spend intact — proved through the route in the
