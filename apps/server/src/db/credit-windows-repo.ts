@@ -201,6 +201,8 @@ export interface MonthlyLot {
  */
 export interface SourcedCreditWindow {
   readonly id: string;
+  /** The coverage the window was drawn from (an invoice, an order, the override marker). */
+  readonly sourceRef: string;
   readonly levelMicro: number;
   readonly levelSeq: number;
   readonly windowStart: PgInstant;
@@ -299,6 +301,15 @@ export interface CreditCoverNow {
   readonly levelSeq: number;
   /** The best coverage's level at now(); null when nothing covers now(). */
   readonly targetMicro: number | null;
+  /** WHICH coverage supplies the target (an invoice, an order, the override marker); null with it. */
+  readonly sourceRef: string | null;
+  /**
+   * Whether that coverage is a paid `proration_up` line: an upgrade that pays
+   * for the step above the level beneath it, not for a month of its own. A
+   * reversal of another invoice never treats it as cover that could take the
+   * month over (see `levelAfterReversal` in credit-clawbacks.ts).
+   */
+  readonly upgradeLine: boolean;
 }
 
 /**
@@ -310,17 +321,34 @@ export interface CreditCoverNow {
  * bought lot.
  */
 export interface ReversalLot extends ClawbackTargetLot {
-  /** What left the lot on work the customer had done: task charges and debt repaid from it. */
+  /**
+   * What left the lot on work the customer had done: task charges, debt repaid
+   * from it, and claims that OTHER clawbacks — another invoice's reversal, a
+   * reversal of another month — collected from it (S17 re-audit #12). Claims
+   * this invoice's own reversals of this month or a plan change collected are
+   * not spending: those are what the reversal arithmetic's O accounts for.
+   */
   readonly consumedMicro: number;
   /**
-   * A lot a won dispute re-granted. Its credit replaces what the dispute took
-   * from the invoice's own lots, so it counts as held or spent credit of the
-   * invoice but its grant is NOT more of what the invoice paid for.
+   * A lot a won dispute gave back: what it re-granted of what it took, or the
+   * credit it granted to raise a month drawn while it stood (a
+   * `dispute_reinstated` step's lot). Its credit counts as held or spent credit
+   * of the invoice, but its grant is NOT more of what the invoice paid for.
    */
   readonly regrant: boolean;
+  /**
+   * 0137 — what the paying invoice still paid when the lot was granted, in its
+   * minor units; null for a lot written before 0137 (read as the whole payment).
+   */
+  readonly stillPaidMinor: number | null;
 }
 
-/** S17 — a reversal clawback that still stands, as the state-based arithmetic reads it. */
+/**
+ * S17 — a clawback that still stands against one invoice's credit in one
+ * window, as the state-based arithmetic reads it: a refund, dispute or crypto
+ * refund of that invoice there, or a plan change of that window whose step is
+ * attributed to the invoice (S17 re-audit #4).
+ */
 export interface StandingReversal {
   readonly id: string;
   readonly amountMicro: number;
@@ -677,6 +705,7 @@ function levelReconciliationSql(accountId: string): SQL {
            w.level_seq,
            best.source,
            best.source_ref,
+           best.kind_rank,
            best.level_micro::text AS target_micro,
            to_char(u.at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS effective_at,
            (extract(epoch FROM (w.window_end - u.at)) * 1000000)::bigint::text AS remaining_us,
@@ -703,9 +732,11 @@ interface ReconciliationRow {
   id: string;
   level_micro: string;
   level_seq: number;
-  /** Null, with the four columns after it, when nothing covers now(). */
+  /** Null, with the five columns after it, when nothing covers now(). */
   source: string | null;
   source_ref: string | null;
+  /** 0 for a paid `proration_up` line, 1 for every other coverage. */
+  kind_rank: number | null;
   target_micro: string | null;
   effective_at: string | null;
   remaining_us: string | null;
@@ -826,10 +857,15 @@ export class DrizzleCreditWindowsRepo {
     accountId: string,
     windowId: string,
   ): Promise<MonthlyLot | null> {
+    // 0137 — the lot remembers what its invoice still paid when it was granted
+    // (NULL for a window no Stripe invoice drew), which is what a later
+    // reversal measures what it keeps against (S17 re-audit #5).
     await tx.execute(sql`
       INSERT INTO credit_lots
-        (account_id, kind, spend_rank, window_id, grant_key, granted_micro, starts_at, expires_at)
-      SELECT w.account_id, 'monthly', 0, w.id, 'window:' || w.id, share.micro, w.window_start, w.window_end
+        (account_id, kind, spend_rank, window_id, grant_key, granted_micro, starts_at, expires_at,
+         still_paid_minor)
+      SELECT w.account_id, 'monthly', 0, w.id, 'window:' || w.id, share.micro, w.window_start, w.window_end,
+             paid.still
         FROM credit_windows w
        CROSS JOIN LATERAL (
          SELECT div(
@@ -838,6 +874,12 @@ export class DrizzleCreditWindowsRepo {
                   (extract(epoch FROM (w.natural_end - w.natural_start)) * 1000000) * 1000000
                 )::bigint * 1000000 AS micro
        ) share
+        LEFT JOIN LATERAL (
+          SELECT GREATEST(pay.amount_paid_minor - pay.refunded_minor - pay.disputed_minor, 0) AS still
+            FROM billing_invoice_payments pay
+           WHERE w.source = 'stripe_invoice' AND pay.stripe_invoice_id = w.source_ref
+             AND pay.account_id = w.account_id
+        ) paid ON true
        WHERE w.id = ${windowId}::uuid AND w.account_id = ${accountId}::uuid AND share.micro > 0
       ON CONFLICT DO NOTHING`);
     const lots = await tx.execute<{ id: string; granted: string }>(sql`
@@ -902,6 +944,8 @@ export class DrizzleCreditWindowsRepo {
       levelSeq: row.level_seq,
       targetMicro:
         row.target_micro === null ? null : exactMicro('a target level', row.target_micro),
+      sourceRef: row.target_micro === null ? null : row.source_ref,
+      upgradeLine: row.target_micro !== null && Number(row.kind_rank) === 0,
     };
   }
 
@@ -959,12 +1003,23 @@ export class DrizzleCreditWindowsRepo {
     grantedMicro: number,
   ): Promise<MonthlyLot> {
     const grantKey = prorationGrantKey(windowId, seq);
+    // 0137 — what the invoice the step is attributed to still paid, when the
+    // step names a Stripe invoice (NULL otherwise). The step is written before
+    // its lot, so it is there to be read.
     await tx.execute(sql`
       INSERT INTO credit_lots
-        (account_id, kind, spend_rank, window_id, grant_key, granted_micro, starts_at, expires_at)
+        (account_id, kind, spend_rank, window_id, grant_key, granted_micro, starts_at, expires_at,
+         still_paid_minor)
       SELECT w.account_id, 'proration', 0, w.id, ${grantKey},
-             ${String(grantedMicro)}::bigint, now(), w.window_end
+             ${String(grantedMicro)}::bigint, now(), w.window_end, paid.still
         FROM credit_windows w
+        LEFT JOIN LATERAL (
+          SELECT GREATEST(pay.amount_paid_minor - pay.refunded_minor - pay.disputed_minor, 0) AS still
+            FROM credit_window_level_changes step
+            JOIN billing_invoice_payments pay
+              ON pay.stripe_invoice_id = step.source_ref AND pay.account_id = w.account_id
+           WHERE step.window_id = w.id AND step.seq = ${seq}
+        ) paid ON true
        WHERE w.id = ${windowId}::uuid AND w.account_id = ${accountId}::uuid AND now() < w.window_end
       ON CONFLICT DO NOTHING`);
     const lots = await tx.execute<{ id: string; granted: string }>(sql`
@@ -985,12 +1040,24 @@ export class DrizzleCreditWindowsRepo {
    * subtracted from what the clawback may ask of the lot, because credit that
    * expired was never used: asking for it back would turn a refund of an
    * untouched month into debt.
+   *
+   * ⛔ THE WINDOW'S LOTS INCLUDE WHAT A WON DISPUTE GAVE BACK FOR IT (S17
+   * re-audit #11). A won dispute re-grants what it clawed as a lot with no
+   * window (`reinstate:<clawback>`, where the reversed clawback's target is
+   * `window:<this window>:<invoice>`), and that credit IS the month's: without
+   * it here, a downgrade after the win found the month's own lots empty, wrote
+   * its share as debt, repaid that debt from the re-granted lot, and a later
+   * refund of the invoice then counted the repayment as spending and charged
+   * the customer for credit nobody used. The credit a win returns that belongs
+   * to no invoice (`reinstate:<clawback>:returned`) is not the month's and is
+   * not taken.
    */
   async clawbackTargets(
     tx: CreditLedgerTx,
     accountId: string,
     windowId: string,
   ): Promise<ClawbackTargetLot[]> {
+    const windowPrefix = `window:${windowId}:%`;
     const result = await tx.execute<Record<string, unknown>>(sql`
       SELECT l.id,
              l.granted_micro::text AS granted,
@@ -999,7 +1066,13 @@ export class DrizzleCreditWindowsRepo {
              COALESCE((SELECT -sum(x.lot_delta_micro) FROM credit_ledger x
                         WHERE x.lot_id = l.id AND x.kind = 'expiry'), 0)::text AS expired
         FROM credit_lots l
-       WHERE l.account_id = ${accountId}::uuid AND l.window_id = ${windowId}::uuid
+       WHERE l.account_id = ${accountId}::uuid
+         AND (l.window_id = ${windowId}::uuid
+              OR (l.window_id IS NULL AND l.kind = 'adjustment'
+                  AND EXISTS (SELECT 1 FROM credit_clawbacks c
+                               WHERE c.account_id = l.account_id AND c.source = 'stripe_dispute'
+                                 AND c.state = 'reversed' AND c.target_key LIKE ${windowPrefix}
+                                 AND l.grant_key = 'reinstate:' || c.id::text)))
        ORDER BY l.created_at DESC, l.id DESC
          FOR UPDATE OF l`);
     return rowsOf<{
@@ -1119,7 +1192,7 @@ export class DrizzleCreditWindowsRepo {
     sourceRef: string,
   ): Promise<SourcedCreditWindow[]> {
     const result = await tx.execute<Record<string, unknown>>(sql`
-      SELECT w.id, w.level_micro::text AS level_micro, w.level_seq,
+      SELECT w.id, w.source_ref, w.level_micro::text AS level_micro, w.level_seq,
              to_char(w.window_start AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS window_start,
              to_char(w.window_end AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS window_end,
              (w.window_start <= now() AND now() < w.window_end) AS current
@@ -1127,12 +1200,14 @@ export class DrizzleCreditWindowsRepo {
        WHERE w.account_id = ${accountId}::uuid
          AND ((w.source = ${source} AND w.source_ref = ${sourceRef})
               OR EXISTS (SELECT 1 FROM credit_window_level_changes step
-                          WHERE step.window_id = w.id AND step.reason = 'plan_change'
+                          WHERE step.window_id = w.id
+                            AND step.reason IN ('plan_change', 'dispute_reinstated')
                             AND step.source_ref = ${sourceRef}))
        ORDER BY w.window_start DESC, w.id DESC
          FOR UPDATE OF w`);
     return rowsOf<{
       id: string;
+      source_ref: string;
       level_micro: string;
       level_seq: number;
       window_start: string;
@@ -1140,6 +1215,7 @@ export class DrizzleCreditWindowsRepo {
       current: boolean;
     }>(result).map((r) => ({
       id: r.id,
+      sourceRef: r.source_ref,
       levelMicro: exactMicro('a window level', r.level_micro),
       levelSeq: r.level_seq,
       windowStart: instant('window_start', r.window_start),
@@ -1153,16 +1229,22 @@ export class DrizzleCreditWindowsRepo {
    * first (the order a clawback takes them in), locked:
    *
    *   · the window's MONTHLY lot, when the window was drawn from that source;
-   *   · every PRORATION lot whose plan-change step is keyed to that source
-   *     (`proration:<window>:<seq>`, the step's `source_ref`, 0136) — a paid
-   *     upgrade's lot belongs to the upgrade invoice, never to the base month;
+   *   · every PRORATION lot whose step is keyed to that source
+   *     (`proration:<window>:<seq>`, the step's `source_ref`, 0136): a
+   *     plan-change step's lot — a paid upgrade's belongs to the upgrade
+   *     invoice, never to the base month — and a `dispute_reinstated` step's
+   *     lot, the credit a won dispute granted to raise a month drawn while it
+   *     stood (re-audit #6), which is a give-back (`regrant`);
    *   · every lot a WON DISPUTE of that source re-granted for this window
    *     (`reinstate:<clawback>`, where the reversed clawback's target is
    *     `targetKey`): it replaces what the dispute took from the lots above.
    *
-   * Never another invoice's lot, and never a goodwill or bought lot. Each lot
-   * carries what expired out of it unspent, and what left it on the customer's
-   * work — task charges and debt repaid from it.
+   * Never another invoice's lot, and never a goodwill or bought lot — nor the
+   * credit a win returns that belongs to no invoice
+   * (`reinstate:<clawback>:returned`, which the exact key match leaves out).
+   * Each lot carries what expired out of it unspent, what left it on the
+   * customer's work (see `ReversalLot.consumedMicro`), and what its invoice
+   * still paid when it was granted (0137).
    */
   async reversalLots(
     tx: CreditLedgerTx,
@@ -1176,11 +1258,24 @@ export class DrizzleCreditWindowsRepo {
              l.granted_micro::text AS granted,
              l.remaining_micro::text AS remaining,
              l.held_micro::text AS held,
-             (l.window_id IS NULL) AS regrant,
+             l.still_paid_minor::text AS still_paid,
+             (l.window_id IS NULL
+              OR EXISTS (SELECT 1 FROM credit_window_level_changes back
+                          WHERE back.window_id = l.window_id AND back.reason = 'dispute_reinstated'
+                            AND l.grant_key = 'proration:' || back.window_id::text || ':' || back.seq::text))
+               AS regrant,
              COALESCE((SELECT -sum(x.lot_delta_micro) FROM credit_ledger x
                         WHERE x.lot_id = l.id AND x.kind = 'expiry'), 0)::text AS expired,
              COALESCE((SELECT -sum(x.lot_delta_micro) FROM credit_ledger x
-                        WHERE x.lot_id = l.id AND x.kind IN ('task_charge', 'debt_repayment')), 0)::text
+                        WHERE x.lot_id = l.id
+                          AND (x.kind IN ('task_charge', 'debt_repayment')
+                               OR (x.idempotency_key LIKE 'claim:%'
+                                   AND NOT EXISTS (
+                                     SELECT 1 FROM credit_clawbacks own
+                                      WHERE own.account_id = x.account_id
+                                        AND own.id::text = split_part(x.idempotency_key, ':', 2)
+                                        AND (own.source = 'plan_change'
+                                             OR own.target_key = ${targetKey}))))), 0)::text
                AS consumed
         FROM credit_lots l
         JOIN credit_windows w ON w.id = ${windowId}::uuid AND w.account_id = l.account_id
@@ -1189,7 +1284,8 @@ export class DrizzleCreditWindowsRepo {
                AND w.source = ${coverage.source} AND w.source_ref = ${coverage.sourceRef})
               OR (l.window_id = w.id AND l.kind = 'proration'
                   AND EXISTS (SELECT 1 FROM credit_window_level_changes step
-                               WHERE step.window_id = w.id AND step.reason = 'plan_change'
+                               WHERE step.window_id = w.id
+                                 AND step.reason IN ('plan_change', 'dispute_reinstated')
                                  AND step.source_ref = ${coverage.sourceRef}
                                  AND l.grant_key = 'proration:' || w.id::text || ':' || step.seq::text))
               OR (l.window_id IS NULL AND l.kind = 'adjustment'
@@ -1204,6 +1300,7 @@ export class DrizzleCreditWindowsRepo {
       granted: string;
       remaining: string;
       held: string;
+      still_paid: string | null;
       regrant: boolean;
       expired: string;
       consumed: string;
@@ -1215,29 +1312,50 @@ export class DrizzleCreditWindowsRepo {
       heldMicro: exactMicro('held credit', r.held),
       consumedMicro: exactMicro('consumed credit', r.consumed),
       regrant: r.regrant === true,
+      stillPaidMinor:
+        r.still_paid === null ? null : exactMicro('what a payment still paid', r.still_paid),
     }));
   }
 
   /**
-   * S17 — the refund, dispute and crypto-refund clawbacks that still stand
-   * against one target (`window:<window>:<coverage>`), oldest first: what the
-   * earlier reversals of the same invoice already asked of that window.
+   * S17 — the clawbacks that still stand against one invoice's credit in one
+   * window, oldest first: what earlier takes already charged beyond that
+   * credit.
+   *
+   *   · the refund, dispute and crypto-refund clawbacks of the invoice there
+   *     (`targetKey`, `window:<window>:<coverage>`), applied;
+   *   · ⛔ the window's PLAN-CHANGE clawbacks whose step is attributed to the
+   *     invoice (S17 re-audit #4): a downgrade's shortfall is debt the
+   *     customer already owes for spending the month, and a later refund that
+   *     did not count it charged the same spend twice (a builder month spent,
+   *     downgraded halfway and refunded owed 13,500 for 10,000 spent). The step
+   *     `<window>:<seq>` names the coverage that supplied its new level (0136);
+   *     a step written before 0136 names none and is attributed to the
+   *     coverage the window was drawn from.
    */
   async standingReversals(
     tx: CreditLedgerTx,
     accountId: string,
-    targetKey: string,
+    target: { readonly windowId: string; readonly targetKey: string; readonly coverageRef: string },
   ): Promise<StandingReversal[]> {
+    const windowTarget = `window:${target.windowId}`;
     const result = await tx.execute<{
       id: string;
       amount: string | null;
       clawed: string | null;
     }>(sql`
-      SELECT id, amount_micro::text AS amount, clawed_micro::text AS clawed
-        FROM credit_clawbacks
-       WHERE account_id = ${accountId}::uuid AND target_key = ${targetKey} AND state = 'applied'
-         AND source IN ('stripe_refund', 'stripe_dispute', 'crypto_refund')
-       ORDER BY created_at, id`);
+      SELECT c.id, c.amount_micro::text AS amount, c.clawed_micro::text AS clawed
+        FROM credit_clawbacks c
+       WHERE c.account_id = ${accountId}::uuid AND c.state = 'applied'
+         AND ((c.target_key = ${target.targetKey}
+               AND c.source IN ('stripe_refund', 'stripe_dispute', 'crypto_refund'))
+              OR (c.source = 'plan_change' AND c.target_key = ${windowTarget}
+                  AND EXISTS (SELECT 1 FROM credit_window_level_changes step
+                                JOIN credit_windows w ON w.id = step.window_id
+                               WHERE step.window_id = ${target.windowId}::uuid
+                                 AND c.source_ref = step.window_id::text || ':' || step.seq::text
+                                 AND COALESCE(step.source_ref, w.source_ref) = ${target.coverageRef})))
+       ORDER BY c.created_at, c.id`);
     return rowsOf<{ id: string; amount: string | null; clawed: string | null }>(result).map(
       (r) => ({
         id: r.id,
@@ -1375,6 +1493,87 @@ export class DrizzleCreditWindowsRepo {
     await tx.execute(sql`
       UPDATE credit_clawbacks SET state = 'reversed', pending_micro = 0
        WHERE id = ${clawbackId}::uuid AND state = 'applied'`);
+  }
+
+  /**
+   * S17 re-audit #13 — the RECORD of a dispute that took nothing itself: one
+   * clawback row keyed by the dispute id, targeting the invoice rather than a
+   * window (`invoice:<invoice>`), measured as the share of the payment the
+   * dispute reversed, with nothing clawed and no debt. It is written when the
+   * dispute leaves no other row — it earned no window, or no window gave
+   * anything up — and, `reversed`, when a win arrives for a dispute nothing
+   * recorded (the win came first). So a dispute is remembered by its id
+   * whatever it took: a `created` or `funds_withdrawn` delivered after the win
+   * finds it and changes nothing.
+   *
+   * Every reader of clawbacks by target, and every reader of pending claims,
+   * passes it by: its target names no window and it carries no claim.
+   */
+  async recordDispute(
+    tx: CreditLedgerTx,
+    input: {
+      readonly accountId: string;
+      readonly disputeId: string;
+      readonly targetKey: string;
+      readonly fractionPpm: number;
+      readonly state: 'applied' | 'reversed';
+    },
+  ): Promise<void> {
+    await tx.execute(sql`
+      INSERT INTO credit_clawbacks
+        (account_id, source, source_ref, target_key, fraction_ppm, state,
+         clawed_micro, pending_micro, debt_micro)
+      VALUES (${input.accountId}::uuid, 'stripe_dispute', ${input.disputeId}, ${input.targetKey},
+              ${Math.min(1_000_000, Math.max(1, Math.round(input.fractionPpm)))}, ${input.state},
+              0, 0, 0)
+      ON CONFLICT DO NOTHING`);
+  }
+
+  /**
+   * S17 re-audit #6 — how far disputes of one invoice lowered one window's
+   * level and wins have not yet put back: the level drops recorded with reason
+   * `dispute` and that invoice, less the raises recorded with reason
+   * `dispute_reinstated` and that invoice. A win restores this much of the
+   * level as a plain move (the credit comes back with the re-grant); any raise
+   * beyond it is a month drawn while the dispute stood, and is granted.
+   */
+  async unrestoredDisputeDropMicro(
+    tx: CreditLedgerTx,
+    windowId: string,
+    invoiceId: string,
+  ): Promise<number> {
+    const result = await tx.execute<{ micro: string }>(sql`
+      SELECT GREATEST(COALESCE(SUM(from_level_micro - to_level_micro), 0), 0)::text AS micro
+        FROM credit_window_level_changes
+       WHERE window_id = ${windowId}::uuid AND source_ref = ${invoiceId}
+         AND reason IN ('dispute', 'dispute_reinstated')
+       ORDER BY 1`);
+    return exactMicro('an unrestored level', rowsOf<{ micro: string }>(result)[0]?.micro ?? '0');
+  }
+
+  /**
+   * The whole window and its natural month, in microseconds: the durations a
+   * level raise from the window's start is prorated over (the same arithmetic
+   * that granted its monthly lot). Null when the window is not the account's.
+   */
+  async wholeWindowMicroseconds(
+    tx: CreditLedgerTx,
+    accountId: string,
+    windowId: string,
+  ): Promise<{ readonly windowMicroseconds: number; readonly naturalMicroseconds: number } | null> {
+    const result = await tx.execute<{ window_us: string; natural_us: string }>(sql`
+      SELECT (extract(epoch FROM (window_end - window_start)) * 1000000)::bigint::text AS window_us,
+             (extract(epoch FROM (natural_end - natural_start)) * 1000000)::bigint::text AS natural_us
+        FROM credit_windows
+       WHERE id = ${windowId}::uuid AND account_id = ${accountId}::uuid
+       ORDER BY id`);
+    const row = rowsOf<{ window_us: string; natural_us: string }>(result)[0];
+    return row === undefined
+      ? null
+      : {
+          windowMicroseconds: exactMicro('a window', row.window_us),
+          naturalMicroseconds: exactMicro('a natural month', row.natural_us),
+        };
   }
 
   /**

@@ -134,9 +134,14 @@ function harness(
         }
       : {}),
     creditClawbacks: clawbacks,
+    // An hour after every event below was sent: well inside the two days a
+    // reversal awaiting its payment is retried for (re-audit #14).
+    now: () => new Date((EVENT_CREATED + 3600) * 1000),
   });
   return { service, repo, errors, alerts, fetched };
 }
+
+const EVENT_CREATED = 1_790_000_000;
 
 let seq = 0;
 function event(type: string, object: Record<string, unknown>): StripeEvent {
@@ -145,7 +150,7 @@ function event(type: string, object: Record<string, unknown>): StripeEvent {
     id: `evt_s17fix_${type.replace(/\./g, '_')}_${String(seq)}`,
     type,
     api_version: '2024-12-18.acacia',
-    created: 1_790_000_000,
+    created: EVENT_CREATED,
     livemode: false,
     data: { object },
   };

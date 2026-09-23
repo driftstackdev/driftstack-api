@@ -3526,6 +3526,16 @@ export const creditLots = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
+    /**
+     * 0137 — what the payment that bought this lot still paid (its amount paid
+     * less what had been refunded or disputed), in that invoice's minor units,
+     * when the lot was granted. A reversal measures what the lot keeps against
+     * it. Written once, with the lot, for a month's lot and a plan-change
+     * step's lot a Stripe invoice paid for; NULL for every other lot and for
+     * lots written before 0137, which readers take as "the whole payment".
+     * Immutable, like every other term of a lot (0137's guard).
+     */
+    stillPaidMinor: bigint('still_paid_minor', { mode: 'number' }),
   },
   (t) => [
     uniqueIndex('credit_lots_grant_key_unique').on(t.grantKey),
@@ -3579,6 +3589,10 @@ export const creditLots = pgTable(
     check(
       'credit_lots_top_up_twelve_months',
       sql`${t.kind} <> 'top_up' OR ${t.expiresAt} <= ((${t.startsAt} AT TIME ZONE 'UTC') + interval '12 months 1 day') AT TIME ZONE 'UTC'`,
+    ),
+    check(
+      'credit_lots_still_paid_nonnegative',
+      sql`${t.stillPaidMinor} IS NULL OR ${t.stillPaidMinor} >= 0`,
     ),
   ],
 );

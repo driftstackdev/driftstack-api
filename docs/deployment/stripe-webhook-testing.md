@@ -60,6 +60,7 @@ stripe trigger customer.subscription.deleted
 # DRIFTSTACK_AI_CREDITS_MODE is off):
 stripe trigger charge.refunded
 stripe trigger charge.dispute.created
+stripe trigger charge.dispute.funds_withdrawn
 stripe trigger charge.dispute.closed
 ```
 
@@ -79,19 +80,32 @@ a handler that never runs, and nothing in this repository can tell.
 | `invoice.finalized` / `invoice.upcoming`                    | logged                                                             |
 | `charge.refunded`                                           | takes back the refunded share of the AI credits the payment bought |
 | `charge.dispute.created`                                    | takes back the disputed share until the dispute is decided         |
+| `charge.dispute.funds_withdrawn`                            | the same, for an inquiry that escalated to a chargeback            |
+| `charge.dispute.updated`                                    | the same, when the update shows an inquiry became a chargeback     |
 | `charge.dispute.closed` / `charge.dispute.funds_reinstated` | a WON dispute puts its credits back; a lost one changes nothing    |
 
-Two cases in the last three rows answer differently from the rest:
+Some cases in the reversal rows answer differently from the rest:
 
 - **An inquiry takes nothing.** A dispute whose status starts with `warning_`
   is an inquiry, not a chargeback: `charge.dispute.created` for it records the
   event and moves no credits, and its `warning_closed` changes nothing.
+- **An inquiry that escalates takes its credits then.** Stripe turns the same
+  dispute into a chargeback and withdraws the funds: `charge.dispute.funds_withdrawn`,
+  and a `charge.dispute.updated` whose status is `needs_response`,
+  `under_review` or `lost`, are applied exactly as `charge.dispute.created` is.
+  A dispute is applied once, whichever of these arrives, so an ordinary
+  dispute's `funds_withdrawn` after its `created` changes nothing. Any other
+  update (evidence submitted, an inquiry still under review) changes nothing.
 - **A refund or dispute that arrives before its `invoice.paid` answers 500.**
   When the charge names an invoice whose payment is not on record yet, the
   handler refuses the event as retryable, no `processed_stripe_events` row is
   written, and Stripe redelivers it; the redelivery after `invoice.paid` applies
-  it. In the log it counts as `handler_transient_error`. A charge with no
-  invoice at all is still recorded and kept for review.
+  it. In the log it counts as `handler_transient_error`. This lasts 48 hours
+  from the event's `created`: after that the event is recorded as handled and
+  kept for review — logged with the charge, alerted without it — because an
+  invoice that is not on record by then will not be, and Stripe stops retrying
+  after about three days. A charge with no invoice at all is recorded and kept
+  for review at once.
 
 Adding a row here is not the same as subscribing the endpoint: the dashboard
 (Developers → Webhooks → the endpoint → "Listen to events") is where the

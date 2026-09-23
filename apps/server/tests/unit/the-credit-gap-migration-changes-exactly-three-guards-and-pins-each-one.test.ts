@@ -375,7 +375,10 @@ describe('migration 0132 changes exactly three guards, and pins each one', () =>
     // 0136 (the S17 audit fix — a level change names the invoice it came from)
     // follows 0135.
     expect(journal.entries[at + 4]?.tag).toBe('0136_credit_window_level_change_source');
-    expect(journal.entries, 'and 0136 is the last one').toHaveLength(137);
+    // 0137 (the S17 re-audit fix — a lot remembers what its payment still paid
+    // when it was granted) follows 0136.
+    expect(journal.entries[at + 5]?.tag).toBe('0137_credit_lot_still_paid');
+    expect(journal.entries, 'and 0137 is the last one').toHaveLength(138);
   });
 
   it('CRITICAL schema.ts mirrors the CHECK and the index this migration adds, by name, and its prose names the trigger it installs and the guard it relaxes', () => {

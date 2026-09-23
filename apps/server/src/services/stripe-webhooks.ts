@@ -50,7 +50,11 @@ import {
 import type { AccountLifecycleService } from './account-lifecycle.js';
 import type { AuthCache } from './auth-cache.js';
 import { refreshCreditsAfter, type CreditsRefresher } from './credit-grants.js';
-import { isCreditReversalAwaitingPayment, type CreditClawbacks } from './credit-clawbacks.js';
+import {
+  isCreditReversalAwaitingPayment,
+  REVERSAL_AWAITS_PAYMENT_FOR_MS,
+  type CreditClawbacks,
+} from './credit-clawbacks.js';
 
 /**
  * Minimal parsed-Stripe-event shape. We don't depend on the `stripe`
@@ -379,6 +383,12 @@ export interface StripeWebhooksServiceConfig {
    * and then those events are logged and nothing more.
    */
   creditClawbacks?: CreditClawbacks | null;
+  /**
+   * S17 re-audit #14 — the clock a reversal's age is judged on (a reversal
+   * naming an invoice not on record is retried for two days, then kept for
+   * review). Injectable for tests; the wall clock otherwise.
+   */
+  now?: () => Date;
 }
 
 export class StripeWebhooksService {
@@ -546,10 +556,21 @@ export class StripeWebhooksService {
           // credits are off. A failure is recorded as an `error:` outcome.
           return await this.handleChargeReversal(event, 'refund');
         case 'charge.dispute.created':
+        case 'charge.dispute.funds_withdrawn':
           // S17 — a dispute is a reversal of the disputed amount until it is
           // decided; the same clawback as a refund, keyed on the dispute. An
-          // inquiry (`warning_*`) takes nothing: no funds have moved.
+          // inquiry (`warning_*`) takes nothing: no funds have moved. When an
+          // inquiry escalates, Stripe withdraws the funds on the SAME dispute
+          // (`funds_withdrawn`) — applied exactly as `created` is, and once per
+          // dispute id, so a normal dispute's `funds_withdrawn` after its
+          // `created` changes nothing (re-audit #9).
           return await this.handleChargeReversal(event, 'dispute');
+        case 'charge.dispute.updated':
+          // S17 re-audit #9 — an escalated inquiry also arrives as an update
+          // whose status is no longer `warning_*`. Applied as `created` is, once
+          // per dispute id; any other update (evidence, an inquiry still an
+          // inquiry) changes nothing.
+          return await this.handleDisputeUpdated(event);
         case 'charge.dispute.closed':
         case 'charge.dispute.funds_reinstated':
           // S17 — a dispute WON puts its credits back (the clawback is
@@ -1329,7 +1350,8 @@ export class StripeWebhooksService {
 
   /**
    * S17 — a refund (`charge.refunded`, the object is the CHARGE) or a dispute
-   * (`charge.dispute.created`, the object is the DISPUTE, naming its charge).
+   * (`charge.dispute.created`, or an escalated inquiry's `funds_withdrawn` /
+   * `updated`; the object is the DISPUTE, naming its charge).
    * The invoice the charge paid is read from the object when it says; a
    * dispute object never does, so the recorded payment is found by the charge
    * id first, and the charge is fetched from Stripe only when nothing on record
@@ -1339,7 +1361,10 @@ export class StripeWebhooksService {
    *     close (`warning_closed`) is neither won nor lost (audit #9).
    *   · A reversal whose invoice has no payment on record yet — it arrived
    *     before `invoice.paid` — is rethrown, so the delivery fails and Stripe
-   *     redelivers it once the payment is recorded (audit #8).
+   *     redelivers it once the payment is recorded (audit #8); from 48 hours
+   *     after Stripe sent it (its `created`), it is recorded as handled and
+   *     kept for review instead — logged with the charge, alerted without it
+   *     (re-audit #14).
    *   · A transient failure is rethrown so the delivery is retried whole.
    *   · Any other failure is logged with the charge, alerted without it, and
    *     recorded as `error:ai_credits_reversal_failed`, so the processed-events
@@ -1398,7 +1423,17 @@ export class StripeWebhooksService {
       this.logEvent(event, `${event.type} → credits ${outcome.kind}`);
       return 'handled';
     } catch (err) {
-      if (isTransientInfraError(err) || isCreditReversalAwaitingPayment(err)) throw err;
+      if (isCreditReversalAwaitingPayment(err)) {
+        // ⛔ RETRIED FOR TWO DAYS, THEN KEPT FOR REVIEW (re-audit #14). An
+        // invoice that will never be recorded — its customer unknown, the
+        // invoice refused, or paid before payments were recorded at all —
+        // would otherwise fail every delivery until Stripe stopped retrying
+        // (about three days) and then vanish with no processed-events row and
+        // no alert.
+        if (this.reversalIsYoung(event)) throw err;
+        return this.keptForReview(event, what, chargeId);
+      }
+      if (isTransientInfraError(err)) throw err;
       this.config.logger.error(
         {
           component: 'stripe-webhooks',
@@ -1487,6 +1522,65 @@ export class StripeWebhooksService {
     }
   }
 
+  /**
+   * S17 re-audit #9 — `charge.dispute.updated`: an inquiry that ESCALATED to a
+   * chargeback (its status is a chargeback's now) is applied exactly as
+   * `charge.dispute.created` is — and, being the same dispute id, at most once
+   * whichever of the two arrives. Every other update — evidence submitted, an
+   * inquiry still under review, a decision (which `closed` carries) — changes
+   * nothing here.
+   */
+  private async handleDisputeUpdated(event: StripeEvent): Promise<DispatchOutcome> {
+    const status = readString(event.data.object, 'status');
+    if (status !== null && ESCALATED_DISPUTE_STATUSES.has(status)) {
+      return this.handleChargeReversal(event, 'dispute');
+    }
+    this.logEvent(event, `${event.type} (${status ?? 'unknown'}; nothing to take back)`);
+    return 'handled';
+  }
+
+  /** Whether a reversal event is still inside the two days it is retried for (re-audit #14). */
+  private reversalIsYoung(event: StripeEvent): boolean {
+    if (event.created === undefined) return false;
+    const now = this.config.now?.() ?? new Date();
+    return now.getTime() - event.created * 1000 < REVERSAL_AWAITS_PAYMENT_FOR_MS;
+  }
+
+  /**
+   * A reversal whose invoice is still not on record two days after Stripe sent
+   * it: recorded as handled and kept for review — logged at error with the
+   * charge, alerted without it — exactly as a charge with no invoice is.
+   */
+  private keptForReview(
+    event: StripeEvent,
+    what: 'refund' | 'dispute',
+    chargeId: string,
+  ): DispatchOutcome {
+    this.config.logger.error(
+      {
+        component: 'stripe-webhooks',
+        eventId: event.id,
+        eventType: event.type,
+        chargeId,
+      },
+      'a reversal names an invoice still not on record after two days; kept for review',
+    );
+    try {
+      this.config.sentry?.captureMessage({
+        message:
+          `A payment ${what} matched no recorded payment, so nothing was taken back from AI credits. ` +
+          'Find the charge id in the server log and review it by hand.',
+        level: 'error',
+        fingerprint: ['billing', 'ai_credits_reversal_unmatched', what],
+        tags: { kind: 'ai_credits_reversal_unmatched', what },
+      });
+    } catch {
+      /* the log line is the record */
+    }
+    this.logEvent(event, `${event.type} → credits unmatched (kept for review)`);
+    return 'handled';
+  }
+
   /** S17 — the id-free alert both reversal paths raise when the credits could not be moved. */
   private alertCreditsFailure(
     kind: 'ai_credits_reversal_failed' | 'ai_credits_reinstate_failed',
@@ -1565,6 +1659,19 @@ function eventTime(event: StripeEvent): Date {
 function isInquiry(status: string | null): boolean {
   return status !== null && status.startsWith('warning_');
 }
+
+/**
+ * S17 re-audit #9 — the statuses of a dispute that is a CHARGEBACK and has not
+ * been decided in the merchant's favour: funds have left. A
+ * `charge.dispute.updated` carrying one applies the dispute (once per id).
+ * `won` is not here — a win is `closed` / `funds_reinstated` — nor are the
+ * inquiry (`warning_*`) and `prevented` statuses, which move no funds.
+ */
+const ESCALATED_DISPUTE_STATUSES: ReadonlySet<string> = new Set([
+  'needs_response',
+  'under_review',
+  'lost',
+]);
 
 function readString(obj: Record<string, unknown>, key: string): string | null {
   const v = obj[key];

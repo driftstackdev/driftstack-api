@@ -67,6 +67,7 @@ import type { AiCreditsMode } from '../lib/config.js';
 import type { Logger } from '../lib/logger.js';
 import type { SentryClient } from '../lib/sentry.js';
 import { isTransientInfraError } from '../lib/transient-error.js';
+import { reversalTargetKey } from './credit-clawbacks.js';
 import { enqueueNextCreditsWindowBoundary } from './credit-grant-jobs.js';
 import type { ScheduledJobsService } from './scheduled-jobs.js';
 
@@ -353,21 +354,43 @@ export class CreditGrantsService implements CreditsRefresher {
    * ⛔ A LAPSE NEVER LOWERS THE LEVEL. An account whose coverage has ended has
    * no target at all, and keeps the month it paid for. What stops it spending
    * is its tier, which is not decided here.
+   *
+   * `netOfExistingLots` (S17 re-audit #7) is for one caller: a refund whose
+   * invoice had set the month's level while ANOTHER payment covers the month
+   * best. The refund lowers the level to what its invoice alone still covers,
+   * and this raises it again for the other payment — prorated from that
+   * payment's start, exactly as any upgrade, but LESS what that payment's own
+   * lots in the window were already granted (an earlier raise it paid for), so
+   * the month is never granted to the same payment twice. The level still
+   * moves when nothing is left to grant.
    */
   async reconcileLevel(
     tx: CreditLedgerTx,
     accountId: string,
+    opts: { readonly netOfExistingLots?: boolean } = {},
   ): Promise<CreditLevelReconciled | null> {
     const { ledger, windows } = this.deps;
     const due = await windows.levelReconciliation(tx, accountId);
     if (due === null) return null;
 
     const seq = due.levelSeq + 1;
-    const deltaMicro = proratedWholeCreditsMicro(
+    let deltaMicro = proratedWholeCreditsMicro(
       due.targetMicro - due.levelMicro,
       due.remainingMicroseconds,
       due.naturalMicroseconds,
     );
+    if (opts.netOfExistingLots === true && deltaMicro > 0) {
+      const own = await windows.reversalLots(
+        tx,
+        accountId,
+        due.windowId,
+        { source: due.source, sourceRef: due.sourceRef },
+        reversalTargetKey(due.windowId, due.sourceRef),
+      );
+      let already = 0;
+      for (const lot of own) if (!lot.regrant) already = already + lot.grantedMicro;
+      deltaMicro = Math.max(0, deltaMicro - already);
+    }
     // The level moves FIRST, and it moves whether or not the prorated share
     // rounds to a whole credit: the level is what the next reconciliation
     // measures against, so a change left unrecorded would be recomputed for
