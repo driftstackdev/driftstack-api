@@ -315,8 +315,13 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
             isNull(apiKeys.revokedAt),
           ),
         )
-        .returning({ id: apiKeys.id });
-      return { memberAccountId, revokedApiKeyIds: revoked.map((r) => r.id) };
+        .returning({ id: apiKeys.id, name: apiKeys.name });
+      return {
+        memberAccountId,
+        revokedApiKeyIds: revoked.map((r) => r.id),
+        revokedApiKeys: revoked.map((r) => ({ id: r.id, name: r.name })),
+        revokedAt: now,
+      };
     });
   }
 

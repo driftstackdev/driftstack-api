@@ -42,6 +42,7 @@ function makeRepo(): {
       accountId: string;
       createdByAccountId: string | null;
       revoked: boolean;
+      name?: string;
     }[];
   };
 } {
@@ -55,6 +56,7 @@ function makeRepo(): {
       accountId: string;
       createdByAccountId: string | null;
       revoked: boolean;
+      name?: string;
     }[],
     teams: [] as TeamRow[],
   };
@@ -194,7 +196,7 @@ function makeRepo(): {
       // V-726 — the real repo revokes, in the same transaction, every live key
       // this member minted on the owner's account. Mirrored here so the service
       // sees the same shape; `state.mintedApiKeys` lets a test assert it.
-      const revokedApiKeyIds: string[] = [];
+      const revokedApiKeys: { id: string; name: string }[] = [];
       for (const key of state.mintedApiKeys) {
         if (
           key.accountId === ownerAccountId &&
@@ -202,10 +204,15 @@ function makeRepo(): {
           !key.revoked
         ) {
           key.revoked = true;
-          revokedApiKeyIds.push(key.id);
+          revokedApiKeys.push({ id: key.id, name: key.name ?? key.id });
         }
       }
-      return Promise.resolve({ memberAccountId, revokedApiKeyIds });
+      return Promise.resolve({
+        memberAccountId,
+        revokedApiKeyIds: revokedApiKeys.map((k) => k.id),
+        revokedApiKeys,
+        revokedAt: new Date('2026-09-24T10:00:00.000Z'),
+      });
     },
     deleteInvitesForEmail: (ownerAccountId, email) => {
       const norm = email.trim().toLowerCase();
@@ -716,6 +723,118 @@ describe('V-553.B-13 TeamMembersService.removeMember', () => {
     expect(state.mintedApiKeys.find((k) => k.id === 'key_legacy')?.revoked).toBe(false);
   });
 
+  // Team-keys follow-up — a key revoked by a removal is a revocation like any other:
+  // the owner's integrations learn of it from the api_key.revoked webhook
+  // (webhooks/events.md: "regardless of who initiated the revocation"), and the
+  // audit log carries one api_key.revoked row per key, as a direct revoke does.
+  it('sends api_key.revoked and writes an api_key.revoked audit row for every key the removal revoked', async () => {
+    const { repo, state } = makeRepo();
+    const { service: email } = makeEmail();
+    state.emailByAccount.set('acc_b', 'b@e.test');
+    state.members.push({
+      id: 'mem_1',
+      ownerAccountId: 'acc_owner',
+      memberAccountId: 'acc_b',
+      memberEmail: 'b@e.test',
+      role: 'admin',
+      invitedAt: new Date(),
+      acceptedAt: new Date(),
+      invitedByAccountId: 'acc_owner',
+      createdAt: new Date(),
+    });
+    state.mintedApiKeys.push(
+      { id: 'k1', accountId: 'acc_owner', createdByAccountId: 'acc_b', revoked: false, name: 'ci' },
+      {
+        id: 'k2',
+        accountId: 'acc_owner',
+        createdByAccountId: 'acc_b',
+        revoked: false,
+        name: 'etl',
+      },
+      {
+        id: 'k3',
+        accountId: 'acc_owner',
+        createdByAccountId: 'acc_owner',
+        revoked: false,
+        name: 'own',
+      },
+    );
+    const events: { accountId: string; type: string; data: Record<string, unknown> }[] = [];
+    const webhooks = {
+      enqueueEvent: (accountId: string, type: 'api_key.revoked', data: Record<string, unknown>) => {
+        events.push({ accountId, type, data });
+        return Promise.resolve(1);
+      },
+    };
+    const rows: { action: string; targetResourceId?: string | null; payload?: unknown }[] = [];
+    const audit = {
+      record: (row: { action: string; targetResourceId?: string | null; payload?: unknown }) => {
+        rows.push(row);
+        return Promise.resolve();
+      },
+    } as unknown as AccountAuditService;
+
+    const svc = new TeamMembersService(repo, email, CONFIG, audit, null, webhooks);
+    expect(await svc.removeMember({ membershipId: 'mem_1', ownerAccountId: 'acc_owner' })).toBe(
+      true,
+    );
+
+    expect(events).toEqual([
+      {
+        accountId: 'acc_owner',
+        type: 'api_key.revoked',
+        data: { api_key_id: 'key_k1', name: 'ci', revoked_at: '2026-09-24T10:00:00.000Z' },
+      },
+      {
+        accountId: 'acc_owner',
+        type: 'api_key.revoked',
+        data: { api_key_id: 'key_k2', name: 'etl', revoked_at: '2026-09-24T10:00:00.000Z' },
+      },
+    ]);
+    expect(
+      rows
+        .filter((r) => r.action === 'api_key.revoked')
+        .map((r) => [r.targetResourceId, r.payload]),
+    ).toEqual([
+      ['key_k1', { name: 'ci', revoked_at: '2026-09-24T10:00:00.000Z' }],
+      ['key_k2', { name: 'etl', revoked_at: '2026-09-24T10:00:00.000Z' }],
+    ]);
+    expect(rows.filter((r) => r.action === 'team.member_removed')).toHaveLength(1);
+  });
+
+  it('a failing webhook or audit write never undoes or blocks the removal', async () => {
+    const { repo, state } = makeRepo();
+    const { service: email } = makeEmail();
+    state.emailByAccount.set('acc_b', 'b@e.test');
+    state.members.push({
+      id: 'mem_1',
+      ownerAccountId: 'acc_owner',
+      memberAccountId: 'acc_b',
+      memberEmail: 'b@e.test',
+      role: 'admin',
+      invitedAt: new Date(),
+      acceptedAt: new Date(),
+      invitedByAccountId: 'acc_owner',
+      createdAt: new Date(),
+    });
+    state.mintedApiKeys.push({
+      id: 'k1',
+      accountId: 'acc_owner',
+      createdByAccountId: 'acc_b',
+      revoked: false,
+      name: 'ci',
+    });
+    const webhooks = { enqueueEvent: () => Promise.reject(new Error('queue down')) };
+    const audit = {
+      record: () => Promise.reject(new Error('audit down')),
+    } as unknown as AccountAuditService;
+    const svc = new TeamMembersService(repo, email, CONFIG, audit, null, webhooks);
+    expect(await svc.removeMember({ membershipId: 'mem_1', ownerAccountId: 'acc_owner' })).toBe(
+      true,
+    );
+    expect(state.mintedApiKeys[0]?.revoked).toBe(true);
+  });
+
   it('records the revoked key ids on the removal audit entry so a silent offboarding is answerable afterwards', async () => {
     const { repo, state } = makeRepo();
     const { service: email } = makeEmail();
@@ -742,8 +861,11 @@ describe('V-553.B-13 TeamMembersService.removeMember', () => {
     const svc = new TeamMembersService(repo, email, CONFIG, audit);
     await svc.removeMember({ membershipId: 'mem_1', ownerAccountId: 'acc_owner' });
 
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.payload).toEqual({ revoked_api_key_ids: ['key_b1'] });
+    // One removal row naming the revoked ids, plus one api_key.revoked row per key.
+    const removal = calls.filter((c) => c.action === 'team.member_removed');
+    expect(removal).toHaveLength(1);
+    expect(removal[0]?.payload).toEqual({ revoked_api_key_ids: ['key_b1'] });
+    expect(calls.filter((c) => c.action === 'api_key.revoked')).toHaveLength(1);
   });
 
   it('cancels the removed member OUTSTANDING invites so they cannot re-join via a pending invite (Fable auth re-audit 2026-07-02)', async () => {

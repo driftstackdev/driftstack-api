@@ -404,6 +404,7 @@ export async function startTestServer(): Promise<TestServer> {
     { dashboardBaseUrl: 'https://app.driftstack.test' },
     accountAuditService,
     authCache,
+    webhooksService,
   );
   const profileSnapshotsRepo = new DrizzleProfileSnapshotsRepo(database);
   const profileSnapshotsService = new ProfileSnapshotsService(

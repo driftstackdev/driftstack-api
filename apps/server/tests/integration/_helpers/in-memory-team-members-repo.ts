@@ -286,7 +286,7 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
     // V-726 — mirror the Drizzle sibling: revoke the keys this member minted on
     // the owner's account. The real atomicity lives in the transaction there;
     // this twin only has to agree on WHICH keys are revoked.
-    const revokedApiKeyIds: string[] = [];
+    const revokedApiKeys: { id: string; name: string }[] = [];
     for (const key of this.mintedApiKeys) {
       if (
         key.accountId === ownerAccountId &&
@@ -294,10 +294,15 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
         !key.revoked
       ) {
         key.revoked = true;
-        revokedApiKeyIds.push(key.id);
+        revokedApiKeys.push({ id: key.id, name: key.name ?? key.id });
       }
     }
-    return { memberAccountId, revokedApiKeyIds };
+    return {
+      memberAccountId,
+      revokedApiKeyIds: revokedApiKeys.map((k) => k.id),
+      revokedApiKeys,
+      revokedAt: new Date(),
+    };
   }
 
   /**
@@ -309,6 +314,7 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
     accountId: string;
     createdByAccountId: string | null;
     revoked: boolean;
+    name?: string;
   }[] = [];
 
   /**
@@ -322,6 +328,7 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
     id: string;
     accountId: string;
     createdByAccountId: string | null;
+    name?: string;
   }): void {
     this.mintedApiKeys.push({ ...input, revoked: false });
   }

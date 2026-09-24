@@ -68,7 +68,7 @@ describe('W448.C apps/server/src/db/team-members-repo.ts content parity', () => 
       /const revoked = await tx\s*\.update\(apiKeys\)\s*\.set\(\{ revokedAt: now \}\)\s*\.where\(\s*and\(\s*eq\(apiKeys\.accountId, ownerAccountId\),\s*eq\(apiKeys\.createdByAccountId, memberAccountId\),\s*isNull\(apiKeys\.revokedAt\),\s*\),\s*\)/,
     );
     expect(body).toMatch(
-      /return \{ memberAccountId, revokedApiKeyIds: revoked\.map\(\(r\) => r\.id\) \};/,
+      /return \{\s*memberAccountId,\s*revokedApiKeyIds: revoked\.map\(\(r\) => r\.id\),\s*revokedApiKeys: revoked\.map\(\(r\) => \(\{ id: r\.id, name: r\.name \}\)\),\s*revokedAt: now,\s*\};/,
     );
   });
 

@@ -27,6 +27,7 @@ import { generateAuthToken, tokenHash } from '../lib/auth-tokens.js';
 import { canonicalOneTimeTokenUrl } from '../lib/canonical-one-time-token-url.js';
 import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
 import type { AccountAuditService } from './account-audit.js';
+import type { RevocationWebhookEmitter } from './api-keys.js';
 import type { AuthCache } from './auth-cache.js';
 import type { EmailService } from './email.js';
 
@@ -72,6 +73,10 @@ export interface TeamInviteRow {
 export interface RemoveMemberResult {
   memberAccountId: string;
   revokedApiKeyIds: string[];
+  /** The same keys with their names, for the api_key.revoked webhook + audit rows. */
+  revokedApiKeys: { id: string; name: string }[];
+  /** The instant the removal revoked them (one statement, one timestamp). */
+  revokedAt: Date;
 }
 
 /**
@@ -203,6 +208,10 @@ export class TeamMembersService {
      *  with the updated teams[]. Without it, membership changes only
      *  take effect after the 30s cache TTL elapses. */
     private readonly authCache: AuthCache | null = null,
+    /** Team-keys follow-up — the owner's api_key.revoked webhook for every key a
+     *  removal revokes (webhooks/events.md: sent "regardless of who initiated the
+     *  revocation"). Optional like the others; best-effort. */
+    private readonly webhooks: RevocationWebhookEmitter | null = null,
   ) {
     this.dashboardBaseUrl = config.dashboardBaseUrl.replace(/\/+$/, '');
   }
@@ -437,6 +446,40 @@ export class TeamMembersService {
     // it keeps the cache from holding a dead credential until its TTL.
     for (const keyId of removed.revokedApiKeyIds) {
       await this.invalidateKeyCache(keyId);
+    }
+    // Team-keys follow-up — each key the removal revoked is a revocation like any
+    // other: the owner's systems hear of it through api_key.revoked, and the audit
+    // log carries one api_key.revoked row per key, as a direct revoke writes
+    // (ApiKeysService.revokeChecked; same payload). The team.member_removed row
+    // below still lists them together. Best-effort: the keys are already revoked.
+    const revokedAtIso = removed.revokedAt.toISOString();
+    for (const key of removed.revokedApiKeys) {
+      if (this.webhooks) {
+        try {
+          await this.webhooks.enqueueEvent(input.ownerAccountId, 'api_key.revoked', {
+            api_key_id: `key_${key.id}`,
+            name: key.name,
+            revoked_at: revokedAtIso,
+          });
+        } catch {
+          /* swallow */
+        }
+      }
+      if (this.accountAudit) {
+        try {
+          await this.accountAudit.record({
+            accountId: input.ownerAccountId,
+            actorType: 'customer',
+            actorAccountId: input.ownerAccountId,
+            actorKeyId: null,
+            action: 'api_key.revoked',
+            targetResourceId: `key_${key.id}`,
+            payload: { name: key.name, revoked_at: revokedAtIso },
+          });
+        } catch {
+          /* swallow */
+        }
+      }
     }
     if (this.accountAudit) {
       try {

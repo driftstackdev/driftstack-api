@@ -207,7 +207,9 @@ Consequences worth planning for:
 - If one of those keys is used by your own systems, it stops working at
   removal. Mint a replacement under your own account first, then remove the
   member. The `team.member_removed` audit entry lists the revoked key ids, so
-  you can always see afterwards exactly what was invalidated.
+  you can always see afterwards exactly what was invalidated. Each revoked key
+  also sends the `api_key.revoked` webhook and gets its own `api_key.revoked`
+  audit entry, as a revoke from the API keys page does.
 - If the member rotated one of your keys, the key they received is revoked,
   and your original still expires when its rotation grace period ends.
   Mint a replacement for anything still using it.

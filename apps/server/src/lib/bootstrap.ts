@@ -1377,6 +1377,7 @@ export async function createProductionDeps(
     { dashboardBaseUrl },
     accountAuditService,
     authCache,
+    webhooksService,
   );
 
   // V-295c3-followup — incident-notification fan-out. Wired into the

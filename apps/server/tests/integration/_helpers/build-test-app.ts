@@ -1288,6 +1288,8 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     noopEmail,
     { dashboardBaseUrl: 'https://app.driftstack.test' },
     accountAuditService,
+    null,
+    webhooksService,
   );
 
   // V-295c3-followup — incident-notification fan-out.
