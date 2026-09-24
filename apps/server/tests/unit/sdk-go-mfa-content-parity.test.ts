@@ -78,7 +78,7 @@ describe('W590.C packages/sdk-go/mfa.go content parity', () => {
       /\/\/ MfaVerifyRequest — first 6-digit TOTP code from the customer's app\./,
     );
     expect(body).toMatch(
-      /^type MfaVerifyRequest struct \{\s*\n\s*Code string `json:"code"`\s*\n\}/m,
+      /^type MfaVerifyRequest struct \{\s*\n\s*Code\s+string `json:"code"`\s*\n\s*CurrentPassword\s+string `json:"current_password,omitempty"`\s*\n\}/m,
     );
     expect(body).toMatch(/\/\/ MfaVerifyResponse — 10 single-use recovery codes\. Shown ONCE\./);
     expect(body).toMatch(
