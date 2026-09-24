@@ -49,15 +49,29 @@
 //     re-audit #7, decided against it rather than against an upgrade line,
 //     R5), prorated from its start.
 //
-// `reconcileUnit` brings a unit's position — what it still holds, what left it
-// on the customer's work, less what its clawbacks charged beyond it — to its
-// target: it takes the difference (free credit first, held credit as a claim,
-// the rest as debt), or gives it back (a claim released, debt forgiven, repaid
-// debt returned as credit that lasts as long as the credit that repaid it, the
-// rest into the month while it runs). Because the target is a function of the
-// facts and every event moves every affected unit to it, the order of events
-// does not change where the account ends: a won dispute leaves exactly what the
-// account would hold had the dispute never been filed.
+// `reconcileUnit` brings a unit's position — what its LIVE lots still hold,
+// what left them on the customer's work, less what its STANDING clawbacks
+// charged beyond it — to its target: it takes the difference (free credit
+// first, held credit as a claim while the month runs, the rest as debt), or
+// gives it back (a claim released, then what the charge beyond the lots became:
+// debt still owed forgiven, debt later credit repaid returned INTO the lot that
+// repaid it while that lot is live — nothing when it has expired or an admin
+// forgave it (R1', R9) — then credit moved to the lots the customer's spending
+// fell on while the unit's credit stood taken (R10), and the rest into the
+// month while it runs). A won dispute first undoes its own clawbacks the same
+// way (`undoReversedClawbacks`) and they then charge nothing. Because the target
+// is a function of the facts and every event moves every affected unit to it,
+// the order of events does not change where the account ends: a won dispute
+// leaves exactly what the account would hold had the dispute never been filed —
+// the same credit, lasting as long.
+//
+// ⛔ THE INTERIM ANNUAL CAP IS FROZEN AT EACH REVERSAL (R8, 0140). What the
+// payment's credit had been spent — plus what running tasks held — when the
+// refund or dispute was measured is recorded on its rows, and every later
+// reconciliation (a win, a refresh, a task's settle) uses the newest standing
+// reversal's figure: a later spend or a later win does not move what may be
+// owed. A task that settles a claim into debt the frozen cap forbids owes only
+// what the clawback's recorded threshold says (credit-reservations.ts).
 //
 // ⛔ NOTHING HERE MAY ABORT THE CALLER'S TRANSACTION OVER AN ORDINARY OUTCOME.
 // "Another window already covers that time" is ordinary. The window insert is
@@ -95,10 +109,16 @@ import type {
 } from '../db/credit-ledger-repo.js';
 import {
   CREDIT_WINDOW_SOURCES,
+  CreditLegacyDisputeError,
+  parseUnitTargetKey,
+  unitLotsForSettle,
   prorationGrantKey,
   unitGivebackPrefix,
   unitTargetKey,
+  type AccountClawback,
   type ClawbackTargetLot,
+  type LedgerDebtEvent,
+  type ReservationHold,
   type CreditClawbackKey,
   type CreditClawbackRecord,
   type CreditClawbackSource,
@@ -338,10 +358,18 @@ export function unitTargetMicro(
 export function allowedDebtByUnit(
   units: readonly { readonly keepMicro: number; readonly consumedMicro: number }[],
   paidForKeepMicro: number | null,
+  /**
+   * S17 R8 — what the payment's credit had been spent (and held) across ALL
+   * its windows when the standing reversal was measured: the cap is frozen
+   * there, so a later spend or a later win does not move it. Absent, it is
+   * what the units have spent now.
+   */
+  capSpentMicro?: number,
 ): (number | null)[] {
   if (paidForKeepMicro === null) return units.map(() => null);
   let spent = 0;
   for (const u of units) spent = spent + u.consumedMicro;
+  if (capSpentMicro !== undefined) spent = capSpentMicro;
   let left = Math.max(0, spent - paidForKeepMicro);
   return units.map((u) => {
     const shortfall = Math.max(0, u.consumedMicro - u.keepMicro);
@@ -349,6 +377,462 @@ export function allowedDebtByUnit(
     left = left - allowed;
     return allowed;
   });
+}
+
+/** What became of the debt one clawback wrote (`debtFates`). */
+export interface ClawbackDebtFate {
+  /** Every debt row it wrote: its own shortfall, and claims that became debt at a settle. */
+  readonly incurredMicro: number;
+  /** What the account still owes of it. */
+  readonly outstandingMicro: number;
+  /** What later credit repaid of it, lot by lot, in the order it was repaid, with the row. */
+  readonly repaid: readonly {
+    readonly lotId: string;
+    readonly micro: number;
+    readonly rowId: number;
+    readonly at: PgInstant;
+  }[];
+  /** What a reconciliation of its own unit (or the undoing of it) forgave. */
+  readonly forgivenSelfMicro: number;
+  /** What anything else forgave — an admin's `forgive_debt`, say. */
+  readonly forgivenOtherMicro: number;
+}
+
+/** `reinstate:window:<window>:<coverage>:undo:<clawback>:…` — a won dispute undoing one clawback. */
+const UNDO_KEY =
+  /^reinstate:window:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[^:]+:undo:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):/;
+/** `reinstate:window:<window>:<coverage>:…` — a reconciliation of one unit. */
+const UNIT_GIVEBACK_KEY =
+  /^reinstate:(window:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[^:]+):/;
+
+/** One chunk of debt, as `followDebt` walks the account's debt oldest first. */
+interface DebtChunk {
+  readonly owner: string | null;
+  readonly unit: string | null;
+  readonly incurred: number;
+  outstanding: number;
+  readonly repaid: { lotId: string; micro: number; rowId: number; at: PgInstant }[];
+  forgivenSelf: number;
+  forgivenOther: number;
+}
+
+/**
+ * The walk behind `debtFates`: every chunk of debt, and for each row that
+ * lowered debt, whose chunks it lowered and by how much.
+ */
+function followDebt(
+  events: readonly LedgerDebtEvent[],
+  clawbacks: readonly AccountClawback[],
+  unitOf: ReadonlyMap<string, string>,
+): {
+  chunks: DebtChunk[];
+  rowOwners: Map<number, { owner: string | null; micro: number }[]>;
+} {
+  const byKey = new Map<string, AccountClawback>();
+  const byId = new Map<string, AccountClawback>();
+  for (const c of clawbacks) {
+    byKey.set(`clawback:${c.source}:${c.sourceRef}:${c.targetKey}:debt`, c);
+    byKey.set(`clawback:${c.source}:${c.sourceRef}:debt`, c);
+    byId.set(c.id, c);
+  }
+  const chunks: DebtChunk[] = [];
+  const rowOwners = new Map<number, { owner: string | null; micro: number }[]>();
+  const reduce = (
+    rowId: number,
+    pool: readonly DebtChunk[],
+    amount: number,
+    apply: (c: DebtChunk, micro: number) => void,
+  ): number => {
+    let left = amount;
+    for (const c of pool) {
+      if (left <= 0) break;
+      const take = Math.min(left, c.outstanding);
+      if (take <= 0) continue;
+      c.outstanding = c.outstanding - take;
+      apply(c, take);
+      rowOwners.set(rowId, [...(rowOwners.get(rowId) ?? []), { owner: c.owner, micro: take }]);
+      left = left - take;
+    }
+    return left;
+  };
+  for (const e of events) {
+    if (e.debtDeltaMicro > 0) {
+      const claim = /^claim_debt:([^:]+):/.exec(e.key);
+      const owner =
+        claim !== null ? (byId.get(claim[1] ?? '') ?? null) : (byKey.get(e.key) ?? null);
+      const unit =
+        owner === null
+          ? null
+          : (unitOf.get(owner.id) ??
+            (owner.targetKey.split(':').length === 3 ? owner.targetKey : null));
+      chunks.push({
+        owner: owner?.id ?? null,
+        unit,
+        incurred: e.debtDeltaMicro,
+        outstanding: e.debtDeltaMicro,
+        repaid: [],
+        forgivenSelf: 0,
+        forgivenOther: 0,
+      });
+      rowOwners.set(e.id, [{ owner: owner?.id ?? null, micro: e.debtDeltaMicro }]);
+      continue;
+    }
+    const amount = -e.debtDeltaMicro;
+    if (e.lotId !== null) {
+      const lotId = e.lotId;
+      reduce(e.id, chunks, amount, (c, micro) => {
+        c.repaid.push({ lotId, micro, rowId: e.id, at: e.at });
+      });
+      continue;
+    }
+    const undo = UNDO_KEY.exec(e.key);
+    const unit = UNIT_GIVEBACK_KEY.exec(e.key);
+    let left = amount;
+    if (undo !== null) {
+      left = reduce(
+        e.id,
+        chunks.filter((c) => c.owner === undo[1]),
+        left,
+        (c, micro) => {
+          c.forgivenSelf = c.forgivenSelf + micro;
+        },
+      );
+    } else if (unit !== null) {
+      left = reduce(
+        e.id,
+        chunks.filter((c) => c.unit === unit[1]),
+        left,
+        (c, micro) => {
+          c.forgivenSelf = c.forgivenSelf + micro;
+        },
+      );
+    }
+    reduce(e.id, chunks, left, (c, micro) => {
+      c.forgivenOther = c.forgivenOther + micro;
+    });
+  }
+  return { chunks, rowOwners };
+}
+
+/**
+ * S17 audit 4 (R9, R1') — follow the account's debt, oldest first, to say what
+ * became of each clawback's: still owed, repaid out of which lots, or forgiven
+ * — by the clawback's own unit (a give-back) or by anything else. Pure.
+ *
+ * Debt is one figure on the account, so a repayment names no debt. It is
+ * taken to pay the OLDEST debt still owed, which is the order every repayment
+ * is made in (`settleDebtFromFree` runs after each movement that adds credit or
+ * debt). A forgiveness keyed to a unit, or to one clawback's undoing, lowers
+ * that unit's (that clawback's) debt, oldest first; any other forgiveness is
+ * taken oldest first, like a repayment. A debt row names its clawback by its
+ * key (`clawback:<source>:<ref>[:<target>]:debt`, `claim_debt:<clawback>:…`);
+ * one that names none is still counted, so the order stays whole.
+ */
+export function debtFates(
+  events: readonly LedgerDebtEvent[],
+  clawbacks: readonly AccountClawback[],
+  /** The unit a clawback's debt belongs to when its target does not say (a plan change's). */
+  unitOf: ReadonlyMap<string, string> = new Map(),
+): Map<string, ClawbackDebtFate> {
+  const { chunks } = followDebt(events, clawbacks, unitOf);
+  const fates = new Map<string, ClawbackDebtFate>();
+  for (const c of chunks) {
+    if (c.owner === null) continue;
+    const had = fates.get(c.owner);
+    fates.set(c.owner, {
+      incurredMicro: (had?.incurredMicro ?? 0) + c.incurred,
+      outstandingMicro: (had?.outstandingMicro ?? 0) + c.outstanding,
+      repaid: [...(had?.repaid ?? []), ...c.repaid],
+      forgivenSelfMicro: (had?.forgivenSelfMicro ?? 0) + c.forgivenSelf,
+      forgivenOtherMicro: (had?.forgivenOtherMicro ?? 0) + c.forgivenOther,
+    });
+  }
+  return fates;
+}
+
+/** A point in the ledger: a row (its id and its transaction's clock), or a clock reading (id 0). */
+export interface LedgerPoint {
+  readonly at: PgInstant;
+  readonly id: number;
+}
+
+const UNKNOWN_OWNER = 'unknown';
+
+function isAfter(a: LedgerPoint, b: LedgerPoint): boolean {
+  return a.at > b.at || (a.at === b.at && a.id > b.id);
+}
+
+/**
+ * Credit a won dispute gives back into a LIVE lot, and since when a twin
+ * without the dispute had it there (S17 audit 4, R10 with R1'): debt the
+ * dispute wrote that the lot repaid, a claim it collected there, spending
+ * that fell on the lot while the dispute stood, or the month it took.
+ */
+export interface TwinCredit {
+  readonly lotId: string;
+  readonly micro: number;
+  readonly since: LedgerPoint;
+  /** The unit whose give-back placed it: that unit's own later takes are already in its target. */
+  readonly originUnit: string;
+  /**
+   * `returned`: debt the unit's charge wrote, or a claim it collected, given
+   * back — that charge was the dispute's doing, and the twin never had it.
+   */
+  readonly kind: 'returned' | 'moved' | 'restored';
+}
+
+/** A claim a twin without a won dispute paid out of credit the dispute's claim collected. */
+interface TwinClaimPay {
+  readonly claimId: string;
+  readonly source: CreditClawbackSource;
+  /** The task whose settlement collected the credit. */
+  readonly task: string;
+  readonly micro: number;
+}
+
+/** A lot, for the order the twin's settlements would have used it in. */
+export interface TwinLot {
+  readonly lotId: string;
+  readonly spendRank: number;
+  readonly expiresAt: PgInstant;
+  readonly createdAt: PgInstant;
+}
+
+/** What the twin's later settlements did differently, as corrections to write. */
+export interface TwinCorrections {
+  /** A later take of another unit would have taken this credit instead of writing debt. */
+  readonly lateTakes: { readonly owner: string; readonly lotId: string; readonly micro: number }[];
+  /** A later settlement would have repaid debt out of this credit (keyed by the credit's origin). */
+  readonly paid: { readonly origin: string; readonly lotId: string; readonly micro: number }[];
+  /** A later settlement repaid this much LESS out of this lot: it goes back into it. */
+  readonly unrepaid: {
+    readonly owner: string | null;
+    readonly lotId: string;
+    readonly micro: number;
+  }[];
+  /** Debt still owed that the twin had already repaid out of the credit. */
+  readonly forgive: { readonly owner: string | null; readonly micro: number }[];
+}
+
+/**
+ * S17 audit 4 — replay the account's debt settlements since each given-back
+ * credit's origin as a twin without the won dispute would have made them. Pure.
+ *
+ * The twin never owed the dispute's debt (`excluded`), and held each credit in
+ * its lot from its `since` on. So from then, every take of another unit whose
+ * lots held such credit took it instead of writing that much debt; and every
+ * settlement — a transaction's debt repayments, in the spend order — found it
+ * at its lot's place in the order and repaid from it, leaving less owed and
+ * reaching less far into later lots. A lot that expires loses the credit, in
+ * the twin too. What the twin did differently comes out as corrections: the
+ * credit consumed (a late take, or repaid), credit the account repaid that
+ * the twin did not (back into those lots), and debt the twin no longer owed.
+ * Repayments pay the oldest debt first in both (the `followDebt` order).
+ */
+export function twinSettlements(input: {
+  readonly events: readonly LedgerDebtEvent[];
+  readonly rowOwners: ReadonlyMap<number, readonly { owner: string | null; micro: number }[]>;
+  readonly ownerUnit: ReadonlyMap<string, string | null>;
+  readonly excluded: ReadonlySet<string>;
+  readonly credits: readonly TwinCredit[];
+  readonly lots: ReadonlyMap<string, TwinLot>;
+  readonly unitLots: ReadonlyMap<string, ReadonlySet<string>>;
+  readonly now: PgInstant;
+}): TwinCorrections {
+  const out: {
+    lateTakes: { owner: string; lotId: string; micro: number }[];
+    paid: { origin: string; lotId: string; micro: number }[];
+    unrepaid: { owner: string | null; lotId: string; micro: number }[];
+    forgive: { owner: string | null; micro: number }[];
+  } = { lateTakes: [], paid: [], unrepaid: [], forgive: [] };
+  const pending = [...input.credits].sort((a, b) =>
+    isAfter(a.since, b.since) ? 1 : isAfter(b.since, a.since) ? -1 : 0,
+  );
+  const extras = new Map<string, { origin: string; micro: number }[]>();
+  const wOut = new Map<string, number>();
+  const diff = new Map<string, number>();
+  const order: string[] = [];
+  // Debt no clawback wrote is one bucket: its rows cannot be told apart.
+  const ownerKey = (owner: string | null, _rowId: number): string => owner ?? UNKNOWN_OWNER;
+  const spendCmp = (a: string, b: string): number => {
+    const x = input.lots.get(a);
+    const y = input.lots.get(b);
+    if (x === undefined || y === undefined) return a < b ? -1 : a > b ? 1 : 0;
+    return (
+      x.spendRank - y.spendRank ||
+      (x.expiresAt < y.expiresAt ? -1 : x.expiresAt > y.expiresAt ? 1 : 0) ||
+      (x.createdAt < y.createdAt ? -1 : x.createdAt > y.createdAt ? 1 : 0) ||
+      (a < b ? -1 : a > b ? 1 : 0)
+    );
+  };
+  const extraOn = (lotId: string): number => {
+    let micro = 0;
+    for (const x of extras.get(lotId) ?? []) micro = micro + x.micro;
+    return micro;
+  };
+  const addExtra = (lotId: string, origin: string, micro: number): void => {
+    if (micro <= 0) return;
+    extras.set(lotId, [...(extras.get(lotId) ?? []), { origin, micro }]);
+  };
+  const consume = (
+    lotId: string,
+    micro: number,
+    allow: (origin: string) => boolean,
+    onPart: (origin: string, part: number) => void,
+  ): number => {
+    let left = micro;
+    for (const x of extras.get(lotId) ?? []) {
+      if (left <= 0) break;
+      if (!allow(x.origin) || x.micro <= 0) continue;
+      const part = Math.min(left, x.micro);
+      x.micro = x.micro - part;
+      left = left - part;
+      onPart(x.origin, part);
+    }
+    return micro - left;
+  };
+  const advanceTo = (point: LedgerPoint): void => {
+    while (pending.length > 0 && isAfter(point, (pending[0] as TwinCredit).since)) {
+      const c = pending.shift() as TwinCredit;
+      addExtra(c.lotId, c.originUnit, c.micro);
+    }
+    for (const lotId of extras.keys()) {
+      const lot = input.lots.get(lotId);
+      if (lot !== undefined && lot.expiresAt <= point.at) extras.delete(lotId);
+    }
+  };
+  const debtOf = (k: string): number => wOut.get(k) ?? 0;
+  const diffOf = (k: string): number => diff.get(k) ?? 0;
+
+  const events = input.events;
+  let i = 0;
+  while (i < events.length) {
+    const e = events[i] as LedgerDebtEvent;
+    advanceTo(e);
+    if (e.debtDeltaMicro > 0) {
+      i = i + 1;
+      const owner = input.rowOwners.get(e.id)?.[0]?.owner ?? null;
+      if (owner !== null && input.excluded.has(owner)) continue;
+      const k = ownerKey(owner, e.id);
+      if (!order.includes(k)) order.push(k);
+      wOut.set(k, debtOf(k) + e.debtDeltaMicro);
+      const unit = owner === null ? null : (input.ownerUnit.get(owner) ?? null);
+      const own = unit === null ? undefined : input.unitLots.get(unit);
+      if (owner === null || unit === null || own === undefined) continue;
+      let left = e.debtDeltaMicro;
+      const newestFirst = [...own].sort(
+        (a, b) =>
+          -((input.lots.get(a)?.createdAt ?? '') < (input.lots.get(b)?.createdAt ?? '') ? -1 : 1),
+      );
+      for (const lotId of newestFirst) {
+        if (left <= 0) break;
+        const took = consume(
+          lotId,
+          left,
+          (origin) => origin !== unit,
+          () => undefined,
+        );
+        if (took <= 0) continue;
+        out.lateTakes.push({ owner, lotId, micro: took });
+        diff.set(k, diffOf(k) + took);
+        left = left - took;
+      }
+      continue;
+    }
+    if (e.lotId === null) {
+      i = i + 1;
+      for (const part of input.rowOwners.get(e.id) ?? []) {
+        if (part.owner !== null && input.excluded.has(part.owner)) continue;
+        const k = ownerKey(part.owner, e.id);
+        const tOut = Math.max(0, debtOf(k) - diffOf(k));
+        wOut.set(k, debtOf(k) - part.micro);
+        diff.set(k, Math.max(0, debtOf(k) - Math.max(0, tOut - part.micro)));
+      }
+      continue;
+    }
+    // One settlement: the repayment rows one transaction wrote.
+    const batch: LedgerDebtEvent[] = [];
+    while (i < events.length) {
+      const r = events[i] as LedgerDebtEvent;
+      if (r.lotId === null || r.debtDeltaMicro >= 0 || r.at !== e.at) break;
+      batch.push(r);
+      i = i + 1;
+    }
+    const wLot = new Map<string, number>();
+    const wPaid = new Map<string, number>();
+    for (const r of batch) {
+      for (const part of input.rowOwners.get(r.id) ?? []) {
+        if (part.owner !== null && input.excluded.has(part.owner)) continue;
+        const k = ownerKey(part.owner, r.id);
+        wPaid.set(k, (wPaid.get(k) ?? 0) + part.micro);
+        wLot.set(r.lotId as string, (wLot.get(r.lotId as string) ?? 0) + part.micro);
+      }
+    }
+    let pool = 0;
+    for (const k of order) pool = pool + Math.max(0, debtOf(k) - diffOf(k));
+    const candidates = new Set<string>(wLot.keys());
+    for (const lotId of extras.keys()) {
+      const lot = input.lots.get(lotId);
+      if (lot !== undefined && lot.createdAt <= e.at && extraOn(lotId) > 0) candidates.add(lotId);
+    }
+    const tLot = new Map<string, number>();
+    let left = pool;
+    for (const lotId of [...candidates].sort(spendCmp)) {
+      const take = Math.min(left, (wLot.get(lotId) ?? 0) + extraOn(lotId));
+      tLot.set(lotId, take);
+      left = left - take;
+    }
+    // Who the twin paid: the oldest debt first, as the account did.
+    const tPaid = new Map<string, number>();
+    let tTotal = pool - left;
+    for (const k of order) {
+      if (tTotal <= 0) break;
+      const pay = Math.min(tTotal, Math.max(0, debtOf(k) - diffOf(k)));
+      tPaid.set(k, pay);
+      tTotal = tTotal - pay;
+    }
+    const surplus = order
+      .filter((k) => (wPaid.get(k) ?? 0) > (tPaid.get(k) ?? 0))
+      .map((k) => ({ k, micro: (wPaid.get(k) ?? 0) - (tPaid.get(k) ?? 0) }))
+      .reverse();
+    for (const lotId of [...candidates].sort(spendCmp)) {
+      const d = (tLot.get(lotId) ?? 0) - (wLot.get(lotId) ?? 0);
+      if (d > 0) {
+        consume(
+          lotId,
+          d,
+          () => true,
+          (origin, part) => {
+            out.paid.push({ origin, lotId, micro: part });
+          },
+        );
+      } else if (d < 0) {
+        let back = -d;
+        for (const s of surplus) {
+          if (back <= 0) break;
+          const part = Math.min(back, s.micro);
+          if (part <= 0) continue;
+          s.micro = s.micro - part;
+          back = back - part;
+          const owner = s.k === UNKNOWN_OWNER ? null : s.k;
+          out.unrepaid.push({ owner, lotId, micro: part });
+          addExtra(lotId, owner === null ? '' : (input.ownerUnit.get(owner) ?? ''), part);
+        }
+      }
+    }
+    for (const k of order) {
+      const wAfter = debtOf(k) - (wPaid.get(k) ?? 0);
+      const tAfter = Math.max(0, debtOf(k) - diffOf(k) - (tPaid.get(k) ?? 0));
+      wOut.set(k, wAfter);
+      diff.set(k, Math.max(0, wAfter - tAfter));
+    }
+  }
+  advanceTo({ at: input.now, id: Number.MAX_SAFE_INTEGER });
+  for (const k of order) {
+    const micro = Math.min(diffOf(k), debtOf(k));
+    if (micro > 0) out.forgive.push({ owner: k === UNKNOWN_OWNER ? null : k, micro });
+  }
+  return out;
 }
 
 /**
@@ -566,6 +1050,20 @@ export function floorToPriorMinute(at: Date): Date {
   return new Date(Math.floor(at.getTime() / MINUTE_MS) * MINUTE_MS - MINUTE_MS);
 }
 
+/**
+ * S17 R10 — the lot a running task's redirected share waits in beside the lot
+ * it holds (`hold:<task>:<lot>:<unit>`): keyed by the task first, so its
+ * settlement finds it (`holdOverflowLotsOf`), and not under any unit's
+ * give-back prefix, so it is no unit's own lot.
+ */
+export function holdOverflowGrantKey(
+  reservationId: string,
+  besideLotId: string,
+  targetKey: string,
+): string {
+  return `hold:${reservationId}:${besideLotId}:${targetKey}`;
+}
+
 /** The lot a reconciliation gives back to a unit for one event (`reinstate:<unit>:<event>`). */
 export function reinstateGrantKey(ref: string): string {
   return `reinstate:${ref}`;
@@ -615,16 +1113,32 @@ export interface UnitPaymentTerms {
   readonly paidForMicro: number | null;
 }
 
+/** What a reconciliation records on every clawback it writes (0140). */
+interface ClawbackExtras {
+  /** The interim cap's consumption it was measured on (R8); null when the payment has no cap. */
+  readonly capSpentMicro: number | null;
+  /** The account's newest ledger row id when it was measured. */
+  readonly ledgerMark: number;
+  /** How much more may be spent before an unpaid claim of it is no longer owed; null: always owed. */
+  readonly claimForgiveAfterMicro: number | null;
+}
+
 /** What a reconciliation of one payment's units did. */
 export interface UnitReconcileSummary {
   /** How many windows the payment has credit in. */
   readonly windows: number;
   /** The clawbacks the event wrote (takes), one per unit that gave anything up. */
   readonly clawbacks: readonly CreditClawbackRecord[];
-  /** Credit given back as lots (the month's give-back and returned debt), whole credits. */
+  /** Credit given back as lots or into lots (the month's give-back and returned debt). */
   readonly regrantedMicro: number;
   /** Debt forgiven. */
   readonly forgivenMicro: number;
+  /**
+   * S17 R8 — the interim cap's consumption this reconciliation measured on
+   * (frozen for a reversal, the standing reversal's otherwise); null when the
+   * payment has no cap.
+   */
+  readonly capSpentMicro: number | null;
 }
 
 const NOTHING: UnitReconcileSummary = {
@@ -632,50 +1146,101 @@ const NOTHING: UnitReconcileSummary = {
   clawbacks: [],
   regrantedMicro: 0,
   forgivenMicro: 0,
+  capSpentMicro: null,
 };
+
+/** One lot's part of a charge, in the order it arose. */
+interface LotPart {
+  readonly lotId: string;
+  micro: number;
+  /** When the account's credit left the lot this way: from then, a twin kept it there. */
+  readonly since?: LedgerPoint;
+  /** A collected claim: the task whose settlement paid it. */
+  readonly reservationId?: string;
+}
+
+/**
+ * One clawback charged against a unit, with what became of what it charged
+ * BEYOND the unit's lots (S17 audit 4, R9): the debt it wrote — still owed,
+ * repaid out of other credit and not yet returned, or forgiven by something
+ * other than a reconciliation — and the claims it collected from lots that are
+ * not the unit's and has not given back.
+ */
+interface UnitCharge {
+  readonly clawback: UnitClawback;
+  /** Applied, not reversed by a win: only a standing clawback still charges the unit. */
+  readonly standing: boolean;
+  readonly outstandingMicro: number;
+  readonly repaidLeft: readonly LotPart[];
+  readonly forgivenOtherMicro: number;
+  readonly collectedLeft: readonly LotPart[];
+}
+
+/** What a charge still stands charged for beyond the unit's lots, its claim aside. */
+function chargedBeyond(c: UnitCharge): number {
+  let micro = c.outstandingMicro + c.forgivenOtherMicro;
+  for (const p of c.repaidLeft) micro = micro + p.micro;
+  for (const p of c.collectedLeft) micro = micro + p.micro;
+  return micro;
+}
 
 /** One unit, read for a reconciliation. */
 interface UnitState {
   readonly windowId: string;
   readonly windowEnd: PgInstant;
-  /** Whether the window still runs: only then does credit go back into it. */
+  /** Whether the window still runs: only then does credit go back into it, or a claim fall. */
   readonly live: boolean;
   readonly coverageRef: string;
   readonly targetKey: string;
   readonly lots: readonly UnitLot[];
-  readonly clawbacks: readonly UnitClawback[];
-  /** Claims the unit's clawbacks collected from lots that are not the unit's. */
-  readonly collectedElsewhereMicro: number;
-  /** Those claims, by the lot each was collected from: where a give-back returns them. */
-  readonly collectedElsewhere: readonly { readonly lotId: string; readonly micro: number }[];
-  /** What a reconciliation already released of the unit's charges (forgiven, or returned elsewhere). */
-  readonly releasedMicro: number;
+  /** Every clawback of the unit, oldest first. */
+  readonly charges: readonly UnitCharge[];
+  /**
+   * Credit a give-back MOVED to lots outside the unit because the customer's
+   * spending fell on them while the unit's credit was taken (R10): spending
+   * that was the unit's, so it counts as the unit's.
+   */
+  readonly movedMicro: number;
+  readonly movedByLot: ReadonlyMap<string, number>;
   /** The grants and takes the unit's target is made of. */
   readonly terms: readonly UnitKeepTerm[];
 }
 
-/** L + S − B: what the unit holds and spent, less what its clawbacks charged beyond it. */
+/**
+ * L + S − B: what the unit holds and spent, less what its standing clawbacks
+ * charged beyond it. A lot whose term has ended counts what is left in it
+ * until the expiry is written (a take may still take it, and what it takes
+ * does not expire); what a running task holds there counts until the task
+ * settles — charged, it is spent; released, it pays the claims on it and the
+ * rest expires.
+ */
 function positionOf(u: UnitState): number {
   let held = 0;
-  let spent = 0;
-  for (const lot of u.lots) {
-    held = held + lot.remainingMicro;
-    spent = spent + lot.consumedMicro;
-  }
-  return held + spent - chargedOf(u);
+  for (const lot of u.lots) held = held + lot.remainingMicro;
+  return held + consumedOf(u) - chargedOf(u);
 }
 
-/** What the unit's clawbacks charged beyond its lots and still stand charged for. */
+/** What the unit's standing clawbacks charged beyond its lots and still stand charged for. */
 function chargedOf(u: UnitState): number {
-  let charged = u.collectedElsewhereMicro - u.releasedMicro;
-  for (const c of u.clawbacks) charged = charged + c.debtMicro + c.pendingMicro;
+  let charged = 0;
+  for (const c of u.charges) {
+    if (!c.standing) continue;
+    charged = charged + chargedBeyond(c) + c.clawback.pendingMicro;
+  }
   return charged;
 }
 
 function consumedOf(u: UnitState): number {
-  let spent = 0;
+  let spent = u.movedMicro;
   for (const lot of u.lots) spent = spent + lot.consumedMicro;
   return spent;
+}
+
+/** What running tasks hold of the unit's lots: credit the customer may yet spend. */
+function heldOf(u: UnitState): number {
+  let held = 0;
+  for (const lot of u.lots) held = held + lot.heldMicro;
+  return held;
 }
 
 /**
@@ -684,30 +1249,64 @@ function consumedOf(u: UnitState): number {
  * REVERSAL created (the cap governs only that), so it is taken off before the
  * cap measures what a reversal may still charge — otherwise a won dispute,
  * moving the unit to the capped target, would forgive a downgrade's debt that
- * no reversal ever charged. What a reconciliation released is counted against
- * the reversals' charges first.
+ * no reversal ever charged.
  */
 function spentForCapOf(u: UnitState): number {
   let planChange = 0;
-  for (const c of u.clawbacks) {
-    if (c.source === 'plan_change') planChange = planChange + c.debtMicro + c.pendingMicro;
+  for (const c of u.charges) {
+    if (!c.standing || c.clawback.source !== 'plan_change') continue;
+    planChange = planChange + chargedBeyond(c) + c.clawback.pendingMicro;
   }
   const owedByPlanChange = Math.min(planChange, Math.max(0, chargedOf(u)));
   return Math.max(0, consumedOf(u) - owedByPlanChange);
 }
 
+/** Two task holds in the spend order of their lots. */
+function holdSpendOrder(a: ReservationHold, b: ReservationHold): number {
+  return (
+    a.spendRank - b.spendRank ||
+    (a.expiresAt < b.expiresAt ? -1 : a.expiresAt > b.expiresAt ? 1 : 0) ||
+    (a.lotCreatedAt < b.lotCreatedAt ? -1 : a.lotCreatedAt > b.lotCreatedAt ? 1 : 0) ||
+    (a.lotId < b.lotId ? -1 : a.lotId > b.lotId ? 1 : 0)
+  );
+}
+
+/** The unit's lot that comes first in the spend order; null when it has none. */
+function firstInSpendOrder(lots: readonly UnitLot[]): UnitLot | null {
+  let first: UnitLot | null = null;
+  for (const lot of lots) {
+    if (
+      first === null ||
+      lot.spendRank < first.spendRank ||
+      (lot.spendRank === first.spendRank &&
+        (lot.expiresAt < first.expiresAt ||
+          (lot.expiresAt === first.expiresAt &&
+            (lot.createdAt < first.createdAt ||
+              (lot.createdAt === first.createdAt && lot.lotId < first.lotId)))))
+    ) {
+      first = lot;
+    }
+  }
+  return first;
+}
+
+/** Take up to `micro` off the parts on one lot, oldest first; what could not be taken. */
+function takeFromParts(parts: LotPart[], lotId: string, micro: number): number {
+  let left = micro;
+  for (const p of parts) {
+    if (left <= 0) break;
+    if (p.lotId !== lotId || p.micro <= 0) continue;
+    const take = Math.min(left, p.micro);
+    p.micro = p.micro - take;
+    left = left - take;
+  }
+  return left;
+}
 function wholeNonNegative(what: string, value: number): number {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new RangeError(`${what} is a whole non-negative number`);
   }
   return value;
-}
-
-/** The later of two instants; fixed-width UTC text orders as a string. */
-function laterOf(a: PgInstant | null, b: PgInstant | null): PgInstant | null {
-  if (a === null) return b;
-  if (b === null) return a;
-  return a > b ? a : b;
 }
 
 /**
@@ -801,7 +1400,11 @@ export class CreditGrantsService implements CreditsRefresher {
     const expired = await ledger.expireDueLots(tx, accountId);
     const window = await this.materializeWindows(tx, accountId);
     const level = await this.reconcileLevel(tx, accountId);
-    await this.reconcileWindowUnits(tx, accountId, { event: null, exclude: [] });
+    await this.reconcileWindowUnits(tx, accountId, {
+      event: null,
+      exclude: [],
+      changed: window.outcome === 'created' || level !== null,
+    });
     const repaid = await ledger.settleDebtFromFree(tx, accountId);
     const current = await windows.currentWindow(accountId, tx);
     return { expired, window, level, repaid, currentWindowEnd: current?.windowEnd ?? null };
@@ -902,6 +1505,12 @@ export class CreditGrantsService implements CreditsRefresher {
     const { ledger, windows } = this.deps;
     const wc = await windows.windowCovers(tx, accountId);
     if (wc === null) return null;
+    // ⛔ A window written before 0139 records no undisputed level, and when a
+    // dispute stands on its payment the level it shows is the lowered one: read
+    // as undisputed it would be granted back as an "upgrade" (audit 4 #11, R14).
+    if (wc.undisputedRecorded === false && wc.covers.some((c) => c.disputed === true)) {
+      throw new CreditLegacyDisputeError();
+    }
     const t = windowTargets(wc);
     const seq = wc.levelSeq + 1;
     const shown = t.levelMicro !== null && t.levelMicro > 0 ? t.levelMicro : wc.levelMicro;
@@ -1084,13 +1693,31 @@ export class CreditGrantsService implements CreditsRefresher {
 
   /**
    * S17 — reconcile every unit one payment has credit in (every window it drew
-   * or holds a level change of, newest first) to its target at what the
-   * payment still pays now (see the header). `take` only takes — a refund, a
-   * dispute or a crypto refund never adds credit — and `both` also gives back
-   * (a win). `onlyWindowIds` limits what is moved (the interim annual cap is
-   * still shared out over every window). The unit a window's stand-alone cover
-   * holds in the CURRENT window is left to `reconcileWindowUnits`, which
-   * measures it on what stands beneath it.
+   * or holds a level change of, or was handed a share of, newest first) to its
+   * target at what the payment still pays now (see the header). `take` only
+   * takes — a refund, a dispute or a crypto refund never adds credit — and
+   * `both` also gives back (a win). `onlyWindowIds` limits what is read and
+   * moved (a refresh moves only the current window, the newest).
+   *
+   * ⛔ A STAND-ALONE PAYMENT'S HAND-OVER IS ITS OWN, IN EVERY WINDOW (audit 4
+   * #1, R11). A resubscription, a crypto term or an override holds the share of
+   * a month drawn from ANOTHER payment that it was handed; when it is refunded
+   * or disputed that share is reconciled here too — in the current window to
+   * what it earns there now (its level above what stands beneath it, the same
+   * figure `reconcileWindowUnits` holds it at), in a window that has ended to
+   * what its grants there keep at what it still pays.
+   *
+   * ⛔ THE INTERIM CAP IS FROZEN AT THE REVERSAL (R8). `cap: 'measure'` is a
+   * reversal: what the payment's credit has been spent — and what running
+   * tasks hold of it — across all its windows is measured now and recorded
+   * with every row this writes. Anything else (a win, a refresh, a task's
+   * settle) uses the newest standing reversal's figure, so a later spend or a
+   * later win does not move what the payment may owe.
+   *
+   * ⛔ EACH UNIT IS RE-READ RIGHT BEFORE IT MOVES, AND DEBT IS SETTLED ONCE,
+   * AFTER THE LOOP, BY THE CALLER (audit 4 #2, R12). A take no longer repays
+   * debt out of another window's lots in the middle of the walk, so no window
+   * asks for credit an earlier step already moved.
    */
   async reconcilePaymentUnits(
     tx: CreditLedgerTx,
@@ -1105,10 +1732,12 @@ export class CreditGrantsService implements CreditsRefresher {
        * Whether the payment stands on its own — a month's line, a crypto term,
        * an override — rather than an upgrade line that pays for the step above
        * the month beneath it. What such a payment holds in a window drawn from
-       * ANOTHER payment is its share above that payment
-       * (`reconcileWindowUnits`), not what it bought there.
+       * ANOTHER payment is the share of it it was handed.
        */
       readonly standsAlone: boolean;
+      readonly cap: 'measure' | 'standing';
+      /** A win: where each credit it gives back into a live lot is recorded (`resettleAsTwin`). */
+      readonly collect?: TwinCredit[];
     },
   ): Promise<UnitReconcileSummary> {
     const { windows } = this.deps;
@@ -1119,35 +1748,89 @@ export class CreditGrantsService implements CreditsRefresher {
       coverage.sourceRef,
     );
     if (earned.length === 0) return NOTHING;
+    const moving = earned.filter(
+      (w) => opts.onlyWindowIds === undefined || opts.onlyWindowIds.includes(w.id),
+    );
+    if (moving.length === 0) return { ...NOTHING, windows: earned.length };
+    // A reversal measures the cap over every window; anything else reads only
+    // the windows it moves (the cap is frozen, R13).
+    const read = opts.cap === 'measure' ? earned : moving;
     const states: UnitState[] = [];
-    for (const w of earned) states.push(await this.unitState(tx, accountId, w, coverage));
-    const keeps = states.map((s) =>
-      unitKeepMicro({
+    for (const w of read) states.push(await this.unitState(tx, accountId, w, coverage));
+
+    const handedCurrent = (w: SourcedCreditWindow): boolean =>
+      opts.standsAlone && w.sourceRef !== coverage.sourceRef && w.current;
+    const envelope = read.some(handedCurrent) ? await this.currentEnvelope(tx, accountId) : null;
+    const keeps = read.map((w, i) => {
+      if (handedCurrent(w)) {
+        return envelope !== null &&
+          envelope.cover.source === coverage.source &&
+          envelope.cover.sourceRef === coverage.sourceRef
+          ? envelope.keepMicro
+          : 0;
+      }
+      return unitKeepMicro({
         amountPaidMinor: terms.amountPaidMinor,
         stillPaidMinor: terms.stillPaidMinor,
-        terms: s.terms,
-      }),
-    );
+        terms: (states[i] as UnitState).terms,
+      });
+    });
+
     const paidForKeep =
       terms.paidForMicro === null
         ? null
         : floorMicroToWholeCredits(
             stillPaidShareMicro(terms.paidForMicro, terms.amountPaidMinor, terms.stillPaidMinor),
           );
+    let capSpent: number | null = null;
+    if (paidForKeep !== null) {
+      let measured = 0;
+      for (const s of states) measured = measured + spentForCapOf(s) + heldOf(s);
+      capSpent =
+        opts.cap === 'measure'
+          ? measured
+          : ((await windows.standingCapSpent(tx, accountId, coverage.sourceRef)) ?? measured);
+    }
     const allowed = allowedDebtByUnit(
       states.map((s, i) => ({ keepMicro: keeps[i] ?? 0, consumedMicro: spentForCapOf(s) })),
       paidForKeep,
+      capSpent ?? undefined,
     );
+    // What of the cap is still unshared when each window's turn comes (newest
+    // first): the most debt more spending there could yet be charged — where a
+    // claim left unpaid at a task's settle stops being owed (R8, audit 4 #3).
+    const unshared: number[] = [];
+    let open = paidForKeep === null || capSpent === null ? 0 : Math.max(0, capSpent - paidForKeep);
+    for (const a of allowed) {
+      unshared.push(open);
+      open = Math.max(0, open - (a ?? 0));
+    }
 
+    const mark = await windows.ledgerMark(tx, accountId);
     const clawbacks: CreditClawbackRecord[] = [];
     let regranted = 0;
     let forgiven = 0;
-    for (const [i, w] of earned.entries()) {
-      const state = states[i] as UnitState;
-      if (opts.onlyWindowIds !== undefined && !opts.onlyWindowIds.includes(w.id)) continue;
-      if (opts.standsAlone && w.sourceRef !== coverage.sourceRef) continue;
-      const target = unitTargetMicro(keeps[i] ?? 0, spentForCapOf(state), allowed[i] ?? null);
-      const done = await this.reconcileUnit(tx, accountId, w, coverage, state, target, opts);
+    let first = true;
+    for (const [i, w] of read.entries()) {
+      if (!moving.includes(w)) continue;
+      const snapshot = states[i] as UnitState;
+      const handed = handedCurrent(w);
+      const keep = keeps[i] ?? 0;
+      const target = handed
+        ? keep
+        : unitTargetMicro(keep, spentForCapOf(snapshot), allowed[i] ?? null);
+      const state = first ? snapshot : await this.unitState(tx, accountId, w, coverage);
+      first = false;
+      const forgiveAfter =
+        handed || paidForKeep === null
+          ? null
+          : Math.max(0, target + (unshared[i] ?? 0) - spentForCapOf(snapshot));
+      const done = await this.reconcileUnit(tx, accountId, w, coverage, state, target, {
+        mode: opts.mode,
+        event: opts.event,
+        extras: { capSpentMicro: capSpent, ledgerMark: mark, claimForgiveAfterMicro: forgiveAfter },
+        collect: opts.collect,
+      });
       if (done.clawback !== null) clawbacks.push(done.clawback);
       regranted = regranted + done.regrantedMicro;
       forgiven = forgiven + done.forgivenMicro;
@@ -1157,7 +1840,70 @@ export class CreditGrantsService implements CreditsRefresher {
       clawbacks,
       regrantedMicro: regranted,
       forgivenMicro: forgiven,
+      capSpentMicro: capSpent,
     };
+  }
+
+  /**
+   * S17 R11 (audit 4 #7) — after a won dispute has moved its own payment's
+   * units, the share of each of that payment's ENDED windows a stand-alone
+   * payment (a resubscription) was handed while the dispute stood is
+   * reconciled too: the month is its own payment's again, so what the
+   * customer spent out of the hand-over has moved home (R10), and what the
+   * hand-over's payment was charged for spending it — a refund of it while
+   * the dispute stood — follows (the window running now is `reconcileWindowUnits`'s).
+   */
+  async reconcileHandedShares(
+    tx: CreditLedgerTx,
+    accountId: string,
+    wonRef: string,
+    event: CreditUnitEvent,
+    collect?: TwinCredit[],
+  ): Promise<{ readonly regrantedMicro: number; readonly forgivenMicro: number }> {
+    const { windows } = this.deps;
+    const ended = (await windows.windowsOfCoverage(tx, accountId, 'stripe_invoice', wonRef)).filter(
+      (w) => !w.current && w.sourceRef === wonRef,
+    );
+    const handed = await windows.handedStripePayments(
+      tx,
+      accountId,
+      ended.map((w) => w.id),
+    );
+    const byRef = new Map<string, string[]>();
+    for (const h of handed)
+      byRef.set(h.stripeInvoiceId, [...(byRef.get(h.stripeInvoiceId) ?? []), h.windowId]);
+    let regranted = 0;
+    let forgiven = 0;
+    for (const [ref, windowIds] of byRef) {
+      const facts = await windows.invoicePayment(tx, accountId, ref);
+      if (facts === null) continue;
+      const done = await this.reconcilePaymentUnits(
+        tx,
+        accountId,
+        { source: 'stripe_invoice', sourceRef: ref },
+        invoiceTerms(facts),
+        {
+          mode: 'both',
+          event: { ...event, disputedMinor: undefined },
+          onlyWindowIds: windowIds,
+          standsAlone: true,
+          cap: 'standing',
+          collect,
+        },
+      );
+      regranted = regranted + done.regrantedMicro;
+      forgiven = forgiven + done.forgivenMicro;
+    }
+    return { regrantedMicro: regranted, forgivenMicro: forgiven };
+  }
+
+  /** The stand-alone cover of the window containing now, and what it earns there; null for none. */
+  private async currentEnvelope(
+    tx: CreditLedgerTx,
+    accountId: string,
+  ): Promise<WindowTargets['envelope']> {
+    const wc = await this.deps.windows.windowCovers(tx, accountId);
+    return wc === null ? null : windowTargets(wc).envelope;
   }
 
   /**
@@ -1168,21 +1914,39 @@ export class CreditGrantsService implements CreditsRefresher {
    * payment of the window that a dispute stands against, once a new month or a
    * plan change has changed what it bought. `event` null is a refresh; an
    * event's own payment is `exclude`d (the event reconciled it already).
+   *
+   * ⛔ A REFRESH THAT MOVED NOTHING RECONCILES NO DISPUTED PAYMENT (audit 4
+   * #10, R13). A spend, an expiry or a lease does not change what a payment
+   * with a dispute standing bought in this window; only a new month or a level
+   * change (`changed`) does, and every event reconciles what it moved itself.
+   * So the refresh inside every task reserve does not read the disputed
+   * payment's units while a dispute stands. The stand-alone cover's share is
+   * still checked on every refresh: a resubscription that arrives beside an
+   * upgrade line already showing more moves no level, and it earns its share
+   * all the same.
    */
   async reconcileWindowUnits(
     tx: CreditLedgerTx,
     accountId: string,
-    input: { readonly event: CreditUnitEvent | null; readonly exclude: readonly string[] },
+    input: {
+      readonly event: CreditUnitEvent | null;
+      readonly exclude: readonly string[];
+      /** A refresh: whether it drew a window or moved a level. */
+      readonly changed?: boolean;
+      /** A win: where each credit it gives back into a live lot is recorded. */
+      readonly collect?: TwinCredit[];
+    },
   ): Promise<void> {
     const { windows } = this.deps;
     const wc = await windows.windowCovers(tx, accountId);
     if (wc === null) return;
     const t = windowTargets(wc);
+    if (input.event === null && input.changed !== true && t.envelope === null) return;
     const window = currentWindowOf(wc);
     const tag =
-      input.event === null ? `rf${String(await windows.ledgerRowCount(tx, accountId))}` : null;
+      input.event === null ? `rf${String(await windows.ledgerMark(tx, accountId))}` : null;
 
-    if (input.event === null) {
+    if (input.event === null && input.changed === true) {
       // A dispute standing against a payment of this window: a new month drawn,
       // or a plan change measured on the undisputed level, changed what that
       // payment bought here, so the dispute takes its share of the new amount.
@@ -1211,6 +1975,7 @@ export class CreditGrantsService implements CreditsRefresher {
             },
             onlyWindowIds: [wc.windowId],
             standsAlone: payment.lineKind !== 'proration_up',
+            cap: 'standing',
           },
         );
       }
@@ -1235,16 +2000,593 @@ export class CreditGrantsService implements CreditsRefresher {
     await this.reconcileUnit(tx, accountId, window, coverage, state, env.keepMicro, {
       mode: 'both',
       event,
+      collect: input.collect,
+      extras: {
+        capSpentMicro: null,
+        ledgerMark: await windows.ledgerMark(tx, accountId),
+        claimForgiveAfterMicro: null,
+      },
     });
+  }
+
+  /**
+   * S17 audit 4 (R9, R1') — a won dispute's clawbacks, just reversed, give back
+   * what they charged BEYOND their units' lots, each by what became of it:
+   * debt still owed is forgiven; debt later credit repaid, and claims collected
+   * from lots that are not the unit's, go back into those very lots while they
+   * are live, lasting as long as they do; debt repaid out of a lot that has
+   * since expired, and debt something else forgave (an admin), give nothing
+   * back — the credit is gone either way, exactly where a twin without the
+   * dispute stands. Keyed to the clawback (`…:undo:<clawback>:…`), so a replay
+   * writes nothing twice. Called under the account's credit lock.
+   */
+  async undoReversedClawbacks(
+    tx: CreditLedgerTx,
+    accountId: string,
+    reversed: readonly CreditClawbackRecord[],
+    collect?: TwinCredit[],
+  ): Promise<{ readonly regrantedMicro: number; readonly forgivenMicro: number }> {
+    const { ledger, windows } = this.deps;
+    const byUnit = new Map<string, CreditClawbackRecord[]>();
+    for (const c of reversed) {
+      if (parseUnitTargetKey(c.targetKey) === null) continue;
+      byUnit.set(c.targetKey, [...(byUnit.get(c.targetKey) ?? []), c]);
+    }
+    if (byUnit.size === 0) return { regrantedMicro: 0, forgivenMicro: 0 };
+    const unitWindows = new Map(
+      (
+        await windows.windowsByIds(
+          tx,
+          accountId,
+          [...byUnit.keys()].map((k) => parseUnitTargetKey(k)?.windowId ?? ''),
+        )
+      ).map((w) => [w.id, w]),
+    );
+    let regranted = 0;
+    let forgiven = 0;
+    for (const [targetKey, group] of byUnit) {
+      const unit = parseUnitTargetKey(targetKey);
+      const window = unit === null ? undefined : unitWindows.get(unit.windowId);
+      if (unit === null || window === undefined) continue;
+      const state = await this.unitState(tx, accountId, window, {
+        source: 'stripe_invoice',
+        sourceRef: unit.coverageRef,
+      });
+      const prefix = unitGivebackPrefix(targetKey);
+      for (const c of group) {
+        const charge = state.charges.find((x) => x.clawback.id === c.id);
+        if (charge === undefined) continue;
+        const owed = (await ledger.lockAccount(tx, accountId)).debtMicro;
+        const forgive = Math.min(charge.outstandingMicro, owed);
+        if (forgive > 0) {
+          await ledger.append(
+            {
+              accountId,
+              kind: 'adjustment',
+              forgiveDebtMicro: forgive,
+              idempotencyKey: `${prefix}undo:${c.id}:forgive`,
+              reason: 'dispute_reinstated',
+            },
+            tx,
+          );
+          forgiven = forgiven + forgive;
+        }
+        const collected = await this.twinClaimsOf(tx, accountId, charge.collectedLeft);
+        regranted =
+          regranted +
+          (await this.returnParts(
+            tx,
+            accountId,
+            [
+              ...charge.repaidLeft.map((p) => ({ ...p, key: `${prefix}undo:${c.id}:returned` })),
+              ...collected.map((p) => ({
+                ...p,
+                key: `${prefix}undo:${c.id}:unclaimed`,
+                twinKey: `undo:${c.id}`,
+              })),
+            ],
+            Number.MAX_SAFE_INTEGER,
+            collect === undefined ? undefined : { into: collect, originUnit: targetKey },
+          ));
+      }
+    }
+    return { regrantedMicro: regranted, forgivenMicro: forgiven };
+  }
+
+  /**
+   * S17 audit 4 — a won dispute's claim collected credit a settling task
+   * released. A twin without the dispute had no such claim, so that same
+   * settlement paid its OTHER claims with the credit instead — each one that
+   * already stood then and still stands now, oldest first, as a settlement
+   * pays them. So each part the dispute's claim collected carries the claims
+   * the twin paid out of it (`twin`): `returnParts` puts the part back into
+   * its lot and collects those claims from it again, with a row of the shape a
+   * settlement writes (`claim:<claim>:<task>:<lot>:undo:<clawback>`), so the
+   * claim's unit reads it as collected exactly as the twin's. Plans only; the
+   * rows are written by `returnParts`.
+   */
+  private async twinClaimsOf(
+    tx: CreditLedgerTx,
+    accountId: string,
+    parts: readonly LotPart[],
+  ): Promise<(LotPart & { readonly twin?: TwinClaimPay[] })[]> {
+    const planned: (LotPart & { twin?: TwinClaimPay[] })[] = parts
+      .filter((p) => p.micro > 0)
+      .map((p) => ({ ...p }));
+    if (planned.every((p) => p.reservationId === undefined || p.since === undefined)) {
+      return planned;
+    }
+    const claims = (await this.deps.windows.standingClaims(tx, accountId)).map((q) => ({
+      ...q,
+      owed: q.pendingMicro,
+    }));
+    for (const p of planned) {
+      const since = p.since;
+      const task = p.reservationId;
+      if (since === undefined || task === undefined) continue;
+      let free = p.micro;
+      for (const q of claims) {
+        if (free <= 0) break;
+        if (q.owed <= 0) continue;
+        const stoodThen = q.ledgerMark !== null ? q.ledgerMark < since.id : q.createdAt < since.at;
+        if (!stoodThen) continue;
+        const pay = Math.min(free, q.owed);
+        p.twin = [...(p.twin ?? []), { claimId: q.id, source: q.source, task, micro: pay }];
+        q.owed = q.owed - pay;
+        free = free - pay;
+      }
+    }
+    return planned;
+  }
+
+  /**
+   * S17 audit 4 — a won dispute's claims on held credit are zeroed with it.
+   * A reversal measured while they stood found that held credit already
+   * claimed, so what it could not take free it wrote as DEBT where a twin
+   * without the dispute made a CLAIM (paid when the task releases the credit,
+   * which would otherwise expire). So, on each unit whose claims the win
+   * freed, as much of its standing charges' debt as the freed held credit now
+   * covers becomes a claim again: that debt is given back (forgiven while
+   * owed, returned into the lots that repaid it), and the same amount is taken
+   * as a pending claim (`<event>:reclaim`). Where the unit stands is unchanged;
+   * what it is charged in is the twin's.
+   */
+  async reclaimDebtAsClaims(
+    tx: CreditLedgerTx,
+    accountId: string,
+    targetKeys: readonly string[],
+    event: CreditUnitEvent,
+    collect?: TwinCredit[],
+  ): Promise<void> {
+    const { ledger, windows } = this.deps;
+    const units = [...new Set(targetKeys)]
+      .map((k) => ({ key: k, unit: parseUnitTargetKey(k) }))
+      .filter((u) => u.unit !== null);
+    if (units.length === 0) return;
+    const found = new Map(
+      (
+        await windows.windowsByIds(
+          tx,
+          accountId,
+          units.map((u) => u.unit?.windowId ?? ''),
+        )
+      ).map((w) => [w.id, w]),
+    );
+    for (const { key, unit } of units) {
+      const window = unit === null ? undefined : found.get(unit.windowId);
+      if (unit === null || window === undefined) continue;
+      const coverage = { source: 'stripe_invoice' as const, sourceRef: unit.coverageRef };
+      const state = await this.unitState(tx, accountId, window, coverage);
+      let debt = 0;
+      for (const c of state.charges) {
+        if (!c.standing || c.clawback.sourceRef.startsWith('hold:')) continue;
+        debt = debt + c.outstandingMicro;
+        for (const p of c.repaidLeft) debt = debt + p.micro;
+      }
+      if (debt <= 0) continue;
+      const claimable = Math.max(
+        0,
+        (await ledger.heldMicro(accountId, tx)) -
+          (await windows.pendingClaimTotalMicro(tx, accountId)),
+      );
+      const convert = Math.min(debt, claimable);
+      if (convert <= 0) continue;
+      const reclaim: CreditUnitEvent = {
+        ...event,
+        ref: `${event.ref}:reclaim`,
+        disputedMinor: undefined,
+      };
+      const ref = `${state.targetKey}:${reclaim.ref}`;
+      let left = convert;
+      let outstanding = 0;
+      for (const c of state.charges) if (c.standing) outstanding = outstanding + c.outstandingMicro;
+      const owed = (await ledger.lockAccount(tx, accountId)).debtMicro;
+      const forgive = Math.min(left, outstanding, owed);
+      if (forgive > 0) {
+        await ledger.append(
+          {
+            accountId,
+            kind: 'adjustment',
+            forgiveDebtMicro: forgive,
+            idempotencyKey: `${reinstateGrantKey(ref)}:forgive`,
+            reason: event.label,
+          },
+          tx,
+        );
+        left = left - forgive;
+      }
+      const parts: { lotId: string; micro: number; key: string; since?: LedgerPoint }[] = [];
+      for (const c of [...state.charges].reverse()) {
+        if (!c.standing) continue;
+        for (const p of [...c.repaidLeft].reverse()) {
+          parts.push({
+            lotId: p.lotId,
+            micro: p.micro,
+            key: `${reinstateGrantKey(ref)}:returned`,
+            since: p.since,
+          });
+        }
+      }
+      const returned = await this.returnParts(
+        tx,
+        accountId,
+        parts,
+        left,
+        collect === undefined ? undefined : { into: collect, originUnit: key },
+      );
+      const given = forgive + returned;
+      if (given <= 0) continue;
+      const mark = await windows.ledgerMark(tx, accountId);
+      await this.clawBack(tx, accountId, {
+        source: reclaim.source,
+        sourceRef: reclaim.ref,
+        targetKey: state.targetKey,
+        windowId: state.windowId,
+        amountMicro: given,
+        ledgerKind: reclaim.ledgerKind,
+        debtReason: reclaim.debtReason,
+        ledgerKeyPrefix: `clawback:${reclaim.source}:${reclaim.ref}:${state.targetKey}`,
+        // Nothing free is taken: the debt becomes a claim on held credit.
+        targets: state.lots.map((l) => ({ ...l, remainingMicro: l.heldMicro })),
+        settle: false,
+        capSpentMicro: null,
+        ledgerMark: mark,
+        claimForgiveAfterMicro: null,
+      });
+    }
+  }
+
+  /**
+   * S17 audit 4 — the last step of a win, before its debt is settled. Each
+   * credit the win gave back into a live lot is credit a twin without the
+   * dispute had held there since the dispute took it (`TwinCredit`). Meanwhile
+   * the account went on: another payment's take found that lot short and wrote
+   * debt, a settlement found it short and repaid out of later lots or left
+   * debt owed. So the account's debt settlements since are replayed as the
+   * twin made them (`twinSettlements`), and what the twin did differently is
+   * written: the credit a take or a settlement would have used is taken out of
+   * the lot again (a late take on that clawback, or a repayment keyed
+   * `…:rs:paid:<lot>`), what the account repaid out of later lots that the twin
+   * did not goes back into them (`…:rs:returned:<lot>`), and debt the twin no
+   * longer owed is forgiven (`…:rs:forgive`). Keyed to the win, so a replay
+   * writes nothing twice.
+   */
+  async resettleAsTwin(
+    tx: CreditLedgerTx,
+    accountId: string,
+    credits: readonly TwinCredit[],
+    reversedIds: readonly string[],
+    eventRef: string,
+  ): Promise<void> {
+    if (credits.length === 0) return;
+    const { ledger, windows } = this.deps;
+    const events = await windows.debtEvents(tx, accountId);
+    const clawbacks = await windows.accountClawbacks(tx, accountId);
+    const { rowOwners } = followDebt(events, clawbacks, new Map());
+    const byId = new Map(clawbacks.map((c) => [c.id, c]));
+    const ownerUnit = new Map<string, string | null>(
+      clawbacks.map((c) => [c.id, parseUnitTargetKey(c.targetKey) === null ? null : c.targetKey]),
+    );
+    let earliest = (credits[0] as TwinCredit).since;
+    for (const c of credits) if (isAfter(earliest, c.since)) earliest = c.since;
+    const unitLots = new Map<string, Set<string>>();
+    const lotIds = new Set(credits.map((c) => c.lotId));
+    for (const e of events) {
+      if (!isAfter(e, earliest)) continue;
+      if (e.lotId !== null) lotIds.add(e.lotId);
+      if (e.debtDeltaMicro <= 0) continue;
+      const owner = rowOwners.get(e.id)?.[0]?.owner ?? null;
+      const unit = owner === null ? null : (ownerUnit.get(owner) ?? null);
+      if (unit === null || unitLots.has(unit)) continue;
+      const own = new Set((await unitLotsForSettle(tx, accountId, unit)).map((l) => l.lotId));
+      unitLots.set(unit, own);
+      for (const id of own) lotIds.add(id);
+    }
+    const lotRows = await windows.lotsForReturn(tx, accountId, [...lotIds]);
+    const lots = new Map(
+      lotRows.map((l) => [
+        l.lotId,
+        { lotId: l.lotId, spendRank: l.spendRank, expiresAt: l.expiresAt, createdAt: l.createdAt },
+      ]),
+    );
+    // Debt the win itself gave back — forgave, or returned into the lots that
+    // repaid it — was the dispute's doing (a charge measured while it stood, a
+    // hand-over it caused): the twin never owed it, whoever wrote it.
+    const undoneUnits = new Set(
+      credits.filter((c) => c.kind === 'returned').map((c) => c.originUnit),
+    );
+    for (const e of events) {
+      if (e.debtDeltaMicro >= 0 || e.lotId !== null) continue;
+      if (!e.key.includes(`:${eventRef}:`) && !UNDO_KEY.test(e.key)) continue;
+      const unit = UNIT_GIVEBACK_KEY.exec(e.key)?.[1];
+      if (unit !== undefined) undoneUnits.add(unit);
+    }
+    const excluded = new Set(reversedIds);
+    for (const c of clawbacks) if (undoneUnits.has(c.targetKey)) excluded.add(c.id);
+    const found = twinSettlements({
+      events,
+      rowOwners,
+      ownerUnit,
+      excluded,
+      credits,
+      lots,
+      unitLots,
+      now: await windows.databaseNow(tx),
+    });
+
+    const fallback = (credits[0] as TwinCredit).originUnit;
+    const unitFor = (owner: string | null): string =>
+      (owner === null ? null : (ownerUnit.get(owner) ?? null)) ?? fallback;
+    const live = new Map(lotRows.map((l) => [l.lotId, l]));
+    const sum = <K extends string>(rows: readonly { key: K; micro: number }[]): Map<K, number> => {
+      const m = new Map<K, number>();
+      for (const r of rows) m.set(r.key, (m.get(r.key) ?? 0) + r.micro);
+      return m;
+    };
+    const rs = `${eventRef}:rs`;
+    for (const [k, micro] of sum(
+      found.unrepaid.map((u) => ({ key: `${unitFor(u.owner)}|${u.lotId}`, micro: u.micro })),
+    )) {
+      const [unit, lotId] = k.split('|') as [string, string];
+      const lot = live.get(lotId);
+      if (lot === undefined || (!lot.live && !lot.expired)) continue;
+      await this.giveInto(
+        tx,
+        accountId,
+        lotId,
+        micro,
+        `${unitGivebackPrefix(unit)}${rs}:returned:${lotId}`,
+        !lot.live,
+      );
+    }
+    for (const [k, micro] of sum(
+      found.lateTakes.map((t) => ({ key: `${t.owner}|${t.lotId}`, micro: t.micro })),
+    )) {
+      const [owner, lotId] = k.split('|') as [string, string];
+      await ledger.append(
+        {
+          accountId,
+          kind:
+            byId.get(owner)?.source === 'plan_change' ? 'proration_clawback' : 'refund_clawback',
+          lotId,
+          amountMicro: micro,
+          idempotencyKey: `resettle:${eventRef}:take:${owner}:${lotId}`,
+          reason: byId.get(owner)?.source ?? 'stripe_dispute',
+        },
+        tx,
+      );
+    }
+    for (const [k, micro] of sum(
+      found.paid.map((p) => ({
+        key: `${p.origin === '' ? fallback : p.origin}|${p.lotId}`,
+        micro: p.micro,
+      })),
+    )) {
+      const [unit, lotId] = k.split('|') as [string, string];
+      await ledger.append(
+        {
+          accountId,
+          kind: 'adjustment',
+          lotId,
+          lotDeltaMicro: -micro,
+          idempotencyKey: `${unitGivebackPrefix(unit)}${rs}:paid:${lotId}`,
+          reason: 'dispute_reinstated',
+        },
+        tx,
+      );
+    }
+    for (const [unit, micro] of sum(
+      found.forgive.map((f) => ({ key: unitFor(f.owner), micro: f.micro })),
+    )) {
+      const owed = (await ledger.lockAccount(tx, accountId)).debtMicro;
+      const forgive = Math.min(micro, owed);
+      if (forgive <= 0) continue;
+      await ledger.append(
+        {
+          accountId,
+          kind: 'adjustment',
+          forgiveDebtMicro: forgive,
+          idempotencyKey: `${unitGivebackPrefix(unit)}${rs}:forgive`,
+          reason: 'dispute_reinstated',
+        },
+        tx,
+      );
+    }
+  }
+
+  /**
+   * Credit back into the lots it came out of — `<key>:<lot>` each — while the
+   * lot has room. A live lot keeps it for its own term (R1'). A lot that has
+   * EXPIRED gets it and gives it up again at once (`giveInto`): the customer
+   * gains nothing — what it paid would have expired with it, exactly as in a
+   * twin where it never paid — and the lot's spending reads as its twin's. A
+   * revoked lot gets nothing. Returns what the customer can spend of it.
+   */
+  private async returnParts(
+    tx: CreditLedgerTx,
+    accountId: string,
+    parts: readonly {
+      readonly lotId: string;
+      readonly micro: number;
+      readonly key: string;
+      readonly since?: LedgerPoint;
+      /** Claims a twin paid out of this part (`twinClaimsOf`), collected again once it is back. */
+      readonly twin?: readonly TwinClaimPay[];
+      readonly twinKey?: string;
+    }[],
+    budgetMicro: number = Number.MAX_SAFE_INTEGER,
+    collect?: { readonly into: TwinCredit[]; readonly originUnit: string },
+  ): Promise<number> {
+    const { ledger, windows } = this.deps;
+    const wanted = parts.filter((p) => p.micro > 0);
+    if (wanted.length === 0 || budgetMicro <= 0) return 0;
+    const lots = new Map(
+      (await windows.lotsForReturn(tx, accountId, [...new Set(wanted.map((p) => p.lotId))])).map(
+        (l) => [l.lotId, l],
+      ),
+    );
+    const into = new Map<
+      string,
+      {
+        key: string;
+        lotId: string;
+        micro: number;
+        live: boolean;
+        recollect: { pay: TwinClaimPay; key: string }[];
+      }
+    >();
+    const usedRoom = new Map<string, number>();
+    let left = budgetMicro;
+    for (const p of wanted) {
+      if (left <= 0) break;
+      const lot = lots.get(p.lotId);
+      if (lot === undefined || (!lot.live && !lot.expired)) continue;
+      const room = lot.roomMicro - (usedRoom.get(p.lotId) ?? 0);
+      const give = Math.min(left, p.micro, room);
+      if (give <= 0) continue;
+      let recollect = 0;
+      const again: { pay: TwinClaimPay; key: string }[] = [];
+      for (const pay of p.twin ?? []) {
+        const micro = Math.min(pay.micro, give - recollect);
+        if (micro <= 0) break;
+        again.push({
+          pay: { ...pay, micro },
+          key: `claim:${pay.claimId}:${pay.task}:${p.lotId}:${p.twinKey ?? 'undo'}`,
+        });
+        recollect = recollect + micro;
+      }
+      const k = `${p.key}:${p.lotId}`;
+      const had = into.get(k);
+      into.set(k, {
+        key: k,
+        lotId: p.lotId,
+        micro: (had?.micro ?? 0) + give,
+        live: lot.live,
+        recollect: [...(had?.recollect ?? []), ...again],
+      });
+      usedRoom.set(p.lotId, (usedRoom.get(p.lotId) ?? 0) + give);
+      left = left - give;
+      if (collect !== undefined && lot.live && p.since !== undefined && give > recollect) {
+        collect.into.push({
+          lotId: p.lotId,
+          micro: give - recollect,
+          since: p.since,
+          originUnit: collect.originUnit,
+          kind: 'returned',
+        });
+      }
+    }
+    let given = 0;
+    let expired = 0;
+    for (const row of into.values()) {
+      await this.giveInto(tx, accountId, row.lotId, row.micro, row.key, false);
+      let recollected = 0;
+      const byKey = new Map<string, { pay: TwinClaimPay; micro: number }>();
+      for (const r of row.recollect) {
+        const had = byKey.get(r.key);
+        byKey.set(r.key, { pay: r.pay, micro: (had?.micro ?? 0) + r.pay.micro });
+      }
+      for (const [key, r] of byKey) {
+        await ledger.append(
+          {
+            accountId,
+            kind: r.pay.source === 'plan_change' ? 'proration_clawback' : 'refund_clawback',
+            lotId: row.lotId,
+            amountMicro: r.micro,
+            idempotencyKey: key,
+            reason: r.pay.source,
+          },
+          tx,
+        );
+        await windows.releasePendingClaim(tx, r.pay.claimId, r.micro);
+        recollected = recollected + r.micro;
+      }
+      const keep = row.micro - recollected;
+      if (!row.live && keep > 0) {
+        await ledger.append(
+          {
+            accountId,
+            kind: 'expiry',
+            lotId: row.lotId,
+            amountMicro: keep,
+            idempotencyKey: `${row.key}:expired`,
+          },
+          tx,
+        );
+      }
+      if (row.live) given = given + keep;
+      else expired = expired + keep;
+    }
+    if (expired > 0) {
+      this.deps.logger?.warn(
+        { component: 'credit-grants', event: 'returned_credit_already_expired', accountId },
+        'credit that repaid debt came from a lot that has since expired; it was not returned (R1: it would have expired anyway)',
+      );
+    }
+    return given;
+  }
+
+  /**
+   * One give-back row into one lot; into a lot whose term has ended, followed
+   * by its expiry in the same transaction, so nothing is left for a refresh to
+   * expire and the customer gains nothing they could spend.
+   */
+  private async giveInto(
+    tx: CreditLedgerTx,
+    accountId: string,
+    lotId: string,
+    micro: number,
+    key: string,
+    expired: boolean,
+  ): Promise<void> {
+    const { ledger } = this.deps;
+    await ledger.append(
+      {
+        accountId,
+        kind: 'adjustment',
+        lotId,
+        lotDeltaMicro: micro,
+        idempotencyKey: key,
+        reason: 'dispute_reinstated',
+      },
+      tx,
+    );
+    if (expired) {
+      await ledger.append(
+        { accountId, kind: 'expiry', lotId, amountMicro: micro, idempotencyKey: `${key}:expired` },
+        tx,
+      );
+    }
   }
 
   /**
    * Bring one unit to `target` (see the header): take the difference when it
    * stands above, give it back — `both` only — when it stands below. A take
    * is recorded once per event and unit (the clawback's key); a give-back is
-   * keyed to the event and the unit too, and rounded UP to whole credits (a
-   * lot holds nothing else), the rounding then taken straight back so the unit
-   * stands exactly at its target.
+   * keyed to the event and the unit too, and rounded UP to whole credits where
+   * it becomes a lot of its own, the rounding then taken straight back so the
+   * unit stands exactly at its target. Debt a take writes is settled by the
+   * caller, once, after every unit has moved (R12).
    */
   private async reconcileUnit(
     tx: CreditLedgerTx,
@@ -1253,7 +2595,12 @@ export class CreditGrantsService implements CreditsRefresher {
     coverage: { readonly source: CreditWindowSource; readonly sourceRef: string },
     state: UnitState,
     target: number,
-    opts: { readonly mode: 'take' | 'both'; readonly event: CreditUnitEvent },
+    opts: {
+      readonly mode: 'take' | 'both';
+      readonly event: CreditUnitEvent;
+      readonly extras: ClawbackExtras;
+      readonly collect?: TwinCredit[] | undefined;
+    },
   ): Promise<{
     clawback: CreditClawbackRecord | null;
     regrantedMicro: number;
@@ -1261,18 +2608,28 @@ export class CreditGrantsService implements CreditsRefresher {
   }> {
     const delta = positionOf(state) - target;
     if (delta > 0) {
-      const clawback = await this.takeFromUnit(tx, accountId, state, delta, opts.event, '');
+      const clawback = await this.takeFromUnit(
+        tx,
+        accountId,
+        state,
+        delta,
+        opts.event,
+        '',
+        opts.extras,
+      );
       return { clawback, regrantedMicro: 0, forgivenMicro: 0 };
     }
     if (delta === 0 || opts.mode === 'take') {
       return { clawback: null, regrantedMicro: 0, forgivenMicro: 0 };
     }
-    const given = await this.giveBack(tx, accountId, state, -delta, opts.event);
+    const given = await this.giveBack(tx, accountId, state, -delta, opts.event, opts.collect);
     // The whole-credit rounding of what was given back, taken straight back.
     const after = await this.unitState(tx, accountId, window, coverage);
     const over = positionOf(after) - target;
     const trim =
-      over > 0 ? await this.takeFromUnit(tx, accountId, after, over, opts.event, ':trim') : null;
+      over > 0
+        ? await this.takeFromUnit(tx, accountId, after, over, opts.event, ':trim', opts.extras)
+        : null;
     return {
       clawback: trim,
       regrantedMicro: given.regrantedMicro,
@@ -1287,6 +2644,7 @@ export class CreditGrantsService implements CreditsRefresher {
     amountMicro: number,
     event: CreditUnitEvent,
     suffix: string,
+    extras: ClawbackExtras,
   ): Promise<CreditClawbackRecord> {
     const sourceRef = `${event.ref}${suffix}`;
     return this.clawBack(tx, accountId, {
@@ -1300,6 +2658,8 @@ export class CreditGrantsService implements CreditsRefresher {
       ledgerKeyPrefix: `clawback:${event.source}:${sourceRef}:${state.targetKey}`,
       targets: state.lots,
       disputedMinor: suffix === '' ? (event.disputedMinor ?? null) : null,
+      settle: false,
+      ...extras,
     });
   }
 
@@ -1310,19 +2670,25 @@ export class CreditGrantsService implements CreditsRefresher {
    * had the charge never been made (the lots, not only their sum, and so the
    * order credit is spent in):
    *
-   *   1. its standing claims on held credit are released;
-   *   2. the debt its clawbacks created is forgiven, as far as the account
-   *      still owes it;
-   *   3. what later credit already repaid of that debt — and what its claims
-   *      collected from other lots — goes back into the lots that paid it, as
-   *      long as they last at least to the end of the account's current month;
-   *      otherwise it comes back as a lot of its own lasting the LONGER of the
-   *      two (S17 R1: a top-up's credit keeps the top-up's term), and not at all
-   *      when both are already past (logged: nothing was lost that would not
-   *      have been);
-   *   4. the rest — credit the unit's own lots gave up — goes back into those
-   *      lots, while the month runs. A month that has ENDED gets nothing of it
-   *      back: it would have expired with the month (M6).
+   *   1. while the month runs, its standing claims on held credit are
+   *      released. Once the month has ended they are not (audit 4 #6): the
+   *      held credit a claim stands on expires when the task releases it, so
+   *      releasing the claim gives nothing back and only lets the task spend
+   *      it free of the debt the claim stood for;
+   *   2. what its standing clawbacks charged beyond its lots, by what became
+   *      of it (`debtFates`, R9): debt still owed is forgiven; debt later
+   *      credit repaid, and claims collected from other lots, go back into
+   *      those lots while they are live (R1': lasting as long as they do); and
+   *      what a lot that has expired repaid, or an admin forgave, gives nothing
+   *      back — it is part of what is given back all the same;
+   *   3. credit moved to the lots the customer's spending fell on while the
+   *      unit's credit stood taken (R10): what they spent from lots after the
+   *      unit's own in the spend order, since its first take and before its
+   *      window ended, LAST in the spend order first — the lots a twin whose
+   *      credit was never taken would not have reached;
+   *   4. the rest back into the unit's own lots that gave it up, while the
+   *      month runs. A month that has ENDED gets nothing of it back: it would
+   *      have expired with the month (M6).
    *
    * A lot of its own holds whole credits only, so it is rounded UP; the caller
    * takes the rounding straight back.
@@ -1333,142 +2699,377 @@ export class CreditGrantsService implements CreditsRefresher {
     state: UnitState,
     amountMicro: number,
     event: CreditUnitEvent,
+    collect?: TwinCredit[],
   ): Promise<{ regrantedMicro: number; forgivenMicro: number }> {
     const { ledger, windows } = this.deps;
     const ref = `${state.targetKey}:${event.ref}`;
+    const key = reinstateGrantKey(ref);
     let left = amountMicro;
+    const standing = state.charges.filter((c) => c.standing);
 
-    for (const c of state.clawbacks) {
-      if (left <= 0) break;
-      if (c.state !== 'applied' || c.pendingMicro <= 0) continue;
-      const release = Math.min(left, c.pendingMicro);
-      await windows.releasePendingClaim(tx, c.id, release);
-      left = left - release;
+    if (state.live) {
+      for (const c of standing) {
+        if (left <= 0) break;
+        if (c.clawback.pendingMicro <= 0) continue;
+        const release = Math.min(left, c.clawback.pendingMicro);
+        await windows.releasePendingClaim(tx, c.clawback.id, release);
+        left = left - release;
+      }
     }
-
-    let charged = state.collectedElsewhereMicro - state.releasedMicro;
-    for (const c of state.clawbacks) charged = charged + c.debtMicro;
-    charged = Math.max(0, charged);
 
     let forgivenMicro = 0;
-    const owed = (await ledger.lockAccount(tx, accountId)).debtMicro;
-    const forgive = Math.min(left, charged, owed);
-    if (forgive > 0) {
-      await ledger.append(
-        {
+    let regrantedMicro = 0;
+    let beyond = 0;
+    for (const c of standing) beyond = beyond + chargedBeyond(c);
+    const part = Math.min(left, beyond);
+    if (part > 0) {
+      let partLeft = part;
+      let outstanding = 0;
+      for (const c of standing) outstanding = outstanding + c.outstandingMicro;
+      const owed = (await ledger.lockAccount(tx, accountId)).debtMicro;
+      const forgive = Math.min(partLeft, outstanding, owed);
+      if (forgive > 0) {
+        await ledger.append(
+          {
+            accountId,
+            kind: 'adjustment',
+            forgiveDebtMicro: forgive,
+            idempotencyKey: `${key}:forgive`,
+            reason: event.label,
+          },
+          tx,
+        );
+        forgivenMicro = forgive;
+        partLeft = partLeft - forgive;
+      }
+      // Newest charge first, and within it what was repaid or collected last.
+      const parts: { lotId: string; micro: number; key: string; since?: LedgerPoint }[] = [];
+      for (const c of [...standing].reverse()) {
+        for (const p of [...c.collectedLeft].reverse()) {
+          parts.push({ lotId: p.lotId, micro: p.micro, key: `${key}:unclaimed`, since: p.since });
+        }
+        for (const p of [...c.repaidLeft].reverse()) {
+          parts.push({ lotId: p.lotId, micro: p.micro, key: `${key}:returned`, since: p.since });
+        }
+      }
+      regrantedMicro =
+        regrantedMicro +
+        (await this.returnParts(
+          tx,
           accountId,
-          kind: 'adjustment',
-          forgiveDebtMicro: forgive,
-          idempotencyKey: `${reinstateGrantKey(ref)}:forgive`,
-          reason: event.label,
-        },
-        tx,
-      );
-      forgivenMicro = forgive;
-      left = left - forgive;
-      charged = charged - forgive;
+          parts,
+          partLeft,
+          collect === undefined ? undefined : { into: collect, originUnit: state.targetKey },
+        ));
+      left = left - part;
     }
 
-    let regrantedMicro = 0;
-    const repaid = Math.min(left, charged);
-    if (repaid > 0) {
-      regrantedMicro =
-        regrantedMicro + (await this.returnRepaid(tx, accountId, state, repaid, ref, event));
-      left = left - repaid;
+    if (left > 0) {
+      const moved = await this.moveToWhereSpendingFell(
+        tx,
+        accountId,
+        state,
+        left,
+        key,
+        event,
+        collect,
+      );
+      regrantedMicro = regrantedMicro + moved;
+      left = left - moved;
     }
     if (left > 0 && state.live) {
       regrantedMicro =
-        regrantedMicro + (await this.restoreTaken(tx, accountId, state, left, ref, event));
+        regrantedMicro + (await this.restoreTaken(tx, accountId, state, left, ref, event, collect));
     }
     return { regrantedMicro, forgivenMicro };
   }
 
   /**
-   * Step 3 of a give-back: `micro` of the unit's charge that other credit
-   * already paid — a claim collected from another lot, or debt a later lot
-   * repaid (the account's newest repayments) — back into the lots that paid it.
+   * Step 3 of a give-back (R10, audit 4 #5): while the unit's credit stood
+   * taken, the customer's tasks fell through to other lots — a top-up,
+   * goodwill, another payment's share. A twin whose credit was never taken
+   * held and spent that much more of the unit's own lots instead.
+   *
+   * So the tasks started since the take (and before the window ended) are
+   * walked in the order they started: the free credit the reversed takes
+   * removed is what each could not find on the unit's lots, so each task's
+   * holds on lots after the unit's in the spend order take up as much of it as
+   * they hold, until it is used up. What a SETTLED task was charged of that
+   * share goes back into the lots it was charged from (the share it released
+   * went back to them already; it is the unit's to have back, and the caller
+   * restores it while the month runs). A task STILL RUNNING has its share
+   * given back into the lots it holds now, as if it will spend it all, and a
+   * record (`hold:<task>:…`) tells its settlement to take back what it did not
+   * spend (`applyHoldRedirects`, credit-reservations.ts). A lot that has
+   * expired takes the credit and expires it again at once. What is given
+   * counts as the unit's own spending. Returns what the give-back placed.
    */
-  private async returnRepaid(
+  private async moveToWhereSpendingFell(
     tx: CreditLedgerTx,
     accountId: string,
     state: UnitState,
     micro: number,
-    ref: string,
+    key: string,
     event: CreditUnitEvent,
+    collect?: TwinCredit[],
   ): Promise<number> {
-    const { ledger, windows } = this.deps;
-    const sources: { lotId: string; micro: number }[] = [...state.collectedElsewhere];
-    let listed = 0;
-    for (const s of sources) listed = listed + s.micro;
-    if (listed < micro) {
-      for (const r of await windows.recentDebtRepayments(tx, accountId, 100)) {
-        if (listed >= micro) break;
-        sources.push({ lotId: r.lotId, micro: r.micro });
-        listed = listed + r.micro;
+    const { windows } = this.deps;
+    const takes = state.charges
+      .filter(
+        (c) =>
+          !c.standing && !c.clawback.sourceRef.startsWith('hold:') && c.clawback.clawedMicro > 0,
+      )
+      .map((c) => ({ at: c.clawback.createdAt, micro: c.clawback.clawedMicro }))
+      .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    const first = firstInSpendOrder(state.lots);
+    const earliest = takes[0];
+    if (earliest === undefined || first === null) return 0;
+    const unitLotIds = new Set(state.lots.map((l) => l.lotId));
+    const recorded = new Map<string, number>();
+    for (const c of state.charges) {
+      if (!c.clawback.sourceRef.startsWith('hold:')) continue;
+      const task = c.clawback.sourceRef.split(':')[1] ?? '';
+      recorded.set(task, (recorded.get(task) ?? 0) + (c.clawback.amountMicro ?? 0));
+    }
+    const afterUnit = (h: ReservationHold): boolean =>
+      h.spendRank > first.spendRank ||
+      (h.spendRank === first.spendRank &&
+        (h.expiresAt > first.expiresAt ||
+          (h.expiresAt === first.expiresAt &&
+            (h.lotCreatedAt > first.createdAt ||
+              (h.lotCreatedAt === first.createdAt && h.lotId > first.lotId)))));
+    const tasks = await windows.reservationsSince(tx, accountId, {
+      since: earliest.at,
+      before: state.live ? null : state.windowEnd,
+    });
+
+    let unfound = 0;
+    let nextTake = 0;
+    let budget = micro;
+    const spentOutside = new Map<
+      string,
+      { hold: ReservationHold; micro: number; since: PgInstant }
+    >();
+    const plans: {
+      reservationId: string;
+      startedAt: PgInstant;
+      share: number;
+      open: boolean;
+      parts: { lotId: string; micro: number }[];
+    }[] = [];
+    for (const task of tasks) {
+      while (nextTake < takes.length && (takes[nextTake]?.at ?? '') <= task.startedAt) {
+        unfound = unfound + (takes[nextTake]?.micro ?? 0);
+        nextTake = nextTake + 1;
+      }
+      const already = recorded.get(task.reservationId);
+      if (already !== undefined) {
+        unfound = Math.max(0, unfound - already);
+        continue;
+      }
+      const outside = task.holds.filter((h) => !unitLotIds.has(h.lotId) && afterUnit(h));
+      let outsideHeld = 0;
+      for (const h of outside) outsideHeld = outsideHeld + h.heldMicro;
+      const share = Math.min(outsideHeld, unfound, budget);
+      if (share <= 0) continue;
+      unfound = unfound - share;
+      let place = share;
+      if (!task.open) {
+        let charged = 0;
+        let chargedOnUnit = 0;
+        for (const h of task.holds) {
+          charged = charged + h.chargedMicro;
+          if (unitLotIds.has(h.lotId)) chargedOnUnit = chargedOnUnit + h.chargedMicro;
+        }
+        place = Math.min(share, Math.max(0, charged - chargedOnUnit));
+      }
+      // A twin whose credit was never taken drew on the unit's lots FIRST, so
+      // the holds it would not have made are the task's LAST in the spend order.
+      const parts: { lotId: string; micro: number }[] = [];
+      let rest = place;
+      for (const h of [...outside].reverse()) {
+        if (rest <= 0) break;
+        const part = Math.min(rest, task.open ? h.heldMicro : h.chargedMicro);
+        if (part <= 0) continue;
+        parts.push({ lotId: h.lotId, micro: part });
+        rest = rest - part;
+      }
+      budget = budget - (place - rest);
+      plans.push({
+        reservationId: task.reservationId,
+        startedAt: task.startedAt,
+        share,
+        open: task.open,
+        parts,
+      });
+      if (!task.open) {
+        for (const h of outside) {
+          if (h.chargedMicro <= 0) continue;
+          const had = spentOutside.get(h.lotId);
+          spentOutside.set(h.lotId, {
+            hold: h,
+            micro: (had?.micro ?? 0) + h.chargedMicro,
+            since: had?.since ?? task.startedAt,
+          });
+        }
       }
     }
+    if (plans.length === 0) return 0;
+
+    // What SETTLED tasks spent outside the unit is one pool: a twin whose
+    // credit was never taken spent less there in all, and what it did spend
+    // fell first in the spend order (one task's spending left free what a
+    // later one then reached). So their shares, together, go back into the
+    // lots LAST in the spend order first — each at most what was spent there.
+    let pooled = 0;
+    for (const plan of plans) {
+      if (plan.open) continue;
+      for (const part of plan.parts) pooled = pooled + part.micro;
+    }
+    const settledParts: {
+      reservationId: string;
+      startedAt: PgInstant;
+      share: number;
+      open: boolean;
+      parts: { lotId: string; micro: number }[];
+    }[] = [];
+    const lastFirst = [...spentOutside.values()].sort((a, b) => -holdSpendOrder(a.hold, b.hold));
+    for (const spent of lastFirst) {
+      if (pooled <= 0) break;
+      const part = Math.min(pooled, spent.micro);
+      if (part <= 0) continue;
+      settledParts.push({
+        reservationId: '',
+        startedAt: spent.since,
+        share: 0,
+        open: false,
+        parts: [{ lotId: spent.hold.lotId, micro: part }],
+      });
+      pooled = pooled - part;
+    }
+
+    const lotIds = [
+      ...new Set([...plans, ...settledParts].flatMap((p) => p.parts.map((x) => x.lotId))),
+    ];
     const lots = new Map(
-      (await windows.lotsForReturn(tx, accountId, [...new Set(sources.map((s) => s.lotId))])).map(
-        (l) => [l.lotId, l],
-      ),
+      (await windows.lotsForReturn(tx, accountId, lotIds)).map((l) => [l.lotId, l]),
     );
-    const month = await windows.currentWindow(accountId, tx);
-    const monthEnd = month?.windowEnd ?? null;
-    const into = new Map<string, number>();
-    let left = micro;
-    let lasts: PgInstant | null = monthEnd;
-    for (const s of sources) {
-      if (left <= 0) break;
-      const lot = lots.get(s.lotId);
-      if (lot === undefined) continue;
-      const want = Math.min(left, s.micro);
-      const already = into.get(s.lotId) ?? 0;
-      // Back into the lot only while it lasts at least as long as the month:
-      // otherwise the longer of the two is the month, and the credit comes
-      // back as a lot of its own (below).
-      const fits =
-        lot.live && (monthEnd === null || lot.expiresAt >= monthEnd)
-          ? Math.max(0, Math.min(want, lot.roomMicro - already))
-          : 0;
-      if (fits > 0) {
-        into.set(s.lotId, already + fits);
-        left = left - fits;
-      }
-      if (fits < want) lasts = laterOf(lasts, lot.expiresAt);
-    }
-    let given = 0;
-    for (const [lotId, amount] of into) {
-      await ledger.append(
-        {
-          accountId,
-          kind: 'adjustment',
-          lotId,
-          lotDeltaMicro: amount,
-          idempotencyKey: `${returnedGrantKey(ref)}:${lotId}`,
-          reason: event.label,
-        },
-        tx,
-      );
-      given = given + amount;
-    }
-    if (left > 0) {
-      if (lasts === null || lasts <= pgInstantOf(this.now())) {
-        this.deps.logger?.warn(
-          { component: 'credit-grants', event: 'returned_credit_already_expired', accountId },
-          'debt repaid from credit that has since expired was not returned; no month is running to hold it',
-        );
-      } else {
-        given =
-          given +
-          (await this.grantLot(tx, accountId, returnedGrantKey(ref), left, lasts, event.label));
+    const usedRoom = new Map<string, number>();
+    const into = new Map<string, { micro: number; expired: boolean }>();
+    let placed = 0;
+    // Settled tasks first: what they were charged made room in the lots it came
+    // out of; a task still running has no such room of its own.
+    const ordered = [...settledParts, ...plans.filter((p) => p.open)];
+    for (const plan of ordered) {
+      for (const part of plan.parts) {
+        const lot = lots.get(part.lotId);
+        if (lot === undefined || (!lot.live && !lot.expired)) continue;
+        const room = Math.max(0, lot.roomMicro - (usedRoom.get(part.lotId) ?? 0));
+        const fits = Math.min(part.micro, room);
+        if (fits > 0) {
+          usedRoom.set(part.lotId, (usedRoom.get(part.lotId) ?? 0) + fits);
+          const had = into.get(part.lotId);
+          into.set(part.lotId, { micro: (had?.micro ?? 0) + fits, expired: !lot.live });
+          placed = placed + fits;
+          // A settled task's spending: the twin had this credit on the lot from
+          // when the task began.
+          if (collect !== undefined && lot.live && !plan.open) {
+            collect.push({
+              lotId: part.lotId,
+              micro: fits,
+              since: { at: plan.startedAt, id: 0 },
+              originUnit: state.targetKey,
+              kind: 'moved',
+            });
+          }
+        }
+        // A task still running holds that share on a lot with too little
+        // room below its grant to take it (holding does not lower what a lot
+        // has left): the rest waits beside it, in a lot of the same term, for
+        // the task's settlement to empty (`applyHoldRedirects`).
+        const over = part.micro - fits;
+        if (over > 0 && plan.open && lot.live) {
+          placed =
+            placed +
+            (await this.overflowLot(tx, accountId, {
+              reservationId: plan.reservationId,
+              besideLotId: part.lotId,
+              expiresAt: lot.expiresAt,
+              targetKey: state.targetKey,
+              micro: over,
+              key,
+            }));
+        }
       }
     }
-    return given;
+    for (const [lotId, row] of into) {
+      await this.giveInto(tx, accountId, lotId, row.micro, `${key}:moved:${lotId}`, row.expired);
+    }
+    const mark = await windows.ledgerMark(tx, accountId);
+    for (const plan of plans) {
+      await windows.recordHoldRedirect(tx, {
+        accountId,
+        source: event.source,
+        reservationId: plan.reservationId,
+        eventRef: event.ref,
+        targetKey: state.targetKey,
+        amountMicro: plan.share,
+        open: plan.open,
+        ledgerMark: mark,
+      });
+    }
+    return placed;
   }
 
   /**
-   * Step 4 of a give-back: `micro` of credit back into the unit's own lots
-   * that gave it up, the lot taken from last first, each no more than was
+   * The lot a running task's redirected share waits in when the lot it holds
+   * has no room for it (`hold:<task>:<lot>:<unit>`): an adjustment lot with
+   * that lot's term, funded under the unit's give-back prefix as credit moved
+   * for the unit (so it counts as the unit's spending), which the task's
+   * settlement empties. Not a unit's lot: its key is not under a give-back
+   * prefix. Returns what it holds.
+   */
+  private async overflowLot(
+    tx: CreditLedgerTx,
+    accountId: string,
+    input: {
+      readonly reservationId: string;
+      readonly besideLotId: string;
+      readonly expiresAt: PgInstant;
+      readonly targetKey: string;
+      readonly micro: number;
+      readonly key: string;
+    },
+  ): Promise<number> {
+    const { ledger } = this.deps;
+    const inserted = await ledger.insertLot(
+      {
+        accountId,
+        kind: 'adjustment',
+        grantKey: holdOverflowGrantKey(input.reservationId, input.besideLotId, input.targetKey),
+        grantedMicro: ceilMicroToWholeCredits(input.micro),
+        startsAt: floorToPriorMinute(this.now()),
+        expiresAt: new Date(input.expiresAt),
+      },
+      tx,
+    );
+    const funded = await ledger.append(
+      {
+        accountId,
+        kind: 'adjustment',
+        lotId: inserted.lot.id,
+        lotDeltaMicro: input.micro,
+        idempotencyKey: `${input.key}:moved:${inserted.lot.id}`,
+        reason: 'dispute_reinstated',
+      },
+      tx,
+    );
+    return funded.applied ? input.micro : 0;
+  }
+
+  /**
+   * Step 4 of a give-back: `micro` of credit back into the unit's own live
+   * lots that gave it up, the lot taken from last first, each no more than was
    * taken out of it; anything left over (none, while every grant the unit
    * keeps came from those lots) as a lot of its own for the rest of the month.
    */
@@ -1479,13 +3080,22 @@ export class CreditGrantsService implements CreditsRefresher {
     micro: number,
     ref: string,
     event: CreditUnitEvent,
+    collect?: TwinCredit[],
   ): Promise<number> {
     const { ledger } = this.deps;
     let left = micro;
     let given = 0;
+    // The twin kept it from the first take being undone.
+    let since: LedgerPoint | null = null;
+    for (const c of state.charges) {
+      if (c.standing || c.clawback.sourceRef.startsWith('hold:') || c.clawback.clawedMicro <= 0)
+        continue;
+      const point = { at: c.clawback.createdAt, id: c.clawback.ledgerMark ?? 0 };
+      if (since === null || isAfter(since, point)) since = point;
+    }
     for (const lot of state.lots) {
       if (left <= 0) break;
-      if (lot.expiresAt <= pgInstantOf(this.now())) continue;
+      if (!lot.live) continue;
       const fits = Math.min(left, lot.takenMicro, lot.grantedMicro - lot.remainingMicro);
       if (fits <= 0) continue;
       await ledger.append(
@@ -1499,6 +3109,15 @@ export class CreditGrantsService implements CreditsRefresher {
         },
         tx,
       );
+      if (collect !== undefined && since !== null) {
+        collect.push({
+          lotId: lot.lotId,
+          micro: fits,
+          since,
+          originUnit: state.targetKey,
+          kind: 'restored',
+        });
+      }
       given = given + fits;
       left = left - fits;
     }
@@ -1557,8 +3176,9 @@ export class CreditGrantsService implements CreditsRefresher {
 
   /**
    * Read one unit: its lots (locked), the level changes that make up its
-   * target, the clawbacks charged against it, what they collected elsewhere,
-   * and the debt a reconciliation already forgave it.
+   * target, the clawbacks charged against it and what became of what each
+   * charged beyond its lots (`debtFates`), and what a reconciliation already
+   * gave back for it or moved to other lots.
    */
   private async unitState(
     tx: CreditLedgerTx,
@@ -1593,14 +3213,76 @@ export class CreditGrantsService implements CreditsRefresher {
       ownClawbackIds: ownIds,
     });
     const lotIds = new Set(lots.map((l) => l.lotId));
-    let collectedElsewhere = 0;
-    const elsewhere = new Map<string, number>();
+
+    const collectedBy = new Map<string, LotPart[]>();
     for (const claim of await windows.collectedClaims(tx, accountId, ownIds)) {
       if (lotIds.has(claim.lotId)) continue;
-      collectedElsewhere = collectedElsewhere + claim.micro;
-      elsewhere.set(claim.lotId, (elsewhere.get(claim.lotId) ?? 0) + claim.micro);
+      const list = collectedBy.get(claim.clawbackId) ?? [];
+      list.push({
+        lotId: claim.lotId,
+        micro: claim.micro,
+        since: { at: claim.at, id: claim.id },
+        reservationId: claim.reservationId,
+      });
+      collectedBy.set(claim.clawbackId, list);
     }
-    const released = await windows.unitReleasedMicro(tx, accountId, givebackPrefix, [...lotIds]);
+    let fates = new Map<string, ClawbackDebtFate>();
+    if (clawbacks.some((c) => c.debtMicro > 0)) {
+      const unitOf = new Map<string, string>();
+      for (const c of clawbacks) if (c.source === 'plan_change') unitOf.set(c.id, targetKey);
+      fates = debtFates(
+        await windows.debtEvents(tx, accountId),
+        await windows.accountClawbacks(tx, accountId),
+        unitOf,
+      );
+    }
+    const charges = clawbacks.map((c) => {
+      const fate = fates.get(c.id);
+      return {
+        clawback: c,
+        standing: c.state === 'applied',
+        // A debt no ledger row accounts for is treated as gone: nothing is
+        // forgiven or returned for it, and it still stands charged.
+        outstandingMicro: fate?.outstandingMicro ?? 0,
+        repaidLeft: (fate?.repaid ?? []).map((p) => ({
+          lotId: p.lotId,
+          micro: p.micro,
+          since: { at: p.at, id: p.rowId },
+        })),
+        forgivenOtherMicro:
+          fate === undefined
+            ? c.debtMicro
+            : fate.forgivenOtherMicro + Math.max(0, c.debtMicro - fate.incurredMicro),
+        collectedLeft: collectedBy.get(c.id) ?? [],
+      };
+    });
+
+    let moved = 0;
+    const movedByLot = new Map<string, number>();
+    for (const row of await windows.unitGivebackRows(tx, accountId, window.id, givebackPrefix)) {
+      if (row.lotId === null) continue;
+      // A settlement took back what a running task did not spend of what a
+      // give-back moved to its lots (`:back:`): no longer the unit's spending.
+      if (row.key.includes(':back:')) {
+        moved = moved + row.lotDeltaMicro;
+        movedByLot.set(row.lotId, (movedByLot.get(row.lotId) ?? 0) + row.lotDeltaMicro);
+        continue;
+      }
+      if (row.lotDeltaMicro <= 0) continue;
+      const undo = UNDO_KEY.exec(row.key);
+      const owners = undo === null ? charges : charges.filter((c) => c.clawback.id === undo[1]);
+      if (row.key.includes(':returned:')) {
+        let left = row.lotDeltaMicro;
+        for (const c of owners) left = takeFromParts(c.repaidLeft, row.lotId, left);
+      } else if (row.key.includes(':unclaimed:')) {
+        let left = row.lotDeltaMicro;
+        for (const c of owners) left = takeFromParts(c.collectedLeft, row.lotId, left);
+      } else if (row.key.includes(':moved:')) {
+        moved = moved + row.lotDeltaMicro;
+        movedByLot.set(row.lotId, (movedByLot.get(row.lotId) ?? 0) + row.lotDeltaMicro);
+      }
+    }
+
     const terms: UnitKeepTerm[] = [];
     if (drawnFromUnit) {
       const monthly = lots.find((l) => l.kind === 'monthly');
@@ -1619,10 +3301,9 @@ export class CreditGrantsService implements CreditsRefresher {
       coverageRef: coverage.sourceRef,
       targetKey,
       lots,
-      clawbacks,
-      collectedElsewhereMicro: collectedElsewhere,
-      collectedElsewhere: [...elsewhere].map(([lotId, micro]) => ({ lotId, micro })),
-      releasedMicro: released,
+      charges,
+      movedMicro: moved,
+      movedByLot,
       terms,
     };
   }
@@ -1642,8 +3323,9 @@ export class CreditGrantsService implements CreditsRefresher {
    * The arithmetic is `planClawbackOfAmount`, which is where the rules about
    * expired, spent and held credit live. What comes out of the lots is one
    * ledger row per lot; what is owed after that is one `debt_incurred` row; and
-   * then the account's debt is paid down from whatever free credit it has left,
-   * because the database refuses to COMMIT debt beside spendable credit.
+   * then — unless the caller settles once for a whole walk (`settle: false`,
+   * R12) — the account's debt is paid down from whatever free credit it has
+   * left, because the database refuses to COMMIT debt beside spendable credit.
    *
    * ⛔ THE PENDING CLAIM IS ASKED OF HELD CREDIT NO CLAIM ALREADY STANDS
    * AGAINST. `pending_micro` is the part of the shortfall that credits held by
@@ -1685,7 +3367,9 @@ export class CreditGrantsService implements CreditsRefresher {
       readonly targets?: readonly ClawbackTargetLot[];
       /** 0139 — the disputed amount, on a row a dispute writes under its own id. */
       readonly disputedMinor?: number | null;
-    },
+      /** R12 — false: the caller settles the account's debt once, after every unit moved. */
+      readonly settle?: boolean;
+    } & Partial<ClawbackExtras>,
   ): Promise<CreditClawbackRecord> {
     const { ledger, windows } = this.deps;
     const already = await windows.findClawback(tx, input);
@@ -1736,8 +3420,11 @@ export class CreditGrantsService implements CreditsRefresher {
       pendingMicro: plan.pendingMicro,
       debtMicro: plan.debtMicro,
       disputedMinor: input.disputedMinor ?? null,
+      capSpentMicro: input.capSpentMicro ?? null,
+      ledgerMark: input.ledgerMark ?? null,
+      claimForgiveAfterMicro: plan.pendingMicro > 0 ? (input.claimForgiveAfterMicro ?? null) : null,
     });
-    await ledger.settleDebtFromFree(tx, accountId);
+    if (input.settle !== false) await ledger.settleDebtFromFree(tx, accountId);
     return record;
   }
 
@@ -1854,11 +3541,6 @@ export function invoiceTerms(payment: InvoicePaymentFacts): UnitPaymentTerms {
 function stillPaidShareMicro(micro: number, paidMinor: number, stillMinor: number): number {
   if (paidMinor === 0) return micro;
   return Number((BigInt(micro) * BigInt(Math.min(stillMinor, paidMinor))) / BigInt(paidMinor));
-}
-
-/** A Date as the microsecond UTC text the windows repo hands the database. */
-function pgInstantOf(at: Date): PgInstant {
-  return `${at.toISOString().slice(0, -1)}000Z`;
 }
 
 /**

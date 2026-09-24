@@ -210,6 +210,15 @@ export interface PendingCreditClaim {
   readonly clawbackId: string;
   readonly source: string;
   readonly pendingMicro: number;
+  /** What it claws from: a credit unit (`window:<window>:<payment>`) for a reversal. */
+  readonly targetKey: string;
+  /** 0140 — the account's newest ledger row when the claim was made; null before 0140. */
+  readonly ledgerMark: number | null;
+  /**
+   * 0140 — how much more of the unit's credit may be spent after the claim was
+   * made before a part of it left unpaid is no longer owed; null: always owed.
+   */
+  readonly claimForgiveAfterMicro: number | null;
 }
 
 function exact(what: string, value: number): number {
@@ -981,16 +990,77 @@ export class DrizzleCreditReservationsRepo {
    * claim left unpaid would become debt that nothing forgives.
    */
   async pendingClaims(tx: CreditLedgerTx, accountId: string): Promise<PendingCreditClaim[]> {
-    const result = await tx.execute<{ id: string; source: string; pending: string }>(sql`
-      SELECT id, source, pending_micro::text AS pending FROM credit_clawbacks
+    const result = await tx.execute<{
+      id: string;
+      source: string;
+      pending: string;
+      target_key: string;
+      mark: string | null;
+      forgive_after: string | null;
+    }>(sql`
+      SELECT id, source, pending_micro::text AS pending, target_key,
+             ledger_mark::text AS mark, claim_forgive_after_micro::text AS forgive_after
+        FROM credit_clawbacks
        WHERE account_id = ${accountId}::uuid AND pending_micro > 0 AND state = 'applied'
        ORDER BY created_at, id
          FOR UPDATE`);
-    return rowsOf<{ id: string; source: string; pending: string }>(result).map((row) => ({
+    return rowsOf<{
+      id: string;
+      source: string;
+      pending: string;
+      target_key: string;
+      mark: string | null;
+      forgive_after: string | null;
+    }>(result).map((row) => ({
       clawbackId: row.id,
       source: row.source,
       pendingMicro: exact('a pending claim', Number(row.pending)),
+      targetKey: row.target_key,
+      ledgerMark: row.mark === null ? null : exact('a ledger mark', Number(row.mark)),
+      claimForgiveAfterMicro:
+        row.forgive_after === null ? null : exact('a claim threshold', Number(row.forgive_after)),
     }));
+  }
+
+  /**
+   * S17 R8 (audit 4 #3) — how much of one clawback's claim is no longer asked
+   * for WITHOUT having been paid or taken as debt: what a reconciliation
+   * released of it (a give-back), and what a settlement let go because the
+   * spending it stood for was no longer the customer's to owe. The clawback's
+   * amounts less what it clawed, still claims, owes as debt, and collected
+   * (its `claim:<clawback>:…` rows, read by `credit_ledger_claim_clawback_idx`).
+   */
+  async claimLetGoMicro(tx: CreditLedgerTx, clawbackId: string): Promise<number> {
+    const result = await tx.execute<{ micro: string }>(sql`
+      SELECT (COALESCE(c.amount_micro, 0) - COALESCE(c.clawed_micro, 0) - c.pending_micro
+                - COALESCE(c.debt_micro, 0)
+                - COALESCE((SELECT sum(-x.lot_delta_micro) FROM credit_ledger x
+                             WHERE x.account_id = c.account_id
+                               AND starts_with(x.idempotency_key, 'claim:')
+                               AND x.idempotency_key ~>=~ ('claim:' || c.id::text || ':')
+                               AND x.idempotency_key ~<~ ('claim:' || c.id::text || ';')), 0))::text AS micro
+        FROM credit_clawbacks c
+       WHERE c.id = ${clawbackId}::uuid
+       ORDER BY 1`);
+    return Math.max(0, Number(rowsOf<{ micro: string }>(result)[0]?.micro ?? '0'));
+  }
+
+  /**
+   * S17 R8 — let part of a clawback's claim go: its pending claim falls and
+   * nothing becomes debt (the guard lets a claim fall). Refused if the row no
+   * longer claims that much.
+   */
+  async letClaimGo(
+    tx: CreditLedgerTx,
+    input: { readonly clawbackId: string; readonly micro: number },
+  ): Promise<void> {
+    const result = await tx.execute<{ id: string }>(sql`
+      UPDATE credit_clawbacks SET pending_micro = pending_micro - ${input.micro}::bigint
+       WHERE id = ${input.clawbackId}::uuid AND pending_micro >= ${input.micro}::bigint
+      RETURNING id`);
+    if (rowsOf<{ id: string }>(result).length !== 1) {
+      throw new Error('a pending credit claim could not be let go: it no longer claims that much');
+    }
   }
 
   /**

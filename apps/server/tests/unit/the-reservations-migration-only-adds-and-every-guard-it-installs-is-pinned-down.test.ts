@@ -277,28 +277,42 @@ describe('migration 0131 only adds, and every guard it installs is pinned down',
     // the arm that keeps that true), so the counts below are unchanged by it —
     // which is exactly why a stale list here fails silently and has to be read
     // as a list.
-    const LATER = ['0132_credit_guard_gaps', '0133_credit_holds_leg_and_shadow_charge']
+    //
+    // 0140 adds `credit_reservations_account_created_idx` (the enforced tasks
+    // of an account in the order they started, which a won dispute walks) and
+    // CHECKs and indexes on OTHER tables, so what the migrations create is read
+    // only for these three tables' names (`mine`).
+    const LATER = [
+      '0132_credit_guard_gaps',
+      '0133_credit_holds_leg_and_shadow_charge',
+      '0140_credit_clawback_frozen_cap_and_reversal_indexes',
+    ]
       .map((tag) => readFileSync(resolve(DB, 'migrations', `${tag}.sql`), 'utf8'))
       .join('\n')
       .split('\n')
       .map((line) => line.replace(/--.*$/, ''))
       .join('\n');
     const both = `${SQL}\n${LATER}`;
+    const mine = /^(credit_reservations_|credit_reservation_holds_|credit_model_calls_)/;
     const inSql = {
-      checks: [...both.matchAll(/CONSTRAINT "(\w+)"\s+CHECK/g)].map((m) => m[1] ?? '').sort(),
-      indexes: [...both.matchAll(/CREATE (?:UNIQUE )?INDEX "(\w+)"/g)]
+      checks: [...both.matchAll(/CONSTRAINT "(\w+)"\s+CHECK/g)]
         .map((m) => m[1] ?? '')
+        .filter((n) => mine.test(n))
+        .sort(),
+      indexes: [...both.matchAll(/CREATE (?:UNIQUE )?INDEX (?:IF NOT EXISTS )?"(\w+)"/g)]
+        .map((m) => m[1] ?? '')
+        .filter((n) => mine.test(n))
         .sort(),
     };
     // 10 on reservations, 2 on holds, 10 on model calls — plus 0132's one more
     // on model calls, and its re-statement of `credit_reservations_amounts`,
     // which names a constraint 0131 already named and so must be de-duplicated.
+    // Indexes: 0131's six, 0132's one on holds, 0140's one on reservations.
     expect(new Set(inSql.checks).size).toBe(23);
-    expect(inSql.indexes).toHaveLength(7);
+    expect(inSql.indexes).toHaveLength(8);
     inSql.checks = [...new Set(inSql.checks)].sort();
 
     const schema = codeOnly(readFileSync(resolve(DB, 'schema.ts'), 'utf8'));
-    const mine = /^(credit_reservations_|credit_reservation_holds_|credit_model_calls_)/;
     const named = (kinds: string[]): string[] =>
       [...schema.matchAll(new RegExp(`\\b(?:${kinds.join('|')})\\(\\s*'(\\w+)'`, 'g'))]
         .map((m) => m[1] ?? '')

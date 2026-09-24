@@ -385,7 +385,13 @@ describe('migration 0132 changes exactly three guards, and pins each one', () =>
     // level change's payment still paid) follows 0138; its own guard pins its
     // shape.
     expect(journal.entries[at + 7]?.tag).toBe('0139_credit_window_undisputed_level');
-    expect(journal.entries, 'and 0139 is the last one').toHaveLength(140);
+    // 0140 (the S17 fourth-audit fix — a reversal's frozen cap, its ledger mark
+    // and its claim threshold, and the reversal reads' indexes) follows 0139;
+    // its own guard pins its shape.
+    expect(journal.entries[at + 8]?.tag).toBe(
+      '0140_credit_clawback_frozen_cap_and_reversal_indexes',
+    );
+    expect(journal.entries, 'and 0140 is the last one').toHaveLength(141);
   });
 
   it('CRITICAL schema.ts mirrors the CHECK and the index this migration adds, by name, and its prose names the trigger it installs and the guard it relaxes', () => {

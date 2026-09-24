@@ -175,6 +175,19 @@ describe('migration 0130 only adds, and every guard it installs is pinned down',
       .map((m) => m[1] ?? '')
       .filter((n) => mine.test(n));
     expect(named(['check'])).toEqual([...new Set([...inSql.checks, ...later])].sort());
+    // Indexes likewise: 0140 adds `credit_clawbacks_hold_idx` to the clawbacks
+    // table, read from its own text (`IF NOT EXISTS` and all).
+    const laterIndexes = readdirSync(resolve(DB, 'migrations'))
+      .filter((f) => /^\d{4}_.*\.sql$/.test(f) && f.localeCompare(`${TAG}.sql`) > 0)
+      .flatMap((f) => [
+        ...readFileSync(resolve(DB, 'migrations', f), 'utf8')
+          .split('\n')
+          .map((line) => line.replace(/--.*$/, ''))
+          .join('\n')
+          .matchAll(/CREATE (?:UNIQUE )?INDEX (?:IF NOT EXISTS )?"(\w+)"/g),
+      ])
+      .map((m) => m[1] ?? '')
+      .filter((n) => mine.test(n));
     // `unique` as well as `uniqueIndex`: migration 0131 promoted
     // `credit_windows_id_account_unique` from a unique INDEX to the unique
     // CONSTRAINT backed by that same index (which is the form a foreign key is
@@ -182,7 +195,9 @@ describe('migration 0130 only adds, and every guard it installs is pinned down',
     // table-level `unique(...)`. The migration that CREATES it is still 0130 and
     // still creates an index, so the two sides are compared across the two
     // spellings rather than one being re-pinned away.
-    expect(named(['index', 'uniqueIndex', 'unique'])).toEqual(inSql.indexes);
+    expect(named(['index', 'uniqueIndex', 'unique'])).toEqual(
+      [...new Set([...inSql.indexes, ...laterIndexes])].sort(),
+    );
     // The lot→window key carries the ACCOUNT, so it is a table-level foreign
     // key over two columns, not a `.references()` on `window_id` alone: a lot
     // names a window of its own account or no window at all.

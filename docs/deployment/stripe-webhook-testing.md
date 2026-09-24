@@ -102,10 +102,35 @@ Some cases in the reversal rows answer differently from the rest:
   paid). Winning one takes only that dispute's amount off.
 - **A won dispute leaves the account where no dispute would have.** What the
   dispute took goes back into the lots it came from, the debt it caused is
-  forgiven, and credit that repaid that debt is returned for as long as it
-  would have lasted. When that credit and the month have both ended, nothing
-  is returned: the win logs `returned_credit_already_expired` and raises no
-  alert, since nothing was lost that would not have been.
+  forgiven, and credit that repaid that debt is returned into the lot that
+  repaid it, lasting only as long as that lot does. When that lot has ended,
+  nothing is returned: the win logs `returned_credit_already_expired` and
+  raises no alert, since nothing was lost that would not have been. The same
+  holds for what the dispute's claim collected from credit a finished task
+  released — except that the account's other claims standing at that task's
+  settlement are paid out of it first, as they would have been without the
+  dispute. Debt an admin forgave while the dispute stood is not handed back.
+- **Spending that fell elsewhere while a dispute stood goes back there.** If,
+  with the month's credit taken, the customer's tasks spent goodwill, a top-up
+  or another payment's share instead, the win moves that spending back onto
+  the month: the credit returns to those lots, the ones last in the spend
+  order first, and a task still running when the dispute is won has the rest
+  settled when it finishes.
+- **Every reversal settles every window it touches, at once.** A refund or a
+  dispute of a payment reconciles each month that payment bought — including
+  the share a resubscription or an upgrade handed over — and a refresh
+  afterwards writes nothing. On an annual invoice the interim cap on the debt
+  a reversal may leave is measured when the reversal lands and stays there: a
+  later spend or settlement does not move it (a win falls back to the figure
+  the newest reversal still standing was measured on), and a claim on credit a
+  running task held is dropped, at its settlement, by as much as the spending
+  since the reversal explains, before any other credit pays it.
+- **A dispute recorded before migration 0139 is refused, not guessed at.**
+  Such a row carries no disputed amount (and its window no undisputed level).
+  A later reversal, the dispute's own win and a refresh of that account each
+  fail with `CreditLegacyDisputeError`, move nothing and alert; the account
+  needs a person to review it. Production held no credit rows when 0139
+  shipped, so none is expected.
 - **A refund or dispute that arrives before its `invoice.paid` answers 500.**
   When the charge names an invoice whose payment is not on record yet, the
   handler refuses the event as retryable, no `processed_stripe_events` row is

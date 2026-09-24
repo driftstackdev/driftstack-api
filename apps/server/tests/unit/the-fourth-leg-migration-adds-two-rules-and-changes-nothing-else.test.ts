@@ -285,7 +285,15 @@ describe('migration 0133 adds the fourth leg and the shadow charge rule, and not
     expect(journal.entries[at + 6]?.when).toBeGreaterThan(
       journal.entries[at + 5]?.when ?? Infinity,
     );
-    expect(journal.entries, 'and 0139 is the last one').toHaveLength(140);
+    // 0140 (the S17 fourth-audit fix — a reversal's frozen cap, ledger mark and
+    // claim threshold, and the indexes the reversal reads use) follows 0139.
+    expect(journal.entries[at + 7]?.tag).toBe(
+      '0140_credit_clawback_frozen_cap_and_reversal_indexes',
+    );
+    expect(journal.entries[at + 7]?.when).toBeGreaterThan(
+      journal.entries[at + 6]?.when ?? Infinity,
+    );
+    expect(journal.entries, 'and 0140 is the last one').toHaveLength(141);
   });
 
   it('CRITICAL schema.ts names the trigger this migration installs, says where the shadow rule lives, and carries the one sentence about the relaxed clawback guard that 0133 is the record of', () => {

@@ -3712,6 +3712,20 @@ export const creditLedger = pgTable(
     index('credit_ledger_lot_idx')
       .on(t.lotId, t.kind)
       .where(sql`${t.lotId} IS NOT NULL`),
+    // 0140 — the reversal reads (S17 audit 4, #10): a clawback's collected
+    // claims by the clawback id inside `claim:<clawback>:…`, a credit unit's
+    // given-back rows by the window id inside `reinstate:window:<window>:…`,
+    // and the account's debt movements in order.
+    // Each key is read by its prefix as a byte range, hence `text_pattern_ops`.
+    index('credit_ledger_claim_clawback_idx')
+      .on(t.accountId, t.idempotencyKey.op('text_pattern_ops'))
+      .where(sql`starts_with(${t.idempotencyKey}, 'claim:')`),
+    index('credit_ledger_giveback_window_idx')
+      .on(t.accountId, t.idempotencyKey.op('text_pattern_ops'))
+      .where(sql`${t.kind} = 'adjustment' AND starts_with(${t.idempotencyKey}, 'reinstate:')`),
+    index('credit_ledger_debt_idx')
+      .on(t.accountId, t.id)
+      .where(sql`${t.debtDeltaMicro} <> 0`),
     check(
       'credit_ledger_kind',
       sql`${t.kind} IN ('grant', 'proration_grant', 'proration_clawback', 'task_charge', 'expiry', 'refund_clawback', 'debt_incurred', 'debt_repayment', 'adjustment', 'top_up')`,
@@ -4062,9 +4076,30 @@ export const creditClawbacks = pgTable(
      * sum can pass what the payment row may hold. NULL on every other row.
      */
     disputedMinor: bigint('disputed_minor', { mode: 'number' }),
+    /**
+     * 0140 — what the payment's credit had been spent, plus what running tasks
+     * held of it, across all of its windows when the reversal that wrote this
+     * row was measured: the interim annual cap's consumption, FROZEN (S17 R8).
+     * The cap reads the newest standing reversal's figure. NULL on every row no
+     * reversal of a payment wrote.
+     */
+    capSpentMicro: bigint('cap_spent_micro', { mode: 'number' }),
+    /** 0140 — the account's newest ledger row id when this clawback was measured. */
+    ledgerMark: bigint('ledger_mark', { mode: 'number' }),
+    /**
+     * 0140 — how much more of the unit's credit may be spent after this take
+     * before a claim on held credit left unpaid at settlement stops being owed
+     * (S17 R8, audit 4 #3). NULL: the whole of an unpaid claim is owed.
+     */
+    claimForgiveAfterMicro: bigint('claim_forgive_after_micro', { mode: 'number' }),
   },
   (t) => [
     uniqueIndex('credit_clawbacks_idempotency_unique').on(t.source, t.sourceRef, t.targetKey),
+    // 0140 — a give-back's record for a task still running, by the task
+    // (`hold:<reservation>:…`): what that task's settlement finishes.
+    index('credit_clawbacks_hold_idx')
+      .on(t.accountId, t.sourceRef.op('text_pattern_ops'))
+      .where(sql`starts_with(${t.sourceRef}, 'hold:')`),
     index('credit_clawbacks_pending_idx')
       .on(t.accountId, t.createdAt)
       .where(sql`${t.pendingMicro} > 0`),
@@ -4094,6 +4129,12 @@ export const creditClawbacks = pgTable(
       sql`${t.state} <> 'unmatched' OR (${t.clawedMicro} IS NULL AND ${t.debtMicro} IS NULL AND ${t.pendingMicro} = 0)`,
     ),
     check('credit_clawbacks_disputed', sql`${t.disputedMinor} IS NULL OR ${t.disputedMinor} >= 0`),
+    check('credit_clawbacks_cap_spent', sql`${t.capSpentMicro} IS NULL OR ${t.capSpentMicro} >= 0`),
+    check('credit_clawbacks_ledger_mark', sql`${t.ledgerMark} IS NULL OR ${t.ledgerMark} >= 0`),
+    check(
+      'credit_clawbacks_claim_forgive_after',
+      sql`${t.claimForgiveAfterMicro} IS NULL OR ${t.claimForgiveAfterMicro} >= 0`,
+    ),
   ],
 );
 
@@ -4308,6 +4349,11 @@ export const creditReservations = pgTable(
       .on(t.maxUntil)
       .where(sql`${t.state} = 'open'`),
     index('credit_reservations_session_idx').on(t.agentSessionId, t.createdAt),
+    // 0140 — an account's enforced tasks in the order they started: what a
+    // won dispute walks to put back what a task's hold sent elsewhere.
+    index('credit_reservations_account_created_idx')
+      .on(t.accountId, t.createdAt)
+      .where(sql`${t.mode} = 'enforce'`),
     check('credit_reservations_mode', sql`${t.mode} IN ('enforce', 'shadow')`),
     check(
       'credit_reservations_slot',

@@ -50,6 +50,28 @@
 //   +twoDisputesOnePayment    as base, and a payment may carry two disputes
 //   +resubscribe              as base, plus a resubscription in month 2
 //
+// And six more, from the fourth audit (histories the six above never produce):
+//
+//   +topUpsAndGoodwill        as base, plus top-ups (360 days) and goodwill
+//                             lasting 1 or 40 days, bought between the events
+//   +runningTasks             as base, plus tasks that HOLD credit and settle
+//                             later — across a reversal, a win or the month end
+//   inOrder+topUpsAndGoodwill+runningTasks
+//   +planChangeDuringDispute+twoDisputesOnePayment+topUpsAndGoodwill+runningTasks
+//   +resubscribe+resubscriptionReversed+topUpsAndGoodwill+runningTasks
+//                             the resubscription's own invoice is refunded or
+//                             disputed (won or lost) after it
+//   inOrder+resubscribeInMonth1+resubscriptionReversed+cryptoTerm
+//                             a resubscription in MONTH 1 on a line that began
+//                             20 days before the month ends, and a builder
+//                             crypto term above the Stripe month, refunded or not
+//
+// THE COMPARISON COVERS WHAT EXPIRES WHEN, not only the totals: the credit an
+// account can spend is grouped by the instant it expires, and the twins must
+// agree on every group. Every instant both twins can see is read once and
+// shared (a top-up's term, goodwill's, a crypto term's), so a group can only
+// differ through the reversal logic.
+//
 // The twins may differ by LESS than one credit: a won dispute's give-back is
 // rounded up to a whole credit (coordinator decision #1), and a lot not owned by
 // the invoice keeps that rounding. Anything from one credit up is a failure.
@@ -64,6 +86,7 @@ import {
   floorToPriorMinute,
   type ReversalOutcome,
 } from '../../src/services/credit-clawbacks.js';
+import { randomUUID } from 'node:crypto';
 import { debtOf, openLedgerDatabase } from './_helpers/credit-ledger-fixtures.js';
 import {
   MICRO,
@@ -83,6 +106,11 @@ import {
   paidProrationUpLine,
   spendFromLot,
 } from './_helpers/credit-plan-change-fixtures.js';
+import {
+  reservationsHarness,
+  settledCall,
+  type ReservationsHarness,
+} from './_helpers/credit-reservation-fixtures.js';
 
 const ISOLATED_DB_NAME = 'driftstack_iso_twin_property';
 const RUN_DB_TESTS = Boolean(process.env.CI || process.env.DATABASE_URL);
@@ -99,6 +127,7 @@ const BOUNDARY_AHEAD_SECONDS = 14;
 let client: postgres.Sql | null = null;
 let harness: GrantsHarness | null = null;
 let service: CreditClawbacksService | null = null;
+let reservations: ReservationsHarness | null = null;
 const alerts: SentryMessage[] = [];
 
 beforeAll(async () => {
@@ -107,6 +136,7 @@ beforeAll(async () => {
   if (opened === null) return;
   client = opened.sql;
   harness = grantsHarness(opened.url, { max: 4 });
+  reservations = reservationsHarness(opened.url, { refresher: null, max: 2 });
   const quiet = { info: () => {}, warn: () => {}, debug: () => {}, error: () => {} };
   service = new CreditClawbacksService({
     ledger: harness.ledger,
@@ -124,6 +154,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await client?.end({ timeout: 5 }).catch(() => {});
   await harness?.database.close().catch(() => {});
+  await reservations?.database.close().catch(() => {});
 });
 
 function db(): postgres.Sql {
@@ -137,6 +168,10 @@ function h(): GrantsHarness {
 function svc(): CreditClawbacksService {
   if (service === null) throw new Error('isolated database unreachable');
   return service;
+}
+function tasks(): ReservationsHarness {
+  if (reservations === null) throw new Error('isolated database unreachable');
+  return reservations;
 }
 
 // ── shared helpers ──────────────────────────────────────────────────────────
@@ -207,8 +242,31 @@ async function granted(chargeId: string) {
   return { ...customer, lotId: await monthlyLotOf(customer.accountId) };
 }
 
-/** A bought top-up lasting 360 days, funded and set against any debt in one transaction. */
-async function buyTopUp(accountId: string, amount: number, key: string): Promise<string> {
+/**
+ * The period of a second line that must start WITH the first line of the
+ * account's `invoiceId`, read off that line rather than off the clock. Written
+ * as the fixtures' default ("five days ago, on the second") each insert takes
+ * its own reading, and two inserts that straddle a second boundary start a
+ * second apart: the later line then covers the month less one second and its
+ * share of it floors a whole credit short (7,000 × (month − 1 s) / month =
+ * 6,999). CI failed arm A8 exactly so (8,999 against 9,000).
+ */
+async function periodOf(invoiceId: string): Promise<{ start: string; end: string }> {
+  const [row] = await db()<Array<{ s: string }>>`
+    SELECT to_char(line_period_start AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS s
+      FROM billing_invoice_payments WHERE stripe_invoice_id = ${invoiceId}`;
+  if (row === undefined) throw new Error('setup: no line to start with');
+  const start = at(row.s);
+  return { start, end: `((${start} AT TIME ZONE 'UTC' + interval '1 month') AT TIME ZONE 'UTC')` };
+}
+
+/** A bought top-up lasting 360 days (or until `expiresAt`), funded and set against any debt in one transaction. */
+async function buyTopUp(
+  accountId: string,
+  amount: number,
+  key: string,
+  expiresAt: Date = new Date(Date.now() + 360 * 24 * 3600 * 1000),
+): Promise<string> {
   return h().ledger.transaction(async (tx) => {
     await h().ledger.lockAccount(tx, accountId);
     const inserted = await h().ledger.insertLot(
@@ -218,7 +276,7 @@ async function buyTopUp(accountId: string, amount: number, key: string): Promise
         grantKey: `topup:${key}`,
         grantedMicro: amount * MICRO,
         startsAt: floorToPriorMinute(new Date()),
-        expiresAt: new Date(Date.now() + 360 * 24 * 3600 * 1000),
+        expiresAt,
       },
       tx,
     );
@@ -296,7 +354,14 @@ type Ev =
   | { readonly k: 'plan'; readonly to: 'up' | 'down' }
   | { readonly k: 'resub' }
   | { readonly k: 'refresh' }
-  | { readonly k: 'replay'; readonly r: number };
+  | { readonly k: 'replay'; readonly r: number }
+  | { readonly k: 'topUp'; readonly amount: number }
+  | { readonly k: 'goodwill'; readonly amount: number; readonly days: number }
+  | { readonly k: 'hold'; readonly r: number }
+  | { readonly k: 'settle'; readonly r: number }
+  | { readonly k: 'resubscribeInMonth1' }
+  | { readonly k: 'crypto' }
+  | { readonly k: 'cryptoRefund' };
 
 function isReversal(e: Ev): e is Reversal {
   return e.k === 'refund' || e.k === 'created' || e.k === 'won';
@@ -320,6 +385,20 @@ function describeEvent(e: Ev): string {
       return 'refresh';
     case 'replay':
       return 'replay';
+    case 'topUp':
+      return `top-up of ${String(e.amount)}`;
+    case 'goodwill':
+      return `goodwill of ${String(e.amount)} for ${String(e.days)} days`;
+    case 'hold':
+      return 'a task holds credit';
+    case 'settle':
+      return 'the oldest running task settles';
+    case 'resubscribeInMonth1':
+      return 'resubscription in month 1 (line began 20 days before the month ends)';
+    case 'crypto':
+      return 'builder crypto term bought';
+    case 'cryptoRefund':
+      return 'crypto term refunded';
   }
 }
 
@@ -330,6 +409,16 @@ interface Config {
   readonly resubscribe: boolean;
   readonly planChangeDuringDispute: boolean;
   readonly twoDisputesOnePayment: boolean;
+  /** Top-ups (360 days) and goodwill (1 or 40 days) woven between the events. */
+  readonly topUpsAndGoodwill?: boolean;
+  /** Tasks holding credit, settled later: across reversals, wins and the month end. */
+  readonly runningTasks?: boolean;
+  /** A resubscription in month 1, on a line that began 20 days before the month ends. */
+  readonly resubscribeInMonth1?: boolean;
+  /** The resubscription's own invoice refunded, or disputed and won or lost, after it. */
+  readonly resubscriptionReversed?: boolean;
+  /** A builder crypto term bought above the Stripe month, refunded or not. */
+  readonly cryptoTerm?: boolean;
 }
 
 const CONFIGS: readonly Config[] = [
@@ -380,6 +469,66 @@ const CONFIGS: readonly Config[] = [
     resubscribe: true,
     planChangeDuringDispute: false,
     twoDisputesOnePayment: false,
+  },
+  {
+    name: '+topUpsAndGoodwill',
+    firstSeed: 11_000,
+    inOrder: false,
+    resubscribe: false,
+    planChangeDuringDispute: false,
+    twoDisputesOnePayment: false,
+    topUpsAndGoodwill: true,
+  },
+  {
+    name: '+runningTasks',
+    firstSeed: 12_000,
+    inOrder: false,
+    resubscribe: false,
+    planChangeDuringDispute: false,
+    twoDisputesOnePayment: false,
+    runningTasks: true,
+  },
+  {
+    name: 'inOrder+topUpsAndGoodwill+runningTasks',
+    firstSeed: 13_000,
+    inOrder: true,
+    resubscribe: false,
+    planChangeDuringDispute: false,
+    twoDisputesOnePayment: false,
+    topUpsAndGoodwill: true,
+    runningTasks: true,
+  },
+  {
+    name: '+planChangeDuringDispute+twoDisputesOnePayment+topUpsAndGoodwill+runningTasks',
+    firstSeed: 14_000,
+    inOrder: false,
+    resubscribe: false,
+    planChangeDuringDispute: true,
+    twoDisputesOnePayment: true,
+    topUpsAndGoodwill: true,
+    runningTasks: true,
+  },
+  {
+    name: '+resubscribe+resubscriptionReversed+topUpsAndGoodwill+runningTasks',
+    firstSeed: 15_000,
+    inOrder: false,
+    resubscribe: true,
+    planChangeDuringDispute: false,
+    twoDisputesOnePayment: false,
+    topUpsAndGoodwill: true,
+    runningTasks: true,
+    resubscriptionReversed: true,
+  },
+  {
+    name: 'inOrder+resubscribeInMonth1+resubscriptionReversed+cryptoTerm',
+    firstSeed: 16_000,
+    inOrder: true,
+    resubscribe: false,
+    planChangeDuringDispute: false,
+    twoDisputesOnePayment: false,
+    resubscribeInMonth1: true,
+    resubscriptionReversed: true,
+    cryptoTerm: true,
   },
 ];
 
@@ -535,7 +684,53 @@ function planFor(seed: number, cfg: Config): Plan {
       winsAfterTheirDispute(month2);
     }
   }
-  if (resubscribes) insertAt(month2, { k: 'resub' });
+  // The new configurations' draws come AFTER every draw the six original ones
+  // make, and only under their own flags: an original seed plans exactly what
+  // it always planned.
+  const resubscriptions: { list: Ev[]; event: Ev }[] = [];
+  if (resubscribes) {
+    const event: Ev = { k: 'resub' };
+    insertAt(month2, event);
+    resubscriptions.push({ list: month2, event });
+  }
+  if (cfg.resubscribeInMonth1 === true && r() < 0.6) {
+    const event: Ev = { k: 'resubscribeInMonth1' };
+    insertAt(month1, event);
+    resubscriptions.push({ list: month1, event });
+  }
+  if (cfg.resubscriptionReversed === true) {
+    for (const { list, event } of resubscriptions) {
+      // A refund of the resubscription, and a dispute of it won or lost, each
+      // after the resubscription itself (in its month, or in month 2).
+      const after = (): { xs: Ev[]; from: number } =>
+        list === month1 && r() < 0.5
+          ? { xs: month2, from: 0 }
+          : { xs: list, from: list.indexOf(event) + 1 };
+      if (r() < 0.6) {
+        const where = after();
+        insertAt(where.xs, { k: 'refund', inv: 'resub', cum: share('resub') }, where.from);
+      }
+      if (r() < 0.5) {
+        const d = `dr_${String(seed)}`;
+        const amount = share('resub');
+        const where = after();
+        const created = insertAt(where.xs, { k: 'created', d, inv: 'resub', amount }, where.from);
+        if (r() < 0.5) {
+          insertAt(where.xs, { k: 'won', d, inv: 'resub', amount }, created + 1);
+          insertAt(where.xs, { k: 'won', d, inv: 'resub', amount }, created + 1);
+          won.add(d);
+        } else lost.add(d);
+      }
+    }
+  }
+  if (cfg.cryptoTerm === true && r() < 0.7) {
+    const list = r() < 0.5 ? month1 : month2;
+    const bought = insertAt(list, { k: 'crypto' });
+    if (r() < 0.6) {
+      if (list === month1 && r() < 0.5) insertAt(month2, { k: 'cryptoRefund' });
+      else insertAt(list, { k: 'cryptoRefund' }, bought + 1);
+    }
+  }
 
   if (cfg.inOrder) {
     // A refund is never delivered while a dispute of its payment stands: it is
@@ -571,6 +766,18 @@ function planFor(seed: number, cfg: Config): Plan {
       if (x < 0.35) out.push({ k: 'spend', r: r() });
       else if (x < 0.5) out.push({ k: 'refresh' });
       else if (x < 0.65) out.push({ k: 'replay', r: r() });
+      if (cfg.topUpsAndGoodwill === true) {
+        const y = r();
+        if (y < 0.12) out.push({ k: 'topUp', amount: pick([250, 1_000, 3_000]) });
+        else if (y < 0.24) {
+          out.push({ k: 'goodwill', amount: pick([500, 2_000]), days: pick([1, 40]) });
+        }
+      }
+      if (cfg.runningTasks === true) {
+        const z = r();
+        if (z < 0.2) out.push({ k: 'hold', r: r() });
+        else if (z < 0.35) out.push({ k: 'settle', r: r() });
+      }
     };
     extra();
     for (const e of xs) {
@@ -602,6 +809,12 @@ interface World {
   readonly charges: Record<Inv, string>;
   nth: number;
   readonly delivered: Reversal[];
+  /** Running tasks, oldest first; the twins open and settle them in lockstep. */
+  readonly holds: string[];
+  /** The month boundary this world's batch runs around. */
+  readonly boundary: string;
+  /** The crypto order bought above the Stripe month, once bought. */
+  cryptoOrder: string | null;
 }
 
 async function makeWorld(
@@ -623,6 +836,7 @@ async function makeWorld(
   const invoices: Record<Inv, string | null> = { base1: null, base2: null, up: null, resub: null };
   if (shape === 'annual') {
     invoices.base1 = await paidLine(db(), accountId, {
+      invoiceId: `in_tw_${tag}_b1`,
       subscriptionId,
       tier: 'api_starter',
       interval: 'year',
@@ -633,6 +847,7 @@ async function makeWorld(
     invoices.base2 = invoices.base1;
   } else {
     invoices.base1 = await paidLine(db(), accountId, {
+      invoiceId: `in_tw_${tag}_b1`,
       subscriptionId,
       tier: 'api_starter',
       start: monthBefore(boundary),
@@ -640,6 +855,7 @@ async function makeWorld(
       amountPaid: PAID,
     });
     invoices.base2 = await paidLine(db(), accountId, {
+      invoiceId: `in_tw_${tag}_b2`,
       subscriptionId,
       tier: 'api_starter',
       start: at(boundary),
@@ -651,7 +867,19 @@ async function makeWorld(
   await charge(invoices.base1, charges.base1);
   if (shape === 'annual') charges.base2 = charges.base1;
   await h().grants.refreshCredits(accountId);
-  return { label, tag, accountId, subscriptionId, invoices, charges, nth: 0, delivered: [] };
+  return {
+    label,
+    tag,
+    accountId,
+    subscriptionId,
+    invoices,
+    charges,
+    nth: 0,
+    delivered: [],
+    holds: [],
+    boundary,
+    cryptoOrder: null,
+  };
 }
 
 /** Everything a refresh or a replay could move, for one world. */
@@ -681,6 +909,132 @@ function changed(before: Record<string, string>, after: Record<string, string>):
     .filter((k) => before[k] !== after[k])
     .map((k) => `${k} ${before[k] ?? '?'}→${after[k] ?? '?'}`)
     .join(', ');
+}
+
+/**
+ * What the account can spend, grouped by the instant it expires (microsecond
+ * UTC text): the terms a comparison of totals cannot see.
+ */
+async function termsOf(accountId: string): Promise<Map<string, number>> {
+  const rows = await db()<Array<{ e: string; free: string }>>`
+    SELECT to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS e,
+           sum(remaining_micro - held_micro)::text AS free
+      FROM credit_lots
+     WHERE account_id = ${accountId}::uuid AND revoked_at IS NULL
+       AND starts_at <= now() AND now() < expires_at AND remaining_micro > held_micro
+     GROUP BY expires_at
+     ORDER BY expires_at`;
+  return new Map(rows.map((row) => [row.e, Number(row.free)]));
+}
+
+/** The first expiry at which the twins' credit differs by a credit or more; null when none does. */
+function termsApart(w: Map<string, number>, t: Map<string, number>): string | null {
+  const instants = [...new Set([...w.keys(), ...t.keys()])].sort();
+  for (const instant of instants) {
+    const a = w.get(instant) ?? 0;
+    const b = t.get(instant) ?? 0;
+    if (Math.abs(a - b) >= MICRO) {
+      return `credit expiring ${instant}: W ${String(credits(a))} ≠ twin ${String(credits(b))}`;
+    }
+  }
+  return null;
+}
+
+/** An instant `days` after the database's clock to the whole second, read ONCE for both twins. */
+async function sharedExpiry(days: number): Promise<Date> {
+  const [row] = await db()<Array<{ e: Date }>>`
+    SELECT date_trunc('second', now()) + make_interval(days => ${days}) AS e`;
+  if (row === undefined) throw new Error('setup: no clock');
+  return row.e;
+}
+
+async function goodwillLot(w: World, amount: number, expiresAt: Date): Promise<void> {
+  w.nth += 1;
+  const key = `${w.tag}_gw_${String(w.nth)}`;
+  await h().ledger.transaction(async (tx) => {
+    await h().ledger.lockAccount(tx, w.accountId);
+    const inserted = await h().ledger.insertLot(
+      {
+        accountId: w.accountId,
+        kind: 'adjustment',
+        grantKey: `goodwill:${key}`,
+        grantedMicro: amount * MICRO,
+        startsAt: floorToPriorMinute(new Date()),
+        expiresAt,
+      },
+      tx,
+    );
+    await h().ledger.append(
+      {
+        accountId: w.accountId,
+        kind: 'grant',
+        lotId: inserted.lot.id,
+        amountMicro: amount * MICRO,
+        idempotencyKey: `admin_goodwill:${key}`,
+        actor: 'admin',
+      },
+      tx,
+    );
+    await h().ledger.settleDebtFromFree(tx, w.accountId);
+  });
+}
+
+/**
+ * A running task holding `micro`, taken from the lots in the product's spend
+ * order: a real reservation and one real hold per lot, in one transaction.
+ */
+async function holdInOrder(w: World, micro: number): Promise<string> {
+  const lots = await db()<Array<{ id: string; free: string }>>`
+    SELECT id, (remaining_micro - held_micro)::text AS free FROM credit_lots
+     WHERE account_id = ${w.accountId}::uuid AND starts_at <= now() AND now() < expires_at
+       AND revoked_at IS NULL AND remaining_micro > held_micro
+     ORDER BY spend_rank, expires_at, created_at, id`;
+  const parts: { lotId: string; micro: number }[] = [];
+  let left = micro;
+  for (const lot of lots) {
+    if (left <= 0) break;
+    const take = Math.min(left, Number(lot.free));
+    parts.push({ lotId: lot.id, micro: take });
+    left = left - take;
+  }
+  if (left > 0) throw new Error('a coupled hold found less free credit than was measured');
+  const reservationId = randomUUID();
+  await db().begin(async (tx) => {
+    await tx`
+      INSERT INTO credit_reservations (id, account_id, agent_session_id, model, rate_card_version,
+                                       mode, slot, reserved_micro, lease_owner,
+                                       lease_expires_at, max_until)
+      SELECT ${reservationId}::uuid, ${w.accountId}::uuid, ${`as_${reservationId}`},
+             'claude-sonnet-5', 1, 'enforce',
+             (SELECT s FROM generate_series(1, 3) s
+               WHERE NOT EXISTS (SELECT 1 FROM credit_reservations o
+                                  WHERE o.account_id = ${w.accountId}::uuid
+                                    AND o.state = 'open' AND o.mode = 'enforce' AND o.slot = s)
+               ORDER BY s LIMIT 1),
+             ${String(micro)}::bigint, 'fixture-boot',
+             now() + interval '10 minutes', now() + interval '29 minutes'`;
+    for (const part of parts) {
+      await tx`
+        INSERT INTO credit_reservation_holds (reservation_id, lot_id, account_id, held_micro)
+        VALUES (${reservationId}::uuid, ${part.lotId}::uuid, ${w.accountId}::uuid,
+                ${String(part.micro)}::bigint)`;
+    }
+  });
+  return reservationId;
+}
+
+async function reservedOf(reservationId: string): Promise<number> {
+  const [row] = await db()<Array<{ r: string }>>`
+    SELECT reserved_micro::text AS r FROM credit_reservations WHERE id = ${reservationId}::uuid`;
+  return Number(row?.r ?? '0');
+}
+
+/** The task's one model call cost `charged`, and it settles as a task does. */
+async function settleHold(w: World, reservationId: string, charged: number): Promise<void> {
+  if (charged > 0) {
+    await settledCall(db(), { reservationId, accountId: w.accountId, chargedMicro: charged });
+  }
+  await tasks().service.settle(reservationId, 'completed');
 }
 
 async function spendInOrder(w: World, micro: number): Promise<void> {
@@ -772,6 +1126,28 @@ async function resubscribe(w: World, second: string): Promise<void> {
   await h().grants.refreshCredits(w.accountId);
 }
 
+/**
+ * A resubscription in MONTH 1 on a line that began 20 days before the month
+ * ends — so the share of the month it is handed is a real one, while the month
+ * still has only seconds left on the database's clock. Its invoice id is fixed
+ * per world, so a tie with the month-2 invoice breaks the same way in both.
+ */
+async function resubscribeInMonth1(w: World): Promise<void> {
+  const next = await subscription(db(), w.accountId, { tier: 'api_starter' });
+  const start = `(${at(w.boundary)} - interval '20 days')`;
+  const invoice = await paidLine(db(), w.accountId, {
+    invoiceId: `in_tw_${w.tag}_rs`,
+    subscriptionId: next,
+    tier: 'api_starter',
+    start,
+    end: `((${start} AT TIME ZONE 'UTC' + interval '1 month') AT TIME ZONE 'UTC')`,
+    amountPaid: PAID,
+  });
+  await charge(invoice, w.charges.resub);
+  w.invoices.resub = invoice;
+  await h().grants.refreshCredits(w.accountId);
+}
+
 interface SeedRun {
   readonly seed: number;
   readonly plan: Plan;
@@ -786,6 +1162,9 @@ async function step(run: SeedRun, e: Ev): Promise<string | null> {
   const { w, t, trace } = run;
   switch (e.k) {
     case 'spend': {
+      // A spend is a task of its own: with three tasks already running there
+      // is no slot for it (at most three enforced tasks per account).
+      if (w.holds.length >= 3 || t.holds.length >= 3) return null;
       const most = Math.floor(
         Math.min(
           await h().ledger.spendableMicro(w.accountId),
@@ -808,6 +1187,96 @@ async function step(run: SeedRun, e: Ev): Promise<string | null> {
       await h().grants.refreshCredits(w.accountId);
       await h().grants.refreshCredits(t.accountId);
       return null;
+    case 'topUp': {
+      const expiresAt = await sharedExpiry(360);
+      for (const x of [w, t]) {
+        x.nth += 1;
+        await buyTopUp(x.accountId, e.amount, `${x.tag}_tu_${String(x.nth)}`, expiresAt);
+      }
+      trace.push(describeEvent(e));
+      return null;
+    }
+    case 'goodwill': {
+      const expiresAt = await sharedExpiry(e.days);
+      await goodwillLot(w, e.amount, expiresAt);
+      await goodwillLot(t, e.amount, expiresAt);
+      trace.push(describeEvent(e));
+      return null;
+    }
+    case 'hold': {
+      if (w.holds.length >= 3 || t.holds.length >= 3) return null;
+      const most = Math.floor(
+        Math.min(
+          await h().ledger.spendableMicro(w.accountId),
+          await h().ledger.spendableMicro(t.accountId),
+        ) / QUARTER,
+      );
+      if (most <= 0) return null;
+      const micro = (1 + Math.floor(e.r * most)) * QUARTER;
+      w.holds.push(await holdInOrder(w, micro));
+      t.holds.push(await holdInOrder(t, micro));
+      trace.push(`a task holds ${String(credits(micro))}`);
+      return null;
+    }
+    case 'settle': {
+      const inW = w.holds.shift();
+      const inT = t.holds.shift();
+      if (inW === undefined || inT === undefined) return null;
+      const held = await reservedOf(inW);
+      const charged = Math.floor((e.r * held) / QUARTER) * QUARTER;
+      await settleHold(w, inW, charged);
+      await settleHold(t, inT, charged);
+      trace.push(
+        `the oldest task settles, charged ${String(credits(charged))} of ${String(credits(held))}`,
+      );
+      const before = await footprint(w);
+      await h().grants.refreshCredits(w.accountId);
+      const after = await footprint(w);
+      return JSON.stringify(before) === JSON.stringify(after)
+        ? null
+        : `the refresh after a settle wrote: ${changed(before, after)}`;
+    }
+    case 'resubscribeInMonth1': {
+      await resubscribeInMonth1(w);
+      await resubscribeInMonth1(t);
+      trace.push(describeEvent(e));
+      return null;
+    }
+    case 'crypto': {
+      const second = await wholeSecondNow();
+      for (const x of [w, t]) {
+        x.cryptoOrder = await cryptoEntitlement(db(), x.accountId, {
+          tier: 'api_builder',
+          orderId: `ord_tw_${x.tag}`,
+          starts: `(${at(second)} - interval '1 second')`,
+          expires: `(${at(second)} + interval '31 days')`,
+        });
+        // The activation refreshes the account.
+        await h().grants.refreshCredits(x.accountId);
+      }
+      trace.push(describeEvent(e));
+      return null;
+    }
+    case 'cryptoRefund': {
+      if (w.cryptoOrder === null || t.cryptoOrder === null) return null;
+      const second = await wholeSecondNow();
+      for (const x of [w, t]) {
+        // The refund revokes the entitlement at the refund instant, then takes
+        // the credits back (crypto-tier-activation's order).
+        await db()`
+          UPDATE crypto_entitlements SET expires_at = ${second}::timestamptz
+           WHERE order_id = ${x.cryptoOrder} AND expires_at > ${second}::timestamptz`;
+        await svc().applyCryptoRefund({ accountId: x.accountId, orderId: x.cryptoOrder ?? '' });
+      }
+      trace.push(describeEvent(e));
+      const before = await footprint(w);
+      await h().grants.refreshCredits(w.accountId);
+      const after = await footprint(w);
+      await h().grants.refreshCredits(t.accountId);
+      return JSON.stringify(before) === JSON.stringify(after)
+        ? null
+        : `the refresh after the ${describeEvent(e)} wrote: ${changed(before, after)}`;
+    }
     case 'plan': {
       const second = await wholeSecondNow();
       await changePlan(w, e.to, run.plan.shape, second);
@@ -897,6 +1366,22 @@ async function runBatch(
     run.trace.push('— month 2 —');
     await runMonth(run, run.plan.month2);
     if (run.failure !== null) continue;
+    if (run.w.holds.length > 0) {
+      // Every task still running settles, having charged nothing more, before
+      // the twins are compared.
+      try {
+        while (run.w.holds.length > 0) {
+          await settleHold(run.w, run.w.holds.shift() as string, 0);
+          await settleHold(run.t, run.t.holds.shift() as string, 0);
+          run.trace.push('a task still running settles, charged 0');
+        }
+        await h().grants.refreshCredits(run.w.accountId);
+        await h().grants.refreshCredits(run.t.accountId);
+      } catch (err) {
+        run.failure = `the final settle threw: ${failureMessage(err)}`;
+        continue;
+      }
+    }
     const bw = await microBalances(run.w.accountId);
     const bt = await microBalances(run.t.accountId);
     const apart =
@@ -904,6 +1389,10 @@ async function runBatch(
       Math.abs(bw.debt - bt.debt) >= MICRO ||
       bw.level !== bt.level;
     if (apart) run.failure = `W ${oneLine(bw)} ≠ twin ${oneLine(bt)}`;
+    else {
+      const terms = termsApart(await termsOf(run.w.accountId), await termsOf(run.t.accountId));
+      if (terms !== null) run.failure = `W ${oneLine(bw)} = twin, but ${terms}`;
+    }
   }
   return batch;
 }
@@ -977,9 +1466,12 @@ describe.skipIf(!RUN_DB_TESTS)(
         subscriptionId: next,
         tier: 'api_starter',
         amountPaid: PAID,
+        ...(await periodOf(c.invoiceId)),
       });
       await h().grants.refreshCredits(c.accountId);
-      const upFrom = "date_trunc('second', now()) - interval '1 hour'";
+      // One clock reading for the plan change: the mirror's tier_since and the
+      // upgrade line's start are the same instant.
+      const upFrom = `(${at(await wholeSecondNow())} - interval '1 hour')`;
       await mirrorMovedTo(db(), next, 'api_builder', upFrom);
       const up = await paidLine(db(), c.accountId, {
         subscriptionId: next,
@@ -1102,6 +1594,7 @@ describe.skipIf(!RUN_DB_TESTS)(
         subscriptionId: next,
         tier: 'api_builder',
         amountPaid: PAID,
+        ...(await periodOf(c.invoiceId)),
       });
       await h().grants.refreshCredits(c.accountId);
       const beforeDispute = await balances(c.accountId);
@@ -1121,6 +1614,7 @@ describe.skipIf(!RUN_DB_TESTS)(
           subscriptionId: next,
           tier: 'api_starter',
           amountPaid: PAID,
+          ...(await periodOf(c.invoiceId)),
         });
         await h().grants.refreshCredits(c.accountId);
         const outcome = await (
