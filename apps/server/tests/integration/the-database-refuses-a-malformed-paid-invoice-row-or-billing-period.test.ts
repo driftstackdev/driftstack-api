@@ -418,12 +418,19 @@ describe.skipIf(!RUN_DB_TESTS)(
           await accepted(tx, statement);
         });
       }
-      // The rolled-back DROPs left every constraint in place.
-      const [left] = await db()<Array<{ n: number }>>`
-        SELECT count(*)::int AS n FROM pg_constraint
+      // The rolled-back DROPs left every constraint in place — each one this arm
+      // dropped is still there by name. (It used to count the CHECKs on the two
+      // tables, which every later migration adding one to `subscriptions`, as
+      // 0141 does, turned red without anything being left dropped.)
+      const left = await db()<Array<{ conname: string }>>`
+        SELECT conname FROM pg_constraint
          WHERE contype = 'c'
-           AND conrelid IN ('billing_invoice_payments'::regclass, 'subscriptions'::regclass)`;
-      expect(left?.n).toBe(9);
+           AND conrelid IN ('billing_invoice_payments'::regclass, 'subscriptions'::regclass)
+         ORDER BY conname`;
+      const present = new Set(left.map((r) => r.conname));
+      const dropped = [...new Set(cases.map((c) => c.constraint))];
+      expect(dropped.length, 'the arm exercised constraints').toBeGreaterThan(0);
+      expect(dropped.filter((name) => !present.has(name))).toEqual([]);
     });
 
     it('the three indexes exist with the predicates the readers will rely on', async () => {
