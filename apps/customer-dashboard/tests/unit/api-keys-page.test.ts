@@ -193,6 +193,16 @@ const ACTIVE_KEY = {
   revoked_at: null,
   expires_at: null,
 };
+const WRITE_KEY = {
+  id: 'key_write',
+  name: 'Session runner',
+  key_prefix: 'ds_live_efgh',
+  scopes: ['write'],
+  created_at: '2026-05-21T10:00:00.000Z',
+  last_used_at: null,
+  revoked_at: null,
+  expires_at: null,
+};
 const REVOKED_KEY = {
   id: 'key_revoked',
   name: 'Old key',
@@ -358,17 +368,45 @@ describe('api-keys page — local integration', () => {
       effectiveTier: 'api_builder',
       callerTeams: [{ owner_account_id: 'acc_owner', role: 'admin', membership_id: 'mem_admin' }],
       actAsHeaders: { 'x-driftstack-account': 'acc_owner' },
-      fetchPlan: [() => json({ data: [ACTIVE_KEY] })],
+      fetchPlan: [() => json({ data: [ACTIVE_KEY, WRITE_KEY] })],
     });
     win = window;
     await flush();
 
     expect(fetchCalls.some((call) => /\/v1\/account\/me$/.test(call.url))).toBe(true);
     expect(fetchCalls.some((call) => /\/v1\/usage$/.test(call.url))).toBe(true);
-    expect(isHidden(window, '[data-rotate="key_active"]')).toBe(false);
+    expect(isHidden(window, '[data-rotate="key_write"]')).toBe(false);
+    expect(isHidden(window, '[data-revoke="key_write"]')).toBe(false);
+    // Team-keys audit F3 — the owner's account_owner key is the owner's to rotate: the
+    // server refuses a member (403), so the page does not offer it. Revoking stays.
+    expect(isHidden(window, '[data-rotate="key_active"]')).toBe(true);
     expect(isHidden(window, '[data-revoke="key_active"]')).toBe(false);
     expect(isHidden(window, 'section[data-api-access-only]')).toBe(false);
     expect(isHidden(window, '[data-show-create]')).toBe(false);
+    // Team-keys audit F1 — owner-level permissions are not offered in a teammate's account.
+    expect(isHidden(window, '[data-owner-level-note]')).toBe(false);
+    for (const label of Array.from(window.document.querySelectorAll('[data-owner-level-scope]'))) {
+      expect(label.classList.contains('hidden')).toBe(true);
+    }
+    const checked = window.document.querySelector<HTMLInputElement>('input[name="scope"]:checked');
+    expect(checked?.value).toBe('write');
+  });
+
+  it('a caller in their own account is offered owner-level permissions and can rotate an owner-level key', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [() => json({ data: [ACTIVE_KEY] })],
+    });
+    win = window;
+    await flush();
+
+    expect(isHidden(window, '[data-rotate="key_active"]')).toBe(false);
+    expect(isHidden(window, '[data-owner-level-note]')).toBe(true);
+    for (const label of Array.from(window.document.querySelectorAll('[data-owner-level-scope]'))) {
+      expect(label.classList.contains('hidden')).toBe(false);
+    }
+    const checked = window.document.querySelector<HTMLInputElement>('input[name="scope"]:checked');
+    expect(checked?.value).toBe('account_owner');
   });
 
   it('paid caller acting as a paid team member keeps SDK guidance and list read-only even after forced DOM clicks', async () => {
