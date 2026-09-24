@@ -177,7 +177,7 @@ describe('W765 docs /api/billing content parity', () => {
     // Live-billing audit #5 (2026-09-24): the portal endpoints now REFUSE a header
     // naming another account (400) instead of silently opening the caller's own.
     expect(p).toMatch(
-      /The mutation endpoints \(checkout-session,\s*\n?portal-session, billing-portal\) act only on the calling account: the\s*\n?Stripe portal endpoints refuse a request whose `X-Driftstack-Account`\s*\n?names another account with `400`/,
+      /The mutation endpoints \(checkout-session,\s*\n?portal-session, billing-portal\) do not act in another member's\s*\n?workspace: the Stripe portal endpoints refuse a request whose\s*\n?`X-Driftstack-Account` names another account with `400`/,
     );
     expect(p).toMatch(/Only the owner\s*\n?manages the owner's billing\./);
     // S46 2026-07-07 (founder-approved) — GET /v1/billing now enforces the
