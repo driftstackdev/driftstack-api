@@ -54,8 +54,27 @@ function buildPaymentSucceededEvent(args: {
         ...(args.hostedInvoiceUrl !== undefined
           ? { hosted_invoice_url: args.hostedInvoiceUrl }
           : {}),
-        ...(args.periodStartSec !== undefined ? { period_start: args.periodStartSec } : {}),
-        ...(args.periodEndSec !== undefined ? { period_end: args.periodEndSec } : {}),
+        // Live-billing audit #12 — the receipt names the period of the invoice's
+        // paid subscription LINE, so that is where the period is given. (It used
+        // to be the invoice's own top-level period_start/period_end, which on a
+        // renewal is the period that just ended.)
+        ...(args.periodStartSec !== undefined && args.periodEndSec !== undefined
+          ? {
+              subscription: 'sub_receipt_period',
+              lines: {
+                object: 'list',
+                data: [
+                  {
+                    type: 'subscription',
+                    proration: false,
+                    amount: args.amountPaid,
+                    price: { id: 'price_api_builder_monthly' },
+                    period: { start: args.periodStartSec, end: args.periodEndSec },
+                  },
+                ],
+              },
+            }
+          : {}),
       },
     },
   });

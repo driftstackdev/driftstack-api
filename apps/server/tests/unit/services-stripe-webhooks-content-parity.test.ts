@@ -106,7 +106,9 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
       /case 'customer\.subscription\.created':\s*case 'customer\.subscription\.updated':\s*return await this\.handleSubscriptionUpsert\(event\);/,
     );
     expect(body).toMatch(
-      /\/\/ Tier change only when the subscription is in an active-paying\s*\/\/ state\. Trialing counts as active for our purposes \(the customer\s*\/\/ gets the tier; Stripe handles the dunning\)\.\s*if \(tier !== undefined && \(status === 'active' \|\| status === 'trialing'\)\) \{/,
+      // Live-billing audit #11 — `tier` now falls back to the plan the mirror row
+      // held when the price is one the configuration no longer names.
+      /\/\/ Tier change only when the subscription is in an active-paying\s*\/\/ state\. Trialing counts as active for our purposes \(the customer\s*\/\/ gets the tier; Stripe handles the dunning\)\. `tier` is the configured[\s\S]+?\(live-billing audit #11\)\.\s*if \(tier !== undefined && \(status === 'active' \|\| status === 'trialing'\)\) \{/,
     );
     expect(body).toMatch(
       /\/\/ V-202b — lifecycle dispatcher fans this out into audit emit \+\s*\/\/ tier-changed email at one call site\./,
@@ -166,12 +168,15 @@ describe('W406.B apps/server/src/services/stripe-webhooks.ts content parity', ()
       /case 'invoice\.finalized':[\s\S]+?this\.logEvent\(event, 'invoice'\);\s*return 'handled';/,
     );
     // Receipt dispatch shape — the lifecycle event carries the decoded
-    // invoice fields; opt-out lives in AccountLifecycleService.
+    // invoice fields; opt-out lives in AccountLifecycleService. Live-billing
+    // audit #12: the period is the PAID LINE's, not the invoice's own top-level
+    // one (which on a renewal is the period that just ended).
     expect(body).toMatch(
-      /kind: 'billing\.payment_succeeded',\s*amountCents: amountPaid,\s*currency,\s*periodStart,\s*periodEnd,\s*hostedInvoiceUrl,\s*stripeEventId: event\.id,\s*stripeInvoiceId,/,
+      /kind: 'billing\.payment_succeeded',\s*amountCents: amountPaid,\s*currency,\s*periodStart: paidLine\?\.periodStart \?\? null,\s*periodEnd: paidLine\?\.periodEnd \?\? null,\s*hostedInvoiceUrl,\s*stripeEventId: event\.id,\s*stripeInvoiceId,/,
     );
+    // Live-billing audit #3 — the failure notice carries when the paid plan stops.
     expect(body).toMatch(
-      /kind: 'billing\.payment_failed',\s*amountCents: amountDue,\s*currency,\s*retryAt,\s*stripeEventId: event\.id,\s*stripeInvoiceId,/,
+      /kind: 'billing\.payment_failed',\s*amountCents: amountDue,\s*currency,\s*retryAt,\s*stripeEventId: event\.id,\s*stripeInvoiceId,\s*\.\.\.\(accessEndsAt !== null \? \{ accessEndsAt \} : \{\}\),/,
     );
     // Zero-amount receipts are noise — pinned skip. A $0 invoice was still PAID,
     // so while AI credits are switched on the skip ends by refreshing the

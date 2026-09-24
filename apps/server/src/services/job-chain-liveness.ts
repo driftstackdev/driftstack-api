@@ -35,6 +35,7 @@ export const EXPECTED_RECURRING_JOB_TYPES: readonly string[] = [
   'agent_turn_telemetry.prune',
   'audit.session_events_archive',
   'auth_tokens.sweep',
+  'billing.past_due_grace_sweep',
   'byok_anthropic.rotation_reminder',
   'cost.recompute_nightly',
   'credits.coverage_sweep',

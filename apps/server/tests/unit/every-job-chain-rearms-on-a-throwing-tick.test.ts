@@ -190,10 +190,14 @@ describe('a recurring sweep re-arms even when its tick throws', () => {
     // job is to notice records that stopped adding up, so a chain of its own
     // that died on one throwing tick would be the failure it exists to catch,
     // one level up and with nothing left watching.
+    // 21 → 22 with registerPastDueGraceSweepJob (live-billing audit #3): the
+    // sweep that ends a failed renewal's seven days of grace when Stripe sends
+    // nothing. A chain that died would leave every past_due customer on a paid
+    // plan for good.
     expect(
       helpers.map((h) => h.name).sort(),
       'the register*Job scan came back short — the checks below cover only what it found',
-    ).toHaveLength(21);
+    ).toHaveLength(22);
   });
 
   it('the detector detects — it must flag the broken shape and clear both working ones', () => {

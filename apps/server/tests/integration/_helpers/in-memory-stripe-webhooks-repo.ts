@@ -2,12 +2,19 @@
 
 import { randomUUID } from 'node:crypto';
 import type { AccountTier } from '@driftstack/api-types';
-import type { StripeWebhooksRepo } from '../../../src/services/stripe-webhooks.js';
+import {
+  PAST_DUE_GRACE_DAYS,
+  type StoredSubscription,
+  type StripeWebhooksRepo,
+} from '../../../src/services/stripe-webhooks.js';
 import {
   isCryptoTierUpgrade,
   tierActivationRank,
 } from '../../../src/services/crypto-tier-activation.js';
-import { ACTIVE_SUBSCRIPTION_STATUSES } from '../../../src/db/subscription-status-sets.js';
+import {
+  ACTIVE_SUBSCRIPTION_STATUSES,
+  COLLECTING_SUBSCRIPTION_STATUSES,
+} from '../../../src/db/subscription-status-sets.js';
 import { SAME_SECOND_STATUS_ORDER } from '../../../src/db/stripe-webhooks-repo.js';
 import {
   completeInvoicePayment,
@@ -49,6 +56,9 @@ interface SubscriptionMirrorRow {
   periodStartSource: PeriodStartSource | null;
   billingInterval: BillingInterval | null;
   tierSince: Date | null;
+  // Migration 0141 (live-billing audit #3).
+  pastDueSince: Date | null;
+  pastDueGraceEndedAt: Date | null;
 }
 
 interface AccountFacet {
@@ -70,6 +80,32 @@ interface CryptoEntitlementRow {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const PAST_DUE_GRACE_MS = PAST_DUE_GRACE_DAYS * DAY_MS;
+
+/**
+ * Mirrors the Drizzle `subscriptionStillGrantsAt` (live-billing audit #3): active
+ * and trialing, and a past_due spell that began within the grace — judged at the
+ * later of now and `at` — and that the past-due sweep has not processed.
+ */
+function stillGrants(s: SubscriptionMirrorRow, at: Date): boolean {
+  if (BILLED_STATUSES.includes(s.status)) return true;
+  return (
+    s.status === 'past_due' &&
+    s.pastDueGraceEndedAt === null &&
+    s.pastDueSince !== null &&
+    s.pastDueSince.getTime() > Math.max(Date.now(), at.getTime()) - PAST_DUE_GRACE_MS
+  );
+}
+
+/** Mirrors the Drizzle `pastDueGraceEndedBy`: the sweep's read, and its mark's re-check. */
+function graceEndedBy(s: SubscriptionMirrorRow, asOf: Date): boolean {
+  return (
+    s.status === 'past_due' &&
+    s.pastDueGraceEndedAt === null &&
+    s.pastDueSince !== null &&
+    s.pastDueSince.getTime() <= asOf.getTime() - PAST_DUE_GRACE_MS
+  );
+}
 
 /**
  * Mirrors the Drizzle `GREATEST(now(), at)` (live-billing audit #9): a crypto
@@ -166,6 +202,8 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
       periodStartSource: null,
       billingInterval: null,
       tierSince: null,
+      pastDueSince: null,
+      pastDueGraceEndedAt: null,
     });
   }
 
@@ -192,6 +230,80 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
    *  as a genuine entitlement. */
   getAccountTier(accountId: string): Promise<AccountTier | null> {
     return Promise.resolve(this.accounts.get(accountId)?.tier ?? null);
+  }
+
+  findSubscription(stripeSubscriptionId: string): Promise<StoredSubscription | null> {
+    const row = Array.from(this.subs.values()).find(
+      (s) => s.stripeSubscriptionId === stripeSubscriptionId,
+    );
+    return Promise.resolve(
+      row === undefined
+        ? null
+        : {
+            accountId: row.accountId,
+            tier: row.tier,
+            status: row.status,
+            createdAt: new Date(row.createdAt.getTime()),
+            pastDueSince: row.pastDueSince === null ? null : new Date(row.pastDueSince.getTime()),
+          },
+    );
+  }
+
+  listCollectingSubscriptions(accountId: string): Promise<
+    Array<{
+      stripeSubscriptionId: string;
+      status: SubscriptionMirrorRow['status'];
+      createdAt: Date;
+    }>
+  > {
+    const collecting: readonly string[] = COLLECTING_SUBSCRIPTION_STATUSES;
+    return Promise.resolve(
+      Array.from(this.subs.values())
+        .filter((s) => s.accountId === accountId && collecting.includes(s.status))
+        // Mirrors ORDER BY created_at, id.
+        .sort(
+          (x, y) =>
+            x.createdAt.getTime() - y.createdAt.getTime() ||
+            (x.id < y.id ? -1 : x.id > y.id ? 1 : 0),
+        )
+        .map((s) => ({
+          stripeSubscriptionId: s.stripeSubscriptionId,
+          status: s.status,
+          createdAt: new Date(s.createdAt.getTime()),
+        })),
+    );
+  }
+
+  listPastDueGraceEnded(args: {
+    asOf: Date;
+    limit: number;
+  }): Promise<Array<{ id: string; accountId: string; pastDueSince: Date }>> {
+    return Promise.resolve(
+      Array.from(this.subs.values())
+        .filter((s) => graceEndedBy(s, args.asOf))
+        // Mirrors ORDER BY past_due_since, id.
+        .sort(
+          (x, y) =>
+            (x.pastDueSince?.getTime() ?? 0) - (y.pastDueSince?.getTime() ?? 0) ||
+            (x.id < y.id ? -1 : x.id > y.id ? 1 : 0),
+        )
+        .slice(0, args.limit)
+        .map((s) => ({
+          id: s.id,
+          accountId: s.accountId,
+          pastDueSince: new Date(s.pastDueSince?.getTime() ?? 0),
+        })),
+    );
+  }
+
+  markPastDueGraceEnded(args: { ids: string[]; asOf: Date }): Promise<void> {
+    for (const id of args.ids) {
+      const s = this.subs.get(id);
+      if (s !== undefined && graceEndedBy(s, args.asOf)) {
+        this.subs.set(id, { ...s, pastDueGraceEndedAt: new Date(args.asOf.getTime()) });
+      }
+    }
+    return Promise.resolve();
   }
 
   findAccountIdFromCustomerOrRef(args: {
@@ -264,6 +376,18 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
         periodStartSource,
         billingInterval,
         tierSince: existing.tier !== args.tier ? args.at : existing.tierSince,
+        // Mirrors the Drizzle CASEs (live-billing audit #3): a move INTO past_due
+        // stamps the start; staying keeps it and the sweep's mark; leaving clears.
+        pastDueSince:
+          args.status !== 'past_due'
+            ? null
+            : existing.status === 'past_due'
+              ? existing.pastDueSince
+              : args.at,
+        pastDueGraceEndedAt:
+          args.status === 'past_due' && existing.status === 'past_due'
+            ? existing.pastDueGraceEndedAt
+            : null,
       });
     } else {
       const id = args.id ?? randomUUID();
@@ -283,6 +407,8 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
         periodStartSource,
         billingInterval,
         tierSince: args.at,
+        pastDueSince: args.status === 'past_due' ? args.at : null,
+        pastDueGraceEndedAt: null,
       });
     }
     return Promise.resolve({ applied: true });
@@ -412,10 +538,11 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     const a = this.accounts.get(args.accountId);
     if (!a) return Promise.resolve({ previousTier: null, appliedTier: args.fallbackTier });
     const previousTier = a.tier;
-    // Best remaining active/trialing subscription for the account (most-recently
-    // updated wins), else the fallback — mirrors the Drizzle query.
+    // Best remaining active/trialing subscription for the account — or past_due
+    // one inside its grace (live-billing audit #3) — most-recently updated wins,
+    // else the fallback. Mirrors the Drizzle query.
     const remaining = Array.from(this.subs.values())
-      .filter((s) => s.accountId === args.accountId && BILLED_STATUSES.includes(s.status))
+      .filter((s) => s.accountId === args.accountId && stillGrants(s, args.at))
       // V-2131 — `id DESC` tiebreak, mirroring the Drizzle ORDER BY.
       .sort(
         (x, y) =>

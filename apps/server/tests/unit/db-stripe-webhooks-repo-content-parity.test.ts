@@ -45,13 +45,16 @@ describe('W446.C apps/server/src/db/stripe-webhooks-repo.ts content parity', () 
 
   it('imports: and/desc/eq/gt/inArray/isNull/lte/or/sql + the SQL type from drizzle-orm; AccountTier; StripeWebhooksRepo from services; Database; accounts + billingInvoicePayments + cryptoEntitlements + processedStripeEvents + subscriptions schemas', () => {
     // Live-billing audit #9 — `type SQL` types cryptoTermRunningAt, the fragment both
-    // tier recomputes judge a crypto term's expiry against.
+    // tier recomputes judge a crypto term's expiry against. Live-billing audit #3 —
+    // `asc` orders the two new reads (collecting subscriptions, the past-due sweep's).
     expect(body).toMatch(
-      /import \{ and, desc, eq, gt, inArray, isNull, lte, or, sql, type SQL \} from 'drizzle-orm';/,
+      /import \{ and, asc, desc, eq, gt, inArray, isNull, lte, or, sql, type SQL \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
+    // Live-billing audit #3 — the grace length and the stored-row shape come from
+    // the service beside the repo interface.
     expect(body).toMatch(
-      /import type \{ StripeWebhooksRepo \} from '\.\.\/services\/stripe-webhooks\.js';/,
+      /import \{\s*PAST_DUE_GRACE_DAYS,\s*type StoredSubscription,\s*type StripeWebhooksRepo,\s*\} from '\.\.\/services\/stripe-webhooks\.js';/,
     );
     // Migration 0129 — the paid-invoice table joins the import, with its row type.
     expect(body).toMatch(
@@ -82,12 +85,16 @@ describe('W446.C apps/server/src/db/stripe-webhooks-repo.ts content parity', () 
   // a status no earlier in SAME_SECOND_STATUS_ORDER does (nothing replaces `canceled`).
   // Behaviour is proved on Postgres in
   // a-same-second-subscription-event-cannot-reopen-checkout-or-revive-a-canceled-plan.
+  // Live-billing audit #3 — after tierSince, the 0141 columns: a move INTO past_due
+  // stamps past_due_since, staying keeps it (and the sweep's mark), leaving clears
+  // both. Proved on Postgres in
+  // a-failed-renewal-keeps-the-paid-plan-for-seven-days-and-the-sweep-ends-it-after.
   it('upsertSubscription: 8-status enum union (incomplete|incomplete_expired|trialing|active|past_due|canceled|unpaid|paused) Stripe-mirror; onConflictDoUpdate target=stripeSubscriptionId; V-079 event-recency setWhere (updated_at < excluded.updated_at, or the same second and a status no earlier in SAME_SECOND_STATUS_ORDER) gates the conflict UPDATE; updates accountId+stripePriceId+tier+status+currentPeriodEnd+cancelAtPeriodEnd+canceledAt+updatedAt, then the 0129 period columns (currentPeriodStart+periodStartSource+billingInterval) and tierSince — which moves ONLY when the stored tier differs from the incoming one; .returning() surfaces the {applied} signal', () => {
     expect(body).toMatch(
       /status:\s*\| 'incomplete'\s*\| 'incomplete_expired'\s*\| 'trialing'\s*\| 'active'\s*\| 'past_due'\s*\| 'canceled'\s*\| 'unpaid'\s*\| 'paused';/,
     );
     expect(body).toMatch(
-      /\.onConflictDoUpdate\(\{\s*target: subscriptions\.stripeSubscriptionId,\s*setWhere: sql`\$\{subscriptions\.updatedAt\} < excluded\.updated_at OR \(\$\{subscriptions\.updatedAt\} = excluded\.updated_at AND \$\{storedStatusRankSql\} <= \$\{incomingStatusRank\}\)`,\s*set: \{\s*accountId: args\.accountId,\s*stripePriceId: args\.stripePriceId,\s*tier: args\.tier,\s*status: args\.status,\s*currentPeriodEnd: args\.currentPeriodEnd,\s*cancelAtPeriodEnd: args\.cancelAtPeriodEnd,\s*canceledAt: args\.canceledAt,\s*updatedAt: args\.at,\s*currentPeriodStart,\s*periodStartSource,\s*billingInterval,\s*tierSince: sql`CASE WHEN \$\{subscriptions\.tier\} IS DISTINCT FROM excluded\.tier THEN excluded\.updated_at ELSE \$\{subscriptions\.tierSince\} END`,\s*\},\s*\}\)\s*\.returning\(\{ id: subscriptions\.id \}\);\s*return \{ applied: result\.length > 0 \};/,
+      /\.onConflictDoUpdate\(\{\s*target: subscriptions\.stripeSubscriptionId,\s*setWhere: sql`\$\{subscriptions\.updatedAt\} < excluded\.updated_at OR \(\$\{subscriptions\.updatedAt\} = excluded\.updated_at AND \$\{storedStatusRankSql\} <= \$\{incomingStatusRank\}\)`,\s*set: \{\s*accountId: args\.accountId,\s*stripePriceId: args\.stripePriceId,\s*tier: args\.tier,\s*status: args\.status,\s*currentPeriodEnd: args\.currentPeriodEnd,\s*cancelAtPeriodEnd: args\.cancelAtPeriodEnd,\s*canceledAt: args\.canceledAt,\s*updatedAt: args\.at,\s*currentPeriodStart,\s*periodStartSource,\s*billingInterval,\s*tierSince: sql`CASE WHEN \$\{subscriptions\.tier\} IS DISTINCT FROM excluded\.tier THEN excluded\.updated_at ELSE \$\{subscriptions\.tierSince\} END`,\s*(?:\/\/[^\n]*\n\s*)*pastDueSince: sql`CASE WHEN excluded\.status <> 'past_due' THEN NULL WHEN \$\{subscriptions\.status\} = 'past_due' THEN \$\{subscriptions\.pastDueSince\} ELSE excluded\.past_due_since END`,\s*pastDueGraceEndedAt: sql`CASE WHEN excluded\.status = 'past_due' AND \$\{subscriptions\.status\} = 'past_due' THEN \$\{subscriptions\.pastDueGraceEndedAt\} ELSE NULL END`,\s*\},\s*\}\)\s*\.returning\(\{ id: subscriptions\.id \}\);\s*return \{ applied: result\.length > 0 \};/,
     );
   });
 

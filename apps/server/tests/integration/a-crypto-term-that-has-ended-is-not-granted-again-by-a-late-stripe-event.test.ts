@@ -229,9 +229,13 @@ describe.skipIf(!RUN_DB_TESTS)(
         const s = makeSubject();
         const { accountId, customerId, subId, webhooks } = await afterTheSweep(s);
 
+        // Created eight days ago (the term ended four days ago). Live-billing
+        // audit #3: a past_due spell keeps the card plan for seven days, so a
+        // spell that began five days ago would rightly keep api_starter; this one
+        // is past its seven days, which is what makes "drops to free" the truth.
         const late = subscriptionEvent(
           'customer.subscription.updated',
-          Math.floor(Date.now() / 1000) - 5 * DAY_S,
+          Math.floor(Date.now() / 1000) - 8 * DAY_S,
           { id: subId, customerId, status: 'past_due' },
         );
         await deliver(webhooks, late);

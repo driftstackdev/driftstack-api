@@ -116,6 +116,7 @@ describe('a dead job chain is reported as 0, not as an absent series', () => {
       'agent_turn_telemetry.prune',
       'audit.session_events_archive',
       'auth_tokens.sweep',
+      'billing.past_due_grace_sweep',
       'byok_anthropic.rotation_reminder',
       'cost.recompute_nightly',
       'credits.coverage_sweep',

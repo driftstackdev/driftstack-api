@@ -988,6 +988,13 @@
       "when": 1786665600028,
       "tag": "0140_credit_clawback_frozen_cap_and_reversal_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1786665600029,
+      "tag": "0141_subscription_past_due_grace",
+      "breakpoints": true
     }
   ]
 }

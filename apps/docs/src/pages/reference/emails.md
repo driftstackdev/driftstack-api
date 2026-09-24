@@ -41,12 +41,12 @@ Opt-outable lifecycle emails.
 
 ## Billing
 
-| Email                                  | Trigger                                                                                                                                                            | Opt-outable? |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
-| **Payment receipt**                    | A successful subscription charge (Stripe's `invoice.payment_succeeded`). Zero-amount invoices — trial starts, 100% discounts — don't produce one.                  | Yes          |
-| **Payment failed**                     | A subscription charge fails (`invoice.payment_failed`). Tells you when the automatic retry happens — or, on the final attempt, that no further retry is scheduled. | No           |
-| **Subscription tier changed**          | Your tier changes (upgrade or downgrade).                                                                                                                          | Yes          |
-| **Your subscription renews in 7 days** | Stripe's upcoming-invoice notice, roughly 7 days before a renewal charges.                                                                                         | Yes          |
+| Email                                  | Trigger                                                                                                                                                                                                                                                 | Opt-outable? |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| **Payment receipt**                    | A successful subscription charge (Stripe's `invoice.payment_succeeded`). Zero-amount invoices — trial starts, 100% discounts — don't produce one.                                                                                                       | Yes          |
+| **Payment failed**                     | A subscription charge fails (`invoice.payment_failed`). Tells you when the automatic retry happens — or, on the final attempt, that no further retry is scheduled — and until when your paid plan stays active (7 days after the first failed payment). | No           |
+| **Subscription tier changed**          | Your tier changes (upgrade or downgrade).                                                                                                                                                                                                               | Yes          |
+| **Your subscription renews in 7 days** | Stripe's upcoming-invoice notice, roughly 7 days before a renewal charges.                                                                                                                                                                              | Yes          |
 
 Stripe (the card processor) may send its own processor receipt in
 addition to the Driftstack one, depending on your Stripe email

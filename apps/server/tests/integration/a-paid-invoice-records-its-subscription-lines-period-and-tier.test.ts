@@ -155,7 +155,11 @@ describe('a paid invoice records its subscription line’s period and plan', () 
     }
   });
 
-  it('CRITICAL the invoice’s top-level period is never used for the record — while the receipt goes on showing it, exactly as before', async () => {
+  // Moved by live-billing audit #12. This arm pinned the receipt "showing [the
+  // top-level period], exactly as before" — February on March's payment, the
+  // period that had just ended. The receipt now names the line's period, the
+  // same one the record stores.
+  it('CRITICAL the invoice’s top-level period is never used — not for the record, and not for the receipt', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const before = receipts().length;
     // Top-level: FEBRUARY (the period that just ended). Line: MARCH.
@@ -175,7 +179,7 @@ describe('a paid invoice records its subscription line’s period and plan', () 
     ]);
     const sent = receipts().slice(before);
     expect(sent).toHaveLength(1);
-    expect(sent[0]?.vars.period).toBe('2026-02-01 – 2026-03-01');
+    expect(sent[0]?.vars.period).toBe('2026-03-01 – 2026-04-01');
   });
 
   it('CRITICAL invoice.paid records the payment and sends NOTHING; both events for one invoice leave one row and one receipt', async () => {

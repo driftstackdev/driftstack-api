@@ -1,11 +1,13 @@
 // What a Stripe payload says about a billing period, read without trusting its
 // shape. Pure: no I/O, no clock, no logger.
 //
-// Two readers and one map builder:
+// The readers and one map builder:
 //
 //   buildStripePriceMaps          the configured price ids, inverted: price → plan
 //                                 and price → billing interval.
 //   readSubscriptionPeriodStart   when a subscription's current period began.
+//   readSubscriptionPeriodEnd     when it ends.
+//   readInvoiceSubscriptionId     which subscription an invoice belongs to.
 //   readPaidInvoice               which subscription LINE a paid invoice paid for,
 //                                 and for which period.
 //
@@ -26,6 +28,8 @@
 //   a line's kind          line.type                   line.parent.type
 //   period start           subscription                subscription.items.data[0]
 //                          .current_period_start       .current_period_start
+//   period end             subscription                subscription.items.data[0]
+//                          .current_period_end         .current_period_end
 //
 // A value that is absent, or of the wrong type, reads as "not there". Nothing
 // here throws on a malformed payload: the caller decides what a missing fact
@@ -144,6 +148,21 @@ export function readSubscriptionPeriodStart(subscription: Obj): Date | null {
   const items = at(subscription, 'items', 'data');
   if (!Array.isArray(items) || items.length === 0) return null;
   return asUnixDate(asObject(items[0])?.current_period_start);
+}
+
+/**
+ * When the subscription's current period ends: the subscription's own
+ * `current_period_end`, else its first item's — the same two places, in the same
+ * order, as {@link readSubscriptionPeriodStart}. Live-billing audit #13: the end
+ * used to be read from the top level alone, so a payload in the newer shape
+ * stored no period end and the billing page said "Renews —".
+ */
+export function readSubscriptionPeriodEnd(subscription: Obj): Date | null {
+  const own = asUnixDate(subscription.current_period_end);
+  if (own !== null) return own;
+  const items = at(subscription, 'items', 'data');
+  if (!Array.isArray(items) || items.length === 0) return null;
+  return asUnixDate(asObject(items[0])?.current_period_end);
 }
 
 // ─── paid invoice ────────────────────────────────────────────────────
@@ -302,6 +321,17 @@ function readPaymentRef(invoice: Obj, field: 'payment_intent' | 'charge'): strin
   return null;
 }
 
+/**
+ * The subscription an invoice belongs to, in either payload shape — paid or not
+ * (the failed-payment notice reads it too); null for an invoice of no subscription.
+ */
+export function readInvoiceSubscriptionId(invoice: Obj): string | null {
+  return (
+    asId(invoice.subscription) ??
+    asId(at(invoice, 'parent', 'subscription_details', 'subscription'))
+  );
+}
+
 /** The one status that is evidence of payment. */
 export const PAID_INVOICE_STATUS = 'paid';
 
@@ -324,9 +354,7 @@ export function invoiceSaysItIsNotPaid(facts: Pick<PaidInvoiceFacts, 'status'>):
  */
 export function readPaidInvoice(invoice: Obj, maps: StripePriceMaps): PaidInvoiceFacts {
   const amountPaid = invoice.amount_paid;
-  const stripeSubscriptionId =
-    asId(invoice.subscription) ??
-    asId(at(invoice, 'parent', 'subscription_details', 'subscription'));
+  const stripeSubscriptionId = readInvoiceSubscriptionId(invoice);
   const billingReason = asString(invoice.billing_reason);
 
   const rawLines = at(invoice, 'lines', 'data');

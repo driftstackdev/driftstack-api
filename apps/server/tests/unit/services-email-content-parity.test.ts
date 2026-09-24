@@ -112,7 +112,8 @@ describe('W405.A apps/server/src/services/email.ts content parity', () => {
       /S44 2026-07-07 \(founder-approved\) — Driftstack-branded payment[\s\S]+?sendBillingReceipt\(args: \{/,
     );
     expect(body).toMatch(
-      /S44 2026-07-07 \(founder-approved\) — payment-failure notice\.[\s\S]+?sendBillingFailure\(args: \{\s*to: string;\s*amountFormatted: string;\s*retryAt: Date \| null;\s*portalUrl: string;\s*\}\): Promise<void>;/,
+      // Live-billing audit #3 — the notice also says when the paid plan stops.
+      /S44 2026-07-07 \(founder-approved\) — payment-failure notice\.[\s\S]+?sendBillingFailure\(args: \{\s*to: string;\s*amountFormatted: string;\s*retryAt: Date \| null;\s*portalUrl: string;\s*\/\*\* Live-billing audit #3 — [\s\S]+?\*\/\s*accessEndsAt\?: Date;\s*\}\): Promise<void>;/,
     );
     expect(body).toMatch(
       /V-304b — fires ~7 days before subscription renewal[\s\S]+?sendBillingRenewalReminder\(args: \{/,

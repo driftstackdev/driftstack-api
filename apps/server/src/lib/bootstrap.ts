@@ -229,6 +229,11 @@ import {
   registerCryptoEntitlementExpirySweepJob,
 } from '../services/crypto-entitlement-expiry-sweeper.js';
 import {
+  PastDueGraceSweeperService,
+  enqueueNextPastDueGraceSweep,
+  registerPastDueGraceSweepJob,
+} from '../services/past-due-grace-sweeper.js';
+import {
   RetentionScrubSweeperService,
   registerRetentionScrubJob,
   enqueueNextRetentionScrub,
@@ -2321,6 +2326,11 @@ export async function createProductionDeps(
       priceToTier,
       priceToInterval,
       ...(stripeInvoiceFetcher !== undefined ? { invoiceFetcher: stripeInvoiceFetcher } : {}),
+      // Live-billing audit #4 — cancels an older subscription a new plan replaced
+      // (at once, prorated). Needs only the secret key, like the fetcher above.
+      ...(stripeInvoiceFetcher !== undefined
+        ? { subscriptionCanceller: new StripeBillingProvider(stripeInvoiceFetcher) }
+        : {}),
       sentry,
       creditsRefresher: creditGrants, // null while AI credits are off
       creditClawbacks, // S17 — null while AI credits are off
@@ -2352,6 +2362,26 @@ export async function createProductionDeps(
     logger, // chain survival: a swallowed tick failure is logged, then re-armed
   });
   await enqueueNextCryptoEntitlementExpirySweep({ scheduledJobs: scheduledJobsService });
+
+  // Live-billing audit #3 — the past-due grace sweep. A failed renewal keeps the
+  // paid plan for seven days (ToS 8.5); when Stripe sends nothing after that, this
+  // takes it away through the same downgradeAccountTierToBestRemaining. Wired
+  // UNCONDITIONALLY, as the crypto expiry sweep above: a past_due subscription can
+  // exist from a deploy where the Stripe webhook was configured and must lose its
+  // plan in one where it currently is not. With none past its grace the tick is
+  // a no-op. Re-arms itself; dedup on (job_type, NULL); failures alert.
+  registerPastDueGraceSweepJob({
+    scheduledJobs: scheduledJobsService,
+    sweeper: new PastDueGraceSweeperService({
+      repo: stripeWebhooksRepo,
+      logger,
+      sentry,
+      accountLifecycle: accountLifecycleService,
+      authCache,
+    }),
+    logger, // chain survival: a swallowed tick failure is logged and alerted, then re-armed
+  });
+  await enqueueNextPastDueGraceSweep({ scheduledJobs: scheduledJobsService });
 
   // V-779 — recover paid crypto orders whose entitlement never landed. The IPN handler commits
   // status='paid' in one transaction and calls the tier activator in a LATER one; a process

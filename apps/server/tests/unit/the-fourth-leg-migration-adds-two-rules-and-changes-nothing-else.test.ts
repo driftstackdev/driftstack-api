@@ -293,7 +293,13 @@ describe('migration 0133 adds the fourth leg and the shadow charge rule, and not
     expect(journal.entries[at + 7]?.when).toBeGreaterThan(
       journal.entries[at + 6]?.when ?? Infinity,
     );
-    expect(journal.entries, 'and 0140 is the last one').toHaveLength(141);
+    // 0141 (live-billing audit #3 — a subscription remembers when it fell into
+    // past_due) follows 0140; its own guard pins its shape.
+    expect(journal.entries[at + 8]?.tag).toBe('0141_subscription_past_due_grace');
+    expect(journal.entries[at + 8]?.when).toBeGreaterThan(
+      journal.entries[at + 7]?.when ?? Infinity,
+    );
+    expect(journal.entries, 'and 0141 is the last one').toHaveLength(142);
   });
 
   it('CRITICAL schema.ts names the trigger this migration installs, says where the shadow rule lives, and carries the one sentence about the relaxed clawback guard that 0133 is the record of', () => {

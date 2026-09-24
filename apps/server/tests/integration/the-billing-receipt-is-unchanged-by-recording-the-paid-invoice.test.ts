@@ -16,6 +16,14 @@
 // subscription, payment references, either payload shape) must produce a
 // receipt IDENTICAL to the one produced by the same invoice stripped down to the
 // handful of fields the receipt is built from.
+//
+// ⚠️ ONE THING DID CHANGE, ON PURPOSE (live-billing audit #12): the period. The
+// receipt used to name the invoice's own top-level period, which on a renewal is
+// the period that just ENDED — and this file pinned it: its second arm asserted
+// "2026-02-01 – 2026-03-01" for a payment whose line is March, i.e. it asserted
+// the defect. The receipt now names the paid LINE's period, the same one the
+// payment record stores; the fields it is built from are therefore the line and
+// the subscription link, and no longer the top-level period.
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { signStripePayload } from '../../src/lib/stripe-signing.js';
@@ -49,7 +57,8 @@ function spec(overrides: Partial<InvoiceSpec> = {}): InvoiceSpec {
     paymentIntentId: 'pi_1',
     chargeId: 'ch_1',
     hostedInvoiceUrl: 'https://invoice.stripe.test/i/receipt',
-    // What the receipt shows: the invoice's OWN period. The line says March.
+    // The invoice's OWN period is February, the period that just ended; the
+    // line is March, the period paid for — what the receipt names (audit #12).
     topLevelPeriod: { startSec: FEB_1, endSec: MAR_1 },
     lines: [
       {
@@ -65,13 +74,17 @@ function spec(overrides: Partial<InvoiceSpec> = {}): InvoiceSpec {
 
 /** The same invoice reduced to the fields the receipt has always been built from. */
 function stripped(invoice: Record<string, unknown>): Record<string, unknown> {
+  // Audit #12: the period comes from the paid line — the lines and the
+  // subscription link (`subscription` in the older shape, `parent` in the newer)
+  // — and no longer from the invoice's own `period_start` / `period_end`.
   const keep = [
     'id',
     'customer',
     'amount_paid',
     'currency',
-    'period_start',
-    'period_end',
+    'subscription',
+    'parent',
+    'lines',
     'hosted_invoice_url',
   ];
   return Object.fromEntries(keep.filter((k) => k in invoice).map((k) => [k, invoice[k]]));
@@ -129,7 +142,10 @@ describe('the billing receipt is unchanged by recording the paid invoice', () =>
     }
   });
 
-  it('CRITICAL the receipt says what it always said: the amount, the INVOICE’S own period (not the line’s) and the hosted invoice link', async () => {
+  // Moved by live-billing audit #12: this arm asserted '2026-02-01 – 2026-03-01',
+  // the invoice's own period — the period that ENDED before the payment it
+  // receipts. That was the defect, pinned. The line's period is the right one.
+  it('CRITICAL the receipt says the amount, the PAID LINE’S period (not the invoice’s own, which just ended) and the hosted invoice link', async () => {
     for (const shape of INVOICE_SHAPES) {
       const [receipt, ...rest] = await emailsFor(
         'invoice.payment_succeeded',
@@ -140,14 +156,14 @@ describe('the billing receipt is unchanged by recording the paid invoice', () =>
       expect(receipt?.to, shape).toEqual(expect.stringContaining('@'));
       expect(receipt?.vars, shape).toEqual({
         amountFormatted: '$149.00',
-        period: '2026-02-01 – 2026-03-01',
+        period: '2026-03-01 – 2026-04-01',
         invoiceUrl: 'https://invoice.stripe.test/i/receipt',
       });
     }
   });
 
-  it('an invoice with no period of its own and no hosted link falls back exactly as the stripped one does', async () => {
-    const full = buildInvoice('newer', spec());
+  it('an invoice with no paid line, no period of its own and no hosted link falls back exactly as the stripped one does', async () => {
+    const full = buildInvoice('newer', spec({ lines: [] }));
     delete full.period_start;
     delete full.period_end;
     delete full.hosted_invoice_url;

@@ -56,6 +56,10 @@ const RECURRING_CONSUMERS = [
   // parallel chains would double its alerts, and a reader who learns to ignore
   // a doubled alert is the failure this audit was written to prevent.
   'credit-invariant-audit.ts',
+  // Live-billing audit #3 — the sweep that ends a failed renewal's seven days of
+  // grace. Two parallel chains would recompute each account twice per tick; the
+  // spells are marked, so nothing is sent twice, but the dedup is still owed.
+  'past-due-grace-sweeper.ts',
 ] as const;
 
 describe('recurring scheduled-job successor dedup invariant', () => {

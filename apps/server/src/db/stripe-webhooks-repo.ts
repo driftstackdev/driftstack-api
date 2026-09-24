@@ -2,9 +2,13 @@
 // ledger + subscription mirror writes + account tier / trial-pack
 // mutations triggered by inbound Stripe events.
 
-import { and, desc, eq, gt, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import type { AccountTier } from '@driftstack/api-types';
-import type { StripeWebhooksRepo } from '../services/stripe-webhooks.js';
+import {
+  PAST_DUE_GRACE_DAYS,
+  type StoredSubscription,
+  type StripeWebhooksRepo,
+} from '../services/stripe-webhooks.js';
 import { isCryptoTierUpgrade, tierActivationRank } from '../services/crypto-tier-activation.js';
 import {
   completeInvoicePayment,
@@ -28,7 +32,10 @@ import {
   subscriptions,
   type BillingInvoicePaymentRow,
 } from './schema.js';
-import { ACTIVE_SUBSCRIPTION_STATUSES } from './subscription-status-sets.js';
+import {
+  ACTIVE_SUBSCRIPTION_STATUSES,
+  COLLECTING_SUBSCRIPTION_STATUSES,
+} from './subscription-status-sets.js';
 
 /**
  * Live-billing audit #2 — the order in which a subscription's statuses follow one
@@ -135,6 +142,74 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
     return row?.tier ?? null;
   }
 
+  async findSubscription(stripeSubscriptionId: string): Promise<StoredSubscription | null> {
+    const [row] = await this.database.db
+      .select({
+        accountId: subscriptions.accountId,
+        tier: subscriptions.tier,
+        status: subscriptions.status,
+        createdAt: subscriptions.createdAt,
+        pastDueSince: subscriptions.pastDueSince,
+      })
+      .from(subscriptions)
+      .where(eq(subscriptions.stripeSubscriptionId, stripeSubscriptionId))
+      .limit(1);
+    return row ?? null;
+  }
+
+  async listCollectingSubscriptions(accountId: string): Promise<
+    Array<{
+      stripeSubscriptionId: string;
+      status: StoredSubscription['status'];
+      createdAt: Date;
+    }>
+  > {
+    return this.database.db
+      .select({
+        stripeSubscriptionId: subscriptions.stripeSubscriptionId,
+        status: subscriptions.status,
+        createdAt: subscriptions.createdAt,
+      })
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.accountId, accountId),
+          inArray(subscriptions.status, [...COLLECTING_SUBSCRIPTION_STATUSES]),
+        ),
+      )
+      .orderBy(asc(subscriptions.createdAt), asc(subscriptions.id));
+  }
+
+  async listPastDueGraceEnded(args: {
+    asOf: Date;
+    limit: number;
+  }): Promise<Array<{ id: string; accountId: string; pastDueSince: Date }>> {
+    const rows = await this.database.db
+      .select({
+        id: subscriptions.id,
+        accountId: subscriptions.accountId,
+        pastDueSince: subscriptions.pastDueSince,
+      })
+      .from(subscriptions)
+      .where(pastDueGraceEndedBy(args.asOf))
+      .orderBy(asc(subscriptions.pastDueSince), asc(subscriptions.id))
+      .limit(args.limit);
+    // The WHERE requires a start; this narrows the type to say so.
+    return rows.flatMap((r) =>
+      r.pastDueSince === null
+        ? []
+        : [{ id: r.id, accountId: r.accountId, pastDueSince: r.pastDueSince }],
+    );
+  }
+
+  async markPastDueGraceEnded(args: { ids: string[]; asOf: Date }): Promise<void> {
+    if (args.ids.length === 0) return;
+    await this.database.db
+      .update(subscriptions)
+      .set({ pastDueGraceEndedAt: args.asOf })
+      .where(and(inArray(subscriptions.id, args.ids), pastDueGraceEndedBy(args.asOf)));
+  }
+
   async upsertSubscription(args: {
     accountId: string;
     stripeSubscriptionId: string;
@@ -200,6 +275,8 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
         periodStartSource,
         billingInterval,
         tierSince: args.at,
+        pastDueSince: args.status === 'past_due' ? args.at : null,
+        pastDueGraceEndedAt: null,
       })
       .onConflictDoUpdate({
         target: subscriptions.stripeSubscriptionId,
@@ -217,6 +294,11 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
           periodStartSource,
           billingInterval,
           tierSince: sql`CASE WHEN ${subscriptions.tier} IS DISTINCT FROM excluded.tier THEN excluded.updated_at ELSE ${subscriptions.tierSince} END`,
+          // Live-billing audit #3 — a move INTO past_due stamps the spell's start
+          // (the incoming row carries this event's time there); staying past_due
+          // keeps the stored start and the sweep's mark; leaving clears both.
+          pastDueSince: sql`CASE WHEN excluded.status <> 'past_due' THEN NULL WHEN ${subscriptions.status} = 'past_due' THEN ${subscriptions.pastDueSince} ELSE excluded.past_due_since END`,
+          pastDueGraceEndedAt: sql`CASE WHEN excluded.status = 'past_due' AND ${subscriptions.status} = 'past_due' THEN ${subscriptions.pastDueGraceEndedAt} ELSE NULL END`,
         },
       })
       .returning({ id: subscriptions.id });
@@ -422,15 +504,13 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
       // updated wins in the pathological multi-active case; `id DESC` breaks a
       // same-transaction tie, since now() is transaction-start time — V-2131). Its tier is the true
       // entitlement; only when NONE remain do we drop to the fallback (free).
+      // Live-billing audit #3 — a past_due subscription inside its grace still
+      // counts (see subscriptionStillGrantsAt), so its first failed renewal keeps
+      // the plan and the recompute after the grace takes it away.
       const remaining = await tx
         .select({ tier: subscriptions.tier })
         .from(subscriptions)
-        .where(
-          and(
-            eq(subscriptions.accountId, args.accountId),
-            inArray(subscriptions.status, [...ACTIVE_SUBSCRIPTION_STATUSES]),
-          ),
-        )
+        .where(and(eq(subscriptions.accountId, args.accountId), subscriptionStillGrantsAt(args.at)))
         .orderBy(desc(subscriptions.updatedAt), desc(subscriptions.id))
         .limit(1);
       const stripeCandidate = remaining[0]?.tier ?? args.fallbackTier;
@@ -688,6 +768,59 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
       .set({ expiredProcessedAt: args.at, updatedAt: args.at })
       .where(inArray(cryptoEntitlements.id, args.ids));
   }
+}
+
+/**
+ * Live-billing audit #3 — the start after which a past_due spell is still inside
+ * its PAST_DUE_GRACE_DAYS when judged at `at`: the grace is judged at the LATER of
+ * the database clock and `at`, as a crypto term is (cryptoTermRunningAt below), so
+ * a Stripe event created inside the grace but delivered after it — a retry, three
+ * days on — cannot hand back a plan the grace has already ended.
+ */
+function pastDueGraceStartsAfter(at: Date): SQL {
+  return sql`GREATEST(now(), ${at.toISOString()}::timestamptz) - make_interval(days => ${PAST_DUE_GRACE_DAYS})`;
+}
+
+/**
+ * Live-billing audit #3 — the subscriptions that still give the account their plan
+ * when a recompute runs at `at`: `active` and `trialing` (the billed set, as
+ * before), and a `past_due` one whose spell began within PAST_DUE_GRACE_DAYS and
+ * that the past-due sweep has not processed. The published terms (8.5) promise
+ * seven days' written notice before a suspension for non-payment, and the
+ * payment-failure email is that notice, so the first failed renewal no longer
+ * takes the plan away. A past_due row with no recorded start (one that fell
+ * behind before migration 0141) never counts, which is what the code did then.
+ */
+function subscriptionStillGrantsAt(at: Date): SQL {
+  return (
+    or(
+      inArray(subscriptions.status, [...ACTIVE_SUBSCRIPTION_STATUSES]),
+      and(
+        eq(subscriptions.status, 'past_due'),
+        isNull(subscriptions.pastDueGraceEndedAt),
+        gt(subscriptions.pastDueSince, pastDueGraceStartsAfter(at)),
+      ),
+    ) ?? sql`false`
+  );
+}
+
+/**
+ * Live-billing audit #3 — past_due spells whose grace was over by `asOf` and that
+ * the past-due sweep has not yet processed: the sweep's read, and the condition
+ * its mark re-checks so a subscription that recovered, or fell behind again,
+ * since the read is left alone.
+ */
+function pastDueGraceEndedBy(asOf: Date): SQL {
+  return (
+    and(
+      eq(subscriptions.status, 'past_due'),
+      isNull(subscriptions.pastDueGraceEndedAt),
+      lte(
+        subscriptions.pastDueSince,
+        sql`${asOf.toISOString()}::timestamptz - make_interval(days => ${PAST_DUE_GRACE_DAYS})`,
+      ),
+    ) ?? sql`false`
+  );
 }
 
 /**

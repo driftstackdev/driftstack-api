@@ -158,6 +158,11 @@ export type LifecycleEvent =
       retryAt: Date | null;
       stripeEventId: string;
       stripeInvoiceId: string;
+      /** Live-billing audit #3 — when the failing subscription's paid plan stops
+       *  (seven days after it fell behind, ToS 8.5), or stopped; absent when it is
+       *  in no such grace (a first payment, a subscription already ended). The
+       *  notice says it. */
+      accessEndsAt?: Date;
     };
 
 export interface AccountLifecycleServiceConfig {
@@ -564,6 +569,7 @@ export class AccountLifecycleService {
       retryAt: Date | null;
       stripeEventId: string;
       stripeInvoiceId: string;
+      accessEndsAt?: Date;
     },
   ): Promise<void> {
     const account = await this.repo.findForLifecycle(accountId);
@@ -588,6 +594,7 @@ export class AccountLifecycleService {
           amountFormatted: formatCents(event.amountCents, event.currency),
           retryAt: event.retryAt,
           portalUrl: this.billingPortalUrl,
+          ...(event.accessEndsAt !== undefined ? { accessEndsAt: event.accessEndsAt } : {}),
         }),
     );
   }

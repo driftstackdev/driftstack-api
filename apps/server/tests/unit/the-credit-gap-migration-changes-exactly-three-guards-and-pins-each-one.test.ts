@@ -391,7 +391,13 @@ describe('migration 0132 changes exactly three guards, and pins each one', () =>
     expect(journal.entries[at + 8]?.tag).toBe(
       '0140_credit_clawback_frozen_cap_and_reversal_indexes',
     );
-    expect(journal.entries, 'and 0140 is the last one').toHaveLength(141);
+    // 0141 (live-billing audit #3 — a subscription remembers when it fell into
+    // past_due) follows 0140; its own guard pins its shape.
+    expect(journal.entries[at + 9]?.tag).toBe('0141_subscription_past_due_grace');
+    expect(journal.entries[at + 9]?.when).toBeGreaterThan(
+      journal.entries[at + 8]?.when ?? Infinity,
+    );
+    expect(journal.entries, 'and 0141 is the last one').toHaveLength(142);
   });
 
   it('CRITICAL schema.ts mirrors the CHECK and the index this migration adds, by name, and its prose names the trigger it installs and the guard it relaxes', () => {

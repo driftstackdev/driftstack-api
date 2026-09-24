@@ -41,10 +41,13 @@ import {
 import type { SentryClient } from '../lib/sentry.js';
 import {
   invoiceSaysItIsNotPaid,
+  readInvoiceSubscriptionId,
   readPaidInvoice,
+  readSubscriptionPeriodEnd,
   readSubscriptionPeriodStart,
   type BillingInterval,
   type PaidInvoiceFacts,
+  type PaidInvoiceLine,
   type PeriodStartSource,
 } from '../lib/stripe-billing-facts.js';
 import type { AccountLifecycleService } from './account-lifecycle.js';
@@ -104,6 +107,47 @@ export interface StripeWebhooksRepo {
   getAccountTier(accountId: string): Promise<AccountTier | null>;
 
   /**
+   * Live-billing audits #11, #4 and #3 — the STORED mirror row of one subscription,
+   * or null when none is stored. Read before a subscription event's upsert
+   * overwrites it: its plan is what an unmapped price falls back to (#11), and its
+   * status says whether the event is the subscription's first move into collecting
+   * (#4). The payment-failure notice reads when a past_due spell began (#3).
+   */
+  findSubscription(stripeSubscriptionId: string): Promise<StoredSubscription | null>;
+
+  /**
+   * Live-billing audit #4 — the account's subscriptions still collecting (`active` |
+   * `trialing` | `past_due`), oldest first by when the mirror first saw them.
+   */
+  listCollectingSubscriptions(accountId: string): Promise<
+    Array<{
+      stripeSubscriptionId: string;
+      status: LocalStatus;
+      /** When the mirror first saw the subscription (its first event's time). */
+      createdAt: Date;
+    }>
+  >;
+
+  /**
+   * Live-billing audit #3 — the past-due sweep's read: past_due subscriptions whose
+   * spell began at least PAST_DUE_GRACE_DAYS before `asOf` and that the sweep has
+   * not yet processed. Oldest spell first, capped. A row with no recorded start
+   * (past_due before migration 0141) is never listed.
+   */
+  listPastDueGraceEnded(args: {
+    asOf: Date;
+    limit: number;
+  }): Promise<Array<{ id: string; accountId: string; pastDueSince: Date }>>;
+
+  /**
+   * Live-billing audit #3 — mark rows processed by the past-due sweep. A row is
+   * marked only while it is STILL in the spell that was listed (past_due, the
+   * grace over at `asOf`, not yet marked), so a subscription that recovered, or
+   * fell behind again, in between is left for what it is now.
+   */
+  markPastDueGraceEnded(args: { ids: string[]; asOf: Date }): Promise<void>;
+
+  /**
    * Upsert a subscription mirror row keyed on `stripeSubscriptionId`.
    * If a row with that id exists, UPDATE its mutable fields ONLY when the
    * incoming event is newer than the stored row (event-recency guard —
@@ -115,6 +159,10 @@ export interface StripeWebhooksRepo {
    * conflicting row already holds a strictly-newer event (write skipped).
    * Callers gate the account-tier mutation on `applied` so a stale event
    * touches neither the mirror nor the tier.
+   *
+   * Live-billing audit #3 — the row also records when a past_due spell began: an
+   * applied move INTO past_due stamps `past_due_since` with `at`; staying past_due
+   * keeps the stamp (and the sweep's mark); any other status clears both.
    */
   upsertSubscription(args: {
     accountId: string;
@@ -249,6 +297,13 @@ export interface StripeWebhooksRepo {
    * crypto-paid tier. With no entitlement rows this is byte-identical to the
    * pure-Stripe computation (the crypto side is a rank comparison bolted on
    * after the unchanged Stripe candidate selection).
+   *
+   * Live-billing audit #3 — "remaining" also counts a `past_due` subscription
+   * inside its grace: fewer than PAST_DUE_GRACE_DAYS since its spell began,
+   * judged at the later of the database clock and `at`, and not yet processed by
+   * the past-due sweep. So the first failed renewal keeps the paid plan (ToS 8.5),
+   * and the recompute that runs once the grace is over — a later event, or the
+   * sweep — takes it away. A past_due row with no recorded start never counts.
    */
   downgradeAccountTierToBestRemaining(args: {
     accountId: string;
@@ -335,6 +390,34 @@ export interface StripeWebhooksRepo {
 
 export type DispatchOutcome = 'handled' | 'ignored' | `error:${string}`;
 
+/**
+ * Live-billing audit #3 — how many days a `past_due` subscription keeps its plan
+ * after its spell began: the published terms (8.5) promise at least seven days'
+ * written notice before a suspension for non-payment, and the payment-failure
+ * email sent at the first failure is that notice. The Drizzle recompute, the
+ * past-due sweep and the email's "until" date all read this one number.
+ */
+export const PAST_DUE_GRACE_DAYS = 7;
+
+const PAST_DUE_GRACE_MS = PAST_DUE_GRACE_DAYS * 24 * 60 * 60 * 1000;
+
+/** What recording a paid invoice did, and the paid line it read (live-billing audit #12). */
+interface RecordedPaidInvoice {
+  recorded: boolean;
+  line: PaidInvoiceLine | null;
+}
+
+/** A subscription's stored mirror row, as the webhook reads it back (see `findSubscription`). */
+export interface StoredSubscription {
+  accountId: string;
+  tier: AccountTier;
+  status: LocalStatus;
+  /** When the mirror first saw the subscription. */
+  createdAt: Date;
+  /** When its current past_due spell began; null when it is not past_due (or it began before 0141). */
+  pastDueSince: Date | null;
+}
+
 export interface StripeWebhooksServiceConfig {
   logger: Logger;
   /**
@@ -389,6 +472,16 @@ export interface StripeWebhooksServiceConfig {
    * review). Injectable for tests; the wall clock otherwise.
    */
   now?: () => Date;
+  /**
+   * Live-billing audit #4 — cancels a subscription at once, prorated (the Stripe
+   * billing provider's `cancelSubscriptionNow`). Used when a customer's NEW plan
+   * subscription starts collecting while an older one still is: the older one is
+   * cancelled so the customer is not billed twice. Absent or null: nothing can be
+   * cancelled, so that case is logged and alerted as not cancelled.
+   */
+  subscriptionCanceller?: {
+    cancelSubscriptionNow(args: { subscriptionId: string }): Promise<void>;
+  } | null;
 }
 
 export class StripeWebhooksService {
@@ -659,7 +752,8 @@ export class StripeWebhooksService {
     const stripeCustomerId = readString(sub, 'customer');
     const status = readString(sub, 'status');
     const cancelAtPeriodEnd = readBool(sub, 'cancel_at_period_end');
-    const currentPeriodEnd = readUnixTimestamp(sub, 'current_period_end');
+    // Live-billing audit #13 — in either payload shape, as the start is read.
+    const currentPeriodEnd = readSubscriptionPeriodEnd(sub);
     const canceledAt = readUnixTimestamp(sub, 'canceled_at');
 
     if (stripeSubscriptionId === null || stripeCustomerId === null || status === null) {
@@ -691,7 +785,21 @@ export class StripeWebhooksService {
       return 'ignored';
     }
 
-    const tier = this.config.priceToTier[priceId];
+    const mappedTier = this.config.priceToTier[priceId];
+    // The stored row, read BEFORE this event's upsert overwrites it (#11, #4).
+    const stored = await this.repo.findSubscription(stripeSubscriptionId);
+    // Live-billing audit #11 — a price the configuration no longer names (a
+    // grandfathered subscriber after the price ids changed) keeps the plan the
+    // mirror already holds for THIS subscription. It used to grant nothing and
+    // store the account's current tier as filler, so a subscriber downgraded by a
+    // failed payment was left on free for good after paying. A subscription the
+    // mirror has never seen (or one stored against another account) still gets
+    // the V-742 filler below and no grant.
+    const storedTier =
+      mappedTier === undefined && stored !== null && stored.accountId === accountId
+        ? stored.tier
+        : undefined;
+    const tier = mappedTier ?? storedTier;
     // V-742 — when the price is unmapped the mirror row still needs a tier to
     // satisfy the NOT NULL column, and that filler used to be 'enterprise'. It
     // was inert when written (the grant on this event is gated on
@@ -716,6 +824,11 @@ export class StripeWebhooksService {
       this.config.logger.warn(
         { component: 'stripe-webhooks', eventId: event.id, priceId },
         'subscription price id not in priceToTier map; mirror written without tier change',
+      );
+    } else if (mappedTier === undefined) {
+      this.config.logger.warn(
+        { component: 'stripe-webhooks', eventId: event.id, priceId, stripeSubscriptionId },
+        'subscription price id not in priceToTier map; the subscription keeps the plan its mirror row holds',
       );
     }
 
@@ -749,9 +862,31 @@ export class StripeWebhooksService {
       return 'handled';
     }
 
+    // Live-billing audit #4 — a NEW plan subscription that has just started
+    // collecting replaces any older one the account still pays: re-checkout is
+    // allowed while a subscription is past_due, and when the old card recovered
+    // both billed. "New" is this event being the subscription's FIRST move into
+    // active/trialing — its `created` event, or the update that completes the
+    // first payment of one Checkout created as incomplete — so a redelivery, or
+    // any later event of the same subscription, reads the stored row as already
+    // collecting and does nothing. It runs straight after the upsert, before any
+    // step that could fail and send Stripe round again (a retry would not see the
+    // first move a second time), and it never throws: what it could not do is
+    // logged and alerted. Only a subscription on a configured plan price replaces
+    // anything, so a custom subscription made by hand in Stripe cancels nothing.
+    if (
+      (status === 'active' || status === 'trialing') &&
+      mappedTier !== undefined &&
+      (stored === null || stored.status === 'incomplete')
+    ) {
+      await this.cancelReplacedSubscriptions(event, accountId, stripeSubscriptionId);
+    }
+
     // Tier change only when the subscription is in an active-paying
     // state. Trialing counts as active for our purposes (the customer
-    // gets the tier; Stripe handles the dunning).
+    // gets the tier; Stripe handles the dunning). `tier` is the configured
+    // plan of the price, or — for a price the configuration no longer names —
+    // the plan the mirror row held (live-billing audit #11).
     if (tier !== undefined && (status === 'active' || status === 'trialing')) {
       // Fable last-hours audit 2026-07-07 (C4) — set the account to its BEST
       // active/trialing entitlement, not blindly this event's tier. The sub
@@ -800,21 +935,29 @@ export class StripeWebhooksService {
       // `customer.subscription.deleted` fires while it merely cycles
       // through past_due, and Stripe's "mark unpaid" dunning policy
       // leaves it parked at `unpaid` forever) but payment has stopped
-      // succeeding. Downgrade using the SAME target + mechanism as an
-      // explicit cancellation (handleSubscriptionDeleted below) — an
-      // account that isn't being billed doesn't keep paid-tier access
-      // for the full multi-week dunning window. The subscription MIRROR
-      // already recorded the real status (past_due/unpaid, not
-      // 'canceled') via the upsertSubscription call above, so the
+      // succeeding. Recompute using the SAME target + mechanism as an
+      // explicit cancellation (handleSubscriptionDeleted below). The
+      // subscription MIRROR already recorded the real status (past_due/unpaid,
+      // not 'canceled') via the upsertSubscription call above, so the
       // distinction from a true cancel survives in the DB; if Stripe's
       // retry later succeeds, the event arrives as status === 'active'
       // and the branch above naturally re-upgrades on the next in-order
       // event — no separate recovery path needed.
+      //
+      // Live-billing audit #3 — `past_due` no longer downgrades AT ONCE. The
+      // recompute counts a past_due subscription as still granting its plan for
+      // PAST_DUE_GRACE_DAYS from when the spell began (ToS 8.5: at least seven
+      // days' written notice — the payment-failure email — before a suspension
+      // for non-payment), so this call leaves the paid plan in place. Once the
+      // grace is over, a later event lands here and takes it away, and the
+      // past-due sweep does so when no event comes. `unpaid` and `paused` still
+      // downgrade at once, as `deleted` does.
       const downgradeTier = this.config.cancelDowngradeTier ?? 'free';
-      // Recompute from the account's remaining active subscriptions — a
-      // past_due on a SUPERSEDED subscription must not downgrade an account
-      // that still holds another active subscription (an account can hold
-      // multiple subscription rows; re-checkout is allowed while past_due).
+      // Recompute from the account's remaining active subscriptions (and a
+      // past_due one inside its grace) — a past_due on a SUPERSEDED
+      // subscription must not downgrade an account that still holds another
+      // active subscription (an account can hold multiple subscription rows;
+      // re-checkout is allowed while past_due).
       const { previousTier, appliedTier } = await this.repo.downgradeAccountTierToBestRemaining({
         accountId,
         fallbackTier: downgradeTier,
@@ -860,7 +1003,8 @@ export class StripeWebhooksService {
       mappedCancelTier === undefined
         ? ((await this.repo.getAccountTier(accountId)) ?? 'free')
         : 'free';
-    const canceledPeriodEnd = readUnixTimestamp(sub, 'current_period_end');
+    // Live-billing audit #13 — in either payload shape, as the start is read.
+    const canceledPeriodEnd = readSubscriptionPeriodEnd(sub);
     const { applied } = await this.repo.upsertSubscription({
       accountId,
       stripeSubscriptionId,
@@ -985,9 +1129,8 @@ export class StripeWebhooksService {
     const amountPaid = readNumber(invoice, 'amount_paid');
     const currency = readString(invoice, 'currency');
     const stripeInvoiceId = readString(invoice, 'id');
-    // Optional fields — the lifecycle handler has fallbacks for each.
-    const periodStart = readUnixTimestamp(invoice, 'period_start');
-    const periodEnd = readUnixTimestamp(invoice, 'period_end');
+    // Optional — the lifecycle handler falls back to the portal. (The period is
+    // the paid line's, read below with the payment record: live-billing audit #12.)
     const hostedInvoiceUrl = readString(invoice, 'hosted_invoice_url');
 
     if (
@@ -1015,8 +1158,9 @@ export class StripeWebhooksService {
       stripeCustomerId,
       clientReferenceId: null,
     });
-    const recorded =
-      accountId !== null && (await this.recordPaidInvoice(event, invoice, accountId));
+    const record =
+      accountId !== null ? await this.recordPaidInvoice(event, invoice, accountId) : null;
+    const recorded = record !== null && record.recorded;
 
     if (amountPaid === 0) {
       this.logEvent(event, 'invoice.payment_succeeded (zero-amount — no receipt)');
@@ -1034,13 +1178,20 @@ export class StripeWebhooksService {
       return;
     }
 
+    // Live-billing audit #12 — the receipt names the period the PAID LINE covers
+    // (the same line, in either payload shape, the payment record was written
+    // from — fetched again from Stripe when the payload named none). It used to
+    // name the invoice's own top-level period, which on a renewal is the period
+    // that just ENDED ("for February" on March's payment) and on a first invoice
+    // is zero-length. With no line it falls back to the charge date, as before.
+    const paidLine = record?.line ?? null;
     if (this.accountLifecycle !== null) {
       await this.accountLifecycle.emit(accountId, {
         kind: 'billing.payment_succeeded',
         amountCents: amountPaid,
         currency,
-        periodStart,
-        periodEnd,
+        periodStart: paidLine?.periodStart ?? null,
+        periodEnd: paidLine?.periodEnd ?? null,
         hostedInvoiceUrl,
         stripeEventId: event.id,
         stripeInvoiceId,
@@ -1095,7 +1246,7 @@ export class StripeWebhooksService {
     // refused (it says it is not paid, its amount is unreadable, it is on record
     // for another account) raises an alert that sends a person to this log, and
     // "payment recorded" beside it would be a lie at the worst possible moment.
-    const recorded = await this.recordPaidInvoice(event, invoice, accountId);
+    const { recorded } = await this.recordPaidInvoice(event, invoice, accountId);
     this.logEvent(
       event,
       recorded ? 'invoice.paid → payment recorded' : 'invoice.paid (payment not recorded)',
@@ -1126,7 +1277,7 @@ export class StripeWebhooksService {
     event: StripeEvent,
     invoice: Record<string, unknown>,
     accountId: string,
-  ): Promise<boolean> {
+  ): Promise<RecordedPaidInvoice> {
     const maps = {
       priceToTier: this.config.priceToTier,
       priceToInterval: this.config.priceToInterval ?? {},
@@ -1134,7 +1285,7 @@ export class StripeWebhooksService {
     let facts = readPaidInvoice(invoice, maps);
     const { stripeInvoiceId, currency } = facts;
     // Both callers have already required these two; this keeps the types honest.
-    if (stripeInvoiceId === null || currency === null) return false;
+    if (stripeInvoiceId === null || currency === null) return { recorded: false, line: facts.line };
 
     // The event's TYPE is this handler's evidence that the invoice was paid, so a
     // payload with no status is recorded. One whose own invoice says 'open',
@@ -1143,13 +1294,13 @@ export class StripeWebhooksService {
     // told. Checked before Stripe is asked anything about it.
     if (invoiceSaysItIsNotPaid(facts)) {
       this.alertUnlinkableInvoice(event, stripeInvoiceId, 'not_paid');
-      return false;
+      return { recorded: false, line: facts.line };
     }
 
     const amountPaidMinor = facts.amountPaidMinor;
     if (amountPaidMinor === null) {
       this.alertUnlinkableInvoice(event, stripeInvoiceId, 'invalid_amount');
-      return false;
+      return { recorded: false, line: facts.line };
     }
 
     if (facts.line === null) {
@@ -1158,7 +1309,7 @@ export class StripeWebhooksService {
       // Stripe: the same contradiction, found one step later, is refused the same way.
       if (invoiceSaysItIsNotPaid(facts)) {
         this.alertUnlinkableInvoice(event, stripeInvoiceId, 'not_paid');
-        return false;
+        return { recorded: false, line: facts.line };
       }
     }
 
@@ -1177,7 +1328,7 @@ export class StripeWebhooksService {
 
     if (outcome === 'account_mismatch') {
       this.alertUnlinkableInvoice(event, stripeInvoiceId, 'account_mismatch');
-      return false;
+      return { recorded: false, line: facts.line };
     }
     // `linked` is the STORED row: an earlier sighting may already have tied this
     // invoice to its line, and then there is nothing to raise.
@@ -1193,7 +1344,7 @@ export class StripeWebhooksService {
         'paid invoice line price not in priceToTier map; recorded without a plan',
       );
     }
-    return true;
+    return { recorded: true, line: facts.line };
   }
 
   private async readInvoiceAgainFromStripe(
@@ -1317,6 +1468,9 @@ export class StripeWebhooksService {
     }
 
     if (this.accountLifecycle !== null) {
+      // Live-billing audit #3 — the notice says until when the paid plan stays
+      // (the grace ToS 8.5 promises), or when it ended if the grace is over.
+      const accessEndsAt = await this.accessEndsAfterFailedPayment(event, invoice, accountId);
       await this.accountLifecycle.emit(accountId, {
         kind: 'billing.payment_failed',
         amountCents: amountDue,
@@ -1324,10 +1478,216 @@ export class StripeWebhooksService {
         retryAt,
         stripeEventId: event.id,
         stripeInvoiceId,
+        ...(accessEndsAt !== null ? { accessEndsAt } : {}),
       });
     }
 
     this.logEvent(event, 'invoice.payment_failed → billing-failure notice dispatched');
+  }
+
+  /**
+   * Live-billing audit #3 — when the paid plan of the subscription whose payment
+   * just failed stops, for the payment-failure notice to say: PAST_DUE_GRACE_DAYS
+   * after its past_due spell began. That spell's start is on the mirror once the
+   * subscription's own past_due event has been processed; the invoice event and
+   * that one arrive in the same second in either order, so a subscription still
+   * mirrored as active or trialing is about to go past_due at this event's time.
+   *
+   * Null — and the notice says nothing about it — when the invoice belongs to no
+   * subscription, the mirror has no row for it (or has it against another
+   * account), or the subscription is in no grace: a first payment (incomplete),
+   * one already ended (unpaid, canceled, paused), or a spell that began before
+   * migration 0141 recorded starts. A failed read never costs the notice: a
+   * transient one is rethrown before anything is sent (Stripe redelivers), any
+   * other is logged and the notice goes without the date.
+   */
+  private async accessEndsAfterFailedPayment(
+    event: StripeEvent,
+    invoice: Record<string, unknown>,
+    accountId: string,
+  ): Promise<Date | null> {
+    const stripeSubscriptionId = readInvoiceSubscriptionId(invoice);
+    if (stripeSubscriptionId === null) return null;
+    let sub: StoredSubscription | null;
+    try {
+      sub = await this.repo.findSubscription(stripeSubscriptionId);
+    } catch (err) {
+      if (isTransientInfraError(err)) throw err;
+      this.config.logger.warn(
+        {
+          component: 'stripe-webhooks',
+          eventId: event.id,
+          stripeSubscriptionId,
+          err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+        },
+        'could not read the subscription for the payment-failure notice; it goes without an end date',
+      );
+      return null;
+    }
+    if (sub === null || sub.accountId !== accountId) return null;
+    if (sub.status === 'past_due') {
+      return sub.pastDueSince === null
+        ? null
+        : new Date(sub.pastDueSince.getTime() + PAST_DUE_GRACE_MS);
+    }
+    if (sub.status === 'active' || sub.status === 'trialing') {
+      return new Date(eventTime(event).getTime() + PAST_DUE_GRACE_MS);
+    }
+    return null;
+  }
+
+  /**
+   * Live-billing audit #4 — the account's NEW plan subscription `newSubscriptionId`
+   * has just started collecting: cancel every OLDER subscription the account still
+   * collects on (active, trialing or past_due), at once and prorated, so the
+   * customer is not billed twice. Never the new one, and never one the mirror saw
+   * after it — that one is the newer purchase, so it is left alone and staff are
+   * told (two checkouts whose events arrived out of order).
+   *
+   * NEVER THROWS. The caller runs it once, on the subscription's first move into
+   * collecting; a retry would not run it again, so rethrowing would lose it rather
+   * than retry it. A cancel Stripe refuses, a canceller that is not configured, or
+   * a read that fails is logged with the ids and alerted without them; a cancel
+   * that went through is alerted too, so staff can decide whether a refund is
+   * owed for the older subscription.
+   */
+  private async cancelReplacedSubscriptions(
+    event: StripeEvent,
+    accountId: string,
+    newSubscriptionId: string,
+  ): Promise<void> {
+    const cancelled: string[] = [];
+    const notCancelled: string[] = [];
+    try {
+      const collecting = await this.repo.listCollectingSubscriptions(accountId);
+      const self = collecting.find((s) => s.stripeSubscriptionId === newSubscriptionId);
+      if (self === undefined) return;
+      const others = collecting.filter((s) => s.stripeSubscriptionId !== newSubscriptionId);
+      if (others.length === 0) return;
+      const older = others.filter((s) => s.createdAt.getTime() < self.createdAt.getTime());
+      const newer = others.filter((s) => s.createdAt.getTime() >= self.createdAt.getTime());
+      if (newer.length > 0) {
+        this.config.logger.warn(
+          {
+            component: 'stripe-webhooks',
+            eventId: event.id,
+            accountId,
+            stripeSubscriptionId: newSubscriptionId,
+            kept: newer.map((s) => s.stripeSubscriptionId),
+          },
+          'a new plan subscription started collecting beside one the mirror saw no earlier; neither was cancelled',
+        );
+        this.alertBilling(
+          'duplicate_subscription_kept',
+          'warning',
+          'An account holds two plan subscriptions still collecting, and the newer one was ' +
+            'not cancelled automatically. Find the account in the server log and cancel the ' +
+            'one it should not be billed for in Stripe.',
+        );
+      }
+      const canceller = this.config.subscriptionCanceller ?? null;
+      for (const s of older) {
+        if (canceller === null) {
+          notCancelled.push(s.stripeSubscriptionId);
+          continue;
+        }
+        try {
+          await canceller.cancelSubscriptionNow({ subscriptionId: s.stripeSubscriptionId });
+          cancelled.push(s.stripeSubscriptionId);
+        } catch (err) {
+          notCancelled.push(s.stripeSubscriptionId);
+          this.config.logger.error(
+            {
+              component: 'stripe-webhooks',
+              eventId: event.id,
+              accountId,
+              stripeSubscriptionId: s.stripeSubscriptionId,
+              err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+            },
+            'Stripe refused to cancel a subscription a new plan replaced',
+          );
+        }
+      }
+    } catch (err) {
+      this.config.logger.error(
+        {
+          component: 'stripe-webhooks',
+          eventId: event.id,
+          accountId,
+          stripeSubscriptionId: newSubscriptionId,
+          err: err instanceof Error ? { name: err.name, message: err.message } : { value: err },
+        },
+        'could not check for a subscription a new plan replaced',
+      );
+      this.alertBilling(
+        'replaced_subscription_not_checked',
+        'error',
+        'A customer started a new plan subscription and it could not be checked whether an ' +
+          'older one is still billing them. Find the account in the server log and check it in Stripe.',
+      );
+      return;
+    }
+    if (cancelled.length > 0) {
+      this.config.logger.warn(
+        {
+          component: 'stripe-webhooks',
+          eventId: event.id,
+          accountId,
+          stripeSubscriptionId: newSubscriptionId,
+          cancelled,
+        },
+        'a new plan subscription replaced older ones still collecting; they were cancelled now, prorated',
+      );
+      this.alertBilling(
+        'replaced_subscription_cancelled',
+        'warning',
+        'A customer started a new plan subscription while an older one was still billing ' +
+          'them; the older one was cancelled at once, with the unused time credited in Stripe. ' +
+          'Find the account in the server log and check whether a refund is owed.',
+      );
+    }
+    if (notCancelled.length > 0) {
+      this.config.logger.error(
+        {
+          component: 'stripe-webhooks',
+          eventId: event.id,
+          accountId,
+          stripeSubscriptionId: newSubscriptionId,
+          notCancelled,
+          cancellerConfigured: this.config.subscriptionCanceller != null,
+        },
+        'a new plan subscription replaced older ones still collecting, and they could NOT be cancelled — the customer may be billed twice',
+      );
+      this.alertBilling(
+        'replaced_subscription_not_cancelled',
+        'error',
+        'A customer started a new plan subscription while an older one was still billing ' +
+          'them, and the older one could not be cancelled, so they may be billed twice. Find ' +
+          'the account in the server log and cancel the older subscription in Stripe.',
+      );
+    }
+  }
+
+  /** An id-free billing alert (live-billing audit #4); the log line beside it is the record. */
+  private alertBilling(
+    kind:
+      | 'replaced_subscription_cancelled'
+      | 'replaced_subscription_not_cancelled'
+      | 'replaced_subscription_not_checked'
+      | 'duplicate_subscription_kept',
+    level: 'warning' | 'error',
+    message: string,
+  ): void {
+    try {
+      this.config.sentry?.captureMessage({
+        message,
+        level,
+        fingerprint: ['billing', kind],
+        tags: { kind },
+      });
+    } catch {
+      /* the log line is the record */
+    }
   }
 
   private handleCheckoutCompleted(event: StripeEvent): Promise<DispatchOutcome> {

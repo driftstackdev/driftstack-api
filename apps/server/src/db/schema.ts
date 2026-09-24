@@ -585,11 +585,36 @@ export const subscriptions = pgTable(
      * migration 0129 whose plan has not changed since: when it began is unknown.
      */
     tierSince: timestamp('tier_since', { withTimezone: true }),
+    /**
+     * Migration 0141 (live-billing audit #3) — the event time at which the
+     * subscription last ENTERED past_due. Set by that move, kept while it stays
+     * past_due, cleared when it leaves. The paid plan is kept for
+     * PAST_DUE_GRACE_DAYS from here (ToS 8.5), then the past-due sweep takes it
+     * away. NULL on a row that is not past_due, and on one already past_due
+     * before 0141, when the start was not recorded: that row is not in a grace
+     * period (it was downgraded at its first failure, as the code then did).
+     */
+    pastDueSince: timestamp('past_due_since', { withTimezone: true }),
+    /**
+     * Migration 0141 — when the past-due sweep took the plan away because the
+     * past_due spell that began at `past_due_since` outlasted the grace. NULL
+     * until it does; cleared whenever `past_due_since` is. The sweep's done-mark,
+     * so it processes one spell once.
+     */
+    pastDueGraceEndedAt: timestamp('past_due_grace_ended_at', { withTimezone: true }),
   },
   (t) => [
     uniqueIndex('subscriptions_stripe_id_unique').on(t.stripeSubscriptionId),
     index('subscriptions_account_idx').on(t.accountId),
     index('subscriptions_status_idx').on(t.status),
+    check(
+      'subscriptions_past_due_since',
+      sql`${t.pastDueSince} IS NULL OR ${t.status} = 'past_due'`,
+    ),
+    check(
+      'subscriptions_past_due_grace_ended',
+      sql`${t.pastDueGraceEndedAt} IS NULL OR ${t.pastDueSince} IS NOT NULL`,
+    ),
     check(
       'subscriptions_billing_interval',
       sql`${t.billingInterval} IS NULL OR ${t.billingInterval} IN ('month', 'year')`,

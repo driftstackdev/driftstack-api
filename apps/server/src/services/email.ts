@@ -102,6 +102,9 @@ export interface EmailService {
     amountFormatted: string;
     retryAt: Date | null;
     portalUrl: string;
+    /** Live-billing audit #3 — when the paid plan stops if the payment still has
+     *  not gone through (or stopped, when that is past). Absent: nothing is said. */
+    accessEndsAt?: Date;
   }): Promise<void>;
   /** V-304b — fires ~7 days before subscription renewal (driven by
    *  Stripe `invoice.upcoming` webhook). Once-per-invoice via dedup
@@ -436,12 +439,17 @@ const TEMPLATES = {
   // next_payment_attempt is nullable: with a retry scheduled the line
   // carries the timestamp; on the final dunning attempt it says no
   // further retry is coming. One template, both truths.
+  //
+  // Live-billing audit #3 — `accessLine`, when present, is its own paragraph
+  // saying until when the paid plan stays (or when it stopped): the written
+  // notice ToS 8.5 requires before a suspension for non-payment. Absent (a first
+  // payment, a subscription already ended), the email is exactly as before.
   'billing-failure': {
     subject: 'Driftstack — payment failed',
     text: (v) =>
-      `We were unable to charge ${v.amountFormatted} on your Driftstack account.\n\n${v.retryLine} To update payment details, visit the billing portal:\n\n${v.portalUrl}\n\n— Driftstack`,
+      `We were unable to charge ${v.amountFormatted} on your Driftstack account.\n\n${v.accessLine ? `${v.accessLine}\n\n` : ''}${v.retryLine} To update payment details, visit the billing portal:\n\n${v.portalUrl}\n\n— Driftstack`,
     html: (v) =>
-      `<p>We were unable to charge <strong>${v.amountFormatted}</strong> on your Driftstack account.</p><p>${v.retryLine} To update payment details, visit the <a href="${v.portalUrl}">billing portal</a>.</p><p>— Driftstack</p>`,
+      `<p>We were unable to charge <strong>${v.amountFormatted}</strong> on your Driftstack account.</p>${v.accessLine ? `<p>${v.accessLine}</p>` : ''}<p>${v.retryLine} To update payment details, visit the <a href="${v.portalUrl}">billing portal</a>.</p><p>— Driftstack</p>`,
   },
   // V-304b — DRAFT copy. Renewal reminder fires ~7 days before the
   // upcoming invoice. Tier-3 review-gated tone.
@@ -664,6 +672,44 @@ function billingSendFailureCanPass(err: unknown): boolean {
       ? (err as { statusCode?: unknown }).statusCode
       : undefined;
   return typeof status === 'number' && (status === 0 || status === 429 || status >= 500);
+}
+
+const MONTH_NAMES = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+] as const;
+
+/**
+ * Live-billing audit #3 — a moment as a customer reads it: "September 30, 2026 at
+ * 03:00 UTC". Rounded DOWN to the minute, so the time stated is never later than
+ * the moment it names.
+ */
+export function customerDateTime(at: Date): string {
+  const hh = String(at.getUTCHours()).padStart(2, '0');
+  const mm = String(at.getUTCMinutes()).padStart(2, '0');
+  return `${MONTH_NAMES[at.getUTCMonth()] ?? ''} ${String(at.getUTCDate())}, ${String(at.getUTCFullYear())} at ${hh}:${mm} UTC`;
+}
+
+/**
+ * Live-billing audit #3 — the payment-failure notice's sentence about the paid
+ * plan: until when it stays while the payment is retried, or — for a later
+ * failure, once that time has passed — when it stopped. What happens, not how.
+ */
+export function billingAccessLine(accessEndsAt: Date, now: Date = new Date()): string {
+  const when = customerDateTime(accessEndsAt);
+  return accessEndsAt.getTime() > now.getTime()
+    ? `Your paid plan stays active until ${when}. If the payment still hasn't gone through by then, your account loses the plan's paid features.`
+    : `Because the payment hadn't gone through, your account lost the plan's paid features on ${when}.`;
 }
 
 /** Backoff delay (ms) BEFORE attempt 2 and attempt 3 respectively — 3
@@ -1010,7 +1056,7 @@ export function createEmailService({
       send('password-reset', to, { link, expiresAt: expiresAt.toISOString() }),
     sendBillingReceipt: ({ to, amountFormatted, period, invoiceUrl }) =>
       send('billing-receipt', to, { amountFormatted, period, invoiceUrl }),
-    sendBillingFailure: ({ to, amountFormatted, retryAt, portalUrl }) =>
+    sendBillingFailure: ({ to, amountFormatted, retryAt, portalUrl, accessEndsAt }) =>
       send('billing-failure', to, {
         amountFormatted,
         // S44 — pre-rendered retry sentence; see the template comment.
@@ -1019,6 +1065,7 @@ export function createEmailService({
             ? `We'll retry automatically at ${retryAt.toISOString()} (UTC).`
             : `This was the final automatic attempt — no further retries are scheduled.`,
         portalUrl,
+        ...(accessEndsAt !== undefined ? { accessLine: billingAccessLine(accessEndsAt) } : {}),
       }),
     sendBillingRenewalReminder: ({ to, amountFormatted, renewalDate, portalUrl }) =>
       send('billing-renewal-reminder', to, {

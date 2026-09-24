@@ -786,6 +786,13 @@ describe('Audit #79 — out-of-order / retried Stripe subscription events', () =
 // still records the real status (not 'canceled') so Stripe's own retry
 // recovering the subscription to 'active' naturally re-upgrades via the
 // existing active/trialing branch — no separate recovery path needed.
+//
+// Live-billing audit #3 moved the first arm below. It pinned the IMMEDIATE
+// downgrade at past_due, which breaks the published terms (8.5: at least seven
+// days' written notice before a suspension for non-payment). past_due now keeps
+// the paid tier for seven days from when the subscription fell behind; the arm
+// pins that, and its old assertion lives on in the arm after it, where the
+// spell is already past its seven days (its events are from 2023).
 // ───────────────────────────────────────────────────────────────────────
 describe('billing-edges audit — past_due/unpaid subscription status downgrades tier', () => {
   let fx: TestAppFixture;
@@ -797,9 +804,12 @@ describe('billing-edges audit — past_due/unpaid subscription status downgrades
     if (fx) await fx.cleanup();
   });
 
-  it('downgrades the account to the free tier when an active subscription moves to past_due', async () => {
+  it('keeps the paid tier when an active subscription moves to past_due, for seven days from then (live-billing audit #3, ToS 8.5)', async () => {
     fx = await buildTestApp({ tier: 'free' });
     const subId = 'sub_pastdue_001';
+    // Recent events: the spell began a minute ago, well inside its seven days.
+    const recentT1 = nowSec() - 3600;
+    const recentT2 = nowSec() - 60;
 
     // Active first — establishes the paid tier.
     await postEvent(
@@ -811,7 +821,7 @@ describe('billing-edges audit — past_due/unpaid subscription status downgrades
         stripeCustomerId: 'cus_test_default',
         priceId: 'price_api_builder_monthly',
         status: 'active',
-        createdSec: T1,
+        createdSec: recentT1,
       }),
     );
     expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
@@ -827,15 +837,54 @@ describe('billing-edges audit — past_due/unpaid subscription status downgrades
         stripeCustomerId: 'cus_test_default',
         priceId: 'price_api_builder_monthly',
         status: 'past_due',
-        createdSec: T2,
+        createdSec: recentT2,
       }),
     )) as { statusCode: number; body: { outcome: string } };
     expect(result.body.outcome).toBe('handled');
 
-    // Tier is downgraded...
+    // The paid tier is KEPT (it used to drop to free here, at once)...
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+    // ...the mirror keeps the REAL status (past_due, not canceled) and when the
+    // spell began, which is what the seven days are counted from.
+    const subs = fx.stripeWebhooksRepo.listSubscriptions();
+    expect(subs).toHaveLength(1);
+    expect(subs[0]?.status).toBe('past_due');
+    expect(subs[0]?.pastDueSince?.getTime()).toBe(recentT2 * 1000);
+  });
+
+  it('downgrades the account to the free tier when a past_due spell is already past its seven days', async () => {
+    fx = await buildTestApp({ tier: 'free' });
+    const subId = 'sub_pastdue_002';
+
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_pastdue_old_active',
+        type: 'customer.subscription.created',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'active',
+        createdSec: T1,
+      }),
+    );
+    expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('api_builder');
+
+    // A past_due event whose spell began in 2023: its seven days are long over.
+    await postEvent(
+      fx,
+      buildSubscriptionEvent({
+        eventId: 'evt_pastdue_old_update',
+        type: 'customer.subscription.updated',
+        stripeSubscriptionId: subId,
+        stripeCustomerId: 'cus_test_default',
+        priceId: 'price_api_builder_monthly',
+        status: 'past_due',
+        createdSec: T2,
+      }),
+    );
+
     expect(fx.stripeWebhooksRepo.readAccount(fx.accountId)?.tier).toBe('free');
-    // ...but the mirror keeps the REAL status (past_due, not canceled) so
-    // the distinction from an explicit cancel survives in the DB.
     const subs = fx.stripeWebhooksRepo.listSubscriptions();
     expect(subs).toHaveLength(1);
     expect(subs[0]?.status).toBe('past_due');

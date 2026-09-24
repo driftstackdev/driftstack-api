@@ -103,7 +103,15 @@ const ALLOW_LIST: Record<string, string[]> = {
   // excluded.updated_at` in the onConflictDoUpdate setWhere. A column REFERENCE
   // (stored row) compared to the EXCLUDED pseudo-table column, NOT a JS Date
   // value bound into the template. Safe.
-  'apps/server/src/db/stripe-webhooks-repo.ts': ['subscriptions.updatedAt'],
+  //
+  // Live-billing audit #3 (migration 0141): the upsert's CASE that keeps the
+  // past-due sweep's mark while a subscription stays past_due reads the STORED
+  // `subscriptions.past_due_grace_ended_at`. A column REFERENCE rendering as an
+  // identifier; the one time the grace judgement binds is `.toISOString()` text.
+  'apps/server/src/db/stripe-webhooks-repo.ts': [
+    'subscriptions.updatedAt',
+    'subscriptions.pastDueGraceEndedAt',
+  ],
   // §8.1.b atlas-priority repo getStats uses sinceIso (string).
   'apps/server/src/db/atlas-priority-events-repo.ts': ['sinceIso'],
   // schema.ts partial-index expressions reference Drizzle COLUMNS via
@@ -153,6 +161,9 @@ const ALLOW_LIST: Record<string, string[]> = {
     't.anchorAt',
     't.startsAt',
     't.expiresAt',
+    // subscriptions (migration 0141, live-billing audit #3): the CHECK that a
+    // past-due sweep mark sits only beside a recorded start. A column REFERENCE.
+    't.pastDueGraceEndedAt',
     // credit windows (migration 0130): the CHECK `window_start <= created_at`
     // ("never created ahead of its start") and the pending-clawbacks index on
     // `created_at`. Column REFERENCES rendering as identifiers. The windows repo
