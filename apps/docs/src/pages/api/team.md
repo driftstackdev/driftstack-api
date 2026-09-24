@@ -53,14 +53,20 @@ Role gating:
 - **Read endpoints** (GET) accept both `member` and `admin` roles.
 - **Write endpoints** (POST / PATCH / DELETE / api-keys rotate)
   require `admin` role on the team. `member` role gets `403`.
+- **Your key's scopes still apply.** The team role decides whose resources
+  you reach; the scopes on your own key decide what it may do there, exactly
+  as on your own account. For example, managing the owner's webhooks needs a
+  key with `account_owner` (the dashboard session has it), so a `read:sessions`
+  key gets `403` even for a team admin.
 - **Agent-session exception.** `/v1/agent-sessions` contains AI
   transcripts and live-control state, so its collection and `:id`
   surface require `admin` for both reads and writes.
 - **Owner-level API keys stay with the owner.** An `admin` member can
   create, rotate and revoke the owner's `read`, `write`, granular and
-  `gui_control` keys. They cannot create a key with `account_owner` or
-  the legacy `admin` scope on the owner's account, and cannot rotate a
-  key that has either — those requests get `403`. Only the owner can
+  `gui_control` keys. They cannot create a key with `account_owner`, the
+  legacy `admin` scope or an `admin:…` scope (such as `admin:billing`) on
+  the owner's account, and cannot rotate a key that has one — those
+  requests get `403`. Only the owner can
   create or rotate a key with the owner's full account control.
 
 Endpoints that honor the header :

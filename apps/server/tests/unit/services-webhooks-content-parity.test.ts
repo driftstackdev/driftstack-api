@@ -90,13 +90,14 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     expect(body).toMatch(/const MAX_ENDPOINTS_PER_ACCOUNT = 10;/);
   });
 
-  it("V-326e5/V-174 create: when effectiveAccountId set → trust route's team-admin gate; else throwIfMissingScope 'account_owner'", () => {
-    expect(body).toMatch(
-      /\/\/ V-326e5 — when effectiveAccountId is set, the route layer has\s*\/\/ already enforced team admin role on the OWNER's team\. Trust\s*\/\/ that decision and skip the account_owner apiKey-scope check/,
-    );
-    expect(body).toMatch(
+  it("V-174 + webhooks audit #1: every webhook write checks 'account_owner', act-as or not — the team-admin gate never stands in for the key's scope", () => {
+    // Skipping the check on act-as let a team admin's read:sessions key create,
+    // rotate and delete the OWNER's endpoints (webhooks audit #1, 2026-09-24).
+    expect(body).not.toMatch(
       /if \(opts\.effectiveAccountId === undefined\) \{\s*throwIfMissingScope\(ctx, 'account_owner'\);/,
     );
+    // create, update, rotateSecret, delete, replayDeliveryAsCustomer, sendTestEvent.
+    expect(body.match(/^ {4}throwIfMissingScope\(ctx, 'account_owner'\);$/gm)?.length).toBe(6);
   });
 
   it('create: events.length===0 → ConflictError; atomic insertEndpointIfUnderLimit cap (null → ConflictError); emits webhook_endpoint.created audit', () => {
@@ -181,10 +182,10 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
   // member's own account, so team replays 404'd). Scope check is
   // skipped when the route resolved an effective team account
   // (mirrors create()/listDeliveries()).
-  it('V-307+S32 replayDeliveryAsCustomer: effective-account ownership + conditional scope + webhook_delivery.replayed audit', () => {
+  it('V-307+S32 replayDeliveryAsCustomer: effective-account ownership + account_owner scope always + webhook_delivery.replayed audit', () => {
     expect(body).toMatch(/replay was the ONLY delivery surface that\s*\/\/ ignored team act-as/);
     expect(body).toMatch(
-      /if \(opts\.effectiveAccountId === undefined\) \{\s*throwIfMissingScope\(ctx, 'account_owner'\);/,
+      /the key must still carry account_owner[\s\S]{0,160}?throwIfMissingScope\(ctx, 'account_owner'\);/,
     );
     expect(body).toMatch(
       /const endpoint = await this\.repo\.findEndpoint\(delivery\.webhookId, accountId\);/,

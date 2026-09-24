@@ -382,17 +382,15 @@ export class WebhooksService {
     input: CreateWebhookInput,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<CreatedWebhookEndpoint> {
-    // V-326e5 — when effectiveAccountId is set, the route layer has
-    // already enforced team admin role on the OWNER's team. Trust
-    // that decision and skip the account_owner apiKey-scope check (the
-    // member's own apiKey may only carry account_owner scope; being
-    // a team admin is the authorization for the OWNER's resource).
-    // V-174 — self-account webhook management is account_owner-level
-    // (web sessions carry account_owner, not admin; admin satisfies
-    // account_owner via alias).
-    if (opts.effectiveAccountId === undefined) {
-      throwIfMissingScope(ctx, 'account_owner');
-    }
+    // V-174 — webhook management is account_owner-level (web sessions carry
+    // account_owner; the legacy admin alias satisfies it). ALWAYS checked, also on a
+    // team-scoped request: the route's team-admin gate decides WHOSE endpoints the
+    // caller may manage, the key's scope decides WHETHER it may manage endpoints at
+    // all. Webhooks audit #1 (2026-09-24): skipping it on act-as let a team admin's
+    // `read:sessions` key create an endpoint on the owner — plaintext secret and the
+    // owner's event stream — and rotate or delete the owner's (every write below
+    // shares this rule, as ApiKeysService does).
+    throwIfMissingScope(ctx, 'account_owner');
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
 
     const url = parseHttpsUrl(input.url);
@@ -531,9 +529,8 @@ export class WebhooksService {
     },
     opts: { effectiveAccountId?: string } = {},
   ): Promise<WebhookEndpointRow> {
-    if (opts.effectiveAccountId === undefined) {
-      throwIfMissingScope(ctx, 'account_owner');
-    }
+    // V-174 + webhooks audit #1 — account_owner always, act-as or not. See create().
+    throwIfMissingScope(ctx, 'account_owner');
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const before = await this.repo.findEndpoint(id, accountId);
     if (!before) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
@@ -599,9 +596,8 @@ export class WebhooksService {
     id: string,
     opts: { effectiveAccountId?: string; graceMs?: number } = {},
   ): Promise<{ row: WebhookEndpointRow; plaintextSecret: string }> {
-    if (opts.effectiveAccountId === undefined) {
-      throwIfMissingScope(ctx, 'account_owner');
-    }
+    // V-174 + webhooks audit #1 — account_owner always, act-as or not. See create().
+    throwIfMissingScope(ctx, 'account_owner');
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const before = await this.repo.findEndpoint(id, accountId);
     if (!before) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
@@ -665,12 +661,9 @@ export class WebhooksService {
     id: string,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<void> {
-    // V-326e5 — same pattern as create(): trust the route's team-
-    // admin gate when effectiveAccountId is set; otherwise enforce
-    // the account_owner api-key scope (V-174).
-    if (opts.effectiveAccountId === undefined) {
-      throwIfMissingScope(ctx, 'account_owner');
-    }
+    // V-174 + webhooks audit #1 — account_owner always; the team-admin gate
+    // (route) only decides whose endpoint. See create().
+    throwIfMissingScope(ctx, 'account_owner');
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const row = await this.disableLiveEndpoint(id, accountId);
     if (row === null) return; // idempotent — no audit emit on no-op
@@ -784,13 +777,11 @@ export class WebhooksService {
     // ignored team act-as: the dashboard sends x-driftstack-account and
     // listDeliveries honours it, but replay scoped the ownership lookup
     // to the member's own account, so every replay of a team-visible
-    // delivery 404'd. Mirrors create()/listDeliveries(): when
-    // effectiveAccountId is set the route layer already enforced the
-    // team-admin role, which is the authorization for the owner's
-    // resource (the member's own key need not carry account_owner).
-    if (opts.effectiveAccountId === undefined) {
-      throwIfMissingScope(ctx, 'account_owner');
-    }
+    // delivery 404'd. Mirrors create()/listDeliveries(): the ownership lookup
+    // uses the effective account, and the key must still carry account_owner
+    // (webhooks audit #1 — the team role says whose delivery, not what the key
+    // may do).
+    throwIfMissingScope(ctx, 'account_owner');
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const delivery = await this.repo.findDeliveryById(deliveryId);
     if (!delivery) {
@@ -843,12 +834,11 @@ export class WebhooksService {
     endpointId: string,
     opts: { effectiveAccountId?: string } = {},
   ): Promise<{ deliveryId: string; eventId: string }> {
-    // account_owner scope or team-admin gate — same posture as
-    // create/update (V-174), since "send test event" can be used to
+    // account_owner scope (plus the route's team-admin gate on act-as) — same
+    // posture as create/update (V-174), since "send test event" can be used to
     // fish for endpoint-state.
-    if (opts.effectiveAccountId === undefined) {
-      throwIfMissingScope(ctx, 'account_owner');
-    }
+    // V-174 + webhooks audit #1 — account_owner always, act-as or not. See create().
+    throwIfMissingScope(ctx, 'account_owner');
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const row = await this.repo.findEndpoint(endpointId, accountId);
     if (!row) {
