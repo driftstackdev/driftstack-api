@@ -1025,12 +1025,17 @@ describe('createEmailService — security-critical retry + per-account tracking 
       retryDelayFn: async () => {},
       accountEmailDeliveryTracker: tracker,
     });
-    await svc.sendBillingReceipt({
-      to: 'user@example.com',
-      amountFormatted: '$1.00',
-      period: '2026-06',
-      invoiceUrl: 'https://x',
-    });
+    // Live-billing audit #8 — still ONE attempt and no tracking, but a billing email
+    // whose failure can pass (429 here) now rejects, so the caller can release its
+    // send-once claim and have Stripe redeliver the event.
+    await expect(
+      svc.sendBillingReceipt({
+        to: 'user@example.com',
+        amountFormatted: '$1.00',
+        period: '2026-06',
+        invoiceUrl: 'https://x',
+      }),
+    ).rejects.toThrow(/billing-receipt email was not sent/);
     expect(sendEmail).toHaveBeenCalledTimes(1);
     expect(logger.error).not.toHaveBeenCalled();
     expect(tracker.findAccountIdByEmail).not.toHaveBeenCalled();

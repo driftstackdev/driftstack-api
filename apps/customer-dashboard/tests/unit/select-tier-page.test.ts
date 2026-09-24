@@ -99,6 +99,13 @@ function setUpDom(
   // @ts-expect-error — jsdom global is loose
   window.fetch = (input: string, init: RequestInit | undefined) => {
     const call: MockFetchCall = { url: String(input), init };
+    // Live-billing audit #14 — the page reads each tier's price (one crypto-checkout
+    // QUOTE per tier). That read is covered by the-plan-picker-shows-the-price-the-server-
+    // charges; this file is about the payment paths, so the quotes are answered here with a
+    // miss (the cards keep their built-in prices) and are not counted among its calls.
+    if (/\/v1\/billing\/crypto-checkout\/quote$/.test(call.url)) {
+      return Promise.resolve(json({}, 404));
+    }
     fetchCalls.push(call);
     if (/\/v1\/account\/me$/.test(call.url)) {
       return Promise.resolve(

@@ -279,8 +279,13 @@ describe('C1 CryptoTierActivationService (entitlement-backed)', () => {
 // exactly as in prod — proving non-stranding + idempotency end-to-end, not just
 // against a mock repo.
 describe('C3 CryptoTierActivationService.revokeTierForRefundedOrder', () => {
-  const NOW = new Date('2026-07-10T12:00:00.000Z');
-  const PAID_AT = new Date('2026-07-08T10:00:00.000Z');
+  // Live-billing audit #9 — a crypto term floors the tier only while it is unexpired
+  // when the recompute RUNS: the later of the real clock and the caller's `at`. This
+  // block's clock was a fixed day in July 2026, which the real clock has since passed,
+  // so every "still valid" term here read as ended. It now starts an hour AHEAD of the
+  // real clock, keeping the same two days and two hours between payment and refund.
+  const NOW = new Date(Date.now() + 60 * 60 * 1000);
+  const PAID_AT = new Date(NOW.getTime() - (2 * 24 + 2) * 60 * 60 * 1000);
 
   function makeRefundDeps() {
     const repo = new InMemoryStripeWebhooksRepo();

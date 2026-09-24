@@ -63,6 +63,16 @@ function requireCtx(request: FastifyRequest): NonNullable<FastifyRequest['accoun
   return request.account;
 }
 
+/**
+ * Live-billing audit #5 — the Stripe customer portal is a Self-workspace action, refused
+ * with the same kind of refusal crypto checkout uses. GET /v1/billing honours the acting-as
+ * header, so a member viewing the owner's workspace sees the OWNER's plan — while the
+ * portal routes opened the member's OWN Stripe customer, so "Cancel in Stripe portal" under
+ * the owner's plan cancelled the member's plan instead.
+ */
+const PORTAL_SELF_WORKSPACE_ONLY_DETAIL =
+  'The Stripe billing portal is available only in the Self workspace. Remove X-Driftstack-Account and retry.';
+
 function publicSubscription(s: SubscriptionMirror): Record<string, unknown> {
   return {
     tier: s.tier,
@@ -133,6 +143,11 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
     { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (req) => {
       const ctx = requireCtx(req);
+      // Resolved only to REFUSE another workspace (see PORTAL_SELF_WORKSPACE_ONLY_DETAIL).
+      // A header naming the caller's own account is Self; one naming an account the
+      // caller does not belong to is refused by the resolver itself (403).
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
+      if (effective.kind !== 'self') throw new BadRequestError(PORTAL_SELF_WORKSPACE_ONLY_DETAIL);
       const result = await service.createPortalSession(ctx.account.id);
       return { portal_url: result.url };
     },
@@ -150,6 +165,9 @@ export function registerBillingRoutes(app: FastifyInstance, deps: BillingRoutesD
     { preHandler: [app.requireAuth, app.requireScope('admin:billing'), app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
+      // Same Self-workspace refusal as POST /v1/billing/portal-session above.
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
+      if (effective.kind !== 'self') throw new BadRequestError(PORTAL_SELF_WORKSPACE_ONLY_DETAIL);
       const result = await service.createPortalSession(ctx.account.id);
       return reply.code(302).header('location', result.url).send();
     },

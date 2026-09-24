@@ -121,6 +121,14 @@ const apiBaseUrl = resolveApiBaseUrl();
       >
         Opens the Stripe billing portal in a new step — choose "Cancel plan" there to finish cancelling.
       </p>
+      {/* Live-billing audit #5 — in another member's workspace this page shows the
+          OWNER's plan, but the Stripe portal only ever opens the signed-in
+          member's own billing (the server refuses the owner's). So the portal
+          buttons are hidden there and this note says who manages it. */}
+      <p data-billing-other-workspace class="mt-2 hidden text-xs text-tk-ink-3" role="note">
+        You're viewing another member's workspace. Its payment details and
+        subscription can only be managed by its owner.
+      </p>
       {/* 2026-07-02 (slice 3.3) — plan-change honesty copy, absorbed from
           the retired /subscription page (the account-portal IA folded that
           drill-down into this card; plan history + the full invoice list
@@ -321,6 +329,31 @@ const apiBaseUrl = resolveApiBaseUrl();
       const portalBtn = root.querySelector('[data-action="portal"]');
       const cancelBtn = root.querySelector('[data-action="cancel"]');
       const cancelHint = root.querySelector('[data-field="cancel-hint"]');
+      const otherWorkspaceNote = root.querySelector('[data-billing-other-workspace]');
+
+      // Live-billing audit #5 — viewing another member's workspace (the layout's
+      // act-as helper names it). The plan shown is theirs; the Stripe portal is not
+      // offered, because it can only open the signed-in member's own billing.
+      const viewingAnotherWorkspace = (() => {
+        try {
+          const headers =
+            typeof window.driftstackActAsHeaders === 'function'
+              ? window.driftstackActAsHeaders()
+              : {};
+          const value = headers && headers['x-driftstack-account'];
+          return typeof value === 'string' && value.length > 0;
+        } catch {
+          return false;
+        }
+      })();
+
+      // The portal button's label follows the subscription: a payment problem
+      // offers the way to update the card.
+      let portalLabel = 'Manage in Stripe portal';
+      function setPortalLabel(label) {
+        portalLabel = label;
+        if (portalBtn && !portalLoading) portalBtn.textContent = label;
+      }
 
       let portalLoading = false;
       let billingDataAvailable = false;
@@ -358,7 +391,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           btn.setAttribute('aria-busy', loading ? 'true' : 'false');
         });
         if (portalBtn) {
-          portalBtn.textContent = loading ? 'Opening Stripe…' : 'Manage in Stripe portal';
+          portalBtn.textContent = loading ? 'Opening Stripe…' : portalLabel;
         }
         if (cancelBtn) {
           cancelBtn.textContent = loading ? 'Opening Stripe…' : 'Cancel in Stripe portal';
@@ -370,6 +403,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           showBanner('Sign in to manage billing.');
           return;
         }
+        if (viewingAnotherWorkspace) return;
         if (!billingDataAvailable) {
           showBanner('Reload live billing before opening Stripe.');
           return;
@@ -421,6 +455,102 @@ const apiBaseUrl = resolveApiBaseUrl();
         return;
       }
 
+      // Live-billing audit #7 — the card says what the subscription's STATUS means.
+      // Only an active or trialing subscription renews, so only it shows "Renews … ·
+      // auto-renews" and the cancel button. Any other status shows the plan the
+      // ACCOUNT is on (a crypto plan included) rather than the subscription's old
+      // one: a canceled subscription is marked canceled, and a failed payment says so
+      // and offers the way to update the card.
+      function renderSubscription(sub, me) {
+        const status = typeof sub.status === 'string' ? sub.status : '';
+        const accountTier = me && typeof me.tier === 'string' ? me.tier : null;
+        const subPlan = tierLabel(sub.tier);
+        const planCta = root.querySelector('[data-field="plan-cta"]');
+        setPortalAvailability(true);
+        setStatusBadge(status.replace(/_/g, ' '), status);
+        setPortalLabel('Manage in Stripe portal');
+        if (portalBtn) portalBtn.classList.remove('hidden');
+        let planCtaLabel = 'Choose a plan';
+        let cancelOffered = false;
+
+        if (status === 'active' || status === 'trialing') {
+          setText('sub-tier', subPlan);
+          let summary =
+            'Renews ' +
+            fmtIso(sub.current_period_end) +
+            ' · ' +
+            (sub.cancel_at_period_end ? 'set to cancel at period end' : 'auto-renews');
+          if (accountTier !== null && accountTier !== 'free' && accountTier !== sub.tier) {
+            summary += '. Your account is on the ' + tierLabel(accountTier) + ' plan.';
+          }
+          setText('sub-summary', summary);
+          planCtaLabel = 'Change plan';
+          cancelOffered = !sub.cancel_at_period_end;
+        } else if (status === 'past_due' || status === 'unpaid') {
+          setText('sub-tier', accountTier !== null ? tierLabel(accountTier) : 'Payment problem');
+          setText(
+            'sub-summary',
+            status === 'past_due'
+              ? 'Your last payment for the ' +
+                  subPlan +
+                  " plan didn't go through. Update your payment method so the next attempt succeeds."
+              : 'Your payments for the ' +
+                  subPlan +
+                  " plan didn't go through, and there are no more automatic attempts. Update your payment method to settle what's owed.",
+          );
+          setPortalLabel('Update payment method');
+          planCtaLabel = null;
+        } else if (status === 'canceled') {
+          setText(
+            'sub-tier',
+            accountTier !== null ? tierLabel(accountTier) : 'Subscription canceled',
+          );
+          let summary =
+            'Your subscription was canceled' +
+            (sub.canceled_at ? ' on ' + fmtIso(sub.canceled_at) : '') +
+            '.';
+          if (accountTier === 'free') {
+            summary += " You're on the Free plan.";
+          } else if (accountTier !== null) {
+            summary +=
+              ' Your ' + tierLabel(accountTier) + " plan isn't billed through this subscription.";
+          }
+          setText('sub-summary', summary);
+        } else {
+          setText('sub-tier', accountTier !== null ? tierLabel(accountTier) : subPlan);
+          setText(
+            'sub-summary',
+            status === 'incomplete'
+              ? 'Your first payment for the ' + subPlan + " plan hasn't completed yet."
+              : status === 'incomplete_expired'
+                ? 'Your first payment for the ' +
+                  subPlan +
+                  " plan didn't complete, so the subscription never started."
+                : status === 'paused'
+                  ? 'Your subscription to the ' + subPlan + ' plan is paused.'
+                  : 'Your subscription to the ' + subPlan + ' plan is not renewing.',
+          );
+        }
+
+        if (planCta) {
+          if (planCtaLabel === null) {
+            planCta.classList.add('hidden');
+          } else {
+            planCta.classList.remove('hidden');
+            planCta.textContent = planCtaLabel;
+            planCta.setAttribute('href', '/select-tier/');
+          }
+        }
+        // Cancel button (+ its honesty hint): only for a subscription that renews.
+        if (cancelBtn) cancelBtn.classList.toggle('hidden', !cancelOffered);
+        if (cancelHint) cancelHint.classList.toggle('hidden', !cancelOffered);
+        if (viewingAnotherWorkspace) {
+          if (portalBtn) portalBtn.classList.add('hidden');
+          if (cancelBtn) cancelBtn.classList.add('hidden');
+          if (cancelHint) cancelHint.classList.add('hidden');
+        }
+      }
+
       // Fetch live billing state.
       // 2026-05-21 — surface the server's problem+json `detail` string
       // (W277.C contract) AND a `status` field on the rejected error
@@ -448,28 +578,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         .then(([body, me]) => {
           // Subscription card.
           if (body.subscription) {
-            const sub = body.subscription;
-            setPortalAvailability(true);
-            setText('sub-tier', tierLabel(sub.tier));
-            const summary =
-              'Renews ' +
-              fmtIso(sub.current_period_end) +
-              ' · ' +
-              (sub.cancel_at_period_end ? 'set to cancel at period end' : 'auto-renews');
-            setText('sub-summary', summary);
-            setStatusBadge((sub.status || '').replace(/_/g, ' '), sub.status);
-            // Paid subscriber: portal + (conditionally) cancel apply.
-            if (portalBtn) portalBtn.classList.remove('hidden');
-            setText('plan-cta', 'Change plan');
-            // Cancel button (+ its honesty hint) visibility.
-            if (cancelBtn) {
-              if (sub.cancel_at_period_end) cancelBtn.classList.add('hidden');
-              else cancelBtn.classList.remove('hidden');
-            }
-            if (cancelHint) {
-              if (sub.cancel_at_period_end) cancelHint.classList.add('hidden');
-              else cancelHint.classList.remove('hidden');
-            }
+            renderSubscription(body.subscription, me);
           } else {
             setPortalAvailability(false);
             const accountTier = me && typeof me.tier === 'string' ? me.tier : null;
@@ -512,6 +621,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (portalBtn) portalBtn.classList.add('hidden');
             if (cancelBtn) cancelBtn.classList.add('hidden');
             if (cancelHint) cancelHint.classList.add('hidden');
+          }
+          if (viewingAnotherWorkspace && otherWorkspaceNote) {
+            otherWorkspaceNote.classList.remove('hidden');
           }
         })
         .catch((err) => {

@@ -264,7 +264,16 @@ describe('V-961 an exempt surface that can drop a field is listed, not inherited
       const at = adminAccounts.indexOf(`'${action}'`);
       expect(at, `${action} is audited in admin-accounts.ts`).toBeGreaterThan(-1);
       // The metadata argument sits between the action name and the operation thunk.
-      const callSite = adminAccounts.slice(at, adminAccounts.indexOf('() =>', at));
+      let callSite = adminAccounts.slice(at, adminAccounts.indexOf('() =>', at));
+      // account.deleted hands one named object to both the audit and the
+      // termination (which writes the cancelled subscriptions into it), so its
+      // metadata is the `auditPayload` declared just before that call — read
+      // THAT declaration, still tied to this one site.
+      if (callSite.includes('auditPayload')) {
+        const decl = adminAccounts.lastIndexOf('const auditPayload', at);
+        expect(decl, `${action}'s auditPayload is declared before its call`).toBeGreaterThan(-1);
+        callSite = adminAccounts.slice(decl, at);
+      }
       expect(
         callSite,
         `${action} no longer omits an absent reason from its audit metadata — if it now records ` +

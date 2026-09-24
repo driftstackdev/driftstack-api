@@ -3,7 +3,11 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { accounts, billingEmailSends } from './schema.js';
-import type { AccountLifecycleRepo, AccountLifecycleRow } from '../services/account-lifecycle.js';
+import type {
+  AccountLifecycleRepo,
+  AccountLifecycleRow,
+  BillingEmailKind,
+} from '../services/account-lifecycle.js';
 
 export class DrizzleAccountLifecycleRepo implements AccountLifecycleRepo {
   constructor(private readonly database: Database) {}
@@ -46,7 +50,7 @@ export class DrizzleAccountLifecycleRepo implements AccountLifecycleRepo {
 
   async claimBillingEmail(args: {
     stripeEventId: string;
-    kind: 'billing-receipt' | 'billing-failure' | 'billing-renewal-reminder';
+    kind: BillingEmailKind;
     accountId: string;
     at: Date;
   }): Promise<boolean> {
@@ -63,5 +67,21 @@ export class DrizzleAccountLifecycleRepo implements AccountLifecycleRepo {
       .onConflictDoNothing({ target: [billingEmailSends.stripeEventId, billingEmailSends.kind] })
       .returning({ stripeEventId: billingEmailSends.stripeEventId });
     return rows.length > 0;
+  }
+
+  async releaseBillingEmailClaim(args: {
+    stripeEventId: string;
+    kind: BillingEmailKind;
+  }): Promise<void> {
+    // Live-billing audit #8 — the claim's primary key is (stripe_event_id, kind), so this
+    // removes exactly the claim of the email that was not sent, and nothing else.
+    await this.database.db
+      .delete(billingEmailSends)
+      .where(
+        and(
+          eq(billingEmailSends.stripeEventId, args.stripeEventId),
+          eq(billingEmailSends.kind, args.kind),
+        ),
+      );
   }
 }

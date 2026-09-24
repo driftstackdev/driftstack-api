@@ -34,12 +34,13 @@ describe('W441.B apps/server/src/db/account-lifecycle-repo.ts content parity', (
     expect(body).toMatch(/\/\/ V-202c — Drizzle implementation of AccountLifecycleRepo\./);
   });
 
-  it('imports: and/eq/isNull from drizzle-orm; Database type; accounts schema; AccountLifecycleRepo/Row from services', () => {
+  it('imports: and/eq/isNull from drizzle-orm; Database type; accounts schema; AccountLifecycleRepo/Row + BillingEmailKind from services', () => {
     expect(body).toMatch(/import \{ and, eq, isNull \} from 'drizzle-orm';/);
     expect(body).toMatch(/import type \{ Database \} from '\.\/client\.js';/);
     expect(body).toMatch(/import \{ accounts, billingEmailSends \} from '\.\/schema\.js';/);
+    // Live-billing audit #8 — BillingEmailKind types the claim and its release.
     expect(body).toMatch(
-      /import type \{ AccountLifecycleRepo, AccountLifecycleRow \} from '\.\.\/services\/account-lifecycle\.js';/,
+      /import type \{\s*AccountLifecycleRepo,\s*AccountLifecycleRow,\s*BillingEmailKind,\s*\} from '\.\.\/services\/account-lifecycle\.js';/,
     );
   });
 

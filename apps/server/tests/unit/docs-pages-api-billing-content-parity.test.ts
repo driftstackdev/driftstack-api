@@ -174,9 +174,12 @@ describe('W765 docs /api/billing content parity', () => {
     expect(p).toMatch(
       /with one read exception: `GET \/v1\/billing`\s*\n?honors the team-RBAC `X-Driftstack-Account` header, so a team\s*\n?member acting as the owner reads the OWNER's subscription state/,
     );
+    // Live-billing audit #5 (2026-09-24): the portal endpoints now REFUSE a header
+    // naming another account (400) instead of silently opening the caller's own.
     expect(p).toMatch(
-      /The mutation endpoints \(checkout-session,\s*\n?portal-session, billing-portal\) do NOT honor the header — only the\s*\n?owner manages the owner's billing\./,
+      /The mutation endpoints \(checkout-session,\s*\n?portal-session, billing-portal\) act only on the calling account: the\s*\n?Stripe portal endpoints refuse a request whose `X-Driftstack-Account`\s*\n?names another account with `400`/,
     );
+    expect(p).toMatch(/Only the owner\s*\n?manages the owner's billing\./);
     // S46 2026-07-07 (founder-approved) — GET /v1/billing now enforces the
     // read:billing scope floor (was the V-481 residual: declared in the enum,
     // enforced nowhere). Broad read / account_owner satisfy per V-481.

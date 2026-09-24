@@ -37,15 +37,19 @@ describe('W442.A apps/server/src/db/billing-repo.ts content parity', () => {
     expect(body).toMatch(/\/\/ Drizzle-backed BillingRepo \(V-082\)\./);
   });
 
-  it('imports: desc/eq from drizzle-orm; BillingAccountSnapshot/BillingRepo/SubscriptionMirror from services/billing; Database type; accounts + subscriptions schema', () => {
+  it('imports: and/desc/eq/gt/inArray/sql from drizzle-orm; BillingAccountSnapshot/BillingRepo/RunningCryptoTerm/SubscriptionMirror from services/billing; Database type; accounts + cryptoEntitlements + subscriptions schema', () => {
     // V-741 — and/inArray joined for findActiveSubscription, which filters the
     // status SET rather than picking the newest row and inspecting it.
-    expect(body).toMatch(/import \{ and, desc, eq, inArray \} from 'drizzle-orm';/);
+    // Live-billing audit #6 — gt/sql, RunningCryptoTerm and cryptoEntitlements joined for
+    // findRunningCryptoTerms, the crypto half of the read an admin tier change is refused on.
+    expect(body).toMatch(/import \{ and, desc, eq, gt, inArray, sql \} from 'drizzle-orm';/);
     expect(body).toMatch(
-      /import type \{\s*BillingAccountSnapshot,\s*BillingRepo,\s*SubscriptionMirror,\s*\} from '\.\.\/services\/billing\.js';/,
+      /import type \{\s*BillingAccountSnapshot,\s*BillingRepo,\s*RunningCryptoTerm,\s*SubscriptionMirror,\s*\} from '\.\.\/services\/billing\.js';/,
     );
     expect(body).toMatch(/import type \{ Database \} from '\.\/client\.js';/);
-    expect(body).toMatch(/import \{ accounts, subscriptions \} from '\.\/schema\.js';/);
+    expect(body).toMatch(
+      /import \{ accounts, cryptoEntitlements, subscriptions \} from '\.\/schema\.js';/,
+    );
   });
 
   it('toAccount mapper: 5-field BillingAccountSnapshot (id, email, name, tier, stripeCustomerId)', () => {

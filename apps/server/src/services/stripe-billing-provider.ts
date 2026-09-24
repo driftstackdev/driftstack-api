@@ -109,4 +109,9 @@ export class StripeBillingProvider implements BillingProvider {
       pause: false,
     });
   }
+
+  /** Account termination: cancel now, prorated (see StripeApiClient.cancelSubscription). */
+  async cancelSubscriptionNow(args: { subscriptionId: string }): Promise<void> {
+    await this.client.cancelSubscription({ subscriptionId: args.subscriptionId });
+  }
 }

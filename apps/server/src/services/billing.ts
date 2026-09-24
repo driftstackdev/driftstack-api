@@ -68,6 +68,20 @@ export interface BillingProvider {
 
   /** Clear a pause set by {@link pauseSubscriptionCollection}. Must be idempotent. */
   resumeSubscriptionCollection(args: { subscriptionId: string }): Promise<void>;
+
+  /**
+   * Live-billing audit #1 — cancel a subscription NOW, for an account being
+   * terminated. Prorated: Stripe credits the unused part of the period already
+   * paid for to the Stripe customer's balance (`prorate=true`, `invoice_now=true`
+   * on `DELETE /v1/subscriptions/:id`). It never refunds: whether a refund is
+   * owed under the Terms (14.5) is a person's decision, and the termination
+   * alerts staff so they can make it.
+   *
+   * Optional because a provider may not implement it yet. BillingService then
+   * refuses to report a termination as clean while a subscription is still
+   * collecting — see {@link BillingService.cancelCollectionForAccount}.
+   */
+  cancelSubscriptionNow?(args: { subscriptionId: string }): Promise<void>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -104,6 +118,49 @@ export interface SubscriptionMirror {
   updatedAt: Date;
 }
 
+/** A paid crypto term that has not ended. */
+export interface RunningCryptoTerm {
+  tier: AccountTier;
+  expiresAt: Date;
+}
+
+/**
+ * What an account is still paying for, read before an admin changes its tier
+ * (live-billing audit #6): a tier set by hand while either of these is live is
+ * undone by the next Stripe event or crypto recompute.
+ */
+export interface LiveBilling {
+  /** Stripe subscriptions still collecting (`active` | `trialing` | `past_due`). */
+  collectingSubscriptions: Array<{
+    stripeSubscriptionId: string;
+    status: SubscriptionMirror['status'];
+    tier: AccountTier;
+  }>;
+  /** Paid crypto terms that have not ended. */
+  cryptoTerms: RunningCryptoTerm[];
+}
+
+/**
+ * A change that had to reach EVERY collecting subscription of an account — a
+ * pause, a resume, a cancellation — reached only some of them. Thrown after all
+ * of them were tried, so one Stripe refusal never stops the rest; it carries
+ * which were done and which were not, so the caller can record both.
+ */
+export class SubscriptionCollectionError extends Error {
+  constructor(
+    readonly action: 'pause' | 'resume' | 'cancel',
+    /** Stripe subscription ids the change reached. */
+    readonly done: readonly string[],
+    /** Stripe subscription ids it did not reach. */
+    readonly failed: readonly string[],
+    message: string,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = 'SubscriptionCollectionError';
+  }
+}
+
 export interface BillingRepo {
   getAccount(accountId: string): Promise<BillingAccountSnapshot | null>;
   setStripeCustomerId(args: { accountId: string; customerId: string }): Promise<void>;
@@ -125,6 +182,18 @@ export interface BillingRepo {
    * `past_due`). The only correct lookup for a billing-pause: see the note on the repo method.
    */
   findCollectingSubscription(accountId: string): Promise<SubscriptionMirror | null>;
+  /**
+   * EVERY subscription whose collection is still running (`active` | `trialing` |
+   * `past_due`), newest first. An account can hold more than one — re-checkout is allowed
+   * while a subscription is past_due — so a pause, a resume or a termination that reaches
+   * only the newest leaves the other one billing (live-billing audit #4).
+   */
+  findCollectingSubscriptions(accountId: string): Promise<SubscriptionMirror[]>;
+  /**
+   * The account's paid crypto terms that have not ended (`expires_at` after now), latest
+   * ending first. A term floors the account's tier while it runs.
+   */
+  findRunningCryptoTerms(accountId: string): Promise<RunningCryptoTerm[]>;
   /**
    * V-741 — any `active` or `trialing` subscription for the account, or null.
    *
@@ -287,19 +356,106 @@ export class BillingService {
    *      insert, so a replayed event for an OLD canceled subscription can sort newer than a
    *      live one. The pause then hit the canceled row and the LIVE subscription kept billing
    *      a suspended customer — the exact AUP §5.2 promise this method exists to keep.
+   *
+   * Live-billing audit #4 — EVERY collecting subscription, not the newest. An account can
+   * hold two (re-checkout is allowed while one is past_due), and a pause that reached only
+   * the newest left the other one billing a suspended customer. Each is tried even when
+   * another fails; any failure is thrown afterwards ({@link SubscriptionCollectionError}),
+   * naming what was and was not paused.
    */
   async pauseCollectionForAccount(accountId: string): Promise<'paused' | 'no_subscription'> {
-    const sub = await this.repo.findCollectingSubscription(accountId);
-    if (sub === null) return 'no_subscription';
-    await this.provider.pauseSubscriptionCollection({ subscriptionId: sub.stripeSubscriptionId });
+    const subs = await this.repo.findCollectingSubscriptions(accountId);
+    if (subs.length === 0) return 'no_subscription';
+    await this.applyToEach('pause', subs, (subscriptionId) =>
+      this.provider.pauseSubscriptionCollection({ subscriptionId }),
+    );
     return 'paused';
   }
 
   /** Inverse of {@link pauseCollectionForAccount}, for the unsuspend path. Idempotent. */
   async resumeCollectionForAccount(accountId: string): Promise<'resumed' | 'no_subscription'> {
-    const sub = await this.repo.findCollectingSubscription(accountId);
-    if (sub === null) return 'no_subscription';
-    await this.provider.resumeSubscriptionCollection({ subscriptionId: sub.stripeSubscriptionId });
+    const subs = await this.repo.findCollectingSubscriptions(accountId);
+    if (subs.length === 0) return 'no_subscription';
+    await this.applyToEach('resume', subs, (subscriptionId) =>
+      this.provider.resumeSubscriptionCollection({ subscriptionId }),
+    );
     return 'resumed';
+  }
+
+  /**
+   * Live-billing audit #1 — for an account being TERMINATED: cancel every subscription
+   * still collecting, now, prorated (see {@link BillingProvider.cancelSubscriptionNow}).
+   * Resolves with the Stripe subscription ids cancelled — empty when nothing was
+   * collecting, which is a normal outcome. Throws {@link SubscriptionCollectionError} when
+   * any was NOT cancelled, including when the provider cannot cancel at all: a
+   * subscription left charging a terminated customer must never read as a clean
+   * termination.
+   */
+  async cancelCollectionForAccount(accountId: string): Promise<{ cancelled: string[] }> {
+    const subs = await this.repo.findCollectingSubscriptions(accountId);
+    if (subs.length === 0) return { cancelled: [] };
+    const provider = this.provider;
+    if (provider.cancelSubscriptionNow === undefined) {
+      throw new SubscriptionCollectionError(
+        'cancel',
+        [],
+        subs.map((s) => s.stripeSubscriptionId),
+        'this billing provider cannot cancel a subscription, so the terminated account may still be charged',
+      );
+    }
+    const cancelled = await this.applyToEach('cancel', subs, (subscriptionId) =>
+      provider.cancelSubscriptionNow!({ subscriptionId }),
+    );
+    return { cancelled };
+  }
+
+  /**
+   * Live-billing audit #6 — what the account is still paying for: Stripe subscriptions
+   * still collecting and crypto terms that have not ended. An admin tier change is refused
+   * while either is live, because the next Stripe event or crypto recompute would undo it.
+   */
+  async liveBillingForAccount(accountId: string): Promise<LiveBilling> {
+    const [subs, cryptoTerms] = await Promise.all([
+      this.repo.findCollectingSubscriptions(accountId),
+      this.repo.findRunningCryptoTerms(accountId),
+    ]);
+    return {
+      collectingSubscriptions: subs.map((s) => ({
+        stripeSubscriptionId: s.stripeSubscriptionId,
+        status: s.status,
+        tier: s.tier,
+      })),
+      cryptoTerms,
+    };
+  }
+
+  /** Apply one Stripe change to each subscription in turn; throw afterwards if any failed. */
+  private async applyToEach(
+    action: 'pause' | 'resume' | 'cancel',
+    subs: readonly SubscriptionMirror[],
+    apply: (subscriptionId: string) => Promise<void>,
+  ): Promise<string[]> {
+    const done: string[] = [];
+    const failed: string[] = [];
+    let firstError: unknown = null;
+    for (const sub of subs) {
+      try {
+        await apply(sub.stripeSubscriptionId);
+        done.push(sub.stripeSubscriptionId);
+      } catch (err) {
+        failed.push(sub.stripeSubscriptionId);
+        firstError ??= err;
+      }
+    }
+    if (failed.length > 0) {
+      throw new SubscriptionCollectionError(
+        action,
+        done,
+        failed,
+        `could not ${action} ${String(failed.length)} of ${String(subs.length)} collecting subscription(s)`,
+        { cause: firstError },
+      );
+    }
+    return done;
   }
 }

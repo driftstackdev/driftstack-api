@@ -24,6 +24,10 @@ import {
 import { resolveApiBaseUrl } from '../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
 
+// Live-billing audit #14 — `price` / `priceCents` are the prices BUILT INTO the
+// page: the seeded prices the server itself falls back to. Once signed in, the
+// page reads each tier's effective price from the same source the crypto charge
+// uses and shows that instead; the built-in price stays whenever that read fails.
 const TIERS: {
   id: AccountTier;
   label: string;
@@ -158,7 +162,7 @@ function aiLabel(tier: AccountTier): string {
               </div>
             </div>
             <h3 class="mt-2 text-lg font-semibold text-tk-ink">{t.label}</h3>
-            <p class="mt-1 text-2xl font-semibold text-tk-ink">{t.price}</p>
+            <p class="mt-1 text-2xl font-semibold text-tk-ink" data-tier-price={t.id}>{t.price}</p>
             <dl class="mt-4 space-y-1 text-sm text-tk-ink-2">
               <div class="flex justify-between">
                 <dt>Sessions at once</dt>
@@ -1400,6 +1404,53 @@ function aiLabel(tier: AccountTier): string {
         });
       }
 
+      // Live-billing audit #14 — show the price the server charges. The crypto
+      // charge follows the price table the owner can edit (listEffective), and the
+      // crypto-checkout quote reads that same table, one tier per request. Each card
+      // takes its tier's answer only when it is a well-formed USD price FOR THAT
+      // tier; a failed or odd answer leaves the price built into the page, which is
+      // the seeded price the server itself falls back to. The crypto button carries
+      // the same amount, so what it sends matches what is shown.
+      function formatMonthlyPrice(cents) {
+        const whole = cents % 100 === 0;
+        return (
+          '$' +
+          (cents / 100).toLocaleString('en-US', {
+            minimumFractionDigits: whole ? 0 : 2,
+            maximumFractionDigits: 2,
+          }) +
+          '/mo'
+        );
+      }
+
+      function loadEffectivePrices() {
+        cryptoLinksByTier.forEach((cryptoBtn, tier) => {
+          authedFetch('/v1/billing/crypto-checkout/quote', {
+            method: 'POST',
+            body: JSON.stringify({ product: tier }),
+          })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((body) => {
+              if (
+                !body ||
+                typeof body !== 'object' ||
+                body.product !== tier ||
+                body.price_currency !== 'USD' ||
+                !Number.isInteger(body.price_cents) ||
+                body.price_cents <= 0
+              ) {
+                return;
+              }
+              const priceEl = root.querySelector('[data-tier-price="' + tier + '"]');
+              if (priceEl) priceEl.textContent = formatMonthlyPrice(body.price_cents);
+              cryptoBtn.setAttribute('data-tier-price-cents', String(body.price_cents));
+            })
+            .catch(() => {
+              // The card keeps the price built into the page.
+            });
+        });
+      }
+
       // Finding #1 — load the account's live billing state so an
       // already-subscribed customer sees "Switch to this plan" /
       // portal-routed CTAs instead of fresh "Start <tier>" Checkout
@@ -1426,6 +1477,8 @@ function aiLabel(tier: AccountTier): string {
         }
         return;
       }
+
+      loadEffectivePrices();
 
       const selfAccountPromise = authedFetch('/v1/account/me', { method: 'GET' }).then(
         async (response) => {

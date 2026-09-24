@@ -176,6 +176,11 @@ const ROSTER: Readonly<Record<string, readonly string[]>> = {
   // S13–S16 re-audit #3 — the old settings PATCH, the same form and the same
   // 400 as the ai-settings PATCH above.
   'PATCH /v1/account/me/bundled-llm-settings': ['self-only refusal'],
+  // Live-billing audit #5 — the Stripe portal opens only the caller's own Stripe
+  // customer, so a header naming another workspace is refused (400), the same
+  // refusal crypto checkout makes. (Its GET twin, /v1/account/me/billing-portal,
+  // refuses the same way and is not a write.)
+  'POST /v1/billing/portal-session': ['self-only refusal'],
 };
 
 /**

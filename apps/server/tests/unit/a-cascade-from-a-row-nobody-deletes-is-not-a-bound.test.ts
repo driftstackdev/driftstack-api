@@ -69,6 +69,20 @@ const DELETED_VIA_DISPATCHER = new Set([
 ]);
 
 /**
+ * Tables with a delete in src/db that is NOT a removal path for the table: it
+ * removes one row the same request has just written, so the table still keeps a
+ * row per event. The detector counts any delete as a way out, which would read
+ * such a table as swept. Resolved by hand, like DELETED_VIA_DISPATCHER, and the
+ * arm "every not-retention delete is still a real delete" fails if one goes.
+ */
+const DELETE_IS_NOT_RETENTION = new Map<string, string>([
+  [
+    'billingEmailSends',
+    'account-lifecycle-repo.ts releaseBillingEmailClaim — gives back the send-once claim of a billing email that was NOT sent, so the Stripe redelivery can send it (live-billing audit #8). Every email that went out keeps its row',
+  ],
+]);
+
+/**
  * Every table whose only removal path is a cascade from a parent that is itself
  * never row-deleted, and what actually bounds it.
  *
@@ -296,7 +310,11 @@ function cascadeOnly(): string[] {
   const { direct } = parseDeletes(tables);
   const out: string[] = [];
   for (const [name, { sql, cascadeParents }] of tables) {
-    if (direct.has(name) || DELETED_VIA_DISPATCHER.has(name)) continue;
+    if (
+      (direct.has(name) && !DELETE_IS_NOT_RETENTION.has(name)) ||
+      DELETED_VIA_DISPATCHER.has(name)
+    )
+      continue;
     if (cascadeParents.length === 0) continue;
     // A cascade whose parent IS deleted really does fire.
     if (cascadeParents.some((p) => direct.has(p))) continue;
@@ -349,6 +367,12 @@ describe('a cascade from a row nobody deletes is not a retention policy', () => 
         `${t} is exempted as dispatcher-deleted but the repo no longer names it`,
       ).toMatch(new RegExp(`\\b${t}\\b`));
     }
+  });
+
+  it('CRITICAL every not-retention delete is still a real delete. An entry here keeps a table on the roster although the detector found a delete for it; once that delete is gone the entry is only an exemption nobody re-reads.', () => {
+    const { direct } = parseDeletes(tables);
+    const gone = [...DELETE_IS_NOT_RETENTION.keys()].filter((t) => !direct.has(t)).sort();
+    expect(gone, 'recorded not-retention delete(s) that no longer exist:').toEqual([]);
   });
 
   it('CRITICAL no table relies on a cascade that cannot fire without that being recorded. Add it here with what bounds it in practice. If the honest answer is "nothing — it appends a row per event", say PER-EVENT, because that is a table that is fine in staging and is a disk-full page at scale.', () => {

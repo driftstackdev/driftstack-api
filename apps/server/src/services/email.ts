@@ -63,6 +63,7 @@ import type { Database } from '../db/client.js';
 import { accounts } from '../db/schema.js';
 import { METRIC_NAMES, type MetricsRegistry } from './metrics-registry.js';
 import { maskEmail } from '../lib/redact-url.js';
+import { RetryableDeliveryError } from '../lib/transient-error.js';
 
 export interface EmailService {
   /**
@@ -85,6 +86,12 @@ export interface EmailService {
     period: string;
     invoiceUrl: string;
   }): Promise<void>;
+  // ⛔ The three billing sends (receipt, failure notice, renewal reminder) REJECT
+  // with a RetryableDeliveryError when the send failed for a reason that can pass
+  // — the connection, Postmark unavailable (5xx) or rate-limiting (429) — so the
+  // caller can release its send-once claim and have Stripe redeliver the event
+  // (live-billing audit #8). Every other failure is swallowed, as for every
+  // other template.
   /** S44 2026-07-07 (founder-approved) — payment-failure notice.
    *  Fires on Stripe `invoice.payment_failed`; NEVER opt-outable
    *  (deliberately absent from OptOutableEmailEventSchema). `retryAt`
@@ -627,6 +634,38 @@ const SECURITY_CRITICAL_TEMPLATES = new Set<TemplateName>([
  */
 const TRANSIENT_RETRY_CATEGORIES = new Set<EmailErrorCategory>(['rate-limited', 'transport']);
 
+/**
+ * Live-billing audit #8 — the billing templates sent ONCE per Stripe event, behind a
+ * send-once claim. Tried once, like every non-security template; but when that one
+ * attempt fails for a reason that can pass, the send REJECTS (RetryableDeliveryError)
+ * instead of swallowing, so the lifecycle releases the claim and the Stripe webhook
+ * fails the delivery for Stripe to redeliver. Swallowed, a single Postmark blip lost
+ * the payment-failure notice, the receipt or the reminder for good: the claim stayed,
+ * and the event was already recorded as processed.
+ */
+const BILLING_REDELIVERABLE_TEMPLATES = new Set<TemplateName>([
+  'billing-receipt',
+  'billing-failure',
+  'billing-renewal-reminder',
+]);
+
+/**
+ * A billing send failure that can pass: the transient categories above, Postmark
+ * answering 429 or 5xx (its client reports those as `statusCode`, with no category
+ * the classifier knows), or no HTTP answer at all (`statusCode` 0 — the client's
+ * shape for a request that never got a response). A 4xx refusal — an inactive
+ * recipient, a pending or inactive Postmark account, a bad key — is not: Stripe
+ * would redeliver for three days into the same refusal.
+ */
+function billingSendFailureCanPass(err: unknown): boolean {
+  if (TRANSIENT_RETRY_CATEGORIES.has(classifyEmailError(err).category)) return true;
+  const status =
+    err !== null && typeof err === 'object'
+      ? (err as { statusCode?: unknown }).statusCode
+      : undefined;
+  return typeof status === 'number' && (status === 0 || status === 429 || status >= 500);
+}
+
 /** Backoff delay (ms) BEFORE attempt 2 and attempt 3 respectively — 3
  *  attempts total (1 initial + 2 retries), security-critical templates
  *  + transient categories only. */
@@ -950,6 +989,16 @@ export function createEmailService({
 
     if (securityCritical) {
       await reportSecurityCriticalFailure({ name, to, category, postmarkCode, err });
+    }
+    // …except a once-per-event billing email whose failure can pass: its caller
+    // holds a send-once claim that must be released for a retry to send it.
+    if (BILLING_REDELIVERABLE_TEMPLATES.has(name) && billingSendFailureCanPass(err)) {
+      throw new RetryableDeliveryError(
+        `${name} email was not sent (${category}); it can be sent again`,
+        {
+          cause: err,
+        },
+      );
     }
   }
 

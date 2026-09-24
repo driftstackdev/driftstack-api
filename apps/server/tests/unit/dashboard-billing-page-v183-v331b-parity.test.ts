@@ -165,9 +165,12 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
   it('CRITICAL subscription card cancel-button visibility — cancel_at_period_end hides the cancel button. Drift to always-show would let customers click cancel on already-canceling subs (no-op churn).', () => {
     const p = read(PAGE);
 
+    // Live-billing audit #7 — and only a subscription that renews (active / trialing)
+    // offers it at all; a canceled or past_due one never does.
     expect(p).toMatch(
-      /if \(cancelBtn\) \{\s*\n\s+if \(sub\.cancel_at_period_end\) cancelBtn\.classList\.add\('hidden'\);\s*\n\s+else cancelBtn\.classList\.remove\('hidden'\);/,
+      /if \(status === 'active' \|\| status === 'trialing'\) \{[\s\S]*?cancelOffered = !sub\.cancel_at_period_end;/,
     );
+    expect(p).toMatch(/if \(cancelBtn\) cancelBtn\.classList\.toggle\('hidden', !cancelOffered\);/);
   });
 
   it('CRITICAL subscription summary copy pinned — "Renews <date> · <set to cancel at period end | auto-renews>". The discriminated subscription-status framing tells customers exactly what happens at period end.', () => {
@@ -193,9 +196,9 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
     expect(p).not.toMatch(/\{status\.replace\(\/_\/g, ' '\)\}/);
 
     // Inline-script version.
-    expect(p).toMatch(
-      /setStatusBadge\(\(sub\.status \|\| ''\)\.replace\(\/_\/g, ' '\), sub\.status\);/,
-    );
+    // Live-billing audit #7 — renderSubscription reads the status once, as `status`.
+    expect(p).toMatch(/const status = typeof sub\.status === 'string' \? sub\.status : '';/);
+    expect(p).toMatch(/setStatusBadge\(status\.replace\(\/_\/g, ' '\), status\);/);
     expect(p).toMatch(/setStatusBadge\('no subscription', 'no_subscription'\);/);
   });
 

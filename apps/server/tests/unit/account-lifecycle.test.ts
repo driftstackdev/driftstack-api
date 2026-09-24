@@ -73,6 +73,15 @@ class TestRepo implements AccountLifecycleRepo {
     this.billingClaims.add(key);
     return Promise.resolve(true);
   }
+
+  // Live-billing audit #8 — mirrors the Drizzle DELETE on (stripe_event_id, kind).
+  releaseBillingEmailClaim(args: {
+    stripeEventId: string;
+    kind: 'billing-receipt' | 'billing-failure' | 'billing-renewal-reminder';
+  }): Promise<void> {
+    this.billingClaims.delete(`${args.stripeEventId}:${args.kind}`);
+    return Promise.resolve();
+  }
 }
 
 function build(opts: { firstFailureSent?: Date | null; shouldSend?: boolean } = {}): TestDeps {

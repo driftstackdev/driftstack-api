@@ -8,6 +8,7 @@ import {
   tierActivationRank,
 } from '../../../src/services/crypto-tier-activation.js';
 import { ACTIVE_SUBSCRIPTION_STATUSES } from '../../../src/db/subscription-status-sets.js';
+import { SAME_SECOND_STATUS_ORDER } from '../../../src/db/stripe-webhooks-repo.js';
 import {
   completeInvoicePayment,
   type InvoicePaymentOutcome,
@@ -69,6 +70,15 @@ interface CryptoEntitlementRow {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Mirrors the Drizzle `GREATEST(now(), at)` (live-billing audit #9): a crypto
+ * term floors the tier only while it is unexpired when the recompute RUNS, never
+ * judged at an earlier Stripe event time.
+ */
+function termRunningAt(at: Date): number {
+  return Math.max(Date.now(), at.getTime());
+}
 
 // V-1263 — the billed-status set is READ from the shared module, not restated. Both call sites
 // below used to spell out `s.status === 'active' || s.status === 'trialing'`, which is the same
@@ -225,14 +235,19 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
       (s) => s.stripeSubscriptionId === args.stripeSubscriptionId,
     );
     if (existing) {
-      // Event-recency guard mirror (matches the Drizzle setWhere
-      // `updated_at <= excluded.updated_at`): on conflict, skip only when
-      // the incoming event is STRICTLY OLDER than the stored row, so an
-      // out-of-order / retried-old event is rejected instead of reverting
-      // the mirror. Equal-time events still apply (`<=` apply ⇒ skip iff
-      // strictly older) — event.created is second-granularity so two
-      // distinct ordered events can share a second.
-      if (args.at.getTime() < existing.updatedAt.getTime()) {
+      // Event-recency guard mirror (matches the Drizzle setWhere): on
+      // conflict, a STRICTLY NEWER event applies; a strictly older one is
+      // rejected; at the SAME second the event applies only when its status is
+      // no earlier in SAME_SECOND_STATUS_ORDER than the stored one, so a
+      // reordered Checkout burst cannot rewind `active` to `incomplete` and
+      // nothing replaces `canceled` (live-billing audit #2).
+      const dt = args.at.getTime() - existing.updatedAt.getTime();
+      if (dt < 0) return Promise.resolve({ applied: false });
+      if (
+        dt === 0 &&
+        SAME_SECOND_STATUS_ORDER.indexOf(args.status) <
+          SAME_SECOND_STATUS_ORDER.indexOf(existing.status)
+      ) {
         return Promise.resolve({ applied: false });
       }
       this.subs.set(existing.id, {
@@ -407,10 +422,12 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
           y.updatedAt.getTime() - x.updatedAt.getTime() || (y.id > x.id ? 1 : y.id < x.id ? -1 : 0),
       );
     // C1 — floor against the highest-ranked UNEXPIRED crypto entitlement (mirrors
-    // the Drizzle gt(expiresAt, at) union). No rows → byte-identical to before.
+    // the Drizzle union, judged when this runs: see termRunningAt). No rows →
+    // byte-identical to before.
     let appliedTier = remaining[0]?.tier ?? args.fallbackTier;
+    const runningAt = termRunningAt(args.at);
     for (const e of this.entitlements.values()) {
-      if (e.accountId !== args.accountId || e.expiresAt.getTime() <= args.at.getTime()) continue;
+      if (e.accountId !== args.accountId || e.expiresAt.getTime() <= runningAt) continue;
       if (tierActivationRank(e.tier) > tierActivationRank(appliedTier)) appliedTier = e.tier;
     }
     this.writeTier(a, appliedTier);
@@ -439,8 +456,9 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     }
     // C1 — also rank in UNEXPIRED crypto entitlements (mirrors the Drizzle union),
     // so a LOWER active/trialing upsert never wipes a higher crypto-paid tier.
+    const runningAt = termRunningAt(args.at);
     for (const e of this.entitlements.values()) {
-      if (e.accountId !== args.accountId || e.expiresAt.getTime() <= args.at.getTime()) continue;
+      if (e.accountId !== args.accountId || e.expiresAt.getTime() <= runningAt) continue;
       if (appliedTier === null || tierActivationRank(e.tier) > tierActivationRank(appliedTier)) {
         appliedTier = e.tier;
       }

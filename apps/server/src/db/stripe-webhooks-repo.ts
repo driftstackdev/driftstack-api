@@ -2,7 +2,7 @@
 // ledger + subscription mirror writes + account tier / trial-pack
 // mutations triggered by inbound Stripe events.
 
-import { and, desc, eq, gt, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import type { AccountTier } from '@driftstack/api-types';
 import type { StripeWebhooksRepo } from '../services/stripe-webhooks.js';
 import { isCryptoTierUpgrade, tierActivationRank } from '../services/crypto-tier-activation.js';
@@ -29,6 +29,39 @@ import {
   type BillingInvoicePaymentRow,
 } from './schema.js';
 import { ACTIVE_SUBSCRIPTION_STATUSES } from './subscription-status-sets.js';
+
+/**
+ * Live-billing audit #2 — the order in which a subscription's statuses follow one
+ * another, used ONLY to settle two events of one subscription stamped with the
+ * SAME second. Stripe's `created` is whole seconds and Stripe does not deliver in
+ * order, so "last processed wins" let Checkout's `created(incomplete)`, processed
+ * after its same-second `updated(active)`, put a paying subscription back to
+ * incomplete — reopening checkout (a second subscription, double billing) — and
+ * let a same-second `updated(active)` processed after `deleted` bring a canceled
+ * subscription and its tier back.
+ *
+ * At an equal second the LATER status here wins; `canceled` is last, so nothing
+ * replaces it. An equal status still applies, so a redelivered event repeats its
+ * own tier step. A strictly newer event wins whatever its status, as before.
+ *
+ * ⛔ `storedStatusRankSql` below spells this order out in SQL. The two must agree; the
+ * arm "every same-second pair is settled the same way" in
+ * a-same-second-subscription-event-cannot-reopen-checkout-or-revive-a-canceled-plan
+ * drives all 64 pairs through Postgres and through this list.
+ */
+export const SAME_SECOND_STATUS_ORDER = [
+  'incomplete',
+  'incomplete_expired',
+  'trialing',
+  'active',
+  'past_due',
+  'unpaid',
+  'paused',
+  'canceled',
+] as const;
+
+/** The STORED row's position in SAME_SECOND_STATUS_ORDER (0 = incomplete … 7 = canceled). */
+const storedStatusRankSql = sql`(CASE ${subscriptions.status} WHEN 'incomplete' THEN 0 WHEN 'incomplete_expired' THEN 1 WHEN 'trialing' THEN 2 WHEN 'active' THEN 3 WHEN 'past_due' THEN 4 WHEN 'unpaid' THEN 5 WHEN 'paused' THEN 6 WHEN 'canceled' THEN 7 END)`;
 
 export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
   constructor(private readonly database: Database) {}
@@ -137,19 +170,19 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
     // canonical ordering signal — Stripe does not guarantee delivery order
     // and re-delivers failed events for up to 3 days, so a stale / out-of-
     // order event must not overwrite a fresher mirror row. On INSERT (no
-    // conflict) the row always applies. On CONFLICT we skip the UPDATE only
-    // when the incoming event is STRICTLY OLDER than the stored row, i.e.
-    // we apply when `stored.updated_at <= excluded.updated_at` (setWhere).
-    // `<=` (not `<`) is deliberate: event.created is second-granularity, so
-    // two genuinely-distinct ordered events (e.g. a created immediately
-    // followed by an updated) can share a second — equal-time events must
-    // still apply (last-processed-wins, matching the prior behaviour, the
-    // best we can do without sub-second ordering). Only a strictly-older
-    // event is rejected. A skipped UPDATE matches the conflict target but
-    // fails the WHERE, so Postgres writes nothing and `.returning()` yields
-    // no row: `applied = result.length > 0` distinguishes "wrote (fresh
-    // insert or newer/equal update)" from "skipped (stale event)". Callers
-    // gate the tier mutation on it.
+    // conflict) the row always applies. On CONFLICT the UPDATE applies when
+    // the incoming event is STRICTLY NEWER than the stored row, and when it
+    // carries the SAME second and a status no earlier in
+    // SAME_SECOND_STATUS_ORDER than the stored one (live-billing audit #2 —
+    // event.created is whole seconds, so two distinct events can share one,
+    // and "last processed wins" let a reordered Checkout burst or a late
+    // update after a cancel rewind the subscription). A strictly-older event,
+    // or a same-second one that would move the lifecycle backwards, is
+    // rejected. A skipped UPDATE matches the conflict target but fails the
+    // WHERE, so Postgres writes nothing and `.returning()` yields no row:
+    // `applied = result.length > 0` distinguishes "wrote" from "skipped".
+    // Callers gate the tier mutation on it.
+    const incomingStatusRank = SAME_SECOND_STATUS_ORDER.indexOf(args.status);
     const result = await this.database.db
       .insert(subscriptions)
       .values({
@@ -170,7 +203,7 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
       })
       .onConflictDoUpdate({
         target: subscriptions.stripeSubscriptionId,
-        setWhere: sql`${subscriptions.updatedAt} <= excluded.updated_at`,
+        setWhere: sql`${subscriptions.updatedAt} < excluded.updated_at OR (${subscriptions.updatedAt} = excluded.updated_at AND ${storedStatusRankSql} <= ${incomingStatusRank})`,
         set: {
           accountId: args.accountId,
           stripePriceId: args.stripePriceId,
@@ -404,14 +437,15 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
       // C1 — floor against the highest-ranked UNEXPIRED crypto entitlement, so a
       // Stripe cancel/past_due never wipes a still-valid crypto-paid tier. With
       // no entitlement rows this loop is a no-op and appliedTier === the Stripe
-      // candidate (byte-identical to the prior behaviour).
+      // candidate (byte-identical to the prior behaviour). "Unexpired" is judged
+      // when this runs, never at an earlier event time — see cryptoTermRunningAt.
       const entRows = await tx
         .select({ tier: cryptoEntitlements.tier })
         .from(cryptoEntitlements)
         .where(
           and(
             eq(cryptoEntitlements.accountId, args.accountId),
-            gt(cryptoEntitlements.expiresAt, args.at),
+            gt(cryptoEntitlements.expiresAt, cryptoTermRunningAt(args.at)),
           ),
         );
       let appliedTier = stripeCandidate;
@@ -472,13 +506,14 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
       // C1 — also rank in the account's UNEXPIRED crypto entitlements, so an
       // active/trialing upsert on a LOWER Stripe sub never wipes a higher
       // crypto-paid tier. No rows → the loop is a no-op (identical to before).
+      // "Unexpired" is judged when this runs — see cryptoTermRunningAt.
       const entRows = await tx
         .select({ tier: cryptoEntitlements.tier })
         .from(cryptoEntitlements)
         .where(
           and(
             eq(cryptoEntitlements.accountId, args.accountId),
-            gt(cryptoEntitlements.expiresAt, args.at),
+            gt(cryptoEntitlements.expiresAt, cryptoTermRunningAt(args.at)),
           ),
         );
       for (const r of entRows) {
@@ -653,6 +688,27 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
       .set({ expiredProcessedAt: args.at, updatedAt: args.at })
       .where(inArray(cryptoEntitlements.id, args.ids));
   }
+}
+
+/**
+ * Live-billing audit #9 — the instant a crypto term must still be running at to
+ * floor the tier: the LATER of the database's now() and the caller's `at`.
+ *
+ * Both recomputes used to judge a term at `at` alone, and a Stripe handler passes
+ * its EVENT time there. Stripe retries a failed delivery for three days, so an
+ * event created before a term ended could arrive after the expiry sweep had
+ * taken that term's tier away — and the recompute saw the term as live and gave
+ * the tier back. The sweep had already marked the term processed, so nothing
+ * ever took it away again. A term now floors only while it is unexpired at the
+ * moment the recompute runs.
+ *
+ * `at` still counts when it is LATER than now(): the sweep and the refund
+ * reconcile pass their own processing clock, and a term they have just ended
+ * (a refund brings `expires_at` forward to `at`) must not count as running
+ * because the database clock is a moment behind theirs.
+ */
+function cryptoTermRunningAt(at: Date): SQL {
+  return sql`GREATEST(now(), ${at.toISOString()}::timestamptz)`;
 }
 
 /**

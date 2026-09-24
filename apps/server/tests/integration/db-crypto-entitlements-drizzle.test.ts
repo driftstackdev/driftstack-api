@@ -174,7 +174,10 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       if (!dbReachable || !client) return;
       const repo = makeRepo();
       const accountId = await seedAccount('free');
-      const paidAt = new Date('2026-07-01T00:00:00.000Z');
+      // Live-billing audit #9 — a term floors the tier only while it is unexpired when the
+      // recompute RUNS (the later of the database clock and `at`), so the payment is placed
+      // relative to the real clock: ten days ago, ending in twenty-one.
+      const paidAt = new Date(Date.now() - 10 * DAY_MS);
       await repo.activateCryptoEntitlement({
         accountId,
         orderId: `ord-${randomUUID()}`,

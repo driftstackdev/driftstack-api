@@ -158,7 +158,35 @@ describe('customer-dashboard Billing (billing.astro) behaviour', () => {
     ).toBe(true);
   });
 
+  // Live-billing audit #7 — this arm used a `past_due` subscription and asserted
+  // that it read "Renews … · auto-renews" with the cancel button shown: the defect.
+  // An active subscription is what its title describes; past_due now says the
+  // payment did not go through (the-billing-page-says-what-each-subscription-
+  // status-means), and its badge still reads "past due".
   it('active auto-renewing subscription: renders tier label, renew summary, status badge, cancel button shown', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      route: () =>
+        json({
+          subscription: {
+            tier: 'api_builder',
+            status: 'active',
+            current_period_end: '2026-06-30T00:00:00.000Z',
+            cancel_at_period_end: false,
+          },
+        }),
+    });
+    win = window;
+    await flush();
+    expect(text(window, '[data-field="sub-tier"]')).toBe(TIER_DISPLAY_NAMES['api_builder']);
+    expect(text(window, '[data-field="sub-summary"]')).toContain('Renews 2026-06-30');
+    expect(text(window, '[data-field="sub-summary"]')).toContain('auto-renews');
+    expect(text(window, '[data-field="sub-status-badge"]')).toBe('active');
+    expect(text(window, '[data-field="plan-cta"]')).toBe('Change plan');
+    expect(isHidden(window, '[data-action="cancel"]')).toBe(false);
+  });
+
+  it('the status badge replaces underscores with spaces (a past_due subscription reads "past due")', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: () =>
@@ -173,13 +201,7 @@ describe('customer-dashboard Billing (billing.astro) behaviour', () => {
     });
     win = window;
     await flush();
-    expect(text(window, '[data-field="sub-tier"]')).toBe(TIER_DISPLAY_NAMES['api_builder']);
-    expect(text(window, '[data-field="sub-summary"]')).toContain('Renews 2026-06-30');
-    expect(text(window, '[data-field="sub-summary"]')).toContain('auto-renews');
-    // Status badge replaces underscores with spaces.
     expect(text(window, '[data-field="sub-status-badge"]')).toBe('past due');
-    expect(text(window, '[data-field="plan-cta"]')).toBe('Change plan');
-    expect(isHidden(window, '[data-action="cancel"]')).toBe(false);
   });
 
   it('subscription set to cancel: summary says so and the cancel button is hidden', async () => {

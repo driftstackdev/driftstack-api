@@ -1,13 +1,14 @@
 // Drizzle-backed BillingRepo (V-082).
 
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import type {
   BillingAccountSnapshot,
   BillingRepo,
+  RunningCryptoTerm,
   SubscriptionMirror,
 } from '../services/billing.js';
 import type { Database } from './client.js';
-import { accounts, subscriptions } from './schema.js';
+import { accounts, cryptoEntitlements, subscriptions } from './schema.js';
 import {
   ACTIVE_SUBSCRIPTION_STATUSES,
   COLLECTING_SUBSCRIPTION_STATUSES,
@@ -118,6 +119,44 @@ export class DrizzleBillingRepo implements BillingRepo {
       .orderBy(desc(subscriptions.createdAt), desc(subscriptions.id))
       .limit(1);
     return row ? toSubscription(row) : null;
+  }
+
+  /**
+   * Live-billing audit #4 — EVERY collecting subscription of the account, newest first (the
+   * same order as findCollectingSubscription, whose first row this set's first row is).
+   * Pause, resume and a termination's cancel must reach each one: an account can hold two,
+   * because re-checkout is allowed while a subscription is past_due.
+   */
+  async findCollectingSubscriptions(accountId: string): Promise<SubscriptionMirror[]> {
+    const rows = await this.database.db
+      .select()
+      .from(subscriptions)
+      .where(
+        and(
+          eq(subscriptions.accountId, accountId),
+          inArray(subscriptions.status, [...COLLECTING_SUBSCRIPTION_STATUSES]),
+        ),
+      )
+      .orderBy(desc(subscriptions.createdAt), desc(subscriptions.id));
+    return rows.map(toSubscription);
+  }
+
+  /**
+   * Live-billing audit #6 — the account's paid crypto terms that have not ended, latest
+   * ending first. "Not ended" is judged against the database clock, as the tier recomputes
+   * judge it (stripe-webhooks-repo.ts, cryptoTermRunningAt).
+   */
+  async findRunningCryptoTerms(accountId: string): Promise<RunningCryptoTerm[]> {
+    return this.database.db
+      .select({ tier: cryptoEntitlements.tier, expiresAt: cryptoEntitlements.expiresAt })
+      .from(cryptoEntitlements)
+      .where(
+        and(
+          eq(cryptoEntitlements.accountId, accountId),
+          gt(cryptoEntitlements.expiresAt, sql`now()`),
+        ),
+      )
+      .orderBy(desc(cryptoEntitlements.expiresAt), desc(cryptoEntitlements.id));
   }
 
   async findCurrentSubscription(accountId: string): Promise<SubscriptionMirror | null> {

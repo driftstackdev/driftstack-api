@@ -64,9 +64,9 @@ const READER = 'lib/effective-account-header.ts';
 /**
  * Files that name the header for a reason other than reading it.
  *
- * MEASURED at 4. Each is a distinct deliberate decision, described in the header
- * above (three) or beside its own entry (the fourth); a fifth arriving without
- * explanation is what this guard is for.
+ * MEASURED at 5. Each is a distinct deliberate decision, described in the header
+ * above (three) or beside its own entry (the fourth and fifth); a sixth arriving
+ * without explanation is what this guard is for.
  *
  * S14 — `routes/account-ai.ts` names the header in two message strings only:
  * a diagnostic Error (`'X-Driftstack-Account named a membership whose owner
@@ -79,12 +79,19 @@ const READER = 'lib/effective-account-header.ts';
  * into `resolveEffectiveAccount`, the same shared resolver `routes/billing.ts`
  * uses (see `effective-account-header-shared-parser.test.ts`'s CONSUMER_ROUTES)
  * — so these are prose in string literals, not a second reader.
+ *
+ * Live-billing audit #5 — `routes/billing.ts` names the header in one message
+ * string: the Stripe portal routes' Self-workspace refusal ("… Remove
+ * X-Driftstack-Account and retry."), the same wording crypto checkout refuses
+ * with. Both portal routes resolve through `readEffectiveAccountHeader(req)`
+ * passed straight into `resolveEffectiveAccount`, as GET /v1/billing already did.
  */
 const NON_READING_USES = new Set([
   'lib/app.ts',
   'lib/openapi.ts',
   'routes/billing-crypto.ts',
   'routes/account-ai.ts',
+  'routes/billing.ts',
 ]);
 
 const HEADER = 'x-driftstack-account';

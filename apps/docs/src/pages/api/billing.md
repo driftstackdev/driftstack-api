@@ -120,8 +120,11 @@ honors the team-RBAC `X-Driftstack-Account` header, so a team
 member acting as the owner reads the OWNER's subscription state
 (tier, status, period end) — the same act-as behavior as
 `GET /v1/usage`. The mutation endpoints (checkout-session,
-portal-session, billing-portal) do NOT honor the header — only the
-owner manages the owner's billing.
+portal-session, billing-portal) act only on the calling account: the
+Stripe portal endpoints refuse a request whose `X-Driftstack-Account`
+names another account with `400`, so a member acting as the owner is
+never sent to their own payment details by mistake. Only the owner
+manages the owner's billing.
 
 Reading billing state (`GET /v1/billing`) requires the
 `read:billing` scope — a broad `read` or `account_owner` key

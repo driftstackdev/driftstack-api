@@ -15,8 +15,11 @@ import type { AccountTier } from '@driftstack/api-types';
 import type { AccountContext } from './auth.js';
 import type { AccountRow } from './auth.js';
 import type { AuthCache } from './auth-cache.js';
+import type { LiveBilling } from './billing.js';
 import { refreshCreditsAfter, type CreditsRefresher } from './credit-grants.js';
+import { ConflictError } from '../lib/errors.js';
 import { NotFoundError, requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
+import type { SentryClient } from '../lib/sentry.js';
 
 export interface ListAccountsArgs {
   /** Cursor is the prior page's last `id` (created_at desc + id desc tie-break). */
@@ -100,7 +103,32 @@ export interface SuspendSessionReclaimer {
 export interface BillingCollectionPauser {
   pauseCollectionForAccount(accountId: string): Promise<'paused' | 'no_subscription'>;
   resumeCollectionForAccount(accountId: string): Promise<'resumed' | 'no_subscription'>;
+  /**
+   * Live-billing audit #1 — cancel every subscription still collecting, at once and
+   * prorated, for an account being TERMINATED. Resolves with the Stripe subscription ids
+   * cancelled (empty when nothing was collecting); rejects when any was not, carrying
+   * `done` / `failed` id lists when it knows them (BillingService's
+   * SubscriptionCollectionError).
+   *
+   * Optional only so a pauser built before this existed still compiles. A pauser WITHOUT
+   * it makes every termination record `billing_cancel` as failed and alert staff — a
+   * subscription that may still be charging is never skipped in silence.
+   */
+  cancelCollectionForAccount?(accountId: string): Promise<{ cancelled: string[] }>;
+  /**
+   * Live-billing audit #6 — what the account is still paying for. When present, an admin
+   * tier change is refused while a Stripe subscription is collecting or a crypto term has
+   * not ended. Absent ⇒ a tier change behaves exactly as before.
+   */
+  liveBillingForAccount?(accountId: string): Promise<LiveBilling>;
 }
+
+/**
+ * Where the termination alerts go (live-billing audit #1): Sentry's message capture.
+ * Every alert sent through it names NO account, customer or subscription — the server
+ * log line beside it does, for the person who follows it up.
+ */
+export type BillingAlerts = Pick<SentryClient, 'captureMessage'>;
 
 /**
  * GDPR Article 17 — minimal auth-flows-service surface the delete-
@@ -147,6 +175,7 @@ export class AccountsAdminService {
      */
     private readonly logger: {
       error?: (obj: Record<string, unknown>, msg: string) => void;
+      warn?: (obj: Record<string, unknown>, msg: string) => void;
     } | null = null,
     /**
      * V-758 — optional so every existing construction site and test double keeps working;
@@ -160,6 +189,12 @@ export class AccountsAdminService {
      * switched off, and then a tier change does exactly what it did.
      */
     private readonly credits: CreditsRefresher | null = null,
+    /**
+     * Live-billing audit #1 — where a termination tells staff that a subscription was
+     * cancelled (so they can decide whether a refund is owed under the Terms, 14.5) or
+     * could NOT be cancelled (so they cancel it by hand). Null ⇒ the server log alone.
+     */
+    private readonly alerts: BillingAlerts | null = null,
   ) {}
 
   /**
@@ -256,6 +291,7 @@ export class AccountsAdminService {
     opts: SetAccountTierOptions = {},
   ): Promise<AccountRow> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
+    await this.refuseWhileStillPaying(accountId, newTier);
     const updated = await this.repo.setTier(accountId, newTier, new Date(), {
       ...opts,
       setByKeyId: opts.setByKeyId ?? ctx.apiKey.id,
@@ -272,6 +308,49 @@ export class AccountsAdminService {
       logger: this.logger,
     });
     return updated;
+  }
+
+  /**
+   * Live-billing audit #6 — a tier set here while the account still pays by card or by
+   * crypto does not last: the subscription's next event (a cancel-at-period-end update,
+   * its `deleted`) resets the tier from Stripe, and the crypto expiry sweep recomputes it
+   * when a term ends. So the change is refused, saying what to end first; Enterprise moves
+   * are made after cancelling.
+   *
+   * Naming the tier the account already holds is not a change — Stripe has nothing to
+   * undo — and is not refused (an Enterprise contract amendment re-sends the same tier).
+   * With no live-billing reader wired a tier change behaves exactly as before.
+   *
+   * Read before the write, not inside its transaction: a subscription created between the
+   * two is not seen. That window is a Checkout completing in the same instant as an admin
+   * action on the same account.
+   */
+  private async refuseWhileStillPaying(accountId: string, newTier: AccountTier): Promise<void> {
+    const billing = this.billing;
+    if (billing?.liveBillingForAccount === undefined) return;
+    const current = await this.repo.findById(accountId);
+    // An absent account is reported by setTier as a 404, exactly as before.
+    if (current === null || current.tier === newTier) return;
+    const live = await billing.liveBillingForAccount(accountId);
+    if (live.collectingSubscriptions.length > 0) {
+      const ids = live.collectingSubscriptions.map((s) => s.stripeSubscriptionId);
+      throw new ConflictError(
+        `Account "${accountId}" has a Stripe subscription that is still collecting (${ids.join(', ')}). ` +
+          'A tier set here would be undone by its next event. Cancel the subscription first, then change the tier.',
+        { resource: 'subscription', stripe_subscription_ids: ids },
+      );
+    }
+    if (live.cryptoTerms.length > 0) {
+      const endsAt = live.cryptoTerms[0]!.expiresAt.toISOString().slice(0, 10);
+      throw new ConflictError(
+        `Account "${accountId}" has a paid crypto term that runs until ${endsAt}. ` +
+          'A tier set here would be undone when that term is recomputed. Refund the crypto order first, or change the tier after the term ends.',
+        {
+          resource: 'crypto_entitlement',
+          expires_at: live.cryptoTerms[0]!.expiresAt.toISOString(),
+        },
+      );
+    }
   }
 
   async suspend(ctx: AccountContext, accountId: string): Promise<AccountRow> {
@@ -336,11 +415,20 @@ export class AccountsAdminService {
    * No distributed transaction: same best-effort consistency
    * guarantee as suspend(), just extended to more surfaces.
    *
-   * Order: sessions → web sessions → API keys → webhooks →
+   * Order: sessions → web sessions → API keys → webhooks → billing →
    * cache invalidation (last, so the cache is only dropped once the
    * full reclaim sweep has been attempted).
+   *
+   * `auditRecord` — the admin audit row's payload, when the route hands it in.
+   * The billing step writes into it which Stripe subscriptions it cancelled and
+   * which it could not, so the admin audit trail says what termination did to
+   * the customer's billing. The route writes the row AFTER this returns.
    */
-  async deleteAccount(ctx: AccountContext, accountId: string): Promise<AccountRow> {
+  async deleteAccount(
+    ctx: AccountContext,
+    accountId: string,
+    auditRecord?: Record<string, unknown>,
+  ): Promise<AccountRow> {
     throwIfMissingScope(ctx, 'driftstack_internal_admin');
     const now = new Date();
     const updated = await this.repo.setStatus(accountId, 'deleted', now);
@@ -379,9 +467,94 @@ export class AccountsAdminService {
     if (webhooks) {
       await this.reclaim('webhooks', accountId, () => webhooks.deleteAllForAccount(ctx, accountId));
     }
+    // Live-billing audit #1 — Stripe kept charging a terminated account every month,
+    // and the customer could no longer sign in to cancel. Same failure handling as
+    // suspend's pause: never fails the termination, never silent.
+    const billing = this.billing;
+    if (billing) {
+      await this.reclaim('billing_cancel', accountId, () =>
+        this.cancelBillingOnTermination(billing, accountId, auditRecord),
+      );
+    }
 
     await this.invalidateCache(accountId);
     return updated;
+  }
+
+  /**
+   * Cancel every subscription still collecting, at once and prorated — the unused part of
+   * the period becomes a credit on the Stripe customer; nothing is refunded automatically.
+   * Records what happened in the audit payload, logs it WITH the account, and alerts staff
+   * WITHOUT it: a cancellation so they can refund under the Terms (14.5) if one is owed, a
+   * failure so they cancel by hand. A failure is rethrown for `reclaim` to record as
+   * `account_reclaim_failed` / `billing_cancel`.
+   */
+  private async cancelBillingOnTermination(
+    billing: BillingCollectionPauser,
+    accountId: string,
+    auditRecord: Record<string, unknown> | undefined,
+  ): Promise<void> {
+    let cancelled: string[];
+    try {
+      if (billing.cancelCollectionForAccount === undefined) {
+        throw new Error(
+          'no subscription canceller is wired, so a subscription of this terminated account may still be charging',
+        );
+      }
+      ({ cancelled } = await billing.cancelCollectionForAccount(accountId));
+    } catch (err) {
+      const done = idsOf(err, 'done');
+      const failed = idsOf(err, 'failed');
+      if (auditRecord !== undefined) {
+        auditRecord.stripe_subscriptions_cancelled = done;
+        auditRecord.stripe_subscriptions_not_cancelled = failed.length > 0 ? failed : 'unknown';
+      }
+      this.alert({
+        message:
+          'Terminating an account could not cancel its Stripe subscription, so it may still be charging. ' +
+          'Cancel it in Stripe by hand and check whether a refund is owed under the Terms (14.5). ' +
+          'The account is named in the server log (account_reclaim_failed, step billing_cancel).',
+        level: 'error',
+        fingerprint: ['billing', 'terminated_account_subscription_not_cancelled'],
+        tags: { kind: 'terminated_account_subscription_not_cancelled' },
+        extra: { cancelled: done.length, not_cancelled: failed.length },
+      });
+      throw err;
+    }
+    if (auditRecord !== undefined) auditRecord.stripe_subscriptions_cancelled = cancelled;
+    if (cancelled.length === 0) return;
+    try {
+      this.logger?.warn?.(
+        {
+          component: 'admin-accounts',
+          event: 'terminated_account_subscription_cancelled',
+          account_id: accountId,
+          stripe_subscription_ids: cancelled,
+        },
+        'terminated account: Stripe subscription(s) cancelled at once, the unused period credited to the Stripe customer — check whether a refund is owed (Terms 14.5)',
+      );
+    } catch {
+      // Logging is best-effort and must not fail the admin action.
+    }
+    this.alert({
+      message:
+        "A terminated account's Stripe subscription was cancelled at once, and the unused part of its " +
+        'period was credited to the Stripe customer. Nothing was refunded: check whether a refund is owed ' +
+        'under the Terms (14.5). The account is named in the server log ' +
+        '(terminated_account_subscription_cancelled).',
+      level: 'warning',
+      fingerprint: ['billing', 'terminated_account_subscription_cancelled'],
+      tags: { kind: 'terminated_account_subscription_cancelled' },
+      extra: { cancelled: cancelled.length },
+    });
+  }
+
+  private alert(message: Parameters<BillingAlerts['captureMessage']>[0]): void {
+    try {
+      this.alerts?.captureMessage(message);
+    } catch {
+      // Fire-and-forget, like every Sentry call: the termination stands regardless.
+    }
   }
 
   private async invalidateCache(accountId: string): Promise<void> {
@@ -394,4 +567,11 @@ export class AccountsAdminService {
       // will TTL out the stale entry within 30s in the worst case.
     }
   }
+}
+
+/** The subscription ids a SubscriptionCollectionError says were (not) reached; [] otherwise. */
+function idsOf(err: unknown, which: 'done' | 'failed'): string[] {
+  if (typeof err !== 'object' || err === null) return [];
+  const ids = (err as Record<string, unknown>)[which];
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [];
 }

@@ -5,6 +5,7 @@ import type {
   BillingAccountSnapshot,
   BillingProvider,
   BillingRepo,
+  RunningCryptoTerm,
   SubscriptionMirror,
 } from '../../../src/services/billing.js';
 import {
@@ -29,6 +30,12 @@ function newerThan(
 export class InMemoryBillingRepo implements BillingRepo {
   private readonly accounts = new Map<string, BillingAccountSnapshot>();
   private readonly subscriptions = new Map<string, SubscriptionMirror>();
+  private readonly cryptoTerms: Array<RunningCryptoTerm & { accountId: string }> = [];
+
+  /** Test seam: record a paid crypto term (a crypto_entitlements row). */
+  addCryptoTerm(term: RunningCryptoTerm & { accountId: string }): void {
+    this.cryptoTerms.push({ ...term });
+  }
 
   /** Test seam: register or update an account snapshot. */
   upsertAccount(snap: BillingAccountSnapshot): void {
@@ -78,6 +85,28 @@ export class InMemoryBillingRepo implements BillingRepo {
     return Promise.resolve(found);
   }
 
+  /** Live-billing audit #4 twin — every collecting subscription, newest first (the SQL order). */
+  findCollectingSubscriptions(accountId: string): Promise<SubscriptionMirror[]> {
+    const rows = Array.from(this.subscriptions.values()).filter(
+      (s) =>
+        s.accountId === accountId &&
+        (COLLECTING_SUBSCRIPTION_STATUSES as readonly string[]).includes(s.status),
+    );
+    rows.sort((a, b) => (newerThan(a, b) ? -1 : newerThan(b, a) ? 1 : 0));
+    return Promise.resolve(rows.map((r) => ({ ...r })));
+  }
+
+  /** Live-billing audit #6 twin — terms that have not ended, latest ending first. */
+  findRunningCryptoTerms(accountId: string): Promise<RunningCryptoTerm[]> {
+    const now = Date.now();
+    return Promise.resolve(
+      this.cryptoTerms
+        .filter((t) => t.accountId === accountId && t.expiresAt.getTime() > now)
+        .sort((a, b) => b.expiresAt.getTime() - a.expiresAt.getTime())
+        .map((t) => ({ tier: t.tier, expiresAt: t.expiresAt })),
+    );
+  }
+
   findCurrentSubscription(accountId: string): Promise<SubscriptionMirror | null> {
     let latest: SubscriptionMirror | null = null;
     for (const s of this.subscriptions.values()) {
@@ -101,6 +130,8 @@ export interface InMemoryProviderState {
   portalSessions: Array<{ id: string; customerId: string }>;
   /** V-758 — subscription ids currently pause_collection'd, for suspension assertions. */
   pausedSubscriptions: Set<string>;
+  /** Live-billing audit #1 — subscription ids cancelled at once by a termination. */
+  canceledSubscriptions: Set<string>;
 }
 
 export class InMemoryBillingProvider implements BillingProvider {
@@ -109,6 +140,7 @@ export class InMemoryBillingProvider implements BillingProvider {
     checkoutSessions: [],
     portalSessions: [],
     pausedSubscriptions: new Set(),
+    canceledSubscriptions: new Set(),
   };
 
   ensureCustomer(args: { accountId: string; email: string; name: string | null }): Promise<string> {
@@ -170,6 +202,12 @@ export class InMemoryBillingProvider implements BillingProvider {
 
   resumeSubscriptionCollection(args: { subscriptionId: string }): Promise<void> {
     this.state.pausedSubscriptions.delete(args.subscriptionId);
+    return Promise.resolve();
+  }
+
+  // Live-billing audit #1 — mirrors the Stripe provider's prorated immediate cancel.
+  cancelSubscriptionNow(args: { subscriptionId: string }): Promise<void> {
+    this.state.canceledSubscriptions.add(args.subscriptionId);
     return Promise.resolve();
   }
 }

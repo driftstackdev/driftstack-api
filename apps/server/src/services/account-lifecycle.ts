@@ -16,6 +16,11 @@
 //     primary responsibility (handling the underlying customer event —
 //     a webhook delivery, a Stripe handler, a session failure) must
 //     never be blocked on lifecycle-side work.
+//     ONE exception (live-billing audit #8): a billing email (receipt,
+//     failure notice, renewal reminder) whose send failed for a reason that
+//     can pass. Its send-once claim is RELEASED and the RetryableDeliveryError
+//     is rethrown, so the Stripe webhook fails the delivery instead of
+//     recording it and Stripe's redelivery sends the email — once.
 //   - Dedup is handled per-event-kind. `session.failed.first` uses the
 //     `accounts.first_failure_email_sent_at` column with an atomic
 //     check-and-set; `subscription.tier_changed` short-circuits when
@@ -25,6 +30,7 @@
 
 import type { AccountTier } from '@driftstack/api-types';
 import type { Logger } from '../lib/logger.js';
+import { isRetryableDeliveryError } from '../lib/transient-error.js';
 import type { EmailService } from './email.js';
 import type { EmailPreferencesService } from './email-preferences.js';
 import type { AccountAuditService } from './account-audit.js';
@@ -61,11 +67,21 @@ export interface AccountLifecycleRepo {
    */
   claimBillingEmail(args: {
     stripeEventId: string;
-    kind: 'billing-receipt' | 'billing-failure' | 'billing-renewal-reminder';
+    kind: BillingEmailKind;
     accountId: string;
     at: Date;
   }): Promise<boolean>;
+  /**
+   * Live-billing audit #8 — give back a claim taken by {@link claimBillingEmail} whose
+   * email was NOT sent, for a reason that can pass, so the Stripe redelivery that follows
+   * can claim it again and send. Only ever called between a failed send and the rethrow
+   * that makes Stripe redeliver; never after a send that went out.
+   */
+  releaseBillingEmailClaim(args: { stripeEventId: string; kind: BillingEmailKind }): Promise<void>;
 }
+
+/** The billing emails sent once per Stripe event, each behind a claim. */
+export type BillingEmailKind = 'billing-receipt' | 'billing-failure' | 'billing-renewal-reminder';
 
 export type LifecycleEvent =
   | {
@@ -219,6 +235,16 @@ export class AccountLifecycleService {
         }
       }
     } catch (err) {
+      // Live-billing audit #8 — the one failure that is NOT swallowed: a billing email
+      // that was not sent and whose claim has been released. Swallowed, the Stripe event
+      // would be recorded as processed and the email never sent.
+      if (isRetryableDeliveryError(err)) {
+        this.logger.warn(
+          { component: 'account-lifecycle', accountId, eventKind: event.kind },
+          'billing email not sent — claim released; rethrowing so the Stripe event is redelivered',
+        );
+        throw err;
+      }
       this.logger.warn(
         {
           component: 'account-lifecycle',
@@ -231,6 +257,48 @@ export class AccountLifecycleService {
         },
         'lifecycle event dispatch failed (best-effort, swallowed)',
       );
+    }
+  }
+
+  /**
+   * Live-billing audit #8 — send a billing email behind the claim just won. When the send
+   * fails for a reason that can pass (the email service rejects with RetryableDeliveryError),
+   * the claim is RELEASED before the error goes on, so the redelivery Stripe makes can
+   * claim and send it: exactly once on success, on either path. Any other failure keeps
+   * the claim and is swallowed by `emit`, as before.
+   *
+   * A release that itself fails leaves the claim in place, and then a redelivery could
+   * only skip the send — so it is logged as an error and the event handled, rather than
+   * sending Stripe round a retry that cannot help.
+   */
+  private async sendClaimed(
+    accountId: string,
+    claim: { stripeEventId: string; kind: BillingEmailKind },
+    send: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      await send();
+    } catch (err) {
+      if (!isRetryableDeliveryError(err)) throw err;
+      try {
+        await this.repo.releaseBillingEmailClaim(claim);
+      } catch (releaseErr) {
+        this.logger.error(
+          {
+            component: 'account-lifecycle',
+            accountId,
+            stripeEventId: claim.stripeEventId,
+            kind: claim.kind,
+            err:
+              releaseErr instanceof Error
+                ? { name: releaseErr.name, message: releaseErr.message }
+                : { value: releaseErr },
+          },
+          'billing email not sent AND its send-once claim could not be released — this email will not be sent',
+        );
+        return;
+      }
+      throw err;
     }
   }
 
@@ -410,12 +478,17 @@ export class AccountLifecycleService {
 
     const amountFormatted = formatCents(event.amountCents, event.currency);
 
-    await this.email.sendBillingRenewalReminder({
-      to: account.email,
-      amountFormatted,
-      renewalDate: event.renewalDate,
-      portalUrl: this.billingPortalUrl,
-    });
+    await this.sendClaimed(
+      accountId,
+      { stripeEventId: event.stripeEventId, kind: 'billing-renewal-reminder' },
+      () =>
+        this.email.sendBillingRenewalReminder({
+          to: account.email,
+          amountFormatted,
+          renewalDate: event.renewalDate,
+          portalUrl: this.billingPortalUrl,
+        }),
+    );
   }
 
   /**
@@ -462,12 +535,17 @@ export class AccountLifecycleService {
         ? `${isoDate(event.periodStart)} – ${isoDate(event.periodEnd)}`
         : isoDate(new Date());
 
-    await this.email.sendBillingReceipt({
-      to: account.email,
-      amountFormatted: formatCents(event.amountCents, event.currency),
-      period,
-      invoiceUrl: event.hostedInvoiceUrl ?? this.billingPortalUrl,
-    });
+    await this.sendClaimed(
+      accountId,
+      { stripeEventId: event.stripeEventId, kind: 'billing-receipt' },
+      () =>
+        this.email.sendBillingReceipt({
+          to: account.email,
+          amountFormatted: formatCents(event.amountCents, event.currency),
+          period,
+          invoiceUrl: event.hostedInvoiceUrl ?? this.billingPortalUrl,
+        }),
+    );
   }
 
   /**
@@ -501,12 +579,17 @@ export class AccountLifecycleService {
     });
     if (!won) return;
 
-    await this.email.sendBillingFailure({
-      to: account.email,
-      amountFormatted: formatCents(event.amountCents, event.currency),
-      retryAt: event.retryAt,
-      portalUrl: this.billingPortalUrl,
-    });
+    await this.sendClaimed(
+      accountId,
+      { stripeEventId: event.stripeEventId, kind: 'billing-failure' },
+      () =>
+        this.email.sendBillingFailure({
+          to: account.email,
+          amountFormatted: formatCents(event.amountCents, event.currency),
+          retryAt: event.retryAt,
+          portalUrl: this.billingPortalUrl,
+        }),
+    );
   }
 }
 

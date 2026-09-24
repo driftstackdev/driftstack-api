@@ -113,8 +113,13 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
     expect(body).toMatch(
       /data-action="cancel"\s*disabled\s*aria-disabled="true"[\s\S]*?class:list=\{\[\s*'btn-secondary text-red-700',\s*'hidden',/,
     );
+    // Live-billing audit #7 — offered only for a subscription that renews (active /
+    // trialing) and is not already set to cancel; every other status hides it.
     expect(body).toMatch(
-      /if \(cancelBtn\) \{\s*if \(sub\.cancel_at_period_end\) cancelBtn\.classList\.add\('hidden'\);\s*else cancelBtn\.classList\.remove\('hidden'\);\s*\}/,
+      /if \(status === 'active' \|\| status === 'trialing'\) \{[\s\S]*?cancelOffered = !sub\.cancel_at_period_end;/,
+    );
+    expect(body).toMatch(
+      /if \(cancelBtn\) cancelBtn\.classList\.toggle\('hidden', !cancelOffered\);/,
     );
   });
 
@@ -152,8 +157,12 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
     expect(body).toMatch(
       /async function handlePortal\(\) \{[\s\S]*?if \(!billingDataAvailable\) \{\s*showBanner\('Reload live billing before opening Stripe\.'\);\s*return;/,
     );
+    // Live-billing audit #7 — the live subscription branch is renderSubscription now.
     expect(body).toMatch(
-      /if \(body\.subscription\) \{\s*const sub = body\.subscription;\s*setPortalAvailability\(true\);/,
+      /if \(body\.subscription\) \{\s*renderSubscription\(body\.subscription, me\);/,
+    );
+    expect(body).toMatch(
+      /function renderSubscription\(sub, me\) \{[\s\S]*?setPortalAvailability\(true\);/,
     );
     expect(body).toMatch(
       /function renderBillingUnavailable\(tier, summary, badge\) \{[\s\S]*?setPortalAvailability\(false\);[\s\S]*?portalBtn\.classList\.add\('hidden'\)/,

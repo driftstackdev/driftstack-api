@@ -186,7 +186,10 @@ describe('W939 V-082 + ADR-003 billing cross-source invariant', () => {
 
   // ─── BillingRepo 3-method interface ──────────────────────────
 
-  it('CRITICAL BillingRepo has 5 methods, and this arm pins 3 of them — getAccount + setStripeCustomerId + findCurrentSubscription. The seam also carries findCollectingSubscription and findActiveSubscription.', () => {
+  // Live-billing audits #4 and #6 added findCollectingSubscriptions (every collecting
+  // subscription, for pause / resume / a termination's cancel) and findRunningCryptoTerms
+  // (the live-billing read an admin tier change is refused on).
+  it('CRITICAL BillingRepo has 7 methods, and this arm pins 3 of them — getAccount + setStripeCustomerId + findCurrentSubscription. The seam also carries findCollectingSubscription, findCollectingSubscriptions, findRunningCryptoTerms and findActiveSubscription.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/billing.ts'));
     expect(p).toMatch(/export interface BillingRepo \{/);
     expect(p).toMatch(/getAccount\(accountId: string\): Promise<BillingAccountSnapshot \| null>;/);

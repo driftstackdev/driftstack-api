@@ -117,12 +117,17 @@ describe('Arc 7 obs.13 — email_send_total counter', () => {
       client: makeStub({ code: 429 }),
       metrics,
     });
-    await svc.sendBillingReceipt({
-      to: 'a@b.com',
-      amountFormatted: '$29.00',
-      period: '2026-05',
-      invoiceUrl: 'https://x',
-    });
+    // Live-billing audit #8 — a billing email whose send fails for a reason that can
+    // pass now REJECTS (so its caller can release the send-once claim), after the
+    // metric below is recorded.
+    await expect(
+      svc.sendBillingReceipt({
+        to: 'a@b.com',
+        amountFormatted: '$29.00',
+        period: '2026-05',
+        invoiceUrl: 'https://x',
+      }),
+    ).rejects.toThrow(/billing-receipt email was not sent/);
     expect(
       metrics.getValue(METRIC_NAMES.emailSendTotal, {
         template: 'billing-receipt',

@@ -2152,9 +2152,27 @@ export async function createProductionDeps(
         billingService === undefined
           ? ('no_subscription' as const)
           : billingService.resumeCollectionForAccount(accountId),
+      // Live-billing audit #1 — terminating an account cancels whatever still
+      // collects. With Stripe unconfigured there is no subscription to cancel.
+      cancelCollectionForAccount: async (accountId: string) =>
+        billingService === undefined
+          ? { cancelled: [] }
+          : billingService.cancelCollectionForAccount(accountId),
+      // Live-billing audit #6 — an admin tier change is refused while the account
+      // still pays. Without Stripe only crypto terms can be live.
+      liveBillingForAccount: async (accountId: string) =>
+        billingService === undefined
+          ? {
+              collectingSubscriptions: [],
+              cryptoTerms: await new DrizzleBillingRepo(dbHandle).findRunningCryptoTerms(accountId),
+            }
+          : billingService.liveBillingForAccount(accountId),
     },
     // Null while AI credits are off; then a tier change does exactly what it did.
     creditGrants,
+    // Live-billing audit #1 — tells staff a terminated account's subscription was
+    // cancelled (refund owed under ToS 14.5?) or could not be.
+    sentry,
   );
 
   // 2026-05-20 — auth-tokens sweeper. Periodic DELETE of stale rows

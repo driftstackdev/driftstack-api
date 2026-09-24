@@ -230,7 +230,12 @@ describe('X-Driftstack-Account acting-as authz invariant (all routes/)', () => {
     // /v1/account/me/bundled-llm-settings in account-bundled-llm.ts — a
     // thirteenth reader file. Like the ai-settings PATCH it resolves the header
     // only to REFUSE a non-self account, before the body is read.
-    expect(reads).toHaveLength(38);
+    // The 39th–40th (2026-09-23, live-billing audit #5): POST
+    // /v1/billing/portal-session and GET /v1/account/me/billing-portal in
+    // billing.ts, which was already a reader file (GET /v1/billing). Both resolve
+    // the header only to REFUSE a non-self account; the arm below proves the
+    // parser goes straight into resolveEffectiveAccount.
+    expect(reads).toHaveLength(40);
     expect(new Set(reads.map((read) => read.file)).size).toBe(13);
     expect(
       reads

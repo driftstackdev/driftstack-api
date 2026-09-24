@@ -89,9 +89,13 @@ describe('W360.B customer-dashboard /billing page content parity', () => {
     // rather than relabelled over a link that still went to the picker.
     expect(body).toMatch(/planCta\.textContent = 'Contact support'/);
     expect(body).toMatch(/mailto:support@driftstack\.dev/);
-    // …and the paid branch re-shows the portal + restores "Change plan".
+    // …and the paid branch re-shows the portal + restores "Change plan". Live-billing
+    // audit #7: "Change plan" is now only for a subscription that renews (active /
+    // trialing); renderSubscription sets the label per status.
     expect(body).toMatch(/if \(portalBtn\) portalBtn\.classList\.remove\('hidden'\)/);
-    expect(body).toMatch(/setText\('plan-cta', 'Change plan'\)/);
+    expect(body).toMatch(
+      /if \(status === 'active' \|\| status === 'trialing'\) \{[\s\S]*?planCtaLabel = 'Change plan';/,
+    );
   });
 
   it('action button wired to POST /v1/billing/portal-session (registered)', () => {
@@ -117,9 +121,13 @@ describe('W360.B customer-dashboard /billing page content parity', () => {
     );
   });
 
+  // Live-billing audit #7 — the cancel button is offered only for a subscription that
+  // renews (active / trialing) and is not already set to cancel; every other status
+  // hides it (behaviour: the-billing-page-says-what-each-subscription-status-means).
   it('cancel-subscription button hidden when cancel_at_period_end (avoid double-cancel)', () => {
+    expect(body).toMatch(/cancelOffered = !sub\.cancel_at_period_end;/);
     expect(body).toMatch(
-      /if \(sub\.cancel_at_period_end\) cancelBtn\.classList\.add\('hidden'\);\s*else cancelBtn\.classList\.remove\('hidden'\);/,
+      /if \(cancelBtn\) cancelBtn\.classList\.toggle\('hidden', !cancelOffered\);/,
     );
   });
 

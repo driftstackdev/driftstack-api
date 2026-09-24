@@ -102,8 +102,10 @@ describe('W916 V-202b/c AccountLifecycle emit dispatcher cross-source invariant'
     // C6 — a per-(event, kind) claim now sits between the account check and
     // the send, but there must still be NO emailPreferences consult on the
     // failure notice (it is critical-path, never opt-outable).
+    // Live-billing audit #8 — the send now runs inside `sendClaimed`, which releases the
+    // send-once claim when the send fails for a reason that can pass.
     expect(p).toMatch(
-      /private async handlePaymentFailed\([\s\S]+?const account = await this\.repo\.findForLifecycle\(accountId\);\s*if \(account === null\) return;[\s\S]+?await this\.email\.sendBillingFailure\(\{/,
+      /private async handlePaymentFailed\([\s\S]+?const account = await this\.repo\.findForLifecycle\(accountId\);\s*if \(account === null\) return;[\s\S]+?await this\.sendClaimed\([\s\S]+?this\.email\.sendBillingFailure\(\{/,
     );
     expect(p).not.toMatch(/shouldSend\(accountId, 'billing-failure'\)/);
   });

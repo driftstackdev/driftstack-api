@@ -21,9 +21,24 @@
 //   08xxx connection_exception, 53xxx insufficient_resources,
 //   57P01 admin_shutdown, 57P02 crash_shutdown, 57P03 cannot_connect_now,
 //   40001 serialization_failure, 40P01 deadlock_detected,
-//   55P03 lock_not_available.
+//   55P03 lock_not_available,
+//   57014 query_canceled — what Postgres raises when a statement outlives
+//   `statement_timeout`. The deployment docs recommend DB_STATEMENT_TIMEOUT_MS,
+//   and with it set a statement that waits on a lock past the timeout ends in
+//   57014. Treated as permanent, a Stripe subscription event hit by one was
+//   acked, recorded as `error:` and deduped on every resend, so a customer who
+//   had paid was never upgraded (live-billing audit #10). A statement cancelled
+//   by a timeout wrote nothing, so running it again is safe.
 const TRANSIENT_SQLSTATE_PREFIXES = ['08', '53'];
-const TRANSIENT_SQLSTATE_EXACT = new Set(['57P01', '57P02', '57P03', '40001', '40P01', '55P03']);
+const TRANSIENT_SQLSTATE_EXACT = new Set([
+  '57P01',
+  '57P02',
+  '57P03',
+  '40001',
+  '40P01',
+  '55P03',
+  '57014',
+]);
 
 // postgres-js driver + node/undici network error codes.
 const TRANSIENT_CODES = new Set([
@@ -51,7 +66,45 @@ const TRANSIENT_NAMES = new Set([
   'SocketError',
 ]);
 
+/** The `code` a {@link RetryableDeliveryError} carries. Allowlisted below. */
+export const RETRYABLE_DELIVERY_CODE = 'DRIFTSTACK_RETRY_DELIVERY';
+
+/**
+ * A step that must happen exactly once did NOT happen, for a reason that can
+ * pass, and whatever it had claimed to make it "once" has been RELEASED — so
+ * running the whole unit of work again is safe, and is the only way the step
+ * will ever happen.
+ *
+ * The one thrower is a billing email (payment-failure notice, receipt, renewal
+ * reminder) whose send failed on the connection, or because Postmark was
+ * unavailable or rate-limiting: its send-once claim is released first, and the
+ * Stripe webhook then fails the delivery instead of recording it, so Stripe
+ * redelivers it and the redelivery sends the email (live-billing audit #8). It
+ * is on the allowlist for exactly that reason: the webhook rethrows what this
+ * module calls transient, and nothing else.
+ *
+ * Never throw it while a claim is still held — a retry would then find the
+ * claim and skip the step, which is the loss this exists to prevent.
+ */
+export class RetryableDeliveryError extends Error {
+  readonly code = RETRYABLE_DELIVERY_CODE;
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = 'RetryableDeliveryError';
+  }
+}
+
+/** True for a {@link RetryableDeliveryError}, however it crossed a module boundary. */
+export function isRetryableDeliveryError(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { code?: unknown }).code === RETRYABLE_DELIVERY_CODE
+  );
+}
+
 function codeIsTransient(code: string): boolean {
+  if (code === RETRYABLE_DELIVERY_CODE) return true;
   if (TRANSIENT_CODES.has(code)) return true;
   if (TRANSIENT_SQLSTATE_EXACT.has(code)) return true;
   return TRANSIENT_SQLSTATE_PREFIXES.some((p) => code.startsWith(p) && /^[0-9A-Z]{5}$/.test(code));

@@ -101,6 +101,34 @@ groups:
             an endpoint secret was rotated without updating STRIPE_WEBHOOK_SECRET
             / the NowPayments IPN secret before assuming forgery.
 
+      - alert: StripeWebhookHandlerError
+        # A Stripe event whose handler threw a PERMANENT error is acked 200 and
+        # written to the processed-events ledger as `error:<name>`. Stripe stops
+        # retrying it, and a resend from the Stripe dashboard is deduplicated by
+        # the event id — so the billing state that event carried (a payment that
+        # should have upgraded the account, a cancellation that should have taken
+        # the tier away) is simply never applied, and nothing else surfaces it.
+        #
+        # A TRANSIENT failure is not counted here: it is rethrown, counted as
+        # `handler_transient_error`, and Stripe redelivers it by itself. Nothing
+        # replays an `error:` event yet, so every one needs a person — any
+        # occurrence alerts (live-billing audit #10).
+        expr: |
+          sum(increase(driftstack_stripe_webhook_total{outcome="error"}[15m])) > 0
+        labels:
+          severity: critical
+          team: driftstack-runtime
+        annotations:
+          summary: 'A Stripe event ended in a handler error and will not be retried'
+          description: |
+            At least one verified Stripe event was recorded as `error:` in the
+            processed-events ledger in the last 15 minutes. Stripe will not
+            redeliver it and a dashboard resend is deduplicated, so the account
+            it concerns may be on the wrong plan until someone applies it by
+            hand. Find the event id in the server log ("Stripe event handler
+            threw"), check the account's subscription and tier against Stripe,
+            and correct them.
+
       - alert: SecurityCriticalEmailFailing
         # signup-verification, password-reset and oauth-pending-verification are
         # the three templates a customer CANNOT route around. If they stop

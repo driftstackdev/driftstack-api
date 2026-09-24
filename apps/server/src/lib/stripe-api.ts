@@ -234,6 +234,26 @@ export class StripeApiClient {
     );
   }
 
+  /**
+   * Cancel a subscription NOW, used when staff terminate an account (the
+   * account's access ends, so its billing must too — ToS 14.5). `prorate` turns
+   * the unused part of the period into a credit on the Stripe customer and
+   * `invoice_now` settles it on a final invoice at once; nothing is refunded
+   * automatically — staff decide that (the caller alerts them). Stripe reads a
+   * DELETE's parameters from the query string. Cancelling an already cancelled
+   * subscription is refused by Stripe with a 4xx, which the caller records.
+   */
+  async cancelSubscription(args: { subscriptionId: string }): Promise<{ id: string }> {
+    return this.sendForm<{ id: string }>(
+      'DELETE',
+      `/v1/subscriptions/${encodeURIComponent(args.subscriptionId)}?${new URLSearchParams({
+        invoice_now: 'true',
+        prorate: 'true',
+      }).toString()}`,
+      {},
+    );
+  }
+
   // ── Invoices + subscriptions (read-only) ──────────────────────────────
 
   /**
@@ -353,6 +373,16 @@ export class StripeApiClient {
     body: Record<string, string>,
     idempotencyKey?: string,
   ): Promise<T> {
+    return this.sendForm<T>('POST', path, body, idempotencyKey);
+  }
+
+  /** A form-encoded write (`post()`, and `cancelSubscription`'s DELETE). */
+  private async sendForm<T>(
+    method: 'POST' | 'DELETE',
+    path: string,
+    body: Record<string, string>,
+    idempotencyKey?: string,
+  ): Promise<T> {
     const url = `${this.config.baseUrl ?? DEFAULT_BASE_URL}${path}`;
     const formBody = new URLSearchParams(body).toString();
     const auth = `Basic ${Buffer.from(`${this.config.secretKey}:`).toString('base64')}`;
@@ -369,7 +399,7 @@ export class StripeApiClient {
     // the other hand-rolled fetch clients — see the audit memo.)
     try {
       const res = await this.fetchImpl(url, {
-        method: 'POST',
+        method,
         headers: {
           Authorization: auth,
           'Stripe-Version': this.config.apiVersion ?? DEFAULT_API_VERSION,

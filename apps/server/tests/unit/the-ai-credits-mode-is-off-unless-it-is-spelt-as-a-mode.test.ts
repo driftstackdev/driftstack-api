@@ -131,6 +131,9 @@ describe('the AI credits mode is off unless it is spelt as a mode', () => {
       )?.length,
       'a crypto activator is constructed without the grants service and the clawbacks service',
     ).toBe(activators);
-    expect(BOOTSTRAP).toMatch(/new AccountsAdminService\([\s\S]*?creditGrants,\s*\);/);
+    // creditGrants, then (live-billing audit #1) the alerts client as the last argument.
+    expect(BOOTSTRAP).toMatch(
+      /new AccountsAdminService\([\s\S]*?creditGrants,\s*(?:\/\/[^\n]*\n\s*)*sentry,\s*\);/,
+    );
   });
 });

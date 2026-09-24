@@ -124,8 +124,12 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
   it('AccountsAdminService: constructor takes repo + optional authCache + optional sessions reclaimer + optional GDPR Article 17 delete-reclaim trio (web sessions / API keys / webhooks)', () => {
     expect(body).toMatch(/export class AccountsAdminService \{/);
     expect(body).toMatch(
-      /constructor\(\s*private readonly repo: AccountsAdminRepo,\s*private readonly authCache: AuthCache \| null = null,\s*private readonly sessions: SuspendSessionReclaimer \| null = null,\s*private readonly webSessions: DeleteWebSessionReclaimer \| null = null,\s*private readonly apiKeys: DeleteApiKeyReclaimer \| null = null,\s*private readonly webhooks: DeleteWebhookReclaimer \| null = null,[\s\S]*?private readonly logger: \{[\s\S]*?\} \| null = null,[\s\S]*?private readonly billing: BillingCollectionPauser \| null = null,[\s\S]*?private readonly credits: CreditsRefresher \| null = null,\s*\) \{\}/,
+      /constructor\(\s*private readonly repo: AccountsAdminRepo,\s*private readonly authCache: AuthCache \| null = null,\s*private readonly sessions: SuspendSessionReclaimer \| null = null,\s*private readonly webSessions: DeleteWebSessionReclaimer \| null = null,\s*private readonly apiKeys: DeleteApiKeyReclaimer \| null = null,\s*private readonly webhooks: DeleteWebhookReclaimer \| null = null,[\s\S]*?private readonly logger: \{[\s\S]*?\} \| null = null,[\s\S]*?private readonly billing: BillingCollectionPauser \| null = null,[\s\S]*?private readonly credits: CreditsRefresher \| null = null,[\s\S]*?private readonly alerts: BillingAlerts \| null = null,\s*\) \{\}/,
     );
+    // Live-billing audit #1 — the last dependency is where a termination alerts staff that
+    // a Stripe subscription was cancelled (or could not be). Optional and null ⇒ the server
+    // log alone.
+    expect(body).toMatch(/export type BillingAlerts = Pick<SentryClient, 'captureMessage'>;/);
     // The last dependency grants monthly AI credits. Optional and null while AI
     // credits are switched off, so every existing construction site keeps working
     // and a tier change then does exactly what it did.
@@ -169,9 +173,11 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     expect(scopeChecks?.length).toBe(9);
   });
 
-  it('deleteAccount (GDPR Article 17): scope check → setStatus(deleted) → NotFoundError on null → 4 best-effort reclaim steps (sessions/webSessions/apiKeys/webhooks) → invalidateCache', () => {
+  // Live-billing audit #1 — deleteAccount also takes the admin audit row's payload (the
+  // billing step writes what it cancelled into it) and cancels billing as a fifth step.
+  it('deleteAccount (GDPR Article 17): scope check → setStatus(deleted) → NotFoundError on null → 5 best-effort reclaim steps (sessions/webSessions/apiKeys/webhooks/billing) → invalidateCache', () => {
     expect(body).toMatch(
-      /async deleteAccount\(ctx: AccountContext, accountId: string\): Promise<AccountRow> \{\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);\s*const now = new Date\(\);\s*const updated = await this\.repo\.setStatus\(accountId, 'deleted', now\);\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);/,
+      /async deleteAccount\(\s*ctx: AccountContext,\s*accountId: string,\s*auditRecord\?: Record<string, unknown>,\s*\): Promise<AccountRow> \{\s*throwIfMissingScope\(ctx, 'driftstack_internal_admin'\);\s*const now = new Date\(\);\s*const updated = await this\.repo\.setStatus\(accountId, 'deleted', now\);\s*if \(!updated\) throw new NotFoundError\(`Account "\$\{accountId\}" not found\.`\);/,
     );
     // Each surface must go through reclaim(), which is what keeps the step
     // best-effort AND recorded. Pinning the step NAMES matters as much as the
@@ -183,6 +189,7 @@ describe('W399.C apps/server/src/services/admin-accounts.ts content parity', () 
     expect(body).toMatch(/await this\.reclaim\('api_keys', accountId, \(\) =>/);
     expect(body).toMatch(/await this\.reclaim\('api_keys_minted_elsewhere', accountId, \(\) =>/);
     expect(body).toMatch(/await this\.reclaim\('webhooks', accountId, \(\) =>/);
+    expect(body).toMatch(/await this\.reclaim\('billing_cancel', accountId, \(\) =>/);
     // reclaim() swallows so the admin action still succeeds, but reports first.
     expect(body).toMatch(
       /private async reclaim\([\s\S]*?\} catch \(err\) \{[\s\S]*?event: 'account_reclaim_failed',/,

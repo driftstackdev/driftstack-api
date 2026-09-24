@@ -99,12 +99,15 @@ describe('C1 CryptoEntitlementExpirySweeperService.tickOnce', () => {
   it('lapsed lower grant while a higher grant is still valid → account tier unchanged, no emit', async () => {
     const repo = new InMemoryStripeWebhooksRepo();
     repo.registerAccount({ accountId: 'acc_1', stripeCustomerId: null, tier: 'free' });
-    // Still-valid higher grant (paidAt recent → expires ~31d out, after NOW).
+    // Still-valid higher grant (paidAt recent → expires ~31d out, after NOW). Live-billing
+    // audit #9: a term floors only while unexpired when the recompute RUNS — the later of
+    // the sweep's clock and the real one — so "recent" is measured from the real clock, not
+    // from this file's fixed NOW, which the real clock has passed.
     await repo.activateCryptoEntitlement({
       accountId: 'acc_1',
       orderId: 'ord_valid',
       tier: 'api_scale',
-      paidAt: new Date('2026-07-01T00:00:00.000Z'),
+      paidAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
       termDays: TERM_DAYS,
     });
     // Expired lower grant.

@@ -262,12 +262,15 @@ export function registerAdminAccountsRoutes(
       const accountId = uuidFromPrefixedId(request.params.id, 'acc');
       const body = DeleteAccountRequestSchema.parse(request.body ?? {});
 
-      const updated = await withAudit(
-        request,
-        'account.deleted',
-        accountId,
-        { ...(body.reason ? { reason: body.reason } : {}) },
-        () => accountsAdmin.deleteAccount(ctx, accountId),
+      // One object, handed to both: deleteAccount writes into it which Stripe
+      // subscriptions it cancelled (or could not), and withAudit records it after
+      // perform() returns, so the termination's audit row says what it stopped
+      // billing (live-billing audit #1).
+      const auditPayload: Record<string, unknown> = {
+        ...(body.reason ? { reason: body.reason } : {}),
+      };
+      const updated = await withAudit(request, 'account.deleted', accountId, auditPayload, () =>
+        accountsAdmin.deleteAccount(ctx, accountId, auditPayload),
       );
       return publicAccount(updated);
     },
