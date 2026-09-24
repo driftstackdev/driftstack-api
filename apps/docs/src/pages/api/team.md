@@ -56,6 +56,12 @@ Role gating:
 - **Agent-session exception.** `/v1/agent-sessions` contains AI
   transcripts and live-control state, so its collection and `:id`
   surface require `admin` for both reads and writes.
+- **Owner-level API keys stay with the owner.** An `admin` member can
+  create, rotate and revoke the owner's `read`, `write`, granular and
+  `gui_control` keys. They cannot create a key with `account_owner` or
+  the legacy `admin` scope on the owner's account, and cannot rotate a
+  key that has either — those requests get `403`. Only the owner can
+  create or rotate a key with the owner's full account control.
 
 Endpoints that honor the header :
 
@@ -191,17 +197,26 @@ isn't owned by the calling account.
 An `admin` member can mint keys against your workspace, and such a key
 authenticates as _your_ account — it does not stop working when their
 membership ends. So removal revokes every live key created by that member,
-at the same moment the membership is removed.
+at the same moment the membership is removed. That includes a key the
+member rotated (they received the new key, so it counts as theirs) and a
+key created with a key the member minted. A revoked key stops working on
+its next request.
 
-Two consequences worth planning for:
+Consequences worth planning for:
 
 - If one of those keys is used by your own systems, it stops working at
   removal. Mint a replacement under your own account first, then remove the
   member. The `team.member_removed` audit entry lists the revoked key ids, so
   you can always see afterwards exactly what was invalidated.
+- If the member rotated one of your keys, the key they received is revoked,
+  and your original still expires when its rotation grace period ends.
+  Mint a replacement for anything still using it.
 - Keys created before this behaviour shipped have no recorded creator and are
-  **not** revoked, because there is nothing to attribute them to. Review
-  `GET /v1/api-keys` when offboarding a long-standing member.
+  **not** revoked, because there is nothing to attribute them to. Keys a
+  member rotated, or created with a key they minted, before members were
+  credited with them are recorded as yours and are not revoked either. Review
+  `GET /v1/api-keys` and the `api_key.rotated` entries in your audit log when
+  offboarding a long-standing member.
 
 ## The team itself
 

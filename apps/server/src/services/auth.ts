@@ -74,6 +74,16 @@ export interface ApiKeyRow {
    * "ordinary key" everywhere (fail-open — never wrongly restricts).
    */
   provenance?: string | null;
+  /**
+   * The account that MINTED this key (`api_keys.created_by_account_id`): the key's
+   * own account for a self-minted key, a team member for a key they minted on the
+   * owner's account, null when unknown (minted before the column existed). Absent on
+   * web sessions and OAuth tokens. A key minted or rotated BY a key whose minter is
+   * not its account records that minter (services/api-keys.ts), so removing the
+   * member also reaches keys minted through their key. Optional for the same
+   * hand-built-fixture reason as `provenance`; absent is read as "not delegated".
+   */
+  createdByAccountId?: string | null;
   createdAt: Date;
 }
 

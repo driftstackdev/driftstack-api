@@ -189,7 +189,9 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
     expect(body).toMatch(/role !== 'admin' && role !== 'member'/);
     expect(body).toMatch(/granted: role === 'admin'/);
     expect(body).toMatch(/const canWrite = canWriteSelectedAccount\(\)/);
-    expect(body).toMatch(/const canRotate = canWrite && apiAccessVerified && apiAccessGranted/);
+    expect(body).toMatch(
+      /const canRotate =\s*canWrite && apiAccessVerified && apiAccessGranted && !ownerLevelInTeammateAccount/,
+    );
     expect(body).toMatch(/\(canRotate \? '' : ' hidden'\)/);
     expect(body).toMatch(/\(canWrite \? '' : ' hidden'\)/);
     expect(body).toMatch(/if \(!showWriteControls\) \{[\s\S]*?revealPre\.textContent = ''/);

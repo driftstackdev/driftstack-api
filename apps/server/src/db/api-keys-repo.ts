@@ -163,7 +163,10 @@ export class DrizzleApiKeysRepo implements ApiKeysRepo {
           // (team-members-repo.ts) and the staff termination sweep (:44 below). A rotated key
           // therefore survived removal of the member who minted it, with the same authority
           // and no expiry. Rotation must not launder attribution.
-          createdByAccountId: locked.createdByAccountId,
+          // Unless the service names a different minter: a team member (or a key a member
+          // minted) rotating one of the owner's keys holds the new plaintext, and
+          // carrying the OWNER forward let it outlive the member's removal.
+          createdByAccountId: input.createdByAccountId ?? locked.createdByAccountId,
         })
         .returning();
       if (!inserted) throw new Error('rotateApiKeyAtomic insert returned no row');

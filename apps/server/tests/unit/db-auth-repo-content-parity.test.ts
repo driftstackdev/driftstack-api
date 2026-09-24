@@ -125,9 +125,9 @@ describe('W448.B apps/server/src/db/auth-repo.ts content parity', () => {
     );
   });
 
-  it('toApiKeyRow: 11-field ApiKeyRow (id + accountId + name + keyPrefix + keyHash + scopes + lastUsedAt + revokedAt + expiresAt + provenance + createdAt)', () => {
+  it('toApiKeyRow: 12-field ApiKeyRow (id + accountId + name + keyPrefix + keyHash + scopes + lastUsedAt + revokedAt + expiresAt + provenance + createdByAccountId + createdAt)', () => {
     expect(body).toMatch(
-      /function toApiKeyRow\(r: typeof apiKeys\.\$inferSelect\): ApiKeyRow \{\s*return \{\s*id: r\.id,\s*accountId: r\.accountId,\s*name: r\.name,\s*keyPrefix: r\.keyPrefix,\s*keyHash: r\.keyHash,\s*scopes: r\.scopes,\s*lastUsedAt: r\.lastUsedAt,\s*revokedAt: r\.revokedAt,\s*expiresAt: r\.expiresAt,\s*provenance: r\.provenance,\s*createdAt: r\.createdAt,\s*\};\s*\}/,
+      /function toApiKeyRow\(r: typeof apiKeys\.\$inferSelect\): ApiKeyRow \{\s*return \{\s*id: r\.id,\s*accountId: r\.accountId,\s*name: r\.name,\s*keyPrefix: r\.keyPrefix,\s*keyHash: r\.keyHash,\s*scopes: r\.scopes,\s*lastUsedAt: r\.lastUsedAt,\s*revokedAt: r\.revokedAt,\s*expiresAt: r\.expiresAt,\s*provenance: r\.provenance,\s*createdByAccountId: r\.createdByAccountId,\s*createdAt: r\.createdAt,\s*\};\s*\}/,
     );
   });
 

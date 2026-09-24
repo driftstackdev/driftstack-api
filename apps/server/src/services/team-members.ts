@@ -222,6 +222,16 @@ export class TeamMembersService {
     }
   }
 
+  /** Best-effort eviction of one revoked key's cached context; same rules as above. */
+  private async invalidateKeyCache(keyId: string): Promise<void> {
+    if (!this.authCache) return;
+    try {
+      await this.authCache.invalidateKey(keyId);
+    } catch {
+      /* swallow */
+    }
+  }
+
   /** Teams the caller owns. */
   async listTeams(ownerAccountId: string): Promise<TeamRow[]> {
     return this.repo.listTeamsOwnedBy(ownerAccountId);
@@ -420,6 +430,14 @@ export class TeamMembersService {
     if (removed === null) return false;
     const removedMemberAccountId = removed.memberAccountId;
     await this.invalidateAuthCache(removedMemberAccountId);
+    // The revoked keys live on the OWNER's account, so the member's invalidation
+    // above does not touch their cache entries. Evict each one, as a direct revoke
+    // does (ApiKeysService.revokeChecked). A positive cache hit already re-reads the
+    // key row and refuses a revoked one, so this is not what stops the key working;
+    // it keeps the cache from holding a dead credential until its TTL.
+    for (const keyId of removed.revokedApiKeyIds) {
+      await this.invalidateKeyCache(keyId);
+    }
     if (this.accountAudit) {
       try {
         await this.accountAudit.record({

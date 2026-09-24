@@ -240,7 +240,7 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toMatch(
       // AccountTier moved INTO the import list: the effective-owner pair is one
       // type now (EffectiveOwner), so the tier is not named separately here.
-      /import type \{ ApiKeyScope \} from '@driftstack\/api-types';/,
+      /import \{ parseGranularScope, type ApiKeyScope \} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ AccountContext \} from '\.\/auth\.js';/);
     expect(body).toMatch(/import type \{ ApiKeyRow \} from '\.\/auth\.js';/);

@@ -216,7 +216,9 @@ describe('W950 api-keys service V-174 + V-296 cross-source invariant', () => {
     // second loose optional, so the file no longer names it directly. The
     // vocabulary claim this arm makes is about ApiKeyScope; the tier one is
     // made where the tier now lives.
-    expect(p).toMatch(/import type \{ ApiKeyScope \} from '@driftstack\/api-types';/);
+    expect(p).toMatch(
+      /import \{ parseGranularScope, type ApiKeyScope \} from '@driftstack\/api-types';/,
+    );
     expect(p).toMatch(
       /import type \{ EffectiveOwner \} from '\.\.\/lib\/effective-account-header\.js';/,
     );

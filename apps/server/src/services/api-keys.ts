@@ -15,7 +15,7 @@
 // scope retains compat-alias semantics during migration via
 // requireScope() — existing 'admin'-scoped keys keep working.
 
-import type { ApiKeyScope } from '@driftstack/api-types';
+import { parseGranularScope, type ApiKeyScope } from '@driftstack/api-types';
 import type { AccountContext } from './auth.js';
 import type { ApiKeyRow } from './auth.js';
 import type { AuthCache } from './auth-cache.js';
@@ -33,6 +33,7 @@ import {
   requireScope as throwIfMissingScope,
   requireTierFeature,
 } from '../lib/errors-helpers.js';
+import { scopesSatisfy } from '../lib/errors-helpers.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
 
 /**
@@ -88,6 +89,13 @@ export interface RotateApiKeyInput {
   keyHash: string;
   now: Date;
   gracePeriodMs: number;
+  /**
+   * Who the successor is attributed to. Omit to carry the old row's minter forward —
+   * the owner rotating a key on their own account. Set when the rotator is not the
+   * account (a team member, or a key a member minted): they now hold the new
+   * plaintext, so removing them from the team must revoke it.
+   */
+  createdByAccountId?: string;
 }
 
 export type RotateApiKeyRepoResult =
@@ -215,6 +223,71 @@ function assertNotDeviceKey(ctx: AccountContext, action: string): void {
   }
 }
 
+/**
+ * A scope that carries the account's own authority: `account_owner`, or anything
+ * that satisfies it (today the legacy `admin` alias) — asked of the canonical scope
+ * predicate rather than listed here, so a future alias is covered without an edit —
+ * or any granular `admin:<resource>` scope. The only routes gated on a granular admin
+ * scope are billing (`admin:billing`: checkout, the portal, crypto orders), which
+ * refuse a member acting in the owner's workspace; a key a member mints on the
+ * owner's account is not acting for anyone — it IS the owner there — so the scope
+ * would open exactly what acting-as keeps closed.
+ */
+function grantsAccountOwner(scope: ApiKeyScope): boolean {
+  return scopesSatisfy([scope], 'account_owner') || parseGranularScope(scope)?.verb === 'admin';
+}
+
+/**
+ * The account a key minted or rotated by this caller is attributed to — the one
+ * whose removal from a team must take the key with it (team-members-repo revokes by
+ * `created_by_account_id`).
+ *
+ * Normally the calling account: on a team-scoped request that is the acting member,
+ * while the key lands on the owner. But a key a member minted on the owner's account
+ * authenticates AS the owner, so `ctx.account` names the owner while the person
+ * holding it is the member — its own `createdByAccountId` says so. A key minted or
+ * rotated through such a key is the member's too; attributed to the account, it
+ * outlived the member's removal (team-keys audit F2).
+ *
+ * Such a delegated key may not act for yet ANOTHER account through a team membership
+ * of the account it lives on. Whichever account the resulting key named, one removal
+ * could not reach it: that third account can remove the owner but not the member, and
+ * the owner's removal of the member revokes only keys on the owner's own account.
+ */
+function actingMinter(ctx: AccountContext, targetAccountId: string, action: string): string {
+  const minter = ctx.apiKey.createdByAccountId;
+  if (minter === null || minter === undefined || minter === ctx.apiKey.accountId) {
+    return ctx.account.id;
+  }
+  if (targetAccountId !== ctx.account.id) {
+    throw new ForbiddenError(
+      `A key created by a team member can't ${action} keys on another account.`,
+    );
+  }
+  return minter;
+}
+
+/**
+ * A key attributed to someone other than the account it lands on — a team member —
+ * may not carry the account's own authority. A key authenticates AS its account, so
+ * an `account_owner` key on the owner's account is the owner: billing, the provider
+ * key, team membership, minting more keys. team.md gives an `admin` member full read
+ * and write on the owner's resources; owner-only settings stay with the owner.
+ * (team-keys audit F1 for create, F3 for rotate.)
+ */
+function assertNotOwnerLevelForAnother(
+  scopes: readonly ApiKeyScope[],
+  mintedBy: string,
+  accountId: string,
+  action: 'create' | 'rotate',
+): void {
+  if (mintedBy !== accountId && scopes.some(grantsAccountOwner)) {
+    throw new ForbiddenError(
+      `A team member can't ${action} a key with account_owner, admin or admin:… scope on the owner's account. Ask the owner.`,
+    );
+  }
+}
+
 export class ApiKeysService {
   constructor(
     private readonly repo: ApiKeysRepo,
@@ -272,6 +345,21 @@ export class ApiKeysService {
     throwIfMissingScope(ctx, 'account_owner');
     assertNotDeviceKey(ctx, 'mint API keys');
 
+    // V-326e6 — when team-scoped, mint the key on the OWNER's
+    // account. Route layer has already enforced 'admin' team role
+    // per Q1. Tier-derived test/live env switch follows the OWNER's
+    // tier (a member acting for an api_starter owner mints
+    // ds_live_… keys; member's own tier doesn't matter).
+    const accountId = opts.effectiveAccountId ?? ctx.account.id;
+    const tier = opts.effectiveTier ?? ctx.account.tier;
+
+    // Who this key is attributed to, and whether it may carry the account's own
+    // authority. Checked before the elevated-scope loop below so a team member
+    // asking for the legacy `admin` alias is told the team rule, not merely that
+    // their session lacks the alias.
+    const mintedBy = actingMinter(ctx, accountId, 'create');
+    assertNotOwnerLevelForAnother(input.scopes, mintedBy, accountId, 'create');
+
     // V-174 privilege de-escalation. The account_owner gate above lets a
     // customer dashboard session mint keys, but a caller must not be able
     // to grant an ELEVATED scope it does not itself hold — otherwise an
@@ -306,14 +394,6 @@ export class ApiKeysService {
         );
       }
     }
-
-    // V-326e6 — when team-scoped, mint the key on the OWNER's
-    // account. Route layer has already enforced 'admin' team role
-    // per Q1. Tier-derived test/live env switch follows the OWNER's
-    // tier (a member acting for an api_starter owner mints
-    // ds_live_… keys; member's own tier doesn't matter).
-    const accountId = opts.effectiveAccountId ?? ctx.account.id;
-    const tier = opts.effectiveTier ?? ctx.account.tier;
 
     // `driftstack_internal_admin` on a key is honoured only while the KEY's
     // account is on the staff allow-list (services/auth.ts,
@@ -368,9 +448,10 @@ export class ApiKeysService {
       expiresAt: input.expiresAt,
       provenance: input.provenance ?? null,
       // V-726 — the ACTING account, which is the member on a team-scoped mint
-      // (accountId above is the owner). This is the only record of who created
-      // the credential, and what removeMember revokes against.
-      createdByAccountId: ctx.account.id,
+      // (accountId above is the owner), or the member behind a key they minted
+      // (actingMinter). This is the only record of who created the credential,
+      // and what removeMember revokes against.
+      createdByAccountId: mintedBy,
     });
 
     // V-216 — record customer-facing audit entry. Best-effort; never
@@ -430,6 +511,11 @@ export class ApiKeysService {
    * key continues to authenticate until that timestamp; after that the
    * existing expires_at gate in auth.ts rejects it cleanly.
    *
+   * The minter is carried forward only when the account rotates its own key. A
+   * team member rotating one of the owner's keys receives the new plaintext, so the
+   * successor is recorded as theirs (removing them revokes it), and they may not
+   * rotate a key that carries `account_owner` or the `admin` alias at all.
+   *
    * Returns { newRow, plaintext, oldKey, gracePeriodEndsAt }. The
    * plaintext is shown once — same UX as initial mint.
    *
@@ -460,11 +546,25 @@ export class ApiKeysService {
     // account. Route layer enforces 'admin' team role.
     const accountId = opts.effectiveAccountId ?? ctx.account.id;
     const tier = opts.effectiveTier ?? ctx.account.tier;
+    const mintedBy = actingMinter(ctx, accountId, 'rotate');
 
     // Rotation always produces an ordinary customer API key. A legacy key on
     // a downgraded Free account remains revocable from the dashboard but may
     // not be refreshed into new programmatic authority.
     requireTierFeature(tier, 'apiAccess');
+
+    // A team member rotating the owner's key receives its new plaintext, so a key
+    // carrying the owner's own authority is the owner's to rotate (team-keys audit
+    // F3: the member got the owner's authority and the owner's key was cut to the
+    // grace window). Read before the transaction: a key's scopes are written once, at
+    // insert, and never updated, so the rotation cannot see different ones. A missing
+    // key falls through to the transaction's own not-found.
+    if (mintedBy !== accountId) {
+      const target = await this.repo.findApiKey(keyId, accountId);
+      if (target !== null) {
+        assertNotOwnerLevelForAnother(target.scopes, mintedBy, accountId, 'rotate');
+      }
+    }
 
     const env = apiKeyEnvForTier(tier);
     const gracePeriodMs = opts.gracePeriodMs ?? 24 * 60 * 60 * 1000;
@@ -488,6 +588,10 @@ export class ApiKeysService {
           keyHash: await hashApiKey(candidatePlaintext),
           now,
           gracePeriodMs,
+          // The rotator now holds the new plaintext. When that is a team member (or a
+          // key a member minted), the successor is theirs, so removing them revokes it;
+          // the owner rotating their own account's key keeps the old row's minter.
+          ...(mintedBy !== accountId ? { createdByAccountId: mintedBy } : {}),
         });
         if (result.kind === 'rotated') {
           rotated = result;

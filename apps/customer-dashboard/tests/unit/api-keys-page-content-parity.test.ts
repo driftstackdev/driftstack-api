@@ -144,7 +144,9 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
 
   it('keeps paid SDK guidance separate from team-admin-only mutations and guards forced DOM paths', () => {
     expect(body).toMatch(/const canWrite = canWriteSelectedAccount\(\)/);
-    expect(body).toMatch(/const canRotate = canWrite && apiAccessVerified && apiAccessGranted/);
+    expect(body).toMatch(
+      /const canRotate =\s*canWrite && apiAccessVerified && apiAccessGranted && !ownerLevelInTeammateAccount/,
+    );
     expect(body).toMatch(/\(canRotate \? '' : ' hidden'\)/);
     expect(body).toMatch(/\(canWrite \? '' : ' hidden'\)/);
     expect(body).toMatch(/apiAccessOnly\.forEach[\s\S]*?!showPaidGuidance/);

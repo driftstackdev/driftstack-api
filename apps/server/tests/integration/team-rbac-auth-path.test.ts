@@ -1442,7 +1442,10 @@ describe('V-326 — resolveEffectiveAccount via X-Driftstack-Account header', ()
         'content-type': 'application/json',
         'x-driftstack-account': `acc_${OWNER_ACCOUNT_ID}`,
       },
-      payload: { name: 'team-key', scopes: ['account_owner'] },
+      // read + write, not account_owner: a team member may not mint the owner's own
+      // authority onto the owner's account (team-keys audit F1). This arm is about WHERE
+      // the key lands and whose tier names it.
+      payload: { name: 'team-key', scopes: ['read', 'write'] },
     });
     expect(res.statusCode).toBe(201);
     const body = res.json<{ id: string; key_prefix: string }>();

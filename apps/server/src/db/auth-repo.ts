@@ -234,6 +234,7 @@ function toApiKeyRow(r: typeof apiKeys.$inferSelect): ApiKeyRow {
     revokedAt: r.revokedAt,
     expiresAt: r.expiresAt,
     provenance: r.provenance,
+    createdByAccountId: r.createdByAccountId,
     createdAt: r.createdAt,
   };
 }

@@ -133,8 +133,12 @@ npm i @driftstack/sdk</code></pre>
         </div>
         <div>
           <span class="block text-sm font-medium text-tk-ink-2">Permissions</span>
+          <p data-owner-level-note class="mt-1 hidden text-xs text-tk-ink-3">
+            You're working in a teammate's account. Full access (account_owner) and admin
+            permissions can only be given by that account's owner, so they aren't offered here.
+          </p>
           <div class="mt-2 space-y-2 text-sm">
-            <label class="flex items-start gap-2">
+            <label class="flex items-start gap-2" data-owner-level-scope>
               <input
                 type="radio"
                 name="scope"
@@ -217,7 +221,7 @@ npm i @driftstack/sdk</code></pre>
                   <input type="checkbox" name="granular-scope" value="write:profiles" />
                   <code class="font-mono text-xs">write:profiles</code>
                 </label>
-                <label class="mt-1 flex items-center gap-2 text-sm">
+                <label class="mt-1 flex items-center gap-2 text-sm" data-owner-level-scope>
                   <input type="checkbox" name="granular-scope" value="admin:profiles" />
                   <code class="font-mono text-xs">admin:profiles</code>
                 </label>
@@ -234,7 +238,7 @@ npm i @driftstack/sdk</code></pre>
                   <input type="checkbox" name="granular-scope" value="write:webhooks" />
                   <code class="font-mono text-xs">write:webhooks</code>
                 </label>
-                <label class="mt-1 flex items-center gap-2 text-sm">
+                <label class="mt-1 flex items-center gap-2 text-sm" data-owner-level-scope>
                   <input type="checkbox" name="granular-scope" value="admin:webhooks" />
                   <code class="font-mono text-xs">admin:webhooks</code>
                 </label>
@@ -247,7 +251,7 @@ npm i @driftstack/sdk</code></pre>
                   <input type="checkbox" name="granular-scope" value="read:api-keys" />
                   <code class="font-mono text-xs">read:api-keys</code>
                 </label>
-                <label class="mt-1 flex items-center gap-2 text-sm">
+                <label class="mt-1 flex items-center gap-2 text-sm" data-owner-level-scope>
                   <input type="checkbox" name="granular-scope" value="admin:api-keys" />
                   <code class="font-mono text-xs">admin:api-keys</code>
                 </label>
@@ -260,7 +264,7 @@ npm i @driftstack/sdk</code></pre>
                   <input type="checkbox" name="granular-scope" value="read:billing" />
                   <code class="font-mono text-xs">read:billing</code>
                 </label>
-                <label class="mt-1 flex items-center gap-2 text-sm">
+                <label class="mt-1 flex items-center gap-2 text-sm" data-owner-level-scope>
                   <input type="checkbox" name="granular-scope" value="admin:billing" />
                   <code class="font-mono text-xs">admin:billing</code>
                 </label>
@@ -569,6 +573,44 @@ npm i @driftstack/sdk</code></pre>
         return Boolean(token && writeAccessVerified && writeAccessGranted);
       }
 
+      // Team-keys audit F1/F3 — in a teammate's account a key lands on THEIR account and
+      // authenticates as them, so owner-level permissions stay with the owner: the server
+      // refuses to create or rotate them (403). Don't offer what will be refused.
+      function actingInOtherWorkspace() {
+        try {
+          const headers =
+            typeof window.driftstackActAsHeaders === 'function'
+              ? window.driftstackActAsHeaders()
+              : {};
+          return Boolean(headers && headers['x-driftstack-account']);
+        } catch {
+          return false;
+        }
+      }
+
+      function isOwnerLevelScope(scope) {
+        return scope === 'account_owner' || scope === 'admin' || /^admin:/.test(String(scope));
+      }
+
+      function syncOwnerLevelScopes() {
+        const acting = actingInOtherWorkspace();
+        root.querySelectorAll('[data-owner-level-scope]').forEach((label) => {
+          label.classList.toggle('hidden', acting);
+          if (acting) {
+            const input = label.querySelector('input');
+            if (input && input.checked) {
+              input.checked = false;
+              if (input.type === 'radio') {
+                const write = root.querySelector('input[name="scope"][value="write"]');
+                if (write) write.checked = true;
+              }
+            }
+          }
+        });
+        const note = root.querySelector('[data-owner-level-note]');
+        if (note) note.classList.toggle('hidden', !acting);
+      }
+
       function canManageApiKeys() {
         return Boolean(
           keyDataAvailable &&
@@ -619,6 +661,7 @@ npm i @driftstack/sdk</code></pre>
           if (rotateReveal) rotateReveal.classList.add('hidden');
           if (rotatePlaintext) rotatePlaintext.textContent = '';
         }
+        syncOwnerLevelScopes();
         const available = canManageApiKeys();
         showCreateBtns.forEach((button) => {
           button.disabled = !available;
@@ -826,7 +869,10 @@ npm i @driftstack/sdk</code></pre>
       function keyLi(k) {
         const isRevoked = k.revoked_at !== null && k.revoked_at !== undefined;
         const canWrite = canWriteSelectedAccount();
-        const canRotate = canWrite && apiAccessVerified && apiAccessGranted;
+        const ownerLevelInTeammateAccount =
+          actingInOtherWorkspace() && (k.scopes || []).some(isOwnerLevelScope);
+        const canRotate =
+          canWrite && apiAccessVerified && apiAccessGranted && !ownerLevelInTeammateAccount;
         const mutationInFlight = mutationKeyIdsInFlight.has(String(k.id));
         const revokeOutcomeUnknown = ambiguousRevokeIds.has(String(k.id));
         const rotateOutcomeUnknown = ambiguousRotateIds.has(String(k.id));

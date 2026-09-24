@@ -111,6 +111,11 @@ interface SerializedApiKey {
    *  ambiguous (ordinary key vs restricted CLI device key), so the cache
    *  envelope validator rejects legacy entries that omit it. */
   provenance: string | null;
+  /** Who minted the key; written explicitly (null for unknown or not delegated).
+   *  Optional on read: an entry from before this field existed deserializes to
+   *  null. That is safe because a positive API-key hit never acts on the cached
+   *  key row — authenticate() replaces it with the live one (services/auth.ts). */
+  createdByAccountId?: string | null;
   createdAt: string;
 }
 
@@ -203,6 +208,7 @@ function serialize(ctx: AccountContext): SerializedContext {
       expiresAt: ctx.apiKey.expiresAt ? ctx.apiKey.expiresAt.toISOString() : null,
       // Always write the field, including an explicit null for ordinary keys.
       provenance: ctx.apiKey.provenance ?? null,
+      createdByAccountId: ctx.apiKey.createdByAccountId ?? null,
       createdAt: ctx.apiKey.createdAt.toISOString(),
     },
     rateLimitOverrides: overrides,
@@ -263,6 +269,7 @@ function deserialize(s: SerializedContext): AccountContext {
       revokedAt: s.apiKey.revokedAt ? new Date(s.apiKey.revokedAt) : null,
       expiresAt: s.apiKey.expiresAt ? new Date(s.apiKey.expiresAt) : null,
       provenance: s.apiKey.provenance,
+      createdByAccountId: s.apiKey.createdByAccountId ?? null,
       createdAt: new Date(s.apiKey.createdAt),
     },
     rateLimitOverrides: overrides,

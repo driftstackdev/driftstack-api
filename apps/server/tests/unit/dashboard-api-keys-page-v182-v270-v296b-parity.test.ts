@@ -283,7 +283,9 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     expect(p).toMatch(/Object\.prototype\.hasOwnProperty\.call\(tierApiAccess, tier\)/);
     expect(p).toMatch(/class="btn-primary hidden"\s*data-show-create\s*data-api-write-only/);
     expect(p).toMatch(/class="dashboard-card mb-8 hidden" data-api-access-only/);
-    expect(p).toMatch(/const canRotate = canWrite && apiAccessVerified && apiAccessGranted;/);
+    expect(p).toMatch(
+      /const canRotate =\s*canWrite && apiAccessVerified && apiAccessGranted && !ownerLevelInTeammateAccount;/,
+    );
     expect(p).toMatch(/\(canRotate \? '' : ' hidden'\) \+/);
     expect(p).toMatch(/rotateAction \+\s*'<button type="button" data-revoke="'/);
     expect(p).toContain('Existing keys are still listed so an owner or admin can revoke them.');

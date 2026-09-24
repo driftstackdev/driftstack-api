@@ -66,6 +66,16 @@ Response (201):
 > scope the calling key does not hold returns `403 Forbidden`:
 > `Cannot grant the "<scope>" scope: the calling key does not hold it.`
 
+> **Team members can't create owner-level keys.** A team member acting
+> for an owner (`X-Driftstack-Account`) can create `read`, `write`,
+> granular and `gui_control` keys on the owner's account, but not a key
+> with `account_owner` or the legacy `admin` scope. That request returns
+> `403 Forbidden`:
+> `A team member can't create a key with account_owner, admin or admin:… scope on the owner's account. Ask the owner.`
+> The same applies to a key a team member created on the owner's
+> account. Keys a member created on your account are revoked when you
+> remove them from the team — see [Team RBAC](/api/team/).
+
 ## List keys
 
 `GET /v1/api-keys` returns all active and revoked keys for the calling
@@ -88,6 +98,13 @@ Rotation mints a fresh plaintext while keeping the old key active for a
 
 Optional `name` field renames the new key (default: preserves the old
 name).
+
+**Team members.** A team member can rotate the owner's `read`, `write`,
+granular and `gui_control` keys, but not a key with `account_owner` or
+the legacy `admin` scope — that returns `403 Forbidden`, and the owner's
+key is left untouched. The member receives the new key, so it counts as
+theirs: it is revoked when the owner removes them from the team. The
+original key still expires at the end of its grace period.
 
 Request:
 

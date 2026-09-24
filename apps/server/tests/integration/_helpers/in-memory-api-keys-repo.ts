@@ -55,14 +55,17 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
       // authenticates (via the mirrored auth repo) with the marker set,
       // mirroring the production api_keys column.
       provenance: input.provenance ?? null,
+      // Team-keys audit F2 — ApiKeyRow now carries the minter (the real auth repo maps
+      // `created_by_account_id` onto it), because a key a member minted must pass that
+      // member on to any key it mints or rotates. The side map below stays the
+      // source for listApiKeysMintedBy.
+      createdByAccountId: input.createdByAccountId ?? null,
       createdAt: new Date(),
     };
     this.byId.set(row.id, row);
     // V-727 — the production api_keys row carries created_by_account_id (who
     // MINTED the key, which on a team-scoped mint is the member while
-    // accountId stays the owner). ApiKeyRow deliberately does not expose it —
-    // it is not auth-relevant and widening that type ripples into the auth
-    // cache — so the twin mirrors the column in a side map instead.
+    // accountId stays the owner). Mirrored in a side map for the minter queries.
     if (input.createdByAccountId != null) {
       this.minterByKeyId.set(row.id, input.createdByAccountId);
     }
@@ -166,16 +169,17 @@ export class InMemoryApiKeysRepo implements ApiKeysRepo {
       revokedAt: null,
       expiresAt: current.expiresAt,
       provenance: null,
+      createdByAccountId: input.createdByAccountId ?? this.minterByKeyId.get(current.id) ?? null,
       createdAt: new Date(),
     };
     const updatedOld: ApiKeyRow = { ...current, expiresAt: gracePeriodEndsAt };
     this.byId.set(current.id, updatedOld);
     this.byId.set(newRow.id, newRow);
-    // V-775 twin — the real repo carries `created_by_account_id` onto the successor. ApiKeyRow
-    // does not expose that column, so this fake tracks it in `minterByKeyId`; propagating it
-    // here is what makes listApiKeysMintedBy (and therefore offboarding reclaim) see the
-    // successor, exactly as the SQL does.
-    const minter = this.minterByKeyId.get(current.id);
+    // V-775 twin — the real repo records the successor's minter as the ROTATOR when a team
+    // member (or a key a member minted) rotates (`input.createdByAccountId`), else carries the
+    // old row's forward. Tracking it here is what makes listApiKeysMintedBy (and therefore
+    // offboarding reclaim) see the successor, exactly as the SQL does.
+    const minter = input.createdByAccountId ?? this.minterByKeyId.get(current.id);
     if (minter !== undefined) this.minterByKeyId.set(newRow.id, minter);
     if (this.authRepoMirror) {
       this.authRepoMirror.upsertApiKey(updatedOld);

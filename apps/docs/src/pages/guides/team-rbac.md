@@ -262,7 +262,11 @@ flow is:
 3. After 24h the old key expires automatically.
 
 Teammates calling the rotation endpoint themselves require admin
-role + `X-Driftstack-Account` header pointing at the owner.
+role + `X-Driftstack-Account` header pointing at the owner. A teammate
+can't rotate a key with `account_owner`, `admin` or an `admin:…` scope —
+only the owner can. A key a teammate rotates counts as theirs: it is
+revoked when they leave the team, so if your own systems use it, rotate
+it again yourself before removing them.
 
 ## Privacy note
 
