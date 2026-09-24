@@ -193,6 +193,14 @@ const ACTIVE_KEY = {
   revoked_at: null,
   expires_at: null,
 };
+/** The permission radio that is selected in the create form, by its value. */
+function checkedScope(window: { document: { querySelector(selector: string): unknown } }): string {
+  const input = window.document.querySelector('input[name="scope"]:checked') as {
+    value?: string;
+  } | null;
+  return input?.value ?? '';
+}
+
 const WRITE_KEY = {
   id: 'key_write',
   name: 'Session runner',
@@ -385,11 +393,10 @@ describe('api-keys page — local integration', () => {
     expect(isHidden(window, '[data-show-create]')).toBe(false);
     // Team-keys audit F1 — owner-level permissions are not offered in a teammate's account.
     expect(isHidden(window, '[data-owner-level-note]')).toBe(false);
-    for (const label of Array.from(window.document.querySelectorAll('[data-owner-level-scope]'))) {
-      expect(label.classList.contains('hidden')).toBe(true);
-    }
-    const checked = window.document.querySelector<HTMLInputElement>('input[name="scope"]:checked');
-    expect(checked?.value).toBe('write');
+    // account_owner + the four granular admin:… choices, every one hidden.
+    expect(window.document.querySelectorAll('[data-owner-level-scope]').length).toBe(5);
+    expect(window.document.querySelectorAll('[data-owner-level-scope].hidden').length).toBe(5);
+    expect(checkedScope(window)).toBe('write');
   });
 
   it('a caller in their own account is offered owner-level permissions and can rotate an owner-level key', async () => {
@@ -402,11 +409,9 @@ describe('api-keys page — local integration', () => {
 
     expect(isHidden(window, '[data-rotate="key_active"]')).toBe(false);
     expect(isHidden(window, '[data-owner-level-note]')).toBe(true);
-    for (const label of Array.from(window.document.querySelectorAll('[data-owner-level-scope]'))) {
-      expect(label.classList.contains('hidden')).toBe(false);
-    }
-    const checked = window.document.querySelector<HTMLInputElement>('input[name="scope"]:checked');
-    expect(checked?.value).toBe('account_owner');
+    expect(window.document.querySelectorAll('[data-owner-level-scope]').length).toBe(5);
+    expect(window.document.querySelectorAll('[data-owner-level-scope].hidden').length).toBe(0);
+    expect(checkedScope(window)).toBe('account_owner');
   });
 
   it('paid caller acting as a paid team member keeps SDK guidance and list read-only even after forced DOM clicks', async () => {
