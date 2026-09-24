@@ -32,6 +32,7 @@ import type { OAuthClientProvider } from '../lib/oauth-client-providers.js';
 import { RateLimitedError } from '../lib/errors.js';
 import type { AccountAuditService } from './account-audit.js';
 import type { RevocationWebhookEmitter } from './api-keys.js';
+import { logLostWebhookEvent } from './webhooks.js';
 import type { EmailPreferencesService } from './email-preferences.js';
 import type { MfaService } from './mfa.js';
 import {
@@ -2190,10 +2191,15 @@ export class AuthFlowsService {
             revoked_at: now.toISOString(),
           });
         } catch (err) {
-          this.logger.warn(
-            { component: 'auth-flows', flow: 'password-reset', apiKeyId: key.id, err },
-            'api_key.revoked webhook enqueue failed after a password reset (best-effort, swallowed)',
-          );
+          // Best-effort, but at ERROR with the event type and account (webhooks
+          // audit #5): no endpoint will ever receive this revocation.
+          logLostWebhookEvent(this.logger, {
+            component: 'auth-flows',
+            accountId,
+            eventType: 'api_key.revoked',
+            err,
+            context: { flow: 'password-reset', api_key_id: key.id },
+          });
         }
       }
       await this.emitAuditBestEffort(

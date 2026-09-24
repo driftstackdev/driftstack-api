@@ -17,7 +17,7 @@
 // session on the node. An unknown session (no row) is dropped with a warn.
 
 import type { ChallengeDetected } from '../schemas/harness-control-protocol.js';
-import type { WebhookEventType } from './webhooks.js';
+import { logLostWebhookEvent, type WebhookEventType } from './webhooks.js';
 import type { Logger } from '../lib/logger.js';
 import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import { isCrossNodeSpoof } from './fleet-session-ownership.js';
@@ -80,11 +80,25 @@ export function makeChallengeRelay(
       typeof frame.challenge.detail === 'string'
         ? { ...frame.challenge, detail: customerSafeNodeDiagnostic(frame.challenge.detail) }
         : frame.challenge;
-    const endpoints = await webhooks.enqueueEvent(session.accountId, 'session.challenge_detected', {
-      session_id: frame.sessionId,
-      challenge_id: frame.challengeId,
-      challenge,
-    });
+    let endpoints: number;
+    try {
+      endpoints = await webhooks.enqueueEvent(session.accountId, 'session.challenge_detected', {
+        session_id: frame.sessionId,
+        challenge_id: frame.challengeId,
+        challenge,
+      });
+    } catch (err) {
+      // Webhooks audit #5 — logged here, where the account is known, rather
+      // than by the relay's generic onError, which could name only the session.
+      logLostWebhookEvent(logger, {
+        component: 'challenge-relay',
+        accountId: session.accountId,
+        eventType: 'session.challenge_detected',
+        err,
+        context: { session_id: frame.sessionId, challenge_id: frame.challengeId },
+      });
+      return;
+    }
     logger.info(
       {
         component: 'challenge-relay',

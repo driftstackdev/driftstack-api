@@ -242,13 +242,23 @@ export class StripeApiClient {
    * automatically — staff decide that (the caller alerts them). Stripe reads a
    * DELETE's parameters from the query string. Cancelling an already cancelled
    * subscription is refused by Stripe with a 4xx, which the caller records.
+   *
+   * Security sweep #11 — `prorate: false` for a subscription whose current period
+   * was never paid (past_due): prorating it credits "unused time" of a period the
+   * customer did not pay for. It then sends `prorate=false&invoice_now=false`, so
+   * nothing is credited and no final invoice is raised; the open invoice is left
+   * as Stripe holds it. Omitted, it is `true` — the termination path's meaning.
    */
-  async cancelSubscription(args: { subscriptionId: string }): Promise<{ id: string }> {
+  async cancelSubscription(args: {
+    subscriptionId: string;
+    prorate?: boolean;
+  }): Promise<{ id: string }> {
+    const prorate = args.prorate ?? true;
     return this.sendForm<{ id: string }>(
       'DELETE',
       `/v1/subscriptions/${encodeURIComponent(args.subscriptionId)}?${new URLSearchParams({
-        invoice_now: 'true',
-        prorate: 'true',
+        invoice_now: prorate ? 'true' : 'false',
+        prorate: prorate ? 'true' : 'false',
       }).toString()}`,
       {},
     );

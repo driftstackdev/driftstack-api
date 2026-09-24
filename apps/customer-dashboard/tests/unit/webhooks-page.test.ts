@@ -644,18 +644,26 @@ describe('webhooks page — local integration', () => {
     expect(fetchCalls.filter((call) => call.init?.method === 'PATCH')).toHaveLength(1);
   });
 
-  it('rotate timeout reconciles committed grace state without a false secret reveal', async () => {
-    const rotating = {
-      ...ENDPOINT,
-      rotation_grace_expires_at: '2026-05-21T10:00:00.000Z',
-    };
+  // Webhooks audit #7 (2026-09-24): a second rotation inside the grace window now
+  // replaces only the secret the customer never saw and keeps the one their
+  // servers run, so after a timed-out rotation that went through, the way out is
+  // to rotate again — not a lock. And a rotation inside a live window keeps the
+  // window's expiry, so it is detected by the secret prefix, not by the grace.
+  it('rotate timeout that went through says so, reveals nothing, and offers the one safe recovery: rotate again', async () => {
+    const before = { ...ENDPOINT, secret_prefix: 'whsec_before' };
+    const rotated = { ...ENDPOINT, secret_prefix: 'whsec_lost__' };
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       fetchPlan: [
-        () => json({ data: [ENDPOINT] }),
+        () => json({ data: [before] }),
         () => Promise.reject(timeout),
-        () => json({ data: [rotating] }),
+        () => json({ data: [rotated] }),
+        () =>
+          json({
+            secret: 'whsec_SECOND_ROTATION',
+            grace_expires_at: '2026-05-21T10:00:00.000Z',
+          }),
       ],
     });
     win = window;
@@ -663,37 +671,63 @@ describe('webhooks page — local integration', () => {
     (window.document.querySelector('[data-rotate="wh_endpoint"]') as HTMLButtonElement).click();
     await flush(10);
 
-    expect(
-      fetchCalls.filter((c) => /\/v1\/webhooks(?:\/wh_endpoint\/rotate-secret)?$/.test(c.url)),
-    ).toHaveLength(3);
-    expect(window.document.querySelector('[data-list]')?.textContent).toContain('rotating');
     expect(isHidden(window, '[data-rotate-reveal]')).toBe(true);
     expect(window.document.querySelector('[data-rotate-secret]')?.textContent).toBe('');
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /took too long.*rotation went through.*new secret can't be shown.*don't rotate again/i,
+      /took too long.*rotation went through.*new secret can't be shown.*rotate again/i,
     );
-    const blockedRotate = window.document.querySelector(
+    expect(window.document.querySelector('[data-banner]')?.textContent).not.toMatch(
+      /don't rotate again/i,
+    );
+    const rotateAgain = window.document.querySelector(
       '[data-rotate="wh_endpoint"]',
     ) as HTMLButtonElement;
-    expect(blockedRotate.disabled).toBe(true);
-    blockedRotate.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
-    await flush();
+    expect(rotateAgain.disabled).toBe(false);
+    rotateAgain.click();
+    await flush(10);
     expect(
       fetchCalls.filter((c) => /\/v1\/webhooks\/wh_endpoint\/rotate-secret$/.test(c.url)),
-    ).toHaveLength(1);
-    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /rotation is paused until you reload and check this endpoint/i,
+    ).toHaveLength(2);
+    expect(window.document.querySelector('[data-rotate-secret]')?.textContent).toBe(
+      'whsec_SECOND_ROTATION',
     );
   });
 
-  it('rotate timeout permits retry only when refreshed grace did not advance', async () => {
+  it('rotate timeout inside a live grace window is recognised by the changed secret prefix — the grace expiry does not move on a second rotation', async () => {
+    const inGrace = {
+      ...ENDPOINT,
+      secret_prefix: 'whsec_first_',
+      rotation_grace_expires_at: '2026-05-21T10:00:00.000Z',
+    };
+    const rotatedAgain = { ...inGrace, secret_prefix: 'whsec_second' };
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [inGrace] }),
+        () => Promise.reject(timeout),
+        () => json({ data: [rotatedAgain] }),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-rotate="wh_endpoint"]') as HTMLButtonElement).click();
+    await flush(10);
+
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /took too long.*rotation went through.*new secret can't be shown/i,
+    );
+  });
+
+  it('rotate timeout permits retry only when the refreshed secret prefix did not change', async () => {
+    const withPrefix = { ...ENDPOINT, secret_prefix: 'whsec_same__' };
     const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       fetchPlan: [
-        () => json({ data: [ENDPOINT] }),
+        () => json({ data: [withPrefix] }),
         () => Promise.reject(timeout),
-        () => json({ data: [ENDPOINT] }),
+        () => json({ data: [withPrefix] }),
         () =>
           json({
             secret: 'whsec_RETRIED_ROTATION',
@@ -720,6 +754,38 @@ describe('webhooks page — local integration', () => {
     ).toHaveLength(2);
     expect(window.document.querySelector('[data-rotate-secret]')?.textContent).toBe(
       'whsec_RETRIED_ROTATION',
+    );
+  });
+
+  it('rotate timeout whose outcome cannot be checked pauses rotation until a reload', async () => {
+    const timeout = Object.assign(new Error('aborted'), { name: 'AbortError' });
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      token: 'tok',
+      fetchPlan: [
+        () => json({ data: [{ ...ENDPOINT, secret_prefix: 'whsec_before' }] }),
+        () => Promise.reject(timeout),
+        () => Promise.reject(new Error('list unavailable')),
+      ],
+    });
+    win = window;
+    await flush();
+    (window.document.querySelector('[data-rotate="wh_endpoint"]') as HTMLButtonElement).click();
+    await flush(10);
+
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /took too long and we couldn't refresh your endpoint list/i,
+    );
+    const blockedRotate = window.document.querySelector(
+      '[data-rotate="wh_endpoint"]',
+    ) as HTMLButtonElement;
+    expect(blockedRotate.disabled).toBe(true);
+    blockedRotate.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await flush();
+    expect(
+      fetchCalls.filter((c) => /\/v1\/webhooks\/wh_endpoint\/rotate-secret$/.test(c.url)),
+    ).toHaveLength(1);
+    expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
+      /rotation is paused until you reload and check this endpoint/i,
     );
   });
 

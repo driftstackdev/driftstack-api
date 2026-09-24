@@ -1801,7 +1801,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             const previousEndpoint = endpointSnapshot.find(
               (endpoint) => String(endpoint.id) === String(id),
             );
-            const previousGrace = previousEndpoint?.rotation_grace_expires_at || null;
+            // A rotation always changes the secret prefix. The grace expiry does
+            // NOT always move: a second rotation inside a live grace window keeps
+            // it (the original secret stays valid until then), so the prefix is
+            // what says whether a timed-out rotation went through.
+            const previousPrefix = previousEndpoint?.secret_prefix || null;
             if (
               !(await window.driftstackConfirm(
                 'Rotate the signing secret for ' +
@@ -1844,30 +1848,29 @@ const apiBaseUrl = resolveApiBaseUrl();
                   const currentEndpoint = endpointSnapshot.find(
                     (endpoint) => String(endpoint.id) === String(id),
                   );
-                  const currentGrace = currentEndpoint?.rotation_grace_expires_at || null;
+                  const currentPrefix = currentEndpoint?.secret_prefix || null;
                   const rotationAdvanced =
-                    refreshed && currentGrace && currentGrace !== previousGrace;
-                  if (rotationAdvanced || !refreshed) {
+                    refreshed && currentPrefix && currentPrefix !== previousPrefix;
+                  // Only an outcome we could not check pauses rotation. One that
+                  // went through does not: rotating again replaces just the secret
+                  // nobody saw and keeps the one the customer's servers run.
+                  if (!refreshed) {
                     uncertainRotationIds.add(String(id));
                     const currentButton = Array.from(
                       ul.querySelectorAll('[data-rotate]'),
                     ).find((candidate) => candidate.getAttribute('data-rotate') === String(id));
                     if (currentButton) {
                       currentButton.disabled = true;
-                      currentButton.textContent = rotationAdvanced
-                        ? 'Rotated — secret not shown'
-                        : 'Check before rotating';
+                      currentButton.textContent = 'Check before rotating';
                       currentButton.setAttribute(
                         'title',
-                        rotationAdvanced
-                          ? 'Reload after deleting or replacing this endpoint. Rotating again would replace a secret you never saw.'
-                          : 'Reload and check this endpoint before rotating again.',
+                        'Reload and check this endpoint before rotating again.',
                       );
                     }
                   }
                   showBanner(
                     rotationAdvanced
-                      ? "The request took too long, but the rotation went through — and the new secret can't be shown. Don't rotate again. Reload, then decide whether to delete or replace this endpoint."
+                      ? "The request took too long, but the rotation went through — and the new secret can't be shown. Rotate again to get one you can see: the secret your servers use now keeps working until the grace period ends."
                       : refreshed
                         ? 'The request took too long and nothing seems to have changed. Try again if you still need to rotate.'
                         : "The request took too long and we couldn't refresh your endpoint list. Reload and check it before rotating again.",

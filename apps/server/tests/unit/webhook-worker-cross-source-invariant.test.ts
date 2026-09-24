@@ -5,8 +5,8 @@
 //   Service intro — 'Webhook delivery worker. Long-running loop'.
 //
 //   5-step loop:
-//     1. Claim a batch of pending deliveries whose nextAttemptAt
-//        is past.
+//     1. Claim pending deliveries whose nextAttemptAt is past —
+//        into a bounded POOL (webhooks audit #2, 2026-09-24).
 //     2. For each: build the signed POST, send via fetch, observe
 //        response.
 //     3. On 2xx → recordDelivered (resets
@@ -71,7 +71,7 @@ describe('W956 webhook-worker delivery-loop cross-source invariant', () => {
 
   it("CRITICAL 5-step loop framing — 1. Claim batch where nextAttemptAt past. 2. For each: build signed POST + fetch + observe. 3. 2xx → recordDelivered (resets consecutiveFailures). 4. Non-2xx/network/timeout → recordRetry (attempts<MAX) or recordDlq (attempts==MAX); only recordDlq bumps consecutiveFailures. 5. Cross auto-disable threshold → mark endpoint disabled. The 5-step delivery state machine is the worker's contract.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/webhook-worker.ts'));
-    expect(p).toMatch(/1\. Claim a batch of pending deliveries whose nextAttemptAt is past/);
+    expect(p).toMatch(/1\. Claim pending deliveries whose nextAttemptAt is past — into a bounded/);
     expect(p).toMatch(/2\. For each: build the signed POST, send via fetch, observe response/);
     expect(p).toMatch(/3\. On 2xx → recordDelivered \(resets endpoint\.consecutiveFailures\)/);
     expect(p).toMatch(
@@ -168,7 +168,9 @@ describe('W956 webhook-worker delivery-loop cross-source invariant', () => {
     expect(p).toMatch(/deliveryTimeoutMs\?: number;/);
     expect(p).toMatch(/Empty-claim sleep \(ms\)\. Default 2s\./);
     expect(p).toMatch(/idleSleepMs\?: number;/);
-    expect(p).toMatch(/Batch size per claim\. Default 25\./);
+    expect(p).toMatch(
+      /Batch size per `tickOnce` claim, and the POOL size of `drain` — the most\s*\* deliveries in flight at once\. Default 25\./,
+    );
     expect(p).toMatch(/batchSize\?: number;/);
   });
 

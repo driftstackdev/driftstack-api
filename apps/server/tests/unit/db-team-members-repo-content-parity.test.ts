@@ -50,10 +50,14 @@ describe('W448.C apps/server/src/db/team-members-repo.ts content parity', () => 
   // V-726 — apiKeys joins the schema imports and RemoveMemberResult the service
   // types: removeMemberWithInvites now revokes, in its own transaction, the keys
   // the departing member minted on the owner.
-  it('imports: and/desc/eq/isNull from drizzle-orm; 6 service types (RemoveMemberResult + TeamInviteRow + TeamMemberRow + TeamMembersRepo + TeamRole + TeamRow); Database; 5 schema tables (accounts + apiKeys + teamInvites + teamMembers + teams)', () => {
-    expect(body).toMatch(/import \{ and, desc, eq, isNull \} from 'drizzle-orm';/);
+  // Security sweep #4/#6 — upsertInviteIfUnderPendingLimit adds asc/count/gt/sql (the
+  // advisory lock, the live-pending count and its oldest expiry) and InviteUpsertOutcome.
+  it('imports: and/asc/count/desc/eq/gt/isNull/sql from drizzle-orm; 7 service types (InviteUpsertOutcome + RemoveMemberResult + TeamInviteRow + TeamMemberRow + TeamMembersRepo + TeamRole + TeamRow); Database; 5 schema tables (accounts + apiKeys + teamInvites + teamMembers + teams)', () => {
     expect(body).toMatch(
-      /import type \{\s*RemoveMemberResult,\s*TeamInviteRow,\s*TeamMemberRow,\s*TeamMembersRepo,\s*TeamRole,\s*TeamRow,\s*\} from '\.\.\/services\/team-members\.js';/,
+      /import \{ and, asc, count, desc, eq, gt, isNull, sql \} from 'drizzle-orm';/,
+    );
+    expect(body).toMatch(
+      /import type \{\s*InviteUpsertOutcome,\s*RemoveMemberResult,\s*TeamInviteRow,\s*TeamMemberRow,\s*TeamMembersRepo,\s*TeamRole,\s*TeamRow,\s*\} from '\.\.\/services\/team-members\.js';/,
     );
     expect(body).toMatch(
       /import \{ accounts, apiKeys, teamInvites, teamMembers, teams \} from '\.\/schema\.js';/,

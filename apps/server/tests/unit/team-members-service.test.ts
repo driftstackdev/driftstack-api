@@ -13,6 +13,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import {
+  TEAM_INVITE_RESEND_COOLDOWN_MS,
   TeamMembersService,
   type TeamInviteRow,
   type TeamMemberRow,
@@ -90,6 +91,38 @@ function makeRepo(): {
       };
       state.invites.push(row);
       return Promise.resolve(row);
+    },
+    // Security sweep #4/#6 — the guarded upsert invite() now goes through: the
+    // cooldown and the live-pending cap, then upsertInvite. Same rules as the
+    // shared in-memory double and the Drizzle repo.
+    upsertInviteIfUnderPendingLimit: async (input) => {
+      const nowMs = input.now.getTime();
+      const current = state.invites.find(
+        (i) =>
+          i.ownerAccountId === input.ownerAccountId &&
+          i.inviteeEmail === input.inviteeEmail &&
+          i.acceptedAt === null,
+      );
+      const replacesLive = current !== undefined && current.inviteExpiresAt.getTime() > nowMs;
+      if (current !== undefined && replacesLive) {
+        const retryAfterMs =
+          current.inviteExpiresAt.getTime() - input.inviteTtlMs + input.resendCooldownMs - nowMs;
+        if (retryAfterMs > 0) return { kind: 'cooldown', retryAfterMs };
+      }
+      if (!replacesLive) {
+        const live = state.invites.filter(
+          (i) =>
+            i.ownerAccountId === input.ownerAccountId &&
+            i.acceptedAt === null &&
+            i.inviteExpiresAt.getTime() > nowMs,
+        );
+        if (live.length >= input.maxPending) {
+          const oldest = Math.min(...live.map((i) => i.inviteExpiresAt.getTime()));
+          return { kind: 'pending_limit', pending: live.length, retryAfterMs: oldest - nowMs };
+        }
+      }
+      if (input.beforeWrite !== undefined) await input.beforeWrite();
+      return { kind: 'upserted', invite: await repo.upsertInvite(input) };
     },
     findInviteByTokenHash: (hash) =>
       Promise.resolve(
@@ -324,16 +357,20 @@ describe('V-553.B-13 TeamMembersService.invite', () => {
     expect(calls.map((c) => c.action)).toEqual(['team.member_invited']);
   });
 
-  it('re-inviting the same email replaces the existing invite token', async () => {
+  // Security sweep #4/#6 — a re-invite replaces the token only once the 10-minute
+  // cooldown since the last invite email has passed; inside it, nothing changes.
+  it('re-inviting the same email after the cooldown replaces the existing invite token', async () => {
     const { repo, state } = makeRepo();
-    const { service: email } = makeEmail();
-    const svc = new TeamMembersService(repo, email, CONFIG);
+    const { service: email, captures } = makeEmail();
+    let now = Date.parse('2026-09-24T09:00:00.000Z');
+    const svc = new TeamMembersService(repo, email, { ...CONFIG, now: () => new Date(now) });
     await svc.invite({
       ownerAccountId: 'acc_owner',
       invitedByAccountId: 'acc_owner',
       inviteeEmail: 'new@e.test',
     });
     const firstHash = state.invites[0]?.inviteTokenHash;
+    now += TEAM_INVITE_RESEND_COOLDOWN_MS + 1000;
     await svc.invite({
       ownerAccountId: 'acc_owner',
       invitedByAccountId: 'acc_owner',
@@ -341,6 +378,29 @@ describe('V-553.B-13 TeamMembersService.invite', () => {
     });
     expect(state.invites).toHaveLength(1);
     expect(state.invites[0]?.inviteTokenHash).not.toBe(firstHash);
+    expect(captures).toHaveLength(2);
+  });
+
+  it('re-inviting the same email inside the cooldown is refused 429 and leaves the invite and its token as they were', async () => {
+    const { repo, state } = makeRepo();
+    const { service: email, captures } = makeEmail();
+    let now = Date.parse('2026-09-24T09:00:00.000Z');
+    const svc = new TeamMembersService(repo, email, { ...CONFIG, now: () => new Date(now) });
+    const input = {
+      ownerAccountId: 'acc_owner',
+      invitedByAccountId: 'acc_owner',
+      inviteeEmail: 'new@e.test',
+    };
+    await svc.invite(input);
+    const firstHash = state.invites[0]?.inviteTokenHash;
+    now += TEAM_INVITE_RESEND_COOLDOWN_MS - 60_000;
+    await expect(svc.invite(input)).rejects.toMatchObject({
+      status: 429,
+      detail:
+        'An invite was emailed to this address less than 10 minutes ago. You can send it again in 1 minute.',
+    });
+    expect(state.invites[0]?.inviteTokenHash).toBe(firstHash);
+    expect(captures).toHaveLength(1);
   });
 
   it('defaults role to "member" when not supplied', async () => {

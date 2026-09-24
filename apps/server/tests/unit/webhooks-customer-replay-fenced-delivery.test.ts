@@ -31,6 +31,13 @@
 // The audit arm is the self-evidencing one. Asserting only the throw would still
 // pass if the throw were moved BELOW the audit write, which is the arrangement that
 // produces the false log entry.
+//
+// Webhooks audit #9 (2026-09-24) changed WHAT the refusal says, not whether it
+// happens: a refused reset of the customer's own delivery that the worker holds is
+// now 409 "being attempted" (it was 404 "not found", for a delivery the customer
+// can see in their list). The arms below drive the race itself — the delivery reads
+// `pending`, the worker claims it before the reset — so the `!updated` branch is
+// what they exercise, not the up-front in_flight check.
 
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -52,14 +59,14 @@ function ctx(): AccountContext {
   } as unknown as AccountContext;
 }
 
-function delivery(): WebhookDeliveryRow {
+function delivery(status: WebhookDeliveryRow['status']): WebhookDeliveryRow {
   return {
     id: DELIVERY_ID,
     webhookId: 'wh_1',
     eventId: 'evt_1',
     eventType: 'session.completed',
     payload: {},
-    status: 'in_flight',
+    status,
     attempts: 1,
     nextAttemptAt: new Date('2026-06-01T00:00:00.000Z'),
     lastResponseStatus: null,
@@ -76,9 +83,16 @@ function delivery(): WebhookDeliveryRow {
  * ~200 lines of shape unrelated to the property under test, and every extra field
  * is another thing that can drift without the guard caring.
  */
-function repoRefusingReset(): WebhooksRepo {
+function repoRefusingReset(afterRefusal: 'claimed' | 'gone' = 'claimed'): WebhooksRepo {
+  let reads = 0;
   return {
-    findDeliveryById: () => Promise.resolve(delivery()),
+    // First read: still pending. After the refused reset: the worker's claim (or,
+    // for `gone`, nothing — the row was discarded in between).
+    findDeliveryById: () => {
+      reads += 1;
+      if (reads === 1) return Promise.resolve(delivery('pending'));
+      return Promise.resolve(afterRefusal === 'claimed' ? delivery('in_flight') : null);
+    },
     findEndpoint: (id: string, accountId: string) =>
       Promise.resolve(
         accountId === ACCOUNT_ID ? ({ id, accountId } as unknown as WebhookEndpointRow) : null,
@@ -97,11 +111,22 @@ describe('customer replay of a delivery the worker already claimed', () => {
     await expect(
       service.replayDeliveryAsCustomer(ctx(), DELIVERY_ID, {}),
       'a refused reset must surface as an error, not a null row',
-    ).rejects.toThrow(/not found/i);
+    ).rejects.toThrow(/being attempted/i);
 
     expect(
       record,
       'no webhook_delivery.replayed entry may be written for a replay the repo refused',
     ).not.toHaveBeenCalled();
+  });
+
+  it('CRITICAL a reset refused because the row is gone is still 404, with no audit entry', async () => {
+    const record = vi.fn().mockResolvedValue(undefined);
+    const audit = { record } as unknown as AccountAuditService;
+    const service = new WebhooksService(repoRefusingReset('gone'), audit);
+
+    await expect(service.replayDeliveryAsCustomer(ctx(), DELIVERY_ID, {})).rejects.toThrow(
+      /not found/i,
+    );
+    expect(record).not.toHaveBeenCalled();
   });
 });

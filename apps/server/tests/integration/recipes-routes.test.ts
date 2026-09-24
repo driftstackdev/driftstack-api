@@ -111,11 +111,14 @@ describe('AI-B4 POST /v1/recipes — wired', () => {
     expect(typo.statusCode).toBe(201);
     expect(typo.headers['x-driftstack-unknown-fields']).toBe('descrption');
 
+    // A second session: one session is saved as one recipe (security sweep #7), so
+    // a second save of the first would be a 409 before any field was looked at.
+    const secondSessionId = await createAgentSession();
     const clean = await fx.app.inject({
       method: 'POST',
       url: '/v1/recipes',
       headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: { agent_session_id: agentSessionId, label: 'r2', description: 'spelled right' },
+      payload: { agent_session_id: secondSessionId, label: 'r2', description: 'spelled right' },
     });
     expect(clean.statusCode).toBe(201);
     expect(clean.headers['x-driftstack-unknown-fields']).toBeUndefined();

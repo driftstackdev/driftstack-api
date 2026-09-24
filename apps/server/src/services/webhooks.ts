@@ -142,9 +142,10 @@ export interface WebhooksRepo {
   insertEndpoint(input: NewWebhookEndpointInput): Promise<WebhookEndpointRow>;
   /**
    * Atomic insert-if-under-cap: insert the endpoint only if the account has
-   * fewer than `limit` active endpoints, else return null. The count + insert
-   * happen under a per-account advisory xact lock so concurrent creates can't
-   * all pass a stale count and exceed the cap (the count-then-insert TOCTOU).
+   * fewer than `limit` endpoints that are not deleted — PAUSED ONES COUNT
+   * (webhooks audit #4) — else return null. The count + insert happen under a
+   * per-account advisory xact lock so concurrent creates can't all pass a
+   * stale count and exceed the cap (the count-then-insert TOCTOU).
    * Mirrors SessionsRepo.insertSessionIfUnderLimit /
    * AgentSessionsRepo.createIfUnderActiveCap.
    */
@@ -175,12 +176,37 @@ export interface WebhooksRepo {
   }): Promise<WebhookEndpointRow | null>;
 
   /**
+   * Webhooks audit #4 — `updateEndpoint` for a patch that may RESUME a paused
+   * endpoint. Under the same per-account advisory lock as
+   * `insertEndpointIfUnderLimit`, a paused → active transition is refused
+   * (`overLimit: true`, nothing written) when the account's OTHER endpoints
+   * that are not deleted already number `limit` or more. Any other patch
+   * applies exactly as `updateEndpoint` does; `row: null` means not found /
+   * not owned / deleted.
+   */
+  updateEndpointIfUnderLimit(
+    input: {
+      id: string;
+      accountId: string;
+      url?: string;
+      events?: WebhookEventType[];
+      description?: string | null;
+      active?: boolean;
+    },
+    limit: number,
+  ): Promise<{ row: WebhookEndpointRow | null; overLimit: boolean }>;
+
+  /**
    * V-359 — rotate the signing secret. Sets `secret = newSecret`,
-   * `secret_prefix = newPrefix`, `secret_prev = oldSecret`,
-   * `secret_prev_expires_at = now + graceMs`, `updated_at = now`.
-   * Returns the updated row, or null when the endpoint isn't found
-   * / not owned by the account. Caller is responsible for the
-   * admin-scope gate.
+   * `secret_prefix = newPrefix`, and the grace slot:
+   *   - no live grace window → `secret_prev = oldSecret`,
+   *     `secret_prev_expires_at = graceExpiresAt`;
+   *   - a live CUSTOMER grace window (webhooks audit #7) → `secret_prev` and
+   *     its expiry are KEPT: the rotation replaces only the current secret;
+   *   - a live server FORCE-rotation window → `secret_prev` (the secret the
+   *     customer runs) is kept with a fresh `graceExpiresAt`.
+   * Returns the updated row, or null when the endpoint isn't found / not owned
+   * by the account / deleted. Caller is responsible for the admin-scope gate.
    */
   rotateSecret(input: {
     id: string;
@@ -242,16 +268,35 @@ export interface WebhooksRepo {
   // deliveries-list + replay routes key off — `wdl_<id>`), so a test-event
   // caller can hand back a delivery_id that actually resolves.
   enqueueDelivery(input: NewWebhookDeliveryInput): Promise<string>;
+  /**
+   * Webhooks audit #5 — one event's fan-out as ONE multi-row insert: every row
+   * is written or none is. Returns the inserted ids in input order.
+   */
+  enqueueDeliveries(inputs: readonly NewWebhookDeliveryInput[]): Promise<string[]>;
+  /**
+   * Every endpoint of the account subscribed to `eventType` that is not
+   * DELETED — paused ones included, so an event raised during a pause is
+   * queued and held for the endpoint (webhooks audit #3).
+   */
   listEndpointsSubscribedTo(
     accountId: string,
     eventType: WebhookEventType,
   ): Promise<WebhookEndpointRow[]>;
 
   // Worker
-  /** Atomic claim using SELECT...FOR UPDATE SKIP LOCKED. */
+  /**
+   * Atomic claim using SELECT...FOR UPDATE SKIP LOCKED. Never claims a PAUSED
+   * endpoint's deliveries (webhooks audit #3).
+   */
   claim(opts: { batchSize: number; now: Date }): Promise<WebhookDeliveryRow[]>;
   /** Look up an endpoint by id without account-scope (worker-only). */
   findEndpointById(id: string): Promise<WebhookEndpointRow | null>;
+  /**
+   * Webhooks audit #3 — put an in_flight delivery back to `pending` without
+   * spending an attempt or touching the endpoint: its endpoint was paused
+   * between the claim and the delivery. Fenced on in_flight.
+   */
+  recordDeferred(deliveryId: string): Promise<void>;
   recordDelivered(deliveryId: string, opts: { responseStatus: number; at: Date }): Promise<void>;
   recordRetry(
     deliveryId: string,
@@ -263,9 +308,19 @@ export interface WebhooksRepo {
       nextAttemptAt: Date;
     },
   ): Promise<void>;
+  /**
+   * `responseExcerpt` is the FINAL attempt's body (webhooks audit #8); omitted
+   * or null, the row's excerpt is cleared rather than left holding an earlier
+   * attempt's.
+   */
   recordDlq(
     deliveryId: string,
-    opts: { responseStatus: number | null; lastError: string | null; at: Date },
+    opts: {
+      responseStatus: number | null;
+      responseExcerpt?: string | null;
+      lastError: string | null;
+      at: Date;
+    },
   ): Promise<void>;
 
   listDeliveriesForEndpoint(
@@ -417,7 +472,8 @@ export class WebhooksService {
     );
     if (row === null) {
       throw new ConflictError(
-        `Account already has ${MAX_ENDPOINTS_PER_ACCOUNT.toString()} active webhook endpoints; limit is ${MAX_ENDPOINTS_PER_ACCOUNT.toString()}.`,
+        `This account already has ${MAX_ENDPOINTS_PER_ACCOUNT.toString()} webhook endpoints, the most it can have. ` +
+          'Paused endpoints count toward the limit; delete one to add another.',
       );
     }
 
@@ -553,7 +609,27 @@ export class WebhooksService {
     if (input.events !== undefined) repoInput.events = input.events;
     if (input.description !== undefined) repoInput.description = input.description;
     if (input.active !== undefined) repoInput.active = input.active;
-    const updated = await this.repo.updateEndpoint(repoInput);
+    // Webhooks audit #4 — resuming is a cap decision. A paused endpoint still
+    // counts toward the cap, so within it a resume always fits; this refuses
+    // only an account already past the cap (one that paused its way there
+    // before paused endpoints counted). The repo reads the row's state under the
+    // create lock, so only a real paused → active transition is checked.
+    let updated: WebhookEndpointRow | null;
+    if (input.active === true) {
+      const result = await this.repo.updateEndpointIfUnderLimit(
+        repoInput,
+        MAX_ENDPOINTS_PER_ACCOUNT,
+      );
+      if (result.overLimit) {
+        throw new ConflictError(
+          `This account already has ${MAX_ENDPOINTS_PER_ACCOUNT.toString()} other webhook endpoints, the most it can have, so this one stays paused. ` +
+            'Paused endpoints count toward the limit; delete one to resume this one.',
+        );
+      }
+      updated = result.row;
+    } else {
+      updated = await this.repo.updateEndpoint(repoInput);
+    }
     if (!updated) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
 
     await this.emitAuditBestEffort(
@@ -584,12 +660,12 @@ export class WebhooksService {
    * when self-account (V-174); route-side team-admin gate when
    * targeting a team owner via `effectiveAccountId`.
    *
-   * Throws ConflictError (409) instead of resolving when a PRIOR
-   * rotation's 24h grace window is still active — the repo's guarded
-   * UPDATE (V-359.G) is a no-op in that case and hands back the
-   * unchanged existing row rather than applying this call, so there is
-   * nothing to safely reveal here (see the `row.secret !== newSecret`
-   * check below).
+   * A second rotation while a prior rotation's grace window is still live
+   * (webhooks audit #7) replaces only the CURRENT secret: the original secret
+   * stays in the grace slot with its original expiry, so the customer's live
+   * verifier keeps working, and a customer who lost the new secret can get
+   * another. It used to be refused with 409 — a status the docs gave only for
+   * a deleted endpoint — for up to 24 hours.
    */
   async rotateSecret(
     ctx: AccountContext,
@@ -621,24 +697,12 @@ export class WebhooksService {
     });
     if (!row) throw new NotFoundError(`Webhook endpoint "${id}" not found.`);
 
-    // V-359.G's guarded UPDATE is a no-op while a prior rotation's grace
-    // window is still live: it matches 0 rows and the repo falls back to
-    // a plain SELECT that returns the UNCHANGED existing row — NOT null.
-    // Detect that here by checking whether the row we got back actually
-    // reflects THIS call's mutation (its secret is the one we just
-    // generated). If it doesn't, the guard blocked the write: `newSecret`
-    // was never persisted anywhere, so returning it would hand the
-    // customer a plaintext that nothing will ever verify against —
-    // permanently breaking inbound HMAC verification until they notice
-    // and retry after the original grace window elapses. Surface a 409
-    // instead of silently "succeeding" with a fabricated secret.
+    // Never hand back a secret that was not persisted: a plaintext nothing
+    // verifies against would break the customer's verifier with no error. The
+    // rotation UPDATE is unconditional on a live endpoint now, so this cannot
+    // happen short of a repo defect — which is why it is a 500, not a 409.
     if (row.secret !== newSecret) {
-      const retryAt = row.secretPrevExpiresAt ? row.secretPrevExpiresAt.toISOString() : 'unknown';
-      throw new ConflictError(
-        `A secret rotation is already in its grace window for this endpoint (active until ${retryAt}). ` +
-          'Wait for the current grace window to elapse before rotating again.',
-        { grace_expires_at: retryAt },
-      );
+      throw new Error('webhook secret rotation returned a row without the new secret');
     }
 
     await this.emitAuditBestEffort(
@@ -649,7 +713,9 @@ export class WebhooksService {
       {
         new_secret_prefix: newPrefix,
         old_secret_prefix: before.secretPrefix,
-        grace_expires_at: graceExpiresAt.toISOString(),
+        // The window the row actually carries: a second rotation inside a live
+        // grace window keeps the original expiry rather than opening a new one.
+        grace_expires_at: (row.secretPrevExpiresAt ?? graceExpiresAt).toISOString(),
       },
     );
 
@@ -793,8 +859,18 @@ export class WebhooksService {
     if (!endpoint) {
       throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
     }
+    // Webhooks audit #9 — the reset is fenced OUT of in_flight (resetting a row
+    // a worker holds would send it twice), and that fenced miss used to surface
+    // as 404 "not found" for a delivery the customer can see in their own list.
+    // It is theirs and it exists: say it is being attempted. Checked again after
+    // the reset, because a worker can claim it in between.
+    if (delivery.status === 'in_flight') throw inFlightReplayConflict(deliveryId);
     const updated = await this.repo.resetDeliveryToPending(deliveryId, new Date());
-    if (!updated) throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
+    if (!updated) {
+      const current = await this.repo.findDeliveryById(deliveryId);
+      if (current?.status === 'in_flight') throw inFlightReplayConflict(deliveryId);
+      throw new NotFoundError(`Webhook delivery "${deliveryId}" not found.`);
+    }
 
     // V-216 — record customer audit entry. Best-effort.
     if (this.accountAudit) {
@@ -907,33 +983,31 @@ export class WebhooksService {
    * Fan out a single event into per-endpoint delivery rows. Returns the
    * number of deliveries enqueued (zero if no endpoint subscribes to the
    * event type — useful for caller-side logging).
+   *
+   * A PAUSED endpoint gets its row too (webhooks audit #3): the claim holds it
+   * until the endpoint is resumed. Only a deleted endpoint is skipped.
+   *
+   * Webhooks audit #5 — all rows go in ONE multi-row insert, so the event
+   * reaches every subscribed endpoint or none; it was one insert per endpoint,
+   * and a failure part-way delivered the event to some endpoints only. A
+   * failure propagates: callers catch it (the state change it reports has
+   * already happened) and log it with `logLostWebhookEvent`.
    */
   async enqueueEvent(
     accountId: string,
     eventType: WebhookEventType,
     data: Record<string, unknown>,
   ): Promise<number> {
-    const closedData = eventType === 'session.failed' ? projectSessionFailedData(data) : data;
     const endpoints = await this.repo.listEndpointsSubscribedTo(accountId, eventType);
-    if (endpoints.length === 0) return 0;
+    // Defence in depth: the repo already leaves deleted endpoints out.
+    const live = endpoints.filter((ep) => ep.disabledAt === null);
+    if (live.length === 0) return 0;
 
-    const eventId = randomUUID();
-    const createdAt = new Date().toISOString();
-    const payload = { id: eventId, type: eventType, created_at: createdAt, data: closedData };
-
-    for (const ep of endpoints) {
-      // Skip endpoints that are disabled even if listEndpointsSubscribedTo
-      // returned them (defence in depth).
-      if (!ep.active || ep.disabledAt !== null) continue;
-      await this.repo.enqueueDelivery({
-        webhookId: ep.id,
-        eventId,
-        eventType,
-        payload,
-      });
-    }
-
-    return endpoints.length;
+    const { eventId, payload } = webhookEventPayload(eventType, data);
+    const ids = await this.repo.enqueueDeliveries(
+      live.map((ep) => ({ webhookId: ep.id, eventId, eventType, payload })),
+    );
+    return ids.length;
   }
 }
 
@@ -1027,6 +1101,72 @@ export class WebhooksAdminService {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * The envelope every delivery of one event carries: `{ id, type, created_at,
+ * data }`, with `session.failed` closed to its published fields. Shared by
+ * `enqueueEvent` and the in-transaction writer (`enqueueWebhookEventInTransaction`
+ * in db/webhooks-repo.ts), so an event queued either way looks the same to the
+ * customer.
+ */
+export function webhookEventPayload(
+  eventType: WebhookEventType,
+  data: Record<string, unknown>,
+): { eventId: string; payload: Record<string, unknown> } {
+  const closedData = eventType === 'session.failed' ? projectSessionFailedData(data) : data;
+  const eventId = randomUUID();
+  const createdAt = new Date().toISOString();
+  return {
+    eventId,
+    payload: { id: eventId, type: eventType, created_at: createdAt, data: closedData },
+  };
+}
+
+function inFlightReplayConflict(deliveryId: string): ConflictError {
+  return new ConflictError(
+    `Webhook delivery "wdl_${deliveryId}" is being attempted right now, so it cannot be replayed yet. ` +
+      'Check its status again in a few minutes: if it is not delivered by then, replay it.',
+  );
+}
+
+/**
+ * Webhooks audit #5 — the one log line for an event that could not be queued.
+ *
+ * Every `enqueueEvent` caller treats the webhook as best-effort: the state
+ * change it reports has already committed, and failing the customer's request
+ * (or an IPN ack) over it would be worse. But the catches swallowed the failure
+ * silently, so an event lost to a connection reset — `crypto.order.paid`, whose
+ * provider retry "does not fire the event again" — left no trace at all. Error
+ * level, because no endpoint will ever receive that event.
+ *
+ * Never throws: it runs inside the caller's catch.
+ */
+export function logLostWebhookEvent(
+  logger: { error?: (obj: Record<string, unknown>, msg: string) => void } | null | undefined,
+  args: {
+    component: string;
+    accountId: string;
+    eventType: WebhookEventType;
+    err: unknown;
+    context?: Record<string, unknown>;
+  },
+): void {
+  try {
+    logger?.error?.(
+      {
+        component: args.component,
+        event: 'webhook_event_not_queued',
+        event_type: args.eventType,
+        account_id: args.accountId,
+        ...args.context,
+        err: args.err,
+      },
+      `${args.eventType} webhook could not be queued — no endpoint will receive this event`,
+    );
+  } catch {
+    // A throwing logger must not turn a lost webhook into a failed request.
+  }
+}
 
 function parseHttpsUrl(raw: string): string {
   let url: URL;

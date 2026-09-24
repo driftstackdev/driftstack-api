@@ -23,13 +23,17 @@
 //     member); the second accept finds the row already there and
 //     returns the existing membership without error.
 
+import type { AccountTier } from '@driftstack/api-types';
 import { generateAuthToken, tokenHash } from '../lib/auth-tokens.js';
 import { canonicalOneTimeTokenUrl } from '../lib/canonical-one-time-token-url.js';
-import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
+import { BadRequestError, ConflictError, NotFoundError, RateLimitedError } from '../lib/errors.js';
 import type { AccountAuditService } from './account-audit.js';
 import type { RevocationWebhookEmitter } from './api-keys.js';
+import type { Logger } from '../lib/logger.js';
+import { logLostWebhookEvent } from './webhooks.js';
 import type { AuthCache } from './auth-cache.js';
 import type { EmailService } from './email.js';
+import { describeWait } from './recipient-email-limit.js';
 
 export type TeamRole = 'member' | 'admin';
 
@@ -107,6 +111,39 @@ export interface TeamMembersRepo {
     inviteExpiresAt: Date;
     invitedByAccountId: string | null;
   }): Promise<TeamInviteRow>;
+  /**
+   * Security sweep #4/#6 — `upsertInvite` under the invite limits, decided under
+   * one per-owner lock so concurrent invites serialise:
+   *
+   *   - `cooldown` when (owner, email) already has a live pending invite sent less
+   *     than `resendCooldownMs` ago. Nothing is written: the emailed link keeps
+   *     working. An invite's send time is `inviteExpiresAt - inviteTtlMs` (every
+   *     send sets the expiry to send time + TTL), so no column records it.
+   *   - `pending_limit` when the owner already has `maxPending` live pending
+   *     invites (unaccepted, unexpired) and this one would add another. Re-sending
+   *     an invite that is already live does not add one, so it is not refused.
+   *     `retryAfterMs` is until the oldest of them expires.
+   *   - otherwise `beforeWrite` runs (it may throw, and then nothing is written),
+   *     and the invite is `upserted` exactly as `upsertInvite` would.
+   */
+  upsertInviteIfUnderPendingLimit(input: {
+    ownerAccountId: string;
+    inviteeEmail: string;
+    role: TeamRole;
+    inviteTokenHash: string;
+    inviteExpiresAt: Date;
+    invitedByAccountId: string | null;
+    maxPending: number;
+    resendCooldownMs: number;
+    inviteTtlMs: number;
+    now: Date;
+    /**
+     * Runs after both limits pass and before anything is written — the caller's
+     * last word (the per-address email limit), so a refused request changes
+     * nothing and an attempt the cooldown refuses spends none of it.
+     */
+    beforeWrite?: () => Promise<void>;
+  }): Promise<InviteUpsertOutcome>;
   /** Token-hash lookup for the accept path. Returns null if not found. */
   findInviteByTokenHash(hash: string): Promise<TeamInviteRow | null>;
   /** Resolve an account row's email by id. Used to assert invite-email match. */
@@ -186,13 +223,52 @@ export interface TeamMembersRepo {
 
 export const TEAM_INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+/** What {@link TeamMembersRepo.upsertInviteIfUnderPendingLimit} decided. */
+export type InviteUpsertOutcome =
+  | { kind: 'upserted'; invite: TeamInviteRow }
+  | { kind: 'cooldown'; retryAfterMs: number }
+  | { kind: 'pending_limit'; pending: number; retryAfterMs: number };
+
+/**
+ * Security sweep #6 — at most this many invites waiting to be accepted per team.
+ * An invite stops counting when it is accepted or expires (7 days after it was
+ * sent). There is no route to withdraw one yet, so the cap is set well above a
+ * real team's burst of invitations.
+ */
+export const MAX_PENDING_TEAM_INVITES = 20;
+
+/**
+ * Security sweep #4/#6 — re-inviting an address inside this long after its last
+ * invite email is refused and sends nothing (the link already sent still works).
+ */
+export const TEAM_INVITE_RESEND_COOLDOWN_MS = 10 * 60 * 1000;
+
+/**
+ * Security sweep #6 — the plans that include teammates. The pricing page says
+ * "On a paid plan, invite teammates", and that is the whole of the published seat
+ * rule: `TIER_FEATURES` carries no seat count. So every paid plan may invite and
+ * the free plan may not. (docs/architecture/team-roles-taxonomy.md sketches
+ * per-plan seat counts; none is published or enforced, and choosing them is a
+ * packaging decision, not this gate's.)
+ */
+export function tierIncludesTeammates(tier: AccountTier): boolean {
+  return tier !== 'free';
+}
+
+/** The refusal a plan without teammates gets. */
+export const TEAMMATES_NOT_ON_PLAN =
+  'Inviting teammates is available on paid plans. Upgrade your plan to invite people to your account.';
+
 export interface TeamMembersServiceConfig {
   /** Public origin of the customer-dashboard, used to build accept URLs in invite emails. */
   dashboardBaseUrl: string;
+  /** Test seam: the clock invites are sent and limited by. Defaults to the wall clock. */
+  now?: () => Date;
 }
 
 export class TeamMembersService {
   private readonly dashboardBaseUrl: string;
+  private readonly now: () => Date;
 
   constructor(
     private readonly repo: TeamMembersRepo,
@@ -212,8 +288,11 @@ export class TeamMembersService {
      *  removal revokes (webhooks/events.md: sent "regardless of who initiated the
      *  revocation"). Optional like the others; best-effort. */
     private readonly webhooks: RevocationWebhookEmitter | null = null,
+    /** Webhooks audit #5 — where a lost `api_key.revoked` is reported. */
+    private readonly logger: Logger | null = null,
   ) {
     this.dashboardBaseUrl = config.dashboardBaseUrl.replace(/\/+$/, '');
+    this.now = config.now ?? (() => new Date());
   }
 
   /**
@@ -293,12 +372,24 @@ export class TeamMembersService {
    * 7-day token + sends the invite email. Idempotent: re-inviting the
    * same email replaces the existing pending invite with a fresh
    * token (the old token becomes invalid immediately).
+   *
+   * Security sweep #4/#6 — except inside {@link TEAM_INVITE_RESEND_COOLDOWN_MS} of
+   * the last invite email to that address, when it is refused (429) and nothing
+   * changes; and a team already holding {@link MAX_PENDING_TEAM_INVITES} invites
+   * waiting is refused a new one (429). Both are decided in the repository under
+   * one lock. The plan gate and the per-address limit run at the route.
    */
   async invite(input: {
     ownerAccountId: string;
     invitedByAccountId: string;
     inviteeEmail: string;
     role?: TeamRole;
+    /**
+     * Security sweep #4 — runs once the team's own limits pass and before the
+     * invite is written or sent; throwing refuses the invite with nothing changed.
+     * The route passes the per-address email limit here.
+     */
+    beforeSend?: () => Promise<void>;
   }): Promise<{ accepted: true }> {
     const normalized = input.inviteeEmail.trim().toLowerCase();
     if (!normalized || !normalized.includes('@')) {
@@ -307,16 +398,35 @@ export class TeamMembersService {
     const role: TeamRole = input.role ?? 'member';
     const plaintext = generateAuthToken();
     const inviteTokenHash = tokenHash(plaintext);
-    const inviteExpiresAt = new Date(Date.now() + TEAM_INVITE_TTL_MS);
+    const now = this.now();
+    const inviteExpiresAt = new Date(now.getTime() + TEAM_INVITE_TTL_MS);
 
-    await this.repo.upsertInvite({
+    const outcome = await this.repo.upsertInviteIfUnderPendingLimit({
       ownerAccountId: input.ownerAccountId,
       inviteeEmail: normalized,
       role,
       inviteTokenHash,
       inviteExpiresAt,
       invitedByAccountId: input.invitedByAccountId,
+      maxPending: MAX_PENDING_TEAM_INVITES,
+      resendCooldownMs: TEAM_INVITE_RESEND_COOLDOWN_MS,
+      inviteTtlMs: TEAM_INVITE_TTL_MS,
+      now,
+      ...(input.beforeSend !== undefined ? { beforeWrite: input.beforeSend } : {}),
     });
+    if (outcome.kind === 'cooldown') {
+      const cooldownMinutes = Math.round(TEAM_INVITE_RESEND_COOLDOWN_MS / 60_000);
+      throw new RateLimitedError(
+        Math.max(1, Math.ceil(outcome.retryAfterMs / 1000)),
+        `An invite was emailed to this address less than ${cooldownMinutes.toString()} minutes ago. You can send it again in ${describeWait(outcome.retryAfterMs)}.`,
+      );
+    }
+    if (outcome.kind === 'pending_limit') {
+      throw new RateLimitedError(
+        Math.max(1, Math.ceil(outcome.retryAfterMs / 1000)),
+        `Your team has ${outcome.pending.toString()} invites waiting to be accepted, the most allowed at once. Try again when one is accepted, or in ${describeWait(outcome.retryAfterMs)}, when the oldest expires.`,
+      );
+    }
 
     const acceptLink = canonicalOneTimeTokenUrl(`${this.dashboardBaseUrl}/team/accept`, plaintext);
     await this.email.sendTeamInvite({
@@ -461,8 +571,15 @@ export class TeamMembersService {
             name: key.name,
             revoked_at: revokedAtIso,
           });
-        } catch {
-          /* swallow */
+        } catch (err) {
+          // Best-effort — the keys are revoked either way — but never silent.
+          logLostWebhookEvent(this.logger, {
+            component: 'team-members',
+            accountId: input.ownerAccountId,
+            eventType: 'api_key.revoked',
+            err,
+            context: { api_key_id: key.id, membership_id: input.membershipId },
+          });
         }
       }
       if (this.accountAudit) {

@@ -147,10 +147,12 @@ describe('W953 V-298b team-members RBAC cross-source invariant', () => {
 
   // ─── 3-error class import ────────────────────────────────────
 
-  it('CRITICAL imports 3 error classes — BadRequestError + ConflictError + NotFoundError. The 3-error palette covers input-validation / state-conflict / row-missing states (matches W939 billing + W948 profiles patterns).', () => {
+  // Security sweep #4/#6 — RateLimitedError joins the palette: the invite re-send
+  // cooldown and the pending-invite cap are refusals that lift with time.
+  it('CRITICAL imports 4 error classes — BadRequestError + ConflictError + NotFoundError + RateLimitedError. The palette covers input-validation / state-conflict / row-missing states (matches W939 billing + W948 profiles patterns), plus the invite limits that lift with time.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/team-members.ts'));
     expect(p).toMatch(
-      /import \{ BadRequestError, ConflictError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ BadRequestError, ConflictError, NotFoundError, RateLimitedError \} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

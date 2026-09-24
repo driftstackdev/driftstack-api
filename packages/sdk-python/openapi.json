@@ -16647,6 +16647,16 @@
               }
             }
           },
+          "409": {
+            "description": "The delivery is being attempted right now (`status: \"in_flight\"`), so it cannot be replayed yet. Check its status again in a few minutes and replay it if it has not been delivered.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Rate limit or concurrency limit hit.",
             "headers": {
@@ -35271,9 +35281,10 @@
     "/v1/auth/logout": {
       "post": {
         "summary": "Revoke a web-session token",
+        "description": "Revokes the web session the caller presents: the `token` in the body, the `Authorization: Bearer` header, or both. With neither, 400.",
         "tags": ["auth"],
         "requestBody": {
-          "required": true,
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
@@ -43633,6 +43644,16 @@
           },
           "404": {
             "description": "Agent session not found (also returned for cross-account access — existence is not leaked).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "This agent session is already saved as a recipe (the body names its `recipe_id`); delete that recipe to save the session again. Repeating the exact same save returns the existing recipe with 201.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -54117,7 +54138,7 @@
             }
           },
           "409": {
-            "description": "The endpoint was not created. Either the account already holds the maximum number of active webhook endpoints, or `events` was supplied empty. Delete or disable an endpoint, or supply at least one event type, and retry.",
+            "description": "The endpoint was not created. Either the account already has the maximum number of webhook endpoints — paused endpoints count toward it — or `events` was supplied empty. Delete an endpoint, or supply at least one event type, and retry.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -55019,7 +55040,7 @@
             }
           },
           "409": {
-            "description": "The endpoint was not updated. Either it is disabled — a disabled endpoint cannot be re-enabled by update and a fresh one must be minted — or `events` was supplied empty.",
+            "description": "The endpoint was not updated. Either it is disabled — a disabled endpoint cannot be re-enabled by update and a fresh one must be minted — or `events` was supplied empty, or `active: true` would resume it while the account already has the maximum number of other webhook endpoints (delete one first).",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -56609,6 +56630,9 @@
                       "minimum": 0
                     },
                     "truncated": {
+                      "type": "boolean"
+                    },
+                    "pages_withheld": {
                       "type": "boolean"
                     }
                   },

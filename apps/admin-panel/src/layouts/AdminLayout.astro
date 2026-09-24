@@ -539,10 +539,14 @@ const navItems = [
           signOut.addEventListener('click', function () {
             try {
               var token = localStorage.getItem('ds_web_session_token') || '';
+              // Security sweep #8 — the token goes in the JSON body, where the logout
+              // route reads it. Sent only as the bearer header, every sign-out was a
+              // 400 this handler swallowed and the session stayed live for 30 days.
               if (token) {
                 fetch('https://api.driftstack.dev/v1/auth/logout', {
                   method: 'POST',
-                  headers: { authorization: 'Bearer ' + token },
+                  headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+                  body: JSON.stringify({ token: token }),
                   credentials: 'include',
                   keepalive: true,
                 }).catch(function () {

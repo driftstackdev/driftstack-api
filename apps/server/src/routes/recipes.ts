@@ -14,8 +14,19 @@ import { parseRequestBodyReportingUnknown } from '../lib/unknown-request-fields.
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { PaginationQuerySchema } from '@driftstack/api-types';
-import { FeatureUnavailableError, NotFoundError, ValidationError } from '../lib/errors.js';
-import { suggestRecipeMetadata, type RecipesRepo, type RecipeRecord } from '../services/recipes.js';
+import {
+  ConflictError,
+  FeatureUnavailableError,
+  NotFoundError,
+  TierLimitError,
+  ValidationError,
+} from '../lib/errors.js';
+import {
+  recipeLimitFor,
+  suggestRecipeMetadata,
+  type RecipesRepo,
+  type RecipeRecord,
+} from '../services/recipes.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { AccountAuditService } from '../services/account-audit.js';
 import { readClientIp } from '../lib/client-ip.js';
@@ -209,14 +220,35 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
       // session originally executed.
       const intentLog: AgentIntent[] = source.transcript.flatMap((entry) => entry.intents ?? []);
 
-      const created = await recipes.create({
+      // Security sweep #7 — each save copied the whole transcript, with no cap and
+      // no dedupe: one session saved 60 times was 60 copies. Now a session is saved
+      // once (an exact repeat answers with that recipe) and an account keeps at most
+      // its plan's number of recipes, both decided under the repository's lock.
+      const limit = recipeLimitFor(ctx.account.tier);
+      const outcome = await recipes.createIfUnderLimit({
         accountId: ctx.account.id,
         agentSessionId: source.id,
         label: body.label,
         ...(body.description !== undefined ? { description: body.description } : {}),
         intentLog,
         transcriptSnapshot: source.transcript,
+        limit,
       });
+      if (outcome.kind === 'session_already_saved') {
+        throw new ConflictError(
+          `This session is already saved as recipe ${outcome.recipeId}. Delete that recipe to save the session again.`,
+          { recipe_id: outcome.recipeId },
+        );
+      }
+      if (outcome.kind === 'limit_reached') {
+        throw new TierLimitError(
+          `Your plan keeps up to ${limit.toString()} recipes, and this account has ${outcome.current.toString()}. Delete a recipe to save a new one.`,
+          { limit, current: outcome.current, resource: 'recipe', tier: ctx.account.tier },
+        );
+      }
+      // A retried save: the recipe it made the first time, and no second audit row.
+      if (outcome.kind === 'existing') return reply.code(201).send(publicRecipe(outcome.record));
+      const created = outcome.record;
       await emitRecipeAudit(req, ctx, 'recipe.created', created.id, {
         label: created.label,
         agent_session_id: source.id,

@@ -76,9 +76,10 @@ describe('W411.A apps/server/src/routes/status-subscribe.ts content parity', () 
     );
   });
 
-  it('POST /v1/status/subscribe: preHandler subscribeGate + service.subscribe(email, now) + 202 reply', () => {
+  // Security sweep #5 — the per-address limit is counted between validation and the send.
+  it('POST /v1/status/subscribe: preHandler subscribeGate + per-address limit + service.subscribe(email, now) + 202 reply', () => {
     expect(body).toMatch(
-      /app\.post\('\/v1\/status\/subscribe', \{ preHandler: \[subscribeGate\] \}, async \(request, reply\) => \{\s*const parsed = SubscribeBodySchema\.safeParse\(request\.body\);\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);\s*await service\.subscribe\(parsed\.data\.email, new Date\(\)\);\s*return reply\.code\(202\)\.send\(\{\s*message: 'Confirmation email sent\. Click the link to finish subscribing\.',\s*\}\);/,
+      /app\.post\('\/v1\/status\/subscribe', \{ preHandler: \[subscribeGate\] \}, async \(request, reply\) => \{\s*const parsed = SubscribeBodySchema\.safeParse\(request\.body\);\s*if \(!parsed\.success\) throw new ValidationError\(parsed\.error\.flatten\(\)\);\s*await recipientLimit\.enforce\('status-subscription', parsed\.data\.email, request\.log\);\s*await service\.subscribe\(parsed\.data\.email, new Date\(\)\);\s*return reply\.code\(202\)\.send\(\{\s*message: 'Confirmation email sent\. Click the link to finish subscribing\.',\s*\}\);/,
     );
   });
 

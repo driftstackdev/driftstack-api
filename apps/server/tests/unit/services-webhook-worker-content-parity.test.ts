@@ -24,7 +24,7 @@
 //   • handleOutcome: 2xx → recordDelivered; AbortError.name →
 //     lastError='timeout'; jitter = floor(random*backoff*0.15) on
 //     retry.
-//   • DeliveryOutcome 3-kind union (delivered | retry | dlq).
+//   • DeliveryOutcome 4-kind union (delivered | retry | dlq | deferred).
 //   • readExcerpt: SIZE-capped bounded body-stream read
 //     (MAX_RESPONSE_READ_BYTES) + cancel (undici decompression-bomb /
 //     huge-body defense), EXCERPT_MAX_CHARS=4096 slice; text() fallback
@@ -49,7 +49,7 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
   it('V-164 framing pinned: 5-step loop (claim → sign+POST → observe → record* → maybe auto-disable)', () => {
     expect(body).toMatch(/Webhook delivery worker\./);
     expect(body).toMatch(
-      /1\. Claim a batch of pending deliveries whose nextAttemptAt is past\s*\/\/\s*2\. For each: build the signed POST, send via fetch, observe response\s*\/\/\s*3\. On 2xx → recordDelivered \(resets endpoint\.consecutiveFailures\)\s*\/\/\s*4\. On non-2xx \/ network \/ timeout → recordRetry \(if attempts < MAX\) or\s*\/\/\s*recordDlq \(if attempts == MAX\)\. Only recordDlq bumps\s*\/\/\s*endpoint\.consecutiveFailures: that counter is a per-DELIVERY signal, and\s*\/\/\s*a retry is an attempt WITHIN one delivery\.\s*\/\/\s*5\. If endpoint\.consecutiveFailures crosses the auto-disable threshold,\s*\/\/\s*mark the endpoint disabled\./,
+      /1\. Claim pending deliveries whose nextAttemptAt is past — into a bounded\s*\/\/\s*POOL: a slot that frees claims again at once \(see `drain`\)\s*\/\/\s*2\. For each: build the signed POST, send via fetch, observe response\s*\/\/\s*3\. On 2xx → recordDelivered \(resets endpoint\.consecutiveFailures\)\s*\/\/\s*4\. On non-2xx \/ network \/ timeout → recordRetry \(if attempts < MAX\) or\s*\/\/\s*recordDlq \(if attempts == MAX\)\. Only recordDlq bumps\s*\/\/\s*endpoint\.consecutiveFailures: that counter is a per-DELIVERY signal, and\s*\/\/\s*a retry is an attempt WITHIN one delivery\.\s*\/\/\s*5\. If endpoint\.consecutiveFailures crosses the auto-disable threshold,\s*\/\/\s*mark the endpoint disabled\./,
     );
     expect(body).toMatch(
       /The loop is process-local; in production we'd run one worker per app\s*\/\/\s*instance and rely on SELECT\.\.\.FOR UPDATE SKIP LOCKED to coordinate\s*\/\/\s*\(already in DrizzleWebhooksRepo\.claim\)\./,
@@ -78,12 +78,15 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     expect(body).toMatch(/const DEFAULT_BATCH_SIZE = 25;/);
   });
 
-  it('Endpoint disabled/deleted between enqueue and claim → direct DLQ (no recoverable path)', () => {
+  it('Endpoint disabled/deleted between enqueue and claim → direct DLQ (no recoverable path); a PAUSED endpoint defers instead (webhooks audit #3)', () => {
     expect(body).toMatch(
-      /\/\/ Fallback: endpoint not in subscriber set \(might have been deleted \/\s*\/\/ disabled between enqueue and claim\)\. Treat as DLQ — there's no\s*\/\/ recoverable path\./,
+      /\/\/ Fallback: endpoint deleted \(or disabled after too many failures\) between\s*\/\/ enqueue and claim\. Treat as DLQ — there's no recoverable path\./,
     );
     expect(body).toMatch(
-      /if \(!endpoint \|\| !endpoint\.active \|\| endpoint\.disabledAt !== null\) \{\s*await this\.config\.repo\.recordDlq\(delivery\.id, \{\s*responseStatus: null,\s*lastError: 'endpoint disabled or deleted between enqueue and claim',/,
+      /if \(!endpoint \|\| endpoint\.disabledAt !== null\) \{\s*await this\.config\.repo\.recordDlq\(delivery\.id, \{\s*responseStatus: null,\s*responseExcerpt: null,\s*lastError: 'endpoint disabled or deleted between enqueue and claim',/,
+    );
+    expect(body).toMatch(
+      /if \(!endpoint\.active\) \{\s*await this\.config\.repo\.recordDeferred\(delivery\.id\);/,
     );
   });
 
@@ -127,7 +130,7 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
 
   it('handleOutcome: nextAttemptIndex >= MAX_ATTEMPTS → recordDlq + auto-disable check (via maybeAutoDisable, re-reading the CURRENT consecutiveFailures)', () => {
     expect(body).toMatch(
-      /if \(nextAttemptIndex >= MAX_ATTEMPTS\) \{\s*await this\.config\.repo\.recordDlq\(delivery\.id, \{\s*responseStatus,\s*lastError,\s*at,\s*\}\);/,
+      /if \(nextAttemptIndex >= MAX_ATTEMPTS\) \{\s*await this\.config\.repo\.recordDlq\(delivery\.id, \{\s*responseStatus,\s*(?:\/\/[^\n]*\s*)*responseExcerpt,\s*lastError,\s*at,\s*\}\);/,
     );
     expect(body).toMatch(/'webhook delivery → DLQ \(max attempts\)',/);
     expect(body).toMatch(
@@ -161,9 +164,9 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     expect(body).toMatch(/'webhook delivery scheduled for retry',/);
   });
 
-  it('DeliveryOutcome: 3-kind union (delivered with status / retry with nextAttemptAt / dlq)', () => {
+  it('DeliveryOutcome: 4-kind union (delivered with status / retry with nextAttemptAt / dlq / deferred)', () => {
     expect(body).toMatch(
-      /export type DeliveryOutcome =\s*\| \{ kind: 'delivered'; delivery: WebhookDeliveryRow; status: number \}\s*\| \{ kind: 'retry'; delivery: WebhookDeliveryRow; nextAttemptAt: Date \}\s*\| \{ kind: 'dlq'; delivery: WebhookDeliveryRow \};/,
+      /export type DeliveryOutcome =\s*\| \{ kind: 'delivered'; delivery: WebhookDeliveryRow; status: number \}\s*\| \{ kind: 'retry'; delivery: WebhookDeliveryRow; nextAttemptAt: Date \}\s*\| \{ kind: 'dlq'; delivery: WebhookDeliveryRow \}\s*\/\*\*[^*]*\*\/\s*\| \{ kind: 'deferred'; delivery: WebhookDeliveryRow \};/,
     );
   });
 
@@ -200,21 +203,26 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
   // the tick and skips the metrics. run() carried the old shape and counted nothing, so the
   // pin was freezing the drift rather than catching it. It now delegates, and what is pinned
   // is that it delegates.
-  it('run(): while-loop on this.running; delegates the batch to tickOnce; empty claim → sleep idleSleepMs', () => {
+  // Webhooks audit #2 (2026-09-24): it now delegates to `drain`, the pool bootstrap
+  // runs, rather than to the batch `tickOnce` — still a delegation, still pinned.
+  it('run(): while-loop on this.running; delegates to the drain pool; empty drain → sleep idleSleepMs', () => {
     expect(body).toMatch(
       /async run\(\): Promise<void> \{\s*if \(this\.running\) return;\s*this\.running = true;/,
     );
     expect(body).toMatch(
-      /while \(this\.running\) \{\s*const \{ claimed \} = await this\.tickOnce\(\);\s*if \(claimed === 0\) await sleep\(idleSleepMs\);\s*\}/,
+      /while \(this\.running\) \{\s*const \{ claimed \} = await this\.drain\(\{\s*maxDeliveries: DEFAULT_DRAIN_MAX_DELIVERIES,\s*budgetMs: DEFAULT_DRAIN_BUDGET_MS,\s*\}\);\s*if \(claimed === 0\) await sleep\(idleSleepMs\);\s*\}/,
     );
     expect(body, 'run() must not grow its own delivery path again').not.toMatch(
       /await Promise\.all\(claimed\.map\(\(d\) => this\.deliver\(d\)\)\);/,
     );
   });
 
-  it('tickOnce: single claim + deliver-batch sync (used in tests)', () => {
+  it('tickOnce: single claim + deliver-batch sync (used in tests); drain: the pool production runs', () => {
     expect(body).toMatch(
-      /\/\*\* Tick once: claim \+ deliver one batch synchronously\. Used in tests\. \*\/\s*async tickOnce\(\): Promise<\{ claimed: number; outcomes: DeliveryOutcome\[\] \}>/,
+      /\* Tick once: claim \+ deliver one BATCH synchronously\.[\s\S]*?\*\/\s*async tickOnce\(\): Promise<\{ claimed: number; outcomes: DeliveryOutcome\[\] \}>/,
+    );
+    expect(body).toMatch(
+      /async drain\(opts: \{\s*maxDeliveries: number;\s*budgetMs: number;\s*\}\): Promise<\{ claims: number; claimed: number \}> \{\s*return drainWebhookDeliveries<WebhookDeliveryRow>\(\{/,
     );
   });
 

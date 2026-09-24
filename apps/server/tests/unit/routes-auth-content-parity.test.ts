@@ -222,9 +222,12 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     );
   });
 
-  it('Logout: IP-gated (W484) + always returns { ok: true as const } regardless of token match (no leak)', () => {
+  // Security sweep #8 — logout revokes every token the caller presents (the `{ token }`
+  // body and/or the bearer header), still IP-gated and still `{ ok: true }` whether or
+  // not a token matched.
+  it('Logout: IP-gated (W484) + revokes the body token and the bearer token + always returns { ok: true as const } regardless of token match (no leak)', () => {
     expect(body).toMatch(
-      /app\.post\('\/v1\/auth\/logout', \{ preHandler: \[logoutGate\] \}, async \(req\) => \{[\s\S]+?await service\.logout\(parsed\.data\.token\);\s*return \{ ok: true as const \};/,
+      /app\.post\('\/v1\/auth\/logout', \{ preHandler: \[logoutGate\] \}, async \(req\) => \{[\s\S]+?presented\.add\(parsed\.data\.token\);[\s\S]+?const bearer = presentedBearerToken\(req\);\s*if \(bearer !== null\) presented\.add\(bearer\);[\s\S]+?for \(const token of presented\) await service\.logout\(token\);\s*return \{ ok: true as const \};/,
     );
   });
 

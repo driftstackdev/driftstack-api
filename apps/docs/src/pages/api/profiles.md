@@ -534,7 +534,8 @@ nothing else. Session records are removed only when the account is deleted.
     }
   ],
   "sessions_scanned": 12,
-  "truncated": false
+  "truncated": false,
+  "pages_withheld": false
 }
 ```
 
@@ -543,6 +544,15 @@ sessions and returns the most recent navigations from them. When
 `truncated` is `true`, older activity exists but is not returned. Requires
 `read:profiles`. Returns `404` for a profile the account does not own and
 `503` on deployments where agent sessions are not enabled.
+
+The pages and session ids come from agent session records, so they are
+shown only to a caller who could read those sessions: the key needs
+`read:sessions` as well, and in a teammate's workspace
+(`X-Driftstack-Account`) the caller must be an admin there, as for
+`/v1/agent-sessions`. Anyone else still gets the rest of the response —
+`sessions_scanned` and `truncated` — with `data` empty and
+`"pages_withheld": true`. Every response carries `pages_withheld`;
+it is `false` when the pages are included.
 
 ## Trim cached site data
 

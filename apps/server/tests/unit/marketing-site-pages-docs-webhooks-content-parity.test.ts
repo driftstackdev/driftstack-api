@@ -63,9 +63,9 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     );
   });
 
-  it("10-endpoint cap + narrow-purpose-over-mega framing pinned: 'Each account can have up to 10 active endpoints. Mint as many narrow-purpose endpoints as you need rather than one mega-endpoint that fans out — easier to retire individual integrations later.' — pinned so the 10-cap + narrow-over-mega commitment survives (drift to a different cap would create marketing↔server-limit divergence)", () => {
+  it("10-endpoint cap + narrow-purpose-over-mega framing pinned: 'Each account can have up to 10 endpoints; paused endpoints count toward the limit, and deleting one frees a place. Mint as many narrow-purpose endpoints as you need rather than one mega-endpoint that fans out — easier to retire individual integrations later.' — pinned so the 10-cap + narrow-over-mega commitment survives (drift to a different cap would create marketing↔server-limit divergence; webhooks audit #4 made paused endpoints count)", () => {
     expect(body).toMatch(
-      /Each account can have up to 10 active endpoints\. Mint as many\s*narrow-purpose endpoints as you need rather than one mega-endpoint\s*that fans out — easier to retire individual integrations later\./,
+      /Each account can have up to 10 endpoints; paused endpoints count\s*toward the limit, and deleting one frees a place\. Mint as many\s*narrow-purpose endpoints as you need rather than one mega-endpoint\s*that fans out — easier to retire individual integrations later\./,
     );
   });
 

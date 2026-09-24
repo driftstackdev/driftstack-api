@@ -247,15 +247,24 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
     );
   });
 
-  it('V-666.I crypto.order.paid emission: only when transitioning INTO paid (skip re-deliver) + account_id non-null + payload 6-field', () => {
+  it("V-666.I crypto.order.paid emission: only when transitioning INTO paid (skip re-deliver) + account_id non-null + payload 6-field; queued inside the paid write's transaction where the repo can (webhooks audit #5)", () => {
     expect(body).toMatch(
       /\/\/ V-666\.I\/R — crypto\.order\.paid webhook \+ receipt email on the →paid transition\./,
     );
     expect(body).toMatch(
-      /firePaid: order\.status !== 'paid' && mapped === 'paid' && updated\.account_id !== null,/,
+      /const firePaid =\s*order\.status !== 'paid' && mapped === 'paid' && updated\.account_id !== null;/,
     );
+    // The 6-field payload, one shape for both paths.
     expect(body).toMatch(
-      /await this\.opts\.webhooks\.enqueueEvent\(outcome\.order\.account_id, 'crypto\.order\.paid', \{\s*order_id: outcome\.order\.order_id,\s*product: outcome\.order\.product,\s*price_cents: outcome\.order\.price_cents,\s*price_currency: outcome\.order\.price_currency,\s*payment_id: outcome\.order\.payment_id,\s*paid_at: paidAtIso,/,
+      /function paidEventData\(order: CryptoOrder\): Record<string, unknown> \{\s*return \{\s*order_id: order\.order_id,\s*product: order\.product,\s*price_cents: order\.price_cents,\s*price_currency: order\.price_currency,\s*payment_id: order\.payment_id,\s*paid_at: new Date\(order\.updated_at\)\.toISOString\(\),\s*\};/,
+    );
+    // In the lock's transaction when the repo writes lock-time events …
+    expect(body).toMatch(
+      /eventType: 'crypto\.order\.paid' as const,\s*data: paidEventData\(updated\),/,
+    );
+    // … and after the commit only when it does not.
+    expect(body).toMatch(
+      /if \(this\.opts\.webhooks !== undefined && !this\.paidEventInLock\(\)\) \{\s*try \{\s*await this\.opts\.webhooks\.enqueueEvent\(\s*outcome\.order\.account_id,\s*'crypto\.order\.paid',\s*paidEventData\(outcome\.order\),\s*\);/,
     );
   });
 

@@ -16,9 +16,10 @@
 //     updatedAt).
 //   • updateEndpoint: selective spread + isNull(disabledAt) — tombstone
 //     rationale 'disabled rows are tombstones'.
-//   • rotateSecret framing pinned: 'Single UPDATE: copy current
-//     secret/prefix INTO the prev slot, overwrite current with new
-//     pair, set grace expiry. No SELECT-then-UPDATE race.'
+//   • rotateSecret framing pinned: 'Single UPDATE: overwrite the current
+//     secret with the new pair and decide the grace slot from the row's
+//     own values at UPDATE time — no SELECT-then-UPDATE race.' Inside a
+//     live grace window the prev slot is KEPT (webhooks audit #7).
 //   • enqueueDelivery: 4-field base + conditional nextAttemptAt spread.
 //   • listEndpointsSubscribedTo: events @> ARRAY[<eventType>] raw SQL
 //     contains-array on Postgres enum array.
@@ -124,16 +125,25 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     );
   });
 
-  it("rotateSecret framing pinned: 'Single UPDATE: copy current secret/prefix INTO the prev slot, overwrite current with the new pair, set the grace expiry. No SELECT-then-UPDATE race — Postgres reads the row's current values at UPDATE time.'", () => {
+  it("rotateSecret framing pinned: 'Single UPDATE: overwrite the current secret with the new pair and decide the grace slot from the row's own values at UPDATE time — no SELECT-then-UPDATE race, and concurrent rotations apply in turn.'", () => {
     expect(body).toMatch(
-      /\/\/ Single UPDATE: copy current secret\/prefix INTO the prev slot,\s*\/\/ overwrite current with the new pair, set the grace expiry\.\s*\/\/ No SELECT-then-UPDATE race — Postgres reads the row's current\s*\/\/ values at UPDATE time\./,
+      /\/\/ Single UPDATE: overwrite the current secret with the new pair and decide\s*\/\/ the grace slot from the row's own values at UPDATE time — no\s*\/\/ SELECT-then-UPDATE race, and concurrent rotations apply in turn\./,
     );
-    // V-359.G.2 (Fable audit 2026-07-03): the prev slot preserves the customer's
-    // still-deployed secret under a live FORCE-rotation grace (forceRotatedAt set +
-    // not-yet-expired) rather than clobbering it with the un-deployed force secret —
-    // else the worker dual-signs {new, force} and both fail the customer's verifier.
+    // Inside a LIVE grace window the prev slot is KEPT. That covers V-359.G.2
+    // (Fable audit 2026-07-03): under a live FORCE-rotation grace the prev slot
+    // holds the customer's still-deployed secret, and clobbering it with the
+    // un-deployed force secret makes the worker dual-sign {new, force} — both fail
+    // the customer's verifier. And webhooks audit #7 (2026-09-24): a second
+    // CUSTOMER rotation keeps the original secret instead of being refused.
     expect(body).toMatch(
-      /secretPrev: sql`CASE WHEN \$\{webhookEndpoints\.forceRotatedAt\} IS NOT NULL AND \$\{webhookEndpoints\.secretPrevExpiresAt\} > \$\{nowIso\}::timestamptz THEN \$\{webhookEndpoints\.secretPrev\} ELSE \$\{webhookEndpoints\.secret\} END`,/,
+      /const liveGrace = sql`\(\$\{webhookEndpoints\.secretPrev\} IS NOT NULL AND \$\{webhookEndpoints\.secretPrevExpiresAt\} > \$\{nowIso\}::timestamptz\)`;/,
+    );
+    expect(body).toMatch(
+      /secretPrev: sql`CASE WHEN \$\{liveGrace\} THEN \$\{webhookEndpoints\.secretPrev\} ELSE \$\{webhookEndpoints\.secret\} END`,/,
+    );
+    // A customer window keeps its expiry; a force window gets a fresh customer one.
+    expect(body).toMatch(
+      /secretPrevExpiresAt: sql`CASE WHEN \$\{liveGrace\} AND \$\{webhookEndpoints\.forceRotatedAt\} IS NULL THEN \$\{webhookEndpoints\.secretPrevExpiresAt\} ELSE \$\{graceIso\}::timestamptz END`,/,
     );
     expect(body).toMatch(/const nowIso = input\.now\.toISOString\(\);/);
   });
@@ -166,7 +176,11 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
     // and — since delivery is serial — stop other customers' webhooks being
     // attempted at all. The lock is separate because PostgreSQL forbids FOR
     // UPDATE alongside a window function; SKIP LOCKED still applies.
-    expect(body).toMatch(/WITH due AS \(/);
+    // Webhooks audit #2 — `busy` counts each endpoint's deliveries already in
+    // flight against the cap, now that delivery is a pool that claims as slots free.
+    expect(body).toMatch(/WITH busy AS \(/);
+    expect(body).toMatch(/\n\s*due AS \(/);
+    expect(body).toMatch(/WHERE rn <= \$\{perEndpointCap\} - COALESCE\(busy\.n, 0\)/);
     expect(body).toMatch(/row_number\(\) OVER \(PARTITION BY webhook_id/);
     expect(body).toMatch(/claimed AS \(/);
     expect(body).toMatch(/FOR UPDATE SKIP LOCKED/);
@@ -205,7 +219,7 @@ describe('W449.C apps/server/src/db/webhooks-repo.ts content parity', () => {
       /\.set\(\{\s*consecutiveFailures: sql`\$\{webhookEndpoints\.consecutiveFailures\} \+ 1`,\s*lastFailureAt: new Date\(\),/,
     );
     expect(body).toMatch(
-      /\.set\(\{\s*status: 'dlq',\s*lastResponseStatus: opts\.responseStatus,\s*lastError: opts\.lastError,\s*updatedAt: opts\.at,\s*\}\)/,
+      /\.set\(\{\s*status: 'dlq',\s*lastResponseStatus: opts\.responseStatus,\s*(?:\/\/[^\n]*\s*)*lastResponseExcerpt: opts\.responseExcerpt \?\? null,\s*lastError: opts\.lastError,\s*updatedAt: opts\.at,\s*\}\)/,
     );
   });
 

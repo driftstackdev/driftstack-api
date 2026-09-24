@@ -81,7 +81,7 @@ export interface BillingProvider {
    * refuses to report a termination as clean while a subscription is still
    * collecting — see {@link BillingService.cancelCollectionForAccount}.
    */
-  cancelSubscriptionNow?(args: { subscriptionId: string }): Promise<void>;
+  cancelSubscriptionNow?(args: { subscriptionId: string; prorate?: boolean }): Promise<void>;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

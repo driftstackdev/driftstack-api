@@ -120,8 +120,13 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
       /if \(!normalized \|\| !normalized\.includes\('@'\)\) \{\s*throw new BadRequestError\('Invalid invitee email\.'\);/,
     );
     expect(body).toMatch(/const role: TeamRole = input\.role \?\? 'member';/);
+    // Security sweep #4/#6 — the clock is the service's own (a test seam), and the
+    // invite is written through the guarded upsert (cooldown + pending cap).
     expect(body).toMatch(
-      /const inviteExpiresAt = new Date\(Date\.now\(\) \+ TEAM_INVITE_TTL_MS\);/,
+      /const now = this\.now\(\);\s*const inviteExpiresAt = new Date\(now\.getTime\(\) \+ TEAM_INVITE_TTL_MS\);/,
+    );
+    expect(body).toMatch(
+      /const outcome = await this\.repo\.upsertInviteIfUnderPendingLimit\(\{[\s\S]*?maxPending: MAX_PENDING_TEAM_INVITES,\s*resendCooldownMs: TEAM_INVITE_RESEND_COOLDOWN_MS,\s*inviteTtlMs: TEAM_INVITE_TTL_MS,/,
     );
     expect(body).toMatch(/const acceptLink = canonicalOneTimeTokenUrl\(/);
     expect(body).toMatch(/`\$\{this\.dashboardBaseUrl\}\/team\/accept`/);
@@ -213,12 +218,13 @@ describe('W407.B apps/server/src/services/team-members.ts content parity', () =>
     );
   });
 
-  it('imports: generateAuthToken + tokenHash + BadRequest/Conflict/NotFound errors + AccountAuditService + AuthCache + EmailService types', () => {
+  it('imports: generateAuthToken + tokenHash + BadRequest/Conflict/NotFound/RateLimited errors + AccountAuditService + AuthCache + EmailService types', () => {
     expect(body).toMatch(
       /import \{ generateAuthToken, tokenHash \} from '\.\.\/lib\/auth-tokens\.js';/,
     );
+    // RateLimitedError: the invite cooldown and pending-cap refusals (security sweep #4/#6).
     expect(body).toMatch(
-      /import \{ BadRequestError, ConflictError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{ BadRequestError, ConflictError, NotFoundError, RateLimitedError \} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(/import type \{ AccountAuditService \} from '\.\/account-audit\.js';/);
     expect(body).toMatch(/import type \{ AuthCache \} from '\.\/auth-cache\.js';/);

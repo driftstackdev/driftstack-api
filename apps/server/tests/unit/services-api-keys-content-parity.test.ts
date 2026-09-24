@@ -213,9 +213,9 @@ describe('W403.A apps/server/src/services/api-keys.ts content parity', () => {
     expect(body).toContain('return outcome;');
   });
 
-  it('Constructor: 5-arg shape (repo + 4 nullable collaborators: authCache + webhooks + legalGate + accountAudit)', () => {
+  it('Constructor: 6-arg shape (repo + 5 nullable collaborators: authCache + webhooks + legalGate + accountAudit + logger — the logger added by webhooks audit #5 so a lost api_key.revoked is logged)', () => {
     expect(body).toMatch(
-      /constructor\(\s*private readonly repo: ApiKeysRepo,\s*private readonly authCache: AuthCache \| null = null,\s*private readonly webhooks: RevocationWebhookEmitter \| null = null,\s*private readonly legalGate: LegalAcceptanceGate \| null = null,\s*private readonly accountAudit: CustomerAuditEmitter \| null = null,\s*\) \{\}/,
+      /constructor\(\s*private readonly repo: ApiKeysRepo,\s*private readonly authCache: AuthCache \| null = null,\s*private readonly webhooks: RevocationWebhookEmitter \| null = null,\s*private readonly legalGate: LegalAcceptanceGate \| null = null,\s*private readonly accountAudit: CustomerAuditEmitter \| null = null,\s*\/\*\*[\s\S]*?\*\/\s*private readonly logger: Logger \| null = null,\s*\) \{\}/,
     );
   });
 

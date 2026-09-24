@@ -48,7 +48,8 @@ inbound delivery.
 - `consecutive_failures` increments on each failed delivery + zeros
   on the next success. After enough consecutive failures, the
   endpoint auto-disables (`disabled_at` set) — you'll need to
-  re-create the endpoint to re-enable.
+  re-create the endpoint to re-enable. Deliveries held while the
+  endpoint is paused are not failures and never count here.
 - `events` is the subscription list. Only subscribable event types
   count here; `test.ping` is delivery-side-only and is rejected if
   passed in the events array .
@@ -85,7 +86,9 @@ Errors:
 - `400 ValidationFailed` — URL not https://, or events array empty
   / >10 entries / contains `test.ping`.
 - `403 Forbidden` — `account_owner` scope missing on the calling key.
-- `409 Conflict` — max 10 active endpoints.
+- `409 Conflict` — the account already has 10 endpoints, the most it
+  can have. Paused endpoints count toward the limit; only deleting an
+  endpoint frees a place.
 
 ## List + get
 
@@ -111,11 +114,23 @@ owned.
 All fields optional; pass any subset. Empty body is rejected (400).
 
 `active: false` pauses delivery without deleting the endpoint;
-useful for maintenance windows or post-incident cooldowns. Resume
-with `active: true`.
+useful for maintenance windows or post-incident cooldowns. While an
+endpoint is paused:
+
+- deliveries already queued for it are held: they are not attempted,
+  not moved to the DLQ, and not counted in `consecutive_failures`, so
+  a pause never auto-disables the endpoint;
+- events raised during the pause are queued for it and held the same
+  way.
+
+Resume with `active: true`: everything held is then delivered like
+any other queued delivery, with the normal retries. A paused endpoint
+still counts toward the 10-endpoint limit.
 
 `409 Conflict` if the endpoint has been deleted (`disabled_at` is
 set); a deleted endpoint cannot be reactivated — create a new one instead.
+Also `409 Conflict` if `active: true` would take the account past
+10 endpoints — delete one first.
 
 ## Delete
 
@@ -188,6 +203,11 @@ Steps to roll:
 3. Deploy the verifier change to all your servers within 24 hours.
 4. The old secret stops working at `grace_expires_at`; subsequent
    deliveries carry only the new-secret `v1=` entry.
+
+Lost the new secret before you deployed it? Rotate again. A rotation
+during the 24-hour window replaces only the new secret: the original
+secret keeps working until the same `grace_expires_at` (the response
+repeats that time), and the secret you lost stops working at once.
 
 `409 Conflict` if the endpoint is disabled. `403 Forbidden` if
 `account_owner` scope is missing.

@@ -473,14 +473,18 @@ export interface StripeWebhooksServiceConfig {
    */
   now?: () => Date;
   /**
-   * Live-billing audit #4 — cancels a subscription at once, prorated (the Stripe
-   * billing provider's `cancelSubscriptionNow`). Used when a customer's NEW plan
+   * Live-billing audit #4 — cancels a subscription at once (the Stripe billing
+   * provider's `cancelSubscriptionNow`). Used when a customer's NEW plan
    * subscription starts collecting while an older one still is: the older one is
    * cancelled so the customer is not billed twice. Absent or null: nothing can be
    * cancelled, so that case is logged and alerted as not cancelled.
+   *
+   * Security sweep #11 — `prorate` is decided per subscription: `false` for one
+   * that is past_due (its current period was never paid, so there is no unused
+   * paid time to credit), `true` for one that is paid up.
    */
   subscriptionCanceller?: {
-    cancelSubscriptionNow(args: { subscriptionId: string }): Promise<void>;
+    cancelSubscriptionNow(args: { subscriptionId: string; prorate: boolean }): Promise<void>;
   } | null;
 }
 
@@ -1539,8 +1543,10 @@ export class StripeWebhooksService {
   /**
    * Live-billing audit #4 — the account's NEW plan subscription `newSubscriptionId`
    * has just started collecting: cancel every OLDER subscription the account still
-   * collects on (active, trialing or past_due), at once and prorated, so the
-   * customer is not billed twice. Never the new one, and never one the mirror saw
+   * collects on (active, trialing or past_due), at once, so the customer is not
+   * billed twice. A paid-up one is cancelled prorated (its unused paid time is
+   * credited); a past_due one WITHOUT proration (security sweep #11) — its current
+   * period was never paid, and prorating it credited that unpaid period. Never the new one, and never one the mirror saw
    * after it — that one is the newer purchase, so it is left alone and staff are
    * told (two checkouts whose events arrived out of order).
    *
@@ -1557,6 +1563,8 @@ export class StripeWebhooksService {
     newSubscriptionId: string,
   ): Promise<void> {
     const cancelled: string[] = [];
+    /** The subset of `cancelled` that was past due, so cancelled without proration. */
+    const cancelledUnpaid: string[] = [];
     const notCancelled: string[] = [];
     try {
       const collecting = await this.repo.listCollectingSubscriptions(accountId);
@@ -1591,9 +1599,14 @@ export class StripeWebhooksService {
           notCancelled.push(s.stripeSubscriptionId);
           continue;
         }
+        const unpaid = s.status === 'past_due';
         try {
-          await canceller.cancelSubscriptionNow({ subscriptionId: s.stripeSubscriptionId });
+          await canceller.cancelSubscriptionNow({
+            subscriptionId: s.stripeSubscriptionId,
+            prorate: !unpaid,
+          });
           cancelled.push(s.stripeSubscriptionId);
+          if (unpaid) cancelledUnpaid.push(s.stripeSubscriptionId);
         } catch (err) {
           notCancelled.push(s.stripeSubscriptionId);
           this.config.logger.error(
@@ -1635,15 +1648,23 @@ export class StripeWebhooksService {
           accountId,
           stripeSubscriptionId: newSubscriptionId,
           cancelled,
+          cancelledWithoutProration: cancelledUnpaid,
         },
-        'a new plan subscription replaced older ones still collecting; they were cancelled now, prorated',
+        'a new plan subscription replaced older ones still collecting; they were cancelled now (prorated unless past due)',
       );
+      const allUnpaid = cancelledUnpaid.length === cancelled.length;
       this.alertBilling(
         'replaced_subscription_cancelled',
         'warning',
-        'A customer started a new plan subscription while an older one was still billing ' +
-          'them; the older one was cancelled at once, with the unused time credited in Stripe. ' +
-          'Find the account in the server log and check whether a refund is owed.',
+        allUnpaid
+          ? 'A customer started a new plan subscription while an older one was past due; ' +
+              'the older one was cancelled at once without proration, so no credit was given ' +
+              'for its unpaid period, and its open invoice was left as it was. Find the account ' +
+              'in the server log and decide in Stripe whether that invoice should be voided.'
+          : 'A customer started a new plan subscription while an older one was still billing ' +
+              'them; the older one was cancelled at once, with the unused time credited in Stripe ' +
+              '(a past due one, if any, without proration). Find the account in the server log ' +
+              'and check whether a refund is owed.',
       );
     }
     if (notCancelled.length > 0) {

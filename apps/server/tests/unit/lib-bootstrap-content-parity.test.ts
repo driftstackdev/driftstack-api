@@ -381,9 +381,11 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     // 5 rows per endpoint, so one tick left a single backlogged endpoint
     // delivering 5/minute. The loop and its stop condition live in
     // drainWebhookDeliveries so they are behaviourally testable — pinned
-    // here only as the wiring.
-    expect(body).toMatch(/await drainWebhookDeliveries\(\{/);
-    expect(body).toMatch(/tick: \(\) => webhookDeliveryWorker\.tickOnce\(\),/);
+    // here only as the wiring. Webhooks audit #2 (2026-09-24): the drain is now
+    // a bounded POOL reached through the worker's `drain`, not a batch loop over
+    // `tickOnce` — a batch waited for its slowest delivery.
+    expect(body).toMatch(/await webhookDeliveryWorker\.drain\(\{/);
+    expect(body).not.toMatch(/tick: \(\) => webhookDeliveryWorker\.tickOnce\(\),/);
     expect(body).toMatch(/webhookDeliveryTimer\.unref\(\);/);
     // The drain loop (a469de115) has no behavioural coverage anywhere — it lives
     // inline in a setInterval closure that no test constructs, so these are
@@ -413,7 +415,7 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     // trap this file warns about elsewhere. A declared-but-unused constant
     // appears once; a wired one appears at least twice.
     for (const name of [
-      'WEBHOOK_DRAIN_MAX_BATCHES',
+      'WEBHOOK_DRAIN_MAX_DELIVERIES',
       'WEBHOOK_DRAIN_BUDGET_MS',
       'WEBHOOK_DELIVERY_BATCH_SIZE',
     ]) {

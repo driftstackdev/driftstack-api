@@ -1290,6 +1290,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     accountAuditService,
     null,
     webhooksService,
+    testLogger, // mirrors bootstrap: a lost api_key.revoked is logged
   );
 
   // V-295c3-followup — incident-notification fan-out.
@@ -1554,6 +1555,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     webhooksService,
     legalService,
     accountAuditService,
+    testLogger, // mirrors bootstrap: a lost api_key.revoked is logged
   );
 
   // V-079: auth-flow service. Uses a no-op email service (Postmark

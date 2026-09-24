@@ -2,6 +2,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type {
+  InviteUpsertOutcome,
   RemoveMemberResult,
   TeamInviteRow,
   TeamMemberRow,
@@ -41,6 +42,59 @@ export class InMemoryTeamMembersRepo implements TeamMembersRepo {
   /** Seed an account-id → email mapping so the service can resolve. */
   upsertAccountEmail(accountId: string, email: string): void {
     this.accountEmails.set(accountId, email);
+  }
+
+  /**
+   * Security sweep #4/#6 — mirrors DrizzleTeamMembersRepo.upsertInviteIfUnderPendingLimit:
+   * the same cooldown (send time = expiry − TTL), the same live-pending count
+   * (unaccepted AND unexpired), the same exemption for re-sending a live invite,
+   * then `upsertInvite`. Sequential, so no lock is needed here; the Drizzle method's
+   * lock is exercised against Postgres.
+   */
+  async upsertInviteIfUnderPendingLimit(input: {
+    ownerAccountId: string;
+    inviteeEmail: string;
+    role: TeamRole;
+    inviteTokenHash: string;
+    inviteExpiresAt: Date;
+    invitedByAccountId: string | null;
+    maxPending: number;
+    resendCooldownMs: number;
+    inviteTtlMs: number;
+    now: Date;
+    beforeWrite?: () => Promise<void>;
+  }): Promise<InviteUpsertOutcome> {
+    const nowMs = input.now.getTime();
+    const current = this.invites.find(
+      (inv) =>
+        inv.ownerAccountId === input.ownerAccountId &&
+        inv.inviteeEmail === input.inviteeEmail &&
+        inv.acceptedAt === null,
+    );
+    const replacesLive = current !== undefined && current.inviteExpiresAt.getTime() > nowMs;
+    if (current !== undefined && replacesLive) {
+      const retryAfterMs =
+        current.inviteExpiresAt.getTime() - input.inviteTtlMs + input.resendCooldownMs - nowMs;
+      if (retryAfterMs > 0) return { kind: 'cooldown', retryAfterMs };
+    }
+    if (!replacesLive) {
+      const live = this.invites.filter(
+        (inv) =>
+          inv.ownerAccountId === input.ownerAccountId &&
+          inv.acceptedAt === null &&
+          inv.inviteExpiresAt.getTime() > nowMs,
+      );
+      if (live.length >= input.maxPending) {
+        const oldest = Math.min(...live.map((inv) => inv.inviteExpiresAt.getTime()));
+        return {
+          kind: 'pending_limit',
+          pending: live.length,
+          retryAfterMs: Math.max(1, oldest - nowMs),
+        };
+      }
+    }
+    if (input.beforeWrite !== undefined) await input.beforeWrite();
+    return { kind: 'upserted', invite: await this.upsertInvite(input) };
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await

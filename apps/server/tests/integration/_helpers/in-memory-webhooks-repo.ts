@@ -92,16 +92,40 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     input: NewWebhookEndpointInput,
     limit: number,
   ): Promise<WebhookEndpointRow | null> {
-    // Synchronous twin of the Drizzle advisory-lock atomic insert: count
-    // active endpoints, refuse if at/over the cap, else insert. No await gap
-    // here so there is no race to serialise (the lock matters only against a
-    // real multi-connection Postgres — see db-webhooks-concurrency-drizzle).
-    let active = 0;
+    // Synchronous twin of the Drizzle advisory-lock atomic insert: count the
+    // endpoints that are not deleted — paused ones included (webhooks audit #4)
+    // — refuse if at/over the cap, else insert. No await gap here so there is
+    // no race to serialise (the lock matters only against a real
+    // multi-connection Postgres — see db-webhooks-concurrency-drizzle).
+    let live = 0;
     for (const r of this.endpoints.values()) {
-      if (r.accountId === input.accountId && r.active) active += 1;
+      if (r.accountId === input.accountId && r.disabledAt === null) live += 1;
     }
-    if (active >= limit) return Promise.resolve(null);
+    if (live >= limit) return Promise.resolve(null);
     return this.insertEndpoint(input);
+  }
+
+  // Twin of DrizzleWebhooksRepo.updateEndpointIfUnderLimit: only a paused →
+  // active transition is a cap decision, counted against the account's OTHER
+  // endpoints that are not deleted.
+  async updateEndpointIfUnderLimit(
+    input: Parameters<WebhooksRepo['updateEndpoint']>[0],
+    limit: number,
+  ): Promise<{ row: WebhookEndpointRow | null; overLimit: boolean }> {
+    const current = this.endpoints.get(input.id);
+    if (!current || current.accountId !== input.accountId || current.disabledAt !== null) {
+      return { row: null, overLimit: false };
+    }
+    if (input.active === true && !current.active) {
+      let others = 0;
+      for (const r of this.endpoints.values()) {
+        if (r.accountId === input.accountId && r.disabledAt === null && r.id !== input.id) {
+          others += 1;
+        }
+      }
+      if (others >= limit) return { row: null, overLimit: true };
+    }
+    return { row: await this.updateEndpoint(input), overLimit: false };
   }
 
   listEndpoints(accountId: string): Promise<WebhookEndpointRow[]> {
@@ -164,36 +188,23 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     if (!r || r.accountId !== input.accountId || r.disabledAt !== null) {
       return Promise.resolve(null);
     }
-    // V-359.G — mirror the Drizzle guard: a SECOND *customer* rotation
-    // while a prior customer rotation is STILL inside its dual-sign grace
-    // window must NOT clobber secret_prev (that would discard the ORIGINAL
-    // secret the customer is still rolling). No-op: return the UNCHANGED
-    // in-flight row. A server force-rotation window (forceRotatedAt set)
-    // is exempt — the customer's escape-hatch rotation proceeds.
-    if (
+    // Mirror the Drizzle CASEs. Inside a LIVE grace window the prev slot holds
+    // the secret the customer's servers verify with, and it is kept: a second
+    // customer rotation (webhooks audit #7) replaces only the current secret
+    // and keeps the original expiry; a customer rotation under a live server
+    // FORCE-rotation window (V-359.G.2) keeps it with a fresh window. Outside
+    // one, the current secret rolls into the prev slot as ever.
+    const liveGrace =
+      r.secretPrev !== null &&
       r.secretPrevExpiresAt !== null &&
-      r.secretPrevExpiresAt.getTime() > input.now.getTime() &&
-      r.forceRotatedAt === null
-    ) {
-      return Promise.resolve({ ...r });
-    }
+      r.secretPrevExpiresAt.getTime() > input.now.getTime();
     const updated: WebhookEndpointRow = {
       ...r,
       secret: input.newSecret,
       secretPrefix: input.newPrefix,
-      // V-359.G.2 (Fable audit 2026-07-03) — mirror the Drizzle CASE: under a
-      // still-live FORCE-rotation grace window the current `secret` is the
-      // server's force-rotated value (customer got only the prefix, never
-      // deployed it) while secret_prev holds the secret the customer actually
-      // has live. Preserve that live secret in the grace slot instead of
-      // clobbering it with the un-deployed force secret.
-      secretPrev:
-        r.forceRotatedAt !== null &&
-        r.secretPrevExpiresAt !== null &&
-        r.secretPrevExpiresAt.getTime() > input.now.getTime()
-          ? r.secretPrev
-          : r.secret,
-      secretPrevExpiresAt: input.graceExpiresAt,
+      secretPrev: liveGrace ? r.secretPrev : r.secret,
+      secretPrevExpiresAt:
+        liveGrace && r.forceRotatedAt === null ? r.secretPrevExpiresAt : input.graceExpiresAt,
       secretCreatedAt: input.now,
       lastReminderSentAt: null,
       // Arc 3 sub-slice 28.7 (v2-#28) — reset force-rotation
@@ -319,12 +330,21 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     return Promise.resolve(row.id);
   }
 
+  // Webhooks audit #5 — the Drizzle twin is one multi-row INSERT (all or none).
+  // Storing a row here cannot fail, so storing them in turn is all-or-none too.
+  async enqueueDeliveries(inputs: readonly NewWebhookDeliveryInput[]): Promise<string[]> {
+    const ids: string[] = [];
+    for (const input of inputs) ids.push(await this.enqueueDelivery(input));
+    return ids;
+  }
+
+  // Every endpoint that is not DELETED — paused ones included (webhooks audit #3).
   listEndpointsSubscribedTo(
     accountId: string,
     eventType: WebhookEventType,
   ): Promise<WebhookEndpointRow[]> {
     const rows = Array.from(this.endpoints.values()).filter(
-      (r) => r.accountId === accountId && r.active && r.events.includes(eventType),
+      (r) => r.accountId === accountId && r.disabledAt === null && r.events.includes(eventType),
     );
     return Promise.resolve(rows.map((r) => ({ ...r })));
   }
@@ -336,11 +356,18 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
     // RECLAIM_STALE_IN_FLIGHT_MS, and without that here a stuck delivery is stuck forever — so
     // any test of crash recovery against this double asserted the opposite of production.
     const staleBefore = opts.now.getTime() - RECLAIM_STALE_IN_FLIGHT_MS;
+    // Webhooks audit #3 — a PAUSED endpoint's deliveries are held, not claimed.
+    // (This double is FIFO: it does not model the per-endpoint cap.)
+    const paused = (webhookId: string): boolean => {
+      const ep = this.endpoints.get(webhookId);
+      return ep !== undefined && !ep.active && ep.disabledAt === null;
+    };
     const eligible = Array.from(this.deliveries.values())
       .filter(
         (r) =>
-          (r.status === 'pending' && r.nextAttemptAt.getTime() <= opts.now.getTime()) ||
-          (r.status === 'in_flight' && r.updatedAt.getTime() < staleBefore),
+          ((r.status === 'pending' && r.nextAttemptAt.getTime() <= opts.now.getTime()) ||
+            (r.status === 'in_flight' && r.updatedAt.getTime() < staleBefore)) &&
+          !paused(r.webhookId),
       )
       .sort((a, b) => a.nextAttemptAt.getTime() - b.nextAttemptAt.getTime())
       .slice(0, opts.batchSize);
@@ -348,6 +375,14 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       this.deliveries.set(r.id, { ...r, status: 'in_flight', updatedAt: opts.now });
     }
     return Promise.resolve(eligible.map((r) => ({ ...r, status: 'in_flight' as const })));
+  }
+
+  // Webhooks audit #3 — back to pending, nothing spent, endpoint untouched.
+  recordDeferred(deliveryId: string): Promise<void> {
+    const row = this.deliveries.get(deliveryId);
+    if (!row || row.status !== 'in_flight') return Promise.resolve();
+    this.deliveries.set(deliveryId, { ...row, status: 'pending', updatedAt: new Date() });
+    return Promise.resolve();
   }
 
   recordDelivered(deliveryId: string, opts: { responseStatus: number; at: Date }): Promise<void> {
@@ -415,7 +450,12 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
 
   recordDlq(
     deliveryId: string,
-    opts: { responseStatus: number | null; lastError: string | null; at: Date },
+    opts: {
+      responseStatus: number | null;
+      responseExcerpt?: string | null;
+      lastError: string | null;
+      at: Date;
+    },
   ): Promise<void> {
     const row = this.deliveries.get(deliveryId);
     if (!row || row.status !== 'in_flight') return Promise.resolve();
@@ -423,6 +463,8 @@ export class InMemoryWebhooksRepo implements WebhooksRepo {
       ...row,
       status: 'dlq',
       lastResponseStatus: opts.responseStatus,
+      // Webhooks audit #8 — the final attempt's body, never an earlier one's.
+      lastResponseExcerpt: opts.responseExcerpt ?? null,
       lastError: opts.lastError,
       updatedAt: opts.at,
     });

@@ -87,7 +87,10 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
       /createSubmit\.disabled = !endpointDataAvailable \|\| createOutcomeBlocked/,
     );
     expect(body).toMatch(/if \(createOutcomeBlocked\)/);
-    expect(body).toMatch(/currentGrace && currentGrace !== previousGrace/);
+    // By the secret prefix (webhooks audit #7): a second rotation inside a live
+    // grace window keeps the grace expiry, so the grace cannot say it happened.
+    expect(body).toMatch(/currentPrefix && currentPrefix !== previousPrefix/);
+    expect(body).not.toContain("Don't rotate again");
     expect(body).toMatch(/uncertainRotationIds\.add\(String\(id\)\)/);
     expect(body).toMatch(/if \(uncertainRotationIds\.has\(String\(id\)\)\)/);
     expect(body).toContain("Your list doesn't show a new endpoint for this URL");

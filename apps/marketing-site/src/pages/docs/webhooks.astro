@@ -56,7 +56,8 @@ const EVENT_TYPES = [
       <code>events</code> when creating an endpoint.
     </p>
     <p class="text-sm text-tk-ink-3">
-      Each account can have up to 10 active endpoints. Mint as many
+      Each account can have up to 10 endpoints; paused endpoints count
+      toward the limit, and deleting one frees a place. Mint as many
       narrow-purpose endpoints as you need rather than one mega-endpoint
       that fans out — easier to retire individual integrations later.
     </p>
@@ -265,6 +266,13 @@ Authorization: Bearer ds_live_…
       your own pace during the grace window — when it expires, the
       old <code>v1=</code> entry drops and only the new-secret
       signature is sent.
+    </p>
+    <p>
+      Lost the new secret before you deployed it? Rotate again. A
+      rotation during the grace window replaces only the new secret:
+      the old one keeps working until the same
+      <code>grace_expires_at</code>, and the secret you lost stops
+      working at once.
     </p>
 
     <h2>Testing</h2>

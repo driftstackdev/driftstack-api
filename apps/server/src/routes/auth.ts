@@ -63,6 +63,8 @@ import { readClientIp } from '../lib/client-ip.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
+import { RecipientEmailLimiter } from '../services/recipient-email-limit.js';
+import { extractBearerToken } from '../services/auth.js';
 import { registerAccountOauthLinkRemovalRoute } from './account-oauth-links.js';
 
 function clientIp(req: FastifyRequest): string | null {
@@ -72,6 +74,24 @@ function clientIp(req: FastifyRequest): string | null {
   // issuedFromIp / sourceIp on every auth flow.  The local name is kept because
   // it reads better at the call sites below.
   return readClientIp(req);
+}
+
+/**
+ * Security sweep #8 — the web-session token a sign-out presents as
+ * `Authorization: Bearer …`, or null when there is none or it is not the shape of
+ * one. The dashboard and the admin panel sent the token only there for months, and
+ * the route read only the body, so no sign-out ever revoked anything.
+ */
+function presentedBearerToken(req: FastifyRequest): string | null {
+  const header = req.headers.authorization;
+  if (typeof header !== 'string' || header.length === 0) return null;
+  let token: string;
+  try {
+    token = extractBearerToken(header);
+  } catch {
+    return null;
+  }
+  return LogoutRequestSchema.shape.token.safeParse(token).success ? token : null;
 }
 
 function userAgent(req: FastifyRequest): string | null {
@@ -156,6 +176,10 @@ export interface AuthRoutesDeps {
 
 export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): void {
   const { service, rateLimitStore } = deps;
+  // Security sweep #5 — the per-ADDRESS limit on the three sends below, layered
+  // on the per-IP gates. Counted before the address is looked up, so the refusal
+  // is the same whether or not an account exists (services/recipient-email-limit.ts).
+  const recipientLimit = new RecipientEmailLimiter(rateLimitStore);
 
   const signupGate = ipRateLimit(rateLimitStore, {
     bucketPrefix: 'auth-ip:signup',
@@ -269,6 +293,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     async (req) => {
       const parsed = ResendVerificationRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      await recipientLimit.enforce('signup-verification', parsed.data.email, req.log);
 
       const result = await service.resendSignupVerification({
         email: parsed.data.email,
@@ -384,6 +409,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
   app.post('/v1/auth/magic-link/request', { preHandler: [magicLinkRequestGate] }, async (req) => {
     const parsed = MagicLinkRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+    await recipientLimit.enforce('magic-link', parsed.data.email, req.log);
 
     const result = await service.requestMagicLink({
       email: parsed.data.email,
@@ -424,6 +450,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     async (req) => {
       const parsed = PasswordResetRequestSchema.safeParse(req.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      await recipientLimit.enforce('password-reset', parsed.data.email, req.log);
 
       const result = await service.requestPasswordReset({
         email: parsed.data.email,
@@ -475,11 +502,29 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     }
   });
 
+  // Security sweep #8 — revoke the session the caller PRESENTS: the `{ token }`
+  // body, the bearer header, or both (each is revoked; holding a token is what
+  // entitles a caller to end it). Neither → the same 400 as before. A body that
+  // is present must still be well formed: it is not quietly ignored because a
+  // header happened to come with it.
   app.post('/v1/auth/logout', { preHandler: [logoutGate] }, async (req) => {
-    const parsed = LogoutRequestSchema.safeParse(req.body);
-    if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+    const presented = new Set<string>();
+    if (req.body !== undefined && req.body !== null) {
+      const parsed = LogoutRequestSchema.safeParse(req.body);
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      presented.add(parsed.data.token);
+    }
+    const bearer = presentedBearerToken(req);
+    if (bearer !== null) presented.add(bearer);
+    if (presented.size === 0) {
+      // No body and no usable bearer: refuse exactly as a missing body always was.
+      const missing = LogoutRequestSchema.safeParse(req.body);
+      throw new ValidationError(
+        missing.success ? { formErrors: ['Required'], fieldErrors: {} } : missing.error.flatten(),
+      );
+    }
 
-    await service.logout(parsed.data.token);
+    for (const token of presented) await service.logout(token);
     return { ok: true as const };
   });
 

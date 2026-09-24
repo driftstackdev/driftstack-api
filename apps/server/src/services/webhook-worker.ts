@@ -1,7 +1,8 @@
 // Webhook delivery worker.
 //
 // Long-running loop:
-//   1. Claim a batch of pending deliveries whose nextAttemptAt is past
+//   1. Claim pending deliveries whose nextAttemptAt is past — into a bounded
+//      POOL: a slot that frees claims again at once (see `drain`)
 //   2. For each: build the signed POST, send via fetch, observe response
 //   3. On 2xx → recordDelivered (resets endpoint.consecutiveFailures)
 //   4. On non-2xx / network / timeout → recordRetry (if attempts < MAX) or
@@ -10,6 +11,8 @@
 //      a retry is an attempt WITHIN one delivery.
 //   5. If endpoint.consecutiveFailures crosses the auto-disable threshold,
 //      mark the endpoint disabled.
+//   A delivery whose endpoint is PAUSED is deferred — back to pending, nothing
+//   spent — and one whose endpoint is deleted is dead-lettered.
 //
 // The loop is process-local; in production we'd run one worker per app
 // instance and rely on SELECT...FOR UPDATE SKIP LOCKED to coordinate
@@ -52,7 +55,10 @@ export interface WebhookWorkerConfig {
   deliveryTimeoutMs?: number;
   /** Empty-claim sleep (ms). Default 2s. */
   idleSleepMs?: number;
-  /** Batch size per claim. Default 25. */
+  /**
+   * Batch size per `tickOnce` claim, and the POOL size of `drain` — the most
+   * deliveries in flight at once. Default 25.
+   */
   batchSize?: number;
 }
 
@@ -82,6 +88,10 @@ const AUTO_DISABLE_AFTER_CONSECUTIVE_FAILURES = 50;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_IDLE_SLEEP_MS = 2_000;
 const DEFAULT_BATCH_SIZE = 25;
+// `run()`'s drain bounds — the same ceilings bootstrap's poller pins at its call
+// site (20 batches' worth of deliveries, and a budget well inside the 60 s poll).
+const DEFAULT_DRAIN_MAX_DELIVERIES = 500;
+const DEFAULT_DRAIN_BUDGET_MS = 30_000;
 // Cap how much of a non-2xx response body we buffer for the failure excerpt.
 // `response.text()` buffers the ENTIRE body before slicing — a misbehaving or
 // malicious customer endpoint can stream a huge body, or a Content-Encoding
@@ -95,40 +105,108 @@ const EXCERPT_MAX_CHARS = 4096;
 const TRANSPORT_ERROR_MAX_CHARS = 500;
 
 /**
- * Drive `tickOnce` until the ready queue is empty, bounded.
+ * Drain the ready queue through a bounded POOL of delivery slots.
  *
- * Extracted from the bootstrap poller so the stop condition is testable. It is
- * the stop condition that matters: `repo.claim` ranks rows within each endpoint
- * and takes at most `perEndpointCap` (5) per call, so it deliberately returns
- * fewer than a full batch whenever ready work is concentrated on few endpoints
- * — the normal shape of a backlog. Stopping on a PARTIAL batch therefore ended
- * the drain after one claim in exactly the case the loop exists for: a single
- * endpoint recovering from an outage drained at 5 per poll. Only an EMPTY claim
- * means nothing is ready.
+ * Webhooks audit #2 (2026-09-24). This used to drive `tickOnce` batch by batch:
+ * claim 25, `Promise.allSettled` them, claim the next 25. A batch lasted as long
+ * as its SLOWEST delivery, so one endpoint answering 200 after ten seconds —
+ * slow but succeeding, so never backed off, with a backlog whose rows are always
+ * the oldest — set the length of every batch, and the 30 s budget ran about
+ * three batches a minute instead of twenty, for every account on the
+ * deployment. The audit measured it: with one 1.5 s endpoint and a 3 s budget,
+ * 40 of 200 fast deliveries went out instead of all of them.
+ *
+ * Now each slot that frees claims again at once, so a straggler holds only its
+ * own slots — and the claim counts an endpoint's deliveries already in flight
+ * against its per-endpoint cap, so it never holds more than that share.
+ *
+ * Stop conditions:
+ *   - a claim that comes back SHORT with nothing in flight means nothing is
+ *     ready — the queue is drained. A short claim WHILE deliveries are in flight
+ *     is not: the capped endpoints may become claimable as they settle, so the
+ *     pool waits for a slot and claims again. (The claim returns fewer than asked
+ *     whenever ready work is concentrated on few endpoints — the normal shape of
+ *     a backlog — which is why a partial claim never ends the drain on its own.)
+ *   - `maxDeliveries` bounds how many one drain claims, and `budgetMs` how long
+ *     it keeps CLAIMING, so a hot queue cannot monopolise the process. Deliveries
+ *     already started always run to their outcome (each is bounded by the
+ *     per-attempt timeout) before the drain returns, so the caller's
+ *     no-overlap guard still covers them.
  *
  * Cannot spin: every claimed row is marked in_flight and settles to delivered,
- * dlq, or pending with a FUTURE next_attempt_at, so it leaves the ready set.
+ * dlq, deferred (a paused endpoint, which the claim then skips) or pending with a
+ * FUTURE next_attempt_at, so it leaves the ready set.
  *
- * @returns how many batches ran and how many deliveries were claimed in total.
+ * @returns how many claims ran and how many deliveries they took in total.
  */
-export async function drainWebhookDeliveries(args: {
-  tick: () => Promise<{ claimed: number }>;
-  maxBatches: number;
+export async function drainWebhookDeliveries<T>(args: {
+  /** Claim up to `slots` ready deliveries. */
+  claim: (slots: number) => Promise<readonly T[]>;
+  /** Deliver one claimed row to its outcome. A rejection is contained. */
+  deliver: (row: T) => Promise<unknown>;
+  /** Pool size: the most deliveries in flight at once. */
+  concurrency: number;
+  /** The most deliveries one drain claims. */
+  maxDeliveries: number;
+  /** Stop claiming once this much wall-clock time has passed. */
   budgetMs: number;
   now?: () => number;
-}): Promise<{ batches: number; claimed: number }> {
+  /** Told about a delivery that rejected despite its own error boundary. */
+  onDeliverError?: (row: T, err: unknown) => void;
+}): Promise<{ claims: number; claimed: number }> {
   const now = args.now ?? ((): number => Date.now());
   const startedAt = now();
-  let batches = 0;
-  let claimedTotal = 0;
-  for (let batch = 0; batch < args.maxBatches; batch++) {
-    const { claimed } = await args.tick();
-    batches += 1;
-    claimedTotal += claimed;
-    if (claimed === 0) break;
-    if (now() - startedAt >= args.budgetMs) break;
+  const inFlight = new Set<Promise<void>>();
+  let claims = 0;
+  let claimed = 0;
+
+  const start = (row: T): void => {
+    const slot: Promise<void> = Promise.resolve()
+      .then(() => args.deliver(row))
+      .then(
+        () => undefined,
+        (err: unknown) => {
+          try {
+            args.onDeliverError?.(row, err);
+          } catch {
+            // Reporting is best-effort; it must not strand the slot.
+          }
+        },
+      )
+      .finally(() => {
+        inFlight.delete(slot);
+      });
+    inFlight.add(slot);
+  };
+
+  try {
+    for (;;) {
+      const free = args.concurrency - inFlight.size;
+      const quota = args.maxDeliveries - claimed;
+      const mayClaim = free > 0 && quota > 0 && now() - startedAt < args.budgetMs;
+      if (mayClaim) {
+        const want = Math.min(free, quota);
+        const rows = await args.claim(want);
+        claims += 1;
+        claimed += rows.length;
+        for (const row of rows) start(row);
+        // Every slot asked for was filled: go round (the loop then waits for one to free).
+        if (rows.length === want) continue;
+        // Short, with nothing in flight: nothing is ready. The queue is drained.
+        if (inFlight.size === 0) break;
+      } else if (inFlight.size === 0) {
+        // Out of budget or quota, and everything started has finished.
+        break;
+      }
+      // Wait for a slot to free, then claim again.
+      await Promise.race(inFlight);
+    }
+  } finally {
+    // A claim that threw must not leave deliveries running past the drain: the
+    // caller's no-overlap guard is released when this returns.
+    await Promise.allSettled([...inFlight]);
   }
-  return { batches, claimed: claimedTotal };
+  return { claims, claimed };
 }
 
 export class WebhookDeliveryWorker {
@@ -139,14 +217,15 @@ export class WebhookDeliveryWorker {
   /**
    * Start the loop. Returns when stop() is called.
    *
-   * V-1389 — delegates to `tickOnce` instead of repeating claim-and-deliver. The two had
-   * drifted: this loop still used `Promise.all`, the form V-781 replaced below because one
-   * escaping rejection discards every other outcome in the tick, and it counted no metrics
-   * at all — both delivery counters would have stayed flat under it.
+   * V-1389 — delegates instead of repeating claim-and-deliver. The two had drifted: this
+   * loop still used `Promise.all`, the form V-781 replaced below because one escaping
+   * rejection discards every other outcome in the tick, and it counted no metrics at all —
+   * both delivery counters would have stayed flat under it.
    *
-   * Nothing calls `run()` today; bootstrap drives `tickOnce()` through a bounded drain. So
-   * the divergence has cost nothing yet, which is exactly why it was worth closing: this is
-   * the obvious entry point for whoever wires this next, and it looked finished.
+   * It delegates to `drain`, the pool bootstrap's poller runs (webhooks audit #2), rather
+   * than to the batch `tickOnce`, for the same reason: nothing calls `run()` today, and it
+   * is the obvious entry point for whoever wires this next — it must not bring back the
+   * batch a single straggler can hold up.
    */
   async run(): Promise<void> {
     if (this.running) return;
@@ -155,7 +234,10 @@ export class WebhookDeliveryWorker {
     const idleSleepMs = this.config.idleSleepMs ?? DEFAULT_IDLE_SLEEP_MS;
 
     while (this.running) {
-      const { claimed } = await this.tickOnce();
+      const { claimed } = await this.drain({
+        maxDeliveries: DEFAULT_DRAIN_MAX_DELIVERIES,
+        budgetMs: DEFAULT_DRAIN_BUDGET_MS,
+      });
       if (claimed === 0) await sleep(idleSleepMs);
     }
   }
@@ -164,7 +246,40 @@ export class WebhookDeliveryWorker {
     this.running = false;
   }
 
-  /** Tick once: claim + deliver one batch synchronously. Used in tests. */
+  /**
+   * Drain the ready queue through a pool of `batchSize` delivery slots — what
+   * bootstrap's poller runs. See `drainWebhookDeliveries` for why it is a pool
+   * and when it stops. Every outcome is counted exactly as `tickOnce` counts it.
+   */
+  async drain(opts: {
+    maxDeliveries: number;
+    budgetMs: number;
+  }): Promise<{ claims: number; claimed: number }> {
+    return drainWebhookDeliveries<WebhookDeliveryRow>({
+      claim: (slots) => this.config.repo.claim({ batchSize: slots, now: this.now() }),
+      deliver: async (delivery) => {
+        this.countOutcome(await this.deliver(delivery));
+      },
+      concurrency: this.config.batchSize ?? DEFAULT_BATCH_SIZE,
+      maxDeliveries: opts.maxDeliveries,
+      budgetMs: opts.budgetMs,
+      onDeliverError: (delivery, err) => {
+        this.config.logger.error(
+          {
+            deliveryId: delivery.id,
+            err: { message: err instanceof Error ? err.message : String(err) },
+          },
+          'webhook delivery escaped its own error boundary — the drain continues',
+        );
+      },
+    });
+  }
+
+  /**
+   * Tick once: claim + deliver one BATCH synchronously. The production path is
+   * `drain` (a pool); this remains for tests and one-shot callers, and it waits
+   * for the batch's slowest delivery by construction.
+   */
   async tickOnce(): Promise<{ claimed: number; outcomes: DeliveryOutcome[] }> {
     const claimed = await this.config.repo.claim({
       batchSize: this.config.batchSize ?? DEFAULT_BATCH_SIZE,
@@ -206,6 +321,8 @@ export class WebhookDeliveryWorker {
   private countOutcome(outcome: DeliveryOutcome): void {
     const metrics = this.config.metrics;
     if (metrics === undefined) return;
+    // A deferred delivery (paused endpoint) was not attempted at all.
+    if (outcome.kind === 'deferred') return;
     try {
       const attemptOutcome = outcome.kind === 'delivered' ? 'success' : 'http_error';
       metrics.inc(METRIC_NAMES.webhookDeliveryAttemptTotal, { outcome: attemptOutcome });
@@ -269,6 +386,7 @@ export class WebhookDeliveryWorker {
       if (nextAttemptIndex >= MAX_ATTEMPTS) {
         await this.config.repo.recordDlq(delivery.id, {
           responseStatus: null,
+          responseExcerpt: null,
           lastError,
           at,
         });
@@ -336,12 +454,12 @@ export class WebhookDeliveryWorker {
     // per delivery — could be batched in a future optimisation.
     const endpoint = await this.config.repo.findEndpointById(delivery.webhookId);
 
-    // Fallback: endpoint not in subscriber set (might have been deleted /
-    // disabled between enqueue and claim). Treat as DLQ — there's no
-    // recoverable path.
-    if (!endpoint || !endpoint.active || endpoint.disabledAt !== null) {
+    // Fallback: endpoint deleted (or disabled after too many failures) between
+    // enqueue and claim. Treat as DLQ — there's no recoverable path.
+    if (!endpoint || endpoint.disabledAt !== null) {
       await this.config.repo.recordDlq(delivery.id, {
         responseStatus: null,
+        responseExcerpt: null,
         lastError: 'endpoint disabled or deleted between enqueue and claim',
         at: this.now(),
       });
@@ -350,6 +468,24 @@ export class WebhookDeliveryWorker {
         'webhook delivery → DLQ (endpoint missing/disabled)',
       );
       return { kind: 'dlq', delivery };
+    }
+
+    // Webhooks audit #3 — a PAUSED endpoint (active=false, disabled_at unset)
+    // defers: the delivery goes back to pending with nothing spent — no
+    // attempt, no failure counted toward auto-disable — and the claim leaves it
+    // alone until the endpoint is resumed. This used to share the branch above,
+    // so pausing "for maintenance", as the docs suggest, dead-lettered every
+    // queued delivery and counted each one as a failed delivery; after resume
+    // the first failure tombstoned the endpoint. The claim already skips a
+    // paused endpoint's rows, so this catches only a pause that landed between
+    // the claim and this lookup.
+    if (!endpoint.active) {
+      await this.config.repo.recordDeferred(delivery.id);
+      this.config.logger.info(
+        { deliveryId: delivery.id, webhookId: delivery.webhookId },
+        'webhook delivery deferred (endpoint paused)',
+      );
+      return { kind: 'deferred', delivery };
     }
 
     // ⛔ THE LAST HOP IS WHERE "MAP ON THE WAY OUT" HAS TO HAPPEN for a webhook.
@@ -495,6 +631,9 @@ export class WebhookDeliveryWorker {
     if (nextAttemptIndex >= MAX_ATTEMPTS) {
       await this.config.repo.recordDlq(delivery.id, {
         responseStatus,
+        // Webhooks audit #8 — the final attempt's body with the final
+        // attempt's status; without it the DLQ row kept an earlier attempt's.
+        responseExcerpt,
         lastError,
         at,
       });
@@ -551,11 +690,11 @@ export class WebhookDeliveryWorker {
   /**
    * Auto-disable an endpoint once its consecutive-failure count crosses the
    * threshold. Re-reads the endpoint's CURRENT consecutiveFailures rather than
-   * the claim-time snapshot captured by deliver(): a batch runs its deliveries
-   * concurrently via Promise.all, so two+ failures for the SAME endpoint would
-   * otherwise each evaluate `snapshot + 1 >= threshold` against the identical
-   * pre-batch count — double-counting off a stale base and disabling at the
-   * wrong count. recordDlq has already committed its +1 (in its own
+   * the claim-time snapshot captured by deliver(): deliveries run
+   * concurrently (a pool in `drain`, a batch in `tickOnce`), so two+ failures
+   * for the SAME endpoint would otherwise each evaluate `snapshot + 1 >=
+   * threshold` against the identical earlier count — double-counting off a
+   * stale base and disabling at the wrong count. recordDlq has already committed its +1 (in its own
    * transaction, fenced on in_flight) before this runs, so the re-read observes
    * every committed increment and the threshold is checked against the live
    * counter — counting each concurrent failed DELIVERY once. recordRetry commits
@@ -580,7 +719,9 @@ export class WebhookDeliveryWorker {
 export type DeliveryOutcome =
   | { kind: 'delivered'; delivery: WebhookDeliveryRow; status: number }
   | { kind: 'retry'; delivery: WebhookDeliveryRow; nextAttemptAt: Date }
-  | { kind: 'dlq'; delivery: WebhookDeliveryRow };
+  | { kind: 'dlq'; delivery: WebhookDeliveryRow }
+  /** The endpoint is paused: back to pending, nothing attempted or counted. */
+  | { kind: 'deferred'; delivery: WebhookDeliveryRow };
 
 async function readExcerpt(response: Response): Promise<string | null> {
   try {

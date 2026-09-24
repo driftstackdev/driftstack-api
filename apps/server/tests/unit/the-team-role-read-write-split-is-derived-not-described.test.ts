@@ -52,7 +52,14 @@ const ROLE_GATING_HELPERS: readonly string[] = [
  * "reads are role-agnostic" is true without qualification; it is not, and the
  * documents must carry the exception for as long as this list is non-empty.
  */
-const ADMIN_ONLY_READS: readonly string[] = ['/v1/agent-sessions'];
+const ADMIN_ONLY_READS: readonly string[] = [
+  '/v1/agent-sessions',
+  // Security sweep #3 (2026-09-24) — the same exception, reached from a profile: the
+  // pages and session ids in a profile's activity come out of agent-session
+  // transcripts, so a member reading the owner's profile gets the rest of the feed
+  // without them. The route still answers members; only those fields are admin-only.
+  '/v1/profiles/:id/activity',
+];
 
 interface Check {
   readonly file: string;

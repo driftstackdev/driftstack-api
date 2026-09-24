@@ -1763,6 +1763,11 @@ function buildRegistry(): OpenAPIRegistry {
           'Delivery not found, or not owned by the effective account (your own, or the owner you are acting as via X-Driftstack-Account).',
         content: problemContent,
       },
+      409: {
+        description:
+          'The delivery is being attempted right now (`status: "in_flight"`), so it cannot be replayed yet. Check its status again in a few minutes and replay it if it has not been delivered.',
+        content: problemContent,
+      },
       ...errors4xx,
     },
   });
@@ -5037,10 +5042,12 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/auth/logout',
     summary: 'Revoke a web-session token',
+    description:
+      'Revokes the web session the caller presents: the `token` in the body, the `Authorization: Bearer` header, or both. With neither, 400.',
     tags: ['auth'],
     request: {
       body: {
-        required: true,
+        required: false,
         content: { 'application/json': { schema: LogoutRequestSchema } },
       },
     },
@@ -6754,6 +6761,11 @@ function buildRegistry(): OpenAPIRegistry {
           'Agent session not found (also returned for cross-account access — existence is not leaked).',
         content: problemContent,
       },
+      409: {
+        description:
+          'This agent session is already saved as a recipe (the body names its `recipe_id`); delete that recipe to save the session again. Repeating the exact same save returns the existing recipe with 201.',
+        content: problemContent,
+      },
       ...errors4xx,
       503: {
         description: 'The recipe library is not available on this deployment.',
@@ -8289,7 +8301,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       409: {
         description:
-          'The endpoint was not created. Either the account already holds the maximum number of active webhook endpoints, or `events` was supplied empty. Delete or disable an endpoint, or supply at least one event type, and retry.',
+          'The endpoint was not created. Either the account already has the maximum number of webhook endpoints — paused endpoints count toward it — or `events` was supplied empty. Delete an endpoint, or supply at least one event type, and retry.',
         content: problemContent,
       },
       // The route replies `reply.code(201)`. This said 200, which it has never
@@ -8402,7 +8414,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       409: {
         description:
-          'The endpoint was not updated. Either it is disabled — a disabled endpoint cannot be re-enabled by update and a fresh one must be minted — or `events` was supplied empty.',
+          'The endpoint was not updated. Either it is disabled — a disabled endpoint cannot be re-enabled by update and a fresh one must be minted — or `events` was supplied empty, or `active: true` would resume it while the account already has the maximum number of other webhook endpoints (delete one first).',
         content: problemContent,
       },
       200: {

@@ -253,11 +253,12 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         const endpointId = randomUUID();
         const ctx = { accountId, endpointId };
         const future = new Date(Date.now() + 12 * 60 * 60 * 1000);
-        // V-359.G blocks a second CUSTOMER rotation while a prior customer grace
-        // window is still live, and a force window is exempt. So the control arm
-        // must use an already-elapsed window — otherwise it is refused by that
-        // guard and proves nothing about the CASE under test. (Learned by
-        // writing it the other way first and watching the control fail.)
+        // Inside ANY live grace window the rotation keeps the prev slot (a second
+        // customer rotation does too, since webhooks audit #7 — before that it
+        // was refused). So the control arm must use an already-elapsed window —
+        // otherwise the prev slot is kept regardless and it proves nothing about
+        // the CASE under test. (Learned by writing it the other way first and
+        // watching the control fail.)
         const past = new Date(Date.now() - 12 * 60 * 60 * 1000);
         const graceEnds = args.forceRotated ? future : past;
         await c`INSERT INTO webhook_endpoints

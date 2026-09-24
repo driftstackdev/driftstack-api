@@ -11,7 +11,32 @@
 // jsonb-payload pattern as agent_sessions.
 
 import { randomUUID } from 'node:crypto';
+import type { AccountTier } from '@driftstack/api-types';
 import type { AgentIntent, TranscriptEntry } from './agent-decomposer.js';
+
+/**
+ * Security sweep #7 — how many recipes an account keeps, per plan.
+ *
+ * Every recipe stores its own encrypted copy of the source session's transcript
+ * (up to 1 MiB, and ciphertext does not compress), so the count bounds the bytes
+ * one account can put into the database: 10 on free is at most ~10 MiB. Paid
+ * plans keep more, in rough proportion to their profile allowance.
+ */
+export const RECIPES_PER_TIER: Readonly<Record<AccountTier, number>> = {
+  free: 10,
+  solo_manual: 50,
+  team_manual: 200,
+  agency_manual: 500,
+  api_starter: 100,
+  api_builder: 500,
+  api_scale: 1000,
+  enterprise: 2000,
+};
+
+/** The recipe cap for a plan. Enforced by `RecipesRepo.createIfUnderLimit`, under a lock. */
+export function recipeLimitFor(tier: AccountTier): number {
+  return RECIPES_PER_TIER[tier];
+}
 
 export interface RecipeRecord {
   /** `rec_<uuid>` id; minted by the repo on create. */
@@ -68,16 +93,40 @@ export interface ListRecipesPage {
   nextCursor: string | null;
 }
 
+/** What {@link RecipesRepo.createIfUnderLimit} decided. */
+export type CreateRecipeOutcome =
+  /** A new recipe was stored. */
+  | { kind: 'created'; record: RecipeRecord }
+  /** The same session, label and description were already saved: that recipe, unchanged. */
+  | { kind: 'existing'; record: RecipeRecord }
+  /** The session is already saved as `recipeId` under another label or description. */
+  | { kind: 'session_already_saved'; recipeId: string }
+  /** The account already holds `current` recipes, at or over the limit. */
+  | { kind: 'limit_reached'; current: number };
+
 export interface RecipesRepo {
   /**
-   * Snapshot a recipe row. MUST be idempotent on (accountId,
-   * agentSessionId, label) if the same combination is sent twice —
-   * v1.0 chooses NOT to enforce uniqueness so customers can save
-   * the same agent-session under multiple labels (e.g. "smoke test"
-   * + "regression test #4" for the same underlying flow). The repo
-   * mints a fresh id per insert.
+   * Snapshot a recipe row, unconditionally. The repo mints a fresh id per insert
+   * and enforces neither limit below — the customer route calls
+   * {@link createIfUnderLimit}. Kept for fixtures and internal callers.
    */
   create(args: CreateRecipeArgs): Promise<RecipeRecord>;
+
+  /**
+   * Security sweep #7 — the customer save path. Under one per-account lock:
+   *
+   *   1. A source session is saved ONCE. If the account already has a recipe of
+   *      `agentSessionId` with the same label and description, that recipe is the
+   *      answer (`existing` — a retried save stores no second copy); with any other
+   *      label or description, `session_already_saved`. A save with no source
+   *      session (`agentSessionId: null`) is never deduplicated.
+   *   2. At most `limit` recipes per account (`limit_reached`).
+   *   3. Otherwise the recipe is stored (`created`).
+   *
+   * v1.0 allowed one session under several labels; each was a full transcript
+   * copy, which is what let one session be saved 60 times into 19 MB.
+   */
+  createIfUnderLimit(args: CreateRecipeArgs & { limit: number }): Promise<CreateRecipeOutcome>;
 
   /**
    * V-530.I (D2) — list the account's recipes, newest first. Keyset
@@ -131,6 +180,31 @@ export class InMemoryRecipesRepo implements RecipesRepo {
     };
     this.rows.set(id, record);
     return record;
+  }
+
+  /**
+   * Security sweep #7 — mirrors DrizzleRecipesRepo.createIfUnderLimit (the same
+   * three rules, in the same order). Sequential, so it needs no lock; the Drizzle
+   * method's lock is exercised against Postgres.
+   */
+  async createIfUnderLimit(
+    args: CreateRecipeArgs & { limit: number },
+  ): Promise<CreateRecipeOutcome> {
+    const validated = validateLabelAndDescription(args.label, args.description);
+    if (args.agentSessionId !== null) {
+      const saved = [...this.rows.values()]
+        .filter((r) => r.accountId === args.accountId && r.agentSessionId === args.agentSessionId)
+        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || (a.id < b.id ? -1 : 1));
+      const same = saved.find(
+        (r) => r.label === validated.label && r.description === validated.description,
+      );
+      if (same !== undefined) return { kind: 'existing', record: same };
+      const first = saved[0];
+      if (first !== undefined) return { kind: 'session_already_saved', recipeId: first.id };
+    }
+    const current = [...this.rows.values()].filter((r) => r.accountId === args.accountId).length;
+    if (current >= args.limit) return { kind: 'limit_reached', current };
+    return { kind: 'created', record: await this.create(args) };
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await

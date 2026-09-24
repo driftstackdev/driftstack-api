@@ -1,7 +1,8 @@
 // V-298c — Drizzle-backed TeamMembersRepo.
 
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, isNull, sql } from 'drizzle-orm';
 import type {
+  InviteUpsertOutcome,
   RemoveMemberResult,
   TeamInviteRow,
   TeamMemberRow,
@@ -67,6 +68,100 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
       .returning();
     if (!row) throw new Error('team_invites upsert returned no row');
     return toInviteRow(row);
+  }
+
+  /**
+   * Security sweep #4/#6 — see the interface. The per-owner advisory lock
+   * serialises every guarded invite for one team, so two concurrent invites of one
+   * address cannot both pass the cooldown and two new addresses cannot both take
+   * the last pending slot. The write itself is `upsertInvite`'s statement.
+   */
+  async upsertInviteIfUnderPendingLimit(input: {
+    ownerAccountId: string;
+    inviteeEmail: string;
+    role: TeamRole;
+    inviteTokenHash: string;
+    inviteExpiresAt: Date;
+    invitedByAccountId: string | null;
+    maxPending: number;
+    resendCooldownMs: number;
+    inviteTtlMs: number;
+    now: Date;
+    beforeWrite?: () => Promise<void>;
+  }): Promise<InviteUpsertOutcome> {
+    return this.database.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`team-invites:${input.ownerAccountId}`}))`,
+      );
+      // The live (owner, email) invite, if any — the partial unique index allows
+      // at most one unaccepted row per pair.
+      const [current] = await tx
+        .select({ inviteExpiresAt: teamInvites.inviteExpiresAt })
+        .from(teamInvites)
+        .where(
+          and(
+            eq(teamInvites.ownerAccountId, input.ownerAccountId),
+            eq(teamInvites.inviteeEmail, input.inviteeEmail),
+            isNull(teamInvites.acceptedAt),
+          ),
+        )
+        .limit(1);
+      const replacesLive =
+        current !== undefined && current.inviteExpiresAt.getTime() > input.now.getTime();
+      if (current !== undefined && replacesLive) {
+        const sentAt = current.inviteExpiresAt.getTime() - input.inviteTtlMs;
+        const retryAfterMs = sentAt + input.resendCooldownMs - input.now.getTime();
+        if (retryAfterMs > 0) return { kind: 'cooldown', retryAfterMs };
+      }
+      if (!replacesLive) {
+        const live = and(
+          eq(teamInvites.ownerAccountId, input.ownerAccountId),
+          isNull(teamInvites.acceptedAt),
+          gt(teamInvites.inviteExpiresAt, input.now),
+        );
+        const [counted] = await tx.select({ n: count() }).from(teamInvites).where(live);
+        const pending = counted?.n ?? 0;
+        if (pending >= input.maxPending) {
+          const [oldest] = await tx
+            .select({ inviteExpiresAt: teamInvites.inviteExpiresAt })
+            .from(teamInvites)
+            .where(live)
+            .orderBy(asc(teamInvites.inviteExpiresAt), asc(teamInvites.id))
+            .limit(1);
+          const retryAfterMs = Math.max(
+            1,
+            (oldest?.inviteExpiresAt.getTime() ?? input.now.getTime() + input.inviteTtlMs) -
+              input.now.getTime(),
+          );
+          return { kind: 'pending_limit', pending, retryAfterMs };
+        }
+      }
+      // A throw here rolls the transaction back: nothing is written.
+      if (input.beforeWrite !== undefined) await input.beforeWrite();
+      const [row] = await tx
+        .insert(teamInvites)
+        .values({
+          ownerAccountId: input.ownerAccountId,
+          inviteeEmail: input.inviteeEmail,
+          role: input.role,
+          inviteTokenHash: input.inviteTokenHash,
+          inviteExpiresAt: input.inviteExpiresAt,
+          invitedByAccountId: input.invitedByAccountId,
+        })
+        .onConflictDoUpdate({
+          target: [teamInvites.ownerAccountId, teamInvites.inviteeEmail],
+          targetWhere: isNull(teamInvites.acceptedAt),
+          set: {
+            inviteTokenHash: input.inviteTokenHash,
+            inviteExpiresAt: input.inviteExpiresAt,
+            role: input.role,
+            invitedByAccountId: input.invitedByAccountId,
+          },
+        })
+        .returning();
+      if (!row) throw new Error('team_invites upsert returned no row');
+      return { kind: 'upserted', invite: toInviteRow(row) };
+    });
   }
 
   async findInviteByTokenHash(hash: string): Promise<TeamInviteRow | null> {

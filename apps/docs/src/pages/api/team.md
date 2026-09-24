@@ -130,6 +130,25 @@ The invitee receives an email containing a token URL. They sign up
 on Driftstack first if they don't already have an account, then
 accept.
 
+Limits on inviting:
+
+- **Paid plans only.** Teammates are included on every paid plan; a
+  Free account is refused `403` ("Inviting teammates is available on
+  paid plans. Upgrade your plan to invite people to your account.").
+- **20 invites waiting per team.** An invite stops counting when it is
+  accepted or expires. A new address past that is refused `429`, with
+  `Retry-After` until the oldest invite expires. Re-sending an invite
+  that is already waiting does not count as a new one.
+- **One email per address every 10 minutes.** Inviting the same address
+  again within 10 minutes of its last invite email is refused `429` and
+  changes nothing; the link already sent keeps working. After that, a
+  re-invite replaces the pending invite and emails a fresh link.
+- **5 invite emails an hour, 10 a day, to one address**, counted across
+  every team that invites it. Past that the invite is refused `429`.
+
+Each `429` carries `Retry-After` and a detail saying what happened and
+when to try again.
+
 ## List pending invites
 
 `GET /v1/team/invites` — pending (unaccepted, unexpired) invites for

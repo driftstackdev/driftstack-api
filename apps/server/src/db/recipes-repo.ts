@@ -48,6 +48,7 @@ import {
 } from '../services/recipe-payload-encryption.js';
 import type {
   CreateRecipeArgs,
+  CreateRecipeOutcome,
   ListRecipesArgs,
   ListRecipesPage,
   RecipeRecord,
@@ -248,6 +249,82 @@ export class DrizzleRecipesRepo implements RecipesRepo {
       throw new Error('Recipe insert returned no rows');
     }
     return rowToRecord(row, key);
+  }
+
+  /**
+   * Security sweep #7 — the customer save path (see RecipesRepo.createIfUnderLimit).
+   * The per-account advisory lock serialises every save for one account, so two
+   * saves of one session cannot both find it unsaved and two saves at the cap
+   * minus one cannot both find room. The insert is `create`'s, inside the lock.
+   */
+  async createIfUnderLimit(
+    args: CreateRecipeArgs & { limit: number },
+  ): Promise<CreateRecipeOutcome> {
+    const key = this.requireEncryptionKey();
+    const validated = validateLabelAndDescription(args.label, args.description);
+    return this.database.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`recipe-create:${args.accountId}`}))`,
+      );
+      if (args.agentSessionId !== null) {
+        // Accounts saved some sessions more than once before this rule, so read
+        // every recipe of the session, oldest first, not only one.
+        const saved = await tx
+          .select({ id: recipes.id, label: recipes.label, description: recipes.description })
+          .from(recipes)
+          .where(
+            and(
+              eq(recipes.accountId, args.accountId),
+              eq(recipes.agentSessionId, args.agentSessionId),
+            ),
+          )
+          .orderBy(asc(recipes.createdAt), asc(recipes.id))
+          .limit(MAX_RECIPE_PAGE);
+        const same = saved.find(
+          (r) => r.label === validated.label && r.description === validated.description,
+        );
+        if (same !== undefined) {
+          const [row] = await tx
+            .select()
+            .from(recipes)
+            .where(and(eq(recipes.id, same.id), eq(recipes.accountId, args.accountId)))
+            .limit(1);
+          if (row) return { kind: 'existing', record: rowToRecord(row, key) };
+        }
+        const first = saved[0];
+        if (first !== undefined) return { kind: 'session_already_saved', recipeId: first.id };
+      }
+      const [counted] = await tx
+        .select({ n: count() })
+        .from(recipes)
+        .where(eq(recipes.accountId, args.accountId));
+      const current = counted?.n ?? 0;
+      if (current >= args.limit) return { kind: 'limit_reached', current };
+
+      const id = `rec_${randomUUID()}`;
+      const context = { accountId: args.accountId, recipeId: id };
+      const now = this.clock();
+      const [row] = await tx
+        .insert(recipes)
+        .values({
+          id,
+          accountId: args.accountId,
+          agentSessionId: args.agentSessionId,
+          label: validated.label,
+          description: validated.description,
+          intentLog: encryptRecipeIntentLog(args.intentLog, key, context),
+          transcriptSnapshot: encryptRecipeTranscriptSnapshot(
+            args.transcriptSnapshot,
+            key,
+            context,
+          ),
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      if (!row) throw new Error('Recipe insert returned no rows');
+      return { kind: 'created', record: rowToRecord(row, key) };
+    });
   }
 
   async list(args: ListRecipesArgs): Promise<ListRecipesPage> {

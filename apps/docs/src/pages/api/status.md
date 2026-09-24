@@ -217,6 +217,12 @@ address is recorded as subscribed.
 IP rate-limit: 3 requests per minute per IP on all three subscription
 routes (subscribe / confirm / unsubscribe).
 
+Per-address limit: at most 5 confirmation emails an hour and 10 in any
+24 hours to one address, whoever asks. Past that `POST /v1/status/subscribe`
+is refused `429` with `Retry-After` and a detail saying how long to wait
+("Too many confirmation emails have been requested for this address. Try
+again in 42 minutes.").
+
 ## Start subscription
 
 `POST /v1/status/subscribe`

@@ -149,7 +149,10 @@ layer. They overlap in some places + diverge in others.
 > owner's audit log, usage and profiles, but `GET /v1/agent-sessions`
 > requires `admin` on the team, deliberately: agent sessions carry
 > transcripts and live control state, so collection reads were not widened
-> to read-only members. (V-831 corrected this paragraph — V-822 wrote
+> to read-only members. The same exception reaches `GET /v1/profiles/:id/activity`:
+> the pages and session ids it lists come out of those transcripts, so a member
+> gets the rest of that feed with the pages withheld (security sweep #3,
+> 2026-09-24). (V-831 corrected this paragraph — V-822 wrote
 > "reads are role-agnostic" flat, generalised from one module.)
 > Thirteen route modules do this today: account-audit,
 > account-me, admin, agent-sessions, agent-sessions-livekit-token,

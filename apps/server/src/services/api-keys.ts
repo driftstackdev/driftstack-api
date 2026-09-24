@@ -35,6 +35,8 @@ import {
 } from '../lib/errors-helpers.js';
 import { scopesSatisfy } from '../lib/errors-helpers.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
+import type { Logger } from '../lib/logger.js';
+import { logLostWebhookEvent } from './webhooks.js';
 
 /**
  * api_keys.key_prefix carries a UNIQUE index (`api_keys_prefix_unique`).
@@ -295,6 +297,12 @@ export class ApiKeysService {
     private readonly webhooks: RevocationWebhookEmitter | null = null,
     private readonly legalGate: LegalAcceptanceGate | null = null,
     private readonly accountAudit: CustomerAuditEmitter | null = null,
+    /**
+     * Webhooks audit #5 — where a lost `api_key.revoked` is reported. The
+     * webhook is best-effort (the key is already revoked), but a swallowed
+     * failure left no trace that the customer's systems never heard of it.
+     */
+    private readonly logger: Logger | null = null,
   ) {}
 
   /**
@@ -771,8 +779,15 @@ export class ApiKeysService {
           name: key.name,
           revoked_at: revokedAt.toISOString(),
         });
-      } catch {
-        // Swallow.
+      } catch (err) {
+        // Best-effort — the key is revoked either way — but never silent.
+        logLostWebhookEvent(this.logger, {
+          component: 'api-keys',
+          accountId,
+          eventType: 'api_key.revoked',
+          err,
+          context: { api_key_id: keyId },
+        });
       }
     }
 

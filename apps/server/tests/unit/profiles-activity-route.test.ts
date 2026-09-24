@@ -49,7 +49,13 @@ async function buildHarness(opts: {
   const app = Fastify({ logger: false });
   registerErrorHandler(app);
   app.decorate('requireAuth', (req: { account?: unknown }) => {
-    req.account = { account: { id: ACCOUNT_ID, tier: 'api_builder' }, teams: [] };
+    // `apiKey` is required on AccountContext: the route reads its scopes to decide
+    // whether the pages may be shown (security sweep #3). A broad `read` key may.
+    req.account = {
+      account: { id: ACCOUNT_ID, tier: 'api_builder' },
+      apiKey: { scopes: ['read'] },
+      teams: [],
+    };
     return Promise.resolve();
   });
   app.decorate('requireScope', (_scope: string) => () => Promise.resolve());
@@ -179,6 +185,7 @@ describe('GET /v1/profiles/:id/activity', () => {
       ],
       sessions_scanned: 1,
       truncated: false,
+      pages_withheld: false,
     });
     expect(calls).toEqual([
       {

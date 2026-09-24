@@ -51,7 +51,7 @@ import {
   PROFILE_ACTIVITY_ENTRY_LIMIT,
   PROFILE_ACTIVITY_SESSION_LIMIT,
 } from '../services/profile-activity.js';
-import { requireArchetypeForTier } from '../lib/errors-helpers.js';
+import { hasScope, requireArchetypeForTier } from '../lib/errors-helpers.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
 import { readEffectiveAccountHeader } from '../lib/effective-account-header.js';
@@ -284,6 +284,14 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   // can never read across accounts even though it is keyed by profile id —
   // and the store query is ALSO account-scoped, so the two guards agree.
   // No query parameters by design (fixed server bounds; see profile-activity).
+  //
+  // Security sweep #3 — the pages and session ids come out of agent-session
+  // transcripts, so they are gated the way agent-session reads are: the key must
+  // satisfy `read:sessions`, and in a teammate's workspace the caller must be an
+  // admin there (team.md: AI transcripts "require admin for both reads and
+  // writes"). A reader without that still gets the rest of the feed — how many
+  // sessions were read and whether there is more — with `data` empty and
+  // `pages_withheld: true`, so it never reads as "no activity".
   app.get<{ Params: { id: string } }>(
     '/v1/profiles/:id/activity',
     {
@@ -307,14 +315,19 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
         sessionLimit: PROFILE_ACTIVITY_SESSION_LIMIT,
         entryLimit: PROFILE_ACTIVITY_ENTRY_LIMIT,
       });
+      const mayReadAgentSessions =
+        hasScope(ctx, 'read:sessions') && (effective.kind !== 'team' || effective.role === 'admin');
       return {
-        data: activity.entries.map((e) => ({
-          at: e.at,
-          url: e.url,
-          agent_session_id: e.agentSessionId,
-        })),
+        data: mayReadAgentSessions
+          ? activity.entries.map((e) => ({
+              at: e.at,
+              url: e.url,
+              agent_session_id: e.agentSessionId,
+            }))
+          : [],
         sessions_scanned: activity.sessionsScanned,
         truncated: activity.truncated,
+        pages_withheld: !mayReadAgentSessions,
       };
     },
   );

@@ -65,6 +65,10 @@ describe('TeamMembersService.invite', () => {
       inviteeEmail: INVITEE_EMAIL,
     });
     const firstHash = repo.getAllInvites()[0]!.inviteTokenHash;
+    // Security sweep #4/#6 — a re-invite is refused inside the 10-minute cooldown
+    // since the last invite email. Move that email back past it, as time would.
+    const pending = repo.getAllInvites()[0]!;
+    pending.inviteExpiresAt = new Date(pending.inviteExpiresAt.getTime() - 11 * 60 * 1000);
     await service.invite({
       ownerAccountId: OWNER,
       invitedByAccountId: INVITER,

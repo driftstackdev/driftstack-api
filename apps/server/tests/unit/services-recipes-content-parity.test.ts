@@ -72,9 +72,20 @@ describe('services/recipes content parity', () => {
     expect(body).toMatch(/transcriptSnapshot: ReadonlyArray<TranscriptEntry>;/);
   });
 
-  it('RecipesRepo idempotency framing pinned: \'Snapshot a recipe row. MUST be idempotent on (accountId, agentSessionId, label) if the same combination is sent twice — v1.0 chooses NOT to enforce uniqueness so customers can save the same agent-session under multiple labels (e.g. "smoke test" + "regression test #4" for the same underlying flow). The repo mints a fresh id per insert.\' — pinned so the deliberate NON-uniqueness contract + the use-case rationale (multi-label snapshots) survive. Drift to enforcing (accountId, agentSessionId, label) uniqueness would reject legitimate re-saves with different labels for the same session', () => {
+  // Security sweep #7 (2026-09-24) REVERSED the v1.0 multi-label contract this arm
+  // used to pin: each save was a full transcript copy, and one session saved 60
+  // times was 19 MB. The customer path is now createIfUnderLimit — one recipe per
+  // source session, an exact repeat answered with the recipe already saved, and a
+  // per-plan cap. Pinned so the reversal and its reason stay stated where the
+  // contract lives; drift back to multi-label saves would reopen the finding.
+  it('RecipesRepo contract pinned: a source session is saved ONCE (exact repeat → the saved recipe; another label → session_already_saved), at most `limit` recipes per account, under one lock; `create` stays unconditional and is not the customer path', () => {
     expect(body).toMatch(
-      /Snapshot a recipe row\. MUST be idempotent on \(accountId,\s*\*\s+agentSessionId, label\) if the same combination is sent twice —\s*\*\s+v1\.0 chooses NOT to enforce uniqueness so customers can save\s*\*\s+the same agent-session under multiple labels \(e\.g\. "smoke test"\s*\*\s+\+ "regression test #4" for the same underlying flow\)\. The repo\s*\*\s+mints a fresh id per insert\./,
+      /Snapshot a recipe row, unconditionally\. The repo mints a fresh id per insert\s*\*\s+and enforces neither limit below — the customer route calls\s*\*\s+\{@link createIfUnderLimit\}\./,
+    );
+    expect(body).toMatch(/1\. A source session is saved ONCE\./);
+    expect(body).toMatch(/2\. At most `limit` recipes per account \(`limit_reached`\)\./);
+    expect(body).toMatch(
+      /createIfUnderLimit\(args: CreateRecipeArgs & \{ limit: number \}\): Promise<CreateRecipeOutcome>;/,
     );
   });
 

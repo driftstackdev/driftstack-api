@@ -57,7 +57,20 @@ afterAll(async () => {
   await fx.cleanup();
 });
 
-function createRecipe(payload: Record<string, unknown>): Promise<{
+/**
+ * Security sweep #7 — a session is saved as ONE recipe (a second save of it under
+ * another label is a 409), so each create after the first names a fresh session
+ * of the same account. The first uses the session the route created above.
+ */
+let sessionsUsed = 0;
+async function nextSessionId(): Promise<string> {
+  sessionsUsed += 1;
+  if (sessionsUsed === 1) return agentSessionId;
+  return (await fx.agentSessionsRepo!.create({ accountId: fx.accountId, tokenBudgetTotal: 1000 }))
+    .id;
+}
+
+async function createRecipe(payload: Record<string, unknown>): Promise<{
   statusCode: number;
   body: string;
 }> {
@@ -65,7 +78,7 @@ function createRecipe(payload: Record<string, unknown>): Promise<{
     method: 'POST',
     url: '/v1/recipes',
     headers: { authorization: `Bearer ${fx.plaintext}` },
-    payload: { agent_session_id: agentSessionId, ...payload },
+    payload: { agent_session_id: await nextSessionId(), ...payload },
   });
 }
 

@@ -67,15 +67,22 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
     );
   });
 
-  it('imports: FastifyInstance + zod + NotFoundError/ValidationError + team service types', () => {
+  // Security sweep #4/#6 — ForbiddenError (the plan gate), the per-address limiter and
+  // the plan rule + its copy from the service join the imports.
+  it('imports: FastifyInstance + zod + Forbidden/NotFound/ValidationError + RecipientEmailLimiter + team service rule, copy and types', () => {
     expect(body).toMatch(/import type \{ FastifyInstance \} from 'fastify';/);
     expect(body).toMatch(/import \{ z \} from 'zod';/);
-    expect(body).toContain("import { NotFoundError, ValidationError } from '../lib/errors.js';");
+    expect(body).toContain(
+      "import { ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';",
+    );
+    expect(body).toContain(
+      "import { RecipientEmailLimiter } from '../services/recipient-email-limit.js';",
+    );
     expect(body).toMatch(
-      // Whitespace-tolerant: this import is now long enough for prettier to wrap
-      // it across lines, and a pin written against the one-line form would break
-      // on a reformat that changed nothing.
-      /import type \{\s*TeamInviteRow,\s*TeamMemberRow,\s*TeamMembersService,\s*TeamRow,?\s*\} from '\.\.\/services\/team-members\.js';/,
+      // Whitespace-tolerant: this import is long enough for prettier to wrap it
+      // across lines, and a pin written against the one-line form would break on
+      // a reformat that changed nothing.
+      /import \{\s*TEAMMATES_NOT_ON_PLAN,\s*tierIncludesTeammates,\s*type TeamInviteRow,\s*type TeamMemberRow,\s*type TeamMembersService,\s*type TeamRow,?\s*\} from '\.\.\/services\/team-members\.js';/,
     );
   });
 
@@ -109,9 +116,14 @@ describe('W437.C apps/server/src/routes/team.ts content parity', () => {
     );
   });
 
-  it('POST /v1/team/invites: invite request body (email + optional role) + service.invite + 202 with "Invite sent. The invitee can accept via the email link." message', () => {
+  // Security sweep #4/#6 — the plan gate runs first, and the per-address limit is
+  // handed to the service to run after the team's own limits and before any write.
+  it('POST /v1/team/invites: paid-plan gate + invite request body (email + optional role) + service.invite with the per-address limit as beforeSend + 202 with "Invite sent. The invitee can accept via the email link." message', () => {
     expect(body).toMatch(
-      /await service\.invite\(\{\s*ownerAccountId: ctx\.account\.id,\s*invitedByAccountId: ctx\.account\.id,\s*inviteeEmail: parsed\.data\.email,\s*\.\.\.\(parsed\.data\.role !== undefined \? \{ role: parsed\.data\.role \} : \{\}\),\s*\}\);\s*return reply\s*\.code\(202\)\s*\.send\(\{ message: 'Invite sent\. The invitee can accept via the email link\.' \}\);/,
+      /if \(!tierIncludesTeammates\(ctx\.account\.tier\)\) throw new ForbiddenError\(TEAMMATES_NOT_ON_PLAN\);\s*const parsed = InviteBodySchema\.safeParse\(request\.body\);/,
+    );
+    expect(body).toMatch(
+      /await service\.invite\(\{\s*ownerAccountId: ctx\.account\.id,\s*invitedByAccountId: ctx\.account\.id,\s*inviteeEmail,\s*\.\.\.\(parsed\.data\.role !== undefined \? \{ role: parsed\.data\.role \} : \{\}\),\s*beforeSend: \(\) => recipientLimit\.enforce\('team-invite', inviteeEmail, request\.log\),\s*\}\);\s*return reply\s*\.code\(202\)\s*\.send\(\{ message: 'Invite sent\. The invitee can accept via the email link\.' \}\);/,
     );
   });
 

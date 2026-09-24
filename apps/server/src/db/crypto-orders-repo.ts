@@ -17,7 +17,13 @@
 import { and, asc, desc, eq, lte, sql } from 'drizzle-orm';
 import type { Database } from './client.js';
 import { cryptoOrders } from './schema.js';
-import type { CryptoOrder, CryptoOrderEvent, CryptoOrdersRepo } from '../services/crypto-orders.js';
+import type {
+  CryptoOrder,
+  CryptoOrderEvent,
+  CryptoOrdersRepo,
+  CryptoOrderWebhookEvent,
+} from '../services/crypto-orders.js';
+import { enqueueWebhookEventInTransaction } from './webhooks-repo.js';
 
 type Row = typeof cryptoOrders.$inferSelect;
 
@@ -46,6 +52,9 @@ function rowToEnvelope(row: Row): CryptoOrder {
 }
 
 export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
+  /** Webhooks audit #5 — `withOrderLock` writes lock-time events in its transaction. */
+  readonly writesWebhookEventsInLock = true;
+
   constructor(private readonly database: Database) {}
 
   async upsert(order: CryptoOrder): Promise<void> {
@@ -246,7 +255,11 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
 
   async withOrderLock<T>(
     orderId: string,
-    fn: (locked: CryptoOrder) => { updated: CryptoOrder | null; result: T },
+    fn: (locked: CryptoOrder) => {
+      updated: CryptoOrder | null;
+      result: T;
+      webhookEvents?: readonly CryptoOrderWebhookEvent[];
+    },
   ): Promise<T | null> {
     return this.database.db.transaction(async (tx) => {
       const rows = await tx
@@ -257,7 +270,7 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
         .limit(1);
       if (rows[0] === undefined) return null;
       const locked = rowToEnvelope(rows[0]);
-      const { updated, result } = fn(locked);
+      const { updated, result, webhookEvents = [] } = fn(locked);
       if (updated !== null) {
         await tx
           .update(cryptoOrders)
@@ -287,6 +300,15 @@ export class DrizzleCryptoOrdersRepo implements CryptoOrdersRepo {
             updatedAt: new Date(updated.updated_at),
           })
           .where(eq(cryptoOrders.orderId, orderId));
+      }
+      // Webhooks audit #5 — the events this transition raises are queued in the
+      // SAME transaction as the write above: the order and its event commit
+      // together, or neither does. A throw here rolls the order back, so the
+      // IPN fails and the provider's retry finds it still unpaid and fires the
+      // event once — instead of the order committing as paid with its
+      // `crypto.order.paid` lost to a failure in a later, separate step.
+      for (const event of webhookEvents) {
+        await enqueueWebhookEventInTransaction(tx, event);
       }
       return result;
     });

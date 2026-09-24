@@ -138,7 +138,9 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
       /const graceMs = opts\.graceMs \?\? 24 \* 60 \* 60 \* 1000; \/\/ 24h default/,
     );
     expect(body).toMatch(
-      /'webhook_endpoint\.secret_rotated',\s*`webhook_endpoint_\$\{id\}`,\s*\{\s*new_secret_prefix: newPrefix,\s*old_secret_prefix: before\.secretPrefix,\s*grace_expires_at: graceExpiresAt\.toISOString\(\),/,
+      // The window the row actually carries (webhooks audit #7: a second
+      // rotation inside a live window keeps the original expiry).
+      /'webhook_endpoint\.secret_rotated',\s*`webhook_endpoint_\$\{id\}`,\s*\{\s*new_secret_prefix: newPrefix,\s*old_secret_prefix: before\.secretPrefix,\s*(?:\/\/[^\n]*\s*)*grace_expires_at: \(row\.secretPrevExpiresAt \?\? graceExpiresAt\)\.toISOString\(\),/,
     );
   });
 
@@ -195,16 +197,22 @@ describe('W406.A apps/server/src/services/webhooks.ts content parity', () => {
     );
   });
 
-  it('enqueueEvent: session.failed is closed before lookup/persistence; unrelated event data passes through; disabled endpoints are skipped', () => {
+  it('enqueueEvent: session.failed is closed before lookup/persistence; unrelated event data passes through; deleted endpoints are skipped (a PAUSED one is queued and held — webhooks audit #3); one multi-row insert (#5)', () => {
     expect(body).toMatch(
       /const closedData = eventType === 'session\.failed' \? projectSessionFailedData\(data\) : data;/,
     );
     expect(body).toMatch(
-      /\/\/ Skip endpoints that are disabled even if listEndpointsSubscribedTo\s*\/\/ returned them \(defence in depth\)\.\s*if \(!ep\.active \|\| ep\.disabledAt !== null\) continue;/,
+      /\/\/ Defence in depth: the repo already leaves deleted endpoints out\.\s*const live = endpoints\.filter\(\(ep\) => ep\.disabledAt === null\);/,
     );
     expect(body).toMatch(
-      /const payload = \{ id: eventId, type: eventType, created_at: createdAt, data: closedData \};/,
+      /const ids = await this\.repo\.enqueueDeliveries\(\s*live\.map\(\(ep\) => \(\{ webhookId: ep\.id, eventId, eventType, payload \}\)\),\s*\);/,
     );
+    // The envelope is built once, in webhookEventPayload, for this path and for
+    // the in-transaction writer the crypto IPN uses (webhooks audit #5).
+    expect(body).toMatch(
+      /payload: \{ id: eventId, type: eventType, created_at: createdAt, data: closedData \},/,
+    );
+    expect(body).toMatch(/const \{ eventId, payload \} = webhookEventPayload\(eventType, data\);/);
   });
 
   it('V-225 emitAuditBestEffort: 4-action union (webhook_endpoint.created/updated/deleted/secret_rotated)', () => {

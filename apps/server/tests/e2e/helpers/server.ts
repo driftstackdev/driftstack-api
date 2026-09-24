@@ -379,6 +379,7 @@ export async function startTestServer(): Promise<TestServer> {
     webhooksService,
     legalService,
     accountAuditService,
+    logger, // mirrors bootstrap: a lost api_key.revoked is logged
   );
 
   // 2026-05-20 — wire StatusSubscribers + TeamMembers + ProfileSnapshots +
@@ -405,6 +406,7 @@ export async function startTestServer(): Promise<TestServer> {
     accountAuditService,
     authCache,
     webhooksService,
+    logger, // mirrors bootstrap: a lost api_key.revoked is logged
   );
   const profileSnapshotsRepo = new DrizzleProfileSnapshotsRepo(database);
   const profileSnapshotsService = new ProfileSnapshotsService(

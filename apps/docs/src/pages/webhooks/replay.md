@@ -16,7 +16,8 @@ yourself rather than emailing support.
 `POST /v1/webhook-deliveries/:deliveryId/replay`
 
 Resets the delivery to `pending`; Driftstack re-sends it within about a
-minute (up to 60 seconds).
+minute (up to 60 seconds). If its endpoint is paused, the delivery is
+held until you resume the endpoint.
 
 Scoped to the **effective** account: the delivery must belong to
 a webhook endpoint your own account owns, or one owned by the account you
@@ -108,6 +109,9 @@ for _, delivery := range page.Data {
 - `404 Not Found` — the delivery id is unknown, or the delivery belongs
   to an endpoint that isn't yours. (We return 404 not 403 so the
   endpoint doesn't leak the existence of other accounts' deliveries.)
+- `409 Conflict` — the delivery is being attempted right now
+  (`status: "in_flight"`). Check its status again in a few minutes: if
+  it hasn't been delivered by then, replay it.
 - `400 Bad Request` — the delivery id is malformed (must be `wdl_<uuid>`).
 - `429 Too Many Requests` — global rate limit; back off and retry.
 

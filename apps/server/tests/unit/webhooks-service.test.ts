@@ -116,22 +116,31 @@ function makeRepo(initial: WebhookEndpointRow[] = []): {
       row.updatedAt = new Date();
       return Promise.resolve(row);
     },
+    // Webhooks audit #4 — only a paused → active transition is a cap decision.
+    updateEndpointIfUnderLimit: async (input, limit) => {
+      const row = rows.find((r) => r.id === input.id && r.accountId === input.accountId);
+      if (!row || row.disabledAt !== null) return { row: null, overLimit: false };
+      if (input.active === true && !row.active) {
+        const others = rows.filter(
+          (r) => r.accountId === input.accountId && r.disabledAt === null && r.id !== input.id,
+        ).length;
+        if (others >= limit) return { row: null, overLimit: true };
+      }
+      return { row: await repo.updateEndpoint(input), overLimit: false };
+    },
     rotateSecret: ({ id, accountId, newSecret, newPrefix, graceExpiresAt, now }) => {
       const row = rows.find((r) => r.id === id && r.accountId === accountId);
       if (!row) return Promise.resolve(null);
-      // V-359.G guard, mirrored from the real DrizzleWebhooksRepo: a
-      // still-live *customer* grace window (force-rotation windows are
-      // exempt) makes this call a no-op — return the row UNCHANGED,
-      // exactly like the real guarded UPDATE falling back to its plain
-      // SELECT. An unconditional mutation here is what let the service's
-      // fabricated-secret bug ship untested.
-      const guardBlocks =
+      // Mirrors the real DrizzleWebhooksRepo CASEs: inside a live grace window
+      // the prev slot (the secret the customer runs) is KEPT, and a customer
+      // window keeps its expiry too (webhooks audit #7 — this used to be the
+      // V-359.G no-op that the service turned into a 409).
+      const liveGrace =
+        row.secretPrev !== null &&
         row.secretPrevExpiresAt !== null &&
-        row.secretPrevExpiresAt.getTime() > now.getTime() &&
-        row.forceRotatedAt === null;
-      if (guardBlocks) return Promise.resolve(row);
-      row.secretPrev = row.secret;
-      row.secretPrevExpiresAt = graceExpiresAt;
+        row.secretPrevExpiresAt.getTime() > now.getTime();
+      if (!liveGrace) row.secretPrev = row.secret;
+      if (!liveGrace || row.forceRotatedAt !== null) row.secretPrevExpiresAt = graceExpiresAt;
       row.secret = newSecret;
       row.secretPrefix = newPrefix;
       row.forceRotatedAt = null;
@@ -141,8 +150,15 @@ function makeRepo(initial: WebhookEndpointRow[] = []): {
     },
     deliveryCountsByEndpoint: () => Promise.resolve(new Map<string, EndpointDeliveryCounts>()),
     enqueueDelivery: () => Promise.resolve(randomUUID()),
+    // Through `repo.enqueueDelivery`, so an arm that swaps that in sees each row.
+    enqueueDeliveries: async (inputs) => {
+      const ids: string[] = [];
+      for (const input of inputs) ids.push(await repo.enqueueDelivery(input));
+      return ids;
+    },
     listEndpointsSubscribedTo: () => Promise.resolve([]),
     claim: () => Promise.resolve([]),
+    recordDeferred: () => Promise.resolve(),
     findEndpointById: () => Promise.resolve(null),
     recordDelivered: () => Promise.resolve(),
     recordRetry: () => Promise.resolve(),
@@ -224,7 +240,9 @@ describe('V-553.B-14 WebhooksService.create', () => {
     );
     const { repo } = makeRepo(existing);
     const svc = new WebhooksService(repo);
-    await expect(svc.create(ctxWith(['admin']), BASE_CREATE)).rejects.toThrow(/limit is 10/);
+    await expect(svc.create(ctxWith(['admin']), BASE_CREATE)).rejects.toThrow(
+      /already has 10 webhook endpoints/,
+    );
   });
 
   it('honours V-326e5 effectiveAccountId — writes to OWNER without requiring admin scope', async () => {
@@ -473,39 +491,44 @@ describe('V-553.B-14 WebhooksService.rotateSecret', () => {
     expect(diff).toBeLessThan(61 * 60 * 1000);
   });
 
-  // Reproduces the fabricated-secret bug end-to-end at the SERVICE layer
-  // (not just the repo-level V-359.G no-op-vs-not-found distinction that
-  // tests/unit/webhooks-repo-rotate-secret-grace-guard.test.ts covers).
-  // Before the fix: the service handed back { row, plaintextSecret:
-  // newSecret } unconditionally whenever repo.rotateSecret returned a
-  // non-null row — including when that row was the UNCHANGED result of a
-  // guard-blocked no-op. The customer would be told rotation succeeded
-  // and shown a secret that was never persisted anywhere, permanently
-  // breaking inbound HMAC verification once they installed it.
-  it('throws instead of returning a fabricated secret when a second rotation lands inside the still-active grace window', async () => {
-    const { repo, rows } = makeRepo([baseRow()]);
+  // Webhooks audit #7 (2026-09-24) — a second rotation inside a live grace
+  // window used to be a repo-level no-op (V-359.G) that this service turned
+  // into a 409, so a customer who lost the new secret could not get another
+  // for up to 24 hours. It now replaces only the current secret and keeps the
+  // original one, and its expiry, in the grace slot.
+  it('a second rotation inside the still-active grace window replaces only the current secret and keeps the original as the previous one', async () => {
+    const original = 'whsec_v1_ORIGORIGORIGORIGORIGORIGORIGORIG';
+    const { repo, rows } = makeRepo([baseRow({ secret: original })]);
     const { audit, calls } = makeAudit();
     const svc = new WebhooksService(repo, audit);
 
     const first = await svc.rotateSecret(ctxWith(['admin']), 'wh_1');
-    const persistedPrefixAfterFirst = rows[0]?.secretPrefix;
-    expect(persistedPrefixAfterFirst).toBe(first.row.secretPrefix);
+    const firstExpiry = rows[0]?.secretPrevExpiresAt?.getTime();
+    const second = await svc.rotateSecret(ctxWith(['admin']), 'wh_1');
 
-    // Second rotation immediately after — the first rotation's 24h grace
-    // window is still fully open, so the repo-level guard (V-359.G) makes
-    // this call a no-op. The service must detect that and throw a
-    // ConflictError rather than resolve 200 with a secret nothing will
-    // ever verify against.
-    await expect(svc.rotateSecret(ctxWith(['admin']), 'wh_1')).rejects.toThrow(/grace window/i);
+    expect(second.plaintextSecret).not.toBe(first.plaintextSecret);
+    expect(rows[0]?.secret).toBe(second.plaintextSecret);
+    expect(rows[0]?.secretPrev).toBe(original);
+    expect(rows[0]?.secretPrevExpiresAt?.getTime()).toBe(firstExpiry);
+    expect(calls.map((c) => c.action)).toEqual([
+      'webhook_endpoint.secret_rotated',
+      'webhook_endpoint.secret_rotated',
+    ]);
+  });
 
-    // The row is untouched by the blocked second call: still holding the
-    // FIRST rotation's actual persisted prefix, not a fabricated second one.
-    expect(rows[0]?.secretPrefix).toBe(persistedPrefixAfterFirst);
-    expect(rows[0]?.secret).toBe(first.plaintextSecret);
+  // The fabricated-secret hazard V-359.G's 409 used to guard, kept on its own:
+  // the service must never hand back a plaintext the row does not carry — the
+  // customer would install a secret nothing verifies against. A repo that
+  // returns the row WITHOUT the new secret (a defect, since the rotation is now
+  // unconditional on a live endpoint) is refused, and nothing is audited.
+  it('throws instead of returning a fabricated secret when the repo hands back a row without the new secret', async () => {
+    const { repo, rows } = makeRepo([baseRow()]);
+    const { audit, calls } = makeAudit();
+    repo.rotateSecret = () => Promise.resolve({ ...rows[0]! });
+    const svc = new WebhooksService(repo, audit);
 
-    // Only ONE audit entry — the blocked call must not emit a
-    // secret_rotated audit event for a mutation that never happened.
-    expect(calls.map((c) => c.action)).toEqual(['webhook_endpoint.secret_rotated']);
+    await expect(svc.rotateSecret(ctxWith(['admin']), 'wh_1')).rejects.toThrow(/new secret/);
+    expect(calls).toEqual([]);
   });
 });
 

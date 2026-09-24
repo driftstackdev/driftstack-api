@@ -48,6 +48,7 @@ import {
 } from '@driftstack/api-types';
 import { randomUUID } from 'node:crypto';
 import type { AccountContext } from './auth.js';
+import { logLostWebhookEvent } from './webhooks.js';
 import {
   DriverLoginResultSchema,
   DriverSearchResultSchema,
@@ -1145,8 +1146,16 @@ export class SessionsService {
           session_id: `ses_${session.id}`,
           duration_ms: durationMs,
         });
-      } catch {
-        // Webhook enqueue is best-effort; never break the user-facing op.
+      } catch (err) {
+        // Webhook enqueue is best-effort; never break the user-facing op — but
+        // never silently either (webhooks audit #5).
+        logLostWebhookEvent(this.deps.logger, {
+          component: 'sessions',
+          accountId,
+          eventType: 'session.completed',
+          err,
+          context: { session_id: session.id },
+        });
       }
     }
 
@@ -1275,8 +1284,15 @@ export class SessionsService {
           auto_destroyed: true,
           reason,
         });
-      } catch {
-        /* webhook enqueue is best-effort */
+      } catch (err) {
+        // Best-effort, never silent (webhooks audit #5).
+        logLostWebhookEvent(this.deps.logger, {
+          component: 'sessions',
+          accountId: destroyedSession.accountId,
+          eventType: 'session.completed',
+          err,
+          context: { session_id: destroyedSession.id },
+        });
       }
     }
     if (this.deps.accountAudit) {
@@ -1353,8 +1369,15 @@ export class SessionsService {
               auto_destroyed: true,
               reason,
             });
-          } catch {
-            /* webhook enqueue is best-effort */
+          } catch (err) {
+            // Best-effort, never silent (webhooks audit #5).
+            logLostWebhookEvent(this.deps.logger, {
+              component: 'sessions',
+              accountId,
+              eventType: 'session.completed',
+              err,
+              context: { session_id: destroyedSession.id },
+            });
           }
         }
         if (this.deps.accountAudit) {
@@ -1678,8 +1701,15 @@ export class SessionsService {
         });
         try {
           await this.deps.webhooks.enqueueEvent(session.accountId, 'session.failed', failedData);
-        } catch {
-          /* webhook enqueue is best-effort */
+        } catch (err) {
+          // Best-effort, never silent (webhooks audit #5).
+          logLostWebhookEvent(this.deps.logger, {
+            component: 'sessions',
+            accountId: session.accountId,
+            eventType: 'session.failed',
+            err,
+            context: { session_id: session.id },
+          });
         }
       }
 
@@ -1770,8 +1800,15 @@ export class SessionsService {
             egress_capabilities: publicEgress.capabilities,
           },
         );
-      } catch {
-        /* webhook enqueue is best-effort — persist already succeeded */
+      } catch (err) {
+        // Best-effort — persist already succeeded — but never silent (webhooks audit #5).
+        logLostWebhookEvent(this.deps.logger, {
+          component: 'sessions',
+          accountId: updated.accountId,
+          eventType: 'session.egress_capability_changed',
+          err,
+          context: { session_id: updated.id },
+        });
       }
     }
     return updated;

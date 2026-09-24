@@ -14,6 +14,7 @@
 // told on-call to expect orders to vanish on every deploy.
 
 import { createHash as nodeCreateHash } from 'node:crypto';
+import { logLostWebhookEvent } from './webhooks.js';
 
 export type CryptoOrderStatus =
   | 'pending' // order created; awaiting payment
@@ -146,11 +147,23 @@ export interface CryptoOrdersRepo {
    * not exist. Closes the IPN dup-fire (#3) + note/cancel lost-update (#7) races:
    * the transition decision is computed against the LOCKED row, and the caller
    * fires side-effects OUTSIDE the lock gated on `result`.
+   *
+   * Webhooks audit #5 — `webhookEvents` are events the transition raises. A repo
+   * that sets `writesWebhookEventsInLock` queues their delivery rows in the SAME
+   * transaction as the write, so the state change and its event commit together
+   * or not at all; one that does not ignores them, and the caller queues them
+   * after the commit instead.
    */
   withOrderLock<T>(
     orderId: string,
-    fn: (locked: CryptoOrder) => { updated: CryptoOrder | null; result: T },
+    fn: (locked: CryptoOrder) => {
+      updated: CryptoOrder | null;
+      result: T;
+      webhookEvents?: readonly CryptoOrderWebhookEvent[];
+    },
   ): Promise<T | null>;
+  /** True when `withOrderLock` writes `webhookEvents` inside its transaction. */
+  readonly writesWebhookEventsInLock?: boolean;
   /**
    * Admin / ops list. Filters by accountId when supplied; limits to
    * `limit` rows (default 50) ordered by created_at DESC.
@@ -164,6 +177,13 @@ export interface CryptoOrdersRepo {
    * once the table holds more than `limit` rows.
    */
   listPendingOlderThan(opts: { olderThan: number; limit: number }): Promise<CryptoOrder[]>;
+}
+
+/** An event a locked order transition raises (see `withOrderLock`). */
+export interface CryptoOrderWebhookEvent {
+  accountId: string;
+  eventType: 'crypto.order.paid' | 'crypto.order.failed';
+  data: Record<string, unknown>;
 }
 
 export class InMemoryCryptoOrdersRepo implements CryptoOrdersRepo {
@@ -1482,18 +1502,37 @@ export class CryptoOrdersService {
           events,
           updated_at: now,
         };
+        // Prior-status checks read the LOCKED status → a re-delivered IPN that
+        // finds the order already failed/paid does NOT re-fire the side-effects.
+        const firePaid =
+          order.status !== 'paid' && mapped === 'paid' && updated.account_id !== null;
         return {
           updated,
           result: {
             order: updated,
-            // Prior-status checks read the LOCKED status → a re-delivered IPN that
-            // finds the order already failed/paid does NOT re-fire the side-effects.
             fireFailed: order.status !== 'failed' && mapped === 'failed',
-            firePaid: order.status !== 'paid' && mapped === 'paid' && updated.account_id !== null,
+            firePaid,
             paymentIdMismatch: false,
             payCurrencyMismatch,
             settledPaymentDropped: false,
           },
+          // Webhooks audit #5 — crypto.order.paid rides the paid write's own
+          // transaction where the repo can do that, so the order is never paid
+          // with its event lost: if the delivery rows cannot be written, the
+          // order is not marked paid either, the IPN fails, and the provider's
+          // retry fires it once. (Queued after the commit, a failure lost the
+          // event for good — the retry found the order already paid.)
+          ...(firePaid && updated.account_id !== null && this.paidEventInLock()
+            ? {
+                webhookEvents: [
+                  {
+                    accountId: updated.account_id,
+                    eventType: 'crypto.order.paid' as const,
+                    data: paidEventData(updated),
+                  },
+                ],
+              }
+            : {}),
         };
       }
       // No-op transition: record the payment_id + crypto quote if we didn't have them yet.
@@ -1671,7 +1710,12 @@ export class CryptoOrdersService {
       }
     }
     // V-666.I/R — crypto.order.paid webhook + receipt email on the →paid transition.
-    // Best-effort: emission failures are swallowed so the IPN ack stays 200.
+    // Where the repo writes lock-time events (the Drizzle repo does), the webhook
+    // was already queued inside the paid write's transaction above. Otherwise it
+    // is queued here, best-effort so the IPN ack stays 200 — but never silently
+    // (webhooks audit #5): a NowPayments retry finds the order already paid and
+    // does not fire the event again, so a lost enqueue here is lost for good and
+    // the error log is the only record of it.
     if (outcome.firePaid && outcome.order.account_id !== null) {
       const paidAtIso = new Date(outcome.order.updated_at).toISOString();
       // S41 2026-07-07 (founder-approved: wire crypto activation) — account-tier
@@ -1712,18 +1756,22 @@ export class CryptoOrdersService {
           );
         }
       }
-      if (this.opts.webhooks !== undefined) {
+      // Already queued inside the lock's transaction when the repo can do that.
+      if (this.opts.webhooks !== undefined && !this.paidEventInLock()) {
         try {
-          await this.opts.webhooks.enqueueEvent(outcome.order.account_id, 'crypto.order.paid', {
-            order_id: outcome.order.order_id,
-            product: outcome.order.product,
-            price_cents: outcome.order.price_cents,
-            price_currency: outcome.order.price_currency,
-            payment_id: outcome.order.payment_id,
-            paid_at: paidAtIso,
+          await this.opts.webhooks.enqueueEvent(
+            outcome.order.account_id,
+            'crypto.order.paid',
+            paidEventData(outcome.order),
+          );
+        } catch (err) {
+          logLostWebhookEvent(this.opts.logger, {
+            component: 'crypto-orders',
+            accountId: outcome.order.account_id,
+            eventType: 'crypto.order.paid',
+            err,
+            context: { order_id: outcome.order.order_id },
           });
-        } catch {
-          /* swallow */
         }
       }
       if (this.opts.paidEmailNotifier !== undefined) {
@@ -1743,6 +1791,15 @@ export class CryptoOrdersService {
       }
     }
     return outcome.order;
+  }
+
+  /**
+   * Whether `crypto.order.paid` is queued inside `withOrderLock` (webhooks audit
+   * #5): only when webhooks are wired at all and the repo writes lock-time
+   * events in its transaction. Otherwise it is queued after the commit.
+   */
+  private paidEventInLock(): boolean {
+    return this.opts.webhooks !== undefined && this.opts.repo.writesWebhookEventsInLock === true;
   }
 
   /**
@@ -1774,8 +1831,15 @@ export class CryptoOrdersService {
         reason,
         failed_at: failedAtIso,
       });
-    } catch {
-      /* swallow */
+    } catch (err) {
+      // Best-effort, never silent (webhooks audit #5).
+      logLostWebhookEvent(this.opts.logger, {
+        component: 'crypto-orders',
+        accountId: order.account_id,
+        eventType: 'crypto.order.failed',
+        err,
+        context: { order_id: order.order_id, reason },
+      });
     }
   }
 }
@@ -1791,6 +1855,18 @@ export class CryptoOrdersService {
  *  Falls back to updated_at for legacy rows with no recorded paid event. */
 function paidAtMs(order: CryptoOrder): number {
   return order.events.find((e) => e.status === 'paid')?.at ?? order.updated_at;
+}
+
+/** The `crypto.order.paid` payload — one shape whether queued in the lock or after it. */
+function paidEventData(order: CryptoOrder): Record<string, unknown> {
+  return {
+    order_id: order.order_id,
+    product: order.product,
+    price_cents: order.price_cents,
+    price_currency: order.price_currency,
+    payment_id: order.payment_id,
+    paid_at: new Date(order.updated_at).toISOString(),
+  };
 }
 
 function isTerminalForward(current: CryptoOrderStatus, next: CryptoOrderStatus): boolean {

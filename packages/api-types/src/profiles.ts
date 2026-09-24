@@ -507,6 +507,14 @@ export const ProfileActivityResponseSchema = z.object({
    * more navigations than were returned. Older activity is then not shown.
    */
   truncated: z.boolean(),
+  /**
+   * True when the pages were withheld from you: they come from AI session
+   * records, which need the `read:sessions` scope and, in a teammate's
+   * workspace, the admin role. `data` is then empty; `sessions_scanned` and
+   * `truncated` still describe the profile's activity. Always sent; optional
+   * here only so a response from an older server still parses.
+   */
+  pages_withheld: z.boolean().optional(),
 });
 export type ProfileActivityResponse = z.infer<typeof ProfileActivityResponseSchema>;
 

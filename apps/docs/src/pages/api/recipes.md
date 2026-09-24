@@ -65,6 +65,32 @@ Request body:
 
 Response `201 Created` returns the resource above.
 
+**A session is saved once.** Each recipe keeps its own copy of the
+session's transcript, so a session already saved as a recipe cannot be
+saved again under another label or description: that answers `409`, with
+the saved recipe's id in `recipe_id`. Delete that recipe to save the
+session again. Repeating the exact same save — same session, label and
+description, as a retry does — returns the recipe already saved, `201`,
+without storing a second copy.
+
+**Recipes per account.** Each plan keeps up to a number of recipes:
+
+| Plan        | Recipes |
+| ----------- | ------: |
+| Free        |      10 |
+| Personal    |      50 |
+| Team        |     200 |
+| Agency      |     500 |
+| API Starter |     100 |
+| API Builder |     500 |
+| API Scale   |    1000 |
+| Enterprise  |    2000 |
+
+A save past the limit is refused `429` with the `tier-limit` problem
+("Your plan keeps up to 10 recipes, and this account has 10. Delete a
+recipe to save a new one."), carrying `limit`, `current`, `resource:
+"recipe"` and `tier`.
+
 ## List
 
 `GET /v1/recipes`
@@ -162,5 +188,7 @@ transcript-only snapshot.
 | -----: | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 |    400 | validation-failed   | body fails schema (missing label, label > 120 chars, description > 2000)                                                                               |
 |    404 | not-found           | `agent_session_id` doesn't exist, or belongs to an account you cannot access — 404 rather than 403 so the response does not confirm the session exists |
+|    409 | conflict            | the session is already saved as the recipe in `recipe_id`, under another label or description                                                          |
+|    429 | tier-limit          | the account already keeps as many recipes as its plan allows                                                                                           |
 |    401 | unauthorized        | missing or invalid bearer token                                                                                                                        |
 |    503 | feature-unavailable | recipe storage is not enabled for this deployment                                                                                                      |

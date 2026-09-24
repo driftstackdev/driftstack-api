@@ -1233,7 +1233,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     });
   }
   if (deps.teamMembersService !== undefined) {
-    registerTeamRoutes(app, { service: deps.teamMembersService });
+    registerTeamRoutes(app, {
+      service: deps.teamMembersService,
+      rateLimitStore: deps.rateLimitStore,
+    });
   }
   registerAdminWebhookRoutes(app, {
     webhooksAdmin: deps.webhooksAdminService,

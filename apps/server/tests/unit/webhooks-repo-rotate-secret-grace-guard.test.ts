@@ -10,9 +10,18 @@
 // discarding the ORIGINAL secret the customer was still rolling, breaking
 // inbound HMAC verification for the first new secret.
 //
-// Unit tests exercise the in-memory variant — the Drizzle path uses the
-// same WHERE guard (secret_prev_expires_at IS NULL OR <= now) and the same
-// no-op-returns-in-flight-row semantics on a guarded miss.
+// V-359.G first closed that by making the second rotation a no-op (which
+// the service answered with 409). Webhooks audit #7 (2026-09-24) found the
+// 409 locked a customer who LOST the new secret out of rotating for up to a
+// day, so the second rotation now replaces only the CURRENT secret: the
+// original stays in secret_prev with its original expiry. The property this
+// file guards — the original secret is never clobbered mid-window — holds
+// either way; these arms pin the new shape of it.
+//
+// Unit tests exercise the in-memory variant — the Drizzle path makes the same
+// decision in the rotation UPDATE's CASEs (see
+// a-second-webhook-secret-rotation-in-the-grace-window-replaces-only-the-new-secret
+// for both repositories).
 
 import { describe, expect, it } from 'vitest';
 import { InMemoryWebhooksRepo } from '../integration/_helpers/in-memory-webhooks-repo.js';
@@ -31,7 +40,7 @@ async function seedEndpoint(repo: InMemoryWebhooksRepo) {
 }
 
 describe('V-359.G rotateSecret grace-window guard', () => {
-  it('preserves the ORIGINAL secret_prev when a second rotation lands inside the live grace window', async () => {
+  it('preserves the ORIGINAL secret_prev and its expiry when a second rotation lands inside the live grace window — and installs the second secret as the current one', async () => {
     const repo = new InMemoryWebhooksRepo();
     const ep = await seedEndpoint(repo);
     const originalSecret = ep.secret;
@@ -63,16 +72,16 @@ describe('V-359.G rotateSecret grace-window guard', () => {
       now: rotate2At,
     });
 
-    // Guard is a NO-OP: the row is unchanged. Without the fix, secret_prev
-    // would have been clobbered to 'whsec_one...' (the first new secret),
-    // discarding the ORIGINAL secret the customer is still rolling.
-    expect(after2?.secret).toBe('whsec_one_one_one_one_one_one_one_one__');
+    // Only the CURRENT secret moves. Without the V-359.G protection,
+    // secret_prev would have been clobbered to 'whsec_one...' (the first new
+    // secret), discarding the ORIGINAL secret the customer is still rolling;
+    // and the window is not extended past the original's expiry.
+    expect(after2?.secret).toBe('whsec_two_two_two_two_two_two_two_two__');
     expect(after2?.secretPrev).toBe(originalSecret);
     expect(after2?.secretPrevExpiresAt).toEqual(grace1ExpiresAt);
 
-    // Persisted state confirms the no-op (no spurious not-found either).
     const persisted = await repo.findEndpoint(ep.id, ACCOUNT_ID);
-    expect(persisted?.secret).toBe('whsec_one_one_one_one_one_one_one_one__');
+    expect(persisted?.secret).toBe('whsec_two_two_two_two_two_two_two_two__');
     expect(persisted?.secretPrev).toBe(originalSecret);
     expect(persisted?.secretPrevExpiresAt).toEqual(grace1ExpiresAt);
   });

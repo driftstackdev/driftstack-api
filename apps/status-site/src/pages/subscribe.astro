@@ -206,10 +206,28 @@ const API_BASE = import.meta.env.PUBLIC_API_BASE_URL ?? 'https://api.driftstack.
         setStatus("That doesn't look like a valid email address.", 'error');
         setEmailValid(false);
       } else if (res.status === 429) {
-        setStatus(
-          'Too many subscribe attempts from this IP. Try again in a minute.',
-          'error',
-        );
+        // Security sweep #5 — a refusal for the ADDRESS (too many confirmation
+        // emails to it) says how long to wait, in the API's own words; anything
+        // else keeps the per-IP line. Matched whole, so no other text is shown.
+        let detail = '';
+        try {
+          const problem = await res.json();
+          detail = problem && typeof problem.detail === 'string' ? problem.detail : '';
+        } catch (_) {
+          detail = '';
+        }
+        if (
+          /^Too many confirmation emails have been requested for this address\. Try again in \d{1,4} (?:minutes?|hours|days)\.$/.test(
+            detail,
+          )
+        ) {
+          setStatus(detail, 'error');
+        } else {
+          setStatus(
+            'Too many subscribe attempts from this IP. Try again in a minute.',
+            'error',
+          );
+        }
       } else {
         setStatus("Couldn't start the subscription right now. Try again in a moment.", 'error');
       }

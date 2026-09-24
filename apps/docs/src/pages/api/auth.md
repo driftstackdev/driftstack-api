@@ -129,7 +129,8 @@ all — the server silently no-ops in the latter two cases, so the
 wire never leaks account existence (same no-enumeration posture as
 magic-link and password-reset). Because each call can trigger an
 email send, the endpoint is tightly rate-limited per IP (the same
-budget as password-reset requests).
+budget as password-reset requests) and per address — see
+[How often one address is emailed](#how-often-one-address-is-emailed).
 
 ## Log in
 
@@ -329,6 +330,28 @@ are **not** revoked by a password reset, so your integrations keep
 working. If you think one of them was exposed, revoke it on the API
 keys page or with `DELETE /v1/api-keys/:id`.
 
+## How often one address is emailed
+
+Verification resends, magic links and password resets each send to the
+address a request names, so each is also limited per **address**, whoever
+asks and from wherever: at most 5 of each kind an hour and 10 in any 24
+hours to one address. Spellings of one Gmail inbox (dots, a `+tag`) count
+as that inbox. Past the limit the request is refused with `429`, a
+`Retry-After` header, and a detail that says how long to wait:
+
+```json
+{
+  "type": "https://errors.driftstack.dev/rate-limited",
+  "status": 429,
+  "detail": "Too many sign-in links have been requested for this address. Try again in 42 minutes.",
+  "retry_after_seconds": 2520
+}
+```
+
+The limit counts every request for the address, whether or not it has an
+account, so a refusal says nothing about who has one. The per-IP limits
+still apply as well.
+
 ## Refresh
 
 `POST /v1/auth/refresh`
@@ -351,6 +374,11 @@ without re-prompting for credentials.
 
 Returns `200` with `{ "ok": true }`. Subsequent requests with that
 token return `401 Unauthorized`.
+
+The token can also be presented as `Authorization: Bearer <token>` with no
+body; when a request carries both, both sessions are revoked. A token that
+is already revoked or unknown is a no-op `200`. With neither a body nor a
+bearer token the request is refused `400`.
 
 ## Sessions list + revoke
 

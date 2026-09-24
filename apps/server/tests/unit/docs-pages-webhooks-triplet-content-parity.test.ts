@@ -90,7 +90,12 @@ describe('W787 docs webhooks/ triplet content parity', () => {
       /`400 ValidationFailed` — URL not https:\/\/, or events array empty\s*\n?\s+\/ >10 entries \/ contains `test\.ping`\./,
     );
     expect(p).toMatch(/`403 Forbidden` — `account_owner` scope missing on the calling key\./);
-    expect(p).toMatch(/`409 Conflict` — max 10 active endpoints\./);
+    // Webhooks audit #4 (2026-09-24): the cap counts every endpoint that is not
+    // deleted — "active" was the loophole (pause, create, resume).
+    expect(p).toMatch(
+      /`409 Conflict` — the account already has 10 endpoints, the most it\s*\n?\s*can have\. Paused endpoints count toward the limit; only deleting an\s*\n?\s*endpoint frees a place\./,
+    );
+    expect(p).not.toMatch(/max 10 active endpoints/);
     // The stale 429-TierLimit framing must NOT return (it's a 409 ConflictError).
     expect(p).not.toMatch(/`429 TierLimit` — account at the max-endpoints-per-account cap\./);
   });
@@ -101,7 +106,15 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     expect(p).toMatch(
       /`active: false` pauses delivery without deleting the endpoint;\s*\n?useful for maintenance windows or post-incident cooldowns\./,
     );
-    expect(p).toMatch(/Resume\s*\n?with `active: true`\./);
+    // Webhooks audit #3 (2026-09-24): what a pause does, exactly — held, not
+    // attempted, not dead-lettered, not counted; queued during; sent after resume.
+    expect(p).toMatch(/Resume with `active: true`: everything held is then delivered/);
+    expect(p).toMatch(
+      /deliveries already queued for it are held: they are not attempted,\s*\n?\s*not moved to the DLQ, and not counted in `consecutive_failures`/,
+    );
+    expect(p).toMatch(
+      /events raised during the pause are queued for it and held the same\s*\n?\s*way\./,
+    );
   });
 
   // ─── webhooks/events.md ───────────────────────────────────────

@@ -10,9 +10,13 @@
 //                to ANOTHER customer's endpoint — their session ids, their
 //                order data, POSTed to a server that has no relationship with
 //                them. There is no recovering from that once it is sent.
-//   active       an endpoint disabled after repeated failures must stop
-//                receiving. Without it, disabling is decorative: the deliveries
-//                keep being enqueued against a URL already known to be dead.
+//   disabled_at  an endpoint deleted, or disabled after repeated failures,
+//                must stop receiving. Without it, disabling is decorative: the
+//                deliveries keep being enqueued against a URL already known to
+//                be dead. (A PAUSED endpoint — active=false, disabled_at unset —
+//                IS selected: webhooks audit #3 made a pause hold events rather
+//                than drop them, and the claim holds its deliveries until it is
+//                resumed. This filter used to be `active`, which dropped them.)
 //   events @>    the subscription itself. Without it an endpoint that asked
 //                only for crypto.order.paid also receives session.completed —
 //                payloads the customer never opted into and may not be
@@ -93,6 +97,8 @@ async function seedEndpoint(args: {
   accountId: string;
   events: readonly string[];
   active?: boolean;
+  /** Set to disable the endpoint the way production does (with active=false). */
+  disabledAt?: Date;
 }): Promise<string> {
   const id = randomUUID();
   // The repo decrypts on read and fails closed on anything that is not a v2
@@ -102,10 +108,10 @@ async function seedEndpoint(args: {
     endpointId: id,
   });
   await sql!`
-    INSERT INTO webhook_endpoints (id, account_id, url, secret, secret_prefix, events, active)
+    INSERT INTO webhook_endpoints (id, account_id, url, secret, secret_prefix, events, active, disabled_at)
     VALUES (${id}, ${args.accountId}, ${`https://hooks.test.local/${id}`},
             ${secret}, 'whsec_test', ${sql!.array([...args.events])}::webhook_event_type[],
-            ${args.active ?? true})`;
+            ${args.active ?? true}, ${args.disabledAt?.toISOString() ?? null}::timestamptz)`;
   return id;
 }
 
@@ -158,16 +164,32 @@ describe('webhook fan-out selection', () => {
   it('CRITICAL a disabled endpoint is not selected', async () => {
     if (!dbReachable || !repo) return;
     const accountId = await seedAccount();
+    // The shape disableEndpoint writes: active=false AND disabled_at set.
     const disabled = await seedEndpoint({
       accountId,
       events: ['session.completed'],
       active: false,
+      disabledAt: new Date(),
     });
     expect(
       await idsFor(accountId, 'session.completed'),
       'a disabled endpoint was still selected — disabling would be decorative and deliveries would ' +
         'keep being enqueued against a URL already known to be dead',
     ).not.toContain(disabled);
+  });
+
+  it('CRITICAL a PAUSED endpoint is selected, so an event raised during the pause is held for it rather than dropped', async () => {
+    if (!dbReachable || !repo) return;
+    const accountId = await seedAccount();
+    const paused = await seedEndpoint({
+      accountId,
+      events: ['session.completed'],
+      active: false,
+    });
+    expect(
+      await idsFor(accountId, 'session.completed'),
+      'a paused endpoint was left out of the fan-out — every event raised during a pause is lost',
+    ).toContain(paused);
   });
 
   it('CRITICAL an endpoint subscribed to several events matches each of them', async () => {

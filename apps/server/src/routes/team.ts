@@ -26,12 +26,16 @@
 import type { FastifyInstance } from 'fastify';
 import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import { z } from 'zod';
-import { NotFoundError, ValidationError } from '../lib/errors.js';
-import type {
-  TeamInviteRow,
-  TeamMemberRow,
-  TeamMembersService,
-  TeamRow,
+import { ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
+import type { RateLimitStore } from '../services/rate-limit.js';
+import { RecipientEmailLimiter } from '../services/recipient-email-limit.js';
+import {
+  TEAMMATES_NOT_ON_PLAN,
+  tierIncludesTeammates,
+  type TeamInviteRow,
+  type TeamMemberRow,
+  type TeamMembersService,
+  type TeamRow,
 } from '../services/team-members.js';
 
 const InviteBodySchema = z.object({
@@ -119,10 +123,17 @@ function publicInvite(row: TeamInviteRow): Record<string, unknown> {
 
 export interface TeamRoutesOptions {
   service: TeamMembersService;
+  /**
+   * Security sweep #4 — where the per-ADDRESS invite count is kept (the shared
+   * rate-limit store; Redis in production). Absent: counted inside this process
+   * only, which still limits, per instance.
+   */
+  rateLimitStore?: RateLimitStore;
 }
 
 export function registerTeamRoutes(app: FastifyInstance, opts: TeamRoutesOptions): void {
   const { service } = opts;
+  const recipientLimit = new RecipientEmailLimiter(opts.rateLimitStore ?? null);
 
   app.post(
     '/v1/team/invites',
@@ -130,6 +141,10 @@ export function registerTeamRoutes(app: FastifyInstance, opts: TeamRoutesOptions
     async (request, reply) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
+      // Security sweep #6 — teammates are a paid-plan feature; a free account
+      // (whose browser session reaches this route) is refused before anything is
+      // stored or sent.
+      if (!tierIncludesTeammates(ctx.account.tier)) throw new ForbiddenError(TEAMMATES_NOT_ON_PLAN);
       const parsed = InviteBodySchema.safeParse(request.body);
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       reportUnknownRequestFields({
@@ -139,11 +154,17 @@ export function registerTeamRoutes(app: FastifyInstance, opts: TeamRoutesOptions
         logger: request.log,
         route: 'POST /v1/team/invites',
       });
+      // Security sweep #4 — at most 5 invite emails an hour and 10 a day to one
+      // address, across every team that invites it. The per-team cap and the
+      // re-send cooldown are decided first, in the service under the repository's
+      // lock, so an attempt they refuse spends none of the address's allowance.
+      const inviteeEmail = parsed.data.email;
       await service.invite({
         ownerAccountId: ctx.account.id,
         invitedByAccountId: ctx.account.id,
-        inviteeEmail: parsed.data.email,
+        inviteeEmail,
         ...(parsed.data.role !== undefined ? { role: parsed.data.role } : {}),
+        beforeSend: () => recipientLimit.enforce('team-invite', inviteeEmail, request.log),
       });
       return reply
         .code(202)

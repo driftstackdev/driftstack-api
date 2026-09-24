@@ -167,7 +167,7 @@ import { EXIT_IDENTITY_TTL_MS, RedisExitIdentityStore } from '../services/exit-i
 import { RedisMfaChallengeStore } from '../services/mfa-challenge-store.js';
 import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
-import { WebhookDeliveryWorker, drainWebhookDeliveries } from '../services/webhook-worker.js';
+import { WebhookDeliveryWorker } from '../services/webhook-worker.js';
 import { AdminAuditService } from '../services/admin-audit.js';
 import { AccountsAdminService } from '../services/admin-accounts.js';
 import { AdminBillingService } from '../services/admin-billing.js';
@@ -1378,6 +1378,7 @@ export async function createProductionDeps(
     accountAuditService,
     authCache,
     webhooksService,
+    logger, // webhooks audit #5 — a lost api_key.revoked is logged, not swallowed
   );
 
   // V-295c3-followup — incident-notification fan-out. Wired into the
@@ -1560,6 +1561,7 @@ export async function createProductionDeps(
     webhooksService,
     legalService,
     accountAuditService,
+    logger, // webhooks audit #5 — a lost api_key.revoked is logged, not swallowed
   );
 
   // V-353b — MFA service. Active only when MFA_ENCRYPTION_KEY is
@@ -4284,8 +4286,10 @@ export async function createProductionDeps(
   // configured webhook enqueues but is never delivered (and replay routes that
   // re-set 'pending' never re-fire).
   // Pinned here rather than left to the worker's default so the ceiling is
-  // explicit at the call site. It is NOT the drain loop's stop signal — see
-  // there for why a partial batch does not mean the queue is empty.
+  // explicit at the call site. It is the drain's POOL size — the most
+  // deliveries in flight at once — and NOT its stop signal: see
+  // drainWebhookDeliveries for why a short claim does not mean the queue is
+  // empty.
   const WEBHOOK_DELIVERY_BATCH_SIZE = 25;
   const webhookDeliveryWorker = new WebhookDeliveryWorker({
     repo: webhooksRepo,
@@ -4302,14 +4306,19 @@ export async function createProductionDeps(
   // customer's events queued behind it. That is a deployment-wide ceiling, not
   // a per-account one, so it does not scale with anything.
   //
-  // The tick now DRAINS: it keeps claiming while the previous batch came back
-  // full, which is the signal that more work is waiting. Bounded twice so a
-  // hot queue cannot monopolise the process — a maximum number of batches per
-  // tick, and a wall-clock budget well inside the poll interval. `tickOnce`
-  // delivers its batch concurrently (Promise.all), so one batch costs about one
-  // delivery's latency rather than the sum, and the per-attempt timeout bounds
-  // that. A partial batch means the queue is drained, so we stop immediately.
-  const WEBHOOK_DRAIN_MAX_BATCHES = 20;
+  // The tick now DRAINS, through a bounded POOL of WEBHOOK_DELIVERY_BATCH_SIZE
+  // slots: each slot that frees claims again at once. Bounded twice so a hot
+  // queue cannot monopolise the process — a maximum number of deliveries per
+  // tick (the old 20 batches' worth), and a wall-clock budget well inside the
+  // poll interval; deliveries already started finish before the drain returns,
+  // each bounded by the per-attempt timeout.
+  //
+  // Webhooks audit #2 (2026-09-24): it drained in BATCHES, and a batch lasted as
+  // long as its slowest delivery, so one slow-but-succeeding endpoint with a
+  // backlog set the length of every batch — about 3 batches per 30 s budget
+  // instead of 20, for every account. In the pool a straggler holds only its
+  // own capped share of the slots.
+  const WEBHOOK_DRAIN_MAX_DELIVERIES = 20 * WEBHOOK_DELIVERY_BATCH_SIZE;
   const WEBHOOK_DRAIN_BUDGET_MS = 30_000;
   // setInterval does not await the previous tick, so a slow drain could
   // otherwise overlap itself and multiply in-flight deliveries. `claim` is
@@ -4321,9 +4330,8 @@ export async function createProductionDeps(
       if (webhookDeliveryRunning) return;
       webhookDeliveryRunning = true;
       try {
-        await drainWebhookDeliveries({
-          tick: () => webhookDeliveryWorker.tickOnce(),
-          maxBatches: WEBHOOK_DRAIN_MAX_BATCHES,
+        await webhookDeliveryWorker.drain({
+          maxDeliveries: WEBHOOK_DRAIN_MAX_DELIVERIES,
           budgetMs: WEBHOOK_DRAIN_BUDGET_MS,
         });
       } catch (err) {

@@ -355,10 +355,26 @@ const navSections: NavSection[] = [
             /^Code is invalid\. Try again or use a recovery code\.$/,
             /^Too many incorrect codes for this sign-in\. Sign in again to retry\.$/,
             /^Challenge token (?:is unknown or expired|is invalid|was issued from a different IP|was already used)\. Sign in again\.$/,
+            // Security sweep #4-#6 — the per-address email limits and the team-invite
+            // limits: what happened and when to try again, in the server's words.
+            /^Too many (?:verification emails|sign-in links|password reset emails|confirmation emails) have been requested for this address\. Try again in \d{1,4} (?:minutes?|hours|days)\.$/,
+            /^This address has been sent too many team invites recently\. Try again in \d{1,4} (?:minutes?|hours|days)\.$/,
+            /^An invite was emailed to this address less than \d{1,4} minutes ago\. You can send it again in \d{1,4} minutes?\.$/,
+            /^Your team has \d{1,4} invites waiting to be accepted, the most allowed at once\. Try again when one is accepted, or in \d{1,4} (?:minutes?|hours|days), when the oldest expires\.$/,
           ];
           if ((kind === 'rate-limited' || kind === 'invalid-auth-token') && detail) {
             for (var i = 0; i < safeDetails.length; i++) {
               if (safeDetails[i].test(detail)) message = detail;
+            }
+          }
+          // A plan refusal the server writes as customer copy (security sweep #6).
+          // Its own list, so no sign-in message is ever shown under this type.
+          var safeForbidden = [
+            /^Inviting teammates is available on paid plans\. Upgrade your plan to invite people to your account\.$/,
+          ];
+          if (kind === 'forbidden' && detail) {
+            for (var f = 0; f < safeForbidden.length; f++) {
+              if (safeForbidden[f].test(detail)) message = detail;
             }
           }
           if (!message && kind === 'unauthorized') {
@@ -1412,15 +1428,21 @@ const navSections: NavSection[] = [
               } catch (_) {
                 /* swallow */
               }
+              // Security sweep #8 — the token goes in the JSON body, where the logout
+              // route reads it. Sent only as the bearer header, every sign-out was a
+              // 400 this handler swallowed and the session stayed live for 30 days.
               try {
-                fetch(apiBaseUrl + '/v1/auth/logout', {
-                  method: 'POST',
-                  headers: { authorization: 'Bearer ' + t },
-                  credentials: 'include',
-                  keepalive: true,
-                }).catch(function () {
-                  /* fire-and-forget */
-                });
+                if (t) {
+                  fetch(apiBaseUrl + '/v1/auth/logout', {
+                    method: 'POST',
+                    headers: { authorization: 'Bearer ' + t, 'content-type': 'application/json' },
+                    body: JSON.stringify({ token: t }),
+                    credentials: 'include',
+                    keepalive: true,
+                  }).catch(function () {
+                    /* fire-and-forget */
+                  });
+                }
               } catch (_) {
                 /* swallow */
               }

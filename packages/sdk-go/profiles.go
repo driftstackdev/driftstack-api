@@ -373,10 +373,14 @@ type ProfileActivityEntry struct {
 
 // ProfileActivityResponse is a profile's recent navigation, most recent first.
 // Truncated is true when older activity exists beyond the server's bounds.
+// PagesWithheld is true when the pages were withheld from the caller: they come
+// from AI session records, which need the read:sessions scope and, in a
+// teammate's workspace, the admin role. Data is then empty.
 type ProfileActivityResponse struct {
 	Data            []ProfileActivityEntry `json:"data"`
 	SessionsScanned int                    `json:"sessions_scanned"`
 	Truncated       bool                   `json:"truncated"`
+	PagesWithheld   bool                   `json:"pages_withheld"`
 }
 
 // Activity returns the profile's recent navigation, projected from the

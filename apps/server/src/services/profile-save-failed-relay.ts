@@ -18,7 +18,7 @@
 // Same shape as makeChallengeRelay (challenge-relay.ts).
 
 import type { ProfileSaveFailed } from '../schemas/harness-control-protocol.js';
-import type { WebhookEventType } from './webhooks.js';
+import { logLostWebhookEvent, type WebhookEventType } from './webhooks.js';
 import type { Logger } from '../lib/logger.js';
 import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import { isCrossNodeSpoof } from './fleet-session-ownership.js';
@@ -96,18 +96,28 @@ export function makeProfileSaveFailedRelay(
       );
       return;
     }
-    const endpoints = await webhooks.enqueueEvent(
-      session.accountId,
-      'session.profile_save_failed',
-      {
+    let endpoints: number;
+    try {
+      endpoints = await webhooks.enqueueEvent(session.accountId, 'session.profile_save_failed', {
         session_id: frame.sessionId,
         profile_id: session.profileId,
         reason: frame.reason,
         // Scrub credentials plus the node's real egress IP before the free-form
         // detail reaches the customer webhook.
         ...(frame.detail !== undefined ? { detail: customerSafeNodeDiagnostic(frame.detail) } : {}),
-      },
-    );
+      });
+    } catch (err) {
+      // Webhooks audit #5 — logged here, where the account is known, rather
+      // than by the relay's generic onError, which could name only the session.
+      logLostWebhookEvent(logger, {
+        component: 'profile-save-failed-relay',
+        accountId: session.accountId,
+        eventType: 'session.profile_save_failed',
+        err,
+        context: { session_id: frame.sessionId, profile_id: session.profileId },
+      });
+      return;
+    }
     logger.info(
       {
         component: 'profile-save-failed-relay',
