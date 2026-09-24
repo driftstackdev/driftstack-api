@@ -110,7 +110,14 @@ export class DrizzleTeamMembersRepo implements TeamMembersRepo {
         current !== undefined && current.inviteExpiresAt.getTime() > input.now.getTime();
       if (current !== undefined && replacesLive) {
         const sentAt = current.inviteExpiresAt.getTime() - input.inviteTtlMs;
-        const retryAfterMs = sentAt + input.resendCooldownMs - input.now.getTime();
+        // Capped at the cooldown: a request racing the invite that won reads its
+        // `now` before that invite was written, so `sentAt` can be a moment AFTER
+        // `now` and the raw difference a millisecond over the cooldown (CI saw
+        // 600001 against 600000). The wait can never honestly exceed the cooldown.
+        const retryAfterMs = Math.min(
+          input.resendCooldownMs,
+          sentAt + input.resendCooldownMs - input.now.getTime(),
+        );
         if (retryAfterMs > 0) return { kind: 'cooldown', retryAfterMs };
       }
       if (!replacesLive) {
