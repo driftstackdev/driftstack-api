@@ -468,8 +468,22 @@ const FILTER_OPTIONS = [
         }
       }
 
+      // A verification that removed the account's password (a first sign-in
+      // link) is labelled as what it did, not as a plain verification.
+      function entryLabel(entry) {
+        if (
+          entry.action === 'account.email_verified' &&
+          entry.payload != null &&
+          typeof entry.payload === 'object' &&
+          entry.payload.password_removed === true
+        ) {
+          return 'Email verified — password removed';
+        }
+        return ACTION_LABEL[entry.action] || entry.action;
+      }
+
       function entryLi(entry) {
-        const label = ACTION_LABEL[entry.action] || entry.action;
+        const label = entryLabel(entry);
         return (
           '<li class="px-6 py-3 transition-colors hover:bg-tk-hover">' +
           '<div class="flex items-start justify-between gap-6">' +

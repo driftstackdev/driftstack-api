@@ -135,10 +135,10 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it('magic-link and password-reset recovery return MFA challenges before any session mint', () => {
     expect(body).toMatch(
-      /if \(this\.mfa !== null && \(await this\.mfa\.getStatus\(account\.id\)\)\.enrolled\) \{\s*return \{\s*kind: 'mfa_required',\s*account,\s*\.\.\.\(await this\.createMfaChallenge\(account, args\.issuedFromIp, args\.userAgent\)\),/,
+      /if \(this\.mfa !== null && \(await this\.mfa\.getStatus\(account\.id\)\)\.enrolled\) \{\s*return \{\s*kind: 'mfa_required',\s*account,\s*passwordRemoved,[\s\S]{0,120}?\.\.\.\(await this\.createMfaChallenge\(\s*account,\s*args\.issuedFromIp,\s*args\.userAgent,\s*'email_link',\s*\)\),/,
     );
     expect(body).toMatch(
-      /if \(mfaRequired\) \{[\s\S]+?await this\.revokeSessionsAfterPasswordReset\(account\.id, null, now\);[\s\S]+?kind: 'mfa_required',[\s\S]+?createMfaChallenge/,
+      /if \(mfaRequired\) \{[\s\S]+?await this\.revokeSessionsAfterPasswordReset\(account\.id, null, now\);[\s\S]+?kind: 'mfa_required',[\s\S]+?createMfaChallenge\(\s*accountAfterPasswordChange,\s*args\.issuedFromIp,\s*args\.userAgent,\s*'password',\s*\{ afterPasswordChange: true \},/,
     );
     expect(body).toMatch(/revoked_via: 'password_reset'/);
   });
@@ -165,7 +165,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
       /\/\/ V-353d — branch on MFA enrollment\. If enrolled, issue a\s*\/\/ challenge token instead of a session;/,
     );
     expect(body).toMatch(
-      /const challenge = await this\.createMfaChallenge\(account, args\.issuedFromIp, args\.userAgent\);\s*return \{\s*kind: 'mfa_required',\s*account,\s*\.\.\.challenge,/,
+      /const challenge = await this\.createMfaChallenge\(\s*account,\s*args\.issuedFromIp,\s*args\.userAgent,\s*'password',\s*\);\s*return \{\s*kind: 'mfa_required',\s*account,\s*\.\.\.challenge,/,
     );
   });
 
@@ -364,7 +364,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
 
   it('issueOAuthWebSession returns the shared IP-bound challenge when local MFA is enrolled', () => {
     expect(body).toMatch(
-      /if \(this\.mfa !== null && \(await this\.mfa\.getStatus\(account\.id\)\)\.enrolled\) \{[\s\S]+?kind: 'mfa_required',[\s\S]+?createMfaChallenge\(account, args\.issuedFromIp, args\.userAgent\)/,
+      /if \(this\.mfa !== null && \(await this\.mfa\.getStatus\(account\.id\)\)\.enrolled\) \{[\s\S]+?kind: 'mfa_required',[\s\S]+?createMfaChallenge\(\s*account,\s*args\.issuedFromIp,\s*args\.userAgent,\s*args\.provider,\s*\)/,
     );
     expect(body).toMatch(/private async createMfaChallenge\(/);
     expect(body).toMatch(/MFA_CHALLENGE_TTL_SECONDS/);

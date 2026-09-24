@@ -7641,7 +7641,8 @@ function buildRegistry(): OpenAPIRegistry {
     },
     responses: {
       200: {
-        description: 'Session issued, or an MFA challenge returned when the account has MFA.',
+        description:
+          "Session issued, or an MFA challenge returned when the account has MFA. Either carries `password_removed: true` when this link was the first confirmation of the account's email address and removed the account's password.",
         content: { 'application/json': { schema: MagicLinkConsumeResponseSchema } },
       },
       ...errors4xx,

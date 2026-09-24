@@ -1101,11 +1101,16 @@ type MagicLinkConsumeRequest struct {
 	Token string `json:"token"`
 }
 
+// MagicLinkConsumeResponse — PasswordRemoved is true when this link was the
+// account's first proof of its email address and a password set before then was
+// removed; the person must set a new one (password reset) to sign in with a
+// password again.
 type MagicLinkConsumeResponse struct {
 	Session            WebSession `json:"session,omitempty"`
 	MfaRequired        bool       `json:"mfa_required,omitempty"`
 	ChallengeToken     string     `json:"challenge_token,omitempty"`
 	ChallengeExpiresAt string     `json:"challenge_expires_at,omitempty"`
+	PasswordRemoved    bool       `json:"password_removed,omitempty"`
 }
 
 type PasswordResetRequest struct {

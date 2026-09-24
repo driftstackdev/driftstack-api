@@ -55,7 +55,7 @@ import type { buildLegalCatalog } from '../../../src/services/legal-catalog.js';
 import { EmailPreferencesService } from '../../../src/services/email-preferences.js';
 import { AccountAuditService } from '../../../src/services/account-audit.js';
 import { AccountLifecycleService } from '../../../src/services/account-lifecycle.js';
-import { createEmailService } from '../../../src/services/email.js';
+import { createEmailService, type EmailService } from '../../../src/services/email.js';
 import { ValidationHarnessService } from '../../../src/services/validation-harness.js';
 import { IncidentsService } from '../../../src/services/incidents.js';
 import type { AdminCreditsHarness } from './admin-credits-route-fixtures.js';
@@ -142,6 +142,8 @@ export interface RealAppOptions {
   readonly ownerEmail?: string;
   /** Omit for no cache (every request takes the slow path). */
   readonly authCache?: AuthCache | null;
+  /** The email service the auth flows send through. Omit for a no-op one. */
+  readonly email?: EmailService;
 }
 
 /** The whole app, wired the way bootstrap wires it, against the isolated database. */
@@ -160,6 +162,7 @@ export async function buildRealApp(
   const webhooksService = new WebhooksService(webhooksRepo, accountAuditService);
   const emailPreferencesService = new EmailPreferencesService(new DrizzleEmailPreferencesRepo(db));
   const noopEmail = createEmailService({ config: null, logger });
+  const authEmail = opts.email ?? noopEmail;
   const accountLifecycleService = new AccountLifecycleService(
     new DrizzleAccountLifecycleRepo(db),
     noopEmail,
@@ -192,7 +195,7 @@ export async function buildRealApp(
   );
   const authFlowsService = new AuthFlowsService(
     new DrizzleAuthFlowsRepo(db),
-    noopEmail,
+    authEmail,
     logger,
     {
       verifyEmailUrl: 'http://localhost:5173/verify-email',

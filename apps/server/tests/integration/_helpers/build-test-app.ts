@@ -229,6 +229,10 @@ function createRecordingEmailService(realService: EmailService): {
       record('mfa-sign-in-locked', args);
       await realService.sendMfaSignInLocked(args);
     },
+    sendPasswordRemoved: async (args) => {
+      record('password-removed', args);
+      await realService.sendPasswordRemoved(args);
+    },
     sendMfaEnrolled: async (args) => {
       record('mfa-enrolled', args);
       await realService.sendMfaEnrolled(args);

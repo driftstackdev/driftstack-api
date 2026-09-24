@@ -408,8 +408,11 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
         issuedFromIp: clientIp(req),
         userAgent: userAgent(req),
       });
-      if (result.kind === 'mfa_required') return mfaRequiredResponse(result);
-      return sessionResponse(result);
+      // Re-audit defect 2 — say so when this link, the address's first
+      // confirmation, removed the account's password. Absent otherwise.
+      const removed = result.passwordRemoved ? { password_removed: true as const } : {};
+      if (result.kind === 'mfa_required') return { ...mfaRequiredResponse(result), ...removed };
+      return { ...sessionResponse(result), ...removed };
     } catch (e) {
       mapAuthFlowError(e);
     }

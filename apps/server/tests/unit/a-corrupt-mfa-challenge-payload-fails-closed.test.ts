@@ -103,6 +103,7 @@ const wellFormed = JSON.stringify({
   source_ip: SOURCE_IP,
   issued_at: 1_767_225_600,
   issued_user_agent: 'Mozilla/5.0',
+  method: 'password',
 });
 
 describe('a stored MFA challenge payload that does not parse fails closed', () => {
@@ -113,7 +114,13 @@ describe('a stored MFA challenge payload that does not parse fails closed', () =
     ['a JSON string', '"just-a-string"'],
     [
       'no account_id',
-      JSON.stringify({ email: 'u@e.test', source_ip: null, issued_at: 1, issued_user_agent: null }),
+      JSON.stringify({
+        email: 'u@e.test',
+        source_ip: null,
+        issued_at: 1,
+        issued_user_agent: null,
+        method: 'password',
+      }),
     ],
     [
       'an empty account_id',
@@ -123,6 +130,7 @@ describe('a stored MFA challenge payload that does not parse fails closed', () =
         source_ip: null,
         issued_at: 1,
         issued_user_agent: null,
+        method: 'password',
       }),
     ],
     [
@@ -132,6 +140,7 @@ describe('a stored MFA challenge payload that does not parse fails closed', () =
         source_ip: null,
         issued_at: 1,
         issued_user_agent: null,
+        method: 'password',
       }),
     ],
     [
@@ -142,6 +151,7 @@ describe('a stored MFA challenge payload that does not parse fails closed', () =
         source_ip: 7,
         issued_at: 1,
         issued_user_agent: null,
+        method: 'password',
       }),
     ],
     [
@@ -152,11 +162,12 @@ describe('a stored MFA challenge payload that does not parse fails closed', () =
         source_ip: null,
         issued_at: '1',
         issued_user_agent: null,
+        method: 'password',
       }),
     ],
     [
       'an issued_at that is not finite',
-      `{"account_id":"acc-1","email":"u@e.test","source_ip":null,"issued_at":1e999,"issued_user_agent":null}`,
+      `{"account_id":"acc-1","email":"u@e.test","source_ip":null,"issued_at":1e999,"issued_user_agent":null,"method":"password"}`,
     ],
     [
       'a numeric issued_user_agent',
@@ -166,6 +177,31 @@ describe('a stored MFA challenge payload that does not parse fails closed', () =
         source_ip: null,
         issued_at: 1,
         issued_user_agent: 7,
+        method: 'password',
+      }),
+    ],
+    // Sign-in re-audit, round 1, defect 1 — the method decides which count a
+    // wrong code is charged to; a challenge without a known one has no right
+    // count, so it fails closed like any other corrupt payload.
+    [
+      'no method',
+      JSON.stringify({
+        account_id: 'acc-1',
+        email: 'u@e.test',
+        source_ip: null,
+        issued_at: 1,
+        issued_user_agent: null,
+      }),
+    ],
+    [
+      'an unknown method',
+      JSON.stringify({
+        account_id: 'acc-1',
+        email: 'u@e.test',
+        source_ip: null,
+        issued_at: 1,
+        issued_user_agent: null,
+        method: 'carrier-pigeon',
       }),
     ],
   ])(

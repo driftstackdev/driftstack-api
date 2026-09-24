@@ -158,10 +158,15 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     expect(body).toMatch(
       /function mfaRequiredResponse\(args: \{[\s\S]+?mfa_required: true,[\s\S]+?challenge_token: args\.challengeToken,[\s\S]+?challenge_expires_at: args\.challengeExpiresAt\.toISOString\(\),/,
     );
-    // magic-link, password-reset, and (V-720) verify-email.
+    // password-reset and (V-720) verify-email; magic-link adds its
+    // `password_removed` flag (sign-in re-audit, round 1, defect 2) to the same
+    // serializer's output.
     expect(
       body.match(/if \(result\.kind === 'mfa_required'\) return mfaRequiredResponse\(result\);/g),
-    ).toHaveLength(3);
+    ).toHaveLength(2);
+    expect(body).toMatch(
+      /if \(result\.kind === 'mfa_required'\) return \{ \.\.\.mfaRequiredResponse\(result\), \.\.\.removed \};/,
+    );
     expect(body).toMatch(
       /if \(result\.kind === 'mfa_required'\) \{\s*return mfaRequiredResponse\(result\);/,
     );

@@ -12,6 +12,9 @@ import DashboardLayout from '../../layouts/DashboardLayout.astro';
 //   5. The page exchanges TOTP/recovery when required, then writes the session
 //      to localStorage and redirects to / (or the safe ?next= path).
 //   6. Token is one-shot — second use returns 400; a successful MFA challenge is too.
+//   7. When the link was the address's first confirmation and removed the
+//      account's password (`password_removed: true`), the page says so and offers
+//      "Set a password" (the reset flow) instead of redirecting straight away.
 //
 // The form is rendered as a fallback for the rare case where a mail
 // client mangles the link (drops the query string), so the user can
@@ -43,6 +46,27 @@ const apiBaseUrl = resolveApiBaseUrl();
       >
         <a href="/login/" class="btn-primary flex w-full items-center justify-center"
           >Request a fresh sign-in link</a
+        >
+      </div>
+
+      <div data-password-removed class="hidden space-y-5" role="status">
+        <div>
+          <h2 class="text-base font-semibold text-tk-ink">Your password was removed</h2>
+          <p class="mt-2 text-sm text-tk-ink-2">
+            The password on your account was removed because your email address was confirmed
+            by email link. You're signed in. To sign in with a password again, set a new one.
+          </p>
+        </div>
+        <a
+          href="/forgot-password/"
+          data-link="set-password"
+          class="btn-primary flex w-full items-center justify-center">Set a password</a
+        >
+        <a
+          href="/"
+          data-link="continue"
+          class="block text-center text-sm text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+          >Continue without a password</a
         >
       </div>
 
@@ -137,6 +161,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       const mfaRecoveryInput = root.querySelector('#magic-link-mfa-recovery');
       const mfaToggle = root.querySelector('[data-mfa-toggle-recovery]');
       const mfaExpiry = root.querySelector('[data-mfa-expiry]');
+      const passwordRemovedPanel = root.querySelector('[data-password-removed]');
+      const continueLink = root.querySelector('[data-link="continue"]');
 
       const safeNextPath = (next, origin) => {
         if (typeof next !== 'string' || next.length === 0) return '/';
@@ -173,6 +199,25 @@ const apiBaseUrl = resolveApiBaseUrl();
         persistWebSession(session);
         const params = new URLSearchParams(window.location.search);
         window.location.href = safeNextPath(params.get('next'), window.location.origin);
+      }
+
+      // The link was the address's first confirmation and removed the account's
+      // password. Keep the session, say what happened, and offer the reset flow
+      // rather than moving on as if nothing changed.
+      function completeSessionAfterPasswordRemoved(session) {
+        persistWebSession(session);
+        if (form) form.classList.add('hidden');
+        if (mfaForm) mfaForm.classList.add('hidden');
+        banner.classList.add('hidden');
+        if (intro) intro.textContent = "You're signed in.";
+        const params = new URLSearchParams(window.location.search);
+        if (continueLink) {
+          continueLink.setAttribute(
+            'href',
+            safeNextPath(params.get('next'), window.location.origin),
+          );
+        }
+        if (passwordRemovedPanel) passwordRemovedPanel.classList.remove('hidden');
       }
 
       function canPersistWebSession() {
@@ -215,6 +260,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       let mfaUsingRecovery = false;
       let mfaInFlight = false;
       let mfaOutcomeUnknown = false;
+      let passwordRemoved = false;
       function setConsumeBusy(busy) {
         if (form) form.setAttribute('aria-busy', busy ? 'true' : 'false');
         if (tokenInput) tokenInput.disabled = busy || consumeOutcomeUnknown;
@@ -348,7 +394,8 @@ const apiBaseUrl = resolveApiBaseUrl();
                   { customerSafe: true },
                 );
               mfaChallengeToken = null;
-              completeSession(session);
+              if (passwordRemoved) completeSessionAfterPasswordRemoved(session);
+              else completeSession(session);
             })
             .catch((err) => {
               if (mfaAccepted) {
@@ -419,6 +466,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
           })
           .then((body) => {
+            passwordRemoved = Boolean(body && body.password_removed === true);
             if (body.mfa_required === true) {
               startMfaChallenge(body);
               return;
@@ -429,7 +477,8 @@ const apiBaseUrl = resolveApiBaseUrl();
                 new Error('The server did not return a session. Sign in again.'),
                 { customerSafe: true },
               );
-            completeSession(session);
+            if (passwordRemoved) completeSessionAfterPasswordRemoved(session);
+            else completeSession(session);
           })
           .catch((err) => {
             if (consumeAccepted) {

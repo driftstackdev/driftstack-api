@@ -350,6 +350,7 @@ const navSections: NavSection[] = [
           var safeDetails = [
             /^Too many incorrect passwords for this email\. Try again in \d{1,4} minutes?, or reset your password\.$/,
             /^Too many incorrect two-factor codes for this account\. Two-factor sign-in is paused — try again in \d{1,4} minutes?\.$/,
+            /^Too many incorrect two-factor codes after signing in with (Google|GitHub|an email link)\. Two-factor sign-in with \1 is paused — try again in \d{1,4} minutes?, or sign in another way\.$/,
             /^Your password was changed\. Two-factor sign-in for this account is paused after too many incorrect codes — sign in with your new password in \d{1,4} minutes?\.$/,
             /^Code is invalid\. Try again or use a recovery code\.$/,
             /^Too many incorrect codes for this sign-in\. Sign in again to retry\.$/,

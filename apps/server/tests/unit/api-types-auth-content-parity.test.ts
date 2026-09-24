@@ -165,7 +165,14 @@ describe('W435.C packages/api-types/src/auth.ts content parity', () => {
     expect(body).toMatch(
       /export const MagicLinkRequestResponseSchema = z\.object\(\{[\s\S]*?sent: z\.literal\(true\),\s*expires_at: Iso8601Schema,\s*debug_token: z\s*\.string\(\)\s*\.optional\(\)\s*\.describe\('Stub email mode only — the plaintext magic-link token'\),\s*\}\);/,
     );
-    expect(body).toMatch(/export const MagicLinkConsumeResponseSchema = LoginResponseUnionSchema;/);
+    // Sign-in re-audit, round 1, defect 2 — the session-or-MFA union, each branch
+    // with an optional `password_removed: true`.
+    expect(body).toMatch(
+      /export const MagicLinkConsumeResponseSchema = z\.union\(\[\s*LoginResponseSchema\.extend\(PasswordRemovedField\),\s*LoginMfaRequiredResponseSchema\.extend\(PasswordRemovedField\),\s*\]\);/,
+    );
+    expect(body).toMatch(
+      /const PasswordRemovedField = \{\s*password_removed: z\s*\.literal\(true\)\s*\.optional\(\)/,
+    );
   });
 
   it('PasswordReset: request shape-stable sent:true; confirm body token + new_password; confirm returns session-or-MFA', () => {

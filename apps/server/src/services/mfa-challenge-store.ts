@@ -18,6 +18,9 @@
 //   - issued_user_agent (carried into the eventual web_session row
 //     so the user-agent comes from the login attempt, not the
 //     challenge attempt — avoids "all sessions look like curl").
+//   - method (the sign-in that started the challenge: wrong codes are
+//     counted, and paused, per account AND per method — see
+//     MfaChallengeMethod).
 
 import { createHash, randomBytes } from 'node:crypto';
 import type { Redis } from 'ioredis';
@@ -25,12 +28,39 @@ import type { Redis } from 'ioredis';
 const REDIS_KEY_PREFIX = 'mfa-challenge:';
 const TTL_SECONDS = 5 * 60;
 
+/**
+ * The sign-in that started an MFA challenge — the first factor the challenger
+ * already presented. Sign-in re-audit, round 1, defect 1: wrong codes are
+ * counted per account AND per method, so ten wrong codes entered after a GitHub
+ * sign-in pause GitHub sign-ins only, and whoever holds a linked identity cannot
+ * lock the owner out of the password, reset and magic-link ways in.
+ *
+ *   - `password`   — password sign-in, and a completed password reset (it hands
+ *                    the person a password; the reset's own challenge is a
+ *                    password sign-in).
+ *   - `email_link` — a sign-in link sent to the address: magic link, verify-email.
+ *   - `google`, `github` — a linked sign-in with that provider.
+ */
+export type MfaChallengeMethod = 'password' | 'email_link' | 'google' | 'github';
+
+export const MFA_CHALLENGE_METHODS: readonly MfaChallengeMethod[] = [
+  'password',
+  'email_link',
+  'google',
+  'github',
+];
+
+export function isMfaChallengeMethod(value: unknown): value is MfaChallengeMethod {
+  return typeof value === 'string' && (MFA_CHALLENGE_METHODS as readonly string[]).includes(value);
+}
+
 export interface MfaChallengePayload {
   account_id: string;
   email: string;
   source_ip: string | null;
   issued_at: number;
   issued_user_agent: string | null;
+  method: MfaChallengeMethod;
 }
 
 export interface MfaChallengeStore {

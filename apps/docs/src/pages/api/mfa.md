@@ -206,11 +206,14 @@ Failure modes:
 - Token already consumed (re-use after success): `400 Bad Request`.
 - 5 wrong codes on one challenge: `400 Bad Request`, and the challenge
   is used up; sign in again.
-- 10 wrong codes on the account within 15 minutes, across any number of
+- 10 wrong codes on the account within 15 minutes by one way of signing
+  in — a password (and a password reset), a sign-in link sent to the
+  address, or one linked Google or GitHub account — across any number of
   challenges: `429 Too Many Requests` with `Retry-After`. For 15 minutes
-  the account takes no code and gets no new challenge, even with the right
-  password. The owner is emailed once, and the audit log records
-  `account.mfa_sign_in_locked`.
+  that way takes no code and gets no new challenge (for a password, even
+  with the right password); the other ways in still work. The owner is
+  emailed once per pause, naming the way that was used, and the audit log
+  records `account.mfa_sign_in_locked`.
 
 Each `400` carries a `detail` saying which of these happened, so a client
 can tell "try the code again" from "sign in again".
@@ -368,11 +371,11 @@ SHA-256/SHA-512 are not supported.
 Every MFA lifecycle event lands in the customer audit log
 (`GET /v1/account/audit-log`):
 
-| Action                                     | When                                                                              |
-| ------------------------------------------ | --------------------------------------------------------------------------------- |
-| `account.mfa_enrolled`                     | First successful `/verify`                                                        |
-| `account.mfa_disabled`                     | Successful disable                                                                |
-| `account.recovery_code_used`               | Recovery code consumed (login or step-up)                                         |
-| `account.login`                            | Successful challenge exchange (with `method: mfa_totp` or `mfa_recovery` payload) |
-| `account.mfa_sign_in_locked`               | 10 wrong sign-in codes in 15 minutes; two-factor sign-in paused for 15 minutes    |
-| `account.mfa_enrollment_password_rejected` | A wrong `current_password` on `/verify`                                           |
+| Action                                     | When                                                                               |
+| ------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `account.mfa_enrolled`                     | First successful `/verify`                                                         |
+| `account.mfa_disabled`                     | Successful disable                                                                 |
+| `account.recovery_code_used`               | Recovery code consumed (login or step-up)                                          |
+| `account.login`                            | Successful challenge exchange (with `method: mfa_totp` or `mfa_recovery` payload)  |
+| `account.mfa_sign_in_locked`               | 10 wrong sign-in codes in 15 minutes by one way in; that way paused for 15 minutes |
+| `account.mfa_enrollment_password_rejected` | A wrong `current_password` on `/verify`                                            |

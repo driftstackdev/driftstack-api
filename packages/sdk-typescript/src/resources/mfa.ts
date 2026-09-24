@@ -30,6 +30,12 @@ export interface MfaEnrollResponse {
 export interface MfaVerifyRequest {
   /** First 6-digit TOTP code from the customer's authenticator app. */
   code: string;
+  /**
+   * The account's current password. Required when the account has one; an
+   * account without a password (created by Google or GitHub sign-in) leaves it
+   * out and needs a sign-in from the last ten minutes instead.
+   */
+  current_password?: string;
 }
 
 export interface MfaVerifyResponse {

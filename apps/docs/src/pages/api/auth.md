@@ -238,12 +238,18 @@ try the code again, sign in again (after 5 wrong codes on one challenge,
 or when the challenge came from a different IP address), or that the
 challenge is unknown or expired.
 
-Wrong codes also count against the **account**, across every challenge.
-After 10 wrong codes within 15 minutes, the account takes no new challenge
-and no code for 15 minutes: `429` with `Retry-After`, including for a
-correct password on `login`. The owner is emailed once ("Someone is trying
-to sign in to your Driftstack account"), and the audit log records
-`account.mfa_sign_in_locked`. A correct code does not clear the count.
+Wrong codes also count against the **account**, across every challenge,
+separately for each way of signing in that starts one: a password (`login`,
+and `password-reset/confirm`, which hands over a new password), a sign-in
+link sent to the address (`magic-link/consume`, `verify-email`), and each
+linked Google or GitHub account. After 10 wrong codes within 15 minutes by
+one way, that way takes no new challenge and no code for 15 minutes: `429`
+with `Retry-After` — for a password, even with the correct password on
+`login`. The other ways in still work, so whoever holds one of them cannot
+lock the owner out of the rest. The owner is emailed once per pause ("Someone
+is trying to sign in to your Driftstack account", naming the way that was
+used), and the audit log records `account.mfa_sign_in_locked` with
+`payload.method`. A correct code does not clear the count.
 
 ## MFA step-up
 
@@ -283,7 +289,10 @@ If the magic link is the **first** time anyone proves the address, it
 also confirms the email. Any password set before that is removed, and
 every session signed in with it ends: whoever registered the address
 never proved they owned it. You're signed in by the link; to use a
-password again, set one with a [password reset](#password-reset).
+password again, set one with a [password reset](#password-reset). When
+that happens the response carries `"password_removed": true` (on either
+branch) and the account is emailed once ("The password on your Driftstack
+account was removed"); otherwise the field is absent.
 
 ## Password reset
 

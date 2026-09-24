@@ -155,7 +155,11 @@ describe('W882 anti-enumeration response cross-source invariant', () => {
 
   it('CRITICAL consume/confirm remain post-token auth responses and use the session-or-MFA union, never the anti-enumeration sent shape', () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
-    expect(p).toMatch(/MagicLinkConsumeResponseSchema = LoginResponseUnionSchema;/);
+    // Sign-in re-audit, round 1, defect 2 — the magic-link union's two branches
+    // each carry an optional `password_removed`; still the session-or-MFA union.
+    expect(p).toMatch(
+      /MagicLinkConsumeResponseSchema = z\.union\(\[\s*LoginResponseSchema\.extend\(PasswordRemovedField\),\s*LoginMfaRequiredResponseSchema\.extend\(PasswordRemovedField\),\s*\]\);/,
+    );
     expect(p).toMatch(/PasswordResetConfirmResponseSchema = LoginResponseUnionSchema;/);
     expect(p).not.toMatch(/MagicLinkConsumeResponseSchema = z\.object\(\{[\s\S]*?sent:/);
     expect(p).not.toMatch(/PasswordResetConfirmResponseSchema = z\.object\(\{[\s\S]*?sent:/);

@@ -64,6 +64,7 @@ import { accounts } from '../db/schema.js';
 import { METRIC_NAMES, type MetricsRegistry } from './metrics-registry.js';
 import { maskEmail } from '../lib/redact-url.js';
 import { RetryableDeliveryError } from '../lib/transient-error.js';
+import type { MfaChallengeMethod } from './mfa-challenge-store.js';
 
 export interface EmailService {
   /**
@@ -174,12 +175,28 @@ export interface EmailService {
     expiresAt: Date;
   }): Promise<void>;
   /**
-   * Sign-in audit #2 — someone entered the account's password correctly and then
-   * the wrong two-factor code ten times, so two-factor sign-in is paused until
-   * `pausedUntil`. Sent once per pause. `resetUrl` is where the owner starts a
-   * password reset if it wasn't them.
+   * Sign-in audit #2 — someone got past the first step of signing in and then
+   * entered the wrong two-factor code ten times, so two-factor sign-in by that
+   * `method` is paused until `pausedUntil` (per method since the re-audit's
+   * defect 1: the other ways in still work). Sent once per pause per method. The
+   * advice follows the method: a password is reset (`resetUrl`); a linked
+   * Google/GitHub sign-in is removed from the Security page (`securityUrl`) after
+   * signing in another way; an email link means the mailbox itself is exposed.
    */
-  sendMfaSignInLocked(args: { to: string; pausedUntil: Date; resetUrl: string }): Promise<void>;
+  sendMfaSignInLocked(args: {
+    to: string;
+    pausedUntil: Date;
+    method: MfaChallengeMethod;
+    resetUrl: string;
+    securityUrl: string;
+  }): Promise<void>;
+  /**
+   * Sign-in re-audit, round 1, defect 2 — a sign-in link was the first
+   * confirmation of the account's address, and it removed the password the
+   * account held. Sent once, by the sign-in that removed it. `resetUrl` is where
+   * the owner sets a new password.
+   */
+  sendPasswordRemoved(args: { to: string; removedAt: Date; resetUrl: string }): Promise<void>;
   /**
    * Sign-in audit #4 — a two-factor authenticator was turned on for the account.
    * Sent on every enrolment, so an owner learns if someone else did it.
@@ -382,6 +399,59 @@ function oauthProviderDisplay(provider: unknown): string {
   return typeof provider === 'string' ? provider : '';
 }
 
+// Sign-in re-audit, round 1, defect 1 — the two-factor pause email names the
+// sign-in method whose codes were wrong. Keyed on the MfaChallengeMethod value;
+// an unrecognised value reads as the password method, whose advice (reset) is
+// the conservative one.
+function mfaPauseProvider(method: unknown): 'google' | 'github' | null {
+  return method === 'google' || method === 'github' ? method : null;
+}
+
+/** "Someone <this>, then entered the wrong two-factor code 10 times." */
+function mfaPauseStarted(method: unknown): string {
+  const provider = mfaPauseProvider(method);
+  if (provider !== null) {
+    return `signed in to your Driftstack account with ${oauthProviderDisplay(provider)}`;
+  }
+  if (method === 'email_link') {
+    return 'signed in to your Driftstack account with a sign-in link sent to this address';
+  }
+  return 'signed in to your Driftstack account with the right password';
+}
+
+/** "two-factor sign-in <this> is paused" */
+function mfaPausePaused(method: unknown): string {
+  const provider = mfaPauseProvider(method);
+  if (provider !== null) return `with ${oauthProviderDisplay(provider)}`;
+  if (method === 'email_link') return 'by email link';
+  return 'with your password';
+}
+
+function mfaPauseAdviceText(v: Record<string, string>): string {
+  const provider = mfaPauseProvider(v.method);
+  if (provider !== null) {
+    const name = oauthProviderDisplay(provider);
+    return `If it wasn't you, someone has access to the ${name} account linked to yours. Sign in another way — with your password or a sign-in link sent to this address — then remove the ${name} sign-in on the Security page:\n\n${v.securityUrl ?? ''}`;
+  }
+  if (v.method === 'email_link') {
+    return `If it wasn't you, someone can read your email. Secure your email account first, then reset your Driftstack password:\n\n${v.resetUrl ?? ''}`;
+  }
+  return `If it wasn't you, someone knows your password. Reset it now:\n\n${v.resetUrl ?? ''}`;
+}
+
+/** The same advice for the HTML body; `v` is already HTML-escaped. */
+function mfaPauseAdviceHtml(v: Record<string, string>): string {
+  const provider = mfaPauseProvider(v.method);
+  if (provider !== null) {
+    const name = oauthProviderDisplay(provider);
+    return `If it wasn't you, someone has access to the ${name} account linked to yours. Sign in another way — with your password or a sign-in link sent to this address — then <a href="${v.securityUrl ?? ''}">remove the ${name} sign-in on the Security page</a>.`;
+  }
+  if (v.method === 'email_link') {
+    return `If it wasn't you, someone can read your email. Secure your email account first, then <a href="${v.resetUrl ?? ''}">reset your Driftstack password</a>.`;
+  }
+  return `If it wasn't you, someone knows your password. <a href="${v.resetUrl ?? ''}">Reset it now</a>.`;
+}
+
 // HTML-escape interpolated values before they reach an email HTML body.
 // Templates interpolate plain-text data (URLs, dates, ids, session error
 // messages, customer-registered webhook URLs) into HTML; escaping at the
@@ -551,15 +621,27 @@ const TEMPLATES = {
     html: (v) =>
       `<p>Someone — probably you — just tried to sign in to your Driftstack account using <strong>${oauthProviderDisplay(v.provider)}</strong>.</p><p>If that was you, confirm the new sign-in method by clicking the link below. It expires at <strong>${v.expiresAt}</strong> (UTC) and works once.</p><p><a href="${v.confirmLink}">${v.confirmLink}</a></p><p>If that wasn't you, ignore this email — no change is made until the link is clicked. Your password (if any) still works.</p><p>— Driftstack</p>`,
   },
-  // Sign-in audit #2 — the account's two-factor sign-in is paused after ten
-  // wrong codes. The reader learns what happened, what it means (their password
-  // is known to whoever did it, if it wasn't them) and the one thing to do.
+  // Sign-in audit #2 — two-factor sign-in by one method is paused after ten
+  // wrong codes. The reader learns what happened, what is paused (only the method
+  // that was used — re-audit defect 1) and the one thing to do if it wasn't them,
+  // which follows the method: a known password is reset; a linked Google/GitHub
+  // account is removed from Security after signing in another way; a sign-in link
+  // means the mailbox itself is exposed.
   'mfa-sign-in-locked': {
     subject: 'Someone is trying to sign in to your Driftstack account',
     text: (v) =>
-      `Someone signed in to your Driftstack account with the right password, then entered the wrong two-factor code 10 times. To protect your account, two-factor sign-in is paused until ${v.pausedUntil}.\n\nIf this was you, wait until then and try again.\n\nIf it wasn't you, someone knows your password. Reset it now:\n\n${v.resetUrl}\n\n— Driftstack`,
+      `Someone ${mfaPauseStarted(v.method)}, then entered the wrong two-factor code 10 times. To protect your account, two-factor sign-in ${mfaPausePaused(v.method)} is paused until ${v.pausedUntil}. Your other ways of signing in still work.\n\nIf this was you, wait until then and try again.\n\n${mfaPauseAdviceText(v)}\n\n— Driftstack`,
     html: (v) =>
-      `<p>Someone signed in to your Driftstack account with the right password, then entered the wrong two-factor code 10 times. To protect your account, two-factor sign-in is paused until <strong>${v.pausedUntil}</strong>.</p><p>If this was you, wait until then and try again.</p><p>If it wasn't you, someone knows your password. <a href="${v.resetUrl}">Reset it now</a>.</p><p>— Driftstack</p>`,
+      `<p>Someone ${mfaPauseStarted(v.method)}, then entered the wrong two-factor code 10 times. To protect your account, two-factor sign-in ${mfaPausePaused(v.method)} is paused until <strong>${v.pausedUntil}</strong>. Your other ways of signing in still work.</p><p>If this was you, wait until then and try again.</p><p>${mfaPauseAdviceHtml(v)}</p><p>— Driftstack</p>`,
+  },
+  // Sign-in re-audit, round 1, defect 2 — the first confirmation of the address
+  // was a sign-in link, and it removed the password the account held.
+  'password-removed': {
+    subject: 'The password on your Driftstack account was removed',
+    text: (v) =>
+      `Your Driftstack account's email address was confirmed for the first time on ${v.removedAt}, by a sign-in link sent to it, so the password on the account was removed.\n\nTo sign in with a password again, set a new one:\n\n${v.resetUrl}\n\nUntil then, sign in with a link sent to this address.\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Your Driftstack account's email address was confirmed for the first time on <strong>${v.removedAt}</strong>, by a sign-in link sent to it, so the password on the account was removed.</p><p>To sign in with a password again, <a href="${v.resetUrl}">set a new one</a>.</p><p>Until then, sign in with a link sent to this address.</p><p>— Driftstack</p>`,
   },
   // Sign-in audit #4 — sent on every two-factor enrolment.
   'mfa-enrolled': {
@@ -913,6 +995,7 @@ export function createEmailService({
       sendTeamInvite: async () => {},
       sendOauthPendingLinkVerification: async () => {},
       sendMfaSignInLocked: async () => {},
+      sendPasswordRemoved: async () => {},
       sendMfaEnrolled: async () => {},
       sendOauthLinkRemoved: async () => {},
       sendWebhookSecretRotationReminder: async () => {},
@@ -1185,8 +1268,15 @@ export function createEmailService({
         confirmLink,
         expiresAt: expiresAt.toISOString(),
       }),
-    sendMfaSignInLocked: ({ to, pausedUntil, resetUrl }) =>
-      send('mfa-sign-in-locked', to, { pausedUntil: customerDateTime(pausedUntil), resetUrl }),
+    sendMfaSignInLocked: ({ to, pausedUntil, method, resetUrl, securityUrl }) =>
+      send('mfa-sign-in-locked', to, {
+        pausedUntil: customerDateTime(pausedUntil),
+        method,
+        resetUrl,
+        securityUrl,
+      }),
+    sendPasswordRemoved: ({ to, removedAt, resetUrl }) =>
+      send('password-removed', to, { removedAt: customerDateTime(removedAt), resetUrl }),
     sendMfaEnrolled: ({ to, enrolledAt }) =>
       send('mfa-enrolled', to, { enrolledAt: customerDateTime(enrolledAt) }),
     sendOauthLinkRemoved: ({ to, provider, providerEmail, removedAt, resetUrl }) =>

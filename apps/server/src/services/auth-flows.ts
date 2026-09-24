@@ -22,18 +22,23 @@ import type { EmailService } from './email.js';
 import type { AuthCache } from './auth-cache.js';
 import {
   AccountFailureLimiter,
+  BoundedMemoryFailureLimiterStore,
+  FailoverFailureLimiterStore,
   MFA_SIGN_IN_LIMIT,
   PASSWORD_SIGN_IN_LIMIT,
   type ReservedAttempt,
 } from './account-failure-limiter.js';
+import type { OAuthClientProvider } from '../lib/oauth-client-providers.js';
 import { RateLimitedError } from '../lib/errors.js';
 import type { AccountAuditService } from './account-audit.js';
 import type { RevocationWebhookEmitter } from './api-keys.js';
 import type { EmailPreferencesService } from './email-preferences.js';
 import type { MfaService } from './mfa.js';
 import {
+  type MfaChallengeMethod,
   type MfaChallengePayload,
   type MfaChallengeStore,
+  isMfaChallengeMethod,
   generateChallengeToken,
   redisKey as mfaChallengeKey,
   attemptsKey as mfaChallengeAttemptsKey,
@@ -542,7 +547,12 @@ export interface MagicLinkConsumeArgs {
   userAgent: string | null;
 }
 
-export type MagicLinkConsumeResult = LoginResult;
+/**
+ * A magic-link sign-in. `passwordRemoved` is true when this link was the
+ * address's first confirmation and removed the password the account held, so
+ * the person can be told (sign-in re-audit, round 1, defect 2).
+ */
+export type MagicLinkConsumeResult = LoginResult & { passwordRemoved: boolean };
 
 export interface PasswordResetRequestArgs {
   email: string;
@@ -600,21 +610,59 @@ function stepUpAttemptsKey(accountId: string): string {
 }
 
 /**
- * Sign-in audit #2 — the refusal while an account's MFA sign-in is paused: 429,
- * Retry-After, and what to do. After a password reset the reset itself went
- * through, and the detail says so.
+ * Sign-in re-audit, round 1, defect 1 — the MFA sign-in limit's subject: the
+ * account AND the sign-in method that started the challenge. Keyed on the account
+ * alone, ten wrong codes entered after a GitHub sign-in paused every way in, so
+ * whoever held a linked identity could keep the owner out indefinitely.
+ */
+function mfaSignInSubject(accountId: string, method: MfaChallengeMethod): string {
+  return `${accountId}:${method}`;
+}
+
+/** How a pause refusal names the method it applies to. */
+function mfaMethodName(method: MfaChallengeMethod): string {
+  switch (method) {
+    case 'google':
+      return 'Google';
+    case 'github':
+      return 'GitHub';
+    case 'email_link':
+      return 'an email link';
+    case 'password':
+      return 'your password';
+  }
+}
+
+/**
+ * Sign-in audit #2 — the refusal while an account's MFA sign-in by `method` is
+ * paused: 429, Retry-After, and what to do. After a password reset the reset
+ * itself went through, and the detail says so. The password-method details are
+ * worded exactly as before the pause became per method: the dashboard shows
+ * those two, word for word, from an allow-list (DashboardLayout.astro).
  */
 function mfaSignInPausedError(
   retryAfterSeconds: number,
+  method: MfaChallengeMethod,
   opts: { afterPasswordChange?: boolean } = {},
 ): RateLimitedError {
   const minutes = Math.max(1, Math.ceil(retryAfterSeconds / 60));
   const wait = `${minutes.toString()} minute${minutes === 1 ? '' : 's'}`;
+  if (opts.afterPasswordChange === true) {
+    return new RateLimitedError(
+      retryAfterSeconds,
+      `Your password was changed. Two-factor sign-in for this account is paused after too many incorrect codes — sign in with your new password in ${wait}.`,
+    );
+  }
+  if (method === 'password') {
+    return new RateLimitedError(
+      retryAfterSeconds,
+      `Too many incorrect two-factor codes for this account. Two-factor sign-in is paused — try again in ${wait}.`,
+    );
+  }
+  const name = mfaMethodName(method);
   return new RateLimitedError(
     retryAfterSeconds,
-    opts.afterPasswordChange === true
-      ? `Your password was changed. Two-factor sign-in for this account is paused after too many incorrect codes — sign in with your new password in ${wait}.`
-      : `Too many incorrect two-factor codes for this account. Two-factor sign-in is paused — try again in ${wait}.`,
+    `Too many incorrect two-factor codes after signing in with ${name}. Two-factor sign-in with ${name} is paused — try again in ${wait}, or sign in another way.`,
   );
 }
 
@@ -628,23 +676,30 @@ function parseMfaChallengePayload(raw: string): MfaChallengePayload | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
 
   const record = value as Record<string, unknown>;
-  const { account_id, email, source_ip, issued_at, issued_user_agent } = record;
+  const { account_id, email, source_ip, issued_at, issued_user_agent, method } = record;
   if (typeof account_id !== 'string' || account_id.length === 0) return null;
   if (typeof email !== 'string' || email.length === 0) return null;
   if (source_ip !== null && typeof source_ip !== 'string') return null;
   if (typeof issued_at !== 'number' || !Number.isFinite(issued_at)) return null;
   if (issued_user_agent !== null && typeof issued_user_agent !== 'string') return null;
+  // The method decides which count a wrong code lands in; without it there is no
+  // right count to charge, so the challenge fails closed like any corrupt one (a
+  // challenge issued before the method was recorded: sign in again).
+  if (!isMfaChallengeMethod(method)) return null;
 
-  return { account_id, email, source_ip, issued_at, issued_user_agent };
+  return { account_id, email, source_ip, issued_at, issued_user_agent, method };
 }
 
 export class AuthFlowsService {
   /**
    * Sign-in audit #3 — password sign-in limit, keyed on the canonical email.
-   * Sign-in audit #2 — MFA sign-in code limit, keyed on the account.
+   * Sign-in audit #2 — MFA sign-in code limit, keyed on the account and the
+   * sign-in method that started the challenge (re-audit defect 1).
    * Both live in the short-lived store the MFA hand-off uses (Redis in
    * production, always wired by bootstrap); null only where a caller builds the
-   * service without that store.
+   * service without that store. While that store is unreachable the password
+   * limit counts in a bounded store inside this process instead of letting every
+   * guess through (re-audit defect 4).
    */
   private readonly passwordSignInLimiter: AccountFailureLimiter | null;
   private readonly mfaSignInLimiter: AccountFailureLimiter | null;
@@ -699,7 +754,26 @@ export class AuthFlowsService {
     this.passwordSignInLimiter =
       mfaChallenges === null
         ? null
-        : new AccountFailureLimiter(mfaChallenges, PASSWORD_SIGN_IN_LIMIT);
+        : new AccountFailureLimiter(
+            new FailoverFailureLimiterStore(
+              mfaChallenges,
+              new BoundedMemoryFailureLimiterStore(),
+              // Once per outage, not once per request.
+              (err) => {
+                this.logger.warn(
+                  { component: 'auth-flows', flow: 'login', err },
+                  'password sign-in limit store unreachable — counting in this process until it answers again',
+                );
+              },
+              () => {
+                this.logger.info(
+                  { component: 'auth-flows', flow: 'login' },
+                  'password sign-in limit store answers again — counting there',
+                );
+              },
+            ),
+            PASSWORD_SIGN_IN_LIMIT,
+          );
     this.mfaSignInLimiter =
       mfaChallenges === null ? null : new AccountFailureLimiter(mfaChallenges, MFA_SIGN_IN_LIMIT);
   }
@@ -709,27 +783,39 @@ export class AuthFlowsService {
     return `${new URL(this.config.passwordResetUrl).origin}/forgot-password`;
   }
 
-  /**
-   * Sign-in audit #2 — refuse while the account's MFA sign-in is paused. The
-   * detail says what happened and when to come back; `afterPasswordChange` is
-   * the password-reset case, where the reset itself already went through.
-   */
-  private async refuseWhileMfaSignInPaused(
-    accountId: string,
-    opts: { afterPasswordChange?: boolean } = {},
-  ): Promise<void> {
-    if (this.mfaSignInLimiter === null) return;
-    const seconds = await this.mfaSignInLimiter.lockedFor(accountId);
-    if (seconds === null) return;
-    throw mfaSignInPausedError(seconds, opts);
+  /** The dashboard's Security page, where a linked sign-in is removed. */
+  private securityUrl(): string {
+    return `${new URL(this.config.passwordResetUrl).origin}/security`;
   }
 
   /**
-   * Sign-in audit #2 — the account just reached ten wrong codes. One
-   * "Recent activity" row, written by the platform, and one email to the owner.
-   * Both best-effort: the pause itself is what protects the account.
+   * Sign-in audit #2 — refuse while the account's MFA sign-in by `method` is
+   * paused. The detail says what happened and when to come back;
+   * `afterPasswordChange` is the password-reset case, where the reset itself
+   * already went through.
    */
-  private async announceMfaSignInPause(accountId: string, pausedUntil: Date): Promise<void> {
+  private async refuseWhileMfaSignInPaused(
+    accountId: string,
+    method: MfaChallengeMethod,
+    opts: { afterPasswordChange?: boolean } = {},
+  ): Promise<void> {
+    if (this.mfaSignInLimiter === null) return;
+    const seconds = await this.mfaSignInLimiter.lockedFor(mfaSignInSubject(accountId, method));
+    if (seconds === null) return;
+    throw mfaSignInPausedError(seconds, method, opts);
+  }
+
+  /**
+   * Sign-in audit #2 — the account just reached ten wrong codes by `method`. One
+   * "Recent activity" row, written by the platform, and one email to the owner
+   * naming the method. Both best-effort: the pause itself is what protects the
+   * account.
+   */
+  private async announceMfaSignInPause(
+    accountId: string,
+    method: MfaChallengeMethod,
+    pausedUntil: Date,
+  ): Promise<void> {
     if (this.accountAudit !== null) {
       try {
         await this.accountAudit.record({
@@ -742,6 +828,7 @@ export class AuthFlowsService {
           payload: {
             failed_codes: MFA_SIGN_IN_LIMIT.maxFailures,
             paused_until: pausedUntil.toISOString(),
+            method,
           },
         });
       } catch (err) {
@@ -757,7 +844,9 @@ export class AuthFlowsService {
         void this.email.sendMfaSignInLocked({
           to: account.email,
           pausedUntil,
+          method,
           resetUrl: this.forgotPasswordUrl(),
+          securityUrl: this.securityUrl(),
         });
       }
     } catch (err) {
@@ -772,9 +861,10 @@ export class AuthFlowsService {
    * Sign-in audit #3 — reserve a password attempt for this email, or refuse
    * with 429 while the email is locked. Keyed on the CANONICAL email and taken
    * before the account lookup, so it runs identically whether or not an account
-   * exists. If the store is unreachable the request goes ahead on the per-IP
-   * limit alone (logged): password sign-in never needed Redis, and a blip must
-   * not take it down.
+   * exists. If Redis is unreachable the limit counts in a bounded store inside
+   * this process (re-audit defect 4: it used to let every guess through), so a
+   * blip neither takes password sign-in down nor lifts the limit. Only if that
+   * store fails too is the request refused — never admitted unlimited.
    */
   private async admitPasswordSignIn(email: string): Promise<ReservedAttempt | null> {
     if (this.passwordSignInLimiter === null) return null;
@@ -784,9 +874,9 @@ export class AuthFlowsService {
     } catch (err) {
       this.logger.warn(
         { component: 'auth-flows', flow: 'login', err },
-        'password sign-in limit unavailable — this request is limited per IP only',
+        'password sign-in limit unavailable in Redis and in this process — refusing',
       );
-      return null;
+      throw new RateLimitedError(60, 'Sign-in is temporarily unavailable. Try again in a minute.');
     }
     if (admission.kind === 'locked') {
       const minutes = Math.max(1, Math.ceil(admission.retryAfterSeconds / 60));
@@ -810,18 +900,23 @@ export class AuthFlowsService {
     }
   }
 
+  /**
+   * `method` is the sign-in that started the challenge; the challenge carries it,
+   * so its wrong codes count — and pause — that method only (re-audit defect 1).
+   */
   private async createMfaChallenge(
     account: AuthFlowAccountRow,
     sourceIp: string | null,
     userAgent: string | null,
+    method: MfaChallengeMethod,
     opts: { afterPasswordChange?: boolean } = {},
   ): Promise<{ challengeToken: string; challengeExpiresAt: Date }> {
     if (this.mfaChallenges === null) {
       throw new AuthFlowError('invalid_auth_token', 'MFA challenge not available on this server.');
     }
-    // Sign-in audit #2 — no new challenge while the account's MFA sign-in is
-    // paused: a fresh password sign-in must not buy a fresh set of guesses.
-    await this.refuseWhileMfaSignInPaused(account.id, opts);
+    // Sign-in audit #2 — no new challenge while the account's MFA sign-in by
+    // this method is paused: a fresh sign-in must not buy a fresh set of guesses.
+    await this.refuseWhileMfaSignInPaused(account.id, method, opts);
     const challengeToken = generateChallengeToken();
     const challengeExpiresAt = new Date(Date.now() + MFA_CHALLENGE_TTL_SECONDS * 1000);
     const payload: MfaChallengePayload = {
@@ -830,6 +925,7 @@ export class AuthFlowsService {
       source_ip: sourceIp,
       issued_at: Date.now(),
       issued_user_agent: userAgent,
+      method,
     };
     await this.mfaChallenges.set(
       mfaChallengeKey(challengeToken),
@@ -1129,7 +1225,13 @@ export class AuthFlowsService {
         ? {
             kind: 'mfa_required',
             account,
-            ...(await this.createMfaChallenge(account, args.issuedFromIp, args.userAgent)),
+            // A link sent to the address started this sign-in.
+            ...(await this.createMfaChallenge(
+              account,
+              args.issuedFromIp,
+              args.userAgent,
+              'email_link',
+            )),
           }
         : {
             kind: 'session',
@@ -1249,7 +1351,12 @@ export class AuthFlowsService {
     if (this.mfa) {
       const status = await this.mfa.getStatus(account.id);
       if (status.enrolled) {
-        const challenge = await this.createMfaChallenge(account, args.issuedFromIp, args.userAgent);
+        const challenge = await this.createMfaChallenge(
+          account,
+          args.issuedFromIp,
+          args.userAgent,
+          'password',
+        );
         return {
           kind: 'mfa_required',
           account,
@@ -1315,15 +1422,22 @@ export class AuthFlowsService {
       );
     }
 
-    // Sign-in audit #2 — the account-wide limit, across every challenge. The
+    // Sign-in audit #2 — the account's limit, across every challenge. The
     // five-per-challenge bound below is per TOKEN and every fresh password
     // sign-in mints a new token, so on its own it bounded nothing per account.
+    // Counted per account AND per the method that started the challenge
+    // (re-audit defect 1), so a pause earned through one way in — a linked
+    // GitHub account, say — leaves the owner's other ways in open.
     // Reserve-before-verify, like step-up: a burst of concurrent guesses cannot
     // all slip past a stale "not yet paused" read.
     let attempt: ReservedAttempt | null = null;
     if (this.mfaSignInLimiter !== null) {
-      const admission = await this.mfaSignInLimiter.admit(payload.account_id);
-      if (admission.kind === 'locked') throw mfaSignInPausedError(admission.retryAfterSeconds);
+      const admission = await this.mfaSignInLimiter.admit(
+        mfaSignInSubject(payload.account_id, payload.method),
+      );
+      if (admission.kind === 'locked') {
+        throw mfaSignInPausedError(admission.retryAfterSeconds, payload.method);
+      }
       attempt = admission.attempt;
     }
 
@@ -1338,13 +1452,18 @@ export class AuthFlowsService {
     if (result === null) {
       const outcome = attempt === null ? null : await attempt.failed();
       if (outcome?.locked === true && outcome.lockedUntil !== null) {
-        // This was the tenth wrong code for the account. The challenge is dead
-        // with the pause; say so now rather than on the next try.
+        // This was the tenth wrong code for the account by this method. The
+        // challenge is dead with the pause; say so now rather than on the next
+        // try.
         await this.mfaChallenges.consume(challengeKey);
         if (outcome.firstNotice) {
-          await this.announceMfaSignInPause(payload.account_id, outcome.lockedUntil);
+          await this.announceMfaSignInPause(
+            payload.account_id,
+            payload.method,
+            outcome.lockedUntil,
+          );
         }
-        throw mfaSignInPausedError(MFA_SIGN_IN_LIMIT.lockSeconds);
+        throw mfaSignInPausedError(MFA_SIGN_IN_LIMIT.lockSeconds, payload.method);
       }
       // V-353d.A — bound brute-force on the 6-digit/recovery code. The
       // token is left alive so the customer can retype, BUT only up to
@@ -1498,9 +1617,16 @@ export class AuthFlowsService {
     // never proved it. It must not survive the owner's proof: the same update
     // drops it and advances the auth epoch, ending every session minted under
     // it. The owner signs in now by this link and can set a password by reset.
+    //
+    // Re-audit defect 2 — and they are told. The person who really signed up
+    // with their own password and then used a magic link before verifying lost
+    // that password silently: the response now says `passwordRemoved`, and one
+    // email goes to the account, sent only by the sign-in whose update removed it.
+    let passwordRemoved = false;
     if (account.emailVerifiedAt === null) {
       const proven = await this.repo.verifyEmailDroppingUnprovenPassword(account.id, now);
       if (proven !== null) {
+        passwordRemoved = holdsPassword(account.passwordHash);
         if (this.authCache) {
           try {
             await this.authCache.invalidateAccount(account.id);
@@ -1510,10 +1636,17 @@ export class AuthFlowsService {
         }
         await this.emitAuditBestEffort(account.id, 'account.email_verified', {
           via: 'magic_link',
-          password_removed: holdsPassword(account.passwordHash),
+          password_removed: passwordRemoved,
           issued_from_ip: args.issuedFromIp,
           user_agent: args.userAgent,
         });
+        if (passwordRemoved) {
+          void this.email.sendPasswordRemoved({
+            to: proven.email,
+            removedAt: now,
+            resetUrl: this.forgotPasswordUrl(),
+          });
+        }
       }
       // Whichever proof won, sign in under the account's current authority.
       account = proven ?? (await this.requireAccount(account.id));
@@ -1528,7 +1661,14 @@ export class AuthFlowsService {
       return {
         kind: 'mfa_required',
         account,
-        ...(await this.createMfaChallenge(account, args.issuedFromIp, args.userAgent)),
+        passwordRemoved,
+        // A link sent to the address started this sign-in.
+        ...(await this.createMfaChallenge(
+          account,
+          args.issuedFromIp,
+          args.userAgent,
+          'email_link',
+        )),
       };
     }
 
@@ -1540,7 +1680,7 @@ export class AuthFlowsService {
       issued_from_ip: args.issuedFromIp,
       user_agent: args.userAgent,
     });
-    return { kind: 'session', account, session };
+    return { kind: 'session', account, session, passwordRemoved };
   }
 
   async requestPasswordReset(args: PasswordResetRequestArgs): Promise<PasswordResetRequestResult> {
@@ -1644,10 +1784,16 @@ export class AuthFlowsService {
       return {
         kind: 'mfa_required',
         account: accountAfterPasswordChange,
+        // A reset hands the person a password, so its challenge counts with
+        // password sign-ins: a pause earned through a linked Google/GitHub
+        // sign-in or an email link never blocks it (re-audit defect 1), and a
+        // password-method pause still does — the reset itself went through and
+        // the refusal says so.
         ...(await this.createMfaChallenge(
           accountAfterPasswordChange,
           args.issuedFromIp,
           args.userAgent,
+          'password',
           { afterPasswordChange: true },
         )),
       };
@@ -2138,7 +2284,7 @@ export class AuthFlowsService {
     accountId: string;
     issuedFromIp: string | null;
     userAgent: string | null;
-    provider: string;
+    provider: OAuthClientProvider;
   }): Promise<OAuthWebSessionResult | null> {
     const account = await this.repo.findAccountById(args.accountId);
     if (account === null || account.status !== 'active') return null;
@@ -2146,7 +2292,14 @@ export class AuthFlowsService {
       if (this.mfaChallenges === null) return null;
       return {
         kind: 'mfa_required',
-        ...(await this.createMfaChallenge(account, args.issuedFromIp, args.userAgent)),
+        // The linked provider started this sign-in; its wrong codes pause only
+        // this provider's sign-ins (re-audit defect 1).
+        ...(await this.createMfaChallenge(
+          account,
+          args.issuedFromIp,
+          args.userAgent,
+          args.provider,
+        )),
       };
     }
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);

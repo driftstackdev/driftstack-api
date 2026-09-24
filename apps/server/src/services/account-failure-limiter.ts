@@ -23,6 +23,12 @@
 // needs no new wiring and no migration. Keys carry a SHA-256 of the subject, never the email itself,
 // for the same reason the challenge keys hash their tokens: plaintext stays out
 // of the keyspace, MONITOR and snapshots.
+//
+// While Redis is unreachable the password limit counts in a bounded store inside
+// the process (`FailoverFailureLimiterStore` over `BoundedMemoryFailureLimiterStore`),
+// as the per-IP limit does — it must not fail open (sign-in re-audit, round 1,
+// defect 4). The MFA code limit does not fall back: the challenge it guards lives
+// in the same store, so without Redis there is no challenge to guess at.
 
 import { createHash } from 'node:crypto';
 import type { MfaChallengeStore } from './mfa-challenge-store.js';
@@ -52,7 +58,11 @@ export const PASSWORD_SIGN_IN_LIMIT: FailureLimit = {
   lockSeconds: 15 * 60,
 };
 
-/** The MFA sign-in code, keyed on the account id, across every challenge (#2). */
+/**
+ * The MFA sign-in code, keyed on the account id AND the sign-in method that
+ * started the challenge, across every challenge (#2; per method since the
+ * re-audit's defect 1 — see `mfaSignInSubject` in auth-flows.ts).
+ */
 export const MFA_SIGN_IN_LIMIT: FailureLimit = {
   name: 'sign-in-limit:mfa-code',
   maxFailures: 10,
@@ -176,5 +186,152 @@ export class AccountFailureLimiter {
         },
       },
     };
+  }
+}
+
+/**
+ * Sign-in re-audit, round 1, defect 4 — a bounded store inside this process, for
+ * a limit to count in while its Redis store is unreachable. The same operations
+ * and the same semantics as the in-memory challenge store, but each of its two
+ * maps holds at most `maxKeys` keys and drops the least recently written one past
+ * that, so a flood of distinct subjects during an outage cannot grow it without
+ * limit — the same trade `BoundedMemoryRateLimitStore` makes for the per-IP
+ * limit: a dropped key starts again from zero, coarser than Redis, far better
+ * than no limit at all.
+ */
+export class BoundedMemoryFailureLimiterStore implements FailureLimiterStore {
+  private readonly entries = new Map<string, { value: string; expiresAt: number }>();
+  private readonly attempts = new Map<string, { count: number; expiresAt: number }>();
+
+  constructor(
+    private readonly maxKeys = 100_000,
+    private readonly now: () => number = () => Date.now(),
+  ) {
+    if (maxKeys < 1) throw new Error('maxKeys must be >= 1');
+  }
+
+  /** Write `key` as the most recent entry of `map`, dropping the oldest past the bound. */
+  private put<V>(map: Map<string, V>, key: string, value: V): void {
+    map.delete(key);
+    if (map.size >= this.maxKeys) {
+      const oldest = map.keys().next().value;
+      if (oldest !== undefined) map.delete(oldest);
+    }
+    map.set(key, value);
+  }
+
+  private live<V extends { expiresAt: number }>(map: Map<string, V>, key: string): V | null {
+    const found = map.get(key);
+    if (found === undefined) return null;
+    if (found.expiresAt <= this.now()) {
+      map.delete(key);
+      return null;
+    }
+    return found;
+  }
+
+  consume(key: string): Promise<string | null> {
+    const found = this.live(this.entries, key);
+    this.entries.delete(key);
+    return Promise.resolve(found?.value ?? null);
+  }
+
+  set(key: string, value: string, ttlSeconds: number): Promise<void> {
+    this.put(this.entries, key, { value, expiresAt: this.now() + ttlSeconds * 1000 });
+    return Promise.resolve();
+  }
+
+  peek(key: string): Promise<string | null> {
+    return Promise.resolve(this.live(this.entries, key)?.value ?? null);
+  }
+
+  incrAttempts(key: string, ttlSeconds: number): Promise<number> {
+    const found = this.live(this.attempts, key);
+    const next = {
+      count: (found?.count ?? 0) + 1,
+      expiresAt: found?.expiresAt ?? this.now() + ttlSeconds * 1000,
+    };
+    this.put(this.attempts, key, next);
+    return Promise.resolve(next.count);
+  }
+
+  releaseAttempt(key: string): Promise<void> {
+    const found = this.live(this.attempts, key);
+    if (found === null || found.count <= 1) {
+      this.attempts.delete(key);
+    } else {
+      found.count -= 1;
+    }
+    return Promise.resolve();
+  }
+
+  resetAttempts(key: string): Promise<void> {
+    this.attempts.delete(key);
+    return Promise.resolve();
+  }
+
+  /** Keys held across both maps (a test seam for the bound). */
+  size(): number {
+    return this.entries.size + this.attempts.size;
+  }
+}
+
+/**
+ * Sign-in re-audit, round 1, defect 4 — `primary` while it answers, `fallback`
+ * while it throws. Each operation tries the primary first, so the limit moves
+ * back to Redis the moment it answers again. `onOutage` runs once when the
+ * primary starts failing and `onRecovery` once when it answers again: one log
+ * line per outage, not one per request.
+ */
+export class FailoverFailureLimiterStore implements FailureLimiterStore {
+  private degraded = false;
+
+  constructor(
+    private readonly primary: FailureLimiterStore,
+    private readonly fallback: FailureLimiterStore,
+    private readonly onOutage: (err: unknown) => void,
+    private readonly onRecovery: () => void,
+  ) {}
+
+  private async run<T>(op: (store: FailureLimiterStore) => Promise<T>): Promise<T> {
+    let result: T;
+    try {
+      result = await op(this.primary);
+    } catch (err) {
+      if (!this.degraded) {
+        this.degraded = true;
+        this.onOutage(err);
+      }
+      return op(this.fallback);
+    }
+    if (this.degraded) {
+      this.degraded = false;
+      this.onRecovery();
+    }
+    return result;
+  }
+
+  consume(key: string): Promise<string | null> {
+    return this.run((s) => s.consume(key));
+  }
+
+  set(key: string, value: string, ttlSeconds: number): Promise<void> {
+    return this.run((s) => s.set(key, value, ttlSeconds));
+  }
+
+  peek(key: string): Promise<string | null> {
+    return this.run((s) => s.peek(key));
+  }
+
+  incrAttempts(key: string, ttlSeconds: number): Promise<number> {
+    return this.run((s) => s.incrAttempts(key, ttlSeconds));
+  }
+
+  releaseAttempt(key: string): Promise<void> {
+    return this.run((s) => s.releaseAttempt(key));
+  }
+
+  resetAttempts(key: string): Promise<void> {
+    return this.run((s) => s.resetAttempts(key));
   }
 }

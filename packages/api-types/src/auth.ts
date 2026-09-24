@@ -243,7 +243,22 @@ export type MagicLinkConsumeRequest = z.infer<typeof MagicLinkConsumeRequestSche
 
 // A magic link proves mailbox control. Accounts with enrolled MFA receive the
 // same short-lived challenge union as password/OAuth login instead of a session.
-export const MagicLinkConsumeResponseSchema = LoginResponseUnionSchema;
+//
+// `password_removed` (sign-in re-audit, round 1, defect 2): present, and true,
+// when this link was the first confirmation of the account's address and removed
+// the password the account held. Absent otherwise.
+const PasswordRemovedField = {
+  password_removed: z
+    .literal(true)
+    .optional()
+    .describe(
+      "Present when this link was the first confirmation of the account's email address and removed the account's password. Set a new one with a password reset.",
+    ),
+};
+export const MagicLinkConsumeResponseSchema = z.union([
+  LoginResponseSchema.extend(PasswordRemovedField),
+  LoginMfaRequiredResponseSchema.extend(PasswordRemovedField),
+]);
 export type MagicLinkConsumeResponse = z.infer<typeof MagicLinkConsumeResponseSchema>;
 
 // ───────────────────────────────────────────────────────────────────────────

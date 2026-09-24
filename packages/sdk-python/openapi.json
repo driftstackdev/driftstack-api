@@ -50217,7 +50217,7 @@
         },
         "responses": {
           "200": {
-            "description": "Session issued, or an MFA challenge returned when the account has MFA.",
+            "description": "Session issued, or an MFA challenge returned when the account has MFA. Either carries `password_removed: true` when this link was the first confirmation of the account's email address and removed the account's password.",
             "content": {
               "application/json": {
                 "schema": {
@@ -50241,6 +50241,11 @@
                             }
                           },
                           "required": ["token", "expires_at", "account_id"]
+                        },
+                        "password_removed": {
+                          "type": "boolean",
+                          "enum": [true],
+                          "description": "Present when this link was the first confirmation of the account's email address and removed the account's password. Set a new one with a password reset."
                         }
                       },
                       "required": ["session"]
@@ -50259,6 +50264,11 @@
                           "type": "string",
                           "format": "date-time",
                           "description": "ISO 8601 timestamp with timezone offset, e.g. 2026-05-02T09:15:00Z"
+                        },
+                        "password_removed": {
+                          "type": "boolean",
+                          "enum": [true],
+                          "description": "Present when this link was the first confirmation of the account's email address and removed the account's password. Set a new one with a password reset."
                         }
                       },
                       "required": ["mfa_required", "challenge_token", "challenge_expires_at"]

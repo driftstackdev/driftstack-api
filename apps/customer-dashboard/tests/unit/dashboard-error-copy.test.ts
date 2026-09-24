@@ -91,6 +91,14 @@ describe('Dashboard shared request error copy', () => {
       ],
       [
         rate,
+        'Too many incorrect two-factor codes after signing in with GitHub. Two-factor sign-in with GitHub is paused — try again in 15 minutes, or sign in another way.',
+      ],
+      [
+        rate,
+        'Too many incorrect two-factor codes after signing in with an email link. Two-factor sign-in with an email link is paused — try again in 1 minute, or sign in another way.',
+      ],
+      [
+        rate,
         'Your password was changed. Two-factor sign-in for this account is paused after too many incorrect codes — sign in with your new password in 3 minutes.',
       ],
       [token, 'Code is invalid. Try again or use a recovery code.'],
@@ -115,6 +123,10 @@ describe('Dashboard shared request error copy', () => {
       'x Code is invalid. Try again or use a recovery code.',
       // the per-IP limiter's own wording is not on the list
       'Too many requests from this IP. Retry in 42s.',
+      // the two method names must agree — a mismatched pair is not a message the server writes
+      'Too many incorrect two-factor codes after signing in with GitHub. Two-factor sign-in with Google is paused — try again in 15 minutes, or sign in another way.',
+      // a provider name outside the three the server names is not on the list
+      'Too many incorrect two-factor codes after signing in with evil.example. Two-factor sign-in with evil.example is paused — try again in 15 minutes, or sign in another way.',
     ];
     for (const detail of near) {
       expect(responseError({ status: 429 }, { type: rate, detail }).message).toBe(
@@ -142,6 +154,7 @@ describe('Dashboard shared request error copy', () => {
       ', or reset your password.',
       'Too many incorrect two-factor codes for this account. Two-factor sign-in is paused — try again in ${wait}.',
       'Your password was changed. Two-factor sign-in for this account is paused after too many incorrect codes — sign in with your new password in ${wait}.',
+      'Too many incorrect two-factor codes after signing in with ${name}. Two-factor sign-in with ${name} is paused — try again in ${wait}, or sign in another way.',
       "'Code is invalid. Try again or use a recovery code.'",
       "'Too many incorrect codes for this sign-in. Sign in again to retry.'",
       "'Challenge token is unknown or expired. Sign in again.'",

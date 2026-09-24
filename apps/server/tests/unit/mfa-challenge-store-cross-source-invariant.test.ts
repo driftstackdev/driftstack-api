@@ -19,13 +19,16 @@
 //   padding). No scrypt — entropy alone is sufficient for 5-min
 //   single-use.
 //
-//   MfaChallengePayload (5 fields, all V-353d defense-in-depth):
+//   MfaChallengePayload (6 fields, all V-353d defense-in-depth):
 //     - account_id  (which account to challenge).
 //     - email       (sanity-check caller claim).
 //     - source_ip   (IP-mismatch refusal; "best-effort, not load-
 //                    bearing security").
 //     - issued_at   (audit reconstruction on success).
 //     - issued_user_agent (carried into web_session row).
+//     - method      (the sign-in that started the challenge; wrong codes are
+//                    counted and paused per method — sign-in re-audit,
+//                    round 1, defect 1).
 //
 //   MfaChallengeStore challenge payload methods plus attempt reservations:
 //     - consume(key) — atomic GETDEL; returns null when missing or
@@ -121,9 +124,9 @@ describe('W917 V-353d MFA challenge store cross-source invariant', () => {
     expect(tokens.size).toBe(10);
   });
 
-  // ─── MfaChallengePayload 5-field defense-in-depth ────────────
+  // ─── MfaChallengePayload 6-field defense-in-depth ────────────
 
-  it('CRITICAL MfaChallengePayload has 5 fields — account_id + email + source_ip (nullable) + issued_at + issued_user_agent (nullable). The 5-field bind is what binds the challenge_token to the originating request, not just to an account.', () => {
+  it('CRITICAL MfaChallengePayload has 6 fields — account_id + email + source_ip (nullable) + issued_at + issued_user_agent (nullable) + method. The bind is what binds the challenge_token to the originating request, not just to an account; the method decides which per-method count a wrong code is charged to.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/mfa-challenge-store.ts'));
     expect(p).toMatch(/export interface MfaChallengePayload \{/);
     expect(p).toMatch(/account_id: string;/);
@@ -131,6 +134,7 @@ describe('W917 V-353d MFA challenge store cross-source invariant', () => {
     expect(p).toMatch(/source_ip: string \| null;/);
     expect(p).toMatch(/issued_at: number;/);
     expect(p).toMatch(/issued_user_agent: string \| null;/);
+    expect(p).toMatch(/method: MfaChallengeMethod;/);
   });
 
   it("CRITICAL source_ip framing — 'defense-in-depth: if attacker steals the challenge_token from a Slack paste, their IP differs and we refuse — best-effort, not load-bearing security'. The Slack-paste attack model + 'best-effort' caveat is the threat-model documentation.", () => {

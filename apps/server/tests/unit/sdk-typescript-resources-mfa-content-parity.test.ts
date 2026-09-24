@@ -90,9 +90,9 @@ describe('W427.A packages/sdk-typescript/src/resources/mfa.ts content parity', (
     );
   });
 
-  it('MfaVerifyRequest — single field `code: string` with "First 6-digit TOTP code from the customer\'s authenticator app" framing. The "first" wording is load-bearing — it tells customers verify is one-shot enrollment-confirmation, NOT an ongoing login-challenge (those live on auth.mfaChallenge).', () => {
+  it('MfaVerifyRequest — `code: string` with "First 6-digit TOTP code from the customer\'s authenticator app" framing, plus the optional `current_password` turning on two-factor needs when the account has a password (sign-in re-audit, round 1, defect 3). The "first" wording is load-bearing — it tells customers verify is one-shot enrollment-confirmation, NOT an ongoing login-challenge (those live on auth.mfaChallenge).', () => {
     expect(body).toMatch(
-      /export interface MfaVerifyRequest \{\s*\/\*\* First 6-digit TOTP code from the customer's authenticator app\. \*\/\s*code: string;\s*\}/,
+      /export interface MfaVerifyRequest \{\s*\/\*\* First 6-digit TOTP code from the customer's authenticator app\. \*\/\s*code: string;\s*\/\*\*[\s\S]*?\*\/\s*current_password\?: string;\s*\}/,
     );
   });
 
