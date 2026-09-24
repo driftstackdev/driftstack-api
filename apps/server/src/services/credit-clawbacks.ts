@@ -22,24 +22,34 @@
 //   · two refunds of the whole owe exactly what was spent (#11);
 //   · a dispute after a refund is measured against what was still paid (#7);
 //   · a delivery repeated or out of order recomputes the same state and takes
-//     nothing more (L5 still keys each distinct cumulative once);
-//   · the order of a refund, a dispute and its win does not matter (re-audit #3,
-//     A10): the win first undoes what the dispute's own clawbacks charged
-//     beyond their lots — debt still owed forgiven, debt later credit repaid
-//     returned into the lot that repaid it while that lot is live, nothing for
-//     a lot that has expired or debt an admin forgave (audit 4, R1' and R9) —
-//     and then moves the payment's units to the target WITHOUT the dispute:
-//     credit the dispute took from a month still running goes back, first to
-//     the lots the customer's spending fell on meanwhile (R10), and debt a
-//     refund measured while it stood charged beyond is forgiven or returned
-//     the same way.
+//     nothing more (L5 still keys each distinct cumulative once).
+//
+// ⛔ A WON DISPUTE RETURNS WHAT IT REMOVED; IT REPLAYS NOTHING (reversal policy
+// v2, rule 6, with Amendments 1 and 2). The win reverses the dispute's
+// clawbacks and cancels their claims, forgives the debt they still leave owed,
+// and gives back everything else they removed — credit taken from the unit's
+// lots, credit their claims collected, and debt other credit repaid
+// (`CreditGrantsService.returnWhatADisputeRemoved`): into the lot it came from
+// while that lot is valid and outlasts every lot the customer used or held
+// while the dispute stood (R-A), else as one new lot (the won payment's for
+// what was taken from it, R-D; the payer's for debt another payment's credit
+// repaid, goodwill's to no payment, R-F), valid until the latest of the end of
+// the current month and every such expiry — a month from the win when none is
+// in the future. Credit taken from a lot that has since ended comes back only
+// when some other lot was used or held while the dispute stood (R-G), and a
+// later take charges what it would take from such a new lot as debt settled
+// at once in the spend order (R-I). It then re-applies rule 1 to the payment in
+// BOTH directions at its new still-paid share, so a refund measured while the
+// dispute stood is re-measured: claims released first, then excess debt
+// forgiven or returned the same way. There is no replay of spending order, settlements or holds:
+// what the win leaves above the twin that never saw the dispute is bounded by
+// what the dispute removed (B2), and never below it.
 //
 // ⛔ A DISPUTE NEVER CHANGES WHAT A MONTH IS WORTH. A month drawn while a
 // dispute stands is drawn in full and the dispute takes its share of it; a
 // plan change made while a dispute stands grants or takes what it would have
 // without the dispute (A3–A5), and the dispute's share of the result follows.
-// That is 0139's undisputed level. So a won dispute has nothing to redo: the
-// account it leaves is the one its twin without the dispute holds.
+// That is 0139's undisputed level. So a won dispute has no month to redo.
 //
 // ⛔ AN ANNUAL INVOICE'S DEBT IS CAPPED ACROSS ITS WINDOWS — AN INTERIM RULE
 // PENDING THE OWNER (audit #6). Applied per window, a refund of half a year
@@ -47,15 +57,18 @@
 // months are still paid for and one was used. Until the owner rules, the debt a
 // payment leaves across ALL of its windows is capped at
 // `max(0, ΣS − floor_whole(s/paid × what the payment bought))`, shared out
-// newest window first. What a PERIOD line bought is its plan allowance × the
-// months it pays for (12 a year, 1 a month). An ANNUAL UPGRADE (`proration_up`)
-// line bought the step up `(upper − from) × the calendar months the line spans`
-// (re-audit #8); a MONTHLY upgrade line stays uncapped — it bought its prorated
-// lot and nothing more. The cap only ever LOWERS debt. ⛔ ΣS is FROZEN at each
-// reversal (audit 4, R8): what the payment's credit had been spent, plus what
-// running tasks held of it, when the refund or dispute was measured is recorded
-// on its rows (0140), and a later win, refresh or task settle uses the newest
-// standing reversal's figure — spending after it does not move the cap.
+// newest window first. What a yearly PERIOD line bought is its plan allowance ×
+// 12. An ANNUAL UPGRADE (`proration_up`) line bought the step up
+// `(upper − from) × the calendar months the line spans` (re-audit #8). A
+// MONTHLY payment of either kind is not capped (reversal policy v2, R-C): it
+// follows rule 1 exactly — debt is what was spent beyond each month's worth,
+// that worth following its plan changes. The cap only ever LOWERS debt. ⛔ ΣS
+// is FROZEN at each reversal (audit 4, R8): what the payment's credit had been
+// spent, plus what running tasks held of it, when the refund or dispute was
+// measured is recorded on its rows (0140), and a later win or refresh uses the
+// newest standing reversal's figure — spending after it does not move the cap.
+// What a running task spends of credit an annual reversal CLAIMED is not
+// charged: its claim, left unpaid, is dropped (rule 3, B1).
 //
 // ⛔ THE LEVEL FOLLOWS ALL COVERAGE, NOT THE INVOICE ALONE (audit #4, #16).
 // After a reversal the CURRENT window's two levels move to what every paid
@@ -73,10 +86,12 @@
 // beneath it). A refund or a dispute of the window's own payment raises that
 // share, in the same transaction, and the debt the reversal wrote is repaid
 // from it before the transaction commits (finding 1: the commit-time check
-// refused debt beside that credit); a won dispute lowers it again (A8). And
-// when the stand-alone payment is itself refunded or disputed, the share it
-// was handed goes back in EVERY window it holds one in (audit 4 #1, R11) —
-// otherwise a chargeback of a resubscription kept the month it was handed.
+// refused debt beside that credit); a won dispute lowers it again while the
+// month runs (A8) — once the month has ended, the share it was handed stands
+// (rule 7, B3). And when the stand-alone payment is itself refunded or
+// disputed, the share it was handed goes back in EVERY window it holds one in
+// (audit 4 #1, R11) — otherwise a chargeback of a resubscription kept the
+// month it was handed.
 //
 // A WON DISPUTE (M6) takes the account's credit lock FIRST and only then locks
 // the dispute's clawbacks (a settlement takes them in that order, audit #13).
@@ -106,7 +121,6 @@
 // provider; any other is recorded as a failed event and alerted).
 
 import { sql } from 'drizzle-orm';
-import { floorMicroToWholeCredits } from '@driftstack/api-types';
 import type { CreditLedgerTx, DrizzleCreditLedgerRepo } from '../db/credit-ledger-repo.js';
 import { rowsOf } from '../db/credit-ledger-repo.js';
 import {
@@ -119,10 +133,8 @@ import {
   invoiceTerms,
   reinstateGrantKey,
   returnedGrantKey,
-  unitKeepMicro,
   type CreditGrantsService,
   type CreditUnitEvent,
-  type TwinCredit,
 } from './credit-grants.js';
 import type { Logger } from '../lib/logger.js';
 import type { SentryClient } from '../lib/sentry.js';
@@ -180,130 +192,6 @@ export function stillPaidForMicro(
   if (amountPaidMinor === 0) return grantedMicro;
   const kept = BigInt(amountPaidMinor - Math.min(amountPaidMinor, reversedMinor));
   return Number((BigInt(grantedMicro) * kept) / BigInt(amountPaidMinor));
-}
-
-/**
- * What ONE lot keeps once the payment that bought it still pays
- * `amountPaidMinor − reversedMinor`: its grant scaled by what is still paid
- * over what was still paid WHEN IT WAS GRANTED (`stillPaidAtGrantMinor`, 0137;
- * null — a lot written before 0137 — is the whole payment), rounded DOWN to
- * whole credits (S17 re-audit #5). A lot granted while part of the payment
- * stood refunded keeps MORE than its grant once that part is put back. A
- * payment of nothing reverses nothing. It is the one-term case of
- * `unitKeepMicro`, which sums a unit's terms unfloored and rounds once (R3).
- */
-export function lotKeepMicro(
-  grantedMicro: number,
-  amountPaidMinor: number,
-  stillPaidAtGrantMinor: number | null,
-  reversedMinor: number,
-): number {
-  wholeMicro('a grant', grantedMicro);
-  wholeMinor('a payment', amountPaidMinor);
-  wholeMinor('a reversal', reversedMinor);
-  if (stillPaidAtGrantMinor !== null) wholeMinor('still paid', stillPaidAtGrantMinor);
-  return unitKeepMicro({
-    amountPaidMinor,
-    stillPaidMinor: amountPaidMinor - Math.min(amountPaidMinor, reversedMinor),
-    terms: [{ micro: grantedMicro, stillPaidAtMinor: stillPaidAtGrantMinor }],
-  });
-}
-
-/** Where one invoice's credit in one window stands, as the single-window arithmetic reads it. */
-export interface ReversalWindowState {
-  /** E — what the invoice's own lots keep at what is still paid. */
-  readonly keepMicro: number;
-  /** S — what left those lots on the customer's work: task charges, debt repaid, others' claims. */
-  readonly consumedMicro: number;
-  /** L — what those lots still hold, held credit included. */
-  readonly remainingMicro: number;
-  /** What running tasks hold of those lots. */
-  readonly heldMicro: number;
-  /** O — what the clawbacks standing against this credit already charged beyond these lots. */
-  readonly owedMicro: number;
-}
-
-/** What one window gives up to a reversal. */
-export interface WindowReversalPlan {
-  /** What a take is asked for: `fromLotsMicro + beyondLotsMicro`. 0: nothing is written. */
-  readonly amountMicro: number;
-  /** Taken out of the lots: their free credit, and their held credit as a pending claim. */
-  readonly fromLotsMicro: number;
-  /** Credit that was spent: debt (or a claim on other held credit). */
-  readonly beyondLotsMicro: number;
-}
-
-/**
- * The single-window form of a take: everything the customer holds or spent
- * above what they keep, less what the standing clawbacks already charged
- * beyond the lots — out of the lots first, and what the lots cannot give is
- * the part that becomes debt, never more than `debtBudgetMicro`. A unit's
- * reconciliation (credit-grants.ts) is this with the budget written as a
- * target: `S + L − O − max(E, S − allowed)`.
- */
-export function planWindowReversal(
-  w: ReversalWindowState,
-  debtBudgetMicro: number,
-): WindowReversalPlan {
-  const needed = Math.max(0, w.consumedMicro + w.remainingMicro - w.keepMicro - w.owedMicro);
-  const fromLotsMicro = Math.min(needed, w.remainingMicro);
-  const beyondLotsMicro = Math.min(needed - fromLotsMicro, Math.max(0, debtBudgetMicro));
-  return { amountMicro: fromLotsMicro + beyondLotsMicro, fromLotsMicro, beyondLotsMicro };
-}
-
-/**
- * The most debt one reversal may still create across ALL of an invoice's
- * windows — the interim cap pending the owner (see the header): what was spent
- * less what the payment still pays for (whole credits, as every keep is), less
- * what the standing clawbacks already charged for spent credit.
- * `paidForMicro` null means no cap beyond the per-window rule. (The grants
- * service shares the same cap out as a total, `allowedDebtByUnit`.)
- *
- * What a standing clawback "already charged for spent credit" is its `O` less
- * the credit running tasks still hold of the lots: that part of a standing
- * claim is paid from the lots themselves when the tasks settle.
- */
-export function reversalDebtBudgetMicro(
-  windows: readonly ReversalWindowState[],
-  terms: {
-    readonly amountPaidMinor: number;
-    readonly reversedMinor: number;
-    readonly paidForMicro: number | null;
-  },
-): number {
-  if (terms.paidForMicro === null) return Number.MAX_SAFE_INTEGER;
-  let consumed = 0;
-  let charged = 0;
-  for (const w of windows) {
-    consumed = consumed + w.consumedMicro;
-    charged = charged + Math.max(0, w.owedMicro - w.heldMicro);
-  }
-  const keep = floorMicroToWholeCredits(
-    stillPaidForMicro(terms.paidForMicro, terms.amountPaidMinor, terms.reversedMinor),
-  );
-  return Math.max(0, Math.max(0, consumed - keep) - charged);
-}
-
-/**
- * A level scaled by what is still paid after an event over what was still
- * paid before it, rounded down to whole credits; unchanged when nothing was
- * still paid before. (What a window whose own payment covers nothing any more
- * would show, measured from where it stood; the grants service reads the same
- * number straight off the payment.)
- */
-export function levelScaledByPayment(
-  levelMicro: number,
-  stillPaidBeforeMinor: number,
-  stillPaidAfterMinor: number,
-): number {
-  wholeMicro('a level', levelMicro);
-  wholeMinor('what was still paid', stillPaidBeforeMinor);
-  wholeMinor('what is still paid', stillPaidAfterMinor);
-  if (stillPaidBeforeMinor === 0) return levelMicro;
-  const scaled =
-    (BigInt(levelMicro) * BigInt(Math.min(stillPaidAfterMinor, stillPaidBeforeMinor))) /
-    BigInt(stillPaidBeforeMinor);
-  return Number((scaled / 1_000_000n) * 1_000_000n);
 }
 
 /** The clawback key of a Stripe refund: the charge and the cumulative it reached. */
@@ -598,42 +486,28 @@ export class CreditClawbacksService implements CreditClawbacks {
       // A plan change still waiting is measured first, on the undisputed level.
       await grants.reconcileLevel(tx, accountId);
       // Reversed and its claim zeroed in one statement: a task that settles
-      // after the win pays the dispute nothing (audit #3).
+      // after the win pays the dispute nothing (audit #3, rule 6).
       for (const clawback of applied) await windows.markClawbackReversed(tx, clawback.id);
-      // What the dispute charged beyond its units' lots is undone by what became
-      // of it (audit 4, R9/R1'): owed debt forgiven, credit that repaid it back
-      // into the lots that paid while they last, nothing for what expired or
-      // what an admin forgave. The reversed rows then charge nothing.
-      // Every credit the win gives back into a live lot, for the last step.
-      const credits: TwinCredit[] = [];
-      const undone = await grants.undoReversedClawbacks(tx, accountId, applied, credits);
-      // Held credit the dispute's claims stood on is claimable again: debt a
-      // reversal wrote for want of it becomes the claim the twin made.
-      await grants.reclaimDebtAsClaims(
-        tx,
-        accountId,
-        applied.filter((c) => c.pendingMicro > 0).map((c) => c.targetKey),
-        {
-          source: 'stripe_dispute',
-          ref: wonDisputeSettleRef(args.disputeId),
-          ledgerKind: 'refund_clawback',
-          debtReason: 'payment_reversed',
-          label: 'dispute_reinstated',
-        },
-        credits,
-      );
-
-      let regrantedMicro = undone.regrantedMicro;
-      let forgivenMicro = undone.forgivenMicro;
-      if (payment !== null && payment.accountId === accountId) {
+      const ours = payment !== null && payment.accountId === accountId ? payment : null;
+      if (ours !== null) {
         // What still stands once this dispute's rows are reversed: the other
         // disputes, by id (R2) — so a second event of the same win, finding
         // nothing applied, changed nothing above.
-        await this.setDisputed(tx, payment, await this.standingDisputedMinor(tx, payment));
+        await this.setDisputed(tx, ours, await this.standingDisputedMinor(tx, ours));
         // R4 — the month a win makes the payment cover again is drawn INSIDE
         // the win, before the level is set, so the next refresh writes nothing.
         await grants.materializeWindows(tx, accountId);
-        const facts = await windows.invoicePayment(tx, accountId, payment.stripeInvoiceId);
+      }
+      // Rule 6: everything the dispute removed comes back — debt still owed
+      // forgiven, and credit taken, claimed or repaid returned for as long as
+      // the credit the customer used meanwhile lasts (R-A, R-D, R-F).
+      const win = await grants.wonDisputeReturn(tx, accountId, args.disputeId);
+      const undone = await grants.returnWhatADisputeRemoved(tx, accountId, applied, win);
+
+      let regrantedMicro = undone.regrantedMicro;
+      let forgivenMicro = undone.forgivenMicro;
+      if (ours !== null) {
+        const facts = await windows.invoicePayment(tx, accountId, ours.stripeInvoiceId);
         if (facts !== null) {
           const event: CreditUnitEvent = {
             source: 'stripe_dispute',
@@ -642,6 +516,10 @@ export class CreditClawbacksService implements CreditClawbacks {
             debtReason: 'payment_reversed',
             label: 'dispute_reinstated',
           };
+          // Rule 6, last step: rule 1 re-applied in BOTH directions at the new
+          // still-paid share, so a refund measured while the dispute stood is
+          // re-measured — claims released first, then its excess debt forgiven
+          // or returned the same way.
           const done = await grants.reconcilePaymentUnits(
             tx,
             accountId,
@@ -652,22 +530,11 @@ export class CreditClawbacksService implements CreditClawbacks {
               event,
               standsAlone: facts.lineKind !== 'proration_up',
               cap: 'standing',
-              collect: credits,
+              win,
             },
           );
           regrantedMicro = regrantedMicro + done.regrantedMicro;
           forgivenMicro = forgivenMicro + done.forgivenMicro;
-          // R11 — the share of an ended month a resubscription was handed
-          // while the dispute stood follows the month back to this payment.
-          const handed = await grants.reconcileHandedShares(
-            tx,
-            accountId,
-            facts.stripeInvoiceId,
-            event,
-            credits,
-          );
-          regrantedMicro = regrantedMicro + handed.regrantedMicro;
-          forgivenMicro = forgivenMicro + handed.forgivenMicro;
           await grants.alignLevels(tx, accountId, {
             reason: 'dispute_reinstated',
             sourceRef: facts.stripeInvoiceId,
@@ -679,19 +546,10 @@ export class CreditClawbacksService implements CreditClawbacks {
             // measured the same way — its own reconcile finds no window where it
             // held nothing before.
             exclude: [],
-            collect: credits,
+            win,
           });
         }
       }
-      // What the account's later settlements did without the credit given back
-      // here is replayed as the twin made them (audit 4, R10).
-      await grants.resettleAsTwin(
-        tx,
-        accountId,
-        credits,
-        applied.map((c) => c.id),
-        wonDisputeSettleRef(args.disputeId),
-      );
       await ledger.settleDebtFromFree(tx, accountId);
 
       this.deps.logger?.info(

@@ -183,17 +183,28 @@ describe('migration 0140 adds three clawback facts and five partial indexes for 
     expect(repo).toMatch(
       /starts_with\(x\.idempotency_key, 'claim:'\)\s+AND x\.idempotency_key ~>=~ \('claim:' \|\| c\.id \|\| ':'\)\s+AND x\.idempotency_key ~<~ \('claim:' \|\| c\.id \|\| ';'\)/,
     );
-    // claimLetGoMicro: the same range, for one clawback.
-    expect(reservations).toMatch(
-      /starts_with\(x\.idempotency_key, 'claim:'\)\s+AND x\.idempotency_key ~>=~ \('claim:' \|\| c\.id::text \|\| ':'\)\s+AND x\.idempotency_key ~<~ \('claim:' \|\| c\.id::text \|\| ';'\)/,
-    );
+    // claimLetGoMicro read ONE clawback's claims by the same range; reversal
+    // policy v2 removed it. What a settlement lets go of a claim is now a
+    // `drop:<clawback>:<task>` record read with the unit's own clawbacks, and a
+    // win reads one clawback's collected claims through collectedClaims — the
+    // bounded read above. So the reservations repo walks no claim rows at all,
+    // and no read anywhere walks them by an unbounded key: every
+    // `~>=~ ('claim:' || …)` bound in the windows repo has its `~<~` partner.
+    expect(reservations).not.toMatch(/'claim:'/);
+    expect(repo.match(/~>=~ \('claim:' \|\| /g)?.length ?? 0).toBe(1);
+    expect(repo.match(/~<~ \('claim:' \|\| /g)?.length ?? 0).toBe(1);
     // unitGivebackRows: the adjustment rows under `reinstate:`, the unit's prefix as a range.
     expect(repo).toMatch(
       /x\.kind = 'adjustment' AND starts_with\(x\.idempotency_key, 'reinstate:'\)\s+AND x\.idempotency_key ~>=~ \$\{range\.from\} AND x\.idempotency_key ~<~ \$\{range\.below\}/,
     );
-    // holdRedirectsOf: the account's `hold:` records, the task's prefix as a range.
-    expect(repo).toMatch(
-      /starts_with\(c\.source_ref, 'hold:'\)\s+AND c\.source_ref ~>=~ \$\{range\.from\} AND c\.source_ref ~<~ \$\{range\.below\}/,
+    // holdRedirectsOf read a task's `hold:` records by the task's prefix as a
+    // range; reversal policy v2 removed the hold redirects, so no `hold:`
+    // record is written or read any more. The index that served the read stays
+    // (dropping it would not be additive), and schema.ts says it is unused —
+    // an index no read uses is a stated decision, not a forgotten one.
+    expect(repo).not.toMatch(/'hold:'/);
+    expect(readFileSync(resolve(DB, 'schema.ts'), 'utf8')).toMatch(
+      /UNUSED SINCE REVERSAL POLICY v2[^\n]*\n(?:\s*\/\/[^\n]*\n)*\s*index\('credit_clawbacks_hold_idx'\)/,
     );
     // debtEvents: the rows that move debt.
     expect(repo).toMatch(/x\.debt_delta_micro <> 0\s+ORDER BY x\.id/);

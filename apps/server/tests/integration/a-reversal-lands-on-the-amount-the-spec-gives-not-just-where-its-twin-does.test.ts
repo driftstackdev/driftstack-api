@@ -25,6 +25,14 @@
 //       dispute took from the unit's own lots, what was spent from OTHER lots
 //       in that window while it stood) — into those other lots.
 //
+// REVERSAL POLICY v2 (design-reversal-policy-v2.md, 2026-09-24) moved three arms
+// to BOUNDS: P3, P9 and P11, where a win after the month ended returns credit
+// the twin let expire (rule 6's new lot, B2) or keeps a hand-over share fixed
+// (B3). Each keeps its twin's amount exact and asserts of W what §3's
+// invariants 3 and 4 say: never below the twin (for every expiry instant too),
+// levels equal, and at most what the dispute removed above it. Every other arm
+// stays exact.
+//
 // Amounts are credits. A starter month is 3,000 credits for 4,900 minor units;
 // an annual starter invoice is 58,800 for twelve such months (36,000 credits);
 // a builder month is 10,000. Every share below is floored to whole credits.
@@ -156,6 +164,52 @@ async function termsOf(accountId: string): Promise<Term[]> {
      GROUP BY expires_at
      ORDER BY expires_at`;
   return rows.map((r) => ({ expires: r.e, credits: credits(Number(r.free)) }));
+}
+
+/**
+ * §3 invariants 3 and 4, for one won-dispute account W against its twin T:
+ * never worse off (spendable, debt, and the credit valid until every expiry
+ * instant or later, each within one credit), the same level, and never more
+ * than `removed` credits (what the dispute removed, B2) better off.
+ */
+async function expectBoundedByTwin(
+  w: string,
+  t: string,
+  removed: number,
+  what: string,
+): Promise<void> {
+  const bw = await balances(w);
+  const bt = await balances(t);
+  expect(bw.level, `${what}: levels`).toBe(bt.level);
+  expect(bw.spendable, `${what}: W spendable not below the twin`).toBeGreaterThan(bt.spendable - 1);
+  expect(bw.debt, `${what}: W debt not above the twin`).toBeLessThan(bt.debt + 1);
+  expect(
+    bw.spendable - bt.spendable,
+    `${what}: W above the twin by at most what was removed`,
+  ).toBeLessThan(removed + 1);
+  expect(
+    bt.debt - bw.debt,
+    `${what}: W's debt below the twin's by at most what was removed`,
+  ).toBeLessThan(removed + 1);
+  const tw = await termsOf(w);
+  const tt = await termsOf(t);
+  const instants = [...new Set([...tw, ...tt].map((x) => x.expires))].sort();
+  for (const x of instants) {
+    const from = (terms: Term[]): number =>
+      terms.filter((term) => term.expires >= x).reduce((sum, term) => sum + term.credits, 0);
+    expect(from(tw), `${what}: credit valid until ${x} or later`).toBeGreaterThan(from(tt) - 1);
+  }
+}
+
+/** Invariant 2's left side: what every lot still holds (live) or has held back, plus what tasks spent, less debt. */
+async function heldSpentLessDebt(accountId: string): Promise<number> {
+  const [row] = await db()<Array<{ n: string }>>`
+    SELECT (COALESCE((SELECT sum(CASE WHEN revoked_at IS NULL AND starts_at <= now() AND now() < expires_at
+                                      THEN remaining_micro - held_micro ELSE 0 END + held_micro)
+                        FROM credit_lots WHERE account_id = ${accountId}::uuid), 0)
+            + COALESCE((SELECT -sum(lot_delta_micro) FROM credit_ledger
+                         WHERE account_id = ${accountId}::uuid AND kind = 'task_charge'), 0))::text AS n`;
+  return credits(Number(row?.n ?? '0') - (await debtOf(db(), accountId)));
 }
 
 /** An SQL instant as `termsOf` spells it. */
@@ -495,7 +549,7 @@ describe.skipIf(!RUN_DB_TESTS)(
       expect(await balances(m.accountId)).toEqual({ spendable: 3_000, debt: 0, level: 3_000 });
     });
 
-    it('CRITICAL a month handed to a resubscription during a dispute is handed back when the dispute is won after the month, and nothing is paid twice (P3)', async () => {
+    it('CRITICAL a month handed to a resubscription during a dispute: after a win past the month the account is never below the twin and at most what the dispute removed above it (P3, bounds)', async () => {
       const boundary = await boundaryIn(12);
       // 840-hour lines (longer than any calendar month), so every share is exact.
       async function world(tag: string, disputed: boolean): Promise<string> {
@@ -539,15 +593,17 @@ describe.skipIf(!RUN_DB_TESTS)(
       await svc().reinstateDispute(dispute('dp_sa_p3_w', 'ch_sa_p3_w'));
       await h().grants.refreshCredits(w);
       // Month 2 is the resubscription's window [boundary, start + 840 h): 360 of
-      // its 840 hours, 3,000 × 360 / 840 = 1,285. The win undoes the dispute AND
-      // the hand-over it caused: the 1,000 the hand-over repaid is not handed
-      // back as credit (ruling (a): the lot that repaid it expired with month 1),
-      // and the hand-over's own share is not charged either. Both end at 1,285.
+      // its 840 hours, 3,000 × 360 / 840 = 1,285 — the twin's amount.
       const monthTwoEnd = await instant(`${at(boundary)} + interval '360 hours'`);
-      for (const accountId of [t, w]) {
-        expect(await balances(accountId)).toEqual({ spendable: 1_285, debt: 0, level: 3_000 });
-        expect(await termsOf(accountId)).toEqual([{ expires: monthTwoEnd, credits: 1_285 }]);
-      }
+      expect(await balances(t)).toEqual({ spendable: 1_285, debt: 0, level: 3_000 });
+      expect(await termsOf(t)).toEqual([{ expires: monthTwoEnd, credits: 1_285 }]);
+      // W (policy v2): the dispute removed the month's 2,000 free and 1,000 of
+      // debt the hand-over paid — 3,000, all of the month. Month 1 has ended, so
+      // rule 6 returns both as one new lot valid to month 2's end, and the
+      // hand-over share stays fixed (rule 7, B3): worked by hand, 1,285 + 3,000
+      // = 4,285. Asserted as the bound B2 (Amendment 1, R-E): at most the
+      // 3,000 the dispute removed above the twin.
+      await expectBoundedByTwin(w, t, 3_000, 'P3');
     }, 60_000);
 
     it('CRITICAL debt an admin forgave while a dispute stood is not handed back as credit when the dispute is won (P4, ruling c)', async () => {
@@ -713,7 +769,7 @@ describe.skipIf(!RUN_DB_TESTS)(
       }
     }, 120_000);
 
-    it('CRITICAL debt an upgrade’s lot repaid in a month that has ended is not handed back as new credit when the dispute is won (P9, ruling a)', async () => {
+    it('CRITICAL debt an upgrade’s lot repaid in a month that has ended: after the win the account is never below the twin and at most what the dispute removed above it (P9, bounds)', async () => {
       const boundary = await boundaryIn(14);
       async function world(tag: string, disputed: boolean) {
         const c = await annualCustomer(`ch_sa_p9_${tag}`, boundary);
@@ -748,14 +804,15 @@ describe.skipIf(!RUN_DB_TESTS)(
       await h().grants.refreshCredits(t.accountId);
       await svc().reinstateDispute(dispute('dp_sa_p9_w', 'ch_sa_p9_w', ANNUAL));
       await h().grants.refreshCredits(w.accountId);
-      // Month 2: 3,000 and 7,000, both to month 2's end. The 3,000 of the
-      // upgrade's month-1 lot that repaid the debt expired with month 1 (as the
-      // twin's unspent 7,000 did), so nothing more comes back (ruling a).
+      // Month 2: 3,000 and 7,000, both to month 2's end — the twin's amount.
       const monthTwoEnd = await instant(w.nextMonthEnd);
-      for (const c of [t, w]) {
-        expect(await balances(c.accountId)).toEqual({ spendable: 10_000, debt: 0, level: 10_000 });
-        expect(await termsOf(c.accountId)).toEqual([{ expires: monthTwoEnd, credits: 10_000 }]);
-      }
+      expect(await balances(t.accountId)).toEqual({ spendable: 10_000, debt: 0, level: 10_000 });
+      expect(await termsOf(t.accountId)).toEqual([{ expires: monthTwoEnd, credits: 10_000 }]);
+      // W (policy v2): the 3,000 the upgrade's month-1 lot paid of the dispute's
+      // debt comes back as one new lot (that lot has expired), valid to month
+      // 2's end: worked by hand, 13,000. The dispute removed month 1's 3,000 of
+      // debt and month 2's 3,000 (the year disputed whole): at most 6,000 above.
+      await expectBoundedByTwin(w.accountId, t.accountId, 6_000, 'P9 at the win');
       // 2,500 of month 2's own lot spent, then the year refunded whole. Month 2
       // gives up its 500 free and owes 2,500; month 1 owes its 3,000 spent (the
       // frozen cap allows all of it: nothing is still paid). The upgrade's
@@ -766,15 +823,29 @@ describe.skipIf(!RUN_DB_TESTS)(
       ] as const) {
         await spendFromLot(db(), c.accountId, await currentMonthlyLot(c.accountId), 2_500, 9);
         await svc().applyStripeRefund(refund(`ch_sa_p9_${tag}`, ANNUAL));
-        expect(await balances(c.accountId), tag).toEqual({
-          spendable: 1_500,
-          debt: 0,
-          level: 10_000,
-        });
+      }
+      // T: 1,500 (above). W (Amendment 3, R-H, with Amendment 2, R-F(b)): the
+      // 3,000 the win returned replaced the UPGRADE's month-1 credit that paid
+      // the dispute's debt, so it belongs to the upgrade invoice and a refund of
+      // the base year does not re-measure it. The refund's 5,500 of debt is
+      // repaid from month 2's upgrade lot (spent first): 1,500 + 3,000 = 4,500.
+      expect(await balances(t.accountId)).toEqual({ spendable: 1_500, debt: 0, level: 10_000 });
+      expect(await balances(w.accountId)).toEqual({ spendable: 4_500, debt: 0, level: 10_000 });
+      // Invariants 3 and 4: never below the twin, at most the 6,000 removed above.
+      await expectBoundedByTwin(w.accountId, t.accountId, 6_000, 'P9 after the refund');
+      // Invariant 2, the paid-for ceiling, summed over the account: what the lots
+      // hold plus what tasks spent, less debt, is at most what the payments are
+      // worth. The base year is refunded whole (worth 0, but annual: the frozen
+      // cap may excuse what was spent — month 1 3,000, month 2 2,500); the
+      // upgrade line is still paid in full: 7,000 × 2. 19,500 — W holds 10,000.
+      for (const c of [w, t]) {
+        expect(await heldSpentLessDebt(c.accountId), 'P9: the paid-for ceiling').toBeLessThan(
+          19_500 + 1,
+        );
       }
     }, 60_000);
 
-    it('CRITICAL a dispute that takes the month while a top-up is held sends the spending to the top-up, and a win after the month puts it back (P11, ruling d)', async () => {
+    it('CRITICAL a dispute that takes the month while a top-up is held sends the spending to the top-up, and a win after the month leaves the account never below the twin (P11, bounds)', async () => {
       const boundary = await boundaryIn(12);
       const topUpEnds = `(${at(boundary)} + interval '360 days')`;
       const w = await twoMonths('ch_sa_p11w', boundary);
@@ -792,17 +863,16 @@ describe.skipIf(!RUN_DB_TESTS)(
       await h().grants.refreshCredits(t.accountId);
       await svc().reinstateDispute(dispute('dp_sa_p11w', 'ch_sa_p11w', 2_450));
       await h().grants.refreshCredits(w.accountId);
-      // min(1,500 taken from the month, 500 spent from the top-up while it
-      // stood) = 500 back into the top-up, for the top-up's term (ruling d).
-      // Both: month 2's 3,000 and the top-up's 3,000.
-      const terms = [
+      // The twin: month 2's 3,000 and the top-up's 3,000.
+      expect(await balances(t.accountId)).toEqual({ spendable: 6_000, debt: 0, level: 3_000 });
+      expect(await termsOf(t.accountId)).toEqual([
         { expires: await instant(monthAfter(boundary)), credits: 3_000 },
         { expires: await instant(topUpEnds), credits: 3_000 },
-      ];
-      for (const c of [t, w]) {
-        expect(await balances(c.accountId)).toEqual({ spendable: 6_000, debt: 0, level: 3_000 });
-        expect(await termsOf(c.accountId)).toEqual(terms);
-      }
+      ]);
+      // W (policy v2): the 1,500 taken from month 1 (ended) comes back as a new
+      // lot valid to the top-up's end (spent while the dispute stood): worked by
+      // hand, 3,000 + 2,500 + 1,500 = 7,000. At most the 1,500 removed above.
+      await expectBoundedByTwin(w.accountId, t.accountId, 1_500, 'P11');
     }, 60_000);
 
     it('CRITICAL a task holding credit across the month end does not cost the customer when the dispute is won after the month (P12)', async () => {

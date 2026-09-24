@@ -469,17 +469,26 @@ describe.skipIf(!RUN_DB_TESTS)(
       await aRefreshChangesNothing(a.accountId);
     });
 
-    it('CRITICAL a claim the dispute collected from a bought top-up comes back as credit no refund of the invoice can take (re-audit #10)', async () => {
+    it('CRITICAL a task holding a bought top-up pays no claim of the invoice; its release repays the dispute’s debt, which the win gives back into the top-up, where no refund of the invoice can take it (re-audit #10, policy v2 rule 4)', async () => {
       const c = await granted('ch_r2_10');
       await spendFromLot(db(), c.accountId, c.lotId, 3_000);
       const topUp = await buyTopUp(c.accountId, 500);
       const task = await holdOnLot(db(), c.accountId, topUp, 500);
       await svc().applyStripeDispute(dispute('dp_r2_10', 'ch_r2_10'));
-      // The task ends having spent nothing: its 500 pays the dispute's claim.
+      // Rule 4: a reversal's claim is paid only from what tasks release into
+      // the payment's OWN lots. The task ends having spent nothing: its 500
+      // pays no claim, goes back into the top-up, and repays 500 of the
+      // dispute's 3,000 of debt (the month was spent whole).
       const settled = await rh().service.settle(task, 'completed');
-      expect(settled.claimsPaidMicro).toBe(500 * MICRO);
+      expect(settled.claimsPaidMicro).toBe(0);
+      expect(await debt(c.accountId)).toBe(2_500);
+      expect(await spendable(c.accountId)).toBe(0);
+      // Rule 6: the debt still owed (2,500) is forgiven, and the 500 the top-up
+      // paid goes back into the top-up.
       await svc().reinstateDispute(dispute('dp_r2_10', 'ch_r2_10'));
+      expect(await debt(c.accountId)).toBe(0);
       expect(await spendable(c.accountId)).toBe(500);
+      expect(await remainingOfLot(topUp)).toBe(500);
 
       await svc().applyStripeRefund(refund('ch_r2_10', PAID));
       // 3,000 spent on a refunded month is owed; the top-up's 500 is the
@@ -509,7 +518,7 @@ describe.skipIf(!RUN_DB_TESTS)(
       ).toEqual([]);
     });
 
-    it('CRITICAL a claim another invoice’s refund collected from this invoice’s lot counts as spending of this invoice (re-audit #12)', async () => {
+    it('CRITICAL another invoice’s refund claims nothing of this invoice’s lot: the task’s release repays that refund’s debt instead, which counts as spending of this invoice (re-audit #12, policy v2 rule 4)', async () => {
       async function upgradedMonth(chargeBase: string, chargeUp: string) {
         const m = await paidMonth(db(), 'api_starter');
         await charge(m.invoiceId, chargeBase);
@@ -536,10 +545,23 @@ describe.skipIf(!RUN_DB_TESTS)(
       expect(await debt(control.accountId)).toBe(3_500);
 
       // A task holds 1,000 of the BASE invoice's lot when the upgrade is refunded.
+      // The upgrade's 3,500 spent is owed; the base month's 2,000 free repays
+      // 2,000 of it. Rule 4: the upgrade's refund may claim nothing of the base
+      // invoice's lot, so when the task releases its 1,000 it pays no claim —
+      // it is free credit again, and repays the next 1,000 of the debt.
       const m = await upgradedMonth('ch_r2_12_base', 'ch_r2_12_up');
       const task = await holdOnLot(db(), m.accountId, m.monthlyId, 1_000);
       await svc().applyStripeRefund(refund('ch_r2_12_up', PAID));
-      await rh().service.settle(task, 'completed');
+      const settled = await rh().service.settle(task, 'completed');
+      expect(settled.claimsPaidMicro).toBe(0);
+      expect(await debt(m.accountId)).toBe(500);
+      expect(await remainingOfLot(m.monthlyId)).toBe(0);
+      const claimRows = (await ledgerOf(db(), m.accountId)).filter((r) =>
+        r.idempotency_key.startsWith('claim:'),
+      );
+      expect(claimRows, 'no claim was collected from the base invoice’s lot').toEqual([]);
+      // The base month repaid 3,000 of the upgrade's debt: refunded whole, it
+      // owes that 3,000 back, the same total as the control.
       await svc().applyStripeRefund(refund('ch_r2_12_base', PAID));
       expect(await debt(m.accountId)).toBe(3_500);
     });

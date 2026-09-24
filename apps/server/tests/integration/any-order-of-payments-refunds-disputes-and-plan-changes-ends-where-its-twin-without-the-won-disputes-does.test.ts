@@ -1,14 +1,12 @@
 // Any order of payments, refunds, disputes and plan changes over TWO MONTHS ends
-// where its twin without the won disputes ends. A seeded differential property
-// test written by the second independent audit of the S17 refund and chargeback
-// rework (a48fb9b47), with the audit's fixed-order arms beside it.
+// where the reversal policy (v2, 2026-09-24) says, measured against its twin
+// without the won disputes. A seeded differential property test, first written
+// by the second independent audit of the S17 refund and chargeback rework
+// (a48fb9b47), extended by the fourth and fifth, and re-based on the policy's
+// stated bounds (design-reversal-policy-v2.md §3) when exact twin equality was
+// replaced as the acceptance. The fixed-order arms (A1–A12) stay EXACT.
 //
-// ⛔ IT FAILS ON THE CODE IT WAS WRITTEN AGAINST, ON PURPOSE. Every arm and every
-// configuration below states what the bar requires; the audit report lists the
-// defect each one reproduces. A builder makes it pass by fixing the code, never
-// by skipping an arm or loosening an expectation.
-//
-// THE PROPERTY. Each seed runs two accounts through the same sequence, in
+// THE WORLDS. Each seed runs two accounts through the same sequence, in
 // lockstep, across a REAL month boundary a few seconds ahead of the database's
 // clock (every coverage, window and expiry is judged on that clock):
 //
@@ -16,25 +14,75 @@
 //      disputes created then won (both win events, `closed` and
 //      `funds_reinstated`) or lost, a mid-month upgrade or downgrade,
 //      resubscriptions, replays and refreshes;
-//   T  the same sequence with every dispute that is eventually WON removed.
+//   T  the same sequence with every dispute that is eventually WON removed;
+//   X  (the monotone config only) W with ONE refund raised by a quarter of the
+//      payment, or ONE more dispute that is never won.
 //
-// A won dispute must restore exactly what it took (M6), so W and T end in the
-// same place: the same spendable credit, the same debt and the same level. Spends
-// are coupled — the same amount in both, never more than either can spend, taken
-// in the product's spend order — and so are the instants of a plan change and a
-// resubscription (one second read once, used by both), so the twins can only
-// drift apart through the reversal logic. Checked after every event of W as well:
+// Spends and holds are coupled — the same amount in every world, never more
+// than any can spend, taken in the product's spend order — and so are the
+// instants of a plan change, a resubscription and every lot's expiry (read once,
+// used by all), so the worlds can only drift apart through the reversal logic.
 //
-//   · a refresh writes NOTHING (no window, lot, ledger row, clawback or level
-//     change, and no balance or payment amount moves);
-//   · a replay of any reversal already delivered changes NOTHING;
-//   · nothing throws.
+// THE INVARIANTS (§3), on EVERY seed:
 //
-// THE SHAPES. `annual`: one api_starter invoice of 58,800 paying a year whose
-// first month ends at the boundary. `monthly`: two api_starter invoices of 4,900,
-// one per month. In month 2 an upgrade to api_builder (a paid `proration_up`
-// line on the month-2 invoice's subscription) or a downgrade to solo_manual may
-// land, and — in the configurations that allow it — a resubscription.
+//   1  No debt for unspent credit. At rest, the account's debt is at most, per
+//      payment, Σ over its months of max(0, spent + claims collected − worth)
+//      — for the annual invoice no more than the frozen cap, max(0, spent and
+//      held at a reversal − still-paid share of 36,000) — plus what plan
+//      changes charged. An independent SQL closed form: lots are tied to their
+//      payment and month by their keys, worth is recomputed here from the
+//      stored grants and steps and the TEST's own record of what was paid,
+//      refunded and disputed; nothing calls into the code under test.
+//   2  Paid-for ceiling, summed over the account: what every lot holds, plus
+//      what tasks spent, less debt, is at most each month's worth of each
+//      payment (annual: the larger of the month's worth and what was spent,
+//      repaid or claimed out of it, since the frozen cap may excuse debt; plus
+//      the credit tasks held on the payment at its reversals — B1), plus every
+//      other lot's grant, plus rounding (B4). (Per unit, a unit's "position"
+//      needs the code's own attribution of charges; the account-wide sum does not.)
+//   3  A win never leaves the customer worse off than the twin: spendable W ≥
+//      twin − 1 credit, debt W ≤ twin + 1 credit, levels exactly equal, and
+//      the same for the credit valid until each expiry instant or later
+//      (dominance — this replaced exact expiry buckets). The tolerance also
+//      carries the annual claims the twin had DROPPED (B1) beyond W's
+//      (Amendment 3, R-J): a concession only the twin received is not owed to W.
+//      B5 (Amendment 4, a stated customer-UNfavourable exception): when the
+//      trace shows an ANNUAL payment refunded or disputed again after one of
+//      its disputes was won, W may end below the twin by at most what the wins
+//      returned to that payment as lots of its own (`…:returned`), because the
+//      frozen cap measures spending on the payment's own lots. Every other
+//      seed keeps the full invariant.
+//   4  Win cap: W's spendable above the twin's, and the twin's debt above W's,
+//      are each at most what the won disputes could remove — (dispute ÷ paid)
+//      × what the payment granted, B2 — plus the most credit tasks held, plus
+//      one credit.
+//   5  Replays and refreshes change nothing (exact, after every event).
+//   6  Monotone: X's net position (spendable − debt) never exceeds W's.
+//   7  Direction, after every event: a refund or dispute never raises what its
+//      own payment's lots hold. (Its second clause — a win never lowers net
+//      position — was dropped by Amendment 1, R-B: a win shrinks a same-month
+//      second payment's share back, rule 7, while W still meets the twin.)
+//
+// EXACT EQUALITY (spendable, debt, level, and credit per expiry instant, within
+// one credit) is kept on the seeds whose trace allows it. §3 names two
+// conditions: every win landed in its dispute's own month, and none of its debt
+// was repaid from credit that later expired. Those two do not make a seed exact
+// under rule 6, so three more are required (adopted by Amendment 1), each a
+// case the rules themselves leave apart:
+//
+//   ·  no coupled spend or hold drew from different lots (kind and expiry) in
+//      W and T — a dispute that took a month's credit sends spending to other
+//      lots, and the win returns the credit with the longest term used (R-A),
+//      so W ends above the twin (P-C) or level with it but longer-lived
+//      (P-A2): dominance holds, equality does not, so the condition stays;
+//   ·  no reversal landed while a won dispute stood and a task held credit — a
+//      refund measured then claims more of the held credit, and an annual
+//      claim left unpaid is dropped (B1);
+//   ·  no debt was repaid, from any lot, while a won dispute stood (the
+//      design's condition is the case of this that needs no spending at all);
+//   ·  no win returned credit as a NEW lot (Amendment 3, R-K): such a lot
+//      lasts as long as what the dispute displaced, so the seed is checked by
+//      dominance, not by credit per expiry instant.
 //
 // THE CONFIGURATIONS, each over its own fixed seeds (a failure names its seed):
 //
@@ -50,7 +98,7 @@
 //   +twoDisputesOnePayment    as base, and a payment may carry two disputes
 //   +resubscribe              as base, plus a resubscription in month 2
 //
-// And six more, from the fourth audit (histories the six above never produce):
+// From the fourth audit (histories the six above never produce):
 //
 //   +topUpsAndGoodwill        as base, plus top-ups (360 days) and goodwill
 //                             lasting 1 or 40 days, bought between the events
@@ -66,15 +114,12 @@
 //                             20 days before the month ends, and a builder
 //                             crypto term above the Stripe month, refunded or not
 //
-// THE COMPARISON COVERS WHAT EXPIRES WHEN, not only the totals: the credit an
-// account can spend is grouped by the instant it expires, and the twins must
-// agree on every group. Every instant both twins can see is read once and
-// shared (a top-up's term, goodwill's, a crypto term's), so a group can only
-// differ through the reversal logic.
-//
-// The twins may differ by LESS than one credit: a won dispute's give-back is
-// rounded up to a whole credit (coordinator decision #1), and a lot not owned by
-// the invoice keeps that rounding. Anything from one credit up is a failure.
+// From the fifth audit (seeds 51000–54035): `dense`, `dense+twoDisputesOnePayment`,
+// `inOrder+dense`, `dense+planChangeDuringDispute+twoDisputesOnePayment` — tasks
+// crowded in, top-ups and goodwill bought between a task's hold and its settle,
+// goodwill that expires within seconds, several claims standing at once, and
+// debt repaid from several sources. And the small monotone config (55000–55023)
+// with its third world.
 
 import { sql } from 'drizzle-orm';
 import type postgres from 'postgres';
@@ -341,7 +386,13 @@ function failureMessage(err: unknown): string {
 type Shape = 'annual' | 'monthly';
 type Inv = 'base1' | 'base2' | 'up' | 'resub';
 type Reversal =
-  | { readonly k: 'refund'; readonly inv: Inv; readonly cum: number }
+  | {
+      readonly k: 'refund';
+      readonly inv: Inv;
+      readonly cum: number;
+      /** The monotone config's third world X delivers this refund raised to `xCum`. */
+      readonly xCum?: number;
+    }
   | {
       readonly k: 'created' | 'won';
       readonly d: string;
@@ -356,12 +407,20 @@ type Ev =
   | { readonly k: 'refresh' }
   | { readonly k: 'replay'; readonly r: number }
   | { readonly k: 'topUp'; readonly amount: number }
-  | { readonly k: 'goodwill'; readonly amount: number; readonly days: number }
+  | {
+      readonly k: 'goodwill';
+      readonly amount: number;
+      readonly days: number;
+      /** Goodwill that expires within seconds, inside the run (the dense configs). */
+      readonly seconds?: number;
+    }
   | { readonly k: 'hold'; readonly r: number }
   | { readonly k: 'settle'; readonly r: number }
   | { readonly k: 'resubscribeInMonth1' }
   | { readonly k: 'crypto' }
-  | { readonly k: 'cryptoRefund' };
+  | { readonly k: 'cryptoRefund' }
+  /** The monotone config: a reversal only the third world X receives (a dispute it loses). */
+  | { readonly k: 'xOnly'; readonly e: Reversal };
 
 function isReversal(e: Ev): e is Reversal {
   return e.k === 'refund' || e.k === 'created' || e.k === 'won';
@@ -370,7 +429,7 @@ function isReversal(e: Ev): e is Reversal {
 function describeEvent(e: Ev): string {
   switch (e.k) {
     case 'refund':
-      return `refund of ${e.inv} to ${String(e.cum)}`;
+      return `refund of ${e.inv} to ${String(e.cum)}${e.xCum !== undefined ? ` (X: ${String(e.xCum)})` : ''}`;
     case 'created':
       return `dispute ${e.d} of ${String(e.amount)} on ${e.inv}`;
     case 'won':
@@ -388,7 +447,9 @@ function describeEvent(e: Ev): string {
     case 'topUp':
       return `top-up of ${String(e.amount)}`;
     case 'goodwill':
-      return `goodwill of ${String(e.amount)} for ${String(e.days)} days`;
+      return e.seconds !== undefined
+        ? `goodwill of ${String(e.amount)} for ${String(e.seconds)} seconds`
+        : `goodwill of ${String(e.amount)} for ${String(e.days)} days`;
     case 'hold':
       return 'a task holds credit';
     case 'settle':
@@ -399,12 +460,16 @@ function describeEvent(e: Ev): string {
       return 'builder crypto term bought';
     case 'cryptoRefund':
       return 'crypto term refunded';
+    case 'xOnly':
+      return `X only: ${describeEvent(e.e)} (lost)`;
   }
 }
 
 interface Config {
   readonly name: string;
   readonly firstSeed: number;
+  /** Default SEEDS_PER_CONFIG. */
+  readonly seeds?: number;
   readonly inOrder: boolean;
   readonly resubscribe: boolean;
   readonly planChangeDuringDispute: boolean;
@@ -419,6 +484,15 @@ interface Config {
   readonly resubscriptionReversed?: boolean;
   /** A builder crypto term bought above the Stripe month, refunded or not. */
   readonly cryptoTerm?: boolean;
+  /**
+   * The fifth audit's generator (seeds 51000–54035): tasks crowded in, top-ups
+   * and goodwill bought BETWEEN a task's hold and its settle, goodwill that
+   * expires within seconds, several claims standing at once, and debt repaid
+   * from several sources.
+   */
+  readonly dense?: boolean;
+  /** Invariant 6: a third world X that receives one more refund, or one more (lost) dispute. */
+  readonly monotone?: boolean;
 }
 
 const CONFIGS: readonly Config[] = [
@@ -530,6 +604,54 @@ const CONFIGS: readonly Config[] = [
     resubscriptionReversed: true,
     cryptoTerm: true,
   },
+  // The fifth audit's four generator configurations, now permanent.
+  {
+    name: 'dense',
+    firstSeed: 51_000,
+    inOrder: false,
+    resubscribe: false,
+    planChangeDuringDispute: false,
+    twoDisputesOnePayment: false,
+    dense: true,
+  },
+  {
+    name: 'dense+twoDisputesOnePayment',
+    firstSeed: 52_000,
+    inOrder: false,
+    resubscribe: false,
+    planChangeDuringDispute: false,
+    twoDisputesOnePayment: true,
+    dense: true,
+  },
+  {
+    name: 'inOrder+dense',
+    firstSeed: 53_000,
+    inOrder: true,
+    resubscribe: false,
+    planChangeDuringDispute: false,
+    twoDisputesOnePayment: false,
+    dense: true,
+  },
+  {
+    name: 'dense+planChangeDuringDispute+twoDisputesOnePayment',
+    firstSeed: 54_000,
+    inOrder: false,
+    resubscribe: false,
+    planChangeDuringDispute: true,
+    twoDisputesOnePayment: true,
+    dense: true,
+  },
+  // Invariant 6, small: three worlds.
+  {
+    name: 'monotone: a third world with one refund raised or one more lost dispute',
+    firstSeed: 55_000,
+    seeds: 24,
+    inOrder: false,
+    resubscribe: false,
+    planChangeDuringDispute: false,
+    twoDisputesOnePayment: false,
+    monotone: true,
+  },
 ];
 
 /** mulberry32: a small seeded generator, so every sequence is reproducible from its seed. */
@@ -575,6 +697,8 @@ interface Plan {
   readonly month2: readonly Ev[];
   /** Disputes that are won in the end: the twin never sees them. */
   readonly won: ReadonlySet<string>;
+  /** §3 exactness, first half: every won dispute is created and won in the same month. */
+  readonly winsInOwnMonth: boolean;
   readonly summary: string;
 }
 
@@ -684,9 +808,9 @@ function planFor(seed: number, cfg: Config): Plan {
       winsAfterTheirDispute(month2);
     }
   }
-  // The new configurations' draws come AFTER every draw the six original ones
-  // make, and only under their own flags: an original seed plans exactly what
-  // it always planned.
+  // The later configurations' draws come AFTER every draw the six original
+  // ones make, and only under their own flags: an original seed plans exactly
+  // what it always planned.
   const resubscriptions: { list: Ev[]; event: Ev }[] = [];
   if (resubscribes) {
     const event: Ev = { k: 'resub' };
@@ -766,6 +890,23 @@ function planFor(seed: number, cfg: Config): Plan {
       if (x < 0.35) out.push({ k: 'spend', r: r() });
       else if (x < 0.5) out.push({ k: 'refresh' });
       else if (x < 0.65) out.push({ k: 'replay', r: r() });
+      if (cfg.dense === true) {
+        const y = r();
+        if (y < 0.15) out.push({ k: 'topUp', amount: pick([250, 1_000, 3_000]) });
+        else if (y < 0.3) out.push({ k: 'goodwill', amount: pick([500, 1_000, 2_000]), days: 40 });
+        else if (y < 0.5) {
+          out.push({
+            k: 'goodwill',
+            amount: pick([500, 1_000, 3_000]),
+            days: 0,
+            seconds: pick([3, 5, 8]),
+          });
+        }
+        const z = r();
+        if (z < 0.4) out.push({ k: 'hold', r: r() });
+        else if (z < 0.65) out.push({ k: 'settle', r: r() < 0.3 ? 0.999 : r() });
+        return;
+      }
       if (cfg.topUpsAndGoodwill === true) {
         const y = r();
         if (y < 0.12) out.push({ k: 'topUp', amount: pick([250, 1_000, 3_000]) });
@@ -787,20 +928,67 @@ function planFor(seed: number, cfg: Config): Plan {
     out.push({ k: 'spend', r: r() });
     return out;
   };
+  const woven1 = weave(month1);
+  const woven2 = [...weave(month2), { k: 'refresh' } as Ev];
+
+  // Invariant 6: the third world X is W with ONE refund raised by a quarter of
+  // what was paid, or ONE more dispute that is never won.
+  let monotone = '';
+  if (cfg.monotone === true) {
+    const lists = [woven1, woven2];
+    const refunds: { list: Ev[]; index: number; e: Reversal & { k: 'refund' } }[] = [];
+    for (const list of lists) {
+      list.forEach((e, index) => {
+        if (e.k === 'refund' && e.cum < paidFor(shape, e.inv)) refunds.push({ list, index, e });
+      });
+    }
+    if (refunds.length > 0 && r() < 0.5) {
+      const chosen = pick(refunds);
+      const raised = Math.min(
+        paidFor(shape, chosen.e.inv),
+        chosen.e.cum + Math.round(paidFor(shape, chosen.e.inv) / 4),
+      );
+      chosen.list[chosen.index] = { ...chosen.e, xCum: raised };
+      monotone = `X raises a refund of ${chosen.e.inv} to ${String(raised)}`;
+    } else {
+      const list = r() < 0.5 ? woven1 : woven2;
+      const inv = pick<Inv>(['base1', base2]);
+      const extraDispute: Reversal = {
+        k: 'created',
+        d: `dx_${String(seed)}`,
+        inv,
+        amount: share(inv),
+      };
+      // Never before the first event, so the invoice exists; anywhere after.
+      insertAt(list, { k: 'xOnly', e: extraDispute }, 1);
+      monotone = `X has one more (lost) dispute of ${String(extraDispute.amount)} on ${inv}`;
+    }
+  }
+
+  // §3 exactness, first half: every won dispute is created and won in the same month.
+  const monthOf = (d: string, k: 'created' | 'won'): number =>
+    month1.some((e) => e.k === k && e.d === d)
+      ? 1
+      : month2.some((e) => e.k === k && e.d === d)
+        ? 2
+        : 0;
+  const winsInOwnMonth = [...won].every((d) => monthOf(d, 'created') === monthOf(d, 'won'));
+
   const described = disputes
     .map((d) => `${String(d.amount)}:${d.fate}`)
     .concat(month2.filter((e) => e.k === 'created').map(() => 'month-2 dispute'));
   return {
     shape,
-    month1: weave(month1),
-    month2: [...weave(month2), { k: 'refresh' }],
+    month1: woven1,
+    month2: woven2,
     won,
-    summary: `${shape}, plan ${planChange}, resubscribes ${String(resubscribes)}, disputes [${described.join(', ')}]`,
+    winsInOwnMonth,
+    summary: `${shape}, plan ${planChange}, resubscribes ${String(resubscribes)}, disputes [${described.join(', ')}]${monotone === '' ? '' : `, ${monotone}`}`,
   };
 }
 
 interface World {
-  readonly label: 'W' | 'T';
+  readonly label: 'W' | 'T' | 'X';
   /** Unique per world and attempt: every charge and dispute id carries it. */
   readonly tag: string;
   readonly accountId: string;
@@ -809,16 +997,29 @@ interface World {
   readonly charges: Record<Inv, string>;
   nth: number;
   readonly delivered: Reversal[];
-  /** Running tasks, oldest first; the twins open and settle them in lockstep. */
+  /** Running tasks, oldest first; the worlds open and settle them in lockstep. */
   readonly holds: string[];
   /** The month boundary this world's batch runs around. */
   readonly boundary: string;
   /** The crypto order bought above the Stripe month, once bought. */
   cryptoOrder: string | null;
+  // ── what the TEST knows about each payment, for the closed forms (never read from the code) ──
+  /** The largest cumulative refund delivered, by invoice id (L5). */
+  readonly refunded: Map<string, number>;
+  /** Disputes delivered and not won, by id: their invoice and amount (R2). */
+  readonly disputesStanding: Map<string, { invoiceId: string; amount: number }>;
+  /** Disputes already won once (a second win event changes nothing). */
+  readonly disputesWon: Set<string>;
+  /** Invariant 1's frozen-cap figure, by invoice id: the most C+Q+H its lots showed at a reversal or win. */
+  readonly capSpent: Map<string, number>;
+  /** Credit tasks held on an ANNUAL payment's lots when a reversal of it landed (B1), by invoice id. */
+  readonly heldAtReversal: Map<string, number>;
+  /** The most credit tasks held on the account at any reversal or win (invariant 4). */
+  maxHeld: number;
 }
 
 async function makeWorld(
-  label: 'W' | 'T',
+  label: 'W' | 'T' | 'X',
   seed: number,
   attempt: number,
   shape: Shape,
@@ -879,6 +1080,12 @@ async function makeWorld(
     holds: [],
     boundary,
     cryptoOrder: null,
+    refunded: new Map(),
+    disputesStanding: new Map(),
+    disputesWon: new Set(),
+    capSpent: new Map(),
+    heldAtReversal: new Map(),
+    maxHeld: 0,
   };
 }
 
@@ -927,7 +1134,7 @@ async function termsOf(accountId: string): Promise<Map<string, number>> {
   return new Map(rows.map((row) => [row.e, Number(row.free)]));
 }
 
-/** The first expiry at which the twins' credit differs by a credit or more; null when none does. */
+/** EXACT seeds only: the first expiry at which the twins' credit differs by a credit or more. */
 function termsApart(w: Map<string, number>, t: Map<string, number>): string | null {
   const instants = [...new Set([...w.keys(), ...t.keys()])].sort();
   for (const instant of instants) {
@@ -940,10 +1147,44 @@ function termsApart(w: Map<string, number>, t: Map<string, number>): string | nu
   return null;
 }
 
-/** An instant `days` after the database's clock to the whole second, read ONCE for both twins. */
+/**
+ * Invariant 3's dominance, which replaces exact buckets on every seed: for every
+ * expiry instant x either twin holds credit at, the credit W holds that is valid
+ * until x or later is at least the twin's, less one credit. Null when W dominates.
+ */
+function dominanceGap(
+  w: Map<string, number>,
+  t: Map<string, number>,
+  tolerance: number = MICRO,
+): string | null {
+  const instants = [...new Set([...w.keys(), ...t.keys()])].sort();
+  const validFrom = (m: Map<string, number>, x: string): number => {
+    let micro = 0;
+    for (const [e, v] of m) if (e >= x) micro = micro + v;
+    return micro;
+  };
+  for (const x of instants) {
+    const a = validFrom(w, x);
+    const b = validFrom(t, x);
+    if (b - a >= tolerance) {
+      return `credit valid until ${x} or later: W ${String(credits(a))} < twin ${String(credits(b))}`;
+    }
+  }
+  return null;
+}
+
+/** An instant `days` after the database's clock to the whole second, read ONCE for every world. */
 async function sharedExpiry(days: number): Promise<Date> {
   const [row] = await db()<Array<{ e: Date }>>`
     SELECT date_trunc('second', now()) + make_interval(days => ${days}) AS e`;
+  if (row === undefined) throw new Error('setup: no clock');
+  return row.e;
+}
+
+/** An instant `seconds` after the database's clock, whole seconds, read ONCE for every world. */
+async function sharedExpirySeconds(seconds: number): Promise<Date> {
+  const [row] = await db()<Array<{ e: Date }>>`
+    SELECT date_trunc('second', now()) + make_interval(secs => ${seconds}) AS e`;
   if (row === undefined) throw new Error('setup: no clock');
   return row.e;
 }
@@ -979,22 +1220,41 @@ async function goodwillLot(w: World, amount: number, expiresAt: Date): Promise<v
   });
 }
 
+/** The account's free lots in the product's spend order, with what identifies a lot across worlds. */
+async function freeLotsInOrder(
+  accountId: string,
+): Promise<Array<{ id: string; free: string; kind: string; e: string }>> {
+  return db()<Array<{ id: string; free: string; kind: string; e: string }>>`
+    SELECT id, (remaining_micro - held_micro)::text AS free, kind,
+           to_char(expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS e
+      FROM credit_lots
+     WHERE account_id = ${accountId}::uuid AND starts_at <= now() AND now() < expires_at
+       AND revoked_at IS NULL AND remaining_micro > held_micro
+     ORDER BY spend_rank, expires_at, created_at, id`;
+}
+
+/** Where a spend or hold drew from, by lot kind and expiry: equal in two worlds or not (§3 exactness). */
+function bucketsOf(parts: readonly { kind: string; e: string; micro: number }[]): string {
+  const m = new Map<string, number>();
+  for (const p of parts) m.set(`${p.kind}@${p.e}`, (m.get(`${p.kind}@${p.e}`) ?? 0) + p.micro);
+  return [...m.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([k, v]) => `${k}:${String(v)}`)
+    .join(',');
+}
+
 /**
  * A running task holding `micro`, taken from the lots in the product's spend
  * order: a real reservation and one real hold per lot, in one transaction.
  */
-async function holdInOrder(w: World, micro: number): Promise<string> {
-  const lots = await db()<Array<{ id: string; free: string }>>`
-    SELECT id, (remaining_micro - held_micro)::text AS free FROM credit_lots
-     WHERE account_id = ${w.accountId}::uuid AND starts_at <= now() AND now() < expires_at
-       AND revoked_at IS NULL AND remaining_micro > held_micro
-     ORDER BY spend_rank, expires_at, created_at, id`;
-  const parts: { lotId: string; micro: number }[] = [];
+async function holdInOrder(w: World, micro: number): Promise<{ id: string; buckets: string }> {
+  const lots = await freeLotsInOrder(w.accountId);
+  const parts: { lotId: string; micro: number; kind: string; e: string }[] = [];
   let left = micro;
   for (const lot of lots) {
     if (left <= 0) break;
     const take = Math.min(left, Number(lot.free));
-    parts.push({ lotId: lot.id, micro: take });
+    parts.push({ lotId: lot.id, micro: take, kind: lot.kind, e: lot.e });
     left = left - take;
   }
   if (left > 0) throw new Error('a coupled hold found less free credit than was measured');
@@ -1020,7 +1280,7 @@ async function holdInOrder(w: World, micro: number): Promise<string> {
                 ${String(part.micro)}::bigint)`;
     }
   });
-  return reservationId;
+  return { id: reservationId, buckets: bucketsOf(parts) };
 }
 
 async function reservedOf(reservationId: string): Promise<number> {
@@ -1037,37 +1297,49 @@ async function settleHold(w: World, reservationId: string, charged: number): Pro
   await tasks().service.settle(reservationId, 'completed');
 }
 
-async function spendInOrder(w: World, micro: number): Promise<void> {
+async function spendInOrder(w: World, micro: number): Promise<string> {
   let left = micro;
-  const lots = await db()<Array<{ id: string; free: string }>>`
-    SELECT id, (remaining_micro - held_micro)::text AS free FROM credit_lots
-     WHERE account_id = ${w.accountId}::uuid AND starts_at <= now() AND now() < expires_at
-       AND revoked_at IS NULL AND remaining_micro > held_micro
-     ORDER BY spend_rank, expires_at, created_at, id`;
+  const lots = await freeLotsInOrder(w.accountId);
+  const parts: { kind: string; e: string; micro: number }[] = [];
   for (const lot of lots) {
     if (left <= 0) break;
     const take = Math.min(left, Number(lot.free));
     w.nth += 1;
     await spendFromLot(db(), w.accountId, lot.id, take / MICRO, w.nth);
+    parts.push({ kind: lot.kind, e: lot.e, micro: take });
     left = left - take;
   }
   if (left > 0) throw new Error('a coupled spend found less free credit than was measured');
+  return bucketsOf(parts);
 }
 
 async function deliver(w: World, e: Reversal): Promise<string> {
-  if (w.invoices[e.inv] === null) return 'no invoice';
+  const invoiceId = w.invoices[e.inv];
+  if (invoiceId === null) return 'no invoice';
   const chargeId = w.charges[e.inv];
   if (e.k === 'refund') {
-    return (await svc().applyStripeRefund(refund(chargeId, e.cum))).kind;
+    const cum = w.label === 'X' && e.xCum !== undefined ? e.xCum : e.cum;
+    const outcome = (await svc().applyStripeRefund(refund(chargeId, cum))).kind;
+    w.refunded.set(invoiceId, Math.max(w.refunded.get(invoiceId) ?? 0, cum));
+    return outcome;
   }
   const args = dispute(`${w.tag}_${e.d}`, chargeId, e.amount);
-  if (e.k === 'created') return (await svc().applyStripeDispute(args)).kind;
-  return (await svc().reinstateDispute(args)).kind;
+  if (e.k === 'created') {
+    const outcome = (await svc().applyStripeDispute(args)).kind;
+    if (!w.disputesWon.has(e.d) && !w.disputesStanding.has(e.d)) {
+      w.disputesStanding.set(e.d, { invoiceId, amount: e.amount });
+    }
+    return outcome;
+  }
+  const outcome = (await svc().reinstateDispute(args)).kind;
+  w.disputesStanding.delete(e.d);
+  w.disputesWon.add(e.d);
+  return outcome;
 }
 
 /**
  * The database's clock to the whole second, as UTC text, read ONCE for an event
- * both twins receive. When each world read its own clock, W's plan change or
+ * every world receives. When each world read its own clock, W's plan change or
  * resubscription could land in the new window's first second (the whole level)
  * and T's a second later (a share floored to a whole credit below it), and the
  * twins then differed by a credit no reversal moved: seed 3011, which has no
@@ -1148,84 +1420,486 @@ async function resubscribeInMonth1(w: World): Promise<void> {
   await h().grants.refreshCredits(w.accountId);
 }
 
+// ── the closed forms (invariants 1 and 2): SQL over the stored facts, and the
+//    test's own record of what was paid, refunded and disputed — never a call
+//    into the code under test ────────────────────────────────────────────────
+
+/** One lot, and the payment and month it belongs to (null for goodwill, a top-up, anything else). */
+interface LotFact {
+  readonly lotId: string;
+  readonly kind: string;
+  readonly ref: string | null;
+  readonly windowId: string | null;
+  /** The window was drawn from `ref`. */
+  readonly drawn: boolean;
+  readonly granted: number;
+  readonly remaining: number;
+  readonly held: number;
+  readonly live: boolean;
+  /** What the lot's monthly grant recorded as still paid when granted (0137); null elsewhere. */
+  readonly stillPaidAt: number | null;
+  /** C: what tasks were charged out of the lot. */
+  readonly charged: number;
+  /** Q: what claims (any clawback's) collected out of the lot. */
+  readonly claims: number;
+  /** B: what the lot repaid of the account's debt. */
+  readonly repaid: number;
+}
+
+async function lotFacts(accountId: string): Promise<LotFact[]> {
+  const rows = await db()<
+    Array<{
+      id: string;
+      kind: string;
+      ref: string | null;
+      window_id: string | null;
+      drawn: boolean | null;
+      granted: string;
+      remaining: string;
+      held: string;
+      live: boolean;
+      still: string | null;
+      charged: string;
+      claims: string;
+      repaid: string;
+    }>
+  >`
+    WITH owned AS (
+      SELECT l.*,
+             CASE WHEN l.kind = 'monthly' THEN (SELECT w.source_ref FROM credit_windows w WHERE w.id = l.window_id)
+                  WHEN l.kind = 'proration' THEN
+                    (SELECT COALESCE(s.source_ref, w.source_ref)
+                       FROM credit_window_level_changes s JOIN credit_windows w ON w.id = s.window_id
+                      WHERE s.window_id = l.window_id
+                        AND l.grant_key = 'proration:' || s.window_id::text || ':' || s.seq::text)
+                  WHEN l.kind = 'adjustment' AND l.window_id IS NULL
+                       AND starts_with(l.grant_key, 'reinstate:window:')
+                    THEN split_part(l.grant_key, ':', 4)
+             END AS ref,
+             CASE WHEN l.kind IN ('monthly', 'proration') THEN l.window_id::text
+                  WHEN l.kind = 'adjustment' AND l.window_id IS NULL
+                       AND starts_with(l.grant_key, 'reinstate:window:')
+                    THEN split_part(l.grant_key, ':', 3)
+             END AS unit_window
+        FROM credit_lots l
+       WHERE l.account_id = ${accountId}::uuid
+    )
+    SELECT o.id::text AS id, o.kind, o.ref, o.unit_window AS window_id,
+           (SELECT w.source_ref = o.ref FROM credit_windows w WHERE w.id::text = o.unit_window) AS drawn,
+           o.granted_micro::text AS granted, o.remaining_micro::text AS remaining,
+           o.held_micro::text AS held,
+           (o.revoked_at IS NULL AND o.starts_at <= now() AND now() < o.expires_at) AS live,
+           o.still_paid_minor::text AS still,
+           COALESCE((SELECT -sum(x.lot_delta_micro) FROM credit_ledger x
+                      WHERE x.lot_id = o.id AND x.kind = 'task_charge'), 0)::text AS charged,
+           COALESCE((SELECT -sum(x.lot_delta_micro) FROM credit_ledger x
+                      WHERE x.lot_id = o.id AND starts_with(x.idempotency_key, 'claim:')), 0)::text AS claims,
+           COALESCE((SELECT -sum(x.lot_delta_micro) FROM credit_ledger x
+                      WHERE x.lot_id = o.id AND x.kind = 'debt_repayment'), 0)::text AS repaid
+      FROM owned o`;
+  return rows.map((r) => ({
+    lotId: r.id,
+    kind: r.kind,
+    ref: r.ref,
+    windowId: r.window_id,
+    drawn: r.drawn === true,
+    granted: Number(r.granted),
+    remaining: Number(r.remaining),
+    held: Number(r.held),
+    live: r.live,
+    stillPaidAt: r.still === null ? null : Number(r.still),
+    charged: Number(r.charged),
+    claims: Number(r.claims),
+    repaid: Number(r.repaid),
+  }));
+}
+
+/** The plan-change steps that make up a unit's worth (0136): window, payment, delta, still paid then. */
+async function stepFacts(
+  accountId: string,
+): Promise<Array<{ windowId: string; ref: string; delta: number; stillPaidAt: number | null }>> {
+  const rows = await db()<Array<{ w: string; ref: string; delta: string; still: string | null }>>`
+    SELECT s.window_id::text AS w, COALESCE(s.source_ref, w.source_ref) AS ref,
+           s.delta_micro::text AS delta, s.still_paid_minor::text AS still
+      FROM credit_window_level_changes s JOIN credit_windows w ON w.id = s.window_id
+     WHERE w.account_id = ${accountId}::uuid AND s.reason = 'plan_change' AND s.delta_micro <> 0`;
+  return rows.map((r) => ({
+    windowId: r.w,
+    ref: r.ref,
+    delta: Number(r.delta),
+    stillPaidAt: r.still === null ? null : Number(r.still),
+  }));
+}
+
+/** Debt a plan change wrote (a downgrade's shortfall, and what its claims became): §3's "plan-change debt". */
+async function planChangeDebtIncurred(accountId: string): Promise<number> {
+  const [row] = await db()<Array<{ n: string }>>`
+    SELECT COALESCE(sum(x.debt_delta_micro), 0)::text AS n FROM credit_ledger x
+     WHERE x.account_id = ${accountId}::uuid AND x.kind = 'debt_incurred'
+       AND (starts_with(x.idempotency_key, 'clawback:plan_change:')
+            OR (starts_with(x.idempotency_key, 'claim_debt:')
+                AND EXISTS (SELECT 1 FROM credit_clawbacks c
+                             WHERE c.id::text = split_part(x.idempotency_key, ':', 2)
+                               AND c.source = 'plan_change')))`;
+  return Number(row?.n ?? '0');
+}
+
+/**
+ * A payment's worth in one month (§1): every grant and plan-change step it
+ * bought × still paid now ÷ still paid when granted, summed exactly, rounded
+ * down to whole credits once; a payment of nothing keeps everything; a term
+ * granted when nothing was still paid keeps all of itself or none of it.
+ */
+function worthMicro(
+  paid: number,
+  still: number,
+  terms: readonly { micro: number; at: number | null }[],
+): number {
+  let num = 0n;
+  let den = 1n;
+  for (const t of terms) {
+    let tn: bigint;
+    let td: bigint;
+    if (paid === 0) {
+      tn = BigInt(t.micro);
+      td = 1n;
+    } else {
+      const atMinor = t.at ?? paid;
+      if (atMinor === 0) {
+        tn = still > 0 ? BigInt(t.micro) : 0n;
+        td = 1n;
+      } else {
+        tn = BigInt(t.micro) * BigInt(still);
+        td = BigInt(atMinor);
+      }
+    }
+    num = num * td + tn * den;
+    den = den * td;
+  }
+  if (num <= 0n) return 0;
+  const micro = num / den;
+  return Number((micro / 1_000_000n) * 1_000_000n);
+}
+
+/** What the TEST knows of one Stripe payment in one world. */
+function paymentFacts(
+  w: World,
+  shape: Shape,
+  invoiceId: string,
+): { inv: Inv; paid: number; still: number; annual: boolean } | null {
+  const inv = (Object.keys(w.invoices) as Inv[]).find((k) => w.invoices[k] === invoiceId);
+  if (inv === undefined) return null;
+  const paid = paidFor(shape, inv);
+  let disputed = 0;
+  for (const d of w.disputesStanding.values()) if (d.invoiceId === invoiceId) disputed += d.amount;
+  const still = Math.max(0, paid - (w.refunded.get(invoiceId) ?? 0) - Math.min(paid, disputed));
+  return { inv, paid, still, annual: shape === 'annual' && (inv === 'base1' || inv === 'up') };
+}
+
+/** Invariants 1 and 2 on one world at rest (every task settled). Returns what is broken. */
+async function closedForms(w: World, shape: Shape): Promise<string[]> {
+  const out: string[] = [];
+  const lots = await lotFacts(w.accountId);
+  const steps = await stepFacts(w.accountId);
+  const debt = await debtOf(db(), w.accountId);
+  const planDebt = await planChangeDebtIncurred(w.accountId);
+
+  // Units: one payment's credit in one month.
+  const units = new Map<
+    string,
+    { windowId: string; ref: string; lots: LotFact[]; drawn: boolean }
+  >();
+  for (const lot of lots) {
+    if (lot.ref === null || lot.windowId === null) continue;
+    const key = `${lot.windowId}|${lot.ref}`;
+    const u = units.get(key) ?? { windowId: lot.windowId, ref: lot.ref, lots: [], drawn: false };
+    u.lots.push(lot);
+    if (lot.drawn) u.drawn = true;
+    units.set(key, u);
+  }
+  for (const s of steps) {
+    const key = `${s.windowId}|${s.ref}`;
+    if (!units.has(key))
+      units.set(key, { windowId: s.windowId, ref: s.ref, lots: [], drawn: false });
+  }
+  // Worth, where the payment's own line decides it: a month drawn from it, or an upgrade line.
+  const worthOf = (u: {
+    windowId: string;
+    ref: string;
+    lots: LotFact[];
+    drawn: boolean;
+  }): number | null => {
+    const pay = paymentFacts(w, shape, u.ref);
+    if (pay === null) return null;
+    if (!u.drawn && pay.inv !== 'up') return null;
+    const terms: { micro: number; at: number | null }[] = [];
+    for (const lot of u.lots) {
+      if (lot.kind === 'monthly') terms.push({ micro: lot.granted, at: lot.stillPaidAt });
+    }
+    for (const s of steps) {
+      if (s.windowId === u.windowId && s.ref === u.ref)
+        terms.push({ micro: s.delta, at: s.stillPaidAt });
+    }
+    return worthMicro(pay.paid, pay.still, terms);
+  };
+
+  // ── invariant 1: no debt for unspent credit ──
+  const perPayment = new Map<string, number>();
+  let unitCount = 0;
+  for (const u of units.values()) {
+    unitCount += 1;
+    let c = 0;
+    let q = 0;
+    for (const lot of u.lots) {
+      c += lot.charged;
+      q += lot.claims;
+    }
+    const k = worthOf(u) ?? 0;
+    perPayment.set(u.ref, (perPayment.get(u.ref) ?? 0) + Math.max(0, c + q - k));
+  }
+  let allowed = 0;
+  for (const [ref, owed] of perPayment) {
+    const pay = paymentFacts(w, shape, ref);
+    let bound = owed;
+    if (pay !== null && pay.annual && pay.inv === 'base1' && w.capSpent.has(ref)) {
+      // What the year still pays for (§1 rule 3): the allowance × 12, scaled, whole credits.
+      const paidForKeep = Number(
+        ((36_000_000_000n * BigInt(pay.still)) / BigInt(pay.paid) / 1_000_000n) * 1_000_000n,
+      );
+      bound = Math.min(bound, Math.max(0, (w.capSpent.get(ref) ?? 0) - paidForKeep));
+    }
+    allowed += bound;
+  }
+  const tolerance1 = MICRO * (unitCount + 1);
+  if (debt > allowed + planDebt + tolerance1) {
+    out.push(
+      `invariant 1 (${w.label}): debt ${String(credits(debt))} > spent-beyond-worth ${String(credits(allowed))} + plan-change debt ${String(credits(planDebt))}`,
+    );
+  }
+
+  // ── invariant 2: the paid-for ceiling, summed over the account ──
+  let held = 0;
+  let used = 0;
+  for (const lot of lots) {
+    held += lot.held;
+    used += (lot.live ? lot.remaining - lot.held : 0) + lot.held + lot.charged;
+  }
+  // A month's target is its worth, or — annual, where the frozen cap may excuse
+  // debt — at most what was used out of it (spent, repaid, claimed) when that is more.
+  const kUnitLots = new Set<string>();
+  const annualRefs = new Set<string>();
+  let ceiling = 0;
+  for (const u of units.values()) {
+    const k = worthOf(u);
+    if (k === null) continue;
+    for (const lot of u.lots) kUnitLots.add(lot.lotId);
+    const pay = paymentFacts(w, shape, u.ref);
+    if (pay !== null && pay.annual) {
+      let usedOut = 0;
+      for (const lot of u.lots) usedOut += lot.charged + lot.repaid + lot.claims;
+      ceiling += Math.max(k, usedOut);
+      annualRefs.add(u.ref);
+    } else ceiling += k;
+  }
+  for (const ref of annualRefs) ceiling += w.heldAtReversal.get(ref) ?? 0;
+  for (const lot of lots) if (!kUnitLots.has(lot.lotId)) ceiling += lot.granted;
+  const tolerance2 = MICRO * (lots.length + 1);
+  if (used - debt > ceiling + tolerance2) {
+    out.push(
+      `invariant 2 (${w.label}): held + spent − debt ${String(credits(used - debt))} > paid for ${String(credits(ceiling))}${held > 0 ? ' (tasks still hold credit)' : ''}`,
+    );
+  }
+  return out;
+}
+
+/** Σ remaining over one payment's own lots (every unit it has): invariant 7's "the reversed payment's own units". */
+async function paymentLotsRemaining(accountId: string, invoiceId: string): Promise<number> {
+  let micro = 0;
+  for (const lot of await lotFacts(accountId)) if (lot.ref === invoiceId) micro += lot.remaining;
+  return micro;
+}
+
+/** Before a reversal or a win lands: the frozen-cap figure (C+Q+H of the payment's lots), B1 and held. */
+async function measureBefore(w: World, invoiceId: string, shape: Shape): Promise<void> {
+  let figure = 0;
+  let heldOnPayment = 0;
+  let heldAll = 0;
+  for (const lot of await lotFacts(w.accountId)) {
+    heldAll += lot.held;
+    if (lot.ref !== invoiceId) continue;
+    figure += lot.charged + lot.claims + lot.held;
+    heldOnPayment += lot.held;
+  }
+  w.capSpent.set(invoiceId, Math.max(w.capSpent.get(invoiceId) ?? 0, figure));
+  const pay = paymentFacts(w, shape, invoiceId);
+  if (pay !== null && pay.annual) {
+    w.heldAtReversal.set(invoiceId, Math.max(w.heldAtReversal.get(invoiceId) ?? 0, heldOnPayment));
+  }
+  w.maxHeld = Math.max(w.maxHeld, heldAll);
+}
+
+async function ledgerMark(accountId: string): Promise<number> {
+  const [row] = await db()<Array<{ n: string }>>`
+    SELECT COALESCE(max(id), 0)::text AS n FROM credit_ledger WHERE account_id = ${accountId}::uuid`;
+  return Number(row?.n ?? '0');
+}
+
 interface SeedRun {
   readonly seed: number;
   readonly plan: Plan;
   readonly w: World;
   readonly t: World;
+  /** The monotone config's third world: W with one refund raised or one more lost dispute. */
+  readonly x: World | null;
   readonly trace: string[];
   failure: string | null;
+  // ── §3 exactness evidence ──
+  /** A coupled spend or hold drew from different lots (kind and expiry) in W and T. */
+  displaced: boolean;
+  /** A reversal landed while a won dispute stood and a task held credit (B1 can differ). */
+  reversalOverTasks: boolean;
+  /** A win in W wrote a lot of its own (R-K): the credit it returned lasts as long as it must, not as the twin's. */
+  winNewLot: boolean;
+  /** B5: invoices a dispute was WON on in W. */
+  readonly wonPayments: Set<string>;
+  /** B5: annual invoices refunded or disputed again in W after one of their disputes was won. */
+  readonly annualReversedAfterWin: Set<string>;
+  /** Won disputes standing in W, with the ledger mark at their `created`. */
+  readonly standingWon: Map<string, number>;
+  /** W's ledger id ranges (from, to] while a won dispute stood. */
+  readonly standingRanges: Array<readonly [number, number]>;
 }
 
-/** One event, in both worlds (W's own checks included). Returns a failure, or null. */
+/** The lots that are no month's own: goodwill, top-ups, and what a reconciliation or a win wrote. */
+async function adjustmentLotCount(accountId: string): Promise<number> {
+  const [row] = await db()<Array<{ n: number }>>`
+    SELECT count(*)::int AS n FROM credit_lots
+     WHERE account_id = ${accountId}::uuid AND kind = 'adjustment'`;
+  return row?.n ?? 0;
+}
+
+/** B5's bound: what the wins returned to these payments as lots of their own (`reinstate:window:<w>:<payment>:…:returned`). */
+async function returnedToPayments(
+  accountId: string,
+  invoiceIds: ReadonlySet<string>,
+): Promise<number> {
+  if (invoiceIds.size === 0) return 0;
+  const rows = await db()<Array<{ ref: string; granted: string }>>`
+    SELECT split_part(grant_key, ':', 4) AS ref, granted_micro::text AS granted FROM credit_lots
+     WHERE account_id = ${accountId}::uuid AND kind = 'adjustment'
+       AND starts_with(grant_key, 'reinstate:window:') AND right(grant_key, 9) = ':returned'`;
+  let micro = 0;
+  for (const r of rows) if (invoiceIds.has(r.ref)) micro += Number(r.granted);
+  return micro;
+}
+
+/** Credit an account's annual claims were DROPPED of (B1, rule 3): the builder's `drop:` records. */
+async function droppedClaimsMicro(accountId: string): Promise<number> {
+  const [row] = await db()<Array<{ n: string }>>`
+    SELECT COALESCE(sum(amount_micro), 0)::text AS n FROM credit_clawbacks
+     WHERE account_id = ${accountId}::uuid AND starts_with(source_ref, 'drop:')`;
+  return Number(row?.n ?? '0');
+}
+
+/** Deliver one reversal to one world, with invariant 7's direction check. Returns its outcome. */
+async function deliverChecked(run: SeedRun, world: World, e: Reversal): Promise<string> {
+  const invoiceId = world.invoices[e.inv];
+  if (invoiceId === null) return 'no invoice';
+  await measureBefore(world, invoiceId, run.plan.shape);
+  // Invariant 7 has no clause for a win (Amendment 1, R-B). R-K: whether W's
+  // win wrote a lot of its own (the credit it returned as a new lot).
+  if (e.k === 'won') {
+    const lotsBefore = await adjustmentLotCount(world.accountId);
+    const outcome = await deliver(world, e);
+    if (world === run.w && (await adjustmentLotCount(world.accountId)) > lotsBefore) {
+      run.winNewLot = true;
+    }
+    return outcome;
+  }
+  const before = await paymentLotsRemaining(world.accountId, invoiceId);
+  const outcome = await deliver(world, e);
+  const after = await paymentLotsRemaining(world.accountId, invoiceId);
+  if (after > before && run.failure === null) {
+    run.failure = `invariant 7 (${world.label}): the ${describeEvent(e)} raised its own payment's lots ${String(credits(before))} → ${String(credits(after))}`;
+  }
+  return outcome;
+}
+
+/** One event, in every world (W's own checks included). Returns a failure, or null. */
 async function step(run: SeedRun, e: Ev): Promise<string | null> {
-  const { w, t, trace } = run;
+  const { w, t, x, trace } = run;
+  const all = x === null ? [w, t] : [w, t, x];
+  const minSpendable = async (): Promise<number> => {
+    let m = Number.MAX_SAFE_INTEGER;
+    for (const world of all) m = Math.min(m, await h().ledger.spendableMicro(world.accountId));
+    return m;
+  };
   switch (e.k) {
     case 'spend': {
       // A spend is a task of its own: with three tasks already running there
       // is no slot for it (at most three enforced tasks per account).
-      if (w.holds.length >= 3 || t.holds.length >= 3) return null;
-      const most = Math.floor(
-        Math.min(
-          await h().ledger.spendableMicro(w.accountId),
-          await h().ledger.spendableMicro(t.accountId),
-        ) / QUARTER,
-      );
+      if (all.some((world) => world.holds.length >= 3)) return null;
+      const most = Math.floor((await minSpendable()) / QUARTER);
       if (most <= 0) return null;
       const micro = (1 + Math.floor(e.r * most)) * QUARTER;
-      await spendInOrder(w, micro);
-      await spendInOrder(t, micro);
+      const wb = await spendInOrder(w, micro);
+      const tb = await spendInOrder(t, micro);
+      if (x !== null) await spendInOrder(x, micro);
+      if (wb !== tb) run.displaced = true;
       trace.push(`spend ${String(credits(micro))}`);
       const before = await footprint(w);
       await h().grants.refreshCredits(w.accountId);
       const after = await footprint(w);
       return JSON.stringify(before) === JSON.stringify(after)
         ? null
-        : `the refresh after a spend wrote: ${changed(before, after)}`;
+        : `invariant 5: the refresh after a spend wrote: ${changed(before, after)}`;
     }
     case 'refresh':
-      await h().grants.refreshCredits(w.accountId);
-      await h().grants.refreshCredits(t.accountId);
+      for (const world of all) await h().grants.refreshCredits(world.accountId);
       return null;
     case 'topUp': {
       const expiresAt = await sharedExpiry(360);
-      for (const x of [w, t]) {
-        x.nth += 1;
-        await buyTopUp(x.accountId, e.amount, `${x.tag}_tu_${String(x.nth)}`, expiresAt);
+      for (const world of all) {
+        world.nth += 1;
+        await buyTopUp(
+          world.accountId,
+          e.amount,
+          `${world.tag}_tu_${String(world.nth)}`,
+          expiresAt,
+        );
       }
       trace.push(describeEvent(e));
       return null;
     }
     case 'goodwill': {
-      const expiresAt = await sharedExpiry(e.days);
-      await goodwillLot(w, e.amount, expiresAt);
-      await goodwillLot(t, e.amount, expiresAt);
+      const expiresAt =
+        e.seconds !== undefined ? await sharedExpirySeconds(e.seconds) : await sharedExpiry(e.days);
+      for (const world of all) await goodwillLot(world, e.amount, expiresAt);
       trace.push(describeEvent(e));
       return null;
     }
     case 'hold': {
-      if (w.holds.length >= 3 || t.holds.length >= 3) return null;
-      const most = Math.floor(
-        Math.min(
-          await h().ledger.spendableMicro(w.accountId),
-          await h().ledger.spendableMicro(t.accountId),
-        ) / QUARTER,
-      );
+      if (all.some((world) => world.holds.length >= 3)) return null;
+      const most = Math.floor((await minSpendable()) / QUARTER);
       if (most <= 0) return null;
       const micro = (1 + Math.floor(e.r * most)) * QUARTER;
-      w.holds.push(await holdInOrder(w, micro));
-      t.holds.push(await holdInOrder(t, micro));
+      const hw = await holdInOrder(w, micro);
+      const ht = await holdInOrder(t, micro);
+      w.holds.push(hw.id);
+      t.holds.push(ht.id);
+      if (x !== null) x.holds.push((await holdInOrder(x, micro)).id);
+      if (hw.buckets !== ht.buckets) run.displaced = true;
+      for (const world of all) {
+        world.maxHeld = Math.max(world.maxHeld, await h().ledger.heldMicro(world.accountId));
+      }
       trace.push(`a task holds ${String(credits(micro))}`);
       return null;
     }
     case 'settle': {
-      const inW = w.holds.shift();
-      const inT = t.holds.shift();
-      if (inW === undefined || inT === undefined) return null;
-      const held = await reservedOf(inW);
+      if (all.some((world) => world.holds.length === 0)) return null;
+      const held = await reservedOf(w.holds[0] as string);
       const charged = Math.floor((e.r * held) / QUARTER) * QUARTER;
-      await settleHold(w, inW, charged);
-      await settleHold(t, inT, charged);
+      for (const world of all) await settleHold(world, world.holds.shift() as string, charged);
       trace.push(
         `the oldest task settles, charged ${String(credits(charged))} of ${String(credits(held))}`,
       );
@@ -1234,60 +1908,60 @@ async function step(run: SeedRun, e: Ev): Promise<string | null> {
       const after = await footprint(w);
       return JSON.stringify(before) === JSON.stringify(after)
         ? null
-        : `the refresh after a settle wrote: ${changed(before, after)}`;
+        : `invariant 5: the refresh after a settle wrote: ${changed(before, after)}`;
     }
     case 'resubscribeInMonth1': {
-      await resubscribeInMonth1(w);
-      await resubscribeInMonth1(t);
+      for (const world of all) await resubscribeInMonth1(world);
       trace.push(describeEvent(e));
       return null;
     }
     case 'crypto': {
       const second = await wholeSecondNow();
-      for (const x of [w, t]) {
-        x.cryptoOrder = await cryptoEntitlement(db(), x.accountId, {
+      for (const world of all) {
+        world.cryptoOrder = await cryptoEntitlement(db(), world.accountId, {
           tier: 'api_builder',
-          orderId: `ord_tw_${x.tag}`,
+          orderId: `ord_tw_${world.tag}`,
           starts: `(${at(second)} - interval '1 second')`,
           expires: `(${at(second)} + interval '31 days')`,
         });
         // The activation refreshes the account.
-        await h().grants.refreshCredits(x.accountId);
+        await h().grants.refreshCredits(world.accountId);
       }
       trace.push(describeEvent(e));
       return null;
     }
     case 'cryptoRefund': {
-      if (w.cryptoOrder === null || t.cryptoOrder === null) return null;
+      if (all.some((world) => world.cryptoOrder === null)) return null;
       const second = await wholeSecondNow();
-      for (const x of [w, t]) {
+      for (const world of all) {
         // The refund revokes the entitlement at the refund instant, then takes
         // the credits back (crypto-tier-activation's order).
         await db()`
           UPDATE crypto_entitlements SET expires_at = ${second}::timestamptz
-           WHERE order_id = ${x.cryptoOrder} AND expires_at > ${second}::timestamptz`;
-        await svc().applyCryptoRefund({ accountId: x.accountId, orderId: x.cryptoOrder ?? '' });
+           WHERE order_id = ${world.cryptoOrder} AND expires_at > ${second}::timestamptz`;
+        await svc().applyCryptoRefund({
+          accountId: world.accountId,
+          orderId: world.cryptoOrder ?? '',
+        });
       }
       trace.push(describeEvent(e));
       const before = await footprint(w);
       await h().grants.refreshCredits(w.accountId);
       const after = await footprint(w);
-      await h().grants.refreshCredits(t.accountId);
+      for (const world of all) if (world !== w) await h().grants.refreshCredits(world.accountId);
       return JSON.stringify(before) === JSON.stringify(after)
         ? null
-        : `the refresh after the ${describeEvent(e)} wrote: ${changed(before, after)}`;
+        : `invariant 5: the refresh after the ${describeEvent(e)} wrote: ${changed(before, after)}`;
     }
     case 'plan': {
       const second = await wholeSecondNow();
-      await changePlan(w, e.to, run.plan.shape, second);
-      await changePlan(t, e.to, run.plan.shape, second);
+      for (const world of all) await changePlan(world, e.to, run.plan.shape, second);
       trace.push(describeEvent(e));
       return null;
     }
     case 'resub': {
       const second = await wholeSecondNow();
-      await resubscribe(w, second);
-      await resubscribe(t, second);
+      for (const world of all) await resubscribe(world, second);
       trace.push(describeEvent(e));
       return null;
     }
@@ -1300,21 +1974,48 @@ async function step(run: SeedRun, e: Ev): Promise<string | null> {
       trace.push(`replay of ${describeEvent(again)}`);
       return JSON.stringify(before) === JSON.stringify(after)
         ? null
-        : `a replay of the ${describeEvent(again)} changed: ${changed(before, after)}`;
+        : `invariant 5: a replay of the ${describeEvent(again)} changed: ${changed(before, after)}`;
+    }
+    case 'xOnly': {
+      if (x === null) return null;
+      const outcome = await deliverChecked(run, x, e.e);
+      trace.push(`${describeEvent(e)} (X ${outcome})`);
+      await h().grants.refreshCredits(x.accountId);
+      return null;
     }
     default: {
       const inTwin = !(e.k !== 'refund' && run.plan.won.has(e.d));
-      const inW = await deliver(w, e);
+      // §3 exactness: a reversal that lands while a won dispute stands and a task
+      // holds credit can leave W's claims shaped unlike T's (B1).
+      if (run.standingWon.size > 0 && !(e.k === 'won' && run.standingWon.has(e.d))) {
+        if ((await h().ledger.heldMicro(w.accountId)) > 0) run.reversalOverTasks = true;
+      }
+      if (e.k === 'created' && run.plan.won.has(e.d) && !run.standingWon.has(e.d)) {
+        if (!w.disputesWon.has(e.d)) run.standingWon.set(e.d, await ledgerMark(w.accountId));
+      }
+      if (e.k === 'won' && run.standingWon.has(e.d)) {
+        run.standingRanges.push([run.standingWon.get(e.d) ?? 0, await ledgerMark(w.accountId)]);
+        run.standingWon.delete(e.d);
+      }
+      // B5: an annual payment refunded or disputed again after a won dispute.
+      const invoiceW = w.invoices[e.inv];
+      if (invoiceW !== null && e.k !== 'won' && run.wonPayments.has(invoiceW)) {
+        if (run.plan.shape === 'annual' && e.inv !== 'resub')
+          run.annualReversedAfterWin.add(invoiceW);
+      }
+      const inW = await deliverChecked(run, w, e);
+      if (invoiceW !== null && e.k === 'won') run.wonPayments.add(invoiceW);
       w.delivered.push(e);
-      const inT = inTwin ? await deliver(t, e) : 'not in the twin';
-      trace.push(`${describeEvent(e)} (W ${inW}, T ${inT})`);
+      const inT = inTwin ? await deliverChecked(run, t, e) : 'not in the twin';
+      const inX = x === null ? null : await deliverChecked(run, x, e);
+      trace.push(`${describeEvent(e)} (W ${inW}, T ${inT}${inX === null ? '' : `, X ${inX}`})`);
       const before = await footprint(w);
       await h().grants.refreshCredits(w.accountId);
       const after = await footprint(w);
-      await h().grants.refreshCredits(t.accountId);
+      for (const world of all) if (world !== w) await h().grants.refreshCredits(world.accountId);
       return JSON.stringify(before) === JSON.stringify(after)
         ? null
-        : `the refresh after the ${describeEvent(e)} wrote: ${changed(before, after)}`;
+        : `invariant 5: the refresh after the ${describeEvent(e)} wrote: ${changed(before, after)}`;
     }
   }
 }
@@ -1323,11 +2024,129 @@ async function runMonth(run: SeedRun, events: readonly Ev[]): Promise<void> {
   for (const e of events) {
     if (run.failure !== null) return;
     try {
-      run.failure = await step(run, e);
+      const found = await step(run, e);
+      if (run.failure === null) run.failure = found;
     } catch (err) {
       run.failure = `the ${describeEvent(e)} threw: ${failureMessage(err)}`;
     }
   }
+}
+
+/** §3: whether this seed's trace allows exact twin equality (see the header). */
+async function exactnessHolds(run: SeedRun): Promise<boolean> {
+  if (run.plan.won.size === 0) return true;
+  if (!run.plan.winsInOwnMonth || run.displaced || run.reversalOverTasks || run.winNewLot) {
+    return false;
+  }
+  // Any debt repayment in W while a won dispute stood (the design's "debt repaid
+  // from credit that later expired" is the case of it that needs no displaced spend).
+  const ranges = [...run.standingRanges];
+  for (const from of run.standingWon.values()) ranges.push([from, Number.MAX_SAFE_INTEGER]);
+  for (const [from, to] of ranges) {
+    const [row] = await db()<Array<{ n: number }>>`
+      SELECT count(*)::int AS n FROM credit_ledger
+       WHERE account_id = ${run.w.accountId}::uuid AND kind = 'debt_repayment'
+         AND id > ${from} AND id <= ${to}`;
+    if ((row?.n ?? 0) > 0) return false;
+  }
+  return true;
+}
+
+/** Credit the won disputes could have removed: (dispute ÷ paid) × what the payment granted (B2). */
+async function removedBound(run: SeedRun): Promise<number> {
+  const lots = await lotFacts(run.w.accountId);
+  let micro = 0;
+  const seen = new Set<string>();
+  for (const list of [run.plan.month1, run.plan.month2]) {
+    for (const e of list) {
+      if (e.k !== 'created' || !run.plan.won.has(e.d) || seen.has(e.d)) continue;
+      seen.add(e.d);
+      const invoiceId = run.w.invoices[e.inv];
+      if (invoiceId === null) continue;
+      let granted = 0;
+      for (const lot of lots) if (lot.ref === invoiceId) granted += lot.granted;
+      const paid = paidFor(run.plan.shape, e.inv);
+      micro += Math.ceil((granted * Math.min(e.amount, paid)) / paid);
+    }
+  }
+  return micro;
+}
+
+/** At rest, every invariant of §3 that compares worlds, and the closed forms on each. */
+async function judge(run: SeedRun): Promise<string | null> {
+  const { w, t, x, plan } = run;
+  const found: string[] = [];
+  for (const world of x === null ? [w, t] : [w, t, x]) {
+    found.push(...(await closedForms(world, plan.shape)));
+  }
+  const bw = await microBalances(w.accountId);
+  const bt = await microBalances(t.accountId);
+  // Invariant 3: never worse off than the twin; levels exactly equal. The
+  // tolerance is one credit plus what the twin was DROPPED of its annual
+  // claims beyond W (Amendment 3, R-J), plus B5 (Amendment 4): what the wins
+  // returned to an annual payment reversed again after a won dispute — zero
+  // on every other seed.
+  const b5 = await returnedToPayments(w.accountId, run.annualReversedAfterWin);
+  const tolerance =
+    MICRO +
+    Math.max(0, (await droppedClaimsMicro(t.accountId)) - (await droppedClaimsMicro(w.accountId))) +
+    b5;
+  if (bt.spendable - bw.spendable >= tolerance) {
+    found.push(
+      `invariant 3: W spendable ${String(credits(bw.spendable))} < twin ${String(credits(bt.spendable))}`,
+    );
+  }
+  if (bw.debt - bt.debt >= tolerance) {
+    found.push(
+      `invariant 3: W debt ${String(credits(bw.debt))} > twin ${String(credits(bt.debt))}`,
+    );
+  }
+  if (bw.level !== bt.level) {
+    found.push(
+      `invariant 3: W level ${String(credits(bw.level))} ≠ twin ${String(credits(bt.level))}`,
+    );
+  }
+  const tw = await termsOf(w.accountId);
+  const tt = await termsOf(t.accountId);
+  const gap = dominanceGap(tw, tt, tolerance);
+  if (gap !== null) found.push(`invariant 3 (dominance): ${gap}`);
+  if (b5 > 0 && found.some((f) => f.startsWith('invariant 3'))) {
+    found.push(`(B5 allowed ${String(credits(b5))} below the twin)`);
+  }
+  // Invariant 4: the win cap.
+  const cap = (await removedBound(run)) + Math.max(w.maxHeld, t.maxHeld) + MICRO;
+  if (bw.spendable - bt.spendable > cap) {
+    found.push(
+      `invariant 4: W spendable ${String(credits(bw.spendable))} > twin ${String(credits(bt.spendable))} + ${String(credits(cap))}`,
+    );
+  }
+  if (bt.debt - bw.debt > cap) {
+    found.push(
+      `invariant 4: twin debt ${String(credits(bt.debt))} > W ${String(credits(bw.debt))} + ${String(credits(cap))}`,
+    );
+  }
+  // §3: exact equality where the trace allows it.
+  if (await exactnessHolds(run)) {
+    const apart =
+      Math.abs(bw.spendable - bt.spendable) >= MICRO ||
+      Math.abs(bw.debt - bt.debt) >= MICRO ||
+      bw.level !== bt.level;
+    if (apart) found.push(`exact seed: W ${oneLine(bw)} ≠ twin ${oneLine(bt)}`);
+    else {
+      const terms = termsApart(tw, tt);
+      if (terms !== null) found.push(`exact seed: W ${oneLine(bw)} = twin, but ${terms}`);
+    }
+  }
+  // Invariant 6: one more refund or lost dispute never raises net position.
+  if (x !== null) {
+    const bx = await microBalances(x.accountId);
+    const netX = bx.spendable - bx.debt;
+    const netW = bw.spendable - bw.debt;
+    if (netX - netW >= MICRO) {
+      found.push(`invariant 6: X net ${String(credits(netX))} > W net ${String(credits(netW))}`);
+    }
+  }
+  return found.length === 0 ? null : found.join(' | ');
 }
 
 /**
@@ -1352,8 +2171,16 @@ async function runBatch(
       plan,
       w: await makeWorld('W', seed, attempt, plan.shape, boundary),
       t: await makeWorld('T', seed, attempt, plan.shape, boundary),
+      x: cfg.monotone === true ? await makeWorld('X', seed, attempt, plan.shape, boundary) : null,
       trace: [plan.summary],
       failure: null,
+      displaced: false,
+      reversalOverTasks: false,
+      winNewLot: false,
+      wonPayments: new Set(),
+      annualReversedAfterWin: new Set(),
+      standingWon: new Map(),
+      standingRanges: [],
     });
   }
   for (const run of batch) await runMonth(run, run.plan.month1);
@@ -1361,37 +2188,29 @@ async function runBatch(
   await waitPast(boundary);
   for (const run of batch) {
     if (run.failure !== null) continue;
-    await h().grants.refreshCredits(run.w.accountId);
-    await h().grants.refreshCredits(run.t.accountId);
+    const all = run.x === null ? [run.w, run.t] : [run.w, run.t, run.x];
+    for (const world of all) await h().grants.refreshCredits(world.accountId);
     run.trace.push('— month 2 —');
     await runMonth(run, run.plan.month2);
     if (run.failure !== null) continue;
     if (run.w.holds.length > 0) {
       // Every task still running settles, having charged nothing more, before
-      // the twins are compared.
+      // the worlds are compared: the invariants are stated at rest.
       try {
         while (run.w.holds.length > 0) {
-          await settleHold(run.w, run.w.holds.shift() as string, 0);
-          await settleHold(run.t, run.t.holds.shift() as string, 0);
+          for (const world of all) await settleHold(world, world.holds.shift() as string, 0);
           run.trace.push('a task still running settles, charged 0');
         }
-        await h().grants.refreshCredits(run.w.accountId);
-        await h().grants.refreshCredits(run.t.accountId);
+        for (const world of all) await h().grants.refreshCredits(world.accountId);
       } catch (err) {
         run.failure = `the final settle threw: ${failureMessage(err)}`;
         continue;
       }
     }
-    const bw = await microBalances(run.w.accountId);
-    const bt = await microBalances(run.t.accountId);
-    const apart =
-      Math.abs(bw.spendable - bt.spendable) >= MICRO ||
-      Math.abs(bw.debt - bt.debt) >= MICRO ||
-      bw.level !== bt.level;
-    if (apart) run.failure = `W ${oneLine(bw)} ≠ twin ${oneLine(bt)}`;
-    else {
-      const terms = termsApart(await termsOf(run.w.accountId), await termsOf(run.t.accountId));
-      if (terms !== null) run.failure = `W ${oneLine(bw)} = twin, but ${terms}`;
+    try {
+      run.failure = await judge(run);
+    } catch (err) {
+      run.failure = `judging threw: ${failureMessage(err)}`;
     }
   }
   return batch;
@@ -1399,7 +2218,7 @@ async function runBatch(
 
 /** Runs one configuration's seeds, a batch at a time around a shared month boundary. */
 async function runConfig(cfg: Config): Promise<SeedRun[]> {
-  const seeds = Array.from({ length: SEEDS_PER_CONFIG }, (_, i) => cfg.firstSeed + i);
+  const seeds = Array.from({ length: cfg.seeds ?? SEEDS_PER_CONFIG }, (_, i) => cfg.firstSeed + i);
   const runs: SeedRun[] = [];
   for (let b = 0; b < seeds.length; b += BATCH) {
     const slice = seeds.slice(b, b + BATCH);
@@ -1721,7 +2540,7 @@ describe.skipIf(!RUN_DB_TESTS)(
     // ── the property, one configuration at a time ───────────────────────
 
     for (const cfg of CONFIGS) {
-      it(`CRITICAL ${String(SEEDS_PER_CONFIG)} seeded two-month sequences under "${cfg.name}" end where their twins do, and no refresh or replay on the way writes anything`, async () => {
+      it(`CRITICAL ${String(cfg.seeds ?? SEEDS_PER_CONFIG)} seeded two-month sequences under "${cfg.name}" keep every invariant of the reversal policy, and are exact where the trace allows`, async () => {
         const runs = await runConfig(cfg);
         const failing = runs.filter((run) => run.failure !== null);
         const first = failing[0];
@@ -1733,9 +2552,9 @@ describe.skipIf(!RUN_DB_TESTS)(
             ? ''
             : `${String(failing.length)} of ${String(runs.length)} seeds fail; first: seed ${String(first.seed)}: ${first.failure ?? ''}\n${lines.join('\n')}\n  seed ${String(first.seed)} ran: ${first.trace.join(' | ')}`,
         ).toBe(0);
-        // No wall-clock bound: about 45 s a configuration locally; the timeout
-        // is only the backstop for a hang (a slow run retries its boundary).
-      }, 240_000);
+        // No wall-clock bound: about a minute a configuration locally; the
+        // timeout is only the backstop for a hang (a slow run retries its boundary).
+      }, 480_000);
     }
   },
 );

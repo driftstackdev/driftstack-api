@@ -52,6 +52,18 @@
 // came from. A task that made no call is charged nothing. Settling twice charges
 // once: the second settlement finds the task already settled and does nothing.
 //
+// ⛔ A REVERSAL'S CLAIM IS PAID ONLY FROM ITS OWN PAYMENT'S CREDIT (reversal
+// policy v2, rule 4). A refund or dispute claims credit a task holds on the
+// reversed payment's own lots — its unit (`window:<window>:<payment>`) — and a
+// settlement pays that claim only from what it releases back into those lots.
+// Credit released from any other lot (a top-up, goodwill, another payment's
+// month) stays the customer's. A claim nothing is left to pay becomes debt on a
+// monthly payment (M5), and is DROPPED on an annual one (rule 3): what a task
+// spends of credit an annual reversal claimed is not charged, and the drop is
+// recorded so the unit's bookkeeping still counts it (`dropClaim`). A plan
+// change's claim (`window:<window>`) is not a reversal's and is paid from
+// whatever the task releases, as before.
+//
 // DARK. Nothing constructs this service yet and no route reserves; S8 admits
 // calls against a reservation, S9 runs the lease keeper, and S12 switches
 // enforcement on for moved accounts.
@@ -81,13 +93,8 @@ import {
   type PendingCreditClaim,
 } from '../db/credit-reservations-repo.js';
 import {
-  finishHoldRedirect,
-  holdOverflowLotsOf,
-  holdRedirectsOf,
-  reservationHoldsForSettle,
-  unitGivebackPrefix,
+  parseUnitTargetKey,
   unitLotsForSettle,
-  unitSpentSinceMicro,
   type CreditClawbackSource,
 } from '../db/credit-windows-repo.js';
 import type { Logger } from '../lib/logger.js';
@@ -933,16 +940,20 @@ export class CreditReservationsService {
       ...claim,
       owed: claim.pendingMicro,
     }));
+    // Rule 4: the lots each reversal's claim may be paid from — its own unit's.
+    const ownLots = new Map<string, ReadonlySet<string>>();
+    for (const claim of claims) {
+      if (parseUnitTargetKey(claim.targetKey) === null || ownLots.has(claim.targetKey)) continue;
+      const lots = await unitLotsForSettle(tx, accountId, claim.targetKey);
+      ownLots.set(claim.targetKey, new Set(lots.map((l) => l.lotId)));
+    }
     const charges: { lotId: string; micro: number }[] = [];
     let left = chargedMicro;
     let owedDebt = account.debtMicro;
     let claimsPaidMicro = 0;
 
-    const holds = await reservations.openHoldsInSpendOrder(tx, reservationId);
-    const takes: number[] = [];
-    for (const hold of holds) {
+    for (const hold of await reservations.openHoldsInSpendOrder(tx, reservationId)) {
       const take = Math.min(left, hold.heldMicro);
-      takes.push(take);
       // The release comes FIRST. `held_micro` is part of what the lot has
       // committed, so charging before releasing would momentarily leave the lot
       // holding more than it has left and the database would refuse it.
@@ -965,30 +976,17 @@ export class CreditReservationsService {
           tx,
         );
       }
-    }
 
-    // S17 R8 — with the whole charge written, the part of each claim that the
-    // unit's spending since its take explains is no longer owed (the frozen cap
-    // allowed no debt for it), and is let go BEFORE anything pays it: released
-    // credit from another lot paying it would charge the customer beyond the
-    // unit exactly as debt would.
-    for (const claim of claims) {
-      if (claim.owed <= 0) continue;
-      const letGo = await this.claimNoLongerOwed(tx, accountId, claim);
-      if (letGo <= 0) continue;
-      await reservations.letClaimGo(tx, { clawbackId: claim.clawbackId, micro: letGo });
-      claim.owed = claim.owed - letGo;
-    }
-
-    for (const [i, hold] of holds.entries()) {
-      const take = takes[i] ?? 0;
       let released = hold.heldMicro - take;
       released = await this.payClaims(tx, {
         accountId,
         reservationId,
         lotId: hold.lotId,
         released,
-        claims,
+        claims: claims.filter((claim) => {
+          const own = ownLots.get(claim.targetKey);
+          return own === undefined || own.has(hold.lotId);
+        }),
         onPaid: (micro) => {
           claimsPaidMicro = claimsPaidMicro + micro;
         },
@@ -1023,7 +1021,6 @@ export class CreditReservationsService {
     }
 
     await reservations.markSettled(tx, { reservationId, chargedMicro, settleReason: reason });
-    await this.applyHoldRedirects(tx, accountId, reservationId, chargedMicro, claimsPaidMicro);
     const claimsToDebtMicro = await this.claimsLeftBecomeDebt(tx, {
       accountId,
       reservationId,
@@ -1041,8 +1038,10 @@ export class CreditReservationsService {
 
   /**
    * Pay standing claims out of the credit one hold released, oldest first, and
-   * return what is left. Each claim's own `owed` falls as it is paid, so two
-   * lots never pay the same claim twice over.
+   * return what is left. The caller passes only the claims this lot may pay
+   * (rule 4: a reversal's claim, only from its own unit's lots). Each claim's
+   * own `owed` falls as it is paid, so two lots never pay the same claim twice
+   * over.
    */
   private async payClaims(
     tx: CreditLedgerTx,
@@ -1090,6 +1089,12 @@ export class CreditReservationsService {
    * claims come from one clawback, which is the only case reachable today, and
    * two clawbacks of different sources must not be recorded under one reason.
    *
+   * ⛔ AN ANNUAL PAYMENT'S CLAIM IS DROPPED, NOT CHARGED (reversal policy v2,
+   * rule 3, which replaces the R8 claim thresholds). What a running task spends
+   * of credit an annual reversal claimed is not owed: the claim falls to
+   * nothing and a record of the drop is kept for the unit's bookkeeping
+   * (`dropClaim`). Bounded by B1: at most what tasks held at the reversal.
+   *
    * ⛔ THE CLAWBACK'S OWN RECORD MOVES WITH THE LEDGER'S, NOT AFTER IT. The
    * claim does not merely disappear: it BECOMES the clawback's `debt_micro`, in
    * the one statement 0132's guard permits. Until 0132 the guard listed
@@ -1117,12 +1122,15 @@ export class CreditReservationsService {
     }
     let total = 0;
     for (const claim of left) {
-      const letGo = await this.claimNoLongerOwed(tx, input.accountId, claim);
-      if (letGo > 0) {
-        await this.deps.reservations.letClaimGo(tx, { clawbackId: claim.clawbackId, micro: letGo });
+      const owed = claim.owed;
+      if (claim.annual) {
+        await this.deps.reservations.dropClaim(tx, {
+          clawbackId: claim.clawbackId,
+          reservationId: input.reservationId,
+          micro: owed,
+        });
+        continue;
       }
-      const owed = claim.owed - letGo;
-      if (owed <= 0) continue;
       await this.deps.ledger.append(
         {
           accountId: input.accountId,
@@ -1140,143 +1148,6 @@ export class CreditReservationsService {
       total = total + owed;
     }
     return total;
-  }
-
-  /**
-   * S17 R10 (audit 4 #5) — finish what a won dispute moved for this task while
-   * it was still running. While the dispute stood, the task held credit on
-   * other lots that a twin whose month was never taken held on the month; the
-   * win gave that share back into the lots the task holds, as if the task
-   * would spend it all (`hold:<task>:…`). Now that it has settled: what it
-   * charged of that share (the twin charges the month's hold first) stays
-   * where it is; what it did not charge is taken back out of those lots —
-   * front first, where the share sat — and, while the month still runs, goes
-   * back into the month's own lots, where the twin's released hold went. A
-   * month that has ended gets nothing: the twin's release expired with it.
-   */
-  private async applyHoldRedirects(
-    tx: CreditLedgerTx,
-    accountId: string,
-    reservationId: string,
-    chargedMicro: number,
-    claimsPaidMicro: number,
-  ): Promise<void> {
-    const redirects = await holdRedirectsOf(tx, accountId, reservationId);
-    // The twin's hold on the month is released FIRST (holds settle in the spend
-    // order), so the claims this settlement paid came out of that release
-    // before any of it went back: that much of it is not in the lots here.
-    let claimsLeft = claimsPaidMicro;
-    if (redirects.length === 0) return;
-    const holds = await reservationHoldsForSettle(tx, reservationId);
-    const freeLeft = new Map(holds.map((h) => [h.lotId, h.freeMicro]));
-    const roomLeft = new Map(holds.map((h) => [h.lotId, h.roomMicro]));
-    for (const redirect of redirects) {
-      const unitLots = await unitLotsForSettle(tx, accountId, redirect.targetKey);
-      const unitIds = new Set(unitLots.map((l) => l.lotId));
-      const beside = await holdOverflowLotsOf(tx, accountId, reservationId, redirect.targetKey);
-      let chargedOnUnit = 0;
-      for (const h of holds)
-        if (unitIds.has(h.lotId)) chargedOnUnit = chargedOnUnit + h.chargedMicro;
-      const spent = Math.min(redirect.amountMicro, Math.max(0, chargedMicro - chargedOnUnit));
-      const delta = new Map<string, number>();
-      const add = (lotId: string, micro: number): void => {
-        delta.set(lotId, (delta.get(lotId) ?? 0) + micro);
-      };
-      // What the task spent of its share and still waits beside the lot it
-      // was charged from goes into that lot, which the charge made room in.
-      let moveIn = spent;
-      for (const b of beside) {
-        if (moveIn <= 0) break;
-        const part = Math.min(moveIn, b.freeMicro, roomLeft.get(b.besideLotId) ?? 0);
-        if (part <= 0) continue;
-        add(b.lotId, -part);
-        add(b.besideLotId, part);
-        roomLeft.set(b.besideLotId, (roomLeft.get(b.besideLotId) ?? 0) - part);
-        moveIn = moveIn - part;
-      }
-      // What it did not spend comes back out — less what paid a claim — from
-      // beside first, then from the lots it held (front first, where the share
-      // sat) …
-      const unspent = redirect.amountMicro - spent;
-      const paidClaims = Math.min(unspent, claimsLeft);
-      claimsLeft = claimsLeft - paidClaims;
-      let back = unspent - paidClaims;
-      let taken = 0;
-      for (const b of beside) {
-        if (back <= 0) break;
-        const free = b.freeMicro + Math.min(0, delta.get(b.lotId) ?? 0);
-        const part = Math.min(back, Math.max(0, free));
-        if (part <= 0) continue;
-        add(b.lotId, -part);
-        taken = taken + part;
-        back = back - part;
-      }
-      for (const h of holds) {
-        if (back <= 0) break;
-        if (unitIds.has(h.lotId)) continue;
-        const free = (freeLeft.get(h.lotId) ?? 0) + (delta.get(h.lotId) ?? 0);
-        const part = Math.min(back, Math.max(0, free));
-        if (part <= 0) continue;
-        add(h.lotId, -part);
-        freeLeft.set(h.lotId, (freeLeft.get(h.lotId) ?? 0) - part);
-        taken = taken + part;
-        back = back - part;
-      }
-      // … and, while the month still runs, into the month's own lots, where the
-      // twin's released hold went. Once it has ended, that release expired.
-      let give = taken;
-      for (const lot of unitLots) {
-        if (give <= 0) break;
-        if (!lot.live) continue;
-        const part = Math.min(give, lot.roomMicro);
-        if (part <= 0) continue;
-        add(lot.lotId, part);
-        give = give - part;
-      }
-      const prefix = unitGivebackPrefix(redirect.targetKey);
-      for (const [lotId, micro] of delta) {
-        if (micro === 0) continue;
-        const marker = unitIds.has(lotId) ? '' : micro > 0 ? 'moved:' : 'back:';
-        await this.deps.ledger.append(
-          {
-            accountId,
-            kind: 'adjustment',
-            lotId,
-            lotDeltaMicro: micro,
-            idempotencyKey: `${prefix}hold:${reservationId}:${marker}${lotId}`,
-            reason: 'dispute_reinstated',
-          },
-          tx,
-        );
-      }
-      await finishHoldRedirect(tx, redirect.id);
-    }
-  }
-
-  /**
-   * S17 R8 (audit 4 #3) — how much of a claim left unpaid is NOT owed. A
-   * refund or dispute measured on a unit while a task held its credit claimed
-   * what the task held; when the task instead SPENT it, the customer owes it
-   * only as far as the reversal's frozen interim cap allowed debt for spending
-   * that much. The clawback recorded how much more of the unit's credit could
-   * be spent before that stops (`claim_forgive_after_micro`): spending on the
-   * unit's lots since the claim beyond that figure — less what of the claim
-   * was already let go — is not owed. This is where a re-reconciliation of the
-   * unit against the frozen cap would put it, computed without one: a task's
-   * settlement holds no windows repository. Null: the whole claim is owed.
-   */
-  private async claimNoLongerOwed(
-    tx: CreditLedgerTx,
-    accountId: string,
-    claim: PendingCreditClaim & { readonly owed: number },
-  ): Promise<number> {
-    if (claim.claimForgiveAfterMicro === null || claim.ledgerMark === null) return 0;
-    const spent = await unitSpentSinceMicro(tx, accountId, {
-      targetKey: claim.targetKey,
-      sinceMark: claim.ledgerMark,
-    });
-    const letGoAlready = await this.deps.reservations.claimLetGoMicro(tx, claim.clawbackId);
-    return Math.min(claim.owed, Math.max(0, spent - claim.claimForgiveAfterMicro - letGoAlready));
   }
 }
 

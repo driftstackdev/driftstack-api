@@ -15,7 +15,8 @@
 //   · two disputes that together dispute more than was paid are both recorded
 //     by their ids, and a win takes only its own dispute's share off (R2);
 //   · debt that a lot repaid and that has since expired, with no month
-//     running, is not returned — logged, never alerted (R1);
+//     running, comes back as one new lot valid for a month from the win
+//     (reversal policy v2, rule 6 — it was "not returned" under R1');
 //   · a downgrade made while a dispute takes the whole month leaves nothing
 //     owed while the dispute stands (a guard: the downgrade is measured on the
 //     undisputed month, and the dispute's share of it follows at once).
@@ -283,7 +284,7 @@ describe.skipIf(!RUN_DB_TESTS)(
       );
     }, 60_000);
 
-    it('debt a lot repaid, when that lot has expired and no month is running, is not returned at the win — logged, and no alert (R1)', async () => {
+    it('CRITICAL debt a lot repaid, when that lot has expired and no month is running, comes back at the win as one lot valid for a month from the win — and no alert (policy v2, rule 6)', async () => {
       const boundary = await boundaryIn(10);
       const c = await payingCustomer(db(), 'api_starter', {
         amountPaid: PAID,
@@ -321,17 +322,27 @@ describe.skipIf(!RUN_DB_TESTS)(
 
       await waitPast(boundary);
       await g().refreshCredits(c.accountId);
-      warnings.length = 0;
       const alertsBefore = alerts.length;
+      const [clock] = await db()<Array<{ t: string }>>`SELECT now()::text AS t`;
       const won = await svc().reinstateDispute(dispute('dp_r3_past', 'ch_r3_past'));
-      expect(won).toMatchObject({ kind: 'reinstated', regrantedMicro: 0 });
-      expect(await spendable(c.accountId)).toBe(0);
+      expect(won).toMatchObject({ kind: 'reinstated' });
+      // Rule 6: the 3,000 the goodwill paid cannot go back into it (expired), so
+      // it comes back as one new lot. None of "the end of the current month"
+      // (no month runs), "the expiry of the lots it came from" (the goodwill's)
+      // or "the expiry of any lot used or held while the dispute stood" (the
+      // month's and the goodwill's) is in the future: it is valid one month
+      // from the win.
+      expect(await spendable(c.accountId)).toBe(3_000);
       expect(await debtOf(db(), c.accountId)).toBe(0);
-      expect(warnings.map((w) => w.event)).toContain('returned_credit_already_expired');
-      expect(
-        alerts.length - alertsBefore,
-        'no alert: nothing was lost that would not have been',
-      ).toBe(0);
+      const [returned] = await db()<Array<{ ok: boolean; n: number }>>`
+        SELECT count(*)::int AS n,
+               bool_and(expires_at BETWEEN (${clock?.t ?? ''}::timestamptz + interval '1 month' - interval '2 minutes')
+                                       AND (now() + interval '1 month' + interval '2 minutes')) AS ok
+          FROM credit_lots
+         WHERE account_id = ${c.accountId}::uuid AND revoked_at IS NULL
+           AND starts_at <= now() AND now() < expires_at AND remaining_micro > held_micro`;
+      expect(returned, 'one lot, valid a month from the win').toEqual({ ok: true, n: 1 });
+      expect(alerts.length - alertsBefore, 'no alert: the win put back what it should').toBe(0);
     }, 60_000);
 
     it('a downgrade made while a dispute takes the whole month leaves nothing owed while the dispute stands (a guard)', async () => {

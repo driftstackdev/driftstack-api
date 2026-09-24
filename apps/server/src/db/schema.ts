@@ -4115,13 +4115,23 @@ export const creditClawbacks = pgTable(
      * 0140 — how much more of the unit's credit may be spent after this take
      * before a claim on held credit left unpaid at settlement stops being owed
      * (S17 R8, audit 4 #3). NULL: the whole of an unpaid claim is owed.
+     *
+     * ⛔ UNUSED SINCE REVERSAL POLICY v2 (2026-09-24): always NULL. An annual
+     * reversal's claim left unpaid is now dropped whole (rule 3) and recorded as
+     * a `drop:<clawback>:<task>` row; a monthly one becomes debt. Nothing writes
+     * or reads this column. It stays — dropping it would not be additive — and
+     * the 0140 guard keeps it immutable, which is harmless.
      */
     claimForgiveAfterMicro: bigint('claim_forgive_after_micro', { mode: 'number' }),
   },
   (t) => [
     uniqueIndex('credit_clawbacks_idempotency_unique').on(t.source, t.sourceRef, t.targetKey),
     // 0140 — a give-back's record for a task still running, by the task
-    // (`hold:<reservation>:…`): what that task's settlement finishes.
+    // (`hold:<reservation>:…`): what that task's settlement finished.
+    // ⛔ UNUSED SINCE REVERSAL POLICY v2 (2026-09-24): a won dispute no longer
+    // redirects a running task's holds, so no `hold:` row is written and no
+    // read asks for one. Left in place (dropping it would not be additive); it
+    // indexes nothing.
     index('credit_clawbacks_hold_idx')
       .on(t.accountId, t.sourceRef.op('text_pattern_ops'))
       .where(sql`starts_with(${t.sourceRef}, 'hold:')`),
@@ -4375,7 +4385,11 @@ export const creditReservations = pgTable(
       .where(sql`${t.state} = 'open'`),
     index('credit_reservations_session_idx').on(t.agentSessionId, t.createdAt),
     // 0140 — an account's enforced tasks in the order they started: what a
-    // won dispute walks to put back what a task's hold sent elsewhere.
+    // won dispute walked to put back what a task's hold sent elsewhere.
+    // ⛔ UNUSED SINCE REVERSAL POLICY v2 (2026-09-24): no read walks an
+    // account's tasks by start any more (a win measures what the customer held
+    // meanwhile from the holds' own release times, `latestExpiryUsedSince`).
+    // Left in place; dropping it would not be additive.
     index('credit_reservations_account_created_idx')
       .on(t.accountId, t.createdAt)
       .where(sql`${t.mode} = 'enforce'`),
