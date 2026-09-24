@@ -55,7 +55,7 @@ function subscribe(states: string[]) {
     url: 'https://api.example/v1/notifications',
     onEvent: () => undefined,
     onState: (s) => states.push(s),
-    eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+    eventSourceFactory: FakeEventSource,
   });
 }
 

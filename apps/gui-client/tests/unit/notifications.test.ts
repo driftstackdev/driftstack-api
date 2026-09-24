@@ -83,7 +83,7 @@ describe('subscribeNotifications', () => {
     subscribeNotifications({
       url: 'https://api.driftstack.dev/v1/account/me/notifications',
       onEvent,
-      eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+      eventSourceFactory: FakeEventSource,
     });
     expect(FakeEventSource.instances).toHaveLength(1);
     expect(FakeEventSource.instances[0]?.url).toBe(
@@ -97,7 +97,7 @@ describe('subscribeNotifications', () => {
       url: 'https://api.example/notifications',
       onEvent: vi.fn(),
       onState: (s) => states.push(s),
-      eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+      eventSourceFactory: FakeEventSource,
     });
     expect(states).toEqual(['connecting']);
     FakeEventSource.instances[0]?.fireOpen();
@@ -109,7 +109,7 @@ describe('subscribeNotifications', () => {
     subscribeNotifications({
       url: 'https://api.example/notifications',
       onEvent,
-      eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+      eventSourceFactory: FakeEventSource,
     });
     const es = FakeEventSource.instances[0];
     if (!es) throw new Error('expected instance');
@@ -139,7 +139,7 @@ describe('subscribeNotifications', () => {
     const close = subscribeNotifications({
       url: 'https://api.example/notifications',
       onEvent: (e) => received.push(e),
-      eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+      eventSourceFactory: FakeEventSource,
     });
     const es = FakeEventSource.instances[0];
     if (!es) throw new Error('expected instance');
@@ -173,7 +173,7 @@ describe('subscribeNotifications', () => {
     subscribeNotifications({
       url: 'https://api.example/notifications',
       onEvent: (e) => received.push(e),
-      eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+      eventSourceFactory: FakeEventSource,
     });
     const es = FakeEventSource.instances[0];
     if (!es) throw new Error('expected instance');
@@ -226,7 +226,7 @@ describe('subscribeNotifications', () => {
       url: 'https://api.example/notifications',
       onEvent: vi.fn(),
       onState: (s) => states.push(s),
-      eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+      eventSourceFactory: FakeEventSource,
     });
     const es = FakeEventSource.instances[0];
     if (!es) throw new Error('expected instance');
@@ -244,7 +244,7 @@ describe('subscribeNotifications', () => {
       url: 'https://api.example/notifications',
       onEvent: vi.fn(),
       onState: (s) => states.push(s),
-      eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+      eventSourceFactory: FakeEventSource,
     });
     const es = FakeEventSource.instances[0];
     if (!es) throw new Error('expected instance');
@@ -264,7 +264,7 @@ describe('subscribeNotifications', () => {
       url: 'https://api.example/notifications',
       onEvent: vi.fn(),
       onState: (s) => states.push(s),
-      eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+      eventSourceFactory: FakeEventSource,
     });
     const es = FakeEventSource.instances[0];
     if (!es) throw new Error('expected instance');
@@ -284,7 +284,7 @@ describe('subscribeNotifications', () => {
       url: 'https://api.example/notifications',
       onEvent: vi.fn(),
       onError,
-      eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+      eventSourceFactory: FakeEventSource,
     });
     const es = FakeEventSource.instances[0];
     if (!es) throw new Error('expected instance');
@@ -310,7 +310,7 @@ describe('subscribeNotifications', () => {
       url: 'https://api.example/notifications',
       onEvent: vi.fn(),
       onState: (s) => states.push(s),
-      eventSourceFactory: FakeEventSource as unknown as typeof EventSource,
+      eventSourceFactory: FakeEventSource,
     });
     const es = FakeEventSource.instances[0];
     if (!es) throw new Error('expected instance');
