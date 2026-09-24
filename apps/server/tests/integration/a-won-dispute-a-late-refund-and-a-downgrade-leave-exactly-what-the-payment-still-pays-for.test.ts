@@ -33,6 +33,7 @@ import {
   payingCustomer,
   subscription,
   type GrantsHarness,
+  samePeriodAs,
 } from './_helpers/credit-grant-fixtures.js';
 import {
   holdOnLot,
@@ -405,6 +406,8 @@ describe.skipIf(!RUN_DB_TESTS)(
         subscriptionId: nextSub,
         tier: 'api_starter',
         amountPaid: PAID,
+        // The SAME month as the old invoice, to the second (see samePeriodAs).
+        ...(await samePeriodAs(db(), c.invoiceId)),
       });
       await h().grants.refreshCredits(c.accountId);
       expect(await spendable(c.accountId)).toBe(3_000);
@@ -424,6 +427,8 @@ describe.skipIf(!RUN_DB_TESTS)(
         subscriptionId: nextSub,
         tier: 'api_starter',
         amountPaid: PAID,
+        // The SAME month as the old invoice, to the second (see samePeriodAs).
+        ...(await samePeriodAs(db(), c.invoiceId)),
       });
       await h().grants.refreshCredits(c.accountId);
       expect(await spendable(c.accountId)).toBe(3_000);

@@ -34,6 +34,7 @@ import {
   payingCustomer,
   subscription,
   type GrantsHarness,
+  samePeriodAs,
 } from './_helpers/credit-grant-fixtures.js';
 import {
   clawbacksOf,
@@ -340,6 +341,8 @@ describe.skipIf(!RUN_DB_TESTS)(
         subscriptionId: nextSub,
         tier: 'api_starter',
         amountPaid: PAID,
+        // The SAME month as the old invoice, to the second (see samePeriodAs).
+        ...(await samePeriodAs(db(), c.invoiceId)),
       });
       await h().grants.refreshCredits(c.accountId);
       const before = await spendable(c.accountId);
@@ -406,6 +409,8 @@ describe.skipIf(!RUN_DB_TESTS)(
         subscriptionId: nextSub,
         tier: 'api_starter',
         amountPaid: PAID,
+        // The SAME month as the old invoice, to the second (see samePeriodAs).
+        ...(await samePeriodAs(db(), c.invoiceId)),
       });
       const resubscribed = await h().grants.refreshCredits(c.accountId);
       expect(resubscribed.level?.fromLevelMicro).toBe(1_500 * MICRO);

@@ -146,6 +146,27 @@ export async function paidLine(sql: Sql, accountId: string, spec: PaidLineSpec):
   return id;
 }
 
+/**
+ * The line period another paid invoice already has, as SQL for `paidLine`'s
+ * `start`/`end`. A second line inserted later with the DEFAULT period reads the
+ * clock again, and when a second ticks over in between it starts one second
+ * later than the first — a resubscription then covers one second less of the
+ * month and its prorated share rounds to one credit less (CI, 2026-09-24:
+ * 2,999 where 3,000 was expected). Give a line that must cover the SAME month
+ * the same period.
+ */
+export async function samePeriodAs(
+  sql: Sql,
+  invoiceId: string,
+): Promise<{ start: string; end: string }> {
+  const [row] = await sql<Array<{ s: string; e: string }>>`
+    SELECT to_char(line_period_start AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS s,
+           to_char(line_period_end AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS e
+      FROM billing_invoice_payments WHERE stripe_invoice_id = ${invoiceId}`;
+  if (row === undefined) throw new Error(`no paid invoice ${invoiceId}`);
+  return { start: `'${row.s}'::timestamptz`, end: `'${row.e}'::timestamptz` };
+}
+
 /** An active subscription with a paid monthly line over now(): the ordinary paying customer. */
 export async function payingCustomer(
   sql: Sql,
