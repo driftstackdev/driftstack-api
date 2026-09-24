@@ -24,6 +24,11 @@ function read(p: string): string {
 const EP = resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/endpoints.md');
 const EV = resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/events.md');
 const RPL = resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/replay.md');
+/** The endpoint cap, read from the service rather than frozen here — a pin that
+ *  spelled the number would cement it past the next change (V-794). */
+const ENDPOINT_CAP = /const MAX_ENDPOINTS_PER_ACCOUNT = (\d+);/.exec(
+  readFileSync(resolve(REPO_ROOT, 'apps/server/src/services/webhooks.ts'), 'utf8'),
+)?.[1];
 
 describe('W787 docs webhooks/ triplet content parity', () => {
   it('all 3 webhooks files exist', () => {
@@ -92,8 +97,13 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     expect(p).toMatch(/`403 Forbidden` — `account_owner` scope missing on the calling key\./);
     // Webhooks audit #4 (2026-09-24): the cap counts every endpoint that is not
     // deleted — "active" was the loophole (pause, create, resume).
+    expect(ENDPOINT_CAP, 'the service still declares its endpoint cap').toMatch(/^\d+$/);
     expect(p).toMatch(
-      /`409 Conflict` — the account already has 10 endpoints, the most it\s*\n?\s*can have\. Paused endpoints count toward the limit; only deleting an\s*\n?\s*endpoint frees a place\./,
+      new RegExp(
+        '`409 Conflict` — the account already has ' +
+          String(ENDPOINT_CAP) +
+          ' endpoints, the most it\\s*can have\\. Paused endpoints count toward the limit; only deleting an\\s*endpoint frees a place\\.',
+      ),
     );
     expect(p).not.toMatch(/max 10 active endpoints/);
     // The stale 429-TierLimit framing must NOT return (it's a 409 ConflictError).
@@ -110,11 +120,9 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     // attempted, not dead-lettered, not counted; queued during; sent after resume.
     expect(p).toMatch(/Resume with `active: true`: everything held is then delivered/);
     expect(p).toMatch(
-      /deliveries already queued for it are held: they are not attempted,\s*\n?\s*not moved to the DLQ, and not counted in `consecutive_failures`/,
+      /deliveries already queued for it are held: they are not attempted,\s*not moved to the DLQ, and not counted in `consecutive_failures`/,
     );
-    expect(p).toMatch(
-      /events raised during the pause are queued for it and held the same\s*\n?\s*way\./,
-    );
+    expect(p).toMatch(/events raised during the pause are queued for it and held the same\s*way\./);
   });
 
   // ─── webhooks/events.md ───────────────────────────────────────

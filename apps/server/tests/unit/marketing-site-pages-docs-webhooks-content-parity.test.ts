@@ -28,6 +28,11 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const LIB = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/webhooks.astro');
+/** The endpoint cap, read from the service rather than frozen here — a pin that
+ *  spelled the number would cement it past the next change (V-794). */
+const ENDPOINT_CAP = /const MAX_ENDPOINTS_PER_ACCOUNT = (\d+);/.exec(
+  readFileSync(resolve(REPO_ROOT, 'apps/server/src/services/webhooks.ts'), 'utf8'),
+)?.[1];
 
 function read(p: string): string {
   return readFileSync(p, 'utf8');
@@ -63,9 +68,13 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
     );
   });
 
-  it("10-endpoint cap + narrow-purpose-over-mega framing pinned: 'Each account can have up to 10 endpoints; paused endpoints count toward the limit, and deleting one frees a place. Mint as many narrow-purpose endpoints as you need rather than one mega-endpoint that fans out — easier to retire individual integrations later.' — pinned so the 10-cap + narrow-over-mega commitment survives (drift to a different cap would create marketing↔server-limit divergence; webhooks audit #4 made paused endpoints count)", () => {
+  it('endpoint cap + narrow-purpose-over-mega framing pinned — the cap in the copy is the one the service enforces (read from webhooks.ts), paused endpoints count toward it (webhooks audit #4), and the page recommends narrow-purpose endpoints over one mega-endpoint', () => {
     expect(body).toMatch(
-      /Each account can have up to 10 endpoints; paused endpoints count\s*toward the limit, and deleting one frees a place\. Mint as many\s*narrow-purpose endpoints as you need rather than one mega-endpoint\s*that fans out — easier to retire individual integrations later\./,
+      new RegExp(
+        'Each account can have up to ' +
+          String(ENDPOINT_CAP) +
+          ' endpoints; paused endpoints count\\s*toward the limit, and deleting one frees a place\\. Mint as many\\s*narrow-purpose endpoints as you need rather than one mega-endpoint\\s*that fans out — easier to retire individual integrations later\\.',
+      ),
     );
   });
 

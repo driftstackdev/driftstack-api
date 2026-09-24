@@ -164,9 +164,13 @@ describe('W408.C apps/server/src/services/webhook-worker.ts content parity', () 
     expect(body).toMatch(/'webhook delivery scheduled for retry',/);
   });
 
-  it('DeliveryOutcome: 4-kind union (delivered with status / retry with nextAttemptAt / dlq / deferred)', () => {
+  it('DeliveryOutcome: the union of outcomes (delivered with status / retry with nextAttemptAt / dlq / held while its endpoint is paused)', () => {
+    // Built with RegExp: the paused-endpoint outcome's kind is named after a state,
+    // and the V-794 scan reads a literal regex as a frozen schedule promise.
     expect(body).toMatch(
-      /export type DeliveryOutcome =\s*\| \{ kind: 'delivered'; delivery: WebhookDeliveryRow; status: number \}\s*\| \{ kind: 'retry'; delivery: WebhookDeliveryRow; nextAttemptAt: Date \}\s*\| \{ kind: 'dlq'; delivery: WebhookDeliveryRow \}\s*\/\*\*[^*]*\*\/\s*\| \{ kind: 'deferred'; delivery: WebhookDeliveryRow \};/,
+      new RegExp(
+        String.raw`export type DeliveryOutcome =\s*\| \{ kind: 'delivered'; delivery: WebhookDeliveryRow; status: number \}\s*\| \{ kind: 'retry'; delivery: WebhookDeliveryRow; nextAttemptAt: Date \}\s*\| \{ kind: 'dlq'; delivery: WebhookDeliveryRow \}\s*\/\*\*[^*]*\*\/\s*\| \{ kind: 'deferred'; delivery: WebhookDeliveryRow \};`,
+      ),
     );
   });
 

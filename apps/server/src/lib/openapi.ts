@@ -5043,11 +5043,11 @@ function buildRegistry(): OpenAPIRegistry {
     path: '/v1/auth/logout',
     summary: 'Revoke a web-session token',
     description:
-      'Revokes the web session the caller presents: the `token` in the body, the `Authorization: Bearer` header, or both. With neither, 400.',
+      'Revokes the web session whose `token` is in the body. A request that also carries `Authorization: Bearer <web session token>` revokes that session too.',
     tags: ['auth'],
     request: {
       body: {
-        required: false,
+        required: true,
         content: { 'application/json': { schema: LogoutRequestSchema } },
       },
     },
