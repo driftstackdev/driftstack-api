@@ -80,15 +80,15 @@ describe('W541.C /.github/workflows/gui-build-check.yml content parity', () => {
       /sudo apt-get install -y libwebkit2gtk-4\.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev pkg-config/,
     );
     expect(body).toMatch(/Setup Rust \(rust-toolchain\.toml pinned per V-240\)/);
-    expect(body).toMatch(/uses: dtolnay\/rust-toolchain@stable/);
-    expect(body).toMatch(/uses: Swatinem\/rust-cache@v2/);
+    expect(body).toMatch(/uses: dtolnay\/rust-toolchain@[0-9a-f]{40} # stable/);
+    expect(body).toMatch(/uses: Swatinem\/rust-cache@[0-9a-f]{40} # v2/);
     expect(body).toMatch(/workspaces: 'apps\/gui-client\/src-tauri -> target'/);
   });
 
   it("Build-step sequence framing pinned: 'uses: actions/checkout@v4' + 'actions/setup-node@v6 with node-version: 22 + cache: npm' + 'Install npm deps + npm ci' + 'Build SDK (transitive dep) + npm run build --workspace packages/sdk-typescript' + 'Typecheck gui-client (TS) + npm run typecheck --workspace apps/gui-client' + 'Build frontend bundle (Vite) + npm run build --workspace apps/gui-client' + 'Cargo check (Rust shell — fast, no codegen) + working-directory: apps/gui-client/src-tauri + cargo check --all-targets' + 'Cargo test (Rust unit tests — V-241 keyring tests) + cargo test --all-targets' — pinned so the SDK-built-first (transitive-dep) + typecheck-then-build + cargo-check-before-cargo-test + V-241-keyring-tests-anchor commitment survives (drift to dropping cargo test would let keyring-rs platform-specific regressions land silently)", () => {
-    expect(body).toMatch(/uses: actions\/checkout@v4/);
+    expect(body).toMatch(/uses: actions\/checkout@[0-9a-f]{40} # v4/);
     expect(body).toMatch(
-      /uses: actions\/setup-node@v6\s*\n\s*with:\s*\n\s*node-version: '22'\s*\n\s*cache: 'npm'/,
+      /uses: actions\/setup-node@[0-9a-f]{40} # v6\s*\n\s*with:\s*\n\s*node-version: '22'\s*\n\s*cache: 'npm'/,
     );
     expect(body).toMatch(/name: Install npm deps\s*\n\s*run: npm ci/);
     expect(body).toMatch(

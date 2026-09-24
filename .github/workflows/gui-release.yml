@@ -52,15 +52,22 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v4
+      # Security sweep E-10 — every action below is pinned to a full commit SHA (a
+      # tag or branch can be moved by its owner, and this job holds the updater
+      # signing key and contents:write), and the checkout does not leave the token
+      # in .git/config for later steps: every step that needs it (gh release,
+      # tauri-action) takes it from env.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22'
 
       - name: Setup Rust (with rust-toolchain.toml pin per V-240)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
 
       # The `targets:` input above used to carry the two Apple targets and it
       # silently did nothing useful: dtolnay/rust-toolchain adds targets to the
@@ -84,7 +91,7 @@ jobs:
           rustup show
 
       - name: Cache Rust deps
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: 'apps/gui-client/src-tauri -> target'
 
@@ -255,7 +262,7 @@ jobs:
           TAURI_UPDATER_PUBKEY: ${{ secrets.TAURI_UPDATER_PUBKEY }}
 
       - name: Build + sign Tauri bundles
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           # tauri-action reads GITHUB_TOKEN from env to create the
           # release; Actions does not auto-export secrets.GITHUB_TOKEN.

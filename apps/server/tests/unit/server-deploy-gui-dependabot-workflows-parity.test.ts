@@ -142,7 +142,7 @@ describe('W726 server-deploy + gui + dependabot workflow parity', () => {
   it('CRITICAL gui-release.yml tauri-action invocation with TAURI_SIGNING_PRIVATE_KEY + TAURI_SIGNING_PRIVATE_KEY_PASSWORD env. The signing env names match the tauri-action contract; drift would silently disable signing.', () => {
     const w = read(GUI_RELEASE);
 
-    expect(w).toMatch(/uses: tauri-apps\/tauri-action@v0/);
+    expect(w).toMatch(/uses: tauri-apps\/tauri-action@[0-9a-f]{40} # v0/);
     expect(w).toMatch(/TAURI_SIGNING_PRIVATE_KEY: \$\{\{ secrets\.TAURI_UPDATER_PRIVKEY \}\}/);
     expect(w).toMatch(
       /TAURI_SIGNING_PRIVATE_KEY_PASSWORD: \$\{\{ secrets\.TAURI_UPDATER_PRIVKEY_PASSWORD \}\}/,
@@ -214,8 +214,11 @@ describe('W726 server-deploy + gui + dependabot workflow parity', () => {
     const check = read(GUI_BUILD_CHECK);
     const release = read(GUI_RELEASE);
 
-    expect(check).toMatch(/dtolnay\/rust-toolchain@stable/);
-    expect(release).toMatch(/dtolnay\/rust-toolchain@stable/);
+    expect(check).toMatch(/dtolnay\/rust-toolchain@[0-9a-f]{40} # stable/);
+    expect(release).toMatch(/dtolnay\/rust-toolchain@[0-9a-f]{40} # stable/);
+    // Security sweep E-10 — pinned to a commit; the two workflows must pin the SAME one.
+    const pinOf = (w: string) => /dtolnay\/rust-toolchain@([0-9a-f]{40})/.exec(w)?.[1];
+    expect(pinOf(check)).toBe(pinOf(release));
     expect(check).toMatch(/V-240/);
     expect(release).toMatch(/V-240/);
   });

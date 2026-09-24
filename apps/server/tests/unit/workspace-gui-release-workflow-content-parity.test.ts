@@ -82,10 +82,10 @@ describe('W542.C /.github/workflows/gui-release.yml content parity', () => {
 
   it("Setup-Rust-with-macOS-universal-targets framing pinned: 'Setup Rust (with rust-toolchain.toml pin per V-240)' + 'uses: dtolnay/rust-toolchain@stable' + a `rustup target add aarch64-apple-darwin x86_64-apple-darwin` step that runs with `working-directory: apps/gui-client/src-tauri` + 'uses: Swatinem/rust-cache@v2 with workspaces: apps/gui-client/src-tauri -> target' + Linux apt-deps: 'libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev' — pinned so the V-240 rust-toolchain-pin + macOS-only-aarch64+x86_64 target install + Swatinem/rust-cache-v2 + Linux-5-apt-dep (no pkg-config in this workflow — that's gui-build-check-only) commitment survives.\n\n⚠️ This arm used to pin the `targets:` INPUT to dtolnay/rust-toolchain, and that input never worked: the action adds targets to the toolchain IT installs (stable), while src-tauri/rust-toolchain.toml pins 1.95.0 for every cargo call under that directory. The first release ever cut died with `Target x86_64-apple-darwin is not installed (installed targets: aarch64-apple-darwin)` — with this pin green the whole time, because it recorded what the file SAID rather than whether it worked. It now pins the mechanism that actually installs the targets, including the working-directory that makes rustup resolve the pinned toolchain.", () => {
     expect(body).toMatch(/Setup Rust \(with rust-toolchain\.toml pin per V-240\)/);
-    expect(body).toMatch(/uses: dtolnay\/rust-toolchain@stable/);
+    expect(body).toMatch(/uses: dtolnay\/rust-toolchain@[0-9a-f]{40} # stable/);
     expect(body).toMatch(/rustup target add aarch64-apple-darwin x86_64-apple-darwin/);
     expect(body).toMatch(/working-directory: apps\/gui-client\/src-tauri/);
-    expect(body).toMatch(/uses: Swatinem\/rust-cache@v2/);
+    expect(body).toMatch(/uses: Swatinem\/rust-cache@[0-9a-f]{40} # v2/);
     expect(body).toMatch(/workspaces: 'apps\/gui-client\/src-tauri -> target'/);
     expect(body).toMatch(
       /sudo apt-get install -y libwebkit2gtk-4\.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev/,
@@ -113,7 +113,7 @@ describe('W542.C /.github/workflows/gui-release.yml content parity', () => {
 
   it("tauri-action@v0 build + sign + V-242 telemetry gate + Release framing pinned: 'Build + sign Tauri bundles + uses: tauri-apps/tauri-action@v0' + 'TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_UPDATER_PRIVKEY }}' + 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_UPDATER_PRIVKEY_PASSWORD }}' + '# V-242 — Sentry DSN. Empty when unset; gate in telemetry.ts short-circuits cleanly so no event leaves the customer.' + 'VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}' + 'VITE_APP_VERSION: ${{ github.ref_name }}' + 'projectPath: apps/gui-client + tagName: ${{ github.ref_name }} + releaseName: Driftstack GUI ${{ github.ref_name }}' + Install/Auto-update releaseBody + 'releaseDraft: false + prerelease: false + args: ${{ matrix.args }}' — pinned so the tauri-action-v0 + 3-signing-env (privkey + privkey_password + V-242 VITE_SENTRY_DSN-gate) + ref_name-as-version + 3-OS-installer-instructions + releaseDraft:false-prerelease:false commitment survives", () => {
     expect(body).toMatch(/name: Build \+ sign Tauri bundles/);
-    expect(body).toMatch(/uses: tauri-apps\/tauri-action@v0/);
+    expect(body).toMatch(/uses: tauri-apps\/tauri-action@[0-9a-f]{40} # v0/);
     expect(body).toMatch(/TAURI_SIGNING_PRIVATE_KEY: \$\{\{ secrets\.TAURI_UPDATER_PRIVKEY \}\}/);
     expect(body).toMatch(
       /TAURI_SIGNING_PRIVATE_KEY_PASSWORD: \$\{\{ secrets\.TAURI_UPDATER_PRIVKEY_PASSWORD \}\}/,

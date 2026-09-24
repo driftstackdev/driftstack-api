@@ -115,7 +115,7 @@ describe('the GUI release ships every app the launcher requires', () => {
   it('CRITICAL the release workflow BUILDS the companion and EMBEDS it where the self-repair looks — a clean DMG install can open a live view (V-2169, closing the V-2148 gap)', () => {
     const wf = read(WORKFLOW);
     // Non-vacuity: this is the real release workflow, with the real build step.
-    expect(wf).toMatch(/tauri-apps\/tauri-action@v0/);
+    expect(wf).toMatch(/tauri-apps\/tauri-action@[0-9a-f]{40} # v0/);
     expect(wf).toMatch(/gui-v\*/);
     const buildsCompanion = new RegExp(
       [escapeRe(sim.configPath), escapeRe(SIM_SCRIPT), escapeRe(sim.productName)].join('|'),
