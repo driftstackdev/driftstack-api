@@ -8077,16 +8077,29 @@ export function registerAgentSessionsRoutes(
   // fleet control plane is wired); challenge_id (optional) correlates to the
   // session.challenge_detected being responded to — the harness validates it
   // against the active challenge (stale → stays paused), absent → manual resume.
+  //
+  // GUI audit #2 — WHO MAY RESUME: exactly who may stop. The Simulator solves the
+  // challenge in the live view and presses Resume holding ONLY the per-session
+  // control key (the macOS Simulator app has no account key), so an
+  // account-bearer-only preHandler answered 401 on every retry and the session
+  // stayed paused. Same preHandler as /stop (the account key with `write`, or the
+  // control key, which is cryptographically bound to THIS :id) and the same
+  // ownership check, skipped only for that bound key.
   app.post<{ Params: { id: string }; Body: unknown }>(
     '/v1/agent-sessions/:id/resume',
-    { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
+    { preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')] },
     async (req, reply) => {
-      const ctx = requireCtx(req);
       const parsed = ResumeSessionRequestSchema.safeParse(req.body ?? {});
       if (!parsed.success) throw new ValidationError(parsed.error.flatten());
       const rec = await sessions.get(req.params.id);
-      if (rec === null || !callerCanAccessAgentSession(ctx, rec.accountId)) {
+      if (rec === null) {
         throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
       }
       await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       // A harness challenge-pause leaves the server status 'active' (the pause is

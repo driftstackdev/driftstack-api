@@ -15,11 +15,13 @@ const ROUTES_DIR = resolve(HERE, '..', '..', 'src', 'routes');
 
 const EXPECTED_GUI_ROUTES = [
   'GET:/v1/account/me',
+  'PATCH:/v1/account/me',
   'GET:/v1/account/me/notifications',
   'GET:/v1/account/audit-log',
   'GET:/v1/account/cost',
   'GET:/v1/account/me/organization',
   'PUT:/v1/account/me/organization',
+  'GET:/v1/account/me/proxies',
   'POST:/v1/account/me/proxies',
   'PUT:/v1/account/me/proxies/:id',
   'DELETE:/v1/account/me/proxies/:id',
@@ -47,6 +49,9 @@ const EXPECTED_GUI_ROUTES = [
   'GET:/v1/agent-sessions/:id',
   'DELETE:/v1/agent-sessions/:id',
   'POST:/v1/agent-sessions/:id/message',
+  'POST:/v1/agent-sessions/:id/stop',
+  'GET:/v1/agent-sessions/:id/captures/:captureId',
+  'POST:/v1/agent-sessions/:id/resume',
   'POST:/v1/agent-sessions/:id/livekit-token',
   'GET:/v1/agent-sessions/:id/gui-control-key',
   'POST:/v1/agent-sessions/:id/transport-report',
@@ -92,10 +97,11 @@ function registeredRouteCalls(): ReadonlySet<string> {
 
 describe('Free desktop route policy', () => {
   // ⚠️ The title said 59 while the assertion said 60 — the number in the title had
-  // drifted, which is how a count pin stops being readable. Both say 61 now: +1 for
-  // P-17's `POST /v1/agent-sessions/:id/egress`.
-  it('pins exactly the 61 current non-denied GUI route templates', () => {
-    expect(FREE_DESKTOP_ALLOWED_ROUTES.size).toBe(61);
+  // drifted, which is how a count pin stops being readable. Both say 66 now: 61
+  // after P-17's `POST /v1/agent-sessions/:id/egress`, +5 from the GUI audit —
+  // #2 resume, #3 stop + captures, #11 the proxy list + PATCH /v1/account/me.
+  it('pins exactly the 66 current non-denied GUI route templates', () => {
+    expect(FREE_DESKTOP_ALLOWED_ROUTES.size).toBe(66);
     expect([...FREE_DESKTOP_ALLOWED_ROUTES].sort()).toEqual([...EXPECTED_GUI_ROUTES].sort());
   });
 
@@ -135,6 +141,9 @@ describe('Free desktop route policy', () => {
     ['GET', '/v1/webhooks'],
     ['GET', '/v1/account/web-sessions'],
     ['GET', '/v1/agent-sessions/:id/transcript'],
+    // GUI audit #11 — the server tunnel test is a paid feature; the proxy LIST
+    // beside it was opened, this was deliberately not.
+    ['POST', '/v1/account/me/proxies/:id/test'],
   ])('fails closed for the unlisted %s:%s surface', (method, route) => {
     expect(() => requireFreeDesktopRouteAccess(method, route)).toThrowError(
       /Free desktop credential cannot access this API route/,

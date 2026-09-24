@@ -298,10 +298,12 @@ describe('C1 device-key deny-gate — device-need routes stay open to a device k
 
 describe('Free desktop credential — fail-closed route surface', () => {
   it('every allowlisted template remains disjoint from the independent deny-set', () => {
-    // 61 since P-17 added POST /v1/agent-sessions/:id/egress. ⚠️ This count is
-    // pinned in TWO files — the sibling is free-desktop-route-policy.test.ts, and
-    // updating one and not the other is how the allowlist grows past a guard.
-    expect(FREE_DESKTOP_ALLOWED_ROUTES.size).toBe(61);
+    // 66: 61 since P-17 added POST /v1/agent-sessions/:id/egress, +5 from the GUI
+    // audit (resume; stop + captures; the proxy list + PATCH /v1/account/me).
+    // ⚠️ This count is pinned in TWO files — the sibling is
+    // free-desktop-route-policy.test.ts, and updating one and not the other is how
+    // the allowlist grows past a guard.
+    expect(FREE_DESKTOP_ALLOWED_ROUTES.size).toBe(66);
     for (const route of FREE_DESKTOP_ALLOWED_ROUTES) {
       expect(DEVICE_KEY_DENY_ROUTES.has(route), route).toBe(false);
     }

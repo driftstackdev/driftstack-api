@@ -19,11 +19,22 @@ import { DEVICE_KEY_DENY_ROUTES } from './device-key-deny.js';
 export const FREE_DESKTOP_ALLOWED_ROUTES: ReadonlySet<string> = new Set<string>([
   // Account, settings, organization, and saved proxies.
   'GET:/v1/account/me',
+  // GUI audit #11 — the desktop app records onboarding completion here on
+  // launch. The body schema is name / timezone / slug / region /
+  // onboarding_completed and the route always writes the CALLER's own account
+  // (it ignores X-Driftstack-Account), so this reaches nothing a Free web
+  // session cannot already change.
+  'PATCH:/v1/account/me',
   'GET:/v1/account/me/notifications',
   'GET:/v1/account/audit-log',
   'GET:/v1/account/cost',
   'GET:/v1/account/me/organization',
   'PUT:/v1/account/me/organization',
+  // GUI audit #11 — the proxy list the Proxies and Profiles views read at
+  // mount. Metadata only (a password is reported as has_password). The
+  // proxy Test route (`POST …/proxies/:id/test`) stays OUT on purpose: the
+  // server-side tunnel test is a paid feature and spends fleet resources.
+  'GET:/v1/account/me/proxies',
   'POST:/v1/account/me/proxies',
   'PUT:/v1/account/me/proxies/:id',
   'DELETE:/v1/account/me/proxies/:id',
@@ -59,6 +70,15 @@ export const FREE_DESKTOP_ALLOWED_ROUTES: ReadonlySet<string> = new Set<string>(
   'GET:/v1/agent-sessions/:id',
   'DELETE:/v1/agent-sessions/:id',
   'POST:/v1/agent-sessions/:id/message',
+  // GUI audit #3 — a Free member acting in a paid owner's workspace may start
+  // a task there (`aiAgent` is checked on the OWNER's tier), so it must also
+  // be able to stop it and see its step screenshots. Both routes keep their
+  // own ownership check (callerCanAccessAgentSession).
+  'POST:/v1/agent-sessions/:id/stop',
+  'GET:/v1/agent-sessions/:id/captures/:captureId',
+  // GUI audit #2 — Resume after a challenge. The Simulator sends the
+  // per-session control key; this entry is the account-key fallback.
+  'POST:/v1/agent-sessions/:id/resume',
   'POST:/v1/agent-sessions/:id/livekit-token',
   'GET:/v1/agent-sessions/:id/gui-control-key',
   'POST:/v1/agent-sessions/:id/transport-report',
