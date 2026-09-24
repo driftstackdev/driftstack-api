@@ -255,8 +255,13 @@ run_ssh "root@${HOST}" "set -euo pipefail; \
     exit 1; \
   fi; \
   echo \"[bridge] HEAD=\$GIT_SHA APP_VERSION=\$APP_VERSION\" >&2; \
-  echo '[bridge] npm ci (lockfile-strict; include dev for build)' >&2; \
-  npm ci --no-audit --include=dev > /tmp/deploy-install.log 2>&1 || (tail -50 /tmp/deploy-install.log; exit 1); \
+  echo '[bridge] npm ci (lockfile-strict; include dev for build; no install scripts)' >&2; \
+  # Security sweep E-9 (2026-09-24): this runs as root on the host that holds every
+  # production secret, so no package lifecycle script may run here. The server build
+  # is plain tsc and the runtime needs no native install step (the packages with
+  # install scripts are esbuild, @sentry/cli, workerd, fsevents and husky — none
+  # used on the host); the predecessor deploy-api.sh used --ignore-scripts too.
+  npm ci --no-audit --include=dev --ignore-scripts > /tmp/deploy-install.log 2>&1 || (tail -50 /tmp/deploy-install.log; exit 1); \
   echo '[bridge] tsc --build api-types + webhook-delivery' >&2; \
   npx tsc --build packages/api-types packages/webhook-delivery; \
   echo '[bridge] npm run build --workspace=@driftstack/server' >&2; \
