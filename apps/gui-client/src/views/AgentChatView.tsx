@@ -32,6 +32,12 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { type AgentSession } from '@driftstack/sdk';
 import { describeAgentSessionState } from '../lib/session-liveness';
 import { useSettings } from '../lib/SettingsContext';
+import { WEB_DASHBOARD_SETTINGS_URL } from '../lib/web-dashboard';
+import { startGuardedPoll } from '../lib/guarded-poll';
+import {
+  AI_SETTINGS_BELONG_TO_WORKSPACE_OWNER,
+  isTeammateWorkspace,
+} from '../lib/settings-error-copy';
 import { useConnectionStatus } from '../lib/use-connection-status';
 import { useConfirm } from '../components/ConfirmProvider';
 import { useFocusTrap } from '../lib/use-focus-trap';
@@ -253,7 +259,10 @@ export function AgentChatView({
    *  needs a real one-click way into the AI & billing settings section. */
   onGoToSettings?: () => void;
 } = {}): JSX.Element {
-  const { client, settings } = useSettings();
+  const { client, settings, activeWorkspace } = useSettings();
+  // GUI audit #10 — "Enable AI features" changes the bundled-AI settings, which
+  // the server refuses while acting in a teammate's workspace.
+  const aiSettingsBelongToOwner = isTeammateWorkspace(activeWorkspace);
   // #139 — the "browser actions are simulated" note is only true while the server
   // runs the StubAgentExecutor. Drive it off /version `agent_execution` (the fleet
   // control-plane gate), NOT `driver` — in prod `driver` stays 'mock' even though
@@ -379,25 +388,22 @@ export function AgentChatView({
     }
     if (client === null || typeof client.agentSessions?.get !== 'function') return undefined;
     let cancelled = false;
-    const poll = (): void => {
-      void client.agentSessions
-        .get(liveSessionId)
-        .then((s) => {
-          if (cancelled) return;
-          // Store the WHOLE session: the badge needs `liveness` as well as
-          // `status`, and deciding between them is `describeAgentSessionState`'s
-          // job, not the fetcher's.
-          setLiveSession(s);
-        })
-        // A transient GET failure is not evidence the session ended. Leaving the
-        // last known status is more honest than flipping the badge off and back.
-        .catch(() => undefined);
-    };
-    poll();
-    const handle = setInterval(poll, 10_000);
+    // GUI audit #12 — never overlapping, and a 429 holds it back (see
+    // lib/guarded-poll). A transient GET failure is not evidence the session
+    // ended: the poll swallows it, leaving the last known status on the badge,
+    // which is more honest than flipping it off and back.
+    const poll = (): Promise<void> =>
+      client.agentSessions.get(liveSessionId).then((s) => {
+        if (cancelled) return;
+        // Store the WHOLE session: the badge needs `liveness` as well as
+        // `status`, and deciding between them is `describeAgentSessionState`'s
+        // job, not the fetcher's.
+        setLiveSession(s);
+      });
+    const stop = startGuardedPoll(poll, { intervalMs: 10_000 });
     return () => {
       cancelled = true;
-      clearInterval(handle);
+      stop();
     };
   }, [client, liveSessionId]);
   // ⛔ TOGGLE = COLLAPSE (stage 4, spec §3.4). The stage is INLINE at every
@@ -711,7 +717,7 @@ export function AgentChatView({
   }, [client]);
 
   function handleEnableBundledLlm(): void {
-    if (!client || bundledLlmEnabling) return;
+    if (!client || bundledLlmEnabling || aiSettingsBelongToOwner) return;
     setBundledLlmEnabling(true);
     setBundledLlmEnableError(null);
     client.account
@@ -1309,23 +1315,38 @@ export function AgentChatView({
                         ? 'Enabled — send your message again to continue.'
                         : 'You can use bundled AI usage billed to your account, or your own Anthropic key.'}
                     </p>
+                    {!bundledLlmEnabled && aiSettingsBelongToOwner && (
+                      <p
+                        data-notice="ai-settings-belong-to-workspace-owner"
+                        className="mt-0.5 text-2xs text-ink-secondary"
+                      >
+                        {AI_SETTINGS_BELONG_TO_WORKSPACE_OWNER}
+                      </p>
+                    )}
                     {bundledLlmEnableError !== null && (
                       <p className="mt-0.5 text-2xs text-status-error">{bundledLlmEnableError}</p>
                     )}
                   </div>
                   {!bundledLlmEnabled && (
                     <div className="flex shrink-0 items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={onGoToSettings}
+                      {/* GUI audit #4 — the web dashboard, not Settings: the
+                          app's own browser sign-in key is refused the
+                          Anthropic-key save by design, so Settings could
+                          never finish this. */}
+                      <a
+                        href={WEB_DASHBOARD_SETTINGS_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-action="use-own-key"
+                        title="Opens the web dashboard"
                         className="btn-secondary px-3 py-1.5 text-xs"
                       >
                         Use my own key
-                      </button>
+                      </a>
                       <button
                         type="button"
                         onClick={handleEnableBundledLlm}
-                        disabled={bundledLlmEnabling}
+                        disabled={bundledLlmEnabling || aiSettingsBelongToOwner}
                         className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
                       >
                         {bundledLlmEnabling ? 'Enabling…' : 'Enable AI features'}
@@ -1350,13 +1371,18 @@ export function AgentChatView({
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={onGoToSettings}
+                    {/* GUI audit #4 — the web dashboard, not Settings (see
+                        the consent banner above). */}
+                    <a
+                      href={WEB_DASHBOARD_SETTINGS_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-action="use-own-key"
+                      title="Opens the web dashboard"
                       className="btn-secondary px-3 py-1.5 text-xs"
                     >
                       Use my own key
-                    </button>
+                    </a>
                     <button
                       type="button"
                       onClick={onGoToSettings}

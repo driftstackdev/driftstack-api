@@ -10,7 +10,10 @@
 // State machine:
 //   - initial: 'connecting' (first probe in flight)
 //   - probe ok (any 2xx response): 'connected' + lastOkAt timestamp
-//   - probe fail (network error / non-2xx): 'offline' + lastError msg
+//   - probe answered 429 / 5xx: 'degraded' + lastError msg (GUI audit #20 —
+//     the server IS reachable; it is busy. "Offline" sent customers off to
+//     check their own network.)
+//   - probe fail (network error / any other non-2xx): 'offline' + lastError msg
 //   - on baseUrl change: reset to 'connecting' + probe immediately
 //
 // 30s cadence chosen so the pill catches real outages within a single
@@ -26,7 +29,7 @@ import { humanizeError } from './humanize-error';
 const PROBE_INTERVAL_MS = 30_000;
 const PROBE_TIMEOUT_MS = 8_000;
 
-export type ConnectionState = 'connecting' | 'connected' | 'offline';
+export type ConnectionState = 'connecting' | 'connected' | 'degraded' | 'offline';
 
 /** W625 — the session driver the connected server runs (from /version).
  *  `mock` means launches won't open a real browser, so the GUI can warn
@@ -137,8 +140,11 @@ export function useConnectionStatus(baseUrl: string): ConnectionStatus {
           return;
         }
         await disposeResponseBody(res);
+        // GUI audit #20 — an answer is reachability: a rate-limited or failing
+        // server is busy, not offline.
+        const busy = res.status === 429 || res.status >= 500;
         setStatus((prev) => ({
-          state: 'offline',
+          state: busy ? 'degraded' : 'offline',
           lastOkAt: prev.lastOkAt,
           lastError: probeResponseError(res.status),
           driver: prev.driver,

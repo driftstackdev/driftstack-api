@@ -119,7 +119,10 @@ export function fixedApiErrorMessage(
     'profile-in-use': 'End the profile’s other live session before launching it again.',
     'proxy-validation-failed': 'The proxy could not be verified. Check its details and try again.',
     'storage-quota-exceeded': 'Profile storage is full. Trim or delete a profile, then try again.',
-    'byok-anthropic-required': 'Connect your AI provider key in Settings, then try again.',
+    // GUI audit #4 — not "in Settings": the app's own browser sign-in key is
+    // refused the provider-key save by design, so Settings could never do it.
+    'byok-anthropic-required':
+      'Add your AI provider key in the web dashboard at app.driftstack.io, then try again.',
     'bundled-llm-consent-required':
       'Enable bundled AI in Settings or connect your own provider key.',
     'bundled-llm-budget-exhausted':

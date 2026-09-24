@@ -52,10 +52,12 @@ const DESKTOP_CSP = {
 } as const;
 
 describe('W617 apps/gui-client/src-tauri/ content parity', () => {
-  it('build.rs: thin tauri-build invocation pinned', () => {
+  it('build.rs: tauri-build with an app manifest that declares every app command (GUI audit #13 — each capability then grants only what its window calls)', () => {
     const body = read(T('build.rs'));
     expect(body).toMatch(/^fn main\(\) \{$/m);
-    expect(body).toMatch(/^\s+tauri_build::build\(\)$/m);
+    expect(body).toMatch(
+      /tauri_build::try_build\(\s*tauri_build::Attributes::new\(\)\s*\.app_manifest\(tauri_build::AppManifest::new\(\)\.commands\(APP_COMMANDS\)\),?\s*\)/,
+    );
     expect(body).toMatch(/^\}$/m);
     expect(existsSync(T('build.rs'))).toBe(true);
   });

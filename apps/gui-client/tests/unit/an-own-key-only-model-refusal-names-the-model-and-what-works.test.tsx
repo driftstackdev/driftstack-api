@@ -14,7 +14,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
-import { ForbiddenError, InternalError } from '@driftstack/sdk';
+import { ByokAnthropicRequiredError, ForbiddenError, InternalError } from '@driftstack/sdk';
 
 const create = vi.fn();
 const message = vi.fn();
@@ -95,9 +95,21 @@ describe('the own-key refusal sentence', () => {
   it('names the refused model, says what works, and never claims steps ran', () => {
     const reason = interruptedTurnReason(ownKeyRefusal('claude-opus-5'));
     expect(reason).toBe(
-      'Opus 5 runs only on your own Anthropic key. Add your key in Settings → AI & billing, then send the message again, or start a new chat with Sonnet 5.',
+      'Opus 5 runs only on your own Anthropic key. Add your key in the web dashboard at app.driftstack.io, then send the message again, or start a new chat with Sonnet 5.',
     );
     expect(reason).not.toMatch(NOTHING_RAN);
+  });
+
+  it('GUI audit #4 — both own-key sentences point to the web dashboard, never to Settings', () => {
+    // The app's own browser sign-in key is refused the Anthropic-key save by
+    // design, so "Add your key in Settings" sent the customer to a field that
+    // could never save it.
+    const missing = interruptedTurnReason(new ByokAnthropicRequiredError(problem(402)));
+    const ownKeyOnly = interruptedTurnReason(ownKeyRefusal('claude-opus-5'));
+    for (const reason of [missing, ownKeyOnly]) {
+      expect(reason).not.toMatch(/Settings/);
+      expect(reason).toMatch(/in the web dashboard at app\.driftstack\.io/);
+    }
   });
 
   it('names whichever own-key-only model was refused, not a hard-coded one', () => {

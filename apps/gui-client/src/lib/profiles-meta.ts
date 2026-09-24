@@ -306,3 +306,12 @@ export function aggregateTags(meta: ProfilesMetaMap): Array<{ tag: string; count
     .map(([tag, count]) => ({ tag, count }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
 }
+
+/** GUI audit #5 — sign-out forgets the local profile metadata (private notes,
+ *  icons, location overrides): it describes the signed-out account's profiles. */
+export function forgetProfilesMeta(): Promise<void> {
+  return writeLock(async () => {
+    await getStore().set(META_KEY, {});
+    await getStore().save();
+  });
+}

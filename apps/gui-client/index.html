@@ -57,10 +57,18 @@
             document.title = 'Driftstack error ' + code + ': ' + msg;
           }
         };
+        // These two listeners are for STARTUP only. Once the app has started
+        // (main.tsx sets __dsBooted when the React tree commits), main.tsx owns
+        // every error: it ignores benign LiveKit/WebRTC teardown races and turns
+        // anything else into a small non-fatal notice. These run FIRST, so without
+        // this stand-down they painted the latched full-screen overlay over a live
+        // session before main.tsx could decide (GUI audit #1).
         window.addEventListener('error', function (e) {
+          if (window.__dsBooted) return;
           window.__dsFatal('WINDOW_ERROR', e.error || e.message);
         });
         window.addEventListener('unhandledrejection', function (e) {
+          if (window.__dsBooted) return;
           window.__dsFatal('UNHANDLED_REJECTION', e.reason);
         });
         // Poll for the React mount instead of one hard deadline: a CPU-starved

@@ -85,7 +85,8 @@ describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () =>
     listMock.mockReset();
     fetchMock.mockReset();
     downloadResponseMock.mockReset();
-    downloadResponseMock.mockResolvedValue(true);
+    // Resolves with the name the file was saved under (GUI audit #6).
+    downloadResponseMock.mockResolvedValue('report.pdf');
   });
 
   it('lists files the page wrote into the download jail', async () => {
@@ -283,6 +284,7 @@ describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () =>
         expect(b).not.toBeNull();
         return b as HTMLButtonElement;
       });
+      downloadResponseMock.mockResolvedValueOnce('report (1).pdf');
       fireEvent.click(saveBtn);
       await waitFor(() => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -290,6 +292,11 @@ describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () =>
       expect(fetchMock.mock.calls[0]?.slice(0, 2)).toEqual(['agt_x', 'report.pdf']);
       await waitFor(() => {
         expect(downloadResponseMock).toHaveBeenCalledWith('report.pdf', response);
+      });
+      // GUI audit #6 — the note names the file as it was SAVED, which is not
+      // the site's name when that name was already taken in Downloads.
+      await waitFor(() => {
+        expect(container.textContent).toContain('Saved report (1).pdf to your Downloads folder.');
       });
       expect(atobSpy).not.toHaveBeenCalled();
     } finally {

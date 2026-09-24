@@ -25,6 +25,7 @@ import { fetchWithDeadline } from './fetch-with-deadline';
 import { readBoundedApiJson, readBoundedDiagnosticJson } from './read-bounded-json';
 import { parseH3Count, parseH3Observation } from './session-h3-observation';
 import { loadBaseUrl, loadSettings } from './settings';
+import { retryAfterMs } from './retry-after';
 
 export type SessionMode = 'ai' | 'manual' | 'pair';
 
@@ -184,6 +185,9 @@ export class AgentSessionControlError extends Error {
     /** RFC 7807 type suffix — 'forbidden' (scope) / 'conflict' (state) /
      *  'not-found' / 'auth_missing' / 'unknown'. */
     readonly kind: string,
+    /** GUI audit #12 — the response's Retry-After in ms, when it carried one,
+     *  so a poller can back off by what the server asked (lib/guarded-poll). */
+    readonly retryAfterMs: number | null = null,
   ) {
     super(message);
     this.name = 'AgentSessionControlError';
@@ -405,7 +409,7 @@ export async function authedResponse(
     } catch {
       // Non-JSON error body — keep the HTTP-status defaults.
     }
-    throw new AgentSessionControlError(detail, res.status, kind);
+    throw new AgentSessionControlError(detail, res.status, kind, retryAfterMs(res));
   }
   return res;
 }

@@ -1,26 +1,34 @@
-// Regression guard for the notifications SSE auth contract. The GUI panel
-// EventSource (NotificationToastStack → useNotifications) authenticates by
-// threading the bearer in the URL's `?ds_token=` query param, because
-// EventSource can't set an Authorization header. The server reads ONLY
-// `?ds_token=` (requireAuthEventSource, apps/server/src/middleware/auth.ts).
-// A prior `?token=` shipped and silently 401'd every notification stream —
-// this pins the param name so it can't drift back.
+// Regression guard for the notifications SSE auth contract.
+//
+// GUI audit #15 — the key used to ride in the URL (`?ds_token=`) because a
+// browser EventSource cannot set headers, so every intermediary that logs URLs
+// saw it. The stream is now read with a header-capable reader and the key goes
+// as `Authorization: Bearer …`, which the server's requireAuthEventSource reads
+// FIRST (apps/server/src/middleware/auth.ts). The URL carries no credential.
 
 import { describe, expect, it } from 'vitest';
-import { notificationStreamUrl } from '../../src/lib/notification-stream-url';
+import {
+  notificationStreamHeaders,
+  notificationStreamUrl,
+} from '../../src/lib/notification-stream-url';
 
 describe('notificationStreamUrl', () => {
-  it('threads the bearer via ?ds_token= (requireAuthEventSource), not ?token=', () => {
-    const url = notificationStreamUrl('https://api.driftstack.dev', 'tok-abc123');
-    expect(url).toBe('https://api.driftstack.dev/v1/account/me/notifications?ds_token=tok-abc123');
-    expect(url).toContain('?ds_token=');
-    expect(url).not.toContain('?token='); // the old, server-rejected param name
+  it('carries no credential of any kind', () => {
+    const url = notificationStreamUrl('https://api.driftstack.dev');
+    expect(url).toBe('https://api.driftstack.dev/v1/account/me/notifications');
+    expect(url).not.toContain('ds_token');
+    expect(url).not.toContain('token=');
   });
 
-  it('strips trailing slashes from the base URL and percent-encodes the token', () => {
-    const url = notificationStreamUrl('https://api.driftstack.dev///', 'a/b+c=');
-    expect(url).toBe(
-      'https://api.driftstack.dev/v1/account/me/notifications?ds_token=a%2Fb%2Bc%3D',
+  it('strips trailing slashes from the base URL', () => {
+    expect(notificationStreamUrl('https://api.driftstack.dev///')).toBe(
+      'https://api.driftstack.dev/v1/account/me/notifications',
     );
+  });
+
+  it('sends the key as a bearer header', () => {
+    expect(notificationStreamHeaders('tok-abc123')).toEqual({
+      authorization: 'Bearer tok-abc123',
+    });
   });
 });

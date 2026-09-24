@@ -91,10 +91,14 @@ objc2 = "0.6"
 # replaces the deprecated lockFocus/unlockFocus). Already in the lockfile
 # (transitive via objc2's stack).
 block2 = "0.6"
+# GUI audit #7 — NSURL + NSError mark a session download with the web-download
+# quarantine (NSURLQuarantinePropertiesKey), as WebKit's WKShareSheet does.
 objc2-foundation = { version = "0.3", features = [
     "NSString",
     "NSDictionary",
     "NSGeometry",
+    "NSURL",
+    "NSError",
     "objc2-core-foundation",
 ] }
 objc2-app-kit = { version = "0.3", features = [

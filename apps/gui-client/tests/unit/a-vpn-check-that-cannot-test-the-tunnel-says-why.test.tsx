@@ -30,7 +30,7 @@ import {
 import {
   CHECK_ENDPOINT_TITLE,
   CHECK_VPN_TITLE,
-  DESKTOP_CREDENTIAL_NEXT_STEP,
+  DESKTOP_CREDENTIAL_TALLY_REASON,
   MISSING_API_KEY_NEXT_STEP,
   VPN_NO_API_KEY_CHECK_NOTICE,
   VPN_NO_EXIT_YET,
@@ -443,20 +443,23 @@ describe('#3 — the profile card for a checked-but-no-exit VPN row', () => {
 });
 
 describe('#9 — one next step for a missing API key', () => {
-  it('every proxy-check sentence for a missing key carries the Settings next step', async () => {
+  it('every proxy-check sentence for a missing key carries the Settings next step', () => {
     expect(MISSING_API_KEY_NEXT_STEP).toBe('Connect your API key in Settings to test it');
     expect(VPN_NO_API_KEY_CHECK_NOTICE).toContain(MISSING_API_KEY_NEXT_STEP);
-    expect(DESKTOP_CREDENTIAL_NEXT_STEP).toContain(MISSING_API_KEY_NEXT_STEP);
+    expect(VPN_NO_API_KEY_CHECK_NOTICE).not.toMatch(/dashboard|sign in/i);
+  });
+
+  it('GUI audit #11 — a Free desktop key is NOT a missing key: its sentences name the plan, never the key step', async () => {
+    // The free-desktop route policy refuses a SIGNED-IN Free account; a pasted
+    // key is refused for Free accounts too, so "Connect your API key" was a
+    // dead end. MUTATION: point either constant back at MISSING_API_KEY_NEXT_STEP.
     const real = await vi.importActual<typeof AccountProxiesModule>(
       '../../src/lib/account-proxies',
     );
-    expect(real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON).toContain(MISSING_API_KEY_NEXT_STEP);
-    for (const s of [
-      VPN_NO_API_KEY_CHECK_NOTICE,
-      DESKTOP_CREDENTIAL_NEXT_STEP,
-      real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON,
-    ]) {
-      expect(s).not.toMatch(/dashboard|sign in/i);
+    for (const s of [DESKTOP_CREDENTIAL_TALLY_REASON, real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON]) {
+      expect(s).not.toContain(MISSING_API_KEY_NEXT_STEP);
+      expect(s).not.toMatch(/API key|Settings/i);
+      expect(s).toMatch(/Free plan/);
     }
   });
 

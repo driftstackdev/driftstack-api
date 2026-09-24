@@ -1598,13 +1598,17 @@ describe('SimulatorWindow — page tab strip', () => {
         },
       ];
 
+      // GUI audit #12 — the poll skips a tick while its previous request is
+      // still out, so let the mount's first request settle (it resolves at once
+      // here) before counting one request per 2 s tick.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
       for (const frame of unknownPollFrames) {
         pageStateValue = frame;
         const callsBeforeTick = getAgentSessionPageState.mock.calls.length;
         await act(async () => {
-          vi.advanceTimersByTime(2000);
-          await Promise.resolve();
-          await Promise.resolve();
+          await vi.advanceTimersByTimeAsync(2000);
         });
         expect(getAgentSessionPageState.mock.calls.length).toBe(callsBeforeTick + 1);
         expect(tabsById().get(activeId)).toEqual(baseline);

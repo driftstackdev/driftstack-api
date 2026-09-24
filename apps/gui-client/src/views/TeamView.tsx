@@ -13,16 +13,29 @@ import { useConfirm } from '../components/ConfirmProvider';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonRows } from '../components/Skeleton';
 import { humanizeError } from '../lib/humanize-error';
+import {
+  isDeviceKeyRefusal,
+  markDeviceKeyRefused,
+  useDeviceKeyRefused,
+} from '../lib/device-key-refusal';
+import { WEB_DASHBOARD_HOST, WEB_DASHBOARD_TEAM_URL } from '../lib/web-dashboard';
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /** Map a raw team API error to customer-friendly copy (the notice showed raw
- *  err.message — status codes / scope jargon a user can't act on). */
+ *  err.message — status codes / scope jargon a user can't act on).
+ *
+ *  ⛔ A 403 is NOT proof the caller is not the owner (GUI audit #4). The app's
+ *  own browser sign-in key is refused team changes BY DESIGN, so this used to
+ *  tell the owner "Only the account owner can manage the team." That refusal is
+ *  recognised before this is called (`isDeviceKeyRefusal`); any other 403 says
+ *  what is true for owner and member alike — this sign-in cannot, the dashboard
+ *  can — and never who the caller is. */
 function friendlyTeamError(err: unknown, fallback: string): string {
   const status = (err as { status?: number } | null)?.status;
   const msg = err instanceof Error ? err.message : '';
   if (status === 403 || /forbidden|owner|scope|not allowed/i.test(msg)) {
-    return 'Only the account owner can manage the team.';
+    return "This sign-in can't change the team. Team changes can be made in the web dashboard.";
   }
   if (status === 402 || /seat|limit|quota|upgrade/i.test(msg)) {
     return "You've reached your team's seat limit — upgrade your plan to add more members.";
@@ -38,7 +51,11 @@ export interface TeamViewProps {
 }
 
 export function TeamView({ onGoToSettings }: TeamViewProps): JSX.Element {
-  const { client } = useSettings();
+  const { client, settings } = useSettings();
+  // GUI audit #4 — once the server has refused this key as the desktop sign-in
+  // key, invite and remove can never work from here: say where they do, and
+  // disable them. Remembered per key, so it holds across views and remounts.
+  const managedInDashboard = useDeviceKeyRefused(settings.apiKey, settings.baseUrl);
   const confirm = useConfirm();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invites, setInvites] = useState<TeamInvite[]>([]);
@@ -142,12 +159,17 @@ export function TeamView({ onGoToSettings }: TeamViewProps): JSX.Element {
       // Silent re-fetch: repaint the lists in place, no full-list skeleton flash.
       await refresh({ silent: true });
     } catch (err) {
-      setNotice({ tone: 'error', text: friendlyTeamError(err, 'Could not send the invite.') });
+      if (isDeviceKeyRefusal(err)) {
+        markDeviceKeyRefused(settings.apiKey, settings.baseUrl);
+        setNotice(null);
+      } else {
+        setNotice({ tone: 'error', text: friendlyTeamError(err, 'Could not send the invite.') });
+      }
     } finally {
       invitingRef.current = false;
       setBusy(false);
     }
-  }, [client, email, role, refresh]);
+  }, [client, email, role, refresh, settings.apiKey, settings.baseUrl]);
 
   const handleRemove = useCallback(
     async (m: TeamMember): Promise<void> => {
@@ -165,12 +187,19 @@ export function TeamView({ onGoToSettings }: TeamViewProps): JSX.Element {
         // Silent re-fetch: repaint the lists in place, no full-list skeleton flash.
         await refresh({ silent: true });
       } catch (err) {
-        setNotice({ tone: 'error', text: friendlyTeamError(err, 'Could not remove the member.') });
+        if (isDeviceKeyRefusal(err)) {
+          markDeviceKeyRefused(settings.apiKey, settings.baseUrl);
+        } else {
+          setNotice({
+            tone: 'error',
+            text: friendlyTeamError(err, 'Could not remove the member.'),
+          });
+        }
       } finally {
         setRemovingId(null);
       }
     },
-    [client, confirm, refresh],
+    [client, confirm, refresh, settings.apiKey, settings.baseUrl],
   );
 
   // Signed out (no API key) → `refresh` bails before flipping `loading` off, so
@@ -239,12 +268,14 @@ export function TeamView({ onGoToSettings }: TeamViewProps): JSX.Element {
             }}
             placeholder="teammate@example.com"
             aria-label="Invitee email"
+            disabled={managedInDashboard}
             className="min-w-0 flex-1 rounded-lg border border-surface-divider bg-surface-inset px-3 py-1.5 text-sm text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none"
           />
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as TeamRole)}
             aria-label="Invitee role"
+            disabled={managedInDashboard}
             className="rounded-lg border border-surface-divider bg-surface-inset px-2.5 py-1.5 text-sm text-ink-primary focus:border-accent focus:outline-none"
           >
             <option value="member">Member</option>
@@ -253,12 +284,29 @@ export function TeamView({ onGoToSettings }: TeamViewProps): JSX.Element {
           <button
             type="button"
             onClick={() => void handleInvite()}
-            disabled={busy}
-            className="btn-primary px-4"
+            disabled={busy || managedInDashboard}
+            className="btn-primary px-4 disabled:opacity-50"
           >
             {busy ? 'Sending…' : 'Send invite'}
           </button>
         </div>
+        {managedInDashboard ? (
+          <p
+            role="status"
+            data-notice="team-managed-in-web-dashboard"
+            className="mt-3 rounded-md bg-surface-inset px-2.5 py-1.5 text-xs text-ink-secondary"
+          >
+            Team changes are managed in the web dashboard.{' '}
+            <a
+              href={WEB_DASHBOARD_TEAM_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent-text underline"
+            >
+              Open {WEB_DASHBOARD_HOST}
+            </a>
+          </p>
+        ) : null}
         {notice !== null ? (
           <p
             role={notice.tone === 'error' ? 'alert' : 'status'}
@@ -343,7 +391,7 @@ export function TeamView({ onGoToSettings }: TeamViewProps): JSX.Element {
                         <button
                           type="button"
                           onClick={() => void handleRemove(m)}
-                          disabled={removingId === m.id}
+                          disabled={removingId === m.id || managedInDashboard}
                           className="shrink-0 rounded-lg border border-surface-divider px-2.5 py-1.5 text-xs font-medium text-ink-secondary transition-colors hover:border-status-error/60 hover:text-status-error disabled:opacity-50"
                         >
                           {removingId === m.id ? 'Removing…' : 'Remove'}

@@ -25,6 +25,7 @@ import { humanizeError } from './humanize-error';
 import { disposeResponseBody } from './dispose-response-body';
 import { readApiErrorMessage } from './api-errors';
 import { readBoundedApiJson } from './read-bounded-json';
+import { isSlowDown, retryAfterMs } from './retry-after';
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -75,6 +76,54 @@ export interface UseBrowserSignInResult {
   cancel: () => void;
 }
 
+/** Driftstack's own cloud API, and the dashboard origins its sign-in page lives on. */
+const CLOUD_API_HOST = 'api.driftstack.dev';
+const CLOUD_DASHBOARD_HOSTS: ReadonlySet<string> = new Set([
+  'app.driftstack.io',
+  'app.driftstack.dev',
+]);
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * GUI audit #14 — is `browserUrl` this deployment's sign-in page for THIS flow?
+ *
+ * The URL comes from the server's /initiate answer and is opened in the default
+ * browser. The shell plugin's capability URL list is never consulted (its `open`
+ * takes no scope), so this is the check: it must carry the code the server just
+ * issued, be https (or loopback http for a local server), have no credentials in
+ * it, and — on Driftstack's own cloud — be the dashboard's `/cli/authorize`. A
+ * self-hosted server names its own dashboard host, so only the scheme and the
+ * code are required there.
+ */
+export function isThisFlowsSignInPage(
+  browserUrl: string,
+  apiBaseUrl: string,
+  code: string,
+): boolean {
+  let page: URL;
+  let api: URL;
+  try {
+    page = new URL(browserUrl);
+    api = new URL(apiBaseUrl);
+  } catch {
+    return false;
+  }
+  if (page.username !== '' || page.password !== '') return false;
+  if (page.searchParams.get('code') !== code) return false;
+  if (page.protocol === 'http:') {
+    return LOOPBACK_HOSTS.has(page.hostname) && LOOPBACK_HOSTS.has(api.hostname);
+  }
+  if (page.protocol !== 'https:') return false;
+  if (api.hostname === CLOUD_API_HOST) {
+    return (
+      CLOUD_DASHBOARD_HOSTS.has(page.hostname) &&
+      page.port === '' &&
+      page.pathname.replace(/\/+$/, '') === '/cli/authorize'
+    );
+  }
+  return true;
+}
+
 export function generateBrowserSignInState(): string {
   const bytes = new Uint8Array(24);
   crypto.getRandomValues(bytes);
@@ -99,6 +148,11 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
   // after it sees the code already gone), and a late "bound" can't sign
   // the customer in after they cancelled.
   const settledRef = useRef(false);
+  // GUI audit #8 — the earliest moment the next exchange poll may go out. A 429
+  // (the pre-login per-IP limit, shared by every desktop and CLI behind one
+  // address) pushes it back by the server's Retry-After; the flow keeps waiting
+  // until its own deadline instead of abandoning a key the user already approved.
+  const nextPollAtRef = useRef(0);
 
   const fetchWithDeadline = async (url: string, init: RequestInit): Promise<Response> => {
     const controller = new AbortController();
@@ -164,6 +218,7 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
 
   async function run(): Promise<void> {
     settledRef.current = false; // re-arm for a fresh attempt
+    nextPollAtRef.current = 0;
     setState({ kind: 'opening' });
     const trimmedUrl = opts.baseUrl.trim().replace(/\/+$/, '');
     const stateToken = generateBrowserSignInState();
@@ -188,6 +243,14 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
         throw Object.assign(
           new Error(
             'This server does not support secure browser sign-in. Update the server and desktop app together, or paste an API key.',
+          ),
+          { customerSafe: true },
+        );
+      }
+      if (!isThisFlowsSignInPage(initiate.browser_url, trimmedUrl, initiate.code)) {
+        throw Object.assign(
+          new Error(
+            "The server's sign-in page address wasn't one this app expects, so it wasn't opened. Check the server address in Settings, or paste an API key instead.",
           ),
           { customerSafe: true },
         );
@@ -282,6 +345,7 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
 
   async function pollOnce(serverUrl: string, code: string, stateToken: string): Promise<void> {
     if (pollInFlightRef.current || settledRef.current) return;
+    if (Date.now() < nextPollAtRef.current) return; // still inside a Retry-After
     pollInFlightRef.current = true;
     try {
       const res = await fetchWithDeadline(`${serverUrl}/v1/auth/cli-authorize/exchange`, {
@@ -297,6 +361,15 @@ export function useBrowserSignIn(opts: UseBrowserSignInOptions): UseBrowserSignI
         return;
       }
       if (!res.ok) {
+        if (isSlowDown(res)) {
+          // GUI audit #8 — "slow down", not "no": wait the server's Retry-After
+          // (never less than our own cadence) and keep polling. The flow's
+          // deadline still ends it if the wait outlasts the authorization.
+          const interval = opts.__pollIntervalMs ?? POLL_INTERVAL_MS;
+          nextPollAtRef.current = Date.now() + Math.max(retryAfterMs(res) ?? 0, interval);
+          await disposeResponseBody(res);
+          return;
+        }
         if (res.status >= 400 && res.status < 500) {
           stop();
           setState({

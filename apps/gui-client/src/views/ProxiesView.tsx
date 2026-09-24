@@ -112,7 +112,7 @@ import {
   CHECK_ENDPOINT_TITLE,
   CHECK_VPN_ACTION,
   CHECK_VPN_TITLE,
-  DESKTOP_CREDENTIAL_NEXT_STEP,
+  DESKTOP_CREDENTIAL_TALLY_REASON,
   EXIT_GEO_UNAVAILABLE,
   ENDPOINT_OK_PILL,
   ENDPOINT_OK_TITLE,
@@ -284,11 +284,11 @@ function notRunPhrase(why: AccountProxyTestNotRun): string {
     case 'plan_excluded':
       return 'not included in your plan';
     case 'desktop_credential':
-      // (j) J4 — the free-desktop route policy refused the CREDENTIAL, not the
-      // plan: the row is "not tested", like a row with no API key at all.
-      // (l) #9 — the same next step that row gets (Settings, never "the
-      // dashboard", which the GUI names nowhere as a place to go from here).
-      return DESKTOP_CREDENTIAL_NEXT_STEP;
+      // (j) J4 — the free-desktop route policy refused the row: "not tested".
+      // GUI audit #11 — it applies only to a Free account's desktop key, so the
+      // clause names the plan, never "connect your API key", which a signed-in
+      // Free account cannot do.
+      return DESKTOP_CREDENTIAL_TALLY_REASON;
   }
 }
 

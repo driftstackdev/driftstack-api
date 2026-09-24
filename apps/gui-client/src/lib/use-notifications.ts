@@ -11,7 +11,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { subscribeNotifications, type NotificationEvent } from './notifications';
-import { notificationStreamUrl } from './notification-stream-url';
+import { notificationStreamHeaders, notificationStreamUrl } from './notification-stream-url';
+import { HeaderEventSource, type EventSourceCtor } from './header-event-source';
 import { useSettings } from './SettingsContext';
 
 const DEFAULT_RING_SIZE = 16;
@@ -27,7 +28,7 @@ export interface UseNotificationsOpts {
   /** Max events retained in the in-memory ring. Defaults to 16. */
   ringSize?: number;
   /** EventSource factory override for tests. */
-  eventSourceFactory?: typeof EventSource;
+  eventSourceFactory?: EventSourceCtor;
   /** Disable auto-subscribe (useful for tests + opt-out flows). */
   disabled?: boolean;
 }
@@ -75,18 +76,25 @@ export function useNotifications(opts: UseNotificationsOpts = {}): UseNotificati
       setConnection('idle');
       return;
     }
-    const url = notificationStreamUrl(baseUrl, apiKey);
+    // GUI audit #15 — the key goes in a header, never the URL.
+    const url = notificationStreamUrl(baseUrl);
+    const headers = notificationStreamHeaders(apiKey);
+    const Source: EventSourceCtor =
+      opts.eventSourceFactory ??
+      class extends HeaderEventSource {
+        constructor(streamUrl: string) {
+          super(streamUrl, headers);
+        }
+      };
     const close = subscribeNotifications({
       url,
+      eventSourceFactory: Source,
       onEvent: (event) => {
         setEvents((prev) => [event, ...prev].slice(0, ringSize));
       },
       onState: (state) => {
         setConnection(state);
       },
-      ...(opts.eventSourceFactory !== undefined
-        ? { eventSourceFactory: opts.eventSourceFactory }
-        : {}),
     });
     closeRef.current = close;
     return () => {

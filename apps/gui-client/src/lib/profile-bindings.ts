@@ -146,3 +146,12 @@ export async function profilesUsingProxy(proxyId: string): Promise<string[]> {
   const all = await listBindings();
   return all.filter((b) => b.defaultProxyId === proxyId).map((b) => b.profileId);
 }
+
+/** GUI audit #5 — sign-out forgets every profile → proxy / session binding:
+ *  they name the signed-out account's profiles, proxies and live sessions. */
+export async function forgetAllBindings(): Promise<void> {
+  return writeLock(async () => {
+    await getStore().set(KEY, []);
+    await getStore().save();
+  });
+}

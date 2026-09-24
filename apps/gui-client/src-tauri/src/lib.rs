@@ -460,6 +460,8 @@ pub fn run() {
             endpoint_resolve,
             simulator_app_supported,
             launch_simulator,
+            close_simulator_windows,
+            mark_session_download,
             repair_simulator_install,
             set_dock_tile,
             reset_dock_tile,
@@ -1157,6 +1159,185 @@ fn ping() -> &'static str {
     "pong"
 }
 
+/// The command-line pattern that finds the separate Simulator app's process: its
+/// executable lives under `Driftstack Simulator.app/Contents/MacOS/`. The main
+/// app only CARRIES the companion as a resource, so it never matches.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn simulator_companion_process_pattern() -> String {
+    format!("{SIMULATOR_APP_FILE_NAME}/Contents/MacOS/")
+}
+
+/// `pkill` arguments that end the Simulator companion: a fixed signal and the
+/// fixed pattern above. Nothing from the caller reaches the command line.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn simulator_companion_quit_args() -> Vec<String> {
+    vec![
+        "-TERM".to_string(),
+        "-f".to_string(),
+        simulator_companion_process_pattern(),
+    ]
+}
+
+/// An in-process Simulator window opened by the main app (Windows, Linux):
+/// `simulator-<session label>` (`open-simulator.ts`).
+fn is_in_process_simulator_window_label(label: &str) -> bool {
+    label
+        .strip_prefix("simulator-")
+        .is_some_and(is_safe_session_label)
+}
+
+/// GUI audit #5 — close every open Simulator window, on sign-out.
+///
+/// A Simulator window holds a per-session control key for the signed-out
+/// account's live session; left open it stays on screen, and in control, for
+/// whoever signs in next on this computer. Closes the in-process
+/// `simulator-<session>` windows, and on macOS ends the separate Simulator app
+/// (its control keys live only in its own memory, so they go with it). Main
+/// window only. Returns how many in-process windows were closed.
+#[tauri::command]
+fn close_simulator_windows(window: tauri::WebviewWindow) -> Result<u32, String> {
+    ensure_main_gui_command(&window)?;
+    use tauri::Manager as _;
+    let mut closed = 0;
+    for (label, win) in window.app_handle().webview_windows() {
+        if is_in_process_simulator_window_label(&label) && win.destroy().is_ok() {
+            closed += 1;
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // Exit status 1 is "no companion running", the common case; any other
+        // failure is logged and sign-out goes on.
+        match std::process::Command::new("/usr/bin/pkill")
+            .args(simulator_companion_quit_args())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+        {
+            Ok(status) if status.success() || status.code() == Some(1) => {}
+            Ok(status) => eprintln!("[simulator] ending the companion on sign-out: {status}"),
+            Err(error) => eprintln!("[simulator] ending the companion on sign-out: {error}"),
+        }
+    }
+    Ok(closed)
+}
+
+/// One plain file name directly inside Downloads: no separator, no parent, no
+/// control character, and within the usual 255-byte file-name limit. The save
+/// (`download.ts` `safeFilename`) already strips separators and `..` runs.
+fn is_plain_download_file_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 255
+        && name != "."
+        && name != ".."
+        && !name.contains(['/', '\\'])
+        && !name.chars().any(char::is_control)
+}
+
+/// The windows that save a website's file from a session: the separate macOS
+/// Simulator app's windows, and the main app's in-process `simulator-<session>`
+/// windows (Windows, Linux). Never the main window.
+fn is_session_download_caller(app_identifier: &str, window_label: &str) -> bool {
+    is_simulator_command_caller(app_identifier, window_label)
+        || (app_identifier == MAIN_GUI_IDENTIFIER
+            && is_in_process_simulator_window_label(window_label))
+}
+
+/// GUI audit #7 — mark a file saved from a session as downloaded from the web.
+///
+/// A website's file reaches `~/Downloads` through the fs plugin, which writes it
+/// like any locally created file: no quarantine, so Gatekeeper never checks an
+/// app inside a downloaded archive and it opens with no warning, where a browser
+/// would have warned. This gives it the mark Safari's downloads carry.
+///
+/// How Safari/WebKit do it (read in WebKit's source): the sandboxed network
+/// process writes downloads already quarantined and `DownloadProxy` relaxes
+/// `QTN_FLAG_HARD` through the private `qtn_file_*` calls; where WebKit marks a
+/// file itself (`WKShareSheet`), it uses the PUBLIC route —
+/// `NSURLQuarantinePropertiesKey` with `kLSQuarantineTypeWebDownload` and the
+/// agent. That public route is the one used here. Windows gets the
+/// `Zone.Identifier` stream browsers write (ZoneId=3, the Internet zone).
+#[tauri::command]
+fn mark_session_download(window: tauri::WebviewWindow, name: String) -> Result<(), String> {
+    use tauri::Manager as _;
+    let app = window.app_handle();
+    if !is_session_download_caller(&app.config().identifier, window.label()) {
+        return Err(COMMAND_ACCESS_DENIED.to_string());
+    }
+    if !is_plain_download_file_name(&name) {
+        return Err("invalid download name".to_string());
+    }
+    let path = app
+        .path()
+        .download_dir()
+        .map_err(|e| e.to_string())?
+        .join(&name);
+    let meta = std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?;
+    if !meta.file_type().is_file() {
+        return Err("the download is not a regular file".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        apply_download_quarantine(&path, "Driftstack", &app.config().identifier)
+    }
+    #[cfg(windows)]
+    {
+        let mut stream = path.into_os_string();
+        stream.push(":Zone.Identifier");
+        std::fs::write(stream, "[ZoneTransfer]\r\nZoneId=3\r\n").map_err(|e| e.to_string())
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        let _ = path;
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[link(name = "CoreServices", kind = "framework")]
+extern "C" {
+    static kLSQuarantineTypeKey: &'static objc2_foundation::NSString;
+    static kLSQuarantineTypeWebDownload: &'static objc2_foundation::NSString;
+    static kLSQuarantineAgentNameKey: &'static objc2_foundation::NSString;
+    static kLSQuarantineAgentBundleIdentifierKey: &'static objc2_foundation::NSString;
+}
+
+/// Set LaunchServices' quarantine properties on `path` as a web download by
+/// `agent_name` / `agent_bundle_id` (see `mark_session_download`).
+#[cfg(target_os = "macos")]
+fn apply_download_quarantine(
+    path: &std::path::Path,
+    agent_name: &str,
+    agent_bundle_id: &str,
+) -> Result<(), String> {
+    use objc2::runtime::AnyObject;
+    use objc2_foundation::{NSDictionary, NSString, NSURLQuarantinePropertiesKey, NSURL};
+    let path = path.to_str().ok_or("the download path is not UTF-8")?;
+    let url = NSURL::fileURLWithPath(&NSString::from_str(path));
+    let agent = NSString::from_str(agent_name);
+    let bundle = NSString::from_str(agent_bundle_id);
+    // SAFETY: CoreServices' exported CFStringRef constants, toll-free bridged to
+    // NSString and valid for the life of the process.
+    let (type_key, web_download, agent_key, bundle_key) = unsafe {
+        (
+            kLSQuarantineTypeKey,
+            kLSQuarantineTypeWebDownload,
+            kLSQuarantineAgentNameKey,
+            kLSQuarantineAgentBundleIdentifierKey,
+        )
+    };
+    let properties: objc2::rc::Retained<NSDictionary<NSString, NSString>> =
+        NSDictionary::from_slices(
+            &[type_key, agent_key, bundle_key],
+            &[web_download, &*agent, &*bundle],
+        );
+    let value: &AnyObject = &properties;
+    // SAFETY: NSURLQuarantinePropertiesKey takes an NSDictionary of the
+    // kLSQuarantine* keys, which is exactly what `value` is.
+    unsafe { url.setResourceValue_forKey_error(Some(value), NSURLQuarantinePropertiesKey) }
+        .map_err(|e| e.localizedDescription().to_string())
+}
+
 /// Launch the separate "Driftstack Simulator" app. The complete base64 session
 /// query (LiveKit JWT + session control key) is atomically written to a 0600
 /// single-use handoff file. argv carries only the validated non-secret session
@@ -1450,7 +1631,7 @@ fn embedded_simulator_version(source: &std::path::Path) -> Option<String> {
 fn simulator_is_running() -> bool {
     std::process::Command::new("/usr/bin/pgrep")
         .arg("-f")
-        .arg(format!("{SIMULATOR_APP_FILE_NAME}/Contents/MacOS/"))
+        .arg(simulator_companion_process_pattern())
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
@@ -2627,6 +2808,38 @@ fn parse_exit_echo(body: &serde_json::Value) -> Result<ProxyExitProbeResult, Str
     })
 }
 
+/// GUI audit #17 — the echo URL on the server this app is configured for.
+///
+/// The probe always asked production, whatever the configured server: staging
+/// and self-hosted customers' proxy exits were sent to production, and where
+/// production was unreachable through the proxy the exit read as unknown.
+/// `https` only (the answer names the exit a session leaves from and travels
+/// through the proxy being measured); host, optional port and a plain path —
+/// no credentials, query or fragment.
+fn exit_echo_url(api_base: &str) -> Result<String, String> {
+    let base = api_base.trim().trim_end_matches('/');
+    let rest = base
+        .strip_prefix("https://")
+        .ok_or_else(|| "the exit check needs an https server address".to_string())?;
+    let (host, path) = match rest.find('/') {
+        Some(i) => (&rest[..i], &rest[i..]),
+        None => (rest, ""),
+    };
+    let host_ok = !host.is_empty()
+        && host.len() <= 262
+        && host
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b':'));
+    let path_ok = path.len() <= 256
+        && path
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'.' | b'-' | b'_' | b'~'));
+    if !host_ok || !path_ok {
+        return Err("invalid server address".to_string());
+    }
+    Ok(format!("https://{host}{path}/v1/egress/echo"))
+}
+
 #[tauri::command]
 async fn proxy_exit_probe(
     window: tauri::WebviewWindow,
@@ -2634,8 +2847,10 @@ async fn proxy_exit_probe(
     port: u16,
     username: Option<String>,
     password: Option<String>,
+    api_base: String,
 ) -> Result<ProxyExitProbeResult, String> {
     ensure_main_gui_command(&window)?;
+    let echo_url = exit_echo_url(&api_base)?;
     // One blocking HTTPS round-trip THROUGH the proxy with an 8s timeout (T-17:
     // the echo alone — the former second hop to a third-party IP-echo host is
     // gone, see ProxyExitProbeResult). Still the worst offender for freezing
@@ -2653,10 +2868,7 @@ async fn proxy_exit_probe(
             .proxy(proxy)
             .timeout(std::time::Duration::from_secs(8))
             .build();
-        let resp = agent
-            .get("https://api.driftstack.dev/v1/egress/echo")
-            .call()
-            .map_err(|e| e.to_string())?;
+        let resp = agent.get(&echo_url).call().map_err(|e| e.to_string())?;
         let body: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
         parse_exit_echo(&body)
     })
@@ -3928,6 +4140,193 @@ mod tests {
             r#"null"#,
         ] {
             assert!(parse_exit_echo(&echo_body(body)).is_err(), "body: {body}");
+        }
+    }
+
+    #[test]
+    fn sign_out_closes_only_the_in_process_simulator_windows() {
+        // GUI audit #5 — sign-out closes the in-process `simulator-<session>`
+        // windows (Windows, Linux), never the main window or anything else.
+        assert!(is_in_process_simulator_window_label(
+            "simulator-ses_abc-123"
+        ));
+        assert!(is_in_process_simulator_window_label(
+            "simulator-6f1c2d3e-0000-4000-8000-000000000001"
+        ));
+        assert!(!is_in_process_simulator_window_label("main"));
+        assert!(!is_in_process_simulator_window_label("simulator-"));
+        assert!(!is_in_process_simulator_window_label("simulator"));
+        assert!(!is_in_process_simulator_window_label("simulatorx-1"));
+        assert!(!is_in_process_simulator_window_label("simulator-../main"));
+        assert!(!is_in_process_simulator_window_label("updater"));
+    }
+
+    #[test]
+    fn sign_out_quits_the_simulator_companion_and_nothing_else() {
+        // GUI audit #5 — on macOS the Simulator is a separate app; sign-out ends
+        // it with a fixed signal to a fixed pattern (no caller input), the same
+        // pattern the companion-refresh check already uses to find it.
+        let pattern = simulator_companion_process_pattern();
+        assert!(
+            "/Applications/Driftstack Simulator.app/Contents/MacOS/driftstack-gui"
+                .contains(&pattern)
+        );
+        assert!(!"/Applications/Driftstack.app/Contents/MacOS/Driftstack".contains(&pattern));
+        assert!(
+            !"/Applications/Driftstack.app/Contents/Resources/Driftstack Simulator.app.zip"
+                .contains(&pattern)
+        );
+        assert_eq!(
+            simulator_companion_quit_args(),
+            vec!["-TERM".to_string(), "-f".to_string(), pattern]
+        );
+    }
+
+    #[test]
+    fn a_session_download_name_is_one_plain_file_in_downloads() {
+        // GUI audit #7 — the command marks ONE file directly in Downloads, named
+        // as the save named it; never a path, a parent, or a hidden trick.
+        for ok in [
+            "statement.pdf",
+            "statement (1).pdf",
+            "README",
+            "invoice.zip",
+            "a b c.txt",
+        ] {
+            assert!(is_plain_download_file_name(ok), "{ok}");
+        }
+        for bad in [
+            "",
+            ".",
+            "..",
+            "../x.pdf",
+            "a/b.pdf",
+            "a\\b.pdf",
+            "/etc/passwd",
+            "x\0y",
+            "line\nbreak.pdf",
+        ] {
+            assert!(!is_plain_download_file_name(bad), "{bad:?}");
+        }
+        assert!(!is_plain_download_file_name(&"a".repeat(256)));
+    }
+
+    #[test]
+    fn only_simulator_windows_may_mark_a_session_download() {
+        assert!(is_session_download_caller(SIMULATOR_IDENTIFIER, "main"));
+        assert!(is_session_download_caller(
+            SIMULATOR_IDENTIFIER,
+            "sim-ses_1"
+        ));
+        assert!(is_session_download_caller(
+            MAIN_GUI_IDENTIFIER,
+            "simulator-ses_1"
+        ));
+        assert!(!is_session_download_caller(MAIN_GUI_IDENTIFIER, "main"));
+        assert!(!is_session_download_caller(
+            MAIN_GUI_IDENTIFIER,
+            "sim-ses_1"
+        ));
+        assert!(!is_session_download_caller(
+            SIMULATOR_IDENTIFIER,
+            "simulator-ses_1"
+        ));
+        assert!(!is_session_download_caller("com.example.other", "main"));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_session_download_carries_the_web_download_quarantine_mark() {
+        // GUI audit #7 — the mark Safari's downloads carry: LaunchServices'
+        // quarantine properties with the web-download type and the agent, set
+        // through the public NSURLQuarantinePropertiesKey (as WebKit's
+        // WKShareSheet does). Read back from the file's com.apple.quarantine
+        // extended attribute, which is what Gatekeeper checks on open.
+        let dir = std::env::temp_dir().join(format!(
+            "ds-quarantine-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let file = dir.join("invoice.zip");
+        std::fs::write(&file, b"website bytes").expect("temp file");
+        assert_eq!(
+            read_quarantine_xattr(&file),
+            None,
+            "a fresh file is unmarked"
+        );
+
+        apply_download_quarantine(&file, "Driftstack", MAIN_GUI_IDENTIFIER)
+            .expect("quarantine applied");
+
+        let value = read_quarantine_xattr(&file).expect("com.apple.quarantine is set");
+        let fields: Vec<&str> = value.split(';').collect();
+        assert!(fields.len() >= 3, "{value}");
+        let flags = u32::from_str_radix(fields[0], 16).expect("hex flags");
+        // Not pre-approved: Gatekeeper still assesses the file on first open.
+        assert_eq!(flags & 0x0040, 0, "{value}");
+        assert_eq!(fields[2], "Driftstack", "{value}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(target_os = "macos")]
+    fn read_quarantine_xattr(path: &std::path::Path) -> Option<String> {
+        use std::os::unix::ffi::OsStrExt as _;
+        let c_path = std::ffi::CString::new(path.as_os_str().as_bytes()).ok()?;
+        let name = std::ffi::CString::new("com.apple.quarantine").ok()?;
+        let mut buf = vec![0u8; 1024];
+        // SAFETY: both strings are NUL-terminated and `buf` is writable for its length.
+        let n = unsafe {
+            libc::getxattr(
+                c_path.as_ptr(),
+                name.as_ptr(),
+                buf.as_mut_ptr().cast(),
+                buf.len(),
+                0,
+                0,
+            )
+        };
+        if n < 0 {
+            return None;
+        }
+        buf.truncate(n as usize);
+        String::from_utf8(buf).ok()
+    }
+
+    #[test]
+    fn the_exit_probe_asks_the_configured_server_not_production() {
+        // GUI audit #17 — the echo is asked of the server this app is configured
+        // for (staging, self-hosted), never a hard-coded production host.
+        assert_eq!(
+            exit_echo_url("https://api.driftstack.dev").as_deref(),
+            Ok("https://api.driftstack.dev/v1/egress/echo")
+        );
+        assert_eq!(
+            exit_echo_url("https://staging.driftstack.dev/").as_deref(),
+            Ok("https://staging.driftstack.dev/v1/egress/echo")
+        );
+        assert_eq!(
+            exit_echo_url("https://driftstack.internal.acme.com:8443/api").as_deref(),
+            Ok("https://driftstack.internal.acme.com:8443/api/v1/egress/echo")
+        );
+        // https only: the answer names the exit the customer's sessions leave
+        // from, and it crosses the proxy being measured.
+        for bad in [
+            "",
+            "http://localhost:3000",
+            "http://api.driftstack.dev",
+            "https://",
+            "https://user:pw@evil.example.com",
+            "https://a.example.com?x=1",
+            "https://a.example.com#frag",
+            "https://a.example.com/ spaces",
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+        ] {
+            assert!(exit_echo_url(bad).is_err(), "{bad:?}");
         }
     }
 }

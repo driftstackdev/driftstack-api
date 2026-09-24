@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-repair-simulator-install"
+description = "Enables the repair_simulator_install command without any pre-configured scope."
+commands.allow = ["repair_simulator_install"]
+
+[[permission]]
+identifier = "deny-repair-simulator-install"
+description = "Denies the repair_simulator_install command without any pre-configured scope."
+commands.deny = ["repair_simulator_install"]

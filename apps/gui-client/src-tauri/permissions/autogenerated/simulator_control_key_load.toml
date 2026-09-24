@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-simulator-control-key-load"
+description = "Enables the simulator_control_key_load command without any pre-configured scope."
+commands.allow = ["simulator_control_key_load"]
+
+[[permission]]
+identifier = "deny-simulator-control-key-load"
+description = "Denies the simulator_control_key_load command without any pre-configured scope."
+commands.deny = ["simulator_control_key_load"]

@@ -66,6 +66,7 @@ import { fetchActiveAgentSessionCount } from './lib/active-agent-sessions';
 import { buildClient } from './lib/client';
 import { dispatchDeepLink } from './lib/deep-link';
 import { openSessionById } from './lib/open-simulator';
+import { forgetSignedOutAccount } from './lib/forget-signed-out-account';
 import { friendlySimulatorOpenReason } from './lib/simulator-open-error';
 import { installAppDeepLinkSources } from './lib/app-deep-link-listener';
 import { record } from './lib/log-buffer';
@@ -666,6 +667,10 @@ function Shell(): JSX.Element {
       // the user is signed out for this session.
       console.warn('[app] sign-out persist failed (cleared in-memory anyway):', err);
     }
+    // GUI audit #5 — and nothing of the account stays for the next person:
+    // chats, saved proxies with their credentials, cached readings, and any
+    // open Simulator window. Never throws.
+    await forgetSignedOutAccount();
     setWizardDismissed(false);
     setView({ kind: 'profiles' });
   };

@@ -26,7 +26,7 @@ import {
   type OsFingerprintUnavailable,
 } from './os-fingerprint-verdict';
 import { cleanWireProxyVantage, type ProxyVantage } from './proxy-vantage';
-import { MISSING_API_KEY_NEXT_STEP } from './proxy-check-copy';
+import { FREE_PLAN_FLEET_TEST_SENTENCE } from './proxy-check-copy';
 
 /**
  * Whether this account's plan carries no VPN egress — so no check of a VPN row
@@ -637,7 +637,7 @@ export type AccountProxyTestResult =
  *  `cleanTestNotRun` does not admit it. (j) J4 — `desktop_credential` likewise:
  *  minted from the 403 the free-desktop ROUTE POLICY answers a Free `cli_device`
  *  credential with (the /test route is not in FREE_DESKTOP_ALLOWED_ROUTES), so
- *  the row is "not tested" — it needs an API key — never "not in your plan". */
+ *  the row is "not tested" — the check is not on the Free plan (GUI audit #11). */
 export type AccountProxyTestNotRun =
   | 'live_session'
   | 'node_busy'
@@ -822,10 +822,10 @@ export function isTierRefusalDetail(detail: string | undefined): detail is strin
  *  `detail` sentence is the discriminator here too; matched, never reproduced.
  *  The problem+json `detail` is appended so the server's own next step
  *  ("upgrade to an API-enabled tier") survives. */
-// (l) #9 — the next step is the ONE the whole app gives for a missing key
-// (Settings), never "the dashboard", which the GUI names nowhere as a place
-// the customer can go from here.
-export const DESKTOP_CREDENTIAL_FLEET_TEST_REASON = `Testing through Driftstack needs an API key. ${MISSING_API_KEY_NEXT_STEP}.`;
+// GUI audit #11 — the refusal is the Free plan's, so the sentence says so. It
+// used to send the customer to "Connect your API key in Settings", which a
+// signed-in Free account can never complete.
+export const DESKTOP_CREDENTIAL_FLEET_TEST_REASON = FREE_PLAN_FLEET_TEST_SENTENCE;
 
 /** The server's route-policy detail — the shared contract's sentence, not a
  *  copy of it. (k) K1 — this used to be a hand-copied phrase in a regex, so a

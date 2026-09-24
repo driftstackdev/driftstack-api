@@ -1,15 +1,21 @@
-// Builds the notifications SSE URL for the GUI panel's EventSource.
+// The notifications SSE URL and the credential that goes WITH it.
 //
-// EventSource can't set an Authorization header, so the bearer (the account
-// API key) rides in the `?ds_token=` query param — the server's
-// requireAuthEventSource contract (apps/server/src/middleware/auth.ts), the
-// same param the SSE routes (/v1/account/me/notifications, the agent-sessions
-// livekit-token stream) read. A prior `?token=` shipped and silently 401'd
-// every notification stream; this lives in its own dependency-free module so
-// the param name is unit-pinned (notification-stream-url.test.ts) and can't
-// drift back — importing the hook itself pulls the SettingsContext/Tauri chain
-// that doesn't load under jsdom.
-export function notificationStreamUrl(baseUrl: string, apiKey: string): string {
+// GUI audit #15 — the account key used to ride in this URL (`?ds_token=`),
+// because a browser EventSource cannot set headers. Anything between the app and
+// the API that logs URLs (a CDN or edge, a TLS-inspecting corporate proxy) then
+// saw a key that never expires. The stream is now read with a header-capable
+// reader (lib/header-event-source.ts) and the key travels as
+// `Authorization: Bearer …`, which the server's requireAuthEventSource reads
+// first (apps/server/src/middleware/auth.ts). The URL carries no credential.
+//
+// Kept dependency-free so the contract is unit-pinned
+// (notification-stream-url.test.ts) without the SettingsContext/Tauri chain.
+export function notificationStreamUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, '');
-  return `${trimmed}/v1/account/me/notifications?ds_token=${encodeURIComponent(apiKey)}`;
+  return `${trimmed}/v1/account/me/notifications`;
+}
+
+/** The headers that authenticate the stream. */
+export function notificationStreamHeaders(apiKey: string): Record<string, string> {
+  return { authorization: `Bearer ${apiKey}` };
 }

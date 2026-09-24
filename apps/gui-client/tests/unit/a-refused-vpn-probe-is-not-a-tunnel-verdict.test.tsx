@@ -1443,10 +1443,10 @@ describe('(i) I6 — a 403 on /test is the tier refusal, surfaced as a not_run',
 // text is pinned once, in the K1 arm below, so a copy change reds there.
 const ROUTE_POLICY_DETAIL: string = FREE_DESKTOP_ROUTE_DENIED_DETAIL;
 
-describe('(j) J4 — the free-desktop route-policy 403 is "needs an API key", never the tier notice', () => {
+describe('(j) J4 — the free-desktop route-policy 403 is "not on the Free plan", never the tier notice', () => {
   // MUTATION: route the policy detail through the tier arm (or drop the arm) →
   // plan_excluded / a throw → red.
-  it('CRITICAL the wire: 403 + the route-policy detail → not_run desktop_credential with the API-key sentence and the detail — not plan_excluded', async () => {
+  it('CRITICAL the wire: 403 + the route-policy detail → not_run desktop_credential with the Free-plan sentence — not plan_excluded', async () => {
     nextResponse = () =>
       problem403(
         JSON.stringify({
@@ -1465,10 +1465,11 @@ describe('(j) J4 — the free-desktop route-policy 403 is "needs an API key", ne
     // The route-policy detail talks about API routes and credentials; it is the
     // discriminator, never part of the customer's sentence.
     expect(r.ok === false ? r.reason : '').not.toContain('API route');
-    // (l) #9 — the next step is Settings, the one the whole app gives for a
-    // missing key; "the dashboard" is named nowhere in the GUI as a place to go.
+    // GUI audit #11 — the route policy only ever refuses a Free account's
+    // desktop key, so the sentence names the plan. It used to say "Connect your
+    // API key in Settings", which a signed-in Free account can never do.
     expect(real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON).toBe(
-      'Testing through Driftstack needs an API key. Connect your API key in Settings to test it.',
+      "The full check through Driftstack isn't included on the Free plan. Upgrade your plan to run it.",
     );
     // The toEqual above pins the whole sentence; this names the claim.
     expect(real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON).not.toContain(
@@ -1515,7 +1516,7 @@ describe('(j) J4 — the free-desktop route-policy 403 is "needs an API key", ne
     ).toBe(false);
   });
 
-  it('CRITICAL the grid: the API-key sentence as a muted notice beside "endpoint ok" — never "not included in your plan", "tunnel down" or "did not answer"; Test all counts the row NOT TESTED (needs an API key from the dashboard)', async () => {
+  it('CRITICAL the grid: the Free-plan sentence as a muted notice beside "endpoint ok" — never "not included in your plan", "tunnel down" or "did not answer"; Test all counts the row NOT TESTED (not on the Free plan)', async () => {
     testAccountProxy.mockResolvedValue({
       ok: false,
       reason: real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON,
@@ -1533,8 +1534,8 @@ describe('(j) J4 — the free-desktop route-policy 403 is "needs an API key", ne
     // the row) and not the tier's clause.
     expect(
       await screen.findByText(
-        // (l) #9 — the one Settings next step, never "the dashboard".
-        '1 VPN tunnel not tested (needs an API key — Connect your API key in Settings to test it) — nothing was tested',
+        // GUI audit #11 — the plan, never "connect your API key".
+        '1 VPN tunnel not tested (not included on the Free plan) — nothing was tested',
       ),
     ).toBeInTheDocument();
     expect((await loadProbeCache()).vpn1?.fleetFailureReason).toBeUndefined();

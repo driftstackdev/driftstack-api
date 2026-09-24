@@ -446,6 +446,22 @@ export async function openSimulatorWindow({
   }
 }
 
+/**
+ * GUI audit #5 — close every open Simulator window: the in-process
+ * `simulator-<session>` windows (Windows, Linux) and, on macOS, the separate
+ * Simulator app. Called on sign-out: a Simulator window holds a control key for
+ * the signed-out account's live session, and must not stay on screen, or in
+ * reach, for whoever signs in next. Never throws.
+ */
+export async function closeAllSimulatorWindows(): Promise<void> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('close_simulator_windows');
+  } catch (err) {
+    console.warn('[simulator] closing the Simulator windows failed:', err);
+  }
+}
+
 /** Does this launcher failure mean the Simulator app simply is not installed?
  *
  * Matched on the Rust error text rather than a code because `launch_simulator`

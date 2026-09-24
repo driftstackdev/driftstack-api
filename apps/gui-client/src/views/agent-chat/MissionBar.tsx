@@ -182,7 +182,7 @@ export function MissionBar({
               locked
                 ? 'Model is locked for the current chat — start a new chat to change it'
                 : hasOwnKey === false
-                  ? 'Some models run only on your own Anthropic key. Add one in Settings → AI & billing.'
+                  ? 'Some models run only on your own Anthropic key. Add one in the web dashboard at app.driftstack.io.'
                   : 'Model'
             }
           >

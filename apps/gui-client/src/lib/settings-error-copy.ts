@@ -1,3 +1,18 @@
+/**
+ * GUI audit #10 — the bundled-AI settings (consent, monthly limit) belong to the
+ * account they bill. The server refuses the change for any request acting in a
+ * teammate's workspace (`account-bundled-llm.ts`: self workspace only), so in
+ * one the app disables "Save AI billing" and "Enable AI features" and says why,
+ * rather than offering a control whose only answer is "try again".
+ */
+export const AI_SETTINGS_BELONG_TO_WORKSPACE_OWNER =
+  'AI settings belong to the workspace owner. Switch to Personal to change your own.';
+
+/** True while the app acts in a teammate's workspace (not Personal). */
+export function isTeammateWorkspace(activeWorkspace: string | null | undefined): boolean {
+  return typeof activeWorkspace === 'string' && activeWorkspace.length > 0;
+}
+
 export type SettingsAction =
   | 'save-ai-billing'
   | 'save-provider-key'

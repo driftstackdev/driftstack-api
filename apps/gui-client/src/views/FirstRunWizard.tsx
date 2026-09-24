@@ -63,6 +63,9 @@ const SELF_HOSTED_DEFAULT_URL = 'http://localhost:3000';
 // unless they spot the small paste link (M10, first-run friendliness).
 const SIGN_IN_SLOW_MS = 40_000;
 
+/** How long "Check key and continue" waits for the server (GUI audit #19). */
+const KEY_CHECK_DEADLINE_MS = 10_000;
+
 export interface FirstRunWizardProps {
   /** Called when the wizard finishes (success or skip-to-app). */
   onComplete: () => void;
@@ -102,7 +105,15 @@ export function FirstRunWizard({ onComplete }: FirstRunWizardProps): JSX.Element
     const trimmedUrl = baseUrl.trim().replace(/\/+$/, '');
     const trimmedKey = (overrideKey ?? apiKey).trim();
     try {
-      const client = new Driftstack({ apiKey: trimmedKey, baseUrl: trimmedUrl });
+      // GUI audit #19 — one question with a person waiting on it: a 10 s deadline
+      // and no retries. The SDK defaults (30 s, three retries on a timeout) kept
+      // "Validating…" on screen for ~2 minutes against a server dropping packets.
+      const client = new Driftstack({
+        apiKey: trimmedKey,
+        baseUrl: trimmedUrl,
+        timeoutMs: KEY_CHECK_DEADLINE_MS,
+        retry: { maxAttempts: 0 },
+      });
       await client.account.me();
       await update({ apiKey: trimmedKey, baseUrl: trimmedUrl }, { reportPersistenceFailure: true });
       setStep('profile');

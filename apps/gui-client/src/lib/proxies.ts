@@ -22,6 +22,7 @@ import type {
   WireGuardConfigInput,
 } from './account-proxies';
 import { makeWriteLock } from './store-write-lock';
+import { loadBaseUrl } from './settings';
 
 export interface ProxyConfig {
   id: string;
@@ -205,6 +206,48 @@ export async function removeProxy(id: string): Promise<void> {
     const all = await listProxiesUnlocked();
     await persist(all.filter((p) => p.id !== id));
     await deleteSecret(id).catch(() => undefined);
+  });
+}
+
+/**
+ * GUI audit #5 — sign-out forgets every saved proxy, its credentials, and the
+ * vault key that decrypts them.
+ *
+ * The registry is not keyed by account, so without this the next person to sign
+ * in on this computer saw the previous account's proxies — passwords and VPN
+ * configs viewable in the editor — and a Test or launch through one re-created
+ * it, credentials included, in THEIR account (`ensureAccountProxyRow` reads a
+ * 404 on the old account's server id as a stale row). Deleting the vault key
+ * also makes any envelope a failed write left behind unreadable.
+ *
+ * Reads the raw rows (never the migration path, which could touch the keychain
+ * to protect a legacy plaintext secret that is about to be deleted anyway), and
+ * removes the legacy per-proxy keychain items too. Best-effort per item: one
+ * failed keychain delete must not keep the rest.
+ */
+export async function forgetAllProxies(): Promise<void> {
+  return writeLock(async () => {
+    const raw = await getStore().get<unknown>(PROXIES_KEY);
+    const ids = Array.isArray(raw)
+      ? raw
+          .map((r) => (typeof r === 'object' && r !== null ? (r as { id?: unknown }).id : null))
+          .filter((id): id is string => typeof id === 'string' && id.length > 0)
+      : [];
+    const envelopes = await getStore().get<unknown>(SECRET_ENVELOPES_KEY);
+    if (typeof envelopes === 'object' && envelopes !== null) {
+      for (const id of Object.keys(envelopes)) if (!ids.includes(id)) ids.push(id);
+    }
+    await getStore().set(PROXIES_KEY, []);
+    await getStore().set(SECRET_ENVELOPES_KEY, {});
+    await getStore().save();
+    volatileSecrets.clear();
+    protectedLoadFailures.clear();
+    vaultKeyPromise = null;
+    vaultKeyFailure = null;
+    for (const id of ids) {
+      await invoke('secret_delete', { key: secretName(id) }).catch(() => undefined);
+    }
+    await invoke('secret_delete', { key: VAULT_KEY_NAME }).catch(() => undefined);
   });
 }
 
@@ -1033,6 +1076,9 @@ export async function probeProxyExit(input: {
       port: input.port,
       username: input.username,
       password: input.password,
+      // GUI audit #17 — the echo is asked of the configured server, never a
+      // hard-coded production host (the native side accepts https only).
+      apiBase: await loadBaseUrl(),
     });
   } catch {
     return null;

@@ -29,6 +29,8 @@
 // the Tauri plugins), and tests pass fakes.
 
 import type { Update } from '@tauri-apps/plugin-updater';
+import { DEFAULT_REQUEST_TIMEOUT_MS } from './fetch-with-deadline';
+import { readBoundedDiagnosticJson } from './read-bounded-json';
 
 /** What the UI needs to render the prompt + drive the install. */
 export interface AvailableUpdate {
@@ -1196,9 +1198,25 @@ async function checkManifestVerbose(deps: UpdaterDeps): Promise<UpdateCheckResul
   try {
     const currentVersion = await deps.currentVersion();
     if (currentVersion === null) return { status: 'none' };
-    const res = await fetch(MANIFEST_URL, { redirect: 'follow' });
-    if (!res.ok) return { status: 'unreachable' };
-    const body: unknown = await res.json();
+    // GUI audit #18 — a deadline, kept armed through the body read, and a
+    // bounded read. A plain fetch + res.json() left Settings on "Checking…" and
+    // the 6-hourly loop's in-flight flag set for as long as a stalled connection
+    // lasted, and buffered whatever the endpoint sent. The manifest is a few KB.
+    // (The fetch stays a literal `fetch(MANIFEST_URL` so the repo's external-URL
+    // detector keeps seeing this module; see a-hardcoded-external-url-…test.ts.)
+    const controller = new AbortController();
+    const deadline = setTimeout(() => controller.abort(), DEFAULT_REQUEST_TIMEOUT_MS);
+    let body: unknown;
+    try {
+      const res = await fetch(MANIFEST_URL, { redirect: 'follow', signal: controller.signal });
+      if (!res.ok) {
+        await res.body?.cancel().catch(() => undefined);
+        return { status: 'unreachable' };
+      }
+      body = await readBoundedDiagnosticJson<unknown>(res);
+    } finally {
+      clearTimeout(deadline);
+    }
     const version =
       typeof body === 'object' &&
       body !== null &&

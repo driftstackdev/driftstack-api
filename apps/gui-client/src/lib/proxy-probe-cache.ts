@@ -1234,6 +1234,25 @@ async function migrateOnce(cache: ProbeCacheMap): Promise<void> {
   }
 }
 
+/**
+ * GUI audit #5 — sign-out forgets every cached reading (exits, locations, OS
+ * and capability verdicts) and the automatic check's backoff ledger. They are
+ * readings of the signed-out account's proxies, which sign-out removes too.
+ * Subscribers are told, so an open surface drops what it was showing.
+ */
+export function forgetProbeCache(): Promise<void> {
+  return writeLock(async () => {
+    await getStore().set(KEY, {});
+    await getStore().set(ATTEMPTS_KEY, {});
+    await getStore().save();
+    // The proxies these marks name are gone with the account. The edit COUNT
+    // stays monotonic: a list sync compares against it.
+    pendingMaterialEdits.clear();
+    lastMaterialEdit.clear();
+    emitProbeCache({});
+  });
+}
+
 /** Record a probe result. `at` injected by the caller (Date.now()) so the
  *  function stays trivially testable. */
 export function saveProbeResult(

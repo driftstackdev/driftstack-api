@@ -47,7 +47,9 @@ describe('disposeResponseBody', () => {
       ['../../src/lib/account-proxies.ts', 5],
       ['../../src/lib/account-organization.ts', 2],
       ['../../src/components/SettingsAccountCard.tsx', 2],
-      ['../../src/lib/browser-sign-in.ts', 2],
+      // GUI audit #8 — 2 → 3: a rate-limited exchange poll is now a "slow
+      // down" exit of its own (it keeps waiting), and it disposes its body too.
+      ['../../src/lib/browser-sign-in.ts', 3],
     ] as const) {
       const source = readFileSync(new URL(relative, import.meta.url), 'utf8');
       expect(source.match(/disposeResponseBody\(/g) ?? [], relative).toHaveLength(expectedCalls);

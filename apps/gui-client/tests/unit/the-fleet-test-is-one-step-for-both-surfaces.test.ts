@@ -363,15 +363,17 @@ describe('(V2) vpnStoreRefusal — each refusal names itself', () => {
   it('CRITICAL the free-desktop ROUTE-POLICY 403 is the CREDENTIAL, not the plan', async () => {
     const { AccountProxyRequestError, DESKTOP_CREDENTIAL_REFUSAL_DETAIL } =
       await import('../../src/lib/account-proxies');
-    const { DESKTOP_CREDENTIAL_NEXT_STEP, VPN_PLAN_EXCLUDED_CHECK_NOTICE } =
+    const { DESKTOP_CREDENTIAL_TALLY_REASON, VPN_PLAN_EXCLUDED_CHECK_NOTICE } =
       await import('../../src/lib/proxy-check-copy');
     const { vpnStoreRefusal } = await import('../../src/lib/proxy-server-test');
     const r = vpnStoreRefusal(
       new AccountProxyRequestError('create', 403, { detail: DESKTOP_CREDENTIAL_REFUSAL_DETAIL }),
     );
-    expect(r.notice).toContain('needs an API key');
+    // GUI audit #11 — the Free plan, never "needs an API key".
+    expect(r.notice).toContain("isn't included on the Free plan");
+    expect(r.notice).not.toContain('API key');
     expect(r.notice).not.toBe(VPN_PLAN_EXCLUDED_CHECK_NOTICE);
-    expect(r.tally).toBe(DESKTOP_CREDENTIAL_NEXT_STEP);
+    expect(r.tally).toBe(DESKTOP_CREDENTIAL_TALLY_REASON);
   });
 
   it('VACUITY CONTROL — any other refusal carries the server’s own sentence, and a 403 with an unknown detail is NOT the plan', async () => {

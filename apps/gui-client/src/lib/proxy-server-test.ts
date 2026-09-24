@@ -33,7 +33,7 @@ import {
 import { openvpnAutoStrip } from './openvpn-refusal';
 import type { OsFingerprint } from './os-fingerprint-verdict';
 import {
-  DESKTOP_CREDENTIAL_NEXT_STEP,
+  DESKTOP_CREDENTIAL_TALLY_REASON,
   MISSING_API_KEY_NEXT_STEP,
   VPN_PLAN_EXCLUDED_CHECK_NOTICE,
   VPN_PLAN_EXCLUDED_TALLY_REASON,
@@ -1713,7 +1713,7 @@ export function vpnStoreRefusal(err: unknown): { notice: string; tally: string }
     if (isDesktopCredentialRefusalDetail(detail)) {
       return {
         notice: `Address found. ${DESKTOP_CREDENTIAL_FLEET_TEST_REASON}`,
-        tally: DESKTOP_CREDENTIAL_NEXT_STEP,
+        tally: DESKTOP_CREDENTIAL_TALLY_REASON,
       };
     }
   }

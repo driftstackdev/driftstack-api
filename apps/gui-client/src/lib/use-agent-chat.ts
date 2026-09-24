@@ -484,7 +484,9 @@ export function ownKeyModelRefusal(err: unknown): { model: string | null } | nul
 function ownKeyModelReason(model: string | null): string {
   const label = model !== null ? chatModelLabel(model) : null;
   const subject = label ?? 'The model this chat uses';
-  const addKey = `${subject} runs only on your own Anthropic key. Add your key in Settings → AI & billing, then send the message again`;
+  // GUI audit #4 — the web dashboard, not Settings: the app's own browser
+  // sign-in key is refused the Anthropic-key save by design.
+  const addKey = `${subject} runs only on your own Anthropic key. Add your key in the web dashboard at app.driftstack.io, then send the message again`;
   // Never suggest the model that was just refused.
   if (model === DEFAULT_AGENT_MODEL) return `${addKey}.`;
   const fallback = chatModelLabel(DEFAULT_AGENT_MODEL) ?? 'the default model';
@@ -507,7 +509,7 @@ export function interruptedTurnReason(err: unknown): string {
     return 'This turn stopped because AI features need a one-time setup. Enable them, then send the message again.';
   }
   if (err instanceof ByokAnthropicRequiredError) {
-    return 'This turn stopped because your Anthropic API key was missing or rejected. Add or replace it in Settings → AI & billing, then send the message again.';
+    return 'This turn stopped because your Anthropic API key was missing or rejected. Add or replace it in the web dashboard at app.driftstack.io, then send the message again.';
   }
   const ownKeyRefusal = ownKeyModelRefusal(err);
   if (ownKeyRefusal !== null) return ownKeyModelReason(ownKeyRefusal.model);

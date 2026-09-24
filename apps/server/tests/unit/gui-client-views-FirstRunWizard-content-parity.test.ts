@@ -92,7 +92,7 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
       /const trimmedUrl = baseUrl\.trim\(\)\.replace\(\/\\\/\+\$\/, ''\);\s*const trimmedKey = \(overrideKey \?\? apiKey\)\.trim\(\);/,
     );
     expect(body).toMatch(
-      /const client = new Driftstack\(\{ apiKey: trimmedKey, baseUrl: trimmedUrl \}\);\s*await client\.account\.me\(\);/,
+      /const client = new Driftstack\(\{\s*apiKey: trimmedKey,\s*baseUrl: trimmedUrl,\s*timeoutMs: KEY_CHECK_DEADLINE_MS,\s*retry: \{ maxAttempts: 0 \},?\s*\}\);\s*await client\.account\.me\(\);/,
     );
     // 2026-05-20 — inline comment was dropped when the validateAndSave
     // function was rearchitected ffe8bfa4; pin the await update call

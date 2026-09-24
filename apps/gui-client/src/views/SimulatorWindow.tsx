@@ -146,6 +146,7 @@ import {
 import { pageErrorCopy, pageErrorInfoEqual, type PageErrorInfo } from '../lib/page-error-copy';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import { downloadBlob, downloadJson, downloadResponse } from '../lib/download';
+import { startGuardedPoll } from '../lib/guarded-poll';
 import {
   loadSimulatorWindowSize,
   persistBaseUrl,
@@ -7206,213 +7207,212 @@ function SimulatorWindowInner({
     const pollSessionId = sessionId;
     const pollRoom = room;
     const pollAuthorityEpoch = manualInputControl.epoch;
-    const tick = (): void => {
-      void getAgentSessionPageState(sessionId, controlAuth)
-        .then((ps) => {
+    // GUI audit #12 — the tick RETURNS its request so the poll can guard it
+    // (lib/guarded-poll): no tick starts while the previous one is still out, and
+    // a 429 holds the poll back by the server's Retry-After. It used to be a
+    // bare interval that, against a slow control plane (15 s deadline, 500 ms
+    // cadence while navigating), could hold ~30 requests open at once.
+    const tick = (): Promise<void> =>
+      getAgentSessionPageState(sessionId, controlAuth).then((ps) => {
+        if (
+          cancelled ||
+          ps === null ||
+          pollAuthorityEpoch !== manualInputControlRef.current.epoch ||
+          pollSessionId !== sessionIdRef.current ||
+          roomBindingRef.current?.sessionId !== pollSessionId ||
+          roomBindingRef.current.room !== pollRoom
+        )
+          return;
+        const pollTargetId = resolvePageStateTabTarget(
+          ps.tabId,
+          tabsRef.current,
+          activeTabIdRef.current,
+          tabSpaceEstablishedRef.current,
+        );
+        // A tagged poll is scoped to that renderer. If its tab was closed or the
+        // restored set replaced it, the stale response is inert rather than being
+        // reinterpreted as foreground state.
+        if (pollTargetId === null) return;
+        // Box-sourced url/title → tab storage (the box is the only writer). When
+        // the poll frame carries a tabId, route precisely — no grace needed (it
+        // lands on the right tab). When an older/self-hosted node omits it, the poll
+        // targets the ACTIVE tab and could carry the PRIOR tab's url for ~2s
+        // after a switch/navigate (the box hasn't re-reported the new page yet) →
+        // the founder's "2nd switch stays on the same url" clobber. So within the
+        // grace window suppress BOTH the URL and the TITLE (founder 2026-07-07:
+        // "title/url not accurate at all times"). A tabId-less in-grace frame
+        // carries the PRIOR tab's page, so applying its title routes the WRONG
+        // tab's title onto the just-switched tab — the persistent inaccuracy. The
+        // earlier design let the title through ("self-heals") but that assumption
+        // fails when a legacy node keeps re-asserting the tabId-less prior title; keeping
+        // the tab's own last-known title (null ⇒ writeTabPageState skips it) until a
+        // genuine frame arrives is strictly more accurate. Current fleet nodes carry
+        // tabId; this branch remains a compatibility fallback (A3 #116).
+        const hasTabId = typeof ps.tabId === 'string' && ps.tabId !== '';
+        const inGrace =
+          Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS ||
+          Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
+        const suppress = !hasTabId && inGrace;
+        // T-23 — the poll is the frame that actually reverted the bar: current nodes
+        // stamp tabId, so the grace suppression above never applied, and the store
+        // keeps reporting the OLD page until the new load commits. Hold that url
+        // while the typed navigation is pending (mirrors the data-channel path).
+        const pendingVerdict = judgePendingNavigationFrame(
+          pendingNavRef.current,
+          { tabId: pollTargetId, url: ps.url, state: ps.state },
+          Date.now(),
+          normalizeNavUrl,
+        );
+        if (pendingVerdict === 'resolve') pendingNavRef.current = null;
+        const heldByPendingNav = pendingVerdict === 'hold';
+        // Authoritative for the SWITCH iff it routes by tabId OR it arrived outside
+        // the post-switch grace window — a tabId-less in-grace poll still carries the
+        // PRIOR tab's page, so it must NOT resolve the switch (keep the retry net up).
+        const inSwitchGrace = Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
+        writeTabPageState(
+          {
+            tabId: ps.tabId,
+            url: suppress || heldByPendingNav ? null : ps.url,
+            title: suppress || heldByPendingNav ? null : ps.title,
+            state: ps.state,
+          },
+          hasTabId || !inSwitchGrace,
+          pollAuthorityEpoch,
+        );
+        // T-25 (2026-09-08) — the on-screen keyboard is driven ONLY by the LiveKit
+        // data-channel focus path above, NEVER by this ~2s CP poll. Focus is
+        // EDGE-triggered (a blur→focus event); the poll is LEVEL-REPLAYED (it re-serves
+        // the last page-state every ~2s), so applying focus from it would re-assert a
+        // stale inputFocused=true a couple of seconds AFTER a genuine blur and pop the
+        // keyboard back up, repeatedly. The harness keeps focus room-only for exactly
+        // this reason (publishInputFocus does NOT append to pageStateBuffer). On a
+        // data-channel loss the keyboard therefore stays as the user left it (focus
+        // UNKNOWN, not driven from a stale poll) and resumes edge-driven behaviour when
+        // the channel recovers. ⛔ Do NOT wire a poll consumer of ps.input_focused here
+        // — a level-replayed poll cannot carry an edge signal without reintroducing the
+        // pop-back. `ps.input_focused` stays on the wire (always null today) but is
+        // deliberately unconsumed by this path.
+        // #116 warm-tabs pre-flight (mirrors the data-channel path): the window-global
+        // page chrome below (freeze badge / error overlay / load-stall advisory / loading
+        // bar + watchdog / nav-target gate) must be driven ONLY by a frame for the ACTIVE
+        // tab. A null/omitted tag retains older/self-hosted compatibility; a present
+        // unknown tag was rejected above. Current fleet tabId stamping plus live BACKGROUND renderers mean a background
+        // tab's poll frame routes its url/title above but must not
+        // touch the foreground chrome (else the #72/#135 false-error is re-introduced
+        // cross-tab). Recognition mirrors writeTabPageState exactly.
+        if (pollTargetId !== activeTabIdRef.current) return;
+        // A3 W2845 — surface/clear the frozen-renderer badge from the poll too
+        // (independent of the loading grace window; a stall is real regardless).
+        // #4 — through applyStalledState so each 'stalled' poll refreshes the TTL
+        // stamp: a real ongoing stall keeps re-stamping (badge stays lit), while a
+        // one-time stall the store keeps re-reading self-clears after the TTL.
+        //
+        // BUT defer to a fresher DATA-CHANNEL frame: the poll reads an un-TTL'd store
+        // that lags a recovery, so right after the box recovers (data channel pushed a
+        // non-stalled state, badge cleared) a stale 'stalled' poll would re-raise the
+        // badge — and then keep it lit for the full TTL (each poll re-stamps it). When
+        // the live data channel reported within the grace window, skip the poll's
+        // stale stall flip entirely; a genuinely-still-stalled page keeps pushing
+        // 'stalled' over the data channel, so the badge stays lit for a REAL freeze.
+        const liveFrameFresh = Date.now() - lastDataChannelStateAtRef.current < PAGE_STATE_GRACE_MS;
+        if (!liveFrameFresh) applyStalledState(ps.state === 'stalled');
+        // #135 — mirror the data-channel: a 'loading' poll tracks the current nav
+        // target; the loaded/errored gates match against it so a stale poll frame from
+        // a page already left can't drive the overlay / load-gate.
+        if (
+          ps.state === 'loading' &&
+          typeof ps.url === 'string' &&
+          ps.url.length > 0 &&
+          !isNewTabLoadError(ps.url) &&
+          !heldByPendingNav // T-23 — a held frame is the OLD page; the typed target stays
+        ) {
+          const pnorm = normalizeNavUrl(ps.url);
+          if (pnorm !== currentNavTargetRef.current) {
+            currentNavTargetRef.current = pnorm;
+            pageReachedLoadedRef.current = false; // #135 — new box-driven page → re-arm gate
+          }
+        }
+        const pollNavTargetOk =
+          currentNavTargetRef.current === '' ||
+          normalizeNavUrl(ps.url) === currentNavTargetRef.current;
+        // #72 — same painted-'loaded' gate as the data-channel path: once this
+        // navigation has loaded, a later 'errored' poll is a sub-resource failure,
+        // not a top-level nav failure → don't pop the overlay over a working page.
+        if (ps.state === 'loaded' && !isNewTabLoadError(ps.url) && pollNavTargetOk) {
+          pageReachedLoadedRef.current = true;
+        }
+        // W616 — surface/clear the page-navigation error from the poll too (same
+        // payload as the data-channel path); 'errored' shows the overlay ONLY before
+        // the page ever loaded (#72), any other state clears it. A blank new-tab
+        // whose branded page couldn't load through the proxy is graceful (no overlay).
+        setPageError((prev) => {
           if (
-            cancelled ||
-            ps === null ||
-            pollAuthorityEpoch !== manualInputControlRef.current.epoch ||
-            pollSessionId !== sessionIdRef.current ||
-            roomBindingRef.current?.sessionId !== pollSessionId ||
-            roomBindingRef.current.room !== pollRoom
-          )
-            return;
-          const pollTargetId = resolvePageStateTabTarget(
-            ps.tabId,
-            tabsRef.current,
-            activeTabIdRef.current,
-            tabSpaceEstablishedRef.current,
-          );
-          // A tagged poll is scoped to that renderer. If its tab was closed or the
-          // restored set replaced it, the stale response is inert rather than being
-          // reinterpreted as foreground state.
-          if (pollTargetId === null) return;
-          // Box-sourced url/title → tab storage (the box is the only writer). When
-          // the poll frame carries a tabId, route precisely — no grace needed (it
-          // lands on the right tab). When an older/self-hosted node omits it, the poll
-          // targets the ACTIVE tab and could carry the PRIOR tab's url for ~2s
-          // after a switch/navigate (the box hasn't re-reported the new page yet) →
-          // the founder's "2nd switch stays on the same url" clobber. So within the
-          // grace window suppress BOTH the URL and the TITLE (founder 2026-07-07:
-          // "title/url not accurate at all times"). A tabId-less in-grace frame
-          // carries the PRIOR tab's page, so applying its title routes the WRONG
-          // tab's title onto the just-switched tab — the persistent inaccuracy. The
-          // earlier design let the title through ("self-heals") but that assumption
-          // fails when a legacy node keeps re-asserting the tabId-less prior title; keeping
-          // the tab's own last-known title (null ⇒ writeTabPageState skips it) until a
-          // genuine frame arrives is strictly more accurate. Current fleet nodes carry
-          // tabId; this branch remains a compatibility fallback (A3 #116).
-          const hasTabId = typeof ps.tabId === 'string' && ps.tabId !== '';
-          const inGrace =
-            Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS ||
-            Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
-          const suppress = !hasTabId && inGrace;
-          // T-23 — the poll is the frame that actually reverted the bar: current nodes
-          // stamp tabId, so the grace suppression above never applied, and the store
-          // keeps reporting the OLD page until the new load commits. Hold that url
-          // while the typed navigation is pending (mirrors the data-channel path).
-          const pendingVerdict = judgePendingNavigationFrame(
-            pendingNavRef.current,
-            { tabId: pollTargetId, url: ps.url, state: ps.state },
-            Date.now(),
-            normalizeNavUrl,
-          );
-          if (pendingVerdict === 'resolve') pendingNavRef.current = null;
-          const heldByPendingNav = pendingVerdict === 'hold';
-          // Authoritative for the SWITCH iff it routes by tabId OR it arrived outside
-          // the post-switch grace window — a tabId-less in-grace poll still carries the
-          // PRIOR tab's page, so it must NOT resolve the switch (keep the retry net up).
-          const inSwitchGrace = Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
-          writeTabPageState(
-            {
-              tabId: ps.tabId,
-              url: suppress || heldByPendingNav ? null : ps.url,
-              title: suppress || heldByPendingNav ? null : ps.title,
-              state: ps.state,
-            },
-            hasTabId || !inSwitchGrace,
-            pollAuthorityEpoch,
-          );
-          // T-25 (2026-09-08) — the on-screen keyboard is driven ONLY by the LiveKit
-          // data-channel focus path above, NEVER by this ~2s CP poll. Focus is
-          // EDGE-triggered (a blur→focus event); the poll is LEVEL-REPLAYED (it re-serves
-          // the last page-state every ~2s), so applying focus from it would re-assert a
-          // stale inputFocused=true a couple of seconds AFTER a genuine blur and pop the
-          // keyboard back up, repeatedly. The harness keeps focus room-only for exactly
-          // this reason (publishInputFocus does NOT append to pageStateBuffer). On a
-          // data-channel loss the keyboard therefore stays as the user left it (focus
-          // UNKNOWN, not driven from a stale poll) and resumes edge-driven behaviour when
-          // the channel recovers. ⛔ Do NOT wire a poll consumer of ps.input_focused here
-          // — a level-replayed poll cannot carry an edge signal without reintroducing the
-          // pop-back. `ps.input_focused` stays on the wire (always null today) but is
-          // deliberately unconsumed by this path.
-          // #116 warm-tabs pre-flight (mirrors the data-channel path): the window-global
-          // page chrome below (freeze badge / error overlay / load-stall advisory / loading
-          // bar + watchdog / nav-target gate) must be driven ONLY by a frame for the ACTIVE
-          // tab. A null/omitted tag retains older/self-hosted compatibility; a present
-          // unknown tag was rejected above. Current fleet tabId stamping plus live BACKGROUND renderers mean a background
-          // tab's poll frame routes its url/title above but must not
-          // touch the foreground chrome (else the #72/#135 false-error is re-introduced
-          // cross-tab). Recognition mirrors writeTabPageState exactly.
-          if (pollTargetId !== activeTabIdRef.current) return;
-          // A3 W2845 — surface/clear the frozen-renderer badge from the poll too
-          // (independent of the loading grace window; a stall is real regardless).
-          // #4 — through applyStalledState so each 'stalled' poll refreshes the TTL
-          // stamp: a real ongoing stall keeps re-stamping (badge stays lit), while a
-          // one-time stall the store keeps re-reading self-clears after the TTL.
-          //
-          // BUT defer to a fresher DATA-CHANNEL frame: the poll reads an un-TTL'd store
-          // that lags a recovery, so right after the box recovers (data channel pushed a
-          // non-stalled state, badge cleared) a stale 'stalled' poll would re-raise the
-          // badge — and then keep it lit for the full TTL (each poll re-stamps it). When
-          // the live data channel reported within the grace window, skip the poll's
-          // stale stall flip entirely; a genuinely-still-stalled page keeps pushing
-          // 'stalled' over the data channel, so the badge stays lit for a REAL freeze.
-          const liveFrameFresh =
-            Date.now() - lastDataChannelStateAtRef.current < PAGE_STATE_GRACE_MS;
-          if (!liveFrameFresh) applyStalledState(ps.state === 'stalled');
-          // #135 — mirror the data-channel: a 'loading' poll tracks the current nav
-          // target; the loaded/errored gates match against it so a stale poll frame from
-          // a page already left can't drive the overlay / load-gate.
-          if (
-            ps.state === 'loading' &&
-            typeof ps.url === 'string' &&
-            ps.url.length > 0 &&
-            !isNewTabLoadError(ps.url) &&
-            !heldByPendingNav // T-23 — a held frame is the OLD page; the typed target stays
+            ps.state !== 'errored' ||
+            isNewTabLoadError(ps.url) ||
+            pageReachedLoadedRef.current ||
+            !pollNavTargetOk
           ) {
-            const pnorm = normalizeNavUrl(ps.url);
-            if (pnorm !== currentNavTargetRef.current) {
-              currentNavTargetRef.current = pnorm;
-              pageReachedLoadedRef.current = false; // #135 — new box-driven page → re-arm gate
-            }
+            return null;
           }
-          const pollNavTargetOk =
-            currentNavTargetRef.current === '' ||
-            normalizeNavUrl(ps.url) === currentNavTargetRef.current;
-          // #72 — same painted-'loaded' gate as the data-channel path: once this
-          // navigation has loaded, a later 'errored' poll is a sub-resource failure,
-          // not a top-level nav failure → don't pop the overlay over a working page.
-          if (ps.state === 'loaded' && !isNewTabLoadError(ps.url) && pollNavTargetOk) {
-            pageReachedLoadedRef.current = true;
-          }
-          // W616 — surface/clear the page-navigation error from the poll too (same
-          // payload as the data-channel path); 'errored' shows the overlay ONLY before
-          // the page ever loaded (#72), any other state clears it. A blank new-tab
-          // whose branded page couldn't load through the proxy is graceful (no overlay).
-          setPageError((prev) => {
-            if (
-              ps.state !== 'errored' ||
-              isNewTabLoadError(ps.url) ||
-              pageReachedLoadedRef.current ||
-              !pollNavTargetOk
-            ) {
-              return null;
-            }
-            // #7 — within the post-navigate / post-switch grace window a stale
-            // 'errored' from the un-correlated store must NOT re-raise the overlay
-            // the operator just dismissed (keep `prev`); the live data-channel push
-            // surfaces a REAL post-nav error immediately, and the next out-of-grace
-            // poll still raises it (the store keeps the latest 'errored', so it is
-            // deferred, not lost — mirroring the 'loading' grace below).
-            if (inGrace) return prev;
-            const next = ps.error ?? {};
-            // The poll returns a fresh envelope every ~2s. Reusing the prior snapshot
-            // when its fields are unchanged prevents an otherwise permanent parent
-            // rerender (including the video host + tab strip) while an error is shown.
-            return prev !== null && pageErrorInfoEqual(prev, next) ? prev : next;
-          });
-          // #135 — clear the soft load-stall advisory from the POLL too. A3's timeout
-          // stall arrives ONLY over the data channel (publishPageStateToRoom), so the
-          // poll never SETS pageLoadStalled — but the terminal 'loaded'/'errored' that
-          // supersedes it may reach the GUI only via the poll if the data-channel frame
-          // was dropped/coalesced, which would otherwise latch the banner over a loaded
-          // page forever. Defer to a fresher data-channel frame (which already cleared
-          // it in its else-branch) and only clear for the current nav target reaching a
-          // terminal state.
-          if (
-            !liveFrameFresh &&
-            pollNavTargetOk &&
-            (ps.state === 'loaded' || ps.state === 'errored')
-          ) {
-            setPageLoadStalled(null);
-          }
-          const loading = ps.state === 'loading';
-          // Don't let a stale 'loaded' (the box hasn't seen our just-submitted
-          // navigate yet) kill the optimistic spinner. Within the grace window after
-          // a navigate, only ESCALATE to loading; the target-owned fallback still
-          // bounds it and turns a dropped terminal frame into an explicit Retry.
-          // T-23 — a held frame (the OLD page, typed navigation pending) must not turn
-          // the spinner off either; the ceiling bounds the hold as it bounds the wait.
-          if (
-            !loading &&
-            (heldByPendingNav || Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS)
-          )
-            return;
-          if (loading) {
-            setPageLoading(armLoadWatchdog());
-          } else {
-            setPageLoading(false);
-            clearLoadWatchdog();
-          }
-        })
-        .catch(() => {
-          /* best-effort poll — transient errors are non-fatal */
+          // #7 — within the post-navigate / post-switch grace window a stale
+          // 'errored' from the un-correlated store must NOT re-raise the overlay
+          // the operator just dismissed (keep `prev`); the live data-channel push
+          // surfaces a REAL post-nav error immediately, and the next out-of-grace
+          // poll still raises it (the store keeps the latest 'errored', so it is
+          // deferred, not lost — mirroring the 'loading' grace below).
+          if (inGrace) return prev;
+          const next = ps.error ?? {};
+          // The poll returns a fresh envelope every ~2s. Reusing the prior snapshot
+          // when its fields are unchanged prevents an otherwise permanent parent
+          // rerender (including the video host + tab strip) while an error is shown.
+          return prev !== null && pageErrorInfoEqual(prev, next) ? prev : next;
         });
-    };
-    tick();
+        // #135 — clear the soft load-stall advisory from the POLL too. A3's timeout
+        // stall arrives ONLY over the data channel (publishPageStateToRoom), so the
+        // poll never SETS pageLoadStalled — but the terminal 'loaded'/'errored' that
+        // supersedes it may reach the GUI only via the poll if the data-channel frame
+        // was dropped/coalesced, which would otherwise latch the banner over a loaded
+        // page forever. Defer to a fresher data-channel frame (which already cleared
+        // it in its else-branch) and only clear for the current nav target reaching a
+        // terminal state.
+        if (
+          !liveFrameFresh &&
+          pollNavTargetOk &&
+          (ps.state === 'loaded' || ps.state === 'errored')
+        ) {
+          setPageLoadStalled(null);
+        }
+        const loading = ps.state === 'loading';
+        // Don't let a stale 'loaded' (the box hasn't seen our just-submitted
+        // navigate yet) kill the optimistic spinner. Within the grace window after
+        // a navigate, only ESCALATE to loading; the target-owned fallback still
+        // bounds it and turns a dropped terminal frame into an explicit Retry.
+        // T-23 — a held frame (the OLD page, typed navigation pending) must not turn
+        // the spinner off either; the ceiling bounds the hold as it bounds the wait.
+        if (
+          !loading &&
+          (heldByPendingNav || Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS)
+        )
+          return;
+        if (loading) {
+          setPageLoading(armLoadWatchdog());
+        } else {
+          setPageLoading(false);
+          clearLoadWatchdog();
+        }
+      });
     // T-10 — adaptive cadence: while a tap-navigation is IN FLIGHT (the operator is
     // waiting on a slow proxy) TIGHTEN the poll to ~500ms so the box's confirming
     // page_state — and the new url it carries — reaches the bar sooner; return to the
     // normal ~2s once nothing is pending. The poll's BEHAVIOUR is unchanged; only its
     // interval is. navInFlight is in the deps below, so the effect re-arms at the new
-    // cadence whenever it flips.
+    // cadence whenever it flips. Best-effort: the guarded poll swallows a
+    // transient failure and keeps the cadence (a 429 holds it back).
     const pollIntervalMs = navInFlight ? 500 : 2000;
-    const handle = window.setInterval(tick, pollIntervalMs);
+    const stop = startGuardedPoll(tick, { intervalMs: pollIntervalMs });
     return () => {
       cancelled = true;
-      window.clearInterval(handle);
+      stop();
     };
   }, [
     sessionId,
@@ -8261,12 +8261,15 @@ function SimulatorWindowInner({
           const f = res.file;
           // The authenticated response remains a stream all the way to the Tauri
           // file handle, avoiding JSON/base64/atob/Blob copies in the WebView.
+          // GUI audit #6 — the save never overwrites a file already in
+          // Downloads, so the name it lands under can differ ("report (1).pdf");
+          // the note names the file the customer will actually find.
           void downloadResponse(f.name, f.response)
-            .then((ok) => {
+            .then((savedAs) => {
               if (reqSessionId !== sessionIdRef.current) return;
               setDownloadsNote(
-                ok
-                  ? `Saved ${f.name} to your Downloads folder.`
+                savedAs !== null
+                  ? `Saved ${savedAs} to your Downloads folder.`
                   : "Couldn't save the file — check the app's file-access permission.",
               );
             })

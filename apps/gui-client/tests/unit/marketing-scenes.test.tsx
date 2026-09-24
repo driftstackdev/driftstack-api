@@ -538,7 +538,7 @@ const AUDIT_APPROVED_VENDOR_COPY: ReadonlyArray<ApprovedVendorCopy> = [
   },
   // AgentChatView / MissionBar — why a model in the picker is unselectable.
   {
-    text: 'Some models run only on your own Anthropic key. Add one in Settings → AI & billing.',
+    text: 'Some models run only on your own Anthropic key. Add one in the web dashboard at app.driftstack.io.',
     scenes: ['audit-agent-chat-consent'],
   },
   // SettingsView — the BYOK field itself, which audit-settings does render.
@@ -786,6 +786,40 @@ describe('every audit scene — the REAL view, loaded, under the marketing priva
         for (const text of texts) {
           expect(joined, `${scene}: sanctioned sentence "${text}" is not rendered`).toContain(text);
         }
+        unmount();
+      } finally {
+        restore();
+      }
+    }
+  });
+
+  it('GUI audit #4 — "Use my own key" in the consent and budget banners opens the web dashboard, never Settings', async () => {
+    // The app's own browser sign-in key is refused the Anthropic-key save by
+    // design, so a button into Settings sent the customer to a field that could
+    // never save. Rendered from the real scenes, which reach both banners.
+    for (const scene of ['audit-agent-chat-consent', 'audit-agent-chat-budget'] as const) {
+      const restore = freezeHarnessClock();
+      try {
+        const { container, unmount } = render(<AuditScene name={scene} />);
+        const stage = container.querySelector<HTMLElement>(`[data-scene="${scene}"]`);
+        expect(stage).not.toBeNull();
+        if (stage === null) return;
+        const banner = await waitFor(
+          () => {
+            const b = stage.querySelector<HTMLElement>('[data-component="ai-llm-banner"]');
+            expect(b, `${scene}: the banner never rendered`).not.toBeNull();
+            return b as HTMLElement;
+          },
+          { timeout: 5_000 },
+        );
+        const own = Array.from(banner.querySelectorAll('a, button')).find(
+          (el) => el.textContent?.trim() === 'Use my own key',
+        );
+        expect(own, `${scene}: no "Use my own key" action`).toBeDefined();
+        expect(own?.tagName, `${scene}: "Use my own key" is not a link`).toBe('A');
+        expect(own?.getAttribute('href')).toBe('https://app.driftstack.io/settings/');
+        expect(own?.getAttribute('target')).toBe('_blank');
+        expect(own?.getAttribute('rel')).toContain('noopener');
         unmount();
       } finally {
         restore();

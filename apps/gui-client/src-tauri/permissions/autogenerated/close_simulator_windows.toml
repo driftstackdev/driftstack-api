@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-close-simulator-windows"
+description = "Enables the close_simulator_windows command without any pre-configured scope."
+commands.allow = ["close_simulator_windows"]
+
+[[permission]]
+identifier = "deny-close-simulator-windows"
+description = "Denies the close_simulator_windows command without any pre-configured scope."
+commands.deny = ["close_simulator_windows"]

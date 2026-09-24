@@ -32,6 +32,7 @@ import { AgentSessionPanel } from '../../components/AgentSessionPanel';
 import { humanizeError } from '../../lib/humanize-error';
 import { preferTypedEndReason } from '../../lib/session-end-reason';
 import { useSettings } from '../../lib/SettingsContext';
+import { startGuardedPoll } from '../../lib/guarded-poll';
 import { IconPhone } from './icons';
 import type { StageWatch } from './stage-copy';
 
@@ -209,38 +210,36 @@ export const LiveAutomationPanel = memo(function LiveAutomationPanel({
     if (sessionId === null || watch.kind !== 'live' || sessionEnded !== null) return undefined;
     if (client === null || typeof client.agentSessions?.get !== 'function') return undefined;
     let cancelled = false;
-    const poll = (): void => {
-      void client.agentSessions
-        .get(sessionId)
-        .then((s) => {
-          if (cancelled) return;
-          // Terminal when the lifecycle status is 'closed' OR a close timestamp /
-          // reason is set (worker browser closed / destroyed / orphan-swept). A
-          // transient transport drop stays status='active' so the panel's own
-          // bounded reconnect still runs — we only latch a REAL end.
-          const ended =
-            s.status === 'closed' ||
-            (typeof s.closed_at === 'string' && s.closed_at.length > 0) ||
-            (typeof s.closed_reason === 'string' && s.closed_reason.length > 0);
-          // The fine typed reason beats the coarse code (it is emitted alongside
-          // it and would otherwise be shadowed — see preferTypedEndReason), and
-          // A3's host-free sentence rides through verbatim. No phase polling
-          // here, so lastPhase is honestly null: the chat's embedded panel
-          // renders the routeless timeout sentence rather than a guessed route.
-          if (ended)
-            setSessionEnded({
-              reason: preferTypedEndReason(s.error_event?.code, s.closed_reason),
-              summary: s.error_event?.summary ?? null,
-              lastPhase: null,
-            });
-        })
-        .catch(() => undefined); // a transient GET failure is not a terminal end
-    };
-    poll();
-    const handle = setInterval(poll, 5_000);
+    // GUI audit #12 — never overlapping, and a 429 holds it back (see
+    // lib/guarded-poll). A transient GET failure is still not a terminal end:
+    // the poll swallows it and keeps its cadence.
+    const poll = (): Promise<void> =>
+      client.agentSessions.get(sessionId).then((s) => {
+        if (cancelled) return;
+        // Terminal when the lifecycle status is 'closed' OR a close timestamp /
+        // reason is set (worker browser closed / destroyed / orphan-swept). A
+        // transient transport drop stays status='active' so the panel's own
+        // bounded reconnect still runs — we only latch a REAL end.
+        const ended =
+          s.status === 'closed' ||
+          (typeof s.closed_at === 'string' && s.closed_at.length > 0) ||
+          (typeof s.closed_reason === 'string' && s.closed_reason.length > 0);
+        // The fine typed reason beats the coarse code (it is emitted alongside
+        // it and would otherwise be shadowed — see preferTypedEndReason), and
+        // A3's host-free sentence rides through verbatim. No phase polling
+        // here, so lastPhase is honestly null: the chat's embedded panel
+        // renders the routeless timeout sentence rather than a guessed route.
+        if (ended)
+          setSessionEnded({
+            reason: preferTypedEndReason(s.error_event?.code, s.closed_reason),
+            summary: s.error_event?.summary ?? null,
+            lastPhase: null,
+          });
+      });
+    const stop = startGuardedPoll(poll, { intervalMs: 5_000 });
     return () => {
       cancelled = true;
-      clearInterval(handle);
+      stop();
     };
   }, [client, sessionId, watch.kind, sessionEnded]);
 

@@ -177,9 +177,18 @@ export const VPN_STALE_CONFIG_CHECK_NOTICE =
  */
 export const VPN_CHECK_IN_PROGRESS = 'Testing through Driftstack — up to 90 s';
 
-/** (j) J4 / #9 — the free-desktop credential cannot reach the test route: the
- *  row is "not tested", with the same next step a row with no key gets. */
-export const DESKTOP_CREDENTIAL_NEXT_STEP = `needs an API key — ${MISSING_API_KEY_NEXT_STEP}`;
+/** (j) J4 — the free-desktop credential cannot reach the test route: the row
+ *  is "not tested".
+ *
+ *  GUI audit #11 — and the reason is the PLAN. The route policy that refuses it
+ *  applies only to a Free account's desktop sign-in key; the full check is a
+ *  paid-plan feature. This used to read "needs an API key — Connect your API key
+ *  in Settings to test it", which is a dead end: the customer IS signed in, and
+ *  a pasted key is refused for Free accounts as well. The tally clause and the
+ *  sentence (`DESKTOP_CREDENTIAL_FLEET_TEST_REASON`) now say what is true. */
+export const FREE_PLAN_FLEET_TEST_SENTENCE =
+  "The full check through Driftstack isn't included on the Free plan. Upgrade your plan to run it.";
+export const DESKTOP_CREDENTIAL_TALLY_REASON = 'not included on the Free plan';
 
 /** (p) D1 — the ONE word for re-running a SOCKS5 test once a row holds a
  *  result, on the Proxies grid's row button AND the profile card's repair row

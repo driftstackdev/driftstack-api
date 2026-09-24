@@ -8,15 +8,27 @@
 import { readFileSync } from 'node:fs';
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import type * as TauriCore from '@tauri-apps/api/core';
+
+// The web-download mark a streamed save asks for (GUI audit #7); covered by
+// a-website-file-saved-from-a-session-is-marked-as-downloaded-from-the-web.
+vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof TauriCore>()),
+  invoke: vi.fn(() => Promise.resolve(undefined)),
+}));
 
 const writeFile = vi.fn();
 const openFile = vi.fn();
 const removeFile = vi.fn();
+// Downloads is empty unless a test says otherwise (the no-overwrite naming is
+// covered by a-session-download-never-overwrites-a-file-already-in-downloads).
+const existsFile = vi.fn(() => Promise.resolve(false));
 // Mocked so the Tauri branch can be exercised without a real plugin.
 vi.mock('@tauri-apps/plugin-fs', () => ({
   writeFile,
   open: openFile,
   remove: removeFile,
+  exists: existsFile,
   BaseDirectory: { Download: 7 },
 }));
 
@@ -223,11 +235,11 @@ describe('downloadResponse (streamed Tauri write)', () => {
       { headers: { 'content-length': '5' } },
     );
 
-    await expect(downloadResponse('../../report.bin', response, 5)).resolves.toBe(true);
+    await expect(downloadResponse('../../report.bin', response, 5)).resolves.toBe('._._report.bin');
+    // GUI audit #6 — created new, never truncating a file that is already there.
     expect(openFile).toHaveBeenCalledWith('._._report.bin', {
       write: true,
-      create: true,
-      truncate: true,
+      createNew: true,
       baseDir: 7,
     });
     expect(write.mock.calls.map((call) => Array.from(call[0]))).toEqual([
@@ -266,7 +278,7 @@ describe('downloadResponse (streamed Tauri write)', () => {
     const close = vi.fn().mockResolvedValue(undefined);
     openFile.mockResolvedValue({ write: vi.fn().mockResolvedValue(0), close });
 
-    await expect(downloadResponse('stalled.bin', new Response('abc'), 4)).resolves.toBe(false);
+    await expect(downloadResponse('stalled.bin', new Response('abc'), 4)).resolves.toBeNull();
     expect(close).toHaveBeenCalledOnce();
     expect(removeFile).toHaveBeenCalledWith('stalled.bin', { baseDir: 7 });
   });

@@ -8,12 +8,12 @@
 // `audit.high_severity` / `session.errored`); the `data:` line is
 // the JSON-encoded NotificationEvent matching the server union.
 //
-// Authentication note: native EventSource lacks header support, so
-// this lib accepts an explicit `url` (caller-built). The server route
-// authenticates via requireAuthEventSource, which reads the bearer
-// from a `?ds_token=` query param (EventSource can't set an
-// Authorization header). The call site builds that URL via
-// notificationStreamUrl() (lib/notification-stream-url.ts).
+// Authentication note: this lib accepts an explicit `url` and an
+// EventSource-shaped constructor (caller-built). The app passes a
+// header-capable reader (lib/header-event-source.ts) so the key travels as
+// `Authorization: Bearer …` and never in the URL (GUI audit #15); the server
+// route authenticates via requireAuthEventSource, which reads that header
+// first. See notificationStreamUrl() (lib/notification-stream-url.ts).
 //
 // Reconnect: the browser-native EventSource auto-reconnects on
 // transient drops (default 3s backoff). For a v0.2 follow-up we'll
@@ -21,6 +21,8 @@
 // once a customer concretely needs it; v0.1 piggybacks on the
 // platform behavior so a Mac sleep/wake cycle resumes the stream
 // without app-level glue.
+
+import type { EventSourceCtor } from './header-event-source';
 
 export type NotificationEvent =
   | {
@@ -82,8 +84,10 @@ export interface SubscribeOpts {
   onState?: (state: 'connecting' | 'open' | 'reconnecting' | 'closed') => void;
   /** Optional error handler. Default: silent. */
   onError?: (err: unknown) => void;
-  /** EventSource constructor override for tests. */
-  eventSourceFactory?: typeof EventSource;
+  /** The EventSource-shaped constructor to open the stream with. The app
+   *  passes a header-capable one (GUI audit #15); tests pass fakes. Omitted →
+   *  the native EventSource. */
+  eventSourceFactory?: EventSourceCtor;
 }
 
 /** Open an EventSource and dispatch parsed events. Returns a

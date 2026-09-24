@@ -14,12 +14,15 @@ import type { ConnectionStatus } from '../lib/use-connection-status';
 const COLOR: Record<ConnectionStatus['state'], string> = {
   connecting: 'bg-status-busy',
   connected: 'bg-status-ready',
+  degraded: 'bg-status-busy',
   offline: 'bg-status-error',
 };
 
 const LABEL: Record<ConnectionStatus['state'], string> = {
   connecting: 'Connecting…',
   connected: 'Connected',
+  // GUI audit #20 — the server answered (429 / 5xx): reachable, but busy.
+  degraded: 'Server busy',
   offline: 'Offline',
 };
 
@@ -42,7 +45,7 @@ export function ConnectionPill({ status, baseUrl, onClick }: Props): JSX.Element
   const tooltip =
     status.state === 'connected'
       ? `Last ok ${formatLastOk(status.lastOkAt)} · ${baseUrl}`
-      : status.state === 'offline'
+      : status.state === 'offline' || status.state === 'degraded'
         ? `${status.lastError ?? 'Unknown error'} · ${baseUrl}`
         : `Checking the connection to ${baseUrl}…`;
   return (

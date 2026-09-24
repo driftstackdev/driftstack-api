@@ -15,6 +15,11 @@
     "core:webview:default",
     "core:event:default",
     "core:resources:default",
+    "allow-simulator-control-key-load",
+    "allow-simulator-control-key-delete",
+    "allow-set-dock-tile",
+    "allow-reset-dock-tile",
+    "allow-mark-session-download",
     "store:default",
     {
       "identifier": "fs:scope",

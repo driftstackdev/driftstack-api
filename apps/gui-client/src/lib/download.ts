@@ -10,7 +10,7 @@
 // the genuine save path. Every helper now returns a boolean so callers can gate
 // their success toast on a CONFIRMED write rather than firing it unconditionally.
 
-import { isTauri } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 
 /** Generous ceiling for operator exports while preventing unbounded buffering. */
 export const DOWNLOAD_MAX_BYTES = 64 * 1024 * 1024;
@@ -98,21 +98,80 @@ async function rejectDeclaredOversize(response: Response, maxBytes: number): Pro
   }
 }
 
+/** `name (n).ext` — the suffix a browser gives a download whose name is taken.
+ *  The extension is the part after the LAST dot, unless the only dot leads the
+ *  name (a dotfile keeps its whole name as the stem). */
+export function numberedFilename(name: string, n: number): string {
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0) return `${name} (${String(n)})`;
+  return `${name.slice(0, dot)} (${String(n)})${name.slice(dot)}`;
+}
+
+/** How many numbered names a save tries before giving up. */
+const MAX_NUMBERED_NAMES = 999;
+
+/**
+ * GUI audit #6 — open a NEW file in Downloads for `name`, never an existing one.
+ *
+ * The name is the one the website gave its download, so it can be anything the
+ * customer already has — and this used to open it with `truncate: true`,
+ * silently replacing their `statement.pdf` with the site's. Now a taken name
+ * moves on to `name (1).ext`, `name (2).ext` … exactly as a browser does, and
+ * every open is `createNew`: a file that appears between the `exists` check and
+ * the open makes the open FAIL rather than be overwritten, and the next number
+ * is tried. Returns the handle and the name it was created under.
+ */
+async function openNewDownloadFile(name: string): Promise<{
+  file: { write(data: Uint8Array): Promise<number>; close(): Promise<void> };
+  savedAs: string;
+}> {
+  const { open, exists, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+  for (let n = 0; n <= MAX_NUMBERED_NAMES; n += 1) {
+    const candidate = n === 0 ? name : numberedFilename(name, n);
+    if (await exists(candidate, { baseDir: BaseDirectory.Download })) continue;
+    try {
+      const file = await open(candidate, {
+        write: true,
+        createNew: true,
+        baseDir: BaseDirectory.Download,
+      });
+      return { file, savedAs: candidate };
+    } catch (error) {
+      // Taken in the meantime → try the next number. Anything else (no
+      // permission, disk full) is the real answer.
+      if (await exists(candidate, { baseDir: BaseDirectory.Download })) continue;
+      throw error;
+    }
+  }
+  throw new Error('no free name for the download');
+}
+
 /** Save a raw response without materializing the full file in the desktop
  *  renderer. Tauri receives one bounded network chunk at a time and writes it
  *  completely before reading the next; browser callers retain the bounded Blob
- *  fallback. A partial desktop file is removed on every failed/cancelled path. */
+ *  fallback. A partial desktop file is removed on every failed/cancelled path.
+ *
+ *  Resolves with the name the file was saved under — which is NOT always the
+ *  name asked for: a save never overwrites a file already in Downloads (GUI
+ *  audit #6), so a taken name is saved as `name (1).ext` — or null when nothing
+ *  was saved. The saved file carries the system's downloaded-from-the-web mark
+ *  (GUI audit #7); one that cannot be marked is removed and reported unsaved.
+ *
+ *  ⚠️ For a file a WEBSITE supplied (the Simulator's session downloads). The
+ *  app's own exports go through `downloadBlob`. */
 export async function downloadResponse(
   filename: string,
   response: Response,
   maxBytes = DOWNLOAD_MAX_BYTES,
-): Promise<boolean> {
+): Promise<string | null> {
   await rejectDeclaredOversize(response, maxBytes);
   if (!isTauri()) {
-    return downloadBlob(filename, await readBoundedDownloadBlob(response, maxBytes));
+    const saved = await downloadBlob(filename, await readBoundedDownloadBlob(response, maxBytes));
+    return saved ? filename : null;
   }
 
-  const boundedName = safeFilename(filename);
+  const requestedName = safeFilename(filename);
+  let savedAs: string | undefined;
   let file:
     | {
         write(data: Uint8Array): Promise<number>;
@@ -123,15 +182,14 @@ export async function downloadResponse(
   let removePartial: (() => Promise<void>) | undefined;
   let completed = false;
   try {
-    const { open, remove, BaseDirectory } = await import('@tauri-apps/plugin-fs');
-    file = await open(boundedName, {
-      write: true,
-      create: true,
-      truncate: true,
-      baseDir: BaseDirectory.Download,
-    });
+    const { remove, BaseDirectory } = await import('@tauri-apps/plugin-fs');
+    const created = await openNewDownloadFile(requestedName);
+    file = created.file;
+    const createdName = created.savedAs;
+    savedAs = createdName;
+    // Only ever the file THIS save created — never a name someone else holds.
     removePartial = async (): Promise<void> => {
-      await remove(boundedName, { baseDir: BaseDirectory.Download });
+      await remove(createdName, { baseDir: BaseDirectory.Download });
     };
 
     const body = response.body;
@@ -165,13 +223,18 @@ export async function downloadResponse(
 
     await file.close();
     file = undefined;
+    // GUI audit #7 — a website's file is marked as downloaded from the web (the
+    // macOS quarantine mark, the Windows Internet zone), so the system checks it
+    // on open exactly as it does a browser download. A file that cannot be
+    // marked is not kept: an unmarked website file in Downloads is the defect.
+    await invoke('mark_session_download', { name: savedAs });
     completed = true;
-    return true;
+    return savedAs ?? requestedName;
   } catch (error) {
     if (reader !== undefined) await reader.cancel().catch(() => undefined);
     else await response.body?.cancel().catch(() => undefined);
     if (error instanceof DownloadResponseTooLargeError) throw error;
-    return false;
+    return null;
   } finally {
     reader?.releaseLock();
     if (file !== undefined) await file.close().catch(() => undefined);

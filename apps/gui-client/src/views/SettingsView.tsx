@@ -26,8 +26,19 @@ import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { humanizeError } from '../lib/humanize-error';
 import { disposeResponseBody } from '../lib/dispose-response-body';
 import { readBoundedDiagnosticJson } from '../lib/read-bounded-json';
-import { friendlySettingsActionError } from '../lib/settings-error-copy';
+import {
+  AI_SETTINGS_BELONG_TO_WORKSPACE_OWNER,
+  friendlySettingsActionError,
+  isTeammateWorkspace,
+} from '../lib/settings-error-copy';
+import {
+  isDeviceKeyRefusal,
+  markDeviceKeyRefused,
+  useDeviceKeyRefused,
+} from '../lib/device-key-refusal';
+import { WEB_DASHBOARD_HOST, WEB_DASHBOARD_SETTINGS_URL } from '../lib/web-dashboard';
 import { useSettings } from '../lib/SettingsContext';
+import { forgetSignedOutAccount } from '../lib/forget-signed-out-account';
 import { isCloudBaseUrl } from '../lib/telemetry';
 import { DEFAULT_SETTINGS, rememberedKeyFor } from '../lib/settings';
 import { normalizeNavigateUrl } from '../lib/address-bar';
@@ -56,7 +67,10 @@ type ByokActionKind = 'saving' | 'testing' | 'clearing';
 export function SettingsView(): JSX.Element {
   const confirm = useConfirm();
   const { push: pushToast } = useToasts();
-  const { settings, update, loading, client } = useSettings();
+  const { settings, update, loading, client, activeWorkspace } = useSettings();
+  // GUI audit #10 — the bundled-AI settings cannot be changed while acting in a
+  // teammate's workspace (the server refuses it); they belong to the owner.
+  const aiSettingsBelongToOwner = isTeammateWorkspace(activeWorkspace);
   const [draftKey, setDraftKey] = useState(settings.apiKey ?? '');
   const [draftUrl, setDraftUrl] = useState(settings.baseUrl);
   const [draftMode, setDraftMode] = useState<'cloud' | 'self-hosted'>(
@@ -152,6 +166,17 @@ export function SettingsView(): JSX.Element {
   const byokActionRef = useRef<{ token: number; kind: ByokActionKind } | null>(null);
   const byokActionTokenRef = useRef(0);
   const byokBusy = byokActionKind !== null;
+  // GUI audit #4 — the desktop sign-in key is refused the Anthropic key's save,
+  // test and clear BY DESIGN. Once the server has said so for this key, the
+  // field says where the key IS managed and its controls are disabled; "check
+  // the key and try again" could never help.
+  const byokManagedInDashboard = useDeviceKeyRefused(settings.apiKey, settings.baseUrl);
+  /** True (and remembered for this key) when `err` is the device-key refusal. */
+  function noteDeviceKeyRefusal(err: unknown): boolean {
+    if (!isDeviceKeyRefusal(err)) return false;
+    markDeviceKeyRefused(settings.apiKey, settings.baseUrl);
+    return true;
+  }
   const [byokTestState, setByokTestState] = useState<
     { kind: 'idle' } | { kind: 'testing' } | { kind: 'ok' } | { kind: 'fail'; reason: string }
   >({ kind: 'idle' });
@@ -231,7 +256,7 @@ export function SettingsView(): JSX.Element {
   }, [client]);
 
   async function handleSaveBundledLlm(): Promise<void> {
-    if (!client) return;
+    if (!client || aiSettingsBelongToOwner) return;
     const capCents = Math.round(Number.parseFloat(bundledLlmCapDraft) * 100);
     if (!Number.isFinite(capCents) || capCents < 0) {
       setBundledLlmSaveError('Enter a valid monthly limit.');
@@ -289,7 +314,13 @@ export function SettingsView(): JSX.Element {
       setByokActionPhase(token, 'testing');
       await runByokTest(token);
     } catch (err) {
-      if (ownsByokAction(token)) {
+      if (noteDeviceKeyRefusal(err)) {
+        // The pasted key cannot be saved from here; do not keep it in the field.
+        if (ownsByokAction(token)) {
+          setByokSaveError(null);
+          setByokKeyDraft('');
+        }
+      } else if (ownsByokAction(token)) {
         setByokSaveError(friendlySettingsActionError(err, 'save-provider-key'));
       }
     } finally {
@@ -305,6 +336,10 @@ export function SettingsView(): JSX.Element {
       if (!ownsByokAction(token)) return;
       setByokTestState(result.ok ? { kind: 'ok' } : { kind: 'fail', reason: result.reason });
     } catch (err) {
+      if (noteDeviceKeyRefusal(err)) {
+        if (ownsByokAction(token)) setByokTestState({ kind: 'idle' });
+        return;
+      }
       if (!ownsByokAction(token)) return;
       setByokTestState({
         kind: 'fail',
@@ -342,6 +377,7 @@ export function SettingsView(): JSX.Element {
       setByokTestState({ kind: 'idle' });
       pushToast({ title: 'Key cleared', tone: 'success' });
     } catch (err) {
+      if (noteDeviceKeyRefusal(err)) return;
       if (!ownsByokAction(token)) return;
       pushToast({
         title: 'Could not clear key',
@@ -934,6 +970,9 @@ export function SettingsView(): JSX.Element {
                     baseUrl: settings.baseUrl,
                     telemetryOptIn: settings.telemetryOptIn,
                   });
+                  // GUI audit #5 — the same clean-up as the sidebar's sign-out:
+                  // nothing of this account stays for the next person.
+                  await forgetSignedOutAccount();
                   setDraftKey('');
                   // Clean re-entry state: re-mask the field + drop stale verdicts
                   // so the next key isn't typed into a revealed field beside a
@@ -1266,7 +1305,9 @@ export function SettingsView(): JSX.Element {
                 aria-label="Use bundled AI billing"
                 data-field="bundled-llm-consent"
                 checked={bundledLlmConsentDraft}
-                disabled={bundledLlmSaving || bundledLlmLoad !== 'loaded'}
+                disabled={
+                  bundledLlmSaving || bundledLlmLoad !== 'loaded' || aiSettingsBelongToOwner
+                }
                 onChange={(e) => {
                   setBundledLlmConsentDraft(e.target.checked);
                   setBundledLlmSavedAt(null); // #GUI-sweep — drop the stale "Saved." on edit
@@ -1286,7 +1327,9 @@ export function SettingsView(): JSX.Element {
                   min="0"
                   step="0.01"
                   value={bundledLlmCapDraft}
-                  disabled={bundledLlmSaving || bundledLlmLoad !== 'loaded'}
+                  disabled={
+                    bundledLlmSaving || bundledLlmLoad !== 'loaded' || aiSettingsBelongToOwner
+                  }
                   onChange={(e) => {
                     setBundledLlmCapDraft(e.target.value);
                     setBundledLlmSavedAt(null); // #GUI-sweep — drop the stale "Saved." on edit
@@ -1297,7 +1340,9 @@ export function SettingsView(): JSX.Element {
               <button
                 type="button"
                 onClick={() => void handleSaveBundledLlm()}
-                disabled={bundledLlmSaving || bundledLlmLoad !== 'loaded'}
+                disabled={
+                  bundledLlmSaving || bundledLlmLoad !== 'loaded' || aiSettingsBelongToOwner
+                }
                 aria-label="Save AI billing settings"
                 className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
               >
@@ -1307,6 +1352,15 @@ export function SettingsView(): JSX.Element {
                 <span className="text-2xs text-status-ready">Saved.</span>
               )}
             </div>
+            {aiSettingsBelongToOwner && (
+              <span
+                role="status"
+                data-notice="ai-settings-belong-to-workspace-owner"
+                className="mt-1.5 block text-2xs text-ink-secondary"
+              >
+                {AI_SETTINGS_BELONG_TO_WORKSPACE_OWNER}
+              </span>
+            )}
             {bundledLlmSaveError !== null && (
               <span role="alert" className="mt-1.5 block text-2xs text-status-error">
                 {bundledLlmSaveError}
@@ -1336,6 +1390,23 @@ export function SettingsView(): JSX.Element {
               If you add your own Anthropic key, every AI chat uses it instead of bundled usage, and
               Anthropic bills you directly.
             </span>
+            {byokManagedInDashboard && (
+              <span
+                role="status"
+                data-notice="anthropic-key-managed-in-web-dashboard"
+                className="mb-2 block text-2xs text-ink-secondary"
+              >
+                Your Anthropic key is managed in the web dashboard.{' '}
+                <a
+                  href={WEB_DASHBOARD_SETTINGS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-accent-text underline"
+                >
+                  Open {WEB_DASHBOARD_HOST}
+                </a>
+              </span>
+            )}
             {byok?.has_key === true ? (
               <div className="flex flex-col gap-2">
                 <div className="flex flex-wrap items-center gap-2 text-xs text-ink-secondary">
@@ -1352,7 +1423,7 @@ export function SettingsView(): JSX.Element {
                   <button
                     type="button"
                     onClick={() => void handleTestByokKey()}
-                    disabled={byokBusy}
+                    disabled={byokBusy || byokManagedInDashboard}
                     aria-label="Test Anthropic key"
                     className="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50"
                   >
@@ -1361,7 +1432,7 @@ export function SettingsView(): JSX.Element {
                   <button
                     type="button"
                     onClick={() => void handleClearByokKey()}
-                    disabled={byokBusy}
+                    disabled={byokBusy || byokManagedInDashboard}
                     className="btn-secondary px-3 py-1.5 text-xs disabled:opacity-50"
                   >
                     {byokActionKind === 'clearing' ? 'Clearing…' : 'Clear'}
@@ -1381,14 +1452,15 @@ export function SettingsView(): JSX.Element {
                   value={byokKeyDraft}
                   onChange={(e) => setByokKeyDraft(e.target.value)}
                   placeholder="sk-ant-…"
-                  className="form-input mono flex-1"
+                  disabled={byokManagedInDashboard}
+                  className="form-input mono flex-1 disabled:opacity-50"
                   spellCheck={false}
                   autoComplete="off"
                 />
                 <button
                   type="button"
                   onClick={() => void handleSetByokKey()}
-                  disabled={byokBusy || byokKeyDraft.trim().length === 0}
+                  disabled={byokBusy || byokManagedInDashboard || byokKeyDraft.trim().length === 0}
                   className="btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
                 >
                   {byokActionKind === 'saving' ? 'Saving…' : 'Set key'}
@@ -1442,7 +1514,15 @@ export function SettingsView(): JSX.Element {
             <span className="ml-1 text-2xs text-ink-muted">— quickstart + reference</span>
           </li>
           <li>
-            <a href="mailto:support@driftstack.dev" className="text-accent-text hover:underline">
+            {/* GUI audit #21 — `target="_blank"`: the shell plugin hands a
+                mailto to the mail app only for a _blank link; without it the
+                click tried to navigate the app's own window and did nothing. */}
+            <a
+              href="mailto:support@driftstack.dev"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-accent-text hover:underline"
+            >
               support@driftstack.dev
             </a>
           </li>

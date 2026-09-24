@@ -26,11 +26,12 @@ describe('useConnectionStatus safe diagnostics', () => {
   });
 
   it.each([
-    [401, 'Your sign-in or API key was not accepted. Check Settings and try again.'],
-    [429, 'The server is receiving too many requests. Try again shortly.'],
-    [503, 'The service is temporarily unavailable. Try again shortly.'],
-    [418, 'The server returned an unexpected response. Check Settings and try again.'],
-  ])('maps HTTP %i without exposing a bare status', async (status, expected) => {
+    [401, 'Your sign-in or API key was not accepted. Check Settings and try again.', 'offline'],
+    // GUI audit #20 — a server that answers 429 / 5xx is busy, not offline.
+    [429, 'The server is receiving too many requests. Try again shortly.', 'degraded'],
+    [503, 'The service is temporarily unavailable. Try again shortly.', 'degraded'],
+    [418, 'The server returned an unexpected response. Check Settings and try again.', 'offline'],
+  ])('maps HTTP %i without exposing a bare status', async (status, expected, state) => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() => Promise.resolve(new Response('', { status }))),
@@ -38,7 +39,7 @@ describe('useConnectionStatus safe diagnostics', () => {
 
     const { result } = renderHook(() => useConnectionStatus('https://api.driftstack.dev'));
 
-    await waitFor(() => expect(result.current.state).toBe('offline'));
+    await waitFor(() => expect(result.current.state).toBe(state));
     expect(result.current.lastError).toBe(expected);
     expect(result.current.lastError).not.toContain(`HTTP ${status.toString()}`);
   });

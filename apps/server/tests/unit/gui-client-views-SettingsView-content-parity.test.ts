@@ -78,8 +78,12 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     expect(body).toMatch(
       /const token = claimByokAction\('clearing'\);[\s\S]*?await client\.account\.clearByokAnthropicKey\(\);[\s\S]*?if \(!ownsByokAction\(token\)\) return;/,
     );
-    expect(body).toContain('disabled={byokBusy}');
-    expect(body).toContain('disabled={byokBusy || byokKeyDraft.trim().length === 0}');
+    // GUI audit #4 — the browser sign-in key cannot change the Anthropic key, so
+    // once that refusal is seen the controls lock and point at the web dashboard.
+    expect(body).toContain('disabled={byokBusy || byokManagedInDashboard}');
+    expect(body).toContain(
+      'disabled={byokBusy || byokManagedInDashboard || byokKeyDraft.trim().length === 0}',
+    );
   });
 
   it('serializes AI billing persistence under a lifecycle-fenced owner and freezes its draft boundary', () => {
@@ -90,8 +94,9 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     expect(body).toMatch(
       /if \(bundledLlmSaveRef\.current\?\.token !== token\) return;[\s\S]*?setBundledLlmSavedAt\(Date\.now\(\)\)/,
     );
+    // GUI audit #10 — in a teammate's workspace the AI settings belong to the owner.
     expect(
-      body.match(/disabled=\{bundledLlmSaving \|\| bundledLlmLoad !== 'loaded'\}/g),
+      body.match(/bundledLlmSaving \|\| bundledLlmLoad !== 'loaded' \|\| aiSettingsBelongToOwner/g),
     ).toHaveLength(3);
   });
 
@@ -218,7 +223,8 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     );
     expect(body).toMatch(/href="https:\/\/status\.driftstack\.io"/);
     expect(body).toMatch(/href="https:\/\/docs\.driftstack\.io"/);
-    expect(body).toMatch(/<a href="mailto:support@driftstack\.dev"/);
+    // GUI audit #21 — a mailto only reaches the mail app as a _blank link.
+    expect(body).toMatch(/<a\s+href="mailto:support@driftstack\.dev"\s+target="_blank"/);
   });
 
   it('Field subcomponent: label + children with section-label header — pinned so the form-field convention stays consistent', () => {

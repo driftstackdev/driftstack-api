@@ -256,3 +256,17 @@ export function deleteChat(id: string): Promise<StoredChat[]> {
     return next;
   });
 }
+
+/**
+ * GUI audit #5 — sign-out forgets every stored chat. Transcripts carry whatever
+ * the account's owner typed and every URL a task visited; none of it belongs to
+ * whoever signs in next on this computer. Taken under the same lock as every
+ * write, so a persist already queued lands first and cannot resurrect a chat
+ * after the wipe.
+ */
+export function forgetAllChats(): Promise<void> {
+  return serialize(async () => {
+    await getStore().set(KEY, []);
+    await getStore().save();
+  });
+}
