@@ -39,6 +39,7 @@ import { DrizzleIncidentsRepo } from '../../../src/db/incidents-repo.js';
 import { MockDriver } from '../../../src/drivers/mock.js';
 import type { AuthCache } from '../../../src/services/auth-cache.js';
 import { AuthFlowsService } from '../../../src/services/auth-flows.js';
+import { InMemoryMfaChallengeStore } from '../../../src/services/mfa-challenge-store.js';
 import { SessionsService } from '../../../src/services/sessions.js';
 import { ApiKeysService } from '../../../src/services/api-keys.js';
 import { UsageService } from '../../../src/services/usage.js';
@@ -202,7 +203,9 @@ export async function buildRealApp(
     authCache,
     accountAuditService,
     null,
-    null,
+    // Bootstrap always wires the short-lived store (Redis there); the sign-in
+    // limits live in it (sign-in audit #2, #3), so the app here has one too.
+    new InMemoryMfaChallengeStore(),
     emailPreferencesService,
     webhooksService,
   );

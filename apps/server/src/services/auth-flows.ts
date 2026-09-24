@@ -20,6 +20,13 @@ import { isUniqueViolation } from '../lib/pg-error.js';
 import { maskEmail } from '../lib/redact-url.js';
 import type { EmailService } from './email.js';
 import type { AuthCache } from './auth-cache.js';
+import {
+  AccountFailureLimiter,
+  MFA_SIGN_IN_LIMIT,
+  PASSWORD_SIGN_IN_LIMIT,
+  type ReservedAttempt,
+} from './account-failure-limiter.js';
+import { RateLimitedError } from '../lib/errors.js';
 import type { AccountAuditService } from './account-audit.js';
 import type { RevocationWebhookEmitter } from './api-keys.js';
 import type { EmailPreferencesService } from './email-preferences.js';
@@ -129,6 +136,27 @@ export interface AuthFlowsRepo {
   /** C9 — returns true iff THIS call performed the null→verified transition
    *  (so the caller can fire the one-time signup-welcome exactly once). */
   markEmailVerified(accountId: string, at: Date): Promise<boolean>;
+  /**
+   * Sign-in audit #1 — the mailbox owner's FIRST proof of the address by a magic
+   * link, in ONE update: mark the email verified, drop any password set before
+   * that proof (the '' "no password" marker) and advance auth_epoch, so a
+   * password chosen by whoever registered the address never survives and every
+   * session minted under it ends. Returns the updated row iff THIS call performed
+   * the unverified→verified transition; null when the address was already
+   * verified (nothing changed) or the account is gone.
+   */
+  verifyEmailDroppingUnprovenPassword(
+    accountId: string,
+    at: Date,
+  ): Promise<AuthFlowAccountRow | null>;
+  /**
+   * Sign-in audit #5 — delete one linked Google/GitHub sign-in of the account,
+   * refusing, atomically with the delete, when it is the account's last way to
+   * sign in: no password and no other link that still signs in. A link the
+   * provider already revoked (`last_revoked_at` set) never signs in, so it never
+   * counts as a way in and can always be removed.
+   */
+  removeOAuthLink(args: { accountId: string; linkId: string }): Promise<RemoveOAuthLinkResult>;
 
   /** Insert a single-use token of the given kind. */
   insertAuthToken(args: {
@@ -181,7 +209,13 @@ export interface AuthFlowsRepo {
     expiredBefore: Date;
   }): Promise<number>;
 
-  /** Insert a new web-session row. */
+  /**
+   * Insert a new web-session row. `createdAt` is the time of the SIGN-IN the
+   * session descends from: omitted for a sign-in (now), passed by a refresh so
+   * the rotated row keeps it. A refresh rotates the bearer; it is not a sign-in,
+   * and "signed in within the last ten minutes" (sign-in audit #4) must not be
+   * renewable by refreshing a stolen session.
+   */
   insertWebSession(args: {
     accountId: string;
     tokenHash: string;
@@ -189,6 +223,7 @@ export interface AuthFlowsRepo {
     expiresAt: Date;
     issuedFromIp: string | null;
     userAgent: string | null;
+    createdAt?: Date;
   }): Promise<WebSessionRow | null>;
   findActiveWebSession(args: { tokenHash: string; now: Date }): Promise<WebSessionRow | null>;
   touchWebSession(id: string, at: Date): Promise<void>;
@@ -243,6 +278,12 @@ export interface AuthFlowsRepo {
   markWebSessionMfaSatisfied(id: string, at: Date): Promise<void>;
 }
 
+/** What {@link AuthFlowsRepo.removeOAuthLink} did. */
+export type RemoveOAuthLinkResult =
+  | { kind: 'removed'; provider: string; providerEmail: string | null }
+  | { kind: 'not_found' }
+  | { kind: 'last_sign_in_method' };
+
 /** What {@link AuthFlowsRepo.revokeCredentialsAfterPasswordReset} revoked. */
 export interface PasswordResetRevocation {
   webSessions: number;
@@ -258,7 +299,9 @@ export type AuthFlowErrorCode =
   | 'invalid_credentials'
   | 'email_not_verified'
   | 'invalid_auth_token'
-  | 'account_suspended';
+  | 'account_suspended'
+  // Sign-in audit #1 — the verification link needs the account's password.
+  | 'password_required';
 
 export class AuthFlowError extends Error {
   readonly code: AuthFlowErrorCode;
@@ -309,6 +352,49 @@ export function canonicalizeEmailForDedup(email: string): string {
   return `${canonicalLocal}@${domain}`;
 }
 
+/**
+ * The one way to resolve a typed or provider-asserted email to an account: by
+ * its literal (lowercased) address AND by its dedup-canonical form, both lookups
+ * always run (see the timing note on the service's private wrapper).
+ *
+ * The email is trimmed and lowercased FIRST. `canonicalizeEmailForDedup` keys
+ * Gmail handling on the literal domain `gmail.com`, so canonicalising a
+ * mixed-case address (`First.Last@Gmail.com`, as a provider may assert it)
+ * skipped the Gmail rules and missed the stored `firstlast@gmail.com` — sign-in
+ * audit #6, V-1724 again for mixed case, a 500 on the OAuth /redeem when the
+ * miss fell through to creating a second account.
+ */
+export async function findAccountByEmailOrCanonical(
+  repo: Pick<AuthFlowsRepo, 'findAccountByEmail' | 'findAccountByCanonicalEmail'>,
+  email: string,
+): Promise<AuthFlowAccountRow | null> {
+  const normalized = email.trim().toLowerCase();
+  const [byLiteral, byCanonical] = await Promise.all([
+    repo.findAccountByEmail(normalized),
+    repo.findAccountByCanonicalEmail(canonicalizeEmailForDedup(normalized)),
+  ]);
+  return byLiteral ?? byCanonical;
+}
+
+/**
+ * Sign-in audit #6 — the Google/GitHub sign-in's account lookup. Production
+ * (bootstrap) and the test app's OAuth wiring both call this, so the in-memory
+ * suites exercise the lookup production runs instead of a literal-only copy of
+ * their own.
+ */
+export async function findAccountIdForSignInEmail(
+  repo: Pick<AuthFlowsRepo, 'findAccountByEmail' | 'findAccountByCanonicalEmail'>,
+  email: string,
+): Promise<string | null> {
+  return (await findAccountByEmailOrCanonical(repo, email))?.id ?? null;
+}
+
+/** '' is the "no password" marker (OAuth-created accounts, a password a magic
+ *  link dropped); null predates the column. Neither is a password. */
+function holdsPassword(passwordHash: string | null): passwordHash is string {
+  return passwordHash !== null && passwordHash !== '';
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Service
 // ───────────────────────────────────────────────────────────────────────────
@@ -346,6 +432,8 @@ export interface SignupResult {
 
 export interface VerifyEmailArgs {
   token: string;
+  /** Sign-in audit #1 — required when the account has a password. */
+  password?: string;
   issuedFromIp: string | null;
   userAgent: string | null;
 }
@@ -511,6 +599,25 @@ function stepUpAttemptsKey(accountId: string): string {
   return `mfa-stepup-attempts:${accountId}`;
 }
 
+/**
+ * Sign-in audit #2 — the refusal while an account's MFA sign-in is paused: 429,
+ * Retry-After, and what to do. After a password reset the reset itself went
+ * through, and the detail says so.
+ */
+function mfaSignInPausedError(
+  retryAfterSeconds: number,
+  opts: { afterPasswordChange?: boolean } = {},
+): RateLimitedError {
+  const minutes = Math.max(1, Math.ceil(retryAfterSeconds / 60));
+  const wait = `${minutes.toString()} minute${minutes === 1 ? '' : 's'}`;
+  return new RateLimitedError(
+    retryAfterSeconds,
+    opts.afterPasswordChange === true
+      ? `Your password was changed. Two-factor sign-in for this account is paused after too many incorrect codes — sign in with your new password in ${wait}.`
+      : `Too many incorrect two-factor codes for this account. Two-factor sign-in is paused — try again in ${wait}.`,
+  );
+}
+
 function parseMfaChallengePayload(raw: string): MfaChallengePayload | null {
   let value: unknown;
   try {
@@ -532,6 +639,16 @@ function parseMfaChallengePayload(raw: string): MfaChallengePayload | null {
 }
 
 export class AuthFlowsService {
+  /**
+   * Sign-in audit #3 — password sign-in limit, keyed on the canonical email.
+   * Sign-in audit #2 — MFA sign-in code limit, keyed on the account.
+   * Both live in the short-lived store the MFA hand-off uses (Redis in
+   * production, always wired by bootstrap); null only where a caller builds the
+   * service without that store.
+   */
+  private readonly passwordSignInLimiter: AccountFailureLimiter | null;
+  private readonly mfaSignInLimiter: AccountFailureLimiter | null;
+
   constructor(
     private readonly repo: AuthFlowsRepo,
     private readonly email: EmailService,
@@ -578,16 +695,133 @@ export class AuthFlowsService {
      * don't exercise webhooks pass null.
      */
     private readonly webhooksService: RevocationWebhookEmitter | null = null,
-  ) {}
+  ) {
+    this.passwordSignInLimiter =
+      mfaChallenges === null
+        ? null
+        : new AccountFailureLimiter(mfaChallenges, PASSWORD_SIGN_IN_LIMIT);
+    this.mfaSignInLimiter =
+      mfaChallenges === null ? null : new AccountFailureLimiter(mfaChallenges, MFA_SIGN_IN_LIMIT);
+  }
+
+  /** Where a customer starts a password reset: the dashboard's forgot-password page. */
+  private forgotPasswordUrl(): string {
+    return `${new URL(this.config.passwordResetUrl).origin}/forgot-password`;
+  }
+
+  /**
+   * Sign-in audit #2 — refuse while the account's MFA sign-in is paused. The
+   * detail says what happened and when to come back; `afterPasswordChange` is
+   * the password-reset case, where the reset itself already went through.
+   */
+  private async refuseWhileMfaSignInPaused(
+    accountId: string,
+    opts: { afterPasswordChange?: boolean } = {},
+  ): Promise<void> {
+    if (this.mfaSignInLimiter === null) return;
+    const seconds = await this.mfaSignInLimiter.lockedFor(accountId);
+    if (seconds === null) return;
+    throw mfaSignInPausedError(seconds, opts);
+  }
+
+  /**
+   * Sign-in audit #2 — the account just reached ten wrong codes. One
+   * "Recent activity" row, written by the platform, and one email to the owner.
+   * Both best-effort: the pause itself is what protects the account.
+   */
+  private async announceMfaSignInPause(accountId: string, pausedUntil: Date): Promise<void> {
+    if (this.accountAudit !== null) {
+      try {
+        await this.accountAudit.record({
+          accountId,
+          actorType: 'system',
+          actorAccountId: null,
+          actorKeyId: null,
+          action: 'account.mfa_sign_in_locked',
+          targetResourceId: null,
+          payload: {
+            failed_codes: MFA_SIGN_IN_LIMIT.maxFailures,
+            paused_until: pausedUntil.toISOString(),
+          },
+        });
+      } catch (err) {
+        this.logger.warn(
+          { component: 'auth-flows', action: 'account.mfa_sign_in_locked', accountId, err },
+          'account-audit emit failed (best-effort, swallowed)',
+        );
+      }
+    }
+    try {
+      const account = await this.repo.findAccountById(accountId);
+      if (account !== null) {
+        void this.email.sendMfaSignInLocked({
+          to: account.email,
+          pausedUntil,
+          resetUrl: this.forgotPasswordUrl(),
+        });
+      }
+    } catch (err) {
+      this.logger.warn(
+        { component: 'auth-flows', flow: 'mfa-sign-in-pause', accountId, err },
+        'MFA sign-in pause notice not sent (best-effort, swallowed)',
+      );
+    }
+  }
+
+  /**
+   * Sign-in audit #3 — reserve a password attempt for this email, or refuse
+   * with 429 while the email is locked. Keyed on the CANONICAL email and taken
+   * before the account lookup, so it runs identically whether or not an account
+   * exists. If the store is unreachable the request goes ahead on the per-IP
+   * limit alone (logged): password sign-in never needed Redis, and a blip must
+   * not take it down.
+   */
+  private async admitPasswordSignIn(email: string): Promise<ReservedAttempt | null> {
+    if (this.passwordSignInLimiter === null) return null;
+    let admission: Awaited<ReturnType<AccountFailureLimiter['admit']>>;
+    try {
+      admission = await this.passwordSignInLimiter.admit(canonicalizeEmailForDedup(email));
+    } catch (err) {
+      this.logger.warn(
+        { component: 'auth-flows', flow: 'login', err },
+        'password sign-in limit unavailable — this request is limited per IP only',
+      );
+      return null;
+    }
+    if (admission.kind === 'locked') {
+      const minutes = Math.max(1, Math.ceil(admission.retryAfterSeconds / 60));
+      throw new RateLimitedError(
+        admission.retryAfterSeconds,
+        `Too many incorrect passwords for this email. Try again in ${minutes.toString()} minute${minutes === 1 ? '' : 's'}, or reset your password.`,
+      );
+    }
+    return admission.attempt;
+  }
+
+  /** Settle a password attempt without letting a store error fail the sign-in. */
+  private async settlePasswordAttempt(settle: () => Promise<unknown>): Promise<void> {
+    try {
+      await settle();
+    } catch (err) {
+      this.logger.warn(
+        { component: 'auth-flows', flow: 'login', err },
+        'password sign-in limit not updated (best-effort, swallowed)',
+      );
+    }
+  }
 
   private async createMfaChallenge(
     account: AuthFlowAccountRow,
     sourceIp: string | null,
     userAgent: string | null,
+    opts: { afterPasswordChange?: boolean } = {},
   ): Promise<{ challengeToken: string; challengeExpiresAt: Date }> {
     if (this.mfaChallenges === null) {
       throw new AuthFlowError('invalid_auth_token', 'MFA challenge not available on this server.');
     }
+    // Sign-in audit #2 — no new challenge while the account's MFA sign-in is
+    // paused: a fresh password sign-in must not buy a fresh set of guesses.
+    await this.refuseWhileMfaSignInPaused(account.id, opts);
     const challengeToken = generateChallengeToken();
     const challengeExpiresAt = new Date(Date.now() + MFA_CHALLENGE_TTL_SECONDS * 1000);
     const payload: MfaChallengePayload = {
@@ -637,6 +871,7 @@ export class AuthFlowsService {
       | 'account.login'
       | 'account.logout'
       | 'account.password_changed'
+      | 'account.oauth_link_removed'
       | 'api_key.revoked',
     payload: Record<string, unknown>,
     actorAccountId: string | null = null,
@@ -687,12 +922,7 @@ export class AuthFlowsService {
    * login() to worry about.
    */
   private async findAccountByEmailOrCanonical(email: string): Promise<AuthFlowAccountRow | null> {
-    const canonicalEmail = canonicalizeEmailForDedup(email);
-    const [byLiteral, byCanonical] = await Promise.all([
-      this.repo.findAccountByEmail(email),
-      this.repo.findAccountByCanonicalEmail(canonicalEmail),
-    ]);
-    return byLiteral ?? byCanonical;
+    return findAccountByEmailOrCanonical(this.repo, email);
   }
 
   async signup(args: SignupArgs): Promise<SignupResult> {
@@ -838,6 +1068,32 @@ export class AuthFlowsService {
     });
     if (row === null) throw new AuthFlowError('invalid_auth_token');
 
+    // Sign-in audit #1 — the link proves the mailbox, not that the person
+    // clicking it chose the account's password. Anyone can sign up with someone
+    // else's address and a password of their own; if the mailbox owner's click
+    // alone verified the account, that password would then sign in with full
+    // owner rights. So when the account has a password, verification needs it:
+    // the person who signed up knows it, a person who never signed up does not,
+    // and the account stays unverified — useless to whoever holds its password.
+    // Checked BEFORE the token is consumed, so a mistyped password does not use
+    // up the link. (A forgotten one: a password reset proves the mailbox too and
+    // verifies the address — see confirmPasswordReset.)
+    const holder = await this.requireAccount(row.accountId);
+    if (holdsPassword(holder.passwordHash)) {
+      if (args.password === undefined || args.password.length === 0) {
+        throw new AuthFlowError(
+          'password_required',
+          'Enter the password you chose when you signed up to confirm this email address.',
+        );
+      }
+      if (!(await verifyPassword(args.password, holder.passwordHash))) {
+        throw new AuthFlowError(
+          'password_required',
+          "That password doesn't match. Enter the password you chose when you signed up.",
+        );
+      }
+    }
+
     // Account-family single-use under concurrency: the first live verification
     // link claims every sibling. A different old/resend link cannot later mint
     // another passwordless session, and concurrent siblings have one winner.
@@ -916,7 +1172,52 @@ export class AuthFlowsService {
   }
 
   async login(args: LoginArgs): Promise<LoginResult> {
-    const account = await this.findAccountByEmailOrCanonical(args.email.trim().toLowerCase());
+    const email = args.email.trim().toLowerCase();
+    // Sign-in audit #3 — the per-email limit, reserved before anything about the
+    // account is looked up (so it behaves the same for an unknown email) and
+    // settled once the password has been checked.
+    const attempt = await this.admitPasswordSignIn(email);
+    let authenticated: AuthFlowAccountRow | null;
+    try {
+      authenticated = await this.authenticatePassword(args);
+    } catch (err) {
+      if (attempt !== null) await this.settlePasswordAttempt(() => attempt.abandoned());
+      throw err;
+    }
+    if (authenticated === null) {
+      if (attempt !== null) await this.settlePasswordAttempt(() => attempt.failed());
+      throw new AuthFlowError('invalid_credentials');
+    }
+    // A correct password clears the email's count.
+    if (attempt !== null) {
+      await this.settlePasswordAttempt(() => attempt.succeeded({ clear: true }));
+    }
+    const account = authenticated;
+    // Account-state checks come AFTER authentication: a wrong-password attempt
+    // on a suspended/unverified account is then indistinguishable from any
+    // other bad login, so neither state leaks to an unauthenticated probe. A
+    // correct-password caller (the account owner) still learns the real state.
+    if (account.status !== 'active') {
+      throw new AuthFlowError('account_suspended');
+    }
+    if (account.emailVerifiedAt === null) {
+      throw new AuthFlowError('email_not_verified');
+    }
+    return this.finishPasswordSignIn(account, args);
+  }
+
+  /**
+   * The password check itself: the account when the password is right, null for
+   * every kind of wrong (unknown email, no password, wrong password) — all at
+   * the same cost.
+   */
+  private async authenticatePassword(args: {
+    email: string;
+    password: string;
+  }): Promise<AuthFlowAccountRow | null> {
+    const email = args.email.trim().toLowerCase();
+    const password = args.password;
+    const account = await this.findAccountByEmailOrCanonical(email);
 
     // Authenticate BEFORE branching on account state so the response time +
     // error are identical whether the email is unknown, password-less
@@ -931,22 +1232,16 @@ export class AuthFlowsService {
     // returns ~instantly while a real password account takes ~scrypt-time —
     // re-opening the exact enumeration channel this branch exists to close.
     if (account === null || account.passwordHash === null || account.passwordHash === '') {
-      await verifyPassword(args.password, await dummyPasswordHash());
-      throw new AuthFlowError('invalid_credentials');
+      await verifyPassword(password, await dummyPasswordHash());
+      return null;
     }
-    const ok = await verifyPassword(args.password, account.passwordHash);
-    if (!ok) throw new AuthFlowError('invalid_credentials');
-    // Account-state checks come AFTER authentication: a wrong-password attempt
-    // on a suspended/unverified account is then indistinguishable from any
-    // other bad login, so neither state leaks to an unauthenticated probe. A
-    // correct-password caller (the account owner) still learns the real state.
-    if (account.status !== 'active') {
-      throw new AuthFlowError('account_suspended');
-    }
-    if (account.emailVerifiedAt === null) {
-      throw new AuthFlowError('email_not_verified');
-    }
+    return (await verifyPassword(password, account.passwordHash)) ? account : null;
+  }
 
+  private async finishPasswordSignIn(
+    account: AuthFlowAccountRow,
+    args: LoginArgs,
+  ): Promise<LoginResult> {
     // V-353d — branch on MFA enrollment. If enrolled, issue a
     // challenge token instead of a session; the customer exchanges it
     // at /v1/auth/mfa/challenge with their 6-digit code (or recovery
@@ -1020,9 +1315,37 @@ export class AuthFlowsService {
       );
     }
 
+    // Sign-in audit #2 — the account-wide limit, across every challenge. The
+    // five-per-challenge bound below is per TOKEN and every fresh password
+    // sign-in mints a new token, so on its own it bounded nothing per account.
+    // Reserve-before-verify, like step-up: a burst of concurrent guesses cannot
+    // all slip past a stale "not yet paused" read.
+    let attempt: ReservedAttempt | null = null;
+    if (this.mfaSignInLimiter !== null) {
+      const admission = await this.mfaSignInLimiter.admit(payload.account_id);
+      if (admission.kind === 'locked') throw mfaSignInPausedError(admission.retryAfterSeconds);
+      attempt = admission.attempt;
+    }
+
     const input = args.code ?? args.recoveryCode!;
-    const result = await this.mfa.verifyCode({ accountId: payload.account_id, input });
+    let result: 'totp' | 'recovery' | null;
+    try {
+      result = await this.mfa.verifyCode({ accountId: payload.account_id, input });
+    } catch (err) {
+      await attempt?.abandoned();
+      throw err;
+    }
     if (result === null) {
+      const outcome = attempt === null ? null : await attempt.failed();
+      if (outcome?.locked === true && outcome.lockedUntil !== null) {
+        // This was the tenth wrong code for the account. The challenge is dead
+        // with the pause; say so now rather than on the next try.
+        await this.mfaChallenges.consume(challengeKey);
+        if (outcome.firstNotice) {
+          await this.announceMfaSignInPause(payload.account_id, outcome.lockedUntil);
+        }
+        throw mfaSignInPausedError(MFA_SIGN_IN_LIMIT.lockSeconds);
+      }
       // V-353d.A — bound brute-force on the 6-digit/recovery code. The
       // token is left alive so the customer can retype, BUT only up to
       // MAX_MFA_CHALLENGE_ATTEMPTS wrong codes; past that we invalidate the
@@ -1053,6 +1376,11 @@ export class AuthFlowsService {
         'Code is invalid. Try again or use a recovery code.',
       );
     }
+
+    // A right code is not a failure: give back only this attempt's slot. The
+    // account's earlier failures still count, so the owner signing in does not
+    // reset the count of someone guessing at the same time.
+    await attempt?.succeeded();
 
     // Success — atomically CLAIM the single-use token before issuing the
     // session. consume() is an atomic GETDEL, so if two requests race the
@@ -1159,13 +1487,36 @@ export class AuthFlowsService {
       at: now,
     });
     if (!consumed) throw new AuthFlowError('invalid_auth_token');
-    const account = await this.requireAccount(row.accountId);
+    let account = await this.requireAccount(row.accountId);
     if (account.status !== 'active') throw new AuthFlowError('account_suspended');
 
     // Magic-link consumption also implicitly verifies the email — the user
     // demonstrably owns the inbox by clicking the link.
+    //
+    // Sign-in audit #1 — and when it is the FIRST proof of the mailbox, any
+    // password on the account was set by whoever registered the address, who
+    // never proved it. It must not survive the owner's proof: the same update
+    // drops it and advances the auth epoch, ending every session minted under
+    // it. The owner signs in now by this link and can set a password by reset.
     if (account.emailVerifiedAt === null) {
-      await this.repo.markEmailVerified(account.id, now);
+      const proven = await this.repo.verifyEmailDroppingUnprovenPassword(account.id, now);
+      if (proven !== null) {
+        if (this.authCache) {
+          try {
+            await this.authCache.invalidateAccount(account.id);
+          } catch {
+            /* the epoch check at lookup still refuses the old sessions */
+          }
+        }
+        await this.emitAuditBestEffort(account.id, 'account.email_verified', {
+          via: 'magic_link',
+          password_removed: holdsPassword(account.passwordHash),
+          issued_from_ip: args.issuedFromIp,
+          user_agent: args.userAgent,
+        });
+      }
+      // Whichever proof won, sign in under the account's current authority.
+      account = proven ?? (await this.requireAccount(account.id));
     }
 
     // A magic link proves mailbox control, not possession of the account's
@@ -1182,6 +1533,13 @@ export class AuthFlowsService {
     }
 
     const session = await this.issueWebSession(account, args.issuedFromIp, args.userAgent);
+    // Sign-in audit #9 — a magic-link sign-in is a sign-in: "Recent activity"
+    // promises sessions started, and this one started a session.
+    await this.emitAuditBestEffort(account.id, 'account.login', {
+      method: 'magic_link',
+      issued_from_ip: args.issuedFromIp,
+      user_agent: args.userAgent,
+    });
     return { kind: 'session', account, session };
   }
 
@@ -1251,6 +1609,28 @@ export class AuthFlowsService {
     const accountAfterPasswordChange = await this.repo.setPassword(account.id, newHash);
     if (accountAfterPasswordChange === null) throw new AuthFlowError('account_suspended');
 
+    // Sign-in audit #7 — the reset link arrived in the mailbox and was used, so
+    // the reset proves the address exactly as the verification link does. Left
+    // unverified, the new password's next sign-in was refused as "not verified".
+    // It is also the safe way out of sign-in audit #1: whoever registered the
+    // address in someone else's name loses the password they chose.
+    if (await this.repo.markEmailVerified(account.id, now)) {
+      await this.emitAuditBestEffort(account.id, 'account.email_verified', {
+        via: 'password_reset',
+        issued_from_ip: args.issuedFromIp,
+        user_agent: args.userAgent,
+      });
+    }
+    // Sign-in audit #3 — the new password starts with a clean count: a reset
+    // proves the mailbox, so guesses at the OLD password no longer hold the
+    // owner out. Best-effort, like every other use of the limit's store here.
+    if (this.passwordSignInLimiter !== null) {
+      const limiter = this.passwordSignInLimiter;
+      await this.settlePasswordAttempt(() =>
+        limiter.clear(canonicalizeEmailForDedup(accountAfterPasswordChange.email)),
+      );
+    }
+
     if (mfaRequired) {
       // Password reset is a compromise-recovery boundary. With MFA enrolled,
       // there is no new session to retain yet: revoke every old session before
@@ -1268,6 +1648,7 @@ export class AuthFlowsService {
           accountAfterPasswordChange,
           args.issuedFromIp,
           args.userAgent,
+          { afterPasswordChange: true },
         )),
       };
     }
@@ -1323,11 +1704,14 @@ export class AuthFlowsService {
         }
       }
       const account = await this.requireAccount(old.accountId);
+      // The rotated row keeps the chain's sign-in time (its createdAt), as it
+      // keeps the epoch: a refresh is not a sign-in (sign-in audit #4).
       const session = await this.issueWebSession(
         account,
         args.issuedFromIp,
         args.userAgent,
         old.authEpoch,
+        old.createdAt,
       );
       return { account, session };
     });
@@ -1551,6 +1935,52 @@ export class AuthFlowsService {
     return n;
   }
 
+  /**
+   * Sign-in audit #5 — remove one of the account's linked Google/GitHub
+   * sign-ins. The row is DELETED (not stamped revoked): the next sign-in with
+   * that identity finds no link and goes to the emailed merge confirmation, like
+   * any identity never linked — so the removed link can no longer sign in, and
+   * the owner can still link it again later through that confirmation. Refused
+   * when it is the account's last way to sign in. A removal leaves a "Recent
+   * activity" row and emails the account.
+   *
+   * It does not end sessions already signed in through the link; "Sign out
+   * everywhere else" does that, and the dashboard says so.
+   */
+  async removeOAuthLink(args: {
+    accountId: string;
+    linkId: string;
+  }): Promise<'removed' | 'not_found' | 'last_sign_in_method'> {
+    const result = await this.repo.removeOAuthLink(args);
+    if (result.kind !== 'removed') return result.kind;
+    const removedAt = new Date();
+    await this.emitAuditBestEffort(
+      args.accountId,
+      'account.oauth_link_removed',
+      { provider: result.provider },
+      null,
+      { targetResourceId: `ol_${args.linkId}` },
+    );
+    try {
+      const account = await this.repo.findAccountById(args.accountId);
+      if (account !== null) {
+        void this.email.sendOauthLinkRemoved({
+          to: account.email,
+          provider: result.provider,
+          providerEmail: result.providerEmail,
+          removedAt,
+          resetUrl: this.forgotPasswordUrl(),
+        });
+      }
+    } catch (err) {
+      this.logger.warn(
+        { component: 'auth-flows', flow: 'oauth-link-removal', accountId: args.accountId, err },
+        'linked sign-in removal notice not sent (best-effort, swallowed)',
+      );
+    }
+    return 'removed';
+  }
+
   // ──────────────────── helpers ────────────────────
 
   /**
@@ -1662,6 +2092,8 @@ export class AuthFlowsService {
     issuedFromIp: string | null,
     userAgent: string | null,
     authorityEpoch = account.authEpoch,
+    /** The sign-in this session descends from; omitted for a sign-in (now). */
+    signedInAt?: Date,
   ): Promise<{ plaintext: string; row: WebSessionRow }> {
     // Shared fail-closed invariant for every current/future session-mint path.
     // Callers may retain earlier checks for clearer flow ordering, but none can
@@ -1676,6 +2108,7 @@ export class AuthFlowsService {
       expiresAt,
       issuedFromIp,
       userAgent,
+      ...(signedInAt !== undefined ? { createdAt: signedInAt } : {}),
     });
     // A password/status transition won after the caller's account read. The
     // repo did not insert a row, so never surface the generated plaintext.

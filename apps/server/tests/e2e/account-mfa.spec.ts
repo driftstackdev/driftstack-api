@@ -84,7 +84,7 @@ async function interactiveAuth(
   const verificationToken = ((await signup.json()) as SignupResponse).debug_token;
   expect(verificationToken).toBeTruthy();
   const verify = await request.post(`${server.baseUrl}/v1/auth/verify-email`, {
-    data: { token: verificationToken },
+    data: { token: verificationToken, password: 'correct horse battery staple' },
   });
   expect(verify.status()).toBe(200);
   const token = ((await verify.json()) as SessionEnvelope).session.token;
@@ -122,7 +122,7 @@ test('full enroll → verify → status → disable cycle', async ({ request }) 
 
   const verifyRes = await request.post(`${server.baseUrl}/v1/account/mfa/verify`, {
     headers,
-    data: { code },
+    data: { code, current_password: 'correct horse battery staple' },
   });
   expect(verifyRes.status()).toBe(200);
   const verify = (await verifyRes.json()) as VerifyResponse;
@@ -169,7 +169,7 @@ test('activation preserves only the enrolling session and evicts a cached predec
   const verificationToken = ((await signup.json()) as SignupResponse).debug_token;
   expect(verificationToken).toBeTruthy();
   const verified = await request.post(`${server.baseUrl}/v1/auth/verify-email`, {
-    data: { token: verificationToken },
+    data: { token: verificationToken, password: 'correct horse battery staple' },
   });
   const enrollingToken = ((await verified.json()) as SessionEnvelope).session.token;
   const predecessorLogin = await request.post(`${server.baseUrl}/v1/auth/login`, {
@@ -194,7 +194,10 @@ test('activation preserves only the enrolling session and evicts a cached predec
   const secret = base32Decode(((await enroll.json()) as EnrollResponse).secret_base32);
   const activation = await request.post(`${server.baseUrl}/v1/account/mfa/verify`, {
     headers: enrollingHeaders,
-    data: { code: computeTotpCode(secret, Math.floor(Date.now() / 1000)) },
+    data: {
+      code: computeTotpCode(secret, Math.floor(Date.now() / 1000)),
+      current_password: 'correct horse battery staple',
+    },
   });
   expect(activation.status()).toBe(200);
 
@@ -214,7 +217,7 @@ test('POST /v1/account/mfa/verify with wrong code returns 400', async ({ request
   await request.post(`${server.baseUrl}/v1/account/mfa/enroll`, { headers });
   const verifyRes = await request.post(`${server.baseUrl}/v1/account/mfa/verify`, {
     headers,
-    data: { code: '000000' },
+    data: { code: '000000', current_password: 'correct horse battery staple' },
   });
   expect(verifyRes.status()).toBe(400);
 });
@@ -225,7 +228,7 @@ test('POST /v1/account/mfa/verify with malformed body returns 400', async ({ req
   await request.post(`${server.baseUrl}/v1/account/mfa/enroll`, { headers });
   const verifyRes = await request.post(`${server.baseUrl}/v1/account/mfa/verify`, {
     headers,
-    data: { code: 'not-six-digits' },
+    data: { code: 'not-six-digits', current_password: 'correct horse battery staple' },
   });
   expect(verifyRes.status()).toBe(400);
 });
@@ -239,7 +242,7 @@ test('POST /v1/account/mfa/disable without confirm body returns 400', async ({ r
   const code = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
   const verify = await request.post(`${server.baseUrl}/v1/account/mfa/verify`, {
     headers,
-    data: { code },
+    data: { code, current_password: 'correct horse battery staple' },
   });
   const recoveryCodes = ((await verify.json()) as VerifyResponse).recovery_codes;
   const stepUp = await request.post(`${server.baseUrl}/v1/auth/mfa/step-up`, {
@@ -269,7 +272,7 @@ test('DELETE /v1/account/mfa back-compat alias also disables', async ({ request 
   const code = computeTotpCode(secretBytes, Math.floor(Date.now() / 1000));
   const verify = await request.post(`${server.baseUrl}/v1/account/mfa/verify`, {
     headers,
-    data: { code },
+    data: { code, current_password: 'correct horse battery staple' },
   });
   const recoveryCodes = ((await verify.json()) as VerifyResponse).recovery_codes;
   const stepUp = await request.post(`${server.baseUrl}/v1/auth/mfa/step-up`, {
@@ -295,7 +298,7 @@ test('POST /v1/account/mfa/recovery-codes/regenerate issues a fresh batch', asyn
   const firstVerify = (await (
     await request.post(`${server.baseUrl}/v1/account/mfa/verify`, {
       headers,
-      data: { code },
+      data: { code, current_password: 'correct horse battery staple' },
     })
   ).json()) as VerifyResponse;
 

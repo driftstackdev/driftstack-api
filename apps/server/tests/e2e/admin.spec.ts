@@ -79,7 +79,7 @@ test('POST /v1/api-keys: a free account cannot mint an ordinary API key at all',
   expect(signup.status()).toBe(200);
   const token = ((await signup.json()) as { debug_token: string }).debug_token;
   const verify = await request.post(`${server.baseUrl}/v1/auth/verify-email`, {
-    data: { token },
+    data: { token, password: 'correct horse battery staple' },
   });
   expect(verify.status()).toBe(200);
   const session = ((await verify.json()) as { session: { token: string } }).session;

@@ -51,7 +51,7 @@ async function signupVerifyAndSession(
     method: 'POST',
     url: '/v1/auth/verify-email',
     headers: { 'user-agent': userAgent },
-    payload: { token },
+    payload: { token, password },
   });
   expect(verify.statusCode).toBe(200);
   const session = verify.json<SessionEnvelope>().session;

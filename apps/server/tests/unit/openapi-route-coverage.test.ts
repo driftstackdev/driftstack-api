@@ -331,7 +331,8 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     // the screenshot behind a `captureId`, as image/png or image/jpeg bytes. It
     // was already registered, so the registration count below does not move, and
     // its INTENTIONALLY_UNPUBLISHED_OPERATIONS entry left in the same change.
-    expect(specOperations.size).toBe(240);
+    // 241 since sign-in audit #5 published `DELETE /v1/account/me/oauth-links/{id}`.
+    expect(specOperations.size).toBe(241);
     // f66e8a02c added PUT /v1/admin/incidents/:id as the 254th unique Fastify
     // registration; this verifier-only correction does not add a route.
     // 256 since V-1611 #14 registered `GET /v1/teams` + `PATCH /v1/teams/:id`.
@@ -368,7 +369,9 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     // /v1/admin/ai-credits/rollback — both unpublished, see their
     // INTENTIONALLY_UNPUBLISHED_OPERATIONS entries, so the published count
     // above does not move either.
-    expect(routeOperations.size).toBe(277);
+    // 278 since sign-in audit #5 registered `DELETE /v1/account/me/oauth-links/:id`
+    // — published, so it is deliberately NOT in INTENTIONALLY_UNPUBLISHED_OPERATIONS.
+    expect(routeOperations.size).toBe(278);
   });
 
   it('documents the method-specific customer-core contract', () => {

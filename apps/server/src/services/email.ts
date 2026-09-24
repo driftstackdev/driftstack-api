@@ -174,6 +174,30 @@ export interface EmailService {
     expiresAt: Date;
   }): Promise<void>;
   /**
+   * Sign-in audit #2 — someone entered the account's password correctly and then
+   * the wrong two-factor code ten times, so two-factor sign-in is paused until
+   * `pausedUntil`. Sent once per pause. `resetUrl` is where the owner starts a
+   * password reset if it wasn't them.
+   */
+  sendMfaSignInLocked(args: { to: string; pausedUntil: Date; resetUrl: string }): Promise<void>;
+  /**
+   * Sign-in audit #4 — a two-factor authenticator was turned on for the account.
+   * Sent on every enrolment, so an owner learns if someone else did it.
+   */
+  sendMfaEnrolled(args: { to: string; enrolledAt: Date }): Promise<void>;
+  /**
+   * Sign-in audit #5 — a linked Google/GitHub sign-in was removed from the
+   * account. `resetUrl` is where the owner starts a password reset if it wasn't
+   * them.
+   */
+  sendOauthLinkRemoved(args: {
+    to: string;
+    provider: string;
+    providerEmail: string | null;
+    removedAt: Date;
+    resetUrl: string;
+  }): Promise<void>;
+  /**
    * v2-#10.5 — webhook signing-secret rotation reminder. Fires when
    * an endpoint's active secret is older than the rotation threshold
    * (60d nag, 90d target). Body includes the endpoint URL + secret
@@ -527,6 +551,32 @@ const TEMPLATES = {
     html: (v) =>
       `<p>Someone — probably you — just tried to sign in to your Driftstack account using <strong>${oauthProviderDisplay(v.provider)}</strong>.</p><p>If that was you, confirm the new sign-in method by clicking the link below. It expires at <strong>${v.expiresAt}</strong> (UTC) and works once.</p><p><a href="${v.confirmLink}">${v.confirmLink}</a></p><p>If that wasn't you, ignore this email — no change is made until the link is clicked. Your password (if any) still works.</p><p>— Driftstack</p>`,
   },
+  // Sign-in audit #2 — the account's two-factor sign-in is paused after ten
+  // wrong codes. The reader learns what happened, what it means (their password
+  // is known to whoever did it, if it wasn't them) and the one thing to do.
+  'mfa-sign-in-locked': {
+    subject: 'Someone is trying to sign in to your Driftstack account',
+    text: (v) =>
+      `Someone signed in to your Driftstack account with the right password, then entered the wrong two-factor code 10 times. To protect your account, two-factor sign-in is paused until ${v.pausedUntil}.\n\nIf this was you, wait until then and try again.\n\nIf it wasn't you, someone knows your password. Reset it now:\n\n${v.resetUrl}\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Someone signed in to your Driftstack account with the right password, then entered the wrong two-factor code 10 times. To protect your account, two-factor sign-in is paused until <strong>${v.pausedUntil}</strong>.</p><p>If this was you, wait until then and try again.</p><p>If it wasn't you, someone knows your password. <a href="${v.resetUrl}">Reset it now</a>.</p><p>— Driftstack</p>`,
+  },
+  // Sign-in audit #4 — sent on every two-factor enrolment.
+  'mfa-enrolled': {
+    subject: 'Two-factor sign-in is now on for your Driftstack account',
+    text: (v) =>
+      `Two-factor sign-in was turned on for your Driftstack account on ${v.enrolledAt}. From now on, signing in needs a code from the authenticator app that was set up.\n\nIf this was you, there's nothing else to do.\n\nIf it wasn't you, someone else has access to your account. Contact support@driftstack.dev right away so we can remove the authenticator and secure your account.\n\n— Driftstack`,
+    html: (v) =>
+      `<p>Two-factor sign-in was turned on for your Driftstack account on <strong>${v.enrolledAt}</strong>. From now on, signing in needs a code from the authenticator app that was set up.</p><p>If this was you, there's nothing else to do.</p><p>If it wasn't you, someone else has access to your account. Contact <a href="mailto:support@driftstack.dev">support@driftstack.dev</a> right away so we can remove the authenticator and secure your account.</p><p>— Driftstack</p>`,
+  },
+  // Sign-in audit #5 — a linked Google/GitHub sign-in was removed.
+  'oauth-link-removed': {
+    subject: 'A sign-in method was removed from your Driftstack account',
+    text: (v) =>
+      `${oauthProviderDisplay(v.provider)} sign-in${v.providerEmail ? ` (${v.providerEmail})` : ''} was removed from your Driftstack account on ${v.removedAt}. That ${oauthProviderDisplay(v.provider)} account can no longer be used to sign in.\n\nIf this was you, there's nothing else to do.\n\nIf it wasn't you, someone else has access to your account. Reset your password now:\n\n${v.resetUrl}\n\n— Driftstack`,
+    html: (v) =>
+      `<p>${oauthProviderDisplay(v.provider)} sign-in${v.providerEmail ? ` (${v.providerEmail})` : ''} was removed from your Driftstack account on <strong>${v.removedAt}</strong>. That ${oauthProviderDisplay(v.provider)} account can no longer be used to sign in.</p><p>If this was you, there's nothing else to do.</p><p>If it wasn't you, someone else has access to your account. <a href="${v.resetUrl}">Reset your password now</a>.</p><p>— Driftstack</p>`,
+  },
   // v2-#11.5 — BYOK Anthropic key rotation nag. Subject explicit
   // about provider name (Anthropic) so the customer immediately
   // knows which credential they need to rotate. No partial-key
@@ -862,6 +912,9 @@ export function createEmailService({
       sendStatusIncidentNotification: async () => {},
       sendTeamInvite: async () => {},
       sendOauthPendingLinkVerification: async () => {},
+      sendMfaSignInLocked: async () => {},
+      sendMfaEnrolled: async () => {},
+      sendOauthLinkRemoved: async () => {},
       sendWebhookSecretRotationReminder: async () => {},
       sendWebhookSecretForceRotated: async () => {},
       sendWebhookSecretGraceExpiring: async () => {},
@@ -1131,6 +1184,17 @@ export function createEmailService({
         provider,
         confirmLink,
         expiresAt: expiresAt.toISOString(),
+      }),
+    sendMfaSignInLocked: ({ to, pausedUntil, resetUrl }) =>
+      send('mfa-sign-in-locked', to, { pausedUntil: customerDateTime(pausedUntil), resetUrl }),
+    sendMfaEnrolled: ({ to, enrolledAt }) =>
+      send('mfa-enrolled', to, { enrolledAt: customerDateTime(enrolledAt) }),
+    sendOauthLinkRemoved: ({ to, provider, providerEmail, removedAt, resetUrl }) =>
+      send('oauth-link-removed', to, {
+        provider,
+        providerEmail: providerEmail ?? '',
+        removedAt: customerDateTime(removedAt),
+        resetUrl,
       }),
     sendWebhookSecretRotationReminder: ({
       to,

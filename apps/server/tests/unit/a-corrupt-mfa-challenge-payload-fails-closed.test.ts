@@ -58,6 +58,10 @@ class RecordingChallengeStore implements MfaChallengeStore {
   releaseAttempt(_key: string): Promise<void> {
     return Promise.resolve();
   }
+
+  resetAttempts(_key: string): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 function serviceWith(stored: string | null): {

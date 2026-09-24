@@ -54,7 +54,7 @@ async function interactiveAuth(
   expect(verificationToken).toBeTruthy();
 
   const verify = await request.post(`${server.baseUrl}/v1/auth/verify-email`, {
-    data: { token: verificationToken },
+    data: { token: verificationToken, password: 'correct horse battery staple' },
   });
   expect(verify.status()).toBe(200);
   const session = ((await verify.json()) as SessionEnvelope).session;

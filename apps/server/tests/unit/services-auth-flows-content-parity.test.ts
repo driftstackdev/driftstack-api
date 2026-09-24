@@ -11,7 +11,7 @@
 //     sha256-hashed at rest + AuthFlowError → RFC 7807 mapping.
 //   • AuthFlowKind 3-literal union (email_verify / magic_link /
 //     password_reset).
-//   • AuthFlowErrorCode: 5-code union (email_already_registered /
+//   • AuthFlowErrorCode: 6-code union (email_already_registered /
 //     invalid_credentials / email_not_verified / invalid_auth_token /
 //     account_suspended).
 //   • signup: email lowercase + uniqueness check + hashPassword +
@@ -73,9 +73,9 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     );
   });
 
-  it('AuthFlowErrorCode: 5-code union (email_already_registered / invalid_credentials / email_not_verified / invalid_auth_token / account_suspended)', () => {
+  it('AuthFlowErrorCode: 6-code union (email_already_registered / invalid_credentials / email_not_verified / invalid_auth_token / account_suspended / password_required — sign-in audit #1)', () => {
     expect(body).toMatch(
-      /export type AuthFlowErrorCode =\s*\| 'email_already_registered'\s*\| 'invalid_credentials'\s*\| 'email_not_verified'\s*\| 'invalid_auth_token'\s*\| 'account_suspended';/,
+      /export type AuthFlowErrorCode =\s*\| 'email_already_registered'\s*\| 'invalid_credentials'\s*\| 'email_not_verified'\s*\| 'invalid_auth_token'\s*\| 'account_suspended'\s*\/\/[^\n]*\n\s*\| 'password_required';/,
     );
     expect(body).toMatch(/this\.name = 'AuthFlowError';/);
   });
@@ -144,13 +144,20 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
   });
 
   it('login: 4-failure-mode cascade (invalid_credentials × 2 + account_suspended + email_not_verified) + V-353d branch returns mfa_required with challenge_token', () => {
+    // authenticatePassword answers null for BOTH wrong kinds (no usable account /
+    // wrong password); login turns null into the one invalid_credentials.
     expect(body).toMatch(
-      /if \(account === null \|\| account\.passwordHash === null \|\| account\.passwordHash === ''\) \{\s*await verifyPassword\(args\.password, await dummyPasswordHash\(\)\);\s*throw new AuthFlowError\('invalid_credentials'\);/,
+      /if \(account === null \|\| account\.passwordHash === null \|\| account\.passwordHash === ''\) \{\s*await verifyPassword\(password, await dummyPasswordHash\(\)\);\s*return null;/,
+    );
+    expect(body).toMatch(
+      /return \(await verifyPassword\(password, account\.passwordHash\)\) \? account : null;/,
+    );
+    expect(body).toMatch(
+      /if \(authenticated === null\) \{[\s\S]{0,200}?throw new AuthFlowError\('invalid_credentials'\);/,
     );
     expect(body).toMatch(
       /if \(account\.status !== 'active'\) \{\s*throw new AuthFlowError\('account_suspended'\);/,
     );
-    expect(body).toMatch(/if \(!ok\) throw new AuthFlowError\('invalid_credentials'\);/);
     expect(body).toMatch(
       /if \(account\.emailVerifiedAt === null\) \{\s*throw new AuthFlowError\('email_not_verified'\);/,
     );
@@ -174,18 +181,25 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     // null AND the empty-string OAuth sentinel (C3), else an IdP-only account
     // returns fast and is enumerable.
     expect(body).toMatch(
-      /if \(account === null \|\| account\.passwordHash === null \|\| account\.passwordHash === ''\) \{\s*await verifyPassword\(args\.password, await dummyPasswordHash\(\)\);\s*throw new AuthFlowError\('invalid_credentials'\);/,
+      /if \(account === null \|\| account\.passwordHash === null \|\| account\.passwordHash === ''\) \{\s*await verifyPassword\(password, await dummyPasswordHash\(\)\);\s*return null;/,
     );
     // dummyPasswordHash lazily computes one fixed scrypt hash, then reuses it.
     expect(body).toMatch(/dummyPasswordHashPromise \?\?= hashPassword\(/);
-    // (2) the real verifyPassword + its throw must PRECEDE the account-state
-    // checks. indexOf ordering is robust to whitespace/refactor reflow.
-    const okIdx = body.indexOf(
-      'const ok = await verifyPassword(args.password, account.passwordHash);',
+    // (2) inside login, the password check + its refusal must PRECEDE the
+    // account-state checks. The check lives in authenticatePassword, so the order
+    // is read in login: the call, then the refusal, then the state checks.
+    // indexOf ordering is robust to whitespace/refactor reflow.
+    const loginIdx = body.indexOf('async login(args: LoginArgs)');
+    const authIdx = body.indexOf(
+      'authenticated = await this.authenticatePassword(args);',
+      loginIdx,
     );
-    const suspendedIdx = body.indexOf("if (account.status !== 'active')", okIdx);
-    expect(okIdx).toBeGreaterThan(-1);
-    expect(suspendedIdx).toBeGreaterThan(okIdx);
+    const refusedIdx = body.indexOf("throw new AuthFlowError('invalid_credentials');", authIdx);
+    const suspendedIdx = body.indexOf("if (account.status !== 'active')", authIdx);
+    expect(loginIdx).toBeGreaterThan(-1);
+    expect(authIdx).toBeGreaterThan(loginIdx);
+    expect(refusedIdx).toBeGreaterThan(authIdx);
+    expect(suspendedIdx).toBeGreaterThan(refusedIdx);
   });
 
   it("V-353d completeMfaChallenge: peek-before-consume (IP mismatch doesn't consume); markWebSessionMfaSatisfied on success; via='totp'|'recovery' result", () => {
@@ -272,7 +286,7 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     expect(body).toMatch(/sendPasswordReset\(\{ to: account\.email, link, expiresAt \}\)/);
   });
 
-  it('consumeMagicLink: atomically invalidates siblings, then implicitly verifies inbox ownership', () => {
+  it('consumeMagicLink: atomically invalidates siblings, then implicitly verifies inbox ownership — and (sign-in audit #1) a first proof drops the password set before it, in the same update that verifies', () => {
     expect(body).toMatch(
       /const consumed = await this\.repo\.consumeAuthTokenFamily\(\{\s*kind: 'magic_link',\s*id: row\.id,\s*accountId: row\.accountId,\s*at: now,\s*\}\);\s*if \(!consumed\) throw new AuthFlowError\('invalid_auth_token'\);/,
     );
@@ -280,8 +294,11 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
       /\/\/ Magic-link consumption also implicitly verifies the email — the user\s*\/\/ demonstrably owns the inbox by clicking the link\./,
     );
     expect(body).toMatch(
-      /if \(account\.emailVerifiedAt === null\) \{\s*await this\.repo\.markEmailVerified\(account\.id, now\);\s*\}/,
+      /if \(account\.emailVerifiedAt === null\) \{\s*const proven = await this\.repo\.verifyEmailDroppingUnprovenPassword\(account\.id, now\);/,
     );
+    // Whichever proof won, the session is minted under the account's CURRENT
+    // authority — the advanced epoch when this link dropped the password.
+    expect(body).toMatch(/account = proven \?\? \(await this\.requireAccount\(account\.id\)\);/);
   });
 
   it('refreshSession: atomic revoke claim precedes replacement mint + cache invalidation', () => {
@@ -331,9 +348,9 @@ describe('W405.B apps/server/src/services/auth-flows.ts content parity', () => {
     );
   });
 
-  it('emitAuditBestEffort: V-224 action union (email_verified/login/logout/password_changed, + api_key.revoked for the desktop credentials a password reset revokes) try/catch warn-log swallow', () => {
+  it('emitAuditBestEffort: V-224 action union (email_verified/login/logout/password_changed, + api_key.revoked for the desktop credentials a password reset revokes, + oauth_link_removed for sign-in audit #5) try/catch warn-log swallow', () => {
     expect(body).toMatch(
-      /action:\s*\| 'account\.email_verified'\s*\| 'account\.login'\s*\| 'account\.logout'\s*\| 'account\.password_changed'\s*\| 'api_key\.revoked',/,
+      /action:\s*\| 'account\.email_verified'\s*\| 'account\.login'\s*\| 'account\.logout'\s*\| 'account\.password_changed'\s*\| 'account\.oauth_link_removed'\s*\| 'api_key\.revoked',/,
     );
     expect(body).toMatch(/'account-audit emit failed \(best-effort, swallowed\)',/);
   });

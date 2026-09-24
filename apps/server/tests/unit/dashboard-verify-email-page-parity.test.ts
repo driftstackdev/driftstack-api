@@ -72,7 +72,8 @@ describe('W735 customer-dashboard verify-email.astro page parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/verify-email', \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*body: JSON\.stringify\(\{ token \}\),\s*credentials: 'include',\s*signal: controller\.signal,\s*\}\)/,
+      // Sign-in audit #1 — the password rides along once the server has asked for it.
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/verify-email', \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*body: JSON\.stringify\(sentPassword \? \{ token, password \} : \{ token \}\),\s*credentials: 'include',\s*signal: controller\.signal,\s*\}\)/,
     );
   });
 

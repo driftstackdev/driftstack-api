@@ -122,8 +122,10 @@ describe('W417.A apps/server/src/routes/account-mfa.ts content parity', () => {
     expect(body).toMatch(
       /const parsed = CompleteMfaEnrollmentRequestSchema\.safeParse\(request\.body \?\? \{\}\);\s*if \(!parsed\.success\) \{\s*throw new BadRequestError\(parsed\.error\.issues\[0\]\?\.message \?\? 'Invalid body\.'\);/,
     );
+    // Sign-in audit #4 — the current password rides along when given; the service
+    // decides whether the account needs it.
     expect(body).toMatch(
-      /const result = await service\.completeEnrollment\(\{\s*accountId: ctx\.account\.id,\s*currentWebSessionId: interactiveWebSessionId\(request\),\s*code: parsed\.data\.code,\s*\}\);\s*return \{ recovery_codes: result\.recoveryCodes \};/,
+      /const result = await service\.completeEnrollment\(\{\s*accountId: ctx\.account\.id,\s*currentWebSessionId: interactiveWebSessionId\(request\),\s*code: parsed\.data\.code,\s*\.\.\.\(parsed\.data\.current_password !== undefined\s*\? \{ currentPassword: parsed\.data\.current_password \}\s*: \{\}\),\s*\}\);\s*return \{ recovery_codes: result\.recoveryCodes \};/,
     );
   });
 

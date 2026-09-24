@@ -74,7 +74,8 @@ describe('W493.C apps/customer-dashboard/src/pages/verify-email.astro content pa
       /const controller = new AbortController\(\);\s*const timeoutId = setTimeout\(\(\) => controller\.abort\(\), VERIFY_REQUEST_TIMEOUT_MS\);/,
     );
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/verify-email', \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*body: JSON\.stringify\(\{ token \}\),\s*credentials: 'include',\s*signal: controller\.signal,\s*\}\)/,
+      // Sign-in audit #1 — the password rides along once the server has asked for it.
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/verify-email', \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*body: JSON\.stringify\(sentPassword \? \{ token, password \} : \{ token \}\),\s*credentials: 'include',\s*signal: controller\.signal,\s*\}\)/,
     );
     expect(body).toMatch(/window\.driftstackResponseError\(r, b\)/);
     expect(body).toMatch(/if \(controller\.signal\.aborted\) \{\s*verifyOutcomeUnknown = true;/);

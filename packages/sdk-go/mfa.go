@@ -36,8 +36,12 @@ type MfaEnrollResponse struct {
 }
 
 // MfaVerifyRequest — first 6-digit TOTP code from the customer's app.
+// CurrentPassword is required when the account has a password and no factor
+// yet; an account with no password instead needs a sign-in from the last 10
+// minutes, and leaves it empty.
 type MfaVerifyRequest struct {
-	Code string `json:"code"`
+	Code            string `json:"code"`
+	CurrentPassword string `json:"current_password,omitempty"`
 }
 
 // MfaVerifyResponse — 10 single-use recovery codes. Shown ONCE.

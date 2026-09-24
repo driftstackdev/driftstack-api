@@ -83,6 +83,17 @@ export type SignupResponse = z.infer<typeof SignupResponseSchema>;
 
 export const VerifyEmailRequestSchema = z.object({
   token: AuthTokenSchema,
+  // Sign-in audit #1 — a verification link proves the mailbox, not that the
+  // person clicking it chose the account's password. When the account has a
+  // password, verification needs it too: someone who never signed up cannot
+  // verify an account another person created in their name. Any length is
+  // accepted here; a wrong password is simply refused.
+  password: z
+    .string()
+    .min(1)
+    .max(128)
+    .optional()
+    .describe('The password chosen at signup. Required when the account has one.'),
 });
 export type VerifyEmailRequest = z.infer<typeof VerifyEmailRequestSchema>;
 

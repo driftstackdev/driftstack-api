@@ -268,7 +268,7 @@ describe('OAuth token exchange refuses a bad redirect_uri and a foreign code', (
     const verify = await fixture.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: debugToken },
+      payload: { token: debugToken, password: 'correct-horse-battery-staple-9' },
     });
     expect(verify.statusCode, `verify-email returned ${verify.statusCode}`).toBe(200);
     return verify.json<{ session: { token: string } }>().session.token;

@@ -173,6 +173,7 @@ const EXPECTED_SCOPED_ROUTES: readonly string[] = [
   // plus the mint's second scope (read:sessions), which taking only the first gate hid.
   'DELETE /v1/account/me/avatar [account_owner]',
   'DELETE /v1/account/me/byok-anthropic-key [account_owner]',
+  'DELETE /v1/account/me/oauth-links/:id [account_owner]',
   'DELETE /v1/account/me/proxies/:id [account_owner]',
   'DELETE /v1/account/mfa [account_owner]',
   'DELETE /v1/account/web-sessions [account_owner]',

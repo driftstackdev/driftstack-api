@@ -242,9 +242,9 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
     );
   });
 
-  it('Constructor: audit and auth cache are nullable defaults', () => {
+  it('Constructor: audit, auth cache and the enrolment-notice email sender are nullable defaults', () => {
     expect(body).toMatch(
-      /constructor\(\s*private readonly repo: MfaRepo,\s*private readonly config: MfaServiceConfig,\s*private readonly accountAudit: AccountAuditService \| null = null,\s*private readonly authCache: AuthCache \| null = null,\s*\) \{\}/,
+      /constructor\(\s*private readonly repo: MfaRepo,\s*private readonly config: MfaServiceConfig,\s*private readonly accountAudit: AccountAuditService \| null = null,\s*private readonly authCache: AuthCache \| null = null,\s*\/\*\*[\s\S]*?\*\/\s*private readonly email: MfaEnrollmentNotice \| null = null,\s*\) \{\}/,
     );
   });
 
@@ -254,10 +254,12 @@ describe('W402.C apps/server/src/services/mfa.ts content parity', () => {
       /import \{\s*decryptSecret,\s*encryptSecret,\s*generateRecoveryCodes,\s*generateTotpSecret,\s*normalizeRecoveryCode,\s*otpauthUri,\s*verifyTotpCode,\s*verifyTotpCodeWithCounter,\s*\} from '\.\.\/lib\/mfa-totp\.js';/,
     );
     expect(body).toMatch(
-      /import \{ BadRequestError, ConflictError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*BadRequestError,\s*ConflictError,\s*ForbiddenError,\s*NotFoundError,\s*RateLimitedError,\s*\} from '\.\.\/lib\/errors\.js';/,
     );
+    expect(body).toMatch(/import \{ verifyPassword \} from '\.\.\/lib\/auth-tokens\.js';/);
     expect(body).toMatch(/import type \{ AccountAuditService \} from '\.\/account-audit\.js';/);
     expect(body).toMatch(/import type \{ AuthCache \} from '\.\/auth-cache\.js';/);
+    expect(body).toMatch(/import type \{ EmailService \} from '\.\/email\.js';/);
   });
 
   it('file exists at canonical path', () => {

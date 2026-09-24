@@ -84,10 +84,18 @@ describe('provider-scoped email canonicalization', () => {
     // fixed the last one — a progress bar wearing a control's clothes. What
     // proves the detector can see its subject is that the primitive is found at
     // all, safely or not.
+    //
+    // Sign-in audit #6 moved the last caller outside the homes — the OAuth
+    // wiring in lib/bootstrap.ts — onto `findAccountIdForSignInEmail` in
+    // services/auth-flows.ts, so the outside population is now legitimately
+    // empty. The positive control is therefore the home that performs the
+    // lookup: the same pattern, over the same comment-stripped text, must still
+    // find the primitive there. If it cannot, the detector is blind, not clean.
+    const homeCode = codeOnly(readFileSync(resolve(SRC, 'services/auth-flows.ts'), 'utf8'));
     expect(
-      anyCaller.length,
-      'no file outside the two homes consults findAccountByEmail — the pattern matches nothing, so the arm below would pass over an empty set',
-    ).toBeGreaterThan(0);
+      /\.findAccountByEmail\(/.test(homeCode) && /\.findAccountByCanonicalEmail\(/.test(homeCode),
+      'the pattern no longer finds the paired lookup even in services/auth-flows.ts — the detector is blind, so an empty result below would mean nothing',
+    ).toBe(true);
 
     expect(
       unsafe.filter((rel) => !EXEMPT.has(rel)),

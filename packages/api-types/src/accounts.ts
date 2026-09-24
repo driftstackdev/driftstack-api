@@ -214,6 +214,16 @@ export type StartMfaEnrollmentResponse = z.infer<typeof StartMfaEnrollmentRespon
 
 export const CompleteMfaEnrollmentRequestSchema = z.object({
   code: z.string().regex(/^\d{6}$/, 'Must be a 6-digit code.'),
+  // Sign-in audit #4 — turning on two-factor needs proof of a recent sign-in:
+  // the account's current password when it has one. An account with no
+  // password (created by Google or GitHub sign-in) instead needs a sign-in
+  // from the last ten minutes, and omits this field.
+  current_password: z
+    .string()
+    .min(1)
+    .max(128)
+    .optional()
+    .describe("The account's current password. Required when the account has one."),
 });
 export type CompleteMfaEnrollmentRequest = z.infer<typeof CompleteMfaEnrollmentRequestSchema>;
 
@@ -299,6 +309,17 @@ export const AccountAuditActionSchema = z.enum([
   'account.mfa_enrolled',
   'account.mfa_disabled',
   'account.recovery_code_used',
+  // Sign-in audit #2 — the account took ten wrong two-factor codes in fifteen
+  // minutes, so two-factor sign-in is paused for fifteen minutes. Written by
+  // the platform (actor `system`), once per pause; the owner is emailed too.
+  'account.mfa_sign_in_locked',
+  // Sign-in audit #4 — a wrong current password while turning on two-factor.
+  // Five in fifteen minutes and the step is refused for a while, so a stolen
+  // session cannot guess the password here.
+  'account.mfa_enrollment_password_rejected',
+  // Sign-in audit #5 — the customer removed a linked Google/GitHub sign-in.
+  // Payload: provider. target_resource_id: the link's `ol_` id.
+  'account.oauth_link_removed',
   // V-281 — admin-recorded notes. Refund recording is audit-only;
   // actual money movement happens via Stripe dashboard manually per
   // the V-280 launch-day runbook. Support notes are free-form

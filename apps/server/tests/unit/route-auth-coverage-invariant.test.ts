@@ -674,7 +674,11 @@ describe('all-route caller-authority invariant', () => {
     // admin') — the strictest scope the other admin credits routes use. The
     // structurally-authorized count below moves WITH the total, by two. No
     // disabled twins, same reason as every other credits route.
-    expect(routes).toHaveLength(332);
+    // 333 since sign-in audit #5: DELETE /v1/account/me/oauth-links/:id
+    // (requireAuth + requireScope('account_owner') + requireMfaFresh). The
+    // structurally-authorized count below moves WITH the total, by one. No
+    // disabled twin: it is registered with the auth flows.
+    expect(routes).toHaveLength(333);
     // +1 (not +2): only the LIVE network route is structurally authorized; the
     // disabled twin is a stub in DISABLED_EXEMPTIONS. Had the live route shipped
     // ungated, this number would not have moved while the total moved by two.
@@ -698,7 +702,9 @@ describe('all-route caller-authority invariant', () => {
     // 238 since S16's two AI-credits routes (requireScope
     // 'driftstack_internal_admin' on both) — the count moves in step with
     // the total again, same as every other arm above.
-    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(238);
+    // 239 since sign-in audit #5's DELETE /v1/account/me/oauth-links/:id
+    // (requireAuth + requireScope('account_owner')) — in step with the total.
+    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(239);
   });
 
   it('every route has structural caller authority or one exact reviewed exemption', () => {

@@ -149,7 +149,7 @@ describe('Full customer lifecycle (V-166)', () => {
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: signupBody.debug_token! },
+      payload: { token: signupBody.debug_token!, password: 'correct horse battery staple' },
     });
     expect(verify.statusCode).toBe(200);
     const session = verify.json<SessionEnvelope>().session;
@@ -201,7 +201,10 @@ describe('Full customer lifecycle (V-166)', () => {
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: signup.json<SignupResponse>().debug_token! },
+      payload: {
+        token: signup.json<SignupResponse>().debug_token!,
+        password: 'correct horse battery staple',
+      },
     });
     const sessionToken = verify.json<SessionEnvelope>().session.token;
     await upgradeSignupToPaidTier(fx, 'logout-test@driftstack.local');
@@ -297,7 +300,10 @@ describe('Full customer lifecycle (V-166)', () => {
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: signup.json<SignupResponse>().debug_token! },
+      payload: {
+        token: signup.json<SignupResponse>().debug_token!,
+        password: 'correct horse battery staple',
+      },
     });
     const sessionToken = verify.json<SessionEnvelope>().session.token;
     await acceptAllLegalDocs(fx, sessionToken);

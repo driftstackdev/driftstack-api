@@ -56,6 +56,12 @@ function makeRepo(): {
   };
   const repo: MfaRepo = {
     findByAccount: () => Promise.resolve(state.row),
+    // A sign-in from a moment ago on an account with no password: the proof of a
+    // recent sign-in (sign-in audit #4) holds, so the arms below exercise the
+    // enrolment logic they are about. The proof itself is proven in
+    // turning-on-two-factor-needs-the-current-password-or-a-sign-in-from-the-last-ten-minutes.test.ts.
+    findEnrollmentProof: () =>
+      Promise.resolve({ email: 'owner@example.test', passwordHash: '', signedInAt: new Date() }),
     startEnrollmentIfNotEnrolled: ({ accountId, ciphertext, iv, tag, now }) => {
       if (state.row?.enrolledAt != null) return Promise.resolve(null);
       const updatedAt = state.row ? nextRevision(now, state.row.updatedAt) : now;

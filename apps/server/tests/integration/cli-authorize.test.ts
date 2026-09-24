@@ -74,7 +74,7 @@ async function freshSessionToken(
     method: 'POST',
     url: '/v1/auth/verify-email',
     headers,
-    payload: { token: debug_token },
+    payload: { token: debug_token, password },
   });
   const { session } = verify.json<SessionResponse>();
   return { token: session.token, accountId: session.account_id };

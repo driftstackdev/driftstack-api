@@ -30,9 +30,17 @@ import {
   verifyTotpCode,
   verifyTotpCodeWithCounter,
 } from '../lib/mfa-totp.js';
-import { BadRequestError, ConflictError, NotFoundError } from '../lib/errors.js';
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  RateLimitedError,
+} from '../lib/errors.js';
+import { verifyPassword } from '../lib/auth-tokens.js';
 import type { AccountAuditService } from './account-audit.js';
 import type { AuthCache } from './auth-cache.js';
+import type { EmailService } from './email.js';
 
 export interface MfaEnrollmentRow {
   accountId: string;
@@ -56,9 +64,27 @@ export interface RecoveryCodeRow {
   createdAt: Date;
 }
 
+/** Sign-in audit #4 — what proving a recent sign-in needs, read in one step. */
+export interface EnrollmentProof {
+  /** Where the enrolment notice goes. */
+  email: string;
+  /** '' / null: the account has no password (created by Google or GitHub sign-in). */
+  passwordHash: string | null;
+  /** When the calling session's sign-in happened — its createdAt, which a refresh carries forward. */
+  signedInAt: Date;
+}
+
 export interface MfaRepo {
   /** V-353b — return the MFA row for the account (any state) or null. */
   findByAccount(accountId: string): Promise<MfaEnrollmentRow | null>;
+  /**
+   * Sign-in audit #4 — the calling web session and its account, for the proof
+   * of a recent sign-in. Null when that session is not this account's.
+   */
+  findEnrollmentProof(args: {
+    accountId: string;
+    webSessionId: string;
+  }): Promise<EnrollmentProof | null>;
   /** Atomically insert/replace a pending secret only while the account is not
    *  enrolled. Returns null when a concurrent request already enrolled it. */
   startEnrollmentIfNotEnrolled(args: {
@@ -123,13 +149,130 @@ export interface CompleteEnrollmentResult {
   recoveryCodes: string[];
 }
 
+/** Sign-in audit #4 — the one email this service sends: the enrolment notice. */
+export type MfaEnrollmentNotice = Pick<EmailService, 'sendMfaEnrolled'>;
+
+/** Sign-in audit #4 — "recent" for an account with no password to re-enter. */
+const RECENT_SIGN_IN_MS = 10 * 60 * 1000;
+/** Sign-in audit #4 — wrong current passwords allowed per window before refusing. */
+const MAX_ENROLLMENT_PASSWORD_REJECTIONS = 5;
+const ENROLLMENT_PASSWORD_WINDOW_SECONDS = 15 * 60;
+
+/** '' is the "no password" marker; null predates the column. Neither is a password. */
+function holdsPassword(passwordHash: string | null): passwordHash is string {
+  return passwordHash !== null && passwordHash !== '';
+}
+
 export class MfaService {
   constructor(
     private readonly repo: MfaRepo,
     private readonly config: MfaServiceConfig,
     private readonly accountAudit: AccountAuditService | null = null,
     private readonly authCache: AuthCache | null = null,
+    /**
+     * Sign-in audit #4 — tells the account whenever a factor is enrolled. Null
+     * where a caller builds the service without an email sender (no notice).
+     */
+    private readonly email: MfaEnrollmentNotice | null = null,
   ) {}
+
+  /** Process-local queue per account: the proof's count-verify-record runs one at a time. */
+  private readonly proofQueues = new Map<string, Promise<void>>();
+
+  private oneProofAtATime<T>(accountId: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.proofQueues.get(accountId) ?? Promise.resolve();
+    const result = previous.then(fn);
+    const tail: Promise<void> = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.proofQueues.set(accountId, tail);
+    void tail.then(() => {
+      if (this.proofQueues.get(accountId) === tail) this.proofQueues.delete(accountId);
+    });
+    return result;
+  }
+
+  /**
+   * Sign-in audit #4 — enrolling the first factor needs proof of a recent
+   * sign-in. Without it a stolen session could enrol the attacker's
+   * authenticator; enrolment advances the auth epoch, which signs every other
+   * browser out, and the owner's password reset then ends in a challenge only
+   * the attacker can answer.
+   *
+   * - The account has a password: the current one. Wrong ones leave a
+   *   "Recent activity" row each, and five in fifteen minutes refuse the step,
+   *   so a stolen session cannot use this as a way to guess the password; the
+   *   check runs one at a time per account so a burst cannot outrun the count.
+   * - No password (created by Google or GitHub sign-in): the session's sign-in
+   *   must be under ten minutes old. A refresh keeps the original sign-in time,
+   *   so refreshing a stolen session does not make it fresh.
+   */
+  private async proveRecentSignIn(args: {
+    accountId: string;
+    webSessionId: string;
+    currentPassword: string | undefined;
+  }): Promise<EnrollmentProof> {
+    const proof = await this.repo.findEnrollmentProof({
+      accountId: args.accountId,
+      webSessionId: args.webSessionId,
+    });
+    if (proof === null) {
+      throw new ForbiddenError('Sign in again to turn on two-factor.', {
+        reauthentication_required: true,
+      });
+    }
+    const passwordHash = proof.passwordHash;
+    if (!holdsPassword(passwordHash)) {
+      if (Date.now() - proof.signedInAt.getTime() > RECENT_SIGN_IN_MS) {
+        throw new ForbiddenError(
+          'Sign in again to turn on two-factor. For your security, this step needs a sign-in from the last 10 minutes.',
+          { reauthentication_required: true },
+        );
+      }
+      return proof;
+    }
+    const currentPassword = args.currentPassword;
+    if (currentPassword === undefined || currentPassword.length === 0) {
+      throw new ForbiddenError('Enter your current password to turn on two-factor.', {
+        current_password_required: true,
+      });
+    }
+    return this.oneProofAtATime(args.accountId, async () => {
+      if (this.accountAudit) {
+        const recentRejections = await this.accountAudit.countActionsSince(
+          args.accountId,
+          'account.mfa_enrollment_password_rejected',
+          new Date(Date.now() - ENROLLMENT_PASSWORD_WINDOW_SECONDS * 1000),
+        );
+        if (recentRejections >= MAX_ENROLLMENT_PASSWORD_REJECTIONS) {
+          throw new RateLimitedError(
+            ENROLLMENT_PASSWORD_WINDOW_SECONDS,
+            'Too many incorrect passwords. Try again in 15 minutes.',
+          );
+        }
+      }
+      if (!(await verifyPassword(currentPassword, passwordHash))) {
+        // Not best-effort: this row IS the count above, so a failure to write it
+        // must not let the guess go uncounted.
+        if (this.accountAudit) {
+          await this.accountAudit.record({
+            accountId: args.accountId,
+            actorType: 'customer',
+            actorAccountId: args.accountId,
+            actorKeyId: null,
+            action: 'account.mfa_enrollment_password_rejected',
+            targetResourceId: null,
+            payload: {},
+          });
+        }
+        throw new ForbiddenError('That password is incorrect.', {
+          current_password_required: true,
+        });
+      }
+      return proof;
+    });
+  }
 
   /** V-353b — start enrollment: generate + encrypt + upsert pending
    *  secret. Re-enrolling overwrites the pending secret (customer
@@ -169,6 +312,8 @@ export class MfaService {
     accountId: string;
     currentWebSessionId: string;
     code: string;
+    /** Sign-in audit #4 — required when the account has a password. */
+    currentPassword?: string;
   }): Promise<CompleteEnrollmentResult> {
     const row = await this.repo.findByAccount(args.accountId);
     if (!row) {
@@ -179,6 +324,11 @@ export class MfaService {
         'MFA is already enrolled. Disable + re-enroll if you need a fresh secret.',
       );
     }
+    const proof = await this.proveRecentSignIn({
+      accountId: args.accountId,
+      webSessionId: args.currentWebSessionId,
+      currentPassword: args.currentPassword,
+    });
     const secretBytes = decryptSecret(
       {
         ciphertext: row.totpSecretCiphertext,
@@ -235,6 +385,12 @@ export class MfaService {
       } catch {
         /* swallow */
       }
+    }
+
+    // Sign-in audit #4 — every enrolment is emailed to the account, so an owner
+    // learns if it was not them. Fire-and-forget, like every notice.
+    if (this.email) {
+      void this.email.sendMfaEnrolled({ to: proof.email, enrolledAt: new Date() });
     }
 
     return { recoveryCodes: codes };

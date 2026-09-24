@@ -216,12 +216,12 @@ describe('W938 V-353b MFA cross-source invariant', () => {
     expect(p).toMatch(/\} from '\.\.\/lib\/mfa-totp\.js';/);
   });
 
-  // ─── 3-error class import ────────────────────────────────────
+  // ─── 5-error class import ────────────────────────────────────
 
-  it('CRITICAL MfaService imports 3 error classes — BadRequestError + ConflictError + NotFoundError. The 3-error palette is what the service throws for input-validation / enrollment-conflict / row-missing cases.', () => {
+  it('CRITICAL MfaService imports 5 error classes — BadRequestError + ConflictError + ForbiddenError + NotFoundError + RateLimitedError. BadRequest / Conflict / NotFound are the input-validation / enrollment-conflict / row-missing cases; Forbidden and RateLimited are the proof of a recent sign-in that enrolment needs (sign-in audit #4): no or wrong current password, a stale sign-in, too many wrong passwords.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/mfa.ts'));
     expect(p).toMatch(
-      /import \{ BadRequestError, ConflictError, NotFoundError \} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*BadRequestError,\s*ConflictError,\s*ForbiddenError,\s*NotFoundError,\s*RateLimitedError,\s*\} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

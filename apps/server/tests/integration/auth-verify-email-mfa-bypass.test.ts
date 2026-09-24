@@ -121,6 +121,9 @@ describe('V-720 — /v1/auth/verify-email honours an enrolled second factor', ()
       method: 'POST',
       url: '/v1/account/mfa/verify',
       headers: { ...headers, 'content-type': 'application/json' },
+      // No current password: the magic link was this account's first proof of
+      // the mailbox, so it dropped the password chosen at signup (sign-in audit
+      // #1). The enrolment rests on that sign-in being minutes old (#4).
       payload: { code: computeTotpCode(secretBytes, Math.floor(Date.now() / 1000)) },
     });
     expect(enrollVerify.statusCode).toBe(200);
@@ -158,7 +161,7 @@ describe('V-720 — /v1/auth/verify-email honours an enrolled second factor', ()
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token },
+      payload: { token, password: 'correct horse battery staple' },
     });
 
     expect(res.statusCode).toBe(200);

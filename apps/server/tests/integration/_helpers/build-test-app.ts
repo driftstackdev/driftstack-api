@@ -132,7 +132,7 @@ import type { ProxyConnectivityProbe } from '../../../src/services/proxy-connect
 import { InMemoryProfileSnapshotsRepo } from './in-memory-profile-snapshots-repo.js';
 import { InMemoryBillingProvider, InMemoryBillingRepo } from './in-memory-billing.js';
 import { BillingService } from '../../../src/services/billing.js';
-import { AuthFlowsService } from '../../../src/services/auth-flows.js';
+import { AuthFlowsService, findAccountIdForSignInEmail } from '../../../src/services/auth-flows.js';
 import {
   CliAuthorizeService,
   InMemoryCliAuthorizeStore,
@@ -224,6 +224,18 @@ function createRecordingEmailService(realService: EmailService): {
     sendOauthPendingLinkVerification: async (args) => {
       record('oauth-pending-verification', args);
       await realService.sendOauthPendingLinkVerification(args);
+    },
+    sendMfaSignInLocked: async (args) => {
+      record('mfa-sign-in-locked', args);
+      await realService.sendMfaSignInLocked(args);
+    },
+    sendMfaEnrolled: async (args) => {
+      record('mfa-enrolled', args);
+      await realService.sendMfaEnrolled(args);
+    },
+    sendOauthLinkRemoved: async (args) => {
+      record('oauth-link-removed', args);
+      await realService.sendOauthLinkRemoved(args);
     },
     sendWebhookSecretRotationReminder: async (args) => {
       record('webhook-secret-rotation-reminder', args);
@@ -1556,6 +1568,7 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     },
     accountAuditService,
     authCache,
+    noopEmail, // sign-in audit #4 — the enrolment notice, as bootstrap should wire it
   );
 
   // V-353d — in-memory challenge token store for the MFA login
@@ -1819,6 +1832,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // see the same 404-from-unregistered-route surface prod does
   // pre-env-wire.
   const oauthLinksRepo = new InMemoryOAuthLinksRepo();
+  // One links table, as in production: the auth-flows double removes a linked
+  // sign-in (DELETE /v1/account/me/oauth-links/:id) from the rows this repo holds.
+  authFlowsRepo.attachOAuthLinks(oauthLinksRepo);
   const oauthPendingLinksRepo = new InMemoryOAuthPendingLinksRepo();
   const oauthClientService =
     opts.oauthClient !== undefined
@@ -1826,10 +1842,9 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
           links: oauthLinksRepo,
           pending: oauthPendingLinksRepo,
           accounts: {
-            findIdByEmail: async (email) => {
-              const row = await authFlowsRepo.findAccountByEmail(email);
-              return row ? row.id : null;
-            },
+            // Sign-in audit #6 — the SAME lookup bootstrap wires (it used to be a
+            // literal-only copy here, which hid the mixed-case Gmail miss).
+            findIdByEmail: (email) => findAccountIdForSignInEmail(authFlowsRepo, email),
             createFromIdp: async (args) => {
               const created = await authFlowsRepo.createAccount({
                 email: args.email,

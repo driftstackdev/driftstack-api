@@ -54,6 +54,9 @@ export interface MfaChallengeStore {
    *  negative or resurrecting an expired key. Valid proofs and verifier
    *  failures release; invalid proofs intentionally retain their slot. */
   releaseAttempt(key: string): Promise<void>;
+  /** Forget an attempt counter entirely (sign-in audit #3: a correct password
+   *  clears the email's failure count). A missing key is a no-op. */
+  resetAttempts(key: string): Promise<void>;
 }
 
 export class RedisMfaChallengeStore implements MfaChallengeStore {
@@ -112,6 +115,10 @@ export class RedisMfaChallengeStore implements MfaChallengeStore {
       key,
     );
   }
+
+  async resetAttempts(key: string): Promise<void> {
+    await this.redis.del(key);
+  }
 }
 
 export class InMemoryMfaChallengeStore implements MfaChallengeStore {
@@ -168,6 +175,11 @@ export class InMemoryMfaChallengeStore implements MfaChallengeStore {
       return;
     }
     existing.count -= 1;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async resetAttempts(key: string): Promise<void> {
+    this.attempts.delete(key);
   }
 }
 

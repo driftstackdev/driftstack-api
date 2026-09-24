@@ -91,7 +91,9 @@ const DELETE_IS_NOT_RETENTION = new Map<string, string>([
  */
 const CASCADE_ONLY_TABLES = new Map<string, string>([
   ['account_audit_log', 'PER-EVENT — one row per customer action'],
-  ['account_oauth_links', 'entity — one row per account per provider'],
+  // account_oauth_links left this roster with sign-in audit #5: the customer
+  // removes a linked sign-in with DELETE /v1/account/me/oauth-links/:id
+  // (auth-flows-repo.ts removeOAuthLink), so it is no longer cascade-only.
   ['api_keys', 'entity — per account, capped by the key limit'],
   [
     'billing_email_sends',
@@ -179,7 +181,6 @@ const CASCADE_ONLY_TABLES = new Map<string, string>([
  */
 const UNIQUENESS_KEY = new Map<string, string>([
   ['account_audit_log', '(pk only)'],
-  ['account_oauth_links', 'provider,providerSub'],
   ['api_keys', 'keyPrefix'],
   ['billing_email_sends', '(pk only)'],
   ['billing_invoice_payments', '(pk only)'],

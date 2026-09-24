@@ -17,8 +17,10 @@ import type {
   AuthFlowTokenRow,
   AuthFlowsRepo,
   PasswordResetRevocation,
+  RemoveOAuthLinkResult,
   WebSessionRow,
 } from '../../../src/services/auth-flows.js';
+import type { OAuthLinkRow } from '../../../src/services/oauth-client.js';
 import { canonicalizeEmailForDedup } from '../../../src/services/auth-flows.js';
 
 /**
@@ -53,6 +55,17 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
   };
   private webSessions = new Map<string, WebSessionRow>();
   private apiKeys = new Map<string, InMemoryResetApiKey>();
+  /**
+   * The links table this double shares with the in-memory OAuth links repo, the
+   * way the Drizzle repos share `account_oauth_links`. Attached by the test app;
+   * absent, the account has no links.
+   */
+  private oauthLinks: { rows: OAuthLinkRow[] } | null = null;
+
+  /** Test-app wiring: read and delete links in the same rows the OAuth links repo holds. */
+  attachOAuthLinks(links: { rows: OAuthLinkRow[] }): void {
+    this.oauthLinks = links;
+  }
 
   /** Test-only seam: an `api_keys` row a password reset may revoke. */
   seedApiKey(row: InMemoryResetApiKey): void {
@@ -154,6 +167,62 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     return Promise.resolve(true);
   }
 
+  /** Same single-row transition as the Drizzle repo: verify, drop the password, advance the epoch. */
+  verifyEmailDroppingUnprovenPassword(
+    accountId: string,
+    at: Date,
+  ): Promise<AuthFlowAccountRow | null> {
+    const slot = this.accounts.get(accountId);
+    if (!slot || slot.account.emailVerifiedAt !== null) return Promise.resolve(null);
+    slot.account = {
+      ...slot.account,
+      emailVerifiedAt: at,
+      passwordHash: '',
+      authEpoch: slot.account.authEpoch + 1,
+    };
+    return Promise.resolve({ ...slot.account });
+  }
+
+  /** Same rule as the Drizzle repo; synchronous, so the check and the delete are one step. */
+  removeOAuthLink(args: { accountId: string; linkId: string }): Promise<RemoveOAuthLinkResult> {
+    const slot = this.accounts.get(args.accountId);
+    const rows = this.oauthLinks?.rows ?? [];
+    const target = rows.find((row) => row.id === args.linkId && row.accountId === args.accountId);
+    if (!slot || target === undefined) return Promise.resolve({ kind: 'not_found' });
+    const hasPassword = slot.account.passwordHash !== null && slot.account.passwordHash !== '';
+    const anotherWayIn = rows.some(
+      (row) =>
+        row.accountId === args.accountId && row.id !== target.id && row.lastRevokedAt === null,
+    );
+    if (!hasPassword && target.lastRevokedAt === null && !anotherWayIn) {
+      return Promise.resolve({ kind: 'last_sign_in_method' });
+    }
+    rows.splice(rows.indexOf(target), 1);
+    return Promise.resolve({
+      kind: 'removed',
+      provider: target.provider,
+      providerEmail: target.providerEmail,
+    });
+  }
+
+  /**
+   * The MFA double's proof read (DrizzleMfaRepo.findEnrollmentProof): the
+   * session scoped to its account, with the account's email and password.
+   */
+  enrollmentProof(args: {
+    accountId: string;
+    webSessionId: string;
+  }): { email: string; passwordHash: string | null; signedInAt: Date } | null {
+    const session = this.webSessions.get(args.webSessionId);
+    const account = this.accounts.get(args.accountId)?.account;
+    if (!session || !account || session.accountId !== args.accountId) return null;
+    return {
+      email: account.email,
+      passwordHash: account.passwordHash,
+      signedInAt: session.createdAt,
+    };
+  }
+
   insertAuthToken(args: {
     kind: AuthFlowKind;
     accountId: string;
@@ -240,6 +309,7 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
     expiresAt: Date;
     issuedFromIp: string | null;
     userAgent: string | null;
+    createdAt?: Date;
   }): Promise<WebSessionRow | null> {
     const account = this.accounts.get(args.accountId)?.account;
     if (
@@ -261,7 +331,7 @@ export class InMemoryAuthFlowsRepo implements AuthFlowsRepo {
       issuedFromIp: args.issuedFromIp,
       userAgent: args.userAgent,
       mfaSatisfiedAt: null,
-      createdAt: now,
+      createdAt: args.createdAt ?? now,
     };
     this.webSessions.set(row.id, row);
     return Promise.resolve({ ...row });

@@ -5,18 +5,20 @@
 // + `web_sessions` + the new `accounts.password_hash` /
 // `accounts.email_verified_at` columns.
 
-import { and, desc, eq, getTableColumns, gt, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, getTableColumns, gt, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import type {
   AuthFlowAccountRow,
   AuthFlowKind,
   AuthFlowTokenRow,
   AuthFlowsRepo,
   PasswordResetRevocation,
+  RemoveOAuthLinkResult,
   WebSessionRow,
 } from '../services/auth-flows.js';
 import { canonicalizeEmailForDedup } from '../services/auth-flows.js';
 import type { Database } from './client.js';
 import {
+  accountOauthLinks,
   accounts,
   apiKeys,
   emailVerifyTokens,
@@ -175,6 +177,74 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
     return rows.length > 0;
   }
 
+  async verifyEmailDroppingUnprovenPassword(
+    accountId: string,
+    at: Date,
+  ): Promise<AuthFlowAccountRow | null> {
+    // One UPDATE: the isNull(emailVerifiedAt) guard makes it the first-transition
+    // claim (as in markEmailVerified), and the password drop and the epoch
+    // advance ride the same row write — no window where the address is verified
+    // and the unproven password still stands.
+    const [row] = await this.database.db
+      .update(accounts)
+      .set({
+        emailVerifiedAt: at,
+        passwordHash: '',
+        authEpoch: sql`${accounts.authEpoch} + 1`,
+        updatedAt: at,
+      })
+      .where(and(eq(accounts.id, accountId), isNull(accounts.emailVerifiedAt)))
+      .returning();
+    return row ? toAccountRow(row) : null;
+  }
+
+  async removeOAuthLink(args: {
+    accountId: string;
+    linkId: string;
+  }): Promise<RemoveOAuthLinkResult> {
+    return this.database.db.transaction(async (tx) => {
+      // Lock the account row first: two removals racing on one account (or a
+      // removal racing a password reset) serialise here, so both cannot see
+      // "another way in" and together remove the last one.
+      const [account] = await tx
+        .select({ passwordHash: accounts.passwordHash })
+        .from(accounts)
+        .where(eq(accounts.id, args.accountId))
+        .for('update')
+        .limit(1);
+      if (!account) return { kind: 'not_found' };
+      const links = await tx
+        .select({
+          id: accountOauthLinks.id,
+          provider: accountOauthLinks.provider,
+          providerEmail: accountOauthLinks.providerEmail,
+          lastRevokedAt: accountOauthLinks.lastRevokedAt,
+        })
+        .from(accountOauthLinks)
+        .where(eq(accountOauthLinks.accountId, args.accountId))
+        .orderBy(asc(accountOauthLinks.id));
+      const target = links.find((link) => link.id === args.linkId);
+      if (target === undefined) return { kind: 'not_found' };
+      const hasPassword = account.passwordHash !== null && account.passwordHash !== '';
+      const anotherWayIn = links.some(
+        (link) => link.id !== target.id && link.lastRevokedAt === null,
+      );
+      if (!hasPassword && target.lastRevokedAt === null && !anotherWayIn) {
+        return { kind: 'last_sign_in_method' };
+      }
+      await tx
+        .delete(accountOauthLinks)
+        .where(
+          and(eq(accountOauthLinks.id, target.id), eq(accountOauthLinks.accountId, args.accountId)),
+        );
+      return {
+        kind: 'removed',
+        provider: target.provider,
+        providerEmail: target.providerEmail,
+      };
+    });
+  }
+
   async insertAuthToken(args: {
     kind: AuthFlowKind;
     accountId: string;
@@ -267,6 +337,7 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
     expiresAt: Date;
     issuedFromIp: string | null;
     userAgent: string | null;
+    createdAt?: Date;
   }): Promise<WebSessionRow | null> {
     return this.database.db.transaction(async (tx) => {
       // Lock the account authority before inserting. If password/status update
@@ -295,6 +366,9 @@ export class DrizzleAuthFlowsRepo implements AuthFlowsRepo {
           expiresAt: args.expiresAt,
           issuedFromIp: args.issuedFromIp,
           userAgent: args.userAgent,
+          // A refresh keeps the time of the sign-in it rotates (see the repo
+          // interface); a sign-in takes the column default, now().
+          ...(args.createdAt !== undefined ? { createdAt: args.createdAt } : {}),
         })
         .returning();
       if (!row) throw new Error('insertWebSession: insert returned no row');

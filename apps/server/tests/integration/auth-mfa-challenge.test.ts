@@ -78,7 +78,7 @@ async function setupEnrolledAccount(
   const verify = await fixture.app.inject({
     method: 'POST',
     url: '/v1/auth/verify-email',
-    payload: { token: verifyToken },
+    payload: { token: verifyToken, password },
   });
   expect(verify.statusCode).toBe(200);
   const firstSessionToken = verify.json<SessionEnvelope>().session.token;
@@ -95,7 +95,7 @@ async function setupEnrolledAccount(
     method: 'POST',
     url: '/v1/account/mfa/verify',
     headers: { authorization: `Bearer ${firstSessionToken}`, 'content-type': 'application/json' },
-    payload: { code },
+    payload: { code, current_password: password },
   });
   expect(complete.statusCode).toBe(200);
   const recoveryCodes = complete.json<{ recovery_codes: string[] }>().recovery_codes;
@@ -141,7 +141,7 @@ describe('POST /v1/auth/login when MFA enrolled (V-353d)', () => {
     await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: t },
+      payload: { token: t, password: 'correct horse battery staple' },
     });
 
     const login = await fx.app.inject({

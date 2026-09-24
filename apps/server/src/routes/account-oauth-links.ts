@@ -2,16 +2,39 @@
 //
 //   GET /v1/account/me/oauth-links — list the authenticated account's
 //                                     active sign-in-with-IDP links.
+//   DELETE /v1/account/me/oauth-links/:id — remove one (sign-in audit #5).
 //
 // Used by the customer dashboard's account/security page to show
 // "Linked accounts: Google (connected 2026-05-12), GitHub (revoked
-// upstream — re-link or use password)". DELETE / revoke from
-// driftstack-side is a separate slice (V-667.C-followup#2).
+// upstream — re-link or use password)", with a Remove control per link.
+//
+// The DELETE is registered by routes/auth.ts (registerAuthRoutes), because it
+// runs through AuthFlowsService — see registerAccountOauthLinkRemovalRoute.
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { ValidationError } from '../lib/errors.js';
+import {
+  BadRequestError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '../lib/errors.js';
 import type { OAuthLinksRepo, OAuthLinkRow } from '../services/oauth-client.js';
+import type { AuthFlowsService } from '../services/auth-flows.js';
+
+// A link's public id is `ol_<uuid>` (publicLink below). The prefix is two
+// letters, so it is pinned in the regex rather than matched by the usual
+// three-letter class.
+const PUBLIC_ID_RE = /^ol_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+
+function uuidFromPrefixedId(value: string): string {
+  const match = PUBLIC_ID_RE.exec(value);
+  if (!match || !match[1]) {
+    throw new BadRequestError('Invalid id format. Expected "ol_<uuid>".');
+  }
+  return match[1];
+}
 
 // V-1367 — validate the querystring rather than trusting the `Querystring` type.
 //
@@ -79,6 +102,73 @@ export function registerAccountOauthLinksRoutes(
       const activeOnly = query.data.active_only === 'true';
       const filtered = activeOnly ? rows.filter((r) => r.lastRevokedAt === null) : rows;
       return { data: filtered.map(publicLink) };
+    },
+  );
+}
+
+export interface AccountOauthLinkRemovalRouteOptions {
+  service: Pick<AuthFlowsService, 'removeOAuthLink'>;
+}
+
+/**
+ * Sign-in audit #5 — DELETE /v1/account/me/oauth-links/:id: remove a linked
+ * Google/GitHub sign-in. A linked identity used to be impossible to remove, so a
+ * customer whose GitHub account was compromised had no way to cut that sign-in
+ * off.
+ *
+ * - A signed-in browser only: an API key — even an account_owner one — cannot
+ *   change how the account signs in, the same line the MFA routes draw.
+ * - With two-factor on, it needs a fresh step-up (requireMfaFresh, a no-op when
+ *   two-factor is off).
+ * - Refused (409) when it is the account's last way to sign in: no password and
+ *   no other link that still signs in.
+ * - 204 on success; the service writes the "Recent activity" row and emails the
+ *   account.
+ */
+export function registerAccountOauthLinkRemovalRoute(
+  app: FastifyInstance,
+  opts: AccountOauthLinkRemovalRouteOptions,
+): void {
+  const requireInteractiveWebSession = (request: FastifyRequest): Promise<void> => {
+    const ctx = request.account;
+    if (!ctx) throw new Error('account context missing after requireAuth');
+    if (ctx.webSession === null) {
+      throw new ForbiddenError(
+        'Removing a linked sign-in needs you to be signed in to the dashboard.',
+      );
+    }
+    // A promise, not a bare return: a one-argument synchronous preHandler is
+    // treated as callback-style and would leave the request waiting.
+    return Promise.resolve();
+  };
+
+  app.delete<{ Params: { id: string } }>(
+    '/v1/account/me/oauth-links/:id',
+    {
+      preHandler: [
+        app.requireAuth,
+        app.requireScope('account_owner'),
+        requireInteractiveWebSession,
+        app.requireMfaFresh(),
+        app.rateLimit('global'),
+      ],
+    },
+    async (request, reply: FastifyReply) => {
+      const ctx = request.account;
+      if (!ctx) throw new Error('account context missing after requireAuth');
+      const linkId = uuidFromPrefixedId(request.params.id);
+      const outcome = await opts.service.removeOAuthLink({
+        accountId: ctx.account.id,
+        linkId,
+      });
+      if (outcome === 'not_found') throw new NotFoundError('Linked sign-in not found.');
+      if (outcome === 'last_sign_in_method') {
+        throw new ConflictError(
+          "This is your account's only way to sign in. Set a password first, then remove it.",
+        );
+      }
+      reply.code(204);
+      return null;
     },
   );
 }

@@ -354,6 +354,7 @@ describe('C9 — signup-welcome fires once on first verify + honors opt-out', ()
     calls.length = 0; // drop the signup-verification email
     await service.verifyEmail({
       token: signup.debugToken as string,
+      password: 'correct horse battery staple',
       issuedFromIp: '127.0.0.1',
       userAgent: 'test',
     });
@@ -378,6 +379,7 @@ describe('C9 — signup-welcome fires once on first verify + honors opt-out', ()
     calls.length = 0;
     await service.verifyEmail({
       token: signup.debugToken as string,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });
@@ -389,6 +391,7 @@ describe('C9 — signup-welcome fires once on first verify + honors opt-out', ()
     await expect(
       service.verifyEmail({
         token: resend.debugToken as string,
+        password: 'correct horse battery staple',
         issuedFromIp: null,
         userAgent: null,
       }),
@@ -438,6 +441,7 @@ describe('C9 — signup-welcome fires once on first verify + honors opt-out', ()
     calls.length = 0;
     await service.verifyEmail({
       token: signup.debugToken as string,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });

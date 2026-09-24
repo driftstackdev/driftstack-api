@@ -68,7 +68,8 @@ describe('V-940 a declared 204 really sends no content', () => {
   const endpoints = declared204();
 
   it('CRITICAL the document still declares a real set of 204 endpoints. The arm below reports an ABSENCE, so an empty set would satisfy it having checked nothing — and this count is pinned rather than floored because a 204 disappearing from the document is itself the change worth noticing.', () => {
-    expect(endpoints.length, 'endpoints declared as bodyless 204').toBe(20);
+    // 21 since sign-in audit #5: DELETE /v1/account/me/oauth-links/{id}.
+    expect(endpoints.length, 'endpoints declared as bodyless 204').toBe(21);
   });
 
   it('CRITICAL every endpoint the document promises a 204 for is registered in a file that sends one. A 204 is the one response a client cannot verify by reading the body, so a route quietly returning 200 with JSON breaks a generated client with nothing in the payload to explain it.', () => {

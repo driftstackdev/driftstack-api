@@ -57,7 +57,7 @@ fi
 echo "▸ verify email"
 VERIFY=$(curl -sf -X POST "$API_BASE/v1/auth/verify-email" \
   -H 'content-type: application/json' \
-  -d "{\"token\":\"$VERIFY_TOKEN\"}")
+  -d "{\"token\":\"$VERIFY_TOKEN\",\"password\":\"$PASSWORD\"}")
 
 SESSION_TOKEN=$(echo "$VERIFY" | jq -r '.session.token')
 ACCOUNT_ID=$(echo "$VERIFY" | jq -r '.session.account_id')

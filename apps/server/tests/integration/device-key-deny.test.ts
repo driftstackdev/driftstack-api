@@ -50,7 +50,8 @@ async function freshSession(f: TestAppFixture): Promise<{ token: string; account
     method: 'POST',
     url: '/v1/auth/verify-email',
     headers: json,
-    payload: { token: debug_token },
+    // The link needs the account's password too (sign-in audit #1).
+    payload: { token: debug_token, password: 'correct horse battery staple' },
   });
   const { session } = verify.json<SessionResponse>();
   return { token: session.token, accountId: session.account_id };

@@ -18,6 +18,11 @@
 // authenticated and so runs behind requireAuth. The blanket wording, and a route
 // list that stopped at ten, both predate the MFA pair.
 //
+// This file also REGISTERS DELETE /v1/account/me/oauth-links/:id (sign-in audit
+// #5), which is authenticated — a signed-in browser only. Its handler lives in
+// account-oauth-links.ts; see the registration at the bottom for why it is
+// wired from here.
+//
 // V-251 — IP-based rate limiting wired on signup / login / verify-email
 // / password-reset-request. Per-IP token-bucket via the same
 // `RateLimitStore` the account-keyed limiter uses; bucket key prefix
@@ -52,11 +57,13 @@ import {
   InvalidCredentialsError,
   ValidationError,
   ForbiddenError,
+  UnauthorizedError,
 } from '../lib/errors.js';
 import { readClientIp } from '../lib/client-ip.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import { knownRequestKeys, reportUnknownRequestFields } from '../lib/unknown-request-fields.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
+import { registerAccountOauthLinkRemovalRoute } from './account-oauth-links.js';
 
 function clientIp(req: FastifyRequest): string | null {
   // Delegates to the shared reader so the trust boundary is decided in ONE
@@ -104,7 +111,18 @@ function mfaRequiredResponse(args: { challengeToken: string; challengeExpiresAt:
   };
 }
 
-function mapAuthFlowError(err: unknown): never {
+/**
+ * AuthFlowError → problem response. Anything else (an ApiError such as the
+ * 429 a sign-in limit throws) passes through to the error handler untouched.
+ *
+ * `serviceMessage` (sign-in audit #8): pass the service's own detail for
+ * `invalid_auth_token` instead of the generic one. Only for a route whose
+ * service messages are all customer-safe — the MFA challenge's are ("Code is
+ * invalid…", "Too many incorrect codes for this sign-in. Sign in again…",
+ * "…issued from a different IP…"). A message-less error still gets the generic
+ * detail: its message is just its code.
+ */
+function mapAuthFlowError(err: unknown, opts: { serviceMessage?: boolean } = {}): never {
   if (!(err instanceof AuthFlowError)) throw err;
   switch (err.code) {
     case 'email_already_registered':
@@ -112,11 +130,17 @@ function mapAuthFlowError(err: unknown): never {
     case 'invalid_credentials':
       throw new InvalidCredentialsError();
     case 'invalid_auth_token':
-      throw new InvalidAuthTokenError();
+      throw opts.serviceMessage === true && err.message !== err.code
+        ? new InvalidAuthTokenError(err.message)
+        : new InvalidAuthTokenError();
     case 'email_not_verified':
       throw new EmailNotVerifiedError();
     case 'account_suspended':
       throw new ForbiddenError('Account is suspended.');
+    case 'password_required':
+      // Sign-in audit #1 — the verification link needs the account's password.
+      // `password_required` tells the dashboard to ask for it.
+      throw new UnauthorizedError(err.message, { password_required: true });
   }
 }
 
@@ -222,6 +246,7 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     try {
       const result = await service.verifyEmail({
         token: parsed.data.token,
+        ...(parsed.data.password !== undefined ? { password: parsed.data.password } : {}),
         issuedFromIp: clientIp(req),
         userAgent: userAgent(req),
       });
@@ -303,7 +328,9 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
         via: result.via,
       };
     } catch (e) {
-      mapAuthFlowError(e);
+      // Sign-in audit #8 — a typo, an address mismatch and "this sign-in is used
+      // up" are different things to do next; say which.
+      mapAuthFlowError(e, { serviceMessage: true });
     }
   });
 
@@ -452,4 +479,11 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRoutesDeps): 
     await service.logout(parsed.data.token);
     return { ok: true as const };
   });
+
+  // Sign-in audit #5 — DELETE /v1/account/me/oauth-links/:id. Registered here
+  // because removing a way to sign in is an auth-flows operation: it needs the
+  // account's password state (the last-way-in rule), the customer audit log and
+  // the account's email, which this service holds and the links read route's
+  // dependencies do not. The route itself lives with its GET sibling.
+  registerAccountOauthLinkRemovalRoute(app, { service });
 }

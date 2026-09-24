@@ -153,6 +153,10 @@ const SDK_ABSENT = new Map<string, string>([
     "first-party console surface: consumed directly by apps/customer-dashboard over raw HTTP, never through the SDK (2 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
+    '/v1/account/me/oauth-links/:p',
+    "first-party console surface: DELETE (sign-in audit #5) is consumed directly by apps/customer-dashboard's security page (its Remove control) over raw HTTP, never through the SDK — and it takes a signed-in browser, which an SDK caller holding an API key is refused. Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
+  ],
+  [
     '/v1/account/me/organization',
     "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (2 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],

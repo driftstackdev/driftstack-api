@@ -135,7 +135,7 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
       /export const StartMfaEnrollmentResponseSchema = z\.object\(\{\s*otpauth_uri: z\.string\(\)\.describe\('otpauth:\/\/ URI; render as a QR code'\),\s*secret_base32: z\.string\(\)\.describe\('Manual-entry secret for auth apps that do not scan QR'\),\s*algorithm: z\.literal\('SHA1'\),\s*digits: z\.literal\(6\),\s*period_seconds: z\.literal\(30\),\s*\}\);/,
     );
     expect(body).toMatch(
-      /export const CompleteMfaEnrollmentRequestSchema = z\.object\(\{\s*code: z\.string\(\)\.regex\(\/\^\\d\{6\}\$\/, 'Must be a 6-digit code\.'\),\s*\}\);/,
+      /export const CompleteMfaEnrollmentRequestSchema = z\.object\(\{\s*code: z\.string\(\)\.regex\(\/\^\\d\{6\}\$\/, 'Must be a 6-digit code\.'\),[\s\S]*?current_password: z\s*\.string\(\)\s*\.min\(1\)\s*\.max\(128\)\s*\.optional\(\)[\s\S]*?\}\);/,
     );
     expect(body).toMatch(
       /export const CompleteMfaEnrollmentResponseSchema = z\.object\(\{\s*recovery_codes: z\.array\(z\.string\(\)\)\.length\(10\),\s*\}\);/,

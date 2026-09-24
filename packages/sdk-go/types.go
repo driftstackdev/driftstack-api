@@ -1030,8 +1030,11 @@ type SignupResponse struct {
 	DebugToken                 string    `json:"debug_token,omitempty"`
 }
 
+// VerifyEmailRequest — Password is required when the account was created with
+// one: the server answers 401 with `password_required` until it matches.
 type VerifyEmailRequest struct {
-	Token string `json:"token"`
+	Token    string `json:"token"`
+	Password string `json:"password,omitempty"`
 }
 
 // WebSession matches the server's `WebSessionSchema`

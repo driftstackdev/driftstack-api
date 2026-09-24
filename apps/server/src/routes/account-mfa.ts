@@ -109,10 +109,16 @@ export function registerAccountMfaRoutes(
         logger: request.log,
         route: 'POST /v1/account/mfa/verify',
       });
+      // Sign-in audit #4 — completing the FIRST factor needs proof of a recent
+      // sign-in: `current_password` when the account has one, otherwise a
+      // sign-in from the last ten minutes. The service decides which applies.
       const result = await service.completeEnrollment({
         accountId: ctx.account.id,
         currentWebSessionId: interactiveWebSessionId(request),
         code: parsed.data.code,
+        ...(parsed.data.current_password !== undefined
+          ? { currentPassword: parsed.data.current_password }
+          : {}),
       });
       return { recovery_codes: result.recoveryCodes };
     },

@@ -425,7 +425,7 @@ describe('POST /v1/auth/verify-email', () => {
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token },
+      payload: { token, password: 'correct horse battery staple' },
     });
 
     expect(verify.statusCode).toBe(200);
@@ -459,14 +459,14 @@ describe('POST /v1/auth/verify-email', () => {
     const first = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token },
+      payload: { token, password: 'correct horse battery staple' },
     });
     expect(first.statusCode).toBe(200);
 
     const second = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token },
+      payload: { token, password: 'correct horse battery staple' },
     });
     expect(second.statusCode).toBe(400);
     expect(second.json<{ type: string }>().type).toBe(PROBLEM_TYPES.InvalidAuthToken);
@@ -495,7 +495,7 @@ describe('POST /v1/auth/verify-email', () => {
         fx.app.inject({
           method: 'POST',
           url: '/v1/auth/verify-email',
-          payload: { token },
+          payload: { token, password: 'correct horse battery staple' },
         }),
       ),
     );
@@ -519,6 +519,7 @@ describe('POST /v1/auth/verify-email', () => {
     await expect(
       service.verifyEmail({
         token: signup.debugToken as string,
+        password: 'correct horse battery staple',
         issuedFromIp: null,
         userAgent: null,
       }),
@@ -580,6 +581,7 @@ describe('POST /v1/auth/verify-email', () => {
     });
     await service.verifyEmail({
       token: signup.debugToken as string,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });
@@ -611,6 +613,7 @@ describe('POST /v1/auth/verify-email', () => {
     });
     await service.verifyEmail({
       token: signup.debugToken as string,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });
@@ -645,6 +648,7 @@ describe('POST /v1/auth/verify-email', () => {
     });
     await service.verifyEmail({
       token: signup.debugToken as string,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });
@@ -704,7 +708,7 @@ describe('POST /v1/auth/login', () => {
     await fixture.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token },
+      payload: { token, password },
     });
   }
 
@@ -838,7 +842,7 @@ describe('POST /v1/auth/resend-verification', () => {
     await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: verifyToken },
+      payload: { token: verifyToken, password: 'correct horse battery staple' },
     });
 
     const res = await fx.app.inject({
@@ -875,7 +879,7 @@ describe('POST /v1/auth/resend-verification', () => {
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: freshToken },
+      payload: { token: freshToken, password: 'correct horse battery staple' },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json<SessionEnvelope>();
@@ -903,7 +907,7 @@ describe('POST /v1/auth/resend-verification', () => {
     const res = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: freshToken },
+      payload: { token: freshToken, password: 'correct horse battery staple' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json<SessionEnvelope>().session.token).toBeDefined();
@@ -1146,6 +1150,7 @@ describe('AuthFlowsService recovery authentication — enrolled MFA', () => {
 
     const result = await service.verifyEmail({
       token: signup.debugToken as string,
+      password: 'correct horse battery staple',
       issuedFromIp: '203.0.113.7',
       userAgent: 'inbox-browser',
     });
@@ -1556,7 +1561,7 @@ describe('POST /v1/auth/password-reset', () => {
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: verifyToken },
+      payload: { token: verifyToken, password: 'correct horse battery staple' },
     });
     const sessionA = verify.json<SessionEnvelope>().session.token;
     const login = await fx.app.inject({
@@ -1803,7 +1808,7 @@ describe('POST /v1/auth/refresh + /v1/auth/logout', () => {
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: verifyToken },
+      payload: { token: verifyToken, password: 'correct horse battery staple' },
     });
     const oldSession = verify.json<SessionEnvelope>().session.token;
 
@@ -1837,7 +1842,7 @@ describe('POST /v1/auth/refresh + /v1/auth/logout', () => {
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: verifyToken },
+      payload: { token: verifyToken, password: 'correct horse battery staple' },
     });
     const sessionToken = verify.json<SessionEnvelope>().session.token;
 
@@ -1891,6 +1896,7 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
     });
     const verify = await service.verifyEmail({
       token: signup.debugToken!,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });
@@ -1918,6 +1924,7 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
     });
     const verify = await service.verifyEmail({
       token: signup.debugToken!,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });
@@ -1947,6 +1954,7 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
     });
     const verify = await service.verifyEmail({
       token: signup.debugToken!,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });
@@ -1984,6 +1992,7 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
     });
     const verify = await serviceA.verifyEmail({
       token: signup.debugToken!,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });
@@ -2022,6 +2031,7 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
     });
     const verify = await service.verifyEmail({
       token: signup.debugToken!,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });
@@ -2054,11 +2064,13 @@ describe('AuthFlowsService.refreshSession — single-use under concurrency (secu
     });
     const verifyA = await service.verifyEmail({
       token: signupA.debugToken!,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });
     const verifyB = await service.verifyEmail({
       token: signupB.debugToken!,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });
@@ -2349,7 +2361,7 @@ describe('V-224 — auth-flows emits customer-facing audit entries', () => {
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token },
+      payload: { token, password: 'correct horse battery staple' },
     });
     const sessionToken = verify.json<SessionEnvelope>().session.token;
 
@@ -2380,7 +2392,7 @@ describe('V-224 — auth-flows emits customer-facing audit entries', () => {
     await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: verifyToken },
+      payload: { token: verifyToken, password: 'correct horse battery staple' },
     });
 
     const login = await fx.app.inject({
@@ -2440,7 +2452,7 @@ describe('V-224 — auth-flows emits customer-facing audit entries', () => {
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: verifyToken },
+      payload: { token: verifyToken, password: 'correct horse battery staple' },
     });
     const firstSession = verify.json<SessionEnvelope>().session.token;
 
@@ -2748,6 +2760,7 @@ describe('a lost single-use token claim is refused, and nothing is written', () 
     await expect(
       service.verifyEmail({
         token: signup.debugToken as string,
+        password: 'correct horse battery staple',
         issuedFromIp: null,
         userAgent: null,
       }),
@@ -2764,6 +2777,7 @@ describe('a lost single-use token claim is refused, and nothing is written', () 
     });
     await service.verifyEmail({
       token: signup.debugToken as string,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });
@@ -2872,6 +2886,7 @@ describe('a vanished account cannot complete a flow it started', () => {
     });
     await service.verifyEmail({
       token: signup.debugToken as string,
+      password: 'correct horse battery staple',
       issuedFromIp: null,
       userAgent: null,
     });
@@ -2952,7 +2967,10 @@ describe('auth emails are suppressed for a suspended account', () => {
     await fxs.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: signup.json<{ debug_token: string }>().debug_token },
+      payload: {
+        token: signup.json<{ debug_token: string }>().debug_token,
+        password: 'correct horse battery staple',
+      },
     });
     // Suspend through the repo the routes actually read. seedAccount is keyed
     // by id, so the row has to be read back first — a fabricated row lands under

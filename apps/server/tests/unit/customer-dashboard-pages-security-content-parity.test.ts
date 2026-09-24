@@ -37,7 +37,8 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
   it('V-353h MFA enroll + verify + recovery contract: POST /v1/account/mfa/enroll → { otpauth_uri, secret_base32 } + POST /v1/account/mfa/verify { code } → { recovery_codes } — pinned so the 2-step enroll-then-verify flow + the recovery_codes response field stay correct (drift to a single-step enroll would skip the QR-scan verification; drift to dropping recovery_codes would orphan customers from the shown-ONCE backup-codes flow)', () => {
     expect(body).toMatch(/authedFetch\('\/v1\/account\/mfa\/enroll', \{ method: 'POST' \}\)/);
     expect(body).toMatch(
-      /authedFetch\('\/v1\/account\/mfa\/verify', \{\s*method: 'POST',\s*body: JSON\.stringify\(\{ code \}\),\s*\}\)/,
+      // Sign-in audit #4 — the current password rides along when the customer gave one.
+      /authedFetch\('\/v1\/account\/mfa\/verify', \{\s*method: 'POST',\s*body: JSON\.stringify\(\s*currentPassword\.length > 0 \? \{ code, current_password: currentPassword \} : \{ code \},\s*\),\s*\}\)/,
     );
     expect(body).toMatch(/body\.recovery_codes \|\| \[\]/);
   });

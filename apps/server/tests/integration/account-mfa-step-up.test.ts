@@ -70,7 +70,7 @@ async function setupEnrolledFreshSession(
   const verify = await fixture.app.inject({
     method: 'POST',
     url: '/v1/auth/verify-email',
-    payload: { token: verifyToken },
+    payload: { token: verifyToken, password },
   });
   const firstSessionToken = verify.json<SessionEnvelope>().session.token;
 
@@ -84,7 +84,10 @@ async function setupEnrolledFreshSession(
     method: 'POST',
     url: '/v1/account/mfa/verify',
     headers: { authorization: `Bearer ${firstSessionToken}`, 'content-type': 'application/json' },
-    payload: { code: computeTotpCode(secretBytes, Math.floor(Date.now() / 1000)) },
+    payload: {
+      code: computeTotpCode(secretBytes, Math.floor(Date.now() / 1000)),
+      current_password: 'correct horse battery staple',
+    },
   });
 
   // Fresh login → MFA challenge → real session with mfa_satisfied_at stamped.
@@ -140,7 +143,7 @@ describe('V-353e step-up gate on DELETE /v1/account/mfa + POST disable', () => {
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: verifyToken },
+      payload: { token: verifyToken, password },
     });
     const sessionToken = verify.json<SessionEnvelope>().session.token;
 
@@ -154,7 +157,10 @@ describe('V-353e step-up gate on DELETE /v1/account/mfa + POST disable', () => {
       method: 'POST',
       url: '/v1/account/mfa/verify',
       headers: { authorization: `Bearer ${sessionToken}`, 'content-type': 'application/json' },
-      payload: { code: computeTotpCode(secretBytes, Math.floor(Date.now() / 1000)) },
+      payload: {
+        code: computeTotpCode(secretBytes, Math.floor(Date.now() / 1000)),
+        current_password: 'correct horse battery staple',
+      },
     });
 
     // The exact enrolling session is now both current-epoch and freshly
@@ -180,7 +186,7 @@ describe('V-353e step-up gate on DELETE /v1/account/mfa + POST disable', () => {
     const verify = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: verifyToken },
+      payload: { token: verifyToken, password },
     });
     const sessionToken = verify.json<SessionEnvelope>().session.token;
 
@@ -194,7 +200,10 @@ describe('V-353e step-up gate on DELETE /v1/account/mfa + POST disable', () => {
       method: 'POST',
       url: '/v1/account/mfa/verify',
       headers: { authorization: `Bearer ${sessionToken}`, 'content-type': 'application/json' },
-      payload: { code: computeTotpCode(secretBytes, Math.floor(Date.now() / 1000)) },
+      payload: {
+        code: computeTotpCode(secretBytes, Math.floor(Date.now() / 1000)),
+        current_password: 'correct horse battery staple',
+      },
     });
 
     // Step-up reauth on the existing session.
@@ -234,7 +243,7 @@ describe('V-353e step-up gate on DELETE /v1/account/mfa + POST disable', () => {
     {
       method: 'POST' as const,
       url: '/v1/account/mfa/verify',
-      payload: { code: '123456' },
+      payload: { code: '123456', current_password: 'correct horse battery staple' },
     },
     {
       method: 'DELETE' as const,

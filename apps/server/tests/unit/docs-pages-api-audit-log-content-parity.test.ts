@@ -156,16 +156,20 @@ describe('W768 docs /api/audit-log content parity', () => {
     expect(p).toMatch(/keys created before this was recorded are not listed/);
   });
 
-  it("CRITICAL account.login payload method 3-enum pinned — password/mfa_totp/mfa_recovery, plus the oauth_callback variant. S36 2026-07-07 (fable-truth-audit): the old 5-enum was FALSE — auth-flows.ts only ever emits method 'password' (:821) or 'mfa_totp'/'mfa_recovery' (:935); magic-link consume emits NO account.login row, password-reset confirm emits account.password_changed {via:'password_reset'}, and the OAuth callback emits account.login with {kind:'oauth_callback', provider, session_id} and no method field.", () => {
+  it("CRITICAL account.login payload method 4-enum pinned — password/magic_link/mfa_totp/mfa_recovery, plus the oauth_callback variant. S36 2026-07-07 (fable-truth-audit): the old 5-enum was FALSE — auth-flows.ts emitted only method 'password' or 'mfa_totp'/'mfa_recovery'; password-reset confirm emits account.password_changed {via:'password_reset'}, and the OAuth callback emits account.login with {kind:'oauth_callback', provider, session_id} and no method field. Sign-in audit #9 (2026-09-24) made magic-link consume emit account.login {method:'magic_link'} — it had created a session with no row — so magic_link is now TRUE and pinned here, while password_reset stays retired.", () => {
     const p = read(PAGE);
+    const src = read(resolve(REPO_ROOT, 'apps/server/src/services/auth-flows.ts'));
 
-    expect(p).toMatch(/`payload\.method` ∈ \{`password`, `mfa_totp`, `mfa_recovery`\}/);
+    expect(p).toMatch(
+      /`payload\.method` ∈ \{`password`, `magic_link`, `mfa_totp`, `mfa_recovery`\}/,
+    );
+    // The documented value is the emitted one.
+    expect(src).toMatch(/'account\.login', \{\s*method: 'magic_link',/);
     expect(p).toMatch(
       /OAuth sign-ins land a variant payload `\{ kind: "oauth_callback", provider, session_id \}` with no `method` field\./,
     );
-    expect(p).toMatch(/Magic-link sign-ins emit no `account\.login` row/);
-    // Negative pins — the retired fictional method values must not come back.
-    expect(p).not.toMatch(/`payload\.method` ∈ \{[^}]*`magic_link`/);
+    expect(p).not.toMatch(/Magic-link sign-ins emit no `account\.login` row/);
+    // Negative pin — the retired fictional method value must not come back.
     expect(p).not.toMatch(/`payload\.method` ∈ \{[^}]*`password_reset`/);
   });
 

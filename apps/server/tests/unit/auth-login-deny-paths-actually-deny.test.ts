@@ -104,6 +104,10 @@ async function appWhereLoginThrows(err: Error): Promise<FastifyInstance> {
     authCache: null,
     authCoalescer: null,
   });
+  // Same reason for this one: registerAuthRoutes also registers DELETE
+  // /v1/account/me/oauth-links/:id (sign-in audit #5), whose preHandlers call
+  // `app.rateLimit('global')` at registration. No arm here reaches that route.
+  app.decorate('rateLimit', () => () => Promise.resolve());
   registerAuthRoutes(app, {
     service: {
       login: () => Promise.reject(err),

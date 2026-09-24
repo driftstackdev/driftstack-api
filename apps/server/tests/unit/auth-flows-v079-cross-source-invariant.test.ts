@@ -22,9 +22,9 @@
 //   AuthFlowKind 3-value union — 'email_verify' | 'magic_link' |
 //     'password_reset'.
 //
-//   AuthFlowErrorCode 5-value union — 'email_already_registered'
+//   AuthFlowErrorCode 6-value union — 'email_already_registered'
 //     | 'invalid_credentials' | 'email_not_verified' |
-//     'invalid_auth_token' | 'account_suspended'.
+//     'invalid_auth_token' | 'account_suspended' | 'password_required'.
 //
 //   AuthFlowAccountRow (8 fields): id + email + name (nullable)
 //     + passwordHash (nullable) + emailVerifiedAt (nullable) +
@@ -112,16 +112,17 @@ describe('W941 V-079 auth-flows cross-source invariant', () => {
     );
   });
 
-  // ─── AuthFlowErrorCode 5-value union ─────────────────────────
+  // ─── AuthFlowErrorCode 6-value union ─────────────────────────
 
-  it("CRITICAL AuthFlowErrorCode 5 codes — 'email_already_registered' | 'invalid_credentials' | 'email_not_verified' | 'invalid_auth_token' | 'account_suspended'. The 5-code palette distinguishes signup-collision / login-fail / unverified / bad-token / suspended states.", () => {
+  it("CRITICAL AuthFlowErrorCode 6 codes — 'email_already_registered' | 'invalid_credentials' | 'email_not_verified' | 'invalid_auth_token' | 'account_suspended' | 'password_required'. The palette distinguishes signup-collision / login-fail / unverified / bad-token / suspended states, and (sign-in audit #1) a verification link that needs the account's password.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/auth-flows.ts'));
     expect(p).toMatch(/export type AuthFlowErrorCode =/);
     expect(p).toMatch(/\| 'email_already_registered'/);
     expect(p).toMatch(/\| 'invalid_credentials'/);
     expect(p).toMatch(/\| 'email_not_verified'/);
     expect(p).toMatch(/\| 'invalid_auth_token'/);
-    expect(p).toMatch(/\| 'account_suspended';/);
+    expect(p).toMatch(/\| 'account_suspended'/);
+    expect(p).toMatch(/\| 'password_required';/);
   });
 
   // ─── AuthFlowError class shape ───────────────────────────────

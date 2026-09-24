@@ -186,6 +186,8 @@ describe('OpenAPI spec generation', () => {
         '/v1/account/me',
         '/v1/account/me/avatar',
         '/v1/account/me/oauth-links',
+        // Sign-in audit #5 — remove a linked Google/GitHub sign-in
+        '/v1/account/me/oauth-links/{id}',
         // V-353 MFA endpoints
         '/v1/account/mfa',
         '/v1/account/mfa/disable',

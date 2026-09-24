@@ -34,7 +34,8 @@
 //   • sessionResponse: { session: { token, expires_at ISO,
 //     account_id=acc_ } } — common shape across signup-verify/login/
 //     magic-link/password-reset-confirm/refresh.
-//   • mapAuthFlowError: AuthFlowError → 5-code exhaustive switch.
+//   • mapAuthFlowError: AuthFlowError → 6-code exhaustive switch (sign-in
+//     audit #1 added password_required; #8 the MFA challenge's own details).
 //   • Logout always returns { ok: true as const } (no leak about
 //     whether token matched).
 
@@ -142,10 +143,12 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
     );
   });
 
-  it('mapAuthFlowError: 5-code exhaustive switch (email_already_registered + invalid_credentials + invalid_auth_token + email_not_verified + account_suspended); rethrow if not AuthFlowError', () => {
+  it('mapAuthFlowError: 6-code exhaustive switch (email_already_registered + invalid_credentials + invalid_auth_token + email_not_verified + account_suspended + password_required); rethrow if not AuthFlowError; the service detail passes through only where asked and only when it is a real message', () => {
     expect(body).toMatch(
-      /function mapAuthFlowError\(err: unknown\): never \{\s*if \(!\(err instanceof AuthFlowError\)\) throw err;\s*switch \(err\.code\) \{\s*case 'email_already_registered':\s*throw new EmailAlreadyRegisteredError\(\);\s*case 'invalid_credentials':\s*throw new InvalidCredentialsError\(\);\s*case 'invalid_auth_token':\s*throw new InvalidAuthTokenError\(\);\s*case 'email_not_verified':\s*throw new EmailNotVerifiedError\(\);\s*case 'account_suspended':\s*throw new ForbiddenError\('Account is suspended\.'\);/,
+      /function mapAuthFlowError\(err: unknown, opts: \{ serviceMessage\?: boolean \} = \{\}\): never \{\s*if \(!\(err instanceof AuthFlowError\)\) throw err;\s*switch \(err\.code\) \{\s*case 'email_already_registered':\s*throw new EmailAlreadyRegisteredError\(\);\s*case 'invalid_credentials':\s*throw new InvalidCredentialsError\(\);\s*case 'invalid_auth_token':\s*throw opts\.serviceMessage === true && err\.message !== err\.code\s*\? new InvalidAuthTokenError\(err\.message\)\s*: new InvalidAuthTokenError\(\);\s*case 'email_not_verified':\s*throw new EmailNotVerifiedError\(\);\s*case 'account_suspended':\s*throw new ForbiddenError\('Account is suspended\.'\);\s*case 'password_required':[\s\S]{0,200}?throw new UnauthorizedError\(err\.message, \{ password_required: true \}\);/,
     );
+    // Only the MFA challenge passes its own detail through (sign-in audit #8).
+    expect(body.match(/mapAuthFlowError\(e, \{ serviceMessage: true \}\)/g)?.length).toBe(1);
   });
 
   it('MFA-required responses use one challenge-token/expiry serializer', () => {
@@ -264,7 +267,7 @@ describe('W421.B apps/server/src/routes/auth.ts content parity', () => {
       /import \{\s*AuthFlowError,\s*type AuthFlowsService,\s*type WebSessionRow,\s*type AuthFlowAccountRow,\s*\} from '\.\.\/services\/auth-flows\.js';/,
     );
     expect(body).toMatch(
-      /import \{\s*EmailAlreadyRegisteredError,\s*EmailNotVerifiedError,\s*InvalidAuthTokenError,\s*InvalidCredentialsError,\s*ValidationError,\s*ForbiddenError,\s*\} from '\.\.\/lib\/errors\.js';/,
+      /import \{\s*EmailAlreadyRegisteredError,\s*EmailNotVerifiedError,\s*InvalidAuthTokenError,\s*InvalidCredentialsError,\s*ValidationError,\s*ForbiddenError,\s*UnauthorizedError,\s*\} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
       /import \{ AUTH_IP_LIMITS, ipRateLimit \} from '\.\.\/middleware\/ip-rate-limit\.js';/,

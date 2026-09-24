@@ -84,7 +84,7 @@ async function consentingSession(fx: TestAppFixture, email: string): Promise<str
   const verify = await fx.app.inject({
     method: 'POST',
     url: '/v1/auth/verify-email',
-    payload: { token: debugToken },
+    payload: { token: debugToken, password: 'correct-horse-battery-staple-9' },
   });
   expect(verify.statusCode, `verify-email returned ${verify.statusCode}`).toBe(200);
   return verify.json<{ session: { token: string } }>().session.token;

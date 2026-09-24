@@ -109,6 +109,13 @@ const CANNOT_DROP: ReadonlyArray<{
   typo: Record<string, unknown>;
   /** Optional fields a `.refine()` makes at-least-one, with the omit test below as proof. */
   refineCovers?: readonly string[];
+  /**
+   * Optional in the schema only because some accounts have nothing to give, and
+   * refused by the SERVICE, with its own 4xx, on every account where the field
+   * matters — so a mistyped key is never answered as success there. Each entry
+   * names the test that proves the refusal.
+   */
+  serviceRequires?: readonly { field: string; provedBy: string }[];
 }> = [
   {
     route: 'POST /v1/auth/login',
@@ -129,8 +136,19 @@ const CANNOT_DROP: ReadonlyArray<{
     typo: { tokn: 'x'.repeat(40) },
   },
   {
+    // Sign-in audit #1 — `password` is optional because an account with no
+    // password (created by Google/GitHub sign-in) has none to give; on an account
+    // that HAS one, verification without it is refused 401 `password_required`,
+    // which is what a mistyped key produces. Never a silent success.
     route: 'POST /v1/auth/verify-email',
     schema: VerifyEmailRequestSchema,
+    serviceRequires: [
+      {
+        field: 'password',
+        provedBy:
+          'apps/server/tests/integration/a-password-chosen-before-the-mailbox-was-proven-never-survives-the-owners-proof.test.ts',
+      },
+    ],
     valid: { token: 'x'.repeat(40) },
     typo: { tokn: 'x'.repeat(40) },
   },
@@ -230,10 +248,21 @@ describe('V-960 the anonymous unknown-field exemption is earned per route', () =
   it('CRITICAL on these routes a mistyped field cannot be dropped in silence — every DECLARED field is required, so the typo is a missing required field and zod answers 400. Derived from each schema rather than from a hand-picked typo: the first version of this arm mistyped one chosen key, which proves nothing about a field added later, and adding an optional field to LoginRequestSchema left it green.', () => {
     const offenders: string[] = [];
     for (const c of CANNOT_DROP) {
+      const serviceRequired = (c.serviceRequires ?? []).map((r) => r.field);
       const optional = optionalFieldsOf(c.schema).filter(
-        (f) => !(c.refineCovers ?? []).includes(f),
+        (f) => !(c.refineCovers ?? []).includes(f) && !serviceRequired.includes(f),
       );
       if (optional.length > 0) offenders.push(`${c.route}: ${optional.join(', ')}`);
+    }
+    // A `serviceRequires` entry is a claim about behaviour, so it must name a proof
+    // that exists and exercises the refusal it claims.
+    for (const c of CANNOT_DROP) {
+      for (const r of c.serviceRequires ?? []) {
+        const proof = readFileSync(resolve(REPO_ROOT, r.provedBy), 'utf8');
+        expect(proof, `${c.route}: ${r.provedBy} proves the ${r.field} refusal`).toContain(
+          `${r.field}_required`,
+        );
+      }
     }
     expect(
       offenders,

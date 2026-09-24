@@ -57,7 +57,7 @@ async function buildInteractiveFixture(): Promise<{ authorization: string }> {
   const verify = await fx.app.inject({
     method: 'POST',
     url: '/v1/auth/verify-email',
-    payload: { token: verificationToken },
+    payload: { token: verificationToken, password: 'correct horse battery staple' },
   });
   expect(verify.statusCode).toBe(200);
   const token = verify.json<SessionEnvelope>().session.token;
@@ -145,7 +145,7 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
       method: 'POST',
       url: '/v1/account/mfa/verify',
       headers: { ...headers, 'content-type': 'application/json' },
-      payload: { code },
+      payload: { code, current_password: 'correct horse battery staple' },
     });
     expect(verify.statusCode).toBe(200);
     const body = verify.json<EnrollCompleteResponse>();
@@ -184,7 +184,7 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
     const verified = await fx.app.inject({
       method: 'POST',
       url: '/v1/auth/verify-email',
-      payload: { token: verificationToken },
+      payload: { token: verificationToken, password },
     });
     const enrollingToken = verified.json<SessionEnvelope>().session.token;
     const predecessorLogin = await fx.app.inject({
@@ -214,7 +214,10 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
       method: 'POST',
       url: '/v1/account/mfa/verify',
       headers: enrollingHeaders,
-      payload: { code: computeTotpCode(secret, Math.floor(Date.now() / 1000)) },
+      payload: {
+        code: computeTotpCode(secret, Math.floor(Date.now() / 1000)),
+        current_password: 'correct horse battery staple',
+      },
     });
     expect(verify.statusCode).toBe(200);
 
@@ -239,7 +242,7 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
       method: 'POST',
       url: '/v1/account/mfa/verify',
       headers: { ...headers, 'content-type': 'application/json' },
-      payload: { code: '000000' },
+      payload: { code: '000000', current_password: 'correct horse battery staple' },
     });
     expect(verify.statusCode).toBe(400);
   });
@@ -255,7 +258,7 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
       method: 'POST',
       url: '/v1/account/mfa/verify',
       headers: { ...headers, 'content-type': 'application/json' },
-      payload: { code: '12345' },
+      payload: { code: '12345', current_password: 'correct horse battery staple' },
     });
     expect(verify.statusCode).toBe(400);
   });
@@ -272,7 +275,10 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
       method: 'POST',
       url: '/v1/account/mfa/verify',
       headers: { ...headers, 'content-type': 'application/json' },
-      payload: { code: computeTotpCode(secret, Math.floor(Date.now() / 1000)) },
+      payload: {
+        code: computeTotpCode(secret, Math.floor(Date.now() / 1000)),
+        current_password: 'correct horse battery staple',
+      },
     });
     expect(first.statusCode, 'the first verify completes enrollment').toBe(200);
 
@@ -281,7 +287,10 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
       method: 'POST',
       url: '/v1/account/mfa/verify',
       headers: { ...headers, 'content-type': 'application/json' },
-      payload: { code: computeTotpCode(secret, Math.floor(Date.now() / 1000)) },
+      payload: {
+        code: computeTotpCode(secret, Math.floor(Date.now() / 1000)),
+        current_password: 'correct horse battery staple',
+      },
     });
     expect(second.statusCode, 'a second verify is a conflict, not a fresh enrollment').toBe(409);
     const detail = second.json<{ detail: string }>().detail;
@@ -309,7 +318,7 @@ describe('POST /v1/account/mfa/enroll → /verify (V-353b)', () => {
       method: 'POST',
       url: '/v1/account/mfa/verify',
       headers: { ...headers, 'content-type': 'application/json' },
-      payload: { code: code1 },
+      payload: { code: code1, current_password: 'correct horse battery staple' },
     });
     const recoveryCode = verify1.json<EnrollCompleteResponse>().recovery_codes[0];
     const stepUp = await fx.app.inject({
@@ -383,7 +392,10 @@ describe('POST /v1/account/mfa/recovery-codes/regenerate (V-353b)', () => {
       method: 'POST',
       url: '/v1/account/mfa/verify',
       headers: { ...headers, 'content-type': 'application/json' },
-      payload: { code: computeTotpCode(secretBytes, Math.floor(Date.now() / 1000)) },
+      payload: {
+        code: computeTotpCode(secretBytes, Math.floor(Date.now() / 1000)),
+        current_password: 'correct horse battery staple',
+      },
     });
     const originalCodes = verify.json<EnrollCompleteResponse>().recovery_codes;
 

@@ -2047,6 +2047,36 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
+  // Sign-in audit #5 — remove a linked Google/GitHub sign-in.
+  registerRoute(r, {
+    method: 'delete',
+    path: '/v1/account/me/oauth-links/{id}',
+    summary:
+      'Remove a linked Google/GitHub sign-in. Signed-in browser only; a fresh two-factor step-up when two-factor is on. (requires `account_owner`)',
+    tags: ['account'],
+    security: auth,
+    request: {
+      params: z.object({ id: prefixedIdParam('ol', 'linked sign-in') }),
+    },
+    responses: {
+      204: {
+        description:
+          'Removed. That Google/GitHub account can no longer sign in; the account is emailed and "Recent activity" records it.',
+      },
+      ...errors4xx,
+      404: {
+        description: 'No linked sign-in with this id on the calling account.',
+        content: problemContent,
+        headers: requestIdHeader,
+      },
+      409: {
+        description:
+          "It is the account's only way to sign in (no password and no other working link). Set a password first.",
+        content: problemContent,
+        headers: requestIdHeader,
+      },
+    },
+  });
 
   // Arc 7 docs.openapi — BYOK Anthropic + Bundled LLM endpoints.
   // The full reference for both surfaces lives at
@@ -4586,6 +4616,15 @@ function buildRegistry(): OpenAPIRegistry {
   });
   const MfaVerifyRequestOpenApi = z.object({
     code: z.string().regex(/^\d{6}$/),
+    // Sign-in audit #4 — mirrors CompleteMfaEnrollmentRequestSchema.current_password.
+    current_password: z
+      .string()
+      .min(1)
+      .max(128)
+      .optional()
+      .describe(
+        "The account's current password. Required when the account has one; an account with no password (created by Google or GitHub sign-in) instead needs a sign-in from the last 10 minutes.",
+      ),
   });
   const MfaVerifyResponseOpenApi = z.object({
     recovery_codes: z.array(z.string()).length(10),

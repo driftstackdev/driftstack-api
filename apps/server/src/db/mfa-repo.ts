@@ -140,6 +140,26 @@ export class DrizzleMfaRepo implements MfaRepo {
     return { scanned: rows.length, converted, remaining: remainingRow?.value ?? 0 };
   }
 
+  async findEnrollmentProof(args: {
+    accountId: string;
+    webSessionId: string;
+  }): Promise<{ email: string; passwordHash: string | null; signedInAt: Date } | null> {
+    // The calling session and its account in one read, scoped so a session id
+    // of another account finds nothing. `created_at` is the time of the sign-in
+    // the session descends from: a refresh carries it forward.
+    const [row] = await this.database.db
+      .select({
+        email: accounts.email,
+        passwordHash: accounts.passwordHash,
+        signedInAt: webSessions.createdAt,
+      })
+      .from(webSessions)
+      .innerJoin(accounts, eq(accounts.id, webSessions.accountId))
+      .where(and(eq(webSessions.id, args.webSessionId), eq(webSessions.accountId, args.accountId)))
+      .limit(1);
+    return row ?? null;
+  }
+
   async findByAccount(accountId: string): Promise<MfaEnrollmentRow | null> {
     const [row] = await this.database.db
       .select()

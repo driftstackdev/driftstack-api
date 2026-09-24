@@ -3,7 +3,12 @@
 // list-unused, mark-all-used).
 
 import { randomUUID } from 'node:crypto';
-import type { MfaEnrollmentRow, MfaRepo, RecoveryCodeRow } from '../../../src/services/mfa.js';
+import type {
+  EnrollmentProof,
+  MfaEnrollmentRow,
+  MfaRepo,
+  RecoveryCodeRow,
+} from '../../../src/services/mfa.js';
 import { nextRevision } from '../../../src/db/mfa-repo.js';
 
 interface MfaSessionAuthority {
@@ -12,6 +17,8 @@ interface MfaSessionAuthority {
     currentWebSessionId: string;
     now: Date;
   }): boolean;
+  /** Sign-in audit #4 — the session and account the enrolment proof reads. */
+  enrollmentProof(args: { accountId: string; webSessionId: string }): EnrollmentProof | null;
 }
 
 export class InMemoryMfaRepo implements MfaRepo {
@@ -23,6 +30,14 @@ export class InMemoryMfaRepo implements MfaRepo {
   findByAccount(accountId: string): Promise<MfaEnrollmentRow | null> {
     const row = this.enrollments.get(accountId);
     return Promise.resolve(row ? { ...row } : null);
+  }
+
+  /** Without a session authority there is no session to prove anything with. */
+  findEnrollmentProof(args: {
+    accountId: string;
+    webSessionId: string;
+  }): Promise<EnrollmentProof | null> {
+    return Promise.resolve(this.sessionAuthority?.enrollmentProof(args) ?? null);
   }
 
   startEnrollmentIfNotEnrolled(args: {

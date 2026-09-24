@@ -35,10 +35,22 @@ describe('routes/account-oauth-links content parity', () => {
     );
   });
 
-  it("Dashboard-consumer + DELETE-as-separate-slice framing pinned: 'Used by the customer dashboard's account/security page to show \"Linked accounts: Google (connected 2026-05-12), GitHub (revoked upstream — re-link or use password)\". DELETE / revoke from driftstack-side is a separate slice (V-667.C-followup#2).' — pinned so the dashboard-consumer + read-only-no-delete-yet contract stays documented", () => {
+  it("Dashboard-consumer framing pinned, and the DELETE that used to be 'a separate slice (V-667.C-followup#2)' now pinned by its gates. Sign-in audit #5: with no way to remove a link, a customer whose GitHub account was compromised could not cut that sign-in off", () => {
     expect(body).toMatch(
-      /\/\/ Used by the customer dashboard's account\/security page to show\s*\/\/ "Linked accounts: Google \(connected 2026-05-12\), GitHub \(revoked\s*\/\/ upstream — re-link or use password\)"\. DELETE \/ revoke from\s*\/\/ driftstack-side is a separate slice \(V-667\.C-followup#2\)\./,
+      /\/\/ Used by the customer dashboard's account\/security page to show\s*\/\/ "Linked accounts: Google \(connected 2026-05-12\), GitHub \(revoked\s*\/\/ upstream — re-link or use password\)", with a Remove control per link\./,
     );
+    expect(body).toMatch(
+      /\/\/\s+DELETE \/v1\/account\/me\/oauth-links\/:id — remove one \(sign-in audit #5\)\./,
+    );
+    // A signed-in browser only, account_owner, a fresh step-up when two-factor is
+    // on, and the account-keyed limiter — in that order, all at registration.
+    expect(body).toMatch(
+      /'\/v1\/account\/me\/oauth-links\/:id',\s*\{\s*preHandler: \[\s*app\.requireAuth,\s*app\.requireScope\('account_owner'\),\s*requireInteractiveWebSession,\s*app\.requireMfaFresh\(\),\s*app\.rateLimit\('global'\),\s*\],/,
+    );
+    expect(body).toMatch(/if \(ctx\.webSession === null\) \{\s*throw new ForbiddenError\(/);
+    expect(body).toMatch(/if \(outcome === 'not_found'\) throw new NotFoundError\(/);
+    expect(body).toMatch(/if \(outcome === 'last_sign_in_method'\) \{\s*throw new ConflictError\(/);
+    expect(body).toMatch(/reply\.code\(204\);/);
   });
 
   it('PublicOAuthLink 6-field shape pinned: id (ol_-prefix) + provider + provider_email (nullable) + linked_at + last_login_at (nullable) + last_revoked_at (nullable). Drift to surfacing provider_avatar_url or provider_name on this endpoint would leak Verdict 3 first-link-only IDP signals; drift to dropping the nullable on email would crash on accounts that linked before email-collection was added', () => {

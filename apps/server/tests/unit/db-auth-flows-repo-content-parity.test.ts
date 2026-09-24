@@ -49,15 +49,15 @@ describe('W449.B apps/server/src/db/auth-flows-repo.ts content parity', () => {
     );
   });
 
-  it('imports: and/desc/eq/gt/isNull/lt/ne/or/sql from drizzle-orm (2026-05-20 sweeper slice added lt/or/sql for stale-token deletion); 6 service types (+ PasswordResetRevocation); Database; 6 schema tables (accounts + apiKeys — a password reset revokes the desktop credentials in its transaction — + emailVerifyTokens + magicLinkTokens + passwordResetTokens + webSessions); AccountTier from @driftstack/api-types', () => {
+  it('imports: and/asc/desc/eq/gt/isNull/lt/ne/or/sql from drizzle-orm (2026-05-20 sweeper slice added lt/or/sql for stale-token deletion; sign-in audit #5 added asc for the ordered links read); 7 service types (+ PasswordResetRevocation, + RemoveOAuthLinkResult); Database; 7 schema tables (accountOauthLinks — a removed linked sign-in is deleted under the account lock — + accounts + apiKeys — a password reset revokes the desktop credentials in its transaction — + emailVerifyTokens + magicLinkTokens + passwordResetTokens + webSessions); AccountTier from @driftstack/api-types', () => {
     expect(body).toMatch(
-      /import \{ and, desc, eq, getTableColumns, gt, isNull, lt, ne, or, sql \} from 'drizzle-orm';/,
+      /import \{ and, asc, desc, eq, getTableColumns, gt, isNull, lt, ne, or, sql \} from 'drizzle-orm';/,
     );
     expect(body).toMatch(
-      /import type \{\s*AuthFlowAccountRow,\s*AuthFlowKind,\s*AuthFlowTokenRow,\s*AuthFlowsRepo,\s*PasswordResetRevocation,\s*WebSessionRow,\s*\} from '\.\.\/services\/auth-flows\.js';/,
+      /import type \{\s*AuthFlowAccountRow,\s*AuthFlowKind,\s*AuthFlowTokenRow,\s*AuthFlowsRepo,\s*PasswordResetRevocation,\s*RemoveOAuthLinkResult,\s*WebSessionRow,\s*\} from '\.\.\/services\/auth-flows\.js';/,
     );
     expect(body).toMatch(
-      /import \{\s*accounts,\s*apiKeys,\s*emailVerifyTokens,\s*magicLinkTokens,\s*passwordResetTokens,\s*webSessions,\s*\} from '\.\/schema\.js';/,
+      /import \{\s*accountOauthLinks,\s*accounts,\s*apiKeys,\s*emailVerifyTokens,\s*magicLinkTokens,\s*passwordResetTokens,\s*webSessions,\s*\} from '\.\/schema\.js';/,
     );
     expect(body).toMatch(/import type \{ AccountTier \} from '@driftstack\/api-types';/);
   });

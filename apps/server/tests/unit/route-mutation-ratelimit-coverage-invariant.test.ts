@@ -389,7 +389,11 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // credits/rollback, each gated with `app.rateLimit('global')` in the same
     // options argument as their `requireScope('driftstack_internal_admin')`.
     // No disabled twins, same reason as S15's above.
-    expect(routes).toHaveLength(186);
+    // 187 since sign-in audit #5: DELETE /v1/account/me/oauth-links/:id, gated
+    // with `app.rateLimit('global')` in the same options argument as its
+    // requireAuth + requireScope('account_owner') + requireMfaFresh. No disabled
+    // twin: it is registered with the auth flows, which every deployment has.
+    expect(routes).toHaveLength(187);
     // +1: `app.patch<{ Params: { id: string } }>('/v1/teams/:id', ...)` is the only
     // one of the two new routes carrying type arguments.
     // T-1 — 77 since `POST /v1/account/me/proxies/:id/test` gained a
@@ -410,7 +414,9 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // Unchanged at 83 for S16: both new routes take a body only, no route
     // params, so neither carries a type argument — the surface above moved by
     // two where this one moved by zero.
-    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(83);
+    // 84 since sign-in audit #5: DELETE /v1/account/me/oauth-links/:id carries
+    // `<{ Params: { id: string } }>`.
+    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(84);
   });
 
   it('every mutation route has a limiter, privileged gate, or exact exemption', () => {
