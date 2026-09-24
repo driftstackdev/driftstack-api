@@ -210,11 +210,86 @@ function scrubSentryBreadcrumb(crumb: Sentry.Breadcrumb): Sentry.Breadcrumb {
   return crumb;
 }
 
+/**
+ * Security sweep E-1 — span attributes, from the trace context of a transaction
+ * event or from a span sent on its own. They carry the request as it arrived: the
+ * URL, target and query (with `?ds_token=`, the OAuth `code`/`state`) and, for
+ * some integrations, request headers under `http.request.header.*`. Header
+ * attributes are dropped to `[redacted]` whatever their name; URL-shaped values
+ * lose their credential params; every other string is run through the free-text
+ * redactor; then the usual key-name scrub.
+ */
+// The SDK does not export these event shapes by name; take them from its own hook types.
+type SentryTransactionEvent = Parameters<
+  NonNullable<Sentry.NodeOptions['beforeSendTransaction']>
+>[0];
+type SentrySpanJSON = Parameters<NonNullable<Sentry.NodeOptions['beforeSendSpan']>>[0];
+const SPAN_URL_KEYS = new Set(['http.url', 'http.target', 'url.full', 'url.path']);
+const SPAN_QUERY_KEYS = new Set(['http.query', 'url.query']);
+function scrubSpanData(data: Record<string, unknown> | undefined): void {
+  if (!data) return;
+  for (const key of Object.keys(data)) {
+    const value = data[key];
+    if (/^http\.(request|response)\.header\./.test(key)) {
+      data[key] = '[redacted]';
+    } else if (typeof value === 'string') {
+      if (SPAN_URL_KEYS.has(key)) {
+        data[key] = redactUrlQueryTokens(value);
+      } else if (SPAN_QUERY_KEYS.has(key)) {
+        data[key] = value.startsWith('?')
+          ? `?${redactQueryString(value.slice(1))}`
+          : redactQueryString(value);
+      } else {
+        data[key] = redactText(value);
+      }
+    }
+  }
+  scrubInPlace(data);
+}
+
+/**
+ * Security sweep E-1 — the TRANSACTION counterpart of scrubSentryEvent. With a
+ * non-zero traces sample rate every sampled request becomes one of these, and the
+ * SDK copies the request into it exactly as it arrived (headers, cookies, URL,
+ * query string). Without this hook they reached the vendor unredacted while the
+ * error event from the same request was scrubbed.
+ */
+function scrubSentryTransaction(event: SentryTransactionEvent): SentryTransactionEvent {
+  if (event.request) {
+    if (typeof event.request.url === 'string') {
+      event.request.url = redactUrlQueryTokens(event.request.url);
+    }
+    if (typeof event.request.query_string === 'string') {
+      event.request.query_string = redactQueryString(event.request.query_string);
+    }
+  }
+  scrubInPlace(event.request);
+  scrubInPlace(event.extra);
+  scrubSpanData(event.contexts?.trace?.data);
+  scrubInPlace(event.contexts);
+  scrubInPlace(event.breadcrumbs);
+  for (const span of event.spans ?? []) {
+    scrubSpanData(span.data);
+    if (typeof span.description === 'string') span.description = redactText(span.description);
+  }
+  if (typeof event.transaction === 'string') event.transaction = redactText(event.transaction);
+  return event;
+}
+
+/** Security sweep E-1 — a span sent on its own (streamed spans). */
+function scrubSentrySpan(span: SentrySpanJSON): SentrySpanJSON {
+  scrubSpanData(span.data);
+  if (typeof span.description === 'string') span.description = redactText(span.description);
+  return span;
+}
+
 // V-494 — exposed under a `__test_*` name so the unit test in
 // tests/unit/sentry-scrub.test.ts can pin the redaction matrix.
 // Not part of the public sentry-helper surface.
 export { scrubInPlace as __test_scrubInPlace };
 export { scrubSentryEvent as __test_scrubSentryEvent };
+export { scrubSentryTransaction as __test_scrubSentryTransaction };
+export { scrubSentrySpan as __test_scrubSentrySpan };
 
 export interface SentryBreadcrumb {
   /** Logical category, e.g. `'http.request'`, `'auth'`, `'billing'`. */
@@ -304,6 +379,11 @@ export function initSentry({ config, logger }: InitSentryArgs): SentryClient {
     // redacts known-sensitive keys.
     beforeSend: scrubSentryEvent,
     beforeBreadcrumb: scrubSentryBreadcrumb,
+    // Security sweep E-1 — sampled requests become TRANSACTION events (and spans),
+    // which beforeSend never sees; without these two hooks they carried the raw
+    // authorization header, cookies, payment signatures and `?ds_token=` URLs.
+    beforeSendTransaction: scrubSentryTransaction,
+    beforeSendSpan: scrubSentrySpan,
     // Default integrations include http + console + onUncaughtException +
     // onUnhandledRejection — exactly what we want for a Node service.
   });
