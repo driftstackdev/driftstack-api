@@ -168,7 +168,31 @@ rather than being omitted.
 
 A non-null `last_revoked_at` means the provider link was revoked on the
 provider's side; sign in with a password or re-link to restore it.
-Removing a link from the Driftstack side is not exposed yet.
+
+### Remove a linked sign-in
+
+`DELETE /v1/account/me/oauth-links/:id`
+
+Removes one linked Google or GitHub sign-in. That Google or GitHub
+account can no longer sign in to yours. Signing in with it again works
+like any account that was never linked: the sign-in is not completed,
+and a confirmation link goes to your email address. Returns `204 No
+Content`.
+
+- Only a signed-in browser can remove a link; an API key is refused with
+  `403`, even with `account_owner`.
+- With two-factor on, it needs a fresh step-up (`403` with
+  `requires_mfa_step_up: true` otherwise; see
+  [MFA step-up](/api/auth/#mfa-step-up)).
+- `409` when it is the account's only way to sign in: the account has no
+  password and no other working link. Set a password first (a
+  [password reset](/api/auth/#password-reset) does it), then remove it.
+- `404` for an id that is not one of the calling account's links.
+
+Each removal is emailed to the account and recorded in the audit log as
+`account.oauth_link_removed`. Removing a link doesn't sign out browsers
+already signed in with it; use "Sign out everywhere else" (or
+`DELETE /v1/account/web-sessions?keep=current`) for that.
 
 ## Effective rate limits
 

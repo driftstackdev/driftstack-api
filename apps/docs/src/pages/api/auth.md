@@ -59,8 +59,18 @@ refuses while it is null.
 `POST /v1/auth/verify-email`
 
 ```json
-{ "token": "<from the verification email>" }
+{ "token": "<from the verification email>", "password": "<the password chosen at signup>" }
 ```
+
+When the account has a password, verifying needs it too. The link proves
+you control the mailbox; the password proves you are the person who signed
+up. Without it, or with a wrong one, the answer is `401` with
+`password_required: true`, and the link stays usable, so a mistyped password
+can be fixed and sent again. If you didn't sign up, ignore the email: nobody
+can use the account until the address is confirmed. If you forgot the
+password, a [password reset](#password-reset) confirms the address too.
+An account with no password (created by Google or GitHub sign-in) sends the
+token alone.
 
 Returns a **discriminated union**, the same shape as `login`:
 
@@ -149,6 +159,15 @@ Branch on the `mfa_required` literal. When it's present + true, do
 not store anything — wait for the customer to enter their TOTP
 code and call the challenge endpoint below.
 
+Password sign-in is limited per email as well as per IP address. After
+10 incorrect passwords for one email within 15 minutes, sign-in with a
+password for that email is refused with `429` and `Retry-After` for 15
+minutes, from any address. Gmail addresses that differ only in dots,
+`+tag` or capital letters count as one email. The limit applies the same
+way whether or not an account exists, so it does not reveal which emails
+are registered. A correct password clears the count, and so does a
+completed password reset.
+
 **SDK usage** (type narrowing + MFA exchange):
 
 ```ts
@@ -214,6 +233,18 @@ was used; `recovery_code` consumption decrements
 `account.recovery_code_used` in the audit log with
 `payload.remaining`.
 
+A refused code answers `400` with a `detail` that says what to do next:
+try the code again, sign in again (after 5 wrong codes on one challenge,
+or when the challenge came from a different IP address), or that the
+challenge is unknown or expired.
+
+Wrong codes also count against the **account**, across every challenge.
+After 10 wrong codes within 15 minutes, the account takes no new challenge
+and no code for 15 minutes: `429` with `Retry-After`, including for a
+correct password on `login`. The owner is emailed once ("Someone is trying
+to sign in to your Driftstack account"), and the audit log records
+`account.mfa_sign_in_locked`. A correct code does not clear the count.
+
 ## MFA step-up
 
 `POST /v1/auth/mfa/step-up`
@@ -244,7 +275,15 @@ link returns the same discriminated union as password login: a normal
 `session` when MFA is not enrolled, or `mfa_required` plus a one-time
 challenge token when it is. The enrolled branch mints no session until
 the caller completes `POST /v1/auth/mfa/challenge`; mailbox access is
-the first factor, not a bypass for TOTP or recovery-code proof.
+the first factor, not a bypass for TOTP or recovery-code proof. A
+magic-link sign-in is recorded as `account.login` with
+`payload.method: "magic_link"`.
+
+If the magic link is the **first** time anyone proves the address, it
+also confirms the email. Any password set before that is removed, and
+every session signed in with it ends: whoever registered the address
+never proved they owned it. You're signed in by the link; to use a
+password again, set one with a [password reset](#password-reset).
 
 ## Password reset
 
@@ -267,6 +306,10 @@ account. It then returns the same discriminated union as login:
 Every prior device must re-authenticate. The reset-confirming device
 is logged in only after it receives the no-MFA session branch or
 successfully exchanges the MFA challenge.
+
+A completed reset also confirms the email address, since the link
+arrived in the mailbox. An account that was never verified can sign in
+with its new password straight away.
 
 That includes the desktop app: its sign-in is revoked with the
 dashboard sessions, and it asks you to sign in again. Each desktop

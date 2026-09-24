@@ -65,9 +65,28 @@ API key cannot activate a pending factor.
 
 ```json
 {
-  "code": "123456"
+  "code": "123456",
+  "current_password": "<the account's current password>"
 }
 ```
+
+Turning on two-factor also needs proof that you signed in recently, so a
+browser someone else got hold of can't lock you out with an authenticator
+of theirs:
+
+- **The account has a password** — send it as `current_password`. Missing
+  or wrong, the answer is `403` with `current_password_required: true`.
+  After 5 wrong passwords within 15 minutes the step is refused with `429`
+  for 15 minutes, and each wrong password appears in the audit log as
+  `account.mfa_enrollment_password_rejected`.
+- **The account has no password** (created by Google or GitHub sign-in) —
+  omit `current_password`. The browser must have signed in within the last
+  10 minutes; otherwise the answer is `403` with
+  `reauthentication_required: true`: sign in again, then retry. Refreshing
+  a session doesn't count as signing in.
+
+Every enrolment is emailed to the account ("Two-factor sign-in is now on
+for your Driftstack account"), so you hear about it if it wasn't you.
 
 The server checks the 6-digit against the pending secret with ±1
 window drift tolerance (90 seconds total). On success, marks the
@@ -185,6 +204,16 @@ Failure modes:
   token theft from chat / email paste; legitimate caller is on the
   same IP.
 - Token already consumed (re-use after success): `400 Bad Request`.
+- 5 wrong codes on one challenge: `400 Bad Request`, and the challenge
+  is used up; sign in again.
+- 10 wrong codes on the account within 15 minutes, across any number of
+  challenges: `429 Too Many Requests` with `Retry-After`. For 15 minutes
+  the account takes no code and gets no new challenge, even with the right
+  password. The owner is emailed once, and the audit log records
+  `account.mfa_sign_in_locked`.
+
+Each `400` carries a `detail` saying which of these happened, so a client
+can tell "try the code again" from "sign in again".
 
 Magic-link consume, password-reset confirm, and linked-IdP/OAuth
 sign-in use the same MFA gate as password login. For an enrolled
@@ -339,9 +368,11 @@ SHA-256/SHA-512 are not supported.
 Every MFA lifecycle event lands in the customer audit log
 (`GET /v1/account/audit-log`):
 
-| Action                       | When                                                                              |
-| ---------------------------- | --------------------------------------------------------------------------------- |
-| `account.mfa_enrolled`       | First successful `/verify`                                                        |
-| `account.mfa_disabled`       | Successful disable                                                                |
-| `account.recovery_code_used` | Recovery code consumed (login or step-up)                                         |
-| `account.login`              | Successful challenge exchange (with `method: mfa_totp` or `mfa_recovery` payload) |
+| Action                                     | When                                                                              |
+| ------------------------------------------ | --------------------------------------------------------------------------------- |
+| `account.mfa_enrolled`                     | First successful `/verify`                                                        |
+| `account.mfa_disabled`                     | Successful disable                                                                |
+| `account.recovery_code_used`               | Recovery code consumed (login or step-up)                                         |
+| `account.login`                            | Successful challenge exchange (with `method: mfa_totp` or `mfa_recovery` payload) |
+| `account.mfa_sign_in_locked`               | 10 wrong sign-in codes in 15 minutes; two-factor sign-in paused for 15 minutes    |
+| `account.mfa_enrollment_password_rejected` | A wrong `current_password` on `/verify`                                           |

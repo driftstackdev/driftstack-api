@@ -18,6 +18,10 @@ const ACTION_LABEL: Record<string, string> = {
   'account.mfa_enrolled': 'MFA enrolled',
   'account.mfa_disabled': 'MFA disabled',
   'account.recovery_code_used': 'MFA recovery code used',
+  // Sign-in audit #2 / #4 / #5.
+  'account.mfa_sign_in_locked': 'Two-factor sign-in paused',
+  'account.mfa_enrollment_password_rejected': 'Wrong password while turning on MFA',
+  'account.oauth_link_removed': 'Linked sign-in removed',
   'api_key.minted': 'API key created',
   'api_key.revoked': 'API key revoked',
   'api_key.rotated': 'API key rotated',
@@ -105,6 +109,10 @@ const FILTER_OPTIONS = [
   { value: 'account.mfa_enrolled', label: 'MFA enrolled' },
   { value: 'account.mfa_disabled', label: 'MFA disabled' },
   { value: 'account.recovery_code_used', label: 'MFA recovery code used' },
+  // Sign-in audit #2 / #4 / #5.
+  { value: 'account.mfa_sign_in_locked', label: 'Two-factor sign-in paused' },
+  { value: 'account.mfa_enrollment_password_rejected', label: 'Wrong password while turning on MFA' },
+  { value: 'account.oauth_link_removed', label: 'Linked sign-ins removed' },
   { value: 'api_key.minted', label: 'API key created' },
   { value: 'api_key.rotated', label: 'API key rotated' },
   { value: 'api_key.revoked', label: 'API key revoked' },

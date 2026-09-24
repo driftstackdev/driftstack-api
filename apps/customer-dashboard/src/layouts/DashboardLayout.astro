@@ -342,6 +342,24 @@ const navSections: NavSection[] = [
             'bundled-llm-budget-exhausted': 'Your monthly AI budget has been reached. Review it in Settings.',
           };
           var message = Object.prototype.hasOwnProperty.call(exact, kind) ? exact[kind] : '';
+          // Sign-in messages the server writes as customer copy, shown word for
+          // word because the generic line would send the customer the wrong way
+          // ("a usage limit was reached" for a paused sign-in). Matched WHOLE and
+          // exactly — anything else the server says is still never reflected.
+          var detail = body && typeof body.detail === 'string' ? body.detail : '';
+          var safeDetails = [
+            /^Too many incorrect passwords for this email\. Try again in \d{1,4} minutes?, or reset your password\.$/,
+            /^Too many incorrect two-factor codes for this account\. Two-factor sign-in is paused — try again in \d{1,4} minutes?\.$/,
+            /^Your password was changed\. Two-factor sign-in for this account is paused after too many incorrect codes — sign in with your new password in \d{1,4} minutes?\.$/,
+            /^Code is invalid\. Try again or use a recovery code\.$/,
+            /^Too many incorrect codes for this sign-in\. Sign in again to retry\.$/,
+            /^Challenge token (?:is unknown or expired|is invalid|was issued from a different IP|was already used)\. Sign in again\.$/,
+          ];
+          if ((kind === 'rate-limited' || kind === 'invalid-auth-token') && detail) {
+            for (var i = 0; i < safeDetails.length; i++) {
+              if (safeDetails[i].test(detail)) message = detail;
+            }
+          }
           if (!message && kind === 'unauthorized') {
             message = 'Your sign-in could not be verified. Check your details and try again.';
           }

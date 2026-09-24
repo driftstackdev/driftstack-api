@@ -183,6 +183,24 @@ const apiBaseUrl = resolveApiBaseUrl();
               </p>
             </div>
           </div>
+          <div class="border-t border-tk-border pt-3" data-section="mfa-current-password">
+            <label class="block text-sm font-medium text-tk-ink-2" for="mfa-current-password">
+              Your current password
+            </label>
+            <input
+              id="mfa-current-password"
+              data-field="mfa-current-password"
+              type="password"
+              autocomplete="current-password"
+              maxlength="128"
+              class="mt-2 w-full max-w-xs rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
+            />
+            <p class="mt-1 text-xs text-tk-ink-3">
+              Turning on two-factor needs your password. Signed up with Google
+              or GitHub and never set one? Leave this empty — it works if you
+              signed in within the last 10 minutes.
+            </p>
+          </div>
           <div class="border-t border-tk-border pt-3">
             <label class="block text-sm font-medium text-tk-ink-2" for="mfa-verify-code">
               Enter the 6-digit code from your app to confirm
@@ -379,9 +397,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       </h2>
       <p class="mt-2 text-sm text-tk-ink-3">
         Google or GitHub accounts linked to yours. Each one lets you sign in
-        with that provider. If you remove Driftstack's access in Google or
-        GitHub, the link is marked inactive here the next time you try to use
-        it. Password sign-in keeps working either way.
+        with that provider. Remove one to stop it signing in to your account —
+        browsers already signed in with it stay signed in until you sign them
+        out above. You can't remove your only way to sign in; set a password
+        first.
       </p>
       <ul class="mt-6 divide-y divide-tk-border" data-list="oauth-links">
         <li class="py-3 text-sm text-tk-ink-3" data-field="oauth-links-empty">
@@ -718,6 +737,16 @@ const apiBaseUrl = resolveApiBaseUrl();
                 escapeHtml(providerLabel(link.provider)) +
                 ' ↗</a>'
               : '';
+            const removeLabel =
+              providerLabel(link.provider) +
+              ' sign-in' +
+              (link.provider_email ? ' (' + link.provider_email + ')' : '');
+            const removeFrag =
+              '<button type="button" data-remove-link-id="' +
+              escapeHtml(link.id) +
+              '" data-remove-link-label="' +
+              escapeHtml(removeLabel) +
+              '" class="shrink-0 text-xs text-tk-err-text underline underline-offset-4 hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-60">Remove</button>';
             return (
               '<li class="flex items-start justify-between gap-4 py-3">' +
               '<div class="min-w-0">' +
@@ -733,7 +762,10 @@ const apiBaseUrl = resolveApiBaseUrl();
               revokedFrag +
               '</p>' +
               '</div>' +
+              '<div class="flex shrink-0 items-center gap-3">' +
               manageFrag +
+              removeFrag +
+              '</div>' +
               '</li>'
             );
           })
@@ -764,6 +796,80 @@ const apiBaseUrl = resolveApiBaseUrl();
               securityErrorMessage(err, "Couldn't load connected accounts. Try again."),
             );
           });
+      }
+
+      // Sign-in audit #5 — remove a linked sign-in. With two-factor on the
+      // server asks for a fresh code first; the step-up prompt below collects
+      // it and retries the removal.
+      let pendingRemoveLinkId = null;
+
+      function removeOauthLink(id) {
+        return authedFetch('/v1/account/me/oauth-links/' + encodeURIComponent(id), {
+          method: 'DELETE',
+        })
+          .then((r) => {
+            if (r.status === 204 || r.ok) return 'removed';
+            return r
+              .json()
+              .catch(() => ({}))
+              .then((b) => {
+                if (b && b.requires_mfa_step_up === true) return 'step-up';
+                if (r.status === 409) {
+                  const lastWayIn = new Error(
+                    b && typeof b.detail === 'string'
+                      ? b.detail
+                      : "This is your account's only way to sign in. Set a password first, then remove it.",
+                  );
+                  lastWayIn.customerSafe = true;
+                  return Promise.reject(lastWayIn);
+                }
+                return Promise.reject(responseError(r, b));
+              });
+          })
+          .then((outcome) => {
+            if (outcome === 'step-up') {
+              pendingRemoveLinkId = id;
+              openStepUp('remove-link');
+              if (mfaStepUpSection && mfaStepUpSection.scrollIntoView) {
+                mfaStepUpSection.scrollIntoView({ block: 'center' });
+              }
+              return;
+            }
+            showBanner('Sign-in removed. That account can no longer sign in to Driftstack.');
+            loadOauthLinks();
+          })
+          .catch((err) => {
+            showBanner(securityErrorMessage(err, "Couldn't remove that sign-in. Try again."));
+          });
+      }
+
+      if (oauthLinksList) {
+        oauthLinksList.addEventListener('click', async (ev) => {
+          const target = ev.target;
+          if (!target || !target.closest) return;
+          const btn = target.closest('[data-remove-link-id]');
+          if (!btn || btn.disabled) return;
+          const id = btn.getAttribute('data-remove-link-id');
+          if (!id) return;
+          const label = btn.getAttribute('data-remove-link-label') || 'this sign-in';
+          btn.disabled = true;
+          try {
+            if (
+              !(await window.driftstackConfirm(
+                'Remove ' +
+                  label +
+                  '? It will no longer sign in to your account. Browsers already signed in with it stay signed in until you sign them out.',
+                { confirmLabel: 'Remove', destructive: true },
+              ))
+            )
+              return;
+            btn.textContent = 'Removing…';
+            await removeOauthLink(id);
+          } finally {
+            btn.disabled = false;
+            btn.textContent = 'Remove';
+          }
+        });
       }
 
       // V-355 — active sign-ins live wire.
@@ -1115,6 +1221,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const mfaQrTarget = root.querySelector('[data-field="mfa-qr"]');
       const mfaSecretEl = root.querySelector('[data-field="mfa-secret-base32"]');
       const mfaVerifyInput = root.querySelector('[data-field="mfa-verify-code"]');
+      const mfaCurrentPasswordInput = root.querySelector('[data-field="mfa-current-password"]');
       const mfaError = root.querySelector('[data-field="mfa-error"]');
       const mfaRecoveryList = root.querySelector('[data-list="mfa-recovery-codes"]');
       const mfaEnrolledAt = root.querySelector('[data-field="mfa-enrolled-at"]');
@@ -1592,6 +1699,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (mfaSecretEl) mfaSecretEl.textContent = body.secret_base32;
             showHidden(mfaEnrollStep, false);
             if (mfaVerifyInput) mfaVerifyInput.value = '';
+            if (mfaCurrentPasswordInput) mfaCurrentPasswordInput.value = '';
             // Stays disabled — the enroll step below is now the live
             // flow; the secret shown there must remain the pending one.
             if (mfaStart) mfaStart.textContent = 'Scan the QR code below';
@@ -1622,9 +1730,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           mfaVerifyBtn.disabled = true;
           mfaVerifyBtn.textContent = 'Verifying…';
         }
+        // Sign-in audit #4 — the current password, when the customer has one.
+        const currentPassword = (mfaCurrentPasswordInput && mfaCurrentPasswordInput.value) || '';
         authedFetch('/v1/account/mfa/verify', {
           method: 'POST',
-          body: JSON.stringify({ code }),
+          body: JSON.stringify(
+            currentPassword.length > 0 ? { code, current_password: currentPassword } : { code },
+          ),
         })
           .then((r) =>
             r.ok
@@ -1632,9 +1744,25 @@ const apiBaseUrl = resolveApiBaseUrl();
               : r
                   .json()
                   .catch(() => ({}))
-                  .then((b) => Promise.reject(responseError(r, b))),
+                  .then((b) => {
+                    // The proof-of-sign-in refusals say exactly what to do next
+                    // (enter the password / sign in again / wait); keep their words.
+                    if (
+                      b &&
+                      typeof b.detail === 'string' &&
+                      (b.current_password_required === true ||
+                        b.reauthentication_required === true ||
+                        r.status === 429)
+                    ) {
+                      const refusal = new Error(b.detail);
+                      refusal.customerSafe = true;
+                      return Promise.reject(refusal);
+                    }
+                    return Promise.reject(responseError(r, b));
+                  }),
           )
           .then((body) => {
+            if (mfaCurrentPasswordInput) mfaCurrentPasswordInput.value = '';
             // Render recovery codes once.
             if (mfaRecoveryList) {
               mfaRecoveryList.innerHTML = (body.recovery_codes || [])
@@ -1757,10 +1885,20 @@ const apiBaseUrl = resolveApiBaseUrl();
             closeStepUp();
             if (action === 'disable') performDisable();
             else if (action === 'regenerate') performRegenerate();
+            else if (action === 'remove-link' && pendingRemoveLinkId) {
+              const linkId = pendingRemoveLinkId;
+              pendingRemoveLinkId = null;
+              removeOauthLink(linkId);
+            }
           })
           .catch((err) => {
             if (err && err.name === 'AbortError') {
-              const actionLabel = action === 'disable' ? 'Disable two-factor' : 'Regenerate';
+              const actionLabel =
+                action === 'disable'
+                  ? 'Disable two-factor'
+                  : action === 'remove-link'
+                    ? 'Remove'
+                    : 'Regenerate';
               showStepUpError(
                 "The request took too long, so we're not sure your code was accepted. Cancel this prompt and try " +
                   actionLabel +

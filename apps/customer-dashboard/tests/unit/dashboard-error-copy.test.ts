@@ -73,6 +73,86 @@ describe('Dashboard shared request error copy', () => {
     expect(error.message).not.toMatch(/internal|private|secret|DO NOT SHOW/i);
   });
 
+  it('shows the sign-in messages the server writes as customer copy, word for word', () => {
+    const rate = 'https://errors.driftstack.dev/rate-limited';
+    const token = 'https://errors.driftstack.dev/invalid-auth-token';
+    const shown = [
+      [
+        rate,
+        'Too many incorrect passwords for this email. Try again in 15 minutes, or reset your password.',
+      ],
+      [
+        rate,
+        'Too many incorrect passwords for this email. Try again in 1 minute, or reset your password.',
+      ],
+      [
+        rate,
+        'Too many incorrect two-factor codes for this account. Two-factor sign-in is paused — try again in 12 minutes.',
+      ],
+      [
+        rate,
+        'Your password was changed. Two-factor sign-in for this account is paused after too many incorrect codes — sign in with your new password in 3 minutes.',
+      ],
+      [token, 'Code is invalid. Try again or use a recovery code.'],
+      [token, 'Too many incorrect codes for this sign-in. Sign in again to retry.'],
+      [token, 'Challenge token was issued from a different IP. Sign in again.'],
+      [token, 'Challenge token was already used. Sign in again.'],
+    ] as const;
+    for (const [type, detail] of shown) {
+      const status = type === rate ? 429 : 400;
+      const error = responseError({ status }, { type, detail });
+      expect(error.message).toBe(detail);
+      expect(error.customerSafe).toBe(true);
+    }
+  });
+
+  it('reflects nothing beyond an exact whole match of a known sign-in message', () => {
+    const rate = 'https://errors.driftstack.dev/rate-limited';
+    const near = [
+      // extra text after a known message
+      'Too many incorrect passwords for this email. Try again in 15 minutes, or reset your password. host=db.private',
+      // extra text before it
+      'x Code is invalid. Try again or use a recovery code.',
+      // the per-IP limiter's own wording is not on the list
+      'Too many requests from this IP. Retry in 42s.',
+    ];
+    for (const detail of near) {
+      expect(responseError({ status: 429 }, { type: rate, detail }).message).toBe(
+        'A usage limit was reached. Wait a moment or review your plan, then try again.',
+      );
+    }
+    // A known message under a different problem type is not shown either.
+    const other = responseError(
+      { status: 403 },
+      {
+        type: 'https://errors.driftstack.dev/forbidden',
+        detail: 'Code is invalid. Try again or use a recovery code.',
+      },
+    );
+    expect(other.message).toBe('You do not have permission to perform this action.');
+  });
+
+  it('lists only sign-in messages the server still writes', () => {
+    const server = readFileSync(
+      resolve(HERE, '..', '..', '..', 'server', 'src', 'services', 'auth-flows.ts'),
+      'utf8',
+    );
+    for (const fragment of [
+      'Too many incorrect passwords for this email. Try again in ${minutes.toString()} minute',
+      ', or reset your password.',
+      'Too many incorrect two-factor codes for this account. Two-factor sign-in is paused — try again in ${wait}.',
+      'Your password was changed. Two-factor sign-in for this account is paused after too many incorrect codes — sign in with your new password in ${wait}.',
+      "'Code is invalid. Try again or use a recovery code.'",
+      "'Too many incorrect codes for this sign-in. Sign in again to retry.'",
+      "'Challenge token is unknown or expired. Sign in again.'",
+      "'Challenge token is invalid. Sign in again.'",
+      "'Challenge token was issued from a different IP. Sign in again.'",
+      "'Challenge token was already used. Sign in again.'",
+    ]) {
+      expect(server, fragment).toContain(fragment);
+    }
+  });
+
   it('maps unknown and untyped responses by status without reflecting prose', () => {
     const unknown = responseError(
       { status: 500 },

@@ -27,7 +27,8 @@ describe('customer dashboard destructive-confirm sweep', () => {
       calls += pageCalls.length;
       guarded += pageGuards.length;
     }
-    expect(calls).toBe(10);
-    expect(guarded).toBe(10);
+    // 11 since sign-in audit #5: security.astro's "Remove" for a linked sign-in.
+    expect(calls).toBe(11);
+    expect(guarded).toBe(11);
   });
 });

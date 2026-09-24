@@ -61,6 +61,33 @@ const apiBaseUrl = resolveApiBaseUrl();
             placeholder="Paste your code"
           />
         </div>
+        <!-- Sign-in audit #1 — the server asks for the account's password when
+             it has one (401 password_required); this block is revealed then. -->
+        <div data-section="verify-password" hidden>
+          <label class="form-label" for="verify-password"> Your password </label>
+          <input
+            id="verify-password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            maxlength="128"
+            class="form-input"
+          />
+          <p class="mt-2 text-xs text-tk-ink-3" data-field="verify-password-help">
+            Enter the password you chose when you signed up. Didn't sign up? Ignore
+            this email — nobody can use the account until the address is confirmed.
+          </p>
+          <p class="mt-2 text-xs text-tk-ink-3">
+            Forgot it?
+            <a
+              data-link="verify-forgot-password"
+              href="/forgot-password/"
+              class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
+              >Reset your password</a
+            >
+            — that confirms your email too.
+          </p>
+        </div>
         <button type="submit" class="btn-primary w-full">Verify + continue</button>
       </form>
 
@@ -122,6 +149,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       const banner = root.querySelector('[data-banner]');
       const emailEl = root.querySelector('[data-field="email"]');
       const tokenInput = root.querySelector('#verify-token');
+      const passwordSection = root.querySelector('[data-section="verify-password"]');
+      const passwordInput = root.querySelector('#verify-password');
       const unknownRecovery = root.querySelector('[data-verify-unknown]');
       const unknownLoginLink = root.querySelector('[data-link="verify-timeout-login"]');
 
@@ -237,6 +266,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       function setVerifyBusy(busy) {
         form.setAttribute('aria-busy', busy ? 'true' : 'false');
         if (tokenInput) tokenInput.disabled = busy || verifyOutcomeUnknown;
+        if (passwordInput) passwordInput.disabled = busy || verifyOutcomeUnknown;
         if (verifySubmit) {
           verifySubmit.disabled = busy || verifyOutcomeUnknown;
           verifySubmit.textContent = busy
@@ -247,7 +277,22 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
       }
 
-      function submitToken(token) {
+      // Sign-in audit #1 — reveal the password field when the server needs it.
+      // `wrongPassword` is true when a password was sent and not accepted.
+      function askForPassword(detail, wrongPassword) {
+        if (formEl) formEl.hidden = false;
+        if (spinnerEl) spinnerEl.hidden = true;
+        if (passwordSection) passwordSection.hidden = false;
+        if (introEl) introEl.textContent = 'Enter your password to confirm your email address.';
+        if (wrongPassword) showBanner(detail || "That password doesn't match. Try again.");
+        if (passwordInput) {
+          passwordInput.value = '';
+          // After the request settles: the field is disabled while it is in flight.
+          window.setTimeout(() => passwordInput.focus(), 0);
+        }
+      }
+
+      function submitToken(token, password) {
         if (verifyInFlight || verifyOutcomeUnknown) return Promise.resolve(false);
         if (!canPersistWebSession()) {
           showFallback();
@@ -264,10 +309,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         const timeoutId = setTimeout(() => controller.abort(), VERIFY_REQUEST_TIMEOUT_MS);
         let verificationAccepted = false;
 
+        const sentPassword = typeof password === 'string' && password.length > 0;
         return fetch(apiBaseUrl + '/v1/auth/verify-email', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ token }),
+          body: JSON.stringify(sentPassword ? { token, password } : { token }),
           credentials: 'include',
           signal: controller.signal,
         })
@@ -279,9 +325,20 @@ const apiBaseUrl = resolveApiBaseUrl();
             return r
               .json()
               .catch(() => ({}))
-              .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
+              .then((b) => {
+                if (b && b.password_required === true) {
+                  // Not a failure of the link: it is still good. Ask for the
+                  // password (and say so when the one sent didn't match).
+                  return { passwordRequired: true, detail: b.detail };
+                }
+                return Promise.reject(window.driftstackResponseError(r, b));
+              });
           })
           .then((body) => {
+            if (body && body.passwordRequired === true) {
+              askForPassword(typeof body.detail === 'string' ? body.detail : '', sentPassword);
+              return;
+            }
             // V-728 — /v1/auth/verify-email returns a discriminated union.
             // A verification link proves control of the mailbox, not possession
             // of the account's second factor, so an MFA-enrolled account gets
@@ -371,7 +428,10 @@ const apiBaseUrl = resolveApiBaseUrl();
         ev.preventDefault();
         const fd = new FormData(form);
         const token = fd.get('token');
-        if (typeof token === 'string' && token.length > 0) submitToken(token);
+        const password = fd.get('password');
+        if (typeof token === 'string' && token.length > 0) {
+          submitToken(token, typeof password === 'string' ? password : '');
+        }
       });
 
       // V-184a.B — auto-submit when the link in the email carried
