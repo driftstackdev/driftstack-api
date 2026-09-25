@@ -277,12 +277,16 @@
   border-radius: 0.75rem;
 }
 
-/* A language-tab group (DocLayout's script) is one code window: the tab bar
-   and the panel sit flush. The panel's pre loses its prose margins and top
-   radius here, un-layered, because the plugin's pre margin outranks a
-   utility class added at runtime. */
+/* A language-tab group, and every other block with a Copy button, is one
+   code window (DocLayout's scripts): a header bar — the language tabs or the
+   language's name on the left, Copy on the right — sits flush on the panel,
+   so the button never covers the first line of code. The panel's pre
+   loses its prose margins and top radius here, un-layered, because the
+   plugin's pre margin outranks a utility class added at runtime. */
 [data-langtabs] pre,
-[data-langtabs] pre.astro-code {
+[data-langtabs] pre.astro-code,
+[data-codewindow] pre,
+[data-codewindow] pre.astro-code {
   margin-top: 0;
   margin-bottom: 0;
   border-top-left-radius: 0;
@@ -335,6 +339,50 @@
   padding-right: 0.875rem;
 }
 
+/* The table card as a scroll box (DocLayout wraps every table in one): the
+   card moves from the table onto the box, so a table wider than the column
+   scrolls sideways INSIDE its card, and code names in it never wrap — the
+   page-wide overflow-wrap:anywhere broke them mid-word in narrow columns
+   ('unverifie' / 'd' on /api/sessions/ at 1440px, 'solo_ma' / 'nual' at
+   390px). A narrow column widens instead, and the card scrolls. */
+.prose .table-scroll {
+  overflow-x: auto;
+  margin-top: 2em;
+  margin-bottom: 2em;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  /* Scroll shades: a soft shade on an edge that has more table beyond it
+     (the two edge shades stay put), hidden by the card-coloured covers
+     that travel with the content (background-attachment: local) once that
+     edge is reached. A table that fits shows neither. The shade is the
+     mode's recessed well colour (--inset: a grey on the light card, near
+     black on the dark one), so it needs no colour of its own. */
+  background:
+    linear-gradient(to right, var(--surface) 30%, transparent) left center / 2.5rem 100% no-repeat
+      local,
+    linear-gradient(to left, var(--surface) 30%, transparent) right center / 2.5rem 100% no-repeat
+      local,
+    linear-gradient(to right, var(--inset), transparent) left center / 1rem 100% no-repeat scroll,
+    linear-gradient(to left, var(--inset), transparent) right center / 1rem 100% no-repeat scroll,
+    var(--surface);
+}
+.prose .table-scroll > table {
+  margin-top: 0;
+  margin-bottom: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.prose .table-scroll code {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.prose .table-scroll:focus-visible {
+  outline: 2px solid rgb(var(--accent-rgb) / 0.4);
+  outline-offset: 2px;
+}
+
 /* S22.2 (2026-07-06, Stoplight relayout) — blockquote = info callout.
    Docs .md pages use plain markdown `>` blockquotes for notes/caveats;
    the default typography treatment (bare left rule + auto curly quote
@@ -384,21 +432,27 @@
    (plain rgb()/alpha compositing — matches the AA computation below);
    text = the app's status token, which it already sets per mode as a
    TEXT-safe tone.
-   P4 (2026-09-25): GET/PUT/PATCH/DELETE read the app's status tokens
-   (ready #086a40 / busy #7b540b / error #a6352e light; #34d399 / #fbbf24 /
-   #fd8c8c dark). POST keeps its own blue per mode (the app has no sync
-   token): #1d4ed8 light, #93c5fd dark (the old #60a5fa was 4.42:1 over the
-   dark hover). The wash went from 15% to 12%, the least that keeps every
-   pair over 4.5 in light. Each pair measured over the wash composited on
+   P4 (2026-09-25): GET/PUT/PATCH read the app's status tokens (ready
+   #086a40 / busy #7b540b light; #34d399 / #fbbf24 dark). POST keeps its
+   own blue per mode (the app has no sync token): #1d4ed8 light, #93c5fd
+   dark (the old #60a5fa was 4.42:1 over the dark hover). The wash went
+   from 15% to 12%, the least that keeps every pair over 4.5 in light.
+   Each pair measured over the wash composited on
    BOTH grounds a chip sits on — the page ground and the row's hover
    (surface-raised, DocLayout's endpoint rows):
      light: GET 4.80/5.30 · POST 4.89/5.40 · PUT/PATCH 4.87/5.38 ·
-            DELETE 4.73/5.23
+            DELETE 4.98/5.50
      dark : GET 7.44/5.97 · POST 8.17/6.59 · PUT/PATCH 8.47/6.78 ·
-            DELETE 6.76/5.49
+            DELETE 6.46/5.21
    GET = ready tint · POST = blue tint · PUT/PATCH = busy/amber tint ·
-   DELETE = error/red tint. The method word is the signal; the tint only
-   groups them. */
+   DELETE = red tint. The method word is the signal; the tint only groups
+   them.
+   DELETE is NOT the app's error red: #a6352e sits 13.4° of hue from the
+   oxblood accent, and the chip sits right under the accent-washed active
+   tree item. Like POST it keeps its own red per mode, the status site's
+   incident red, past the app's 25° rule: #983d16 light (27.9° from the
+   accent; 4.98 on the ground, 5.50 on the hover) and #fb8e60 dark (27.7°;
+   6.46 / 5.21). */
 .method-chip {
   display: inline-block;
   flex-shrink: 0;
@@ -430,10 +484,14 @@
   background: rgb(var(--busy-rgb) / 0.12);
 }
 .method-chip--delete {
-  color: var(--err-text);
-  background: rgb(var(--err-rgb) / 0.12);
+  color: #fb8e60;
+  background: rgb(251 142 96 / 0.12);
 }
 [data-mode='light'] .method-chip--post {
   color: #1d4ed8;
   background: rgb(37 99 235 / 0.12);
+}
+[data-mode='light'] .method-chip--delete {
+  color: #983d16;
+  background: rgb(152 61 22 / 0.12);
 }

@@ -698,7 +698,8 @@ const nextItem =
        stays OUTSIDE the group. The picked language persists in
        localStorage (ds_docs_lang) and applies to every group on the page.
        Runs in document order AFTER the copy-button script, so each moved
-       <pre> carries its copy button along. Plain raw code — never a
+       <pre> carries its copy button along (into the group's header, P4).
+       Plain raw code — never a
        template literal inside an expression container (the
        dead-inline-script trap: Astro would emit the wrapper literally as
        a no-op string). */
@@ -776,17 +777,28 @@ const nextItem =
         /* The tab bar is the header of the code window, so the whole group
            is a dark island (the dark mode's tokens) on either page mode. */
         wrapper.setAttribute('data-mode', 'dark');
+        /* The header holds the tablist and, beside it (not inside: a
+           tablist holds only tabs), the Copy button. */
+        var head = document.createElement('div');
+        head.className =
+          'flex items-center gap-2 rounded-t-xl border border-b-0 ' +
+          'border-tk-border bg-tk-surface px-2 py-1.5';
         var bar = document.createElement('div');
         bar.setAttribute('role', 'tablist');
         bar.setAttribute('aria-label', 'Code sample language');
-        bar.className =
-          'flex flex-wrap items-center gap-1 rounded-t-xl border border-b-0 ' +
-          'border-tk-border bg-tk-surface px-2 py-1.5';
-        wrapper.appendChild(bar);
+        bar.className = 'flex flex-wrap items-center gap-1';
+        head.appendChild(bar);
+        wrapper.appendChild(head);
         var first = run[0].pre;
         first.parentNode.insertBefore(wrapper, first);
         var tabs = [];
         var panels = [];
+        /* Each panel's Copy button moves into the header, right-aligned,
+           and only the visible panel's button shows: on the pre it sat
+           over the first line of code. */
+        var copyBox = document.createElement('div');
+        copyBox.className = 'ml-auto flex items-center';
+        var copies = [];
         run.forEach(function (r, i) {
           var lang = langs[i];
           var tab = document.createElement('button');
@@ -807,6 +819,12 @@ const nextItem =
              wrapper carries them) and its top radius (it sits flush
              under the tab bar). */
           r.pre.classList.add('my-0', 'rounded-t-none');
+          var copy = r.pre.querySelector(':scope > [data-copy-code]');
+          if (copy) {
+            copy.classList.remove('absolute', 'right-2', 'top-2');
+            copyBox.appendChild(copy);
+          }
+          copies.push(copy);
           panel.appendChild(r.pre);
           wrapper.appendChild(panel);
           panels.push(panel);
@@ -816,6 +834,7 @@ const nextItem =
             writeStored(lang);
           });
         });
+        if (copyBox.children.length) head.appendChild(copyBox);
         var group = {
           select: function (lang, focus) {
             var idx = langs.indexOf(lang);
@@ -826,6 +845,7 @@ const nextItem =
               t.tabIndex = on ? 0 : -1;
               t.className = on ? TAB_ACTIVE : TAB_BASE;
               panels[i].hidden = !on;
+              if (copies[i]) copies[i].hidden = !on;
             });
             if (focus) tabs[idx].focus();
           },
@@ -895,6 +915,89 @@ const nextItem =
       });
       var stored = readStored();
       if (stored) applyEverywhere(stored);
+    })();
+  </script>
+  <script is:inline>
+    {/* P4 (2026-09-25) — code windows and table cards.
+        Code windows: every other code block that has a Copy button (the
+        ones the language tabs did not group) becomes the same code window
+        as a tab group: a slim dark header bar with the language's name on
+        the left and Copy on the right, sitting flush on the block. On the
+        block itself the button covered the end of the first line of code
+        (at phone width, most first lines). Runs AFTER the language-tabs
+        script, so grouped blocks are left alone; a block without a button
+        (no Clipboard API) stays as it is.
+        Table cards: every table moves into a scroll box (.table-scroll in
+        base.css) that becomes its card, and code names inside no longer
+        wrap: a narrow first column broke them mid-word ('unverifie' / 'd').
+        A table wider than the column scrolls sideways inside its card, and
+        such a box joins the tab order so a keyboard can scroll it. Without
+        this script a table keeps its plain card.
+        Plain raw code, for the same dead-inline-script reason as the
+        scripts above. */}
+    (function () {
+      /* The header's language name: the tab names for the languages the
+         tabs know, the fence's own name in capitals for the rest (JSON,
+         HTTP, TSX), and none for plain text. */
+      var NAMES = {
+        ts: 'TypeScript',
+        typescript: 'TypeScript',
+        js: 'JavaScript',
+        javascript: 'JavaScript',
+        python: 'Python',
+        py: 'Python',
+        go: 'Go',
+        bash: 'bash',
+        sh: 'bash',
+      };
+      function nameOf(raw) {
+        if (!raw || raw === 'plaintext' || raw === 'text') return '';
+        return Object.prototype.hasOwnProperty.call(NAMES, raw) ? NAMES[raw] : raw.toUpperCase();
+      }
+      document.querySelectorAll('article pre').forEach(function (pre) {
+        if (pre.closest('[data-langtabs]')) return;
+        var copy = pre.querySelector(':scope > [data-copy-code]');
+        if (!copy) return;
+        var wrapper = document.createElement('div');
+        wrapper.className = 'my-6';
+        wrapper.setAttribute('data-codewindow', '');
+        wrapper.setAttribute('data-mode', 'dark');
+        var bar = document.createElement('div');
+        bar.className =
+          'flex items-center gap-2 rounded-t-xl border border-b-0 border-tk-border ' +
+          'bg-tk-surface px-2 py-1.5';
+        var name = nameOf(pre.getAttribute('data-language'));
+        if (name) {
+          var label = document.createElement('span');
+          label.className = 'px-1.5 font-mono text-xs text-tk-ink-3';
+          label.textContent = name;
+          bar.appendChild(label);
+        }
+        copy.classList.remove('absolute', 'right-2', 'top-2');
+        copy.classList.add('ml-auto');
+        bar.appendChild(copy);
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(bar);
+        wrapper.appendChild(pre);
+      });
+      var boxes = [];
+      document.querySelectorAll('article table').forEach(function (table) {
+        var box = document.createElement('div');
+        box.className = 'table-scroll';
+        table.parentNode.insertBefore(box, table);
+        box.appendChild(table);
+        boxes.push(box);
+      });
+      function syncScrollable() {
+        boxes.forEach(function (box) {
+          if (box.scrollWidth > box.clientWidth + 1) box.setAttribute('tabindex', '0');
+          else box.removeAttribute('tabindex');
+        });
+      }
+      if (boxes.length) {
+        syncScrollable();
+        window.addEventListener('resize', syncScrollable);
+      }
     })();
   </script>
 </BaseLayout>

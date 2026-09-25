@@ -50,9 +50,25 @@ const wash = (fg: Rgb, alpha: number, bg: Rgb): Rgb => [
   fg[1] * alpha + bg[1] * (1 - alpha),
   fg[2] * alpha + bg[2] * (1 - alpha),
 ];
+/** HSL hue, the measure the app's 25° rule (status hue vs accent) uses. */
+function hue([r, g, b]: Rgb): number {
+  const [rn, gn, bn] = [r / 255, g / 255, b / 255];
+  const max = Math.max(rn, gn, bn);
+  const d = max - Math.min(rn, gn, bn);
+  if (d === 0) return 0;
+  const h = max === rn ? ((gn - bn) / d) % 6 : max === gn ? (bn - rn) / d + 2 : (rn - gn) / d + 4;
+  return (h * 60 + 360) % 360;
+}
+const hueGap = (a: number, b: number): number => {
+  const d = Math.abs(a - b) % 360;
+  return d > 180 ? 360 - d : d;
+};
 
 type ModeTokens = Record<string, string>;
-const tokens = JSON.parse(read(TOKENS_JSON)) as { modes: { light: ModeTokens; dark: ModeTokens } };
+const tokens = JSON.parse(read(TOKENS_JSON)) as {
+  accent: Record<string, string>;
+  modes: { light: ModeTokens; dark: ModeTokens };
+};
 
 describe('docs styles/base content parity', () => {
   const body = read(PAGE);
@@ -215,13 +231,15 @@ describe('docs styles/base content parity', () => {
     expect(body).toMatch(/#8b949e\) is 5\.80:1 on #0f172a and 6\.51:1 on #050811/);
   });
 
-  it('P4 inline code is a neutral chip scoped to code OUTSIDE a pre, so a fenced block’s own <code> never paints stripes across the island; a language-tab group sits flush (un-layered, because the plugin’s pre margin outranks a runtime utility)', () => {
+  it('P4 inline code is a neutral chip scoped to code OUTSIDE a pre, so a fenced block’s own <code> never paints stripes across the island; a language-tab group and a code window sit flush (un-layered, because the plugin’s pre margin outranks a runtime utility)', () => {
     expect(body).toMatch(
       /\.prose :where\(:not\(pre\) > code\):not\(:where\(\[class~='not-prose'\] \*\)\) \{\s*\n\s*background: var\(--inset\);/,
     );
     expect(body).toMatch(/\.prose :where\(pre code\) \{\s*\n\s*background: transparent;/);
+    // P4 fix-up — a standalone block with a Copy button is the same code
+    // window (DocLayout's code-window script), so it sits flush too.
     expect(body).toMatch(
-      /\[data-langtabs\] pre,\s*\n\[data-langtabs\] pre\.astro-code \{\s*\n\s*margin-top: 0;\s*\n\s*margin-bottom: 0;/,
+      /\[data-langtabs\] pre,\s*\n\[data-langtabs\] pre\.astro-code,\s*\n\[data-codewindow\] pre,\s*\n\[data-codewindow\] pre\.astro-code \{\s*\n\s*margin-top: 0;\s*\n\s*margin-bottom: 0;/,
     );
   });
 
@@ -230,6 +248,33 @@ describe('docs styles/base content parity', () => {
       /\.prose table \{\s*\n\s*border-collapse: separate;\s*\n\s*border-spacing: 0;\s*\n\s*border: 1px solid var\(--border\);\s*\n\s*border-radius: 0\.75rem;\s*\n\s*background: var\(--surface\);/,
     );
     expect(body).toMatch(/\.prose tbody td \{\s*\n\s*border-top: 1px solid var\(--border\);/);
+  });
+
+  // P4 fix-up (2026-09-25) — with the page-wide overflow-wrap:anywhere, a
+  // narrow first column broke its code names mid-word ('unverifie' / 'd' on
+  // /api/sessions/ at 1440px). DocLayout now wraps every table in a scroll box
+  // that takes the card; code in it never wraps, and a table wider than the
+  // column scrolls inside its card (docs-clipboard-controls runs the script).
+  it('P4 a wrapped table’s card is its scroll box: the box takes the card and scrolls sideways, the table drops its own, and code names inside never wrap mid-word', () => {
+    expect(body).toMatch(
+      /\.prose \.table-scroll \{\s*\n\s*overflow-x: auto;\s*\n\s*margin-top: 2em;\s*\n\s*margin-bottom: 2em;\s*\n\s*border: 1px solid var\(--border\);\s*\n\s*border-radius: 0\.75rem;/,
+    );
+    // A table that scrolls shows it: edge shades, covered once the edge is
+    // reached (covers ride the content), on the card colour.
+    const box = body.slice(body.indexOf('.prose .table-scroll {'));
+    const rule = box.slice(0, box.indexOf('\n}'));
+    expect(rule.match(/no-repeat\s+local/g)).toHaveLength(2);
+    expect(rule.match(/no-repeat\s+scroll/g)).toHaveLength(2);
+    expect(rule.match(/var\(--inset\), transparent/g)).toHaveLength(2);
+    expect(rule).toMatch(/var\(--surface\);$/);
+    expect(body).toMatch(
+      /\.prose \.table-scroll > table \{\s*\n\s*margin-top: 0;\s*\n\s*margin-bottom: 0;\s*\n\s*border: 0;/,
+    );
+    expect(body).toMatch(
+      /\.prose \.table-scroll code \{\s*\n\s*white-space: nowrap;\s*\n\s*overflow-wrap: normal;\s*\n\s*word-break: normal;/,
+    );
+    const layout = read(resolve(REPO_ROOT, 'apps/docs/src/layouts/DocLayout.astro'));
+    expect(layout).toMatch(/box\.className = 'table-scroll';/);
   });
 
   it('S22.2 (2026-07-06, Stoplight relayout) — blockquote = info callout: an accent-2 left rule on the elevated surface with a hairline and the 12px card radius, normal weight, the plugin’s auto quote marks removed — ZERO .md edits, every markdown `>` note renders as a callout', () => {
@@ -254,17 +299,33 @@ describe('docs styles/base content parity', () => {
     );
     return Number(m?.[1]);
   };
+  // DELETE keeps its own red per mode (like POST: the dark value on the bare
+  // rule, the light one under [data-mode='light']), not the app's error red,
+  // which sits 13.4° of hue from the accent. The wash is the same red at 12%.
+  const deleteRed = (mode: 'light' | 'dark'): string => {
+    const m = body.match(
+      mode === 'light'
+        ? /\n\[data-mode='light'\] \.method-chip--delete \{\s*\n\s*color: (#[0-9a-f]{6});\s*\n\s*background: rgb\((\d+) (\d+) (\d+) \/ 0\.12\);/
+        : /\n\.method-chip--delete \{\s*\n\s*color: (#[0-9a-f]{6});\s*\n\s*background: rgb\((\d+) (\d+) (\d+) \/ 0\.12\);/,
+    );
+    expect(m, `DELETE chip (${mode})`).not.toBeNull();
+    const washHex =
+      '#' + [m?.[2], m?.[3], m?.[4]].map((c) => Number(c).toString(16).padStart(2, '0')).join('');
+    // The wash is the text red itself, so the pair measured below is the pair drawn.
+    expect(washHex, `DELETE wash (${mode})`).toBe(m?.[1]);
+    return m?.[1] as string;
+  };
   const chips = (mode: 'light' | 'dark'): Array<[string, string, string]> => {
     const t = tokens.modes[mode] as Record<string, string>;
     return [
       ['GET', t['status-ready'] as string, t['status-ready'] as string],
       ['PUT/PATCH', t['status-busy'] as string, t['status-busy'] as string],
-      ['DELETE', t['status-error-text'] as string, t['status-error'] as string],
+      ['DELETE', deleteRed(mode), deleteRed(mode)],
       mode === 'light' ? ['POST', '#1d4ed8', '#2563eb'] : ['POST', '#93c5fd', '#60a5fa'],
     ];
   };
 
-  it('S22.4 .method-chip recipes pinned: tiny mono uppercase badges, wash = rgb()/alpha of the mode’s status triplet (NOT color-mix — its Lightning-CSS fallback degrades to a solid same-colour background), text = the status token; POST keeps its own blue per mode', () => {
+  it('S22.4 .method-chip recipes pinned: tiny mono uppercase badges, wash = rgb()/alpha of the mode’s status triplet (NOT color-mix — its Lightning-CSS fallback degrades to a solid same-colour background), text = the status token; POST keeps its own blue per mode, and (P4 fix-up) DELETE its own incident red per mode', () => {
     expect(body).toMatch(
       /\.method-chip \{\s*\n\s*display: inline-block;\s*\n\s*flex-shrink: 0;\s*\n\s*min-width: 2\.75rem;/,
     );
@@ -278,10 +339,13 @@ describe('docs styles/base content parity', () => {
       /\.method-chip--put,\s*\n\s*\.method-chip--patch \{\s*\n\s*color: var\(--busy-text\);\s*\n\s*background: rgb\(var\(--busy-rgb\) \/ 0\.12\);/,
     );
     expect(body).toMatch(
-      /\.method-chip--delete \{\s*\n\s*color: var\(--err-text\);\s*\n\s*background: rgb\(var\(--err-rgb\) \/ 0\.12\);/,
+      /\.method-chip--delete \{\s*\n\s*color: #fb8e60;\s*\n\s*background: rgb\(251 142 96 \/ 0\.12\);/,
     );
     expect(body).toMatch(
       /\[data-mode='light'\] \.method-chip--post \{\s*\n\s*color: #1d4ed8;\s*\n\s*background: rgb\(37 99 235 \/ 0\.12\);/,
+    );
+    expect(body).toMatch(
+      /\[data-mode='light'\] \.method-chip--delete \{\s*\n\s*color: #983d16;\s*\n\s*background: rgb\(152 61 22 \/ 0\.12\);/,
     );
     expect(body).not.toMatch(/color-mix\([^)]*--ready/);
   });
@@ -309,5 +373,20 @@ describe('docs styles/base content parity', () => {
       wash(rgb(light['status-error'] as string), 0.15, rgb(light['surface-inset'] as string)),
     );
     expect(nearMiss).toBeLessThan(4.5);
+  });
+
+  // P4 fix-up (2026-09-25) — the DELETE chip sat on the app's error red
+  // (#a6352e), 13.4° of hue from the oxblood accent, right under the
+  // accent-washed active tree item. It now takes the status site's incident
+  // red, which keeps the app's 25° rule.
+  it('P4 — the DELETE chip’s red is at least 25° of hue from the brand accent in both modes (the app’s rule for status hues), so it never reads as the brand — and the app’s own error red would not be (CONTROL: 13.4° light, 9.9° dark)', () => {
+    const accentHue = hue(rgb(tokens.accent.accent as string));
+    expect(deleteRed('light')).toBe('#983d16');
+    expect(deleteRed('dark')).toBe('#fb8e60');
+    for (const mode of ['light', 'dark'] as const) {
+      expect(hueGap(accentHue, hue(rgb(deleteRed(mode)))), mode).toBeGreaterThanOrEqual(25);
+      const appError = tokens.modes[mode]['status-error-text'] as string;
+      expect(hueGap(accentHue, hue(rgb(appError))), `${mode} app error`).toBeLessThan(25);
+    }
   });
 });
