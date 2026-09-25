@@ -2,12 +2,16 @@
   <!-- Driftstack mark — the L2 "Drift Layers" mark (founder-picked
        2026-06-12): two phone-shaped identity layers fanned with a
        drift offset. The back layer is a neutral ink outline; the
-       front layer is filled in the brand oxblood #9b3b46 with a white
+       front layer is filled in the brand oxblood #a83b4d with a white
        home-indicator dot. Flat fills (no gradient/filter) so the mark
-       stays crisp at favicon sizes and inherits no theme assumptions. -->
+       stays crisp at favicon sizes and inherits no theme assumptions.
+       2026-09-25: re-coloured from the retired red and ink to the one
+       oxblood accent #a83b4d and the secondary ink #525863, the same
+       two colours as driftstack-horizontal.svg. /*.svg is immutable at
+       the edge, so every page asks for it as ?v=5. -->
   <rect x="46" y="30" width="118" height="194" rx="34"
-        fill="none" stroke="#474a55" stroke-width="14" opacity="0.55"
+        fill="none" stroke="#525863" stroke-width="14" opacity="0.55"
         transform="rotate(-7 105 127)"/>
-  <rect x="86" y="30" width="118" height="194" rx="34" fill="#9b3b46"/>
+  <rect x="86" y="30" width="118" height="194" rx="34" fill="#a83b4d"/>
   <circle cx="145" cy="192" r="12" fill="#ffffff"/>
 </svg>

@@ -7,6 +7,7 @@
 // check is preventive — drift between apps would erode brand
 // uniformity across customer surfaces.
 
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
@@ -188,25 +189,44 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
       }
       expect(refCount, `${app} references driftstack-mark.svg?v= at least once`).toBeGreaterThan(0);
     }
-    // The union of every app's referenced versions must be exactly {4}: all
-    // apps on one version, and that version is the current v4 (bumped 2026-06-16
-    // with the oxblood-mark rebrand to bust the stale violet favicon).
+    // The union of every app's referenced versions must be exactly {5}: all
+    // apps on one version, and that version is the current v5 (v4 was the
+    // 2026-06-16 oxblood-mark rebrand that busted the stale violet favicon; v5,
+    // 2026-09-25, carries the mark re-coloured to the one accent #a83b4d and
+    // the secondary ink #525863, the lockup's colours).
     expect(
       [...allVersions].sort(),
-      'all 5 apps share ONE cache-bust version (currently v4) — bump them together',
-    ).toEqual(['4']);
+      'all 5 apps share ONE cache-bust version (currently v5) — bump them together',
+    ).toEqual(['5']);
+
+    // The version names ONE set of bytes. /*.svg is immutable at the edge for
+    // a year, so a changed mark served under an old ?v= reaches no cached
+    // client: when the mark's bytes change, bump ?v= in every app AND re-pin
+    // the hash here, in the same commit.
+    const MARK_SHA256_BY_VERSION: Record<string, string> = {
+      '5': 'e3947a148ca91a38adc20160256f9b3e9c9d12b7a713f841b972b28c5b05a28a',
+    };
+    const [version] = [...allVersions];
+    const markSha = createHash('sha256')
+      .update(readFileSync(resolve(REPO_ROOT, 'apps/marketing-site/public/driftstack-mark.svg')))
+      .digest('hex');
+    expect(
+      markSha,
+      `driftstack-mark.svg changed without a ?v= bump (served as ?v=${version})`,
+    ).toBe(MARK_SHA256_BY_VERSION[version!]);
   });
 
-  it("CRITICAL driftstack-mark.svg shape pinned — 256×256 viewBox + aria-label 'Driftstack logo' + the L2 Drift Layers framing (front layer filled in the brand oxblood #9b3b46 since the 2026-06-16 rebrand — founder: 'logo still purple, use the new red'; ink outline back layer, flat fills for favicon crispness). Drift to a different viewBox/aria would break responsive sizing + a11y.", () => {
+  it("CRITICAL driftstack-mark.svg shape pinned — 256×256 viewBox + aria-label 'Driftstack logo' + the L2 Drift Layers framing (front layer filled in the brand oxblood since the 2026-06-16 rebrand — founder: 'logo still purple, use the new red' — and, since 2026-09-25, in the one accent #a83b4d with a #525863 secondary-ink outline, the same two colours as driftstack-horizontal.svg; flat fills for favicon crispness). Drift to a different viewBox/aria would break responsive sizing + a11y.", () => {
     const mark = readFileSync(resolve(REPO_ROOT, 'apps/docs/public/driftstack-mark.svg'), 'utf8');
 
     expect(mark).toMatch(
       /<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 256 256" width="256" height="256" aria-label="Driftstack logo">/,
     );
     expect(mark).toMatch(/the L2 "Drift Layers" mark \(founder-picked/);
-    expect(mark).toMatch(/front layer is filled in the brand oxblood #9b3b46/);
-    expect(mark).toMatch(/fill="#9b3b46"/);
-    expect(mark).toMatch(/stroke="#474a55" stroke-width="14" opacity="0\.55"/);
+    expect(mark).toMatch(/front layer is filled in the brand oxblood #a83b4d/);
+    expect(mark).toMatch(/fill="#a83b4d"/);
+    expect(mark).toMatch(/stroke="#525863" stroke-width="14" opacity="0\.55"/);
+    expect(mark).not.toMatch(/#9b3b46|#474a55/);
   });
 
   it('CRITICAL customer-dashboard + admin-panel + status-site each ship their own public/_headers with the security-header set (X-Frame-Options + X-Content-Type-Options + Referrer-Policy + Permissions-Policy). Private customer/admin origins additionally send X-Robots-Tag: noindex, nofollow at the edge, including non-HTML/error responses. None of the three ship a robots.txt override.', () => {

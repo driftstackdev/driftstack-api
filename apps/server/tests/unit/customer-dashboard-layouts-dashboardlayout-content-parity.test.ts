@@ -137,10 +137,10 @@ describe('customer-dashboard layouts/DashboardLayout content parity', () => {
     expect(body).toMatch(/const fullTitle = `\$\{title\} · Driftstack`;/);
   });
 
-  it('noindex,nofollow meta robots pinned + favicon at /driftstack-mark.svg?v=4. Drift to indexed=yes would let search engines crawl authenticated dashboard pages or follow private links (privacy regression); drift to a different favicon version would break the cache-bust strategy', () => {
+  it('noindex,nofollow meta robots pinned + favicon at /driftstack-mark.svg?v=5. Drift to indexed=yes would let search engines crawl authenticated dashboard pages or follow private links (privacy regression); drift to a different favicon version would break the cache-bust strategy', () => {
     expect(body).toMatch(/<meta name="robots" content="noindex,nofollow" \/>/);
     expect(body).toMatch(
-      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=4"/,
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=5"/,
     );
   });
 

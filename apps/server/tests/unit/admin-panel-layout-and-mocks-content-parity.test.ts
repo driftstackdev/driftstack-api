@@ -82,13 +82,13 @@ describe('W789 admin-panel AdminLayout content parity', () => {
     expect(p).toMatch(/stays alongside as the staff-context indicator\./);
   });
 
-  it('CRITICAL driftstack-mark.svg favicon + brand mark with cache-bust v=3 pinned (v3 = L2 rebrand bytes). Drift to dropping the cache-bust would let old logos persist on staff browsers.', () => {
+  it('CRITICAL driftstack-mark.svg favicon + brand mark with cache-bust v=5 pinned (v5 = the #a83b4d oxblood mark, 2026-09-25). Drift to dropping the cache-bust would let old logos persist on staff browsers.', () => {
     const p = read(LAYOUT);
 
     expect(p).toMatch(
-      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=4" \/>/,
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=5" \/>/,
     );
-    expect(p).toMatch(/src="\/driftstack-mark\.svg\?v=4"/);
+    expect(p).toMatch(/src="\/driftstack-mark\.svg\?v=5"/);
   });
 
   it("CRITICAL 'admin' pill styling pinned — bg-tk-accent/10 + text-tk-accent + font-mono uppercase. The oxblood-50 background distinguishes admin from customer-side blue palettes.", () => {

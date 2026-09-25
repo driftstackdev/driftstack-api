@@ -92,16 +92,16 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     );
   });
 
-  it('CRITICAL Driftstack favicon at /driftstack-mark.svg?v=4 (cache-busted v=3, L2 rebrand bytes). Drift to dropping the version-qstring would let stale-favicon caches persist across deploys.', () => {
+  it('CRITICAL Driftstack favicon at /driftstack-mark.svg?v=5 (cache-busted v=5, the #a83b4d oxblood mark bytes). Drift to dropping the version-qstring would let stale-favicon caches persist across deploys.', () => {
     const l = read(LAYOUT);
 
     expect(l).toMatch(
-      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=4" \/>/,
+      /<link rel="icon" type="image\/svg\+xml" href="\/driftstack-mark\.svg\?v=5" \/>/,
     );
 
-    // 2 logo IMG references (sidebar + headerless-onboarding) both use v=3.
-    const logoCount = (l.match(/\/driftstack-mark\.svg\?v=4/g) ?? []).length;
-    expect(logoCount, 'driftstack-mark.svg?v=4 references').toBeGreaterThanOrEqual(2);
+    // 2 logo IMG references (sidebar + headerless-onboarding) both use v=5.
+    const logoCount = (l.match(/\/driftstack-mark\.svg\?v=5/g) ?? []).length;
+    expect(logoCount, 'driftstack-mark.svg?v=5 references').toBeGreaterThanOrEqual(2);
   });
 
   it('CRITICAL noindex,nofollow robots meta pinned. The authenticated dashboard must neither be indexed nor contribute followed customer-URL links.', () => {
