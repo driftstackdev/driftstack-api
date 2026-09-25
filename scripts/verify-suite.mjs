@@ -44,7 +44,7 @@ import { spawn, spawnSync } from 'node:child_process';
  *
  * "It is under apps/gui-client" is not the question. The extension is.
  */
-export const EXPECTED_TEST_FILES = 3615;
+export const EXPECTED_TEST_FILES = 3602;
 
 /**
  * Files the ROOT config collects — both vitest projects, which is what CI's
@@ -74,7 +74,7 @@ export const EXPECTED_TEST_FILES = 3615;
  * scope; this note exists so "five jobs" is not read as "everything that can
  * fail a PR".
  */
-export const EXPECTED_TEST_FILES_ALL = 3932;
+export const EXPECTED_TEST_FILES_ALL = 3948;
 
 /**
  * The CI jobs this gate does NOT run, with how to run each locally.
@@ -142,7 +142,7 @@ export const EXPECTED_TEST_FILES_ALL = 3932;
  *
  * Locally those files skip for want of `DATABASE_URL`. They are MOST of the
  * skipped files in a local green, not all of them: 144 test files gate on
- * `DATABASE_URL`, 110 on `RUN_DB_TESTS` and 5 on `REDIS_URL`, with 17 more carrying
+ * `DATABASE_URL`, 111 on `RUN_DB_TESTS` and 6 on `REDIS_URL`, with 17 more carrying
  * some other condition. V-917 enumerated the skip mechanisms and V-1034 re-audited
  * all 19 of them against where each can be true, finding zero unconditional skips
  * and one deliberate inversion (`.npmrc`, gitignored, so its assertions run for an
