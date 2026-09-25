@@ -201,6 +201,17 @@ describe('the sidebar folds to an icon rail in a narrow window', () => {
     expect(profiles.textContent).toContain('12');
   });
 
+  it('CRITICAL a full-width label that truncates says its whole name on hover', () => {
+    // The sidebar is sized for the Mac's system font. On Linux (the CI render
+    // gate) and Windows the wider fonts cut "AI Browser Automation" by ~10px,
+    // and a truncated label with no title cannot be read at all.
+    const { aside } = renderInRow(1440);
+    expect(aside.dataset.sidebarTier).not.toBe('rail');
+    const label = screen.getByText('AI Browser Automation');
+    expect(label.className).toContain('truncate');
+    expect(label).toHaveAttribute('title', 'AI Browser Automation');
+  });
+
   it('CRITICAL search, sign-out and the workspace switcher stay reachable in the rail', () => {
     mockAccountMe = buildAccountMe({
       teams: [

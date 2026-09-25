@@ -3620,19 +3620,24 @@
   z-index: 2;
   flex: none;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
+  row-gap: 2px;
   min-height: 20px;
   margin-bottom: 8px;
   font-size: 10.5px;
   line-height: 16px;
   color: rgb(var(--ink-muted-rgb));
-  white-space: nowrap;
 }
+/* Each beat stays whole; the row wraps between beats instead. On a wider system
+   font (Linux, Windows) the single nowrap row ran 2px past the pane and cut the
+   last beat, "Live view". */
 .ai-boot li {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  white-space: nowrap;
 }
 .ai-boot li + li::before {
   content: '';

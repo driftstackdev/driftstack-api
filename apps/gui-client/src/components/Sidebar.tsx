@@ -664,7 +664,12 @@ function SidebarItem({
           {icon}
         </span>
       )}
-      <span className={rail ? 'sr-only' : 'flex-1 truncate'}>{children}</span>
+      {/* A label that truncates says its whole name on hover. The sidebar is sized
+          for the Mac's system font; Windows and Linux fonts run wider, and
+          "AI Browser Automation" lost its last word there with no way to read it. */}
+      <span className={rail ? 'sr-only' : 'flex-1 truncate'} title={rail ? undefined : children}>
+        {children}
+      </span>
       {hasBadge && (
         <span
           aria-hidden={rail ? 'true' : undefined}
